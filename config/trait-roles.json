@@ -1,0 +1,40 @@
+{
+  "traitRoles": [
+    {
+      "trait_type": "Role",
+      "trait_value": "The Hitman",
+      "roleId": null,
+      "description": "Members holding NFTs with The Hitman role"
+    },
+    {
+      "trait_type": "Role",
+      "trait_value": "The Accountant",
+      "roleId": null,
+      "description": "Members holding NFTs with The Accountant role"
+    },
+    {
+      "trait_type": "Role",
+      "trait_value": "The Driver",
+      "roleId": null,
+      "description": "Members holding NFTs with The Driver role"
+    },
+    {
+      "trait_type": "Role",
+      "trait_value": "The Enforcer",
+      "roleId": null,
+      "description": "Members holding NFTs with The Enforcer role"
+    },
+    {
+      "trait_type": "Role",
+      "trait_value": "The Don",
+      "roleId": null,
+      "description": "Members holding NFTs with The Don role"
+    },
+    {
+      "trait_type": "Role",
+      "trait_value": "The Consigliere",
+      "roleId": null,
+      "description": "Members holding NFTs with The Consigliere role"
+    }
+  ]
+}

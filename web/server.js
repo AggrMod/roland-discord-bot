@@ -438,6 +438,17 @@ class WebServer {
       }
     });
 
+    // Role configuration endpoint
+    this.app.get('/api/admin/roles/config', adminAuthMiddleware, (req, res) => {
+      try {
+        const config = roleService.getRoleConfigSummary();
+        res.json({ success: true, config });
+      } catch (error) {
+        logger.error('Error fetching role config:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
     // ==================== PUBLIC API - GOVERNANCE ====================
 
     this.app.get('/api/public/proposals/active', (req, res) => {

@@ -74,6 +74,9 @@ client.once(Events.ClientReady, () => {
 
   // Start periodic vote check (every 5 minutes)
   startVoteCheckInterval();
+
+  // Start role resync scheduler (every 4 hours)
+  startRoleResyncScheduler();
 });
 
 client.on(Events.InteractionCreate, async interaction => {
@@ -333,6 +336,86 @@ function startVoteCheckInterval() {
   }, 5 * 60 * 1000); // 5 minutes
 
   logger.log('📅 Vote auto-close and draft expiry checker started (runs every 5 minutes)');
+}
+
+function startRoleResyncScheduler() {
+  const RESYNC_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
+  const STARTUP_DELAY_MS = 60 * 1000; // 1 minute delay on startup to avoid race conditions
+  
+  // Load guild ID from environment
+  const guildId = process.env.GUILD_ID || process.env.DISCORD_GUILD_ID;
+
+  async function performRoleResync() {
+    try {
+      const startTime = Date.now();
+      logger.log('🔄 Starting role resync cycle...');
+
+      if (!guildId) {
+        logger.warn('⚠️ GUILD_ID not configured, skipping role resync');
+        return;
+      }
+
+      const guild = client.guilds.cache.get(guildId);
+      if (!guild) {
+        logger.warn(`⚠️ Guild ${guildId} not found, skipping role resync`);
+        return;
+      }
+
+      // Get all verified users (users with at least some NFTs)
+      const verifiedUsers = roleService.getAllVerifiedUsers();
+      logger.log(`📊 Found ${verifiedUsers.length} verified users to resync`);
+
+      let syncedCount = 0;
+      let errorCount = 0;
+      let totalAdded = 0;
+      let totalRemoved = 0;
+
+      for (const user of verifiedUsers) {
+        try {
+          // Re-fetch holdings and update database
+          const updateResult = await roleService.updateUserRoles(user.discord_id, user.username);
+          
+          if (updateResult.success) {
+            // Sync Discord roles (tier + trait)
+            const syncResult = await roleService.syncUserDiscordRoles(guild, user.discord_id);
+            
+            if (syncResult.success) {
+              syncedCount++;
+              totalAdded += syncResult.totalAdded || 0;
+              totalRemoved += syncResult.totalRemoved || 0;
+            } else {
+              errorCount++;
+              logger.warn(`Failed to sync roles for user ${user.discord_id}: ${syncResult.message}`);
+            }
+          }
+
+          // Small delay to avoid rate limits
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (error) {
+          errorCount++;
+          logger.error(`Error processing user ${user.discord_id}:`, error);
+        }
+      }
+
+      const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+      logger.log(`✅ Role resync complete: ${syncedCount} synced, ${errorCount} errors, ${totalAdded} roles added, ${totalRemoved} roles removed (${duration}s)`);
+    } catch (error) {
+      logger.error('❌ Error in role resync cycle:', error);
+    }
+  }
+
+  // Run once on startup with delay
+  setTimeout(() => {
+    logger.log('🚀 Running initial role resync (startup)...');
+    performRoleResync();
+  }, STARTUP_DELAY_MS);
+
+  // Schedule recurring resync every 4 hours
+  setInterval(() => {
+    performRoleResync();
+  }, RESYNC_INTERVAL_MS);
+
+  logger.log(`⏰ Role resync scheduler started (runs every 4 hours + on startup)`);
 }
 
 client.on(Events.Error, error => {

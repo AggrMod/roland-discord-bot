@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Solpranos - Wallet Verification</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎩 Solpranos</h1>
+      <h2>Wallet Verification</h2>
+    </div>
+
+    <div id="step1" class="step active">
+      <h3>Step 1: Enter Your Discord ID</h3>
+      <p class="hint">Right-click your name in Discord and select "Copy User ID"<br>(Enable Developer Mode in Settings → Advanced if needed)</p>
+      <input type="text" id="discordIdInput" placeholder="123456789012345678" />
+      <button onclick="setDiscordId()">Continue</button>
+    </div>
+
+    <div id="step2" class="step">
+      <h3>Step 2: Connect Your Wallet</h3>
+      <p class="hint">Click the button below to connect your Phantom or Solflare wallet</p>
+      <p id="discordIdDisplay" class="info"></p>
+      <button onclick="connectWallet()">Connect Wallet</button>
+      <button class="secondary" onclick="goBack()">Back</button>
+    </div>
+
+    <div id="step3" class="step">
+      <h3>✅ Wallet Verified!</h3>
+      <p id="successMessage" class="success"></p>
+      <div id="walletsList"></div>
+      <button onclick="reset()">Verify Another Wallet</button>
+    </div>
+
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+      <p>Processing...</p>
+    </div>
+
+    <div id="error" class="error"></div>
+  </div>
+
+  <script>
+    let currentDiscordId = '';
+    let currentWallet = '';
+
+    function showStep(stepNumber) {
+      document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
+      document.getElementById(`step${stepNumber}`).classList.add('active');
+      document.getElementById('error').style.display = 'none';
+    }
+
+    function showLoading(show) {
+      document.getElementById('loading').style.display = show ? 'flex' : 'none';
+    }
+
+    function showError(message) {
+      const errorEl = document.getElementById('error');
+      errorEl.textContent = message;
+      errorEl.style.display = 'block';
+      setTimeout(() => {
+        errorEl.style.display = 'none';
+      }, 5000);
+    }
+
+    function setDiscordId() {
+      const discordId = document.getElementById('discordIdInput').value.trim();
+      
+      if (!discordId || !/^\d{17,19}$/.test(discordId)) {
+        showError('Please enter a valid Discord ID (17-19 digits)');
+        return;
+      }
+
+      currentDiscordId = discordId;
+      document.getElementById('discordIdDisplay').textContent = `Discord ID: ${discordId}`;
+      
+      // Load existing wallets
+      loadWallets();
+      
+      showStep(2);
+    }
+
+    function goBack() {
+      showStep(1);
+    }
+
+    async function connectWallet() {
+      try {
+        // Check if Phantom or Solflare is installed
+        const provider = window.solana || window.phantom?.solana;
+        
+        if (!provider) {
+          showError('Please install Phantom or Solflare wallet extension');
+          return;
+        }
+
+        showLoading(true);
+
+        // Connect wallet
+        const response = await provider.connect();
+        const publicKey = response.publicKey.toString();
+        currentWallet = publicKey;
+
+        // Create message to sign
+        const timestamp = Date.now();
+        const message = `Verify wallet ownership for Solpranos: ${currentDiscordId}:${timestamp}`;
+        
+        // Request signature
+        const encodedMessage = new TextEncoder().encode(message);
+        const signedMessage = await provider.signMessage(encodedMessage, 'utf8');
+        
+        // Convert signature to base58
+        const signature = btoa(String.fromCharCode(...signedMessage.signature));
+        const signatureBase58 = bs58Encode(signedMessage.signature);
+
+        // Send to server
+        const verifyResponse = await fetch('/api/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            discordId: currentDiscordId,
+            walletAddress: publicKey,
+            signature: signatureBase58,
+            message: message
+          })
+        });
+
+        const result = await verifyResponse.json();
+        
+        showLoading(false);
+
+        if (result.success) {
+          document.getElementById('successMessage').textContent = 
+            `Wallet ${publicKey.slice(0, 6)}...${publicKey.slice(-4)} successfully linked!`;
+          await loadWallets();
+          showStep(3);
+        } else {
+          showError(result.message || 'Verification failed');
+        }
+
+      } catch (error) {
+        showLoading(false);
+        console.error('Wallet connection error:', error);
+        showError(error.message || 'Failed to connect wallet');
+      }
+    }
+
+    async function loadWallets() {
+      try {
+        const response = await fetch(`/api/wallets/${currentDiscordId}`);
+        const result = await response.json();
+
+        if (result.success && result.wallets.length > 0) {
+          displayWallets(result.wallets);
+        }
+      } catch (error) {
+        console.error('Error loading wallets:', error);
+      }
+    }
+
+    function displayWallets(wallets) {
+      const listEl = document.getElementById('walletsList');
+      
+      if (wallets.length === 0) {
+        listEl.innerHTML = '';
+        return;
+      }
+
+      listEl.innerHTML = `
+        <div class="wallets-header">
+          <h4>Your Linked Wallets</h4>
+        </div>
+        <div class="wallets-list">
+          ${wallets.map(wallet => `
+            <div class="wallet-item ${wallet.is_favorite ? 'favorite' : ''}">
+              <span class="wallet-address">${wallet.wallet_address.slice(0, 6)}...${wallet.wallet_address.slice(-4)}</span>
+              <button 
+                class="star-btn ${wallet.is_favorite ? 'active' : ''}" 
+                onclick="setFavorite('${wallet.wallet_address}')"
+                title="${wallet.is_favorite ? 'Favorite wallet' : 'Set as favorite'}"
+              >
+                ${wallet.is_favorite ? '⭐' : '☆'}
+              </button>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    async function setFavorite(walletAddress) {
+      try {
+        showLoading(true);
+        
+        const response = await fetch(`/api/wallets/${currentDiscordId}/favorite`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ walletAddress })
+        });
+
+        const result = await response.json();
+        
+        showLoading(false);
+
+        if (result.success) {
+          await loadWallets();
+        } else {
+          showError(result.message || 'Failed to set favorite');
+        }
+      } catch (error) {
+        showLoading(false);
+        showError('Failed to set favorite wallet');
+      }
+    }
+
+    function reset() {
+      currentDiscordId = '';
+      currentWallet = '';
+      document.getElementById('discordIdInput').value = '';
+      showStep(1);
+    }
+
+    // Base58 encoding function (simple implementation)
+    function bs58Encode(buffer) {
+      const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+      const base = ALPHABET.length;
+      
+      let encoded = '';
+      let num = BigInt('0x' + Array.from(buffer).map(b => b.toString(16).padStart(2, '0')).join(''));
+      
+      while (num > 0n) {
+        const remainder = num % BigInt(base);
+        num = num / BigInt(base);
+        encoded = ALPHABET[Number(remainder)] + encoded;
+      }
+      
+      // Add leading zeros
+      for (let i = 0; i < buffer.length && buffer[i] === 0; i++) {
+        encoded = ALPHABET[0] + encoded;
+      }
+      
+      return encoded;
+    }
+  </script>
+</body>
+</html>

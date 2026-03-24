@@ -1,14 +1,20 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Collection, Events } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, Events, Partials } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const logger = require('./utils/logger');
+const WebServer = require('./web/server');
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMessageReactions,
+  ],
+  partials: [
+    Partials.Message,
+    Partials.Reaction,
   ],
 });
 
@@ -48,6 +54,10 @@ function loadCommandsFromDirectory(dir) {
 
 loadCommandsFromDirectory('commands');
 
+// Initialize web server
+const webServer = new WebServer();
+webServer.start();
+
 client.once(Events.ClientReady, () => {
   logger.log(`✅ Bot is online as ${client.user.tag}`);
   logger.log(`📊 Loaded ${client.commands.size} commands`);
@@ -82,6 +92,90 @@ client.on(Events.InteractionCreate, async interaction => {
     } else {
       await interaction.reply(errorMessage);
     }
+  }
+});
+
+// Handle reactions for proposal support
+client.on(Events.MessageReactionAdd, async (reaction, user) => {
+  try {
+    // Ignore bot reactions
+    if (user.bot) return;
+
+    // Fetch partial messages
+    if (reaction.partial) {
+      await reaction.fetch();
+    }
+    if (reaction.message.partial) {
+      await reaction.message.fetch();
+    }
+
+    // Only handle ✅ reactions
+    if (reaction.emoji.name !== '✅') return;
+
+    // Check if this is in the proposals channel
+    const proposalsChannelId = process.env.PROPOSALS_CHANNEL_ID;
+    if (!proposalsChannelId || reaction.message.channel.id !== proposalsChannelId) return;
+
+    const db = require('./database/db');
+    const walletService = require('./services/walletService');
+    const proposalService = require('./services/proposalService');
+
+    // Find proposal by message ID
+    const proposal = db.prepare('SELECT * FROM proposals WHERE message_id = ?').get(reaction.message.id);
+    
+    if (!proposal) {
+      logger.warn(`Reaction on non-proposal message: ${reaction.message.id}`);
+      return;
+    }
+
+    if (proposal.status !== 'draft') {
+      logger.log(`User ${user.id} reacted to non-draft proposal ${proposal.proposal_id}`);
+      return;
+    }
+
+    // Check if user has verified wallet
+    const wallets = walletService.getLinkedWallets(user.id);
+    if (!wallets || wallets.length === 0) {
+      logger.log(`User ${user.id} tried to support without verified wallet`);
+      return;
+    }
+
+    // Add supporter
+    const result = proposalService.addSupporter(proposal.proposal_id, user.id);
+    
+    if (result.success) {
+      logger.log(`User ${user.id} supported proposal ${proposal.proposal_id} via reaction (${result.supporterCount}/4)`);
+      
+      // Update the embed
+      const { EmbedBuilder } = require('discord.js');
+      const proposalData = proposalService.getProposal(proposal.proposal_id);
+      const supporterCount = proposalService.getSupporterCount(proposal.proposal_id);
+      
+      let status = proposalData.status === 'draft' ? `Draft (${supporterCount}/4 supporters)` : 
+                   proposalData.status === 'voting' ? 'Active Voting' : 
+                   proposalData.status;
+      
+      const embed = new EmbedBuilder()
+        .setColor(proposalData.status === 'voting' ? '#00FF00' : '#FFD700')
+        .setTitle(`📜 ${proposalData.title}`)
+        .setDescription(proposalData.description)
+        .addFields(
+          { name: '🆔 Proposal ID', value: proposalData.proposal_id, inline: true },
+          { name: '📊 Status', value: status, inline: true },
+          { name: '👥 Supporters', value: supporterCount.toString(), inline: true }
+        )
+        .setTimestamp();
+
+      if (proposalData.status === 'voting') {
+        embed.setFooter({ text: '✅ Promoted to voting! Use /vote to cast your vote.' });
+      } else {
+        embed.setFooter({ text: '✅ React with checkmark to support (4 needed)' });
+      }
+
+      await reaction.message.edit({ embeds: [embed] });
+    }
+  } catch (error) {
+    logger.error('Error handling reaction:', error);
   }
 });
 

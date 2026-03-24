@@ -27,6 +27,7 @@ function initDatabase() {
       wallet_address TEXT NOT NULL UNIQUE,
       verified BOOLEAN DEFAULT 1,
       primary_wallet BOOLEAN DEFAULT 0,
+      is_favorite BOOLEAN DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (discord_id) REFERENCES users(discord_id)
     );
@@ -46,6 +47,8 @@ function initDatabase() {
       quorum_threshold INTEGER DEFAULT 25,
       start_time DATETIME,
       end_time DATETIME,
+      message_id TEXT,
+      channel_id TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (creator_id) REFERENCES users(discord_id)
     );

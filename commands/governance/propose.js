@@ -2,6 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const proposalService = require('../../services/proposalService');
 const roleService = require('../../services/roleService');
 const walletService = require('../../services/walletService');
+const logger = require('../../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -70,5 +71,41 @@ module.exports = {
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });
+
+    // Post to proposals channel
+    const proposalsChannelId = process.env.PROPOSALS_CHANNEL_ID;
+    if (proposalsChannelId) {
+      try {
+        const proposalsChannel = await interaction.client.channels.fetch(proposalsChannelId);
+        
+        if (proposalsChannel && proposalsChannel.isTextBased()) {
+          const channelEmbed = new EmbedBuilder()
+            .setColor('#FFD700')
+            .setTitle(`📜 ${title}`)
+            .setDescription(description)
+            .addFields(
+              { name: '🆔 Proposal ID', value: result.proposalId, inline: true },
+              { name: '👤 Creator', value: interaction.user.username, inline: true },
+              { name: '📊 Status', value: 'Draft (0/4 supporters)', inline: true }
+            )
+            .setFooter({ text: '✅ React with checkmark to support (4 needed)' })
+            .setTimestamp();
+
+          const message = await proposalsChannel.send({ embeds: [channelEmbed] });
+          
+          // Add checkmark reaction
+          await message.react('✅');
+          
+          // Store message ID in database
+          const db = require('../../database/db');
+          db.prepare('UPDATE proposals SET message_id = ?, channel_id = ? WHERE proposal_id = ?')
+            .run(message.id, proposalsChannelId, result.proposalId);
+          
+          logger.log(`Proposal ${result.proposalId} posted to channel ${proposalsChannelId}, message ${message.id}`);
+        }
+      } catch (error) {
+        logger.error('Error posting proposal to channel:', error);
+      }
+    }
   },
 };

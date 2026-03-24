@@ -6,58 +6,27 @@ const logger = require('../../utils/logger');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('verify')
-    .setDescription('Link your Solana wallet to your Discord account')
-    .addStringOption(option =>
-      option.setName('wallet')
-        .setDescription('Your Solana wallet address')
-        .setRequired(true)
-    ),
+    .setDescription('Link your Solana wallet to your Discord account'),
 
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
-    const walletAddress = interaction.options.getString('wallet');
     const discordId = interaction.user.id;
-    const username = interaction.user.username;
-
-    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(walletAddress)) {
-      const embed = new EmbedBuilder()
-        .setColor('#FF0000')
-        .setTitle('❌ Invalid Wallet Address')
-        .setDescription('Please provide a valid Solana wallet address.')
-        .setTimestamp();
-
-      return interaction.editReply({ embeds: [embed] });
-    }
-
-    const linkResult = walletService.linkWallet(discordId, username, walletAddress);
-
-    if (!linkResult.success) {
-      const embed = new EmbedBuilder()
-        .setColor('#FF0000')
-        .setTitle('❌ Verification Failed')
-        .setDescription(linkResult.message)
-        .setTimestamp();
-
-      return interaction.editReply({ embeds: [embed] });
-    }
-
-    const updateResult = await roleService.updateUserRoles(discordId, username);
-
+    const webUrl = process.env.WEB_URL || 'http://localhost:3000';
+    
     const embed = new EmbedBuilder()
       .setColor('#FFD700')
-      .setTitle('✅ Wallet Verified Successfully')
-      .setDescription(`Your wallet has been linked to your Discord account.`)
+      .setTitle('🔗 Wallet Verification')
+      .setDescription('To verify your wallet, please visit our secure web verification page.')
       .addFields(
-        { name: '💼 Wallet', value: `\`${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}\``, inline: true },
-        { name: '🎴 NFTs Owned', value: updateResult.totalNFTs?.toString() || '0', inline: true },
-        { name: '🏆 Tier', value: updateResult.tier || 'None', inline: true },
-        { name: '🗳️ Voting Power', value: updateResult.votingPower?.toString() || '0', inline: true }
+        { name: '🌐 Verification URL', value: `${webUrl}/verify`, inline: false },
+        { name: '🆔 Your Discord ID', value: `\`${discordId}\``, inline: false },
+        { name: '📝 Instructions', value: '1. Click the link above\n2. Enter your Discord ID (shown above)\n3. Connect your Phantom or Solflare wallet\n4. Sign the verification message\n5. Come back here and use `/refresh-roles` to update your roles', inline: false }
       )
-      .setFooter({ text: 'Welcome to the Solpranos!' })
+      .setFooter({ text: 'Your wallet will be securely verified via cryptographic signature' })
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });
-    logger.log(`User ${username} (${discordId}) verified wallet ${walletAddress}`);
+    logger.log(`User ${interaction.user.username} (${discordId}) requested verification link`);
   },
 };

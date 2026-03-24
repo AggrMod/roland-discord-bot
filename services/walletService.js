@@ -60,6 +60,39 @@ class WalletService {
   getAllUserWallets(discordId) {
     return this.getLinkedWallets(discordId).map(w => w.wallet_address);
   }
+
+  setFavoriteWallet(discordId, walletAddress) {
+    try {
+      // Verify wallet belongs to user
+      const wallet = db.prepare('SELECT * FROM wallets WHERE discord_id = ? AND wallet_address = ?').get(discordId, walletAddress);
+      
+      if (!wallet) {
+        return { success: false, message: 'Wallet not found' };
+      }
+
+      // Unset all favorites for this user
+      db.prepare('UPDATE wallets SET is_favorite = 0 WHERE discord_id = ?').run(discordId);
+      
+      // Set new favorite
+      db.prepare('UPDATE wallets SET is_favorite = 1 WHERE discord_id = ? AND wallet_address = ?').run(discordId, walletAddress);
+
+      logger.log(`User ${discordId} set favorite wallet: ${walletAddress}`);
+      return { success: true, message: 'Favorite wallet updated' };
+    } catch (error) {
+      logger.error('Error setting favorite wallet:', error);
+      return { success: false, message: 'Failed to set favorite wallet' };
+    }
+  }
+
+  getFavoriteWallet(discordId) {
+    try {
+      const wallet = db.prepare('SELECT wallet_address FROM wallets WHERE discord_id = ? AND is_favorite = 1').get(discordId);
+      return wallet ? wallet.wallet_address : null;
+    } catch (error) {
+      logger.error('Error getting favorite wallet:', error);
+      return null;
+    }
+  }
 }
 
 module.exports = new WalletService();

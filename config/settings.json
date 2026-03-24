@@ -1,0 +1,57 @@
+{
+  "tiers": [
+    {
+      "name": "Associate",
+      "minNFTs": 1,
+      "maxNFTs": 2,
+      "votingPower": 1,
+      "roleId": null
+    },
+    {
+      "name": "Soldato",
+      "minNFTs": 3,
+      "maxNFTs": 6,
+      "votingPower": 3,
+      "roleId": null
+    },
+    {
+      "name": "Capo",
+      "minNFTs": 7,
+      "maxNFTs": 14,
+      "votingPower": 6,
+      "roleId": null
+    },
+    {
+      "name": "Elite",
+      "minNFTs": 15,
+      "maxNFTs": 49,
+      "votingPower": 10,
+      "roleId": null
+    },
+    {
+      "name": "Underboss",
+      "minNFTs": 50,
+      "maxNFTs": 149,
+      "votingPower": 14,
+      "roleId": null
+    },
+    {
+      "name": "Don",
+      "minNFTs": 150,
+      "maxNFTs": 999999,
+      "votingPower": 18,
+      "roleId": null
+    }
+  ],
+  "characterRoles": [
+    "The Hitman",
+    "The Accountant",
+    "The Driver",
+    "The Enforcer",
+    "The Don",
+    "The Consigliere"
+  ],
+  "quorumPercentage": 25,
+  "supportThreshold": 4,
+  "voteDurationDays": 7
+}

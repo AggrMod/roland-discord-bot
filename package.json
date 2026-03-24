@@ -15,6 +15,8 @@
     "@solana/web3.js": "^1.95.8",
     "bs58": "^6.0.0",
     "express": "^4.18.2",
+    "express-session": "^1.18.0",
+    "cors": "^2.8.5",
     "tweetnacl": "^1.0.3"
   }
 }

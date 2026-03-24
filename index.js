@@ -65,8 +65,9 @@ client.once(Events.ClientReady, () => {
   
   client.user.setActivity('The Commission', { type: 0 });
 
-  // Pass client to proposalService
+  // Pass client to proposalService and webServer
   proposalService.setClient(client);
+  webServer.setClient(client);
 
   // Start periodic vote check (every 5 minutes)
   startVoteCheckInterval();

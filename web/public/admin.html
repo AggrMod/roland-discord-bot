@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Solpranos Admin Portal</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+      color: #fff;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    header {
+      background: rgba(0, 0, 0, 0.5);
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      border: 2px solid #FFD700;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    h1 {
+      color: #FFD700;
+      font-size: 2em;
+      text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+    }
+
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .tab {
+      background: rgba(255, 215, 0, 0.2);
+      color: #FFD700;
+      border: 1px solid #FFD700;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .tab.active {
+      background: #FFD700;
+      color: #000;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .section {
+      background: rgba(0, 0, 0, 0.5);
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      border: 1px solid #FFD700;
+    }
+
+    h2 {
+      color: #FFD700;
+      margin-bottom: 15px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: rgba(255, 215, 0, 0.1);
+      padding: 20px;
+      border-radius: 10px;
+      border: 1px solid #FFD700;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 2em;
+      color: #FFD700;
+      font-weight: bold;
+    }
+
+    .stat-label {
+      color: #ccc;
+      margin-top: 5px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 215, 0, 0.3);
+    }
+
+    th {
+      background: rgba(255, 215, 0, 0.2);
+      color: #FFD700;
+      font-weight: bold;
+    }
+
+    tr:hover {
+      background: rgba(255, 215, 0, 0.1);
+    }
+
+    button {
+      background: #FFD700;
+      color: #000;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.3s;
+      margin: 5px;
+    }
+
+    button:hover {
+      background: #FFC700;
+      box-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
+    }
+
+    button.danger {
+      background: #dc3545;
+      color: #fff;
+    }
+
+    button.success {
+      background: #28a745;
+      color: #fff;
+    }
+
+    input, select, textarea {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid #FFD700;
+      color: #fff;
+      padding: 10px;
+      border-radius: 5px;
+      width: 100%;
+      margin-bottom: 10px;
+    }
+
+    label {
+      display: block;
+      color: #FFD700;
+      margin-bottom: 5px;
+      margin-top: 15px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+    }
+
+    .tier-editor {
+      margin-top: 20px;
+    }
+
+    .tier-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
+      align-items: center;
+    }
+
+    .tier-row input {
+      margin-bottom: 0;
+    }
+
+    .login-prompt {
+      text-align: center;
+      padding: 40px;
+    }
+
+    .error-message {
+      background: #dc3545;
+      color: #fff;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+    }
+
+    .success-message {
+      background: #28a745;
+      color: #fff;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+    }
+
+    @media (max-width: 768px) {
+      .tier-row {
+        grid-template-columns: 1fr;
+      }
+
+      table {
+        font-size: 0.9em;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>⚙️ Solpranos Admin Portal</h1>
+      <div>
+        <button onclick="window.location.href='/dashboard'">Dashboard</button>
+        <button onclick="logout()">Logout</button>
+      </div>
+    </header>
+
+    <div id="loginPrompt" class="section login-prompt" style="display:none;">
+      <h2>Admin Access Required</h2>
+      <p style="margin: 20px 0; color: #ccc;">You must be logged in with an administrator account to access this portal.</p>
+      <button onclick="login()">🎮 Login with Discord</button>
+    </div>
+
+    <div id="errorMessage" class="error-message" style="display:none;"></div>
+
+    <div id="adminContent" style="display:none;">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('overview')">Overview</div>
+        <div class="tab" onclick="switchTab('settings')">Settings</div>
+        <div class="tab" onclick="switchTab('users')">Users</div>
+        <div class="tab" onclick="switchTab('proposals')">Proposals</div>
+        <div class="tab" onclick="switchTab('missions')">Missions</div>
+      </div>
+
+      <!-- Overview Tab -->
+      <div id="overview" class="tab-content active">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-value" id="totalUsers">0</div>
+            <div class="stat-label">Total Users</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="totalWallets">0</div>
+            <div class="stat-label">Verified Wallets</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="totalProposals">0</div>
+            <div class="stat-label">Total Proposals</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="activeProposals">0</div>
+            <div class="stat-label">Active Proposals</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="totalMissions">0</div>
+            <div class="stat-label">Total Missions</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="activeMissions">0</div>
+            <div class="stat-label">Active Missions</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings Tab -->
+      <div id="settings" class="tab-content">
+        <div class="section">
+          <h2>⚙️ System Configuration</h2>
+          
+          <div class="form-row">
+            <div>
+              <label>Quorum Percentage (%)</label>
+              <input type="number" id="quorumPercentage" min="1" max="100">
+            </div>
+            <div>
+              <label>Support Threshold</label>
+              <input type="number" id="supportThreshold" min="1">
+            </div>
+            <div>
+              <label>Vote Duration (Days)</label>
+              <input type="number" id="voteDurationDays" min="1" max="30">
+            </div>
+          </div>
+
+          <h3 style="color: #FFD700; margin-top: 30px;">Tier Configuration</h3>
+          <div class="tier-editor" id="tierEditor"></div>
+
+          <div style="margin-top: 20px;">
+            <button class="success" onclick="saveSettings()">💾 Save All Settings</button>
+            <button class="danger" onclick="resetSettings()">🔄 Reset to Defaults</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Users Tab -->
+      <div id="users" class="tab-content">
+        <div class="section">
+          <h2>👥 User Management</h2>
+          <table id="usersTable">
+            <thead>
+              <tr>
+                <th>Discord ID</th>
+                <th>Username</th>
+                <th>Tier</th>
+                <th>NFTs</th>
+                <th>VP</th>
+                <th>Wallets</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Proposals Tab -->
+      <div id="proposals" class="tab-content">
+        <div class="section">
+          <h2>📜 Proposal Management</h2>
+          <table id="proposalsTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Title</th>
+                <th>Creator</th>
+                <th>Status</th>
+                <th>Yes VP</th>
+                <th>No VP</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Missions Tab -->
+      <div id="missions" class="tab-content">
+        <div class="section">
+          <h2>🎯 Mission Management</h2>
+          
+          <h3 style="color: #FFD700; margin-bottom: 15px;">Create New Mission</h3>
+          <form onsubmit="createMission(event)">
+            <label>Title</label>
+            <input type="text" id="missionTitle" required>
+            
+            <label>Description</label>
+            <textarea id="missionDescription" rows="3" required></textarea>
+            
+            <div class="form-row">
+              <div>
+                <label>Total Slots</label>
+                <input type="number" id="missionSlots" min="1" required>
+              </div>
+              <div>
+                <label>Reward Points</label>
+                <input type="number" id="missionReward" min="0" required>
+              </div>
+            </div>
+            
+            <button type="submit" class="success">➕ Create Mission</button>
+          </form>
+
+          <h3 style="color: #FFD700; margin-top: 30px;">Existing Missions</h3>
+          <table id="missionsTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Title</th>
+                <th>Status</th>
+                <th>Slots</th>
+                <th>Reward</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentTab = 'overview';
+    let settingsData = null;
+    let usersData = [];
+    let proposalsData = [];
+    let missionsData = [];
+
+    async function checkAuth() {
+      try {
+        const response = await fetch('/api/admin/settings');
+        const data = await response.json();
+
+        if (data.success) {
+          showAdmin();
+          loadAllData();
+        } else {
+          showLoginPrompt();
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        showLoginPrompt();
+      }
+    }
+
+    function showLoginPrompt() {
+      document.getElementById('loginPrompt').style.display = 'block';
+      document.getElementById('adminContent').style.display = 'none';
+    }
+
+    function showAdmin() {
+      document.getElementById('loginPrompt').style.display = 'none';
+      document.getElementById('adminContent').style.display = 'block';
+    }
+
+    function showError(message) {
+      const errorDiv = document.getElementById('errorMessage');
+      errorDiv.textContent = message;
+      errorDiv.style.display = 'block';
+      setTimeout(() => {
+        errorDiv.style.display = 'none';
+      }, 5000);
+    }
+
+    async function loadAllData() {
+      await Promise.all([
+        loadSettings(),
+        loadUsers(),
+        loadProposals(),
+        loadMissions()
+      ]);
+      updateOverviewStats();
+    }
+
+    async function loadSettings() {
+      try {
+        const response = await fetch('/api/admin/settings');
+        const data = await response.json();
+
+        if (data.success) {
+          settingsData = data.settings;
+          renderSettings();
+        }
+      } catch (error) {
+        console.error('Error loading settings:', error);
+      }
+    }
+
+    function renderSettings() {
+      document.getElementById('quorumPercentage').value = settingsData.quorumPercentage;
+      document.getElementById('supportThreshold').value = settingsData.supportThreshold;
+      document.getElementById('voteDurationDays').value = settingsData.voteDurationDays;
+
+      const tierEditor = document.getElementById('tierEditor');
+      tierEditor.innerHTML = `
+        <div class="tier-row" style="font-weight: bold; color: #FFD700;">
+          <div>Tier Name</div>
+          <div>Min NFTs</div>
+          <div>Max NFTs</div>
+          <div>Voting Power</div>
+        </div>
+      `;
+
+      settingsData.tiers.forEach((tier, index) => {
+        const row = document.createElement('div');
+        row.className = 'tier-row';
+        row.innerHTML = `
+          <input type="text" value="${tier.name}" data-tier="${index}" data-field="name" readonly style="background: rgba(255,255,255,0.05);">
+          <input type="number" value="${tier.minNFTs}" data-tier="${index}" data-field="minNFTs" min="1">
+          <input type="number" value="${tier.maxNFTs}" data-tier="${index}" data-field="maxNFTs" min="1">
+          <input type="number" value="${tier.votingPower}" data-tier="${index}" data-field="votingPower" min="1">
+        `;
+        tierEditor.appendChild(row);
+      });
+    }
+
+    async function saveSettings() {
+      // Collect tier data
+      const tierInputs = document.querySelectorAll('#tierEditor input[data-tier]');
+      const tiers = [];
+
+      for (let i = 0; i < settingsData.tiers.length; i++) {
+        const tierData = {
+          name: settingsData.tiers[i].name,
+          roleId: settingsData.tiers[i].roleId,
+          minNFTs: 0,
+          maxNFTs: 0,
+          votingPower: 0
+        };
+
+        tierInputs.forEach(input => {
+          if (parseInt(input.dataset.tier) === i) {
+            const field = input.dataset.field;
+            tierData[field] = field === 'name' ? input.value : parseInt(input.value);
+          }
+        });
+
+        tiers.push(tierData);
+      }
+
+      const newSettings = {
+        tiers,
+        quorumPercentage: parseFloat(document.getElementById('quorumPercentage').value),
+        supportThreshold: parseInt(document.getElementById('supportThreshold').value),
+        voteDurationDays: parseInt(document.getElementById('voteDurationDays').value)
+      };
+
+      try {
+        const response = await fetch('/api/admin/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newSettings)
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          alert('✅ Settings saved successfully!');
+          await loadSettings();
+        } else {
+          showError(data.message);
+        }
+      } catch (error) {
+        console.error('Error saving settings:', error);
+        showError('Failed to save settings');
+      }
+    }
+
+    async function resetSettings() {
+      if (!confirm('Reset all settings to defaults? This cannot be undone.')) {
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/admin/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reset: true })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          alert('✅ Settings reset to defaults!');
+          await loadSettings();
+        } else {
+          showError(data.message);
+        }
+      } catch (error) {
+        console.error('Error resetting settings:', error);
+        showError('Failed to reset settings');
+      }
+    }
+
+    async function loadUsers() {
+      try {
+        const response = await fetch('/api/admin/users');
+        const data = await response.json();
+
+        if (data.success) {
+          usersData = data.users;
+          renderUsers();
+        }
+      } catch (error) {
+        console.error('Error loading users:', error);
+      }
+    }
+
+    function renderUsers() {
+      const tbody = document.querySelector('#usersTable tbody');
+      tbody.innerHTML = '';
+
+      usersData.forEach(user => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${user.discord_id}</td>
+          <td>${user.username}</td>
+          <td>${user.tier || 'None'}</td>
+          <td>${user.total_nfts}</td>
+          <td>${user.voting_power}</td>
+          <td>${user.wallet_count}</td>
+          <td><button onclick="viewUser('${user.discord_id}')">View</button></td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    async function loadProposals() {
+      try {
+        const response = await fetch('/api/admin/proposals');
+        const data = await response.json();
+
+        if (data.success) {
+          proposalsData = data.proposals;
+          renderProposals();
+        }
+      } catch (error) {
+        console.error('Error loading proposals:', error);
+      }
+    }
+
+    function renderProposals() {
+      const tbody = document.querySelector('#proposalsTable tbody');
+      tbody.innerHTML = '';
+
+      proposalsData.forEach(proposal => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${proposal.proposal_id}</td>
+          <td>${proposal.title}</td>
+          <td>${proposal.creator_id}</td>
+          <td>${proposal.status}</td>
+          <td>${proposal.yes_vp}</td>
+          <td>${proposal.no_vp}</td>
+          <td>
+            ${proposal.status === 'voting' ? `<button class="danger" onclick="closeProposal('${proposal.proposal_id}')">Close Vote</button>` : '-'}
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    async function closeProposal(id) {
+      if (!confirm(`Force close voting for ${id}?`)) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/admin/proposals/${id}/close`, {
+          method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          alert('✅ Proposal closed!');
+          await loadProposals();
+          updateOverviewStats();
+        } else {
+          showError(data.message);
+        }
+      } catch (error) {
+        console.error('Error closing proposal:', error);
+        showError('Failed to close proposal');
+      }
+    }
+
+    async function loadMissions() {
+      try {
+        const response = await fetch('/api/admin/missions');
+        const data = await response.json();
+
+        if (data.success) {
+          missionsData = data.missions;
+          renderMissions();
+        }
+      } catch (error) {
+        console.error('Error loading missions:', error);
+      }
+    }
+
+    function renderMissions() {
+      const tbody = document.querySelector('#missionsTable tbody');
+      tbody.innerHTML = '';
+
+      missionsData.forEach(mission => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${mission.mission_id}</td>
+          <td>${mission.title}</td>
+          <td>${mission.status}</td>
+          <td>${mission.filled_slots}/${mission.total_slots}</td>
+          <td>${mission.reward_points}</td>
+          <td>
+            ${mission.status === 'ready' ? `<button class="success" onclick="startMission('${mission.mission_id}')">Start</button>` : ''}
+            ${mission.status === 'active' ? `<button class="success" onclick="completeMission('${mission.mission_id}')">Complete</button>` : ''}
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    async function createMission(event) {
+      event.preventDefault();
+
+      const missionData = {
+        title: document.getElementById('missionTitle').value,
+        description: document.getElementById('missionDescription').value,
+        totalSlots: parseInt(document.getElementById('missionSlots').value),
+        rewardPoints: parseInt(document.getElementById('missionReward').value)
+      };
+
+      try {
+        const response = await fetch('/api/admin/missions/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(missionData)
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          alert(`✅ Mission ${data.missionId} created!`);
+          event.target.reset();
+          await loadMissions();
+          updateOverviewStats();
+        } else {
+          showError(data.message);
+        }
+      } catch (error) {
+        console.error('Error creating mission:', error);
+        showError('Failed to create mission');
+      }
+    }
+
+    async function startMission(id) {
+      try {
+        const response = await fetch(`/api/admin/missions/${id}/start`, {
+          method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          alert('✅ Mission started!');
+          await loadMissions();
+          updateOverviewStats();
+        } else {
+          showError(data.message);
+        }
+      } catch (error) {
+        console.error('Error starting mission:', error);
+        showError('Failed to start mission');
+      }
+    }
+
+    async function completeMission(id) {
+      if (!confirm(`Complete mission ${id} and award points to participants?`)) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/admin/missions/${id}/complete`, {
+          method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          alert('✅ Mission completed and points awarded!');
+          await loadMissions();
+          updateOverviewStats();
+        } else {
+          showError(data.message);
+        }
+      } catch (error) {
+        console.error('Error completing mission:', error);
+        showError('Failed to complete mission');
+      }
+    }
+
+    function updateOverviewStats() {
+      document.getElementById('totalUsers').textContent = usersData.length;
+      
+      const totalWallets = usersData.reduce((sum, user) => sum + user.wallet_count, 0);
+      document.getElementById('totalWallets').textContent = totalWallets;
+      
+      document.getElementById('totalProposals').textContent = proposalsData.length;
+      
+      const activeProposals = proposalsData.filter(p => p.status === 'voting' || p.status === 'draft').length;
+      document.getElementById('activeProposals').textContent = activeProposals;
+      
+      document.getElementById('totalMissions').textContent = missionsData.length;
+      
+      const activeMissions = missionsData.filter(m => m.status === 'recruiting' || m.status === 'active').length;
+      document.getElementById('activeMissions').textContent = activeMissions;
+    }
+
+    function switchTab(tabName) {
+      currentTab = tabName;
+
+      // Update tab buttons
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      event.target.classList.add('active');
+
+      // Update tab content
+      document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+      });
+      document.getElementById(tabName).classList.add('active');
+    }
+
+    function viewUser(discordId) {
+      alert(`View user details: ${discordId}\n\nFull user details viewer coming soon!`);
+    }
+
+    function login() {
+      window.location.href = '/auth/discord/login';
+    }
+
+    function logout() {
+      window.location.href = '/auth/discord/logout';
+    }
+
+    // Load on page load
+    checkAuth();
+  </script>
+</body>
+</html>

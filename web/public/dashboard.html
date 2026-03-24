@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Solpranos Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+      color: #fff;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    header {
+      background: rgba(0, 0, 0, 0.5);
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      border: 2px solid #FFD700;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    h1 {
+      color: #FFD700;
+      font-size: 2em;
+      text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin-top: 10px;
+    }
+
+    .avatar {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      border: 2px solid #FFD700;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: rgba(0, 0, 0, 0.5);
+      padding: 20px;
+      border-radius: 10px;
+      border: 1px solid #FFD700;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 2em;
+      color: #FFD700;
+      font-weight: bold;
+    }
+
+    .stat-label {
+      color: #ccc;
+      margin-top: 5px;
+    }
+
+    .section {
+      background: rgba(0, 0, 0, 0.5);
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      border: 1px solid #FFD700;
+    }
+
+    h2 {
+      color: #FFD700;
+      margin-bottom: 15px;
+      font-size: 1.5em;
+    }
+
+    .wallet-list {
+      list-style: none;
+    }
+
+    .wallet-item {
+      background: rgba(255, 215, 0, 0.1);
+      padding: 15px;
+      margin-bottom: 10px;
+      border-radius: 5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .wallet-address {
+      font-family: monospace;
+      color: #FFD700;
+      word-break: break-all;
+      flex: 1;
+    }
+
+    .wallet-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    button {
+      background: #FFD700;
+      color: #000;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.3s;
+    }
+
+    button:hover {
+      background: #FFC700;
+      box-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
+    }
+
+    button.secondary {
+      background: #666;
+      color: #fff;
+    }
+
+    button.secondary:hover {
+      background: #888;
+    }
+
+    button.danger {
+      background: #dc3545;
+      color: #fff;
+    }
+
+    button.danger:hover {
+      background: #c82333;
+    }
+
+    .favorite-star {
+      color: #FFD700;
+      font-size: 1.5em;
+      cursor: pointer;
+      opacity: 0.3;
+      transition: opacity 0.3s;
+    }
+
+    .favorite-star.active {
+      opacity: 1;
+    }
+
+    .proposal-item, .mission-item {
+      background: rgba(255, 215, 0, 0.1);
+      padding: 15px;
+      margin-bottom: 10px;
+      border-radius: 5px;
+    }
+
+    .proposal-title, .mission-title {
+      color: #FFD700;
+      font-size: 1.2em;
+      margin-bottom: 5px;
+    }
+
+    .proposal-meta, .mission-meta {
+      color: #ccc;
+      font-size: 0.9em;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 5px 10px;
+      border-radius: 3px;
+      font-size: 0.8em;
+      font-weight: bold;
+      margin-left: 10px;
+    }
+
+    .status-voting {
+      background: #28a745;
+    }
+
+    .status-draft {
+      background: #ffc107;
+      color: #000;
+    }
+
+    .status-recruiting {
+      background: #17a2b8;
+    }
+
+    .status-active {
+      background: #28a745;
+    }
+
+    .login-prompt {
+      text-align: center;
+      padding: 40px;
+    }
+
+    .login-prompt button {
+      font-size: 1.2em;
+      padding: 15px 30px;
+    }
+
+    .empty-state {
+      text-align: center;
+      color: #888;
+      padding: 20px;
+    }
+
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 1.5em;
+      }
+
+      .stats {
+        grid-template-columns: 1fr;
+      }
+
+      .wallet-actions {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>🎩 Solpranos Dashboard</h1>
+      </div>
+      <div>
+        <button onclick="window.location.href='/'">Home</button>
+        <button onclick="window.location.href='/verify'">Verify Wallet</button>
+        <button id="logoutBtn" style="display:none;" onclick="logout()">Logout</button>
+      </div>
+    </header>
+
+    <div id="loginPrompt" class="section login-prompt" style="display:none;">
+      <h2>Welcome to Solpranos Dashboard</h2>
+      <p style="margin: 20px 0; color: #ccc;">Login with Discord to view your profile, manage wallets, and track your governance participation.</p>
+      <button onclick="login()">🎮 Login with Discord</button>
+    </div>
+
+    <div id="dashboardContent" style="display:none;">
+      <div class="user-info">
+        <img id="userAvatar" class="avatar" src="" alt="Avatar">
+        <div>
+          <h3 id="userName"></h3>
+          <p style="color: #ccc;">Logged in</p>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-value" id="tierStat">-</div>
+          <div class="stat-label">Tier</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="vpStat">0</div>
+          <div class="stat-label">Voting Power</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="nftsStat">0</div>
+          <div class="stat-label">NFTs</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="pointsStat">0</div>
+          <div class="stat-label">Heist Points</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>💼 My Wallets</h2>
+        <ul id="walletList" class="wallet-list"></ul>
+        <button onclick="window.location.href='/verify'">➕ Add Wallet</button>
+      </div>
+
+      <div class="section">
+        <h2>📜 My Proposals</h2>
+        <div id="proposalList"></div>
+      </div>
+
+      <div class="section">
+        <h2>🎯 My Missions</h2>
+        <div id="missionList"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let userData = null;
+
+    async function loadDashboard() {
+      try {
+        const response = await fetch('/api/user/me');
+        const data = await response.json();
+
+        if (data.success) {
+          userData = data;
+          showDashboard();
+        } else {
+          showLoginPrompt();
+        }
+      } catch (error) {
+        console.error('Error loading dashboard:', error);
+        showLoginPrompt();
+      }
+    }
+
+    function showLoginPrompt() {
+      document.getElementById('loginPrompt').style.display = 'block';
+      document.getElementById('dashboardContent').style.display = 'none';
+      document.getElementById('logoutBtn').style.display = 'none';
+    }
+
+    function showDashboard() {
+      document.getElementById('loginPrompt').style.display = 'none';
+      document.getElementById('dashboardContent').style.display = 'block';
+      document.getElementById('logoutBtn').style.display = 'inline-block';
+
+      // User info
+      const avatarUrl = userData.user.avatar 
+        ? `https://cdn.discordapp.com/avatars/${userData.user.discordId}/${userData.user.avatar}.png`
+        : 'https://cdn.discordapp.com/embed/avatars/0.png';
+      
+      document.getElementById('userAvatar').src = avatarUrl;
+      document.getElementById('userName').textContent = userData.user.username;
+
+      // Stats
+      document.getElementById('tierStat').textContent = userData.user.tier || 'None';
+      document.getElementById('vpStat').textContent = userData.user.votingPower;
+      document.getElementById('nftsStat').textContent = userData.user.totalNFTs;
+      document.getElementById('pointsStat').textContent = userData.user.totalPoints;
+
+      // Wallets
+      renderWallets();
+
+      // Proposals
+      renderProposals();
+
+      // Missions
+      renderMissions();
+    }
+
+    function renderWallets() {
+      const list = document.getElementById('walletList');
+      list.innerHTML = '';
+
+      if (userData.wallets.length === 0) {
+        list.innerHTML = '<div class="empty-state">No wallets linked. Click "Add Wallet" to get started.</div>';
+        return;
+      }
+
+      userData.wallets.forEach(wallet => {
+        const li = document.createElement('li');
+        li.className = 'wallet-item';
+        li.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+            <span class="favorite-star ${wallet.is_favorite ? 'active' : ''}" 
+                  onclick="toggleFavorite('${wallet.wallet_address}')"
+                  title="Set as favorite">⭐</span>
+            <span class="wallet-address">${wallet.wallet_address}</span>
+          </div>
+          <div class="wallet-actions">
+            <button class="danger" onclick="removeWallet('${wallet.wallet_address}')">Remove</button>
+          </div>
+        `;
+        list.appendChild(li);
+      });
+    }
+
+    async function toggleFavorite(address) {
+      try {
+        const response = await fetch(`/api/user/wallets/${address}/favorite`, {
+          method: 'POST'
+        });
+        const data = await response.json();
+
+        if (data.success) {
+          await loadDashboard();
+        } else {
+          alert(data.message);
+        }
+      } catch (error) {
+        console.error('Error setting favorite:', error);
+        alert('Failed to set favorite wallet');
+      }
+    }
+
+    async function removeWallet(address) {
+      if (!confirm('Are you sure you want to remove this wallet?')) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/user/wallets/${address}`, {
+          method: 'DELETE'
+        });
+        const data = await response.json();
+
+        if (data.success) {
+          await loadDashboard();
+        } else {
+          alert(data.message);
+        }
+      } catch (error) {
+        console.error('Error removing wallet:', error);
+        alert('Failed to remove wallet');
+      }
+    }
+
+    function renderProposals() {
+      const list = document.getElementById('proposalList');
+      list.innerHTML = '';
+
+      if (userData.proposals.length === 0) {
+        list.innerHTML = '<div class="empty-state">No active proposals created by you.</div>';
+        return;
+      }
+
+      userData.proposals.forEach(proposal => {
+        const div = document.createElement('div');
+        div.className = 'proposal-item';
+        div.innerHTML = `
+          <div class="proposal-title">
+            ${proposal.title}
+            <span class="status-badge status-${proposal.status}">${proposal.status.toUpperCase()}</span>
+          </div>
+          <div class="proposal-meta">
+            ${proposal.proposal_id} • Created ${new Date(proposal.created_at).toLocaleDateString()}
+          </div>
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    function renderMissions() {
+      const list = document.getElementById('missionList');
+      list.innerHTML = '';
+
+      if (userData.missions.length === 0) {
+        list.innerHTML = '<div class="empty-state">No active missions joined.</div>';
+        return;
+      }
+
+      userData.missions.forEach(mission => {
+        const div = document.createElement('div');
+        div.className = 'mission-item';
+        div.innerHTML = `
+          <div class="mission-title">
+            ${mission.title}
+            <span class="status-badge status-${mission.status}">${mission.status.toUpperCase()}</span>
+          </div>
+          <div class="mission-meta">
+            ${mission.mission_id} • Role: ${mission.assigned_role} • NFT: ${mission.assigned_nft_name || 'N/A'}
+            ${mission.points_awarded > 0 ? ` • Earned: ${mission.points_awarded} pts` : ''}
+          </div>
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    function login() {
+      window.location.href = '/auth/discord/login';
+    }
+
+    function logout() {
+      window.location.href = '/auth/discord/logout';
+    }
+
+    // Load on page load
+    loadDashboard();
+  </script>
+</body>
+</html>

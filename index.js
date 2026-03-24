@@ -57,6 +57,8 @@ webServer.start();
 const proposalService = require('./services/proposalService');
 const walletService = require('./services/walletService');
 const roleService = require('./services/roleService');
+const governanceLogger = require('./utils/governanceLogger');
+const settings = require('./config/settings.json');
 
 client.once(Events.ClientReady, () => {
   logger.log(`✅ Bot is online as ${client.user.tag}`);
@@ -65,9 +67,10 @@ client.once(Events.ClientReady, () => {
   
   client.user.setActivity('The Commission', { type: 0 });
 
-  // Pass client to proposalService and webServer
+  // Pass client to proposalService, webServer, and governanceLogger
   proposalService.setClient(client);
   webServer.setClient(client);
+  governanceLogger.setClient(client);
 
   // Start periodic vote check (every 5 minutes)
   startVoteCheckInterval();
@@ -202,12 +205,14 @@ async function updateProposalMessage(message, proposalId, supporterCount, isProm
     const proposal = proposalService.getProposal(proposalId);
     if (!proposal) return;
 
+    const supportThreshold = settings.supportThreshold || 4;
+
     const embed = EmbedBuilder.from(message.embeds[0]);
     
     // Update supporters field
     const fieldIndex = embed.data.fields.findIndex(f => f.name === '👥 Supporters');
     if (fieldIndex >= 0) {
-      embed.data.fields[fieldIndex].value = isPromoted ? '4/4 ✅' : `${supporterCount}/4`;
+      embed.data.fields[fieldIndex].value = isPromoted ? `${supportThreshold}/${supportThreshold} ✅` : `${supporterCount}/${supportThreshold}`;
     }
 
     // Update status field if promoted
@@ -310,7 +315,7 @@ async function handleVoteButton(interaction) {
 }
 
 function startVoteCheckInterval() {
-  // Check every 5 minutes for votes that need to be closed
+  // Check every 5 minutes for votes that need to be closed and stale drafts
   setInterval(async () => {
     try {
       const db = require('./database/db');
@@ -319,12 +324,15 @@ function startVoteCheckInterval() {
       for (const proposal of activeVotes) {
         proposalService.checkAutoClose(proposal.proposal_id);
       }
+
+      // Check for stale draft proposals
+      await proposalService.expireStaleProposals();
     } catch (error) {
       logger.error('Error in vote check interval:', error);
     }
   }, 5 * 60 * 1000); // 5 minutes
 
-  logger.log('📅 Vote auto-close checker started (runs every 5 minutes)');
+  logger.log('📅 Vote auto-close and draft expiry checker started (runs every 5 minutes)');
 }
 
 client.on(Events.Error, error => {

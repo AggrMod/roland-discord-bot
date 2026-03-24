@@ -1,6 +1,8 @@
 const db = require('../database/db');
 const vpService = require('./vpService');
 const logger = require('../utils/logger');
+const governanceLogger = require('../utils/governanceLogger');
+const settings = require('../config/settings.json');
 
 class ProposalService {
   constructor() {
@@ -26,6 +28,14 @@ class ProposalService {
       `).run(proposalId, creatorId, creatorWallet, title, description);
 
       logger.log(`Proposal ${proposalId} created by ${creatorId}`);
+      
+      // Audit log
+      governanceLogger.log('proposal_created', {
+        proposalId,
+        creatorId,
+        title
+      });
+      
       return { success: true, proposalId };
     } catch (error) {
       logger.error('Error creating proposal:', error);
@@ -54,6 +64,16 @@ class ProposalService {
         return { success: false, message: 'Can only support draft proposals' };
       }
 
+      // Block self-support
+      if (proposal.creator_id === supporterId) {
+        // Audit log
+        governanceLogger.log('support_blocked', {
+          proposalId,
+          userId: supporterId
+        });
+        return { success: false, message: 'You cannot support your own proposal' };
+      }
+
       db.prepare(`
         INSERT INTO proposal_supporters (proposal_id, supporter_id)
         VALUES (?, ?)
@@ -63,12 +83,22 @@ class ProposalService {
         'SELECT COUNT(*) as count FROM proposal_supporters WHERE proposal_id = ?'
       ).get(proposalId).count;
 
-      if (supporterCount >= 4) {
+      // Get support threshold from settings
+      const supportThreshold = settings.supportThreshold || 4;
+
+      // Audit log
+      governanceLogger.log('support_added', {
+        proposalId,
+        supporterId,
+        supporterCount
+      });
+
+      if (supporterCount >= supportThreshold) {
         this.promoteToVoting(proposalId);
       }
 
-      logger.log(`User ${supporterId} supported proposal ${proposalId} (${supporterCount}/4)`);
-      return { success: true, supporterCount, promoted: supporterCount >= 4 };
+      logger.log(`User ${supporterId} supported proposal ${proposalId} (${supporterCount}/${supportThreshold})`);
+      return { success: true, supporterCount, promoted: supporterCount >= supportThreshold };
     } catch (error) {
       if (error.message.includes('UNIQUE constraint failed')) {
         return { success: false, message: 'You already support this proposal' };
@@ -86,6 +116,8 @@ class ProposalService {
       const allUsers = db.prepare('SELECT voting_power FROM users WHERE voting_power > 0').all();
       const totalVP = vpService.getTotalVPInSystem(allUsers);
 
+      const proposal = this.getProposal(proposalId);
+
       db.prepare(`
         UPDATE proposals 
         SET status = 'voting', start_time = ?, end_time = ?, total_vp = ?
@@ -93,6 +125,13 @@ class ProposalService {
       `).run(startTime.toISOString(), endTime.toISOString(), totalVP, proposalId);
 
       logger.log(`Proposal ${proposalId} promoted to voting. Total VP: ${totalVP}`);
+
+      // Audit log
+      governanceLogger.log('proposal_promoted', {
+        proposalId,
+        totalVP,
+        title: proposal ? proposal.title : 'N/A'
+      });
 
       // Post to voting channel
       if (this.client) {
@@ -191,6 +230,14 @@ class ProposalService {
         `).run(voteChoice, votingPower, proposalId, voterId);
 
         logger.log(`User ${voterId} changed vote on ${proposalId} to ${voteChoice}`);
+        
+        // Audit log
+        governanceLogger.log('vote_changed', {
+          proposalId,
+          voterId,
+          voteChoice,
+          votingPower
+        });
       } else {
         db.prepare(`
           INSERT INTO votes (proposal_id, voter_id, vote_choice, voting_power)
@@ -198,6 +245,14 @@ class ProposalService {
         `).run(proposalId, voterId, voteChoice, votingPower);
 
         logger.log(`User ${voterId} voted ${voteChoice} on ${proposalId} with ${votingPower} VP`);
+        
+        // Audit log
+        governanceLogger.log('vote_cast', {
+          proposalId,
+          voterId,
+          voteChoice,
+          votingPower
+        });
       }
 
       this.updateProposalTally(proposalId);
@@ -310,6 +365,16 @@ class ProposalService {
       }
 
       db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ?').run(finalStatus, proposalId);
+
+      // Audit log
+      governanceLogger.log('vote_closed', {
+        proposalId,
+        status: finalStatus,
+        quorumMet,
+        yesVP: proposal.yes_vp,
+        noVP: proposal.no_vp,
+        abstainVP: proposal.abstain_vp
+      });
 
       // Update voting channel message
       await this.updateVotingMessageFinal(proposalId, finalStatus, quorumMet);
@@ -456,6 +521,119 @@ class ProposalService {
 
   getSupporterCount(proposalId) {
     return db.prepare('SELECT COUNT(*) as count FROM proposal_supporters WHERE proposal_id = ?').get(proposalId).count;
+  }
+
+  async expireStaleProposals() {
+    try {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const staleDrafts = db.prepare(`
+        SELECT * FROM proposals 
+        WHERE status = 'draft' 
+        AND created_at < ?
+      `).all(sevenDaysAgo.toISOString());
+
+      const supportThreshold = settings.supportThreshold || 4;
+
+      for (const proposal of staleDrafts) {
+        const supporterCount = this.getSupporterCount(proposal.proposal_id);
+        
+        if (supporterCount < supportThreshold) {
+          // Mark as expired
+          db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ?')
+            .run('expired', proposal.proposal_id);
+
+          logger.log(`Proposal ${proposal.proposal_id} expired (${supporterCount}/${supportThreshold} supporters after 7 days)`);
+
+          // Audit log
+          await governanceLogger.log('proposal_expired', {
+            proposalId: proposal.proposal_id,
+            creatorId: proposal.creator_id,
+            title: proposal.title,
+            supporterCount
+          });
+
+          // Disable support button on proposal message if it exists
+          if (proposal.message_id && proposal.channel_id && this.client) {
+            await this.disableProposalMessage(proposal.channel_id, proposal.message_id, proposal.proposal_id);
+          }
+
+          // Post expiration notice to proposals channel if configured
+          if (proposal.channel_id && this.client) {
+            await this.postExpirationNotice(proposal.channel_id, proposal.proposal_id, proposal.title, supporterCount, supportThreshold);
+          }
+        }
+      }
+
+      if (staleDrafts.length > 0) {
+        logger.log(`Checked ${staleDrafts.length} stale draft proposal(s)`);
+      }
+    } catch (error) {
+      logger.error('Error expiring stale proposals:', error);
+    }
+  }
+
+  async disableProposalMessage(channelId, messageId, proposalId) {
+    try {
+      const channel = await this.client.channels.fetch(channelId);
+      if (!channel || !channel.isTextBased()) return;
+
+      const message = await channel.messages.fetch(messageId);
+      if (!message) return;
+
+      const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+
+      const embed = EmbedBuilder.from(message.embeds[0])
+        .setColor('#808080')
+        .setFooter({ text: 'This proposal expired after 7 days without sufficient support.' });
+
+      // Update status field
+      const statusIndex = embed.data.fields.findIndex(f => f.name === '📊 Status');
+      if (statusIndex >= 0) {
+        embed.data.fields[statusIndex].value = 'EXPIRED ⏰';
+      }
+
+      // Disable button
+      const row = new ActionRowBuilder()
+        .addComponents(
+          new ButtonBuilder()
+            .setCustomId(`support_${proposalId}_expired`)
+            .setLabel('Support')
+            .setStyle(ButtonStyle.Primary)
+            .setEmoji('✅')
+            .setDisabled(true)
+        );
+
+      await message.edit({ embeds: [embed], components: [row] });
+    } catch (error) {
+      logger.error('Error disabling proposal message:', error);
+    }
+  }
+
+  async postExpirationNotice(channelId, proposalId, title, supporterCount, supportThreshold) {
+    try {
+      const channel = await this.client.channels.fetch(channelId);
+      if (!channel || !channel.isTextBased()) return;
+
+      const { EmbedBuilder } = require('discord.js');
+
+      const embed = new EmbedBuilder()
+        .setColor('#808080')
+        .setTitle('⏰ Proposal Expired')
+        .setDescription(`**${title}**`)
+        .addFields(
+          { name: '🆔 Proposal ID', value: proposalId, inline: true },
+          { name: '👥 Final Support', value: `${supporterCount}/${supportThreshold}`, inline: true },
+          { name: '📊 Status', value: 'Expired', inline: true }
+        )
+        .setFooter({ text: 'Draft expired after 7 days without sufficient support' })
+        .setTimestamp();
+
+      await channel.send({ embeds: [embed] });
+    } catch (error) {
+      logger.error('Error posting expiration notice:', error);
+    }
   }
 }
 

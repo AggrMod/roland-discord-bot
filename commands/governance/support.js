@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const proposalService = require('../../services/proposalService');
 const roleService = require('../../services/roleService');
+const settings = require('../../config/settings.json');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -42,16 +43,6 @@ module.exports = {
       return interaction.editReply({ embeds: [embed] });
     }
 
-    if (proposal.creator_id === discordId) {
-      const embed = new EmbedBuilder()
-        .setColor('#FF0000')
-        .setTitle('❌ Cannot Support Own Proposal')
-        .setDescription('You cannot support your own proposal.')
-        .setTimestamp();
-
-      return interaction.editReply({ embeds: [embed] });
-    }
-
     const result = proposalService.addSupporter(proposalId, discordId);
 
     if (!result.success) {
@@ -64,8 +55,9 @@ module.exports = {
       return interaction.editReply({ embeds: [embed] });
     }
 
+    const supportThreshold = settings.supportThreshold || 4;
     const supporterCount = result.supporterCount;
-    const isPromoted = supporterCount >= 4;
+    const isPromoted = result.promoted;
 
     const embed = new EmbedBuilder()
       .setColor('#FFD700')
@@ -73,13 +65,13 @@ module.exports = {
       .setDescription(`**${proposal.title}**`)
       .addFields(
         { name: '🆔 Proposal ID', value: proposalId, inline: true },
-        { name: '👥 Supporters', value: `${supporterCount}/4`, inline: true },
+        { name: '👥 Supporters', value: `${supporterCount}/${supportThreshold}`, inline: true },
         { name: '📊 Status', value: isPromoted ? 'Now Voting' : 'Still in Draft', inline: true }
       )
       .setFooter({ 
         text: isPromoted 
           ? 'Voting is now open for 7 days!' 
-          : `${4 - supporterCount} more supporter(s) needed`
+          : `${supportThreshold - supporterCount} more supporter(s) needed`
       })
       .setTimestamp();
 

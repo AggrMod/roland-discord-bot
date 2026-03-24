@@ -3,6 +3,7 @@ const proposalService = require('../../services/proposalService');
 const roleService = require('../../services/roleService');
 const walletService = require('../../services/walletService');
 const logger = require('../../utils/logger');
+const settings = require('../../config/settings.json');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -58,6 +59,8 @@ module.exports = {
       return interaction.editReply({ embeds: [embed] });
     }
 
+    const supportThreshold = settings.supportThreshold || 4;
+
     const embed = new EmbedBuilder()
       .setColor('#FFD700')
       .setTitle('📜 New Proposal Created')
@@ -65,7 +68,7 @@ module.exports = {
       .addFields(
         { name: '🆔 Proposal ID', value: result.proposalId, inline: true },
         { name: '👤 Creator', value: interaction.user.username, inline: true },
-        { name: '📊 Status', value: 'Draft (Needs 4 supporters)', inline: true }
+        { name: '📊 Status', value: `Draft (Needs ${supportThreshold} supporters)`, inline: true }
       )
       .setFooter({ text: 'Posted to proposals channel - waiting for supporters' })
       .setTimestamp();
@@ -87,9 +90,9 @@ module.exports = {
               { name: '🆔 Proposal ID', value: result.proposalId, inline: true },
               { name: '👤 Creator', value: interaction.user.username, inline: true },
               { name: '📊 Status', value: 'Draft', inline: true },
-              { name: '👥 Supporters', value: '0/4', inline: true }
+              { name: '👥 Supporters', value: `0/${supportThreshold}`, inline: true }
             )
-            .setFooter({ text: 'Click Support below to help promote this proposal (4 needed)' })
+            .setFooter({ text: `Click Support below to help promote this proposal (${supportThreshold} needed)` })
             .setTimestamp();
 
           const row = new ActionRowBuilder()

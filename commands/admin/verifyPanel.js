@@ -20,7 +20,11 @@ module.exports = {
     const row = new ActionRowBuilder()
       .addComponents(
         new ButtonBuilder()
+          .setCustomId('panel_verify')
           .setLabel('Verify')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setLabel('Add Wallet')
           .setStyle(ButtonStyle.Link)
           .setURL(`${webUrl}/verify`),
         new ButtonBuilder()
@@ -29,7 +33,6 @@ module.exports = {
           .setURL('https://the-solpranos.com/help')
       );
 
-    // Send as a regular message (not ephemeral) so it stays in the channel
     await interaction.channel.send({ embeds: [embed], components: [row] });
     await interaction.reply({ content: '✅ Verification panel posted!', ephemeral: true });
     logger.log(`Verify panel posted in #${interaction.channel.name} by ${interaction.user.username}`);

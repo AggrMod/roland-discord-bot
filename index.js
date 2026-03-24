@@ -107,6 +107,16 @@ client.on(Events.InteractionCreate, async interaction => {
   if (interaction.isButton()) {
     const customId = interaction.customId;
 
+    // Verify panel button handler
+    if (customId === 'panel_verify') {
+      // Run the same logic as /verify command
+      const verifyCommand = client.commands.get('verify');
+      if (verifyCommand) {
+        await verifyCommand.execute(interaction);
+      }
+      return;
+    }
+
     // Support button handler
     if (customId.startsWith('support_')) {
       await handleSupportButton(interaction);

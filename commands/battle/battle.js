@@ -185,20 +185,29 @@ async function handleStart(interaction) {
     }
   }
 
-  // Post winner
+  // Post HYPE winner finale with @mention
   const winnerEmbed = new EmbedBuilder()
     .setColor('#FFD700')
-    .setTitle('👑 Battle Complete!')
-    .setDescription(battleResult.winnerLine)
-    .addFields(
-      { name: '🏆 Winner', value: battleResult.winner.username, inline: true },
-      { name: '❤️ HP Remaining', value: battleResult.winner.hp.toString(), inline: true },
-      { name: '💥 Total Damage', value: battleResult.winner.total_damage_dealt.toString(), inline: true }
+    .setTitle('👑 The Family Crown Goes To...')
+    .setDescription(
+      `<@${battleResult.winner.user_id}>\n\n` +
+      `${battleResult.finaleOutro}`
     )
-    .setFooter({ text: 'Use /battle stats to see your overall record' })
+    .addFields(
+      { name: '🏆 Champion', value: battleResult.winner.username, inline: true },
+      { name: '❤️ HP Remaining', value: battleResult.winner.hp.toString(), inline: true },
+      { name: '💥 Total Damage', value: battleResult.winner.total_damage_dealt.toString(), inline: true },
+      { name: '⚔️ Rounds Survived', value: battleResult.roundCount.toString(), inline: true },
+      { name: '👥 Total Fighters', value: battleResult.totalPlayers.toString(), inline: true },
+      { name: '📊 Win Rate', value: '100% (this battle)', inline: true }
+    )
+    .setFooter({ text: 'Use /battle stats to see your overall record | Era: Solpranos' })
     .setTimestamp();
 
-  await interaction.followUp({ embeds: [winnerEmbed] });
+  await interaction.followUp({ 
+    content: `🎊 Congratulations <@${battleResult.winner.user_id}>! 🎊`,
+    embeds: [winnerEmbed] 
+  });
 
   // Update original lobby message
   try {

@@ -4,63 +4,46 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Solpranos Admin Portal</title>
+  <link rel="stylesheet" href="/portal-style.css">
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-      color: #fff;
-      min-height: 100vh;
-      padding: 20px;
-    }
-
-    .container {
+    /* Admin-specific extensions */
+    .admin-container {
       max-width: 1400px;
       margin: 0 auto;
+      padding: var(--space-6);
     }
 
-    header {
-      background: rgba(0, 0, 0, 0.5);
-      padding: 20px;
-      border-radius: 10px;
-      margin-bottom: 20px;
-      border: 2px solid #FFD700;
+    .admin-tabs {
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    h1 {
-      color: #FFD700;
-      font-size: 2em;
-      text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
-    }
-
-    .tabs {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
+      gap: var(--space-2);
+      margin-bottom: var(--space-6);
       flex-wrap: wrap;
+      border-bottom: 2px solid var(--border-default);
+      padding-bottom: var(--space-2);
     }
 
-    .tab {
-      background: rgba(255, 215, 0, 0.2);
-      color: #FFD700;
-      border: 1px solid #FFD700;
-      padding: 10px 20px;
-      border-radius: 5px;
+    .admin-tab {
+      background: transparent;
+      color: var(--text-secondary);
+      border: none;
+      padding: var(--space-3) var(--space-5);
+      border-radius: var(--radius-md) var(--radius-md) 0 0;
       cursor: pointer;
-      transition: all 0.3s;
+      transition: var(--transition-base);
+      font-size: var(--font-base);
+      font-weight: 600;
+      position: relative;
     }
 
-    .tab.active {
-      background: #FFD700;
-      color: #000;
+    .admin-tab:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .admin-tab.active {
+      background: var(--bg-elevated);
+      color: var(--gold);
+      border-bottom: 3px solid var(--gold);
     }
 
     .tab-content {
@@ -69,154 +52,162 @@
 
     .tab-content.active {
       display: block;
+      animation: fadeIn 0.3s ease;
     }
 
-    .section {
-      background: rgba(0, 0, 0, 0.5);
-      padding: 20px;
-      border-radius: 10px;
-      margin-bottom: 20px;
-      border: 1px solid #FFD700;
-    }
-
-    h2 {
-      color: #FFD700;
-      margin-bottom: 15px;
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 15px;
-      margin-bottom: 20px;
+      gap: var(--space-4);
+      margin-bottom: var(--space-6);
     }
 
     .stat-card {
-      background: rgba(255, 215, 0, 0.1);
-      padding: 20px;
-      border-radius: 10px;
-      border: 1px solid #FFD700;
+      background: var(--bg-secondary);
+      padding: var(--space-6);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-default);
       text-align: center;
+      transition: var(--transition-base);
+    }
+
+    .stat-card:hover {
+      border-color: var(--border-emphasis);
+      box-shadow: var(--shadow-gold-sm);
+      transform: translateY(-2px);
     }
 
     .stat-value {
-      font-size: 2em;
-      color: #FFD700;
+      font-size: var(--font-4xl);
+      color: var(--gold);
       font-weight: bold;
+      display: block;
+      margin-bottom: var(--space-2);
     }
 
     .stat-label {
-      color: #ccc;
-      margin-top: 5px;
+      color: var(--text-secondary);
+      font-size: var(--font-sm);
     }
 
-    table {
+    .admin-table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 15px;
+      margin-top: var(--space-4);
+      background: var(--bg-secondary);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
     }
 
-    th, td {
-      padding: 12px;
+    .admin-table th,
+    .admin-table td {
+      padding: var(--space-4);
       text-align: left;
-      border-bottom: 1px solid rgba(255, 215, 0, 0.3);
+      border-bottom: 1px solid var(--border-subtle);
     }
 
-    th {
-      background: rgba(255, 215, 0, 0.2);
-      color: #FFD700;
-      font-weight: bold;
+    .admin-table th {
+      background: var(--bg-tertiary);
+      color: var(--gold);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: var(--font-xs);
+      letter-spacing: 0.5px;
     }
 
-    tr:hover {
-      background: rgba(255, 215, 0, 0.1);
+    .admin-table tbody tr {
+      transition: var(--transition-fast);
     }
 
-    button {
-      background: #FFD700;
-      color: #000;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 5px;
-      cursor: pointer;
-      font-weight: bold;
-      transition: all 0.3s;
-      margin: 5px;
-    }
-
-    button:hover {
-      background: #FFC700;
-      box-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
-    }
-
-    button.danger {
-      background: #dc3545;
-      color: #fff;
-    }
-
-    button.success {
-      background: #28a745;
-      color: #fff;
-    }
-
-    input, select, textarea {
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid #FFD700;
-      color: #fff;
-      padding: 10px;
-      border-radius: 5px;
-      width: 100%;
-      margin-bottom: 10px;
-    }
-
-    label {
-      display: block;
-      color: #FFD700;
-      margin-bottom: 5px;
-      margin-top: 15px;
+    .admin-table tbody tr:hover {
+      background: var(--bg-tertiary);
     }
 
     .form-row {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 15px;
+      gap: var(--space-4);
+      margin-bottom: var(--space-4);
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+
+    .form-group label {
+      color: var(--gold);
+      font-size: var(--font-sm);
+      font-weight: 600;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-default);
+      color: var(--text-primary);
+      padding: var(--space-3);
+      border-radius: var(--radius-md);
+      font-size: var(--font-base);
+      transition: var(--transition-base);
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--gold);
+      box-shadow: 0 0 0 3px var(--gold-glow);
     }
 
     .tier-editor {
-      margin-top: 20px;
+      margin-top: var(--space-6);
     }
 
     .tier-row {
       display: grid;
       grid-template-columns: 2fr 1fr 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 10px;
+      gap: var(--space-3);
+      margin-bottom: var(--space-3);
       align-items: center;
     }
 
     .tier-row input {
-      margin-bottom: 0;
+      margin: 0;
+    }
+
+    .tier-row.header {
+      font-weight: 600;
+      color: var(--gold);
+      font-size: var(--font-sm);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding-bottom: var(--space-2);
+      border-bottom: 2px solid var(--border-default);
     }
 
     .login-prompt {
       text-align: center;
-      padding: 40px;
+      padding: var(--space-12);
     }
 
-    .error-message {
-      background: #dc3545;
-      color: #fff;
-      padding: 15px;
-      border-radius: 5px;
-      margin-bottom: 20px;
+    .login-prompt h2 {
+      color: var(--gold);
+      font-size: var(--font-3xl);
+      margin-bottom: var(--space-4);
     }
 
-    .success-message {
-      background: #28a745;
-      color: #fff;
-      padding: 15px;
-      border-radius: 5px;
-      margin-bottom: 20px;
+    .login-prompt p {
+      color: var(--text-secondary);
+      margin-bottom: var(--space-6);
+      font-size: var(--font-lg);
     }
 
     @media (max-width: 768px) {
@@ -224,104 +215,112 @@
         grid-template-columns: 1fr;
       }
 
-      table {
-        font-size: 0.9em;
+      .admin-table {
+        font-size: var(--font-sm);
+      }
+
+      .admin-tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
       }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>⚙️ Solpranos Admin Portal</h1>
-      <div>
-        <button onclick="window.location.href='/dashboard'">Dashboard</button>
-        <button onclick="logout()">Logout</button>
-      </div>
-    </header>
+  <!-- Top Navigation -->
+  <nav class="top-nav" role="navigation" aria-label="Admin navigation">
+    <div class="nav-brand">
+      <h1>⚙️ Solpranos Admin</h1>
+    </div>
+    <div class="nav-user">
+      <button class="btn-secondary" onclick="window.location.href='/dashboard'" style="margin-right: 10px;">Dashboard</button>
+      <button class="btn-secondary" onclick="logout()">Logout</button>
+    </div>
+  </nav>
 
-    <div id="loginPrompt" class="section login-prompt" style="display:none;">
+  <div class="admin-container">
+    <div id="loginPrompt" class="card login-prompt" style="display:none;">
       <h2>Admin Access Required</h2>
-      <p style="margin: 20px 0; color: #ccc;">You must be logged in with an administrator account to access this portal.</p>
-      <button onclick="login()">🎮 Login with Discord</button>
+      <p>You must be logged in with an administrator account to access this portal.</p>
+      <button class="btn-primary" onclick="login()">🎮 Login with Discord</button>
     </div>
 
-    <div id="errorMessage" class="error-message" style="display:none;"></div>
+    <div id="errorMessage" class="alert alert-error" style="display:none;"></div>
 
     <div id="adminContent" style="display:none;">
-      <div class="tabs">
-        <div class="tab active" onclick="switchTab('overview')">Overview</div>
-        <div class="tab" onclick="switchTab('settings')">Settings</div>
-        <div class="tab" onclick="switchTab('users')">Users</div>
-        <div class="tab" onclick="switchTab('proposals')">Proposals</div>
-        <div class="tab" onclick="switchTab('missions')">Missions</div>
+      <div class="admin-tabs">
+        <button class="admin-tab active" onclick="switchTab('overview')">Overview</button>
+        <button class="admin-tab" onclick="switchTab('settings')">Settings</button>
+        <button class="admin-tab" onclick="switchTab('users')">Users</button>
+        <button class="admin-tab" onclick="switchTab('proposals')">Proposals</button>
+        <button class="admin-tab" onclick="switchTab('missions')">Missions</button>
       </div>
 
       <!-- Overview Tab -->
       <div id="overview" class="tab-content active">
         <div class="stats-grid">
           <div class="stat-card">
-            <div class="stat-value" id="totalUsers">0</div>
-            <div class="stat-label">Total Users</div>
+            <span class="stat-value" id="totalUsers">0</span>
+            <span class="stat-label">Total Users</span>
           </div>
           <div class="stat-card">
-            <div class="stat-value" id="totalWallets">0</div>
-            <div class="stat-label">Verified Wallets</div>
+            <span class="stat-value" id="totalWallets">0</span>
+            <span class="stat-label">Verified Wallets</span>
           </div>
           <div class="stat-card">
-            <div class="stat-value" id="totalProposals">0</div>
-            <div class="stat-label">Total Proposals</div>
+            <span class="stat-value" id="totalProposals">0</span>
+            <span class="stat-label">Total Proposals</span>
           </div>
           <div class="stat-card">
-            <div class="stat-value" id="activeProposals">0</div>
-            <div class="stat-label">Active Proposals</div>
+            <span class="stat-value" id="activeProposals">0</span>
+            <span class="stat-label">Active Proposals</span>
           </div>
           <div class="stat-card">
-            <div class="stat-value" id="totalMissions">0</div>
-            <div class="stat-label">Total Missions</div>
+            <span class="stat-value" id="totalMissions">0</span>
+            <span class="stat-label">Total Missions</span>
           </div>
           <div class="stat-card">
-            <div class="stat-value" id="activeMissions">0</div>
-            <div class="stat-label">Active Missions</div>
+            <span class="stat-value" id="activeMissions">0</span>
+            <span class="stat-label">Active Missions</span>
           </div>
         </div>
       </div>
 
       <!-- Settings Tab -->
       <div id="settings" class="tab-content">
-        <div class="section">
-          <h2>⚙️ System Configuration</h2>
+        <div class="card">
+          <h2 class="card-title">⚙️ System Configuration</h2>
           
           <div class="form-row">
-            <div>
+            <div class="form-group">
               <label>Quorum Percentage (%)</label>
               <input type="number" id="quorumPercentage" min="1" max="100">
             </div>
-            <div>
+            <div class="form-group">
               <label>Support Threshold</label>
               <input type="number" id="supportThreshold" min="1">
             </div>
-            <div>
+            <div class="form-group">
               <label>Vote Duration (Days)</label>
               <input type="number" id="voteDurationDays" min="1" max="30">
             </div>
           </div>
 
-          <h3 style="color: #FFD700; margin-top: 30px;">Tier Configuration</h3>
+          <h3 style="color: var(--gold); margin-top: var(--space-8); font-size: var(--font-xl);">Tier Configuration</h3>
           <div class="tier-editor" id="tierEditor"></div>
 
-          <div style="margin-top: 20px;">
-            <button class="success" onclick="saveSettings()">💾 Save All Settings</button>
-            <button class="danger" onclick="resetSettings()">🔄 Reset to Defaults</button>
+          <div style="margin-top: var(--space-6); display: flex; gap: var(--space-3);">
+            <button class="btn-primary" onclick="saveSettings()">💾 Save All Settings</button>
+            <button class="btn-danger" onclick="resetSettings()">🔄 Reset to Defaults</button>
           </div>
         </div>
       </div>
 
       <!-- Users Tab -->
       <div id="users" class="tab-content">
-        <div class="section">
-          <h2>👥 User Management</h2>
-          <table id="usersTable">
+        <div class="card">
+          <h2 class="card-title">👥 User Management</h2>
+          <table class="admin-table" id="usersTable">
             <thead>
               <tr>
                 <th>Discord ID</th>
@@ -340,9 +339,9 @@
 
       <!-- Proposals Tab -->
       <div id="proposals" class="tab-content">
-        <div class="section">
-          <h2>📜 Proposal Management</h2>
-          <table id="proposalsTable">
+        <div class="card">
+          <h2 class="card-title">📜 Proposal Management</h2>
+          <table class="admin-table" id="proposalsTable">
             <thead>
               <tr>
                 <th>ID</th>
@@ -361,33 +360,37 @@
 
       <!-- Missions Tab -->
       <div id="missions" class="tab-content">
-        <div class="section">
-          <h2>🎯 Mission Management</h2>
+        <div class="card">
+          <h2 class="card-title">🎯 Mission Management</h2>
           
-          <h3 style="color: #FFD700; margin-bottom: 15px;">Create New Mission</h3>
+          <h3 style="color: var(--gold); margin-bottom: var(--space-4); font-size: var(--font-lg);">Create New Mission</h3>
           <form onsubmit="createMission(event)">
-            <label>Title</label>
-            <input type="text" id="missionTitle" required>
+            <div class="form-group">
+              <label>Title</label>
+              <input type="text" id="missionTitle" required>
+            </div>
             
-            <label>Description</label>
-            <textarea id="missionDescription" rows="3" required></textarea>
+            <div class="form-group">
+              <label>Description</label>
+              <textarea id="missionDescription" rows="3" required></textarea>
+            </div>
             
             <div class="form-row">
-              <div>
+              <div class="form-group">
                 <label>Total Slots</label>
                 <input type="number" id="missionSlots" min="1" required>
               </div>
-              <div>
+              <div class="form-group">
                 <label>Reward Points</label>
                 <input type="number" id="missionReward" min="0" required>
               </div>
             </div>
             
-            <button type="submit" class="success">➕ Create Mission</button>
+            <button type="submit" class="btn-primary">➕ Create Mission</button>
           </form>
 
-          <h3 style="color: #FFD700; margin-top: 30px;">Existing Missions</h3>
-          <table id="missionsTable">
+          <h3 style="color: var(--gold); margin-top: var(--space-8); margin-bottom: var(--space-4); font-size: var(--font-lg);">Existing Missions</h3>
+          <table class="admin-table" id="missionsTable">
             <thead>
               <tr>
                 <th>ID</th>
@@ -479,7 +482,7 @@
 
       const tierEditor = document.getElementById('tierEditor');
       tierEditor.innerHTML = `
-        <div class="tier-row" style="font-weight: bold; color: #FFD700;">
+        <div class="tier-row header">
           <div>Tier Name</div>
           <div>Min NFTs</div>
           <div>Max NFTs</div>
@@ -491,7 +494,7 @@
         const row = document.createElement('div');
         row.className = 'tier-row';
         row.innerHTML = `
-          <input type="text" value="${tier.name}" data-tier="${index}" data-field="name" readonly style="background: rgba(255,255,255,0.05);">
+          <input type="text" value="${tier.name}" data-tier="${index}" data-field="name" readonly style="background: var(--bg-primary); opacity: 0.7;">
           <input type="number" value="${tier.minNFTs}" data-tier="${index}" data-field="minNFTs" min="1">
           <input type="number" value="${tier.maxNFTs}" data-tier="${index}" data-field="maxNFTs" min="1">
           <input type="number" value="${tier.votingPower}" data-tier="${index}" data-field="votingPower" min="1">
@@ -605,7 +608,7 @@
           <td>${user.total_nfts}</td>
           <td>${user.voting_power}</td>
           <td>${user.wallet_count}</td>
-          <td><button onclick="viewUser('${user.discord_id}')">View</button></td>
+          <td><button class="btn-secondary btn-sm" onclick="viewUser('${user.discord_id}')">View</button></td>
         `;
         tbody.appendChild(row);
       });
@@ -639,7 +642,7 @@
           <td>${proposal.yes_vp}</td>
           <td>${proposal.no_vp}</td>
           <td>
-            ${proposal.status === 'voting' ? `<button class="danger" onclick="closeProposal('${proposal.proposal_id}')">Close Vote</button>` : '-'}
+            ${proposal.status === 'voting' ? `<button class="btn-danger btn-sm" onclick="closeProposal('${proposal.proposal_id}')">Close Vote</button>` : '-'}
           </td>
         `;
         tbody.appendChild(row);
@@ -698,8 +701,8 @@
           <td>${mission.filled_slots}/${mission.total_slots}</td>
           <td>${mission.reward_points}</td>
           <td>
-            ${mission.status === 'ready' ? `<button class="success" onclick="startMission('${mission.mission_id}')">Start</button>` : ''}
-            ${mission.status === 'active' ? `<button class="success" onclick="completeMission('${mission.mission_id}')">Complete</button>` : ''}
+            ${mission.status === 'ready' ? `<button class="btn-primary btn-sm" onclick="startMission('${mission.mission_id}')">Start</button>` : ''}
+            ${mission.status === 'active' ? `<button class="btn-primary btn-sm" onclick="completeMission('${mission.mission_id}')">Complete</button>` : ''}
           </td>
         `;
         tbody.appendChild(row);
@@ -806,7 +809,7 @@
       currentTab = tabName;
 
       // Update tab buttons
-      document.querySelectorAll('.tab').forEach(tab => {
+      document.querySelectorAll('.admin-tab').forEach(tab => {
         tab.classList.remove('active');
       });
       event.target.classList.add('active');

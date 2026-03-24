@@ -4,10 +4,207 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Solpranos - Wallet Verification</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/portal-style.css">
+  <style>
+    /* Verify page specific extensions */
+    .verify-container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: var(--space-6);
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: var(--space-8);
+    }
+
+    .header h1 {
+      color: var(--gold);
+      font-size: var(--font-4xl);
+      margin-bottom: var(--space-2);
+      text-shadow: 0 0 20px var(--gold-glow);
+    }
+
+    .header h2 {
+      color: var(--text-secondary);
+      font-size: var(--font-xl);
+      font-weight: 400;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-4);
+      background: var(--bg-secondary);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-default);
+      margin-bottom: var(--space-6);
+    }
+
+    .user-info .avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius-full);
+      border: 2px solid var(--gold);
+    }
+
+    .step {
+      display: none;
+    }
+
+    .step.active {
+      display: block;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .step h3 {
+      color: var(--gold);
+      font-size: var(--font-2xl);
+      margin-bottom: var(--space-4);
+      text-align: center;
+    }
+
+    .hint {
+      color: var(--text-secondary);
+      text-align: center;
+      margin-bottom: var(--space-6);
+      font-size: var(--font-base);
+      line-height: 1.6;
+    }
+
+    .loading {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-8);
+      gap: var(--space-4);
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid var(--bg-tertiary);
+      border-top-color: var(--gold);
+      border-radius: var(--radius-full);
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading p {
+      color: var(--text-secondary);
+      font-size: var(--font-lg);
+    }
+
+    .wallets-header h4 {
+      color: var(--gold);
+      font-size: var(--font-lg);
+      margin-bottom: var(--space-3);
+    }
+
+    .wallets-list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      margin-bottom: var(--space-4);
+    }
+
+    .wallet-item {
+      background: var(--bg-tertiary);
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: var(--transition-base);
+    }
+
+    .wallet-item:hover {
+      border-color: var(--border-default);
+      background: var(--bg-elevated);
+    }
+
+    .wallet-item.favorite {
+      border-color: var(--gold);
+      background: rgba(255, 215, 0, 0.05);
+    }
+
+    .wallet-address {
+      font-family: 'Monaco', 'Courier New', monospace;
+      color: var(--text-primary);
+      font-size: var(--font-sm);
+    }
+
+    .star-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: var(--font-xl);
+      cursor: pointer;
+      padding: var(--space-1);
+      transition: var(--transition-base);
+    }
+
+    .star-btn:hover {
+      color: var(--gold);
+      transform: scale(1.2);
+    }
+
+    .star-btn.active {
+      color: var(--gold);
+    }
+
+    .link-btn {
+      display: inline-block;
+      margin-top: var(--space-4);
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: var(--font-sm);
+      transition: var(--transition-base);
+    }
+
+    .link-btn:hover {
+      color: var(--gold);
+    }
+
+    .success {
+      color: var(--success);
+      text-align: center;
+      margin-bottom: var(--space-4);
+      font-size: var(--font-lg);
+    }
+
+    .button-center {
+      display: flex;
+      justify-content: center;
+      gap: var(--space-3);
+      margin-top: var(--space-4);
+      flex-wrap: wrap;
+    }
+  </style>
 </head>
 <body>
-  <div class="container">
+  <!-- Top Navigation -->
+  <nav class="top-nav" role="navigation" aria-label="Verification navigation">
+    <div class="nav-brand">
+      <h1>🎩 Solpranos</h1>
+    </div>
+    <div class="nav-user">
+      <button class="btn-secondary" onclick="window.location.href='/dashboard'">Dashboard</button>
+    </div>
+  </nav>
+
+  <div class="verify-container">
     <div class="header">
       <h1>🎩 Solpranos</h1>
       <h2>Wallet Verification</h2>
@@ -18,28 +215,38 @@
       <span id="userName"></span>
     </div>
 
-    <div id="step-connect" class="step active">
-      <h3>Connect Your Wallet</h3>
-      <p class="hint">Click the button below to connect your Phantom or Solflare wallet and verify ownership.</p>
-      <button onclick="connectWallet()">🔗 Connect Wallet</button>
-      <div id="walletsList"></div>
-      <a href="/dashboard" class="link-btn">← Back to Dashboard</a>
-    </div>
+    <div class="card">
+      <div id="step-connect" class="step active">
+        <h3>Connect Your Wallet</h3>
+        <p class="hint">Click the button below to connect your Phantom or Solflare wallet and verify ownership.</p>
+        <div class="button-center">
+          <button class="btn-primary" onclick="connectWallet()">🔗 Connect Wallet</button>
+        </div>
+        <div id="walletsList"></div>
+        <div class="button-center">
+          <a href="/dashboard" class="link-btn">← Back to Dashboard</a>
+        </div>
+      </div>
 
-    <div id="step-success" class="step">
-      <h3>✅ Wallet Verified!</h3>
-      <p id="successMessage" class="success"></p>
-      <div id="walletsListSuccess"></div>
-      <button onclick="connectAnother()">Add Another Wallet</button>
-      <a href="/dashboard" class="link-btn">← Back to Dashboard</a>
-    </div>
+      <div id="step-success" class="step">
+        <h3>✅ Wallet Verified!</h3>
+        <p id="successMessage" class="success"></p>
+        <div id="walletsListSuccess"></div>
+        <div class="button-center">
+          <button class="btn-primary" onclick="connectAnother()">Add Another Wallet</button>
+        </div>
+        <div class="button-center">
+          <a href="/dashboard" class="link-btn">← Back to Dashboard</a>
+        </div>
+      </div>
 
-    <div id="loading" class="loading">
-      <div class="spinner"></div>
-      <p>Processing...</p>
-    </div>
+      <div id="loading" class="loading">
+        <div class="spinner"></div>
+        <p>Processing...</p>
+      </div>
 
-    <div id="error" class="error"></div>
+      <div id="error" class="alert alert-error" style="display:none; margin-top: var(--space-4);"></div>
+    </div>
   </div>
 
   <script>

@@ -4,307 +4,301 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Solpranos Dashboard</title>
+  <link rel="stylesheet" href="/portal-style.css">
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-      color: #fff;
-      min-height: 100vh;
-      padding: 20px;
-    }
-
-    .container {
+    /* Dashboard-specific extensions */
+    .dashboard-container {
       max-width: 1200px;
       margin: 0 auto;
+      padding: var(--space-6);
     }
 
-    header {
-      background: rgba(0, 0, 0, 0.5);
-      padding: 20px;
-      border-radius: 10px;
-      margin-bottom: 20px;
-      border: 2px solid #FFD700;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    h1 {
-      color: #FFD700;
-      font-size: 2em;
-      text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
-    }
-
-    .user-info {
+    .user-header {
       display: flex;
       align-items: center;
-      gap: 15px;
-      margin-top: 10px;
+      gap: var(--space-4);
+      margin-bottom: var(--space-6);
+      padding: var(--space-5);
+      background: var(--bg-secondary);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-default);
     }
 
-    .avatar {
-      width: 50px;
-      height: 50px;
-      border-radius: 50%;
-      border: 2px solid #FFD700;
+    .user-avatar {
+      width: 64px;
+      height: 64px;
+      border-radius: var(--radius-full);
+      border: 3px solid var(--gold);
     }
 
-    .stats {
+    .user-name {
+      font-size: var(--font-2xl);
+      font-weight: bold;
+      color: var(--text-primary);
+      margin: 0;
+    }
+
+    .user-status {
+      color: var(--text-secondary);
+      font-size: var(--font-sm);
+    }
+
+    .stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 15px;
-      margin-bottom: 20px;
+      gap: var(--space-4);
+      margin-bottom: var(--space-6);
     }
 
     .stat-card {
-      background: rgba(0, 0, 0, 0.5);
-      padding: 20px;
-      border-radius: 10px;
-      border: 1px solid #FFD700;
+      background: var(--bg-secondary);
+      padding: var(--space-6);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-default);
       text-align: center;
+      transition: var(--transition-base);
+    }
+
+    .stat-card:hover {
+      border-color: var(--border-emphasis);
+      box-shadow: var(--shadow-gold-sm);
+      transform: translateY(-2px);
     }
 
     .stat-value {
-      font-size: 2em;
-      color: #FFD700;
+      font-size: var(--font-4xl);
+      color: var(--gold);
       font-weight: bold;
+      display: block;
+      margin-bottom: var(--space-2);
     }
 
     .stat-label {
-      color: #ccc;
-      margin-top: 5px;
-    }
-
-    .section {
-      background: rgba(0, 0, 0, 0.5);
-      padding: 20px;
-      border-radius: 10px;
-      margin-bottom: 20px;
-      border: 1px solid #FFD700;
-    }
-
-    h2 {
-      color: #FFD700;
-      margin-bottom: 15px;
-      font-size: 1.5em;
+      color: var(--text-secondary);
+      font-size: var(--font-sm);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     .wallet-list {
       list-style: none;
+      padding: 0;
+      margin: 0;
     }
 
     .wallet-item {
-      background: rgba(255, 215, 0, 0.1);
-      padding: 15px;
-      margin-bottom: 10px;
-      border-radius: 5px;
+      background: var(--bg-tertiary);
+      padding: var(--space-4);
+      margin-bottom: var(--space-3);
+      border-radius: var(--radius-md);
       display: flex;
       justify-content: space-between;
       align-items: center;
       flex-wrap: wrap;
+      gap: var(--space-3);
+      border: 1px solid var(--border-subtle);
+      transition: var(--transition-base);
+    }
+
+    .wallet-item:hover {
+      border-color: var(--border-default);
+      background: var(--bg-elevated);
     }
 
     .wallet-address {
-      font-family: monospace;
-      color: #FFD700;
+      font-family: 'Monaco', 'Courier New', monospace;
+      color: var(--gold);
       word-break: break-all;
       flex: 1;
+      font-size: var(--font-sm);
     }
 
     .wallet-actions {
       display: flex;
-      gap: 10px;
-      margin-top: 10px;
-    }
-
-    button {
-      background: #FFD700;
-      color: #000;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 5px;
-      cursor: pointer;
-      font-weight: bold;
-      transition: all 0.3s;
-    }
-
-    button:hover {
-      background: #FFC700;
-      box-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
-    }
-
-    button.secondary {
-      background: #666;
-      color: #fff;
-    }
-
-    button.secondary:hover {
-      background: #888;
-    }
-
-    button.danger {
-      background: #dc3545;
-      color: #fff;
-    }
-
-    button.danger:hover {
-      background: #c82333;
+      gap: var(--space-2);
     }
 
     .favorite-star {
-      color: #FFD700;
-      font-size: 1.5em;
+      color: var(--gold);
+      font-size: var(--font-xl);
       cursor: pointer;
       opacity: 0.3;
-      transition: opacity 0.3s;
+      transition: var(--transition-base);
+    }
+
+    .favorite-star:hover {
+      opacity: 0.6;
     }
 
     .favorite-star.active {
       opacity: 1;
     }
 
-    .proposal-item, .mission-item {
-      background: rgba(255, 215, 0, 0.1);
-      padding: 15px;
-      margin-bottom: 10px;
-      border-radius: 5px;
+    .proposal-item,
+    .mission-item {
+      background: var(--bg-tertiary);
+      padding: var(--space-4);
+      margin-bottom: var(--space-3);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+      transition: var(--transition-base);
     }
 
-    .proposal-title, .mission-title {
-      color: #FFD700;
-      font-size: 1.2em;
-      margin-bottom: 5px;
+    .proposal-item:hover,
+    .mission-item:hover {
+      border-color: var(--border-default);
+      background: var(--bg-elevated);
     }
 
-    .proposal-meta, .mission-meta {
-      color: #ccc;
-      font-size: 0.9em;
+    .proposal-title,
+    .mission-title {
+      color: var(--gold);
+      font-size: var(--font-lg);
+      font-weight: 600;
+      margin-bottom: var(--space-2);
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      flex-wrap: wrap;
+    }
+
+    .proposal-meta,
+    .mission-meta {
+      color: var(--text-secondary);
+      font-size: var(--font-sm);
     }
 
     .status-badge {
       display: inline-block;
-      padding: 5px 10px;
-      border-radius: 3px;
-      font-size: 0.8em;
+      padding: var(--space-1) var(--space-3);
+      border-radius: var(--radius-sm);
+      font-size: var(--font-xs);
       font-weight: bold;
-      margin-left: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     .status-voting {
-      background: #28a745;
+      background: var(--success-bg);
+      color: var(--success);
     }
 
     .status-draft {
-      background: #ffc107;
-      color: #000;
+      background: var(--warning-bg);
+      color: var(--warning);
     }
 
     .status-recruiting {
-      background: #17a2b8;
+      background: var(--info-bg);
+      color: var(--info);
     }
 
     .status-active {
-      background: #28a745;
+      background: var(--success-bg);
+      color: var(--success);
     }
 
     .login-prompt {
       text-align: center;
-      padding: 40px;
+      padding: var(--space-12);
     }
 
-    .login-prompt button {
-      font-size: 1.2em;
-      padding: 15px 30px;
+    .login-prompt h2 {
+      color: var(--gold);
+      font-size: var(--font-3xl);
+      margin-bottom: var(--space-4);
+    }
+
+    .login-prompt p {
+      color: var(--text-secondary);
+      margin-bottom: var(--space-6);
+      font-size: var(--font-lg);
     }
 
     .empty-state {
       text-align: center;
-      color: #888;
-      padding: 20px;
+      color: var(--text-muted);
+      padding: var(--space-8);
+      font-size: var(--font-base);
     }
 
     @media (max-width: 768px) {
-      h1 {
-        font-size: 1.5em;
-      }
-
-      .stats {
+      .stats-grid {
         grid-template-columns: 1fr;
       }
 
       .wallet-actions {
         width: 100%;
       }
+
+      .user-header {
+        flex-direction: column;
+        text-align: center;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <div>
-        <h1>🎩 Solpranos Dashboard</h1>
-      </div>
-      <div>
-        <button onclick="window.location.href='/'">Home</button>
-        <button onclick="window.location.href='/verify'">Verify Wallet</button>
-        <button id="logoutBtn" style="display:none;" onclick="logout()">Logout</button>
-      </div>
-    </header>
+  <!-- Top Navigation -->
+  <nav class="top-nav" role="navigation" aria-label="Dashboard navigation">
+    <div class="nav-brand">
+      <h1>🎩 Solpranos Dashboard</h1>
+    </div>
+    <div class="nav-user">
+      <button class="btn-secondary" onclick="window.location.href='/'" style="margin-right: 10px;">Home</button>
+      <button class="btn-secondary" onclick="window.location.href='/verify'" style="margin-right: 10px;">Verify Wallet</button>
+      <button id="logoutBtn" class="btn-secondary" style="display:none;" onclick="logout()">Logout</button>
+    </div>
+  </nav>
 
-    <div id="loginPrompt" class="section login-prompt" style="display:none;">
+  <div class="dashboard-container">
+    <div id="loginPrompt" class="card login-prompt" style="display:none;">
       <h2>Welcome to Solpranos Dashboard</h2>
-      <p style="margin: 20px 0; color: #ccc;">Login with Discord to view your profile, manage wallets, and track your governance participation.</p>
-      <button onclick="login()">🎮 Login with Discord</button>
+      <p>Login with Discord to view your profile, manage wallets, and track your governance participation.</p>
+      <button class="btn-primary" onclick="login()">🎮 Login with Discord</button>
     </div>
 
     <div id="dashboardContent" style="display:none;">
-      <div class="user-info">
-        <img id="userAvatar" class="avatar" src="" alt="Avatar">
+      <div class="user-header">
+        <img id="userAvatar" class="user-avatar" src="" alt="User avatar">
         <div>
-          <h3 id="userName"></h3>
-          <p style="color: #ccc;">Logged in</p>
+          <h2 class="user-name" id="userName"></h2>
+          <p class="user-status">Logged in</p>
         </div>
       </div>
 
-      <div class="stats">
+      <div class="stats-grid">
         <div class="stat-card">
-          <div class="stat-value" id="tierStat">-</div>
-          <div class="stat-label">Tier</div>
+          <span class="stat-value" id="tierStat">-</span>
+          <span class="stat-label">Tier</span>
         </div>
         <div class="stat-card">
-          <div class="stat-value" id="vpStat">0</div>
-          <div class="stat-label">Voting Power</div>
+          <span class="stat-value" id="vpStat">0</span>
+          <span class="stat-label">Voting Power</span>
         </div>
         <div class="stat-card">
-          <div class="stat-value" id="nftsStat">0</div>
-          <div class="stat-label">NFTs</div>
+          <span class="stat-value" id="nftsStat">0</span>
+          <span class="stat-label">NFTs</span>
         </div>
         <div class="stat-card">
-          <div class="stat-value" id="pointsStat">0</div>
-          <div class="stat-label">Heist Points</div>
+          <span class="stat-value" id="pointsStat">0</span>
+          <span class="stat-label">Heist Points</span>
         </div>
       </div>
 
-      <div class="section">
-        <h2>💼 My Wallets</h2>
+      <div class="card">
+        <h2 class="card-title">💼 My Wallets</h2>
         <ul id="walletList" class="wallet-list"></ul>
-        <button onclick="window.location.href='/verify'">➕ Add Wallet</button>
+        <button class="btn-primary" onclick="window.location.href='/verify'">➕ Add Wallet</button>
       </div>
 
-      <div class="section">
-        <h2>📜 My Proposals</h2>
+      <div class="card">
+        <h2 class="card-title">📜 My Proposals</h2>
         <div id="proposalList"></div>
       </div>
 
-      <div class="section">
-        <h2>🎯 My Missions</h2>
+      <div class="card">
+        <h2 class="card-title">🎯 My Missions</h2>
         <div id="missionList"></div>
       </div>
     </div>
@@ -378,14 +372,14 @@
         const li = document.createElement('li');
         li.className = 'wallet-item';
         li.innerHTML = `
-          <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+          <div style="display: flex; align-items: center; gap: var(--space-3); flex: 1;">
             <span class="favorite-star ${wallet.is_favorite ? 'active' : ''}" 
                   onclick="toggleFavorite('${wallet.wallet_address}')"
                   title="Set as favorite">⭐</span>
             <span class="wallet-address">${wallet.wallet_address}</span>
           </div>
           <div class="wallet-actions">
-            <button class="danger" onclick="removeWallet('${wallet.wallet_address}')">Remove</button>
+            <button class="btn-danger btn-sm" onclick="removeWallet('${wallet.wallet_address}')">Remove</button>
           </div>
         `;
         list.appendChild(li);

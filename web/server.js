@@ -75,6 +75,11 @@ class WebServer {
       res.redirect('/?section=admin');
     });
 
+    // Keep advanced admin dashboard accessible for deep management tools
+    this.app.get('/admin-panel', (req, res) => {
+      res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+    });
+
     // ==================== FEATURE FLAGS ====================
 
     this.app.get('/api/features', (req, res) => {

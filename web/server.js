@@ -29,10 +29,20 @@ class WebServer {
   }
 
   setupMiddleware() {
-    // CORS for public API
+    // CORS for public API - explicitly configured for the-solpranos.com integration
+    // Allows cross-origin requests for public endpoints
     this.app.use(cors({
-      origin: ['https://the-solpranos.com', 'http://localhost:3000'],
-      credentials: true
+      origin: [
+        'https://the-solpranos.com',
+        'https://www.the-solpranos.com',
+        'http://localhost:3000',
+        'http://localhost:5173' // Vite dev server
+      ],
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+      exposedHeaders: ['X-Total-Count'], // For pagination
+      maxAge: 86400 // 24 hours preflight cache
     }));
 
     this.app.use(express.json());
@@ -52,6 +62,14 @@ class WebServer {
   }
 
   setupRoutes() {
+    // ==================== API V1 (VERSIONED PUBLIC API) ====================
+    
+    const v1Router = require('./routes/v1');
+    const { errorHandler, notFoundHandler } = require('../utils/apiErrorHandler');
+    
+    // Mount v1 API routes (standardized, versioned)
+    this.app.use('/api/public/v1', v1Router);
+    
     // ==================== PUBLIC PAGES ====================
     
     this.app.get('/', (req, res) => {
@@ -1128,6 +1146,14 @@ class WebServer {
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });
+
+    // ==================== ERROR HANDLING ====================
+    
+    // 404 handler (must be after all routes)
+    this.app.use(notFoundHandler);
+    
+    // Global error handler (must be last)
+    this.app.use(errorHandler);
   }
 
   verifySignature(walletAddress, signatureBase58, message) {

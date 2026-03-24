@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Solpranos Portal</title>
+  <link rel="stylesheet" href="/portal-style.css">
+</head>
+<body>
+  <div class="portal-container">
+    <!-- Top Navigation -->
+    <nav class="top-nav">
+      <div class="nav-brand">
+        <button class="mobile-menu-btn" onclick="toggleMobileMenu()">☰</button>
+        <h1>🎩 Solpranos</h1>
+      </div>
+      <div class="nav-user">
+        <img id="navAvatar" class="nav-avatar" src="" alt="" style="display:none;">
+        <span id="navUsername" class="nav-username"></span>
+        <button id="navAuthBtn" class="btn-secondary" onclick="handleAuth()">Login</button>
+      </div>
+    </nav>
+
+    <!-- Mobile Navigation Overlay -->
+    <div id="mobileMenu" class="mobile-menu">
+      <div class="mobile-menu-content">
+        <button class="mobile-menu-close" onclick="toggleMobileMenu()">✕</button>
+        <div class="mobile-menu-items">
+          <button class="nav-item active" data-section="dashboard" onclick="switchSection('dashboard'); toggleMobileMenu()">
+            <span class="nav-icon">📊</span>
+            <span class="nav-label">Dashboard</span>
+          </button>
+          <button class="nav-item" data-section="governance" onclick="switchSection('governance'); toggleMobileMenu()">
+            <span class="nav-icon">📜</span>
+            <span class="nav-label">Governance</span>
+          </button>
+          <button class="nav-item" data-section="wallets" onclick="switchSection('wallets'); toggleMobileMenu()">
+            <span class="nav-icon">💼</span>
+            <span class="nav-label">Wallets</span>
+          </button>
+          <button class="nav-item" data-section="heist" onclick="switchSection('heist'); toggleMobileMenu()" id="mobileNavHeist" style="display:none;">
+            <span class="nav-icon">🎯</span>
+            <span class="nav-label">Heist</span>
+          </button>
+          <button class="nav-item" data-section="help" onclick="switchSection('help'); toggleMobileMenu()">
+            <span class="nav-icon">❓</span>
+            <span class="nav-label">Help</span>
+          </button>
+          <button class="nav-item" data-section="admin" onclick="switchSection('admin'); toggleMobileMenu()" id="mobileNavAdmin" style="display:none;">
+            <span class="nav-icon">⚙️</span>
+            <span class="nav-label">Admin</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="portal-layout">
+      <!-- Sidebar Navigation -->
+      <aside class="sidebar">
+        <div class="sidebar-section">
+          <button class="nav-item active" data-section="dashboard" onclick="switchSection('dashboard')">
+            <span class="nav-icon">📊</span>
+            <span class="nav-label">Dashboard</span>
+          </button>
+          <button class="nav-item" data-section="governance" onclick="switchSection('governance')">
+            <span class="nav-icon">📜</span>
+            <span class="nav-label">Governance</span>
+          </button>
+          <button class="nav-item" data-section="wallets" onclick="switchSection('wallets')">
+            <span class="nav-icon">💼</span>
+            <span class="nav-label">Wallets</span>
+          </button>
+          <button class="nav-item" data-section="heist" onclick="switchSection('heist')" id="navHeist" style="display:none;">
+            <span class="nav-icon">🎯</span>
+            <span class="nav-label">Heist</span>
+          </button>
+          <button class="nav-item" data-section="help" onclick="switchSection('help')">
+            <span class="nav-icon">❓</span>
+            <span class="nav-label">Help</span>
+          </button>
+        </div>
+        <div class="sidebar-footer">
+          <button class="nav-item" data-section="admin" onclick="switchSection('admin')" id="navAdmin" style="display:none;">
+            <span class="nav-icon">⚙️</span>
+            <span class="nav-label">Admin</span>
+          </button>
+        </div>
+      </aside>
+
+      <!-- Content Sections -->
+      <main class="content-area">
+        <!-- Dashboard Section -->
+        <section id="section-dashboard" class="content-section active">
+          <div class="section-header">
+            <h2>Dashboard</h2>
+            <p class="section-subtitle">Overview of your Solpranos activity</p>
+          </div>
+
+          <div id="loginPrompt" class="card login-card">
+            <h3>Welcome to Solpranos</h3>
+            <p>Login with Discord to access your dashboard and manage your governance participation.</p>
+            <button class="btn-primary" onclick="login()">🎮 Login with Discord</button>
+          </div>
+
+          <div id="dashboardContent" style="display:none;">
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-icon">🏆</div>
+                <div class="stat-value" id="tierStat">-</div>
+                <div class="stat-label">Tier</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon">⚡</div>
+                <div class="stat-value" id="vpStat">0</div>
+                <div class="stat-label">Voting Power</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-icon">🖼️</div>
+                <div class="stat-value" id="nftsStat">0</div>
+                <div class="stat-label">NFTs</div>
+              </div>
+              <div class="stat-card" id="heistPointsCard" style="display:none;">
+                <div class="stat-icon">💎</div>
+                <div class="stat-value" id="pointsStat">0</div>
+                <div class="stat-label">Heist Points</div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>Recent Activity</h3>
+              <div id="recentActivity">
+                <div class="empty-state">No recent activity</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Governance Section -->
+        <section id="section-governance" class="content-section">
+          <div class="section-header">
+            <h2>Governance</h2>
+            <p class="section-subtitle">View and participate in DAO proposals</p>
+          </div>
+
+          <div class="card">
+            <h3>My Proposals</h3>
+            <div id="myProposals">
+              <div class="empty-state">No proposals created yet</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Active Votes</h3>
+            <div id="activeVotes">
+              <div class="empty-state">No active proposals</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Wallets Section -->
+        <section id="section-wallets" class="content-section">
+          <div class="section-header">
+            <h2>Wallet Management</h2>
+            <p class="section-subtitle">Link and manage your Solana wallets</p>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3>My Wallets</h3>
+              <button class="btn-primary" onclick="window.location.href='/verify'">➕ Add Wallet</button>
+            </div>
+            <div id="walletsList">
+              <div class="empty-state">No wallets linked</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Heist Section -->
+        <section id="section-heist" class="content-section">
+          <div class="section-header">
+            <h2>Heist Missions</h2>
+            <p class="section-subtitle">Join missions and earn rewards</p>
+          </div>
+
+          <div class="card">
+            <h3>My Missions</h3>
+            <div id="myMissions">
+              <div class="empty-state">No missions joined yet</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Available Missions</h3>
+            <div id="availableMissions">
+              <div class="empty-state">No missions available</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Help Section -->
+        <section id="section-help" class="content-section">
+          <div class="section-header">
+            <h2>Help Center</h2>
+            <p class="section-subtitle">Guides and troubleshooting</p>
+          </div>
+
+          <div class="help-categories">
+            <div class="card help-card" onclick="toggleHelp('getting-started')">
+              <h3>🚀 Getting Started</h3>
+              <p>Learn the basics of Solpranos DAO</p>
+            </div>
+            <div class="card help-card" onclick="toggleHelp('wallet-setup')">
+              <h3>💼 Wallet Setup</h3>
+              <p>How to link and verify your wallet</p>
+            </div>
+            <div class="card help-card" onclick="toggleHelp('governance')">
+              <h3>📜 Governance</h3>
+              <p>Creating and voting on proposals</p>
+            </div>
+            <div class="card help-card" onclick="toggleHelp('troubleshooting')">
+              <h3>🔧 Troubleshooting</h3>
+              <p>Common issues and solutions</p>
+            </div>
+          </div>
+
+          <div id="help-getting-started" class="help-content" style="display:none;">
+            <div class="card">
+              <h3>🚀 Getting Started with Solpranos</h3>
+              <div class="help-steps">
+                <div class="help-step">
+                  <div class="step-number">1</div>
+                  <div class="step-content">
+                    <h4>Join the Discord</h4>
+                    <p>Make sure you're a member of the Solpranos Discord server.</p>
+                  </div>
+                </div>
+                <div class="help-step">
+                  <div class="step-number">2</div>
+                  <div class="step-content">
+                    <h4>Link Your Wallet</h4>
+                    <p>Use the Wallets section to verify ownership of your Solana wallet containing Solpranos NFTs.</p>
+                  </div>
+                </div>
+                <div class="help-step">
+                  <div class="step-number">3</div>
+                  <div class="step-content">
+                    <h4>Get Your Tier</h4>
+                    <p>Your tier is automatically assigned based on the number of NFTs you hold.</p>
+                  </div>
+                </div>
+                <div class="help-step">
+                  <div class="step-number">4</div>
+                  <div class="step-content">
+                    <h4>Participate</h4>
+                    <p>Start voting on proposals and joining missions to earn rewards.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-wallet-setup" class="help-content" style="display:none;">
+            <div class="card">
+              <h3>💼 Wallet Setup Guide</h3>
+              <div class="help-section">
+                <h4>How to Link a Wallet</h4>
+                <ol>
+                  <li>Click "Add Wallet" in the Wallets section</li>
+                  <li>Enter your Solana wallet address</li>
+                  <li>Sign the verification message using Phantom, Solflare, or another wallet</li>
+                  <li>Submit the signature to complete verification</li>
+                </ol>
+              </div>
+              <div class="help-section">
+                <h4>Supported Wallets</h4>
+                <ul>
+                  <li>Phantom Wallet</li>
+                  <li>Solflare</li>
+                  <li>Backpack</li>
+                  <li>Any wallet that supports message signing</li>
+                </ul>
+              </div>
+              <div class="help-section">
+                <h4>Setting a Favorite Wallet</h4>
+                <p>Click the star icon next to any linked wallet to set it as your favorite. This wallet will be used for voting power calculations.</p>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-governance" class="help-content" style="display:none;">
+            <div class="card">
+              <h3>📜 Governance Guide</h3>
+              <div class="help-section">
+                <h4>Creating a Proposal</h4>
+                <ol>
+                  <li>Use the <code>/gov create</code> command in Discord</li>
+                  <li>Provide a clear title and detailed description</li>
+                  <li>Wait for admin approval before voting begins</li>
+                </ol>
+              </div>
+              <div class="help-section">
+                <h4>Voting on Proposals</h4>
+                <ol>
+                  <li>View active proposals in the Governance section or Discord</li>
+                  <li>Use <code>/gov vote</code> with Yes, No, or Abstain</li>
+                  <li>Your voting power is based on your tier</li>
+                </ol>
+              </div>
+              <div class="help-section">
+                <h4>Voting Power</h4>
+                <p>Each tier has different voting power:</p>
+                <ul>
+                  <li><strong>Associate:</strong> 1 VP</li>
+                  <li><strong>Soldier:</strong> 2 VP</li>
+                  <li><strong>Capo:</strong> 3 VP</li>
+                  <li><strong>Underboss:</strong> 4 VP</li>
+                  <li><strong>Don:</strong> 5 VP</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-troubleshooting" class="help-content" style="display:none;">
+            <div class="card">
+              <h3>🔧 Troubleshooting</h3>
+              <div class="help-section">
+                <h4>Wallet verification failed</h4>
+                <p><strong>Issue:</strong> Signature verification returns an error</p>
+                <p><strong>Solution:</strong></p>
+                <ul>
+                  <li>Make sure you're signing with the same wallet you entered</li>
+                  <li>Copy the EXACT verification message provided</li>
+                  <li>Try a different wallet app (Phantom, Solflare, etc.)</li>
+                  <li>Clear your browser cache and try again</li>
+                </ul>
+              </div>
+              <div class="help-section">
+                <h4>Tier not updating</h4>
+                <p><strong>Issue:</strong> Your tier doesn't reflect your NFT count</p>
+                <p><strong>Solution:</strong></p>
+                <ul>
+                  <li>Run <code>/tier refresh</code> in Discord</li>
+                  <li>Wait a few minutes for the blockchain scan to complete</li>
+                  <li>Make sure your NFTs are in a verified wallet</li>
+                </ul>
+              </div>
+              <div class="help-section">
+                <h4>Can't see admin features</h4>
+                <p><strong>Issue:</strong> Admin panel not visible</p>
+                <p><strong>Solution:</strong></p>
+                <ul>
+                  <li>Only Discord administrators can access the admin panel</li>
+                  <li>Log out and log back in to refresh permissions</li>
+                  <li>Contact a server administrator if you should have access</li>
+                </ul>
+              </div>
+              <div class="help-section">
+                <h4>Still need help?</h4>
+                <p>Contact support in the Discord server's #support channel.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Admin Section -->
+        <section id="section-admin" class="content-section">
+          <div class="section-header">
+            <h2>Admin Portal</h2>
+            <p class="section-subtitle">System administration and management</p>
+          </div>
+          <div class="card">
+            <p>Loading admin panel...</p>
+            <button class="btn-primary" onclick="window.location.href='/admin'">Open Full Admin Panel</button>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="/portal.js"></script>
+</body>
+</html>

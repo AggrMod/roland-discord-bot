@@ -53,70 +53,7 @@ class WebServer {
     // ==================== PUBLIC PAGES ====================
     
     this.app.get('/', (req, res) => {
-      res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Solpranos Wallet Verification</title>
-          <style>
-            body {
-              margin: 0;
-              padding: 0;
-              font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-              background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-              color: #FFD700;
-              display: flex;
-              justify-content: center;
-              align-items: center;
-              height: 100vh;
-              text-align: center;
-            }
-            .container {
-              max-width: 600px;
-              padding: 40px;
-              background: rgba(0, 0, 0, 0.6);
-              border: 2px solid #FFD700;
-              border-radius: 15px;
-              box-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
-            }
-            h1 {
-              font-size: 3em;
-              margin: 0;
-              text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
-            }
-            p {
-              font-size: 1.2em;
-              color: #ccc;
-              margin: 20px 0;
-            }
-            a {
-              display: inline-block;
-              margin: 10px;
-              padding: 15px 40px;
-              background: #FFD700;
-              color: #000;
-              text-decoration: none;
-              font-weight: bold;
-              border-radius: 5px;
-              transition: all 0.3s;
-            }
-            a:hover {
-              background: #FFC700;
-              box-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
-            }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>🎩 Solpranos</h1>
-            <h2>Wallet Verification & Dashboard</h2>
-            <p>Link your Solana wallet and manage your governance participation</p>
-            <a href="/verify">Verify Wallet</a>
-            <a href="/dashboard">Dashboard</a>
-          </div>
-        </body>
-        </html>
-      `);
+      res.sendFile(path.join(__dirname, 'public', 'portal.html'));
     });
 
     this.app.get('/verify', (req, res) => {
@@ -129,11 +66,27 @@ class WebServer {
     });
 
     this.app.get('/dashboard', (req, res) => {
-      res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+      // Redirect to portal for unified experience
+      res.redirect('/?section=dashboard');
     });
 
     this.app.get('/admin', (req, res) => {
       res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+    });
+
+    // ==================== FEATURE FLAGS ====================
+
+    this.app.get('/api/features', (req, res) => {
+      try {
+        const heistEnabled = process.env.HEIST_ENABLED === 'true';
+        res.json({ 
+          success: true, 
+          heistEnabled 
+        });
+      } catch (error) {
+        logger.error('Error fetching feature flags:', error);
+        res.json({ success: true, heistEnabled: false });
+      }
     });
 
     // ==================== DISCORD OAUTH ====================

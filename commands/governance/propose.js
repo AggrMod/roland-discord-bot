@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const proposalService = require('../../services/proposalService');
 const roleService = require('../../services/roleService');
 const walletService = require('../../services/walletService');
@@ -32,7 +32,7 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setColor('#FF0000')
         .setTitle('❌ Not Eligible')
-        .setDescription('You must verify your wallet and own at least 1 SOLPRANOS NFT to create proposals.\n\nUse `/verify <wallet>` to get started.')
+        .setDescription('You must verify your wallet and own at least 1 SOLPRANOS NFT to create proposals.\n\nUse `/verify` to get started.')
         .setTimestamp();
 
       return interaction.editReply({ embeds: [embed] });
@@ -67,12 +67,12 @@ module.exports = {
         { name: '👤 Creator', value: interaction.user.username, inline: true },
         { name: '📊 Status', value: 'Draft (Needs 4 supporters)', inline: true }
       )
-      .setFooter({ text: 'Use /support <proposal-id> to support this proposal' })
+      .setFooter({ text: 'Posted to proposals channel - waiting for supporters' })
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });
 
-    // Post to proposals channel
+    // Post to proposals channel with Support button
     const proposalsChannelId = process.env.PROPOSALS_CHANNEL_ID;
     if (proposalsChannelId) {
       try {
@@ -86,15 +86,22 @@ module.exports = {
             .addFields(
               { name: '🆔 Proposal ID', value: result.proposalId, inline: true },
               { name: '👤 Creator', value: interaction.user.username, inline: true },
-              { name: '📊 Status', value: 'Draft (0/4 supporters)', inline: true }
+              { name: '📊 Status', value: 'Draft', inline: true },
+              { name: '👥 Supporters', value: '0/4', inline: true }
             )
-            .setFooter({ text: '✅ React with checkmark to support (4 needed)' })
+            .setFooter({ text: 'Click Support below to help promote this proposal (4 needed)' })
             .setTimestamp();
 
-          const message = await proposalsChannel.send({ embeds: [channelEmbed] });
-          
-          // Add checkmark reaction
-          await message.react('✅');
+          const row = new ActionRowBuilder()
+            .addComponents(
+              new ButtonBuilder()
+                .setCustomId(`support_${result.proposalId}`)
+                .setLabel('Support')
+                .setStyle(ButtonStyle.Primary)
+                .setEmoji('✅')
+            );
+
+          const message = await proposalsChannel.send({ embeds: [channelEmbed], components: [row] });
           
           // Store message ID in database
           const db = require('../../database/db');

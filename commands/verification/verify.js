@@ -1,12 +1,14 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const walletService = require('../../services/walletService');
 const roleService = require('../../services/roleService');
+const nftService = require('../../services/nftService');
+const vpService = require('../../services/vpService');
 const logger = require('../../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('verify')
-    .setDescription('Link your Solana wallet to your Discord account'),
+    .setDescription('Check your wallet verification status and view your holdings'),
 
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: true });
@@ -14,19 +16,92 @@ module.exports = {
     const discordId = interaction.user.id;
     const webUrl = process.env.WEB_URL || 'http://localhost:3000';
     
+    // Check if user has verified wallets
+    const wallets = walletService.getLinkedWallets(discordId);
+    const userInfo = await roleService.getUserInfo(discordId);
+
+    if (!wallets || wallets.length === 0) {
+      // User NOT verified - show simple message with Verify and Get Help buttons
+      const embed = new EmbedBuilder()
+        .setColor('#FFD700')
+        .setTitle('🔗 Wallet Verification')
+        .setDescription('You have no verified wallets yet. Verify your wallet to access all features!')
+        .addFields(
+          { name: '📝 How to Verify', value: 'Click the **Verify** button below to connect your wallet and unlock your roles, voting power, and more.', inline: false }
+        )
+        .setFooter({ text: 'Secure wallet verification via cryptographic signature' })
+        .setTimestamp();
+
+      const row = new ActionRowBuilder()
+        .addComponents(
+          new ButtonBuilder()
+            .setLabel('Verify')
+            .setStyle(ButtonStyle.Success)
+            .setURL(`${webUrl}/verify`),
+          new ButtonBuilder()
+            .setLabel('Get Help')
+            .setStyle(ButtonStyle.Link)
+            .setURL('https://the-solpranos.com/help')
+        );
+
+      await interaction.editReply({ embeds: [embed], components: [row] });
+      logger.log(`User ${interaction.user.username} (${discordId}) requested verification - not yet verified`);
+      return;
+    }
+
+    // User IS verified - show Solmate-style summary
+    const walletAddresses = wallets.map(w => w.wallet_address);
+    const allNFTs = await nftService.getAllNFTsForWallets(walletAddresses);
+    const totalNFTs = allNFTs.length;
+    const totalAssets = totalNFTs; // For simplicity, assets = NFTs (could expand later)
+    const totalTokens = 0; // Mock - could be expanded
+
+    // Get role information
+    const rolesConfig = vpService.getAllTiers();
+    const userTier = vpService.getTierForNFTCount(totalNFTs);
+    
+    // Build role qualification list
+    let rolesList = '';
+    if (userTier) {
+      rolesList = `You have been verified for **@${userTier.name}** (holding ${totalNFTs}/${userTier.minNFTs})`;
+    } else {
+      rolesList = 'No tier roles qualified yet. Get more NFTs to unlock roles!';
+    }
+
     const embed = new EmbedBuilder()
       .setColor('#FFD700')
-      .setTitle('🔗 Wallet Verification')
-      .setDescription('To verify your wallet, please visit our secure web verification page.')
-      .addFields(
-        { name: '🌐 Verification URL', value: `${webUrl}/verify`, inline: false },
-        { name: '🆔 Your Discord ID', value: `\`${discordId}\``, inline: false },
-        { name: '📝 Instructions', value: '1. Click the link above\n2. Enter your Discord ID (shown above)\n3. Connect your Phantom or Solflare wallet\n4. Sign the verification message\n5. Come back here and use `/refresh-roles` to update your roles', inline: false }
+      .setTitle('✅ Wallet Verification Status')
+      .setDescription(
+        `You have **${wallets.length}** verified wallet${wallets.length > 1 ? 's' : ''}\n` +
+        `You have **${totalAssets}** assets in your wallet${wallets.length > 1 ? 's' : ''}\n` +
+        `You have **${totalNFTs}** NFTs in your wallet${wallets.length > 1 ? 's' : ''}\n` +
+        `You have **${totalTokens}** tokens in your wallet${wallets.length > 1 ? 's' : ''}\n\n` +
+        rolesList
       )
-      .setFooter({ text: 'Your wallet will be securely verified via cryptographic signature' })
+      .addFields(
+        { name: '💪 Voting Power', value: userInfo?.voting_power?.toString() || '0', inline: true },
+        { name: '🎭 Tier', value: userTier?.name || 'None', inline: true }
+      )
+      .setFooter({ text: 'Keep collecting to unlock higher tiers!' })
       .setTimestamp();
 
-    await interaction.editReply({ embeds: [embed] });
-    logger.log(`User ${interaction.user.username} (${discordId}) requested verification link`);
+    const row = new ActionRowBuilder()
+      .addComponents(
+        new ButtonBuilder()
+          .setLabel('Verify')
+          .setStyle(ButtonStyle.Success)
+          .setURL(`${webUrl}/verify`),
+        new ButtonBuilder()
+          .setLabel('Add Wallet')
+          .setStyle(ButtonStyle.Secondary)
+          .setURL(`${webUrl}/verify?action=add`),
+        new ButtonBuilder()
+          .setLabel('Get Help')
+          .setStyle(ButtonStyle.Link)
+          .setURL('https://the-solpranos.com/help')
+      );
+
+    await interaction.editReply({ embeds: [embed], components: [row] });
+    logger.log(`User ${interaction.user.username} (${discordId}) viewed verification status - ${wallets.length} wallet(s), ${totalNFTs} NFTs`);
   },
 };

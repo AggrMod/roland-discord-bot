@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Collection, Events, Partials } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const logger = require('./utils/logger');
@@ -10,11 +10,6 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMessageReactions,
-  ],
-  partials: [
-    Partials.Message,
-    Partials.Reaction,
   ],
 });
 
@@ -58,126 +53,268 @@ loadCommandsFromDirectory('commands');
 const webServer = new WebServer();
 webServer.start();
 
+// Set client reference in proposalService
+const proposalService = require('./services/proposalService');
+const walletService = require('./services/walletService');
+const roleService = require('./services/roleService');
+
 client.once(Events.ClientReady, () => {
   logger.log(`✅ Bot is online as ${client.user.tag}`);
   logger.log(`📊 Loaded ${client.commands.size} commands`);
   logger.log(`🏛️ Serving ${client.guilds.cache.size} guild(s)`);
   
   client.user.setActivity('The Commission', { type: 0 });
+
+  // Pass client to proposalService
+  proposalService.setClient(client);
+
+  // Start periodic vote check (every 5 minutes)
+  startVoteCheckInterval();
 });
 
 client.on(Events.InteractionCreate, async interaction => {
-  if (!interaction.isChatInputCommand()) return;
+  // Handle slash commands
+  if (interaction.isChatInputCommand()) {
+    const command = client.commands.get(interaction.commandName);
 
-  const command = client.commands.get(interaction.commandName);
+    if (!command) {
+      logger.warn(`No command matching ${interaction.commandName} was found.`);
+      return;
+    }
 
-  if (!command) {
-    logger.warn(`No command matching ${interaction.commandName} was found.`);
+    try {
+      await command.execute(interaction);
+      logger.log(`Command executed: ${interaction.commandName} by ${interaction.user.tag}`);
+    } catch (error) {
+      logger.error(`Error executing ${interaction.commandName}:`, error);
+      
+      const errorMessage = { 
+        content: 'There was an error while executing this command!', 
+        ephemeral: true 
+      };
+
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp(errorMessage);
+      } else {
+        await interaction.reply(errorMessage);
+      }
+    }
     return;
   }
 
-  try {
-    await command.execute(interaction);
-    logger.log(`Command executed: ${interaction.commandName} by ${interaction.user.tag}`);
-  } catch (error) {
-    logger.error(`Error executing ${interaction.commandName}:`, error);
-    
-    const errorMessage = { 
-      content: 'There was an error while executing this command!', 
-      ephemeral: true 
-    };
+  // Handle button interactions
+  if (interaction.isButton()) {
+    const customId = interaction.customId;
 
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp(errorMessage);
-    } else {
-      await interaction.reply(errorMessage);
+    // Support button handler
+    if (customId.startsWith('support_')) {
+      await handleSupportButton(interaction);
+      return;
+    }
+
+    // Vote button handlers
+    if (customId.startsWith('vote_yes_') || customId.startsWith('vote_no_') || customId.startsWith('vote_abstain_')) {
+      await handleVoteButton(interaction);
+      return;
     }
   }
 });
 
-// Handle reactions for proposal support
-client.on(Events.MessageReactionAdd, async (reaction, user) => {
+async function handleSupportButton(interaction) {
   try {
-    // Ignore bot reactions
-    if (user.bot) return;
+    await interaction.deferReply({ ephemeral: true });
 
-    // Fetch partial messages
-    if (reaction.partial) {
-      await reaction.fetch();
-    }
-    if (reaction.message.partial) {
-      await reaction.message.fetch();
-    }
-
-    // Only handle ✅ reactions
-    if (reaction.emoji.name !== '✅') return;
-
-    // Check if this is in the proposals channel
-    const proposalsChannelId = process.env.PROPOSALS_CHANNEL_ID;
-    if (!proposalsChannelId || reaction.message.channel.id !== proposalsChannelId) return;
-
-    const db = require('./database/db');
-    const walletService = require('./services/walletService');
-    const proposalService = require('./services/proposalService');
-
-    // Find proposal by message ID
-    const proposal = db.prepare('SELECT * FROM proposals WHERE message_id = ?').get(reaction.message.id);
-    
-    if (!proposal) {
-      logger.warn(`Reaction on non-proposal message: ${reaction.message.id}`);
-      return;
-    }
-
-    if (proposal.status !== 'draft') {
-      logger.log(`User ${user.id} reacted to non-draft proposal ${proposal.proposal_id}`);
-      return;
-    }
+    const proposalId = interaction.customId.replace('support_', '');
+    const discordId = interaction.user.id;
 
     // Check if user has verified wallet
-    const wallets = walletService.getLinkedWallets(user.id);
+    const wallets = walletService.getLinkedWallets(discordId);
     if (!wallets || wallets.length === 0) {
-      logger.log(`User ${user.id} tried to support without verified wallet`);
-      return;
-    }
-
-    // Add supporter
-    const result = proposalService.addSupporter(proposal.proposal_id, user.id);
-    
-    if (result.success) {
-      logger.log(`User ${user.id} supported proposal ${proposal.proposal_id} via reaction (${result.supporterCount}/4)`);
-      
-      // Update the embed
-      const { EmbedBuilder } = require('discord.js');
-      const proposalData = proposalService.getProposal(proposal.proposal_id);
-      const supporterCount = proposalService.getSupporterCount(proposal.proposal_id);
-      
-      let status = proposalData.status === 'draft' ? `Draft (${supporterCount}/4 supporters)` : 
-                   proposalData.status === 'voting' ? 'Active Voting' : 
-                   proposalData.status;
-      
       const embed = new EmbedBuilder()
-        .setColor(proposalData.status === 'voting' ? '#00FF00' : '#FFD700')
-        .setTitle(`📜 ${proposalData.title}`)
-        .setDescription(proposalData.description)
-        .addFields(
-          { name: '🆔 Proposal ID', value: proposalData.proposal_id, inline: true },
-          { name: '📊 Status', value: status, inline: true },
-          { name: '👥 Supporters', value: supporterCount.toString(), inline: true }
-        )
+        .setColor('#FF0000')
+        .setTitle('❌ Not Verified')
+        .setDescription('You must verify your wallet to support proposals.\n\nUse `/verify` to get started.')
         .setTimestamp();
 
-      if (proposalData.status === 'voting') {
-        embed.setFooter({ text: '✅ Promoted to voting! Use /vote to cast your vote.' });
-      } else {
-        embed.setFooter({ text: '✅ React with checkmark to support (4 needed)' });
-      }
-
-      await reaction.message.edit({ embeds: [embed] });
+      return interaction.editReply({ embeds: [embed] });
     }
+
+    const userInfo = await roleService.getUserInfo(discordId);
+    if (!userInfo || !userInfo.voting_power || userInfo.voting_power === 0) {
+      const embed = new EmbedBuilder()
+        .setColor('#FF0000')
+        .setTitle('❌ Not Eligible')
+        .setDescription('You must own at least 1 SOLPRANOS NFT to support proposals.')
+        .setTimestamp();
+
+      return interaction.editReply({ embeds: [embed] });
+    }
+
+    const result = proposalService.addSupporter(proposalId, discordId);
+
+    if (!result.success) {
+      const embed = new EmbedBuilder()
+        .setColor('#FF0000')
+        .setTitle('❌ Cannot Support')
+        .setDescription(result.message || 'An error occurred.')
+        .setTimestamp();
+
+      return interaction.editReply({ embeds: [embed] });
+    }
+
+    const supporterCount = result.supporterCount;
+    const isPromoted = result.promoted;
+
+    // Update the proposal message
+    await updateProposalMessage(interaction.message, proposalId, supporterCount, isPromoted);
+
+    const embed = new EmbedBuilder()
+      .setColor('#FFD700')
+      .setTitle(isPromoted ? '🗳️ Promoted to Voting!' : '✅ Support Added')
+      .setDescription(isPromoted 
+        ? 'This proposal has been promoted to voting! Check the voting channel to cast your vote.'
+        : `You've supported this proposal! (${supporterCount}/4 supporters)`
+      )
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [embed] });
+    logger.log(`User ${discordId} supported proposal ${proposalId} (${supporterCount}/4)${isPromoted ? ' - PROMOTED' : ''}`);
+
   } catch (error) {
-    logger.error('Error handling reaction:', error);
+    logger.error('Error handling support button:', error);
+    await interaction.editReply({ content: 'An error occurred while processing your support.', ephemeral: true });
   }
-});
+}
+
+async function updateProposalMessage(message, proposalId, supporterCount, isPromoted) {
+  try {
+    const proposal = proposalService.getProposal(proposalId);
+    if (!proposal) return;
+
+    const embed = EmbedBuilder.from(message.embeds[0]);
+    
+    // Update supporters field
+    const fieldIndex = embed.data.fields.findIndex(f => f.name === '👥 Supporters');
+    if (fieldIndex >= 0) {
+      embed.data.fields[fieldIndex].value = isPromoted ? '4/4 ✅' : `${supporterCount}/4`;
+    }
+
+    // Update status field if promoted
+    if (isPromoted) {
+      const statusIndex = embed.data.fields.findIndex(f => f.name === '📊 Status');
+      if (statusIndex >= 0) {
+        embed.data.fields[statusIndex].value = 'PROMOTED TO VOTE ✅';
+      }
+      embed.setColor('#00FF00');
+      embed.setFooter({ text: 'This proposal has been promoted to voting!' });
+    }
+
+    // Disable button if promoted
+    const row = isPromoted 
+      ? new ActionRowBuilder()
+          .addComponents(
+            new ButtonBuilder()
+              .setCustomId(`support_${proposalId}_disabled`)
+              .setLabel('Support')
+              .setStyle(ButtonStyle.Primary)
+              .setEmoji('✅')
+              .setDisabled(true)
+          )
+      : message.components[0];
+
+    await message.edit({ embeds: [embed], components: [row] });
+  } catch (error) {
+    logger.error('Error updating proposal message:', error);
+  }
+}
+
+async function handleVoteButton(interaction) {
+  try {
+    await interaction.deferReply({ ephemeral: true });
+
+    const parts = interaction.customId.split('_');
+    const voteChoice = parts[1]; // yes, no, or abstain
+    const proposalId = parts.slice(2).join('_'); // Handle proposal IDs with underscores
+
+    const discordId = interaction.user.id;
+
+    // Check if user has verified wallet
+    const wallets = walletService.getLinkedWallets(discordId);
+    if (!wallets || wallets.length === 0) {
+      const embed = new EmbedBuilder()
+        .setColor('#FF0000')
+        .setTitle('❌ Not Verified')
+        .setDescription('You must verify your wallet to vote on proposals.\n\nUse `/verify` to get started.')
+        .setTimestamp();
+
+      return interaction.editReply({ embeds: [embed] });
+    }
+
+    const userInfo = await roleService.getUserInfo(discordId);
+    if (!userInfo || !userInfo.voting_power || userInfo.voting_power === 0) {
+      const embed = new EmbedBuilder()
+        .setColor('#FF0000')
+        .setTitle('❌ Not Eligible')
+        .setDescription('You must own at least 1 SOLPRANOS NFT to vote.')
+        .setTimestamp();
+
+      return interaction.editReply({ embeds: [embed] });
+    }
+
+    const result = proposalService.castVote(proposalId, discordId, voteChoice, userInfo.voting_power);
+
+    if (!result.success) {
+      const embed = new EmbedBuilder()
+        .setColor('#FF0000')
+        .setTitle('❌ Cannot Vote')
+        .setDescription(result.message || 'An error occurred.')
+        .setTimestamp();
+
+      return interaction.editReply({ embeds: [embed] });
+    }
+
+    // Update the voting message with new tallies
+    await proposalService.updateVotingMessage(proposalId);
+
+    const choiceEmoji = {
+      'yes': '✅',
+      'no': '❌',
+      'abstain': '⚖️'
+    };
+
+    const embed = new EmbedBuilder()
+      .setColor('#FFD700')
+      .setTitle('🗳️ Vote Recorded!')
+      .setDescription(`Your ${choiceEmoji[voteChoice]} **${voteChoice.toUpperCase()}** vote has been recorded!\n\n**Voting Power:** ${userInfo.voting_power} VP`)
+      .setFooter({ text: 'You can change your vote any time before voting closes.' })
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [embed] });
+    logger.log(`User ${discordId} voted ${voteChoice} on proposal ${proposalId} with ${userInfo.voting_power} VP`);
+
+  } catch (error) {
+    logger.error('Error handling vote button:', error);
+    await interaction.editReply({ content: 'An error occurred while processing your vote.', ephemeral: true });
+  }
+}
+
+function startVoteCheckInterval() {
+  // Check every 5 minutes for votes that need to be closed
+  setInterval(async () => {
+    try {
+      const db = require('./database/db');
+      const activeVotes = db.prepare('SELECT * FROM proposals WHERE status = ?').all('voting');
+
+      for (const proposal of activeVotes) {
+        proposalService.checkAutoClose(proposal.proposal_id);
+      }
+    } catch (error) {
+      logger.error('Error in vote check interval:', error);
+    }
+  }, 5 * 60 * 1000); // 5 minutes
+
+  logger.log('📅 Vote auto-close checker started (runs every 5 minutes)');
+}
 
 client.on(Events.Error, error => {
   logger.error('Discord client error:', error);

@@ -10,6 +10,12 @@ db.pragma('journal_mode = WAL');
 function initDatabase() {
   logger.log('Initializing database...');
 
+  // Migration: add missing columns
+  try { db.exec('ALTER TABLE proposals ADD COLUMN voting_message_id TEXT'); } catch(e) {}
+  try { db.exec('ALTER TABLE proposals ADD COLUMN message_id TEXT'); } catch(e) {}
+  try { db.exec('ALTER TABLE proposals ADD COLUMN channel_id TEXT'); } catch(e) {}
+  try { db.exec('ALTER TABLE wallets ADD COLUMN is_favorite BOOLEAN DEFAULT 0'); } catch(e) {}
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       discord_id TEXT PRIMARY KEY,

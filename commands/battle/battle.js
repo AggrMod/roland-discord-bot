@@ -13,9 +13,14 @@ module.exports = {
         .addIntegerOption(option =>
           option
             .setName('max_players')
-            .setDescription('Maximum players (2-8)')
+            .setDescription('Maximum players (optional, leave empty for unlimited)')
             .setMinValue(2)
-            .setMaxValue(8)
+            .setRequired(false)
+        )
+        .addRoleOption(option =>
+          option
+            .setName('required_role')
+            .setDescription('Required role to join (optional)')
             .setRequired(false)
         )
     )
@@ -66,21 +71,36 @@ module.exports = {
 async function handleCreate(interaction) {
   await interaction.deferReply();
 
-  const maxPlayers = interaction.options.getInteger('max_players') || 8;
   const creatorId = interaction.user.id;
   const channelId = interaction.channelId;
+  const maxPlayers = interaction.options.getInteger('max_players') || null; // null = unlimited
+  const requiredRole = interaction.options.getRole('required_role');
+  const requiredRoleId = requiredRole ? requiredRole.id : null;
 
   // Create initial embed
   const embed = battleService.buildLobbyEmbed(
-    { status: 'open', max_players: maxPlayers, min_players: 2 },
-    []
+    { 
+      status: 'open', 
+      min_players: 2, 
+      max_players: maxPlayers,
+      required_role_id: requiredRoleId 
+    },
+    [],
+    requiredRole
   );
 
   // Send message
   const message = await interaction.editReply({ embeds: [embed] });
 
   // Create lobby in database
-  const result = battleService.createLobby(channelId, message.id, creatorId, 2, maxPlayers);
+  const result = battleService.createLobby(
+    channelId, 
+    message.id, 
+    creatorId, 
+    2, 
+    maxPlayers || 999, // 999 = effectively unlimited
+    requiredRoleId
+  );
 
   if (!result.success) {
     await interaction.editReply({ content: 'Failed to create battle lobby', embeds: [] });
@@ -90,7 +110,7 @@ async function handleCreate(interaction) {
   // Add reaction
   try {
     await message.react(battleService.SWORD_EMOJI);
-    logger.log(`Battle lobby ${result.lobbyId} created with reaction added`);
+    logger.log(`Battle lobby ${result.lobbyId} created (max: ${maxPlayers || 'unlimited'}, role: ${requiredRoleId || 'none'})`);
   } catch (error) {
     logger.error('Failed to add reaction to battle lobby:', error);
   }
@@ -126,7 +146,17 @@ async function handleStart(interaction) {
     const channel = await interaction.client.channels.fetch(lobby.channel_id);
     const message = await channel.messages.fetch(lobby.message_id);
 
-    const updatedEmbed = battleService.buildLobbyEmbed(lobby, result.participants);
+    // Fetch required role if set
+    let requiredRole = null;
+    if (lobby.required_role_id) {
+      try {
+        requiredRole = await interaction.guild.roles.fetch(lobby.required_role_id);
+      } catch (error) {
+        logger.error('Failed to fetch required role:', error);
+      }
+    }
+
+    const updatedEmbed = battleService.buildLobbyEmbed(lobby, result.participants, requiredRole);
     updatedEmbed.setColor('#FF0000');
     updatedEmbed.setDescription('🔴 **BATTLE IN PROGRESS**\n\nThe family is settling scores...');
     
@@ -138,17 +168,20 @@ async function handleStart(interaction) {
   // Simulate battle
   const battleResult = battleService.simulateBattle(lobby.lobby_id);
 
-  // Post rounds (batch every 3 rounds to reduce spam)
-  const batchSize = 3;
-  for (let i = 0; i < battleResult.rounds.length; i += batchSize) {
-    const batch = battleResult.rounds.slice(i, i + batchSize);
-    const roundText = batch.map(r => `**Round ${r.round}:**\n${r.text}`).join('\n\n');
+  // Post rounds as embeds (Rumble Royale style)
+  for (const round of battleResult.rounds) {
+    const roundEmbed = new EmbedBuilder()
+      .setColor('#FF6B6B')
+      .setTitle(`⚔️ Round ${round.round}`)
+      .setDescription(round.events.join('\n'))
+      .setFooter({ text: `Players Left: ${round.playersLeft} | Era: Solpranos` })
+      .setTimestamp();
     
-    await interaction.followUp({ content: roundText });
+    await interaction.followUp({ embeds: [roundEmbed] });
     
-    // Small delay between batches
-    if (i + batchSize < battleResult.rounds.length) {
-      await new Promise(resolve => setTimeout(resolve, 2000));
+    // Small delay between rounds for drama
+    if (round.round < battleResult.rounds.length) {
+      await new Promise(resolve => setTimeout(resolve, 1500));
     }
   }
 

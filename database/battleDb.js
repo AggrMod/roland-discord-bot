@@ -13,7 +13,8 @@ function initBattleTables() {
       creator_id TEXT NOT NULL,
       status TEXT DEFAULT 'open',
       min_players INTEGER DEFAULT 2,
-      max_players INTEGER DEFAULT 8,
+      max_players INTEGER DEFAULT 999,
+      required_role_id TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       started_at DATETIME,
       completed_at DATETIME

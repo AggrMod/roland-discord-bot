@@ -635,12 +635,32 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
       const lobby = battleService.getLobbyByMessage(reaction.message.id);
       
       if (lobby && lobby.status === 'open') {
-        const result = battleService.addParticipant(lobby.lobby_id, user.id, user.username);
+        // Fetch member to get roles
+        let userRoles = [];
+        try {
+          const member = await reaction.message.guild.members.fetch(user.id);
+          userRoles = member.roles.cache.map(role => role.id);
+        } catch (error) {
+          logger.error('Failed to fetch member roles:', error);
+        }
+
+        const result = battleService.addParticipant(lobby.lobby_id, user.id, user.username, userRoles);
         
         if (result.success) {
           // Update lobby embed
           const participants = battleService.getParticipants(lobby.lobby_id);
-          const updatedEmbed = battleService.buildLobbyEmbed(lobby, participants);
+          
+          // Fetch required role if set
+          let requiredRole = null;
+          if (lobby.required_role_id) {
+            try {
+              requiredRole = await reaction.message.guild.roles.fetch(lobby.required_role_id);
+            } catch (error) {
+              logger.error('Failed to fetch required role:', error);
+            }
+          }
+          
+          const updatedEmbed = battleService.buildLobbyEmbed(lobby, participants, requiredRole);
           
           await reaction.message.edit({ embeds: [updatedEmbed] });
           logger.log(`User ${user.username} joined battle lobby ${lobby.lobby_id} via reaction`);
@@ -650,6 +670,16 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
         } else {
           // Remove their reaction if they can't join
           await reaction.users.remove(user.id);
+          
+          // If they were blocked by role requirement, optionally notify them
+          if (result.requiresRole) {
+            try {
+              await user.send(`❌ You need a specific role to join that battle lobby.`);
+            } catch (dmError) {
+              // User has DMs disabled, ignore
+              logger.log(`Could not DM user ${user.username} about role requirement (DMs disabled)`);
+            }
+          }
         }
       }
     }
@@ -685,7 +715,18 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
         if (result.success) {
           // Update lobby embed
           const participants = battleService.getParticipants(lobby.lobby_id);
-          const updatedEmbed = battleService.buildLobbyEmbed(lobby, participants);
+          
+          // Fetch required role if set
+          let requiredRole = null;
+          if (lobby.required_role_id) {
+            try {
+              requiredRole = await reaction.message.guild.roles.fetch(lobby.required_role_id);
+            } catch (error) {
+              logger.error('Failed to fetch required role:', error);
+            }
+          }
+          
+          const updatedEmbed = battleService.buildLobbyEmbed(lobby, participants, requiredRole);
           
           await reaction.message.edit({ embeds: [updatedEmbed] });
           logger.log(`User ${user.username} left battle lobby ${lobby.lobby_id} via reaction removal`);

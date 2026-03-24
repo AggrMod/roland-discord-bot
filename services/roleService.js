@@ -630,14 +630,16 @@ class RoleService {
         configured: !!collection.roleId,
         enabled: collection.enabled !== false,
         updateAuthority: collection.updateAuthority,
-        firstVerifiedCreator: collection.firstVerifiedCreator
+        firstVerifiedCreator: collection.firstVerifiedCreator,
+        type: collection.type || 'slug',                      // Include type for display
+        originalInput: collection.originalInput || collection.id  // Include original input
       });
     }
 
     return summary;
   }
 
-  addCollection(id, name, roleId, updateAuthority = null, firstVerifiedCreator = null) {
+  addCollection(id, name, roleId, updateAuthority = null, firstVerifiedCreator = null, type = 'slug', originalInput = null) {
     try {
       if (!this.collectionsConfig) {
         this.loadConfigs();
@@ -656,13 +658,15 @@ class RoleService {
         firstVerifiedCreator,
         roleId,
         enabled: true,
+        type: type || 'slug',                    // Store type (slug or address)
+        originalInput: originalInput || id,      // Store original input for reference
         description: `Members holding NFTs from ${name} collection`
       };
 
       this.collectionsConfig.collections.push(newCollection);
       this.saveCollectionsConfig();
       
-      logger.log(`Added collection: ${name} (${id})`);
+      logger.log(`Added collection: ${name} (${id}) [type: ${type}]`);
       return { success: true, collection: newCollection };
     } catch (error) {
       logger.error('Error adding collection:', error);

@@ -2,6 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, ActionRowBuilder
 const roleService = require('../../services/roleService');
 const walletService = require('../../services/walletService');
 const logger = require('../../utils/logger');
+const { resolveCollectionInput, formatCollectionForDisplay } = require('../../utils/collectionResolver');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -86,7 +87,7 @@ module.exports = {
                 .setRequired(true))
             .addStringOption(option =>
               option.setName('collection')
-                .setDescription('Collection symbol or name (e.g., "solpranos-main")')
+                .setDescription('Collection slug (e.g., "solpranos-main") or mint address')
                 .setRequired(true))
             .addIntegerOption(option =>
               option.setName('amount')
@@ -251,14 +252,12 @@ module.exports = {
     const config = roleService.getRoleConfigSummary();
     const collections = roleService.getCollectionsSummary();
 
-    // Build collections field
+    // Build collections field with type indicators
     const collectionsConfigured = collections.filter(c => c.configured).length;
     const collectionsTotal = collections.length;
     const collectionsText = collections.map(c => {
-      const status = c.configured ? '✅' : '⚠️';
-      const roleInfo = c.roleId ? `<@&${c.roleId}>` : '_No role assigned_';
-      const enabledStatus = c.enabled ? '' : ' (disabled)';
-      return `${status} **${c.name}** → ${roleInfo}${enabledStatus}`;
+      // Use formatter from collectionResolver for consistent display
+      return formatCollectionForDisplay(c);
     }).join('\n') || '_No collections configured_';
 
     // Build tier roles field
@@ -313,13 +312,13 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
 
     const role = interaction.options.getRole('role');
-    const collection = interaction.options.getString('collection');
+    const collectionInput = interaction.options.getString('collection');
     const amount = interaction.options.getInteger('amount') || 1;
     const traitName = interaction.options.getString('traitname');
     const traitValue = interaction.options.getString('traitvalue');
 
-    // Validation
-    if (!collection || collection.length < 3) {
+    // Validate collection input
+    if (!collectionInput || collectionInput.trim().length < 3) {
       return interaction.editReply({ 
         content: '❌ Invalid collection identifier. Must be at least 3 characters.', 
         ephemeral: true 
@@ -352,16 +351,36 @@ module.exports = {
       return;
     }
 
-    // Standard collection-based role
-    const result = roleService.addCollection(collection, collection, role.id);
-
-    if (result.success) {
-      const amountText = amount > 1 ? ` (requires ${amount} NFTs)` : '';
-      await interaction.editReply({ 
-        content: `✅ Collection action added!\n**${collection}** → <@&${role.id}>${amountText}\n\nMembers holding this collection will receive the role automatically.`,
+    // Resolve collection input (slug or address)
+    let resolved;
+    try {
+      resolved = resolveCollectionInput(collectionInput);
+    } catch (error) {
+      return interaction.editReply({ 
+        content: `❌ ${error.message}`, 
         ephemeral: true 
       });
-      logger.log(`Admin ${interaction.user.tag} added collection: ${collection} → role ${role.id} (amount: ${amount})`);
+    }
+
+    // Standard collection-based role with resolved identifier
+    const result = roleService.addCollection(
+      resolved.key,           // Internal key (normalized slug or addr:...)
+      resolved.label,         // Display name
+      role.id,
+      null,                   // updateAuthority (for future expansion)
+      null,                   // firstVerifiedCreator (for future expansion)
+      resolved.type,          // Store type for display
+      resolved.original       // Store original input
+    );
+
+    if (result.success) {
+      const typeIndicator = resolved.type === 'address' ? ' 🔑 (address)' : ' 📦 (slug)';
+      const amountText = amount > 1 ? ` (requires ${amount} NFTs)` : '';
+      await interaction.editReply({ 
+        content: `✅ Collection action added!\n**${resolved.label}**${typeIndicator} → <@&${role.id}>${amountText}\n\nMembers holding this collection will receive the role automatically.`,
+        ephemeral: true 
+      });
+      logger.log(`Admin ${interaction.user.tag} added collection: ${resolved.label} [${resolved.type}] → role ${role.id} (amount: ${amount})`);
     } else {
       await interaction.editReply({ 
         content: `❌ ${result.message}`, 
@@ -426,9 +445,18 @@ module.exports = {
     let actionDescription = '';
 
     if (type === 'collection') {
-      // If identifier provided, use it; otherwise find by role
+      // If identifier provided, resolve it (supports both slug and address)
       if (identifier) {
-        result = roleService.deleteCollection(identifier);
+        // Try to resolve the input to find the correct key
+        let resolvedKey = identifier;
+        try {
+          const resolved = resolveCollectionInput(identifier);
+          resolvedKey = resolved.key;
+        } catch (error) {
+          // If resolution fails, use identifier as-is (backward compatibility)
+        }
+        
+        result = roleService.deleteCollection(resolvedKey);
         actionDescription = `collection "${identifier}"`;
       } else {
         // Find collection by roleId

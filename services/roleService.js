@@ -8,17 +8,28 @@ class RoleService {
   constructor() {
     this.traitRolesConfig = null;
     this.tiersConfig = null;
+    this.collectionsConfig = null;
   }
 
   loadConfigs() {
     try {
       this.tiersConfig = require('../config/roles.json');
       this.traitRolesConfig = require('../config/trait-roles.json');
+      
+      try {
+        this.collectionsConfig = require('../config/collections.json');
+      } catch (error) {
+        logger.warn('Collections config not found, creating default');
+        this.collectionsConfig = { collections: [] };
+        this.saveCollectionsConfig();
+      }
+      
       logger.log('Role configs loaded successfully');
     } catch (error) {
       logger.error('Error loading role configs:', error);
       this.tiersConfig = { tiers: [] };
       this.traitRolesConfig = { traitRoles: [] };
+      this.collectionsConfig = { collections: [] };
     }
   }
 
@@ -591,6 +602,123 @@ class RoleService {
     const configPath = path.join(__dirname, '../config/trait-roles.json');
     fs.writeFileSync(configPath, JSON.stringify(this.traitRolesConfig, null, 2), 'utf8');
     logger.log('Saved trait-roles.json');
+  }
+
+  saveCollectionsConfig() {
+    const fs = require('fs');
+    const path = require('path');
+    const configPath = path.join(__dirname, '../config/collections.json');
+    fs.writeFileSync(configPath, JSON.stringify(this.collectionsConfig, null, 2), 'utf8');
+    logger.log('Saved collections.json');
+  }
+
+  /**
+   * Collection management methods
+   */
+
+  getCollectionsSummary() {
+    if (!this.collectionsConfig) {
+      this.loadConfigs();
+    }
+
+    const summary = [];
+    for (const collection of (this.collectionsConfig.collections || [])) {
+      summary.push({
+        id: collection.id,
+        name: collection.name,
+        roleId: collection.roleId,
+        configured: !!collection.roleId,
+        enabled: collection.enabled !== false,
+        updateAuthority: collection.updateAuthority,
+        firstVerifiedCreator: collection.firstVerifiedCreator
+      });
+    }
+
+    return summary;
+  }
+
+  addCollection(id, name, roleId, updateAuthority = null, firstVerifiedCreator = null) {
+    try {
+      if (!this.collectionsConfig) {
+        this.loadConfigs();
+      }
+
+      // Check for duplicate ID
+      const existing = this.collectionsConfig.collections.find(c => c.id === id);
+      if (existing) {
+        return { success: false, message: `Collection "${id}" already exists` };
+      }
+
+      const newCollection = {
+        id,
+        name,
+        updateAuthority,
+        firstVerifiedCreator,
+        roleId,
+        enabled: true,
+        description: `Members holding NFTs from ${name} collection`
+      };
+
+      this.collectionsConfig.collections.push(newCollection);
+      this.saveCollectionsConfig();
+      
+      logger.log(`Added collection: ${name} (${id})`);
+      return { success: true, collection: newCollection };
+    } catch (error) {
+      logger.error('Error adding collection:', error);
+      return { success: false, message: 'Failed to add collection' };
+    }
+  }
+
+  editCollection(id, updates) {
+    try {
+      if (!this.collectionsConfig) {
+        this.loadConfigs();
+      }
+
+      const collection = this.collectionsConfig.collections.find(c => c.id === id);
+      if (!collection) {
+        return { success: false, message: `Collection "${id}" not found` };
+      }
+
+      // Apply updates
+      if (updates.name !== undefined) collection.name = updates.name;
+      if (updates.roleId !== undefined) collection.roleId = updates.roleId;
+      if (updates.updateAuthority !== undefined) collection.updateAuthority = updates.updateAuthority;
+      if (updates.firstVerifiedCreator !== undefined) collection.firstVerifiedCreator = updates.firstVerifiedCreator;
+      if (updates.enabled !== undefined) collection.enabled = updates.enabled;
+      if (updates.description !== undefined) collection.description = updates.description;
+
+      this.saveCollectionsConfig();
+      
+      logger.log(`Edited collection: ${id}`);
+      return { success: true, collection };
+    } catch (error) {
+      logger.error('Error editing collection:', error);
+      return { success: false, message: 'Failed to edit collection' };
+    }
+  }
+
+  deleteCollection(id) {
+    try {
+      if (!this.collectionsConfig) {
+        this.loadConfigs();
+      }
+
+      const collectionIndex = this.collectionsConfig.collections.findIndex(c => c.id === id);
+      if (collectionIndex === -1) {
+        return { success: false, message: `Collection "${id}" not found` };
+      }
+
+      this.collectionsConfig.collections.splice(collectionIndex, 1);
+      this.saveCollectionsConfig();
+      
+      logger.log(`Deleted collection: ${id}`);
+      return { success: true };
+    } catch (error) {
+      logger.error('Error deleting collection:', error);
+      return { success: false, message: 'Failed to delete collection' };
+    }
   }
 }
 

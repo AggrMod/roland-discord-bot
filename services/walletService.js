@@ -93,6 +93,17 @@ class WalletService {
       return null;
     }
   }
+
+  removeAllWallets(discordId) {
+    try {
+      const result = db.prepare('DELETE FROM wallets WHERE discord_id = ?').run(discordId);
+      logger.log(`Removed ${result.changes} wallets from user ${discordId}`);
+      return { success: true, message: `${result.changes} wallets removed` };
+    } catch (error) {
+      logger.error('Error removing all wallets:', error);
+      return { success: false, message: 'Failed to remove wallets' };
+    }
+  }
 }
 
 module.exports = new WalletService();

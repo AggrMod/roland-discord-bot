@@ -1,0 +1,13 @@
+{
+  "collections": [
+    {
+      "id": "solpranos-main",
+      "name": "The Solpranos",
+      "updateAuthority": null,
+      "firstVerifiedCreator": null,
+      "roleId": null,
+      "enabled": true,
+      "description": "Main Solpranos NFT collection"
+    }
+  ]
+}

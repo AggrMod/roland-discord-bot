@@ -62,6 +62,23 @@ Discord bot for the Solpranos NFT ecosystem featuring wallet verification, DAO g
 - `/wallet-list` - View linked wallets and NFT holdings
 - `/refresh-roles` - Update roles based on current NFT count
 
+### Admin: Verification Management (Solmate-style)
+Preferred command interface for managing verification:
+- `/verification create` - Create verification panel
+- `/verification actions list` - List all verification actions
+- `/verification actions addcollection` - Add collection-based action
+- `/verification actions addtoken` - Add trait/tier-based action
+- `/verification actions remove` - Remove verification action
+- `/verification exportuser` - Export user data
+- `/verification removeuser` - Remove user from system
+
+### Admin: Advanced Role Configuration (Legacy)
+Advanced interface for managing role mappings:
+- `/role-config list` - View current role configuration
+- `/role-config add-tier/edit-tier/delete-tier` - Manage NFT tiers
+- `/role-config add-trait/edit-trait/delete-trait` - Manage trait roles
+- `/role-config sync` - Manually sync user roles
+
 ### Governance Commands
 - `/propose <title> <description>` - Create a new proposal
 - `/support <proposal-id>` - Support a draft proposal

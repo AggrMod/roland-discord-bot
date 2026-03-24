@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Collection, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Collection, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const logger = require('./utils/logger');
@@ -10,6 +10,12 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMessageReactions,
+  ],
+  partials: [
+    Partials.Message,
+    Partials.Channel,
+    Partials.Reaction,
   ],
 });
 
@@ -604,6 +610,91 @@ function startRoleResyncScheduler() {
 
 client.on(Events.Error, error => {
   logger.error('Discord client error:', error);
+});
+
+// Battle reaction handlers
+client.on(Events.MessageReactionAdd, async (reaction, user) => {
+  try {
+    // Ignore bot reactions
+    if (user.bot) return;
+
+    // Handle partial reactions
+    if (reaction.partial) {
+      try {
+        await reaction.fetch();
+      } catch (error) {
+        logger.error('Failed to fetch reaction:', error);
+        return;
+      }
+    }
+
+    const battleService = require('./services/battleService');
+
+    // Check if this is a battle lobby reaction
+    if (reaction.emoji.name === battleService.SWORD_EMOJI) {
+      const lobby = battleService.getLobbyByMessage(reaction.message.id);
+      
+      if (lobby && lobby.status === 'open') {
+        const result = battleService.addParticipant(lobby.lobby_id, user.id, user.username);
+        
+        if (result.success) {
+          // Update lobby embed
+          const participants = battleService.getParticipants(lobby.lobby_id);
+          const updatedEmbed = battleService.buildLobbyEmbed(lobby, participants);
+          
+          await reaction.message.edit({ embeds: [updatedEmbed] });
+          logger.log(`User ${user.username} joined battle lobby ${lobby.lobby_id} via reaction`);
+        } else if (result.message === 'Already in this lobby') {
+          // Silently ignore - user already joined
+          return;
+        } else {
+          // Remove their reaction if they can't join
+          await reaction.users.remove(user.id);
+        }
+      }
+    }
+  } catch (error) {
+    logger.error('Error handling reaction add:', error);
+  }
+});
+
+client.on(Events.MessageReactionRemove, async (reaction, user) => {
+  try {
+    // Ignore bot reactions
+    if (user.bot) return;
+
+    // Handle partial reactions
+    if (reaction.partial) {
+      try {
+        await reaction.fetch();
+      } catch (error) {
+        logger.error('Failed to fetch reaction:', error);
+        return;
+      }
+    }
+
+    const battleService = require('./services/battleService');
+
+    // Check if this is a battle lobby reaction
+    if (reaction.emoji.name === battleService.SWORD_EMOJI) {
+      const lobby = battleService.getLobbyByMessage(reaction.message.id);
+      
+      if (lobby && lobby.status === 'open') {
+        const result = battleService.removeParticipant(lobby.lobby_id, user.id);
+        
+        if (result.success) {
+          // Update lobby embed
+          const participants = battleService.getParticipants(lobby.lobby_id);
+          const updatedEmbed = battleService.buildLobbyEmbed(lobby, participants);
+          
+          await reaction.message.edit({ embeds: [updatedEmbed] });
+          logger.log(`User ${user.username} left battle lobby ${lobby.lobby_id} via reaction removal`);
+        }
+      }
+    }
+  } catch (error) {
+    logger.error('Error handling reaction remove:', error);
+  }
 });
 
 process.on('unhandledRejection', error => {

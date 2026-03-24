@@ -38,6 +38,22 @@ function initDatabase() {
       FOREIGN KEY (discord_id) REFERENCES users(discord_id)
     );
 
+    CREATE TABLE IF NOT EXISTS micro_verify_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      discord_id TEXT NOT NULL,
+      username TEXT NOT NULL,
+      expected_amount REAL NOT NULL,
+      destination_wallet TEXT NOT NULL,
+      sender_wallet TEXT,
+      tx_signature TEXT,
+      status TEXT DEFAULT 'pending',
+      expires_at DATETIME NOT NULL,
+      verified_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (discord_id) REFERENCES users(discord_id)
+    );
+
     CREATE TABLE IF NOT EXISTS proposals (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       proposal_id TEXT UNIQUE NOT NULL,
@@ -117,6 +133,9 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_votes_proposal ON votes(proposal_id);
     CREATE INDEX IF NOT EXISTS idx_missions_status ON missions(status);
     CREATE INDEX IF NOT EXISTS idx_mission_participants_mission ON mission_participants(mission_id);
+    CREATE INDEX IF NOT EXISTS idx_micro_verify_discord_id ON micro_verify_requests(discord_id);
+    CREATE INDEX IF NOT EXISTS idx_micro_verify_status ON micro_verify_requests(status);
+    CREATE INDEX IF NOT EXISTS idx_micro_verify_amount ON micro_verify_requests(expected_amount);
   `);
 
   logger.log('Database initialized successfully');

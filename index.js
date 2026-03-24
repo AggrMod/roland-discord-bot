@@ -58,6 +58,7 @@ const proposalService = require('./services/proposalService');
 const walletService = require('./services/walletService');
 const roleService = require('./services/roleService');
 const treasuryService = require('./services/treasuryService');
+const microVerifyService = require('./services/microVerifyService');
 const governanceLogger = require('./utils/governanceLogger');
 const settings = require('./config/settings.json');
 
@@ -68,10 +69,17 @@ client.once(Events.ClientReady, () => {
   
   client.user.setActivity('The Commission', { type: 0 });
 
+  // Set global client reference for microVerifyService
+  global.discordClient = client;
+
   // Pass client to proposalService, webServer, and governanceLogger
   proposalService.setClient(client);
   webServer.setClient(client);
   governanceLogger.setClient(client);
+
+  // Initialize and start micro-verify service
+  microVerifyService.init();
+  microVerifyService.startPolling();
 
   // Start periodic vote check (every 5 minutes)
   startVoteCheckInterval();
@@ -81,6 +89,11 @@ client.once(Events.ClientReady, () => {
 
   // Start treasury monitoring scheduler
   treasuryService.startScheduler();
+
+  // Start micro-verify cleanup job (runs every 10 minutes)
+  setInterval(() => {
+    microVerifyService.expireStaleRequests();
+  }, 10 * 60 * 1000);
 });
 
 client.on(Events.InteractionCreate, async interaction => {
@@ -142,6 +155,17 @@ client.on(Events.InteractionCreate, async interaction => {
     // Vote button handlers
     if (customId.startsWith('vote_yes_') || customId.startsWith('vote_no_') || customId.startsWith('vote_abstain_')) {
       await handleVoteButton(interaction);
+      return;
+    }
+
+    // Micro-verify button handlers
+    if (customId === 'micro_verify_check_status') {
+      await handleMicroVerifyCheckStatus(interaction);
+      return;
+    }
+
+    if (customId === 'micro_verify_copy_amount') {
+      await handleMicroVerifyCopyAmount(interaction);
       return;
     }
   }
@@ -324,6 +348,91 @@ async function handleVoteButton(interaction) {
   } catch (error) {
     logger.error('Error handling vote button:', error);
     await interaction.editReply({ content: 'An error occurred while processing your vote.', ephemeral: true });
+  }
+}
+
+async function handleMicroVerifyCheckStatus(interaction) {
+  const microVerifyService = require('./services/microVerifyService');
+  
+  try {
+    await interaction.deferReply({ ephemeral: true });
+
+    const discordId = interaction.user.id;
+    const result = microVerifyService.getPendingRequest(discordId);
+
+    if (!result.success) {
+      // Check if user has verified wallets now
+      const wallets = walletService.getLinkedWallets(discordId);
+      
+      if (wallets && wallets.length > 0) {
+        const embed = new EmbedBuilder()
+          .setColor('#57F287')
+          .setTitle('✅ Wallet Already Verified!')
+          .setDescription('Your wallet has been successfully verified. Use `/verify` to see your status.')
+          .setTimestamp();
+
+        await interaction.editReply({ embeds: [embed] });
+      } else {
+        const embed = new EmbedBuilder()
+          .setColor('#FFA500')
+          .setTitle('⏳ No Verification Request')
+          .setDescription(result.message || 'No pending verification request found.')
+          .setTimestamp();
+
+        await interaction.editReply({ embeds: [embed] });
+      }
+      return;
+    }
+
+    const request = result.request;
+    const expiresAt = new Date(request.expires_at);
+    const timeLeft = Math.max(0, Math.floor((expiresAt - new Date()) / 1000 / 60));
+
+    const embed = new EmbedBuilder()
+      .setColor('#FFA500')
+      .setTitle('⏳ Verification Pending')
+      .setDescription(
+        `Waiting for your transfer...\n\n` +
+        `**Amount:** \`${request.expected_amount}\` SOL\n` +
+        `**Time left:** ${timeLeft} minute(s)\n\n` +
+        `The system checks for transactions every ${microVerifyService.getConfig().pollIntervalSeconds} seconds.`
+      )
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [embed] });
+  } catch (error) {
+    logger.error('Error handling micro-verify check status:', error);
+    await interaction.editReply({ content: 'An error occurred while checking status.', ephemeral: true });
+  }
+}
+
+async function handleMicroVerifyCopyAmount(interaction) {
+  const microVerifyService = require('./services/microVerifyService');
+  
+  try {
+    const discordId = interaction.user.id;
+    const result = microVerifyService.getPendingRequest(discordId);
+
+    if (!result.success) {
+      await interaction.reply({ 
+        content: 'No pending verification request found.', 
+        ephemeral: true 
+      });
+      return;
+    }
+
+    const request = result.request;
+    
+    await interaction.reply({ 
+      content: `💰 **Amount to send:** \`${request.expected_amount}\`\n\nCopy this exact amount and send it to the verification wallet.`, 
+      ephemeral: true 
+    });
+  } catch (error) {
+    logger.error('Error handling micro-verify copy amount:', error);
+    await interaction.reply({ 
+      content: 'An error occurred.', 
+      ephemeral: true 
+    });
   }
 }
 

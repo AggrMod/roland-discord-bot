@@ -13,6 +13,7 @@ const roleService = require('../services/roleService');
 const proposalService = require('../services/proposalService');
 const missionService = require('../services/missionService');
 const treasuryService = require('../services/treasuryService');
+const microVerifyService = require('../services/microVerifyService');
 
 class WebServer {
   constructor() {
@@ -1056,6 +1057,74 @@ class WebServer {
         res.json({ success: true, message: 'Favorite wallet updated' });
       } catch (error) {
         logger.error('Error setting favorite wallet:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // ==================== MICRO-TRANSFER VERIFICATION ====================
+
+    this.app.post('/api/micro-verify/request', (req, res) => {
+      if (!req.session.discordUser) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
+
+      try {
+        const discordId = req.session.discordUser.id;
+        const username = req.session.discordUser.username;
+
+        const result = microVerifyService.createRequest(discordId, username);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error creating micro-verify request:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.get('/api/micro-verify/status', (req, res) => {
+      if (!req.session.discordUser) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
+
+      try {
+        const discordId = req.session.discordUser.id;
+        const result = microVerifyService.getPendingRequest(discordId);
+        
+        if (result.success) {
+          const request = result.request;
+          const expiresAt = new Date(request.expires_at);
+          const timeLeftMs = expiresAt - new Date();
+          const timeLeftMinutes = Math.max(0, Math.floor(timeLeftMs / 1000 / 60));
+
+          res.json({
+            success: true,
+            request: {
+              id: request.id,
+              amount: request.expected_amount,
+              destinationWallet: request.destination_wallet,
+              expiresAt: request.expires_at,
+              timeLeftMinutes,
+              status: request.status
+            }
+          });
+        } else {
+          res.json({ success: false, message: result.message });
+        }
+      } catch (error) {
+        logger.error('Error getting micro-verify status:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.get('/api/micro-verify/config', (req, res) => {
+      try {
+        const config = microVerifyService.getConfig();
+        res.json({
+          success: true,
+          enabled: config.enabled,
+          ttlMinutes: config.ttlMinutes
+        });
+      } catch (error) {
+        logger.error('Error getting micro-verify config:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });

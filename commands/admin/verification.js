@@ -90,6 +90,10 @@ module.exports = {
                   { name: 'Trait Role', value: 'trait' },
                   { name: 'NFT Tier', value: 'tier' }
                 ))
+            .addRoleOption(option =>
+              option.setName('role')
+                .setDescription('Discord role to assign')
+                .setRequired(true))
             .addStringOption(option =>
               option.setName('trait_type')
                 .setDescription('Trait type (for trait actions)')
@@ -113,11 +117,7 @@ module.exports = {
             .addIntegerOption(option =>
               option.setName('voting_power')
                 .setDescription('Voting power (for tier actions)')
-                .setRequired(false))
-            .addRoleOption(option =>
-              option.setName('role')
-                .setDescription('Discord role to assign')
-                .setRequired(true)))
+                .setRequired(false)))
         
         // Remove action
         .addSubcommand(subcommand =>

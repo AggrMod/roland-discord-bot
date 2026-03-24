@@ -119,6 +119,11 @@ class WebServer {
     });
 
     this.app.get('/verify', (req, res) => {
+      // If not logged in via Discord OAuth, redirect to login first
+      if (!req.session.discordUser) {
+        req.session.returnTo = '/verify';
+        return res.redirect('/auth/discord/login');
+      }
       res.sendFile(path.join(__dirname, 'public', 'verify.html'));
     });
 
@@ -188,7 +193,9 @@ class WebServer {
           accessToken: tokenData.access_token
         };
 
-        res.redirect('/dashboard');
+        const returnTo = req.session.returnTo || '/dashboard';
+        delete req.session.returnTo;
+        res.redirect(returnTo);
       } catch (error) {
         logger.error('OAuth callback error:', error);
         res.redirect('/dashboard?error=auth_failed');

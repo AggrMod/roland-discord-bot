@@ -1,5 +1,8 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, Events } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
+const logger = require('./utils/logger');
 
 const client = new Client({
   intents: [
@@ -9,46 +12,95 @@ const client = new Client({
   ],
 });
 
-// Slash commands
-const commands = [
-  new SlashCommandBuilder()
-    .setName('ping')
-    .setDescription('Check if the bot is alive'),
-  new SlashCommandBuilder()
-    .setName('solpranos')
-    .setDescription('About the Solpranos ecosystem'),
-].map(cmd => cmd.toJSON());
+client.commands = new Collection();
 
-// Register commands on ready
-client.once('ready', async () => {
-  console.log(`✅ ${client.user.tag} is online!`);
-
-  const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-  try {
-    await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
-    console.log('✅ Slash commands registered');
-  } catch (err) {
-    console.error('Failed to register commands:', err);
+function loadCommandsFromDirectory(dir) {
+  const commandsPath = path.join(__dirname, dir);
+  
+  if (!fs.existsSync(commandsPath)) {
+    logger.warn(`Commands directory not found: ${commandsPath}`);
+    return;
   }
+
+  const entries = fs.readdirSync(commandsPath, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = path.join(commandsPath, entry.name);
+
+    if (entry.isDirectory()) {
+      loadCommandsFromDirectory(path.relative(__dirname, fullPath));
+    } else if (entry.isFile() && entry.name.endsWith('.js')) {
+      try {
+        const command = require(fullPath);
+        
+        if ('data' in command && 'execute' in command) {
+          client.commands.set(command.data.name, command);
+          logger.log(`Loaded command: ${command.data.name}`);
+        } else {
+          logger.warn(`Command at ${fullPath} is missing required "data" or "execute" property.`);
+        }
+      } catch (error) {
+        logger.error(`Error loading command at ${fullPath}:`, error);
+      }
+    }
+  }
+}
+
+loadCommandsFromDirectory('commands');
+
+client.once(Events.ClientReady, () => {
+  logger.log(`✅ Bot is online as ${client.user.tag}`);
+  logger.log(`📊 Loaded ${client.commands.size} commands`);
+  logger.log(`🏛️ Serving ${client.guilds.cache.size} guild(s)`);
+  
+  client.user.setActivity('The Commission', { type: 0 });
 });
 
-// Handle slash commands
-client.on('interactionCreate', async (interaction) => {
+client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
-  if (interaction.commandName === 'ping') {
-    await interaction.reply('🏛️ The family is awake.');
+  const command = client.commands.get(interaction.commandName);
+
+  if (!command) {
+    logger.warn(`No command matching ${interaction.commandName} was found.`);
+    return;
   }
 
-  if (interaction.commandName === 'solpranos') {
-    await interaction.reply({
-      embeds: [{
-        title: '🏛️ The Solpranos',
-        description: 'Welcome to the Solpranos ecosystem. Governance and the heist await.',
-        color: 0xFFD700,
-      }],
-    });
+  try {
+    await command.execute(interaction);
+    logger.log(`Command executed: ${interaction.commandName} by ${interaction.user.tag}`);
+  } catch (error) {
+    logger.error(`Error executing ${interaction.commandName}:`, error);
+    
+    const errorMessage = { 
+      content: 'There was an error while executing this command!', 
+      ephemeral: true 
+    };
+
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp(errorMessage);
+    } else {
+      await interaction.reply(errorMessage);
+    }
   }
 });
+
+client.on(Events.Error, error => {
+  logger.error('Discord client error:', error);
+});
+
+process.on('unhandledRejection', error => {
+  logger.error('Unhandled promise rejection:', error);
+});
+
+process.on('uncaughtException', error => {
+  logger.error('Uncaught exception:', error);
+  process.exit(1);
+});
+
+if (!process.env.DISCORD_TOKEN) {
+  logger.error('❌ DISCORD_TOKEN is not set in .env file');
+  process.exit(1);
+}
 
 client.login(process.env.DISCORD_TOKEN);

@@ -57,6 +57,7 @@ webServer.start();
 const proposalService = require('./services/proposalService');
 const walletService = require('./services/walletService');
 const roleService = require('./services/roleService');
+const treasuryService = require('./services/treasuryService');
 const governanceLogger = require('./utils/governanceLogger');
 const settings = require('./config/settings.json');
 
@@ -77,6 +78,9 @@ client.once(Events.ClientReady, () => {
 
   // Start role resync scheduler (every 4 hours)
   startRoleResyncScheduler();
+
+  // Start treasury monitoring scheduler
+  treasuryService.startScheduler();
 });
 
 client.on(Events.InteractionCreate, async interaction => {

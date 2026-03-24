@@ -12,6 +12,7 @@ const walletService = require('../services/walletService');
 const roleService = require('../services/roleService');
 const proposalService = require('../services/proposalService');
 const missionService = require('../services/missionService');
+const treasuryService = require('../services/treasuryService');
 
 class WebServer {
   constructor() {
@@ -582,6 +583,51 @@ class WebServer {
         }
       } catch (error) {
         logger.error('Error syncing roles:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // ==================== TREASURY API ====================
+
+    // Public treasury endpoint (no wallet address exposed)
+    this.app.get('/api/public/treasury', (req, res) => {
+      try {
+        const summary = treasuryService.getSummary();
+        res.json(summary);
+      } catch (error) {
+        logger.error('Error fetching public treasury:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // Admin treasury endpoints
+    this.app.get('/api/admin/treasury', adminAuthMiddleware, (req, res) => {
+      try {
+        const summary = treasuryService.getAdminSummary();
+        res.json(summary);
+      } catch (error) {
+        logger.error('Error fetching admin treasury:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.put('/api/admin/treasury/config', adminAuthMiddleware, (req, res) => {
+      try {
+        const { enabled, solanaWallet, refreshHours } = req.body;
+        const result = treasuryService.updateConfig({ enabled, solanaWallet, refreshHours });
+        res.json(result);
+      } catch (error) {
+        logger.error('Error updating treasury config:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/treasury/refresh', adminAuthMiddleware, async (req, res) => {
+      try {
+        const result = await treasuryService.fetchBalances();
+        res.json(result);
+      } catch (error) {
+        logger.error('Error refreshing treasury:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });

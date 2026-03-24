@@ -36,7 +36,7 @@ module.exports = {
         .addComponents(
           new ButtonBuilder()
             .setLabel('Verify')
-            .setStyle(ButtonStyle.Success)
+            .setStyle(ButtonStyle.Link)
             .setURL(`${webUrl}/verify`),
           new ButtonBuilder()
             .setLabel('Get Help')
@@ -89,11 +89,11 @@ module.exports = {
       .addComponents(
         new ButtonBuilder()
           .setLabel('Verify')
-          .setStyle(ButtonStyle.Success)
+          .setStyle(ButtonStyle.Link)
           .setURL(`${webUrl}/verify`),
         new ButtonBuilder()
           .setLabel('Add Wallet')
-          .setStyle(ButtonStyle.Secondary)
+          .setStyle(ButtonStyle.Link)
           .setURL(`${webUrl}/verify?action=add`),
         new ButtonBuilder()
           .setLabel('Get Help')

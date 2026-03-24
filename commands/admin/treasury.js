@@ -1,6 +1,7 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const treasuryService = require('../../services/treasuryService');
 const logger = require('../../utils/logger');
+const governanceLogger = require('../../utils/governanceLogger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -50,6 +51,11 @@ module.exports = {
             .setMinValue(1)
             .setMaxValue(168)
         )
+    )
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName('panel')
+        .setDescription('Post treasury monitoring panel in current channel')
     ),
 
   async execute(interaction) {
@@ -68,6 +74,8 @@ module.exports = {
         await handleSetWallet(interaction);
       } else if (subcommand === 'set-interval') {
         await handleSetInterval(interaction);
+      } else if (subcommand === 'panel') {
+        await handlePanel(interaction);
       }
     } catch (error) {
       logger.error('Error executing treasury command:', error);
@@ -283,3 +291,109 @@ async function handleSetInterval(interaction) {
   await interaction.editReply({ embeds: [embed] });
   logger.log(`Treasury refresh interval set to ${hours} hours by ${interaction.user.tag}`);
 }
+
+async function handlePanel(interaction) {
+  await interaction.deferReply();
+
+  const { embed, components } = buildTreasuryPanel();
+
+  await interaction.editReply({ embeds: [embed], components: [components] });
+  
+  // Log to governance if available
+  try {
+    governanceLogger.logAction({
+      type: 'treasury_panel_posted',
+      actor: interaction.user.id,
+      channel: interaction.channel.id,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    // Governance logger may not be configured, ignore
+  }
+
+  logger.log(`Treasury panel posted by ${interaction.user.tag} in #${interaction.channel.name}`);
+}
+
+function buildTreasuryPanel() {
+  const config = treasuryService.getConfig();
+  
+  let embed;
+  
+  if (!config || !config.enabled) {
+    // Disabled state
+    embed = new EmbedBuilder()
+      .setColor('#808080')
+      .setTitle('💰 Treasury Monitor')
+      .setDescription('⚙️ **Treasury monitoring is currently disabled.**\n\nAn administrator can enable it using `/treasury enable`.')
+      .setTimestamp();
+  } else if (!config.solana_wallet) {
+    // No wallet configured state
+    embed = new EmbedBuilder()
+      .setColor('#FFA500')
+      .setTitle('💰 Treasury Monitor')
+      .setDescription('⚠️ **No wallet configured.**\n\nAn administrator needs to set a wallet using `/treasury set-wallet`.')
+      .setTimestamp();
+  } else {
+    // Normal operational state
+    const statusEmoji = {
+      ok: '✅',
+      warning: '⚠️',
+      stale: '🔴',
+      never_updated: '⭕'
+    };
+
+    const statusText = {
+      ok: 'Current',
+      warning: 'Needs Refresh',
+      stale: 'Stale Data',
+      never_updated: 'Not Yet Updated'
+    };
+
+    const staleness = treasuryService.checkStaleness(config.last_updated, config.refresh_hours);
+    const sol = config.sol_balance || '0.0000';
+    const usdc = config.usdc_balance || '0.0000';
+
+    let color = '#00FF00'; // Green for ok
+    if (staleness.status === 'warning') color = '#FFA500'; // Orange
+    if (staleness.status === 'stale' || staleness.status === 'never_updated') color = '#FF0000'; // Red
+
+    embed = new EmbedBuilder()
+      .setColor(color)
+      .setTitle('💰 Treasury Monitor')
+      .addFields(
+        { name: '💵 SOL Balance', value: `**${sol}** SOL`, inline: true },
+        { name: '💵 USDC Balance', value: `**$${usdc}**`, inline: true },
+        { name: '📊 Status', value: `${statusEmoji[staleness.status]} ${statusText[staleness.status]}`, inline: true }
+      )
+      .setTimestamp();
+
+    if (config.last_updated) {
+      const lastUpdatedDate = new Date(config.last_updated);
+      embed.setFooter({ text: `Last updated: ${lastUpdatedDate.toLocaleString()}` });
+    } else {
+      embed.setFooter({ text: 'Never updated - click refresh to fetch data' });
+    }
+
+    if (config.last_error) {
+      embed.addFields({ 
+        name: '❌ Last Error', 
+        value: config.last_error.substring(0, 200), 
+        inline: false 
+      });
+    }
+  }
+
+  // Always include refresh button
+  const refreshButton = new ButtonBuilder()
+    .setCustomId('treasury_refresh_panel')
+    .setLabel('🔄 Refresh')
+    .setStyle(ButtonStyle.Primary);
+
+  const row = new ActionRowBuilder()
+    .addComponents(refreshButton);
+
+  return { embed, components: row };
+}
+
+// Export for use in button handler
+module.exports.buildTreasuryPanel = buildTreasuryPanel;

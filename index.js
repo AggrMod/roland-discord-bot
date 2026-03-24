@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Collection, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const logger = require('./utils/logger');
@@ -124,6 +124,12 @@ client.on(Events.InteractionCreate, async interaction => {
       if (verifyCommand) {
         await verifyCommand.execute(interaction);
       }
+      return;
+    }
+
+    // Treasury panel refresh button handler
+    if (customId === 'treasury_refresh_panel') {
+      await handleTreasuryRefreshButton(interaction);
       return;
     }
 
@@ -318,6 +324,71 @@ async function handleVoteButton(interaction) {
   } catch (error) {
     logger.error('Error handling vote button:', error);
     await interaction.editReply({ content: 'An error occurred while processing your vote.', ephemeral: true });
+  }
+}
+
+async function handleTreasuryRefreshButton(interaction) {
+  try {
+    await interaction.deferUpdate();
+
+    // Check if user is admin
+    if (!interaction.memberPermissions.has(PermissionFlagsBits.Administrator)) {
+      await interaction.followUp({ 
+        content: '❌ Only administrators can refresh the treasury panel.', 
+        ephemeral: true 
+      });
+      return;
+    }
+
+    const config = treasuryService.getConfig();
+
+    if (!config || !config.enabled || !config.solana_wallet) {
+      // Just rebuild the panel with current state (shows setup messages)
+      const treasuryCommand = require('./commands/admin/treasury.js');
+      const { embed, components } = treasuryCommand.buildTreasuryPanel();
+      
+      await interaction.editReply({ embeds: [embed], components: [components] });
+      
+      await interaction.followUp({ 
+        content: '⚠️ Treasury not fully configured. Enable and configure wallet to fetch live data.', 
+        ephemeral: true 
+      });
+      return;
+    }
+
+    // Fetch fresh balances
+    const result = await treasuryService.fetchBalances();
+
+    // Rebuild panel with fresh data
+    const treasuryCommand = require('./commands/admin/treasury.js');
+    const { embed, components } = treasuryCommand.buildTreasuryPanel();
+
+    await interaction.editReply({ embeds: [embed], components: [components] });
+
+    if (result.success) {
+      await interaction.followUp({ 
+        content: `✅ Treasury data refreshed: ${result.balances.sol} SOL, $${result.balances.usdc} USDC`, 
+        ephemeral: true 
+      });
+      logger.log(`Treasury panel refreshed by ${interaction.user.tag}`);
+    } else {
+      await interaction.followUp({ 
+        content: `⚠️ Refresh attempted but encountered error: ${result.message || result.error}`, 
+        ephemeral: true 
+      });
+    }
+
+  } catch (error) {
+    logger.error('Error handling treasury refresh button:', error);
+    try {
+      await interaction.followUp({ 
+        content: 'An error occurred while refreshing the treasury panel.', 
+        ephemeral: true 
+      });
+    } catch (followUpError) {
+      // Interaction might have expired, log and continue
+      logger.error('Could not send error follow-up:', followUpError);
+    }
   }
 }
 

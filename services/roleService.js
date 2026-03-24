@@ -345,6 +345,8 @@ class RoleService {
     for (const traitRole of (this.traitRolesConfig.traitRoles || [])) {
       summary.traitRoles.push({
         trait: `${traitRole.trait_type}: ${traitRole.trait_value}`,
+        traitType: traitRole.trait_type,
+        traitValue: traitRole.trait_value,
         roleId: traitRole.roleId,
         configured: !!traitRole.roleId,
         description: traitRole.description
@@ -352,6 +354,243 @@ class RoleService {
     }
 
     return summary;
+  }
+
+  /**
+   * CRUD operations for tiers
+   */
+  
+  addTier(name, minNFTs, maxNFTs, votingPower, roleId = null) {
+    try {
+      if (!this.tiersConfig) {
+        this.loadConfigs();
+      }
+
+      // Check for duplicate name
+      const existing = this.tiersConfig.tiers.find(t => t.name === name);
+      if (existing) {
+        return { success: false, message: `Tier "${name}" already exists` };
+      }
+
+      // Check for overlapping ranges
+      const overlap = this.tiersConfig.tiers.find(t => {
+        return (minNFTs >= t.minNFTs && minNFTs <= t.maxNFTs) ||
+               (maxNFTs >= t.minNFTs && maxNFTs <= t.maxNFTs) ||
+               (minNFTs <= t.minNFTs && maxNFTs >= t.maxNFTs);
+      });
+
+      if (overlap) {
+        return { 
+          success: false, 
+          message: `NFT range ${minNFTs}-${maxNFTs} overlaps with existing tier "${overlap.name}" (${overlap.minNFTs}-${overlap.maxNFTs})` 
+        };
+      }
+
+      const newTier = {
+        name,
+        minNFTs,
+        maxNFTs,
+        votingPower,
+        roleId
+      };
+
+      this.tiersConfig.tiers.push(newTier);
+      this.saveRolesConfig();
+      
+      logger.log(`Added tier: ${name} (${minNFTs}-${maxNFTs} NFTs, VP:${votingPower})`);
+      return { success: true, tier: newTier };
+    } catch (error) {
+      logger.error('Error adding tier:', error);
+      return { success: false, message: 'Failed to add tier' };
+    }
+  }
+
+  editTier(name, updates) {
+    try {
+      if (!this.tiersConfig) {
+        this.loadConfigs();
+      }
+
+      const tierIndex = this.tiersConfig.tiers.findIndex(t => t.name === name);
+      if (tierIndex === -1) {
+        return { success: false, message: `Tier "${name}" not found` };
+      }
+
+      const tier = this.tiersConfig.tiers[tierIndex];
+
+      // Apply updates
+      if (updates.minNFTs !== undefined) tier.minNFTs = updates.minNFTs;
+      if (updates.maxNFTs !== undefined) tier.maxNFTs = updates.maxNFTs;
+      if (updates.votingPower !== undefined) tier.votingPower = updates.votingPower;
+      if (updates.roleId !== undefined) tier.roleId = updates.roleId;
+
+      // Validate updated range doesn't overlap with other tiers
+      if (updates.minNFTs !== undefined || updates.maxNFTs !== undefined) {
+        const overlap = this.tiersConfig.tiers.find((t, idx) => {
+          if (idx === tierIndex) return false; // Skip self
+          return (tier.minNFTs >= t.minNFTs && tier.minNFTs <= t.maxNFTs) ||
+                 (tier.maxNFTs >= t.minNFTs && tier.maxNFTs <= t.maxNFTs) ||
+                 (tier.minNFTs <= t.minNFTs && tier.maxNFTs >= t.maxNFTs);
+        });
+
+        if (overlap) {
+          return { 
+            success: false, 
+            message: `Updated range ${tier.minNFTs}-${tier.maxNFTs} overlaps with tier "${overlap.name}" (${overlap.minNFTs}-${overlap.maxNFTs})` 
+          };
+        }
+      }
+
+      this.saveRolesConfig();
+      
+      logger.log(`Edited tier: ${name}`);
+      return { success: true, tier };
+    } catch (error) {
+      logger.error('Error editing tier:', error);
+      return { success: false, message: 'Failed to edit tier' };
+    }
+  }
+
+  deleteTier(name) {
+    try {
+      if (!this.tiersConfig) {
+        this.loadConfigs();
+      }
+
+      const tierIndex = this.tiersConfig.tiers.findIndex(t => t.name === name);
+      if (tierIndex === -1) {
+        return { success: false, message: `Tier "${name}" not found` };
+      }
+
+      this.tiersConfig.tiers.splice(tierIndex, 1);
+      this.saveRolesConfig();
+      
+      logger.log(`Deleted tier: ${name}`);
+      return { success: true };
+    } catch (error) {
+      logger.error('Error deleting tier:', error);
+      return { success: false, message: 'Failed to delete tier' };
+    }
+  }
+
+  /**
+   * CRUD operations for trait mappings
+   */
+  
+  addTrait(traitType, traitValue, roleId, description = null) {
+    try {
+      if (!this.traitRolesConfig) {
+        this.loadConfigs();
+      }
+
+      // Check for duplicate
+      const existing = this.traitRolesConfig.traitRoles.find(
+        t => t.trait_type === traitType && t.trait_value === traitValue
+      );
+
+      if (existing) {
+        return { 
+          success: false, 
+          message: `Trait mapping already exists: ${traitType}: ${traitValue}` 
+        };
+      }
+
+      const newTrait = {
+        trait_type: traitType,
+        trait_value: traitValue,
+        roleId,
+        description: description || `Members holding NFTs with ${traitType}: ${traitValue}`
+      };
+
+      this.traitRolesConfig.traitRoles.push(newTrait);
+      this.saveTraitRolesConfig();
+      
+      logger.log(`Added trait mapping: ${traitType}:${traitValue} → ${roleId}`);
+      return { success: true, trait: newTrait };
+    } catch (error) {
+      logger.error('Error adding trait:', error);
+      return { success: false, message: 'Failed to add trait mapping' };
+    }
+  }
+
+  editTrait(traitType, traitValue, roleId, description = null) {
+    try {
+      if (!this.traitRolesConfig) {
+        this.loadConfigs();
+      }
+
+      const trait = this.traitRolesConfig.traitRoles.find(
+        t => t.trait_type === traitType && t.trait_value === traitValue
+      );
+
+      if (!trait) {
+        return { 
+          success: false, 
+          message: `Trait mapping not found: ${traitType}: ${traitValue}` 
+        };
+      }
+
+      trait.roleId = roleId;
+      if (description) {
+        trait.description = description;
+      }
+
+      this.saveTraitRolesConfig();
+      
+      logger.log(`Edited trait mapping: ${traitType}:${traitValue} → ${roleId}`);
+      return { success: true, trait };
+    } catch (error) {
+      logger.error('Error editing trait:', error);
+      return { success: false, message: 'Failed to edit trait mapping' };
+    }
+  }
+
+  deleteTrait(traitType, traitValue) {
+    try {
+      if (!this.traitRolesConfig) {
+        this.loadConfigs();
+      }
+
+      const traitIndex = this.traitRolesConfig.traitRoles.findIndex(
+        t => t.trait_type === traitType && t.trait_value === traitValue
+      );
+
+      if (traitIndex === -1) {
+        return { 
+          success: false, 
+          message: `Trait mapping not found: ${traitType}: ${traitValue}` 
+        };
+      }
+
+      this.traitRolesConfig.traitRoles.splice(traitIndex, 1);
+      this.saveTraitRolesConfig();
+      
+      logger.log(`Deleted trait mapping: ${traitType}:${traitValue}`);
+      return { success: true };
+    } catch (error) {
+      logger.error('Error deleting trait:', error);
+      return { success: false, message: 'Failed to delete trait mapping' };
+    }
+  }
+
+  /**
+   * Persist configs to disk
+   */
+  
+  saveRolesConfig() {
+    const fs = require('fs');
+    const path = require('path');
+    const configPath = path.join(__dirname, '../config/roles.json');
+    fs.writeFileSync(configPath, JSON.stringify(this.tiersConfig, null, 2), 'utf8');
+    logger.log('Saved roles.json');
+  }
+
+  saveTraitRolesConfig() {
+    const fs = require('fs');
+    const path = require('path');
+    const configPath = path.join(__dirname, '../config/trait-roles.json');
+    fs.writeFileSync(configPath, JSON.stringify(this.traitRolesConfig, null, 2), 'utf8');
+    logger.log('Saved trait-roles.json');
   }
 }
 

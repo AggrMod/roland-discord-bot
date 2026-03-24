@@ -438,13 +438,150 @@ class WebServer {
       }
     });
 
-    // Role configuration endpoint
+    // Role configuration endpoints
     this.app.get('/api/admin/roles/config', adminAuthMiddleware, (req, res) => {
       try {
         const config = roleService.getRoleConfigSummary();
         res.json({ success: true, config });
       } catch (error) {
         logger.error('Error fetching role config:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // Tier CRUD
+    this.app.post('/api/admin/roles/tiers', adminAuthMiddleware, (req, res) => {
+      try {
+        const { name, minNFTs, maxNFTs, votingPower, roleId } = req.body;
+        
+        if (!name || minNFTs === undefined || maxNFTs === undefined || votingPower === undefined) {
+          return res.status(400).json({ success: false, message: 'Missing required fields' });
+        }
+
+        const result = roleService.addTier(name, minNFTs, maxNFTs, votingPower, roleId || null);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error adding tier:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.put('/api/admin/roles/tiers/:name', adminAuthMiddleware, (req, res) => {
+      try {
+        const { name } = req.params;
+        const updates = req.body;
+
+        const result = roleService.editTier(name, updates);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error editing tier:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.delete('/api/admin/roles/tiers/:name', adminAuthMiddleware, (req, res) => {
+      try {
+        const { name } = req.params;
+        const result = roleService.deleteTier(name);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error deleting tier:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // Trait CRUD
+    this.app.post('/api/admin/roles/traits', adminAuthMiddleware, (req, res) => {
+      try {
+        const { traitType, traitValue, roleId, description } = req.body;
+        
+        if (!traitType || !traitValue || !roleId) {
+          return res.status(400).json({ success: false, message: 'Missing required fields' });
+        }
+
+        const result = roleService.addTrait(traitType, traitValue, roleId, description);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error adding trait:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.put('/api/admin/roles/traits/:traitType/:traitValue', adminAuthMiddleware, (req, res) => {
+      try {
+        const { traitType, traitValue } = req.params;
+        const { roleId, description } = req.body;
+
+        if (!roleId) {
+          return res.status(400).json({ success: false, message: 'roleId is required' });
+        }
+
+        const result = roleService.editTrait(traitType, traitValue, roleId, description);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error editing trait:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.delete('/api/admin/roles/traits/:traitType/:traitValue', adminAuthMiddleware, (req, res) => {
+      try {
+        const { traitType, traitValue } = req.params;
+        const result = roleService.deleteTrait(traitType, traitValue);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error deleting trait:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // Role sync endpoint
+    this.app.post('/api/admin/roles/sync', adminAuthMiddleware, async (req, res) => {
+      try {
+        if (!this.client) {
+          return res.status(500).json({ success: false, message: 'Bot not initialized' });
+        }
+
+        const { discordId } = req.body;
+        const guildId = process.env.GUILD_ID;
+        const guild = await this.client.guilds.fetch(guildId);
+
+        if (discordId) {
+          // Sync single user
+          await roleService.updateUserRoles(discordId);
+          const syncResult = await roleService.syncUserDiscordRoles(guild, discordId);
+          return res.json(syncResult);
+        } else {
+          // Sync all users
+          const allUsers = roleService.getAllVerifiedUsers();
+          let syncedCount = 0;
+          let errorCount = 0;
+
+          for (const user of allUsers) {
+            try {
+              await roleService.updateUserRoles(user.discord_id, user.username);
+              const syncResult = await roleService.syncUserDiscordRoles(guild, user.discord_id);
+              
+              if (syncResult.success) {
+                syncedCount++;
+              } else {
+                errorCount++;
+              }
+            } catch (error) {
+              logger.error(`Error syncing user ${user.discord_id}:`, error);
+              errorCount++;
+            }
+          }
+
+          res.json({ 
+            success: true, 
+            message: `Synced ${syncedCount} users, ${errorCount} errors`,
+            syncedCount,
+            errorCount
+          });
+        }
+      } catch (error) {
+        logger.error('Error syncing roles:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });

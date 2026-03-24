@@ -251,6 +251,7 @@
       <div class="admin-tabs">
         <button class="admin-tab active" onclick="switchTab('overview')">Overview</button>
         <button class="admin-tab" onclick="switchTab('settings')">Settings</button>
+        <button class="admin-tab" onclick="switchTab('roles')">Role Config</button>
         <button class="admin-tab" onclick="switchTab('users')">Users</button>
         <button class="admin-tab" onclick="switchTab('proposals')">Proposals</button>
         <button class="admin-tab" onclick="switchTab('missions')">Missions</button>
@@ -312,6 +313,54 @@
           <div style="margin-top: var(--space-6); display: flex; gap: var(--space-3);">
             <button class="btn-primary" onclick="saveSettings()">💾 Save All Settings</button>
             <button class="btn-danger" onclick="resetSettings()">🔄 Reset to Defaults</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Role Config Tab -->
+      <div id="roles" class="tab-content">
+        <div class="card">
+          <h2 class="card-title">🎭 Role Configuration</h2>
+          
+          <div style="display: flex; gap: var(--space-4); margin-bottom: var(--space-6);">
+            <button class="btn-primary" onclick="syncAllRoles()">🔄 Sync All Users</button>
+            <button class="btn-secondary" onclick="loadRoleConfig()">🔃 Refresh</button>
+          </div>
+
+          <h3 style="color: var(--gold); margin-bottom: var(--space-4); font-size: var(--font-xl);">📊 Tier Configuration</h3>
+          
+          <div style="margin-bottom: var(--space-6);">
+            <table class="admin-table" id="tiersTable">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Min NFTs</th>
+                  <th>Max NFTs</th>
+                  <th>Voting Power</th>
+                  <th>Discord Role</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+            <button class="btn-primary" onclick="showAddTierForm()" style="margin-top: var(--space-4);">➕ Add Tier</button>
+          </div>
+
+          <h3 style="color: var(--gold); margin-bottom: var(--space-4); margin-top: var(--space-8); font-size: var(--font-xl);">🎨 Trait-Role Mappings</h3>
+          
+          <div>
+            <table class="admin-table" id="traitsTable">
+              <thead>
+                <tr>
+                  <th>Trait Type</th>
+                  <th>Trait Value</th>
+                  <th>Discord Role</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+            <button class="btn-primary" onclick="showAddTraitForm()" style="margin-top: var(--space-4);">➕ Add Trait Mapping</button>
           </div>
         </div>
       </div>
@@ -414,6 +463,7 @@
     let usersData = [];
     let proposalsData = [];
     let missionsData = [];
+    let roleConfigData = null;
 
     async function checkAuth() {
       try {
@@ -454,11 +504,68 @@
     async function loadAllData() {
       await Promise.all([
         loadSettings(),
+        loadRoleConfig(),
         loadUsers(),
         loadProposals(),
         loadMissions()
       ]);
       updateOverviewStats();
+    }
+
+    async function loadRoleConfig() {
+      try {
+        const response = await fetch('/api/admin/roles/config');
+        const data = await response.json();
+
+        if (data.success) {
+          roleConfigData = data.config;
+          renderRoleConfig();
+        }
+      } catch (error) {
+        console.error('Error loading role config:', error);
+      }
+    }
+
+    function renderRoleConfig() {
+      if (!roleConfigData) return;
+
+      // Render tiers
+      const tiersTbody = document.querySelector('#tiersTable tbody');
+      tiersTbody.innerHTML = '';
+
+      roleConfigData.tiers.forEach(tier => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td><strong>${tier.name}</strong></td>
+          <td>${tier.minNFTs}</td>
+          <td>${tier.maxNFTs}</td>
+          <td>${tier.votingPower}</td>
+          <td>${tier.roleId ? `Role ID: ${tier.roleId}` : '<em>Not set</em>'}</td>
+          <td>
+            <button class="btn-secondary btn-sm" onclick="editTier('${tier.name}')">Edit</button>
+            <button class="btn-danger btn-sm" onclick="deleteTier('${tier.name}')">Delete</button>
+          </td>
+        `;
+        tiersTbody.appendChild(row);
+      });
+
+      // Render traits
+      const traitsTbody = document.querySelector('#traitsTable tbody');
+      traitsTbody.innerHTML = '';
+
+      roleConfigData.traitRoles.forEach(trait => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${trait.traitType}</td>
+          <td>${trait.traitValue}</td>
+          <td>${trait.roleId ? `Role ID: ${trait.roleId}` : '<em>Not set</em>'}</td>
+          <td>
+            <button class="btn-secondary btn-sm" onclick="editTrait('${trait.traitType}', '${trait.traitValue}')">Edit</button>
+            <button class="btn-danger btn-sm" onclick="deleteTrait('${trait.traitType}', '${trait.traitValue}')">Delete</button>
+          </td>
+        `;
+        traitsTbody.appendChild(row);
+      });
     }
 
     async function loadSettings() {
@@ -831,6 +938,233 @@
 
     function logout() {
       window.location.href = '/auth/discord/logout';
+    }
+
+    // ========== ROLE CONFIGURATION CRUD ==========
+
+    function showAddTierForm() {
+      const name = prompt('Tier name:');
+      if (!name) return;
+
+      const minNFTs = parseInt(prompt('Minimum NFTs:'));
+      const maxNFTs = parseInt(prompt('Maximum NFTs:'));
+      const votingPower = parseInt(prompt('Voting Power:'));
+      const roleId = prompt('Discord Role ID (leave empty to skip):') || null;
+
+      if (isNaN(minNFTs) || isNaN(maxNFTs) || isNaN(votingPower)) {
+        alert('❌ Invalid input');
+        return;
+      }
+
+      addTier(name, minNFTs, maxNFTs, votingPower, roleId);
+    }
+
+    async function addTier(name, minNFTs, maxNFTs, votingPower, roleId) {
+      try {
+        const response = await fetch('/api/admin/roles/tiers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, minNFTs, maxNFTs, votingPower, roleId })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          alert(`✅ Tier "${name}" added successfully!`);
+          await loadRoleConfig();
+        } else {
+          showError(data.message);
+        }
+      } catch (error) {
+        console.error('Error adding tier:', error);
+        showError('Failed to add tier');
+      }
+    }
+
+    function editTier(name) {
+      const tier = roleConfigData.tiers.find(t => t.name === name);
+      if (!tier) return;
+
+      const minNFTs = prompt('Minimum NFTs:', tier.minNFTs);
+      const maxNFTs = prompt('Maximum NFTs:', tier.maxNFTs);
+      const votingPower = prompt('Voting Power:', tier.votingPower);
+      const roleId = prompt('Discord Role ID:', tier.roleId || '');
+
+      if (minNFTs === null && maxNFTs === null && votingPower === null && roleId === null) {
+        return;
+      }
+
+      const updates = {};
+      if (minNFTs !== null && minNFTs !== '') updates.minNFTs = parseInt(minNFTs);
+      if (maxNFTs !== null && maxNFTs !== '') updates.maxNFTs = parseInt(maxNFTs);
+      if (votingPower !== null && votingPower !== '') updates.votingPower = parseInt(votingPower);
+      if (roleId !== null) updates.roleId = roleId || null;
+
+      updateTier(name, updates);
+    }
+
+    async function updateTier(name, updates) {
+      try {
+        const response = await fetch(`/api/admin/roles/tiers/${encodeURIComponent(name)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates)
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          alert(`✅ Tier "${name}" updated successfully!`);
+          await loadRoleConfig();
+        } else {
+          showError(data.message);
+        }
+      } catch (error) {
+        console.error('Error updating tier:', error);
+        showError('Failed to update tier');
+      }
+    }
+
+    async function deleteTier(name) {
+      if (!confirm(`Delete tier "${name}"? This cannot be undone.`)) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/admin/roles/tiers/${encodeURIComponent(name)}`, {
+          method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          alert(`✅ Tier "${name}" deleted successfully!`);
+          await loadRoleConfig();
+        } else {
+          showError(data.message);
+        }
+      } catch (error) {
+        console.error('Error deleting tier:', error);
+        showError('Failed to delete tier');
+      }
+    }
+
+    function showAddTraitForm() {
+      const traitType = prompt('Trait Type (e.g., Role):');
+      if (!traitType) return;
+
+      const traitValue = prompt('Trait Value (e.g., The Hitman):');
+      if (!traitValue) return;
+
+      const roleId = prompt('Discord Role ID:');
+      if (!roleId) return;
+
+      addTrait(traitType, traitValue, roleId);
+    }
+
+    async function addTrait(traitType, traitValue, roleId) {
+      try {
+        const response = await fetch('/api/admin/roles/traits', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ traitType, traitValue, roleId })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          alert(`✅ Trait mapping "${traitType}: ${traitValue}" added successfully!`);
+          await loadRoleConfig();
+        } else {
+          showError(data.message);
+        }
+      } catch (error) {
+        console.error('Error adding trait:', error);
+        showError('Failed to add trait');
+      }
+    }
+
+    function editTrait(traitType, traitValue) {
+      const trait = roleConfigData.traitRoles.find(
+        t => t.traitType === traitType && t.traitValue === traitValue
+      );
+      if (!trait) return;
+
+      const roleId = prompt('New Discord Role ID:', trait.roleId || '');
+      if (roleId === null || roleId === '') return;
+
+      updateTrait(traitType, traitValue, roleId);
+    }
+
+    async function updateTrait(traitType, traitValue, roleId) {
+      try {
+        const response = await fetch(`/api/admin/roles/traits/${encodeURIComponent(traitType)}/${encodeURIComponent(traitValue)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roleId })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          alert(`✅ Trait mapping "${traitType}: ${traitValue}" updated successfully!`);
+          await loadRoleConfig();
+        } else {
+          showError(data.message);
+        }
+      } catch (error) {
+        console.error('Error updating trait:', error);
+        showError('Failed to update trait');
+      }
+    }
+
+    async function deleteTrait(traitType, traitValue) {
+      if (!confirm(`Delete trait mapping "${traitType}: ${traitValue}"? This cannot be undone.`)) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/admin/roles/traits/${encodeURIComponent(traitType)}/${encodeURIComponent(traitValue)}`, {
+          method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          alert(`✅ Trait mapping "${traitType}: ${traitValue}" deleted successfully!`);
+          await loadRoleConfig();
+        } else {
+          showError(data.message);
+        }
+      } catch (error) {
+        console.error('Error deleting trait:', error);
+        showError('Failed to delete trait');
+      }
+    }
+
+    async function syncAllRoles() {
+      if (!confirm('Sync roles for ALL users? This may take a while.')) {
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/admin/roles/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          alert(`✅ Role sync complete!\nSynced: ${data.syncedCount}\nErrors: ${data.errorCount}`);
+        } else {
+          showError(data.message);
+        }
+      } catch (error) {
+        console.error('Error syncing roles:', error);
+        showError('Failed to sync roles');
+      }
     }
 
     // Load on page load

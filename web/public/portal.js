@@ -225,9 +225,9 @@ function renderProposals() {
       <div class="empty-state">
         <div class="empty-state-icon">📜</div>
         <h4 class="empty-state-title">No Proposals Yet</h4>
-        <p class="empty-state-message">You haven't created any proposals. Use the /gov create command in Discord to submit your first proposal.</p>
+        <p class="empty-state-message">You haven't created any proposals. Use the /propose command in Discord to submit your first proposal.</p>
         <div class="empty-state-action">
-          <button class="btn-primary" onclick="showInfo('Use /gov create in Discord to create a proposal')">
+          <button class="btn-primary" onclick="showInfo('Use /propose in Discord to create a proposal')">
             <span>ℹ️</span>
             <span>Learn How</span>
           </button>

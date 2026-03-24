@@ -71,7 +71,8 @@ class WebServer {
     });
 
     this.app.get('/admin', (req, res) => {
-      res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+      // Redirect to portal admin section for unified UI
+      res.redirect('/?section=admin');
     });
 
     // ==================== FEATURE FLAGS ====================

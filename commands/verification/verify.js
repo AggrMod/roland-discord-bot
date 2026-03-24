@@ -17,7 +17,25 @@ module.exports = {
     const webUrl = process.env.WEB_URL || 'http://localhost:3000';
     
     // Check if user has verified wallets
-    const wallets = walletService.getLinkedWallets(discordId);
+    let wallets = walletService.getLinkedWallets(discordId);
+
+    // In mock mode, auto-register a mock wallet if user has none
+    if ((!wallets || wallets.length === 0) && process.env.MOCK_MODE === 'true') {
+      const mockWallet = `MOCK${discordId.slice(0, 8)}${Math.random().toString(36).slice(2, 8)}`;
+      walletService.linkWallet(discordId, interaction.user.username, mockWallet);
+      wallets = walletService.getLinkedWallets(discordId);
+      
+      // Update NFT counts and roles
+      const nftService = require('../../services/nftService');
+      const allNFTs = await nftService.getAllNFTsForWallets([mockWallet]);
+      const totalNFTs = allNFTs.length;
+      const db = require('../../database/db');
+      db.prepare('UPDATE users SET total_nfts = ? WHERE discord_id = ?').run(totalNFTs, discordId);
+      
+      // Assign roles
+      await roleService.updateUserRoles(interaction.member, totalNFTs);
+    }
+
     const userInfo = await roleService.getUserInfo(discordId);
 
     if (!wallets || wallets.length === 0) {

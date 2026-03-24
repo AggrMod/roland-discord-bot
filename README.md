@@ -62,22 +62,39 @@ Discord bot for the Solpranos NFT ecosystem featuring wallet verification, DAO g
 - `/wallet-list` - View linked wallets and NFT holdings
 - `/refresh-roles` - Update roles based on current NFT count
 
-### Admin: Verification Management (Solmate-style)
-Preferred command interface for managing verification:
-- `/verification create` - Create verification panel
-- `/verification actions list` - List all verification actions
-- `/verification actions addcollection` - Add collection-based action
-- `/verification actions addtoken` - Add trait/tier-based action
-- `/verification actions remove` - Remove verification action
-- `/verification exportuser` - Export user data
-- `/verification removeuser` - Remove user from system
+### Admin: Verification Management (Family Style)
+Primary command interface for managing verification with Solpranos flair:
 
-### Admin: Advanced Role Configuration (Legacy)
-Advanced interface for managing role mappings:
-- `/role-config list` - View current role configuration
-- `/role-config add-tier/edit-tier/delete-tier` - Manage NFT tiers
-- `/role-config add-trait/edit-trait/delete-trait` - Manage trait roles
-- `/role-config sync` - Manually sync user roles
+**Panel Creation:**
+- `/verification create` - Post a verification panel (with optional customization: title, description, color, footer, thumbnail, image)
+
+**Actions Management:**
+- `/verification actions list` - Show all verification actions and role assignments
+- `/verification actions addcollection role:<role> collection:<name> [amount:1] [traitname] [traitvalue]` - Assign role for NFT collection holders
+- `/verification actions addtoken role:<role> token:<name> [amount:1]` - Assign role for SPL token holders
+- `/verification actions remove role:<role> type:<collection/token/trait> [identifier]` - Remove verification action by role + context
+
+**Member Management:**
+- `/verification exportuser user:<@user>` - Export a member's verification data
+- `/verification removeuser user:<@user> confirm:true` - Remove member from Family (cannot be undone)
+
+**Examples:**
+```
+/verification create title:"Join the Family" color:#8B0000
+/verification actions addcollection role:@Soldato collection:solpranos-main amount:3
+/verification actions addcollection role:@Hitman collection:solpranos-main traitname:Role traitvalue:The Hitman
+/verification actions addtoken role:@Whale token:$BRUNO amount:100000
+/verification actions remove role:@Soldato type:collection identifier:solpranos-main
+```
+
+### Admin: Advanced Role Configuration (Power Users)
+Advanced interface for granular role mapping control:
+- `/role-config list` - View detailed role configuration with voting power
+- `/role-config add-tier/edit-tier/delete-tier` - Fine-tune NFT tier thresholds and voting power
+- `/role-config add-trait/edit-trait/delete-trait` - Manage trait-to-role mappings directly
+- `/role-config sync [user]` - Force role re-sync for one or all members
+
+💡 **Tip:** Most admins should use `/verification actions` for day-to-day management. Use `/role-config` only when you need advanced control over tier mechanics or voting power.
 
 ### Governance Commands
 - `/propose <title> <description>` - Create a new proposal

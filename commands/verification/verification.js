@@ -401,7 +401,7 @@ module.exports = {
       });
     }
 
-    const result = await microVerifyService.createMicroVerifySession(discordId, username);
+    const result = microVerifyService.createRequest(discordId, username);
 
     if (!result.success) {
       return interaction.editReply({ 
@@ -410,23 +410,32 @@ module.exports = {
       });
     }
 
+    const req = result.request;
+    const expiresTs = Math.floor(new Date(req.expiresAt).getTime() / 1000);
+
     const embed = new EmbedBuilder()
       .setColor('#FFD700')
       .setTitle('⚡ Quick Verification')
-      .setDescription(`Click the link below to complete quick verification:\n\n${result.url}`)
+      .setDescription('Send the exact tiny SOL amount from your wallet to complete verification.')
       .addFields(
-        { name: '⏱️ Expires', value: 'In 10 minutes', inline: true },
-        { name: '🔐 Secure', value: 'Wallet signature required', inline: true }
+        { name: 'Amount', value: `\`${req.amount} SOL\``, inline: true },
+        { name: 'Destination', value: `\`${req.destinationWallet}\``, inline: false },
+        { name: 'Expires', value: `<t:${expiresTs}:R>`, inline: true },
+        { name: 'Check Status', value: 'Use button below after sending.', inline: true }
       )
-      .setFooter({ text: 'Quick verification for instant role assignment' })
+      .setFooter({ text: 'Quick verification via micro-transfer' })
       .setTimestamp();
 
     const row = new ActionRowBuilder()
       .addComponents(
         new ButtonBuilder()
-          .setLabel('Quick Verify')
-          .setStyle(ButtonStyle.Link)
-          .setURL(result.url)
+          .setCustomId('micro_verify_copy_amount')
+          .setLabel('Copy Amount')
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId('micro_verify_check_status')
+          .setLabel('Check Status')
+          .setStyle(ButtonStyle.Primary)
       );
 
     await interaction.editReply({ embeds: [embed], components: [row] });

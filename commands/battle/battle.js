@@ -304,7 +304,7 @@ module.exports = {
   async handleAdminList(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
-    const battles = battleDb.prepare('SELECT * FROM battle_lobbies WHERE status IN ("open", "in_progress") ORDER BY created_at DESC').all();
+    const battles = battleDb.prepare("SELECT * FROM battle_lobbies WHERE status IN ('open', 'in_progress') ORDER BY created_at DESC").all();
 
     if (battles.length === 0) {
       return interaction.editReply({ content: '❌ No active battles.', ephemeral: true });

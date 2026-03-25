@@ -166,7 +166,7 @@ module.exports = {
     }
 
     const c = adminSummary.config;
-    const b = adminSummary.balances;
+    const b = adminSummary.treasury || { sol: '0.0000', usdc: '0.0000' };
     const statusText = c.enabled ? '✅ Enabled' : '❌ Disabled';
 
     const embed = new EmbedBuilder()

@@ -59,6 +59,39 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+// ==================== WALLET MANAGEMENT ====================
+function showWalletAddForm() {
+  // Show wallet modal/form within portal
+  const walletsList = document.getElementById('walletsList');
+  if (walletsList) {
+    const formHtml = `
+      <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
+        <h4 style="color:#e0e7ff; margin-bottom:12px;">Add New Wallet</h4>
+        <div style="display:grid; gap:12px;">
+          <input id="newWalletAddr" type="text" placeholder="Enter Solana wallet address" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.85em;">
+          <button onclick="submitWalletVerification()" class="btn-primary" style="padding:10px 16px;">Sign & Verify Wallet</button>
+          <button onclick="location.reload()" class="btn-secondary" style="padding:10px 16px;">Cancel</button>
+        </div>
+      </div>
+    `;
+    walletsList.innerHTML = formHtml;
+    walletsList.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function submitWalletVerification() {
+  const addr = document.getElementById('newWalletAddr')?.value.trim();
+  if (!addr) {
+    showError('Please enter a wallet address');
+    return;
+  }
+  showSuccess('Wallet verification initiated - redirecting to sign...');
+  // Will integrate with existing verify flow via window.location or modal
+  setTimeout(() => {
+    window.location.href = '/verify?address=' + encodeURIComponent(addr);
+  }, 800);
+}
+
 // ==================== PORTAL LOADING ====================
 async function loadPortal() {
   try {

@@ -429,24 +429,24 @@ body {
 
 /* ==================== CARDS ==================== */
 .card {
-  background: rgba(21, 21, 21, 0.8);
+  background: rgba(20, 29, 54, 0.65);
   backdrop-filter: blur(10px);
-  border: 1px solid var(--border-default);
+  border: 1px solid rgba(99, 102, 241, 0.22);
   border-radius: var(--radius-lg);
   padding: var(--space-6);
   margin-bottom: var(--space-6);
   transition: var(--transition-base);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
 .card:hover {
-  border-color: var(--border-emphasis);
-  box-shadow: var(--shadow-md), 0 0 20px rgba(255, 215, 0, 0.1);
+  border-color: rgba(99, 102, 241, 0.35);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35), 0 0 16px rgba(99, 102, 241, 0.15);
   transform: translateY(-2px);
 }
 
 .card h3 {
-  color: var(--gold);
+  color: #e0e7ff;
   font-size: var(--font-xl);
   font-weight: 600;
   margin-bottom: var(--space-5);
@@ -469,14 +469,15 @@ body {
 .login-card {
   text-align: center;
   padding: var(--space-12);
-  border: 2px solid var(--gold);
-  box-shadow: var(--shadow-gold-lg);
-  background: linear-gradient(135deg, rgba(255, 215, 0, 0.05), rgba(255, 215, 0, 0.02));
+  border: 2px solid rgba(99, 102, 241, 0.4);
+  box-shadow: 0 8px 32px rgba(99, 102, 241, 0.15);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(99, 102, 241, 0.04));
 }
 
 .login-card h3 {
   font-size: var(--font-3xl);
   margin-bottom: var(--space-4);
+  color: #e0e7ff;
   text-shadow: 0 0 20px var(--gold-glow);
 }
 
@@ -496,8 +497,8 @@ body {
 }
 
 .stat-card {
-  background: linear-gradient(135deg, rgba(255, 215, 0, 0.12) 0%, rgba(255, 215, 0, 0.04) 100%);
-  border: 1px solid var(--border-default);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(99, 102, 241, 0.04) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.22);
   border-radius: var(--radius-lg);
   padding: var(--space-6);
   text-align: center;
@@ -513,15 +514,15 @@ body {
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  background: linear-gradient(90deg, transparent, #6366f1, transparent);
   opacity: 0;
   transition: var(--transition-base);
 }
 
 .stat-card:hover {
-  border-color: var(--gold);
+  border-color: rgba(99, 102, 241, 0.35);
   transform: translateY(-4px);
-  box-shadow: var(--shadow-gold-md);
+  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.2);
 }
 
 .stat-card:hover::before {
@@ -531,7 +532,7 @@ body {
 .stat-icon {
   font-size: 3rem;
   margin-bottom: var(--space-3);
-  filter: drop-shadow(0 0 8px var(--gold-glow));
+  filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.25));
   transition: var(--transition-base);
 }
 
@@ -541,10 +542,10 @@ body {
 
 .stat-value {
   font-size: var(--font-3xl);
-  color: var(--gold);
+  color: #818cf8;
   font-weight: 700;
   margin-bottom: var(--space-2);
-  text-shadow: 0 0 15px var(--gold-glow);
+  text-shadow: 0 0 12px rgba(129, 140, 248, 0.3);
   letter-spacing: -0.02em;
 }
 
@@ -579,14 +580,14 @@ body {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dark) 100%);
-  color: #000;
-  box-shadow: var(--shadow-gold-sm);
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
 
 .btn-primary:hover {
-  background: linear-gradient(135deg, var(--gold-light) 0%, var(--gold) 100%);
-  box-shadow: var(--shadow-gold-md);
+  background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
+  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
   transform: translateY(-2px);
 }
 
@@ -595,15 +596,15 @@ body {
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--gold);
-  border: 1px solid var(--border-default);
+  background: rgba(99, 102, 241, 0.08);
+  color: #c7d2fe;
+  border: 1px solid rgba(99, 102, 241, 0.22);
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 215, 0, 0.1);
-  border-color: var(--border-emphasis);
-  box-shadow: var(--shadow-gold-sm);
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.35);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
 }
 
 .btn-danger {

@@ -114,26 +114,23 @@
           </div>
 
           <div id="dashboardContent" style="display:none;">
-            <div class="stats-grid">
-              <div class="stat-card">
-                <div class="stat-icon" aria-hidden="true">🏆</div>
-                <div class="stat-value" id="tierStat">-</div>
-                <div class="stat-label">Membership Tier</div>
+            <h3 style="margin-bottom:16px; color:#e0e7ff;">👤 Your Profile</h3>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; margin-bottom:32px;">
+              <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
+                <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:8px;">Membership Tier</div>
+                <div style="font-size:2em; font-weight:700; color:#e0e7ff;" id="tierStat">-</div>
               </div>
-              <div class="stat-card">
-                <div class="stat-icon" aria-hidden="true">⚡</div>
-                <div class="stat-value" id="vpStat">0</div>
-                <div class="stat-label">Voting Power</div>
+              <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
+                <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:8px;">Voting Power</div>
+                <div style="font-size:2em; font-weight:700; color:#93c5fd;" id="vpStat">0</div>
               </div>
-              <div class="stat-card">
-                <div class="stat-icon" aria-hidden="true">🖼️</div>
-                <div class="stat-value" id="nftsStat">0</div>
-                <div class="stat-label">NFTs Held</div>
+              <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
+                <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:8px;">NFTs Held</div>
+                <div style="font-size:2em; font-weight:700; color:#86efac;" id="nftsStat">0</div>
               </div>
-              <div class="stat-card" id="heistPointsCard" style="display:none;">
-                <div class="stat-icon" aria-hidden="true">💎</div>
-                <div class="stat-value" id="pointsStat">0</div>
-                <div class="stat-label">Heist Points</div>
+              <div id="heistPointsCard" style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px; display:none;">
+                <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:8px;">Heist Points</div>
+                <div style="font-size:2em; font-weight:700; color:#fcd34d;" id="pointsStat">0</div>
               </div>
             </div>
 
@@ -206,7 +203,7 @@
           <div class="card">
             <div class="card-header">
               <h3>Connected Wallets</h3>
-              <button class="btn-primary" onclick="window.location.href='/verify'">
+              <button class="btn-primary" onclick="showWalletAddForm()">
                 <span>➕</span>
                 <span>Add Wallet</span>
               </button>

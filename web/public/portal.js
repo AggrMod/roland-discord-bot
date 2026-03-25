@@ -895,3 +895,101 @@ async function refreshTreasury() {
     btn.innerHTML = originalText;
   }
 }
+
+// ==================== INTEGRATED ADMIN: USER MANAGEMENT ====================
+function showAdminUsers() {
+  if (!isAdmin) {
+    showError('Admin access required.');
+    return;
+  }
+
+  switchSection('admin');
+  const card = document.getElementById('adminUsersCard');
+  if (card) card.style.display = 'block';
+  loadAdminUsers();
+
+  setTimeout(() => {
+    card?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 100);
+}
+
+async function loadAdminUsers() {
+  if (!isAdmin) return;
+
+  const content = document.getElementById('adminUsersContent');
+  const btn = document.getElementById('adminUsersRefreshBtn');
+  if (!content) return;
+
+  const originalBtn = btn ? btn.innerHTML : null;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳</span><span>Loading...</span>';
+  }
+
+  content.innerHTML = `
+    <div style="text-align:center; padding: var(--space-5); color: var(--text-secondary);">
+      <div class="spinner"></div>
+      <p>Loading users...</p>
+    </div>
+  `;
+
+  try {
+    const response = await fetch('/api/admin/users');
+    const data = await response.json();
+
+    if (!data.success) {
+      content.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(data.message || 'Failed to load users')}</div></div>`;
+      return;
+    }
+
+    const users = data.users || [];
+    if (!users.length) {
+      content.innerHTML = `<div class="empty-state"><div class="empty-state-title">No users found</div></div>`;
+      return;
+    }
+
+    const rows = users.slice(0, 100).map(u => {
+      const tier = u.tier || 'none';
+      const vp = u.voting_power ?? u.votingPower ?? 0;
+      const nfts = u.total_nfts ?? u.totalNFTs ?? 0;
+      const name = u.username || u.discord_username || 'Unknown';
+      const did = u.discord_id || u.discordId || '—';
+      return `
+        <tr>
+          <td style="padding:8px; border-bottom:1px solid var(--border-color);">${escapeHtml(name)}</td>
+          <td style="padding:8px; border-bottom:1px solid var(--border-color); font-family:monospace;">${escapeHtml(String(did))}</td>
+          <td style="padding:8px; border-bottom:1px solid var(--border-color);">${escapeHtml(String(tier))}</td>
+          <td style="padding:8px; border-bottom:1px solid var(--border-color);">${nfts}</td>
+          <td style="padding:8px; border-bottom:1px solid var(--border-color);">${vp}</td>
+        </tr>
+      `;
+    }).join('');
+
+    content.innerHTML = `
+      <div style="margin-bottom:10px; color: var(--text-secondary); font-size: 0.9em;">Showing ${Math.min(users.length, 100)} of ${users.length} users</div>
+      <div style="overflow:auto; border:1px solid var(--border-color); border-radius:8px;">
+        <table style="width:100%; border-collapse:collapse; font-size: 0.92em;">
+          <thead>
+            <tr style="background: var(--bg-tertiary); text-align:left;">
+              <th style="padding:8px;">Username</th>
+              <th style="padding:8px;">Discord ID</th>
+              <th style="padding:8px;">Tier</th>
+              <th style="padding:8px;">NFTs</th>
+              <th style="padding:8px;">VP</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div style="margin-top:8px; color: var(--text-secondary); font-size: 0.85em;">Need advanced edits? Use the full admin panel.</div>
+    `;
+  } catch (error) {
+    console.error('Error loading admin users:', error);
+    content.innerHTML = `<div class="error-state"><div class="error-message">Failed to load users: ${escapeHtml(error.message)}</div></div>`;
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalBtn;
+    }
+  }
+}

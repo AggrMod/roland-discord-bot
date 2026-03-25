@@ -260,11 +260,12 @@ module.exports = {
 
     for (const r of sim.rounds) {
       const lines = (r.events || []).slice(0, 8).map(e => `• ${e}`).join('\n');
+      const isEliteIntro = !!r.eliteFourActivated;
       const roundEmbed = new EmbedBuilder()
-        .setColor('#57F287')
-        .setTitle(`Round ${r.round}`)
+        .setColor(isEliteIntro ? '#ED4245' : '#57F287')
+        .setTitle(isEliteIntro ? `🏆 ELITE FOUR • Round ${r.round}` : `Round ${r.round}`)
         .setDescription(`${lines}\n\n**Players Left:** ${r.playersLeft}`)
-        .setFooter({ text: 'Era: Solpranos' });
+        .setFooter({ text: isEliteIntro ? 'No revivals. No mercy. Final circle.' : 'Era: Solpranos' });
 
       await interaction.channel.send({ embeds: [roundEmbed] });
     }

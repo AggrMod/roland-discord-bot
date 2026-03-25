@@ -479,10 +479,12 @@ class BattleService {
     while (alivePlayers.length > 1) {
       roundNum++;
       const events = [];
+      let eliteFourActivatedThisRound = false;
 
       // Elite Four mode activates once when 4 fighters remain
       if (!eliteFourMode && alivePlayers.length === 4) {
         eliteFourMode = true;
+        eliteFourActivatedThisRound = true;
 
         events.push('🏆 **ELITE FOUR MODE ACTIVATED**');
         events.push('🎭 Final circle unlocked: all four fighters are restored to **100 HP**.');
@@ -493,6 +495,11 @@ class BattleService {
           db.prepare('UPDATE battle_participants SET hp = ? WHERE lobby_id = ? AND user_id = ?')
             .run(100, lobbyId, p.user_id);
         }
+
+        const rollCall = alivePlayers
+          .map((p, idx) => `${idx + 1}) **${p.username}** — 100 HP`)
+          .join('\n');
+        events.push(`🩸 **Elite Four Roll Call**\n${rollCall}`);
       }
 
       if (eliteFourMode) {
@@ -666,7 +673,9 @@ class BattleService {
       rounds.push({ 
         round: roundNum, 
         events,
-        playersLeft: alivePlayers.length 
+        playersLeft: alivePlayers.length,
+        eliteFourActivated: eliteFourActivatedThisRound,
+        eliteFourMode
       });
       
       // Safety break

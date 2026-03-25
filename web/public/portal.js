@@ -321,7 +321,7 @@ function uint8ToBase58(bytes) {
 async function loadPortal() {
   try {
     // Check feature flags
-    const flagsResponse = await fetch('/api/features');
+    const flagsResponse = await fetch('/api/features', { credentials: 'include' });
     if (flagsResponse.ok) {
       const flags = await flagsResponse.json();
       heistEnabled = flags.heistEnabled || false;
@@ -334,8 +334,8 @@ async function loadPortal() {
       }
     }
 
-    // Try to load user data
-    const response = await fetch('/api/user/me');
+    // Try to load user data (credentials CRITICAL for session cookies)
+    const response = await fetch('/api/user/me', { credentials: 'include' });
     const data = await response.json();
 
     if (data.success) {

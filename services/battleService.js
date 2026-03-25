@@ -196,6 +196,86 @@ const FINALE_OUTROS = [
   "{winner} survived everything the streets threw at them. {rounds} rounds, {totalPlayers} enemies, one victor. That's Solpranos royalty right there.",
 ];
 
+const TAUNT_LINES = [
+  "💬 {attacker} trash talks {defender}: \"You fight like a rat carrying pasta!\"",
+  "💬 {attacker} to {defender}: \"I've seen stronger hits from a nonna with a wooden spoon!\"",
+  "💬 {attacker} smirks: \"Is that the best you got, or are you saving your energy for crying?\"",
+  "💬 {attacker} laughs: \"My grandmother hits harder, and she's been dead for five years!\"",
+  "💬 {attacker} yells at {defender}: \"You swing like you've never seen a fight before!\"",
+  "💬 {attacker} to {defender}: \"I've fought squirrels with more balls than you!\"",
+  "💬 {attacker} grins: \"Is your mommy watching? Tell her you're doing terrible!\"",
+  "💬 {attacker} shouts: \"The family will use you as a cautionary tale!\"",
+  "💬 {attacker} sneers: \"You're so bad at this, I'm starting to feel bad. Nah, I'm lying.\"",
+  "💬 {attacker} to {defender}: \"Keep swinging—eventually you'll hit something. Probably yourself.\"",
+  "💬 {attacker} mocks {defender}: \"Did you learn to fight from a book? A children's book?\"",
+  "💬 {attacker} laughs: \"I've seen better technique from a drunk guy at the bar!\"",
+  "💬 {attacker} taunts: \"You're making this too easy. Where's the fun in that?\"",
+  "💬 {attacker} to {defender}: \"The boss sent me to fight you? He must hate me.\"",
+  "💬 {attacker} grins wickedly: \"Your style: it's like watching someone flail in the dark.\"",
+];
+
+const TRASH_TALK_LINES = [
+  "🗣️ {attacker} after hitting {defender}: \"That's what happens when you step up!\"",
+  "🗣️ {attacker} after a solid hit: \"See? The family remembers you now!\"",
+  "🗣️ {attacker} sneers: \"You should've stayed home tonight, {defender}.\"",
+  "🗣️ {attacker} to {defender}: \"That's gonna leave a mark—on your reputation!\"",
+  "🗣️ {attacker} spits: \"The streets are talking about you now. Not in a good way.\"",
+  "🗣️ {attacker} laughs: \"Is that all you got? I expected more from a {defender}.\"",
+  "🗣️ {attacker} mockingly: \"Oof. That looked like it hurt. Good.\"",
+  "🗣️ {attacker} to {defender}: \"Next time, bring backup. You're gonna need it.\"",
+  "🗣️ {attacker} grins: \"Your resistance is noted. Not respected, just noted.\"",
+  "🗣️ {attacker} after hitting {defender}: \"Welcome to the big leagues, kid.\"",
+  "🗣️ {attacker} taunts: \"You're writing checks your body can't cash!\"",
+  "🗣️ {attacker} sneers: \"They warned you about the Solpranos. You didn't listen.\"",
+  "🗣️ {attacker} to {defender}: \"Keep that energy up—it's funny.\"",
+  "🗣️ {attacker} laughs coldly: \"This is what happens when you forget your place.\"",
+  "🗣️ {attacker} after a hit: \"Stick around—there's plenty more where that came from!\"",
+];
+
+const DODGE_LINES = [
+  "⚡ {player} dodges {opponent}'s attack at the last second! (Close one)",
+  "🎯 {opponent} swings at {player}, but {player} rolls out of the way! (Slick move)",
+  "💨 {player} slips between {opponent}'s strikes like water! (Matrix vibes)",
+  "🏃 {opponent} charges at {player}, but {player} sidestepped—can't catch a ghost!",
+  "✨ {player} reads {opponent}'s telegraph and ducks! (Seventh sense)",
+  "🎲 {player} and {opponent} exchange strikes—both miss spectacularly! (Amateur hour)",
+  "👀 {player} sees the punch coming from a mile away! (Situational awareness)",
+  "🕐 {opponent} is moving in slow motion compared to {player}! (Flash step)",
+  "🤸 {player} does a backflip to dodge—unnecessary, but effective! (Showboating)",
+  "💪 {opponent} swings with all their might... {player} wasn't even there!",
+  "🎭 {player} fakes left, {opponent} falls for it—clean dodge! (Psychological warfare)",
+  "🌪️ {player} weaves through {opponent}'s assault like it's nothing!",
+  "🍀 {player} sidesteps—the miss almost threw {opponent} off balance! (Momentum nightmare)",
+];
+
+const COMEBACK_LINES = [
+  "🔥 {player} stops the bleeding and finds their rhythm! (Survival instinct kicking in)",
+  "💥 {player} fires back with renewed intensity! (Second wind activated)",
+  "👊 {player} staggers back, then plants their feet—time to even the score! (Comeback energy)",
+  "😤 {player} wipes the blood from their face: 'That all you got?'",
+  "⚡ {player} is BACK IN THE GAME! (Never count them out)",
+  "🔴 {player} has taken a beating, but the look in their eyes says it's NOT over! (Dangerous when cornered)",
+  "💪 {player} cracks their knuckles—they're just getting warmed up! (Second half incoming)",
+  "🎬 {player} rolls their shoulders and nods: 'Now the real fight begins.'",
+  "🔥 {player} has been marked for dead, but stubborn beats broken! (Willpower > HP)",
+  "⚔️ {player} and {opponent} lock eyes—both bloodied, both NOT quitting! (Respect in the chaos)",
+  "😠 {player} is FURIOUS now. {opponent} just woke up the wrong version! (Rage unlocked)",
+  "👑 {player} gets back up. The crowd goes WILD! (Crowd favorite moment)",
+];
+
+const ROUND_TRANSITION_LINES = [
+  "📢 Both warriors shake out the exhaustion. Round {round} incoming...",
+  "📯 The air is thick with tension. Who will strike first in Round {round}?",
+  "⏰ Moment of silence. Then... ROUND {round}!",
+  "🔔 *DING* The bell rings for Round {round}! Here we go!",
+  "💨 A brief pause. A few deep breaths. Time to do it again in Round {round}!",
+  "😤 Blood on the canvas. Anger in the air. Round {round} begins NOW!",
+  "🎬 Dramatic pause. The tension is unbearable. And ROUND {round}... FIGHT!",
+  "⚡ The crowd is on their feet. Here comes Round {round}!",
+  "🔥 Neither fighter is backing down. This is just getting started. Round {round}!",
+  "😤 Both soldiers nod at each other. There's still fuel in the tank. Round {round}!",
+];
+
 class BattleService {
   constructor() {
     this.SWORD_EMOJI = '⚔️';
@@ -435,21 +515,39 @@ class BattleService {
             delete playerBuffs[attacker.user_id]; // One-time use
           }
 
-          // Apply damage
-          defender.hp -= damage;
-          attacker.total_damage_dealt += damage;
+          // 15% chance to dodge/miss entirely
+          const dodgeChance = Math.random() < 0.15;
+          
+          if (dodgeChance) {
+            const dodgeLine = DODGE_LINES[Math.floor(Math.random() * DODGE_LINES.length)]
+              .replace('{player}', `**${defender.username}**`)
+              .replace('{opponent}', `**${attacker.username}**`);
+            events.push(dodgeLine);
+          } else {
+            // Apply damage
+            defender.hp -= damage;
+            attacker.total_damage_dealt += damage;
 
-          // Pick flavor text
-          const line = isCrit 
-            ? CRIT_LINES[Math.floor(Math.random() * CRIT_LINES.length)]
-            : ATTACK_LINES[Math.floor(Math.random() * ATTACK_LINES.length)];
+            // Pick flavor text
+            const line = isCrit 
+              ? CRIT_LINES[Math.floor(Math.random() * CRIT_LINES.length)]
+              : ATTACK_LINES[Math.floor(Math.random() * ATTACK_LINES.length)];
 
-          let eventText = line
-            .replace('{attacker}', `**${attacker.username}**`)
-            .replace('{defender}', `**${defender.username}**`)
-            .replace('{damage}', damage);
+            let eventText = line
+              .replace('{attacker}', `**${attacker.username}**`)
+              .replace('{defender}', `**${defender.username}**`)
+              .replace('{damage}', damage);
 
-          events.push(eventText);
+            events.push(eventText);
+
+            // 30% chance to add trash talk after a hit
+            if (Math.random() < 0.30) {
+              const trashTalk = TRASH_TALK_LINES[Math.floor(Math.random() * TRASH_TALK_LINES.length)]
+                .replace('{attacker}', `**${attacker.username}**`)
+                .replace('{defender}', `**${defender.username}**`);
+              events.push(trashTalk);
+            }
+          }
 
           // Check for death
           if (defender.hp <= 0) {
@@ -584,6 +682,48 @@ class BattleService {
       logger.error('Error getting battle stats:', error);
       return null;
     }
+  }
+
+  // Punchline getters
+  getRandomAttackLine() {
+    return ATTACK_LINES[Math.floor(Math.random() * ATTACK_LINES.length)];
+  }
+
+  getRandomCritLine() {
+    return CRIT_LINES[Math.floor(Math.random() * CRIT_LINES.length)];
+  }
+
+  getRandomDeathLine() {
+    return DEATH_LINES[Math.floor(Math.random() * DEATH_LINES.length)];
+  }
+
+  getRandomTauntLine() {
+    return TAUNT_LINES[Math.floor(Math.random() * TAUNT_LINES.length)];
+  }
+
+  getRandomTrashTalkLine() {
+    return TRASH_TALK_LINES[Math.floor(Math.random() * TRASH_TALK_LINES.length)];
+  }
+
+  getRandomDodgeLine() {
+    return DODGE_LINES[Math.floor(Math.random() * DODGE_LINES.length)];
+  }
+
+  getRandomComebackLine() {
+    return COMEBACK_LINES[Math.floor(Math.random() * COMEBACK_LINES.length)];
+  }
+
+  getRandomRoundTransition(round) {
+    const line = ROUND_TRANSITION_LINES[Math.floor(Math.random() * ROUND_TRANSITION_LINES.length)];
+    return line.replace('{round}', round);
+  }
+
+  getRandomFlavorLine() {
+    return FLAVOR_LINES[Math.floor(Math.random() * FLAVOR_LINES.length)];
+  }
+
+  getRandomLuckyEscapeLine() {
+    return LUCKY_ESCAPE_LINES[Math.floor(Math.random() * LUCKY_ESCAPE_LINES.length)];
   }
 
   buildLobbyEmbed(lobby, participants, requiredRoles = null, excludedRoles = null) {

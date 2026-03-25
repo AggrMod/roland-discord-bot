@@ -7,7 +7,7 @@ This file mirrors the current module-first command set.
 - `/verification wallets`
 - `/verification refresh`
 - `/verification quick`
-- Admin: `/verification admin panel|export-user|remove-user|export-wallets|role-config|actions|og-view|og-enable|og-role|og-limit|og-sync|activity-watch-add|activity-watch-remove|activity-watch-list|activity-feed`
+- Admin: `/verification admin panel|export-user|remove-user|export-wallets|role-config|actions|og-view|og-enable|og-role|og-limit|og-sync|activity-watch-add|activity-watch-remove|activity-watch-list|activity-feed|activity-alerts`
 
 ## Governance
 - `/governance propose`

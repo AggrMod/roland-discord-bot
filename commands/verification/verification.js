@@ -184,7 +184,33 @@ module.exports = {
                 .setDescription('Number of events (1-30)')
                 .setRequired(false)
                 .setMinValue(1)
-                .setMaxValue(30)))),
+                .setMaxValue(30)))
+
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('activity-alerts')
+            .setDescription('Configure NFT activity auto-post alerts')
+            .addBooleanOption(option =>
+              option
+                .setName('enabled')
+                .setDescription('Enable or disable auto alerts')
+                .setRequired(true))
+            .addChannelOption(option =>
+              option
+                .setName('channel')
+                .setDescription('Alert channel (required when enabling)')
+                .setRequired(false))
+            .addStringOption(option =>
+              option
+                .setName('types')
+                .setDescription('Comma-separated types (mint,sell,list,delist,transfer)')
+                .setRequired(false))
+            .addNumberOption(option =>
+              option
+                .setName('min_sol')
+                .setDescription('Minimum SOL price to alert')
+                .setRequired(false)
+                .setMinValue(0)))),
 
   async execute(interaction) {
     // Check if verification module is enabled
@@ -247,6 +273,9 @@ module.exports = {
             break;
           case 'activity-feed':
             await this.handleAdminActivityFeed(interaction);
+            break;
+          case 'activity-alerts':
+            await this.handleAdminActivityAlerts(interaction);
             break;
         }
       } else {
@@ -870,5 +899,37 @@ module.exports = {
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed], ephemeral: true });
+  },
+
+  async handleAdminActivityAlerts(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const enabled = interaction.options.getBoolean('enabled');
+    const channel = interaction.options.getChannel('channel');
+    const types = interaction.options.getString('types');
+    const minSol = interaction.options.getNumber('min_sol');
+
+    if (enabled && !channel) {
+      return interaction.editReply({ content: '❌ Channel is required when enabling alerts.', ephemeral: true });
+    }
+
+    const result = nftActivityService.updateAlertConfig({
+      enabled,
+      channelId: channel ? channel.id : undefined,
+      eventTypes: types !== null ? types : undefined,
+      minSol: minSol !== null ? minSol : undefined
+    });
+
+    if (!result.success) {
+      return interaction.editReply({ content: `❌ ${result.message}`, ephemeral: true });
+    }
+
+    const cfg = nftActivityService.getAlertConfig();
+    await interaction.editReply({
+      content: enabled
+        ? `✅ NFT activity alerts enabled in <#${cfg.channel_id}> | types=${cfg.event_types} | min_sol=${cfg.min_sol}`
+        : '✅ NFT activity alerts disabled.',
+      ephemeral: true
+    });
   }
 };

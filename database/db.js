@@ -155,6 +155,16 @@ function initDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS nft_activity_alert_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      enabled BOOLEAN DEFAULT 0,
+      channel_id TEXT,
+      event_types TEXT DEFAULT 'mint,sell,list,delist,transfer',
+      min_sol REAL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE INDEX IF NOT EXISTS idx_micro_verify_discord_id ON micro_verify_requests(discord_id);
     CREATE INDEX IF NOT EXISTS idx_micro_verify_status ON micro_verify_requests(status);
     CREATE INDEX IF NOT EXISTS idx_micro_verify_amount ON micro_verify_requests(expected_amount);

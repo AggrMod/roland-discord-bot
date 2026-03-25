@@ -130,6 +130,13 @@ async function loadPortal() {
     if (flagsResponse.ok) {
       const flags = await flagsResponse.json();
       heistEnabled = flags.heistEnabled || false;
+      
+      // Show/hide heist nav items
+      if (heistEnabled) {
+        document.getElementById('navHeist').style.display = 'block';
+        document.getElementById('mobileNavHeist').style.display = 'block';
+        document.getElementById('heistPointsCard').style.display = 'block';
+      }
     }
 
     // Try to load user data
@@ -616,6 +623,27 @@ function switchSection(sectionName) {
   const url = new URL(window.location);
   url.searchParams.set('section', sectionName);
   window.history.pushState({}, '', url);
+}
+
+function toggleHelp(categoryId) {
+  // Hide all help content
+  document.querySelectorAll('.help-content').forEach(content => {
+    content.style.display = 'none';
+  });
+
+  // Show selected help content
+  const content = document.getElementById(`help-${categoryId}`);
+  if (content) {
+    const isVisible = content.style.display === 'block';
+    content.style.display = isVisible ? 'none' : 'block';
+    
+    if (!isVisible) {
+      // Smooth scroll to content
+      setTimeout(() => {
+        content.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 100);
+    }
+  }
 }
 
 function toggleMobileMenu() {
@@ -1480,6 +1508,7 @@ function renderAdminUsersTable(users) {
         <tbody>${rows}</tbody>
       </table>
     </div>
+    <div style="margin-top:8px; color: var(--text-secondary); font-size: 0.85em;">Need advanced edits? Use the full admin panel.</div>
   `;
 }
 

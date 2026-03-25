@@ -61,16 +61,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ==================== WALLET MANAGEMENT ====================
 function showWalletAddForm() {
-  // Show wallet modal/form within portal
+  // Show dual verification methods
   const walletsList = document.getElementById('walletsList');
   if (walletsList) {
     const formHtml = `
-      <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
-        <h4 style="color:#e0e7ff; margin-bottom:12px;">Add New Wallet</h4>
-        <div style="display:grid; gap:12px;">
-          <input id="newWalletAddr" type="text" placeholder="Enter Solana wallet address" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.85em;">
-          <button onclick="submitWalletVerification()" class="btn-primary" style="padding:10px 16px;">Sign & Verify Wallet</button>
-          <button onclick="location.reload()" class="btn-secondary" style="padding:10px 16px;">Cancel</button>
+      <div style="display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(280px,1fr));">
+        <!-- Wallet Connection Method -->
+        <div style="padding:20px; background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(99,102,241,0.05)); border:1px solid rgba(99,102,241,0.22); border-radius:12px;">
+          <h4 style="color:#e0e7ff; margin-bottom:16px; display:flex; align-items:center; gap:8px;">
+            <span style="font-size:1.3em;">🔗</span>
+            <span>Wallet Connection</span>
+          </h4>
+          <p style="color:var(--text-secondary); font-size:0.9em; margin-bottom:12px; line-height:1.6;">Sign a message with your wallet to prove ownership. No transaction required.</p>
+          <div style="display:grid; gap:12px;">
+            <input id="walletAddr1" type="text" placeholder="Enter your Solana wallet address" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.85em;">
+            <button onclick="verifyBySignature()" class="btn-primary" style="padding:10px 16px; width:100%;">✓ Sign & Verify</button>
+          </div>
+        </div>
+
+        <!-- Micro Transaction Method -->
+        <div style="padding:20px; background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(99,102,241,0.05)); border:1px solid rgba(99,102,241,0.22); border-radius:12px;">
+          <h4 style="color:#e0e7ff; margin-bottom:16px; display:flex; align-items:center; gap:8px;">
+            <span style="font-size:1.3em;">💰</span>
+            <span>Micro Transaction</span>
+          </h4>
+          <p style="color:var(--text-secondary); font-size:0.9em; margin-bottom:12px; line-height:1.6;">Send a small SOL amount to prove ownership. Funds returned after verification.</p>
+          <div style="display:grid; gap:12px;">
+            <input id="walletAddr2" type="text" placeholder="Enter your Solana wallet address" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.85em;">
+            <button onclick="verifyByMicroTx()" class="btn-primary" style="padding:10px 16px; width:100%;">💸 Send Verification</button>
+          </div>
         </div>
       </div>
     `;
@@ -79,17 +98,28 @@ function showWalletAddForm() {
   }
 }
 
-function submitWalletVerification() {
-  const addr = document.getElementById('newWalletAddr')?.value.trim();
+function verifyBySignature() {
+  const addr = document.getElementById('walletAddr1')?.value.trim();
   if (!addr) {
     showError('Please enter a wallet address');
     return;
   }
-  showSuccess('Wallet verification initiated - redirecting to sign...');
-  // Will integrate with existing verify flow via window.location or modal
+  showSuccess('Initiating wallet signature verification...');
   setTimeout(() => {
-    window.location.href = '/verify?address=' + encodeURIComponent(addr);
-  }, 800);
+    window.location.href = '/verify';
+  }, 600);
+}
+
+function verifyByMicroTx() {
+  const addr = document.getElementById('walletAddr2')?.value.trim();
+  if (!addr) {
+    showError('Please enter a wallet address');
+    return;
+  }
+  showSuccess('Initiating micro-transaction verification...');
+  setTimeout(() => {
+    window.location.href = '/verify?method=micro';
+  }, 600);
 }
 
 // ==================== PORTAL LOADING ====================

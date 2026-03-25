@@ -217,39 +217,91 @@
           </div>
 
           <div class="card">
-            <h3>Wallet Guide</h3>
+            <h3>Wallet Verification Methods</h3>
             <p style="color: var(--text-secondary); margin-bottom: var(--space-4); line-height: 1.7;">
-              Link your Solana wallet to verify NFT ownership and unlock voting power. Your tier and voting rights are automatically calculated based on verified holdings.
+              Choose your preferred verification method. Both prove ownership and unlock voting power based on your NFT holdings.
             </p>
-            <div class="help-steps">
-              <div class="help-step">
-                <div class="step-number">1</div>
-                <div class="step-content">
-                  <h4>Click "Add Wallet"</h4>
-                  <p>Start the verification process</p>
+            
+            <div style="display:grid; gap:24px; margin-bottom:24px;">
+              <!-- Wallet Connection -->
+              <div>
+                <h4 style="color:#c9d6ff; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                  <span>🔗</span>
+                  <span>Method 1: Wallet Connection</span>
+                </h4>
+                <div class="help-steps">
+                  <div class="help-step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                      <h4>Click "Add Wallet"</h4>
+                      <p>Choose "Wallet Connection" option</p>
+                    </div>
+                  </div>
+                  <div class="help-step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                      <h4>Enter Address</h4>
+                      <p>Paste your Solana wallet address</p>
+                    </div>
+                  </div>
+                  <div class="help-step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                      <h4>Sign Message</h4>
+                      <p>Sign with Phantom, Solflare, or your preferred wallet</p>
+                    </div>
+                  </div>
+                  <div class="help-step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                      <h4>Verify</h4>
+                      <p>Submit signature to complete verification</p>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div class="help-step">
-                <div class="step-number">2</div>
-                <div class="step-content">
-                  <h4>Enter Address</h4>
-                  <p>Paste your Solana wallet address</p>
+
+              <!-- Micro Transaction -->
+              <div>
+                <h4 style="color:#c9d6ff; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                  <span>💰</span>
+                  <span>Method 2: Micro Transaction</span>
+                </h4>
+                <div class="help-steps">
+                  <div class="help-step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                      <h4>Click "Add Wallet"</h4>
+                      <p>Choose "Micro Transaction" option</p>
+                    </div>
+                  </div>
+                  <div class="help-step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                      <h4>Enter Address</h4>
+                      <p>Paste your Solana wallet address</p>
+                    </div>
+                  </div>
+                  <div class="help-step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                      <h4>Send SOL</h4>
+                      <p>Send small SOL amount from your wallet</p>
+                    </div>
+                  </div>
+                  <div class="help-step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                      <h4>Verified & Refunded</h4>
+                      <p>SOL returned after verification completes</p>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div class="help-step">
-                <div class="step-number">3</div>
-                <div class="step-content">
-                  <h4>Sign Message</h4>
-                  <p>Sign with Phantom, Solflare, or your preferred wallet</p>
-                </div>
-              </div>
-              <div class="help-step">
-                <div class="step-number">4</div>
-                <div class="step-content">
-                  <h4>Verify</h4>
-                  <p>Submit signature to complete verification</p>
-                </div>
-              </div>
+            </div>
+
+            <div style="padding:12px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.22); border-radius:10px; color:var(--text-secondary); font-size:0.9em;">
+              <strong>💡 Tip:</strong> Wallet Connection is faster and free. Micro Transaction provides extra certainty and funds are refunded.
             </div>
           </div>
         </section>

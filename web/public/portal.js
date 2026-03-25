@@ -403,7 +403,7 @@ async function checkAdminStatus() {
       document.getElementById('mobileNavAdmin').style.display = 'block';
       
       // Load treasury data for admin
-      await loadTreasuryData();
+      await loadTreasuryPublicView();
     }
   } catch (error) {
     // User is not admin, keep admin nav hidden
@@ -425,7 +425,7 @@ function loadDashboardData() {
   renderRecentActivity();
   renderProposals();
   renderWallets();
-  loadPublicTreasuryData(); // Load public treasury data
+  loadTreasuryPublicView(); // Load public treasury data
   
   if (heistEnabled) {
     renderMissions();

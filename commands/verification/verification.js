@@ -644,7 +644,18 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
 
     const db = require('../../database/db');
-    const wallets = db.prepare('SELECT * FROM wallets').all();
+    const wallets = db.prepare(`
+      SELECT 
+        w.discord_id,
+        u.username,
+        w.wallet_address,
+        w.primary_wallet,
+        w.verified,
+        w.created_at
+      FROM wallets w
+      LEFT JOIN users u ON w.discord_id = u.discord_id
+      ORDER BY w.discord_id, w.created_at
+    `).all();
 
     if (wallets.length === 0) {
       return interaction.editReply({ 
@@ -653,8 +664,8 @@ module.exports = {
       });
     }
 
-    const csv = 'discord_id,username,wallet_address,primary_wallet,verified_at\n' +
-      wallets.map(w => `${w.discord_id},${w.username},${w.wallet_address},${w.primary_wallet ? 'true' : 'false'},${w.verified_at}`).join('\n');
+    const csv = 'discord_id,username,wallet_address,primary_wallet,verified,created_at\n' +
+      wallets.map(w => `${w.discord_id},"${w.username || ''}",${w.wallet_address},${w.primary_wallet ? 'true' : 'false'},${w.verified ? 'true' : 'false'},"${w.created_at}"`).join('\n');
 
     const buffer = Buffer.from(csv, 'utf-8');
     const attachment = { name: 'wallets.csv', attachment: buffer };
@@ -670,11 +681,45 @@ module.exports = {
   async handleAdminRoleConfig(interaction) {
     await interaction.deferReply({ ephemeral: true });
     
-    // Placeholder - integrate with existing role-config logic
-    await interaction.editReply({ 
-      content: '⚙️ Role configuration - use `/verification admin actions` for now.', 
-      ephemeral: true 
-    });
+    const action = interaction.options.getString('action');
+
+    if (action === 'view') {
+      // Show current trait roles configuration
+      const config = roleService.getRoleConfigSummary();
+      const traitsText = config.traitRoles.map(t => {
+        const status = t.configured ? '✅' : '⚠️';
+        const roleInfo = t.roleId ? `<@&${t.roleId}>` : '_No role assigned_';
+        return `${status} **${t.trait}** → ${roleInfo}`;
+      }).join('\n') || '_No trait roles configured_';
+
+      const embed = new EmbedBuilder()
+        .setColor('#FFD700')
+        .setTitle('🎨 Trait Role Configuration')
+        .setDescription('Current trait-to-role mappings')
+        .addFields(
+          { name: 'Configured Traits', value: traitsText, inline: false },
+          { 
+            name: 'To Configure', 
+            value: 'Trait roles are set via the web admin panel at `/admin` → Admin Panel → Verification Roles tab.\n\nAlternatively, use the web API:\n`POST /api/admin/roles/traits` with trait name and roleId.',
+            inline: false
+          }
+        )
+        .setTimestamp();
+
+      await interaction.editReply({ embeds: [embed] });
+    } else if (action === 'set_tier') {
+      // Placeholder - tier roles should be configured via admin
+      await interaction.editReply({ 
+        content: '⚙️ Tier role configuration: Use `/verification admin actions` to view tier settings.\n\nTier roles are configured in the web admin panel → Dashboard → Verification Roles.', 
+        ephemeral: true 
+      });
+    } else if (action === 'set_trait') {
+      // Placeholder - trait roles should be configured via admin
+      await interaction.editReply({ 
+        content: '🎨 Trait role configuration: Use `/verification admin actions` to view trait settings.\n\nTraits are configured in the web admin panel → Dashboard → Verification Roles tab.', 
+        ephemeral: true 
+      });
+    }
   },
 
   async handleAdminActions(interaction) {

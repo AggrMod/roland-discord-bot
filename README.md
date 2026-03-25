@@ -41,6 +41,27 @@ Discord bot for the Solpranos NFT ecosystem featuring wallet verification, DAO g
 - Points-based reward system
 - *Currently disabled by default, available for future re-enable*
 
+## 🔧 CRITICAL: Recent Fixes (v1.1.0)
+
+### Portal Login Not Working?
+1. **Env vars validation**: Check that these are set correctly in `.env`:
+   - `DISCORD_CLIENT_SECRET` (from Discord Developer Portal > OAuth2 > General)
+   - `DISCORD_REDIRECT_URI` (must match EXACTLY in Discord Developer Portal > OAuth2 > Redirects)
+   - `SESSION_SECRET` (set to a random string, min 32 chars)
+2. **Trust proxy fix**: Now automatically enabled in production
+3. **Persistent sessions**: Sessions now survive restarts (SQLite-backed)
+
+### Real NFT Verification (Not Mock)
+1. Set `HELIUS_API_KEY` in `.env` (get from https://www.helius.dev/)
+2. Verify `MOCK_MODE` is NOT set to `true` in `.env` (or set it to `false`)
+3. System will fetch real Solana NFTs from mainnet via Helius DAS API
+4. Falls back to mock data if Helius is unavailable
+
+### Trait Roles Integration
+- **Feature**: Fully wired; configure via web admin panel (`/admin` → Verification Roles)
+- **Discord commands**: `/verification admin role-config [view|set-tier|set-trait]` shows status and next steps
+- **Web API**: `POST /api/admin/roles/traits` for programmatic trait-role assignment
+
 ## Installation
 
 1. Clone the repository
@@ -52,7 +73,8 @@ Discord bot for the Solpranos NFT ecosystem featuring wallet verification, DAO g
 3. Configure environment variables:
    ```bash
    cp .env.example .env
-   # Edit .env with your bot token and client ID
+   # CRITICAL: Read .env.example comments and fill in all OAuth vars
+   nano .env
    ```
 
 4. Deploy slash commands:
@@ -67,11 +89,20 @@ Discord bot for the Solpranos NFT ecosystem featuring wallet verification, DAO g
 
 ## Environment Variables
 
+### Required
 - `DISCORD_TOKEN` - Your Discord bot token
 - `CLIENT_ID` - Your Discord application client ID
-- `GUILD_ID` - (Optional) Guild ID for testing (faster command deployment)
-- `MOCK_MODE` - Set to `true` to use mock NFT data (no blockchain queries)
+- `GUILD_ID` - Guild ID for slash command deployment
+- `DISCORD_CLIENT_SECRET` - From Discord Developer Portal (CRITICAL for login)
+- `DISCORD_REDIRECT_URI` - Must match Discord OAuth2 redirect URL exactly
+- `SESSION_SECRET` - Random string for session encryption (min 32 chars)
+
+### Optional but Recommended
+- `HELIUS_API_KEY` - For real Solana NFT verification (get from https://www.helius.dev/)
+- `NODE_ENV` - Set to `production` for HTTPS-only cookies
+- `MOCK_MODE` - Set to `false` to disable mock NFT data (use real Solana NFTs)
 - `SOLANA_RPC_URL` - Solana RPC endpoint (default: mainnet-beta)
+- `WEB_URL` - Your bot's web URL for redirects (default: http://localhost:3000)
 
 ## Commands
 

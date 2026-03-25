@@ -5,6 +5,47 @@ const path = require('path');
 const logger = require('./utils/logger');
 const WebServer = require('./web/server');
 
+// Validate critical environment variables on startup
+function validateEnvVars() {
+  const required = ['DISCORD_TOKEN', 'CLIENT_ID', 'GUILD_ID'];
+  const oauthVars = ['DISCORD_CLIENT_SECRET', 'DISCORD_REDIRECT_URI', 'SESSION_SECRET'];
+  
+  const missing = [];
+  
+  for (const varName of required) {
+    if (!process.env[varName]) {
+      missing.push(varName);
+    }
+  }
+
+  // Check OAuth variables with helpful messaging
+  const oauthMissing = [];
+  for (const varName of oauthVars) {
+    if (!process.env[varName]) {
+      oauthMissing.push(varName);
+    }
+  }
+
+  if (missing.length > 0) {
+    logger.error(`CRITICAL: Missing required environment variables: ${missing.join(', ')}`);
+    logger.error('Please set these in .env file');
+    process.exit(1);
+  }
+
+  if (oauthMissing.length > 0) {
+    logger.warn(`⚠️  OAuth variables missing: ${oauthMissing.join(', ')}`);
+    logger.warn('Portal login will not work until these are set.');
+    logger.warn('See .env.example for details on setting up Discord OAuth2');
+  }
+
+  // Check for hardcoded defaults
+  if (process.env.SESSION_SECRET === 'solpranos-secret-key-change-this-in-production') {
+    logger.warn('⚠️  WARNING: Using default SESSION_SECRET. Set a unique value in production!');
+  }
+}
+
+validateEnvVars();
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,

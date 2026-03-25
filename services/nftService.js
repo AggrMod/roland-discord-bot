@@ -1,7 +1,7 @@
 const { Connection, PublicKey } = require('@solana/web3.js');
 const logger = require('../utils/logger');
 
-const MOCK_MODE = process.env.MOCK_MODE === 'true' || true;
+const MOCK_MODE = process.env.MOCK_MODE === 'true';
 
 class NFTService {
   constructor() {
@@ -15,13 +15,72 @@ class NFTService {
 
     try {
       logger.log(`Fetching NFTs for wallet: ${walletAddress}`);
-      // TODO: Implement real Solana NFT fetching
-      // For now, return empty array for production mode
-      return [];
+      return await this.fetchNFTsFromHelius(walletAddress);
     } catch (error) {
       logger.error('Error fetching NFTs:', error);
+      // Fallback to mock on error
+      return this.getMockNFTs(walletAddress);
+    }
+  }
+
+  async fetchNFTsFromHelius(walletAddress) {
+    const heliusApiKey = process.env.HELIUS_API_KEY;
+    if (!heliusApiKey) {
+      logger.warn('HELIUS_API_KEY not configured, using mock NFTs');
+      return this.getMockNFTs(walletAddress);
+    }
+
+    try {
+      const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'helius-nft-fetch',
+          method: 'getAssetsByOwner',
+          params: {
+            ownerAddress: walletAddress,
+            displayOptions: {
+              showFungible: false,
+              showCollectionMetadata: true,
+              showInscription: false
+            },
+            limit: 1000
+          }
+        })
+      });
+
+      const data = await response.json();
+      if (data.error) {
+        logger.error('Helius API error:', data.error);
+        return [];
+      }
+
+      if (!data.result || !data.result.items) {
+        return [];
+      }
+
+      // Transform Helius response to NFT format
+      return data.result.items.map(item => ({
+        mint: item.id,
+        name: item.content?.metadata?.name || 'Unknown NFT',
+        image: item.content?.links?.image || '',
+        attributes: this.extractHeliusAttributes(item.content?.metadata?.attributes || []),
+        collectionKey: item.grouping?.[0]?.group_value || null,
+        assignedToMission: null
+      })).filter(nft => nft.attributes.length > 0); // Only include NFTs with metadata
+    } catch (error) {
+      logger.error('Helius fetch error:', error);
       return [];
     }
+  }
+
+  extractHeliusAttributes(attributes) {
+    if (!Array.isArray(attributes)) return [];
+    return attributes.map(attr => ({
+      trait_type: attr.trait_type || attr.traitType || 'Unknown',
+      value: attr.value
+    })).filter(a => a.value);
   }
 
   getMockNFTs(walletAddress) {

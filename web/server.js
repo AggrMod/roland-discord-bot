@@ -1,5 +1,7 @@
 const express = require('express');
 const session = require('express-session');
+const SqliteStore = require('better-sqlite3-session-store')(session);
+const Database = require('better-sqlite3');
 const cors = require('cors');
 const path = require('path');
 const nacl = require('tweetnacl');
@@ -30,6 +32,9 @@ class WebServer {
   }
 
   setupMiddleware() {
+    // Trust proxy - CRITICAL for production (AWS ELB, Nginx, etc.)
+    this.app.set('trust proxy', 1);
+
     // CORS for public API - explicitly configured for the-solpranos.com integration
     // Allows cross-origin requests for public endpoints
     this.app.use(cors({
@@ -49,14 +54,23 @@ class WebServer {
     this.app.use(express.json());
     this.app.use(express.static(path.join(__dirname, 'public')));
 
-    // Session management
+    // Persistent session store (SQLite) - survives restarts
+    const sessionDb = new Database(path.join(__dirname, '../database/sessions.db'));
+    sessionDb.pragma('journal_mode = WAL');
+
+    // Session management with persistent store
     this.app.use(session({
-      secret: process.env.SESSION_SECRET || 'solpranos-secret-key',
+      store: new SqliteStore({
+        client: sessionDb,
+        expiration: 24 * 60 * 60 * 1000 // 24 hours
+      }),
+      secret: process.env.SESSION_SECRET || 'solpranos-secret-key-change-this-in-production',
       resave: false,
       saveUninitialized: false,
       cookie: {
         secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
+        sameSite: 'lax',
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
       }
     }));

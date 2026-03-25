@@ -131,7 +131,7 @@ async function verifyBySignature() {
     btn.innerHTML = '⏳ Requesting challenge...';
 
     // 2. Get challenge from server
-    const challengeRes = await fetch('/api/verify/challenge', { method: 'POST' });
+    const challengeRes = await fetch('/api/verify/challenge', { method: 'POST', credentials: 'include' });
     const challengeData = await challengeRes.json();
     if (!challengeData.success) throw new Error(challengeData.message || 'Failed to get challenge');
 
@@ -193,7 +193,7 @@ async function verifyByMicroTx() {
 
   try {
     // 1. Create micro-verify request on server
-    const reqRes = await fetch('/api/micro-verify/request', { method: 'POST' });
+    const reqRes = await fetch('/api/micro-verify/request', { method: 'POST', credentials: 'include' });
     const reqData = await reqRes.json();
     if (!reqData.success) throw new Error(reqData.message || 'Failed to create verification request');
 
@@ -1442,7 +1442,7 @@ function reverifyAllRoles() {
         btn.innerHTML = '<span>⏳</span><span>Syncing...</span>';
       }
 
-      const response = await fetch('/api/admin/roles/sync', { method: 'POST' });
+      const response = await fetch('/api/admin/roles/sync', { method: 'POST', credentials: 'include' });
       const data = await response.json();
 
       if (data.success) {
@@ -1558,7 +1558,7 @@ async function deleteRole(idx) {
     try {
       const traitType = role.type || 'collection';
       const traitValue = role.collection_id || role.mint || '';
-      const response = await fetch(`/api/admin/roles/traits/${encodeURIComponent(traitType)}/${encodeURIComponent(traitValue)}`, { method: 'DELETE' });
+      const response = await fetch(`/api/admin/roles/traits/${encodeURIComponent(traitType)}/${encodeURIComponent(traitValue)}`, { method: 'DELETE', credentials: 'include' });
       const data = await response.json();
       if (data.success) {
         showSuccess(`Role "${roleName}" deleted`);

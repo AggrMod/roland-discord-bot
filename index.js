@@ -817,13 +817,17 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
           const participants = battleService.getParticipants(lobby.lobby_id);
           
           // Fetch required/excluded roles if set
-          let requiredRole = null;
+          let requiredRoles = [];
           let excludedRoles = [];
-          if (lobby.required_role_id) {
-            try {
-              requiredRole = await reaction.message.guild.roles.fetch(lobby.required_role_id);
-            } catch (error) {
-              logger.error('Failed to fetch required role:', error);
+          if (lobby.required_role_ids) {
+            const requiredIds = lobby.required_role_ids.split(',');
+            for (const requiredId of requiredIds) {
+              try {
+                const role = await reaction.message.guild.roles.fetch(requiredId);
+                requiredRoles.push(role);
+              } catch (error) {
+                logger.error('Failed to fetch required role:', error);
+              }
             }
           }
           if (lobby.excluded_role_ids) {
@@ -838,7 +842,7 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
             }
           }
           
-          const updatedEmbed = battleService.buildLobbyEmbed(lobby, participants, requiredRole, excludedRoles.length ? excludedRoles : null);
+          const updatedEmbed = battleService.buildLobbyEmbed(lobby, participants, requiredRoles.length ? requiredRoles : null, excludedRoles.length ? excludedRoles : null);
           
           await reaction.message.edit({ embeds: [updatedEmbed] });
           logger.log(`User ${user.username} joined battle lobby ${lobby.lobby_id} via reaction`);
@@ -898,13 +902,17 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
           const participants = battleService.getParticipants(lobby.lobby_id);
           
           // Fetch required/excluded roles if set
-          let requiredRole = null;
+          let requiredRoles = [];
           let excludedRoles = [];
-          if (lobby.required_role_id) {
-            try {
-              requiredRole = await reaction.message.guild.roles.fetch(lobby.required_role_id);
-            } catch (error) {
-              logger.error('Failed to fetch required role:', error);
+          if (lobby.required_role_ids) {
+            const requiredIds = lobby.required_role_ids.split(',');
+            for (const requiredId of requiredIds) {
+              try {
+                const role = await reaction.message.guild.roles.fetch(requiredId);
+                requiredRoles.push(role);
+              } catch (error) {
+                logger.error('Failed to fetch required role:', error);
+              }
             }
           }
           if (lobby.excluded_role_ids) {
@@ -919,7 +927,7 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
             }
           }
           
-          const updatedEmbed = battleService.buildLobbyEmbed(lobby, participants, requiredRole, excludedRoles.length ? excludedRoles : null);
+          const updatedEmbed = battleService.buildLobbyEmbed(lobby, participants, requiredRoles.length ? requiredRoles : null, excludedRoles.length ? excludedRoles : null);
           
           await reaction.message.edit({ embeds: [updatedEmbed] });
           logger.log(`User ${user.username} left battle lobby ${lobby.lobby_id} via reaction removal`);

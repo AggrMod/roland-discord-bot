@@ -22,8 +22,18 @@ module.exports = {
             .setRequired(false))
         .addRoleOption(option =>
           option
-            .setName('required_role')
-            .setDescription('Required role to join (optional)')
+            .setName('required_role_1')
+            .setDescription('First required role (optional)')
+            .setRequired(false))
+        .addRoleOption(option =>
+          option
+            .setName('required_role_2')
+            .setDescription('Second required role (optional)')
+            .setRequired(false))
+        .addRoleOption(option =>
+          option
+            .setName('required_role_3')
+            .setDescription('Third required role (optional)')
             .setRequired(false))
         .addRoleOption(option =>
           option
@@ -160,8 +170,16 @@ module.exports = {
     const creatorId = interaction.user.id;
     const channelId = interaction.channelId;
     const maxPlayers = interaction.options.getInteger('max_players') || 999;
-    const requiredRole = interaction.options.getRole('required_role');
-    const requiredRoleId = requiredRole ? requiredRole.id : null;
+    const requiredRoleArray = [];
+    const requiredRoles = [];
+    for (let i = 1; i <= 3; i++) {
+      const role = interaction.options.getRole(`required_role_${i}`);
+      if (role) {
+        requiredRoleArray.push(role.id);
+        requiredRoles.push(role);
+      }
+    }
+
     const excludedRoleArray = [];
     const excludedRoles = [];
     for (let i = 1; i <= 3; i++) {
@@ -190,7 +208,7 @@ module.exports = {
       creatorId,
       2,
       maxPlayers,
-      requiredRoleId,
+      requiredRoleArray.length ? requiredRoleArray : null,
       excludedRoleArray.length ? excludedRoleArray : null
     );
 
@@ -201,7 +219,7 @@ module.exports = {
 
     const lobby = battleService.getLobby(createResult.lobbyId);
     const participants = battleService.getParticipants(createResult.lobbyId);
-    const lobbyEmbed = battleService.buildLobbyEmbed(lobby, participants, requiredRole, excludedRoles.length ? excludedRoles : null);
+    const lobbyEmbed = battleService.buildLobbyEmbed(lobby, participants, requiredRoles.length ? requiredRoles : null, excludedRoles.length ? excludedRoles : null);
 
     await placeholder.edit({ content: '', embeds: [lobbyEmbed] });
     await placeholder.react(battleService.SWORD_EMOJI);

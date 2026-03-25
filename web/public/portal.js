@@ -1044,14 +1044,43 @@ async function loadAdminSettingsView() {
     if (!data.success) throw new Error(data.message || 'Failed to load settings');
 
     const s = data.settings || {};
-    content.innerHTML = `
-      <div style="display:grid; gap:12px; grid-template-columns: repeat(auto-fit,minmax(220px,1fr));">
-        <div class="stat-card"><div class="stat-label">Support Threshold</div><div class="stat-value">${s.supportThreshold ?? '—'}</div></div>
-        <div class="stat-card"><div class="stat-label">Voting Days</div><div class="stat-value">${s.votingDays ?? '—'}</div></div>
-        <div class="stat-card"><div class="stat-label">Quorum %</div><div class="stat-value">${s.quorumPercent ?? '—'}</div></div>
-        <div class="stat-card"><div class="stat-label">Heist Enabled</div><div class="stat-value">${s.heistEnabled ? '✅' : '❌'}</div></div>
+    
+    // Module toggles
+    const modules = [
+      { name: 'Verification', key: 'verificationEnabled', icon: '✓' },
+      { name: 'Governance', key: 'governanceEnabled', icon: '📜' },
+      { name: 'Treasury', key: 'treasuryEnabled', icon: '💰' },
+      { name: 'Battle', key: 'battleEnabled', icon: '⚔️' },
+      { name: 'Heist', key: 'heistEnabled', icon: '🎯' }
+    ];
+
+    const moduleToggles = modules.map(mod => `
+      <div style="padding:12px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px; display:flex; justify-content:space-between; align-items:center;">
+        <span style="color:#e0e7ff; font-weight:600;">${mod.icon} ${mod.name}</span>
+        <span style="font-size:1.5em; color:${s[mod.key] ? '#10b981' : '#ef4444'};">${s[mod.key] ? '✅' : '❌'}</span>
       </div>
-      <div style="margin-top:10px; color: var(--text-secondary);">Edit settings via Discord commands or full admin panel when needed.</div>
+    `).join('');
+
+    content.innerHTML = `
+      <div style="margin-bottom:24px;">
+        <h4 style="color:#c9d6ff; margin-bottom:12px;">📦 Module Status</h4>
+        <div style="display:grid; gap:12px; grid-template-columns: repeat(auto-fit,minmax(200px,1fr));">
+          ${moduleToggles}
+        </div>
+      </div>
+
+      <div style="margin-bottom:24px;">
+        <h4 style="color:#c9d6ff; margin-bottom:12px;">⚙️ Governance Settings</h4>
+        <div style="display:grid; gap:12px; grid-template-columns: repeat(auto-fit,minmax(220px,1fr));">
+          <div class="stat-card"><div class="stat-label">Support Threshold</div><div class="stat-value">${s.supportThreshold ?? '—'}</div></div>
+          <div class="stat-card"><div class="stat-label">Voting Days</div><div class="stat-value">${s.votingDays ?? '—'}</div></div>
+          <div class="stat-card"><div class="stat-label">Quorum %</div><div class="stat-value">${s.quorumPercent ?? '—'}</div></div>
+        </div>
+      </div>
+
+      <div style="padding:12px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.22); border-radius:10px; color:var(--text-secondary); font-size:0.9em;">
+        <strong>💡 Tip:</strong> Configure module settings via Discord commands. Use /verification admin, /governance admin, /treasury admin, /battle admin, or /heist commands to manage detailed settings.
+      </div>
     `;
   } catch (e) {
     content.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;

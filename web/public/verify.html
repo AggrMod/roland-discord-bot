@@ -222,7 +222,7 @@
         
         <div class="button-center">
           <button class="btn-primary" onclick="connectWallet()">🔗 Wallet Signature</button>
-          <button class="btn-secondary" onclick="startMicroVerify()" id="microVerifyBtn" style="display:none;">💸 Micro Transfer</button>
+          <button class="btn-secondary" onclick="startMicroVerify()" id="microVerifyBtn" disabled title="Micro-transfer verification is not enabled yet.">💸 Micro Transfer (Not Enabled)</button>
         </div>
         
         <div id="walletsList"></div>
@@ -310,16 +310,27 @@
     }
 
     async function loadMicroVerifyConfig() {
+      const btn = document.getElementById('microVerifyBtn');
+
       try {
         const res = await fetch('/api/micro-verify/config');
         const data = await res.json();
-        
+
         if (data.success && data.enabled) {
           microVerifyConfig = data;
-          document.getElementById('microVerifyBtn').style.display = 'inline-block';
+          btn.disabled = false;
+          btn.textContent = '💸 Micro Transfer';
+          btn.title = 'Verify via tiny SOL transfer';
+        } else {
+          btn.disabled = true;
+          btn.textContent = '💸 Micro Transfer (Not Enabled)';
+          btn.title = 'Micro-transfer verification is not enabled yet.';
         }
       } catch (err) {
         console.error('Error loading micro-verify config:', err);
+        btn.disabled = true;
+        btn.textContent = '💸 Micro Transfer (Unavailable)';
+        btn.title = 'Could not load micro-transfer config.';
       }
     }
 

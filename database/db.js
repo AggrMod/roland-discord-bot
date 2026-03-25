@@ -15,6 +15,7 @@ function initDatabase() {
   try { db.exec('ALTER TABLE proposals ADD COLUMN message_id TEXT'); } catch(e) {}
   try { db.exec('ALTER TABLE proposals ADD COLUMN channel_id TEXT'); } catch(e) {}
   try { db.exec('ALTER TABLE wallets ADD COLUMN is_favorite BOOLEAN DEFAULT 0'); } catch(e) {}
+  try { db.exec('CREATE TABLE user_verify_amounts (id INTEGER PRIMARY KEY AUTOINCREMENT, discord_id TEXT UNIQUE NOT NULL, username TEXT, assigned_amount REAL NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'); } catch(e) {}
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (

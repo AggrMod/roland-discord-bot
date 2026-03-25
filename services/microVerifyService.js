@@ -80,6 +80,53 @@ class MicroVerifyService {
   }
 
   /**
+   * Get or create a fixed verification amount for a user
+   * Same amount used for all their wallet verifications
+   */
+  getOrCreateUserAmount(discordId, username) {
+    try {
+      // Check if user already has an assigned amount
+      const existing = db.prepare('SELECT assigned_amount FROM user_verify_amounts WHERE discord_id = ?').get(discordId);
+      
+      if (existing) {
+        return { 
+          success: true, 
+          amount: existing.assigned_amount,
+          isNew: false 
+        };
+      }
+
+      // Generate new amount (with collision check)
+      let amount, attempts = 0;
+      do {
+        amount = this.generateUniqueAmount();
+        attempts++;
+        const collision = db.prepare('SELECT id FROM user_verify_amounts WHERE assigned_amount = ?').get(amount);
+        if (!collision) break;
+      } while (attempts < 10);
+
+      if (attempts >= 10) {
+        return { success: false, message: 'Failed to generate unique amount' };
+      }
+
+      // Store it
+      db.prepare(`
+        INSERT INTO user_verify_amounts (discord_id, username, assigned_amount)
+        VALUES (?, ?, ?)
+      `).run(discordId, username, amount);
+
+      return { 
+        success: true, 
+        amount,
+        isNew: true 
+      };
+    } catch (error) {
+      logger.error('Error getting/creating user verify amount:', error);
+      return { success: false, message: 'Database error' };
+    }
+  }
+
+  /**
    * Create a new verification request
    */
   createRequest(discordId, username) {
@@ -121,18 +168,12 @@ class MicroVerifyService {
         };
       }
 
-      // Generate unique amount
-      let amount, attempts = 0;
-      do {
-        amount = this.generateUniqueAmount();
-        attempts++;
-        const exists = db.prepare('SELECT id FROM micro_verify_requests WHERE expected_amount = ? AND status = ?').get(amount, 'pending');
-        if (!exists) break;
-      } while (attempts < 10);
-
-      if (attempts >= 10) {
-        return { success: false, message: 'Failed to generate unique amount. Please try again.' };
+      // Get or create user's fixed verification amount
+      const amountResult = this.getOrCreateUserAmount(discordId, username);
+      if (!amountResult.success) {
+        return amountResult;
       }
+      const amount = amountResult.amount;
 
       // Calculate expiry
       const expiresAt = new Date(Date.now() + config.ttlMinutes * 60 * 1000).toISOString();

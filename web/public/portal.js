@@ -31,19 +31,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Close role modal when clicking outside
-  document.getElementById('roleModal')?.addEventListener('click', (e) => {
-    if (e.target.id === 'roleModal') {
-      closeRoleModal();
-    }
-  });
-
-  // Attach role form submission
-  const roleForm = document.getElementById('roleForm');
-  if (roleForm) {
-    roleForm.addEventListener('submit', saveRole);
-  }
-
   // Keyboard navigation
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -1734,11 +1721,6 @@ function reverifyAllRoles() {
 function openAddRoleModal() {
   // Legacy: redirect to the new split UI
   openAddTraitModal();
-}
-
-function closeRoleModal() {
-  const modal = document.getElementById('roleModal');
-  if (modal) modal.style.display = 'none';
 }
 
 let adminRolesCache = [];

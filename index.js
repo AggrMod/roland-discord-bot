@@ -143,11 +143,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
     // Verify panel button handler
     if (customId === 'panel_verify') {
-      // Run the same logic as /verify command
-      const verifyCommand = client.commands.get('verify');
-      if (verifyCommand) {
-        await verifyCommand.execute(interaction);
-      }
+      await handlePanelVerifyButton(interaction);
       return;
     }
 
@@ -187,6 +183,43 @@ client.on(Events.InteractionCreate, async interaction => {
     }
   }
 });
+
+async function handlePanelVerifyButton(interaction) {
+  try {
+    await interaction.deferReply({ ephemeral: true });
+
+    const webUrl = process.env.WEB_URL || 'http://localhost:3000';
+
+    const embed = new EmbedBuilder()
+      .setColor('#FFD700')
+      .setTitle('🔗 Verification Portal')
+      .setDescription('Click below to verify or add wallets. Then run `/verification status` to confirm your role/holdings sync.')
+      .addFields(
+        { name: 'Next Steps', value: '1) Open portal\n2) Connect/sign\n3) Return and run `/verification status`', inline: false }
+      )
+      .setTimestamp();
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setLabel('Open Verify Portal')
+        .setStyle(ButtonStyle.Link)
+        .setURL(`${webUrl}/verify`)
+    );
+
+    await interaction.editReply({ embeds: [embed], components: [row], ephemeral: true });
+  } catch (error) {
+    logger.error('Error handling panel verify button:', error);
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content: '❌ Verification button failed. Please run `/verification status` or use `/verification quick`.' });
+      } else {
+        await interaction.reply({ content: '❌ Verification button failed. Please run `/verification status` or use `/verification quick`.', ephemeral: true });
+      }
+    } catch (followUpError) {
+      logger.error('Could not send verify button error:', followUpError);
+    }
+  }
+}
 
 async function handleSupportButton(interaction) {
   try {

@@ -19,7 +19,7 @@
         <button class="top-link" onclick="switchSection('dashboard')">Home</button>
         <button class="top-link" onclick="switchSection('dashboard')">Dashboard</button>
         <button class="top-link" onclick="switchSection('help')">Docs</button>
-        <button class="top-link" onclick="switchSection('admin')">Settings</button>
+        <button class="top-link" onclick="switchSection('admin'); showAdminView('stats');">Settings</button>
       </div>
       <div class="nav-user">
         <img id="navAvatar" class="nav-avatar" src="" alt="User avatar" style="display:none;">
@@ -88,7 +88,7 @@
           </button>
         </div>
         <div class="sidebar-footer">
-          <button class="nav-item" data-section="admin" onclick="switchSection('admin')" id="navAdmin" style="display:none;">
+          <button class="nav-item" data-section="admin" onclick="switchSection('admin'); showAdminView('stats');" id="navAdmin" style="display:none;">
             <span class="nav-icon" aria-hidden="true">⚙️</span>
             <span class="nav-label">Admin</span>
           </button>
@@ -655,16 +655,46 @@
                 <span>👥</span>
                 <span>Verification Roles</span>
               </button>
+              <button class="btn-secondary" onclick="showAdminView('activity')" style="justify-content: flex-start;">
+                <span>📋</span>
+                <span>Activity Feed</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Dashboard Stats -->
+          <div class="card" id="adminStatsCard" style="display:none; margin-bottom:24px;">
+            <h3 style="margin-bottom:16px;">📊 Server Overview</h3>
+            <div id="adminStatsContent" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px;">
+              <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
+                <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:8px;">Total Users</div>
+                <div style="font-size:2em; font-weight:700; color:#e0e7ff;" id="statTotalUsers">—</div>
+              </div>
+              <div style="padding:16px; background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.22); border-radius:10px;">
+                <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:8px;">Verified</div>
+                <div style="font-size:2em; font-weight:700; color:#86efac;" id="statVerified">—</div>
+              </div>
+              <div style="padding:16px; background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.22); border-radius:10px;">
+                <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:8px;">Pending</div>
+                <div style="font-size:2em; font-weight:700; color:#fcd34d;" id="statPending">—</div>
+              </div>
+              <div style="padding:16px; background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.22); border-radius:10px;">
+                <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:8px;">Last Sync</div>
+                <div style="font-size:1.1em; font-weight:600; color:#93c5fd;" id="statLastSync">—</div>
+              </div>
             </div>
           </div>
 
           <div class="card" id="adminUsersCard" style="display:none;">
             <div class="card-header">
               <h3>👥 User Management (Integrated)</h3>
-              <button class="btn-secondary" onclick="loadAdminUsers()" id="adminUsersRefreshBtn">
-                <span>🔄</span>
-                <span>Refresh</span>
-              </button>
+              <div style="display:flex; gap:8px;">
+                <input id="adminUsersSearchInput" type="text" placeholder="Search username, ID, or tier..." style="padding:8px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.85em; width:200px;">
+                <button class="btn-secondary" onclick="loadAdminUsers()" id="adminUsersRefreshBtn">
+                  <span>🔄</span>
+                  <span>Refresh</span>
+                </button>
+              </div>
             </div>
             <div id="adminUsersContent" style="margin-top: var(--space-4); color: var(--text-secondary);">
               Select <strong>User Management</strong> to load users.
@@ -701,6 +731,19 @@
               <a class="btn-secondary" href="/admin-help.html" target="_blank" rel="noopener">Open standalone</a>
             </div>
             <div id="adminHelpContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>Admin Help</strong> to load guide.</div>
+          </div>
+
+          <div class="card" id="adminActivityCard" style="display:none;">
+            <div class="card-header">
+              <h3>📋 Recent Activity</h3>
+              <button class="btn-secondary" onclick="loadAdminActivity()">
+                <span>🔄</span>
+                <span>Refresh</span>
+              </button>
+            </div>
+            <div id="adminActivityContent" style="margin-top: var(--space-4); color: var(--text-secondary);">
+              Select <strong>Activity Feed</strong> to load data.
+            </div>
           </div>
 
           <div class="card" id="adminRolesCard" style="display:none;">

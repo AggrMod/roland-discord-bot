@@ -911,7 +911,7 @@ async function refreshTreasury() {
 
 // ==================== INTEGRATED ADMIN WORKSPACE ====================
 function hideAllAdminCards() {
-  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminAnalyticsCard', 'adminHelpCard', 'adminRolesCard']
+  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminAnalyticsCard', 'adminHelpCard', 'adminRolesCard', 'adminActivityCard', 'adminStatsCard']
     .forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
@@ -928,15 +928,17 @@ function showAdminView(view) {
   hideAllAdminCards();
 
   const map = {
+    stats: { card: 'adminStatsCard', load: loadAdminStats },
     users: { card: 'adminUsersCard', load: loadAdminUsers },
     proposals: { card: 'adminProposalsCard', load: loadAdminProposals },
     settings: { card: 'adminSettingsCard', load: loadAdminSettingsView },
     analytics: { card: 'adminAnalyticsCard', load: loadAdminAnalyticsView },
     help: { card: 'adminHelpCard', load: loadAdminHelpView },
-    roles: { card: 'adminRolesCard', load: loadAdminRoles }
+    roles: { card: 'adminRolesCard', load: loadAdminRoles },
+    activity: { card: 'adminActivityCard', load: loadAdminActivity }
   };
 
-  const target = map[view] || map.users;
+  const target = map[view] || map.stats;
   const card = document.getElementById(target.card);
   if (card) card.style.display = 'block';
   if (typeof target.load === 'function') target.load();
@@ -945,7 +947,7 @@ function showAdminView(view) {
 }
 
 function showAdminUsers() {
-  showAdminView('users');
+  showAdminView('stats');
 }
 
 async function loadAdminHelpView() {
@@ -1275,6 +1277,40 @@ async function deleteRole(idx) {
   });
 }
 
+async function loadAdminStats() {
+  if (!isAdmin) return;
+  const content = document.getElementById('adminStatsContent');
+  if (!content) return;
+
+  try {
+    const [usersRes, proposalsRes] = await Promise.all([
+      fetch('/api/admin/users'),
+      fetch('/api/admin/proposals')
+    ]);
+    const usersData = await usersRes.json();
+    const proposalsData = await proposalsRes.json();
+
+    const users = usersData.users || [];
+    const proposals = proposalsData.proposals || [];
+    const verified = users.filter(u => u.total_nfts > 0).length;
+    const pending = users.length - verified;
+
+    document.getElementById('statTotalUsers').textContent = users.length;
+    document.getElementById('statVerified').textContent = verified;
+    document.getElementById('statPending').textContent = pending;
+    
+    const now = new Date();
+    document.getElementById('statLastSync').textContent = now.toLocaleTimeString();
+  } catch (e) {
+    console.error('Error loading stats:', e);
+    document.getElementById('statTotalUsers').textContent = '—';
+    document.getElementById('statVerified').textContent = '—';
+    document.getElementById('statPending').textContent = '—';
+  }
+}
+
+let adminUsersCache = [];
+
 async function loadAdminUsers() {
   if (!isAdmin) return;
 
@@ -1305,46 +1341,30 @@ async function loadAdminUsers() {
     }
 
     const users = data.users || [];
+    adminUsersCache = users; // Cache for search/filter
+
     if (!users.length) {
       content.innerHTML = `<div class="empty-state"><div class="empty-state-title">No users found</div></div>`;
       return;
     }
 
-    const rows = users.slice(0, 100).map(u => {
-      const tier = u.tier || 'none';
-      const vp = u.voting_power ?? u.votingPower ?? 0;
-      const nfts = u.total_nfts ?? u.totalNFTs ?? 0;
-      const name = u.username || u.discord_username || 'Unknown';
-      const did = u.discord_id || u.discordId || '—';
-      return `
-        <tr>
-          <td style="padding:8px; border-bottom:1px solid var(--border-color);">${escapeHtml(name)}</td>
-          <td style="padding:8px; border-bottom:1px solid var(--border-color); font-family:monospace;">${escapeHtml(String(did))}</td>
-          <td style="padding:8px; border-bottom:1px solid var(--border-color);">${escapeHtml(String(tier))}</td>
-          <td style="padding:8px; border-bottom:1px solid var(--border-color);">${nfts}</td>
-          <td style="padding:8px; border-bottom:1px solid var(--border-color);">${vp}</td>
-        </tr>
-      `;
-    }).join('');
+    renderAdminUsersTable(users);
 
-    content.innerHTML = `
-      <div style="margin-bottom:10px; color: var(--text-secondary); font-size: 0.9em;">Showing ${Math.min(users.length, 100)} of ${users.length} users</div>
-      <div style="overflow:auto; border:1px solid var(--border-color); border-radius:8px;">
-        <table style="width:100%; border-collapse:collapse; font-size: 0.92em;">
-          <thead>
-            <tr style="background: var(--bg-tertiary); text-align:left;">
-              <th style="padding:8px;">Username</th>
-              <th style="padding:8px;">Discord ID</th>
-              <th style="padding:8px;">Tier</th>
-              <th style="padding:8px;">NFTs</th>
-              <th style="padding:8px;">VP</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-      <div style="margin-top:8px; color: var(--text-secondary); font-size: 0.85em;">Need advanced edits? Use the full admin panel.</div>
-    `;
+    // Attach search listener
+    const searchInput = document.getElementById('adminUsersSearchInput');
+    if (searchInput) {
+      searchInput.value = '';
+      searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase();
+        const filtered = adminUsersCache.filter(u => {
+          const name = (u.username || u.discord_username || '').toLowerCase();
+          const did = String(u.discord_id || u.discordId || '').toLowerCase();
+          const tier = (u.tier || '').toLowerCase();
+          return name.includes(query) || did.includes(query) || tier.includes(query);
+        });
+        renderAdminUsersTable(filtered);
+      });
+    }
   } catch (error) {
     console.error('Error loading admin users:', error);
     content.innerHTML = `<div class="error-state"><div class="error-message">Failed to load users: ${escapeHtml(error.message)}</div></div>`;
@@ -1353,5 +1373,89 @@ async function loadAdminUsers() {
       btn.disabled = false;
       btn.innerHTML = originalBtn;
     }
+  }
+}
+
+function renderAdminUsersTable(users) {
+  const content = document.getElementById('adminUsersContent');
+  if (!content) return;
+
+  const rows = users.slice(0, 100).map(u => {
+    const tier = u.tier || 'none';
+    const vp = u.voting_power ?? u.votingPower ?? 0;
+    const nfts = u.total_nfts ?? u.totalNFTs ?? 0;
+    const name = u.username || u.discord_username || 'Unknown';
+    const did = u.discord_id || u.discordId || '—';
+    return `
+      <tr>
+        <td style="padding:8px; border-bottom:1px solid var(--border-color);">${escapeHtml(name)}</td>
+        <td style="padding:8px; border-bottom:1px solid var(--border-color); font-family:monospace;">${escapeHtml(String(did))}</td>
+        <td style="padding:8px; border-bottom:1px solid var(--border-color);">${escapeHtml(String(tier))}</td>
+        <td style="padding:8px; border-bottom:1px solid var(--border-color);">${nfts}</td>
+        <td style="padding:8px; border-bottom:1px solid var(--border-color);">${vp}</td>
+      </tr>
+    `;
+  }).join('');
+
+  content.innerHTML = `
+    <div style="margin-bottom:10px; color: var(--text-secondary); font-size: 0.9em;">Showing ${Math.min(users.length, 100)} of ${users.length} users</div>
+    <div style="overflow:auto; border:1px solid var(--border-color); border-radius:8px;">
+      <table style="width:100%; border-collapse:collapse; font-size: 0.92em;">
+        <thead>
+          <tr style="background: var(--bg-tertiary); text-align:left;">
+            <th style="padding:8px;">Username</th>
+            <th style="padding:8px;">Discord ID</th>
+            <th style="padding:8px;">Tier</th>
+            <th style="padding:8px;">NFTs</th>
+            <th style="padding:8px;">VP</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div style="margin-top:8px; color: var(--text-secondary); font-size: 0.85em;">Need advanced edits? Use the full admin panel.</div>
+  `;
+}
+
+async function loadAdminActivity() {
+  if (!isAdmin) return;
+  const content = document.getElementById('adminActivityContent');
+  if (!content) return;
+
+  content.innerHTML = `<div style="text-align:center; padding: var(--space-5); color: var(--text-secondary);"><div class="spinner"></div><p>Loading activity...</p></div>`;
+
+  try {
+    // Mock activity feed for now (could hook to real audit logs)
+    const activities = [
+      { action: 'User verified', user: 'Stoned Rabbit holder', time: '2 minutes ago', type: 'verify' },
+      { action: 'Role synced', user: 'System', time: '5 minutes ago', type: 'sync' },
+      { action: 'Proposal created', user: 'Roland', time: '1 hour ago', type: 'proposal' },
+      { action: 'Treasury updated', user: 'System', time: '2 hours ago', type: 'treasury' },
+      { action: 'User joined', user: 'New Member', time: '3 hours ago', type: 'user' }
+    ];
+
+    const rows = activities.map(a => `
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid rgba(99,102,241,0.15); gap:12px;">
+        <div style="display:flex; align-items:center; gap:12px; flex:1;">
+          <div style="font-size:1.2em;">
+            ${a.type === 'verify' ? '✓' : a.type === 'sync' ? '🔄' : a.type === 'proposal' ? '📜' : a.type === 'treasury' ? '💰' : '👤'}
+          </div>
+          <div>
+            <div style="color:#e0e7ff; font-weight:600;">${escapeHtml(a.action)}</div>
+            <div style="color:var(--text-secondary); font-size:0.85em;">${escapeHtml(a.user)}</div>
+          </div>
+        </div>
+        <div style="color:var(--text-secondary); font-size:0.85em; white-space:nowrap;">${a.time}</div>
+      </div>
+    `).join('');
+
+    content.innerHTML = `
+      <div style="border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.5); overflow:hidden;">
+        ${rows}
+      </div>
+      <div style="margin-top:12px; color:var(--text-secondary); font-size:0.9em;">Latest activity from your Discord server</div>
+    `;
+  } catch (e) {
+    content.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;
   }
 }

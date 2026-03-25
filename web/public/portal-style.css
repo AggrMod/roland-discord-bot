@@ -414,11 +414,11 @@ body {
 
 .section-header h2 {
   font-size: var(--font-3xl);
-  color: var(--gold);
+  color: #e0e7ff;
   font-weight: 700;
   margin-bottom: var(--space-2);
   letter-spacing: -0.02em;
-  text-shadow: 0 0 15px var(--gold-glow);
+  text-shadow: 0 0 12px rgba(99, 102, 241, 0.25);
 }
 
 .section-subtitle {

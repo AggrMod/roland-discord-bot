@@ -980,7 +980,7 @@ function showAdminView(view) {
 }
 
 function showAdminUsers() {
-  showAdminView('stats');
+  showAdminView('users');
 }
 
 async function loadAdminHelpView() {

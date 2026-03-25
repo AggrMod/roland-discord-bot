@@ -190,13 +190,13 @@ module.exports = {
       }
     }
 
-    // Prevent multiple open lobbies by same creator in channel
+    // Prevent multiple active battles in the same channel (open or in_progress)
     const existing = battleDb.prepare(
-      'SELECT * FROM battle_lobbies WHERE channel_id = ? AND creator_id = ? AND status = ? ORDER BY created_at DESC LIMIT 1'
-    ).get(channelId, creatorId, 'open');
+      "SELECT * FROM battle_lobbies WHERE channel_id = ? AND status IN ('open','in_progress') ORDER BY created_at DESC LIMIT 1"
+    ).get(channelId);
 
     if (existing) {
-      return interaction.editReply({ content: '❌ You already have an open battle lobby in this channel. Start or cancel it first.', ephemeral: true });
+      return interaction.editReply({ content: '❌ There is already an active battle in this channel. Finish or cancel it before creating a new one.', ephemeral: true });
     }
 
     // Create temporary message first to get messageId
@@ -310,7 +310,28 @@ module.exports = {
       return interaction.editReply({ content: `❌ ${result.message}`, ephemeral: true });
     }
 
-    await interaction.editReply({ content: '✅ Battle lobby cancelled.', ephemeral: true });
+    // Close/update the original lobby message so channel state is clear
+    try {
+      const channel = await interaction.client.channels.fetch(lobby.channel_id);
+      if (channel) {
+        const msg = await channel.messages.fetch(lobby.message_id);
+        if (msg) {
+          const cancelledEmbed = new EmbedBuilder()
+            .setColor('#ED4245')
+            .setTitle('🛑 Battle Cancelled')
+            .setDescription(`This battle was cancelled by <@${interaction.user.id}>.`)
+            .setFooter({ text: 'Create a new battle with /battle create' })
+            .setTimestamp();
+
+          await msg.edit({ content: '', embeds: [cancelledEmbed] });
+          await msg.reactions.removeAll().catch(() => {});
+        }
+      }
+    } catch (e) {
+      logger.error('Failed to update cancelled battle message:', e);
+    }
+
+    await interaction.editReply({ content: '✅ Battle cancelled and lobby closed.', ephemeral: true });
     logger.log(`Battle ${lobby.lobby_id} cancelled by ${interaction.user.username}`);
   },
 

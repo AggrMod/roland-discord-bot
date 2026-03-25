@@ -27,8 +27,18 @@ module.exports = {
             .setRequired(false))
         .addRoleOption(option =>
           option
-            .setName('excluded_role')
-            .setDescription('Role excluded from joining (optional)')
+            .setName('excluded_role_1')
+            .setDescription('First excluded role (optional)')
+            .setRequired(false))
+        .addRoleOption(option =>
+          option
+            .setName('excluded_role_2')
+            .setDescription('Second excluded role (optional)')
+            .setRequired(false))
+        .addRoleOption(option =>
+          option
+            .setName('excluded_role_3')
+            .setDescription('Third excluded role (optional)')
             .setRequired(false)))
     
     .addSubcommand(subcommand =>
@@ -152,8 +162,15 @@ module.exports = {
     const maxPlayers = interaction.options.getInteger('max_players') || 999;
     const requiredRole = interaction.options.getRole('required_role');
     const requiredRoleId = requiredRole ? requiredRole.id : null;
-    const excludedRole = interaction.options.getRole('excluded_role');
-    const excludedRoleId = excludedRole ? excludedRole.id : null;
+    const excludedRoleArray = [];
+    const excludedRoles = [];
+    for (let i = 1; i <= 3; i++) {
+      const role = interaction.options.getRole(`excluded_role_${i}`);
+      if (role) {
+        excludedRoleArray.push(role.id);
+        excludedRoles.push(role);
+      }
+    }
 
     // Prevent multiple open lobbies by same creator in channel
     const existing = battleDb.prepare(
@@ -174,7 +191,7 @@ module.exports = {
       2,
       maxPlayers,
       requiredRoleId,
-      excludedRoleId
+      excludedRoleArray.length ? excludedRoleArray : null
     );
 
     if (!createResult.success) {
@@ -184,7 +201,7 @@ module.exports = {
 
     const lobby = battleService.getLobby(createResult.lobbyId);
     const participants = battleService.getParticipants(createResult.lobbyId);
-    const lobbyEmbed = battleService.buildLobbyEmbed(lobby, participants, requiredRole, excludedRole);
+    const lobbyEmbed = battleService.buildLobbyEmbed(lobby, participants, requiredRole, excludedRoles.length ? excludedRoles : null);
 
     await placeholder.edit({ content: '', embeds: [lobbyEmbed] });
     await placeholder.react(battleService.SWORD_EMOJI);

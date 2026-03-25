@@ -15,7 +15,7 @@ function initBattleTables() {
       min_players INTEGER DEFAULT 2,
       max_players INTEGER DEFAULT 999,
       required_role_id TEXT,
-      excluded_role_id TEXT,
+      excluded_role_ids TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       started_at DATETIME,
       completed_at DATETIME
@@ -50,6 +50,15 @@ function initBattleTables() {
 
   // Safe additive migrations
   try { db.exec('ALTER TABLE battle_lobbies ADD COLUMN excluded_role_id TEXT'); } catch (e) {}
+  try { db.exec('ALTER TABLE battle_lobbies ADD COLUMN excluded_role_ids TEXT'); } catch (e) {}
+  // If old column exists, populate new column
+  try {
+    const rows = db.prepare('SELECT id, excluded_role_id FROM battle_lobbies WHERE excluded_role_id IS NOT NULL AND excluded_role_ids IS NULL').all();
+    const stmt = db.prepare('UPDATE battle_lobbies SET excluded_role_ids = ? WHERE id = ?');
+    for (const row of rows) {
+      stmt.run(row.excluded_role_id, row.id);
+    }
+  } catch (e) {}
 
   logger.log('Battle tables initialized successfully');
 }

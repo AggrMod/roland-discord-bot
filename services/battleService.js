@@ -201,14 +201,15 @@ class BattleService {
     this.SWORD_EMOJI = '⚔️';
   }
 
-  createLobby(channelId, messageId, creatorId, minPlayers = 2, maxPlayers = 999, requiredRoleId = null, excludedRoleId = null) {
+  createLobby(channelId, messageId, creatorId, minPlayers = 2, maxPlayers = 999, requiredRoleId = null, excludedRoleIds = null) {
     const lobbyId = `battle_${Date.now()}_${creatorId}`;
     
     try {
+      const excludedIdsStr = excludedRoleIds && excludedRoleIds.length ? excludedRoleIds.join(',') : null;
       db.prepare(`
-        INSERT INTO battle_lobbies (lobby_id, channel_id, message_id, creator_id, min_players, max_players, required_role_id, excluded_role_id)
+        INSERT INTO battle_lobbies (lobby_id, channel_id, message_id, creator_id, min_players, max_players, required_role_id, excluded_role_ids)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(lobbyId, channelId, messageId, creatorId, minPlayers, maxPlayers, requiredRoleId, excludedRoleId);
+      `).run(lobbyId, channelId, messageId, creatorId, minPlayers, maxPlayers, requiredRoleId, excludedIdsStr);
 
       logger.log(`Battle lobby created: ${lobbyId} by ${creatorId}`);
       return { success: true, lobbyId };
@@ -269,13 +270,17 @@ class BattleService {
         }
       }
 
-      // Check excluded role
-      if (lobby.excluded_role_id && userRoles.includes(lobby.excluded_role_id)) {
-        return {
-          success: false,
-          message: 'Your role is excluded from this battle',
-          blockedRole: true
-        };
+      // Check excluded roles
+      if (lobby.excluded_role_ids) {
+        const excludedSet = new Set(lobby.excluded_role_ids.split(','));
+        const hasExcludedRole = userRoles.some(rid => excludedSet.has(rid));
+        if (hasExcludedRole) {
+          return {
+            success: false,
+            message: 'Your role is excluded from this battle',
+            blockedRole: true
+          };
+        }
       }
 
       const participants = this.getParticipants(lobbyId);
@@ -578,7 +583,7 @@ class BattleService {
     }
   }
 
-  buildLobbyEmbed(lobby, participants, requiredRole = null, excludedRole = null) {
+  buildLobbyEmbed(lobby, participants, requiredRole = null, excludedRoles = null) {
     const maxPlayersText = (!lobby.max_players || lobby.max_players >= 999) 
       ? '∞' 
       : lobby.max_players;
@@ -594,9 +599,13 @@ class BattleService {
       description += `\n**Required Role:** ${roleName}`;
     }
 
-    if (lobby.excluded_role_id || excludedRole) {
-      const excludedName = excludedRole ? excludedRole.name : `<@&${lobby.excluded_role_id}>`;
-      description += `\n**Excluded Role:** ${excludedName}`;
+    if ((lobby.excluded_role_ids || excludedRoles) && excludedRoles && excludedRoles.length) {
+      const excludedNames = excludedRoles.map(r => r.name).join(', ');
+      description += `\n**Excluded Roles:** ${excludedNames}`;
+    } else if (lobby.excluded_role_ids) {
+      const excludedIds = lobby.excluded_role_ids.split(',');
+      const excludedMentions = excludedIds.map(id => `<@&${id}>`).join(', ');
+      description += `\n**Excluded Roles:** ${excludedMentions}`;
     }
 
     const embed = new EmbedBuilder()

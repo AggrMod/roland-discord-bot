@@ -153,10 +153,18 @@ class NFTActivityService {
       DELIST: '#5865F2',
       TRANSFER: '#EB459E'
     };
+    const iconMap = {
+      MINT: '🪄',
+      SELL: '💸',
+      LIST: '🏷️',
+      DELIST: '📦',
+      TRANSFER: '🔁'
+    };
+    const typeIcon = iconMap[typeUpper] || '🧩';
 
     const embed = new EmbedBuilder()
       .setColor(colorMap[typeUpper] || '#5865F2')
-      .setTitle(`🧩 NFT Activity • ${typeUpper}`)
+      .setTitle(`${typeIcon} NFT Activity • ${typeUpper}`)
       .addFields(
         { name: 'Collection', value: evt.collectionKey || 'unknown', inline: true },
         { name: 'Token', value: evt.tokenName || evt.tokenMint || 'unknown', inline: true },

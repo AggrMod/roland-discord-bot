@@ -269,7 +269,7 @@ async function pollMicroVerifyStatus(statusEl, attempts = 0) {
   }
   
   try {
-    const res = await fetch('/api/micro-verify/status');
+    const res = await fetch('/api/micro-verify/status', { credentials: 'include' });
     const data = await res.json();
     
     if (data.success && data.request?.status === 'verified') {
@@ -394,7 +394,7 @@ function showUnauthenticatedState() {
 
 async function checkAdminStatus() {
   try {
-    const response = await fetch('/api/admin/settings');
+    const response = await fetch('/api/admin/settings', { credentials: 'include' });
     const data = await response.json();
     
     if (data.success) {
@@ -533,7 +533,7 @@ async function loadActiveVotes() {
   const container = document.getElementById('activeVotes');
   
   try {
-    const response = await fetch('/api/public/proposals/active');
+    const response = await fetch('/api/public/proposals/active', { credentials: 'include' });
     const data = await response.json();
     
     if (!data.success || !data.proposals || data.proposals.length === 0) {
@@ -749,7 +749,7 @@ async function loadAvailableMissions() {
   const container = document.getElementById('availableMissions');
   
   try {
-    const response = await fetch('/api/public/missions/active');
+    const response = await fetch('/api/public/missions/active', { credentials: 'include' });
     const data = await response.json();
     
     if (!data.success || !data.missions || data.missions.length === 0) {
@@ -858,7 +858,7 @@ async function loadTreasuryPublicView() {
   content.innerHTML = `<div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading...</p></div>`;
   
   try {
-    const response = await fetch('/api/public/v1/treasury');
+    const response = await fetch('/api/public/v1/treasury', { credentials: 'include' });
     const data = await response.json();
     
     if (data.success) {
@@ -892,7 +892,7 @@ async function loadTreasuryTransactions() {
   if (!content) return;
   
   try {
-    const response = await fetch('/api/public/v1/treasury/transactions?limit=10');
+    const response = await fetch('/api/public/v1/treasury/transactions?limit=10', { credentials: 'include' });
     const data = await response.json();
     
     if (data.success && data.transactions?.length > 0) {
@@ -1215,7 +1215,7 @@ async function loadAdminProposals() {
   content.innerHTML = `<div style="text-align:center; padding: var(--space-5); color: var(--text-secondary);"><div class="spinner"></div><p>Loading proposals...</p></div>`;
 
   try {
-    const response = await fetch('/api/admin/proposals');
+    const response = await fetch('/api/admin/proposals', { credentials: 'include' });
     const data = await response.json();
     if (!data.success) throw new Error(data.message || 'Failed to load proposals');
 
@@ -1247,7 +1247,7 @@ async function loadAdminSettingsView() {
   content.innerHTML = `<div style="text-align:center; padding: var(--space-5); color: var(--text-secondary);"><div class="spinner"></div><p>Loading settings...</p></div>`;
 
   try {
-    const response = await fetch('/api/admin/settings');
+    const response = await fetch('/api/admin/settings', { credentials: 'include' });
     const data = await response.json();
     if (!data.success) throw new Error(data.message || 'Failed to load settings');
 
@@ -1302,8 +1302,8 @@ async function loadAdminAnalyticsView() {
 
   try {
     const [usersRes, proposalsRes] = await Promise.all([
-      fetch('/api/admin/users'),
-      fetch('/api/admin/proposals')
+      fetch('/api/admin/users', { credentials: 'include' }),
+      fetch('/api/admin/proposals', { credentials: 'include' })
     ]);
     const usersData = await usersRes.json();
     const proposalsData = await proposalsRes.json();
@@ -1333,7 +1333,7 @@ async function loadAdminRoles() {
   content.innerHTML = `<div style="text-align:center; padding: var(--space-5); color: var(--text-secondary);"><div class="spinner"></div><p>Loading roles...</p></div>`;
 
   try {
-    const response = await fetch('/api/admin/roles/config');
+    const response = await fetch('/api/admin/roles/config', { credentials: 'include' });
     const data = await response.json();
     if (!data.success) throw new Error(data.message || 'Failed to load roles');
 
@@ -1579,8 +1579,8 @@ async function loadAdminStats() {
 
   try {
     const [usersRes, proposalsRes] = await Promise.all([
-      fetch('/api/admin/users'),
-      fetch('/api/admin/proposals')
+      fetch('/api/admin/users', { credentials: 'include' }),
+      fetch('/api/admin/proposals', { credentials: 'include' })
     ]);
     const usersData = await usersRes.json();
     const proposalsData = await proposalsRes.json();
@@ -1627,7 +1627,7 @@ async function loadAdminUsers() {
   `;
 
   try {
-    const response = await fetch('/api/admin/users');
+    const response = await fetch('/api/admin/users', { credentials: 'include' });
     const data = await response.json();
 
     if (!data.success) {
@@ -1722,8 +1722,8 @@ async function loadAdminActivity() {
   try {
     // Build activity from real data (proposals + users)
     const [usersRes, proposalsRes] = await Promise.all([
-      fetch('/api/admin/users'),
-      fetch('/api/admin/proposals')
+      fetch('/api/admin/users', { credentials: 'include' }),
+      fetch('/api/admin/proposals', { credentials: 'include' })
     ]);
     const usersData = await usersRes.json();
     const proposalsData = await proposalsRes.json();

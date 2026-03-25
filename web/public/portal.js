@@ -1230,7 +1230,10 @@ function openAddRoleModal() {
   document.getElementById('roleModalTitle').textContent = 'Add Verification Role';
   document.getElementById('roleForm').reset();
   document.getElementById('roleForm').dataset.mode = 'add';
-  document.getElementById('roleModal').style.display = 'flex';
+  const modal = document.getElementById('roleModal');
+  if (modal) {
+    modal.style.display = 'flex';
+  }
 }
 
 function closeRoleModal() {

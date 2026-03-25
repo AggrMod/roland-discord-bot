@@ -437,7 +437,7 @@ function renderWallets() {
         <h4 class="empty-state-title">No Wallets Connected</h4>
         <p class="empty-state-message">Link your Solana wallet to verify NFT ownership and unlock voting power.</p>
         <div class="empty-state-action">
-          <button class="btn-primary" onclick="window.location.href='/verify'">
+          <button class="btn-primary" onclick="showWalletAddForm()">
             <span>➕</span>
             <span>Add Your First Wallet</span>
           </button>

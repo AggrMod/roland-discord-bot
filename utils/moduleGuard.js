@@ -122,6 +122,37 @@ class ModuleGuard {
 
     return true;
   }
+
+  /**
+   * Admin or Moderator check
+   */
+  async checkAdminOrModerator(interaction) {
+    if (!interaction.member) {
+      await interaction.reply({
+        content: '❌ This command must be used in a server.',
+        ephemeral: true
+      });
+      return false;
+    }
+
+    const perms = interaction.member.permissions;
+    const allowed =
+      perms.has('Administrator') ||
+      perms.has('ManageGuild') ||
+      perms.has('ManageMessages') ||
+      perms.has('ModerateMembers') ||
+      perms.has('KickMembers');
+
+    if (!allowed) {
+      await interaction.reply({
+        content: '❌ Only Family admins or moderators can use this command.',
+        ephemeral: true
+      });
+      return false;
+    }
+
+    return true;
+  }
 }
 
 // Singleton instance

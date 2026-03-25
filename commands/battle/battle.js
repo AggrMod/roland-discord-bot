@@ -133,9 +133,11 @@ module.exports = {
         // User commands
         switch (subcommand) {
           case 'create':
+            if (!await moduleGuard.checkAdminOrModerator(interaction)) return;
             await this.handleCreate(interaction);
             break;
           case 'start':
+            if (!await moduleGuard.checkAdminOrModerator(interaction)) return;
             await this.handleStart(interaction);
             break;
           case 'cancel':
@@ -407,8 +409,30 @@ module.exports = {
     }
 
     battleDb.prepare('UPDATE battle_lobbies SET status = ?, completed_at = CURRENT_TIMESTAMP WHERE lobby_id = ?').run('cancelled', battleId);
+    battleDb.prepare('DELETE FROM battle_participants WHERE lobby_id = ?').run(battleId);
 
-    await interaction.editReply({ content: `✅ Battle ${battleId} force-ended by admin.`, ephemeral: true });
+    // Close/update original lobby message for consistency
+    try {
+      const channel = await interaction.client.channels.fetch(lobby.channel_id);
+      if (channel) {
+        const msg = await channel.messages.fetch(lobby.message_id);
+        if (msg) {
+          const endedEmbed = new EmbedBuilder()
+            .setColor('#ED4245')
+            .setTitle('🛑 Battle Force-Ended')
+            .setDescription(`This battle was force-ended by admin <@${interaction.user.id}>.`)
+            .setFooter({ text: 'State closed by moderation action' })
+            .setTimestamp();
+
+          await msg.edit({ content: '', embeds: [endedEmbed] });
+          await msg.reactions.removeAll().catch(() => {});
+        }
+      }
+    } catch (e) {
+      logger.error('Failed to update force-ended battle message:', e);
+    }
+
+    await interaction.editReply({ content: `✅ Battle ${battleId} force-ended and lobby closed.`, ephemeral: true });
     logger.log(`Admin ${interaction.user.tag} force-ended battle ${battleId}`);
   },
 

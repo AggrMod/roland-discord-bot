@@ -270,6 +270,61 @@ class TreasuryService {
   }
 
   /**
+   * Get recent treasury wallet transactions (incoming/outgoing SOL)
+   */
+  async getRecentTransactions(limit = 15) {
+    const config = this.getConfig();
+
+    if (!config || !config.solana_wallet) {
+      return { success: false, message: 'No treasury wallet configured' };
+    }
+
+    try {
+      const wallet = new PublicKey(config.solana_wallet);
+      const sigs = await this.connection.getSignaturesForAddress(wallet, { limit: Math.min(Math.max(limit, 1), 50) });
+
+      if (!sigs.length) {
+        return { success: true, transactions: [] };
+      }
+
+      const parsed = await this.connection.getParsedTransactions(
+        sigs.map(s => s.signature),
+        { maxSupportedTransactionVersion: 0 }
+      );
+
+      const txs = [];
+      for (let i = 0; i < parsed.length; i++) {
+        const tx = parsed[i];
+        if (!tx || !tx.meta) continue;
+
+        const keys = tx.transaction.message.accountKeys.map(k => k.pubkey.toBase58());
+        const idx = keys.findIndex(k => k === config.solana_wallet);
+        if (idx === -1) continue;
+
+        const pre = tx.meta.preBalances?.[idx] ?? 0;
+        const post = tx.meta.postBalances?.[idx] ?? 0;
+        const deltaLamports = post - pre;
+        const deltaSol = deltaLamports / 1e9;
+
+        txs.push({
+          signature: sigs[i].signature,
+          slot: sigs[i].slot,
+          blockTime: sigs[i].blockTime,
+          success: !sigs[i].err,
+          feeSol: (tx.meta.fee || 0) / 1e9,
+          deltaSol: Number(deltaSol.toFixed(6)),
+          direction: deltaSol > 0 ? 'incoming' : deltaSol < 0 ? 'outgoing' : 'neutral'
+        });
+      }
+
+      return { success: true, transactions: txs };
+    } catch (error) {
+      logger.error('Error fetching treasury transactions:', error);
+      return { success: false, message: 'Failed to fetch transaction history', error: error.message };
+    }
+  }
+
+  /**
    * Check if treasury data is stale
    */
   checkStaleness(lastUpdated, refreshHours) {

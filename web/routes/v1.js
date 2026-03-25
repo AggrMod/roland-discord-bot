@@ -209,15 +209,38 @@ router.get('/stats', asyncHandler(async (req, res) => {
  */
 router.get('/treasury', asyncHandler(async (req, res) => {
   const summary = treasuryService.getSummary();
-  
-  // Ensure no wallet address leaks
-  if (summary.data && summary.data.wallet) {
-    delete summary.data.wallet;
+
+  if (!summary.success) {
+    return res.json(success({}, { message: summary.message || 'Treasury unavailable' }));
   }
 
-  res.json(success(summary.data || {}, { 
-    lastUpdated: summary.lastUpdated || null 
+  res.json(success(summary.treasury || {}, {
+    lastUpdated: summary.treasury?.lastUpdated || null
   }));
+}));
+
+/**
+ * GET /api/public/v1/treasury/transactions?limit=20
+ * Returns recent treasury SOL transactions (signature/time/direction/amount)
+ */
+router.get('/treasury/transactions', asyncHandler(async (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit || '20', 10), 1), 50);
+  const result = await treasuryService.getRecentTransactions(limit);
+
+  if (!result.success) {
+    return res.status(400).json(error('TREASURY_TX_UNAVAILABLE', result.message || 'Could not fetch treasury transactions'));
+  }
+
+  const txs = result.transactions.map(tx => ({
+    signature: tx.signature,
+    blockTime: tx.blockTime,
+    direction: tx.direction,
+    deltaSol: tx.deltaSol,
+    feeSol: tx.feeSol,
+    success: tx.success
+  }));
+
+  res.json(success({ transactions: txs }, { count: txs.length }));
 }));
 
 // ==================== MISSIONS ENDPOINTS ====================

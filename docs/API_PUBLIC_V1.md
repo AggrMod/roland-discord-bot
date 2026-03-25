@@ -339,6 +339,18 @@ Returns treasury balance summary (no sensitive wallet addresses).
 curl https://your-domain.com/api/public/v1/treasury
 ```
 
+#### Get Treasury Transactions Feed
+
+Returns recent SOL transaction history for treasury wallet (incoming/outgoing deltas).
+
+**Endpoint:** `GET /treasury/transactions?limit=20`
+
+**Example Request:**
+
+```bash
+curl "https://your-domain.com/api/public/v1/treasury/transactions?limit=20"
+```
+
 ---
 
 ### Missions

@@ -17,7 +17,7 @@ This file mirrors the current module-first command set.
 
 ## Treasury
 - `/treasury view`
-- Admin: `/treasury admin status|refresh|enable|disable|set-wallet|set-interval`
+- Admin: `/treasury admin status|refresh|enable|disable|set-wallet|set-interval|tx-history`
 
 ## Battle
 - `/battle create`

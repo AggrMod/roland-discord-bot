@@ -60,7 +60,19 @@ module.exports = {
                 .setDescription('Number of hours between refreshes (1-168)')
                 .setRequired(true)
                 .setMinValue(1)
-                .setMaxValue(168)))),
+                .setMaxValue(168)))
+
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('tx-history')
+            .setDescription('Show recent treasury transactions')
+            .addIntegerOption(option =>
+              option
+                .setName('limit')
+                .setDescription('How many recent transactions (1-20)')
+                .setRequired(false)
+                .setMinValue(1)
+                .setMaxValue(20)))),
 
   async execute(interaction) {
     // Check if treasury module is enabled
@@ -96,6 +108,9 @@ module.exports = {
             break;
           case 'set-interval':
             await this.handleAdminSetInterval(interaction);
+            break;
+          case 'tx-history':
+            await this.handleAdminTxHistory(interaction);
             break;
         }
       } else {
@@ -277,5 +292,36 @@ module.exports = {
       ephemeral: true 
     });
     logger.log(`Admin ${interaction.user.tag} set treasury interval to ${hours} hours`);
+  },
+
+  async handleAdminTxHistory(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const limit = interaction.options.getInteger('limit') || 10;
+    const result = await treasuryService.getRecentTransactions(limit);
+
+    if (!result.success) {
+      return interaction.editReply({ content: `❌ ${result.message}`, ephemeral: true });
+    }
+
+    if (!result.transactions.length) {
+      return interaction.editReply({ content: 'No recent transactions found.', ephemeral: true });
+    }
+
+    const lines = result.transactions.slice(0, limit).map((tx, i) => {
+      const dir = tx.direction === 'incoming' ? '🟢 IN' : tx.direction === 'outgoing' ? '🔴 OUT' : '🟡 FLAT';
+      const amt = `${tx.deltaSol > 0 ? '+' : ''}${tx.deltaSol} SOL`;
+      const when = tx.blockTime ? `<t:${tx.blockTime}:R>` : 'unknown';
+      return `${i + 1}. ${dir} ${amt} • ${when}\n   \`${tx.signature.slice(0, 10)}...${tx.signature.slice(-8)}\``;
+    }).join('\n');
+
+    const embed = new EmbedBuilder()
+      .setColor('#FFD700')
+      .setTitle('📜 Treasury Transaction History')
+      .setDescription(lines)
+      .setFooter({ text: `Showing latest ${Math.min(limit, result.transactions.length)} txs` })
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [embed], ephemeral: true });
   }
 };

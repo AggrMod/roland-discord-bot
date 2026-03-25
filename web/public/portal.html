@@ -300,6 +300,10 @@
               <h3>📜 Governance</h3>
               <p>Understanding proposals, voting, and DAO participation</p>
             </div>
+            <div class="card help-card" onclick="toggleHelp('battles')">
+              <h3>⚔️ Battle Lobbies</h3>
+              <p>Create and join battle lobbies with configurable role gating</p>
+            </div>
             <div class="card help-card" onclick="toggleHelp('troubleshooting')">
               <h3>🔧 Troubleshooting</h3>
               <p>Solutions to common issues and technical problems</p>
@@ -453,6 +457,49 @@
                     </tr>
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-battles" class="help-content" style="display:none;">
+            <div class="card">
+              <h3>⚔️ Battle Lobbies</h3>
+              <div class="help-section">
+                <h4>Creating a Battle Lobby</h4>
+                <p>Use the command: <code>/battle create</code></p>
+                <p><strong>Optional Parameters:</strong></p>
+                <ul>
+                  <li><code>max_players</code> — Maximum number of participants (default: 999)</li>
+                  <li><code>required_role_1/2/3</code> — Require at least ONE of these roles to join</li>
+                  <li><code>excluded_role_1/2/3</code> — Block users with ANY of these roles</li>
+                </ul>
+              </div>
+              <div class="help-section">
+                <h4>Role Gating Explained</h4>
+                <p><strong>Required Roles (ANY Logic):</strong> A user must have at least one of the specified roles. If you set required_role_1:@Member and required_role_2:@Supporter, any user with @Member OR @Supporter can join.</p>
+                <p><strong>Excluded Roles (NONE Logic):</strong> A user cannot have any of the specified roles. If you set excluded_role_1:@Bot and excluded_role_2:@Muted, users with @Bot OR @Muted are blocked.</p>
+              </div>
+              <div class="help-section">
+                <h4>Example: Members-Only Battle</h4>
+                <p>Create a battle for members and supporters only, excluding bots:</p>
+                <p><code>/battle create max_players:20 required_role_1:@Member required_role_2:@Supporter excluded_role_1:@Bot</code></p>
+              </div>
+              <div class="help-section">
+                <h4>Joining a Battle</h4>
+                <ol>
+                  <li>React with ⚔️ to a battle lobby message to join</li>
+                  <li>If you meet role requirements, you're added to the participant list</li>
+                  <li>If you don't meet requirements, your reaction is removed and you'll receive a DM explaining why</li>
+                  <li>Battle creator can start the lobby once minimum players are reached</li>
+                </ol>
+              </div>
+              <div class="help-section">
+                <h4>Battle Commands</h4>
+                <ul>
+                  <li><code>/battle start</code> — Start your open lobby (requires minimum players)</li>
+                  <li><code>/battle cancel</code> — Cancel your open lobby</li>
+                  <li><code>/battle stats</code> — View battle statistics and leaderboards</li>
+                </ul>
               </div>
             </div>
           </div>

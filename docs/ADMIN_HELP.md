@@ -20,11 +20,33 @@ This file mirrors the current module-first command set.
 - Admin: `/treasury admin status|refresh|enable|disable|set-wallet|set-interval|tx-history`
 
 ## Battle
-- `/battle create`
-- `/battle start`
-- `/battle cancel`
-- `/battle stats`
+
+### Commands
+- `/battle create` — Create battle lobby (optional: role gating, max players)
+- `/battle start` — Start your open lobby (requires min players)
+- `/battle cancel` — Cancel your open lobby
+- `/battle stats` — Show battle stats and leaderboards
 - Admin: `/battle admin list|force-end|settings`
+
+### Role Gating (Optional)
+When creating a lobby, you can gate participation:
+
+**Required Roles (ANY Logic):**
+- `required_role_1`, `required_role_2`, `required_role_3`
+- User must have **at least ONE** of these roles to join
+- If not met: user is blocked with DM notification
+
+**Excluded Roles (NONE Logic):**
+- `excluded_role_1`, `excluded_role_2`, `excluded_role_3`
+- User **cannot have ANY** of these roles
+- If found: reaction removed, user sent DM
+
+**Example:**
+```
+/battle create max_players:10 required_role_1:@Member required_role_2:@Supporter excluded_role_1:@Bot excluded_role_2:@Muted
+```
+
+Users with @Member OR @Supporter can join, but NOT @Bot or @Muted holders.
 
 ## Heist
 - `/heist view|signup|status`

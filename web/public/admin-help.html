@@ -43,11 +43,18 @@
     <section class="card" style="padding:16px;margin:16px 0;">
       <h2>⚔️ Battle</h2>
       <ul>
-        <li><code>/battle create</code> — Create battle lobby.</li>
-        <li><code>/battle start</code> — Start your open lobby.</li>
+        <li><code>/battle create</code> — Create battle lobby with optional role gating and max players.</li>
+        <li><code>/battle start</code> — Start your open lobby (min players required).</li>
         <li><code>/battle cancel</code> — Cancel your open lobby.</li>
-        <li><code>/battle stats</code> — Show battle stats.</li>
+        <li><code>/battle stats</code> — Show battle stats and leaderboards.</li>
       </ul>
+      <h4 style="color:#ffd700;margin-top:12px;">Role Gating (Optional)</h4>
+      <p style="font-size:14px;color:#b7c0d8;margin:8px 0;">When creating a lobby, you can control who can join:</p>
+      <ul style="font-size:14px;">
+        <li><strong>Required Roles (ANY):</strong> <code>required_role_1</code>, <code>required_role_2</code>, <code>required_role_3</code> — User must have <strong>at least one</strong> of these roles to join.</li>
+        <li><strong>Excluded Roles (NONE):</strong> <code>excluded_role_1</code>, <code>excluded_role_2</code>, <code>excluded_role_3</code> — User <strong>cannot have any</strong> of these roles; they will be auto-removed if they react to join.</li>
+      </ul>
+      <p style="font-size:13px;color:#a0aac4;margin:8px 0;"><em>Example: Require @Member or @Supporter, exclude @Bot and @Muted:</em><br><code>/battle create max_players:10 required_role_1:@Member required_role_2:@Supporter excluded_role_1:@Bot excluded_role_2:@Muted</code></p>
       <p><strong>Admin:</strong> <code>/battle admin list</code>, <code>force-end</code>, <code>settings</code>.</p>
     </section>
 

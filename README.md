@@ -9,6 +9,15 @@ Discord bot for the Solpranos NFT ecosystem featuring wallet verification, DAO g
 - Automatic NFT counting and tier assignment
 - Role-based permissions (Associate → Don)
 - Voting power calculation
+- OG (Original/early member) role system with configurable limits
+- Micro-verification via SOL micro-transfers
+
+### 📡 NFT Activity Tracking
+- Watch and monitor specific NFT collections
+- Real-time activity alerts (mints, sells, lists, etc.)
+- Configurable Discord channel posting with filters
+- Event-type emoji badges for visual clarity
+- Webhook ingest API for external event sources
 
 ### 🗳️ DAO Governance
 - Create proposals with community support system
@@ -17,11 +26,20 @@ Discord bot for the Solpranos NFT ecosystem featuring wallet verification, DAO g
 - Quorum checking (25% minimum)
 - 7-day voting periods with auto-close
 
+### ⚔️ Battle Lobbies
+- Create and join battle lobbies with community members
+- **Multi-role gating**: Require any of up to 3 roles (OR logic)
+- **Role exclusion**: Block users with any of up to 3 roles (AND logic)
+- Reaction-based joining (⚔️ emoji)
+- Configurable max players and minimum thresholds
+- Real-time participant tracking and lobby updates
+
 ### 🎯 Heist Mission System
 - Role-based mission requirements
 - NFT assignment and locking
 - Multi-slot missions with progress tracking
 - Points-based reward system
+- *Currently disabled by default, available for future re-enable*
 
 ## Installation
 
@@ -57,11 +75,18 @@ Discord bot for the Solpranos NFT ecosystem featuring wallet verification, DAO g
 
 ## Commands
 
-### Verification Commands
+### User Commands
 - `/verification status` - View your verification status and linked wallets
 - `/verification wallets` - View linked wallets and NFT holdings
 - `/verification refresh` - Update roles based on current NFT count
 - `/verification quick` - Quick micro-verification
+- `/battle create` - Create a battle lobby with optional role gating
+- `/battle start` - Start your open battle lobby
+- `/battle cancel` - Cancel your open battle lobby
+- `/battle stats` - View battle statistics and leaderboards
+- `/governance propose` - Create a governance proposal
+- `/governance support` - Support a draft proposal
+- `/governance vote` - Vote on an active proposal
 
 ### Admin Commands
 
@@ -73,9 +98,19 @@ Discord bot for the Solpranos NFT ecosystem featuring wallet verification, DAO g
 - `/verification admin export-user` - Export user verification data
 - `/verification admin remove-user` - Remove user from system
 - `/verification admin role-config` - Configure role assignments
-- `/verification admin og-config` - Configure OG roles
-- `/verification admin micro-config` - Configure micro-verification
+- `/verification admin og-view` - View OG role configuration
+- `/verification admin og-enable` - Enable/disable OG role system
+- `/verification admin og-role` - Set OG role
+- `/verification admin og-limit` - Set OG role limit
+- `/verification admin og-sync` - Sync OG roles to Discord
 - `/verification admin export-wallets` - Export all wallets
+
+#### NFT Activity Tracking Admin
+- `/verification admin activity-watch-add` - Add collection to watch
+- `/verification admin activity-watch-remove` - Remove watched collection
+- `/verification admin activity-watch-list` - List watched collections
+- `/verification admin activity-feed` - View recent activity events
+- `/verification admin activity-alerts` - Configure auto-post alerts (channel, event types, min SOL price)
 
 #### Governance Admin
 - `/governance admin settings` - Configure governance parameters
@@ -88,11 +123,34 @@ Discord bot for the Solpranos NFT ecosystem featuring wallet verification, DAO g
 - `/treasury admin enable/disable` - Toggle monitoring
 - `/treasury admin set-wallet` - Set treasury wallet address
 - `/treasury admin set-interval` - Set refresh interval
+- `/treasury admin tx-history` - View recent treasury transactions
+- `/treasury admin tx-alerts` - Configure auto-post tx alerts (channel, filters)
+
+#### Battle Commands
+- `/battle create` - Create a new battle lobby
+  - `max_players` (optional) - Set max participants
+  - `required_role_1/2/3` (optional) - Require at least ONE of these roles (OR logic)
+  - `excluded_role_1/2/3` (optional) - Block users with ANY of these roles (AND logic)
+- `/battle start` - Start your open lobby (requires minimum players met)
+- `/battle cancel` - Cancel your open lobby
+- `/battle stats` - View battle stats and leaderboards
 
 #### Battle Admin
 - `/battle admin list` - List all active battles
 - `/battle admin force-end` - Force end a battle (emergency)
 - `/battle admin settings` - Configure battle parameters
+
+**Role Gating Examples:**
+```
+# Members only, excluding bots
+/battle create max_players:10 required_role_1:@Member excluded_role_1:@Bot
+
+# Multiple required roles (any one is OK)
+/battle create max_players:20 required_role_1:@Member required_role_2:@Supporter required_role_3:@Holder
+
+# Multiple excluded roles (users with any are blocked)
+/battle create excluded_role_1:@Bot excluded_role_2:@Muted excluded_role_3:@Banned
+```
 
 #### System Config
 - `/config modules` - View module toggle states

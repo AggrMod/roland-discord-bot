@@ -234,7 +234,7 @@ async function handleSupportButton(interaction) {
       const embed = new EmbedBuilder()
         .setColor('#FF0000')
         .setTitle('❌ Not Verified')
-        .setDescription('You must verify your wallet to support proposals.\n\nUse `/verify` to get started.')
+        .setDescription('You must verify your wallet to support proposals.\n\nUse `/verification status` to get started.')
         .setTimestamp();
 
       return interaction.editReply({ embeds: [embed] });
@@ -347,7 +347,7 @@ async function handleVoteButton(interaction) {
       const embed = new EmbedBuilder()
         .setColor('#FF0000')
         .setTitle('❌ Not Verified')
-        .setDescription('You must verify your wallet to vote on proposals.\n\nUse `/verify` to get started.')
+        .setDescription('You must verify your wallet to vote on proposals.\n\nUse `/verification status` to get started.')
         .setTimestamp();
 
       return interaction.editReply({ embeds: [embed] });
@@ -418,7 +418,7 @@ async function handleMicroVerifyCheckStatus(interaction) {
         const embed = new EmbedBuilder()
           .setColor('#57F287')
           .setTitle('✅ Wallet Already Verified!')
-          .setDescription('Your wallet has been successfully verified. Use `/verify` to see your status.')
+          .setDescription('Your wallet has been successfully verified. Use `/verification status` to see your status.')
           .setTimestamp();
 
         await interaction.editReply({ embeds: [embed] });

@@ -382,7 +382,7 @@ class MicroVerifyService {
       await user.send(
         `✅ **Wallet Verified!**\n\n` +
         `Your wallet \`${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}\` has been successfully verified via micro-transfer!\n\n` +
-        `Your roles and voting power have been updated. Use \`/verify\` to see your status.`
+        `Your roles and voting power have been updated. Use \`/verification status\` to see your status.`
       ).catch(err => logger.error('Failed to DM user:', err));
 
       logger.log(`Notified user ${discordId} of verification`);

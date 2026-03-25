@@ -87,18 +87,23 @@ client.once(Events.ClientReady, () => {
   microVerifyService.init();
   microVerifyService.startPolling();
 
-  // Start periodic vote check (every 5 minutes)
+  // Import module guard for scheduler checks
+  const moduleGuard = require('./utils/moduleGuard');
+
+  // Start periodic vote check (every 5 minutes) - only if governance enabled
   startVoteCheckInterval();
 
-  // Start role resync scheduler (every 4 hours)
+  // Start role resync scheduler (every 4 hours) - only if verification enabled
   startRoleResyncScheduler();
 
-  // Start treasury monitoring scheduler
+  // Start treasury monitoring scheduler - only if treasury enabled
   treasuryService.startScheduler();
 
-  // Start micro-verify cleanup job (runs every 10 minutes)
+  // Start micro-verify cleanup job (runs every 10 minutes) - only if verification enabled
   setInterval(() => {
-    microVerifyService.expireStaleRequests();
+    if (moduleGuard.isModuleEnabled('verification')) {
+      microVerifyService.expireStaleRequests();
+    }
   }, 10 * 60 * 1000);
 });
 
@@ -549,6 +554,12 @@ async function handleTreasuryRefreshButton(interaction) {
 function startVoteCheckInterval() {
   // Check every 5 minutes for votes that need to be closed and stale drafts
   setInterval(async () => {
+    // Check if governance module is enabled
+    const moduleGuard = require('./utils/moduleGuard');
+    if (!moduleGuard.isModuleEnabled('governance')) {
+      return; // Skip if governance disabled
+    }
+
     try {
       const db = require('./database/db');
       const activeVotes = db.prepare('SELECT * FROM proposals WHERE status = ?').all('voting');
@@ -575,6 +586,12 @@ function startRoleResyncScheduler() {
   const guildId = process.env.GUILD_ID || process.env.DISCORD_GUILD_ID;
 
   async function performRoleResync() {
+    // Check if verification module is enabled
+    const moduleGuard = require('./utils/moduleGuard');
+    if (!moduleGuard.isModuleEnabled('verification')) {
+      return; // Skip if verification disabled
+    }
+
     try {
       const startTime = Date.now();
       logger.log('🔄 Starting role resync cycle...');

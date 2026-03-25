@@ -1,0 +1,7 @@
+{
+  "verificationEnabled": true,
+  "governanceEnabled": true,
+  "treasuryEnabled": true,
+  "battleEnabled": true,
+  "heistEnabled": false
+}

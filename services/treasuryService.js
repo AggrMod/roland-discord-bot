@@ -297,6 +297,13 @@ class TreasuryService {
   startScheduler() {
     const config = this.getConfig();
     
+    // Check if treasury module is enabled (via module toggles)
+    const moduleGuard = require('../utils/moduleGuard');
+    if (!moduleGuard.isModuleEnabled('treasury')) {
+      logger.log('⏸️ Treasury module disabled');
+      return;
+    }
+
     if (!config || !config.enabled || !config.solana_wallet) {
       logger.log('⏸️ Treasury scheduler not started (disabled or no wallet configured)');
       return;
@@ -310,11 +317,15 @@ class TreasuryService {
     }
 
     // Initial fetch
-    this.fetchBalances().catch(err => logger.error('Initial treasury fetch failed:', err));
+    if (moduleGuard.isModuleEnabled('treasury')) {
+      this.fetchBalances().catch(err => logger.error('Initial treasury fetch failed:', err));
+    }
 
     // Schedule recurring fetches
     this.refreshTimer = setInterval(() => {
-      this.fetchBalances().catch(err => logger.error('Scheduled treasury fetch failed:', err));
+      if (moduleGuard.isModuleEnabled('treasury')) {
+        this.fetchBalances().catch(err => logger.error('Scheduled treasury fetch failed:', err));
+      }
     }, intervalMs);
 
     logger.log(`⏰ Treasury auto-refresh started (every ${config.refresh_hours} hours)`);

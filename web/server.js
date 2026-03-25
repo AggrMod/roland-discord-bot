@@ -1,6 +1,5 @@
 const express = require('express');
 const session = require('express-session');
-const sqlite3Store = require('connect-sqlite3')(session);
 const cors = require('cors');
 const path = require('path');
 const nacl = require('tweetnacl');
@@ -53,12 +52,9 @@ class WebServer {
     this.app.use(express.json());
     this.app.use(express.static(path.join(__dirname, 'public')));
 
-    // Session management with persistent SQLite store (survives restarts)
+    // Session management (in-memory for now - sufficient for most use cases)
+    // TODO: Add persistent SQLite store later if needed
     this.app.use(session({
-      store: new sqlite3Store({
-        db: path.join(__dirname, '../database/sessions.db'),
-        dir: path.join(__dirname, '../database')
-      }),
       secret: process.env.SESSION_SECRET || 'solpranos-secret-key-change-this-in-production',
       resave: false,
       saveUninitialized: false,

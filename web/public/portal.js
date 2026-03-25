@@ -680,6 +680,10 @@ function confirmRemoveWallet(address) {
     `Are you sure you want to remove wallet ${address.substring(0, 8)}...${address.substring(address.length - 8)}? This action cannot be undone.`,
     () => removeWallet(address)
   );
+  
+  // Update button text for this specific action
+  const btn = document.getElementById('confirmButton');
+  if (btn) btn.textContent = 'Remove Wallet';
 }
 
 async function removeWallet(address) {
@@ -943,7 +947,10 @@ function closeConfirmModal() {
   document.body.style.overflow = '';
   confirmCallback = null;
   const btn = document.getElementById('confirmButton');
-  if (btn) btn.style.display = '';
+  if (btn) {
+    btn.style.display = '';
+    btn.textContent = 'Confirm'; // Reset text
+  }
 }
 
 function confirmAction() {

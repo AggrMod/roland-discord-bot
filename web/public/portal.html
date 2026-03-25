@@ -387,7 +387,7 @@
               <div class="help-section">
                 <h4>Creating a Proposal</h4>
                 <ol>
-                  <li>Use the <code>/propose</code> command in Discord</li>
+                  <li>Use the <code>/governance propose</code> command in Discord</li>
                   <li>Provide a clear, descriptive title for your proposal</li>
                   <li>Write a detailed description explaining the proposal's purpose and impact</li>
                   <li>Wait for admin review and approval before voting begins</li>
@@ -410,7 +410,7 @@
                 <ol>
                   <li>View active proposals in the Governance section or Discord</li>
                   <li>Read the proposal details carefully</li>
-                  <li>Use <code>/vote</code> command with your choice: Yes, No, or Abstain</li>
+                  <li>Use <code>/governance vote</code> with your choice: Yes, No, or Abstain</li>
                   <li>Your voting power is automatically calculated based on your tier</li>
                   <li>Track voting progress and results in real-time</li>
                 </ol>
@@ -477,7 +477,7 @@
                 <p><strong>Issue:</strong> Your displayed tier doesn't reflect your current NFT count</p>
                 <p><strong>Solutions:</strong></p>
                 <ul>
-                  <li>Run <code>/tier refresh</code> command in Discord to force a blockchain scan</li>
+                  <li>Run <code>/verification refresh</code> in Discord to force a holdings refresh</li>
                   <li>Wait 2-3 minutes for the blockchain verification to complete</li>
                   <li>Ensure your NFTs are in a wallet that's been verified in the system</li>
                   <li>Check that you've set your primary wallet correctly</li>
@@ -503,7 +503,7 @@
                   <li>Ensure you have at least 1 verified NFT (minimum tier requirement)</li>
                   <li>Check that the proposal is in "Voting" status</li>
                   <li>Verify you haven't already voted on this proposal</li>
-                  <li>Use the Discord <code>/vote</code> command instead of the web interface</li>
+                  <li>Use Discord <code>/governance vote</code> instead of the web interface</li>
                 </ul>
               </div>
               <div class="help-section">
@@ -537,6 +537,19 @@
             </div>
             <p style="color: var(--text-secondary); line-height: 1.7;">
               Access the full-featured admin dashboard to manage proposals, users, missions, and system settings. Advanced tools and analytics are available in the dedicated admin interface.
+            </p>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3>📘 Admin Command Guide</h3>
+              <button class="btn-secondary" onclick="window.open('/admin-help.html', '_blank')">
+                <span>📄</span>
+                <span>Open Admin Help</span>
+              </button>
+            </div>
+            <p style="color: var(--text-secondary); line-height: 1.7;">
+              Complete command reference for all live module commands, admin subcommands, and usage examples.
             </p>
           </div>
 

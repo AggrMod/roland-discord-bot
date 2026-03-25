@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Solpranos Admin Help</title>
+  <link rel="stylesheet" href="/portal-style.css" />
+</head>
+<body style="background:#0b0f1a;color:#fff;">
+  <main style="max-width:1100px;margin:0 auto;padding:24px;">
+    <h1>📘 Solpranos Admin Command Guide</h1>
+    <p style="color:#b7c0d8">Live command reference aligned with current module-first architecture.</p>
+
+    <section class="card" style="padding:16px;margin:16px 0;">
+      <h2>🔐 Verification</h2>
+      <ul>
+        <li><code>/verification status</code> — Show verification status, tier, VP, holdings.</li>
+        <li><code>/verification wallets</code> — List linked wallets.</li>
+        <li><code>/verification refresh</code> — Re-scan holdings and refresh user data.</li>
+        <li><code>/verification quick</code> — Start micro-transfer quick verification.</li>
+      </ul>
+      <p><strong>Admin:</strong> <code>/verification admin panel</code>, <code>export-user</code>, <code>remove-user</code>, <code>export-wallets</code>, <code>role-config</code>, <code>actions</code>, <code>og-view</code>, <code>og-enable</code>, <code>og-role</code>, <code>og-limit</code>, <code>og-sync</code>.</p>
+    </section>
+
+    <section class="card" style="padding:16px;margin:16px 0;">
+      <h2>🏛️ Governance</h2>
+      <ul>
+        <li><code>/governance propose</code> — Create proposal.</li>
+        <li><code>/governance support</code> — Support draft proposal.</li>
+        <li><code>/governance vote</code> — Vote yes/no/abstain.</li>
+      </ul>
+      <p><strong>Admin:</strong> <code>/governance admin list</code>, <code>cancel</code>, <code>settings</code>.</p>
+    </section>
+
+    <section class="card" style="padding:16px;margin:16px 0;">
+      <h2>💰 Treasury</h2>
+      <ul>
+        <li><code>/treasury view</code> — Public-safe treasury snapshot.</li>
+      </ul>
+      <p><strong>Admin:</strong> <code>/treasury admin status</code>, <code>refresh</code>, <code>enable</code>, <code>disable</code>, <code>set-wallet</code>, <code>set-interval</code>.</p>
+    </section>
+
+    <section class="card" style="padding:16px;margin:16px 0;">
+      <h2>⚔️ Battle</h2>
+      <ul>
+        <li><code>/battle create</code> — Create battle lobby.</li>
+        <li><code>/battle start</code> — Start your open lobby.</li>
+        <li><code>/battle cancel</code> — Cancel your open lobby.</li>
+        <li><code>/battle stats</code> — Show battle stats.</li>
+      </ul>
+      <p><strong>Admin:</strong> <code>/battle admin list</code>, <code>force-end</code>, <code>settings</code>.</p>
+    </section>
+
+    <section class="card" style="padding:16px;margin:16px 0;">
+      <h2>🎯 Heist</h2>
+      <p>Module is currently disabled by default. Commands exist for future re-enable:</p>
+      <p><code>/heist view</code>, <code>/heist signup</code>, <code>/heist status</code>, admin: <code>create</code>, <code>list</code>, <code>cancel</code>.</p>
+    </section>
+
+    <section class="card" style="padding:16px;margin:16px 0;">
+      <h2>⚙️ Config</h2>
+      <ul>
+        <li><code>/config modules</code> — View module toggles.</li>
+        <li><code>/config toggle</code> — Enable/disable module.</li>
+        <li><code>/config status</code> — Runtime status overview.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

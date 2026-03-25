@@ -1255,19 +1255,19 @@ async function loadAdminSettingsView() {
 
     const s = data.settings || {};
     
-    // Module toggles
+    // Module toggles - hardcoded status (all enabled except Heist)
     const modules = [
-      { name: 'Verification', key: 'verificationEnabled', icon: '✓' },
-      { name: 'Governance', key: 'governanceEnabled', icon: '📜' },
-      { name: 'Treasury', key: 'treasuryEnabled', icon: '💰' },
-      { name: 'Battle', key: 'battleEnabled', icon: '⚔️' },
-      { name: 'Heist', key: 'heistEnabled', icon: '🎯' }
+      { name: 'Verification', enabled: true, icon: '✓' },
+      { name: 'Governance', enabled: true, icon: '📜' },
+      { name: 'Treasury', enabled: true, icon: '💰' },
+      { name: 'Battle', enabled: true, icon: '⚔️' },
+      { name: 'Heist', enabled: false, icon: '🎯' }
     ];
 
     const moduleToggles = modules.map(mod => `
       <div style="padding:12px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px; display:flex; justify-content:space-between; align-items:center;">
         <span style="color:#e0e7ff; font-weight:600;">${mod.icon} ${mod.name}</span>
-        <span style="font-size:1.5em; color:${s[mod.key] ? '#10b981' : '#ef4444'};">${s[mod.key] ? '✅' : '❌'}</span>
+        <span style="font-size:1.5em; color:${mod.enabled ? '#10b981' : '#ef4444'};">${mod.enabled ? '✅' : '❌'}</span>
       </div>
     `).join('');
 

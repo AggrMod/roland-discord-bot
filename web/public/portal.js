@@ -896,50 +896,147 @@ async function refreshTreasury() {
   }
 }
 
-// ==================== INTEGRATED ADMIN: USER MANAGEMENT ====================
-function showAdminUsers() {
-  if (!isAdmin) {
-    showError('Admin access required.');
-    return;
-  }
-
-  switchSection('admin');
-  const card = document.getElementById('adminUsersCard');
-  const toolCard = document.getElementById('adminToolCard');
-  if (toolCard) toolCard.style.display = 'none';
-  if (card) card.style.display = 'block';
-  loadAdminUsers();
-
-  setTimeout(() => {
-    card?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, 100);
+// ==================== INTEGRATED ADMIN WORKSPACE ====================
+function hideAllAdminCards() {
+  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminAnalyticsCard', 'adminHelpCard']
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
 }
 
-function openAdminTool(path, title = 'Admin Tool') {
+function showAdminView(view) {
   if (!isAdmin) {
     showError('Admin access required.');
     return;
   }
 
   switchSection('admin');
-  const card = document.getElementById('adminToolCard');
-  const usersCard = document.getElementById('adminUsersCard');
-  const frame = document.getElementById('adminToolFrame');
-  const titleEl = document.getElementById('adminToolTitle');
+  hideAllAdminCards();
 
-  if (usersCard) usersCard.style.display = 'none';
-  if (titleEl) titleEl.textContent = `🧩 ${title}`;
-  if (frame) frame.src = path;
+  const map = {
+    users: { card: 'adminUsersCard', load: loadAdminUsers },
+    proposals: { card: 'adminProposalsCard', load: loadAdminProposals },
+    settings: { card: 'adminSettingsCard', load: loadAdminSettingsView },
+    analytics: { card: 'adminAnalyticsCard', load: loadAdminAnalyticsView },
+    help: { card: 'adminHelpCard', load: loadAdminHelpView }
+  };
+
+  const target = map[view] || map.users;
+  const card = document.getElementById(target.card);
   if (card) card.style.display = 'block';
+  if (typeof target.load === 'function') target.load();
 
   setTimeout(() => card?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
 }
 
-function closeAdminTool() {
-  const card = document.getElementById('adminToolCard');
-  const frame = document.getElementById('adminToolFrame');
-  if (frame) frame.src = 'about:blank';
-  if (card) card.style.display = 'none';
+function showAdminUsers() {
+  showAdminView('users');
+}
+
+async function loadAdminHelpView() {
+  if (!isAdmin) return;
+  const content = document.getElementById('adminHelpContent');
+  if (!content) return;
+
+  content.innerHTML = `
+    <div style="display:grid; gap: var(--space-3);">
+      <div><strong>Verification Admin</strong>: /verification admin panel, export-user, remove-user, export-wallets, role-config, actions, og-view, og-enable, og-role, og-limit, og-sync, activity-watch-add/remove/list, activity-feed, activity-alerts</div>
+      <div><strong>Governance Admin</strong>: /governance admin list, cancel, settings</div>
+      <div><strong>Treasury Admin</strong>: /treasury admin status, refresh, enable/disable, set-wallet, set-interval, tx-history, tx-alerts</div>
+      <div><strong>Battle Admin</strong>: /battle admin list, force-end, settings</div>
+      <div style="color: var(--text-secondary);">For complete reference open standalone admin help.</div>
+    </div>
+  `;
+}
+
+async function loadAdminProposals() {
+  if (!isAdmin) return;
+  const content = document.getElementById('adminProposalsContent');
+  if (!content) return;
+
+  content.innerHTML = `<div style="text-align:center; padding: var(--space-5); color: var(--text-secondary);"><div class="spinner"></div><p>Loading proposals...</p></div>`;
+
+  try {
+    const response = await fetch('/api/admin/proposals');
+    const data = await response.json();
+    if (!data.success) throw new Error(data.message || 'Failed to load proposals');
+
+    const proposals = data.proposals || [];
+    if (!proposals.length) {
+      content.innerHTML = `<div class="empty-state"><div class="empty-state-title">No proposals found</div></div>`;
+      return;
+    }
+
+    content.innerHTML = `<div style="display:grid; gap:12px;">${proposals.slice(0, 50).map(p => `
+      <div style="padding:12px; border:1px solid var(--border-color); border-radius:10px; background: var(--bg-tertiary);">
+        <div style="display:flex; justify-content:space-between; gap:12px;">
+          <strong>${escapeHtml(p.title || 'Untitled')}</strong>
+          <span class="status-badge status-${escapeHtml(p.status || 'draft')}">${escapeHtml(p.status || 'draft')}</span>
+        </div>
+        <div style="color:var(--text-secondary); font-size:0.9em; margin-top:6px;">ID: ${escapeHtml(p.proposal_id || '')} • Creator: ${escapeHtml(p.creator_id || '')}</div>
+      </div>
+    `).join('')}</div>`;
+  } catch (e) {
+    content.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+async function loadAdminSettingsView() {
+  if (!isAdmin) return;
+  const content = document.getElementById('adminSettingsContent');
+  if (!content) return;
+
+  content.innerHTML = `<div style="text-align:center; padding: var(--space-5); color: var(--text-secondary);"><div class="spinner"></div><p>Loading settings...</p></div>`;
+
+  try {
+    const response = await fetch('/api/admin/settings');
+    const data = await response.json();
+    if (!data.success) throw new Error(data.message || 'Failed to load settings');
+
+    const s = data.settings || {};
+    content.innerHTML = `
+      <div style="display:grid; gap:12px; grid-template-columns: repeat(auto-fit,minmax(220px,1fr));">
+        <div class="stat-card"><div class="stat-label">Support Threshold</div><div class="stat-value">${s.supportThreshold ?? '—'}</div></div>
+        <div class="stat-card"><div class="stat-label">Voting Days</div><div class="stat-value">${s.votingDays ?? '—'}</div></div>
+        <div class="stat-card"><div class="stat-label">Quorum %</div><div class="stat-value">${s.quorumPercent ?? '—'}</div></div>
+        <div class="stat-card"><div class="stat-label">Heist Enabled</div><div class="stat-value">${s.heistEnabled ? '✅' : '❌'}</div></div>
+      </div>
+      <div style="margin-top:10px; color: var(--text-secondary);">Edit settings via Discord commands or full admin panel when needed.</div>
+    `;
+  } catch (e) {
+    content.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+async function loadAdminAnalyticsView() {
+  if (!isAdmin) return;
+  const content = document.getElementById('adminAnalyticsContent');
+  if (!content) return;
+
+  try {
+    const [usersRes, proposalsRes] = await Promise.all([
+      fetch('/api/admin/users'),
+      fetch('/api/admin/proposals')
+    ]);
+    const usersData = await usersRes.json();
+    const proposalsData = await proposalsRes.json();
+
+    const users = usersData.users || [];
+    const proposals = proposalsData.proposals || [];
+    const active = proposals.filter(p => ['supporting','voting'].includes((p.status || '').toLowerCase())).length;
+
+    content.innerHTML = `
+      <div style="display:grid; gap:12px; grid-template-columns: repeat(auto-fit,minmax(220px,1fr));">
+        <div class="stat-card"><div class="stat-label">Total Users</div><div class="stat-value">${users.length}</div></div>
+        <div class="stat-card"><div class="stat-label">Total Proposals</div><div class="stat-value">${proposals.length}</div></div>
+        <div class="stat-card"><div class="stat-label">Active Proposals</div><div class="stat-value">${active}</div></div>
+      </div>
+      <div style="margin-top:10px; color: var(--text-secondary);">Light analytics inside portal. Deep analytics remain available in advanced tooling.</div>
+    `;
+  } catch (e) {
+    content.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;
+  }
 }
 
 async function loadAdminUsers() {

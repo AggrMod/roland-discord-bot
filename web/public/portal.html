@@ -15,6 +15,12 @@
         <button class="mobile-menu-btn" onclick="toggleMobileMenu()" aria-label="Open menu">☰</button>
         <h1>🎩 Solpranos</h1>
       </div>
+      <div class="top-links" aria-label="Top links">
+        <button class="top-link" onclick="switchSection('dashboard')">Home</button>
+        <button class="top-link" onclick="switchSection('dashboard')">Dashboard</button>
+        <button class="top-link" onclick="switchSection('help')">Docs</button>
+        <button class="top-link" onclick="switchSection('admin')">Settings</button>
+      </div>
       <div class="nav-user">
         <img id="navAvatar" class="nav-avatar" src="" alt="User avatar" style="display:none;">
         <span id="navUsername" class="nav-username"></span>
@@ -587,9 +593,9 @@
           <div class="card">
             <div class="card-header">
               <h3>Admin Dashboard</h3>
-              <button class="btn-primary" onclick="openAdminTool('/admin-panel', 'Full Admin Panel')">
+              <button class="btn-primary" onclick="showAdminView('settings')">
                 <span>⚙️</span>
-                <span>Open Full Admin Panel</span>
+                <span>Open Admin Workspace</span>
               </button>
             </div>
             <p style="color: var(--text-secondary); line-height: 1.7;">
@@ -600,7 +606,7 @@
           <div class="card">
             <div class="card-header">
               <h3>📘 Admin Command Guide</h3>
-              <button class="btn-secondary" onclick="openAdminTool('/admin-help.html', 'Admin Command Guide')">
+              <button class="btn-secondary" onclick="showAdminView('help')">
                 <span>📄</span>
                 <span>Open Admin Help</span>
               </button>
@@ -629,7 +635,7 @@
           <div class="card">
             <h3>Quick Actions</h3>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); margin-top: var(--space-4);">
-              <button class="btn-secondary" onclick="openAdminTool('/admin-panel#proposals', 'Manage Proposals')" style="justify-content: flex-start;">
+              <button class="btn-secondary" onclick="showAdminView('proposals')" style="justify-content: flex-start;">
                 <span>📜</span>
                 <span>Manage Proposals</span>
               </button>
@@ -637,11 +643,11 @@
                 <span>👥</span>
                 <span>User Management</span>
               </button>
-              <button class="btn-secondary" onclick="openAdminTool('/admin-panel#settings', 'System Settings')" style="justify-content: flex-start;">
+              <button class="btn-secondary" onclick="showAdminView('settings')" style="justify-content: flex-start;">
                 <span>⚙️</span>
                 <span>System Settings</span>
               </button>
-              <button class="btn-secondary" onclick="openAdminTool('/admin-panel#analytics', 'Analytics')" style="justify-content: flex-start;">
+              <button class="btn-secondary" onclick="showAdminView('analytics')" style="justify-content: flex-start;">
                 <span>📊</span>
                 <span>Analytics</span>
               </button>
@@ -661,14 +667,36 @@
             </div>
           </div>
 
-          <div class="card" id="adminToolCard" style="display:none;">
+          <div class="card" id="adminProposalsCard" style="display:none;">
             <div class="card-header">
-              <h3 id="adminToolTitle">🧩 Admin Tool</h3>
-              <button class="btn-secondary" onclick="closeAdminTool()">Close</button>
+              <h3>📜 Proposal Management (Integrated)</h3>
+              <button class="btn-secondary" onclick="loadAdminProposals()">Refresh</button>
             </div>
-            <div style="margin-top: var(--space-4); border: 1px solid var(--border-color); border-radius: var(--radius-md); overflow: hidden; background: #0b0f1a;">
-              <iframe id="adminToolFrame" src="about:blank" style="width:100%; min-height: 900px; border:0;"></iframe>
+            <div id="adminProposalsContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>Manage Proposals</strong> to load data.</div>
+          </div>
+
+          <div class="card" id="adminSettingsCard" style="display:none;">
+            <div class="card-header">
+              <h3>⚙️ System Settings (Integrated)</h3>
+              <button class="btn-secondary" onclick="loadAdminSettingsView()">Refresh</button>
             </div>
+            <div id="adminSettingsContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>System Settings</strong> to load data.</div>
+          </div>
+
+          <div class="card" id="adminAnalyticsCard" style="display:none;">
+            <div class="card-header">
+              <h3>📊 Analytics (Integrated)</h3>
+              <button class="btn-secondary" onclick="loadAdminAnalyticsView()">Refresh</button>
+            </div>
+            <div id="adminAnalyticsContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>Analytics</strong> to load data.</div>
+          </div>
+
+          <div class="card" id="adminHelpCard" style="display:none;">
+            <div class="card-header">
+              <h3>📘 Admin Command Guide (Integrated)</h3>
+              <a class="btn-secondary" href="/admin-help.html" target="_blank" rel="noopener">Open standalone</a>
+            </div>
+            <div id="adminHelpContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>Admin Help</strong> to load guide.</div>
           </div>
         </section>
       </main>

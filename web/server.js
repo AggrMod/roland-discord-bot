@@ -78,12 +78,12 @@ class WebServer {
     });
 
     this.app.get('/verify', (req, res) => {
-      // If not logged in via Discord OAuth, redirect to login first
+      // Unified UI: send verification flow to portal wallets section
       if (!req.session.discordUser) {
-        req.session.returnTo = '/verify';
+        req.session.returnTo = '/?section=wallets';
         return res.redirect('/auth/discord/login');
       }
-      res.sendFile(path.join(__dirname, 'public', 'verify.html'));
+      return res.redirect('/?section=wallets');
     });
 
     this.app.get('/dashboard', (req, res) => {

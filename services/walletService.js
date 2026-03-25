@@ -21,14 +21,59 @@ class WalletService {
 
       const walletCount = db.prepare('SELECT COUNT(*) as count FROM wallets WHERE discord_id = ?').get(discordId).count;
       const isPrimary = walletCount === 0 ? 1 : 0;
+      const isFirstWallet = walletCount === 0;
 
       db.prepare('INSERT INTO wallets (discord_id, wallet_address, primary_wallet) VALUES (?, ?, ?)').run(discordId, walletAddress, isPrimary);
 
       logger.log(`Wallet ${walletAddress} linked to user ${discordId}`);
-      return { success: true, message: 'Wallet linked successfully' };
+      
+      // Trigger OG role assignment if this is first wallet
+      if (isFirstWallet) {
+        this.triggerOGRoleAssignment(discordId, username);
+      }
+      
+      return { success: true, message: 'Wallet linked successfully', isFirstWallet };
     } catch (error) {
       logger.error('Error linking wallet:', error);
       return { success: false, message: 'Failed to link wallet' };
+    }
+  }
+
+  async triggerOGRoleAssignment(discordId, username) {
+    try {
+      // Defer OG role assignment to avoid blocking verification
+      setImmediate(async () => {
+        try {
+          const ogRoleService = require('./ogRoleService');
+          const client = global.discordClient;
+          
+          if (!client) {
+            logger.warn('Discord client not available for OG role assignment');
+            return;
+          }
+
+          const guildId = process.env.GUILD_ID || process.env.DISCORD_GUILD_ID;
+          if (!guildId) {
+            logger.warn('GUILD_ID not configured for OG role assignment');
+            return;
+          }
+
+          const guild = await client.guilds.fetch(guildId).catch(() => null);
+          if (!guild) {
+            logger.warn('Could not fetch guild for OG role assignment');
+            return;
+          }
+
+          const result = await ogRoleService.assignOnVerification(guild, discordId, username);
+          if (result.assigned) {
+            logger.log(`✨ OG role auto-assigned to ${username} (${discordId})`);
+          }
+        } catch (error) {
+          logger.error('Error in OG role auto-assignment:', error);
+        }
+      });
+    } catch (error) {
+      logger.error('Error triggering OG role assignment:', error);
     }
   }
 

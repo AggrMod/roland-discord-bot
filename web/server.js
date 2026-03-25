@@ -606,6 +606,121 @@ class WebServer {
       }
     });
 
+    // ==================== OG ROLE API ====================
+
+    this.app.get('/api/admin/og-role/config', adminAuthMiddleware, async (req, res) => {
+      try {
+        const ogRoleService = require('../services/ogRoleService');
+        const guildId = process.env.GUILD_ID;
+        const guild = await this.client.guilds.fetch(guildId);
+        
+        const status = await ogRoleService.getStatus(guild);
+        res.json({ success: true, config: status });
+      } catch (error) {
+        logger.error('Error fetching OG role config:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.put('/api/admin/og-role/config', adminAuthMiddleware, (req, res) => {
+      try {
+        const ogRoleService = require('../services/ogRoleService');
+        const { enabled, roleId, limit } = req.body;
+        
+        let result = { success: true };
+        
+        if (enabled !== undefined) {
+          result = ogRoleService.setEnabled(enabled);
+          if (!result.success) return res.json(result);
+        }
+        
+        if (roleId !== undefined) {
+          result = ogRoleService.setRole(roleId);
+          if (!result.success) return res.json(result);
+        }
+        
+        if (limit !== undefined) {
+          result = ogRoleService.setLimit(limit);
+          if (!result.success) return res.json(result);
+        }
+        
+        res.json({ success: true, message: 'OG role config updated' });
+      } catch (error) {
+        logger.error('Error updating OG role config:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/og-role/sync', adminAuthMiddleware, async (req, res) => {
+      try {
+        const ogRoleService = require('../services/ogRoleService');
+        const { fullSync } = req.body;
+        const guildId = process.env.GUILD_ID;
+        const guild = await this.client.guilds.fetch(guildId);
+        
+        const result = await ogRoleService.syncRoles(guild, fullSync || false);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error syncing OG roles:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // ==================== ROLE CLAIM API ====================
+
+    this.app.get('/api/admin/role-claim/config', adminAuthMiddleware, async (req, res) => {
+      try {
+        const roleClaimService = require('../services/roleClaimService');
+        const guildId = process.env.GUILD_ID;
+        const guild = await this.client.guilds.fetch(guildId);
+        
+        const status = await roleClaimService.getRoleStatus(guild);
+        res.json(status);
+      } catch (error) {
+        logger.error('Error fetching role claim config:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/role-claim/add', adminAuthMiddleware, async (req, res) => {
+      try {
+        const roleClaimService = require('../services/roleClaimService');
+        const { roleId, label } = req.body;
+        
+        if (!roleId) {
+          return res.status(400).json({ success: false, message: 'roleId is required' });
+        }
+        
+        // Validate role first
+        const guildId = process.env.GUILD_ID;
+        const guild = await this.client.guilds.fetch(guildId);
+        const validation = await roleClaimService.validateRole(guild, roleId);
+        
+        if (!validation.valid) {
+          return res.json({ success: false, message: validation.message });
+        }
+        
+        const result = roleClaimService.addRole(roleId, label);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error adding claimable role:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.delete('/api/admin/role-claim/:roleId', adminAuthMiddleware, (req, res) => {
+      try {
+        const roleClaimService = require('../services/roleClaimService');
+        const { roleId } = req.params;
+        
+        const result = roleClaimService.removeRole(roleId);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error removing claimable role:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
     // ==================== TREASURY API ====================
 
     // Public treasury endpoint (no wallet address exposed)

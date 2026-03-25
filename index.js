@@ -174,6 +174,12 @@ client.on(Events.InteractionCreate, async interaction => {
       await handleMicroVerifyCopyAmount(interaction);
       return;
     }
+
+    // Role claim button handler
+    if (customId.startsWith('role_claim_')) {
+      await handleRoleClaimButton(interaction);
+      return;
+    }
   }
 });
 
@@ -437,6 +443,39 @@ async function handleMicroVerifyCopyAmount(interaction) {
     logger.error('Error handling micro-verify copy amount:', error);
     await interaction.reply({ 
       content: 'An error occurred.', 
+      ephemeral: true 
+    });
+  }
+}
+
+async function handleRoleClaimButton(interaction) {
+  const roleClaimService = require('./services/roleClaimService');
+  
+  try {
+    await interaction.deferReply({ ephemeral: true });
+
+    // Extract role ID from customId: role_claim_<roleId>
+    const roleId = interaction.customId.replace('role_claim_', '');
+    
+    const result = await roleClaimService.toggleRole(
+      interaction.guild,
+      interaction.member,
+      roleId
+    );
+
+    const embed = new EmbedBuilder()
+      .setColor(result.success ? (result.action === 'added' ? '#57F287' : '#FEE75C') : '#ED4245')
+      .setTitle(result.success ? (result.action === 'added' ? '✅ Role Added' : '➖ Role Removed') : '❌ Error')
+      .setDescription(result.message)
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [embed] });
+    
+    logger.log(`User ${interaction.user.tag} ${result.action || 'attempted'} role: ${roleId}`);
+  } catch (error) {
+    logger.error('Error handling role claim button:', error);
+    await interaction.editReply({ 
+      content: 'An error occurred while processing your request.', 
       ephemeral: true 
     });
   }

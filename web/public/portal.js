@@ -678,7 +678,8 @@ function confirmRemoveWallet(address) {
   showConfirmModal(
     'Remove Wallet',
     `Are you sure you want to remove wallet ${address.substring(0, 8)}...${address.substring(address.length - 8)}? This action cannot be undone.`,
-    () => removeWallet(address)
+    () => removeWallet(address),
+    'Remove Wallet'
   );
   
   // Update button text for this specific action
@@ -928,14 +929,19 @@ function toggleMobileMenu() {
 }
 
 // ==================== MODALS ====================
-function showConfirmModal(title, message, callback) {
+function showConfirmModal(title, message, callback, buttonText = 'Confirm') {
   const modal = document.getElementById('confirmModal');
   const modalTitle = document.getElementById('confirmTitle');
   const modalMessage = document.getElementById('confirmMessage');
+  const btn = document.getElementById('confirmButton');
   
   modalTitle.textContent = title;
   modalMessage.textContent = message;
   confirmCallback = callback;
+  
+  if (btn) {
+    btn.textContent = buttonText;
+  }
   
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
@@ -1019,7 +1025,7 @@ async function castVote(proposalId, choice) {
     } catch (e) {
       showError('Error casting vote: ' + e.message);
     }
-  });
+  }, 'Cast Vote');
 }
 
 // ==================== CREATE PROPOSAL ====================
@@ -1538,7 +1544,7 @@ function deleteTier(idx) {
     } catch (e) {
       showError('Error deleting tier: ' + e.message);
     }
-  });
+  }, 'Delete');
 }
 
 // ==================== TRAIT RULE CRUD ====================
@@ -1644,7 +1650,7 @@ function deleteTraitRule(idx) {
     } catch (e) {
       showError('Error deleting trait rule: ' + e.message);
     }
-  });
+  }, 'Delete');
 }
 
 function exportVerificationRoles() {
@@ -1922,7 +1928,7 @@ function confirmRemoveUser(discordId, username) {
     } catch (e) {
       showError('Error removing user: ' + e.message);
     }
-  });
+  }, 'Remove User');
 }
 
 // ==================== TREASURY TRACKER ====================
@@ -2219,7 +2225,7 @@ async function removeWatchedCollection(identifier) {
     } catch (e) {
       showError('Error: ' + e.message);
     }
-  });
+  }, 'Remove');
 }
 
 function openEditActivityAlertsModal() {

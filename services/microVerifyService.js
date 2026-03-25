@@ -141,7 +141,34 @@ class MicroVerifyService {
         return { success: false, message: 'Verification wallet not configured' };
       }
 
-      // Check rate limit
+      // Reuse existing pending request if still valid (better UX)
+      const pending = db.prepare(`
+        SELECT * FROM micro_verify_requests
+        WHERE discord_id = ? AND status = 'pending'
+        ORDER BY created_at DESC
+        LIMIT 1
+      `).get(discordId);
+
+      if (pending) {
+        if (new Date(pending.expires_at) > new Date()) {
+          return {
+            success: true,
+            reused: true,
+            request: {
+              id: pending.id,
+              amount: pending.expected_amount,
+              destinationWallet: pending.destination_wallet,
+              expiresAt: pending.expires_at,
+              ttlMinutes: config.ttlMinutes
+            }
+          };
+        }
+
+        // Expire stale pending request and continue creating a fresh one
+        this.expireRequest(pending.id);
+      }
+
+      // Check rate limit (after handling pending reuse)
       const rateLimitCheck = db.prepare(`
         SELECT COUNT(*) as count FROM micro_verify_requests 
         WHERE discord_id = ? 
@@ -152,19 +179,6 @@ class MicroVerifyService {
         return { 
           success: false, 
           message: `Please wait ${config.rateLimitMinutes} minutes before requesting another verification` 
-        };
-      }
-
-      // Check max pending
-      const pendingCheck = db.prepare(`
-        SELECT COUNT(*) as count FROM micro_verify_requests 
-        WHERE discord_id = ? AND status = ?
-      `).get(discordId, 'pending');
-
-      if (pendingCheck.count >= config.maxPendingPerUser) {
-        return { 
-          success: false, 
-          message: 'You already have a pending verification request. Please complete or wait for it to expire.' 
         };
       }
 

@@ -905,12 +905,41 @@ function showAdminUsers() {
 
   switchSection('admin');
   const card = document.getElementById('adminUsersCard');
+  const toolCard = document.getElementById('adminToolCard');
+  if (toolCard) toolCard.style.display = 'none';
   if (card) card.style.display = 'block';
   loadAdminUsers();
 
   setTimeout(() => {
     card?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, 100);
+}
+
+function openAdminTool(path, title = 'Admin Tool') {
+  if (!isAdmin) {
+    showError('Admin access required.');
+    return;
+  }
+
+  switchSection('admin');
+  const card = document.getElementById('adminToolCard');
+  const usersCard = document.getElementById('adminUsersCard');
+  const frame = document.getElementById('adminToolFrame');
+  const titleEl = document.getElementById('adminToolTitle');
+
+  if (usersCard) usersCard.style.display = 'none';
+  if (titleEl) titleEl.textContent = `🧩 ${title}`;
+  if (frame) frame.src = path;
+  if (card) card.style.display = 'block';
+
+  setTimeout(() => card?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+}
+
+function closeAdminTool() {
+  const card = document.getElementById('adminToolCard');
+  const frame = document.getElementById('adminToolFrame');
+  if (frame) frame.src = 'about:blank';
+  if (card) card.style.display = 'none';
 }
 
 async function loadAdminUsers() {

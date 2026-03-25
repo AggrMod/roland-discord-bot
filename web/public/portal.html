@@ -587,7 +587,7 @@
           <div class="card">
             <div class="card-header">
               <h3>Admin Dashboard</h3>
-              <button class="btn-primary" onclick="window.location.href='/admin-panel'">
+              <button class="btn-primary" onclick="openAdminTool('/admin-panel', 'Full Admin Panel')">
                 <span>⚙️</span>
                 <span>Open Full Admin Panel</span>
               </button>
@@ -600,7 +600,7 @@
           <div class="card">
             <div class="card-header">
               <h3>📘 Admin Command Guide</h3>
-              <button class="btn-secondary" onclick="window.open('/admin-help.html', '_blank')">
+              <button class="btn-secondary" onclick="openAdminTool('/admin-help.html', 'Admin Command Guide')">
                 <span>📄</span>
                 <span>Open Admin Help</span>
               </button>
@@ -629,7 +629,7 @@
           <div class="card">
             <h3>Quick Actions</h3>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); margin-top: var(--space-4);">
-              <button class="btn-secondary" onclick="window.location.href='/admin-panel#proposals'" style="justify-content: flex-start;">
+              <button class="btn-secondary" onclick="openAdminTool('/admin-panel#proposals', 'Manage Proposals')" style="justify-content: flex-start;">
                 <span>📜</span>
                 <span>Manage Proposals</span>
               </button>
@@ -637,11 +637,11 @@
                 <span>👥</span>
                 <span>User Management</span>
               </button>
-              <button class="btn-secondary" onclick="window.location.href='/admin-panel#settings'" style="justify-content: flex-start;">
+              <button class="btn-secondary" onclick="openAdminTool('/admin-panel#settings', 'System Settings')" style="justify-content: flex-start;">
                 <span>⚙️</span>
                 <span>System Settings</span>
               </button>
-              <button class="btn-secondary" onclick="window.location.href='/admin-panel#analytics'" style="justify-content: flex-start;">
+              <button class="btn-secondary" onclick="openAdminTool('/admin-panel#analytics', 'Analytics')" style="justify-content: flex-start;">
                 <span>📊</span>
                 <span>Analytics</span>
               </button>
@@ -658,6 +658,16 @@
             </div>
             <div id="adminUsersContent" style="margin-top: var(--space-4); color: var(--text-secondary);">
               Select <strong>User Management</strong> to load users.
+            </div>
+          </div>
+
+          <div class="card" id="adminToolCard" style="display:none;">
+            <div class="card-header">
+              <h3 id="adminToolTitle">🧩 Admin Tool</h3>
+              <button class="btn-secondary" onclick="closeAdminTool()">Close</button>
+            </div>
+            <div style="margin-top: var(--space-4); border: 1px solid var(--border-color); border-radius: var(--radius-md); overflow: hidden; background: #0b0f1a;">
+              <iframe id="adminToolFrame" src="about:blank" style="width:100%; min-height: 900px; border:0;"></iframe>
             </div>
           </div>
         </section>

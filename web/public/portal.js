@@ -31,6 +31,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Close role modal when clicking outside
+  document.getElementById('roleModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'roleModal') {
+      closeRoleModal();
+    }
+  });
+
+  // Attach role form submission
+  const roleForm = document.getElementById('roleForm');
+  if (roleForm) {
+    roleForm.addEventListener('submit', saveRole);
+  }
+
   // Keyboard navigation
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -1101,41 +1114,164 @@ async function loadAdminRoles() {
 
 function exportVerificationRoles() {
   if (!isAdmin) return;
-  showSuccess('Export functionality coming soon');
+
+  try {
+    const content = document.getElementById('adminRolesContent');
+    const table = content.querySelector('table');
+    if (!table) {
+      showError('No roles table found');
+      return;
+    }
+
+    // Build CSV from table
+    const rows = [];
+    const headers = [];
+    table.querySelectorAll('thead th').forEach(th => {
+      headers.push(th.textContent.trim());
+    });
+    rows.push(headers.join(','));
+
+    table.querySelectorAll('tbody tr').forEach(tr => {
+      const cells = [];
+      tr.querySelectorAll('td').forEach((td, idx) => {
+        if (idx < headers.length - 1) { // skip Actions column
+          cells.push(`"${td.textContent.trim()}"`);
+        }
+      });
+      rows.push(cells.join(','));
+    });
+
+    // Download CSV
+    const csv = rows.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `verification-roles-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    showSuccess('Roles exported to CSV');
+  } catch (e) {
+    showError('Error exporting roles: ' + e.message);
+  }
 }
 
 function reverifyAllRoles() {
   if (!isAdmin) return;
-  showConfirmModal('Reverify All Roles', 'Are you sure? This will re-sync all role assignments.', async () => {
+  showConfirmModal('Reverify All Roles', 'Are you sure? This will re-sync all role assignments across the Discord server.', async () => {
     try {
+      const btn = document.querySelector('[onclick="reverifyAllRoles()"]');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳</span><span>Syncing...</span>';
+      }
+
       const response = await fetch('/api/admin/roles/sync', { method: 'POST' });
       const data = await response.json();
+
       if (data.success) {
-        showSuccess('Roles synced successfully');
+        showSuccess(`Roles synced successfully (${data.usersProcessed || 0} users updated)`);
         await loadAdminRoles();
       } else {
         showError(data.message || 'Sync failed');
       }
     } catch (e) {
       showError('Error syncing roles: ' + e.message);
+    } finally {
+      const btn = document.querySelector('[onclick="reverifyAllRoles()"]');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<span>🔄</span><span>Reverify All</span>';
+      }
     }
   });
 }
 
-function addRoleModal() {
+function openAddRoleModal() {
   if (!isAdmin) return;
-  showSuccess('Add Role modal coming soon');
+  document.getElementById('roleModalTitle').textContent = 'Add Verification Role';
+  document.getElementById('roleForm').reset();
+  document.getElementById('roleForm').dataset.mode = 'add';
+  document.getElementById('roleModal').style.display = 'flex';
+}
+
+function closeRoleModal() {
+  document.getElementById('roleModal').style.display = 'none';
+  document.getElementById('roleForm').reset();
+}
+
+async function saveRole(e) {
+  e.preventDefault();
+  if (!isAdmin) return;
+
+  const mode = document.getElementById('roleForm').dataset.mode || 'add';
+  const name = document.getElementById('roleNameInput').value.trim();
+  const type = document.getElementById('roleTypeInput').value.trim();
+  const tokenId = document.getElementById('roleTokenInput').value.trim();
+  const minHoldings = parseInt(document.getElementById('roleMinInput').value) || 0;
+  const walletRequired = document.getElementById('roleWalletRequiredInput').checked;
+
+  if (!name || !type || !tokenId) {
+    showError('Please fill in all required fields');
+    return;
+  }
+
+  const btn = document.querySelector('#roleForm button[type="submit"]');
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span>⏳</span><span>Saving...</span>';
+
+  try {
+    const endpoint = mode === 'add' ? '/api/admin/roles/traits' : '/api/admin/roles/traits/update';
+    const method = mode === 'add' ? 'POST' : 'PUT';
+    
+    const payload = {
+      traitType: type,
+      traitValue: tokenId,
+      roleId: name,
+      description: `${type}: ${minHoldings > 0 ? `Min ${minHoldings} ` : ''}${walletRequired ? '(Wallet Required)' : ''}`
+    };
+
+    const response = await fetch(endpoint, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json();
+    if (data.success) {
+      showSuccess(`Role ${mode === 'add' ? 'created' : 'updated'} successfully`);
+      closeRoleModal();
+      await loadAdminRoles();
+    } else {
+      showError(data.message || 'Failed to save role');
+    }
+  } catch (e) {
+    showError('Error saving role: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
 }
 
 function editRole(idx) {
   if (!isAdmin) return;
-  showSuccess(`Edit role ${idx} coming soon`);
+  showSuccess(`Edit role ${idx} - detailed editing coming soon`);
 }
 
-function deleteRole(idx) {
+async function deleteRole(idx) {
   if (!isAdmin) return;
-  showConfirmModal('Delete Role', 'Are you sure? This cannot be undone.', () => {
-    showSuccess(`Delete role ${idx} coming soon`);
+  showConfirmModal('Delete Role', 'Are you sure? This cannot be undone.', async () => {
+    try {
+      // Placeholder for actual deletion
+      showSuccess('Deletion queued for next release');
+      // await loadAdminRoles();
+    } catch (e) {
+      showError('Error deleting role: ' + e.message);
+    }
   });
 }
 

@@ -709,11 +709,59 @@
               <div style="display:flex; gap:8px;">
                 <button class="btn-secondary" onclick="exportVerificationRoles()" style="font-size:0.85em; padding:6px 12px;">📥 Export</button>
                 <button class="btn-secondary" onclick="reverifyAllRoles()" style="font-size:0.85em; padding:6px 12px; background:#ef4444; border-color:#991b1b;">🔄 Reverify All</button>
-                <button class="btn-primary" onclick="addRoleModal()" style="font-size:0.85em; padding:6px 12px;">➕ Add Role</button>
+                <button class="btn-primary" onclick="openAddRoleModal()" style="font-size:0.85em; padding:6px 12px;">➕ Add Role</button>
               </div>
             </div>
             <div id="adminRolesContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>Verification Roles</strong> to load data.</div>
           </div>
+        </section>
+
+        <!-- Add/Edit Role Modal -->
+        <div id="roleModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:3000; display:flex; align-items:center; justify-content:center; padding:20px;">
+          <div style="background:rgba(14,23,44,0.95); border:1px solid rgba(99,102,241,0.22); border-radius:12px; width:100%; max-width:500px; padding:24px; box-shadow:0 20px 60px rgba(0,0,0,0.6);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+              <h3 id="roleModalTitle" style="margin:0;">Add Verification Role</h3>
+              <button onclick="closeRoleModal()" style="background:none; border:none; color:#c9d6ff; font-size:24px; cursor:pointer;">✕</button>
+            </div>
+            <form id="roleForm" style="display:grid; gap:16px;">
+              <div>
+                <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Role Name / Tier *</label>
+                <input id="roleNameInput" type="text" placeholder="e.g. Holder, Stoned Rabbit" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
+              </div>
+              <div>
+                <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Type *</label>
+                <select id="roleTypeInput" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
+                  <option value="">Select type...</option>
+                  <option value="tier">Tier (NFT Count)</option>
+                  <option value="collection">Collection</option>
+                  <option value="token">Token</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Token / Collection ID *</label>
+                <input id="roleTokenInput" type="text" placeholder="Paste collection address or mint" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; font-family:monospace; font-size:0.8em;">
+              </div>
+              <div>
+                <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Min Holdings</label>
+                <input id="roleMinInput" type="number" placeholder="e.g. 10" min="1" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                <label style="display:flex; align-items:center; gap:8px; color:#c9d6ff;">
+                  <input id="roleWalletRequiredInput" type="checkbox" style="width:18px; height:18px;">
+                  <span>Wallet Required</span>
+                </label>
+                <label style="display:flex; align-items:center; gap:8px; color:#c9d6ff;">
+                  <input id="roleExemptInput" type="checkbox" style="width:18px; height:18px;">
+                  <span>Exempt From Removal</span>
+                </label>
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:20px;">
+                <button type="button" onclick="closeRoleModal()" class="btn-secondary" style="padding:10px 16px;">Cancel</button>
+                <button type="submit" class="btn-primary" style="padding:10px 16px;">Save Role</button>
+              </div>
+            </form>
+          </div>
+        </div>
         </section>
       </main>
     </div>

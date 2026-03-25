@@ -1,6 +1,6 @@
 {
-  "enabled": false,
-  "roleId": null,
-  "limit": 100,
+  "enabled": true,
+  "roleId": "r1",
+  "limit": 1,
   "version": 1
 }

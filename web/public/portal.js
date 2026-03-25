@@ -74,7 +74,11 @@ function showWalletAddForm() {
           </h4>
           <p style="color:var(--text-secondary); font-size:0.9em; margin-bottom:12px; line-height:1.6;">Sign a message with your wallet to prove ownership. No transaction required.</p>
           <div style="display:grid; gap:12px;">
-            <input id="walletAddr1" type="text" placeholder="Enter your Solana wallet address" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.85em;">
+            <div>
+              <label style="color:#c9d6ff; font-size:0.85em; margin-bottom:6px; display:block;">Which wallet are you signing with?</label>
+              <input id="walletAddr1" type="text" placeholder="Enter your Solana wallet address" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.85em; width:100%;">
+              <p style="color:var(--text-secondary); font-size:0.8em; margin-top:6px;">You'll sign a message to verify ownership</p>
+            </div>
             <button onclick="verifyBySignature()" class="btn-primary" style="padding:10px 16px; width:100%;">✓ Sign & Verify</button>
           </div>
         </div>
@@ -87,7 +91,11 @@ function showWalletAddForm() {
           </h4>
           <p style="color:var(--text-secondary); font-size:0.9em; margin-bottom:12px; line-height:1.6;">Send a small SOL amount to prove ownership. Funds returned after verification.</p>
           <div style="display:grid; gap:12px;">
-            <input id="walletAddr2" type="text" placeholder="Enter your Solana wallet address" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.85em;">
+            <div>
+              <label style="color:#c9d6ff; font-size:0.85em; margin-bottom:6px; display:block;">Which wallet are you sending from?</label>
+              <input id="walletAddr2" type="text" placeholder="Enter your Solana wallet address" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.85em; width:100%;">
+              <p style="color:var(--text-secondary); font-size:0.8em; margin-top:6px;">Send a tiny amount of SOL from this wallet</p>
+            </div>
             <button onclick="verifyByMicroTx()" class="btn-primary" style="padding:10px 16px; width:100%;">💸 Send Verification</button>
           </div>
         </div>
@@ -615,6 +623,9 @@ function switchSection(sectionName) {
   // Load section-specific data
   if (sectionName === 'governance' && userData) {
     loadActiveVotes();
+  } else if (sectionName === 'treasury') {
+    loadTreasuryPublicView();
+    loadTreasuryTransactions();
   } else if (sectionName === 'heist' && userData && heistEnabled) {
     loadAvailableMissions();
   }
@@ -643,6 +654,73 @@ function toggleHelp(categoryId) {
         content.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }, 100);
     }
+  }
+}
+
+async function loadTreasuryPublicView() {
+  const content = document.getElementById('publicTreasuryView');
+  if (!content) return;
+  
+  content.innerHTML = `<div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading...</p></div>`;
+  
+  try {
+    const response = await fetch('/api/public/v1/treasury');
+    const data = await response.json();
+    
+    if (data.success) {
+      const t = data.treasury || {};
+      content.innerHTML = `
+        <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
+          <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
+            <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:8px;">SOL Balance</div>
+            <div style="font-size:2em; font-weight:700; color:#93c5fd;">${t.sol_balance?.toFixed(2) || '—'}</div>
+          </div>
+          <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
+            <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:8px;">USDC Balance</div>
+            <div style="font-size:2em; font-weight:700; color:#86efac;">${t.usdc_balance?.toFixed(2) || '—'}</div>
+          </div>
+          <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
+            <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:8px;">Last Updated</div>
+            <div style="font-size:1.1em; font-weight:600; color:#e0e7ff;">${t.last_updated ? new Date(t.last_updated).toLocaleString() : '—'}</div>
+          </div>
+        </div>
+      `;
+    } else {
+      content.innerHTML = `<div style="color:var(--text-secondary); text-align:center; padding:20px;">Treasury data unavailable</div>`;
+    }
+  } catch (e) {
+    content.innerHTML = `<div style="color:#ef4444; text-align:center; padding:20px;">Error loading treasury: ${e.message}</div>`;
+  }
+}
+
+async function loadTreasuryTransactions() {
+  const content = document.getElementById('publicTreasuryTransactions');
+  if (!content) return;
+  
+  try {
+    const response = await fetch('/api/public/v1/treasury/transactions?limit=10');
+    const data = await response.json();
+    
+    if (data.success && data.transactions?.length > 0) {
+      const rows = data.transactions.map(tx => `
+        <div style="padding:12px; border-bottom:1px solid rgba(99,102,241,0.15); display:flex; justify-content:space-between; align-items:center;">
+          <div style="flex:1;">
+            <div style="color:#e0e7ff; font-weight:600;">${tx.type === 'in' ? '➕ Incoming' : '➖ Outgoing'}</div>
+            <div style="color:var(--text-secondary); font-size:0.85em; font-family:monospace;">${tx.tx_hash?.slice(0, 16)}...</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="color:#e0e7ff; font-weight:600;">${tx.amount} ${tx.token}</div>
+            <div style="color:var(--text-secondary); font-size:0.85em;">${new Date(tx.timestamp).toLocaleDateString()}</div>
+          </div>
+        </div>
+      `).join('');
+      
+      content.innerHTML = `<div style="border:1px solid rgba(99,102,241,0.22); border-radius:10px; overflow:hidden;">${rows}</div>`;
+    } else {
+      content.innerHTML = `<div style="color:var(--text-secondary); text-align:center; padding:20px;">No transactions yet</div>`;
+    }
+  } catch (e) {
+    content.innerHTML = `<div style="color:#ef4444; text-align:center; padding:20px;">Error loading transactions</div>`;
   }
 }
 

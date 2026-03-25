@@ -335,6 +335,34 @@
           </div>
         </section>
 
+        <!-- Treasury Section -->
+        <section id="section-treasury" class="content-section">
+          <header class="section-header">
+            <h2>DAO Treasury</h2>
+            <p class="section-subtitle">Real-time treasury balances and transaction history</p>
+          </header>
+
+          <div class="card">
+            <div class="card-header">
+              <h3>💰 Treasury Status</h3>
+              <button class="btn-secondary" onclick="loadTreasuryPublicView()">
+                <span>🔄</span>
+                <span>Refresh</span>
+              </button>
+            </div>
+            <div id="publicTreasuryView" style="margin-top: var(--space-4); color: var(--text-secondary);">
+              <div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading treasury...</p></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Recent Transactions</h3>
+            <div id="publicTreasuryTransactions" style="margin-top: var(--space-4); color: var(--text-secondary);">
+              <div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading transactions...</p></div>
+            </div>
+          </div>
+        </section>
+
         <!-- Help Section -->
         <section id="section-help" class="content-section">
           <header class="section-header">

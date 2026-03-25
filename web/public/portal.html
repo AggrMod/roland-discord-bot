@@ -651,6 +651,10 @@
                 <span>📊</span>
                 <span>Analytics</span>
               </button>
+              <button class="btn-secondary" onclick="showAdminView('roles')" style="justify-content: flex-start;">
+                <span>👥</span>
+                <span>Verification Roles</span>
+              </button>
             </div>
           </div>
 
@@ -697,6 +701,18 @@
               <a class="btn-secondary" href="/admin-help.html" target="_blank" rel="noopener">Open standalone</a>
             </div>
             <div id="adminHelpContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>Admin Help</strong> to load guide.</div>
+          </div>
+
+          <div class="card" id="adminRolesCard" style="display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:var(--space-4);">
+              <h3 style="margin:0;">👥 Verification Roles</h3>
+              <div style="display:flex; gap:8px;">
+                <button class="btn-secondary" onclick="exportVerificationRoles()" style="font-size:0.85em; padding:6px 12px;">📥 Export</button>
+                <button class="btn-secondary" onclick="reverifyAllRoles()" style="font-size:0.85em; padding:6px 12px; background:#ef4444; border-color:#991b1b;">🔄 Reverify All</button>
+                <button class="btn-primary" onclick="addRoleModal()" style="font-size:0.85em; padding:6px 12px;">➕ Add Role</button>
+              </div>
+            </div>
+            <div id="adminRolesContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>Verification Roles</strong> to load data.</div>
           </div>
         </section>
       </main>

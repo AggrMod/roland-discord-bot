@@ -898,7 +898,7 @@ async function refreshTreasury() {
 
 // ==================== INTEGRATED ADMIN WORKSPACE ====================
 function hideAllAdminCards() {
-  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminAnalyticsCard', 'adminHelpCard']
+  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminAnalyticsCard', 'adminHelpCard', 'adminRolesCard']
     .forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
@@ -919,7 +919,8 @@ function showAdminView(view) {
     proposals: { card: 'adminProposalsCard', load: loadAdminProposals },
     settings: { card: 'adminSettingsCard', load: loadAdminSettingsView },
     analytics: { card: 'adminAnalyticsCard', load: loadAdminAnalyticsView },
-    help: { card: 'adminHelpCard', load: loadAdminHelpView }
+    help: { card: 'adminHelpCard', load: loadAdminHelpView },
+    roles: { card: 'adminRolesCard', load: loadAdminRoles }
   };
 
   const target = map[view] || map.users;
@@ -1037,6 +1038,105 @@ async function loadAdminAnalyticsView() {
   } catch (e) {
     content.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;
   }
+}
+
+async function loadAdminRoles() {
+  if (!isAdmin) return;
+  const content = document.getElementById('adminRolesContent');
+  if (!content) return;
+
+  content.innerHTML = `<div style="text-align:center; padding: var(--space-5); color: var(--text-secondary);"><div class="spinner"></div><p>Loading roles...</p></div>`;
+
+  try {
+    const response = await fetch('/api/admin/roles/config');
+    const data = await response.json();
+    if (!data.success) throw new Error(data.message || 'Failed to load roles');
+
+    const roles = data.roles || [];
+    if (!roles.length) {
+      content.innerHTML = `<div class="empty-state"><div class="empty-state-title">No verification roles configured</div></div>`;
+      return;
+    }
+
+    const rows = roles.map((role, idx) => `
+      <tr>
+        <td style="padding:12px; border-bottom:1px solid rgba(99,102,241,0.15); color:#e0e7ff; font-weight:600;">${escapeHtml(role.role_name || role.roleId || '')}</td>
+        <td style="padding:12px; border-bottom:1px solid rgba(99,102,241,0.15); color:#c7d2fe;"><span style="display:inline-block; background:rgba(168,85,247,0.18); border:1px solid rgba(168,85,247,0.35); border-radius:4px; padding:4px 8px; font-size:0.85em;">Solana</span></td>
+        <td style="padding:12px; border-bottom:1px solid rgba(99,102,241,0.15); color:#c7d2fe; font-family:monospace; font-size:0.85em;">${escapeHtml((role.collection_id || role.mint || 'N/A').slice(0, 12))}...</td>
+        <td style="padding:12px; border-bottom:1px solid rgba(99,102,241,0.15);"><span style="display:inline-block; background:rgba(59,130,246,0.18); border:1px solid rgba(59,130,246,0.35); border-radius:4px; padding:4px 8px; font-size:0.85em; color:#93c5fd;">${escapeHtml(role.type || 'Collection')}</span></td>
+        <td style="padding:12px; border-bottom:1px solid rgba(99,102,241,0.15); color:#c7d2fe; font-size:0.9em;">
+          ${role.wallet_required ? '<span style="color:#10b981;">✓ Wallet Required</span>' : ''}
+          ${role.min_holdings ? `<br/><span style="color:#fbbf24;">Min: ${role.min_holdings}</span>` : ''}
+          ${role.options ? `<br/><span style="color:#06b6d4;">${role.options}</span>` : ''}
+        </td>
+        <td style="padding:12px; border-bottom:1px solid rgba(99,102,241,0.15); text-align:right;">
+          <button class="btn-icon" onclick="editRole(${idx})" style="width:32px; height:32px; background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.35); border-radius:6px; cursor:pointer; color:#818cf8; font-size:0.9em;">✏️</button>
+          <button class="btn-icon" onclick="deleteRole(${idx})" style="width:32px; height:32px; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.35); border-radius:6px; cursor:pointer; color:#fca5a5; font-size:0.9em; margin-left:4px;">🗑️</button>
+        </td>
+      </tr>
+    `).join('');
+
+    content.innerHTML = `
+      <div style="overflow:auto; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.5);">
+        <table style="width:100%; border-collapse:collapse; font-size:0.9em;">
+          <thead>
+            <tr style="background:rgba(99,102,241,0.12); text-align:left;">
+              <th style="padding:12px; color:#c9d6ff; font-weight:600; border-bottom:1px solid rgba(99,102,241,0.22);">Role</th>
+              <th style="padding:12px; color:#c9d6ff; font-weight:600; border-bottom:1px solid rgba(99,102,241,0.22);">Chain</th>
+              <th style="padding:12px; color:#c9d6ff; font-weight:600; border-bottom:1px solid rgba(99,102,241,0.22);">Token / Identifier</th>
+              <th style="padding:12px; color:#c9d6ff; font-weight:600; border-bottom:1px solid rgba(99,102,241,0.22);">Type</th>
+              <th style="padding:12px; color:#c9d6ff; font-weight:600; border-bottom:1px solid rgba(99,102,241,0.22);">Options</th>
+              <th style="padding:12px; color:#c9d6ff; font-weight:600; border-bottom:1px solid rgba(99,102,241,0.22); text-align:right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div style="margin-top:12px; color:var(--text-secondary); font-size:0.9em;">Showing ${roles.length} role(s)</div>
+    `;
+  } catch (e) {
+    content.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+function exportVerificationRoles() {
+  if (!isAdmin) return;
+  showSuccess('Export functionality coming soon');
+}
+
+function reverifyAllRoles() {
+  if (!isAdmin) return;
+  showConfirmModal('Reverify All Roles', 'Are you sure? This will re-sync all role assignments.', async () => {
+    try {
+      const response = await fetch('/api/admin/roles/sync', { method: 'POST' });
+      const data = await response.json();
+      if (data.success) {
+        showSuccess('Roles synced successfully');
+        await loadAdminRoles();
+      } else {
+        showError(data.message || 'Sync failed');
+      }
+    } catch (e) {
+      showError('Error syncing roles: ' + e.message);
+    }
+  });
+}
+
+function addRoleModal() {
+  if (!isAdmin) return;
+  showSuccess('Add Role modal coming soon');
+}
+
+function editRole(idx) {
+  if (!isAdmin) return;
+  showSuccess(`Edit role ${idx} coming soon`);
+}
+
+function deleteRole(idx) {
+  if (!isAdmin) return;
+  showConfirmModal('Delete Role', 'Are you sure? This cannot be undone.', () => {
+    showSuccess(`Delete role ${idx} coming soon`);
+  });
 }
 
 async function loadAdminUsers() {

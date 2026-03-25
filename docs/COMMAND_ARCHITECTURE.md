@@ -277,42 +277,6 @@ Module toggles stored in: `config/module-toggles.json`
 
 ---
 
-## Legacy Command Handling
-
-### Backward Compatibility Strategy
-
-**Approach**: Minimal bridge with deprecation warnings
-
-For critical commands (`/verify`, `/propose`, `/vote`), we provide **alias commands** that:
-1. Show deprecation warning
-2. Redirect to new command
-3. Still execute the action
-
-**Example**:
-```
-User: /verify
-Bot: ⚠️ This command has been renamed to /verification status
-     Running /verification status...
-     [Normal output follows]
-```
-
-### Legacy Command List
-
-Commands with aliases:
-- `/verify` → `/verification status`
-- `/wallet-list` → `/verification wallets`
-- `/refresh-roles` → `/verification refresh`
-- `/propose` → `/governance propose`
-- `/support` → `/governance support`
-- `/vote` → `/governance vote`
-- `/treasury` (admin) → `/treasury admin [subcommand]`
-- `/battle` → unchanged (already module-first)
-- `/heist-*` → `/heist *`
-
-All other admin commands **removed** from top-level, must use module admin namespaces.
-
----
-
 ## Implementation Notes
 
 ### Guard Middleware
@@ -348,19 +312,9 @@ if (!isModuleEnabled('governance')) {
 - [ ] Restart bot process
 - [ ] Verify module toggles in `/config modules`
 - [ ] Test each module on/off behavior
-- [ ] Verify legacy aliases work
 - [ ] Check portal reflects module states
 - [ ] Test admin guards
 - [ ] Verify schedulers respect module state
-
----
-
-## Migration Timeline
-
-**Phase 1**: Deploy new command structure (✅ This refactor)
-**Phase 2**: Monitor legacy command usage (1 week)
-**Phase 3**: Remove aliases if usage < 5% (Sprint B)
-**Phase 4**: Full legacy command removal (Sprint C)
 
 ---
 

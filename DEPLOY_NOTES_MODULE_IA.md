@@ -227,15 +227,9 @@ If issues arise:
 
 ## Post-Deployment Monitoring
 
-### Week 1: Legacy Command Usage
+### Week 1: Command Migration Complete
 
-Monitor logs for legacy command usage:
-
-```bash
-grep "used legacy" logs/bot.log | wc -l
-```
-
-If usage < 5% by Sprint B → remove aliases.
+✅ **Legacy commands removed** - All backward compatibility aliases have been removed. Users must use the new module-first command structure.
 
 ### Module Health Check
 
@@ -261,11 +255,10 @@ All tests passing. No breaking changes to existing functionality.
 
 ## Next Steps (Sprint B)
 
-1. **Remove legacy aliases** if usage < 5%
-2. **Add in-app role config UI** (currently edit JSON)
-3. **Portal module integration** (hide disabled sections)
-4. **Advanced admin settings** (edit quorum, support threshold via commands)
-5. **Module analytics** (usage tracking per module)
+1. **Add in-app role config UI** (currently edit JSON)
+2. **Portal module integration** (hide disabled sections)
+3. **Advanced admin settings** (edit quorum, support threshold via commands)
+4. **Module analytics** (usage tracking per module)
 
 ---
 
@@ -296,10 +289,6 @@ All tests passing. No breaking changes to existing functionality.
 - `commands/battle/battle.js` (refactored)
 - `commands/heist/heist.js`
 - `commands/config/config.js`
-- `commands/legacy/verify.js`
-- `commands/legacy/propose.js`
-- `commands/legacy/support.js`
-- `commands/legacy/vote.js`
 - `docs/COMMAND_ARCHITECTURE.md`
 - `test-module-refactor.js`
 

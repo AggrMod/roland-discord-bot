@@ -58,53 +58,56 @@ Discord bot for the Solpranos NFT ecosystem featuring wallet verification, DAO g
 ## Commands
 
 ### Verification Commands
-- `/verify <wallet>` - Link your Solana wallet
-- `/wallet-list` - View linked wallets and NFT holdings
-- `/refresh-roles` - Update roles based on current NFT count
+- `/verification status` - View your verification status and linked wallets
+- `/verification wallets` - View linked wallets and NFT holdings
+- `/verification refresh` - Update roles based on current NFT count
+- `/verification quick` - Quick micro-verification
 
-### Admin: Verification Management (Family Style)
-Primary command interface for managing verification with Solpranos flair:
+### Admin Commands
 
-**Panel Creation:**
-- `/verification create` - Post a verification panel (with optional customization: title, description, color, footer, thumbnail, image)
+#### Verification Admin
+- `/verification admin panel` - Post verification panel
+- `/verification admin actions list` - Show all verification actions
+- `/verification admin actions add` - Add verification action
+- `/verification admin actions remove` - Remove verification action
+- `/verification admin export-user` - Export user verification data
+- `/verification admin remove-user` - Remove user from system
+- `/verification admin role-config` - Configure role assignments
+- `/verification admin og-config` - Configure OG roles
+- `/verification admin micro-config` - Configure micro-verification
+- `/verification admin export-wallets` - Export all wallets
 
-**Actions Management:**
-- `/verification actions list` - Show all verification actions and role assignments
-- `/verification actions addcollection role:<role> collection:<name> [amount:1] [traitname] [traitvalue]` - Assign role for NFT collection holders
-- `/verification actions addtoken role:<role> token:<name> [amount:1]` - Assign role for SPL token holders
-- `/verification actions remove role:<role> type:<collection/token/trait> [identifier]` - Remove verification action by role + context
+#### Governance Admin
+- `/governance admin settings` - Configure governance parameters
+- `/governance admin list` - View all proposals
+- `/governance admin cancel` - Cancel a proposal (emergency)
 
-**Member Management:**
-- `/verification exportuser user:<@user>` - Export a member's verification data
-- `/verification removeuser user:<@user> confirm:true` - Remove member from Family (cannot be undone)
+#### Treasury Admin
+- `/treasury admin status` - View treasury status
+- `/treasury admin refresh` - Manually refresh balances
+- `/treasury admin enable/disable` - Toggle monitoring
+- `/treasury admin set-wallet` - Set treasury wallet address
+- `/treasury admin set-interval` - Set refresh interval
 
-**Examples:**
-```
-/verification create title:"Join the Family" color:#8B0000
-/verification actions addcollection role:@Soldato collection:solpranos-main amount:3
-/verification actions addcollection role:@Hitman collection:solpranos-main traitname:Role traitvalue:The Hitman
-/verification actions addtoken role:@Whale token:$BRUNO amount:100000
-/verification actions remove role:@Soldato type:collection identifier:solpranos-main
-```
+#### Battle Admin
+- `/battle admin list` - List all active battles
+- `/battle admin force-end` - Force end a battle (emergency)
+- `/battle admin settings` - Configure battle parameters
 
-### Admin: Advanced Role Configuration (Power Users)
-Advanced interface for granular role mapping control:
-- `/role-config list` - View detailed role configuration with voting power
-- `/role-config add-tier/edit-tier/delete-tier` - Fine-tune NFT tier thresholds and voting power
-- `/role-config add-trait/edit-trait/delete-trait` - Manage trait-to-role mappings directly
-- `/role-config sync [user]` - Force role re-sync for one or all members
-
-💡 **Tip:** Most admins should use `/verification actions` for day-to-day management. Use `/role-config` only when you need advanced control over tier mechanics or voting power.
+#### System Config
+- `/config modules` - View module toggle states
+- `/config toggle` - Toggle module on/off
+- `/config status` - System status overview
 
 ### Governance Commands
-- `/propose <title> <description>` - Create a new proposal
-- `/support <proposal-id>` - Support a draft proposal
-- `/vote <proposal-id> <choice>` - Cast your vote (yes/no/abstain)
+- `/governance propose` - Create a new proposal
+- `/governance support` - Support a draft proposal
+- `/governance vote` - Cast your vote (yes/no/abstain)
 
-### Heist Commands
-- `/heist-view` - View available missions
-- `/heist-signup <mission-id>` - Sign up for a mission
-- `/heist-status` - View your active/completed missions
+### Heist Commands (toggleable, default: disabled)
+- `/heist view` - View available missions
+- `/heist signup` - Sign up for a mission
+- `/heist status` - View your active/completed missions
 
 ## Database Schema
 

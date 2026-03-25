@@ -563,7 +563,6 @@ module.exports = {
         { name: `📊 Tier Roles (${tiersConfigured}/${tiersTotal})`, value: tiersText, inline: false },
         { name: `🎨 Trait Roles (${traitsConfigured}/${traitsTotal})`, value: traitsText, inline: false }
       )
-      .setFooter({ text: 'Use legacy commands for advanced configuration (Sprint B)' })
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });

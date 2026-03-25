@@ -72,23 +72,14 @@ for (const cmd of newCommands) {
   }
 }
 
-// Test 4: Legacy aliases exist
-console.log('\n4. Checking legacy command aliases...');
-const legacyCommands = [
-  'commands/legacy/verify.js',
-  'commands/legacy/propose.js',
-  'commands/legacy/support.js',
-  'commands/legacy/vote.js'
-];
-
-for (const cmd of legacyCommands) {
-  const cmdPath = path.join(__dirname, cmd);
-  if (!fs.existsSync(cmdPath)) {
-    console.error(`  ❌ ${cmd} not found`);
-    errors++;
-  } else {
-    console.log(`  ✅ ${path.basename(cmd, '.js')} alias exists`);
-  }
+// Test 4: Legacy commands removed
+console.log('\n4. Verifying legacy commands removed...');
+const legacyPath = path.join(__dirname, 'commands/legacy');
+if (fs.existsSync(legacyPath)) {
+  console.error('  ❌ commands/legacy folder still exists (should be removed)');
+  errors++;
+} else {
+  console.log('  ✅ Legacy command aliases removed');
 }
 
 // Test 5: Old commands renamed

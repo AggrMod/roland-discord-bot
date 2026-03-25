@@ -201,14 +201,14 @@ class BattleService {
     this.SWORD_EMOJI = '⚔️';
   }
 
-  createLobby(channelId, messageId, creatorId, minPlayers = 2, maxPlayers = 999, requiredRoleId = null) {
+  createLobby(channelId, messageId, creatorId, minPlayers = 2, maxPlayers = 999, requiredRoleId = null, excludedRoleId = null) {
     const lobbyId = `battle_${Date.now()}_${creatorId}`;
     
     try {
       db.prepare(`
-        INSERT INTO battle_lobbies (lobby_id, channel_id, message_id, creator_id, min_players, max_players, required_role_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(lobbyId, channelId, messageId, creatorId, minPlayers, maxPlayers, requiredRoleId);
+        INSERT INTO battle_lobbies (lobby_id, channel_id, message_id, creator_id, min_players, max_players, required_role_id, excluded_role_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(lobbyId, channelId, messageId, creatorId, minPlayers, maxPlayers, requiredRoleId, excludedRoleId);
 
       logger.log(`Battle lobby created: ${lobbyId} by ${creatorId}`);
       return { success: true, lobbyId };
@@ -267,6 +267,15 @@ class BattleService {
             requiresRole: true 
           };
         }
+      }
+
+      // Check excluded role
+      if (lobby.excluded_role_id && userRoles.includes(lobby.excluded_role_id)) {
+        return {
+          success: false,
+          message: 'Your role is excluded from this battle',
+          blockedRole: true
+        };
       }
 
       const participants = this.getParticipants(lobbyId);
@@ -569,7 +578,7 @@ class BattleService {
     }
   }
 
-  buildLobbyEmbed(lobby, participants, requiredRole = null) {
+  buildLobbyEmbed(lobby, participants, requiredRole = null, excludedRole = null) {
     const maxPlayersText = (!lobby.max_players || lobby.max_players >= 999) 
       ? '∞' 
       : lobby.max_players;
@@ -583,6 +592,11 @@ class BattleService {
     if (lobby.required_role_id || requiredRole) {
       const roleName = requiredRole ? requiredRole.name : `<@&${lobby.required_role_id}>`;
       description += `\n**Required Role:** ${roleName}`;
+    }
+
+    if (lobby.excluded_role_id || excludedRole) {
+      const excludedName = excludedRole ? excludedRole.name : `<@&${lobby.excluded_role_id}>`;
+      description += `\n**Excluded Role:** ${excludedName}`;
     }
 
     const embed = new EmbedBuilder()

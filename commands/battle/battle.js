@@ -24,6 +24,11 @@ module.exports = {
           option
             .setName('required_role')
             .setDescription('Required role to join (optional)')
+            .setRequired(false))
+        .addRoleOption(option =>
+          option
+            .setName('excluded_role')
+            .setDescription('Role excluded from joining (optional)')
             .setRequired(false)))
     
     .addSubcommand(subcommand =>
@@ -147,6 +152,8 @@ module.exports = {
     const maxPlayers = interaction.options.getInteger('max_players') || 999;
     const requiredRole = interaction.options.getRole('required_role');
     const requiredRoleId = requiredRole ? requiredRole.id : null;
+    const excludedRole = interaction.options.getRole('excluded_role');
+    const excludedRoleId = excludedRole ? excludedRole.id : null;
 
     // Prevent multiple open lobbies by same creator in channel
     const existing = battleDb.prepare(
@@ -166,7 +173,8 @@ module.exports = {
       creatorId,
       2,
       maxPlayers,
-      requiredRoleId
+      requiredRoleId,
+      excludedRoleId
     );
 
     if (!createResult.success) {
@@ -176,7 +184,7 @@ module.exports = {
 
     const lobby = battleService.getLobby(createResult.lobbyId);
     const participants = battleService.getParticipants(createResult.lobbyId);
-    const lobbyEmbed = battleService.buildLobbyEmbed(lobby, participants, requiredRole);
+    const lobbyEmbed = battleService.buildLobbyEmbed(lobby, participants, requiredRole, excludedRole);
 
     await placeholder.edit({ content: '', embeds: [lobbyEmbed] });
     await placeholder.react(battleService.SWORD_EMOJI);

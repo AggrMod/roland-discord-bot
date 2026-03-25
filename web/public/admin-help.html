@@ -37,14 +37,14 @@
       <ul>
         <li><code>/treasury view</code> — Public-safe treasury snapshot.</li>
       </ul>
-      <p><strong>Admin:</strong> <code>/treasury admin status</code>, <code>refresh</code>, <code>enable</code>, <code>disable</code>, <code>set-wallet</code>, <code>set-interval</code>, <code>tx-history</code>.</p>
+      <p><strong>Admin:</strong> <code>/treasury admin status</code>, <code>refresh</code>, <code>enable</code>, <code>disable</code>, <code>set-wallet</code>, <code>set-interval</code>, <code>tx-history</code>, <code>tx-alerts</code>.</p>
     </section>
 
     <section class="card" style="padding:16px;margin:16px 0;">
       <h2>⚔️ Battle</h2>
       <ul>
-        <li><code>/battle create</code> — Create battle lobby with optional role gating and max players.</li>
-        <li><code>/battle start</code> — Start your open lobby (min players required).</li>
+        <li><code>/battle create</code> — Create battle lobby with optional role gating and max players. <strong>(Admins/Mods only)</strong></li>
+        <li><code>/battle start</code> — Start your open lobby (min players required). <strong>(Admins/Mods only)</strong></li>
         <li><code>/battle cancel</code> — Cancel your open lobby.</li>
         <li><code>/battle stats</code> — Show battle stats and leaderboards.</li>
       </ul>
@@ -55,6 +55,8 @@
         <li><strong>Excluded Roles (NONE):</strong> <code>excluded_role_1</code>, <code>excluded_role_2</code>, <code>excluded_role_3</code> — User <strong>cannot have any</strong> of these roles; they will be auto-removed if they react to join.</li>
       </ul>
       <p style="font-size:13px;color:#a0aac4;margin:8px 0;"><em>Example: Require @Member or @Supporter, exclude @Bot and @Muted:</em><br><code>/battle create max_players:10 required_role_1:@Member required_role_2:@Supporter excluded_role_1:@Bot excluded_role_2:@Muted</code></p>
+      <p style="font-size:13px;color:#a0aac4;margin:8px 0;"><strong>Channel Rule:</strong> only <strong>one active battle per channel</strong> at a time (open or in-progress).</p>
+      <p style="font-size:13px;color:#a0aac4;margin:8px 0;"><strong>Closure Behavior:</strong> cancel/force-end updates the original lobby message and removes reactions so the battle is clearly closed.</p>
       <p><strong>Admin:</strong> <code>/battle admin list</code>, <code>force-end</code>, <code>settings</code>.</p>
     </section>
 

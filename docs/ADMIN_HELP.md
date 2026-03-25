@@ -17,14 +17,14 @@ This file mirrors the current module-first command set.
 
 ## Treasury
 - `/treasury view`
-- Admin: `/treasury admin status|refresh|enable|disable|set-wallet|set-interval|tx-history`
+- Admin: `/treasury admin status|refresh|enable|disable|set-wallet|set-interval|tx-history|tx-alerts`
 
 ## Battle
 
 ### Commands
-- `/battle create` — Create battle lobby (optional: role gating, max players)
-- `/battle start` — Start your open lobby (requires min players)
-- `/battle cancel` — Cancel your open lobby
+- `/battle create` — Create battle lobby (optional: role gating, max players) **[Admins/Mods only]**
+- `/battle start` — Start your open lobby (requires min players) **[Admins/Mods only]**
+- `/battle cancel` — Cancel your open lobby (updates lobby message + removes reactions)
 - `/battle stats` — Show battle stats and leaderboards
 - Admin: `/battle admin list|force-end|settings`
 
@@ -47,6 +47,15 @@ When creating a lobby, you can gate participation:
 ```
 
 Users with @Member OR @Supporter can join, but NOT @Bot or @Muted holders.
+
+**Channel Rule:**
+- Only one active battle per channel at a time (`open` or `in_progress`).
+
+**Elite Four Mode (Auto):**
+- Activates when 4 players remain
+- All 4 reset to 100 HP
+- Lucky escapes/revivals disabled
+- Increased combat intensity + narrative drama
 
 ## Heist
 - `/heist view|signup|status`

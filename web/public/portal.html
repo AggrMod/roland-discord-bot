@@ -466,13 +466,14 @@
               <h3>⚔️ Battle Lobbies</h3>
               <div class="help-section">
                 <h4>Creating a Battle Lobby</h4>
-                <p>Use the command: <code>/battle create</code></p>
+                <p>Use the command: <code>/battle create</code> <strong>(Admins/Moderators only)</strong></p>
                 <p><strong>Optional Parameters:</strong></p>
                 <ul>
                   <li><code>max_players</code> — Maximum number of participants (default: 999)</li>
                   <li><code>required_role_1/2/3</code> — Require at least ONE of these roles to join</li>
                   <li><code>excluded_role_1/2/3</code> — Block users with ANY of these roles</li>
                 </ul>
+                <p><strong>Channel Rule:</strong> only one active battle per channel at a time.</p>
               </div>
               <div class="help-section">
                 <h4>Role Gating Explained</h4>
@@ -490,15 +491,24 @@
                   <li>React with ⚔️ to a battle lobby message to join</li>
                   <li>If you meet role requirements, you're added to the participant list</li>
                   <li>If you don't meet requirements, your reaction is removed and you'll receive a DM explaining why</li>
-                  <li>Battle creator can start the lobby once minimum players are reached</li>
+                  <li>An admin/mod starts the lobby with <code>/battle start</code> once minimum players are reached</li>
                 </ol>
               </div>
               <div class="help-section">
                 <h4>Battle Commands</h4>
                 <ul>
-                  <li><code>/battle start</code> — Start your open lobby (requires minimum players)</li>
-                  <li><code>/battle cancel</code> — Cancel your open lobby</li>
+                  <li><code>/battle start</code> — Start your open lobby (requires minimum players, Admin/Mod only)</li>
+                  <li><code>/battle cancel</code> — Cancel your open lobby (closes lobby message and removes reactions)</li>
                   <li><code>/battle stats</code> — View battle statistics and leaderboards</li>
+                </ul>
+              </div>
+              <div class="help-section">
+                <h4>Elite Four Phase</h4>
+                <ul>
+                  <li>Automatically triggers when 4 fighters remain</li>
+                  <li>All remaining fighters reset to 100 HP</li>
+                  <li>No lucky escapes / revivals</li>
+                  <li>Higher combat intensity and dramatic narration</li>
                 </ul>
               </div>
             </div>

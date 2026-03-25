@@ -14,6 +14,7 @@ const proposalService = require('../services/proposalService');
 const missionService = require('../services/missionService');
 const treasuryService = require('../services/treasuryService');
 const microVerifyService = require('../services/microVerifyService');
+const nftActivityService = require('../services/nftActivityService');
 
 class WebServer {
   constructor() {
@@ -1259,6 +1260,32 @@ class WebServer {
       } catch (error) {
         logger.error('Error getting micro-verify config:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // ==================== NFT ACTIVITY WEBHOOK (optional external source) ====================
+
+    this.app.post('/api/webhooks/nft-activity', (req, res) => {
+      try {
+        const configuredSecret = process.env.NFT_ACTIVITY_WEBHOOK_SECRET;
+        if (configuredSecret) {
+          const provided = req.headers['x-webhook-secret'];
+          if (provided !== configuredSecret) {
+            return res.status(401).json({ success: false, message: 'Unauthorized' });
+          }
+        }
+
+        const event = req.body || {};
+        const result = nftActivityService.ingestEvent(event, 'webhook');
+
+        if (!result.success && !result.ignored) {
+          return res.status(400).json({ success: false, message: result.message || 'Invalid event' });
+        }
+
+        return res.json({ success: true, ignored: !!result.ignored });
+      } catch (error) {
+        logger.error('Error in nft activity webhook:', error);
+        return res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });
 

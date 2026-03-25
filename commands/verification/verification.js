@@ -5,6 +5,7 @@ const nftService = require('../../services/nftService');
 const vpService = require('../../services/vpService');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
+const nftActivityService = require('../../services/nftActivityService');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -146,7 +147,44 @@ module.exports = {
               option
                 .setName('full')
                 .setDescription('Full sync (also removes from ineligible users)')
-                .setRequired(false)))),
+                .setRequired(false)))
+
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('activity-watch-add')
+            .setDescription('Add NFT collection key to activity watchlist')
+            .addStringOption(option =>
+              option
+                .setName('collection')
+                .setDescription('Collection key/slug/address')
+                .setRequired(true)))
+
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('activity-watch-remove')
+            .setDescription('Remove NFT collection key from activity watchlist')
+            .addStringOption(option =>
+              option
+                .setName('collection')
+                .setDescription('Collection key/slug/address')
+                .setRequired(true)))
+
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('activity-watch-list')
+            .setDescription('List NFT activity watched collections'))
+
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('activity-feed')
+            .setDescription('Show recent NFT activity feed')
+            .addIntegerOption(option =>
+              option
+                .setName('limit')
+                .setDescription('Number of events (1-30)')
+                .setRequired(false)
+                .setMinValue(1)
+                .setMaxValue(30)))),
 
   async execute(interaction) {
     // Check if verification module is enabled
@@ -197,6 +235,18 @@ module.exports = {
             break;
           case 'og-sync':
             await this.handleAdminOGSync(interaction);
+            break;
+          case 'activity-watch-add':
+            await this.handleAdminActivityWatchAdd(interaction);
+            break;
+          case 'activity-watch-remove':
+            await this.handleAdminActivityWatchRemove(interaction);
+            break;
+          case 'activity-watch-list':
+            await this.handleAdminActivityWatchList(interaction);
+            break;
+          case 'activity-feed':
+            await this.handleAdminActivityFeed(interaction);
             break;
         }
       } else {
@@ -770,5 +820,55 @@ module.exports = {
 
     await interaction.editReply({ content: null, embeds: [embed] });
     logger.log(`Admin ${interaction.user.tag} ran OG sync: +${result.added} -${result.removed} errors:${result.errors}`);
+  },
+
+  async handleAdminActivityWatchAdd(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    const collection = interaction.options.getString('collection');
+    const result = nftActivityService.addWatchedCollection(collection);
+    await interaction.editReply({ content: result.success ? `✅ Added watch: \`${collection}\`` : `❌ ${result.message}`, ephemeral: true });
+  },
+
+  async handleAdminActivityWatchRemove(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    const collection = interaction.options.getString('collection');
+    const result = nftActivityService.removeWatchedCollection(collection);
+    await interaction.editReply({ content: result.success ? `✅ Removed watch: \`${collection}\` (${result.removed || 0})` : `❌ ${result.message}`, ephemeral: true });
+  },
+
+  async handleAdminActivityWatchList(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    const watches = nftActivityService.listWatchedCollections();
+    if (!watches.length) return interaction.editReply({ content: 'No watched collections configured yet.', ephemeral: true });
+
+    const embed = new EmbedBuilder()
+      .setColor('#FFD700')
+      .setTitle('👁️ NFT Activity Watchlist')
+      .setDescription(watches.map((w, i) => `${i + 1}. \`${w.collection_key}\``).join('\n'))
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [embed], ephemeral: true });
+  },
+
+  async handleAdminActivityFeed(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    const limit = interaction.options.getInteger('limit') || 10;
+    const events = nftActivityService.listEvents(limit);
+    if (!events.length) return interaction.editReply({ content: 'No NFT activity events yet.', ephemeral: true });
+
+    const lines = events.slice(0, limit).map((e, i) => {
+      const t = e.event_time ? Math.floor(new Date(e.event_time).getTime() / 1000) : null;
+      const when = t ? `<t:${t}:R>` : 'unknown';
+      const price = e.price_sol !== null && e.price_sol !== undefined ? ` | ${e.price_sol} SOL` : '';
+      return `${i + 1}. **${e.event_type}** ${e.collection_key ? `(${e.collection_key})` : ''} ${e.token_name || ''}${price} • ${when}`;
+    }).join('\n');
+
+    const embed = new EmbedBuilder()
+      .setColor('#5865F2')
+      .setTitle('📡 NFT Activity Feed')
+      .setDescription(lines)
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [embed], ephemeral: true });
   }
 };

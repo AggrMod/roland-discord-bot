@@ -351,6 +351,18 @@ Returns recent SOL transaction history for treasury wallet (incoming/outgoing de
 curl "https://your-domain.com/api/public/v1/treasury/transactions?limit=20"
 ```
 
+#### Get NFT Activity Feed
+
+Returns recent NFT activity events for watched collections.
+
+**Endpoint:** `GET /nft/activity?limit=20`
+
+**Example Request:**
+
+```bash
+curl "https://your-domain.com/api/public/v1/nft/activity?limit=20"
+```
+
 ---
 
 ### Missions

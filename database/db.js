@@ -133,9 +133,34 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_votes_proposal ON votes(proposal_id);
     CREATE INDEX IF NOT EXISTS idx_missions_status ON missions(status);
     CREATE INDEX IF NOT EXISTS idx_mission_participants_mission ON mission_participants(mission_id);
+    CREATE TABLE IF NOT EXISTS nft_activity_watch (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      collection_key TEXT UNIQUE NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS nft_activity_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_type TEXT NOT NULL,
+      collection_key TEXT,
+      token_mint TEXT,
+      token_name TEXT,
+      from_wallet TEXT,
+      to_wallet TEXT,
+      price_sol REAL,
+      tx_signature TEXT,
+      source TEXT DEFAULT 'unknown',
+      event_time DATETIME,
+      raw_json TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE INDEX IF NOT EXISTS idx_micro_verify_discord_id ON micro_verify_requests(discord_id);
     CREATE INDEX IF NOT EXISTS idx_micro_verify_status ON micro_verify_requests(status);
     CREATE INDEX IF NOT EXISTS idx_micro_verify_amount ON micro_verify_requests(expected_amount);
+    CREATE INDEX IF NOT EXISTS idx_nft_activity_events_time ON nft_activity_events(event_time);
+    CREATE INDEX IF NOT EXISTS idx_nft_activity_events_collection ON nft_activity_events(collection_key);
+    CREATE INDEX IF NOT EXISTS idx_nft_activity_events_type ON nft_activity_events(event_type);
   `);
 
   logger.log('Database initialized successfully');

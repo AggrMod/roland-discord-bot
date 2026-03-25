@@ -9,6 +9,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../../database/db');
 const treasuryService = require('../../services/treasuryService');
+const nftActivityService = require('../../services/nftActivityService');
 const { success, error, sanitize, redactWallet } = require('../../utils/apiResponse');
 const { asyncHandler, notFoundError, validationError } = require('../../utils/apiErrorHandler');
 
@@ -241,6 +242,30 @@ router.get('/treasury/transactions', asyncHandler(async (req, res) => {
   }));
 
   res.json(success({ transactions: txs }, { count: txs.length }));
+}));
+
+/**
+ * GET /api/public/v1/nft/activity?limit=20
+ * Returns recent NFT activity events for watched collections
+ */
+router.get('/nft/activity', asyncHandler(async (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit || '20', 10), 1), 100);
+  const events = nftActivityService.listEvents(limit);
+
+  const sanitized = events.map(e => ({
+    eventType: e.event_type,
+    collectionKey: e.collection_key,
+    tokenName: e.token_name,
+    tokenMint: e.token_mint,
+    fromWallet: e.from_wallet ? redactWallet(e.from_wallet) : null,
+    toWallet: e.to_wallet ? redactWallet(e.to_wallet) : null,
+    priceSol: e.price_sol,
+    txSignature: e.tx_signature,
+    source: e.source,
+    eventTime: e.event_time || e.created_at
+  }));
+
+  res.json(success({ events: sanitized }, { count: sanitized.length }));
 }));
 
 // ==================== MISSIONS ENDPOINTS ====================

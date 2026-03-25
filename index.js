@@ -188,22 +188,74 @@ async function handlePanelVerifyButton(interaction) {
   try {
     await interaction.deferReply({ ephemeral: true });
 
+    const discordId = interaction.user.id;
+    const username = interaction.user.username;
     const webUrl = process.env.WEB_URL || 'http://localhost:3000';
+    const wallets = walletService.getLinkedWallets(discordId);
 
+    // If no wallets linked, send to portal
+    if (!wallets || wallets.length === 0) {
+      const embed = new EmbedBuilder()
+        .setColor('#FFD700')
+        .setTitle('🔗 Verification Portal')
+        .setDescription('No wallet linked yet. Connect your wallet to join the Family, then we\'ll sync your holdings automatically.')
+        .addFields(
+          { name: 'Next Steps', value: '1) Open portal\n2) Connect/sign\n3) Click Verify again', inline: false }
+        )
+        .setTimestamp();
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setLabel('Open Verify Portal')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`${webUrl}/verify`),
+        new ButtonBuilder()
+          .setLabel('Add Wallet')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`${webUrl}/verify?action=add`)
+      );
+
+      await interaction.editReply({ embeds: [embed], components: [row], ephemeral: true });
+      return;
+    }
+
+    // Wallet exists: verify holdings now
+    const updateResult = await roleService.updateUserRoles(discordId, username);
+
+    if (!updateResult.success) {
+      return interaction.editReply({
+        content: `❌ Could not verify holdings right now: ${updateResult.message || 'unknown error'}. Try again in a moment.`
+      });
+    }
+
+    // Sync Discord roles best-effort
+    let roleSyncText = 'Role sync skipped';
+    if (interaction.guild) {
+      const syncResult = await roleService.syncUserDiscordRoles(interaction.guild, discordId);
+      roleSyncText = syncResult.success
+        ? `+${syncResult.totalAdded || 0} / -${syncResult.totalRemoved || 0}`
+        : 'Role sync partial';
+    }
+
+    const tierText = updateResult.tier || 'Associate';
     const embed = new EmbedBuilder()
-      .setColor('#FFD700')
-      .setTitle('🔗 Verification Portal')
-      .setDescription('Click below to verify or add wallets. Then run `/verification status` to confirm your role/holdings sync.')
+      .setColor('#57F287')
+      .setTitle('✅ Holdings Verified')
+      .setDescription('Your linked wallet(s) were detected and your holdings were refreshed.')
       .addFields(
-        { name: 'Next Steps', value: '1) Open portal\n2) Connect/sign\n3) Return and run `/verification status`', inline: false }
+        { name: 'Linked Wallets', value: `${wallets.length}`, inline: true },
+        { name: 'NFTs', value: `${updateResult.totalNFTs || 0}`, inline: true },
+        { name: 'Tier', value: `${tierText}`, inline: true },
+        { name: 'Voting Power', value: `${updateResult.votingPower || 0}`, inline: true },
+        { name: 'Discord Role Sync', value: roleSyncText, inline: true }
       )
       .setTimestamp();
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setLabel('Open Verify Portal')
+        .setLabel('Add Wallet')
         .setStyle(ButtonStyle.Link)
-        .setURL(`${webUrl}/verify`)
+        .setURL(`${webUrl}/verify?action=add`)
     );
 
     await interaction.editReply({ embeds: [embed], components: [row], ephemeral: true });

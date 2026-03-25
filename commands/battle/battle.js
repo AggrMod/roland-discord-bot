@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const battleService = require('../../services/battleService');
+const battleDb = require('../../database/battleDb');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
 
@@ -143,99 +144,153 @@ module.exports = {
 
     const creatorId = interaction.user.id;
     const channelId = interaction.channelId;
-    const maxPlayers = interaction.options.getInteger('max_players') || null;
+    const maxPlayers = interaction.options.getInteger('max_players') || 999;
     const requiredRole = interaction.options.getRole('required_role');
     const requiredRoleId = requiredRole ? requiredRole.id : null;
 
-    // Delegate to battleService (existing logic preserved)
-    const result = battleService.createBattle(creatorId, channelId, maxPlayers, requiredRoleId);
+    // Prevent multiple open lobbies by same creator in channel
+    const existing = battleDb.prepare(
+      'SELECT * FROM battle_lobbies WHERE channel_id = ? AND creator_id = ? AND status = ? ORDER BY created_at DESC LIMIT 1'
+    ).get(channelId, creatorId, 'open');
 
-    if (!result.success) {
-      return interaction.editReply({ 
-        content: `❌ ${result.message}`,
-        ephemeral: true 
-      });
+    if (existing) {
+      return interaction.editReply({ content: '❌ You already have an open battle lobby in this channel. Start or cancel it first.', ephemeral: true });
     }
 
-    const embed = new EmbedBuilder()
-      .setColor('#FFD700')
-      .setTitle('⚔️ Battle Lobby Created')
-      .setDescription('A new battle lobby has been created! Players can join now.')
-      .addFields(
-        { name: '🆔 Battle ID', value: result.battleId, inline: true },
-        { name: '👤 Creator', value: interaction.user.username, inline: true },
-        { name: '👥 Players', value: '1' + (maxPlayers ? `/${maxPlayers}` : ''), inline: true }
-      )
-      .setFooter({ text: 'Click Join to participate!' })
-      .setTimestamp();
+    // Create temporary message first to get messageId
+    const placeholder = await interaction.channel.send({ content: '⚔️ Setting up battle lobby...' });
 
-    await interaction.editReply({ embeds: [embed] });
-    logger.log(`User ${interaction.user.username} created battle ${result.battleId}`);
+    const createResult = battleService.createLobby(
+      channelId,
+      placeholder.id,
+      creatorId,
+      2,
+      maxPlayers,
+      requiredRoleId
+    );
+
+    if (!createResult.success) {
+      await placeholder.delete().catch(() => {});
+      return interaction.editReply({ content: `❌ ${createResult.message}`, ephemeral: true });
+    }
+
+    const lobby = battleService.getLobby(createResult.lobbyId);
+    const participants = battleService.getParticipants(createResult.lobbyId);
+    const lobbyEmbed = battleService.buildLobbyEmbed(lobby, participants, requiredRole);
+
+    await placeholder.edit({ content: '', embeds: [lobbyEmbed] });
+    await placeholder.react(battleService.SWORD_EMOJI);
+
+    await interaction.editReply({
+      content: `✅ Battle lobby created! Players can join by reacting ${battleService.SWORD_EMOJI} on the lobby message.`
+    });
+
+    logger.log(`User ${interaction.user.username} created battle lobby ${createResult.lobbyId}`);
   },
 
   async handleStart(interaction) {
     await interaction.deferReply();
 
     const userId = interaction.user.id;
-    const result = battleService.startBattle(userId);
+    const channelId = interaction.channelId;
 
-    if (!result.success) {
-      return interaction.editReply({ 
-        content: `❌ ${result.message}`,
-        ephemeral: true 
-      });
+    const lobby = battleDb.prepare(
+      'SELECT * FROM battle_lobbies WHERE channel_id = ? AND creator_id = ? AND status = ? ORDER BY created_at DESC LIMIT 1'
+    ).get(channelId, userId, 'open');
+
+    if (!lobby) {
+      return interaction.editReply({ content: '❌ No open lobby found for you in this channel.', ephemeral: true });
     }
 
-    const embed = new EmbedBuilder()
-      .setColor('#FF0000')
-      .setTitle('⚔️ Battle Started!')
-      .setDescription('The battle has begun! May the best Family member win.')
+    const startResult = battleService.startBattle(lobby.lobby_id, userId);
+    if (!startResult.success) {
+      return interaction.editReply({ content: `❌ ${startResult.message}`, ephemeral: true });
+    }
+
+    await interaction.editReply({ content: `⚔️ Battle started with ${startResult.participants.length} fighters. Let the chaos begin...` });
+
+    // Simulate and post rounds
+    const sim = battleService.simulateBattle(lobby.lobby_id);
+    if (!sim || !sim.winner) {
+      return interaction.followUp({ content: '❌ Battle simulation failed unexpectedly.' });
+    }
+
+    for (const r of sim.rounds) {
+      const lines = (r.events || []).slice(0, 8).map(e => `• ${e}`).join('\n');
+      const roundEmbed = new EmbedBuilder()
+        .setColor('#57F287')
+        .setTitle(`Round ${r.round}`)
+        .setDescription(`${lines}\n\n**Players Left:** ${r.playersLeft}`)
+        .setFooter({ text: 'Era: Solpranos' });
+
+      await interaction.channel.send({ embeds: [roundEmbed] });
+    }
+
+    const winner = sim.winner;
+    const outro = sim.finaleOutro || sim.winnerLine;
+    const winnerEmbed = new EmbedBuilder()
+      .setColor('#FFD700')
+      .setTitle('👑 The Family Crown Goes To...')
+      .setDescription(`🎉 **<@${winner.user_id}>**\n\n${outro}`)
       .addFields(
-        { name: '🆔 Battle ID', value: result.battleId, inline: true },
-        { name: '👥 Participants', value: `${result.playerCount}`, inline: true }
+        { name: 'Rounds Survived', value: `${sim.roundCount || sim.rounds.length}`, inline: true },
+        { name: 'Final HP', value: `${winner.hp ?? 0}`, inline: true },
+        { name: 'Total Damage', value: `${winner.total_damage_dealt ?? 0}`, inline: true },
+        { name: 'Total Fighters', value: `${sim.totalPlayers || startResult.participants.length}`, inline: true }
       )
-      .setFooter({ text: 'Good luck!' })
+      .setFooter({ text: 'Business is settled.' })
       .setTimestamp();
 
-    await interaction.editReply({ embeds: [embed] });
-    logger.log(`Battle ${result.battleId} started by ${interaction.user.username}`);
+    await interaction.channel.send({ content: `🏆 Congratulations <@${winner.user_id}>!`, embeds: [winnerEmbed] });
+
+    logger.log(`Battle ${lobby.lobby_id} completed. Winner: ${winner.username}`);
   },
 
   async handleCancel(interaction) {
-    await interaction.deferReply();
+    await interaction.deferReply({ ephemeral: true });
 
     const userId = interaction.user.id;
-    const result = battleService.cancelBattle(userId);
+    const channelId = interaction.channelId;
 
-    if (!result.success) {
-      return interaction.editReply({ 
-        content: `❌ ${result.message}`,
-        ephemeral: true 
-      });
+    const lobby = battleDb.prepare(
+      'SELECT * FROM battle_lobbies WHERE channel_id = ? AND creator_id = ? AND status = ? ORDER BY created_at DESC LIMIT 1'
+    ).get(channelId, userId, 'open');
+
+    if (!lobby) {
+      return interaction.editReply({ content: '❌ No open lobby found for you in this channel.', ephemeral: true });
     }
 
-    await interaction.editReply({ 
-      content: '✅ Battle lobby cancelled.',
-      ephemeral: true 
-    });
-    logger.log(`Battle ${result.battleId} cancelled by ${interaction.user.username}`);
+    const result = battleService.cancelBattle(lobby.lobby_id, userId);
+
+    if (!result.success) {
+      return interaction.editReply({ content: `❌ ${result.message}`, ephemeral: true });
+    }
+
+    await interaction.editReply({ content: '✅ Battle lobby cancelled.', ephemeral: true });
+    logger.log(`Battle ${lobby.lobby_id} cancelled by ${interaction.user.username}`);
   },
 
   async handleStats(interaction) {
     await interaction.deferReply();
 
     const targetUser = interaction.options.getUser('user') || interaction.user;
-    const stats = battleService.getUserStats(targetUser.id);
+    const stats = battleService.getStats(targetUser.id) || {};
+
+    const played = stats.battles_played || 0;
+    const won = stats.battles_won || 0;
+    const losses = Math.max(played - won, 0);
+    const winRate = played > 0 ? ((won / played) * 100).toFixed(1) : '0.0';
 
     const embed = new EmbedBuilder()
       .setColor('#FFD700')
       .setTitle(`⚔️ Battle Stats: ${targetUser.username}`)
       .setDescription('Battle performance overview')
       .addFields(
-        { name: '🏆 Wins', value: `${stats.wins || 0}`, inline: true },
-        { name: '💀 Losses', value: `${stats.losses || 0}`, inline: true },
-        { name: '📊 Win Rate', value: `${stats.winRate || 0}%`, inline: true },
-        { name: '⚔️ Total Battles', value: `${stats.total || 0}`, inline: true }
+        { name: '🏆 Wins', value: `${won}`, inline: true },
+        { name: '💀 Losses', value: `${losses}`, inline: true },
+        { name: '📊 Win Rate', value: `${winRate}%`, inline: true },
+        { name: '⚔️ Total Battles', value: `${played}`, inline: true },
+        { name: '💥 Total Damage', value: `${stats.total_damage_dealt || 0}`, inline: true }
       )
       .setFooter({ text: 'Keep fighting for the Family!' })
       .setTimestamp();
@@ -249,17 +304,15 @@ module.exports = {
   async handleAdminList(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
-    const battles = battleService.getAllBattles();
+    const battles = battleDb.prepare('SELECT * FROM battle_lobbies WHERE status IN ("open", "in_progress") ORDER BY created_at DESC').all();
 
     if (battles.length === 0) {
-      return interaction.editReply({ 
-        content: '❌ No active battles.',
-        ephemeral: true 
-      });
+      return interaction.editReply({ content: '❌ No active battles.', ephemeral: true });
     }
 
     const battleList = battles.map((b, i) => {
-      return `${i + 1}. **${b.battleId}**: ${b.playerCount} players (Status: ${b.status})`;
+      const count = battleService.getParticipants(b.lobby_id).length;
+      return `${i + 1}. **${b.lobby_id}**: ${count} players (Status: ${b.status})`;
     }).join('\n');
 
     const embed = new EmbedBuilder()
@@ -280,25 +333,17 @@ module.exports = {
     const confirm = interaction.options.getBoolean('confirm');
 
     if (!confirm) {
-      return interaction.editReply({ 
-        content: '❌ You must set confirm=true to force-end a battle.',
-        ephemeral: true 
-      });
+      return interaction.editReply({ content: '❌ You must set confirm=true to force-end a battle.', ephemeral: true });
     }
 
-    const result = battleService.forceEndBattle(battleId);
-
-    if (!result.success) {
-      return interaction.editReply({ 
-        content: `❌ ${result.message}`,
-        ephemeral: true 
-      });
+    const lobby = battleService.getLobby(battleId);
+    if (!lobby) {
+      return interaction.editReply({ content: `❌ Battle ${battleId} not found.`, ephemeral: true });
     }
 
-    await interaction.editReply({ 
-      content: `✅ Battle ${battleId} force-ended by admin.`,
-      ephemeral: true 
-    });
+    battleDb.prepare('UPDATE battle_lobbies SET status = ?, completed_at = CURRENT_TIMESTAMP WHERE lobby_id = ?').run('cancelled', battleId);
+
+    await interaction.editReply({ content: `✅ Battle ${battleId} force-ended by admin.`, ephemeral: true });
     logger.log(`Admin ${interaction.user.tag} force-ended battle ${battleId}`);
   },
 

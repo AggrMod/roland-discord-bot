@@ -127,35 +127,28 @@ module.exports = {
   async handleView(interaction) {
     await interaction.deferReply();
 
-    const config = treasuryService.getConfig();
-    const balances = await treasuryService.getBalances();
+    const summary = treasuryService.getSummary();
 
-    if (!config.treasuryWalletAddress) {
+    if (!summary.success) {
       return interaction.editReply({ 
-        content: '❌ Treasury wallet not configured yet. Contact an admin.',
-        ephemeral: true 
+        content: `❌ ${summary.message || 'Treasury unavailable right now.'}`
       });
     }
 
-    const totalUSD = balances.reduce((sum, b) => sum + (b.usdValue || 0), 0);
-
-    const balanceList = balances.length > 0
-      ? balances.slice(0, 10).map(b => 
-          `💎 **${b.symbol}**: ${b.amount.toFixed(4)} ($${(b.usdValue || 0).toFixed(2)})`
-        ).join('\n')
-      : '_No balances found_';
+    const t = summary.treasury;
+    const statusEmoji = t.status === 'ok' ? '✅' : t.status === 'stale' ? '⚠️' : '❌';
 
     const embed = new EmbedBuilder()
       .setColor('#FFD700')
       .setTitle('💰 Family Treasury')
-      .setDescription(`Current holdings for the Family treasury`)
+      .setDescription('Current treasury snapshot')
       .addFields(
-        { name: '💼 Wallet', value: `\`${config.treasuryWalletAddress.slice(0, 8)}...${config.treasuryWalletAddress.slice(-8)}\``, inline: false },
-        { name: '💵 Total Value', value: `$${totalUSD.toFixed(2)} USD`, inline: true },
-        { name: '📦 Assets', value: `${balances.length}`, inline: true },
-        { name: '🪙 Holdings', value: balanceList, inline: false }
+        { name: '🪙 SOL', value: `${t.sol}`, inline: true },
+        { name: '💵 USDC', value: `${t.usdc}`, inline: true },
+        { name: 'Status', value: `${statusEmoji} ${t.status}`, inline: true },
+        { name: 'Last Updated', value: t.lastUpdated ? `<t:${Math.floor(new Date(t.lastUpdated).getTime()/1000)}:R>` : 'Unknown', inline: false }
       )
-      .setFooter({ text: 'Updated every few hours • The Commission watches the Family funds' })
+      .setFooter({ text: 'Treasury Watch • Wallet address hidden for security' })
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });
@@ -167,20 +160,14 @@ module.exports = {
   async handleAdminStatus(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
-    const config = treasuryService.getConfig();
-    const balances = await treasuryService.getBalances();
+    const adminSummary = treasuryService.getAdminSummary();
+    if (!adminSummary.success) {
+      return interaction.editReply({ content: `❌ ${adminSummary.message || 'Unable to read treasury config.'}`, ephemeral: true });
+    }
 
-    const totalUSD = balances.reduce((sum, b) => sum + (b.usdValue || 0), 0);
-
-    const statusText = config.enabled ? '✅ Enabled' : '❌ Disabled';
-    const walletText = config.treasuryWalletAddress || '_Not set_';
-    const intervalText = `${config.refreshIntervalHours} hours`;
-
-    const balanceList = balances.length > 0
-      ? balances.slice(0, 15).map(b => 
-          `💎 **${b.symbol}**: ${b.amount.toFixed(4)} ($${(b.usdValue || 0).toFixed(2)})`
-        ).join('\n')
-      : '_No balances found_';
+    const c = adminSummary.config;
+    const b = adminSummary.balances;
+    const statusText = c.enabled ? '✅ Enabled' : '❌ Disabled';
 
     const embed = new EmbedBuilder()
       .setColor('#FFD700')
@@ -188,11 +175,11 @@ module.exports = {
       .setDescription('Full treasury configuration and balances')
       .addFields(
         { name: 'Status', value: statusText, inline: true },
-        { name: 'Refresh Interval', value: intervalText, inline: true },
-        { name: 'Wallet Address', value: walletText, inline: false },
-        { name: '💵 Total Value', value: `$${totalUSD.toFixed(2)} USD`, inline: true },
-        { name: '📦 Assets', value: `${balances.length}`, inline: true },
-        { name: '🪙 Holdings', value: balanceList, inline: false }
+        { name: 'Refresh Interval', value: `${c.refreshHours} hours`, inline: true },
+        { name: 'Wallet', value: c.wallet || '_Not set_', inline: true },
+        { name: 'SOL', value: `${b.sol}`, inline: true },
+        { name: 'USDC', value: `${b.usdc}`, inline: true },
+        { name: 'Last Updated', value: c.lastUpdated ? `<t:${Math.floor(new Date(c.lastUpdated).getTime()/1000)}:R>` : 'Unknown', inline: true }
       )
       .setFooter({ text: 'Use /treasury admin commands to configure' })
       .setTimestamp();
@@ -205,7 +192,10 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
 
     try {
-      await treasuryService.refreshBalances();
+      const result = await treasuryService.fetchBalances();
+      if (!result.success) {
+        return interaction.editReply({ content: `❌ ${result.message || 'Refresh failed.'}`, ephemeral: true });
+      }
       
       await interaction.editReply({ 
         content: '✅ Treasury balances refreshed successfully.',
@@ -224,7 +214,10 @@ module.exports = {
   async handleAdminEnable(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
-    treasuryService.setEnabled(true);
+    const result = treasuryService.updateConfig({ enabled: true });
+    if (!result.success) {
+      return interaction.editReply({ content: `❌ ${result.message}`, ephemeral: true });
+    }
     
     await interaction.editReply({ 
       content: '✅ Treasury monitoring enabled. Automatic refreshes will run.',
@@ -236,7 +229,10 @@ module.exports = {
   async handleAdminDisable(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
-    treasuryService.setEnabled(false);
+    const result = treasuryService.updateConfig({ enabled: false });
+    if (!result.success) {
+      return interaction.editReply({ content: `❌ ${result.message}`, ephemeral: true });
+    }
     
     await interaction.editReply({ 
       content: '❌ Treasury monitoring disabled. Automatic refreshes paused.',
@@ -250,21 +246,20 @@ module.exports = {
 
     const address = interaction.options.getString('address');
 
-    // Basic Solana address validation (base58, ~32-44 chars)
-    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address)) {
+    const result = treasuryService.updateConfig({ solanaWallet: address });
+    if (!result.success) {
       return interaction.editReply({ 
-        content: '❌ Invalid Solana wallet address format.',
+        content: `❌ ${result.message}`,
         ephemeral: true 
       });
     }
-
-    treasuryService.setTreasuryWallet(address);
     
+    const masked = treasuryService.maskAddress(address);
     await interaction.editReply({ 
-      content: `✅ Treasury wallet set to: \`${address}\`\n\nRun \`/treasury admin refresh\` to fetch balances.`,
+      content: `✅ Treasury wallet set to: \`${masked}\`\n\nRun \`/treasury admin refresh\` to fetch balances.`,
       ephemeral: true 
     });
-    logger.log(`Admin ${interaction.user.tag} set treasury wallet to ${address}`);
+    logger.log(`Admin ${interaction.user.tag} set treasury wallet`);
   },
 
   async handleAdminSetInterval(interaction) {
@@ -272,7 +267,10 @@ module.exports = {
 
     const hours = interaction.options.getInteger('hours');
 
-    treasuryService.setRefreshInterval(hours);
+    const result = treasuryService.updateConfig({ refreshHours: hours });
+    if (!result.success) {
+      return interaction.editReply({ content: `❌ ${result.message}`, ephemeral: true });
+    }
     
     await interaction.editReply({ 
       content: `✅ Refresh interval set to ${hours} hour(s).`,

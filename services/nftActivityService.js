@@ -1,5 +1,6 @@
 const db = require('../database/db');
 const logger = require('../utils/logger');
+const { EmbedBuilder } = require('discord.js');
 
 class NFTActivityService {
   getAlertConfig() {
@@ -141,17 +142,36 @@ class NFTActivityService {
     const channel = await client.channels.fetch(cfg.channel_id).catch(() => null);
     if (!channel || !channel.send) return;
 
-    const sig = evt.txSignature ? `\n\`${evt.txSignature.slice(0, 12)}...${evt.txSignature.slice(-8)}\`` : '';
-    const when = evt.eventTime ? `<t:${Math.floor(new Date(evt.eventTime).getTime() / 1000)}:R>` : 'now';
+    const whenTs = evt.eventTime ? Math.floor(new Date(evt.eventTime).getTime() / 1000) : null;
+    const shortSig = evt.txSignature ? `${evt.txSignature.slice(0, 12)}...${evt.txSignature.slice(-8)}` : null;
 
+    const typeUpper = (evt.eventType || 'unknown').toUpperCase();
+    const colorMap = {
+      MINT: '#57F287',
+      SELL: '#ED4245',
+      LIST: '#FEE75C',
+      DELIST: '#5865F2',
+      TRANSFER: '#EB459E'
+    };
+
+    const embed = new EmbedBuilder()
+      .setColor(colorMap[typeUpper] || '#5865F2')
+      .setTitle(`🧩 NFT Activity • ${typeUpper}`)
+      .addFields(
+        { name: 'Collection', value: evt.collectionKey || 'unknown', inline: true },
+        { name: 'Token', value: evt.tokenName || evt.tokenMint || 'unknown', inline: true },
+        { name: 'Price', value: evt.priceSol !== null && evt.priceSol !== undefined ? `${evt.priceSol} SOL` : '—', inline: true },
+        { name: 'From', value: evt.fromWallet ? `\`${evt.fromWallet.slice(0, 6)}...${evt.fromWallet.slice(-4)}\`` : '—', inline: true },
+        { name: 'To', value: evt.toWallet ? `\`${evt.toWallet.slice(0, 6)}...${evt.toWallet.slice(-4)}\`` : '—', inline: true },
+        { name: 'When', value: whenTs ? `<t:${whenTs}:R>` : 'now', inline: true }
+      )
+      .setFooter({ text: shortSig ? `Tx: ${shortSig}` : 'No tx signature provided' })
+      .setTimestamp();
+
+    const explorer = evt.txSignature ? `https://solscan.io/tx/${evt.txSignature}` : null;
     await channel.send({
-      content:
-        `🧩 **NFT Activity** • **${evt.eventType.toUpperCase()}**` +
-        `\nCollection: ${evt.collectionKey || 'unknown'}` +
-        `\nToken: ${evt.tokenName || evt.tokenMint || 'unknown'}` +
-        `${evt.priceSol !== null && evt.priceSol !== undefined ? `\nPrice: ${evt.priceSol} SOL` : ''}` +
-        `\nTime: ${when}` +
-        sig
+      content: explorer ? `🔗 ${explorer}` : undefined,
+      embeds: [embed]
     });
   }
 

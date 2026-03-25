@@ -441,6 +441,24 @@ class WebServer {
       }
     });
 
+    this.app.delete('/api/admin/users/:discordId', adminAuthMiddleware, (req, res) => {
+      try {
+        const { discordId } = req.params;
+        const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(discordId);
+        if (!user) {
+          return res.status(404).json({ success: false, message: 'User not found' });
+        }
+        db.prepare('DELETE FROM wallets WHERE discord_id = ?').run(discordId);
+        db.prepare('DELETE FROM votes WHERE voter_id = ?').run(discordId);
+        db.prepare('DELETE FROM users WHERE discord_id = ?').run(discordId);
+        logger.log(`Admin removed user ${discordId} (${user.username})`);
+        res.json({ success: true, message: 'User removed' });
+      } catch (error) {
+        logger.error('Error removing user:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
     this.app.get('/api/admin/proposals', adminAuthMiddleware, (req, res) => {
       try {
         const proposals = db.prepare('SELECT * FROM proposals ORDER BY created_at DESC').all();

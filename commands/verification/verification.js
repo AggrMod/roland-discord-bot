@@ -99,7 +99,54 @@ module.exports = {
         .addSubcommand(subcommand =>
           subcommand
             .setName('actions')
-            .setDescription('View all verification actions and role assignments'))),
+            .setDescription('View all verification actions and role assignments'))
+        
+        // OG Role Management
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('og-view')
+            .setDescription('View OG role configuration and eligible members'))
+        
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('og-enable')
+            .setDescription('Enable or disable the OG role system')
+            .addBooleanOption(option =>
+              option
+                .setName('enabled')
+                .setDescription('Enable (true) or disable (false)')
+                .setRequired(true)))
+        
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('og-role')
+            .setDescription('Set the OG role to assign')
+            .addRoleOption(option =>
+              option
+                .setName('role')
+                .setDescription('The role to assign to OG members')
+                .setRequired(true)))
+        
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('og-limit')
+            .setDescription('Set the number of OG slots (first X verified users)')
+            .addIntegerOption(option =>
+              option
+                .setName('count')
+                .setDescription('Number of OG slots')
+                .setRequired(true)
+                .setMinValue(1)))
+        
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('og-sync')
+            .setDescription('Sync OG role to eligible users')
+            .addBooleanOption(option =>
+              option
+                .setName('full')
+                .setDescription('Full sync (also removes from ineligible users)')
+                .setRequired(false)))),
 
   async execute(interaction) {
     // Check if verification module is enabled
@@ -135,6 +182,21 @@ module.exports = {
             break;
           case 'actions':
             await this.handleAdminActions(interaction);
+            break;
+          case 'og-view':
+            await this.handleAdminOGView(interaction);
+            break;
+          case 'og-enable':
+            await this.handleAdminOGEnable(interaction);
+            break;
+          case 'og-role':
+            await this.handleAdminOGRole(interaction);
+            break;
+          case 'og-limit':
+            await this.handleAdminOGLimit(interaction);
+            break;
+          case 'og-sync':
+            await this.handleAdminOGSync(interaction);
             break;
         }
       } else {
@@ -567,5 +629,137 @@ module.exports = {
 
     await interaction.editReply({ embeds: [embed] });
     logger.log(`Admin ${interaction.user.tag} viewed verification actions`);
+  },
+
+  // ==================== OG ROLE ADMIN COMMANDS ====================
+
+  async handleAdminOGView(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const ogRoleService = require('../../services/ogRoleService');
+    const status = await ogRoleService.getStatus(interaction.guild);
+
+    const embed = new EmbedBuilder()
+      .setColor(status.enabled ? '#57F287' : '#ED4245')
+      .setTitle('⭐ OG Role Configuration')
+      .setDescription(status.enabled ? 'OG role system is **ENABLED**' : 'OG role system is **DISABLED**')
+      .addFields(
+        { name: '🎭 Role', value: status.roleName, inline: true },
+        { name: '🔢 Limit', value: status.limit.toString(), inline: true },
+        { name: '✅ Eligible', value: status.eligibleCount.toString(), inline: true },
+        { name: '👥 Current Holders', value: status.currentHoldersCount.toString(), inline: true }
+      )
+      .setTimestamp();
+
+    if (status.eligible.length > 0) {
+      const eligibleList = status.eligible.map((u, idx) => 
+        `${idx + 1}. ${u.username} - Verified: ${new Date(u.verifiedAt).toLocaleDateString()}`
+      ).join('\n');
+
+      embed.addFields({
+        name: '📋 First 10 Eligible Users',
+        value: eligibleList || 'None',
+        inline: false
+      });
+    }
+
+    embed.setFooter({ text: 'Use /verification admin og-sync to apply changes to Discord roles' });
+
+    await interaction.editReply({ embeds: [embed] });
+    logger.log(`Admin ${interaction.user.tag} viewed OG config`);
+  },
+
+  async handleAdminOGEnable(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const ogRoleService = require('../../services/ogRoleService');
+    const enabled = interaction.options.getBoolean('enabled');
+    const result = ogRoleService.setEnabled(enabled);
+
+    const embed = new EmbedBuilder()
+      .setColor(result.success ? '#57F287' : '#ED4245')
+      .setTitle(result.success ? '✅ Success' : '❌ Error')
+      .setDescription(result.message)
+      .setTimestamp();
+
+    if (result.success && enabled) {
+      embed.setFooter({ text: 'Don\'t forget to run /verification admin og-sync to apply the role!' });
+    }
+
+    await interaction.editReply({ embeds: [embed] });
+    logger.log(`Admin ${interaction.user.tag} ${enabled ? 'enabled' : 'disabled'} OG role`);
+  },
+
+  async handleAdminOGRole(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const ogRoleService = require('../../services/ogRoleService');
+    const role = interaction.options.getRole('role');
+    const result = ogRoleService.setRole(role.id);
+
+    const embed = new EmbedBuilder()
+      .setColor(result.success ? '#57F287' : '#ED4245')
+      .setTitle(result.success ? '✅ Success' : '❌ Error')
+      .setDescription(result.success ? `OG role set to: ${role.name}` : result.message)
+      .setTimestamp();
+
+    if (result.success) {
+      embed.setFooter({ text: 'Run /verification admin og-sync to apply this role to eligible users' });
+    }
+
+    await interaction.editReply({ embeds: [embed] });
+    logger.log(`Admin ${interaction.user.tag} set OG role to ${role.name}`);
+  },
+
+  async handleAdminOGLimit(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const ogRoleService = require('../../services/ogRoleService');
+    const count = interaction.options.getInteger('count');
+    const result = ogRoleService.setLimit(count);
+
+    const embed = new EmbedBuilder()
+      .setColor(result.success ? '#57F287' : '#ED4245')
+      .setTitle(result.success ? '✅ Success' : '❌ Error')
+      .setDescription(result.message)
+      .setTimestamp();
+
+    if (result.success) {
+      embed.setFooter({ text: 'Run /verification admin og-sync to apply the new limit' });
+    }
+
+    await interaction.editReply({ embeds: [embed] });
+    logger.log(`Admin ${interaction.user.tag} set OG limit to ${count}`);
+  },
+
+  async handleAdminOGSync(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const ogRoleService = require('../../services/ogRoleService');
+    const fullSync = interaction.options.getBoolean('full') || false;
+
+    await interaction.editReply({ 
+      content: `🔄 Syncing OG roles${fullSync ? ' (full sync - will remove ineligible holders)' : ''}...` 
+    });
+
+    const result = await ogRoleService.syncRoles(interaction.guild, fullSync);
+
+    const embed = new EmbedBuilder()
+      .setColor(result.success ? '#57F287' : '#ED4245')
+      .setTitle(result.success ? '✅ Sync Complete' : '❌ Sync Failed')
+      .setDescription(result.message)
+      .setTimestamp();
+
+    if (result.success) {
+      embed.addFields(
+        { name: '➕ Added', value: result.added.toString(), inline: true },
+        { name: '➖ Removed', value: result.removed.toString(), inline: true },
+        { name: '❌ Errors', value: result.errors.toString(), inline: true },
+        { name: '✅ Total Eligible', value: result.eligible.toString(), inline: true }
+      );
+    }
+
+    await interaction.editReply({ content: null, embeds: [embed] });
+    logger.log(`Admin ${interaction.user.tag} ran OG sync: +${result.added} -${result.removed} errors:${result.errors}`);
   }
 };

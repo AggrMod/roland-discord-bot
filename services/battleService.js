@@ -475,9 +475,45 @@ class BattleService {
     const playerBuffs = {}; // Track temporary buffs
 
     let roundNum = 0;
+    let eliteFourMode = false;
     while (alivePlayers.length > 1) {
       roundNum++;
       const events = [];
+
+      // Elite Four mode activates once when 4 fighters remain
+      if (!eliteFourMode && alivePlayers.length === 4) {
+        eliteFourMode = true;
+
+        events.push('🏆 **ELITE FOUR MODE ACTIVATED**');
+        events.push('🎭 Final circle unlocked: all four fighters are restored to **100 HP**.');
+        events.push('🚫 No lucky escapes now. No revivals. No mercy.');
+
+        for (const p of alivePlayers) {
+          p.hp = 100;
+          db.prepare('UPDATE battle_participants SET hp = ? WHERE lobby_id = ? AND user_id = ?')
+            .run(100, lobbyId, p.user_id);
+        }
+      }
+
+      if (eliteFourMode) {
+        events.push(this.getRandomRoundTransition(roundNum));
+        // Light narrative spice in Elite mode
+        if (Math.random() < 0.40 && alivePlayers.length > 1) {
+          const attacker = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
+          let defender = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
+          let attempts = 0;
+          while (defender.user_id === attacker.user_id && attempts < 10) {
+            defender = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
+            attempts++;
+          }
+          if (defender.user_id !== attacker.user_id) {
+            const taunt = TAUNT_LINES[Math.floor(Math.random() * TAUNT_LINES.length)]
+              .replace('{attacker}', `**${attacker.username}**`)
+              .replace('{defender}', `**${defender.username}**`);
+            events.push(taunt);
+          }
+        }
+      }
       
       // Generate 2-5 events per round (scales with player count)
       const eventCount = Math.min(
@@ -487,10 +523,13 @@ class BattleService {
 
       for (let i = 0; i < eventCount; i++) {
         // Event type distribution:
-        // 60% combat, 20% item find, 15% flavor, 5% lucky escape
+        // Standard: 60% combat, 20% item, 20% flavor
+        // Elite Four: 75% combat, 15% item, 10% flavor
         const rand = Math.random();
+        const combatThreshold = eliteFourMode ? 0.75 : 0.60;
+        const itemThreshold = eliteFourMode ? 0.90 : 0.80;
         
-        if (rand < 0.60 && alivePlayers.length > 1) {
+        if (rand < combatThreshold && alivePlayers.length > 1) {
           // COMBAT EVENT
           const attacker = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
           let defender = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
@@ -503,11 +542,16 @@ class BattleService {
           }
           if (defender.user_id === attacker.user_id) continue;
 
-          // Calculate damage (10-30, with 20% crit chance for 40-50)
-          const isCrit = Math.random() < 0.2;
+          // Calculate damage (standard vs elite tuning)
+          const critChance = eliteFourMode ? 0.35 : 0.20;
+          const isCrit = Math.random() < critChance;
           let damage = isCrit 
             ? Math.floor(Math.random() * 11) + 40 // 40-50
             : Math.floor(Math.random() * 21) + 10; // 10-30
+
+          if (eliteFourMode) {
+            damage = Math.floor(damage * 1.25); // Elite Four damage ramp
+          }
 
           // Apply damage buff if exists
           if (playerBuffs[attacker.user_id]) {
@@ -540,19 +584,28 @@ class BattleService {
 
             events.push(eventText);
 
-            // 30% chance to add trash talk after a hit
-            if (Math.random() < 0.30) {
+            // Trash talk chance increases in Elite Four
+            const trashTalkChance = eliteFourMode ? 0.50 : 0.30;
+            if (Math.random() < trashTalkChance) {
               const trashTalk = TRASH_TALK_LINES[Math.floor(Math.random() * TRASH_TALK_LINES.length)]
                 .replace('{attacker}', `**${attacker.username}**`)
                 .replace('{defender}', `**${defender.username}**`);
               events.push(trashTalk);
             }
+
+            // Comeback narrative when someone is badly hurt
+            if (defender.hp > 0 && defender.hp <= 30 && Math.random() < 0.35) {
+              const comeback = COMEBACK_LINES[Math.floor(Math.random() * COMEBACK_LINES.length)]
+                .replace('{player}', `**${defender.username}**`)
+                .replace('{opponent}', `**${attacker.username}**`);
+              events.push(comeback);
+            }
           }
 
           // Check for death
           if (defender.hp <= 0) {
-            // 5% chance to survive with 1 HP (lucky escape)
-            if (Math.random() < 0.05 && alivePlayers.length > 2) {
+            // 5% chance to survive with 1 HP (lucky escape) - disabled in Elite Four
+            if (!eliteFourMode && Math.random() < 0.05 && alivePlayers.length > 2) {
               defender.hp = 1;
               const luckyLine = LUCKY_ESCAPE_LINES[Math.floor(Math.random() * LUCKY_ESCAPE_LINES.length)]
                 .replace('{player}', `**${defender.username}**`);
@@ -579,7 +632,7 @@ class BattleService {
           db.prepare('UPDATE battle_participants SET total_damage_dealt = ? WHERE lobby_id = ? AND user_id = ?')
             .run(attacker.total_damage_dealt, lobbyId, attacker.user_id);
 
-        } else if (rand < 0.80 && alivePlayers.length > 0) {
+        } else if (rand < itemThreshold && alivePlayers.length > 0) {
           // ITEM FIND EVENT
           const player = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
           const itemLine = ITEM_FIND_LINES[Math.floor(Math.random() * ITEM_FIND_LINES.length)];
@@ -647,7 +700,8 @@ class BattleService {
       winnerLine, 
       finaleOutro,
       totalPlayers,
-      roundCount: roundNum
+      roundCount: roundNum,
+      eliteFourModeUsed: eliteFourMode
     };
   }
 

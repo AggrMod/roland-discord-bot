@@ -72,7 +72,33 @@ module.exports = {
                 .setDescription('How many recent transactions (1-20)')
                 .setRequired(false)
                 .setMinValue(1)
-                .setMaxValue(20)))),
+                .setMaxValue(20)))
+
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('tx-alerts')
+            .setDescription('Configure automatic treasury transaction alerts')
+            .addBooleanOption(option =>
+              option
+                .setName('enabled')
+                .setDescription('Enable or disable tx alerts')
+                .setRequired(true))
+            .addChannelOption(option =>
+              option
+                .setName('channel')
+                .setDescription('Channel to post alerts in (required when enabling)')
+                .setRequired(false))
+            .addBooleanOption(option =>
+              option
+                .setName('incoming_only')
+                .setDescription('Only alert incoming transfers')
+                .setRequired(false))
+            .addNumberOption(option =>
+              option
+                .setName('min_sol')
+                .setDescription('Minimum absolute SOL delta to alert (e.g. 0.1)')
+                .setRequired(false)
+                .setMinValue(0)))),
 
   async execute(interaction) {
     // Check if treasury module is enabled
@@ -111,6 +137,9 @@ module.exports = {
             break;
           case 'tx-history':
             await this.handleAdminTxHistory(interaction);
+            break;
+          case 'tx-alerts':
+            await this.handleAdminTxAlerts(interaction);
             break;
         }
       } else {
@@ -194,6 +223,8 @@ module.exports = {
         { name: 'Wallet', value: c.wallet || '_Not set_', inline: true },
         { name: 'SOL', value: `${b.sol}`, inline: true },
         { name: 'USDC', value: `${b.usdc}`, inline: true },
+        { name: 'Tx Alerts', value: c.txAlertsEnabled ? `✅ <#${c.txAlertChannelId}>` : '❌ Off', inline: true },
+        { name: 'Alerts Filter', value: `incoming_only=${c.txAlertIncomingOnly ? 'yes' : 'no'} | min=${c.txAlertMinSol || 0} SOL`, inline: false },
         { name: 'Last Updated', value: c.lastUpdated ? `<t:${Math.floor(new Date(c.lastUpdated).getTime()/1000)}:R>` : 'Unknown', inline: true }
       )
       .setFooter({ text: 'Use /treasury admin commands to configure' })
@@ -323,5 +354,38 @@ module.exports = {
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed], ephemeral: true });
+  },
+
+  async handleAdminTxAlerts(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const enabled = interaction.options.getBoolean('enabled');
+    const channel = interaction.options.getChannel('channel');
+    const incomingOnly = interaction.options.getBoolean('incoming_only');
+    const minSol = interaction.options.getNumber('min_sol');
+
+    if (enabled && !channel) {
+      return interaction.editReply({ content: '❌ Please provide a channel when enabling alerts.', ephemeral: true });
+    }
+
+    const result = treasuryService.updateConfig({
+      txAlertsEnabled: enabled,
+      txAlertChannelId: channel ? channel.id : undefined,
+      txAlertIncomingOnly: incomingOnly !== null ? incomingOnly : undefined,
+      txAlertMinSol: minSol !== null ? minSol : undefined,
+      txLastSignature: null
+    });
+
+    if (!result.success) {
+      return interaction.editReply({ content: `❌ ${result.message}`, ephemeral: true });
+    }
+
+    const cfg = treasuryService.getAdminSummary().config;
+    await interaction.editReply({
+      content: enabled
+        ? `✅ Tx alerts enabled in <#${cfg.txAlertChannelId}> | incoming_only=${cfg.txAlertIncomingOnly ? 'yes' : 'no'} | min_sol=${cfg.txAlertMinSol}`
+        : '✅ Tx alerts disabled.',
+      ephemeral: true
+    });
   }
 };

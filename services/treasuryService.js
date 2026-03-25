@@ -26,10 +26,23 @@ class TreasuryService {
           sol_balance TEXT,
           usdc_balance TEXT,
           last_error TEXT,
+          tx_alerts_enabled BOOLEAN DEFAULT 0,
+          tx_alert_channel_id TEXT,
+          tx_alert_incoming_only BOOLEAN DEFAULT 0,
+          tx_alert_min_sol REAL DEFAULT 0,
+          tx_last_signature TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
       `);
+
+      // Safe additive migrations
+      try { db.exec('ALTER TABLE treasury_config ADD COLUMN tx_alerts_enabled BOOLEAN DEFAULT 0'); } catch (e) {}
+      try { db.exec('ALTER TABLE treasury_config ADD COLUMN tx_alert_channel_id TEXT'); } catch (e) {}
+      try { db.exec('ALTER TABLE treasury_config ADD COLUMN tx_alert_incoming_only BOOLEAN DEFAULT 0'); } catch (e) {}
+      try { db.exec('ALTER TABLE treasury_config ADD COLUMN tx_alert_min_sol REAL DEFAULT 0'); } catch (e) {}
+      try { db.exec('ALTER TABLE treasury_config ADD COLUMN tx_last_signature TEXT'); } catch (e) {}
+
       logger.log('✅ Treasury config table initialized');
     } catch (error) {
       logger.error('Error initializing treasury table:', error);
@@ -62,7 +75,7 @@ class TreasuryService {
   /**
    * Update treasury configuration (admin only)
    */
-  updateConfig({ enabled, solanaWallet, refreshHours }) {
+  updateConfig({ enabled, solanaWallet, refreshHours, txAlertsEnabled, txAlertChannelId, txAlertIncomingOnly, txAlertMinSol, txLastSignature }) {
     try {
       const updates = [];
       const params = [];
@@ -87,6 +100,35 @@ class TreasuryService {
         }
         updates.push('refresh_hours = ?');
         params.push(refreshHours);
+      }
+
+      if (txAlertsEnabled !== undefined) {
+        updates.push('tx_alerts_enabled = ?');
+        params.push(txAlertsEnabled ? 1 : 0);
+      }
+
+      if (txAlertChannelId !== undefined) {
+        updates.push('tx_alert_channel_id = ?');
+        params.push(txAlertChannelId || null);
+      }
+
+      if (txAlertIncomingOnly !== undefined) {
+        updates.push('tx_alert_incoming_only = ?');
+        params.push(txAlertIncomingOnly ? 1 : 0);
+      }
+
+      if (txAlertMinSol !== undefined) {
+        const minVal = Number(txAlertMinSol);
+        if (Number.isNaN(minVal) || minVal < 0) {
+          return { success: false, message: 'txAlertMinSol must be a non-negative number' };
+        }
+        updates.push('tx_alert_min_sol = ?');
+        params.push(minVal);
+      }
+
+      if (txLastSignature !== undefined) {
+        updates.push('tx_last_signature = ?');
+        params.push(txLastSignature || null);
       }
 
       if (updates.length === 0) {
@@ -257,7 +299,11 @@ class TreasuryService {
         wallet: config.solana_wallet ? this.maskAddress(config.solana_wallet) : null,
         refreshHours: config.refresh_hours,
         lastUpdated: config.last_updated,
-        lastError: config.last_error
+        lastError: config.last_error,
+        txAlertsEnabled: config.tx_alerts_enabled === 1,
+        txAlertChannelId: config.tx_alert_channel_id || null,
+        txAlertIncomingOnly: config.tx_alert_incoming_only === 1,
+        txAlertMinSol: Number(config.tx_alert_min_sol || 0)
       },
       treasury: {
         sol: config.sol_balance || '0.0000',
@@ -325,6 +371,59 @@ class TreasuryService {
   }
 
   /**
+   * Check for new txs and post alerts to configured channel
+   */
+  async checkAndSendTxAlerts() {
+    const config = this.getConfig();
+    if (!config || config.tx_alerts_enabled !== 1 || !config.tx_alert_channel_id || !config.solana_wallet) return;
+
+    const txResult = await this.getRecentTransactions(20);
+    if (!txResult.success || !txResult.transactions.length) return;
+
+    const latestSig = txResult.transactions[0].signature;
+
+    // First run baseline: set pointer, don't flood old txs
+    if (!config.tx_last_signature) {
+      this.updateConfig({ txLastSignature: latestSig });
+      return;
+    }
+
+    const newTxs = [];
+    for (const tx of txResult.transactions) {
+      if (tx.signature === config.tx_last_signature) break;
+      newTxs.push(tx);
+    }
+
+    if (!newTxs.length) return;
+
+    const filtered = newTxs
+      .filter(tx => tx.success)
+      .filter(tx => !(config.tx_alert_incoming_only === 1 && tx.direction !== 'incoming'))
+      .filter(tx => Math.abs(tx.deltaSol) >= Number(config.tx_alert_min_sol || 0));
+
+    this.updateConfig({ txLastSignature: latestSig });
+
+    if (!filtered.length) return;
+
+    const client = global.discordClient;
+    if (!client) return;
+
+    const channel = await client.channels.fetch(config.tx_alert_channel_id).catch(() => null);
+    if (!channel || !channel.send) return;
+
+    const lines = filtered.slice().reverse().slice(0, 10).map(tx => {
+      const dir = tx.direction === 'incoming' ? '🟢 IN' : tx.direction === 'outgoing' ? '🔴 OUT' : '🟡';
+      const amount = `${tx.deltaSol > 0 ? '+' : ''}${tx.deltaSol} SOL`;
+      const when = tx.blockTime ? `<t:${tx.blockTime}:R>` : 'unknown';
+      return `${dir} ${amount} • ${when}\n\`${tx.signature.slice(0, 12)}...${tx.signature.slice(-8)}\``;
+    });
+
+    await channel.send({
+      content: `💰 **Treasury Tx Alert** (${filtered.length} new)` + '\n' + lines.join('\n')
+    });
+  }
+
+  /**
    * Check if treasury data is stale
    */
   checkStaleness(lastUpdated, refreshHours) {
@@ -374,12 +473,14 @@ class TreasuryService {
     // Initial fetch
     if (moduleGuard.isModuleEnabled('treasury')) {
       this.fetchBalances().catch(err => logger.error('Initial treasury fetch failed:', err));
+      this.checkAndSendTxAlerts().catch(err => logger.error('Initial treasury tx alert check failed:', err));
     }
 
     // Schedule recurring fetches
     this.refreshTimer = setInterval(() => {
       if (moduleGuard.isModuleEnabled('treasury')) {
         this.fetchBalances().catch(err => logger.error('Scheduled treasury fetch failed:', err));
+        this.checkAndSendTxAlerts().catch(err => logger.error('Scheduled treasury tx alert check failed:', err));
       }
     }, intervalMs);
 

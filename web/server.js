@@ -1,7 +1,6 @@
 const express = require('express');
 const session = require('express-session');
-const SqliteStore = require('better-sqlite3-session-store');
-const Database = require('better-sqlite3');
+const sqlite3Store = require('connect-sqlite3')(session);
 const cors = require('cors');
 const path = require('path');
 const nacl = require('tweetnacl');
@@ -54,14 +53,11 @@ class WebServer {
     this.app.use(express.json());
     this.app.use(express.static(path.join(__dirname, 'public')));
 
-    // Persistent session store (SQLite) - survives restarts
-    const sessionDb = new Database(path.join(__dirname, '../database/sessions.db'));
-    sessionDb.pragma('journal_mode = WAL');
-
-    // Session management with persistent store
+    // Session management with persistent SQLite store (survives restarts)
     this.app.use(session({
-      store: new SqliteStore({
-        db: sessionDb
+      store: new sqlite3Store({
+        db: path.join(__dirname, '../database/sessions.db'),
+        dir: path.join(__dirname, '../database')
       }),
       secret: process.env.SESSION_SECRET || 'solpranos-secret-key-change-this-in-production',
       resave: false,

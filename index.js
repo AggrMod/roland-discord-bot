@@ -502,11 +502,8 @@ async function handleTreasuryRefreshButton(interaction) {
     const config = treasuryService.getConfig();
 
     if (!config || !config.enabled || !config.solana_wallet) {
-      // Just rebuild the panel with current state (shows setup messages)
-      const treasuryCommand = require('./commands/admin/treasury.js');
-      const { embed, components } = treasuryCommand.buildTreasuryPanel();
-      
-      await interaction.editReply({ embeds: [embed], components: [components] });
+      const panel = buildTreasuryPanelFromService();
+      await interaction.editReply({ embeds: [panel.embed], components: [panel.components] });
       
       await interaction.followUp({ 
         content: '⚠️ Treasury not fully configured. Enable and configure wallet to fetch live data.', 
@@ -519,20 +516,18 @@ async function handleTreasuryRefreshButton(interaction) {
     const result = await treasuryService.fetchBalances();
 
     // Rebuild panel with fresh data
-    const treasuryCommand = require('./commands/admin/treasury.js');
-    const { embed, components } = treasuryCommand.buildTreasuryPanel();
-
-    await interaction.editReply({ embeds: [embed], components: [components] });
+    const panel = buildTreasuryPanelFromService();
+    await interaction.editReply({ embeds: [panel.embed], components: [panel.components] });
 
     if (result.success) {
       await interaction.followUp({ 
-        content: `✅ Treasury data refreshed: ${result.balances.sol} SOL, $${result.balances.usdc} USDC`, 
+        content: `✅ Treasury data refreshed: ${result.balances.sol} SOL, ${result.balances.usdc} USDC`, 
         ephemeral: true 
       });
       logger.log(`Treasury panel refreshed by ${interaction.user.tag}`);
     } else {
       await interaction.followUp({ 
-        content: `⚠️ Refresh attempted but encountered error: ${result.message || result.error}`, 
+        content: `⚠️ Refresh attempted but encountered error: ${result.message || result.error}`,
         ephemeral: true 
       });
     }
@@ -545,10 +540,40 @@ async function handleTreasuryRefreshButton(interaction) {
         ephemeral: true 
       });
     } catch (followUpError) {
-      // Interaction might have expired, log and continue
       logger.error('Could not send error follow-up:', followUpError);
     }
   }
+}
+
+function buildTreasuryPanelFromService() {
+  const summary = treasuryService.getSummary();
+  const status = summary.success ? summary.treasury.status : 'error';
+  const statusEmoji = status === 'ok' ? '✅' : status === 'stale' ? '⚠️' : '❌';
+
+  const embed = new EmbedBuilder()
+    .setColor('#FFD700')
+    .setTitle('💰 Treasury Watch')
+    .setDescription(summary.success
+      ? 'Live treasury snapshot'
+      : `⚠️ ${summary.message || 'Treasury unavailable'}`)
+    .addFields(
+      { name: '🪙 SOL', value: summary.success ? `${summary.treasury.sol}` : '—', inline: true },
+      { name: '💵 USDC', value: summary.success ? `${summary.treasury.usdc}` : '—', inline: true },
+      { name: 'Status', value: `${statusEmoji} ${status}`, inline: true },
+      { name: 'Last Updated', value: summary.success && summary.treasury.lastUpdated ? `<t:${Math.floor(new Date(summary.treasury.lastUpdated).getTime()/1000)}:R>` : 'Unknown', inline: false }
+    )
+    .setFooter({ text: 'Wallet hidden for security' })
+    .setTimestamp();
+
+  const components = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('treasury_refresh_panel')
+      .setLabel('Refresh')
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji('🔄')
+  );
+
+  return { embed, components };
 }
 
 function startVoteCheckInterval() {

@@ -1,6 +1,6 @@
 const express = require('express');
 const session = require('express-session');
-const SqliteStore = require('better-sqlite3-session-store')(session);
+const SqliteStore = require('better-sqlite3-session-store');
 const Database = require('better-sqlite3');
 const cors = require('cors');
 const path = require('path');
@@ -61,8 +61,7 @@ class WebServer {
     // Session management with persistent store
     this.app.use(session({
       store: new SqliteStore({
-        client: sessionDb,
-        expiration: 24 * 60 * 60 * 1000 // 24 hours
+        db: sessionDb
       }),
       secret: process.env.SESSION_SECRET || 'solpranos-secret-key-change-this-in-production',
       resave: false,

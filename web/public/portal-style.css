@@ -1077,7 +1077,8 @@ body {
 }
 
 /* ==================== LOADING STATES ==================== */
-.loading-spinner {
+.loading-spinner,
+.spinner {
   display: inline-block;
   width: 40px;
   height: 40px;

@@ -315,9 +315,9 @@ function renderProposals() {
         <h4 class="empty-state-title">No Proposals Yet</h4>
         <p class="empty-state-message">You haven't created any proposals. Use the /propose command in Discord to submit your first proposal.</p>
         <div class="empty-state-action">
-          <button class="btn-primary" onclick="showInfo('Use /propose in Discord to create a proposal')">
-            <span>ℹ️</span>
-            <span>Learn How</span>
+          <button class="btn-primary" onclick="showCreateProposalForm()">
+            <span>➕</span>
+            <span>Create Proposal</span>
           </button>
         </div>
       </div>
@@ -409,6 +409,13 @@ async function loadActiveVotes() {
             <span>Participation Progress</span>
             <span style="color: ${quorumMet ? 'var(--success)' : 'var(--text-muted)'};">${quorumMet ? '✓ Quorum Met' : 'Quorum Pending'}</span>
           </div>
+          ${userData ? `
+          <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
+            <button class="btn-success" onclick="castVote('${proposal.proposalId}','yes')" style="flex:1; min-width:80px;">👍 Yes</button>
+            <button class="btn-danger" onclick="castVote('${proposal.proposalId}','no')" style="flex:1; min-width:80px;">👎 No</button>
+            <button class="btn-secondary" onclick="castVote('${proposal.proposalId}','abstain')" style="flex:1; min-width:80px;">⏭️ Abstain</button>
+          </div>
+          ` : ''}
         </div>
       `;
     }).join('') + '</div>';
@@ -777,8 +784,109 @@ function showInfo(message) {
 }
 
 function showNotification(message, type = 'info') {
-  // Simple alert for now - could be enhanced with toast notifications
-  alert(message);
+  // Remove existing toast if any
+  const existing = document.querySelector('.toast-notification');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.className = 'toast-notification';
+  const colors = { success: '#10b981', error: '#ef4444', info: '#3b82f6', warning: '#f59e0b' };
+  const icons = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
+  toast.style.cssText = `
+    position:fixed; top:24px; right:24px; z-index:9999;
+    padding:14px 20px; border-radius:10px; max-width:400px;
+    background:rgba(14,23,44,0.95); border:1px solid ${colors[type] || colors.info};
+    color:#e0e7ff; font-size:0.92em; display:flex; align-items:center; gap:10px;
+    box-shadow:0 8px 24px rgba(0,0,0,0.5); animation:fadeInUp 0.3s ease;
+  `;
+  toast.innerHTML = `<span style="color:${colors[type] || colors.info}; font-size:1.3em;">${icons[type] || icons.info}</span><span>${escapeHtml(message)}</span>`;
+  document.body.appendChild(toast);
+  setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; setTimeout(() => toast.remove(), 300); }, 4000);
+}
+
+// ==================== VOTING ====================
+async function castVote(proposalId, choice) {
+  if (!userData) {
+    showError('Please log in to vote');
+    return;
+  }
+  
+  const labels = { yes: 'YES', no: 'NO', abstain: 'ABSTAIN' };
+  showConfirmModal(`Vote ${labels[choice]}?`, `Cast your vote as "${labels[choice]}" on this proposal? This cannot be changed.`, async () => {
+    try {
+      const response = await fetch('/api/user/vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ proposalId, choice })
+      });
+      const data = await response.json();
+      if (data.success) {
+        showSuccess(`Vote cast: ${labels[choice]}`);
+        await loadActiveVotes();
+      } else {
+        showError(data.message || 'Failed to cast vote');
+      }
+    } catch (e) {
+      showError('Error casting vote: ' + e.message);
+    }
+  });
+}
+
+// ==================== CREATE PROPOSAL ====================
+function showCreateProposalForm() {
+  if (!userData) {
+    showError('Please log in to create a proposal');
+    return;
+  }
+
+  showConfirmModal('Create Proposal', '', null);
+  // Override modal content with form
+  const body = document.getElementById('confirmMessage');
+  const btn = document.getElementById('confirmButton');
+  const title = document.getElementById('confirmTitle');
+  title.textContent = '📜 Create New Proposal';
+  btn.textContent = 'Submit Proposal';
+  btn.classList.remove('btn-danger');
+  btn.classList.add('btn-primary');
+
+  body.innerHTML = `
+    <div style="display:grid; gap:16px;">
+      <div>
+        <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Proposal Title *</label>
+        <input id="proposalTitleInput" type="text" placeholder="Enter a clear, descriptive title" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
+      </div>
+      <div>
+        <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Description *</label>
+        <textarea id="proposalDescInput" placeholder="Explain your proposal's purpose and impact" rows="4" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; resize:vertical;"></textarea>
+      </div>
+    </div>
+  `;
+
+  confirmCallback = async () => {
+    const proposalTitle = document.getElementById('proposalTitleInput')?.value.trim();
+    const proposalDesc = document.getElementById('proposalDescInput')?.value.trim();
+    if (!proposalTitle || !proposalDesc) {
+      showError('Please fill in both title and description');
+      return;
+    }
+    try {
+      const response = await fetch('/api/user/proposals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: proposalTitle, description: proposalDesc })
+      });
+      const data = await response.json();
+      if (data.success) {
+        showSuccess('Proposal submitted! It will be reviewed by admins.');
+        await loadPortal();
+        switchSection('governance');
+      } else {
+        showError(data.message || 'Failed to create proposal');
+      }
+    } catch (e) {
+      showError('Error creating proposal: ' + e.message);
+    }
+  };
 }
 
 // ==================== AUTH ====================
@@ -1237,7 +1345,8 @@ async function loadAdminRoles() {
     const data = await response.json();
     if (!data.success) throw new Error(data.message || 'Failed to load roles');
 
-    const roles = data.roles || [];
+    const roles = data.roles || data.config || [];
+    adminRolesCache = roles;
     if (!roles.length) {
       content.innerHTML = `<div class="empty-state"><div class="empty-state-title">No verification roles configured</div></div>`;
       return;
@@ -1432,18 +1541,39 @@ async function saveRole(e) {
   }
 }
 
+let adminRolesCache = [];
+
 function editRole(idx) {
-  if (!isAdmin) return;
-  showSuccess(`Edit role ${idx} - detailed editing coming soon`);
+  if (!isAdmin || !adminRolesCache[idx]) return;
+  const role = adminRolesCache[idx];
+  document.getElementById('roleModalTitle').textContent = 'Edit Verification Role';
+  document.getElementById('roleNameInput').value = role.role_name || role.roleId || '';
+  document.getElementById('roleTypeInput').value = role.type || '';
+  document.getElementById('roleTokenInput').value = role.collection_id || role.mint || '';
+  document.getElementById('roleMinInput').value = role.min_holdings || '';
+  document.getElementById('roleWalletRequiredInput').checked = !!role.wallet_required;
+  document.getElementById('roleExemptInput').checked = !!role.exempt;
+  document.getElementById('roleForm').dataset.mode = 'edit';
+  document.getElementById('roleForm').dataset.editIdx = idx;
+  document.getElementById('roleModal').style.display = 'flex';
 }
 
 async function deleteRole(idx) {
-  if (!isAdmin) return;
-  showConfirmModal('Delete Role', 'Are you sure? This cannot be undone.', async () => {
+  if (!isAdmin || !adminRolesCache[idx]) return;
+  const role = adminRolesCache[idx];
+  const roleName = role.role_name || role.roleId || `Role #${idx}`;
+  showConfirmModal('Delete Role', `Are you sure you want to delete "${roleName}"? This cannot be undone.`, async () => {
     try {
-      // Placeholder for actual deletion
-      showSuccess('Deletion queued for next release');
-      // await loadAdminRoles();
+      const traitType = role.type || 'collection';
+      const traitValue = role.collection_id || role.mint || '';
+      const response = await fetch(`/api/admin/roles/traits/${encodeURIComponent(traitType)}/${encodeURIComponent(traitValue)}`, { method: 'DELETE' });
+      const data = await response.json();
+      if (data.success) {
+        showSuccess(`Role "${roleName}" deleted`);
+        await loadAdminRoles();
+      } else {
+        showError(data.message || 'Failed to delete role');
+      }
     } catch (e) {
       showError('Error deleting role: ' + e.message);
     }
@@ -1598,16 +1728,46 @@ async function loadAdminActivity() {
   content.innerHTML = `<div style="text-align:center; padding: var(--space-5); color: var(--text-secondary);"><div class="spinner"></div><p>Loading activity...</p></div>`;
 
   try {
-    // Mock activity feed for now (could hook to real audit logs)
-    const activities = [
-      { action: 'User verified', user: 'Stoned Rabbit holder', time: '2 minutes ago', type: 'verify' },
-      { action: 'Role synced', user: 'System', time: '5 minutes ago', type: 'sync' },
-      { action: 'Proposal created', user: 'Roland', time: '1 hour ago', type: 'proposal' },
-      { action: 'Treasury updated', user: 'System', time: '2 hours ago', type: 'treasury' },
-      { action: 'User joined', user: 'New Member', time: '3 hours ago', type: 'user' }
-    ];
+    // Build activity from real data (proposals + users)
+    const [usersRes, proposalsRes] = await Promise.all([
+      fetch('/api/admin/users'),
+      fetch('/api/admin/proposals')
+    ]);
+    const usersData = await usersRes.json();
+    const proposalsData = await proposalsRes.json();
 
-    const rows = activities.map(a => `
+    const activities = [];
+    
+    // Recent proposals
+    (proposalsData.proposals || []).slice(0, 10).forEach(p => {
+      activities.push({
+        action: `Proposal ${p.status === 'voting' ? 'active' : p.status}: ${p.title || 'Untitled'}`,
+        user: p.creator_id || 'Unknown',
+        time: p.created_at ? formatDate(new Date(p.created_at)) : 'Unknown',
+        type: 'proposal',
+        date: new Date(p.created_at || 0)
+      });
+    });
+
+    // Recent users (by wallet count as proxy for activity)
+    (usersData.users || []).filter(u => u.total_nfts > 0).slice(0, 5).forEach(u => {
+      activities.push({
+        action: `Verified: ${u.username || 'User'} (${u.total_nfts} NFTs, ${u.tier || 'none'})`,
+        user: u.discord_id || '',
+        time: 'Active member',
+        type: 'verify',
+        date: new Date(0)
+      });
+    });
+
+    activities.sort((a, b) => b.date - a.date);
+
+    if (!activities.length) {
+      content.innerHTML = `<div class="empty-state"><div class="empty-state-title">No activity yet</div></div>`;
+      return;
+    }
+
+    const rows = activities.slice(0, 15).map(a => `
       <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid rgba(99,102,241,0.15); gap:12px;">
         <div style="display:flex; align-items:center; gap:12px; flex:1;">
           <div style="font-size:1.2em;">
@@ -1626,7 +1786,7 @@ async function loadAdminActivity() {
       <div style="border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.5); overflow:hidden;">
         ${rows}
       </div>
-      <div style="margin-top:12px; color:var(--text-secondary); font-size:0.9em;">Latest activity from your Discord server</div>
+      <div style="margin-top:12px; color:var(--text-secondary); font-size:0.9em;">Activity derived from proposals and verified users</div>
     `;
   } catch (e) {
     content.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;

@@ -270,6 +270,80 @@ class WebServer {
       }
     });
 
+    // ==================== USER VOTING ====================
+
+    this.app.post('/api/user/vote', async (req, res) => {
+      if (!req.session.discordUser) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
+
+      try {
+        const discordId = req.session.discordUser.id;
+        const username = req.session.discordUser.username;
+        const { proposalId, choice } = req.body;
+
+        if (!proposalId || !choice) {
+          return res.status(400).json({ success: false, message: 'proposalId and choice are required' });
+        }
+
+        if (!['yes', 'no', 'abstain'].includes(choice.toLowerCase())) {
+          return res.status(400).json({ success: false, message: 'Choice must be yes, no, or abstain' });
+        }
+
+        // Get user's voting power
+        const userInfo = await roleService.getUserInfo(discordId);
+        if (!userInfo || !userInfo.voting_power || userInfo.voting_power < 1) {
+          return res.status(403).json({ success: false, message: 'You need at least 1 verified NFT to vote' });
+        }
+        const result = proposalService.castVote(proposalId, discordId, choice.toLowerCase(), userInfo.voting_power);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error casting vote via web:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // ==================== USER PROPOSAL CREATION ====================
+
+    this.app.post('/api/user/proposals', async (req, res) => {
+      if (!req.session.discordUser) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
+
+      try {
+        const discordId = req.session.discordUser.id;
+        const username = req.session.discordUser.username;
+        const { title, description } = req.body;
+
+        if (!title || !description) {
+          return res.status(400).json({ success: false, message: 'Title and description are required' });
+        }
+
+        if (title.length > 200) {
+          return res.status(400).json({ success: false, message: 'Title must be 200 characters or less' });
+        }
+
+        if (description.length > 2000) {
+          return res.status(400).json({ success: false, message: 'Description must be 2000 characters or less' });
+        }
+
+        // Check user has voting power (at least 1 verified NFT)
+        const userInfo = await roleService.getUserInfo(discordId);
+        if (!userInfo || !userInfo.voting_power || userInfo.voting_power < 1) {
+          return res.status(403).json({ success: false, message: 'You need at least 1 verified NFT to create proposals' });
+        }
+
+        // Get user's primary wallet for the proposal
+        const primaryWallet = db.prepare('SELECT wallet_address FROM wallets WHERE discord_id = ? AND is_favorite = 1').get(discordId);
+        const walletAddr = primaryWallet ? primaryWallet.wallet_address : '';
+        const result = proposalService.createProposal(discordId, walletAddr, title, description);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error creating proposal via web:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
     // ==================== ADMIN API ====================
 
     const adminAuthMiddleware = async (req, res, next) => {

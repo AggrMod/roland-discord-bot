@@ -1179,8 +1179,90 @@ class WebServer {
       }
     });
 
-    // ==================== LEGACY WALLET VERIFICATION ====================
+    // ==================== WALLET VERIFICATION ====================
 
+    // Generate a challenge nonce for signature verification
+    this.app.post('/api/verify/challenge', (req, res) => {
+      if (!req.session.discordUser) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
+
+      try {
+        const nonce = require('crypto').randomBytes(16).toString('hex');
+        const message = `Solpranos Wallet Verification\nUser: ${req.session.discordUser.username}\nNonce: ${nonce}`;
+        req.session.verifyChallenge = { message, nonce, createdAt: Date.now() };
+        res.json({ success: true, message });
+      } catch (error) {
+        logger.error('Error generating challenge:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // Session-aware signature verify (wallet address extracted from signature context)
+    this.app.post('/api/verify/signature', async (req, res) => {
+      if (!req.session.discordUser) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
+
+      try {
+        const { walletAddress, signature } = req.body;
+        const discordId = req.session.discordUser.id;
+
+        if (!walletAddress || !signature) {
+          return res.status(400).json({ success: false, message: 'Missing walletAddress or signature' });
+        }
+
+        // Validate challenge exists and isn't expired (5 min TTL)
+        const challenge = req.session.verifyChallenge;
+        if (!challenge || (Date.now() - challenge.createdAt) > 5 * 60 * 1000) {
+          return res.status(400).json({ success: false, message: 'Challenge expired. Please try again.' });
+        }
+
+        const isValid = this.verifySignature(walletAddress, signature, challenge.message);
+        if (!isValid) {
+          return res.status(400).json({ success: false, message: 'Invalid signature. Make sure you signed with the correct wallet.' });
+        }
+
+        // Clear challenge after use
+        delete req.session.verifyChallenge;
+
+        const existingWallet = db.prepare('SELECT * FROM wallets WHERE wallet_address = ?').get(walletAddress);
+        if (existingWallet) {
+          if (existingWallet.discord_id === discordId) {
+            return res.json({ success: true, message: 'Wallet already linked to your account' });
+          }
+          return res.status(400).json({ success: false, message: 'This wallet is already linked to another account' });
+        }
+
+        const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(discordId);
+        if (!user) {
+          db.prepare('INSERT INTO users (discord_id, username) VALUES (?, ?)').run(discordId, req.session.discordUser.username || 'Web User');
+        }
+
+        const walletCount = db.prepare('SELECT COUNT(*) as count FROM wallets WHERE discord_id = ?').get(discordId).count;
+        const isFavorite = walletCount === 0 ? 1 : 0;
+        const isPrimary = walletCount === 0 ? 1 : 0;
+
+        db.prepare('INSERT INTO wallets (discord_id, wallet_address, primary_wallet, is_favorite) VALUES (?, ?, ?, ?)').run(
+          discordId, walletAddress, isPrimary, isFavorite
+        );
+
+        // Trigger role update
+        try {
+          await roleService.updateUserRoles(discordId, req.session.discordUser.username);
+        } catch (roleErr) {
+          logger.error('Role update after verify failed (non-fatal):', roleErr);
+        }
+
+        logger.log(`Web signature verification: User ${discordId} linked wallet ${walletAddress}`);
+        res.json({ success: true, message: 'Wallet verified successfully!' });
+      } catch (error) {
+        logger.error('Error in signature verification:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // Legacy verify endpoint (kept for API consumers)
     this.app.post('/api/verify', async (req, res) => {
       try {
         const { discordId, walletAddress, signature, message } = req.body;

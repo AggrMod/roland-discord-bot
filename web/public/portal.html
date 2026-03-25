@@ -225,83 +225,67 @@
           </div>
 
           <div class="card">
-            <h3>Wallet Verification Methods</h3>
+            <h3>How Verification Works</h3>
             <p style="color: var(--text-secondary); margin-bottom: var(--space-4); line-height: 1.7;">
-              Choose your preferred verification method. Both prove ownership and unlock voting power based on your NFT holdings.
+              Click <strong>Add Wallet</strong> above, then choose a method. Your wallet extension opens automatically — no need to copy/paste addresses.
             </p>
             
-            <div style="display:grid; gap:24px; margin-bottom:24px;">
-              <!-- Wallet Connection -->
+            <div style="display:grid; gap:24px; margin-bottom:24px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr));">
               <div>
                 <h4 style="color:#c9d6ff; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
                   <span>🔗</span>
-                  <span>Method 1: Wallet Connection</span>
+                  <span>Sign Message (Recommended)</span>
                 </h4>
                 <div class="help-steps">
                   <div class="help-step">
                     <div class="step-number">1</div>
                     <div class="step-content">
-                      <h4>Click "Add Wallet"</h4>
-                      <p>Choose "Wallet Connection" option</p>
+                      <h4>Click "Connect & Sign"</h4>
+                      <p>Your wallet extension opens automatically</p>
                     </div>
                   </div>
                   <div class="help-step">
                     <div class="step-number">2</div>
                     <div class="step-content">
-                      <h4>Enter Address</h4>
-                      <p>Paste your Solana wallet address</p>
+                      <h4>Approve the Signature</h4>
+                      <p>Sign the verification message — free, no transaction</p>
                     </div>
                   </div>
                   <div class="help-step">
                     <div class="step-number">3</div>
                     <div class="step-content">
-                      <h4>Sign Message</h4>
-                      <p>Sign with Phantom, Solflare, or your preferred wallet</p>
-                    </div>
-                  </div>
-                  <div class="help-step">
-                    <div class="step-number">4</div>
-                    <div class="step-content">
-                      <h4>Verify</h4>
-                      <p>Submit signature to complete verification</p>
+                      <h4>Done!</h4>
+                      <p>Wallet linked, NFTs scanned, tier assigned</p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <!-- Micro Transaction -->
               <div>
                 <h4 style="color:#c9d6ff; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
-                  <span>💰</span>
-                  <span>Method 2: Micro Transaction</span>
+                  <span>💸</span>
+                  <span>Micro Transaction</span>
                 </h4>
                 <div class="help-steps">
                   <div class="help-step">
                     <div class="step-number">1</div>
                     <div class="step-content">
-                      <h4>Click "Add Wallet"</h4>
-                      <p>Choose "Micro Transaction" option</p>
+                      <h4>Click "Send & Verify"</h4>
+                      <p>Your wallet extension opens automatically</p>
                     </div>
                   </div>
                   <div class="help-step">
                     <div class="step-number">2</div>
                     <div class="step-content">
-                      <h4>Enter Address</h4>
-                      <p>Paste your Solana wallet address</p>
+                      <h4>Approve the Transaction</h4>
+                      <p>Send ~0.001 SOL — refunded after verification</p>
                     </div>
                   </div>
                   <div class="help-step">
                     <div class="step-number">3</div>
                     <div class="step-content">
-                      <h4>Send SOL</h4>
-                      <p>Send small SOL amount from your wallet</p>
-                    </div>
-                  </div>
-                  <div class="help-step">
-                    <div class="step-number">4</div>
-                    <div class="step-content">
-                      <h4>Verified & Refunded</h4>
-                      <p>SOL returned after verification completes</p>
+                      <h4>Done!</h4>
+                      <p>Wallet verified, SOL returned, tier assigned</p>
                     </div>
                   </div>
                 </div>
@@ -309,7 +293,7 @@
             </div>
 
             <div style="padding:12px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.22); border-radius:10px; color:var(--text-secondary); font-size:0.9em;">
-              <strong>💡 Tip:</strong> Wallet Connection is faster and free. Micro Transaction provides extra certainty and funds are refunded.
+              <strong>💡 Tip:</strong> Sign Message is instant and free. Micro Transaction provides extra certainty for high-value wallets — funds are always refunded.
             </div>
           </div>
         </section>
@@ -443,12 +427,11 @@
               <div class="help-section">
                 <h4>How to Link a Wallet</h4>
                 <ol>
-                  <li>Click the "Add Wallet" button in the Wallets section</li>
-                  <li>Enter your Solana wallet public address</li>
-                  <li>Copy the verification message provided by the system</li>
-                  <li>Sign the message using Phantom, Solflare, or another compatible wallet</li>
-                  <li>Paste the signature back into the verification form</li>
-                  <li>Submit to complete the linking process</li>
+                  <li>Click the <strong>"Add Wallet"</strong> button in the Wallets section</li>
+                  <li>Choose <strong>Sign Message</strong> (free) or <strong>Micro Transaction</strong></li>
+                  <li>Your wallet extension (Phantom, Solflare, etc.) opens automatically</li>
+                  <li>Approve the signature or transaction in your wallet</li>
+                  <li>Done — your wallet address is detected automatically, no copy/paste needed</li>
                 </ol>
               </div>
               <div class="help-section">
@@ -461,8 +444,8 @@
                 </ul>
               </div>
               <div class="help-section">
-                <h4>Setting a Favorite Wallet</h4>
-                <p>Click the star icon next to any verified wallet to set it as your favorite. This wallet will be used for primary voting power calculations and NFT verification.</p>
+                <h4>Setting a Primary Wallet</h4>
+                <p>Click the <strong>"Set Primary"</strong> button next to any verified wallet. This wallet will be used for primary voting power calculations and NFT verification.</p>
               </div>
               <div class="help-section">
                 <h4>Security Best Practices</h4>
@@ -613,11 +596,11 @@
                 <p><strong>Issue:</strong> Signature verification returns an error</p>
                 <p><strong>Solutions:</strong></p>
                 <ul>
-                  <li>Ensure you're signing with the exact wallet address you entered</li>
-                  <li>Copy the verification message exactly as provided (no extra spaces)</li>
+                  <li>Make sure your wallet extension is unlocked before clicking the verify button</li>
                   <li>Try a different wallet application (switch between Phantom, Solflare, etc.)</li>
                   <li>Clear your browser cache and cookies, then try again</li>
                   <li>Make sure your wallet software is up to date</li>
+                  <li>If using a hardware wallet, ensure it's connected and the Solana app is open</li>
                 </ul>
               </div>
               <div class="help-section">

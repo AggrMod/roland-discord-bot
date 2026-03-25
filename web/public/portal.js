@@ -61,73 +61,260 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ==================== WALLET MANAGEMENT ====================
 function showWalletAddForm() {
-  // Show dual verification methods
+  if (!userData) {
+    showError('Please log in first to verify a wallet');
+    return;
+  }
+
   const walletsList = document.getElementById('walletsList');
-  if (walletsList) {
-    const formHtml = `
-      <div style="display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(280px,1fr));">
-        <!-- Wallet Connection Method -->
-        <div style="padding:20px; background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(99,102,241,0.05)); border:1px solid rgba(99,102,241,0.22); border-radius:12px;">
-          <h4 style="color:#e0e7ff; margin-bottom:16px; display:flex; align-items:center; gap:8px;">
-            <span style="font-size:1.3em;">🔗</span>
-            <span>Wallet Connection</span>
-          </h4>
-          <p style="color:var(--text-secondary); font-size:0.9em; margin-bottom:12px; line-height:1.6;">Sign a message with your wallet to prove ownership. No transaction required.</p>
-          <div style="display:grid; gap:12px;">
-            <div>
-              <label style="color:#c9d6ff; font-size:0.85em; margin-bottom:6px; display:block;">Which wallet are you signing with?</label>
-              <input id="walletAddr1" type="text" placeholder="Enter your Solana wallet address" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.85em; width:100%;">
-              <p style="color:var(--text-secondary); font-size:0.8em; margin-top:6px;">You'll sign a message to verify ownership</p>
-            </div>
-            <button onclick="verifyBySignature()" class="btn-primary" style="padding:10px 16px; width:100%;">✓ Sign & Verify</button>
-          </div>
-        </div>
+  if (!walletsList) return;
 
-        <!-- Micro Transaction Method -->
-        <div style="padding:20px; background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(99,102,241,0.05)); border:1px solid rgba(99,102,241,0.22); border-radius:12px;">
-          <h4 style="color:#e0e7ff; margin-bottom:16px; display:flex; align-items:center; gap:8px;">
-            <span style="font-size:1.3em;">💰</span>
-            <span>Micro Transaction</span>
-          </h4>
-          <p style="color:var(--text-secondary); font-size:0.9em; margin-bottom:12px; line-height:1.6;">Send a small SOL amount to prove ownership. Funds returned after verification.</p>
-          <div style="display:grid; gap:12px;">
-            <div>
-              <label style="color:#c9d6ff; font-size:0.85em; margin-bottom:6px; display:block;">Which wallet are you sending from?</label>
-              <input id="walletAddr2" type="text" placeholder="Enter your Solana wallet address" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.85em; width:100%;">
-              <p style="color:var(--text-secondary); font-size:0.8em; margin-top:6px;">Send a tiny amount of SOL from this wallet</p>
-            </div>
-            <button onclick="verifyByMicroTx()" class="btn-primary" style="padding:10px 16px; width:100%;">💸 Send Verification</button>
-          </div>
-        </div>
+  walletsList.innerHTML = `
+    <div style="display:grid; gap:20px; grid-template-columns:repeat(auto-fit,minmax(280px,1fr));">
+      <!-- Wallet Signature Method -->
+      <div style="padding:28px; background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(99,102,241,0.05)); border:2px solid rgba(99,102,241,0.30); border-radius:14px; text-align:center;">
+        <div style="font-size:2.5em; margin-bottom:12px;">🔗</div>
+        <h4 style="color:#e0e7ff; margin-bottom:12px; font-size:1.15em;">Sign Message</h4>
+        <p style="color:var(--text-secondary); font-size:0.9em; line-height:1.6; margin-bottom:20px;">
+          Your wallet extension opens automatically.<br>Sign a message to prove ownership — <strong>free, no transaction</strong>.
+        </p>
+        <button id="signVerifyBtn" onclick="verifyBySignature()" class="btn-primary" style="padding:14px 24px; width:100%; font-size:1em;">
+          ✓ Connect & Sign
+        </button>
+        <p style="color:var(--text-muted); font-size:0.8em; margin-top:10px;">Phantom · Solflare · Backpack</p>
       </div>
-    `;
-    walletsList.innerHTML = formHtml;
-    walletsList.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      <!-- Micro Transaction Method -->
+      <div style="padding:28px; background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(99,102,241,0.05)); border:2px solid rgba(99,102,241,0.30); border-radius:14px; text-align:center;">
+        <div style="font-size:2.5em; margin-bottom:12px;">💸</div>
+        <h4 style="color:#e0e7ff; margin-bottom:12px; font-size:1.15em;">Micro Transaction</h4>
+        <p style="color:var(--text-secondary); font-size:0.9em; line-height:1.6; margin-bottom:20px;">
+          Send a tiny SOL amount (~0.001) to verify.<br>Your wallet opens automatically — <strong>funds returned after</strong>.
+        </p>
+        <button id="microVerifyBtn" onclick="verifyByMicroTx()" class="btn-primary" style="padding:14px 24px; width:100%; font-size:1em;">
+          💰 Send & Verify
+        </button>
+        <p style="color:var(--text-muted); font-size:0.8em; margin-top:10px;">Any Solana wallet that supports transfers</p>
+      </div>
+    </div>
+    <div id="verifyStatus" style="margin-top:16px;"></div>
+  `;
+  walletsList.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Detect available Solana wallet provider
+function getSolanaProvider() {
+  if (window.phantom?.solana?.isPhantom) return window.phantom.solana;
+  if (window.solflare?.isSolflare) return window.solflare;
+  if (window.backpack?.isBackpack) return window.backpack;
+  if (window.solana) return window.solana;
+  return null;
+}
+
+async function verifyBySignature() {
+  const btn = document.getElementById('signVerifyBtn');
+  const statusEl = document.getElementById('verifyStatus');
+  
+  const provider = getSolanaProvider();
+  if (!provider) {
+    showError('No Solana wallet detected. Please install Phantom, Solflare, or Backpack.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Connecting wallet...';
+
+  try {
+    // 1. Connect wallet
+    const resp = await provider.connect();
+    const walletAddress = resp.publicKey.toString();
+    btn.innerHTML = '⏳ Requesting challenge...';
+
+    // 2. Get challenge from server
+    const challengeRes = await fetch('/api/verify/challenge', { method: 'POST' });
+    const challengeData = await challengeRes.json();
+    if (!challengeData.success) throw new Error(challengeData.message || 'Failed to get challenge');
+
+    btn.innerHTML = '⏳ Sign the message in your wallet...';
+
+    // 3. Sign the challenge message
+    const encodedMessage = new TextEncoder().encode(challengeData.message);
+    const signedMessage = await provider.signMessage(encodedMessage, 'utf8');
+    
+    // Extract signature bytes → base58
+    const signatureBytes = signedMessage.signature || signedMessage;
+    const signatureBase58 = btoa(String.fromCharCode(...new Uint8Array(signatureBytes)))
+      // We need base58, not base64. Use a lightweight encoder.
+      ;
+    // Actually, convert Uint8Array to base58 using a small helper
+    const sig58 = uint8ToBase58(new Uint8Array(signatureBytes));
+
+    btn.innerHTML = '⏳ Verifying on server...';
+
+    // 4. Submit to server
+    const verifyRes = await fetch('/api/verify/signature', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletAddress, signature: sig58 })
+    });
+    const verifyData = await verifyRes.json();
+
+    if (verifyData.success) {
+      showSuccess(verifyData.message || 'Wallet verified!');
+      await loadPortal(); // Refresh all data
+    } else {
+      showError(verifyData.message || 'Verification failed');
+    }
+  } catch (error) {
+    if (error.code === 4001 || error.message?.includes('reject')) {
+      showInfo('Signing cancelled. No changes made.');
+    } else {
+      showError('Verification failed: ' + (error.message || 'Unknown error'));
+      console.error('Signature verification error:', error);
+    }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '✓ Connect & Sign';
   }
 }
 
-function verifyBySignature() {
-  const addr = document.getElementById('walletAddr1')?.value.trim();
-  if (!addr) {
-    showError('Please enter a wallet address');
+async function verifyByMicroTx() {
+  const btn = document.getElementById('microVerifyBtn');
+  const statusEl = document.getElementById('verifyStatus');
+
+  const provider = getSolanaProvider();
+  if (!provider) {
+    showError('No Solana wallet detected. Please install Phantom, Solflare, or Backpack.');
     return;
   }
-  showSuccess('Initiating wallet signature verification...');
-  setTimeout(() => {
-    window.location.href = '/verify';
-  }, 600);
+
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Requesting verification...';
+
+  try {
+    // 1. Create micro-verify request on server
+    const reqRes = await fetch('/api/micro-verify/request', { method: 'POST' });
+    const reqData = await reqRes.json();
+    if (!reqData.success) throw new Error(reqData.message || 'Failed to create verification request');
+
+    const { amount, destinationWallet, id: requestId } = reqData.request || reqData;
+    const lamports = Math.round((amount || 0.001) * 1e9);
+
+    btn.innerHTML = '⏳ Approve transaction in your wallet...';
+
+    // 2. Connect wallet and send micro transaction
+    const resp = await provider.connect();
+    const fromPubkey = resp.publicKey;
+
+    // Build and send transaction using Solana web3
+    // We need @solana/web3.js — load it dynamically if not present
+    if (!window.solanaWeb3) {
+      await loadScript('https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js');
+    }
+    const { Connection, PublicKey, Transaction, SystemProgram } = window.solanaWeb3;
+
+    const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey,
+        toPubkey: new PublicKey(destinationWallet),
+        lamports
+      })
+    );
+
+    transaction.feePayer = fromPubkey;
+    const { blockhash } = await connection.getLatestBlockhash();
+    transaction.recentBlockhash = blockhash;
+
+    const signed = await provider.signTransaction(transaction);
+    btn.innerHTML = '⏳ Sending transaction...';
+    const txSig = await connection.sendRawTransaction(signed.serialize());
+
+    btn.innerHTML = '⏳ Confirming...';
+    await connection.confirmTransaction(txSig, 'confirmed');
+
+    showSuccess('Transaction sent! Verification is processing — your wallet will appear shortly.');
+
+    // Show status area with polling
+    if (statusEl) {
+      statusEl.innerHTML = `
+        <div style="padding:16px; background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3); border-radius:10px; text-align:center;">
+          <div class="spinner" style="width:24px; height:24px; margin:0 auto 8px;"></div>
+          <p style="color:#86efac; font-weight:600;">Transaction sent! Waiting for server confirmation...</p>
+          <p style="color:var(--text-secondary); font-size:0.85em; margin-top:6px;">TX: ${txSig.slice(0, 16)}...</p>
+        </div>
+      `;
+    }
+
+    // Poll for completion
+    pollMicroVerifyStatus(statusEl);
+
+  } catch (error) {
+    if (error.code === 4001 || error.message?.includes('reject')) {
+      showInfo('Transaction cancelled. No changes made.');
+    } else {
+      showError('Verification failed: ' + (error.message || 'Unknown error'));
+      console.error('Micro-tx verification error:', error);
+    }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '💰 Send & Verify';
+  }
 }
 
-function verifyByMicroTx() {
-  const addr = document.getElementById('walletAddr2')?.value.trim();
-  if (!addr) {
-    showError('Please enter a wallet address');
+async function pollMicroVerifyStatus(statusEl, attempts = 0) {
+  if (attempts > 30) {
+    if (statusEl) statusEl.innerHTML = `<div style="padding:12px; background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); border-radius:10px; text-align:center; color:#fcd34d;">Verification is still processing. It may take a few minutes — refresh the page to check.</div>`;
     return;
   }
-  showSuccess('Initiating micro-transaction verification...');
-  setTimeout(() => {
-    window.location.href = '/verify?method=micro';
-  }, 600);
+  
+  try {
+    const res = await fetch('/api/micro-verify/status');
+    const data = await res.json();
+    
+    if (data.success && data.request?.status === 'verified') {
+      showSuccess('Wallet verified via micro-transaction!');
+      await loadPortal();
+      return;
+    }
+  } catch (e) { /* continue polling */ }
+
+  setTimeout(() => pollMicroVerifyStatus(statusEl, attempts + 1), 5000);
+}
+
+// Load external script dynamically
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+// Lightweight base58 encoder (Bitcoin/Solana alphabet)
+function uint8ToBase58(bytes) {
+  const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  const d = [];
+  let i, j, carry;
+  for (i = 0; i < bytes.length; i++) {
+    carry = bytes[i];
+    for (j = 0; j < d.length; j++) {
+      carry += d[j] << 8;
+      d[j] = carry % 58;
+      carry = (carry / 58) | 0;
+    }
+    while (carry > 0) {
+      d.push(carry % 58);
+      carry = (carry / 58) | 0;
+    }
+  }
+  let output = '';
+  for (i = 0; i < bytes.length && bytes[i] === 0; i++) output += ALPHABET[0];
+  for (i = d.length - 1; i >= 0; i--) output += ALPHABET[d[i]];
+  return output;
 }
 
 // ==================== PORTAL LOADING ====================
@@ -375,7 +562,7 @@ async function loadActiveVotes() {
             <span class="status-badge status-${proposal.status}">${proposal.status}</span>
           </div>
           <div class="proposal-meta" style="margin-bottom: var(--space-4);">
-            Proposal #${proposal.proposal_id} • Created by ${escapeHtml(proposal.author || 'Unknown')}
+            Proposal #${proposal.proposal_id} • Created by ${escapeHtml(proposal.creator || 'Unknown')}
           </div>
           ${proposal.description ? `<p style="color: var(--text-secondary); margin-bottom: var(--space-4); line-height: 1.6;">${escapeHtml(proposal.description)}</p>` : ''}
           
@@ -1007,7 +1194,7 @@ async function loadPublicTreasuryData() {
         </div>
       </div>
       
-      <div style="margin-top: var(--space-4); padding: var(--space-3); background: var(--card-bg); border-radius: var(--radius-md); border: 1px solid var(--border-color); text-align: center; font-size: 0.85em; color: var(--text-secondary);">
+      <div style="margin-top: var(--space-4); padding: var(--space-3); background: var(--bg-tertiary); border-radius: var(--radius-md); border: 1px solid var(--border-default); text-align: center; font-size: 0.85em; color: var(--text-secondary);">
         ${statusEmoji[treasury.status]} Last updated: ${lastUpdatedText}
       </div>
     `;
@@ -1086,7 +1273,7 @@ async function loadTreasuryData() {
         </div>
       </div>
       
-      <div style="margin-top: var(--space-4); padding: var(--space-3); background: var(--card-bg); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+      <div style="margin-top: var(--space-4); padding: var(--space-3); background: var(--bg-tertiary); border-radius: var(--radius-md); border: 1px solid var(--border-default);">
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); font-size: 0.9em;">
           <div>
             <strong style="color: var(--text-secondary);">Wallet:</strong>
@@ -1234,7 +1421,7 @@ async function loadAdminProposals() {
     }
 
     content.innerHTML = `<div style="display:grid; gap:12px;">${proposals.slice(0, 50).map(p => `
-      <div style="padding:12px; border:1px solid var(--border-color); border-radius:10px; background: var(--bg-tertiary);">
+      <div style="padding:12px; border:1px solid var(--border-default); border-radius:10px; background: var(--bg-tertiary);">
         <div style="display:flex; justify-content:space-between; gap:12px;">
           <strong>${escapeHtml(p.title || 'Untitled')}</strong>
           <span class="status-badge status-${escapeHtml(p.status || 'draft')}">${escapeHtml(p.status || 'draft')}</span>
@@ -1691,18 +1878,18 @@ function renderAdminUsersTable(users) {
     const did = u.discord_id || u.discordId || '—';
     return `
       <tr>
-        <td style="padding:8px; border-bottom:1px solid var(--border-color);">${escapeHtml(name)}</td>
-        <td style="padding:8px; border-bottom:1px solid var(--border-color); font-family:monospace;">${escapeHtml(String(did))}</td>
-        <td style="padding:8px; border-bottom:1px solid var(--border-color);">${escapeHtml(String(tier))}</td>
-        <td style="padding:8px; border-bottom:1px solid var(--border-color);">${nfts}</td>
-        <td style="padding:8px; border-bottom:1px solid var(--border-color);">${vp}</td>
+        <td style="padding:8px; border-bottom:1px solid var(--border-default);">${escapeHtml(name)}</td>
+        <td style="padding:8px; border-bottom:1px solid var(--border-default); font-family:monospace;">${escapeHtml(String(did))}</td>
+        <td style="padding:8px; border-bottom:1px solid var(--border-default);">${escapeHtml(String(tier))}</td>
+        <td style="padding:8px; border-bottom:1px solid var(--border-default);">${nfts}</td>
+        <td style="padding:8px; border-bottom:1px solid var(--border-default);">${vp}</td>
       </tr>
     `;
   }).join('');
 
   content.innerHTML = `
     <div style="margin-bottom:10px; color: var(--text-secondary); font-size: 0.9em;">Showing ${Math.min(users.length, 100)} of ${users.length} users</div>
-    <div style="overflow:auto; border:1px solid var(--border-color); border-radius:8px;">
+    <div style="overflow:auto; border:1px solid var(--border-default); border-radius:8px;">
       <table style="width:100%; border-collapse:collapse; font-size: 0.92em;">
         <thead>
           <tr style="background: var(--bg-tertiary); text-align:left;">

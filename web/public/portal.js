@@ -1174,7 +1174,7 @@ window.addEventListener('unhandledrejection', (event) => {
 
 // ==================== INTEGRATED ADMIN WORKSPACE ====================
 function hideAllAdminCards() {
-  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminAnalyticsCard', 'adminHelpCard', 'adminRolesCard', 'adminActivityCard', 'adminStatsCard', 'adminNftTrackerCard', 'adminVotingPowerCard', 'adminSelfServeRolesCard']
+  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminAnalyticsCard', 'adminHelpCard', 'adminRolesCard', 'adminActivityCard', 'adminStatsCard', 'adminNftTrackerCard', 'adminVotingPowerCard', 'adminSelfServeRolesCard', 'adminApiRefCard']
     .forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
@@ -1240,7 +1240,8 @@ function showAdminView(view) {
     activity: { card: 'adminActivityCard', load: loadAdminActivity },
     votingpower: { card: 'adminVotingPowerCard', load: loadVotingPowerView },
     nfttracker: { card: 'adminNftTrackerCard', load: loadNftTrackerView },
-    selfserveroles: { card: 'adminSelfServeRolesCard', load: loadSelfServeRolesView }
+    selfserveroles: { card: 'adminSelfServeRolesCard', load: loadSelfServeRolesView },
+    apiref: { card: 'adminApiRefCard', load: loadApiRefView }
   };
 
   const target = map[view] || map.settings;
@@ -4227,4 +4228,95 @@ async function postSelfServePanel() {
   } catch (e) {
     if (status) status.innerHTML = `<p style="color:#ef4444;">❌ Error: ${e.message}</p>`;
   }
+}
+
+// ==================== API REFERENCE ====================
+function loadApiRefView() {
+  if (!isAdmin) return;
+  const content = document.getElementById('adminApiRefContent');
+  if (!content) return;
+
+  const badge = (method) => {
+    const colors = { GET: '#22c55e', POST: '#3b82f6', DELETE: '#ef4444' };
+    return `<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.75em;font-weight:700;color:#fff;background:${colors[method] || '#6b7280'};font-family:monospace;">${method}</span>`;
+  };
+  const authBadge = (pub) => pub
+    ? '<span style="font-size:0.8em;">🔓 Public</span>'
+    : '<span style="font-size:0.8em;">🔐 Session required</span>';
+
+  const endpoint = (method, path, desc, auth, example) => `
+    <div style="background:var(--bg-secondary);border-radius:8px;padding:var(--space-3) var(--space-4);margin-bottom:var(--space-3);border:1px solid rgba(99,102,241,0.1);">
+      <div style="display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;">
+        ${badge(method)}
+        <code style="font-size:0.9em;color:var(--text-primary);">${path}</code>
+        <span style="margin-left:auto;">${authBadge(auth)}</span>
+      </div>
+      <p style="margin:var(--space-2) 0 0;font-size:0.88em;color:var(--text-secondary);">${desc}</p>
+      ${example ? `
+        <details style="margin-top:var(--space-2);">
+          <summary style="cursor:pointer;font-size:0.82em;color:var(--accent-primary);user-select:none;">Example Response</summary>
+          <pre style="margin:var(--space-2) 0 0;padding:var(--space-3);background:rgba(0,0,0,0.3);border-radius:6px;overflow-x:auto;font-size:0.8em;color:#e2e8f0;line-height:1.5;">${example}</pre>
+        </details>` : ''}
+    </div>`;
+
+  content.innerHTML = `
+    <div style="position:sticky;top:0;z-index:10;background:var(--bg-primary);padding:var(--space-2) 0 var(--space-3);margin-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.1);display:flex;gap:var(--space-3);flex-wrap:wrap;">
+      <a href="#apiref-public" style="color:var(--accent-primary);font-size:0.85em;text-decoration:none;">Public Endpoints</a>
+      <a href="#apiref-auth" style="color:var(--accent-primary);font-size:0.85em;text-decoration:none;">Auth Endpoints</a>
+      <a href="#apiref-flow" style="color:var(--accent-primary);font-size:0.85em;text-decoration:none;">Auth Flow</a>
+    </div>
+
+    <h4 id="apiref-public" style="color:var(--text-primary);margin:0 0 var(--space-3);">Public Endpoints <span style="font-weight:400;font-size:0.8em;color:var(--text-secondary);">(no auth required)</span></h4>
+
+    ${endpoint('GET', '/api/public/stats', 'Returns community statistics.', true,
+      JSON.stringify({ memberCount: 120, totalNFTs: 540, verifiedWallets: 89, activeProposals: 2 }, null, 2))}
+
+    ${endpoint('GET', '/api/public/treasury', 'Returns treasury balance and wallet info.', true,
+      JSON.stringify({ sol: "12.4500", usdc: "0.0000", wallet: "AbCd...XyZ1", lastUpdated: "2026-03-27T10:00:00Z" }, null, 2))}
+
+    ${endpoint('GET', '/api/public/proposals/active', 'Returns active governance proposals.', true,
+      JSON.stringify({ proposals: [{ id: "1", title: "Add new trait", yesVotes: 5, noVotes: 2, endsAt: "2026-04-01" }] }, null, 2))}
+
+    ${endpoint('GET', '/api/public/proposals/concluded', 'Returns concluded proposals.', true, null)}
+
+    ${endpoint('GET', '/api/public/proposals/:id', 'Returns a single proposal by ID.', true, null)}
+
+    ${endpoint('GET', '/api/public/leaderboard', 'Returns top NFT holders.', true,
+      JSON.stringify({ leaderboard: [{ username: "CryptoKing", totalNFTs: 12, tier: "Don", rank: 1 }] }, null, 2))}
+
+    ${endpoint('GET', '/api/public/leaderboard/:userId', 'Returns specific user rank and stats.', true, null)}
+
+    ${endpoint('GET', '/api/public/missions/active', 'Returns active missions.', true, null)}
+
+    ${endpoint('GET', '/api/public/missions/completed', 'Returns completed missions.', true, null)}
+
+    ${endpoint('GET', '/api/public/missions/:id', 'Returns a single mission by ID.', true, null)}
+
+    <h4 id="apiref-auth" style="color:var(--text-primary);margin:var(--space-4) 0 var(--space-3);">Auth Endpoints <span style="font-weight:400;font-size:0.8em;color:var(--text-secondary);">(session required — Discord OAuth login)</span></h4>
+
+    ${endpoint('GET', '/api/user/me', 'Returns the logged-in user profile.', false,
+      JSON.stringify({ discordId: "123456789", username: "CryptoKing", totalNFTs: 5, tier: "Don", votingPower: 10, wallets: ["AbCd..."] }, null, 2))}
+
+    ${endpoint('POST', '/api/user/vote', 'Cast a vote on a proposal. Body: <code>{ "proposalId": "1", "choice": "yes" }</code>', false, null)}
+
+    ${endpoint('POST', '/api/user/proposals', 'Create a governance proposal. Body: <code>{ "title": "...", "description": "..." }</code>', false, null)}
+
+    <h4 id="apiref-flow" style="color:var(--text-primary);margin:var(--space-4) 0 var(--space-3);">Auth Flow</h4>
+    <div style="background:var(--bg-secondary);border-radius:8px;padding:var(--space-4);border:1px solid rgba(99,102,241,0.1);font-size:0.88em;line-height:1.7;color:var(--text-secondary);">
+      <p style="margin:0 0 var(--space-3);"><strong style="color:var(--text-primary);">How to implement Discord OAuth for your external website:</strong></p>
+      <ol style="margin:0;padding-left:var(--space-4);">
+        <li>Redirect the user to Discord OAuth2:<br>
+          <code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;font-size:0.9em;word-break:break-all;">https://discord.com/api/oauth2/authorize?client_id=CLIENT_ID&amp;redirect_uri=REDIRECT_URI&amp;response_type=code&amp;scope=identify</code>
+        </li>
+        <li>Discord redirects back with <code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;">?code=...</code></li>
+        <li>Exchange the code at <code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;">GET /auth/discord/callback?code=...</code> — the bot handles the OAuth exchange and sets a session cookie</li>
+        <li>Subsequent requests include the cookie automatically (same-origin or CORS with <code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;">credentials: 'include'</code>)</li>
+        <li>Use <code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;">GET /api/user/me</code> to check if the user is logged in</li>
+      </ol>
+    </div>
+
+    <div style="background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.25);border-radius:8px;padding:var(--space-3) var(--space-4);margin-top:var(--space-4);font-size:0.85em;color:#eab308;">
+      <strong>CORS Note:</strong> For cross-origin requests from your website, contact your server admin to add your domain to the CORS allowlist.
+    </div>
+  `;
 }

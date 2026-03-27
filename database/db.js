@@ -365,6 +365,25 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_tenant_modules_tenant ON tenant_modules(tenant_id);
     CREATE INDEX IF NOT EXISTS idx_tenant_modules_key ON tenant_modules(module_key);
     CREATE INDEX IF NOT EXISTS idx_tenant_audit_logs_guild_created ON tenant_audit_logs(guild_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS billing_entitlement_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT,
+      customer_id TEXT,
+      event_type TEXT NOT NULL,
+      payload_hash TEXT NOT NULL UNIQUE,
+      payload_json TEXT NOT NULL,
+      result TEXT NOT NULL,
+      processed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_billing_entitlement_events_guild_created
+      ON billing_entitlement_events(guild_id, processed_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_billing_entitlement_events_customer_created
+      ON billing_entitlement_events(customer_id, processed_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_billing_entitlement_events_event_type
+      ON billing_entitlement_events(event_type);
   `);
 
   // Backward-compatible migrations for existing deployments

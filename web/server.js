@@ -4,6 +4,7 @@ const BetterSqlite3Store = require('better-sqlite3-session-store')(session);
 const Database = require('better-sqlite3');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
+const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const nacl = require('tweetnacl');
@@ -55,6 +56,42 @@ function hasDiscordAdminPermission(guildSummary) {
   return isAdmin || canManageGuild;
 }
 
+function normalizeWebhookValue(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function stableJson(value) {
+  if (Array.isArray(value)) {
+    return value.map(stableJson);
+  }
+
+  if (value && typeof value === 'object' && value.constructor === Object) {
+    return Object.keys(value)
+      .sort()
+      .reduce((acc, key) => {
+        const normalized = stableJson(value[key]);
+        if (normalized !== undefined) {
+          acc[key] = normalized;
+        }
+        return acc;
+      }, {});
+  }
+
+  return value;
+}
+
+function hashWebhookPayload(payload) {
+  return crypto.createHash('sha256').update(JSON.stringify(stableJson(payload))).digest('hex');
+}
+
+function timingSafeEquals(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length === 0 || b.length === 0 || a.length !== b.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
+
 class WebServer {
   constructor() {
     this.app = express();
@@ -85,13 +122,21 @@ class WebServer {
       ],
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', REQUEST_GUILD_HEADER],
+      allowedHeaders: ['Content-Type', 'Authorization', REQUEST_GUILD_HEADER, 'x-entitlement-secret'],
       exposedHeaders: ['X-Total-Count'], // For pagination
       maxAge: 86400 // 24 hours preflight cache
     }));
 
     this.app.use(express.json());
     this.app.use(express.static(path.join(__dirname, 'public')));
+
+    this.app.get('/health', (_req, res) => {
+      res.json({
+        ok: true,
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString()
+      });
+    });
 
     // Session secret enforcement
     const sessionSecret = process.env.SESSION_SECRET || 'solpranos-secret-key-change-this-in-production';
@@ -2804,6 +2849,134 @@ class WebServer {
       } catch (error) {
         logger.error('Error posting ticket panel:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // ==================== BILLING ENTITLEMENT WEBHOOK ====================
+
+    this.app.post('/api/billing/webhook/entitlement', (req, res) => {
+      try {
+        const configuredSecret = process.env.ENTITLEMENT_WEBHOOK_SECRET;
+        if (!configuredSecret) {
+          return res.status(503).json({ success: false, message: 'Entitlement webhook is not configured' });
+        }
+
+        const providedSecret = normalizeWebhookValue(req.get('x-entitlement-secret'));
+        if (!timingSafeEquals(providedSecret, configuredSecret)) {
+          return res.status(401).json({ success: false, message: 'Unauthorized' });
+        }
+
+        const payload = req.body && typeof req.body === 'object' ? req.body : {};
+        const normalizedPayload = {
+          eventType: normalizeWebhookValue(payload.eventType),
+          customerId: normalizeWebhookValue(payload.customerId),
+          guildId: normalizeWebhookValue(payload.guildId),
+          plan: normalizeWebhookValue(payload.plan),
+          status: normalizeWebhookValue(payload.status),
+          metadata: payload.metadata === undefined ? undefined : payload.metadata
+        };
+        const payloadHash = hashWebhookPayload(normalizedPayload);
+
+        const existingEvent = db.prepare(`
+          SELECT id, result
+          FROM billing_entitlement_events
+          WHERE payload_hash = ?
+        `).get(payloadHash);
+
+        if (existingEvent) {
+          return res.json({
+            success: true,
+            duplicate: true,
+            eventId: existingEvent.id,
+            result: existingEvent.result
+          });
+        }
+
+        const normalizedEventType = normalizedPayload.eventType.toLowerCase();
+        const normalizedStatus = normalizedPayload.status.toLowerCase();
+        const successMarkers = new Set(['approved', 'success']);
+        const suspendedMarkers = new Set(['cancelled', 'canceled', 'past_due', 'suspended']);
+        const actionMarkers = new Set([normalizedEventType, normalizedStatus].filter(Boolean));
+        const shouldApplyPlan = Array.from(actionMarkers).some(marker => successMarkers.has(marker));
+        const shouldSuspend = Array.from(actionMarkers).some(marker => suspendedMarkers.has(marker));
+
+        let result = 'ignored';
+
+        if (!normalizedPayload.guildId || !normalizedPayload.customerId || !normalizedPayload.eventType || !normalizedPayload.status) {
+          result = 'invalid:missing_required_fields';
+        } else if (shouldApplyPlan) {
+          if (!normalizedPayload.plan) {
+            result = 'invalid:missing_plan';
+          } else {
+            const planResult = tenantService.setTenantPlan(
+              normalizedPayload.guildId,
+              normalizedPayload.plan,
+              'billing-entitlement-webhook'
+            );
+
+            if (!planResult.success) {
+              result = `error:${planResult.message || 'plan_update_failed'}`;
+            } else {
+              result = `applied_plan:${normalizedPayload.plan}`;
+            }
+          }
+        } else if (shouldSuspend) {
+          const statusResult = tenantService.setTenantStatus(
+            normalizedPayload.guildId,
+            'suspended',
+            'billing-entitlement-webhook'
+          );
+
+          if (!statusResult.success) {
+            result = `error:${statusResult.message || 'status_update_failed'}`;
+          } else {
+            result = 'suspended';
+          }
+        }
+
+        const insertResult = db.prepare(`
+          INSERT INTO billing_entitlement_events (
+            guild_id,
+            customer_id,
+            event_type,
+            payload_hash,
+            payload_json,
+            result,
+            processed_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `).run(
+          normalizedPayload.guildId || null,
+          normalizedPayload.customerId || null,
+          normalizedPayload.eventType || null,
+          payloadHash,
+          JSON.stringify(stableJson(normalizedPayload)),
+          result
+        );
+
+        return res.json({
+          success: true,
+          eventId: insertResult.lastInsertRowid,
+          result
+        });
+      } catch (error) {
+        if (error && String(error.message || error).includes('UNIQUE constraint failed: billing_entitlement_events.payload_hash')) {
+          const duplicateEvent = db.prepare(`
+            SELECT id, result
+            FROM billing_entitlement_events
+            WHERE payload_hash = ?
+          `).get(payloadHash);
+
+          return res.json({
+            success: true,
+            duplicate: true,
+            eventId: duplicateEvent?.id || null,
+            result: duplicateEvent?.result || 'duplicate'
+          });
+        }
+
+        logger.error('Error in entitlement webhook:', error);
+        return res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });
 

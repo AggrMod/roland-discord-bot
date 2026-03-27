@@ -1300,19 +1300,6 @@ async function loadAdminSettingsView() {
       });
     };
 
-    // Build tier editor rows
-    let tierRows = '';
-    if (s.tiers && s.tiers.length) {
-      s.tiers.forEach((tier, i) => {
-        tierRows += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-2);margin-bottom:var(--space-2);">
-          <input type="text" value="${escapeHtml(tier.name)}" data-ps-tier="${i}" data-ps-field="name" readonly style="${fieldInput}opacity:0.7;">
-          <input type="number" value="${tier.minNFTs}" data-ps-tier="${i}" data-ps-field="minNFTs" min="1" style="${fieldInput}">
-          <input type="number" value="${tier.maxNFTs}" data-ps-tier="${i}" data-ps-field="maxNFTs" min="1" style="${fieldInput}">
-          <input type="number" value="${tier.votingPower}" data-ps-tier="${i}" data-ps-field="votingPower" min="1" style="${fieldInput}">
-        </div>`;
-      });
-    }
-
     // Step 2: Inject HTML skeleton with loading placeholders for channel selects
     content.innerHTML = `
       <!-- Governance Card -->
@@ -1434,17 +1421,6 @@ async function loadAdminSettingsView() {
         </div>
       </div>
 
-      <!-- Tier Configuration Card -->
-      <div style="${cardStyle}">
-        <h3 style="${cardHeader}">🏆 Tier Configuration</h3>
-        <div id="ps_tierEditor">
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-2);margin-bottom:var(--space-2);font-weight:600;color:var(--text-secondary);font-size:var(--font-sm);">
-            <div>Tier Name</div><div>Min NFTs</div><div>Max NFTs</div><div>Voting Power</div>
-          </div>
-          ${tierRows}
-        </div>
-      </div>
-
       <!-- Action Buttons -->
       <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid var(--border-default);">
         <button class="btn-danger" onclick="resetPortalSettings()">🔄 Reset to Defaults</button>
@@ -1519,24 +1495,6 @@ function showSettingsSuccess(message) {
 async function savePortalSettings() {
   if (!portalSettingsData) return;
 
-  // Collect tier data
-  const tierInputs = document.querySelectorAll('#ps_tierEditor input[data-ps-tier]');
-  const tiers = [];
-  for (let i = 0; i < portalSettingsData.tiers.length; i++) {
-    const tierData = {
-      name: portalSettingsData.tiers[i].name,
-      roleId: portalSettingsData.tiers[i].roleId,
-      minNFTs: 0, maxNFTs: 0, votingPower: 0
-    };
-    tierInputs.forEach(input => {
-      if (parseInt(input.dataset.psTier) === i) {
-        const field = input.dataset.psField;
-        tierData[field] = field === 'name' ? input.value : parseInt(input.value);
-      }
-    });
-    tiers.push(tierData);
-  }
-
   const battleRoundPauseMinSec = parseInt(document.getElementById('ps_battleRoundPauseMinSec').value);
   const battleRoundPauseMaxSec = parseInt(document.getElementById('ps_battleRoundPauseMaxSec').value);
   const battleElitePrepSec = parseInt(document.getElementById('ps_battleElitePrepSec').value);
@@ -1546,7 +1504,6 @@ async function savePortalSettings() {
   }
 
   const newSettings = {
-    tiers,
     quorumPercentage: parseFloat(document.getElementById('ps_quorumPercentage').value),
     supportThreshold: parseInt(document.getElementById('ps_supportThreshold').value),
     voteDurationDays: parseInt(document.getElementById('ps_voteDurationDays').value),
@@ -1647,6 +1604,48 @@ async function loadAdminAnalyticsView() {
 
 let adminTiersCache = [];
 let adminTraitsCache = [];
+let discordRolesCache = null;
+
+async function fetchDiscordRoles() {
+  if (discordRolesCache) return discordRolesCache;
+  try {
+    const res = await fetch('/api/admin/discord/roles', { credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
+        discordRolesCache = data.roles || [];
+        return discordRolesCache;
+      }
+    }
+  } catch (e) {
+    console.error('Failed to fetch Discord roles:', e);
+  }
+  return [];
+}
+
+function roleSelectHTML(id, selectedValue, required = false) {
+  return `<select id="${id}" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
+    <option value="">-- Select Role --</option>
+  </select>`;
+}
+
+async function populateRoleSelect(selectId, selectedValue) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const roles = await fetchDiscordRoles();
+  sel.innerHTML = '<option value="">-- Select Role --</option>';
+  roles.forEach(role => {
+    const opt = document.createElement('option');
+    opt.value = role.id;
+    const colorDot = role.color && role.color !== '#000000' ? `\u25CF ` : '';
+    opt.textContent = colorDot + role.name;
+    if (role.color && role.color !== '#000000') {
+      opt.style.color = role.color;
+    }
+    if (selectedValue && selectedValue === role.id) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
 
 async function loadAdminRoles() {
   if (!isAdmin) return;
@@ -1654,6 +1653,10 @@ async function loadAdminRoles() {
   if (!content) return;
 
   content.innerHTML = `<div style="text-align:center; padding: var(--space-5); color: var(--text-secondary);"><div class="spinner"></div><p>Loading roles config...</p></div>`;
+
+  // Pre-fetch Discord roles so dropdowns open instantly
+  discordRolesCache = null;
+  fetchDiscordRoles();
 
   try {
     const response = await fetch('/api/admin/roles/config', { credentials: 'include' });
@@ -1760,6 +1763,7 @@ function openAddTierModal() {
   btn.classList.remove('btn-danger');
   btn.classList.add('btn-primary');
   body.innerHTML = tierFormHTML();
+  populateRoleSelect('tierRoleIdInput', '');
   confirmCallback = () => saveTierFromForm('add');
 }
 
@@ -1775,6 +1779,7 @@ function editTier(idx) {
   btn.classList.remove('btn-danger');
   btn.classList.add('btn-primary');
   body.innerHTML = tierFormHTML(tier);
+  populateRoleSelect('tierRoleIdInput', tier.roleId || '');
   body.dataset.editName = tier.name;
   confirmCallback = () => saveTierFromForm('edit', tier.name);
 }
@@ -1792,8 +1797,8 @@ function tierFormHTML(tier = {}) {
       </div>
       <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Voting Power *</label>
         <input id="tierVPInput" type="number" value="${tier.votingPower ?? ''}" min="0" placeholder="10" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Discord Role ID (optional)</label>
-        <input id="tierRoleIdInput" type="text" value="${escapeHtml(tier.roleId || '')}" placeholder="Paste Discord role ID" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; font-family:monospace;"></div>
+      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Discord Role (optional)</label>
+        ${roleSelectHTML('tierRoleIdInput', tier.roleId || '')}</div>
     </div>`;
 }
 
@@ -1802,7 +1807,7 @@ async function saveTierFromForm(mode, originalName) {
   const minNFTs = parseInt(document.getElementById('tierMinInput')?.value);
   const maxNFTs = document.getElementById('tierMaxInput')?.value.trim() === '' ? 999999 : parseInt(document.getElementById('tierMaxInput')?.value);
   const votingPower = parseInt(document.getElementById('tierVPInput')?.value);
-  const roleId = document.getElementById('tierRoleIdInput')?.value.trim() || null;
+  const roleId = document.getElementById('tierRoleIdInput')?.value || null;
 
   if (!name || isNaN(minNFTs) || isNaN(votingPower)) {
     showError('Please fill in name, min NFTs, and voting power');
@@ -1870,6 +1875,7 @@ function openAddTraitModal() {
   btn.classList.remove('btn-danger');
   btn.classList.add('btn-primary');
   body.innerHTML = traitFormHTML();
+  populateRoleSelect('traitRoleIdInput', '');
   confirmCallback = () => saveTraitFromForm('add');
 }
 
@@ -1885,6 +1891,7 @@ function editTraitRule(idx) {
   btn.classList.remove('btn-danger');
   btn.classList.add('btn-primary');
   body.innerHTML = traitFormHTML(tr);
+  populateRoleSelect('traitRoleIdInput', tr.roleId || '');
   body.dataset.editType = tr.traitType || tr.trait_type;
   body.dataset.editValue = tr.traitValue || tr.trait_value;
   confirmCallback = () => saveTraitFromForm('edit', tr.traitType || tr.trait_type, tr.traitValue || tr.trait_value);
@@ -1897,8 +1904,8 @@ function traitFormHTML(tr = {}) {
         <input id="traitTypeInput" type="text" value="${escapeHtml(tr.traitType || tr.trait_type || '')}" placeholder="e.g. Role, Background, Accessory" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
       <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Trait Value *</label>
         <input id="traitValueInput" type="text" value="${escapeHtml(tr.traitValue || tr.trait_value || '')}" placeholder="e.g. Hitman, Gold Chain" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Discord Role ID *</label>
-        <input id="traitRoleIdInput" type="text" value="${escapeHtml(tr.roleId || '')}" placeholder="Paste Discord role ID" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; font-family:monospace;"></div>
+      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Discord Role *</label>
+        ${roleSelectHTML('traitRoleIdInput', tr.roleId || '')}</div>
       <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Description (optional)</label>
         <input id="traitDescInput" type="text" value="${escapeHtml(tr.description || '')}" placeholder="e.g. Assigned to Hitman trait holders" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
     </div>`;
@@ -1907,7 +1914,7 @@ function traitFormHTML(tr = {}) {
 async function saveTraitFromForm(mode, origType, origValue) {
   const traitType = document.getElementById('traitTypeInput')?.value.trim();
   const traitValue = document.getElementById('traitValueInput')?.value.trim();
-  const roleId = document.getElementById('traitRoleIdInput')?.value.trim();
+  const roleId = document.getElementById('traitRoleIdInput')?.value;
   const description = document.getElementById('traitDescInput')?.value.trim() || null;
 
   if (!traitType || !traitValue || !roleId) {

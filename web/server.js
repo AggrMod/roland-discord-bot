@@ -439,6 +439,33 @@ class WebServer {
       }
     });
 
+    // Fetch Discord roles for dropdown selects
+    this.app.get('/api/admin/discord/roles', adminAuthMiddleware, async (req, res) => {
+      try {
+        if (!this.client) {
+          return res.status(500).json({ success: false, message: 'Bot not initialized' });
+        }
+
+        const guildId = process.env.GUILD_ID;
+        const guild = await this.client.guilds.fetch(guildId);
+        const roles = await guild.roles.fetch();
+
+        const roleList = roles
+          .filter(role => role.name !== '@everyone')
+          .map(role => ({
+            id: role.id,
+            name: role.name,
+            color: role.hexColor
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        res.json({ success: true, roles: roleList });
+      } catch (error) {
+        logger.error('Error fetching Discord roles:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch roles' });
+      }
+    });
+
     this.app.get('/api/admin/users', adminAuthMiddleware, (req, res) => {
       try {
         const users = db.prepare(`

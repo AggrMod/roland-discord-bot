@@ -4508,6 +4508,7 @@ function loadApiRefView() {
 
 let _ticketCategories = [];
 let _ticketChannelsList = [];
+let _ticketRolesList = [];
 
 async function loadTicketingView() {
   const container = document.getElementById('adminTicketingContent');
@@ -4528,6 +4529,15 @@ async function loadTicketingView() {
       const res = await fetch('/api/admin/discord/channels', { credentials: 'include' });
       const json = await res.json();
       if (json.success) _ticketChannelsList = json.channels || [];
+    } catch (e) { /* ignore */ }
+  }
+
+  // Fetch roles if not cached
+  if (_ticketRolesList.length === 0) {
+    try {
+      const res = await fetch('/api/admin/discord/roles', { credentials: 'include' });
+      const json = await res.json();
+      if (json.success) _ticketRolesList = json.roles || [];
     } catch (e) { /* ignore */ }
   }
 
@@ -4666,8 +4676,11 @@ function _showCategoryForm(cat) {
         </select>
       </div>
       <div>
-        <label style="font-size:0.85em;font-weight:600;">Allowed Roles (comma-separated IDs)</label>
-        <input type="text" id="catRoles" value="${allowedRoles.join(',')}" placeholder="e.g. 12345,67890" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;" />
+        <label style="font-size:0.85em;font-weight:600;">Allowed Roles</label>
+        <select id="catRoles" multiple style="width:100%;min-height:120px;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
+          ${_ticketRolesList.map(r => `<option value="${r.id}" ${allowedRoles.includes(r.id) ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('')}
+        </select>
+        <div style="font-size:0.78em;color:var(--text-secondary);margin-top:4px;">Hold Ctrl/Cmd to select multiple roles.</div>
       </div>
       <div>
         <label style="font-size:0.85em;font-weight:600;">Template Fields (max 5)</label>
@@ -4725,8 +4738,8 @@ async function saveCategoryFromModal() {
   const emoji = document.getElementById('catEmoji').value.trim() || '🎫';
   const description = document.getElementById('catDesc').value.trim();
   const parentChannelId = document.getElementById('catParentChannel').value || '';
-  const rolesStr = document.getElementById('catRoles').value.trim();
-  const allowedRoleIds = rolesStr ? rolesStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+  const roleSelect = document.getElementById('catRoles');
+  const allowedRoleIds = roleSelect ? Array.from(roleSelect.selectedOptions || []).map(o => o.value).filter(Boolean) : [];
 
   // Collect template fields
   const templateFields = [];

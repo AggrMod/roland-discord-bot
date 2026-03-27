@@ -89,11 +89,53 @@ class WebServer {
   }
 
   setupRoutes() {
+    // ==================== RATE LIMITING ====================
+
+    const rateLimitMessage = { success: false, message: 'Too many requests, please try again later.' };
+
+    const publicApiLimiter = rateLimit({
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      max: 100,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: rateLimitMessage
+    });
+
+    const authLimiter = rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 10,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: rateLimitMessage
+    });
+
+    const verifyLimiter = rateLimit({
+      windowMs: 60 * 60 * 1000, // 1 hour
+      max: 20,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: rateLimitMessage
+    });
+
+    const adminLimiter = rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 200,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: rateLimitMessage
+    });
+
+    this.app.use('/api/public/', publicApiLimiter);
+    this.app.use('/auth/', authLimiter);
+    this.app.use('/api/verify/', verifyLimiter);
+    this.app.use('/api/micro-verify/', verifyLimiter);
+    this.app.use('/api/admin/', adminLimiter);
+
     // ==================== API V1 (VERSIONED PUBLIC API) ====================
-    
+
     const v1Router = require('./routes/v1');
     const { errorHandler, notFoundHandler } = require('../utils/apiErrorHandler');
-    
+
     // Mount v1 API routes (standardized, versioned)
     this.app.use('/api/public/v1', v1Router);
     

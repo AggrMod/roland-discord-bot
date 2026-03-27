@@ -19,3 +19,24 @@
 - Admin UI: Governance card gets a "Voting Power Mappings" sub-section
 - `proposalService` reads VP from role mappings instead of tier config
 - `/verification admin` shows role→VP table separately from tier table
+
+## Base Verified Role (post-verification flat assignment)
+
+**Request**: Assign a role to everyone who completes wallet verification, regardless of NFT holdings.
+
+**Examples**:
+- "Verified" role → assigned to all wallet-verified members
+- "OG" role → assigned to first 250 verifications (already partially built via ogRoleService)
+
+**Design**:
+- New admin setting: `baseVerifiedRoleId` — a role ID assigned to every successfully verified user
+- Assigned in `roleService.syncUserDiscordRoles()` after all tier/trait roles are processed
+- Independent of NFT count (holding 0 NFTs still gets this role)
+- Admin UI: Verification module card gets a "Base Verified Role" dropdown (uses Discord role dropdown)
+- Stack with OG role system: OG = first X verifications, Verified = everyone
+
+**Scope**:
+- `services/roleService.js`: assign baseVerifiedRoleId in syncUserDiscordRoles()
+- `config/settings.js`: add baseVerifiedRoleId to defaults
+- `web/public/portal.js`: add dropdown in Verification module settings card
+- `web/server.js`: include in settings API

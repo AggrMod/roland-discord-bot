@@ -1239,7 +1239,8 @@ function showAdminView(view) {
     analytics: { card: 'adminAnalyticsCard', load: loadAdminAnalyticsView },
     help: { card: 'adminHelpCard', load: loadAdminHelpView },
     roles: { card: 'adminRolesCard', load: loadAdminRoles },
-    activity: { card: 'adminActivityCard', load: loadAdminActivity }
+    activity: { card: 'adminActivityCard', load: loadAdminActivity },
+    votingpower: { card: 'adminVotingPowerCard', load: loadVotingPowerView }
   };
 
   const target = map[view] || map.settings;
@@ -1546,25 +1547,7 @@ async function loadAdminSettingsView() {
             <select id="ps_governanceLogChannelId" style="${selectStyle}"><option value="">Loading channels...</option></select>
           </div>
         </div>
-        <h4 style="color:#c9d6ff;font-size:0.95em;font-weight:600;margin:var(--space-4) 0 var(--space-3) 0;padding-top:var(--space-3);border-top:1px solid rgba(99,102,241,0.12);">⚡ Voting Power Mappings</h4>
-        <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:12px;">Map Discord roles to voting power. If no mappings are configured, VP falls back to tier-based calculation.</p>
-        <div id="vpMappingsTableContainer" style="margin-bottom:16px;">
-          <p style="color:var(--text-secondary);font-size:0.85em;">Loading mappings...</p>
-        </div>
-        <div style="background:rgba(30,41,59,0.5);border:1px solid rgba(99,102,241,0.15);border-radius:10px;padding:16px;margin-top:8px;">
-          <h5 style="color:#c9d6ff;font-size:0.88em;font-weight:600;margin:0 0 12px 0;">Add Mapping</h5>
-          <div style="${gridRow}">
-            <div>
-              <label style="${fieldLabel}">Discord Role</label>
-              ${roleSelectHTML('vpMappingRoleSelect', '', false)}
-            </div>
-            <div>
-              <label style="${fieldLabel}">Voting Power</label>
-              <input type="number" id="vpMappingVPInput" min="1" value="1" style="${fieldInput}">
-            </div>
-          </div>
-          <button onclick="addVPMapping()" style="margin-top:12px;padding:8px 20px;background:linear-gradient(135deg,rgba(99,102,241,0.7),rgba(139,92,246,0.7));border:1px solid rgba(99,102,241,0.3);border-radius:8px;color:#e0e7ff;font-size:0.88em;cursor:pointer;">+ Add Mapping</button>
-        </div>
+        <p style="color:var(--text-secondary);font-size:0.85em;margin-top:var(--space-4);padding-top:var(--space-3);border-top:1px solid rgba(99,102,241,0.12);font-style:italic;">Voting Power mappings are managed in the <a href="#" onclick="event.preventDefault();showAdminView('votingpower')" style="color:#a5b4fc;text-decoration:underline;">Voting Power tab</a> &rarr;</p>
       </div>
 
       <!-- ✅ VERIFICATION MODULE -->
@@ -2379,6 +2362,69 @@ async function populateRoleSelect(selectId, selectedValue) {
 
 // ==================== VP MAPPINGS ====================
 
+async function loadVotingPowerView() {
+  if (!isAdmin) return;
+  const content = document.getElementById('adminVotingPowerContent');
+  if (!content) return;
+
+  content.innerHTML = `<div style="text-align:center; padding: var(--space-5); color: var(--text-secondary);"><div class="spinner"></div><p>Loading voting power mappings...</p></div>`;
+
+  try {
+    const roles = await fetchDiscordRoles();
+    const rHTML = roleSelectHTML('vpRoleSelect', '', false);
+
+    const res = await fetch('/api/admin/governance/vp-mappings', { credentials: 'include' });
+    const data = await res.json();
+    const mappings = (data.success && data.mappings) ? data.mappings : [];
+
+    let tableHTML;
+    if (mappings.length === 0) {
+      tableHTML = '<p style="color:var(--text-secondary);font-size:0.85em;font-style:italic;padding:12px 0;">No VP mappings configured. Falling back to tier-based VP.</p>';
+    } else {
+      const rows = mappings.map(m => `<tr style="border-bottom:1px solid rgba(99,102,241,0.08);">
+        <td style="padding:10px 12px;color:#e0e7ff;">${m.role_name || m.role_id}</td>
+        <td style="padding:10px 12px;color:#a5b4fc;font-weight:600;">${m.voting_power}</td>
+        <td style="padding:10px 12px;"><button onclick="removeVPMapping('${m.role_id}')" style="padding:4px 12px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:6px;color:#fca5a5;font-size:0.82em;cursor:pointer;">Remove</button></td>
+      </tr>`).join('');
+      tableHTML = `<div style="overflow-x:auto;border-radius:10px;border:1px solid rgba(99,102,241,0.12);">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr style="background:rgba(30,41,59,0.7);">
+            <th style="padding:10px 12px;text-align:left;color:#94a3b8;font-size:0.82em;font-weight:600;">Role</th>
+            <th style="padding:10px 12px;text-align:left;color:#94a3b8;font-size:0.82em;font-weight:600;">Voting Power</th>
+            <th style="padding:10px 12px;text-align:left;color:#94a3b8;font-size:0.82em;font-weight:600;">Actions</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    }
+
+    content.innerHTML = `
+      <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:16px;">Map Discord roles to voting power. Anyone holding a role gets its VP (cumulative across roles).</p>
+      <div id="vpMappingsTableContainer" style="margin-bottom:16px;">${tableHTML}</div>
+      <div style="background:rgba(30,41,59,0.5);border:1px solid rgba(99,102,241,0.15);border-radius:10px;padding:16px;margin-top:8px;">
+        <h5 style="color:#c9d6ff;font-size:0.88em;font-weight:600;margin:0 0 12px 0;">➕ Add Mapping</h5>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);">
+          <div>
+            <label style="display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;">Discord Role</label>
+            ${rHTML}
+          </div>
+          <div>
+            <label style="display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;">Voting Power</label>
+            <input type="number" id="vpAmountInput" min="1" max="1000" placeholder="e.g. 10" value="1" style="width:100%;padding:10px 14px;background:rgba(15,23,42,0.6);border:1px solid rgba(99,102,241,0.2);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
+          </div>
+        </div>
+        <button onclick="addVPMapping()" style="margin-top:12px;padding:8px 20px;background:linear-gradient(135deg,rgba(99,102,241,0.7),rgba(139,92,246,0.7));border:1px solid rgba(99,102,241,0.3);border-radius:8px;color:#e0e7ff;font-size:0.88em;cursor:pointer;">Add Mapping</button>
+      </div>
+      <p style="color:var(--text-secondary);font-size:0.8em;font-style:italic;margin-top:16px;">Falls back to NFT tier-based VP if no mappings are configured.</p>
+    `;
+
+    populateRoleSelect('vpRoleSelect', roles);
+  } catch (e) {
+    console.error('Failed to load voting power view:', e);
+    content.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;">Failed to load voting power mappings.</p>';
+  }
+}
+
 async function loadVPMappings() {
   const container = document.getElementById('vpMappingsTableContainer');
   if (!container) return;
@@ -2411,8 +2457,8 @@ async function loadVPMappings() {
 }
 
 async function addVPMapping() {
-  const sel = document.getElementById('vpMappingRoleSelect');
-  const vpInput = document.getElementById('vpMappingVPInput');
+  const sel = document.getElementById('vpRoleSelect') || document.getElementById('vpMappingRoleSelect');
+  const vpInput = document.getElementById('vpAmountInput') || document.getElementById('vpMappingVPInput');
   if (!sel || !vpInput) return;
   const roleId = sel.value;
   const votingPower = parseInt(vpInput.value);
@@ -2430,7 +2476,7 @@ async function addVPMapping() {
     if (data.success) {
       sel.value = '';
       vpInput.value = '1';
-      await loadVPMappings();
+      await loadVotingPowerView();
     } else {
       alert(data.message || 'Failed to add mapping.');
     }
@@ -2449,7 +2495,7 @@ async function removeVPMapping(roleId) {
     });
     const data = await res.json();
     if (data.success) {
-      await loadVPMappings();
+      await loadVotingPowerView();
     } else {
       alert(data.message || 'Failed to remove mapping.');
     }

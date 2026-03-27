@@ -138,6 +138,10 @@
               <span class="nav-icon" aria-hidden="true">📘</span>
               <span class="nav-label">Commands</span>
             </button>
+            <button class="nav-item admin-sub-item" data-admin-nav="votingpower" onclick="showAdminView('votingpower')">
+              <span class="nav-icon" aria-hidden="true">🗳️</span>
+              <span class="nav-label">Voting Power</span>
+            </button>
           </div>
         </div>
       </aside>
@@ -735,6 +739,14 @@
               <button class="btn-secondary" onclick="loadAdminSettingsView()">Refresh</button>
             </div>
             <div id="adminSettingsContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>System Settings</strong> to load data.</div>
+          </div>
+
+          <div class="card" id="adminVotingPowerCard" style="display:none;">
+            <div class="card-header">
+              <h3>🗳️ Voting Power Mappings</h3>
+              <button class="btn-secondary" onclick="loadVotingPowerView()">Refresh</button>
+            </div>
+            <div id="adminVotingPowerContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>Voting Power</strong> to load data.</div>
           </div>
 
           <div id="adminAnalyticsCard" style="display:none;">

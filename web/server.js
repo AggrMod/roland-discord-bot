@@ -1669,7 +1669,7 @@ class WebServer {
 
     // ==================== NFT ACTIVITY ADMIN CONFIG ====================
 
-    this.app.get('/api/admin/nft-activity/config', this.requireAdmin.bind(this), (req, res) => {
+    this.app.get('/api/admin/nft-activity/config', adminAuthMiddleware, (req, res) => {
       try {
         const config = nftActivityService.getAlertConfig();
         if (!config) return res.status(500).json({ success: false, message: 'Failed to load NFT activity config' });
@@ -1680,7 +1680,7 @@ class WebServer {
       }
     });
 
-    this.app.put('/api/admin/nft-activity/config', this.requireAdmin.bind(this), (req, res) => {
+    this.app.put('/api/admin/nft-activity/config', adminAuthMiddleware, (req, res) => {
       try {
         const { enabled, channelId, eventTypes, minSol } = req.body;
         const result = nftActivityService.updateAlertConfig({ enabled, channelId, eventTypes, minSol });
@@ -1694,7 +1694,7 @@ class WebServer {
 
     // ==================== NFT TRACKER COLLECTIONS (per-collection config) ====================
 
-    this.app.get('/api/admin/nft-tracker/collections', this.requireAdmin.bind(this), (req, res) => {
+    this.app.get('/api/admin/nft-tracker/collections', adminAuthMiddleware, (req, res) => {
       try {
         const collections = nftActivityService.getTrackedCollections();
         res.json({ success: true, collections });
@@ -1704,7 +1704,7 @@ class WebServer {
       }
     });
 
-    this.app.post('/api/admin/nft-tracker/collections', this.requireAdmin.bind(this), (req, res) => {
+    this.app.post('/api/admin/nft-tracker/collections', adminAuthMiddleware, (req, res) => {
       try {
         const { collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer } = req.body;
         const result = nftActivityService.addTrackedCollection({ collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer });
@@ -1716,7 +1716,7 @@ class WebServer {
       }
     });
 
-    this.app.delete('/api/admin/nft-tracker/collections/:id', this.requireAdmin.bind(this), (req, res) => {
+    this.app.delete('/api/admin/nft-tracker/collections/:id', adminAuthMiddleware, (req, res) => {
       try {
         const result = nftActivityService.removeTrackedCollection(req.params.id);
         if (!result.success) return res.status(400).json(result);
@@ -1727,7 +1727,7 @@ class WebServer {
       }
     });
 
-    this.app.put('/api/admin/nft-tracker/collections/:id', this.requireAdmin.bind(this), (req, res) => {
+    this.app.put('/api/admin/nft-tracker/collections/:id', adminAuthMiddleware, (req, res) => {
       try {
         const result = nftActivityService.updateTrackedCollection(req.params.id, req.body);
         if (!result.success) return res.status(400).json(result);

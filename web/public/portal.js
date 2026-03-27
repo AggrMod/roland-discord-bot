@@ -4929,8 +4929,14 @@ async function loadTicketArchiveTab() {
   container.innerHTML = 'Loading archive...';
 
   const q = (window._ticketArchiveQuery || '').trim();
+  const range = window._ticketArchiveRange || 'all';
   const params = new URLSearchParams({ statuses: 'closed,deleted' });
   if (q) params.set('q', q);
+  if (range === '7d' || range === '30d') {
+    const days = range === '7d' ? 7 : 30;
+    const from = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    params.set('from', from);
+  }
 
   try {
     const res = await fetch(`/api/admin/tickets?${params.toString()}`, { credentials: 'include' });
@@ -4938,11 +4944,18 @@ async function loadTicketArchiveTab() {
     if (!json.success) { container.innerHTML = 'Failed to load archive.'; return; }
 
     const tickets = json.tickets || [];
+    window._ticketArchiveRows = tickets;
     let html = `
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:var(--space-3);flex-wrap:wrap;">
-        <input id="ticketArchiveSearch" type="text" value="${escapeHtml(q)}" placeholder="Search username, category, transcript text..." style="min-width:320px;flex:1;padding:8px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:8px;color:var(--text-primary);" />
+        <input id="ticketArchiveSearch" type="text" value="${escapeHtml(q)}" placeholder="Search username, category, transcript text..." style="min-width:280px;flex:1;padding:8px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:8px;color:var(--text-primary);" />
+        <select id="ticketArchiveRange" style="padding:8px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:8px;color:var(--text-primary);">
+          <option value="all" ${range === 'all' ? 'selected' : ''}>All time</option>
+          <option value="7d" ${range === '7d' ? 'selected' : ''}>Last 7 days</option>
+          <option value="30d" ${range === '30d' ? 'selected' : ''}>Last 30 days</option>
+        </select>
         <button class="btn-primary" onclick="runTicketArchiveSearch()" style="font-size:0.85em;">Search</button>
         <button class="btn-secondary" onclick="clearTicketArchiveSearch()" style="font-size:0.85em;">Clear</button>
+        <button class="btn-secondary" onclick="exportTicketArchiveCsv()" style="font-size:0.85em;">📥 Export CSV</button>
       </div>
     `;
 
@@ -4983,12 +4996,38 @@ async function loadTicketArchiveTab() {
 
 window.runTicketArchiveSearch = function() {
   window._ticketArchiveQuery = document.getElementById('ticketArchiveSearch')?.value || '';
+  window._ticketArchiveRange = document.getElementById('ticketArchiveRange')?.value || 'all';
   loadTicketArchiveTab();
 };
 
 window.clearTicketArchiveSearch = function() {
   window._ticketArchiveQuery = '';
+  window._ticketArchiveRange = 'all';
   loadTicketArchiveTab();
+};
+
+window.exportTicketArchiveCsv = function() {
+  const rows = window._ticketArchiveRows || [];
+  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const header = ['ticket_number','status','category_name','opener_name','opener_id','claimed_by','created_at','closed_at'];
+  const csv = [header.join(',')].concat(rows.map(r => [
+    esc(r.ticket_number || r.id),
+    esc(r.status),
+    esc(r.category_name),
+    esc(r.opener_name),
+    esc(r.opener_id),
+    esc(r.claimed_by || ''),
+    esc(r.created_at || ''),
+    esc(r.closed_at || '')
+  ].join(','))).join('\n');
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ticket-archive-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 };
 
 async function viewTicketTranscript(id) {

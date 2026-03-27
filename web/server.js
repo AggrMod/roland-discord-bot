@@ -2031,7 +2031,7 @@ class WebServer {
 
     this.app.get('/api/admin/tickets', adminAuthMiddleware, (req, res) => {
       try {
-        const { status, statuses, category, opener, q } = req.query;
+        const { status, statuses, category, opener, q, from, to } = req.query;
         const statusList = typeof statuses === 'string' && statuses.trim()
           ? statuses.split(',').map(s => s.trim()).filter(Boolean)
           : undefined;
@@ -2040,7 +2040,9 @@ class WebServer {
           statuses: statusList,
           category: category ? parseInt(category) : undefined,
           opener,
-          q
+          q,
+          from,
+          to
         });
         res.json({ success: true, tickets });
       } catch (error) {

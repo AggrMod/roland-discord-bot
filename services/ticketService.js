@@ -591,7 +591,7 @@ class TicketService {
     return db.prepare('SELECT * FROM tickets WHERE category_id = ? ORDER BY created_at DESC').all(categoryId);
   }
 
-  getAllTickets({ status, statuses, category, opener, q } = {}) {
+  getAllTickets({ status, statuses, category, opener, q, from, to } = {}) {
     let query = 'SELECT * FROM tickets WHERE 1=1';
     const params = [];
     if (status) { query += ' AND status = ?'; params.push(status); }
@@ -601,6 +601,8 @@ class TicketService {
     }
     if (category) { query += ' AND category_id = ?'; params.push(category); }
     if (opener) { query += ' AND opener_id = ?'; params.push(opener); }
+    if (from) { query += ' AND DATE(created_at) >= DATE(?)'; params.push(from); }
+    if (to) { query += ' AND DATE(created_at) <= DATE(?)'; params.push(to); }
     if (q) {
       const s = `%${String(q).trim()}%`;
       query += ' AND (opener_name LIKE ? OR opener_id LIKE ? OR category_name LIKE ? OR transcript LIKE ?)';

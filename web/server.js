@@ -432,12 +432,18 @@ class WebServer {
           ChannelType.AnnouncementThread
         ];
 
+        const threadTypes = [
+          ChannelType.PublicThread,
+          ChannelType.PrivateThread,
+          ChannelType.AnnouncementThread
+        ];
+
         const channelList = channels
           .filter(ch => ch && textTypes.includes(ch.type))
           .map(ch => ({
             id: ch.id,
             name: ch.name,
-            type: ch.isThread() ? 'thread' : 'text',
+            type: threadTypes.includes(ch.type) ? 'thread' : 'text',
             parentName: ch.parent ? ch.parent.name : null
           }))
           .sort((a, b) => (a.parentName || '').localeCompare(b.parentName || '') || a.name.localeCompare(b.name));

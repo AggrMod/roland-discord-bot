@@ -1794,6 +1794,7 @@ async function loadAdminRoles() {
         <tr>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#e0e7ff; font-weight:600;">${escapeHtml(tr.traitType || tr.trait_type || '')}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#c7d2fe;">${escapeHtml(tr.traitValue || tr.trait_value || '')}</td>
+          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#a5b4fc; font-family:monospace; font-size:0.85em;">${escapeHtml(tr.collectionId || 'Any')}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#93c5fd; font-family:monospace; font-size:0.85em;">${escapeHtml(tr.roleId || '')}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:var(--text-secondary); font-size:0.85em;">${escapeHtml(tr.description || '—')}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); text-align:right;">
@@ -1808,6 +1809,7 @@ async function loadAdminRoles() {
             <thead><tr style="background:rgba(99,102,241,0.12); text-align:left;">
               <th style="padding:10px; color:#c9d6ff;">Trait Type</th>
               <th style="padding:10px; color:#c9d6ff;">Trait Value</th>
+              <th style="padding:10px; color:#c9d6ff;">Collection</th>
               <th style="padding:10px; color:#c9d6ff;">Discord Role ID</th>
               <th style="padding:10px; color:#c9d6ff;">Description</th>
               <th style="padding:10px; color:#c9d6ff; text-align:right;">Actions</th>
@@ -1838,7 +1840,7 @@ function openAddTierModal() {
   btn.classList.remove('btn-danger');
   btn.classList.add('btn-primary');
   body.innerHTML = tierFormHTML();
-  populateRoleSelect('tierRoleIdInput', '');
+  setTimeout(() => populateRoleSelect('tierRoleIdInput', ''), 0);
   confirmCallback = () => saveTierFromForm('add');
 }
 
@@ -1854,7 +1856,7 @@ function editTier(idx) {
   btn.classList.remove('btn-danger');
   btn.classList.add('btn-primary');
   body.innerHTML = tierFormHTML(tier);
-  populateRoleSelect('tierRoleIdInput', tier.roleId || '');
+  setTimeout(() => populateRoleSelect('tierRoleIdInput', tier.roleId || ''), 0);
   body.dataset.editName = tier.name;
   confirmCallback = () => saveTierFromForm('edit', tier.name);
 }
@@ -1951,7 +1953,7 @@ function openAddTraitModal() {
   btn.classList.remove('btn-danger');
   btn.classList.add('btn-primary');
   body.innerHTML = traitFormHTML();
-  populateRoleSelect('traitRoleIdInput', '');
+  setTimeout(() => populateRoleSelect('traitRoleIdInput', ''), 0);
   confirmCallback = () => saveTraitFromForm('add');
 }
 
@@ -1967,7 +1969,7 @@ function editTraitRule(idx) {
   btn.classList.remove('btn-danger');
   btn.classList.add('btn-primary');
   body.innerHTML = traitFormHTML(tr);
-  populateRoleSelect('traitRoleIdInput', tr.roleId || '');
+  setTimeout(() => populateRoleSelect('traitRoleIdInput', tr.roleId || ''), 0);
   body.dataset.editType = tr.traitType || tr.trait_type;
   body.dataset.editValue = tr.traitValue || tr.trait_value;
   confirmCallback = () => saveTraitFromForm('edit', tr.traitType || tr.trait_type, tr.traitValue || tr.trait_value);
@@ -1980,6 +1982,8 @@ function traitFormHTML(tr = {}) {
         <input id="traitTypeInput" type="text" value="${escapeHtml(tr.traitType || tr.trait_type || '')}" placeholder="e.g. Role, Background, Accessory" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
       <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Trait Value *</label>
         <input id="traitValueInput" type="text" value="${escapeHtml(tr.traitValue || tr.trait_value || '')}" placeholder="e.g. Hitman, Gold Chain" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
+      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Collection ID (optional)</label>
+        <input id="traitCollectionInput" type="text" value="${escapeHtml(tr.collectionId || '')}" placeholder="Leave empty to match any collection" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
       <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Discord Role *</label>
         ${roleSelectHTML('traitRoleIdInput', tr.roleId || '')}</div>
       <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Description (optional)</label>
@@ -1991,6 +1995,7 @@ async function saveTraitFromForm(mode, origType, origValue) {
   const traitType = document.getElementById('traitTypeInput')?.value.trim();
   const traitValue = document.getElementById('traitValueInput')?.value.trim();
   const roleId = document.getElementById('traitRoleIdInput')?.value;
+  const collectionId = document.getElementById('traitCollectionInput')?.value.trim() || null;
   const description = document.getElementById('traitDescInput')?.value.trim() || null;
 
   if (!traitType || !traitValue || !roleId) {
@@ -2012,7 +2017,7 @@ async function saveTraitFromForm(mode, origType, origValue) {
       method,
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ traitType, traitValue, roleId, description })
+      body: JSON.stringify({ traitType, traitValue, roleId, collectionId, description })
     });
     const data = await response.json();
     if (data.success) {

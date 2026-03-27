@@ -1110,8 +1110,21 @@ class WebServer {
           // Tenant scaffold flags
           multiTenantEnabled,
           tenantEnabled: multiTenantEnabled && !!tenantContext.tenant,
-          readOnlyManaged: multiTenantEnabled ? tenantContext.readOnlyManaged : false
+          readOnlyManaged: multiTenantEnabled ? tenantContext.readOnlyManaged : false,
+          tenantBranding: tenantContext.branding || null
         };
+
+        // In multitenant mode, module enabled states come from tenant module entitlements
+        if (multiTenantEnabled && tenantContext?.tenant && tenantContext.modules) {
+          effectiveSettings.moduleBattleEnabled = !!tenantContext.modules.battle;
+          effectiveSettings.moduleGovernanceEnabled = !!tenantContext.modules.governance;
+          effectiveSettings.moduleVerificationEnabled = !!tenantContext.modules.verification;
+          effectiveSettings.moduleMissionsEnabled = !!tenantContext.modules.heist;
+          effectiveSettings.moduleTreasuryEnabled = !!tenantContext.modules.treasury;
+          effectiveSettings.moduleNftTrackerEnabled = !!tenantContext.modules.nfttracker;
+          effectiveSettings.moduleRoleClaimEnabled = !!tenantContext.modules.selfserveroles;
+          effectiveSettings.moduleTicketingEnabled = !!tenantContext.modules.ticketing;
+        }
         
         res.json({ success: true, settings: effectiveSettings });
       } catch (error) {

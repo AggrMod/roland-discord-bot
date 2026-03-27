@@ -345,6 +345,7 @@ function getServerRecord(guildId) {
 
 function setActiveGuild(guildId, { persist = true, announce = true } = {}) {
   const normalized = normalizeGuildId(guildId);
+  const previous = activeGuildId;
   activeGuildId = normalized;
 
   if (persist) {
@@ -360,6 +361,32 @@ function setActiveGuild(guildId, { persist = true, announce = true } = {}) {
   if (announce && activeGuildId) {
     showInfo(`Active server set to ${getActiveServerLabel()}`);
   }
+
+  // Refresh tenant-sensitive screens when switching active server context
+  if (previous !== activeGuildId) {
+    refreshTenantScopedViews();
+  }
+}
+
+function refreshTenantScopedViews() {
+  const activeSection = document.querySelector('.content-section.active')?.id || '';
+  const activeAdminView = document.querySelector('.admin-sub-item.active')?.getAttribute('data-admin-nav');
+
+  if (activeSection === 'section-admin' && activeAdminView) {
+    showAdminView(activeAdminView);
+    return;
+  }
+
+  if (activeSection === 'section-governance') {
+    loadActiveVotes();
+  } else if (activeSection === 'section-treasury') {
+    loadTreasuryPublicView();
+    loadTreasuryTransactions();
+    loadTreasuryTrackerView();
+  } else if (activeSection === 'section-nft-activity') {
+    loadNFTActivityView();
+    if (isAdmin) loadNFTActivityAdminView();
+  }
 }
 
 function getActiveServerLabel() {
@@ -373,6 +400,7 @@ function getActiveServerLabel() {
 
 function updateActiveGuildBadge() {
   const badge = document.getElementById('activeGuildBadge');
+  const brandTitle = document.getElementById('navBrandTitle');
   if (!badge) return;
 
   if (activeGuildId) {
@@ -380,10 +408,12 @@ function updateActiveGuildBadge() {
     badge.style.display = 'inline-flex';
     badge.textContent = record?.name ? `Active: ${record.name}` : `Active: ${activeGuildId}`;
     badge.title = activeGuildId;
+    if (brandTitle) brandTitle.textContent = `🎩 ${record?.name || 'Portal'}`;
   } else {
     badge.style.display = 'inline-flex';
     badge.textContent = 'Select server';
     badge.title = 'No active server selected';
+    if (brandTitle) brandTitle.textContent = '🎩 Solpranos';
   }
 
   renderNavServerSelect();

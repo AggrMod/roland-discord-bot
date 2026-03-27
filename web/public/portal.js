@@ -369,6 +369,7 @@ function setActiveGuild(guildId, { persist = true, announce = true } = {}) {
 }
 
 function refreshTenantScopedViews() {
+  syncTenantModuleNavVisibility();
   const activeSection = document.querySelector('.content-section.active')?.id || '';
   const activeAdminView = document.querySelector('.admin-sub-item.active')?.getAttribute('data-admin-nav');
 
@@ -448,6 +449,37 @@ function renderNavServerSelect() {
 
 function onNavServerSelect(guildId) {
   setActiveGuild(guildId);
+}
+
+function setNavSectionVisibility(section, visible) {
+  document.querySelectorAll(`[data-section="${section}"]`).forEach(el => {
+    el.style.display = visible ? '' : 'none';
+  });
+}
+
+function applyTenantModuleNavVisibility(settings = {}) {
+  const map = {
+    governance: !!settings.moduleGovernanceEnabled,
+    wallets: !!settings.moduleVerificationEnabled,
+    treasury: !!settings.moduleTreasuryEnabled,
+    'nft-activity': !!settings.moduleNftTrackerEnabled,
+    heist: !!settings.moduleMissionsEnabled
+  };
+
+  Object.entries(map).forEach(([section, enabled]) => setNavSectionVisibility(section, enabled));
+}
+
+async function syncTenantModuleNavVisibility() {
+  if (!isAdmin) return;
+  try {
+    const res = await fetch('/api/admin/settings', { credentials: 'include', headers: activeGuildId ? { 'x-guild-id': activeGuildId } : {} });
+    const data = await res.json();
+    if (data.success && data.settings) {
+      applyTenantModuleNavVisibility(data.settings);
+    }
+  } catch (e) {
+    console.warn('Could not sync tenant module nav visibility:', e.message);
+  }
 }
 
 function renderServerCard(server, { managed = true } = {}) {
@@ -588,6 +620,7 @@ async function loadPortal() {
       await loadServerAccess();
       await checkSuperadminStatus();
       await checkAdminStatus();
+      await syncTenantModuleNavVisibility();
       loadDashboardData();
     } else {
       showUnauthenticatedState();

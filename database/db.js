@@ -37,6 +37,12 @@ function initDatabase() {
       voting_power INTEGER NOT NULL DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS superadmins (
+      discord_id TEXT PRIMARY KEY,
+      added_by TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   db.exec(`

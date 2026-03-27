@@ -1332,11 +1332,16 @@ function showAdminView(view) {
     }
   });
 
-  // Ensure submenu is open
+  // Keep Admin submenu behavior isolated from standalone Superadmin nav item
   const submenu = document.getElementById('adminSubmenu');
   const chevron = document.getElementById('adminChevron');
-  if (submenu) submenu.style.display = 'flex';
-  if (chevron) chevron.textContent = '▼';
+  if (view === 'superadmin') {
+    if (submenu) submenu.style.display = 'none';
+    if (chevron) chevron.textContent = '▶';
+  } else {
+    if (submenu) submenu.style.display = 'flex';
+    if (chevron) chevron.textContent = '▼';
+  }
 
   loadEnvStatusBar();
 

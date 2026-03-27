@@ -1300,10 +1300,25 @@ async function loadAdminSettingsView() {
       });
     };
 
+    // Helper: show/hide settings sections based on module toggles
+    const updateSectionVisibility = () => {
+      const govEnabled = document.getElementById('ps_moduleGovernanceEnabled')?.checked;
+      const battleEnabled = document.getElementById('ps_moduleBattleEnabled')?.checked;
+      const microEnabled = document.getElementById('ps_moduleMicroVerifyEnabled')?.checked;
+      const govCard = document.getElementById('ps_section_governance');
+      const battleCard = document.getElementById('ps_section_battle');
+      const channelCard = document.getElementById('ps_section_channels');
+      const microCard = document.getElementById('ps_section_micro');
+      if (govCard) govCard.style.display = govEnabled ? 'block' : 'none';
+      if (battleCard) battleCard.style.display = battleEnabled ? 'block' : 'none';
+      if (channelCard) channelCard.style.display = govEnabled ? 'block' : 'none';
+      if (microCard) microCard.style.display = microEnabled ? 'block' : 'none';
+    };
+
     // Step 2: Inject HTML skeleton with loading placeholders for channel selects
     content.innerHTML = `
       <!-- Governance Card -->
-      <div style="${cardStyle}">
+      <div id="ps_section_governance" style="${cardStyle}display:${(s.moduleGovernanceEnabled ?? true) ? 'block' : 'none'};">
         <h3 style="${cardHeader}">⚙️ Governance</h3>
         <div style="${gridRow}">
           <div>
@@ -1325,7 +1340,7 @@ async function loadAdminSettingsView() {
       </div>
 
       <!-- Battle Timing Card -->
-      <div style="${cardStyle}">
+      <div id="ps_section_battle" style="${cardStyle}display:${(s.moduleBattleEnabled ?? true) ? 'block' : 'none'};">
         <h3 style="${cardHeader}">⚔️ Battle Timing (seconds)</h3>
         <div style="${gridRow}">
           <div>
@@ -1361,7 +1376,7 @@ async function loadAdminSettingsView() {
       </div>
 
       <!-- Channel Overrides Card -->
-      <div style="${cardStyle}">
+      <div id="ps_section_channels" style="${cardStyle}display:${(s.moduleGovernanceEnabled ?? true) ? 'block' : 'none'};">
         <h3 style="${cardHeader}">🔗 Channel Overrides</h3>
         <p style="color:var(--text-secondary);font-size:var(--font-sm);margin-bottom:var(--space-4);">Leave empty to use .env defaults.</p>
         <div style="${gridRow}">
@@ -1387,7 +1402,7 @@ async function loadAdminSettingsView() {
       </div>
 
       <!-- Micro-Transfer Verification Card -->
-      <div style="${cardStyle}">
+      <div id="ps_section_micro" style="${cardStyle}display:${(s.moduleMicroVerifyEnabled ?? false) ? 'block' : 'none'};">
         <h3 style="${cardHeader}">🔐 Micro-Transfer Verification</h3>
         <div style="${gridRow}">
           <div>
@@ -1430,6 +1445,12 @@ async function loadAdminSettingsView() {
 
     // Step 3: Attach toggle listeners now that DOM is ready
     attachToggleListeners();
+
+    // Step 3b: Wire module toggles to show/hide their related settings sections
+    ['ps_moduleBattleEnabled', 'ps_moduleGovernanceEnabled', 'ps_moduleMicroVerifyEnabled'].forEach(id => {
+      const cb = document.getElementById(id);
+      if (cb) cb.addEventListener('change', updateSectionVisibility);
+    });
 
     // Step 4: Fetch channels AFTER skeleton is in the DOM, then populate selects
     const channelIds = ['proposalsChannelId', 'votingChannelId', 'resultsChannelId', 'governanceLogChannelId'];
@@ -1684,7 +1705,7 @@ async function loadAdminRoles() {
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#e0e7ff; font-weight:600;">${escapeHtml(tier.name)}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#c7d2fe;">${tier.minNFTs}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#c7d2fe;">${tier.maxNFTs === Infinity || tier.maxNFTs >= 999999 ? '∞' : tier.maxNFTs}</td>
-          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#fbbf24; font-weight:600;">${tier.votingPower}</td>
+          <td class="vp-col" style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#fbbf24; font-weight:600;${portalSettingsData?.moduleGovernanceEnabled === false ? 'opacity:0.3;' : ''}">${tier.votingPower}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#93c5fd; font-family:monospace; font-size:0.85em;">${escapeHtml(tier.roleId || 'Not set')}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); text-align:right;">
             <button onclick="editTier(${idx})" style="width:32px; height:32px; background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.35); border-radius:6px; cursor:pointer; color:#818cf8; font-size:0.9em;">✏️</button>
@@ -1699,7 +1720,7 @@ async function loadAdminRoles() {
               <th style="padding:10px; color:#c9d6ff;">Tier Name</th>
               <th style="padding:10px; color:#c9d6ff;">Minimum NFT count</th>
               <th style="padding:10px; color:#c9d6ff;">Maximum NFT count</th>
-              <th style="padding:10px; color:#c9d6ff;">Voting Power</th>
+              <th class="vp-col" style="padding:10px; color:#c9d6ff;">${portalSettingsData?.moduleGovernanceEnabled === false ? 'Voting Power <span style="color:#888;font-weight:400;font-size:0.85em;">(governance disabled)</span>' : 'Voting Power'}</th>
               <th style="padding:10px; color:#c9d6ff;">Discord Role ID</th>
               <th style="padding:10px; color:#c9d6ff; text-align:right;">Actions</th>
             </tr></thead>
@@ -1795,7 +1816,7 @@ function tierFormHTML(tier = {}) {
         <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Maximum NFT count</label>
           <input id="tierMaxInput" type="number" value="${tier.maxNFTs >= 999999 ? '' : (tier.maxNFTs ?? '')}" min="0" placeholder="∞ (leave blank for unlimited)" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
       </div>
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Voting Power *</label>
+      <div id="tierVPField" style="${portalSettingsData?.moduleGovernanceEnabled === false ? 'display:none;' : ''}"><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Voting Power ${portalSettingsData?.moduleGovernanceEnabled === false ? '<span style="color:#888;font-size:0.85em;">(governance disabled)</span>' : '*'}</label>
         <input id="tierVPInput" type="number" value="${tier.votingPower ?? ''}" min="0" placeholder="10" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
       <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Discord Role (optional)</label>
         ${roleSelectHTML('tierRoleIdInput', tier.roleId || '')}</div>
@@ -1809,8 +1830,9 @@ async function saveTierFromForm(mode, originalName) {
   const votingPower = parseInt(document.getElementById('tierVPInput')?.value);
   const roleId = document.getElementById('tierRoleIdInput')?.value || null;
 
-  if (!name || isNaN(minNFTs) || isNaN(votingPower)) {
-    showError('Please fill in name, min NFTs, and voting power');
+  const govEnabled = portalSettingsData?.moduleGovernanceEnabled !== false;
+  if (!name || isNaN(minNFTs) || (govEnabled && isNaN(votingPower))) {
+    showError(govEnabled ? 'Please fill in name, min NFTs, and voting power' : 'Please fill in name and min NFTs');
     return;
   }
 

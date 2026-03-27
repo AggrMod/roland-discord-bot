@@ -116,6 +116,26 @@ class RoleService {
       changes.added.push(...traitChanges.added);
       changes.removed.push(...traitChanges.removed);
 
+      // 3. Assign base verified role (unconditional for all verified users)
+      const settingsManager = require('../config/settings');
+      const baseVerifiedRoleId = settingsManager.getSettings().baseVerifiedRoleId;
+      if (baseVerifiedRoleId) {
+        try {
+          if (!member.roles.cache.has(baseVerifiedRoleId)) {
+            const baseRole = member.guild.roles.cache.get(baseVerifiedRoleId);
+            if (baseRole) {
+              await member.roles.add(baseRole);
+              changes.added.push('Base Verified');
+              logger.log(`Added base verified role to ${member.user.tag}`);
+            } else {
+              logger.warn(`Base verified role ${baseVerifiedRoleId} not found in guild`);
+            }
+          }
+        } catch (err) {
+          logger.error(`Error assigning base verified role to ${discordId}:`, err);
+        }
+      }
+
       // Log changes
       if (changes.added.length > 0 || changes.removed.length > 0) {
         logger.log(`Role sync for ${discordId} (${member.user.tag}): +${changes.added.length} -${changes.removed.length}`);

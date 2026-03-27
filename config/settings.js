@@ -211,6 +211,9 @@ class SettingsManager {
         verifyRateLimitMinutes: 5,
         maxPendingPerUser: 1,
         
+        // Base Verified Role
+        baseVerifiedRoleId: '',
+
         // Channel Overrides
         proposalsChannelId: '',
         votingChannelId: '',

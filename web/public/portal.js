@@ -1435,7 +1435,11 @@ async function loadAdminSettingsView() {
       <!-- ✅ VERIFICATION MODULE -->
       <div id="ps_section_verification" style="${cardStyle}${moduleCardBorder}display:${(s.moduleVerificationEnabled ?? true) ? 'block' : 'none'};">
         <h3 style="${cardHeader}">✅ Verification Module</h3>
-        ${noSettingsMsg}
+        <div>
+          <label style="${fieldLabel}">Base Verified Role</label>
+          <p style="color:var(--text-secondary);font-size:0.8em;margin:0 0 8px 0;">Assigned to all verified members regardless of NFT holdings</p>
+          ${roleSelectHTML('ps_baseVerifiedRoleId', s.baseVerifiedRoleId || '')}
+        </div>
       </div>
 
       <!-- 🎯 MISSIONS MODULE -->
@@ -1500,6 +1504,12 @@ async function loadAdminSettingsView() {
 
     // Step 3: Attach toggle listeners now that DOM is ready
     attachToggleListeners();
+
+    // Populate base verified role dropdown
+    populateRoleSelect('ps_baseVerifiedRoleId', s.baseVerifiedRoleId || '').then(() => {
+      const sel = document.getElementById('ps_baseVerifiedRoleId');
+      if (sel && sel.options.length > 0) sel.options[0].textContent = '-- None (disabled) --';
+    });
 
     // Step 3b: Wire ALL module toggles to show/hide their related settings cards
     Object.keys(moduleMap).forEach(id => {
@@ -1630,7 +1640,8 @@ async function savePortalSettings() {
     verifyRequestTtlMinutes: parseInt(document.getElementById('ps_verifyRequestTtlMinutes').value),
     pollIntervalSeconds: parseInt(document.getElementById('ps_pollIntervalSeconds').value),
     verifyRateLimitMinutes: parseInt(document.getElementById('ps_verifyRateLimitMinutes').value),
-    maxPendingPerUser: parseInt(document.getElementById('ps_maxPendingPerUser').value)
+    maxPendingPerUser: parseInt(document.getElementById('ps_maxPendingPerUser').value),
+    baseVerifiedRoleId: document.getElementById('ps_baseVerifiedRoleId').value || ''
   };
 
   try {

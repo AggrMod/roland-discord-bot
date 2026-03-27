@@ -691,16 +691,32 @@ class WebServer {
       }
     });
 
-    this.app.put('/api/superadmin/tenants/:guildId/branding', superadminGuard, (req, res) => {
+    this.app.put('/api/superadmin/tenants/:guildId/branding', superadminGuard, async (req, res) => {
       try {
+        const guildId = req.params.guildId;
+        const patch = req.body || {};
         const result = tenantService.updateTenantBranding(
-          req.params.guildId,
-          req.body || {},
+          guildId,
+          patch,
           req.session.discordUser.id
         );
 
         if (!result.success) {
           return res.status(400).json(result);
+        }
+
+        // Best-effort: apply tenant bot display name as guild-specific bot nickname
+        // (Discord global username cannot be changed per server.)
+        if (patch.bot_display_name && this.client) {
+          try {
+            const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+            const me = guild ? await guild.members.fetchMe().catch(() => null) : null;
+            if (me) {
+              await me.setNickname(String(patch.bot_display_name).slice(0, 32));
+            }
+          } catch (e) {
+            logger.warn(`Could not set bot nickname for guild ${guildId}: ${e.message}`);
+          }
         }
 
         res.json(result);

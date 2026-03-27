@@ -5,6 +5,7 @@ const Database = require('better-sqlite3');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
+const fs = require('fs');
 const nacl = require('tweetnacl');
 const bs58Module = require('bs58');
 const bs58 = bs58Module.default || bs58Module;
@@ -1035,6 +1036,48 @@ class WebServer {
       } catch (error) {
         logger.error('Error updating tenant status:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/superadmin/tenants/:guildId/logo-upload', superadminGuard, logSuperadminTenantAction, async (req, res) => {
+      try {
+        const guildId = req.params.guildId;
+        const { dataUrl } = req.body || {};
+        if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
+          return res.status(400).json({ success: false, message: 'dataUrl (image) is required' });
+        }
+
+        const match = dataUrl.match(/^data:(image\/(png|jpeg|jpg|webp));base64,(.+)$/i);
+        if (!match) {
+          return res.status(400).json({ success: false, message: 'Unsupported image format' });
+        }
+
+        const mime = match[1].toLowerCase();
+        const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
+        const b64 = match[3];
+        const buffer = Buffer.from(b64, 'base64');
+        const maxBytes = 2 * 1024 * 1024;
+        if (buffer.length > maxBytes) {
+          return res.status(400).json({ success: false, message: 'Logo too large (max 2MB)' });
+        }
+
+        const uploadDir = path.join(__dirname, 'public', 'uploads', 'tenant-logos');
+        fs.mkdirSync(uploadDir, { recursive: true });
+        const safeGuildId = normalizeGuildId(guildId);
+        const fileName = `${safeGuildId}-${Date.now()}.${ext}`;
+        const filePath = path.join(uploadDir, fileName);
+        fs.writeFileSync(filePath, buffer);
+
+        const publicUrl = `/uploads/tenant-logos/${fileName}`;
+        const result = tenantService.updateTenantBranding(guildId, { logo_url: publicUrl }, req.session.discordUser.id);
+        if (!result.success) {
+          return res.status(400).json(result);
+        }
+
+        return res.json({ success: true, logo_url: publicUrl });
+      } catch (error) {
+        logger.error('Error uploading tenant logo:', error);
+        return res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });
 

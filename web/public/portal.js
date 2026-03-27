@@ -1990,6 +1990,10 @@ function renderTenantDetailPanel(tenant) {
               <span>Logo URL</span>
               <input id="tenantBrandLogoUrl" type="text" value="${escapeHtml(branding.logo_url || '')}" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
             </label>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <input id="tenantBrandLogoFile" type="file" accept="image/png,image/jpeg,image/webp" style="font-size:0.82em;color:#c7d2fe;">
+              <button class="btn-secondary" id="tenantLogoUploadBtn" onclick="uploadTenantLogo()" style="padding:8px 12px;">Upload Logo</button>
+            </div>
             <label style="display:grid; gap:6px; color:#e0e7ff; font-size:0.9em;">
               <span>Support URL</span>
               <input id="tenantBrandSupportUrl" type="text" value="${escapeHtml(branding.support_url || '')}" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
@@ -2254,6 +2258,55 @@ async function saveTenantStatus() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Save';
+  }
+}
+
+async function uploadTenantLogo() {
+  if (!selectedTenantGuildId) return;
+  const input = document.getElementById('tenantBrandLogoFile');
+  const btn = document.getElementById('tenantLogoUploadBtn');
+  if (!input || !input.files || input.files.length === 0) {
+    return showError('Select a logo file first.');
+  }
+
+  const file = input.files[0];
+  const maxBytes = 2 * 1024 * 1024;
+  if (file.size > maxBytes) {
+    return showError('Logo too large (max 2MB).');
+  }
+
+  const reader = new FileReader();
+  const dataUrl = await new Promise((resolve, reject) => {
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  }).catch(() => null);
+
+  if (!dataUrl) return showError('Failed to read logo file.');
+
+  btn.disabled = true;
+  btn.textContent = 'Uploading...';
+  try {
+    const response = await fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/logo-upload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ dataUrl })
+    });
+    const data = await response.json();
+    if (data.success) {
+      const logoInput = document.getElementById('tenantBrandLogoUrl');
+      if (logoInput) logoInput.value = data.logo_url || '';
+      showSuccess('Logo uploaded');
+      await loadSuperadminView();
+    } else {
+      showError(data.message || 'Failed to upload logo');
+    }
+  } catch (error) {
+    showError(`Failed to upload logo: ${error.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Upload Logo';
   }
 }
 

@@ -11,6 +11,7 @@ const bs58 = bs58Module.default || bs58Module;
 const db = require('../database/db');
 const logger = require('../utils/logger');
 const settingsManager = require('../config/settings');
+const tenantService = require('../services/tenantService');
 const walletService = require('../services/walletService');
 const roleService = require('../services/roleService');
 const proposalService = require('../services/proposalService');
@@ -558,6 +559,8 @@ class WebServer {
     this.app.get('/api/admin/settings', adminAuthMiddleware, (req, res) => {
       try {
         const settings = settingsManager.getSettings();
+        const tenantContext = tenantService.getTenantContext(process.env.GUILD_ID);
+        const multiTenantEnabled = tenantService.isMultitenantEnabled();
         
         // Smart load: DB override → .env fallback
         const effectiveSettings = {
@@ -570,7 +573,12 @@ class WebServer {
           
           // Verification wallet
           verificationReceiveWallet: settings.verificationReceiveWallet || process.env.VERIFICATION_RECEIVE_WALLET || '',
-          nftActivityWebhookSecret: settings.nftActivityWebhookSecret || process.env.NFT_ACTIVITY_WEBHOOK_SECRET || ''
+          nftActivityWebhookSecret: settings.nftActivityWebhookSecret || process.env.NFT_ACTIVITY_WEBHOOK_SECRET || '',
+
+          // Tenant scaffold flags
+          multiTenantEnabled,
+          tenantEnabled: multiTenantEnabled && !!tenantContext.tenant,
+          readOnlyManaged: multiTenantEnabled ? tenantContext.readOnlyManaged : false
         };
         
         res.json({ success: true, settings: effectiveSettings });

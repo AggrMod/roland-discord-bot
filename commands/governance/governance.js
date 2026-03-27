@@ -1,7 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const proposalService = require('../../services/proposalService');
 const roleService = require('../../services/roleService');
-const walletService = require('../../services/walletService');
 const settings = require('../../config/settings.json');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
@@ -23,7 +22,22 @@ module.exports = {
         .addStringOption(option =>
           option.setName('description')
             .setDescription('Detailed description of the proposal')
-            .setRequired(true)))
+            .setRequired(true))
+        .addStringOption(option =>
+          option.setName('category')
+            .setDescription('Proposal category')
+            .setRequired(false)
+            .addChoices(
+              { name: 'Partnership', value: 'Partnership' },
+              { name: 'Treasury Allocation', value: 'Treasury Allocation' },
+              { name: 'Rule Change', value: 'Rule Change' },
+              { name: 'Community Event', value: 'Community Event' },
+              { name: 'Other', value: 'Other' }
+            ))
+        .addStringOption(option =>
+          option.setName('cost')
+            .setDescription('Estimated cost (e.g. 500 USDC)')
+            .setRequired(false)))
     
     .addSubcommand(subcommand =>
       subcommand
@@ -169,15 +183,15 @@ module.exports = {
       return interaction.editReply({ embeds: [embed] });
     }
 
-    const wallets = walletService.getLinkedWallets(discordId);
-    const primaryWallet = wallets.find(w => w.primary_wallet) || wallets[0];
+    const category = interaction.options.getString('category') || 'Other';
+    const costIndication = interaction.options.getString('cost') || null;
 
-    const result = proposalService.createProposal(
-      discordId,
-      primaryWallet?.wallet_address || null,
+    const result = proposalService.createProposal(discordId, {
       title,
-      description
-    );
+      description,
+      category,
+      costIndication
+    });
 
     if (!result.success) {
       const embed = new EmbedBuilder()

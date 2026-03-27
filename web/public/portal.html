@@ -653,32 +653,10 @@
             <h2>Admin Portal</h2>
             <p class="section-subtitle">System administration and DAO management tools</p>
           </header>
+          <div id="adminEnvStatusBar" style="margin-bottom: var(--space-4);"></div>
           
-          <div class="card">
-            <div class="card-header">
-              <h3>Admin Dashboard</h3>
-              <button class="btn-primary" onclick="showAdminView('settings')">
-                <span>⚙️</span>
-                <span>Open Admin Workspace</span>
-              </button>
-            </div>
-            <p style="color: var(--text-secondary); line-height: 1.7;">
-              Access the full-featured admin dashboard to manage proposals, users, missions, and system settings. Advanced tools and analytics are available in the dedicated admin interface.
-            </p>
-          </div>
 
-          <div class="card">
-            <div class="card-header">
-              <h3>📘 Admin Command Guide</h3>
-              <button class="btn-secondary" onclick="showAdminView('help')">
-                <span>📄</span>
-                <span>Open Admin Help</span>
-              </button>
-            </div>
-            <p style="color: var(--text-secondary); line-height: 1.7;">
-              Complete command reference for all live module commands, admin subcommands, and usage examples.
-            </p>
-          </div>
+
 
           <div class="card">
             <h3>Quick Actions</h3>
@@ -706,6 +684,10 @@
               <button class="btn-secondary" onclick="showAdminView('activity')" style="justify-content: flex-start;">
                 <span>📋</span>
                 <span>Activity Feed</span>
+              </button>
+              <button class="btn-secondary" onclick="showAdminView('help')" style="justify-content: flex-start;">
+                <span>📘</span>
+                <span>Commands</span>
               </button>
             </div>
           </div>
@@ -775,10 +757,9 @@
 
           <div class="card" id="adminHelpCard" style="display:none;">
             <div class="card-header">
-              <h3>📘 Admin Command Guide (Integrated)</h3>
-              <a class="btn-secondary" href="/admin-help.html" target="_blank" rel="noopener">Open standalone</a>
+              <h3>📘 Command Reference</h3>
             </div>
-            <div id="adminHelpContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>Admin Help</strong> to load guide.</div>
+            <div id="adminHelpContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>Commands</strong> to load guide.</div>
           </div>
 
           <div class="card" id="adminActivityCard" style="display:none;">

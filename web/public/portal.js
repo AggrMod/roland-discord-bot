@@ -816,6 +816,8 @@ function switchSection(sectionName) {
   } else if (sectionName === 'nft-activity') {
     loadNFTActivityView();
     if (isAdmin) loadNFTActivityAdminView();
+  } else if (sectionName === 'admin') {
+    loadEnvStatusBar();
   } else if (sectionName === 'heist' && userData && heistEnabled) {
     loadAvailableMissions();
   }
@@ -1231,15 +1233,54 @@ async function loadAdminHelpView() {
   const content = document.getElementById('adminHelpContent');
   if (!content) return;
 
-  content.innerHTML = `
-    <div style="display:grid; gap: var(--space-3);">
-      <div><strong>Verification Admin</strong>: /verification admin panel, export-user, remove-user, export-wallets, role-config, actions, og-view, og-enable, og-role, og-limit, og-sync, activity-watch-add/remove/list, activity-feed, activity-alerts</div>
-      <div><strong>Governance Admin</strong>: /governance admin list, cancel, settings</div>
-      <div><strong>Treasury Admin</strong>: /treasury admin status, refresh, enable/disable, set-wallet, set-interval, tx-history, tx-alerts</div>
-      <div><strong>Battle Admin</strong>: /battle admin list, force-end, settings</div>
-      <div style="color: var(--text-secondary);">For complete reference open standalone admin help.</div>
-    </div>
-  `;
+  const cmdSection = (title, icon, commands) => {
+    const rows = commands.map(c => `
+      <tr>
+        <td style="padding:8px 10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#c7d2fe; font-family:monospace; font-size:0.85em; white-space:nowrap;">${escapeHtml(c.name)}</td>
+        <td style="padding:8px 10px; border-bottom:1px solid rgba(99,102,241,0.15); color:var(--text-secondary); font-size:0.9em;">${escapeHtml(c.desc)}</td>
+        <td style="padding:8px 10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#93c5fd; font-size:0.85em;">${escapeHtml(c.options || '—')}</td>
+        <td style="padding:8px 10px; border-bottom:1px solid rgba(99,102,241,0.15); color:var(--text-secondary); font-family:monospace; font-size:0.8em;">${escapeHtml(c.example || '')}</td>
+      </tr>`).join('');
+    return `
+      <h4 style="color:#c9d6ff; margin:20px 0 8px;">${icon} ${escapeHtml(title)}</h4>
+      <div style="overflow:auto; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.5); margin-bottom:16px;">
+        <table style="width:100%; border-collapse:collapse; font-size:0.9em;">
+          <thead><tr style="background:rgba(99,102,241,0.12); text-align:left;">
+            <th style="padding:8px 10px; color:#c9d6ff;">Command</th>
+            <th style="padding:8px 10px; color:#c9d6ff;">Description</th>
+            <th style="padding:8px 10px; color:#c9d6ff;">Options</th>
+            <th style="padding:8px 10px; color:#c9d6ff;">Example</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  };
+
+  content.innerHTML = cmdSection('Battle', '⚔️', [
+    { name: '/battle', desc: 'Start a new battle between two fighters', options: 'opponent (required)', example: '/battle @user' }
+  ]) + cmdSection('Governance', '📜', [
+    { name: '/governance propose', desc: 'Create a new governance proposal', options: 'title, description, duration (required)', example: '/governance propose title:"Fund project" description:"Allocate 100 SOL" duration:7d' },
+    { name: '/governance vote', desc: 'Vote on an active proposal', options: 'proposal_id, choice (required)', example: '/governance vote proposal_id:1 choice:yes' },
+    { name: '/governance support', desc: 'Show support for a proposal without voting', options: 'proposal_id (required)', example: '/governance support proposal_id:1' }
+  ]) + cmdSection('Verification', '✅', [
+    { name: '/verification verify', desc: 'Verify your wallet to receive holder roles', options: '—', example: '/verification verify' },
+    { name: '/verification status', desc: 'Check your current verification status', options: '—', example: '/verification status' },
+    { name: '/verification admin set_trait', desc: 'Add a trait-based role mapping', options: 'trait_type, trait_value, role (required)', example: '/verification admin set_trait trait_type:Background trait_value:Gold role:@GoldHolder' },
+    { name: '/verification admin remove_trait', desc: 'Remove a trait-based role mapping', options: 'trait_type, trait_value (required)', example: '/verification admin remove_trait trait_type:Background trait_value:Gold' }
+  ]) + cmdSection('Treasury', '💰', [
+    { name: '/treasury balance', desc: 'View current treasury balance', options: '—', example: '/treasury balance' },
+    { name: '/treasury transactions', desc: 'View recent treasury transactions', options: 'limit (optional)', example: '/treasury transactions limit:10' }
+  ]) + cmdSection('Missions', '🎯', [
+    { name: '/mission join', desc: 'Join an available mission', options: 'mission_id (required)', example: '/mission join mission_id:1' },
+    { name: '/mission status', desc: 'Check your current mission progress', options: '—', example: '/mission status' },
+    { name: '/mission list', desc: 'List all available missions', options: '—', example: '/mission list' }
+  ]) + cmdSection('Roles', '🏷️', [
+    { name: '/roles claim', desc: 'Claim your earned Discord roles based on NFT holdings', options: '—', example: '/roles claim' }
+  ]) + cmdSection('Admin', '🔧', [
+    { name: '/admin users', desc: 'List or search verified users', options: 'search (optional)', example: '/admin users search:username' },
+    { name: '/admin sync', desc: 'Sync roles for all verified users', options: '—', example: '/admin sync' },
+    { name: '/admin settings', desc: 'View or update system settings', options: 'key, value (optional)', example: '/admin settings key:mockMode value:true' }
+  ]);
 }
 
 async function loadAdminProposals() {
@@ -1895,7 +1936,7 @@ async function loadAdminRoles() {
 
     // === TIERS SECTION ===
     html += `<h4 style="color:#c9d6ff; margin-bottom:8px;">🏆 NFT Holder Tiers</h4>`;
-    html += `<p style="color:var(--text-secondary); font-size:0.85em; margin-bottom:12px;">Define tier levels based on how many NFTs a holder owns. Each tier grants a Discord role and voting power.</p>`;
+    html += `<p style="color:var(--text-secondary); font-size:0.85em; margin-bottom:12px;">Define tier levels based on how many NFTs a holder owns. Each tier grants a Discord role.</p>`;
     if (tiers.length === 0) {
       html += `<div style="padding:16px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.15); border-radius:10px; color:var(--text-secondary); margin-bottom:20px;">No tiers configured. Click "➕ Add Tier" to create one.</div>`;
     } else {
@@ -1904,7 +1945,7 @@ async function loadAdminRoles() {
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#e0e7ff; font-weight:600;">${escapeHtml(tier.name)}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#c7d2fe;">${tier.minNFTs}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#c7d2fe;">${tier.maxNFTs === Infinity || tier.maxNFTs >= 999999 ? '∞' : tier.maxNFTs}</td>
-          <td class="vp-col" style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#fbbf24; font-weight:600;${portalSettingsData?.moduleGovernanceEnabled === false ? 'opacity:0.3;' : ''}">${tier.votingPower}</td>
+
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#93c5fd; font-family:monospace; font-size:0.85em;">${escapeHtml(tier.roleId || 'Not set')}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); text-align:right;">
             <button onclick="editTier(${idx})" style="width:32px; height:32px; background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.35); border-radius:6px; cursor:pointer; color:#818cf8; font-size:0.9em;">✏️</button>
@@ -1919,7 +1960,7 @@ async function loadAdminRoles() {
               <th style="padding:10px; color:#c9d6ff;">Tier Name</th>
               <th style="padding:10px; color:#c9d6ff;">Minimum NFT count</th>
               <th style="padding:10px; color:#c9d6ff;">Maximum NFT count</th>
-              <th class="vp-col" style="padding:10px; color:#c9d6ff;">${portalSettingsData?.moduleGovernanceEnabled === false ? 'Voting Power <span style="color:#888;font-weight:400;font-size:0.85em;">(governance disabled)</span>' : 'Voting Power'}</th>
+
               <th style="padding:10px; color:#c9d6ff;">Discord Role ID</th>
               <th style="padding:10px; color:#c9d6ff; text-align:right;">Actions</th>
             </tr></thead>

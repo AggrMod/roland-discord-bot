@@ -894,20 +894,20 @@ async function loadTreasuryPublicView() {
     const data = await response.json();
     
     if (data.success) {
-      const t = data.treasury || {};
+      const t = data.data || data.treasury || {};
       content.innerHTML = `
         <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
           <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
             <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:8px;">SOL Balance</div>
-            <div style="font-size:2em; font-weight:700; color:#93c5fd;">${t.sol_balance?.toFixed(2) || '—'}</div>
+            <div style="font-size:2em; font-weight:700; color:#93c5fd;">${t.sol ?? t.sol_balance ?? '—'}</div>
           </div>
           <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
             <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:8px;">USDC Balance</div>
-            <div style="font-size:2em; font-weight:700; color:#86efac;">${t.usdc_balance?.toFixed(2) || '—'}</div>
+            <div style="font-size:2em; font-weight:700; color:#86efac;">${t.usdc ?? t.usdc_balance ?? '—'}</div>
           </div>
           <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
             <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:8px;">Last Updated</div>
-            <div style="font-size:1.1em; font-weight:600; color:#e0e7ff;">${t.last_updated ? new Date(t.last_updated).toLocaleString() : '—'}</div>
+            <div style="font-size:1.1em; font-weight:600; color:#e0e7ff;">${t.lastUpdated || t.last_updated ? new Date(t.lastUpdated || t.last_updated).toLocaleString() : '—'}</div>
           </div>
         </div>
       `;
@@ -929,20 +929,30 @@ async function loadTreasuryTransactions() {
   try {
     const response = await fetch('/api/public/v1/treasury/transactions?limit=10', { credentials: 'include' });
     const data = await response.json();
+    const transactions = data.data?.transactions || data.transactions || [];
     
-    if (data.success && data.transactions?.length > 0) {
-      const rows = data.transactions.map(tx => `
+    if (data.success && transactions.length > 0) {
+      const rows = transactions.map(tx => {
+        const direction = tx.direction || (tx.type === 'in' ? 'in' : 'out');
+        const label = direction === 'in' || direction === 'incoming' ? '➕ Incoming' : '➖ Outgoing';
+        const amount = tx.deltaSol ?? tx.amount ?? '—';
+        const hash = tx.signature || tx.tx_hash || '';
+        const timestamp = tx.blockTime
+          ? new Date(tx.blockTime * 1000)
+          : (tx.timestamp ? new Date(tx.timestamp) : null);
+
+        return `
         <div style="padding:12px; border-bottom:1px solid rgba(99,102,241,0.15); display:flex; justify-content:space-between; align-items:center;">
           <div style="flex:1;">
-            <div style="color:#e0e7ff; font-weight:600;">${tx.type === 'in' ? '➕ Incoming' : '➖ Outgoing'}</div>
-            <div style="color:var(--text-secondary); font-size:0.85em; font-family:monospace;">${tx.tx_hash?.slice(0, 16)}...</div>
+            <div style="color:#e0e7ff; font-weight:600;">${label}</div>
+            <div style="color:var(--text-secondary); font-size:0.85em; font-family:monospace;">${hash ? `${hash.slice(0, 16)}...` : '—'}</div>
           </div>
           <div style="text-align:right;">
-            <div style="color:#e0e7ff; font-weight:600;">${tx.amount} ${tx.token}</div>
-            <div style="color:var(--text-secondary); font-size:0.85em;">${new Date(tx.timestamp).toLocaleDateString()}</div>
+            <div style="color:#e0e7ff; font-weight:600;">${amount} SOL</div>
+            <div style="color:var(--text-secondary); font-size:0.85em;">${timestamp ? timestamp.toLocaleDateString() : '—'}</div>
           </div>
         </div>
-      `).join('');
+      `}).join('');
       
       content.innerHTML = `<div style="border:1px solid rgba(99,102,241,0.22); border-radius:10px; overflow:hidden;">${rows}</div>`;
     } else {
@@ -1340,64 +1350,80 @@ async function loadAdminHelpView() {
       </div>`;
   };
 
-  content.innerHTML = cmdSection('Verification', '🔐', [
-    { name: '/verification status', desc: 'Check your wallet verification status and holdings', options: '—', example: '/verification status' },
-    { name: '/verification wallets', desc: 'List all your linked wallets', options: '—', example: '/verification wallets' },
-    { name: '/verification refresh', desc: 'Refresh your roles based on current holdings', options: '—', example: '/verification refresh' },
-    { name: '/verification quick', desc: 'Quick micro-verification for instant role assignment', options: '—', example: '/verification quick' },
-    { name: '/verification admin panel', desc: 'Post a verification panel to the channel', options: 'title, description, color (all optional)', example: '/verification admin panel title:"Verify Here"' },
-    { name: '/verification admin export-user', desc: "Export a member's verification data", options: 'user (required)', example: '/verification admin export-user user:@member' },
-    { name: '/verification admin remove-user', desc: 'Remove a member from the Family (irreversible)', options: 'user, confirm (required)', example: '/verification admin remove-user user:@member confirm:true' },
-    { name: '/verification admin export-wallets', desc: 'Export all verified wallets as CSV', options: '—', example: '/verification admin export-wallets' },
-    { name: '/verification admin role-config', desc: 'Configure role assignment rules (view/set tier/set trait/remove trait)', options: 'action (required), trait-type, trait-value, collection-id, role, description', example: '/verification admin role-config action:Set Tier Role' },
-    { name: '/verification admin actions', desc: 'View all verification actions and role assignments', options: '—', example: '/verification admin actions' },
-    { name: '/verification admin og-view', desc: 'View OG role configuration and eligible members', options: '—', example: '/verification admin og-view' },
-    { name: '/verification admin og-enable', desc: 'Enable or disable the OG role system', options: 'enabled (required)', example: '/verification admin og-enable enabled:true' },
-    { name: '/verification admin og-role', desc: 'Set the OG role to assign', options: 'role (required)', example: '/verification admin og-role role:@OG' },
-    { name: '/verification admin og-limit', desc: 'Set number of OG slots (first X verified users)', options: 'count (required)', example: '/verification admin og-limit count:50' },
-    { name: '/verification admin og-sync', desc: 'Sync OG role to eligible users', options: 'full (optional — also removes from ineligible)', example: '/verification admin og-sync full:true' },
-    { name: '/verification admin activity-watch-add', desc: 'Add NFT collection to activity watchlist', options: 'collection (required)', example: '/verification admin activity-watch-add collection:abc123' },
-    { name: '/verification admin activity-watch-remove', desc: 'Remove NFT collection from watchlist', options: 'collection (required)', example: '/verification admin activity-watch-remove collection:abc123' },
-    { name: '/verification admin activity-watch-list', desc: 'List all watched NFT collections', options: '—', example: '/verification admin activity-watch-list' },
-    { name: '/verification admin activity-feed', desc: 'Show recent NFT activity feed', options: 'limit (optional, 1-30)', example: '/verification admin activity-feed limit:10' },
-    { name: '/verification admin activity-alerts', desc: 'Configure NFT activity auto-post alerts', options: 'enabled (required), channel, types, min_sol', example: '/verification admin activity-alerts enabled:true channel:#alerts' }
-  ]) + cmdSection('Governance', '🏛️', [
-    { name: '/governance propose', desc: 'Create a new governance proposal', options: 'title, description (required)', example: '/governance propose title:"Fund project" description:"Allocate 100 SOL"' },
-    { name: '/governance support', desc: 'Support a draft proposal to promote it to voting', options: 'proposal_id (required)', example: '/governance support proposal_id:P-001' },
-    { name: '/governance vote', desc: 'Cast your vote on an active proposal', options: 'proposal_id, choice (required: yes/no/abstain)', example: '/governance vote proposal_id:P-001 choice:yes' },
-    { name: '/governance admin list', desc: 'View all proposals (any status)', options: 'status (optional: draft/voting/passed/failed)', example: '/governance admin list status:voting' },
-    { name: '/governance admin cancel', desc: 'Cancel a proposal (emergency)', options: 'proposal_id, confirm (required)', example: '/governance admin cancel proposal_id:P-001 confirm:true' },
-    { name: '/governance admin settings', desc: 'View or update governance settings', options: '—', example: '/governance admin settings' }
-  ]) + cmdSection('Battle', '⚔️', [
-    { name: '/battle create', desc: 'Create a new battle lobby', options: 'max_players (optional), required_role_1-3, excluded_role_1-3 (optional)', example: '/battle create max_players:10' },
-    { name: '/battle start', desc: 'Start the battle (creator only)', options: '—', example: '/battle start' },
-    { name: '/battle cancel', desc: 'Cancel the battle lobby (creator only)', options: '—', example: '/battle cancel' },
-    { name: '/battle stats', desc: 'View battle statistics', options: 'user (optional)', example: '/battle stats user:@member' },
-    { name: '/battle admin list', desc: 'List all active battles', options: '—', example: '/battle admin list' },
-    { name: '/battle admin force-end', desc: 'Force end a battle (emergency)', options: 'battle_id, confirm (required)', example: '/battle admin force-end battle_id:abc123 confirm:true' },
-    { name: '/battle admin settings', desc: 'View current battle settings', options: '—', example: '/battle admin settings' }
-  ]) + cmdSection('Heist', '🎯', [
-    { name: '/heist view', desc: 'View available heist missions', options: '—', example: '/heist view' },
-    { name: '/heist signup', desc: 'Sign up for a heist mission', options: 'mission_id (required), role (required: driver/hacker/muscle/lookout)', example: '/heist signup mission_id:H-001 role:hacker' },
-    { name: '/heist status', desc: 'View your current mission status', options: '—', example: '/heist status' },
-    { name: '/heist admin create', desc: 'Create a new heist mission', options: 'title, description, slots (2-20), reward (required)', example: '/heist admin create title:"Bank Job" description:"Hit the vault" slots:4 reward:100' },
-    { name: '/heist admin list', desc: 'List all missions (any status)', options: '—', example: '/heist admin list' },
-    { name: '/heist admin cancel', desc: 'Cancel a heist mission', options: 'mission_id, confirm (required)', example: '/heist admin cancel mission_id:H-001 confirm:true' }
-  ]) + cmdSection('Treasury', '💰', [
-    { name: '/treasury view', desc: 'View current treasury balances (public read-only)', options: '—', example: '/treasury view' },
-    { name: '/treasury admin status', desc: 'View full treasury status (admin)', options: '—', example: '/treasury admin status' },
-    { name: '/treasury admin refresh', desc: 'Manually refresh treasury balances', options: '—', example: '/treasury admin refresh' },
-    { name: '/treasury admin enable', desc: 'Enable treasury monitoring', options: '—', example: '/treasury admin enable' },
-    { name: '/treasury admin disable', desc: 'Disable treasury monitoring', options: '—', example: '/treasury admin disable' },
-    { name: '/treasury admin set-wallet', desc: 'Set the treasury wallet address', options: 'address (required)', example: '/treasury admin set-wallet address:So1...' },
-    { name: '/treasury admin set-interval', desc: 'Set refresh interval in hours', options: 'hours (required, 1-168)', example: '/treasury admin set-interval hours:6' },
-    { name: '/treasury admin tx-history', desc: 'Show recent treasury transactions', options: 'limit (optional, 1-20)', example: '/treasury admin tx-history limit:10' },
-    { name: '/treasury admin tx-alerts', desc: 'Configure automatic treasury transaction alerts', options: 'enabled (required), channel, incoming_only, min_sol', example: '/treasury admin tx-alerts enabled:true channel:#treasury' }
-  ]) + cmdSection('Config', '⚙️', [
-    { name: '/config modules', desc: 'View all module toggle states', options: '—', example: '/config modules' },
-    { name: '/config toggle', desc: 'Toggle a module on or off', options: 'module (required: verification/governance/treasury/battle/heist), enabled (required)', example: '/config toggle module:battle enabled:true' },
-    { name: '/config status', desc: 'System status overview (uptime, memory, guilds)', options: '—', example: '/config status' }
-  ]);
+  content.innerHTML = `
+    <div style="margin-bottom:16px;padding:12px 14px;border:1px solid rgba(99,102,241,0.18);border-radius:10px;background:rgba(99,102,241,0.08);color:var(--text-secondary);font-size:0.88em;line-height:1.6;">
+      Current command surface includes canonical grouped commands, legacy governance aliases (/propose, /support, /vote), and one deprecated OG alias (/og-config).
+    </div>
+    ${cmdSection('Verification', '🔐', [
+      { name: '/verification status', desc: 'Check your wallet verification status and holdings', options: '—', example: '/verification status' },
+      { name: '/verification wallets', desc: 'List all your linked wallets', options: '—', example: '/verification wallets' },
+      { name: '/verification refresh', desc: 'Refresh your roles based on current holdings', options: '—', example: '/verification refresh' },
+      { name: '/verification quick', desc: 'Quick micro-verification for instant role assignment', options: '—', example: '/verification quick' },
+      { name: '/verification admin panel', desc: 'Post a verification panel to the channel', options: 'title, description, color (all optional)', example: '/verification admin panel title:"Verify Here"' },
+      { name: '/verification admin export-user', desc: "Export a member's verification data", options: 'user (required)', example: '/verification admin export-user user:@member' },
+      { name: '/verification admin remove-user', desc: 'Remove a member from the Family (irreversible)', options: 'user, confirm (required)', example: '/verification admin remove-user user:@member confirm:true' },
+      { name: '/verification admin export-wallets', desc: 'Export all verified wallets as CSV', options: '—', example: '/verification admin export-wallets' },
+      { name: '/verification admin role-config', desc: 'Configure role assignment rules (view/set tier/set trait/remove trait)', options: 'action (required), trait-type, trait-value, collection-id, role, description', example: '/verification admin role-config action:Set Tier Role' },
+      { name: '/verification admin actions', desc: 'View all verification actions and role assignments', options: '—', example: '/verification admin actions' },
+      { name: '/verification admin og-view', desc: 'View OG role configuration and eligible members', options: '—', example: '/verification admin og-view' },
+      { name: '/verification admin og-enable', desc: 'Enable or disable the OG role system', options: 'enabled (required)', example: '/verification admin og-enable enabled:true' },
+      { name: '/verification admin og-role', desc: 'Set the OG role to assign', options: 'role (required)', example: '/verification admin og-role role:@OG' },
+      { name: '/verification admin og-limit', desc: 'Set number of OG slots (first X verified users)', options: 'count (required)', example: '/verification admin og-limit count:50' },
+      { name: '/verification admin og-sync', desc: 'Sync OG role to eligible users', options: 'full (optional - also removes from ineligible)', example: '/verification admin og-sync full:true' },
+      { name: '/verification admin activity-watch-add', desc: 'Add NFT collection to activity watchlist', options: 'collection (required)', example: '/verification admin activity-watch-add collection:abc123' },
+      { name: '/verification admin activity-watch-remove', desc: 'Remove NFT collection from watchlist', options: 'collection (required)', example: '/verification admin activity-watch-remove collection:abc123' },
+      { name: '/verification admin activity-watch-list', desc: 'List all watched NFT collections', options: '—', example: '/verification admin activity-watch-list' },
+      { name: '/verification admin activity-feed', desc: 'Show recent NFT activity feed', options: 'limit (optional, 1-30)', example: '/verification admin activity-feed limit:10' },
+      { name: '/verification admin activity-alerts', desc: 'Configure NFT activity auto-post alerts', options: 'enabled (required), channel, types, min_sol', example: '/verification admin activity-alerts enabled:true channel:#alerts' }
+    ])}
+    ${cmdSection('Governance', '🏛️', [
+      { name: '/governance propose', desc: 'Create a new governance proposal', options: 'title, description (required)', example: '/governance propose title:"Fund project" description:"Allocate 100 SOL"' },
+      { name: '/governance support', desc: 'Support a draft proposal to promote it to voting', options: 'proposal_id (required)', example: '/governance support proposal_id:P-001' },
+      { name: '/governance vote', desc: 'Cast your vote on an active proposal', options: 'proposal_id, choice (required: yes/no/abstain)', example: '/governance vote proposal_id:P-001 choice:yes' },
+      { name: '/propose', desc: 'Standalone alias for /governance propose', options: 'title, description (required)', example: '/propose title:"Fund project" description:"Allocate 100 SOL"' },
+      { name: '/support', desc: 'Standalone alias for /governance support', options: 'proposal_id (required)', example: '/support proposal_id:P-001' },
+      { name: '/vote', desc: 'Standalone alias for /governance vote', options: 'proposal_id, choice (required: yes/no/abstain)', example: '/vote proposal_id:P-001 choice:yes' },
+      { name: '/governance admin list', desc: 'View all proposals (any status)', options: 'status (optional: draft/voting/passed/failed)', example: '/governance admin list status:voting' },
+      { name: '/governance admin cancel', desc: 'Cancel a proposal (emergency)', options: 'proposal_id, confirm (required)', example: '/governance admin cancel proposal_id:P-001 confirm:true' },
+      { name: '/governance admin settings', desc: 'View or update governance settings', options: '—', example: '/governance admin settings' }
+    ])}
+    ${cmdSection('Battle', '⚔️', [
+      { name: '/battle create', desc: 'Create a new battle lobby', options: 'max_players (optional), required_role_1-3, excluded_role_1-3 (optional)', example: '/battle create max_players:10' },
+      { name: '/battle start', desc: 'Start the battle (creator only)', options: '—', example: '/battle start' },
+      { name: '/battle cancel', desc: 'Cancel the battle lobby (creator only)', options: '—', example: '/battle cancel' },
+      { name: '/battle stats', desc: 'View battle statistics', options: 'user (optional)', example: '/battle stats user:@member' },
+      { name: '/battle admin list', desc: 'List all active battles', options: '—', example: '/battle admin list' },
+      { name: '/battle admin force-end', desc: 'Force end a battle (emergency)', options: 'battle_id, confirm (required)', example: '/battle admin force-end battle_id:abc123 confirm:true' },
+      { name: '/battle admin settings', desc: 'View current battle settings', options: '—', example: '/battle admin settings' }
+    ])}
+    ${cmdSection('Heist', '🎯', [
+      { name: '/heist view', desc: 'View available heist missions', options: '—', example: '/heist view' },
+      { name: '/heist signup', desc: 'Sign up for a heist mission', options: 'mission_id (required), role (required: driver/hacker/muscle/lookout)', example: '/heist signup mission_id:H-001 role:hacker' },
+      { name: '/heist status', desc: 'View your current mission status', options: '—', example: '/heist status' },
+      { name: '/heist admin create', desc: 'Create a new heist mission', options: 'title, description, slots (2-20), reward (required)', example: '/heist admin create title:"Bank Job" description:"Hit the vault" slots:4 reward:100' },
+      { name: '/heist admin list', desc: 'List all missions (any status)', options: '—', example: '/heist admin list' },
+      { name: '/heist admin cancel', desc: 'Cancel a heist mission', options: 'mission_id, confirm (required)', example: '/heist admin cancel mission_id:H-001 confirm:true' }
+    ])}
+    ${cmdSection('Treasury', '💰', [
+      { name: '/treasury view', desc: 'View current treasury balances (public read-only)', options: '—', example: '/treasury view' },
+      { name: '/treasury admin status', desc: 'View full treasury status (admin)', options: '—', example: '/treasury admin status' },
+      { name: '/treasury admin refresh', desc: 'Manually refresh treasury balances', options: '—', example: '/treasury admin refresh' },
+      { name: '/treasury admin enable', desc: 'Enable treasury monitoring', options: '—', example: '/treasury admin enable' },
+      { name: '/treasury admin disable', desc: 'Disable treasury monitoring', options: '—', example: '/treasury admin disable' },
+      { name: '/treasury admin set-wallet', desc: 'Set the treasury wallet address', options: 'address (required)', example: '/treasury admin set-wallet address:So1...' },
+      { name: '/treasury admin set-interval', desc: 'Set refresh interval in hours', options: 'hours (required, 1-168)', example: '/treasury admin set-interval hours:6' },
+      { name: '/treasury admin tx-history', desc: 'Show recent treasury transactions', options: 'limit (optional, 1-20)', example: '/treasury admin tx-history limit:10' },
+      { name: '/treasury admin tx-alerts', desc: 'Configure automatic treasury transaction alerts', options: 'enabled (required), channel, incoming_only, min_sol', example: '/treasury admin tx-alerts enabled:true channel:#treasury' }
+    ])}
+    ${cmdSection('Config', '⚙️', [
+      { name: '/config modules', desc: 'View all module toggle states', options: '—', example: '/config modules' },
+      { name: '/config toggle', desc: 'Toggle a module on or off', options: 'module (required: verification/governance/treasury/battle/heist), enabled (required)', example: '/config toggle module:battle enabled:true' },
+      { name: '/config status', desc: 'System status overview (uptime, memory, guilds)', options: '—', example: '/config status' }
+    ])}
+    ${cmdSection('Deprecated', '⚠️', [
+      { name: '/og-config', desc: 'Deprecated legacy OG command; use /verification admin og-* instead', options: 'view/enable/role/limit/sync', example: '/og-config view' }
+    ])}
+  `;
 }
 
 async function loadAdminProposals() {
@@ -2273,7 +2299,8 @@ async function loadAdminAnalyticsView() {
     // Treasury balance
     let treasuryBalance = '—';
     if (treasuryData) {
-      const bal = treasuryData.balance ?? treasuryData.sol ?? treasuryData.total;
+      const treasurySnapshot = treasuryData.data || treasuryData.treasury || treasuryData;
+      const bal = treasurySnapshot.balance ?? treasurySnapshot.sol ?? treasurySnapshot.total ?? treasurySnapshot.sol_balance;
       if (bal !== undefined && bal !== null) treasuryBalance = typeof bal === 'number' ? bal.toFixed(2) + ' SOL' : bal;
     }
 
@@ -4442,64 +4469,144 @@ function loadApiRefView() {
         </details>` : ''}
     </div>`;
 
+  const section = (id, title, subtitle, endpoints) => `
+    <h4 id="${id}" style="color:var(--text-primary);margin:0 0 var(--space-3);">${title} <span style="font-weight:400;font-size:0.8em;color:var(--text-secondary);">${subtitle}</span></h4>
+    ${endpoints.join('')}
+  `;
+
+  const publicV1Example = JSON.stringify({
+    success: true,
+    data: {
+      stats: {
+        totalProposals: 12,
+        passedProposals: 8,
+        passRate: 67,
+        totalVotes: 420,
+        totalVPUsed: 980,
+        activeVoters: 64
+      }
+    },
+    error: null,
+    meta: { version: '1.0.0', timestamp: '2026-03-27T10:00:00Z' }
+  }, null, 2);
+
+  const treasuryExample = JSON.stringify({
+    success: true,
+    data: {
+      sol: '12.4500',
+      usdc: '0.0000',
+      lastUpdated: '2026-03-27T10:00:00Z',
+      status: 'ok'
+    },
+    error: null,
+    meta: { version: '1.0.0', timestamp: '2026-03-27T10:00:00Z' }
+  }, null, 2);
+
+  const proposalExample = JSON.stringify({
+    success: true,
+    data: {
+      proposals: [
+        {
+          proposalId: 'P-001',
+          title: 'Add new trait',
+          status: 'voting',
+          quorum: { required: 50, current: 72 }
+        }
+      ]
+    },
+    error: null,
+    meta: { version: '1.0.0', timestamp: '2026-03-27T10:00:00Z' }
+  }, null, 2);
+
+  const leaderboardExample = JSON.stringify({
+    success: true,
+    data: {
+      leaderboard: [
+        { rank: 1, username: 'CryptoKing', tier: 'Don', totalPoints: 120 }
+      ]
+    },
+    error: null,
+    meta: { version: '1.0.0', timestamp: '2026-03-27T10:00:00Z' }
+  }, null, 2);
+
   content.innerHTML = `
     <div style="position:sticky;top:0;z-index:10;background:var(--bg-primary);padding:var(--space-2) 0 var(--space-3);margin-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.1);display:flex;gap:var(--space-3);flex-wrap:wrap;">
-      <a href="#apiref-public" style="color:var(--accent-primary);font-size:0.85em;text-decoration:none;">Public Endpoints</a>
-      <a href="#apiref-auth" style="color:var(--accent-primary);font-size:0.85em;text-decoration:none;">Auth Endpoints</a>
+      <a href="#apiref-public-v1" style="color:var(--accent-primary);font-size:0.85em;text-decoration:none;">Public v1</a>
+      <a href="#apiref-legacy" style="color:var(--accent-primary);font-size:0.85em;text-decoration:none;">Legacy Aliases</a>
+      <a href="#apiref-auth" style="color:var(--accent-primary);font-size:0.85em;text-decoration:none;">Session / Auth</a>
       <a href="#apiref-flow" style="color:var(--accent-primary);font-size:0.85em;text-decoration:none;">Auth Flow</a>
     </div>
 
-    <h4 id="apiref-public" style="color:var(--text-primary);margin:0 0 var(--space-3);">Public Endpoints <span style="font-weight:400;font-size:0.8em;color:var(--text-secondary);">(no auth required)</span></h4>
+    <div style="margin-bottom:16px;padding:12px 14px;border:1px solid rgba(99,102,241,0.18);border-radius:10px;background:rgba(99,102,241,0.08);color:var(--text-secondary);font-size:0.88em;line-height:1.6;">
+      Canonical public routes use <code>/api/public/v1/*</code> and return the standard <code>{ success, data, error, meta }</code> envelope. Legacy <code>/api/public/*</code> aliases remain mounted for compatibility.
+    </div>
 
-    ${endpoint('GET', '/api/public/stats', 'Returns community statistics.', true,
-      JSON.stringify({ memberCount: 120, totalNFTs: 540, verifiedWallets: 89, activeProposals: 2 }, null, 2))}
+    ${section('apiref-public-v1', 'Public v1 Endpoints', '(no auth required)', [
+      endpoint('GET', '/api/public/v1/stats', 'Returns community statistics.', true, publicV1Example),
+      endpoint('GET', '/api/public/v1/treasury', 'Returns the treasury snapshot used by the portal.', true, treasuryExample),
+      endpoint('GET', '/api/public/v1/treasury/transactions?limit=20', 'Returns recent treasury transactions.', true, JSON.stringify({ success: true, data: { transactions: [{ signature: '5Zy...', direction: 'out', deltaSol: -0.25, feeSol: 0.000005, blockTime: 1774605600 }] }, error: null, meta: { version: '1.0.0', timestamp: '2026-03-27T10:00:00Z' } }, null, 2)),
+      endpoint('GET', '/api/public/v1/proposals/active', 'Returns active proposals in supporting or voting state.', true, proposalExample),
+      endpoint('GET', '/api/public/v1/proposals/concluded', 'Returns concluded proposals with pagination metadata.', true, null),
+      endpoint('GET', '/api/public/v1/proposals/:id', 'Returns a single proposal by ID.', true, null),
+      endpoint('GET', '/api/public/v1/nft/activity?limit=20', 'Returns recent NFT activity events for watched collections.', true, null),
+      endpoint('GET', '/api/public/v1/missions/active', 'Returns active and recruiting missions.', true, null),
+      endpoint('GET', '/api/public/v1/missions/completed?limit=50&offset=0', 'Returns completed missions with pagination metadata.', true, null),
+      endpoint('GET', '/api/public/v1/missions/:id', 'Returns a single mission by ID.', true, null),
+      endpoint('GET', '/api/public/v1/leaderboard?limit=100', 'Returns the mission leaderboard.', true, leaderboardExample),
+      endpoint('GET', '/api/public/v1/leaderboard/:userId', 'Returns a single user leaderboard entry.', true, null)
+    ])}
 
-    ${endpoint('GET', '/api/public/treasury', 'Returns treasury balance and wallet info.', true,
-      JSON.stringify({ sol: "12.4500", usdc: "0.0000", wallet: "AbCd...XyZ1", lastUpdated: "2026-03-27T10:00:00Z" }, null, 2))}
+    ${section('apiref-legacy', 'Legacy Public Aliases', '(still mounted for compatibility)', [
+      endpoint('GET', '/api/public/stats', 'Legacy stats route used by older portal views.', true, null),
+      endpoint('GET', '/api/public/treasury', 'Legacy treasury route used by older views.', true, null),
+      endpoint('GET', '/api/public/proposals/active', 'Legacy active proposals route used by the voting panel.', true, null),
+      endpoint('GET', '/api/public/proposals/concluded', 'Legacy concluded proposals route.', true, null),
+      endpoint('GET', '/api/public/proposals/:id', 'Legacy single-proposal route.', true, null),
+      endpoint('GET', '/api/public/missions/active', 'Legacy active missions route.', true, null),
+      endpoint('GET', '/api/public/missions/completed', 'Legacy completed missions route.', true, null),
+      endpoint('GET', '/api/public/missions/:id', 'Legacy single-mission route.', true, null),
+      endpoint('GET', '/api/public/leaderboard', 'Legacy leaderboard route.', true, null),
+      endpoint('GET', '/api/public/leaderboard/:userId', 'Legacy single-user leaderboard route.', true, null)
+    ])}
 
-    ${endpoint('GET', '/api/public/proposals/active', 'Returns active governance proposals.', true,
-      JSON.stringify({ proposals: [{ id: "1", title: "Add new trait", yesVotes: 5, noVotes: 2, endsAt: "2026-04-01" }] }, null, 2))}
-
-    ${endpoint('GET', '/api/public/proposals/concluded', 'Returns concluded proposals.', true, null)}
-
-    ${endpoint('GET', '/api/public/proposals/:id', 'Returns a single proposal by ID.', true, null)}
-
-    ${endpoint('GET', '/api/public/leaderboard', 'Returns top NFT holders.', true,
-      JSON.stringify({ leaderboard: [{ username: "CryptoKing", totalNFTs: 12, tier: "Don", rank: 1 }] }, null, 2))}
-
-    ${endpoint('GET', '/api/public/leaderboard/:userId', 'Returns specific user rank and stats.', true, null)}
-
-    ${endpoint('GET', '/api/public/missions/active', 'Returns active missions.', true, null)}
-
-    ${endpoint('GET', '/api/public/missions/completed', 'Returns completed missions.', true, null)}
-
-    ${endpoint('GET', '/api/public/missions/:id', 'Returns a single mission by ID.', true, null)}
-
-    <h4 id="apiref-auth" style="color:var(--text-primary);margin:var(--space-4) 0 var(--space-3);">Auth Endpoints <span style="font-weight:400;font-size:0.8em;color:var(--text-secondary);">(session required — Discord OAuth login)</span></h4>
-
-    ${endpoint('GET', '/api/user/me', 'Returns the logged-in user profile.', false,
-      JSON.stringify({ discordId: "123456789", username: "CryptoKing", totalNFTs: 5, tier: "Don", votingPower: 10, wallets: ["AbCd..."] }, null, 2))}
-
-    ${endpoint('POST', '/api/user/vote', 'Cast a vote on a proposal. Body: <code>{ "proposalId": "1", "choice": "yes" }</code>', false, null)}
-
-    ${endpoint('POST', '/api/user/proposals', 'Create a governance proposal. Body: <code>{ "title": "...", "description": "..." }</code>', false, null)}
+    ${section('apiref-auth', 'Session / Auth Endpoints', '(Discord OAuth session required)', [
+      endpoint('GET', '/auth/discord/login', 'Starts the Discord OAuth flow.', false, null),
+      endpoint('GET', '/auth/discord/callback?code=...', 'OAuth callback that stores the Discord session.', false, null),
+      endpoint('GET', '/auth/discord/logout', 'Clears the session and returns to the portal.', false, null),
+      endpoint('GET', '/api/user/me', 'Returns the logged-in user profile.', false, JSON.stringify({ success: true, user: { discordId: '123456789', username: 'CryptoKing', tier: 'Don', votingPower: 10 } }, null, 2)),
+      endpoint('GET', '/api/user/is-admin', 'Checks whether the current session has Discord administrator access.', false, null),
+      endpoint('POST', '/api/verify/challenge', 'Creates a wallet-signing challenge for the current session.', false, null),
+      endpoint('POST', '/api/verify/signature', 'Verifies a signed wallet challenge. Body: <code>{ "walletAddress": "...", "signature": "..." }</code>', false, null),
+      endpoint('POST', '/api/micro-verify/request', 'Creates a micro-transfer verification request.', false, null),
+      endpoint('GET', '/api/micro-verify/status', 'Checks the current micro-transfer verification status.', false, null),
+      endpoint('GET', '/api/micro-verify/config', 'Returns the current micro-transfer configuration.', false, null),
+      endpoint('POST', '/api/user/vote', 'Casts a vote on a proposal. Body: <code>{ "proposalId": "...", "choice": "yes" }</code>', false, null),
+      endpoint('POST', '/api/user/proposals', 'Creates a governance proposal. Body: <code>{ "title": "...", "description": "..." }</code>', false, null),
+      endpoint('POST', '/api/governance/proposals/:id/submit', 'Submits a draft proposal for review.', false, null),
+      endpoint('POST', '/api/governance/proposals/:id/support', 'Adds support to a draft proposal.', false, null),
+      endpoint('GET', '/api/governance/proposals/:id/comments', 'Returns proposal comments.', false, null),
+      endpoint('POST', '/api/governance/proposals/:id/comments', 'Adds a proposal comment.', false, null),
+      endpoint('POST', '/api/user/wallets/:address/favorite', 'Marks a linked wallet as primary.', false, null),
+      endpoint('DELETE', '/api/user/wallets/:address', 'Deletes a linked wallet.', false, null),
+      endpoint('GET', '/api/features', 'Returns feature flags used by the portal.', false, null)
+    ])}
 
     <h4 id="apiref-flow" style="color:var(--text-primary);margin:var(--space-4) 0 var(--space-3);">Auth Flow</h4>
     <div style="background:var(--bg-secondary);border-radius:8px;padding:var(--space-4);border:1px solid rgba(99,102,241,0.1);font-size:0.88em;line-height:1.7;color:var(--text-secondary);">
-      <p style="margin:0 0 var(--space-3);"><strong style="color:var(--text-primary);">How to implement Discord OAuth for your external website:</strong></p>
+      <p style="margin:0 0 var(--space-3);"><strong style="color:var(--text-primary);">How to implement Discord OAuth for an external website:</strong></p>
       <ol style="margin:0;padding-left:var(--space-4);">
         <li>Redirect the user to Discord OAuth2:<br>
           <code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;font-size:0.9em;word-break:break-all;">https://discord.com/api/oauth2/authorize?client_id=CLIENT_ID&amp;redirect_uri=REDIRECT_URI&amp;response_type=code&amp;scope=identify</code>
         </li>
-        <li>Discord redirects back with <code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;">?code=...</code></li>
-        <li>Exchange the code at <code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;">GET /auth/discord/callback?code=...</code> — the bot handles the OAuth exchange and sets a session cookie</li>
-        <li>Subsequent requests include the cookie automatically (same-origin or CORS with <code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;">credentials: 'include'</code>)</li>
-        <li>Use <code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;">GET /api/user/me</code> to check if the user is logged in</li>
+        <li>Discord redirects back with <code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;">?code=...</code>.</li>
+        <li>Send the code to <code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;">GET /auth/discord/callback?code=...</code> so the bot can exchange it and set the session cookie.</li>
+        <li>Subsequent requests should include credentials automatically (<code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;">credentials: 'include'</code>).</li>
+        <li>Use <code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:4px;">GET /api/user/me</code> to confirm the session is live.</li>
       </ol>
     </div>
 
     <div style="background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.25);border-radius:8px;padding:var(--space-3) var(--space-4);margin-top:var(--space-4);font-size:0.85em;color:#eab308;">
-      <strong>CORS Note:</strong> For cross-origin requests from your website, contact your server admin to add your domain to the CORS allowlist.
+      <strong>CORS Note:</strong> Cross-origin callers must be on the allowlist configured by the server.
     </div>
   `;
 }

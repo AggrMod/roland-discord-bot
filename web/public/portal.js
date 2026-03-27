@@ -18,7 +18,6 @@ function isTenantSensitiveRequest(input) {
     const url = new URL(rawUrl, window.location.origin);
     return (
       url.pathname.startsWith('/api/admin/') ||
-      url.pathname.startsWith('/api/superadmin/') ||
       url.pathname.startsWith('/api/verification/admin/') ||
       url.pathname === '/api/user/is-admin'
     );
@@ -27,16 +26,21 @@ function isTenantSensitiveRequest(input) {
   }
 }
 
+function buildTenantRequestHeaders(initHeaders) {
+  const headers = new Headers(initHeaders || {});
+  if (activeGuildId && !headers.has('x-guild-id')) {
+    headers.set('x-guild-id', activeGuildId);
+  }
+  return headers;
+}
+
 window.fetch = async function(input, init = {}) {
   const shouldAttachGuild = isTenantSensitiveRequest(input);
   if (!shouldAttachGuild) {
     return originalFetch(input, init);
   }
 
-  const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
-  if (activeGuildId && !headers.has('x-guild-id')) {
-    headers.set('x-guild-id', activeGuildId);
-  }
+  const headers = buildTenantRequestHeaders(init.headers || (input instanceof Request ? input.headers : undefined));
 
   return originalFetch(input, { ...init, headers });
 };
@@ -519,9 +523,9 @@ function applyTenantModuleNavVisibility(settings = {}) {
 }
 
 async function syncTenantModuleNavVisibility() {
-  if (!isAdmin) return;
+  if (!isAdmin || !activeGuildId) return;
   try {
-    const res = await fetch('/api/admin/settings', { credentials: 'include', headers: activeGuildId ? { 'x-guild-id': activeGuildId } : {} });
+    const res = await fetch('/api/admin/settings', { credentials: 'include', headers: buildTenantRequestHeaders() });
     const data = await res.json();
     if (data.success && data.settings) {
       // keep tenant-scoped settings/branding in sync with active guild context
@@ -803,24 +807,31 @@ async function loadDashboardData() {
   let tierConfiguredForTenant = true;
 
   try {
-    const headers = activeGuildId ? { 'x-guild-id': activeGuildId } : {};
+    const missingTenantContext = (serverAccessData.managedServers.length > 0) && !activeGuildId;
+    if (!missingTenantContext) {
+      const headers = buildTenantRequestHeaders();
 
-    // Tenant module state (for VP visibility)
-    const settingsRes = await fetch('/api/admin/settings', { credentials: 'include', headers }).catch(() => null);
-    if (settingsRes && settingsRes.ok) {
-      const settingsJson = await settingsRes.json().catch(() => null);
-      if (settingsJson?.success && settingsJson?.settings) {
-        governanceEnabledForTenant = !!settingsJson.settings.moduleGovernanceEnabled;
-        verificationEnabledForTenant = !!settingsJson.settings.moduleVerificationEnabled;
+      // Tenant module state (for VP visibility)
+      const settingsRes = await fetch('/api/admin/settings', { credentials: 'include', headers }).catch(() => null);
+      if (settingsRes && settingsRes.ok) {
+        const settingsJson = await settingsRes.json().catch(() => null);
+        if (settingsJson?.success && settingsJson?.settings) {
+          governanceEnabledForTenant = !!settingsJson.settings.moduleGovernanceEnabled;
+          verificationEnabledForTenant = !!settingsJson.settings.moduleVerificationEnabled;
+        }
       }
-    }
 
-    // Tenant verification tiers state (for tier label validity)
-    const rolesRes = await fetch('/api/admin/roles/config', { credentials: 'include', headers }).catch(() => null);
-    if (rolesRes && rolesRes.ok) {
-      const rolesJson = await rolesRes.json().catch(() => null);
-      const tiers = rolesJson?.config?.tiers || [];
-      tierConfiguredForTenant = Array.isArray(tiers) && tiers.length > 0;
+      // Tenant verification tiers state (for tier label validity)
+      const rolesRes = await fetch('/api/admin/roles/config', { credentials: 'include', headers }).catch(() => null);
+      if (rolesRes && rolesRes.ok) {
+        const rolesJson = await rolesRes.json().catch(() => null);
+        const tiers = rolesJson?.config?.tiers || [];
+        tierConfiguredForTenant = Array.isArray(tiers) && tiers.length > 0;
+      }
+    } else {
+      governanceEnabledForTenant = false;
+      verificationEnabledForTenant = false;
+      tierConfiguredForTenant = false;
     }
   } catch (e) {
     // Best-effort only; fallback to existing values
@@ -1726,7 +1737,6 @@ function isTenantSensitiveAdminView(view) {
     'users',
     'proposals',
     'settings',
-    'superadmin',
     'analytics',
     'roles',
     'activity',
@@ -1765,7 +1775,7 @@ function showAdminView(view) {
   const card = document.getElementById(target.card);
   if (card) card.style.display = 'block';
 
-  if (isTenantSensitiveAdminView(view) && serverAccessData.managedServers.length > 0 && !getServerRecord(activeGuildId)) {
+  if (isTenantSensitiveAdminView(view) && !activeGuildId) {
     if (card) {
       card.innerHTML = `
         <div style="padding:20px; border:1px solid rgba(245,158,11,0.22); border-radius:10px; background:rgba(245,158,11,0.08); color:#fcd34d;">

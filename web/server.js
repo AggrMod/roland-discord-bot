@@ -171,9 +171,13 @@ class WebServer {
 
     const fallbackGuildId = () => normalizeGuildId(process.env.GUILD_ID || process.env.DISCORD_GUILD_ID);
 
-    const getRequestedGuildId = (req) => {
+    const getRequestedGuildId = (req, { allowFallback = true } = {}) => {
       const headerGuildId = normalizeGuildId(req.get(REQUEST_GUILD_HEADER));
-      return headerGuildId || fallbackGuildId();
+      if (headerGuildId) {
+        return headerGuildId;
+      }
+
+      return allowFallback ? fallbackGuildId() : '';
     };
 
     const getDiscordUserGuilds = async (req) => {
@@ -228,7 +232,7 @@ class WebServer {
       }
 
       const userId = req.session.discordUser.id;
-      const requestedGuildId = allowFallback ? getRequestedGuildId(req) : normalizeGuildId(req.get(REQUEST_GUILD_HEADER));
+      const requestedGuildId = getRequestedGuildId(req, { allowFallback });
 
       if (!requestedGuildId) {
         return { ok: false, status: 409, message: 'Select a server to continue' };
@@ -843,8 +847,12 @@ class WebServer {
       }
 
       try {
-        const access = await resolveAdminGuildAccess(req, { allowFallback: true });
-        return res.json({ isAdmin: access.ok });
+        const access = await resolveAdminGuildAccess(req, { allowFallback: !tenantService.isMultitenantEnabled() });
+        if (!access.ok) {
+          return res.status(access.status).json({ isAdmin: false, message: access.message });
+        }
+
+        return res.json({ isAdmin: true });
       } catch (error) {
         logger.error('Admin check error:', error);
         return res.json({ isAdmin: false });
@@ -1120,7 +1128,7 @@ class WebServer {
 
     const adminAuthMiddleware = async (req, res, next) => {
       try {
-        const access = await resolveAdminGuildAccess(req, { allowFallback: true });
+        const access = await resolveAdminGuildAccess(req, { allowFallback: !tenantService.isMultitenantEnabled() });
         if (!access.ok) {
           return res.status(access.status).json({ success: false, message: access.message });
         }

@@ -1257,53 +1257,47 @@ async function loadAdminSettingsView() {
 
   content.innerHTML = `<div style="text-align:center; padding: var(--space-5); color: var(--text-secondary);"><div class="spinner"></div><p>Loading settings...</p></div>`;
 
-  try {
-    const [settingsRes, channelsRes] = await Promise.all([
-      fetch('/api/admin/settings', { credentials: 'include' }),
-      fetch('/api/admin/discord/channels', { credentials: 'include' })
-    ]);
+  // --- Shared inline-style constants ---
+  const cardStyle = 'background:var(--bg-secondary);border:1px solid var(--border-default);border-radius:var(--radius-lg);padding:var(--space-5);margin-bottom:var(--space-5);';
+  const cardHeader = 'color:var(--gold);font-size:var(--font-lg);font-weight:700;margin:0 0 var(--space-4) 0;padding-bottom:var(--space-3);border-bottom:1px solid var(--border-default);';
+  const gridRow = 'display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);';
+  const fieldLabel = 'display:block;color:var(--text-secondary);font-size:var(--font-sm);font-weight:600;margin-bottom:var(--space-1);';
+  const fieldInput = 'width:100%;padding:var(--space-2) var(--space-3);border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--bg-primary);color:var(--text-primary);font-size:var(--font-sm);';
+  const selectStyle = 'width:100%;padding:var(--space-2) var(--space-3);border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--bg-primary);color:var(--text-primary);font-size:var(--font-sm);';
 
+  try {
+    // Step 1: Fetch settings first
+    const settingsRes = await fetch('/api/admin/settings', { credentials: 'include' });
     const settingsJson = await settingsRes.json();
     if (!settingsJson.success) throw new Error(settingsJson.message || 'Failed to load settings');
     portalSettingsData = settingsJson.settings;
     const s = portalSettingsData;
 
-    let channelsList = [];
-    if (channelsRes.ok) {
-      const channelsJson = await channelsRes.json();
-      if (channelsJson.success) channelsList = channelsJson.channels || [];
-    }
-
-    // Build the channel <select> helper
-    const channelSelectHtml = (id, label) => {
-      let html = `<div class="form-group"><label>${label}</label>
-        <select id="ps_${id}" style="width:100%;padding:var(--space-2);border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text-primary);">
-          <option value="">-- Use .env default --</option>`;
-      const grouped = {};
-      channelsList.forEach(ch => {
-        const parent = ch.parentName || 'Other';
-        if (!grouped[parent]) grouped[parent] = [];
-        grouped[parent].push(ch);
-      });
-      Object.keys(grouped).sort().forEach(parent => {
-        html += `<optgroup label="${escapeHtml(parent)}">`;
-        grouped[parent].forEach(ch => {
-          const selected = (s[id] && s[id] === ch.id) ? ' selected' : '';
-          html += `<option value="${escapeHtml(ch.id)}"${selected}># ${escapeHtml(ch.name)}</option>`;
-        });
-        html += `</optgroup>`;
-      });
-      html += `</select></div>`;
-      return html;
-    };
-
-    // Build module toggle helper
+    // Build module toggle helper (styled toggle switch)
     const moduleToggle = (id, label, icon, defaultVal) => {
       const checked = (s[id] ?? defaultVal) ? ' checked' : '';
-      return `<div style="display:flex;align-items:center;gap:var(--space-2);padding:var(--space-3);background:var(--bg-secondary);border-radius:var(--radius-md);">
-        <input type="checkbox" id="ps_${id}"${checked} style="width:18px;height:18px;cursor:pointer;">
-        <label for="ps_${id}" style="cursor:pointer;font-weight:500;">${icon} ${label}</label>
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-3) var(--space-4);background:var(--bg-primary);border:1px solid var(--border-default);border-radius:var(--radius-md);transition:border-color .2s;">
+        <label for="ps_${id}" style="cursor:pointer;font-weight:500;font-size:var(--font-sm);display:flex;align-items:center;gap:var(--space-2);">
+          <span style="font-size:1.25em;">${icon}</span> ${label}
+        </label>
+        <label style="position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0;">
+          <input type="checkbox" id="ps_${id}"${checked} style="opacity:0;width:0;height:0;"
+            onchange="this.parentElement.querySelector('span').style.background=this.checked?'var(--gold)':'#555';">
+          <span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:${(s[id] ?? defaultVal) ? 'var(--gold)' : '#555'};border-radius:24px;transition:.3s;"></span>
+          <span style="position:absolute;content:'';height:18px;width:18px;left:${(s[id] ?? defaultVal) ? '22px' : '3px'};bottom:3px;background:#fff;border-radius:50%;transition:.3s;pointer-events:none;"
+            class="ps-toggle-knob"></span>
+        </label>
       </div>`;
+    };
+
+    // Attach toggle animation via event delegation (after HTML injected)
+    const attachToggleListeners = () => {
+      content.querySelectorAll('input[type="checkbox"][id^="ps_module"]').forEach(cb => {
+        cb.addEventListener('change', function() {
+          const knob = this.parentElement.querySelector('.ps-toggle-knob');
+          if (knob) knob.style.left = this.checked ? '22px' : '3px';
+        });
+      });
     };
 
     // Build tier editor rows
@@ -1311,112 +1305,199 @@ async function loadAdminSettingsView() {
     if (s.tiers && s.tiers.length) {
       s.tiers.forEach((tier, i) => {
         tierRows += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-2);margin-bottom:var(--space-2);">
-          <input type="text" value="${escapeHtml(tier.name)}" data-ps-tier="${i}" data-ps-field="name" readonly style="background:var(--bg-primary);opacity:0.7;">
-          <input type="number" value="${tier.minNFTs}" data-ps-tier="${i}" data-ps-field="minNFTs" min="1">
-          <input type="number" value="${tier.maxNFTs}" data-ps-tier="${i}" data-ps-field="maxNFTs" min="1">
-          <input type="number" value="${tier.votingPower}" data-ps-tier="${i}" data-ps-field="votingPower" min="1">
+          <input type="text" value="${escapeHtml(tier.name)}" data-ps-tier="${i}" data-ps-field="name" readonly style="${fieldInput}opacity:0.7;">
+          <input type="number" value="${tier.minNFTs}" data-ps-tier="${i}" data-ps-field="minNFTs" min="1" style="${fieldInput}">
+          <input type="number" value="${tier.maxNFTs}" data-ps-tier="${i}" data-ps-field="maxNFTs" min="1" style="${fieldInput}">
+          <input type="number" value="${tier.votingPower}" data-ps-tier="${i}" data-ps-field="votingPower" min="1" style="${fieldInput}">
         </div>`;
       });
     }
 
+    // Step 2: Inject HTML skeleton with loading placeholders for channel selects
     content.innerHTML = `
-      <h3 style="color:var(--gold);font-size:var(--font-xl);">⚙️ Governance</h3>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Quorum Percentage (%)</label>
-          <input type="number" id="ps_quorumPercentage" min="1" max="100" value="${s.quorumPercentage ?? ''}">
+      <!-- Governance Card -->
+      <div style="${cardStyle}">
+        <h3 style="${cardHeader}">⚙️ Governance</h3>
+        <div style="${gridRow}">
+          <div>
+            <label style="${fieldLabel}">Quorum Percentage (%)</label>
+            <input type="number" id="ps_quorumPercentage" min="1" max="100" value="${s.quorumPercentage ?? ''}" style="${fieldInput}">
+          </div>
+          <div>
+            <label style="${fieldLabel}">Support Threshold</label>
+            <input type="number" id="ps_supportThreshold" min="1" value="${s.supportThreshold ?? ''}" style="${fieldInput}">
+          </div>
         </div>
-        <div class="form-group">
-          <label>Support Threshold</label>
-          <input type="number" id="ps_supportThreshold" min="1" value="${s.supportThreshold ?? ''}">
-        </div>
-        <div class="form-group">
-          <label>Vote Duration (Days)</label>
-          <input type="number" id="ps_voteDurationDays" min="1" max="30" value="${s.voteDurationDays ?? ''}">
-        </div>
-      </div>
-
-      <h3 style="color:var(--gold);margin-top:var(--space-8);font-size:var(--font-xl);">⚔️ Battle Timing (seconds)</h3>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Round Pause Min (s)</label>
-          <input type="number" id="ps_battleRoundPauseMinSec" min="0" max="120" step="1" value="${s.battleRoundPauseMinSec ?? 5}">
-        </div>
-        <div class="form-group">
-          <label>Round Pause Max (s)</label>
-          <input type="number" id="ps_battleRoundPauseMaxSec" min="0" max="180" step="1" value="${s.battleRoundPauseMaxSec ?? 10}">
-        </div>
-        <div class="form-group">
-          <label>Elite Four Prep Delay (s)</label>
-          <input type="number" id="ps_battleElitePrepSec" min="0" max="300" step="1" value="${s.battleElitePrepSec ?? 12}">
+        <div style="${gridRow}margin-top:var(--space-3);">
+          <div>
+            <label style="${fieldLabel}">Vote Duration (Days)</label>
+            <input type="number" id="ps_voteDurationDays" min="1" max="30" value="${s.voteDurationDays ?? ''}" style="${fieldInput}">
+          </div>
+          <div></div>
         </div>
       </div>
 
-      <h3 style="color:var(--gold);margin-top:var(--space-8);font-size:var(--font-xl);">🎮 Module Control</h3>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:var(--space-4);margin-bottom:var(--space-6);">
-        ${moduleToggle('moduleBattleEnabled', 'Battle', '⚔️', true)}
-        ${moduleToggle('moduleGovernanceEnabled', 'Governance', '🗳️', true)}
-        ${moduleToggle('moduleVerificationEnabled', 'Verification', '✅', true)}
-        ${moduleToggle('moduleMissionsEnabled', 'Missions', '🎯', true)}
-        ${moduleToggle('moduleTreasuryEnabled', 'Treasury', '💰', true)}
-        ${moduleToggle('moduleRoleResyncEnabled', 'Role Resync', '👥', true)}
-        ${moduleToggle('moduleMicroVerifyEnabled', 'Micro-Transfer Verify', '🔐', false)}
-      </div>
-
-      <h3 style="color:var(--gold);margin-top:var(--space-8);font-size:var(--font-xl);">🔗 Channel Overrides</h3>
-      <p style="color:var(--text-secondary);font-size:var(--font-sm);margin-bottom:var(--space-4);">Leave empty to use .env defaults. Select a channel from the dropdown below:</p>
-      <div class="form-row">
-        ${channelSelectHtml('proposalsChannelId', 'Proposals Channel')}
-        ${channelSelectHtml('votingChannelId', 'Voting Channel')}
-      </div>
-      <div class="form-row">
-        ${channelSelectHtml('resultsChannelId', 'Results Channel')}
-        ${channelSelectHtml('governanceLogChannelId', 'Governance Log Channel')}
-      </div>
-
-      <h3 style="color:var(--gold);margin-top:var(--space-8);font-size:var(--font-xl);">🔐 Micro-Transfer Verification Settings</h3>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Verification Receive Wallet</label>
-          <input type="text" id="ps_verificationReceiveWallet" placeholder="Solana wallet address" value="${escapeHtml(s.verificationReceiveWallet ?? '')}">
+      <!-- Battle Timing Card -->
+      <div style="${cardStyle}">
+        <h3 style="${cardHeader}">⚔️ Battle Timing (seconds)</h3>
+        <div style="${gridRow}">
+          <div>
+            <label style="${fieldLabel}">Round Pause Min (s)</label>
+            <input type="number" id="ps_battleRoundPauseMinSec" min="0" max="120" step="1" value="${s.battleRoundPauseMinSec ?? 5}" style="${fieldInput}">
+          </div>
+          <div>
+            <label style="${fieldLabel}">Round Pause Max (s)</label>
+            <input type="number" id="ps_battleRoundPauseMaxSec" min="0" max="180" step="1" value="${s.battleRoundPauseMaxSec ?? 10}" style="${fieldInput}">
+          </div>
         </div>
-        <div class="form-group">
-          <label>NFT Activity Webhook Secret</label>
-          <input type="text" id="ps_nftActivityWebhookSecret" placeholder="Optional shared secret" value="${escapeHtml(s.nftActivityWebhookSecret ?? '')}">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Verify Request TTL (minutes)</label>
-          <input type="number" id="ps_verifyRequestTtlMinutes" min="1" max="1440" value="${s.verifyRequestTtlMinutes ?? 15}">
-        </div>
-        <div class="form-group">
-          <label>Poll Interval (seconds)</label>
-          <input type="number" id="ps_pollIntervalSeconds" min="5" max="300" value="${s.pollIntervalSeconds ?? 30}">
-        </div>
-        <div class="form-group">
-          <label>Verify Rate Limit (minutes)</label>
-          <input type="number" id="ps_verifyRateLimitMinutes" min="1" max="60" value="${s.verifyRateLimitMinutes ?? 5}">
-        </div>
-        <div class="form-group">
-          <label>Max Pending Per User</label>
-          <input type="number" id="ps_maxPendingPerUser" min="1" max="10" value="${s.maxPendingPerUser ?? 1}">
+        <div style="${gridRow}margin-top:var(--space-3);">
+          <div>
+            <label style="${fieldLabel}">Elite Four Prep Delay (s)</label>
+            <input type="number" id="ps_battleElitePrepSec" min="0" max="300" step="1" value="${s.battleElitePrepSec ?? 12}" style="${fieldInput}">
+          </div>
+          <div></div>
         </div>
       </div>
 
-      <h3 style="color:var(--gold);margin-top:var(--space-8);font-size:var(--font-xl);">Tier Configuration</h3>
-      <div id="ps_tierEditor">
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-2);margin-bottom:var(--space-2);font-weight:600;color:var(--text-secondary);">
-          <div>Tier Name</div><div>Min NFTs</div><div>Max NFTs</div><div>Voting Power</div>
+      <!-- Module Control Card -->
+      <div style="${cardStyle}">
+        <h3 style="${cardHeader}">🎮 Module Control</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--space-3);">
+          ${moduleToggle('moduleBattleEnabled', 'Battle', '⚔️', true)}
+          ${moduleToggle('moduleGovernanceEnabled', 'Governance', '🗳️', true)}
+          ${moduleToggle('moduleVerificationEnabled', 'Verification', '✅', true)}
+          ${moduleToggle('moduleMissionsEnabled', 'Missions', '🎯', true)}
+          ${moduleToggle('moduleTreasuryEnabled', 'Treasury', '💰', true)}
+          ${moduleToggle('moduleRoleResyncEnabled', 'Role Resync', '👥', true)}
+          ${moduleToggle('moduleMicroVerifyEnabled', 'Micro-Transfer Verify', '🔐', false)}
         </div>
-        ${tierRows}
       </div>
 
-      <div style="margin-top:var(--space-6);display:flex;gap:var(--space-3);">
-        <button class="btn-primary" onclick="savePortalSettings()">💾 Save All Settings</button>
+      <!-- Channel Overrides Card -->
+      <div style="${cardStyle}">
+        <h3 style="${cardHeader}">🔗 Channel Overrides</h3>
+        <p style="color:var(--text-secondary);font-size:var(--font-sm);margin-bottom:var(--space-4);">Leave empty to use .env defaults.</p>
+        <div style="${gridRow}">
+          <div>
+            <label style="${fieldLabel}">Proposals Channel</label>
+            <select id="ps_proposalsChannelId" style="${selectStyle}"><option value="">Loading channels...</option></select>
+          </div>
+          <div>
+            <label style="${fieldLabel}">Voting Channel</label>
+            <select id="ps_votingChannelId" style="${selectStyle}"><option value="">Loading channels...</option></select>
+          </div>
+        </div>
+        <div style="${gridRow}margin-top:var(--space-3);">
+          <div>
+            <label style="${fieldLabel}">Results Channel</label>
+            <select id="ps_resultsChannelId" style="${selectStyle}"><option value="">Loading channels...</option></select>
+          </div>
+          <div>
+            <label style="${fieldLabel}">Governance Log Channel</label>
+            <select id="ps_governanceLogChannelId" style="${selectStyle}"><option value="">Loading channels...</option></select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Micro-Transfer Verification Card -->
+      <div style="${cardStyle}">
+        <h3 style="${cardHeader}">🔐 Micro-Transfer Verification</h3>
+        <div style="${gridRow}">
+          <div>
+            <label style="${fieldLabel}">Verification Receive Wallet</label>
+            <input type="text" id="ps_verificationReceiveWallet" placeholder="Solana wallet address" value="${escapeHtml(s.verificationReceiveWallet ?? '')}" style="${fieldInput}">
+          </div>
+          <div>
+            <label style="${fieldLabel}">NFT Activity Webhook Secret</label>
+            <input type="text" id="ps_nftActivityWebhookSecret" placeholder="Optional shared secret" value="${escapeHtml(s.nftActivityWebhookSecret ?? '')}" style="${fieldInput}">
+          </div>
+        </div>
+        <div style="${gridRow}margin-top:var(--space-3);">
+          <div>
+            <label style="${fieldLabel}">Verify Request TTL (minutes)</label>
+            <input type="number" id="ps_verifyRequestTtlMinutes" min="1" max="1440" value="${s.verifyRequestTtlMinutes ?? 15}" style="${fieldInput}">
+          </div>
+          <div>
+            <label style="${fieldLabel}">Poll Interval (seconds)</label>
+            <input type="number" id="ps_pollIntervalSeconds" min="5" max="300" value="${s.pollIntervalSeconds ?? 30}" style="${fieldInput}">
+          </div>
+        </div>
+        <div style="${gridRow}margin-top:var(--space-3);">
+          <div>
+            <label style="${fieldLabel}">Verify Rate Limit (minutes)</label>
+            <input type="number" id="ps_verifyRateLimitMinutes" min="1" max="60" value="${s.verifyRateLimitMinutes ?? 5}" style="${fieldInput}">
+          </div>
+          <div>
+            <label style="${fieldLabel}">Max Pending Per User</label>
+            <input type="number" id="ps_maxPendingPerUser" min="1" max="10" value="${s.maxPendingPerUser ?? 1}" style="${fieldInput}">
+          </div>
+        </div>
+      </div>
+
+      <!-- Tier Configuration Card -->
+      <div style="${cardStyle}">
+        <h3 style="${cardHeader}">🏆 Tier Configuration</h3>
+        <div id="ps_tierEditor">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-2);margin-bottom:var(--space-2);font-weight:600;color:var(--text-secondary);font-size:var(--font-sm);">
+            <div>Tier Name</div><div>Min NFTs</div><div>Max NFTs</div><div>Voting Power</div>
+          </div>
+          ${tierRows}
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid var(--border-default);">
         <button class="btn-danger" onclick="resetPortalSettings()">🔄 Reset to Defaults</button>
+        <button class="btn-primary" onclick="savePortalSettings()">💾 Save All Settings</button>
       </div>
     `;
+
+    // Step 3: Attach toggle listeners now that DOM is ready
+    attachToggleListeners();
+
+    // Step 4: Fetch channels AFTER skeleton is in the DOM, then populate selects
+    const channelIds = ['proposalsChannelId', 'votingChannelId', 'resultsChannelId', 'governanceLogChannelId'];
+    try {
+      const channelsRes = await fetch('/api/admin/discord/channels', { credentials: 'include' });
+      let channelsList = [];
+      if (channelsRes.ok) {
+        const channelsJson = await channelsRes.json();
+        if (channelsJson.success) channelsList = channelsJson.channels || [];
+      }
+
+      // Group channels by parent category
+      const grouped = {};
+      channelsList.forEach(ch => {
+        const parent = ch.parentName || 'Other';
+        if (!grouped[parent]) grouped[parent] = [];
+        grouped[parent].push(ch);
+      });
+
+      // Populate each select element that exists in the DOM
+      channelIds.forEach(id => {
+        const sel = document.getElementById(`ps_${id}`);
+        if (!sel) return;
+        sel.innerHTML = '<option value="">-- Use .env default --</option>';
+        Object.keys(grouped).sort().forEach(parent => {
+          const optgroup = document.createElement('optgroup');
+          optgroup.label = parent;
+          grouped[parent].forEach(ch => {
+            const opt = document.createElement('option');
+            opt.value = ch.id;
+            opt.textContent = '# ' + ch.name;
+            if (s[id] && s[id] === ch.id) opt.selected = true;
+            optgroup.appendChild(opt);
+          });
+          sel.appendChild(optgroup);
+        });
+      });
+    } catch (chErr) {
+      console.error('Failed to load channels:', chErr);
+      channelIds.forEach(id => {
+        const sel = document.getElementById(`ps_${id}`);
+        if (sel) sel.innerHTML = '<option value="">-- Channel load failed --</option>';
+      });
+    }
   } catch (e) {
     content.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;
   }

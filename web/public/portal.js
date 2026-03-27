@@ -1248,6 +1248,8 @@ async function loadAdminProposals() {
   }
 }
 
+let portalSettingsData = null;
+
 async function loadAdminSettingsView() {
   if (!isAdmin) return;
   const content = document.getElementById('adminSettingsContent');
@@ -1256,51 +1258,266 @@ async function loadAdminSettingsView() {
   content.innerHTML = `<div style="text-align:center; padding: var(--space-5); color: var(--text-secondary);"><div class="spinner"></div><p>Loading settings...</p></div>`;
 
   try {
-    const response = await fetch('/api/admin/settings', { credentials: 'include' });
-    const data = await response.json();
-    if (!data.success) throw new Error(data.message || 'Failed to load settings');
+    const [settingsRes, channelsRes] = await Promise.all([
+      fetch('/api/admin/settings', { credentials: 'include' }),
+      fetch('/api/admin/discord/channels', { credentials: 'include' })
+    ]);
 
-    const s = data.settings || {};
-    
-    // Module toggles - hardcoded status (all enabled except Heist)
-    const modules = [
-      { name: 'Verification', enabled: true, icon: '✓' },
-      { name: 'Governance', enabled: true, icon: '📜' },
-      { name: 'Treasury', enabled: true, icon: '💰' },
-      { name: 'Battle', enabled: true, icon: '⚔️' },
-      { name: 'Heist', enabled: false, icon: '🎯' }
-    ];
+    const settingsJson = await settingsRes.json();
+    if (!settingsJson.success) throw new Error(settingsJson.message || 'Failed to load settings');
+    portalSettingsData = settingsJson.settings;
+    const s = portalSettingsData;
 
-    const moduleToggles = modules.map(mod => `
-      <div style="padding:12px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px; display:flex; justify-content:space-between; align-items:center;">
-        <span style="color:#e0e7ff; font-weight:600;">${mod.icon} ${mod.name}</span>
-        <span style="font-size:1.5em; color:${mod.enabled ? '#10b981' : '#ef4444'};">${mod.enabled ? '✅' : '❌'}</span>
-      </div>
-    `).join('');
+    let channelsList = [];
+    if (channelsRes.ok) {
+      const channelsJson = await channelsRes.json();
+      if (channelsJson.success) channelsList = channelsJson.channels || [];
+    }
+
+    // Build the channel <select> helper
+    const channelSelectHtml = (id, label) => {
+      let html = `<div class="form-group"><label>${label}</label>
+        <select id="ps_${id}" style="width:100%;padding:var(--space-2);border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text-primary);">
+          <option value="">-- Use .env default --</option>`;
+      const grouped = {};
+      channelsList.forEach(ch => {
+        const parent = ch.parentName || 'Other';
+        if (!grouped[parent]) grouped[parent] = [];
+        grouped[parent].push(ch);
+      });
+      Object.keys(grouped).sort().forEach(parent => {
+        html += `<optgroup label="${escapeHtml(parent)}">`;
+        grouped[parent].forEach(ch => {
+          const selected = (s[id] && s[id] === ch.id) ? ' selected' : '';
+          html += `<option value="${escapeHtml(ch.id)}"${selected}># ${escapeHtml(ch.name)}</option>`;
+        });
+        html += `</optgroup>`;
+      });
+      html += `</select></div>`;
+      return html;
+    };
+
+    // Build module toggle helper
+    const moduleToggle = (id, label, icon, defaultVal) => {
+      const checked = (s[id] ?? defaultVal) ? ' checked' : '';
+      return `<div style="display:flex;align-items:center;gap:var(--space-2);padding:var(--space-3);background:var(--bg-secondary);border-radius:var(--radius-md);">
+        <input type="checkbox" id="ps_${id}"${checked} style="width:18px;height:18px;cursor:pointer;">
+        <label for="ps_${id}" style="cursor:pointer;font-weight:500;">${icon} ${label}</label>
+      </div>`;
+    };
+
+    // Build tier editor rows
+    let tierRows = '';
+    if (s.tiers && s.tiers.length) {
+      s.tiers.forEach((tier, i) => {
+        tierRows += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-2);margin-bottom:var(--space-2);">
+          <input type="text" value="${escapeHtml(tier.name)}" data-ps-tier="${i}" data-ps-field="name" readonly style="background:var(--bg-primary);opacity:0.7;">
+          <input type="number" value="${tier.minNFTs}" data-ps-tier="${i}" data-ps-field="minNFTs" min="1">
+          <input type="number" value="${tier.maxNFTs}" data-ps-tier="${i}" data-ps-field="maxNFTs" min="1">
+          <input type="number" value="${tier.votingPower}" data-ps-tier="${i}" data-ps-field="votingPower" min="1">
+        </div>`;
+      });
+    }
 
     content.innerHTML = `
-      <div style="margin-bottom:24px;">
-        <h4 style="color:#c9d6ff; margin-bottom:12px;">📦 Module Status</h4>
-        <div style="display:grid; gap:12px; grid-template-columns: repeat(auto-fit,minmax(200px,1fr));">
-          ${moduleToggles}
+      <h3 style="color:var(--gold);font-size:var(--font-xl);">⚙️ Governance</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Quorum Percentage (%)</label>
+          <input type="number" id="ps_quorumPercentage" min="1" max="100" value="${s.quorumPercentage ?? ''}">
+        </div>
+        <div class="form-group">
+          <label>Support Threshold</label>
+          <input type="number" id="ps_supportThreshold" min="1" value="${s.supportThreshold ?? ''}">
+        </div>
+        <div class="form-group">
+          <label>Vote Duration (Days)</label>
+          <input type="number" id="ps_voteDurationDays" min="1" max="30" value="${s.voteDurationDays ?? ''}">
         </div>
       </div>
 
-      <div style="margin-bottom:24px;">
-        <h4 style="color:#c9d6ff; margin-bottom:12px;">⚙️ Governance Settings</h4>
-        <div style="display:grid; gap:12px; grid-template-columns: repeat(auto-fit,minmax(220px,1fr));">
-          <div class="stat-card"><div class="stat-label">Support Threshold</div><div class="stat-value">${s.supportThreshold ?? '—'}</div></div>
-          <div class="stat-card"><div class="stat-label">Voting Days</div><div class="stat-value">${s.votingDays ?? '—'}</div></div>
-          <div class="stat-card"><div class="stat-label">Quorum %</div><div class="stat-value">${s.quorumPercent ?? '—'}</div></div>
+      <h3 style="color:var(--gold);margin-top:var(--space-8);font-size:var(--font-xl);">⚔️ Battle Timing (seconds)</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Round Pause Min (s)</label>
+          <input type="number" id="ps_battleRoundPauseMinSec" min="0" max="120" step="1" value="${s.battleRoundPauseMinSec ?? 5}">
+        </div>
+        <div class="form-group">
+          <label>Round Pause Max (s)</label>
+          <input type="number" id="ps_battleRoundPauseMaxSec" min="0" max="180" step="1" value="${s.battleRoundPauseMaxSec ?? 10}">
+        </div>
+        <div class="form-group">
+          <label>Elite Four Prep Delay (s)</label>
+          <input type="number" id="ps_battleElitePrepSec" min="0" max="300" step="1" value="${s.battleElitePrepSec ?? 12}">
         </div>
       </div>
 
-      <div style="padding:12px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.22); border-radius:10px; color:var(--text-secondary); font-size:0.9em;">
-        <strong>💡 Tip:</strong> Configure module settings via Discord commands. Use /verification admin, /governance admin, /treasury admin, /battle admin, or /heist commands to manage detailed settings.
+      <h3 style="color:var(--gold);margin-top:var(--space-8);font-size:var(--font-xl);">🎮 Module Control</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:var(--space-4);margin-bottom:var(--space-6);">
+        ${moduleToggle('moduleBattleEnabled', 'Battle', '⚔️', true)}
+        ${moduleToggle('moduleGovernanceEnabled', 'Governance', '🗳️', true)}
+        ${moduleToggle('moduleVerificationEnabled', 'Verification', '✅', true)}
+        ${moduleToggle('moduleMissionsEnabled', 'Missions', '🎯', true)}
+        ${moduleToggle('moduleTreasuryEnabled', 'Treasury', '💰', true)}
+        ${moduleToggle('moduleRoleResyncEnabled', 'Role Resync', '👥', true)}
+        ${moduleToggle('moduleMicroVerifyEnabled', 'Micro-Transfer Verify', '🔐', false)}
+      </div>
+
+      <h3 style="color:var(--gold);margin-top:var(--space-8);font-size:var(--font-xl);">🔗 Channel Overrides</h3>
+      <p style="color:var(--text-secondary);font-size:var(--font-sm);margin-bottom:var(--space-4);">Leave empty to use .env defaults. Select a channel from the dropdown below:</p>
+      <div class="form-row">
+        ${channelSelectHtml('proposalsChannelId', 'Proposals Channel')}
+        ${channelSelectHtml('votingChannelId', 'Voting Channel')}
+      </div>
+      <div class="form-row">
+        ${channelSelectHtml('resultsChannelId', 'Results Channel')}
+        ${channelSelectHtml('governanceLogChannelId', 'Governance Log Channel')}
+      </div>
+
+      <h3 style="color:var(--gold);margin-top:var(--space-8);font-size:var(--font-xl);">🔐 Micro-Transfer Verification Settings</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Verification Receive Wallet</label>
+          <input type="text" id="ps_verificationReceiveWallet" placeholder="Solana wallet address" value="${escapeHtml(s.verificationReceiveWallet ?? '')}">
+        </div>
+        <div class="form-group">
+          <label>NFT Activity Webhook Secret</label>
+          <input type="text" id="ps_nftActivityWebhookSecret" placeholder="Optional shared secret" value="${escapeHtml(s.nftActivityWebhookSecret ?? '')}">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Verify Request TTL (minutes)</label>
+          <input type="number" id="ps_verifyRequestTtlMinutes" min="1" max="1440" value="${s.verifyRequestTtlMinutes ?? 15}">
+        </div>
+        <div class="form-group">
+          <label>Poll Interval (seconds)</label>
+          <input type="number" id="ps_pollIntervalSeconds" min="5" max="300" value="${s.pollIntervalSeconds ?? 30}">
+        </div>
+        <div class="form-group">
+          <label>Verify Rate Limit (minutes)</label>
+          <input type="number" id="ps_verifyRateLimitMinutes" min="1" max="60" value="${s.verifyRateLimitMinutes ?? 5}">
+        </div>
+        <div class="form-group">
+          <label>Max Pending Per User</label>
+          <input type="number" id="ps_maxPendingPerUser" min="1" max="10" value="${s.maxPendingPerUser ?? 1}">
+        </div>
+      </div>
+
+      <h3 style="color:var(--gold);margin-top:var(--space-8);font-size:var(--font-xl);">Tier Configuration</h3>
+      <div id="ps_tierEditor">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-2);margin-bottom:var(--space-2);font-weight:600;color:var(--text-secondary);">
+          <div>Tier Name</div><div>Min NFTs</div><div>Max NFTs</div><div>Voting Power</div>
+        </div>
+        ${tierRows}
+      </div>
+
+      <div style="margin-top:var(--space-6);display:flex;gap:var(--space-3);">
+        <button class="btn-primary" onclick="savePortalSettings()">💾 Save All Settings</button>
+        <button class="btn-danger" onclick="resetPortalSettings()">🔄 Reset to Defaults</button>
       </div>
     `;
   } catch (e) {
     content.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+async function savePortalSettings() {
+  if (!portalSettingsData) return;
+
+  // Collect tier data
+  const tierInputs = document.querySelectorAll('#ps_tierEditor input[data-ps-tier]');
+  const tiers = [];
+  for (let i = 0; i < portalSettingsData.tiers.length; i++) {
+    const tierData = {
+      name: portalSettingsData.tiers[i].name,
+      roleId: portalSettingsData.tiers[i].roleId,
+      minNFTs: 0, maxNFTs: 0, votingPower: 0
+    };
+    tierInputs.forEach(input => {
+      if (parseInt(input.dataset.psTier) === i) {
+        const field = input.dataset.psField;
+        tierData[field] = field === 'name' ? input.value : parseInt(input.value);
+      }
+    });
+    tiers.push(tierData);
+  }
+
+  const battleRoundPauseMinSec = parseInt(document.getElementById('ps_battleRoundPauseMinSec').value);
+  const battleRoundPauseMaxSec = parseInt(document.getElementById('ps_battleRoundPauseMaxSec').value);
+  const battleElitePrepSec = parseInt(document.getElementById('ps_battleElitePrepSec').value);
+
+  if (Number.isFinite(battleRoundPauseMinSec) && Number.isFinite(battleRoundPauseMaxSec) && battleRoundPauseMinSec > battleRoundPauseMaxSec) {
+    return showError('Round Pause Min cannot be greater than Round Pause Max');
+  }
+
+  const newSettings = {
+    tiers,
+    quorumPercentage: parseFloat(document.getElementById('ps_quorumPercentage').value),
+    supportThreshold: parseInt(document.getElementById('ps_supportThreshold').value),
+    voteDurationDays: parseInt(document.getElementById('ps_voteDurationDays').value),
+    battleRoundPauseMinSec,
+    battleRoundPauseMaxSec,
+    battleElitePrepSec,
+    moduleBattleEnabled: document.getElementById('ps_moduleBattleEnabled').checked,
+    moduleGovernanceEnabled: document.getElementById('ps_moduleGovernanceEnabled').checked,
+    moduleVerificationEnabled: document.getElementById('ps_moduleVerificationEnabled').checked,
+    moduleMissionsEnabled: document.getElementById('ps_moduleMissionsEnabled').checked,
+    moduleTreasuryEnabled: document.getElementById('ps_moduleTreasuryEnabled').checked,
+    moduleRoleResyncEnabled: document.getElementById('ps_moduleRoleResyncEnabled').checked,
+    moduleMicroVerifyEnabled: document.getElementById('ps_moduleMicroVerifyEnabled').checked,
+    proposalsChannelId: document.getElementById('ps_proposalsChannelId').value || '',
+    votingChannelId: document.getElementById('ps_votingChannelId').value || '',
+    resultsChannelId: document.getElementById('ps_resultsChannelId').value || '',
+    governanceLogChannelId: document.getElementById('ps_governanceLogChannelId').value || '',
+    verificationReceiveWallet: document.getElementById('ps_verificationReceiveWallet').value.trim() || '',
+    nftActivityWebhookSecret: document.getElementById('ps_nftActivityWebhookSecret').value.trim() || '',
+    verifyRequestTtlMinutes: parseInt(document.getElementById('ps_verifyRequestTtlMinutes').value),
+    pollIntervalSeconds: parseInt(document.getElementById('ps_pollIntervalSeconds').value),
+    verifyRateLimitMinutes: parseInt(document.getElementById('ps_verifyRateLimitMinutes').value),
+    maxPendingPerUser: parseInt(document.getElementById('ps_maxPendingPerUser').value)
+  };
+
+  try {
+    const response = await fetch('/api/admin/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(newSettings)
+    });
+    const data = await response.json();
+    if (data.success) {
+      alert('Settings saved successfully!');
+      await loadAdminSettingsView();
+    } else {
+      showError(data.message || 'Failed to save settings');
+    }
+  } catch (error) {
+    console.error('Error saving settings:', error);
+    showError('Failed to save settings');
+  }
+}
+
+async function resetPortalSettings() {
+  if (!confirm('Reset all settings to defaults? This cannot be undone.')) return;
+
+  try {
+    const response = await fetch('/api/admin/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ reset: true })
+    });
+    const data = await response.json();
+    if (data.success) {
+      alert('Settings reset to defaults!');
+      await loadAdminSettingsView();
+    } else {
+      showError(data.message || 'Failed to reset settings');
+    }
+  } catch (error) {
+    console.error('Error resetting settings:', error);
+    showError('Failed to reset settings');
   }
 }
 

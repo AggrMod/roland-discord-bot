@@ -1667,6 +1667,77 @@ class WebServer {
       }
     });
 
+    // ==================== NFT ACTIVITY ADMIN CONFIG ====================
+
+    this.app.get('/api/admin/nft-activity/config', this.requireAdmin.bind(this), (req, res) => {
+      try {
+        const config = nftActivityService.getAlertConfig();
+        if (!config) return res.status(500).json({ success: false, message: 'Failed to load NFT activity config' });
+        res.json({ success: true, config });
+      } catch (error) {
+        logger.error('Error getting NFT activity config:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.put('/api/admin/nft-activity/config', this.requireAdmin.bind(this), (req, res) => {
+      try {
+        const { enabled, channelId, eventTypes, minSol } = req.body;
+        const result = nftActivityService.updateAlertConfig({ enabled, channelId, eventTypes, minSol });
+        if (!result.success) return res.status(400).json(result);
+        res.json({ success: true, message: 'NFT activity config updated' });
+      } catch (error) {
+        logger.error('Error updating NFT activity config:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // ==================== NFT TRACKER COLLECTIONS (per-collection config) ====================
+
+    this.app.get('/api/admin/nft-tracker/collections', this.requireAdmin.bind(this), (req, res) => {
+      try {
+        const collections = nftActivityService.getTrackedCollections();
+        res.json({ success: true, collections });
+      } catch (error) {
+        logger.error('Error getting tracked collections:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/nft-tracker/collections', this.requireAdmin.bind(this), (req, res) => {
+      try {
+        const { collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer } = req.body;
+        const result = nftActivityService.addTrackedCollection({ collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer });
+        if (!result.success) return res.status(400).json(result);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error adding tracked collection:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.delete('/api/admin/nft-tracker/collections/:id', this.requireAdmin.bind(this), (req, res) => {
+      try {
+        const result = nftActivityService.removeTrackedCollection(req.params.id);
+        if (!result.success) return res.status(400).json(result);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error removing tracked collection:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.put('/api/admin/nft-tracker/collections/:id', this.requireAdmin.bind(this), (req, res) => {
+      try {
+        const result = nftActivityService.updateTrackedCollection(req.params.id, req.body);
+        if (!result.success) return res.status(400).json(result);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error updating tracked collection:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
     // ==================== NFT ACTIVITY WEBHOOK (optional external source) ====================
 
     this.app.post('/api/webhooks/nft-activity', (req, res) => {

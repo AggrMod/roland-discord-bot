@@ -177,6 +177,20 @@ function initDatabase() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS nft_tracked_collections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      collection_address TEXT NOT NULL UNIQUE,
+      collection_name TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      track_mint INTEGER DEFAULT 1,
+      track_sale INTEGER DEFAULT 1,
+      track_list INTEGER DEFAULT 1,
+      track_delist INTEGER DEFAULT 1,
+      track_transfer INTEGER DEFAULT 0,
+      enabled INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE INDEX IF NOT EXISTS idx_micro_verify_discord_id ON micro_verify_requests(discord_id);
     CREATE INDEX IF NOT EXISTS idx_micro_verify_status ON micro_verify_requests(status);
     CREATE INDEX IF NOT EXISTS idx_micro_verify_amount ON micro_verify_requests(expected_amount);

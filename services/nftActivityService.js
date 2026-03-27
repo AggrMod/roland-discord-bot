@@ -36,6 +36,93 @@ class NFTActivityService {
     }
   }
 
+  getTrackedCollections() {
+    try {
+      return db.prepare('SELECT * FROM nft_tracked_collections ORDER BY created_at DESC').all();
+    } catch (e) {
+      logger.error('Error getting tracked collections:', e);
+      return [];
+    }
+  }
+
+  addTrackedCollection({ collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer }) {
+    try {
+      if (!collectionAddress || !collectionName || !channelId) {
+        return { success: false, message: 'collectionAddress, collectionName, and channelId are required' };
+      }
+      const result = db.prepare(`
+        INSERT INTO nft_tracked_collections (collection_address, collection_name, channel_id, track_mint, track_sale, track_list, track_delist, track_transfer)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        collectionAddress.trim(),
+        collectionName.trim(),
+        channelId,
+        trackMint !== undefined ? (trackMint ? 1 : 0) : 1,
+        trackSale !== undefined ? (trackSale ? 1 : 0) : 1,
+        trackList !== undefined ? (trackList ? 1 : 0) : 1,
+        trackDelist !== undefined ? (trackDelist ? 1 : 0) : 1,
+        trackTransfer !== undefined ? (trackTransfer ? 1 : 0) : 0
+      );
+      return { success: true, message: 'Collection added', id: result.lastInsertRowid };
+    } catch (e) {
+      if (e.message && e.message.includes('UNIQUE constraint')) {
+        return { success: false, message: 'Collection address already tracked' };
+      }
+      logger.error('Error adding tracked collection:', e);
+      return { success: false, message: 'Failed to add tracked collection' };
+    }
+  }
+
+  removeTrackedCollection(id) {
+    try {
+      const result = db.prepare('DELETE FROM nft_tracked_collections WHERE id = ?').run(id);
+      return { success: true, removed: result.changes };
+    } catch (e) {
+      logger.error('Error removing tracked collection:', e);
+      return { success: false, message: 'Failed to remove tracked collection' };
+    }
+  }
+
+  updateTrackedCollection(id, updates) {
+    try {
+      const allowed = ['collection_name', 'channel_id', 'track_mint', 'track_sale', 'track_list', 'track_delist', 'track_transfer', 'enabled'];
+      const fieldMap = {
+        collectionName: 'collection_name',
+        channelId: 'channel_id',
+        trackMint: 'track_mint',
+        trackSale: 'track_sale',
+        trackList: 'track_list',
+        trackDelist: 'track_delist',
+        trackTransfer: 'track_transfer',
+        enabled: 'enabled'
+      };
+      const setClauses = [];
+      const params = [];
+      for (const [key, val] of Object.entries(updates)) {
+        const col = fieldMap[key];
+        if (col && allowed.includes(col)) {
+          setClauses.push(`${col} = ?`);
+          params.push(typeof val === 'boolean' ? (val ? 1 : 0) : val);
+        }
+      }
+      if (!setClauses.length) return { success: false, message: 'No valid updates provided' };
+      params.push(id);
+      db.prepare(`UPDATE nft_tracked_collections SET ${setClauses.join(', ')} WHERE id = ?`).run(...params);
+      return { success: true };
+    } catch (e) {
+      logger.error('Error updating tracked collection:', e);
+      return { success: false, message: 'Failed to update tracked collection' };
+    }
+  }
+
+  getTrackedCollectionByAddress(address) {
+    try {
+      return db.prepare('SELECT * FROM nft_tracked_collections WHERE collection_address = ? AND enabled = 1').get(address);
+    } catch (e) {
+      return null;
+    }
+  }
+
   listWatchedCollections() {
     try {
       return db.prepare('SELECT collection_key, created_at FROM nft_activity_watch ORDER BY created_at DESC').all();
@@ -126,20 +213,34 @@ class NFTActivityService {
   }
 
   async maybeSendAlert(evt) {
-    const cfg = this.getAlertConfig();
-    if (!cfg || cfg.enabled !== 1 || !cfg.channel_id) return;
+    // Per-collection tracked config takes priority
+    const tracked = evt.collectionKey ? this.getTrackedCollectionByAddress(evt.collectionKey) : null;
 
-    const typeSet = new Set((cfg.event_types || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
-    if (typeSet.size && !typeSet.has(evt.eventType)) return;
+    let alertChannelId = null;
+    if (tracked) {
+      // Use per-collection event flags
+      const eventFlagMap = { mint: 'track_mint', sell: 'track_sale', list: 'track_list', delist: 'track_delist', transfer: 'track_transfer' };
+      const flagCol = eventFlagMap[evt.eventType];
+      if (flagCol && !tracked[flagCol]) return;
+      alertChannelId = tracked.channel_id;
+    } else {
+      // Fallback to global config
+      const cfg = this.getAlertConfig();
+      if (!cfg || cfg.enabled !== 1 || !cfg.channel_id) return;
+      const typeSet = new Set((cfg.event_types || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
+      if (typeSet.size && !typeSet.has(evt.eventType)) return;
+      const minSol = Number(cfg.min_sol || 0);
+      const price = Number(evt.priceSol || 0);
+      if (price < minSol) return;
+      alertChannelId = cfg.channel_id;
+    }
 
-    const minSol = Number(cfg.min_sol || 0);
-    const price = Number(evt.priceSol || 0);
-    if (price < minSol) return;
+    if (!alertChannelId) return;
 
     const client = global.discordClient;
     if (!client) return;
 
-    const channel = await client.channels.fetch(cfg.channel_id).catch(() => null);
+    const channel = await client.channels.fetch(alertChannelId).catch(() => null);
     if (!channel || !channel.send) return;
 
     const whenTs = evt.eventTime ? Math.floor(new Date(evt.eventTime).getTime() / 1000) : null;

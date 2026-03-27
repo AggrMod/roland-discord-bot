@@ -121,6 +121,23 @@ class SettingsManager {
         }
       }
 
+      // Module toggles are booleans - validate type
+      const moduleKeys = [
+        'moduleBattleEnabled',
+        'moduleGovernanceEnabled',
+        'moduleVerificationEnabled',
+        'moduleMissionsEnabled',
+        'moduleTreasuryEnabled',
+        'moduleRoleResyncEnabled',
+        'moduleMicroVerifyEnabled'
+      ];
+      
+      for (const key of moduleKeys) {
+        if (newSettings[key] !== undefined && typeof newSettings[key] !== 'boolean') {
+          return { success: false, message: `${key} must be a boolean` };
+        }
+      }
+
       // Merge with existing settings
       this.settings = { ...this.settings, ...newSettings };
       
@@ -177,10 +194,14 @@ class SettingsManager {
         battleRoundPauseMaxSec: 10,
         battleElitePrepSec: 12,
         
-        // Feature Flags
-        heistEnabled: false,
-        roleResyncEnabled: true,
-        microVerifyEnabled: false,
+        // Module Toggles (per-module control)
+        moduleBattleEnabled: true,
+        moduleGovernanceEnabled: true,
+        moduleVerificationEnabled: true,
+        moduleMissionsEnabled: true,
+        moduleTreasuryEnabled: true,
+        moduleRoleResyncEnabled: true,
+        moduleMicroVerifyEnabled: false,
         
         // Micro-Transfer Verification
         verificationReceiveWallet: '',

@@ -323,39 +323,64 @@
             </div>
           </div>
 
-          <h3 style="color: var(--gold); margin-top: var(--space-8); font-size: var(--font-xl);">⚡ Feature Flags</h3>
+          <h3 style="color: var(--gold); margin-top: var(--space-8); font-size: var(--font-xl);">🎮 Module Control</h3>
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--space-4); margin-bottom: var(--space-6);">
             <div style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3); background: var(--bg-secondary); border-radius: var(--radius-md);">
-              <input type="checkbox" id="heistEnabled" style="width: 18px; height: 18px; cursor: pointer;">
-              <label for="heistEnabled" style="cursor: pointer; font-weight: 500;">Heist Mode Enabled</label>
+              <input type="checkbox" id="moduleBattleEnabled" checked style="width: 18px; height: 18px; cursor: pointer;">
+              <label for="moduleBattleEnabled" style="cursor: pointer; font-weight: 500;">⚔️ Battle</label>
             </div>
             <div style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3); background: var(--bg-secondary); border-radius: var(--radius-md);">
-              <input type="checkbox" id="roleResyncEnabled" checked style="width: 18px; height: 18px; cursor: pointer;">
-              <label for="roleResyncEnabled" style="cursor: pointer; font-weight: 500;">Role Resync Enabled</label>
+              <input type="checkbox" id="moduleGovernanceEnabled" checked style="width: 18px; height: 18px; cursor: pointer;">
+              <label for="moduleGovernanceEnabled" style="cursor: pointer; font-weight: 500;">🗳️ Governance</label>
             </div>
             <div style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3); background: var(--bg-secondary); border-radius: var(--radius-md);">
-              <input type="checkbox" id="microVerifyEnabled" style="width: 18px; height: 18px; cursor: pointer;">
-              <label for="microVerifyEnabled" style="cursor: pointer; font-weight: 500;">Micro-Transfer Verification</label>
+              <input type="checkbox" id="moduleVerificationEnabled" checked style="width: 18px; height: 18px; cursor: pointer;">
+              <label for="moduleVerificationEnabled" style="cursor: pointer; font-weight: 500;">✅ Verification</label>
+            </div>
+            <div style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3); background: var(--bg-secondary); border-radius: var(--radius-md);">
+              <input type="checkbox" id="moduleMissionsEnabled" checked style="width: 18px; height: 18px; cursor: pointer;">
+              <label for="moduleMissionsEnabled" style="cursor: pointer; font-weight: 500;">🎯 Missions</label>
+            </div>
+            <div style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3); background: var(--bg-secondary); border-radius: var(--radius-md);">
+              <input type="checkbox" id="moduleTreasuryEnabled" checked style="width: 18px; height: 18px; cursor: pointer;">
+              <label for="moduleTreasuryEnabled" style="cursor: pointer; font-weight: 500;">💰 Treasury</label>
+            </div>
+            <div style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3); background: var(--bg-secondary); border-radius: var(--radius-md);">
+              <input type="checkbox" id="moduleRoleResyncEnabled" checked style="width: 18px; height: 18px; cursor: pointer;">
+              <label for="moduleRoleResyncEnabled" style="cursor: pointer; font-weight: 500;">👥 Role Resync</label>
+            </div>
+            <div style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3); background: var(--bg-secondary); border-radius: var(--radius-md);">
+              <input type="checkbox" id="moduleMicroVerifyEnabled" style="width: 18px; height: 18px; cursor: pointer;">
+              <label for="moduleMicroVerifyEnabled" style="cursor: pointer; font-weight: 500;">🔐 Micro-Transfer Verify</label>
             </div>
           </div>
 
           <h3 style="color: var(--gold); margin-top: var(--space-8); font-size: var(--font-xl);">🔗 Channel Overrides</h3>
+          <p style="color: var(--text-secondary); font-size: var(--font-sm); margin-bottom: var(--space-4);">Leave empty to use .env defaults. Select a channel from the dropdown below:</p>
           <div class="form-row">
             <div class="form-group">
-              <label>Proposals Channel ID</label>
-              <input type="text" id="proposalsChannelId" placeholder="Leave empty to use .env">
+              <label>Proposals Channel</label>
+              <select id="proposalsChannelId" style="width: 100%; padding: var(--space-2); border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-secondary); color: var(--text-primary);">
+                <option value="">-- Use .env default --</option>
+              </select>
             </div>
             <div class="form-group">
-              <label>Voting Channel ID</label>
-              <input type="text" id="votingChannelId" placeholder="Leave empty to use .env">
+              <label>Voting Channel</label>
+              <select id="votingChannelId" style="width: 100%; padding: var(--space-2); border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-secondary); color: var(--text-primary);">
+                <option value="">-- Use .env default --</option>
+              </select>
             </div>
             <div class="form-group">
-              <label>Results Channel ID</label>
-              <input type="text" id="resultsChannelId" placeholder="Leave empty to use .env">
+              <label>Results Channel</label>
+              <select id="resultsChannelId" style="width: 100%; padding: var(--space-2); border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-secondary); color: var(--text-primary);">
+                <option value="">-- Use .env default --</option>
+              </select>
             </div>
             <div class="form-group">
-              <label>Governance Log Channel ID</label>
-              <input type="text" id="governanceLogChannelId" placeholder="Leave empty to use .env">
+              <label>Governance Log Channel</label>
+              <select id="governanceLogChannelId" style="width: 100%; padding: var(--space-2); border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-secondary); color: var(--text-primary);">
+                <option value="">-- Use .env default --</option>
+              </select>
             </div>
           </div>
 
@@ -657,11 +682,60 @@
 
         if (data.success) {
           settingsData = data.settings;
-          renderSettings();
         }
+
+        // Load Discord channels for dropdowns
+        const channelsResponse = await fetch('/api/admin/discord/channels');
+        if (channelsResponse.ok) {
+          const channelsData = await channelsResponse.json();
+          if (channelsData.success) {
+            populateChannelSelects(channelsData.channels);
+          }
+        }
+
+        renderSettings();
       } catch (error) {
         console.error('Error loading settings:', error);
       }
+    }
+
+    function populateChannelSelects(channels) {
+      // Helper to populate a select with channels
+      const populateSelect = (selectId) => {
+        const select = document.getElementById(selectId);
+        if (!select) return;
+        
+        // Keep the default option
+        const defaultOption = select.options[0];
+        select.innerHTML = '';
+        select.appendChild(defaultOption);
+
+        // Group channels by parent
+        const grouped = {};
+        channels.forEach(ch => {
+          const parent = ch.parentName || 'Other';
+          if (!grouped[parent]) grouped[parent] = [];
+          grouped[parent].push(ch);
+        });
+
+        // Add grouped options
+        Object.keys(grouped).sort().forEach(parent => {
+          const optgroup = document.createElement('optgroup');
+          optgroup.label = parent;
+          grouped[parent].forEach(ch => {
+            const option = document.createElement('option');
+            option.value = ch.id;
+            option.textContent = `# ${ch.name}`;
+            optgroup.appendChild(option);
+          });
+          select.appendChild(optgroup);
+        });
+      };
+
+      populateSelect('proposalsChannelId');
+      populateSelect('votingChannelId');
+      populateSelect('resultsChannelId');
+      populateSelect('governanceLogChannelId');
     }
 
     function renderSettings() {
@@ -675,12 +749,16 @@
       document.getElementById('battleRoundPauseMaxSec').value = settingsData.battleRoundPauseMaxSec ?? 10;
       document.getElementById('battleElitePrepSec').value = settingsData.battleElitePrepSec ?? 12;
       
-      // Feature Flags
-      document.getElementById('heistEnabled').checked = settingsData.heistEnabled ?? false;
-      document.getElementById('roleResyncEnabled').checked = settingsData.roleResyncEnabled ?? true;
-      document.getElementById('microVerifyEnabled').checked = settingsData.microVerifyEnabled ?? false;
+      // Module Toggles
+      document.getElementById('moduleBattleEnabled').checked = settingsData.moduleBattleEnabled ?? true;
+      document.getElementById('moduleGovernanceEnabled').checked = settingsData.moduleGovernanceEnabled ?? true;
+      document.getElementById('moduleVerificationEnabled').checked = settingsData.moduleVerificationEnabled ?? true;
+      document.getElementById('moduleMissionsEnabled').checked = settingsData.moduleMissionsEnabled ?? true;
+      document.getElementById('moduleTreasuryEnabled').checked = settingsData.moduleTreasuryEnabled ?? true;
+      document.getElementById('moduleRoleResyncEnabled').checked = settingsData.moduleRoleResyncEnabled ?? true;
+      document.getElementById('moduleMicroVerifyEnabled').checked = settingsData.moduleMicroVerifyEnabled ?? false;
       
-      // Channel Overrides
+      // Channel Overrides (smart load: effective values show DB override or .env default)
       document.getElementById('proposalsChannelId').value = settingsData.proposalsChannelId ?? '';
       document.getElementById('votingChannelId').value = settingsData.votingChannelId ?? '';
       document.getElementById('resultsChannelId').value = settingsData.resultsChannelId ?? '';
@@ -761,16 +839,20 @@
         battleRoundPauseMaxSec,
         battleElitePrepSec,
         
-        // Feature Flags
-        heistEnabled: document.getElementById('heistEnabled').checked,
-        roleResyncEnabled: document.getElementById('roleResyncEnabled').checked,
-        microVerifyEnabled: document.getElementById('microVerifyEnabled').checked,
+        // Module Toggles (per-module control)
+        moduleBattleEnabled: document.getElementById('moduleBattleEnabled').checked,
+        moduleGovernanceEnabled: document.getElementById('moduleGovernanceEnabled').checked,
+        moduleVerificationEnabled: document.getElementById('moduleVerificationEnabled').checked,
+        moduleMissionsEnabled: document.getElementById('moduleMissionsEnabled').checked,
+        moduleTreasuryEnabled: document.getElementById('moduleTreasuryEnabled').checked,
+        moduleRoleResyncEnabled: document.getElementById('moduleRoleResyncEnabled').checked,
+        moduleMicroVerifyEnabled: document.getElementById('moduleMicroVerifyEnabled').checked,
         
-        // Channel Overrides
-        proposalsChannelId: document.getElementById('proposalsChannelId').value.trim() || '',
-        votingChannelId: document.getElementById('votingChannelId').value.trim() || '',
-        resultsChannelId: document.getElementById('resultsChannelId').value.trim() || '',
-        governanceLogChannelId: document.getElementById('governanceLogChannelId').value.trim() || '',
+        // Channel Overrides (dropdowns: store channel ID or empty for .env default)
+        proposalsChannelId: document.getElementById('proposalsChannelId').value || '',
+        votingChannelId: document.getElementById('votingChannelId').value || '',
+        resultsChannelId: document.getElementById('resultsChannelId').value || '',
+        governanceLogChannelId: document.getElementById('governanceLogChannelId').value || '',
         
         // Micro-Transfer Verification
         verificationReceiveWallet: document.getElementById('verificationReceiveWallet').value.trim() || '',

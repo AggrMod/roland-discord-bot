@@ -379,7 +379,22 @@ class WebServer {
     this.app.get('/api/admin/settings', adminAuthMiddleware, (req, res) => {
       try {
         const settings = settingsManager.getSettings();
-        res.json({ success: true, settings });
+        
+        // Smart load: DB override → .env fallback
+        const effectiveSettings = {
+          ...settings,
+          // Channel overrides: if empty in DB, use .env
+          proposalsChannelId: settings.proposalsChannelId || process.env.PROPOSALS_CHANNEL_ID || '',
+          votingChannelId: settings.votingChannelId || process.env.VOTING_CHANNEL_ID || '',
+          resultsChannelId: settings.resultsChannelId || process.env.RESULTS_CHANNEL_ID || '',
+          governanceLogChannelId: settings.governanceLogChannelId || process.env.GOVERNANCE_LOG_CHANNEL_ID || '',
+          
+          // Verification wallet
+          verificationReceiveWallet: settings.verificationReceiveWallet || process.env.VERIFICATION_RECEIVE_WALLET || '',
+          nftActivityWebhookSecret: settings.nftActivityWebhookSecret || process.env.NFT_ACTIVITY_WEBHOOK_SECRET || ''
+        };
+        
+        res.json({ success: true, settings: effectiveSettings });
       } catch (error) {
         logger.error('Error fetching settings:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
@@ -393,6 +408,34 @@ class WebServer {
       } catch (error) {
         logger.error('Error updating settings:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // Fetch Discord channels for dropdown selects
+    this.app.get('/api/admin/discord/channels', adminAuthMiddleware, async (req, res) => {
+      try {
+        if (!this.client) {
+          return res.status(500).json({ success: false, message: 'Bot not initialized' });
+        }
+
+        const guildId = process.env.GUILD_ID;
+        const guild = await this.client.guilds.fetch(guildId);
+        const channels = await guild.channels.fetch();
+
+        const channelList = channels
+          .filter(ch => ch.isText() || ch.isThread()) // Only text channels and threads
+          .map(ch => ({
+            id: ch.id,
+            name: ch.name,
+            type: ch.isDMBased() ? 'dm' : (ch.isThread() ? 'thread' : 'text'),
+            parentName: ch.parent ? ch.parent.name : null
+          }))
+          .sort((a, b) => (a.parentName || '').localeCompare(b.parentName || '') || a.name.localeCompare(b.name));
+
+        res.json({ success: true, channels: channelList });
+      } catch (error) {
+        logger.error('Error fetching Discord channels:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch channels' });
       }
     });
 

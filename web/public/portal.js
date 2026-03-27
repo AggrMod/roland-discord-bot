@@ -1300,48 +1300,46 @@ async function loadAdminSettingsView() {
       });
     };
 
-    // Helper: show/hide settings sections based on module toggles
+    // Helper: show/hide module cards based on module toggles
+    const moduleMap = {
+      'ps_moduleBattleEnabled': 'ps_section_battle',
+      'ps_moduleGovernanceEnabled': 'ps_section_governance',
+      'ps_moduleVerificationEnabled': 'ps_section_verification',
+      'ps_moduleMissionsEnabled': 'ps_section_missions',
+      'ps_moduleTreasuryEnabled': 'ps_section_treasury',
+      'ps_moduleRoleResyncEnabled': 'ps_section_roleresync',
+      'ps_moduleMicroVerifyEnabled': 'ps_section_micro'
+    };
     const updateSectionVisibility = () => {
-      const govEnabled = document.getElementById('ps_moduleGovernanceEnabled')?.checked;
-      const battleEnabled = document.getElementById('ps_moduleBattleEnabled')?.checked;
-      const microEnabled = document.getElementById('ps_moduleMicroVerifyEnabled')?.checked;
-      const govCard = document.getElementById('ps_section_governance');
-      const battleCard = document.getElementById('ps_section_battle');
-      const channelCard = document.getElementById('ps_section_channels');
-      const microCard = document.getElementById('ps_section_micro');
-      if (govCard) govCard.style.display = govEnabled ? 'block' : 'none';
-      if (battleCard) battleCard.style.display = battleEnabled ? 'block' : 'none';
-      if (channelCard) channelCard.style.display = govEnabled ? 'block' : 'none';
-      if (microCard) microCard.style.display = microEnabled ? 'block' : 'none';
+      Object.entries(moduleMap).forEach(([toggleId, sectionId]) => {
+        const cb = document.getElementById(toggleId);
+        const section = document.getElementById(sectionId);
+        if (cb && section) section.style.display = cb.checked ? 'block' : 'none';
+      });
     };
 
-    // Step 2: Inject HTML skeleton with loading placeholders for channel selects
+    const noSettingsMsg = '<p style="color:var(--text-secondary);font-size:0.9em;margin:0;">No configurable settings for this module yet.</p>';
+    const moduleCardBorder = 'border-left:3px solid var(--gold);';
+
+    // Step 2: Inject HTML skeleton
     content.innerHTML = `
-      <!-- Governance Card -->
-      <div id="ps_section_governance" style="${cardStyle}display:${(s.moduleGovernanceEnabled ?? true) ? 'block' : 'none'};">
-        <h3 style="${cardHeader}">⚙️ Governance</h3>
-        <div style="${gridRow}">
-          <div>
-            <label style="${fieldLabel}">Quorum Percentage (%)</label>
-            <input type="number" id="ps_quorumPercentage" min="1" max="100" value="${s.quorumPercentage ?? ''}" style="${fieldInput}">
-          </div>
-          <div>
-            <label style="${fieldLabel}">Support Threshold</label>
-            <input type="number" id="ps_supportThreshold" min="1" value="${s.supportThreshold ?? ''}" style="${fieldInput}">
-          </div>
-        </div>
-        <div style="${gridRow}margin-top:var(--space-3);">
-          <div>
-            <label style="${fieldLabel}">Vote Duration (Days)</label>
-            <input type="number" id="ps_voteDurationDays" min="1" max="30" value="${s.voteDurationDays ?? ''}" style="${fieldInput}">
-          </div>
-          <div></div>
+      <!-- MODULE CONTROL — always visible -->
+      <div style="${cardStyle}">
+        <h3 style="${cardHeader}">🎮 Module Control</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--space-3);">
+          ${moduleToggle('moduleBattleEnabled', 'Battle', '⚔️', true)}
+          ${moduleToggle('moduleGovernanceEnabled', 'Governance', '🗳️', true)}
+          ${moduleToggle('moduleVerificationEnabled', 'Verification', '✅', true)}
+          ${moduleToggle('moduleMissionsEnabled', 'Missions', '🎯', true)}
+          ${moduleToggle('moduleTreasuryEnabled', 'Treasury', '💰', true)}
+          ${moduleToggle('moduleRoleResyncEnabled', 'Role Resync', '👥', true)}
+          ${moduleToggle('moduleMicroVerifyEnabled', 'Micro-Transfer Verify', '🔐', false)}
         </div>
       </div>
 
-      <!-- Battle Timing Card -->
-      <div id="ps_section_battle" style="${cardStyle}display:${(s.moduleBattleEnabled ?? true) ? 'block' : 'none'};">
-        <h3 style="${cardHeader}">⚔️ Battle Timing (seconds)</h3>
+      <!-- ⚔️ BATTLE MODULE -->
+      <div id="ps_section_battle" style="${cardStyle}${moduleCardBorder}display:${(s.moduleBattleEnabled ?? true) ? 'block' : 'none'};">
+        <h3 style="${cardHeader}">⚔️ Battle Module</h3>
         <div style="${gridRow}">
           <div>
             <label style="${fieldLabel}">Round Pause Min (s)</label>
@@ -1361,23 +1359,27 @@ async function loadAdminSettingsView() {
         </div>
       </div>
 
-      <!-- Module Control Card -->
-      <div style="${cardStyle}">
-        <h3 style="${cardHeader}">🎮 Module Control</h3>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--space-3);">
-          ${moduleToggle('moduleBattleEnabled', 'Battle', '⚔️', true)}
-          ${moduleToggle('moduleGovernanceEnabled', 'Governance', '🗳️', true)}
-          ${moduleToggle('moduleVerificationEnabled', 'Verification', '✅', true)}
-          ${moduleToggle('moduleMissionsEnabled', 'Missions', '🎯', true)}
-          ${moduleToggle('moduleTreasuryEnabled', 'Treasury', '💰', true)}
-          ${moduleToggle('moduleRoleResyncEnabled', 'Role Resync', '👥', true)}
-          ${moduleToggle('moduleMicroVerifyEnabled', 'Micro-Transfer Verify', '🔐', false)}
+      <!-- 🗳️ GOVERNANCE MODULE -->
+      <div id="ps_section_governance" style="${cardStyle}${moduleCardBorder}display:${(s.moduleGovernanceEnabled ?? true) ? 'block' : 'none'};">
+        <h3 style="${cardHeader}">🗳️ Governance Module</h3>
+        <div style="${gridRow}">
+          <div>
+            <label style="${fieldLabel}">Quorum Percentage (%)</label>
+            <input type="number" id="ps_quorumPercentage" min="1" max="100" value="${s.quorumPercentage ?? ''}" style="${fieldInput}">
+          </div>
+          <div>
+            <label style="${fieldLabel}">Support Threshold</label>
+            <input type="number" id="ps_supportThreshold" min="1" value="${s.supportThreshold ?? ''}" style="${fieldInput}">
+          </div>
         </div>
-      </div>
-
-      <!-- Channel Overrides Card -->
-      <div id="ps_section_channels" style="${cardStyle}display:${(s.moduleGovernanceEnabled ?? true) ? 'block' : 'none'};">
-        <h3 style="${cardHeader}">🔗 Channel Overrides</h3>
+        <div style="${gridRow}margin-top:var(--space-3);">
+          <div>
+            <label style="${fieldLabel}">Vote Duration (Days)</label>
+            <input type="number" id="ps_voteDurationDays" min="1" max="30" value="${s.voteDurationDays ?? ''}" style="${fieldInput}">
+          </div>
+          <div></div>
+        </div>
+        <h4 style="color:#c9d6ff;font-size:0.95em;font-weight:600;margin:var(--space-4) 0 var(--space-3) 0;padding-top:var(--space-3);border-top:1px solid rgba(99,102,241,0.12);">🔗 Channel Overrides</h4>
         <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:12px;">Leave empty to use .env defaults.</p>
         <div style="${gridRow}">
           <div>
@@ -1401,9 +1403,33 @@ async function loadAdminSettingsView() {
         </div>
       </div>
 
-      <!-- Micro-Transfer Verification Card -->
-      <div id="ps_section_micro" style="${cardStyle}display:${(s.moduleMicroVerifyEnabled ?? false) ? 'block' : 'none'};">
-        <h3 style="${cardHeader}">🔐 Micro-Transfer Verification</h3>
+      <!-- ✅ VERIFICATION MODULE -->
+      <div id="ps_section_verification" style="${cardStyle}${moduleCardBorder}display:${(s.moduleVerificationEnabled ?? true) ? 'block' : 'none'};">
+        <h3 style="${cardHeader}">✅ Verification Module</h3>
+        ${noSettingsMsg}
+      </div>
+
+      <!-- 🎯 MISSIONS MODULE -->
+      <div id="ps_section_missions" style="${cardStyle}${moduleCardBorder}display:${(s.moduleMissionsEnabled ?? true) ? 'block' : 'none'};">
+        <h3 style="${cardHeader}">🎯 Missions Module</h3>
+        ${noSettingsMsg}
+      </div>
+
+      <!-- 💰 TREASURY MODULE -->
+      <div id="ps_section_treasury" style="${cardStyle}${moduleCardBorder}display:${(s.moduleTreasuryEnabled ?? true) ? 'block' : 'none'};">
+        <h3 style="${cardHeader}">💰 Treasury Module</h3>
+        ${noSettingsMsg}
+      </div>
+
+      <!-- 👥 ROLE RESYNC MODULE -->
+      <div id="ps_section_roleresync" style="${cardStyle}${moduleCardBorder}display:${(s.moduleRoleResyncEnabled ?? true) ? 'block' : 'none'};">
+        <h3 style="${cardHeader}">👥 Role Resync Module</h3>
+        ${noSettingsMsg}
+      </div>
+
+      <!-- 🔐 MICRO-TRANSFER VERIFY MODULE -->
+      <div id="ps_section_micro" style="${cardStyle}${moduleCardBorder}display:${(s.moduleMicroVerifyEnabled ?? false) ? 'block' : 'none'};">
+        <h3 style="${cardHeader}">🔐 Micro-Transfer Verify Module</h3>
         <div style="${gridRow}">
           <div>
             <label style="${fieldLabel}">Verification Receive Wallet</label>
@@ -1436,7 +1462,7 @@ async function loadAdminSettingsView() {
         </div>
       </div>
 
-      <!-- Action Buttons -->
+      <!-- Action Buttons — always visible -->
       <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);">
         <button class="btn-danger" onclick="resetPortalSettings()" style="font-size:0.85em;padding:8px 16px;">🔄 Reset to Defaults</button>
         <button class="btn-primary" onclick="savePortalSettings()" style="font-size:0.85em;padding:8px 16px;">💾 Save All Settings</button>
@@ -1446,8 +1472,8 @@ async function loadAdminSettingsView() {
     // Step 3: Attach toggle listeners now that DOM is ready
     attachToggleListeners();
 
-    // Step 3b: Wire module toggles to show/hide their related settings sections
-    ['ps_moduleBattleEnabled', 'ps_moduleGovernanceEnabled', 'ps_moduleMicroVerifyEnabled'].forEach(id => {
+    // Step 3b: Wire ALL module toggles to show/hide their related settings cards
+    Object.keys(moduleMap).forEach(id => {
       const cb = document.getElementById(id);
       if (cb) cb.addEventListener('change', updateSectionVisibility);
     });

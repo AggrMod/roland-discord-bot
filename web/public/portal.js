@@ -424,10 +424,6 @@ async function checkSuperadminStatus() {
     if (!isSuperadmin) {
       const card = document.getElementById('adminSuperadminCard');
       if (card) card.style.display = 'none';
-
-      if (document.querySelector('.admin-sub-item.active')?.getAttribute('data-admin-nav') === 'superadmin') {
-        showAdminView('settings');
-      }
     }
   } catch (error) {
     isSuperadmin = false;

@@ -109,14 +109,14 @@
             <span class="nav-label">Admin</span>
             <span class="admin-chevron" id="adminChevron" style="margin-left:auto;font-size:0.7em;transition:transform 0.2s;">▶</span>
           </button>
+          <button class="nav-item" data-section="admin" onclick="switchSection('admin'); showAdminView('superadmin')" id="adminSuperadminNav" style="display:none; margin-top:6px;">
+            <span class="nav-icon" aria-hidden="true">🛡️</span>
+            <span class="nav-label">Superadmin</span>
+          </button>
           <div id="adminSubmenu" class="admin-submenu" style="display:none;">
             <button class="nav-item admin-sub-item" data-admin-nav="settings" onclick="showAdminView('settings')">
               <span class="nav-icon" aria-hidden="true">⚙️</span>
               <span class="nav-label">Settings</span>
-            </button>
-            <button class="nav-item admin-sub-item" data-admin-nav="superadmin" onclick="showAdminView('superadmin')" id="adminSuperadminNav" style="display:none;">
-              <span class="nav-icon" aria-hidden="true">🛡️</span>
-              <span class="nav-label">Superadmin</span>
             </button>
             <button class="nav-item admin-sub-item" data-admin-nav="users" onclick="showAdminView('users')">
               <span class="nav-icon" aria-hidden="true">👥</span>

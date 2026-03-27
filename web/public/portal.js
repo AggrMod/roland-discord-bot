@@ -2194,8 +2194,6 @@ function tierFormHTML(tier = {}) {
         <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Maximum NFT count</label>
           <input id="tierMaxInput" type="number" value="${tier.maxNFTs >= 999999 ? '' : (tier.maxNFTs ?? '')}" min="0" placeholder="∞ (leave blank for unlimited)" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
       </div>
-      <div id="tierVPField" style="${portalSettingsData?.moduleGovernanceEnabled === false ? 'display:none;' : ''}"><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Voting Power ${portalSettingsData?.moduleGovernanceEnabled === false ? '<span style="color:#888;font-size:0.85em;">(governance disabled)</span>' : '*'}</label>
-        <input id="tierVPInput" type="number" value="${tier.votingPower ?? ''}" min="0" placeholder="10" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
       <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Discord Role (optional)</label>
         ${roleSelectHTML('tierRoleIdInput', tier.roleId || '')}</div>
     </div>`;
@@ -2205,12 +2203,10 @@ async function saveTierFromForm(mode, originalName) {
   const name = document.getElementById('tierNameInput')?.value.trim();
   const minNFTs = parseInt(document.getElementById('tierMinInput')?.value);
   const maxNFTs = document.getElementById('tierMaxInput')?.value.trim() === '' ? 999999 : parseInt(document.getElementById('tierMaxInput')?.value);
-  const votingPower = parseInt(document.getElementById('tierVPInput')?.value);
   const roleId = document.getElementById('tierRoleIdInput')?.value || null;
 
-  const govEnabled = portalSettingsData?.moduleGovernanceEnabled !== false;
-  if (!name || isNaN(minNFTs) || (govEnabled && isNaN(votingPower))) {
-    showError(govEnabled ? 'Please fill in name, min NFTs, and voting power' : 'Please fill in name and min NFTs');
+  if (!name || isNaN(minNFTs)) {
+    showError('Please fill in tier name and minimum NFT count');
     return;
   }
 
@@ -2219,11 +2215,11 @@ async function saveTierFromForm(mode, originalName) {
     if (mode === 'add') {
       url = '/api/admin/roles/tiers';
       method = 'POST';
-      body = { name, minNFTs, maxNFTs, votingPower, roleId };
+      body = { name, minNFTs, maxNFTs, roleId };
     } else {
       url = `/api/admin/roles/tiers/${encodeURIComponent(originalName)}`;
       method = 'PUT';
-      body = { name, minNFTs, maxNFTs, votingPower, roleId };
+      body = { name, minNFTs, maxNFTs, roleId };
     }
 
     const response = await fetch(url, {

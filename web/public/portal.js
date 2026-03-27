@@ -747,6 +747,7 @@ async function checkSuperadminStatus() {
 // ==================== DATA LOADING ====================
 async function loadDashboardData() {
   let governanceEnabledForTenant = true;
+  let verificationEnabledForTenant = true;
   let tierConfiguredForTenant = true;
 
   try {
@@ -758,6 +759,7 @@ async function loadDashboardData() {
       const settingsJson = await settingsRes.json().catch(() => null);
       if (settingsJson?.success && settingsJson?.settings) {
         governanceEnabledForTenant = !!settingsJson.settings.moduleGovernanceEnabled;
+        verificationEnabledForTenant = !!settingsJson.settings.moduleVerificationEnabled;
       }
     }
 
@@ -773,19 +775,22 @@ async function loadDashboardData() {
   }
 
   // Load stats
+  const tierCard = document.getElementById('tierStatCard');
+  const nftsCard = document.getElementById('nftsStatCard');
+  const vpCard = document.getElementById('vpStatCard');
+
+  if (tierCard) tierCard.style.display = verificationEnabledForTenant ? 'block' : 'none';
+  if (nftsCard) nftsCard.style.display = verificationEnabledForTenant ? 'block' : 'none';
+  if (vpCard) vpCard.style.display = governanceEnabledForTenant ? 'block' : 'none';
+
   document.getElementById('tierStat').textContent = tierConfiguredForTenant
     ? (userData.user.tier || 'None')
     : 'Unconfigured';
 
   const vpEl = document.getElementById('vpStat');
   if (vpEl) {
-    if (governanceEnabledForTenant) {
-      vpEl.textContent = userData.user.votingPower || 0;
-      vpEl.title = '';
-    } else {
-      vpEl.textContent = '—';
-      vpEl.title = 'Governance module is disabled for this server';
-    }
+    vpEl.textContent = userData.user.votingPower || 0;
+    vpEl.title = '';
   }
 
   document.getElementById('nftsStat').textContent = userData.user.totalNFTs || 0;

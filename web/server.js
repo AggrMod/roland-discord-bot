@@ -24,6 +24,7 @@ const superadminService = require('../services/superadminService');
 const superadminGuard = require('../middleware/superadminGuard');
 
 const DISCORD_ADMIN_PERMISSION = 0x8n;
+const DISCORD_MANAGE_GUILD_PERMISSION = 0x20n;
 const REQUEST_GUILD_HEADER = 'x-guild-id';
 
 function normalizeGuildId(guildId) {
@@ -47,7 +48,10 @@ function hasDiscordAdminPermission(guildSummary) {
     return false;
   }
 
-  return (parseGuildPermissionBits(guildSummary.permissions) & DISCORD_ADMIN_PERMISSION) === DISCORD_ADMIN_PERMISSION;
+  const perms = parseGuildPermissionBits(guildSummary.permissions);
+  const isAdmin = (perms & DISCORD_ADMIN_PERMISSION) === DISCORD_ADMIN_PERMISSION;
+  const canManageGuild = (perms & DISCORD_MANAGE_GUILD_PERMISSION) === DISCORD_MANAGE_GUILD_PERMISSION;
+  return isAdmin || canManageGuild;
 }
 
 class WebServer {
@@ -261,7 +265,7 @@ class WebServer {
         if (requestedGuildId === fallback) {
           const directGuild = await fetchGuildById(requestedGuildId);
           const member = directGuild ? await directGuild.members.fetch(userId).catch(() => null) : null;
-          if (member?.permissions?.has('Administrator')) {
+          if (member?.permissions && (member.permissions.has('Administrator') || member.permissions.has('ManageGuild'))) {
             const botGuildIds = getBotGuildIds();
             if (!botGuildIds.has(requestedGuildId)) {
               return { ok: false, status: 403, message: 'Bot is not installed in the selected server' };
@@ -545,7 +549,7 @@ class WebServer {
           if (fallback) {
             const guild = await fetchGuildById(fallback);
             const member = guild ? await guild.members.fetch(userId).catch(() => null) : null;
-            if (guild && member?.permissions?.has('Administrator') && botGuildIds.has(guild.id)) {
+            if (guild && member?.permissions && (member.permissions.has('Administrator') || member.permissions.has('ManageGuild')) && botGuildIds.has(guild.id)) {
               managedServers.push({
                 guildId: guild.id,
                 name: guild.name,

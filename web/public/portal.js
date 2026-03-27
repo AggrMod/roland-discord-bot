@@ -4114,19 +4114,49 @@ async function loadSelfServeRolesView() {
     `;
 
     populateRoleSelect('srRoleSelect', '');
-    try {
-      const chRes = await fetch('/api/admin/discord/channels', { credentials: 'include' });
-      const channels = await chRes.json();
+    // Populate channel dropdown — use cached channelsList if available
+    setTimeout(() => {
       const sel = document.getElementById('srPanelChannelId');
-      if (sel && Array.isArray(channels)) {
-        channels.filter(c => c.type === 0).forEach(c => {
-          const opt = document.createElement('option');
-          opt.value = c.id;
-          opt.textContent = c.parentName ? `${c.parentName} > #${c.name}` : `#${c.name}`;
-          sel.appendChild(opt);
+      if (!sel) return;
+      const list = (typeof channelsList !== 'undefined' && channelsList.length > 0)
+        ? channelsList
+        : [];
+      if (list.length > 0) {
+        const grouped = {};
+        list.forEach(ch => {
+          const parent = ch.parentName || 'Other';
+          if (!grouped[parent]) grouped[parent] = [];
+          grouped[parent].push(ch);
         });
+        sel.innerHTML = '<option value="">-- Select Channel --</option>';
+        Object.keys(grouped).sort().forEach(parent => {
+          const og = document.createElement('optgroup');
+          og.label = parent;
+          grouped[parent].forEach(ch => {
+            const opt = document.createElement('option');
+            opt.value = ch.id;
+            opt.textContent = '# ' + ch.name;
+            og.appendChild(opt);
+          });
+          sel.appendChild(og);
+        });
+      } else {
+        // Fallback: fetch directly
+        fetch('/api/admin/discord/channels', { credentials: 'include' })
+          .then(r => r.json())
+          .then(data => {
+            const chs = data.channels || data || [];
+            sel.innerHTML = '<option value="">-- Select Channel --</option>';
+            chs.forEach(ch => {
+              const opt = document.createElement('option');
+              opt.value = ch.id;
+              opt.textContent = (ch.parentName ? ch.parentName + ' > ' : '') + '# ' + ch.name;
+              sel.appendChild(opt);
+            });
+          })
+          .catch(e => console.error('Failed to load channels:', e));
       }
-    } catch (e) { console.error('Failed to load channels for SR panel:', e); }
+    }, 100);
 
   } catch (error) {
     console.error('Error loading self-serve roles:', error);

@@ -1174,7 +1174,7 @@ window.addEventListener('unhandledrejection', (event) => {
 
 // ==================== INTEGRATED ADMIN WORKSPACE ====================
 function hideAllAdminCards() {
-  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminAnalyticsCard', 'adminHelpCard', 'adminRolesCard', 'adminActivityCard', 'adminStatsCard']
+  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminAnalyticsCard', 'adminHelpCard', 'adminRolesCard', 'adminActivityCard', 'adminStatsCard', 'adminNftTrackerCard', 'adminVotingPowerCard']
     .forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
@@ -1223,10 +1223,8 @@ function toggleAdminSubmenu() {
 }
 
 function showAdminView(view) {
-  if (!isAdmin) {
-    showError('Admin access required.');
-    return;
-  }
+  // Admin sidebar is only shown to admins — no need to re-check here
+  // (prevents timing issues where isAdmin hasn't been set yet)
 
   switchSection('admin');
   hideAllAdminCards();
@@ -1240,7 +1238,8 @@ function showAdminView(view) {
     help: { card: 'adminHelpCard', load: loadAdminHelpView },
     roles: { card: 'adminRolesCard', load: loadAdminRoles },
     activity: { card: 'adminActivityCard', load: loadAdminActivity },
-    votingpower: { card: 'adminVotingPowerCard', load: loadVotingPowerView }
+    votingpower: { card: 'adminVotingPowerCard', load: loadVotingPowerView },
+    nfttracker: { card: 'adminNftTrackerCard', load: loadNftTrackerView }
   };
 
   const target = map[view] || map.settings;
@@ -1449,9 +1448,7 @@ async function loadAdminSettingsView() {
       'ps_moduleGovernanceEnabled': 'ps_section_governance',
       'ps_moduleVerificationEnabled': 'ps_section_verification',
       'ps_moduleMissionsEnabled': 'ps_section_missions',
-      'ps_moduleTreasuryEnabled': 'ps_section_treasury',
-      'ps_moduleNftTrackerEnabled': 'ps_section_nftTracker',
-      'ps_moduleMicroVerifyEnabled': 'ps_section_micro'
+      'ps_moduleTreasuryEnabled': 'ps_section_treasury'
     };
     const updateSectionVisibility = () => {
       Object.entries(moduleMap).forEach(([toggleId, sectionId]) => {
@@ -1478,8 +1475,6 @@ async function loadAdminSettingsView() {
           ${moduleToggle('moduleVerificationEnabled', 'Verification', '✅', true)}
           ${moduleToggle('moduleMissionsEnabled', 'Heist', '🎯', true)}
           ${moduleToggle('moduleTreasuryEnabled', 'Treasury', '💰', true)}
-          ${moduleToggle('moduleNftTrackerEnabled', 'NFT Tracker', '📡', true)}
-          ${moduleToggle('moduleMicroVerifyEnabled', 'Micro-Transfer Verify', '🔐', false)}
         </div>
       </div>
 
@@ -1573,6 +1568,54 @@ async function loadAdminSettingsView() {
             </label>
           </div>
         </div>
+
+        <!-- Micro-Transfer Verification (inline subsection) -->
+        <div style="margin-top:var(--space-4);padding-top:var(--space-3);border-top:1px solid rgba(99,102,241,0.12);">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-3) var(--space-4);background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;">
+            <label for="ps_moduleMicroVerifyEnabled" style="cursor:pointer;font-weight:500;font-size:0.9em;color:#e0e7ff;display:flex;align-items:center;gap:var(--space-2);">
+              <span style="font-size:1.25em;">🔐</span> Enable Micro-Transfer Verification
+            </label>
+            <label style="position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0;">
+              <input type="checkbox" id="ps_moduleMicroVerifyEnabled"${(s.moduleMicroVerifyEnabled ?? false) ? ' checked' : ''} style="opacity:0;width:0;height:0;"
+                onchange="this.parentElement.querySelector('span').style.background=this.checked?'var(--gold)':'#555';document.getElementById('microVerifySubFields').style.display=this.checked?'block':'none';">
+              <span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:${(s.moduleMicroVerifyEnabled ?? false) ? 'var(--gold)' : '#555'};border-radius:24px;transition:.3s;"></span>
+              <span style="position:absolute;content:'';height:18px;width:18px;left:${(s.moduleMicroVerifyEnabled ?? false) ? '22px' : '3px'};bottom:3px;background:#fff;border-radius:50%;transition:.3s;pointer-events:none;"
+                class="ps-toggle-knob"></span>
+            </label>
+          </div>
+          <div id="microVerifySubFields" style="display:${(s.moduleMicroVerifyEnabled ?? false) ? 'block' : 'none'};margin-top:var(--space-3);padding:var(--space-3);background:rgba(30,41,59,0.4);border-radius:8px;border:1px solid rgba(99,102,241,0.12);">
+            <div style="${gridRow}">
+              <div>
+                <label style="${fieldLabel}">Verification Receive Wallet</label>
+                <input type="text" id="ps_verificationReceiveWallet" placeholder="Solana wallet address" value="${escapeHtml(s.verificationReceiveWallet ?? '')}" style="${fieldInput}">
+              </div>
+              <div>
+                <label style="${fieldLabel}">NFT Activity Webhook Secret</label>
+                <input type="text" id="ps_nftActivityWebhookSecret" placeholder="Optional shared secret" value="${escapeHtml(s.nftActivityWebhookSecret ?? '')}" style="${fieldInput}">
+              </div>
+            </div>
+            <div style="${gridRow}margin-top:var(--space-3);">
+              <div>
+                <label style="${fieldLabel}">Verify Request TTL (minutes)</label>
+                <input type="number" id="ps_verifyRequestTtlMinutes" min="1" max="1440" value="${s.verifyRequestTtlMinutes ?? 15}" style="${fieldInput}">
+              </div>
+              <div>
+                <label style="${fieldLabel}">Poll Interval (seconds)</label>
+                <input type="number" id="ps_pollIntervalSeconds" min="5" max="300" value="${s.pollIntervalSeconds ?? 30}" style="${fieldInput}">
+              </div>
+            </div>
+            <div style="${gridRow}margin-top:var(--space-3);">
+              <div>
+                <label style="${fieldLabel}">Verify Rate Limit (minutes)</label>
+                <input type="number" id="ps_verifyRateLimitMinutes" min="1" max="60" value="${s.verifyRateLimitMinutes ?? 5}" style="${fieldInput}">
+              </div>
+              <div>
+                <label style="${fieldLabel}">Max Pending Per User</label>
+                <input type="number" id="ps_maxPendingPerUser" min="1" max="10" value="${s.maxPendingPerUser ?? 1}" style="${fieldInput}">
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- 🎯 HEIST MODULE -->
@@ -1621,95 +1664,6 @@ async function loadAdminSettingsView() {
           <div style="margin-top:var(--space-4);display:flex;align-items:center;gap:var(--space-3);">
             <button class="btn-primary" id="treasurySaveBtn" style="font-size:0.85em;padding:8px 16px;">💾 Save Treasury Settings</button>
             <span id="treasuryFeedback" style="font-size:0.85em;font-weight:600;"></span>
-          </div>
-        </div>
-      </div>
-
-      <!-- 📡 NFT ACTIVITY TRACKER MODULE (multi-collection) -->
-      <div id="ps_section_nftTracker" style="${cardStyle}${moduleCardBorder}display:${(s.moduleNftTrackerEnabled ?? true) ? 'block' : 'none'};">
-        <h3 style="${cardHeader}">📡 NFT Activity Tracker</h3>
-        <div id="nftTrackerConfigLoading" style="color:var(--text-secondary);font-size:0.9em;">Loading tracked collections...</div>
-        <div id="nftTrackerContent" style="display:none;">
-          <!-- Collections table -->
-          <div id="nftCollectionsTableWrap" style="overflow-x:auto;"></div>
-          <!-- Add Collection Form -->
-          <div style="margin-top:var(--space-4);padding-top:var(--space-4);border-top:1px solid rgba(255,255,255,0.08);">
-            <h4 style="color:var(--text-primary);font-size:0.95em;margin:0 0 var(--space-3) 0;">➕ Add Collection</h4>
-            <div style="${gridRow}">
-              <div>
-                <label style="${fieldLabel}">Collection Name</label>
-                <input type="text" id="nftAddName" placeholder="e.g. My NFT Collection" style="${fieldInput}" required>
-              </div>
-              <div>
-                <label style="${fieldLabel}">Collection Address</label>
-                <input type="text" id="nftAddAddress" placeholder="Solana collection address" style="${fieldInput}" required>
-              </div>
-            </div>
-            <div style="${gridRow}margin-top:var(--space-3);">
-              <div>
-                <label style="${fieldLabel}">Alert Channel</label>
-                <select id="nftAddChannel" style="${selectStyle}"><option value="">-- Select channel --</option></select>
-              </div>
-            </div>
-            <div style="margin-top:var(--space-3);">
-              <label style="${fieldLabel}">Track Events</label>
-              <div style="display:flex;flex-wrap:wrap;gap:var(--space-3);margin-top:var(--space-2);">
-                <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
-                  <input type="checkbox" id="nftAddMint" checked> 🪙 Mint
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
-                  <input type="checkbox" id="nftAddSale" checked> 💰 Sale
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
-                  <input type="checkbox" id="nftAddList" checked> 📋 List
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
-                  <input type="checkbox" id="nftAddDelist" checked> ❌ Delist
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
-                  <input type="checkbox" id="nftAddTransfer"> 🔄 Transfer
-                </label>
-              </div>
-            </div>
-            <div style="margin-top:var(--space-4);display:flex;align-items:center;gap:var(--space-3);">
-              <button class="btn-primary" id="nftAddCollectionBtn" style="font-size:0.85em;padding:8px 16px;">Add Collection</button>
-              <span id="nftTrackerFeedback" style="font-size:0.85em;font-weight:600;"></span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 🔐 MICRO-TRANSFER VERIFY MODULE -->
-      <div id="ps_section_micro" style="${cardStyle}${moduleCardBorder}display:${(s.moduleMicroVerifyEnabled ?? false) ? 'block' : 'none'};">
-        <h3 style="${cardHeader}">🔐 Micro-Transfer Verify Module</h3>
-        <div style="${gridRow}">
-          <div>
-            <label style="${fieldLabel}">Verification Receive Wallet</label>
-            <input type="text" id="ps_verificationReceiveWallet" placeholder="Solana wallet address" value="${escapeHtml(s.verificationReceiveWallet ?? '')}" style="${fieldInput}">
-          </div>
-          <div>
-            <label style="${fieldLabel}">NFT Activity Webhook Secret</label>
-            <input type="text" id="ps_nftActivityWebhookSecret" placeholder="Optional shared secret" value="${escapeHtml(s.nftActivityWebhookSecret ?? '')}" style="${fieldInput}">
-          </div>
-        </div>
-        <div style="${gridRow}margin-top:var(--space-3);">
-          <div>
-            <label style="${fieldLabel}">Verify Request TTL (minutes)</label>
-            <input type="number" id="ps_verifyRequestTtlMinutes" min="1" max="1440" value="${s.verifyRequestTtlMinutes ?? 15}" style="${fieldInput}">
-          </div>
-          <div>
-            <label style="${fieldLabel}">Poll Interval (seconds)</label>
-            <input type="number" id="ps_pollIntervalSeconds" min="5" max="300" value="${s.pollIntervalSeconds ?? 30}" style="${fieldInput}">
-          </div>
-        </div>
-        <div style="${gridRow}margin-top:var(--space-3);">
-          <div>
-            <label style="${fieldLabel}">Verify Rate Limit (minutes)</label>
-            <input type="number" id="ps_verifyRateLimitMinutes" min="1" max="60" value="${s.verifyRateLimitMinutes ?? 5}" style="${fieldInput}">
-          </div>
-          <div>
-            <label style="${fieldLabel}">Max Pending Per User</label>
-            <input type="number" id="ps_maxPendingPerUser" min="1" max="10" value="${s.maxPendingPerUser ?? 1}" style="${fieldInput}">
           </div>
         </div>
       </div>
@@ -1933,165 +1887,7 @@ async function loadAdminSettingsView() {
       if (configLoading) configLoading.textContent = 'Error loading treasury config.';
     }
 
-    // Step 6: Load NFT Activity Tracker (multi-collection) and wire up form
-    try {
-      // Helper to populate channel dropdown
-      const populateNftChannelDropdown = (selectEl) => {
-        if (!selectEl) return;
-        if (channelsList.length > 0) {
-          const grouped = {};
-          channelsList.forEach(ch => {
-            const parent = ch.parentName || 'Other';
-            if (!grouped[parent]) grouped[parent] = [];
-            grouped[parent].push(ch);
-          });
-          selectEl.innerHTML = '<option value="">-- Select channel --</option>';
-          Object.keys(grouped).sort().forEach(parent => {
-            const optgroup = document.createElement('optgroup');
-            optgroup.label = parent;
-            grouped[parent].forEach(ch => {
-              const opt = document.createElement('option');
-              opt.value = ch.id;
-              opt.textContent = '# ' + ch.name;
-              optgroup.appendChild(opt);
-            });
-            selectEl.appendChild(optgroup);
-          });
-        } else {
-          selectEl.innerHTML = '<option value="">-- No channels available --</option>';
-        }
-      };
-
-      // Helper to render collections table
-      const renderNftCollectionsTable = async () => {
-        const wrap = document.getElementById('nftCollectionsTableWrap');
-        if (!wrap) return;
-        try {
-          const res = await fetch('/api/admin/nft-tracker/collections', { credentials: 'include' });
-          const data = await res.json();
-          const collections = data.collections || [];
-          if (!collections.length) {
-            wrap.innerHTML = '<p style="color:var(--text-secondary);font-size:0.9em;margin:0;">No tracked collections yet. Add one below.</p>';
-            return;
-          }
-          const channelName = (id) => { const ch = channelsList.find(c => c.id === id); return ch ? '#' + ch.name : id; };
-          const truncAddr = (a) => a && a.length > 12 ? a.slice(0, 6) + '...' + a.slice(-4) : a;
-          const eventIcons = (c) => {
-            let s = '';
-            if (c.track_mint) s += '🪙 ';
-            if (c.track_sale) s += '💰 ';
-            if (c.track_list) s += '📋 ';
-            if (c.track_delist) s += '❌ ';
-            if (c.track_transfer) s += '🔄 ';
-            return s.trim() || '—';
-          };
-          const rows = collections.map(c => `
-            <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
-              <td style="padding:8px 10px;font-size:0.85em;color:var(--text-primary);">${escapeHtml(c.collection_name)}</td>
-              <td style="padding:8px 10px;font-size:0.85em;color:var(--text-secondary);font-family:monospace;" title="${escapeHtml(c.collection_address)}">${truncAddr(c.collection_address)}</td>
-              <td style="padding:8px 10px;font-size:0.85em;color:var(--text-secondary);">${escapeHtml(channelName(c.channel_id))}</td>
-              <td style="padding:8px 10px;font-size:0.85em;">${eventIcons(c)}</td>
-              <td style="padding:8px 10px;font-size:0.85em;color:${c.enabled ? '#86efac' : '#fca5a5'};">${c.enabled ? 'Yes' : 'No'}</td>
-              <td style="padding:8px 10px;"><button class="btn-danger nft-remove-btn" data-id="${c.id}" style="font-size:0.8em;padding:4px 10px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">Remove</button></td>
-            </tr>
-          `).join('');
-          wrap.innerHTML = `
-            <table style="width:100%;border-collapse:collapse;">
-              <thead>
-                <tr style="border-bottom:2px solid rgba(255,255,255,0.1);">
-                  <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Name</th>
-                  <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Address</th>
-                  <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Channel</th>
-                  <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Events</th>
-                  <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Enabled</th>
-                  <th style="padding:8px 10px;"></th>
-                </tr>
-              </thead>
-              <tbody>${rows}</tbody>
-            </table>
-          `;
-          // Wire remove buttons
-          wrap.querySelectorAll('.nft-remove-btn').forEach(btn => {
-            btn.addEventListener('click', async () => {
-              if (!confirm('Remove this tracked collection?')) return;
-              btn.disabled = true;
-              btn.textContent = '...';
-              try {
-                await fetch('/api/admin/nft-tracker/collections/' + btn.dataset.id, { method: 'DELETE', credentials: 'include' });
-              } catch (e) { console.error('[NFT Tracker] Remove error:', e); }
-              renderNftCollectionsTable();
-            });
-          });
-        } catch (e) {
-          wrap.innerHTML = '<p style="color:#fca5a5;font-size:0.9em;">Failed to load tracked collections.</p>';
-          console.error('[NFT Tracker] Table render error:', e);
-        }
-      };
-
-      // Populate the add-form channel dropdown
-      populateNftChannelDropdown(document.getElementById('nftAddChannel'));
-
-      // Initial table render
-      await renderNftCollectionsTable();
-
-      // Show content, hide loading
-      const nftContent = document.getElementById('nftTrackerContent');
-      const nftLoading = document.getElementById('nftTrackerConfigLoading');
-      if (nftContent) nftContent.style.display = 'block';
-      if (nftLoading) nftLoading.style.display = 'none';
-
-      // Add Collection button handler
-      const addBtn = document.getElementById('nftAddCollectionBtn');
-      if (addBtn) {
-        addBtn.addEventListener('click', async () => {
-          const feedback = document.getElementById('nftTrackerFeedback');
-          const name = document.getElementById('nftAddName')?.value?.trim();
-          const address = document.getElementById('nftAddAddress')?.value?.trim();
-          const channelId = document.getElementById('nftAddChannel')?.value;
-          if (!name || !address || !channelId) {
-            if (feedback) { feedback.style.color = '#fca5a5'; feedback.textContent = 'Name, address, and channel are required'; setTimeout(() => { feedback.textContent = ''; }, 5000); }
-            return;
-          }
-          addBtn.disabled = true;
-          addBtn.textContent = 'Adding...';
-          try {
-            const payload = {
-              collectionName: name,
-              collectionAddress: address,
-              channelId,
-              trackMint: !!document.getElementById('nftAddMint')?.checked,
-              trackSale: !!document.getElementById('nftAddSale')?.checked,
-              trackList: !!document.getElementById('nftAddList')?.checked,
-              trackDelist: !!document.getElementById('nftAddDelist')?.checked,
-              trackTransfer: !!document.getElementById('nftAddTransfer')?.checked
-            };
-            const res = await fetch('/api/admin/nft-tracker/collections', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-              body: JSON.stringify(payload)
-            });
-            const data = await res.json();
-            if (res.ok && data.success) {
-              if (feedback) { feedback.style.color = '#86efac'; feedback.textContent = '✓ Collection added!'; setTimeout(() => { feedback.textContent = ''; }, 5000); }
-              document.getElementById('nftAddName').value = '';
-              document.getElementById('nftAddAddress').value = '';
-              renderNftCollectionsTable();
-            } else {
-              if (feedback) { feedback.style.color = '#fca5a5'; feedback.textContent = data.message || 'Failed to add collection'; setTimeout(() => { feedback.textContent = ''; }, 8000); }
-            }
-          } catch (err) {
-            console.error('[NFT Tracker] Add error:', err);
-            if (feedback) { feedback.style.color = '#fca5a5'; feedback.textContent = 'Network error'; setTimeout(() => { feedback.textContent = ''; }, 8000); }
-          } finally {
-            addBtn.disabled = false;
-            addBtn.textContent = 'Add Collection';
-          }
-        });
-      }
-    } catch (nftErr) {
-      console.error('[Settings] NFT tracker error:', nftErr);
-      const nftLoading = document.getElementById('nftTrackerConfigLoading');
-      if (nftLoading) nftLoading.textContent = 'Error loading NFT tracker.';
-    }
+    // NFT tracker is now in its own tab — see loadNftTrackerView()
   } catch (e) {
     content.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;
   }
@@ -2358,6 +2154,218 @@ async function populateRoleSelect(selectId, selectedValue) {
     if (selectedValue && selectedValue === role.id) opt.selected = true;
     sel.appendChild(opt);
   });
+}
+
+// ==================== NFT TRACKER TAB ====================
+async function loadNftTrackerView() {
+  if (!isAdmin) return;
+  const content = document.getElementById('adminNftTrackerContent');
+  if (!content) return;
+
+  content.innerHTML = '<p style="color:var(--text-secondary);font-size:0.9em;">Loading tracked collections...</p>';
+
+  // Fetch channels for dropdown
+  let channelsList = [];
+  try {
+    const chRes = await fetch('/api/admin/discord/channels', { credentials: 'include' });
+    const chData = await chRes.json();
+    channelsList = chData.channels || [];
+  } catch (e) { console.error('[NFT Tracker] Channels fetch error:', e); }
+
+  const populateNftChannelDropdown = (selectEl) => {
+    if (!selectEl) return;
+    if (channelsList.length > 0) {
+      const grouped = {};
+      channelsList.forEach(ch => {
+        const parent = ch.parentName || 'Other';
+        if (!grouped[parent]) grouped[parent] = [];
+        grouped[parent].push(ch);
+      });
+      selectEl.innerHTML = '<option value="">-- Select channel --</option>';
+      Object.keys(grouped).sort().forEach(parent => {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = parent;
+        grouped[parent].forEach(ch => {
+          const opt = document.createElement('option');
+          opt.value = ch.id;
+          opt.textContent = '# ' + ch.name;
+          optgroup.appendChild(opt);
+        });
+        selectEl.appendChild(optgroup);
+      });
+    } else {
+      selectEl.innerHTML = '<option value="">-- No channels available --</option>';
+    }
+  };
+
+  const renderNftCollectionsTable = async () => {
+    const wrap = document.getElementById('nftCollectionsTableWrap');
+    if (!wrap) return;
+    try {
+      const res = await fetch('/api/admin/nft-tracker/collections', { credentials: 'include' });
+      const data = await res.json();
+      const collections = data.collections || [];
+      if (!collections.length) {
+        wrap.innerHTML = '<p style="color:var(--text-secondary);font-size:0.9em;margin:0;">No tracked collections yet. Add one below.</p>';
+        return;
+      }
+      const channelName = (id) => { const ch = channelsList.find(c => c.id === id); return ch ? '#' + ch.name : id; };
+      const truncAddr = (a) => a && a.length > 12 ? a.slice(0, 6) + '...' + a.slice(-4) : a;
+      const eventIcons = (c) => {
+        let s = '';
+        if (c.track_mint) s += '🪙 ';
+        if (c.track_sale) s += '💰 ';
+        if (c.track_list) s += '📋 ';
+        if (c.track_delist) s += '❌ ';
+        if (c.track_transfer) s += '🔄 ';
+        return s.trim() || '—';
+      };
+      const rows = collections.map(c => `
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
+          <td style="padding:8px 10px;font-size:0.85em;color:var(--text-primary);">${escapeHtml(c.collection_name)}</td>
+          <td style="padding:8px 10px;font-size:0.85em;color:var(--text-secondary);font-family:monospace;" title="${escapeHtml(c.collection_address)}">${truncAddr(c.collection_address)}</td>
+          <td style="padding:8px 10px;font-size:0.85em;color:var(--text-secondary);">${escapeHtml(channelName(c.channel_id))}</td>
+          <td style="padding:8px 10px;font-size:0.85em;">${eventIcons(c)}</td>
+          <td style="padding:8px 10px;font-size:0.85em;color:${c.enabled ? '#86efac' : '#fca5a5'};">${c.enabled ? 'Yes' : 'No'}</td>
+          <td style="padding:8px 10px;"><button class="btn-danger nft-remove-btn" data-id="${c.id}" style="font-size:0.8em;padding:4px 10px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">Remove</button></td>
+        </tr>
+      `).join('');
+      wrap.innerHTML = `
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="border-bottom:2px solid rgba(255,255,255,0.1);">
+              <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Name</th>
+              <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Address</th>
+              <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Channel</th>
+              <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Events</th>
+              <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Enabled</th>
+              <th style="padding:8px 10px;"></th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+      wrap.querySelectorAll('.nft-remove-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Remove this tracked collection?')) return;
+          btn.disabled = true;
+          btn.textContent = '...';
+          try {
+            await fetch('/api/admin/nft-tracker/collections/' + btn.dataset.id, { method: 'DELETE', credentials: 'include' });
+          } catch (e) { console.error('[NFT Tracker] Remove error:', e); }
+          renderNftCollectionsTable();
+        });
+      });
+    } catch (e) {
+      wrap.innerHTML = '<p style="color:#fca5a5;font-size:0.9em;">Failed to load tracked collections.</p>';
+      console.error('[NFT Tracker] Table render error:', e);
+    }
+  };
+
+  const cardStyle = 'background:var(--card-bg);border:1px solid var(--border-default);border-radius:var(--radius-lg);padding:var(--space-5);margin-bottom:var(--space-4);';
+  const gridRow = 'display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);';
+  const fieldLabel = 'display:block;font-weight:600;font-size:0.85em;color:#c9d6ff;margin-bottom:6px;';
+  const fieldInput = 'width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;';
+  const selectStyle = fieldInput;
+
+  content.innerHTML = `
+    <div style="${cardStyle}">
+      <div id="nftCollectionsTableWrap" style="overflow-x:auto;"></div>
+      <div style="margin-top:var(--space-4);padding-top:var(--space-4);border-top:1px solid rgba(255,255,255,0.08);">
+        <h4 style="color:var(--text-primary);font-size:0.95em;margin:0 0 var(--space-3) 0;">➕ Add Collection</h4>
+        <div style="${gridRow}">
+          <div>
+            <label style="${fieldLabel}">Collection Name</label>
+            <input type="text" id="nftAddName" placeholder="e.g. My NFT Collection" style="${fieldInput}" required>
+          </div>
+          <div>
+            <label style="${fieldLabel}">Collection Address</label>
+            <input type="text" id="nftAddAddress" placeholder="Solana collection address" style="${fieldInput}" required>
+          </div>
+        </div>
+        <div style="${gridRow}margin-top:var(--space-3);">
+          <div>
+            <label style="${fieldLabel}">Alert Channel</label>
+            <select id="nftAddChannel" style="${selectStyle}"><option value="">-- Select channel --</option></select>
+          </div>
+        </div>
+        <div style="margin-top:var(--space-3);">
+          <label style="${fieldLabel}">Track Events</label>
+          <div style="display:flex;flex-wrap:wrap;gap:var(--space-3);margin-top:var(--space-2);">
+            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
+              <input type="checkbox" id="nftAddMint" checked> 🪙 Mint
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
+              <input type="checkbox" id="nftAddSale" checked> 💰 Sale
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
+              <input type="checkbox" id="nftAddList" checked> 📋 List
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
+              <input type="checkbox" id="nftAddDelist" checked> ❌ Delist
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
+              <input type="checkbox" id="nftAddTransfer"> 🔄 Transfer
+            </label>
+          </div>
+        </div>
+        <div style="margin-top:var(--space-4);display:flex;align-items:center;gap:var(--space-3);">
+          <button class="btn-primary" id="nftAddCollectionBtn" style="font-size:0.85em;padding:8px 16px;">Add Collection</button>
+          <span id="nftTrackerFeedback" style="font-size:0.85em;font-weight:600;"></span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  populateNftChannelDropdown(document.getElementById('nftAddChannel'));
+  await renderNftCollectionsTable();
+
+  const addBtn = document.getElementById('nftAddCollectionBtn');
+  if (addBtn) {
+    addBtn.addEventListener('click', async () => {
+      const feedback = document.getElementById('nftTrackerFeedback');
+      const name = document.getElementById('nftAddName')?.value?.trim();
+      const address = document.getElementById('nftAddAddress')?.value?.trim();
+      const channelId = document.getElementById('nftAddChannel')?.value;
+      if (!name || !address || !channelId) {
+        if (feedback) { feedback.style.color = '#fca5a5'; feedback.textContent = 'Name, address, and channel are required'; setTimeout(() => { feedback.textContent = ''; }, 5000); }
+        return;
+      }
+      addBtn.disabled = true;
+      addBtn.textContent = 'Adding...';
+      try {
+        const payload = {
+          collectionName: name,
+          collectionAddress: address,
+          channelId,
+          trackMint: !!document.getElementById('nftAddMint')?.checked,
+          trackSale: !!document.getElementById('nftAddSale')?.checked,
+          trackList: !!document.getElementById('nftAddList')?.checked,
+          trackDelist: !!document.getElementById('nftAddDelist')?.checked,
+          trackTransfer: !!document.getElementById('nftAddTransfer')?.checked
+        };
+        const res = await fetch('/api/admin/nft-tracker/collections', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          if (feedback) { feedback.style.color = '#86efac'; feedback.textContent = '✓ Collection added!'; setTimeout(() => { feedback.textContent = ''; }, 5000); }
+          document.getElementById('nftAddName').value = '';
+          document.getElementById('nftAddAddress').value = '';
+          renderNftCollectionsTable();
+        } else {
+          if (feedback) { feedback.style.color = '#fca5a5'; feedback.textContent = data.message || 'Failed to add collection'; setTimeout(() => { feedback.textContent = ''; }, 8000); }
+        }
+      } catch (err) {
+        console.error('[NFT Tracker] Add error:', err);
+        if (feedback) { feedback.style.color = '#fca5a5'; feedback.textContent = 'Network error'; setTimeout(() => { feedback.textContent = ''; }, 8000); }
+      } finally {
+        addBtn.disabled = false;
+        addBtn.textContent = 'Add Collection';
+      }
+    });
+  }
 }
 
 // ==================== VP MAPPINGS ====================

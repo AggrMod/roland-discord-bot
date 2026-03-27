@@ -142,6 +142,10 @@
               <span class="nav-icon" aria-hidden="true">🗳️</span>
               <span class="nav-label">Voting Power</span>
             </button>
+            <button class="nav-item admin-sub-item" data-admin-nav="nfttracker" onclick="showAdminView('nfttracker')">
+              <span class="nav-icon" aria-hidden="true">📡</span>
+              <span class="nav-label">NFT Tracker</span>
+            </button>
           </div>
         </div>
       </aside>
@@ -747,6 +751,14 @@
               <button class="btn-secondary" onclick="loadVotingPowerView()">Refresh</button>
             </div>
             <div id="adminVotingPowerContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>Voting Power</strong> to load data.</div>
+          </div>
+
+          <div class="card" id="adminNftTrackerCard" style="display:none;">
+            <div class="card-header">
+              <h3>📡 NFT Activity Tracker</h3>
+              <button class="btn-secondary" onclick="loadNftTrackerView()">Refresh</button>
+            </div>
+            <div id="adminNftTrackerContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>NFT Tracker</strong> to load data.</div>
           </div>
 
           <div id="adminAnalyticsCard" style="display:none;">

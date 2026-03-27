@@ -69,10 +69,84 @@ class RoleService {
   async getUserInfo(discordId) {
     try {
       const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(discordId);
+      if (user) {
+        // If role_vp_mappings has any rows, override voting_power from role mappings
+        const mappingCount = db.prepare('SELECT COUNT(*) as cnt FROM role_vp_mappings').get().cnt;
+        if (mappingCount > 0) {
+          user.voting_power = user.voting_power || 0; // keep DB value as fallback context
+        }
+      }
       return user;
     } catch (error) {
       logger.error('Error fetching user info:', error);
       return null;
+    }
+  }
+
+  // ==================== VP DECOUPLING: Role → Voting Power Mappings ====================
+
+  getRoleVPMappings() {
+    try {
+      return db.prepare('SELECT * FROM role_vp_mappings ORDER BY voting_power DESC').all();
+    } catch (error) {
+      logger.error('Error fetching role VP mappings:', error);
+      return [];
+    }
+  }
+
+  addRoleVPMapping(roleId, roleName, votingPower) {
+    try {
+      db.prepare(`
+        INSERT OR REPLACE INTO role_vp_mappings (role_id, role_name, voting_power)
+        VALUES (?, ?, ?)
+      `).run(roleId, roleName || null, votingPower);
+      logger.log(`Added/updated role VP mapping: ${roleName || roleId} → ${votingPower} VP`);
+      return { success: true };
+    } catch (error) {
+      logger.error('Error adding role VP mapping:', error);
+      return { success: false, message: 'Failed to add role VP mapping' };
+    }
+  }
+
+  removeRoleVPMapping(roleId) {
+    try {
+      const result = db.prepare('DELETE FROM role_vp_mappings WHERE role_id = ?').run(roleId);
+      if (result.changes === 0) {
+        return { success: false, message: 'Mapping not found' };
+      }
+      logger.log(`Removed role VP mapping: ${roleId}`);
+      return { success: true };
+    } catch (error) {
+      logger.error('Error removing role VP mapping:', error);
+      return { success: false, message: 'Failed to remove role VP mapping' };
+    }
+  }
+
+  getUserVotingPower(discordId, guildMember) {
+    try {
+      const mappings = db.prepare('SELECT * FROM role_vp_mappings').all();
+
+      // If no mappings configured, fall back to tier-based VP from DB
+      if (mappings.length === 0) {
+        const user = db.prepare('SELECT voting_power FROM users WHERE discord_id = ?').get(discordId);
+        return user ? user.voting_power : 0;
+      }
+
+      // Sum VP for all matching roles the member has
+      let totalVP = 0;
+      if (guildMember && guildMember.roles && guildMember.roles.cache) {
+        const memberRoleIds = new Set(guildMember.roles.cache.keys());
+        for (const mapping of mappings) {
+          if (memberRoleIds.has(mapping.role_id)) {
+            totalVP += mapping.voting_power;
+          }
+        }
+      }
+
+      return totalVP;
+    } catch (error) {
+      logger.error('Error computing user voting power:', error);
+      return 0;
     }
   }
 

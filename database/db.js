@@ -17,6 +17,17 @@ function initDatabase() {
   try { db.exec('ALTER TABLE wallets ADD COLUMN is_favorite BOOLEAN DEFAULT 0'); } catch(e) {}
   try { db.exec('CREATE TABLE user_verify_amounts (id INTEGER PRIMARY KEY AUTOINCREMENT, discord_id TEXT UNIQUE NOT NULL, username TEXT, assigned_amount REAL NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'); } catch(e) {}
 
+  // VP decoupling: role-to-voting-power mapping table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS role_vp_mappings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      role_id TEXT NOT NULL UNIQUE,
+      role_name TEXT,
+      voting_power INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       discord_id TEXT PRIMARY KEY,

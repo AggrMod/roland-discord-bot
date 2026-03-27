@@ -968,6 +968,42 @@ class WebServer {
       }
     });
 
+    // ==================== ADMIN API - VP MAPPINGS ====================
+
+    this.app.get('/api/admin/governance/vp-mappings', adminAuthMiddleware, (req, res) => {
+      try {
+        const mappings = roleService.getRoleVPMappings();
+        res.json({ success: true, mappings });
+      } catch (error) {
+        logger.error('Error fetching VP mappings:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/governance/vp-mappings', adminAuthMiddleware, (req, res) => {
+      try {
+        const { roleId, roleName, votingPower } = req.body;
+        if (!roleId || votingPower === undefined) {
+          return res.status(400).json({ success: false, message: 'roleId and votingPower are required' });
+        }
+        const result = roleService.addRoleVPMapping(roleId, roleName, parseInt(votingPower));
+        res.json(result);
+      } catch (error) {
+        logger.error('Error adding VP mapping:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.delete('/api/admin/governance/vp-mappings/:roleId', adminAuthMiddleware, (req, res) => {
+      try {
+        const result = roleService.removeRoleVPMapping(req.params.roleId);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error removing VP mapping:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
     // ==================== PUBLIC API - GOVERNANCE ====================
 
     this.app.get('/api/public/proposals/active', (req, res) => {

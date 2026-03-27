@@ -1430,6 +1430,25 @@ async function loadAdminSettingsView() {
             <select id="ps_governanceLogChannelId" style="${selectStyle}"><option value="">Loading channels...</option></select>
           </div>
         </div>
+        <h4 style="color:#c9d6ff;font-size:0.95em;font-weight:600;margin:var(--space-4) 0 var(--space-3) 0;padding-top:var(--space-3);border-top:1px solid rgba(99,102,241,0.12);">⚡ Voting Power Mappings</h4>
+        <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:12px;">Map Discord roles to voting power. If no mappings are configured, VP falls back to tier-based calculation.</p>
+        <div id="vpMappingsTableContainer" style="margin-bottom:16px;">
+          <p style="color:var(--text-secondary);font-size:0.85em;">Loading mappings...</p>
+        </div>
+        <div style="background:rgba(30,41,59,0.5);border:1px solid rgba(99,102,241,0.15);border-radius:10px;padding:16px;margin-top:8px;">
+          <h5 style="color:#c9d6ff;font-size:0.88em;font-weight:600;margin:0 0 12px 0;">Add Mapping</h5>
+          <div style="${gridRow}">
+            <div>
+              <label style="${fieldLabel}">Discord Role</label>
+              ${roleSelectHTML('vpMappingRoleSelect', '', false)}
+            </div>
+            <div>
+              <label style="${fieldLabel}">Voting Power</label>
+              <input type="number" id="vpMappingVPInput" min="1" value="1" style="${fieldInput}">
+            </div>
+          </div>
+          <button onclick="addVPMapping()" style="margin-top:12px;padding:8px 20px;background:linear-gradient(135deg,rgba(99,102,241,0.7),rgba(139,92,246,0.7));border:1px solid rgba(99,102,241,0.3);border-radius:8px;color:#e0e7ff;font-size:0.88em;cursor:pointer;">+ Add Mapping</button>
+        </div>
       </div>
 
       <!-- ✅ VERIFICATION MODULE -->
@@ -1510,6 +1529,10 @@ async function loadAdminSettingsView() {
       const sel = document.getElementById('ps_baseVerifiedRoleId');
       if (sel && sel.options.length > 0) sel.options[0].textContent = '-- None (disabled) --';
     });
+
+    // Load VP mappings UI in governance card
+    populateRoleSelect('vpMappingRoleSelect', '');
+    loadVPMappings();
 
     // Step 3b: Wire ALL module toggles to show/hide their related settings cards
     Object.keys(moduleMap).forEach(id => {
@@ -1760,6 +1783,88 @@ async function populateRoleSelect(selectId, selectedValue) {
     if (selectedValue && selectedValue === role.id) opt.selected = true;
     sel.appendChild(opt);
   });
+}
+
+// ==================== VP MAPPINGS ====================
+
+async function loadVPMappings() {
+  const container = document.getElementById('vpMappingsTableContainer');
+  if (!container) return;
+  try {
+    const res = await fetch('/api/admin/governance/vp-mappings', { credentials: 'include' });
+    const data = await res.json();
+    if (!data.success || !data.mappings || data.mappings.length === 0) {
+      container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.85em;font-style:italic;">No VP mappings configured. Falling back to tier-based VP.</p>';
+      return;
+    }
+    const rows = data.mappings.map(m => `<tr style="border-bottom:1px solid rgba(99,102,241,0.08);">
+      <td style="padding:10px 12px;color:#e0e7ff;">${m.role_name || m.role_id}</td>
+      <td style="padding:10px 12px;color:#a5b4fc;font-weight:600;">${m.voting_power}</td>
+      <td style="padding:10px 12px;"><button onclick="removeVPMapping('${m.role_id}')" style="padding:4px 12px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:6px;color:#fca5a5;font-size:0.82em;cursor:pointer;">Remove</button></td>
+    </tr>`).join('');
+    container.innerHTML = `<div style="overflow-x:auto;border-radius:10px;border:1px solid rgba(99,102,241,0.12);">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="background:rgba(30,41,59,0.7);">
+          <th style="padding:10px 12px;text-align:left;color:#94a3b8;font-size:0.82em;font-weight:600;">Role</th>
+          <th style="padding:10px 12px;text-align:left;color:#94a3b8;font-size:0.82em;font-weight:600;">Voting Power</th>
+          <th style="padding:10px 12px;text-align:left;color:#94a3b8;font-size:0.82em;font-weight:600;">Actions</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  } catch (e) {
+    console.error('Failed to load VP mappings:', e);
+    container.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;">Failed to load VP mappings.</p>';
+  }
+}
+
+async function addVPMapping() {
+  const sel = document.getElementById('vpMappingRoleSelect');
+  const vpInput = document.getElementById('vpMappingVPInput');
+  if (!sel || !vpInput) return;
+  const roleId = sel.value;
+  const votingPower = parseInt(vpInput.value);
+  if (!roleId) return alert('Please select a role.');
+  if (!votingPower || votingPower < 1) return alert('Voting power must be at least 1.');
+  const roleName = sel.options[sel.selectedIndex]?.textContent?.replace(/^\u25CF\s*/, '') || '';
+  try {
+    const res = await fetch('/api/admin/governance/vp-mappings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ roleId, roleName, votingPower })
+    });
+    const data = await res.json();
+    if (data.success) {
+      sel.value = '';
+      vpInput.value = '1';
+      await loadVPMappings();
+    } else {
+      alert(data.message || 'Failed to add mapping.');
+    }
+  } catch (e) {
+    console.error('Failed to add VP mapping:', e);
+    alert('Failed to add VP mapping.');
+  }
+}
+
+async function removeVPMapping(roleId) {
+  if (!confirm('Remove this VP mapping?')) return;
+  try {
+    const res = await fetch(`/api/admin/governance/vp-mappings/${roleId}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+    const data = await res.json();
+    if (data.success) {
+      await loadVPMappings();
+    } else {
+      alert(data.message || 'Failed to remove mapping.');
+    }
+  } catch (e) {
+    console.error('Failed to remove VP mapping:', e);
+    alert('Failed to remove VP mapping.');
+  }
 }
 
 async function loadAdminRoles() {

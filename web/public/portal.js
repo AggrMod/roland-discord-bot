@@ -1257,13 +1257,13 @@ async function loadAdminSettingsView() {
 
   content.innerHTML = `<div style="text-align:center; padding: var(--space-5); color: var(--text-secondary);"><div class="spinner"></div><p>Loading settings...</p></div>`;
 
-  // --- Shared inline-style constants ---
-  const cardStyle = 'background:var(--bg-secondary);border:1px solid var(--border-default);border-radius:var(--radius-lg);padding:var(--space-5);margin-bottom:var(--space-5);';
-  const cardHeader = 'color:var(--gold);font-size:var(--font-lg);font-weight:700;margin:0 0 var(--space-4) 0;padding-bottom:var(--space-3);border-bottom:1px solid var(--border-default);';
+  // --- Shared inline-style constants (matched to Verification Roles tab) ---
+  const cardStyle = 'background:rgba(14,23,44,0.5);border:1px solid rgba(99,102,241,0.22);border-radius:10px;padding:var(--space-5);margin-bottom:var(--space-5);';
+  const cardHeader = 'color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0 0 var(--space-4) 0;padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);';
   const gridRow = 'display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);';
-  const fieldLabel = 'display:block;color:var(--text-secondary);font-size:var(--font-sm);font-weight:600;margin-bottom:var(--space-1);';
-  const fieldInput = 'width:100%;padding:var(--space-2) var(--space-3);border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--bg-primary);color:var(--text-primary);font-size:var(--font-sm);';
-  const selectStyle = 'width:100%;padding:var(--space-2) var(--space-3);border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--bg-primary);color:var(--text-primary);font-size:var(--font-sm);';
+  const fieldLabel = 'display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;';
+  const fieldInput = 'width:100%;padding:10px 12px;border:1px solid rgba(99,102,241,0.22);border-radius:8px;background:rgba(30,41,59,0.8);color:#e0e7ff;font-size:0.9em;';
+  const selectStyle = 'width:100%;padding:10px 12px;border:1px solid rgba(99,102,241,0.22);border-radius:8px;background:rgba(30,41,59,0.8);color:#e0e7ff;font-size:0.9em;';
 
   try {
     // Step 1: Fetch settings first
@@ -1276,8 +1276,8 @@ async function loadAdminSettingsView() {
     // Build module toggle helper (styled toggle switch)
     const moduleToggle = (id, label, icon, defaultVal) => {
       const checked = (s[id] ?? defaultVal) ? ' checked' : '';
-      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-3) var(--space-4);background:var(--bg-primary);border:1px solid var(--border-default);border-radius:var(--radius-md);transition:border-color .2s;">
-        <label for="ps_${id}" style="cursor:pointer;font-weight:500;font-size:var(--font-sm);display:flex;align-items:center;gap:var(--space-2);">
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-3) var(--space-4);background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;transition:border-color .2s;">
+        <label for="ps_${id}" style="cursor:pointer;font-weight:500;font-size:0.9em;color:#e0e7ff;display:flex;align-items:center;gap:var(--space-2);">
           <span style="font-size:1.25em;">${icon}</span> ${label}
         </label>
         <label style="position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0;">
@@ -1378,7 +1378,7 @@ async function loadAdminSettingsView() {
       <!-- Channel Overrides Card -->
       <div id="ps_section_channels" style="${cardStyle}display:${(s.moduleGovernanceEnabled ?? true) ? 'block' : 'none'};">
         <h3 style="${cardHeader}">🔗 Channel Overrides</h3>
-        <p style="color:var(--text-secondary);font-size:var(--font-sm);margin-bottom:var(--space-4);">Leave empty to use .env defaults.</p>
+        <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:12px;">Leave empty to use .env defaults.</p>
         <div style="${gridRow}">
           <div>
             <label style="${fieldLabel}">Proposals Channel</label>
@@ -1437,9 +1437,9 @@ async function loadAdminSettingsView() {
       </div>
 
       <!-- Action Buttons -->
-      <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid var(--border-default);">
-        <button class="btn-danger" onclick="resetPortalSettings()">🔄 Reset to Defaults</button>
-        <button class="btn-primary" onclick="savePortalSettings()">💾 Save All Settings</button>
+      <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);">
+        <button class="btn-danger" onclick="resetPortalSettings()" style="font-size:0.85em;padding:8px 16px;">🔄 Reset to Defaults</button>
+        <button class="btn-primary" onclick="savePortalSettings()" style="font-size:0.85em;padding:8px 16px;">💾 Save All Settings</button>
       </div>
     `;
 
@@ -1454,12 +1454,31 @@ async function loadAdminSettingsView() {
 
     // Step 4: Fetch channels AFTER skeleton is in the DOM, then populate selects
     const channelIds = ['proposalsChannelId', 'votingChannelId', 'resultsChannelId', 'governanceLogChannelId'];
+    // Verify selects exist in DOM before fetch
+    channelIds.forEach(id => {
+      const sel = document.getElementById(`ps_${id}`);
+      console.log(`[Settings] Channel select ps_${id} in DOM:`, !!sel);
+    });
     try {
+      console.log('[Settings] Fetching /api/admin/discord/channels...');
       const channelsRes = await fetch('/api/admin/discord/channels', { credentials: 'include' });
+      console.log('[Settings] Channels response status:', channelsRes.status, channelsRes.ok);
       let channelsList = [];
       if (channelsRes.ok) {
         const channelsJson = await channelsRes.json();
+        console.log('[Settings] Channels response:', channelsJson.success, 'count:', (channelsJson.channels || []).length);
         if (channelsJson.success) channelsList = channelsJson.channels || [];
+      } else {
+        console.error('[Settings] Channels fetch failed with status:', channelsRes.status);
+      }
+
+      if (channelsList.length === 0) {
+        console.warn('[Settings] No channels returned from API');
+        channelIds.forEach(id => {
+          const sel = document.getElementById(`ps_${id}`);
+          if (sel) sel.innerHTML = '<option value="">-- No channels available --</option>';
+        });
+        return;
       }
 
       // Group channels by parent category
@@ -1469,11 +1488,15 @@ async function loadAdminSettingsView() {
         if (!grouped[parent]) grouped[parent] = [];
         grouped[parent].push(ch);
       });
+      console.log('[Settings] Channel groups:', Object.keys(grouped).length, 'categories');
 
       // Populate each select element that exists in the DOM
       channelIds.forEach(id => {
         const sel = document.getElementById(`ps_${id}`);
-        if (!sel) return;
+        if (!sel) {
+          console.error(`[Settings] Select element ps_${id} not found in DOM during population`);
+          return;
+        }
         sel.innerHTML = '<option value="">-- Use .env default --</option>';
         Object.keys(grouped).sort().forEach(parent => {
           const optgroup = document.createElement('optgroup');
@@ -1482,14 +1505,19 @@ async function loadAdminSettingsView() {
             const opt = document.createElement('option');
             opt.value = ch.id;
             opt.textContent = '# ' + ch.name;
-            if (s[id] && s[id] === ch.id) opt.selected = true;
             optgroup.appendChild(opt);
           });
           sel.appendChild(optgroup);
         });
+        // Set selected value AFTER all options are in the DOM
+        if (s[id]) {
+          sel.value = s[id];
+          console.log(`[Settings] Set ps_${id} selected value:`, s[id], '-> matched:', sel.value === s[id]);
+        }
       });
+      console.log('[Settings] Channel dropdowns populated successfully');
     } catch (chErr) {
-      console.error('Failed to load channels:', chErr);
+      console.error('[Settings] Failed to load channels:', chErr);
       channelIds.forEach(id => {
         const sel = document.getElementById(`ps_${id}`);
         if (sel) sel.innerHTML = '<option value="">-- Channel load failed --</option>';

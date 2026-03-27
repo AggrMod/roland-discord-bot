@@ -313,6 +313,7 @@ class TreasuryService {
       config: {
         enabled: config.enabled === 1,
         wallet: config.solana_wallet ? this.maskAddress(config.solana_wallet) : null,
+        solanaWallet: config.solana_wallet || null,
         refreshHours: config.refresh_hours,
         lastUpdated: config.last_updated,
         lastError: config.last_error,

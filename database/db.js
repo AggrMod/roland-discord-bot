@@ -355,6 +355,7 @@ function initDatabase() {
       max_enabled_modules INTEGER,
       max_branding_profiles INTEGER,
       max_read_only_overrides INTEGER,
+      mock_data_enabled INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
@@ -374,6 +375,7 @@ function initDatabase() {
   try { db.exec("ALTER TABLE tenant_branding ADD COLUMN brand_color TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE ticket_categories ADD COLUMN closed_parent_channel_id TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE ticket_categories ADD COLUMN ping_role_ids TEXT DEFAULT '[]'"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_limits ADD COLUMN mock_data_enabled INTEGER DEFAULT 0"); } catch (e) {}
 
   try {
     db.exec(`

@@ -33,7 +33,7 @@ class RoleService {
     }
   }
 
-  async updateUserRoles(discordId, username) {
+  async updateUserRoles(discordId, username, guildId = null) {
     try {
       const wallets = walletService.getAllUserWallets(discordId);
       
@@ -42,7 +42,7 @@ class RoleService {
         return { success: false, message: 'No wallets linked' };
       }
 
-      const totalNFTs = await nftService.countNFTsForWallets(wallets);
+      const totalNFTs = await nftService.countNFTsForWallets(wallets, { guildId });
       const tier = vpService.getTierForNFTCount(totalNFTs);
       const votingPower = vpService.calculateVotingPower(totalNFTs);
 
@@ -185,7 +185,7 @@ class RoleService {
 
       // 2. Sync trait roles
       const wallets = walletService.getAllUserWallets(discordId);
-      const allNFTs = await nftService.getAllNFTsForWallets(wallets);
+      const allNFTs = await nftService.getAllNFTsForWallets(wallets, { guildId: guild.id });
       const traitChanges = await this.syncTraitRoles(member, allNFTs);
       changes.added.push(...traitChanges.added);
       changes.removed.push(...traitChanges.removed);

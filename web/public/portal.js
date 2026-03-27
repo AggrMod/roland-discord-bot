@@ -1983,6 +1983,17 @@ function renderTenantDetailPanel(tenant) {
               <option value="suspended"${String(tenant.status || 'active') === 'suspended' ? ' selected' : ''}>Suspended</option>
             </select>
           </label>
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-top:12px; padding:10px 12px; border:1px solid rgba(99,102,241,0.16); border-radius:10px; background:rgba(14,23,44,0.45);">
+            <div style="color:#e0e7ff; font-size:0.9em; font-weight:600;">Tenant Mock Data</div>
+            <label style="position:relative;display:inline-block;width:44px;height:24px;">
+              <input id="tenantMockDataSwitch" type="checkbox" ${(tenant.limits?.mock_data_enabled ? 'checked' : '')} onchange="this.parentElement.querySelector('.track').style.background=this.checked?'var(--gold)':'#555'; this.parentElement.querySelector('.knob').style.left=this.checked?'22px':'3px';" style="opacity:0;width:0;height:0;">
+              <span class="track" style="position:absolute;inset:0;background:${tenant.limits?.mock_data_enabled ? 'var(--gold)' : '#555'};border-radius:24px;transition:.25s;"></span>
+              <span class="knob" style="position:absolute;width:18px;height:18px;left:${tenant.limits?.mock_data_enabled ? '22px' : '3px'};bottom:3px;background:#fff;border-radius:50%;transition:.25s;pointer-events:none;"></span>
+            </label>
+          </div>
+          <div style="margin-top:8px; text-align:right;">
+            <button class="btn-secondary" id="tenantMockDataSaveBtn" onclick="saveTenantMockData()" style="padding:8px 14px;">Save Mock Data</button>
+          </div>
         </div>
       </div>
 
@@ -2277,6 +2288,37 @@ async function saveTenantStatus() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Save';
+  }
+}
+
+async function saveTenantMockData() {
+  if (!selectedTenantGuildId) return;
+
+  const input = document.getElementById('tenantMockDataSwitch');
+  const btn = document.getElementById('tenantMockDataSaveBtn');
+  if (!input || !btn) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  try {
+    const response = await fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/mock-data`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ enabled: !!input.checked })
+    });
+    const data = await response.json();
+    if (data.success) {
+      showSuccess(`Mock data ${input.checked ? 'enabled' : 'disabled'} for tenant`);
+      await loadSuperadminView();
+    } else {
+      showError(data.message || 'Failed to update mock data setting');
+    }
+  } catch (error) {
+    showError(`Failed to update mock data setting: ${error.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Mock Data';
   }
 }
 

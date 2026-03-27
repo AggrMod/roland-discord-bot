@@ -1047,6 +1047,25 @@ class WebServer {
       }
     });
 
+    this.app.put('/api/superadmin/tenants/:guildId/mock-data', superadminGuard, logSuperadminTenantAction, (req, res) => {
+      try {
+        const result = tenantService.setTenantMockData(
+          req.params.guildId,
+          !!req.body?.enabled,
+          req.session.discordUser.id
+        );
+
+        if (!result.success) {
+          return res.status(400).json(result);
+        }
+
+        res.json(result);
+      } catch (error) {
+        logger.error('Error updating tenant mock-data flag:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
     this.app.post('/api/superadmin/tenants/:guildId/logo-upload', superadminGuard, logSuperadminTenantAction, async (req, res) => {
       try {
         const guildId = req.params.guildId;
@@ -1727,7 +1746,7 @@ class WebServer {
 
         if (discordId) {
           // Sync single user
-          await roleService.updateUserRoles(discordId);
+          await roleService.updateUserRoles(discordId, req.session.discordUser?.username, req.guildId);
           const syncResult = await roleService.syncUserDiscordRoles(guild, discordId);
           return res.json(syncResult);
         } else {
@@ -1738,7 +1757,7 @@ class WebServer {
 
           for (const user of allUsers) {
             try {
-              await roleService.updateUserRoles(user.discord_id, user.username);
+              await roleService.updateUserRoles(user.discord_id, user.username, guild.id);
               const syncResult = await roleService.syncUserDiscordRoles(guild, user.discord_id);
               
               if (syncResult.success) {
@@ -2452,7 +2471,7 @@ class WebServer {
 
         // Trigger role update
         try {
-          await roleService.updateUserRoles(discordId, req.session.discordUser.username);
+          await roleService.updateUserRoles(discordId, req.session.discordUser.username, req.guildId || null);
         } catch (roleErr) {
           logger.error('Role update after verify failed (non-fatal):', roleErr);
         }

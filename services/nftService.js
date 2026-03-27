@@ -1,5 +1,6 @@
 const { Connection, PublicKey } = require('@solana/web3.js');
 const logger = require('../utils/logger');
+const tenantService = require('./tenantService');
 
 const MOCK_MODE = process.env.MOCK_MODE === 'true';
 
@@ -25,8 +26,13 @@ class NFTService {
     this.connection = new Connection(process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com');
   }
 
-  async getNFTsForWallet(walletAddress) {
-    if (MOCK_MODE) {
+  async getNFTsForWallet(walletAddress, options = {}) {
+    const guildId = options.guildId;
+    const tenantMockEnabled = guildId && tenantService.isMultitenantEnabled()
+      ? tenantService.getTenantContext(guildId)?.limits?.mockDataEnabled === true
+      : false;
+
+    if (MOCK_MODE || tenantMockEnabled) {
       return this.getMockNFTs(walletAddress);
     }
 
@@ -128,27 +134,27 @@ class NFTService {
     return nfts;
   }
 
-  async getNFTsByRole(walletAddress, requiredRole) {
-    const allNFTs = await this.getNFTsForWallet(walletAddress);
+  async getNFTsByRole(walletAddress, requiredRole, options = {}) {
+    const allNFTs = await this.getNFTsForWallet(walletAddress, options);
     return allNFTs.filter(nft => {
       const roleAttr = nft.attributes.find(a => a.trait_type === 'Role');
       return roleAttr && roleAttr.value === requiredRole && !nft.assignedToMission;
     });
   }
 
-  async countNFTsForWallets(walletAddresses) {
+  async countNFTsForWallets(walletAddresses, options = {}) {
     let totalCount = 0;
     for (const wallet of walletAddresses) {
-      const nfts = await this.getNFTsForWallet(wallet);
+      const nfts = await this.getNFTsForWallet(wallet, options);
       totalCount += nfts.length;
     }
     return totalCount;
   }
 
-  async getAllNFTsForWallets(walletAddresses) {
+  async getAllNFTsForWallets(walletAddresses, options = {}) {
     const allNFTs = [];
     for (const wallet of walletAddresses) {
-      const nfts = await this.getNFTsForWallet(wallet);
+      const nfts = await this.getNFTsForWallet(wallet, options);
       allNFTs.push(...nfts);
     }
     return allNFTs;

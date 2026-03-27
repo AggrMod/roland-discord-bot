@@ -158,6 +158,7 @@ class TenantService {
           max_enabled_modules = COALESCE(max_enabled_modules, ?),
           max_branding_profiles = COALESCE(max_branding_profiles, ?),
           max_read_only_overrides = COALESCE(max_read_only_overrides, ?),
+          mock_data_enabled = COALESCE(mock_data_enabled, 0),
           updated_at = CURRENT_TIMESTAMP
       WHERE tenant_id = ?
     `).run(
@@ -421,9 +422,10 @@ class TenantService {
         max_commands,
         max_enabled_modules,
         max_branding_profiles,
-        max_read_only_overrides
+        max_read_only_overrides,
+        mock_data_enabled
       )
-      VALUES (?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, 0)
       ON CONFLICT(tenant_id) DO UPDATE SET
         max_commands = excluded.max_commands,
         max_enabled_modules = excluded.max_enabled_modules,
@@ -509,6 +511,33 @@ class TenantService {
       success: true,
       tenant: after
     };
+  }
+
+  setTenantMockData(guildId, enabled, actorId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'Invalid guild id' };
+
+    const tenantRecord = db.prepare('SELECT * FROM tenants WHERE guild_id = ?').get(normalizedGuildId);
+    if (!tenantRecord) return { success: false, message: 'Tenant not found' };
+
+    const before = this.getTenantContext(normalizedGuildId);
+    db.prepare(`
+      UPDATE tenant_limits
+      SET mock_data_enabled = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE tenant_id = ?
+    `).run(enabled ? 1 : 0, tenantRecord.id);
+
+    const after = this.getTenantContext(normalizedGuildId);
+    this.logTenantAudit({
+      guildId: normalizedGuildId,
+      actorId,
+      action: 'tenant.mock_data.update',
+      before,
+      after
+    });
+
+    return { success: true, message: `Mock data ${enabled ? 'enabled' : 'disabled'}`, tenant: after };
   }
 
   setTenantStatus(guildId, status, actorId) {

@@ -385,6 +385,29 @@ function updateActiveGuildBadge() {
     badge.textContent = 'Select server';
     badge.title = 'No active server selected';
   }
+
+  renderNavServerSelect();
+}
+
+function renderNavServerSelect() {
+  const sel = document.getElementById('navServerSelect');
+  if (!sel) return;
+
+  const managed = serverAccessData?.managedServers || [];
+  if (!userData || managed.length === 0) {
+    sel.style.display = 'none';
+    sel.innerHTML = '';
+    return;
+  }
+
+  sel.innerHTML = managed
+    .map(s => `<option value="${escapeHtml(s.guildId)}" ${s.guildId === activeGuildId ? 'selected' : ''}>${escapeHtml(s.name || s.guildId)}</option>`)
+    .join('');
+  sel.style.display = 'inline-block';
+}
+
+function onNavServerSelect(guildId) {
+  setActiveGuild(guildId);
 }
 
 function renderServerCard(server, { managed = true } = {}) {
@@ -583,6 +606,8 @@ function showUnauthenticatedState() {
   navUsername.textContent = '';
   const activeGuildBadge = document.getElementById('activeGuildBadge');
   if (activeGuildBadge) activeGuildBadge.style.display = 'none';
+  const navServerSelect = document.getElementById('navServerSelect');
+  if (navServerSelect) navServerSelect.style.display = 'none';
   navAuthBtn.textContent = 'Login';
   navAuthBtn.onclick = login;
   navAuthBtn.classList.remove('btn-secondary');

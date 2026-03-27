@@ -18,7 +18,7 @@
       <div class="top-links" aria-label="Top links">
         <button class="top-link" onclick="switchSection('dashboard')">Home</button>
         <button class="top-link" onclick="switchSection('dashboard')">Dashboard</button>
-        <button class="top-link" onclick="switchSection('servers')">Servers</button>
+        <button class="top-link" onclick="switchSection('servers')" style="display:none;">Servers</button>
         <button class="top-link" onclick="switchSection('help')">Docs</button>
         <button class="top-link" id="topNavAdmin" onclick="switchSection('admin'); showAdminView('stats');" style="display:none;">Settings</button>
       </div>
@@ -26,6 +26,7 @@
         <img id="navAvatar" class="nav-avatar" src="" alt="User avatar" style="display:none;">
         <span id="navUsername" class="nav-username"></span>
         <span id="activeGuildBadge" class="active-guild-badge" style="display:none;"></span>
+        <select id="navServerSelect" onchange="onNavServerSelect(this.value)" style="display:none;max-width:220px;padding:6px 10px;border:1px solid rgba(99,102,241,0.25);border-radius:8px;background:rgba(30,41,59,0.85);color:#e0e7ff;font-size:0.85em;"></select>
         <button id="navAuthBtn" class="btn-secondary" onclick="handleAuth()">Login</button>
       </div>
     </nav>

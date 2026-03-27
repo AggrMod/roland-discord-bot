@@ -10,6 +10,14 @@
   <main style="max-width:1100px;margin:0 auto;padding:24px;">
     <h1>📘 Solpranos Admin Command Guide</h1>
     <p style="color:#b7c0d8">Live command reference aligned with current module-first architecture.</p>
+    <div class="card" style="padding:12px 16px;margin:16px 0;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);">
+      <strong>Compatibility Notes</strong>
+      <ul style="margin-top:8px;">
+        <li>Canonical public API is <code>/api/public/v1/*</code>. Legacy <code>/api/public/*</code> aliases remain for compatibility.</li>
+        <li>Legacy governance aliases <code>/propose</code>, <code>/support</code>, <code>/vote</code> are still available.</li>
+        <li><code>/og-config</code> is deprecated; use <code>/verification admin og-*</code>.</li>
+      </ul>
+    </div>
 
     <section class="card" style="padding:16px;margin:16px 0;">
       <h2>🔐 Verification</h2>
@@ -28,6 +36,7 @@
         <li><code>/governance propose</code> — Create proposal.</li>
         <li><code>/governance support</code> — Support draft proposal.</li>
         <li><code>/governance vote</code> — Vote yes/no/abstain.</li>
+        <li><code>/propose</code>, <code>/support</code>, <code>/vote</code> — legacy aliases (still supported).</li>
       </ul>
       <p><strong>Admin:</strong> <code>/governance admin list</code>, <code>cancel</code>, <code>settings</code>.</p>
     </section>
@@ -72,6 +81,17 @@
         <li><code>/config modules</code> — View module toggles.</li>
         <li><code>/config toggle</code> — Enable/disable module.</li>
         <li><code>/config status</code> — Runtime status overview.</li>
+      </ul>
+    </section>
+
+    <section class="card" style="padding:16px;margin:16px 0;">
+      <h2>🖥️ Web-Only Admin Surfaces</h2>
+      <p>These are managed in <code>/admin</code> and intentionally do not have full slash-command parity:</p>
+      <ul>
+        <li>Ticketing categories/panel/archive controls</li>
+        <li>Analytics dashboard</li>
+        <li>Self-Serve Roles UI</li>
+        <li>Voting Power mapping table</li>
       </ul>
     </section>
   </main>

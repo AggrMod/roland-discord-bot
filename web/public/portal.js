@@ -2712,8 +2712,8 @@ async function addVPMapping() {
   if (!sel || !vpInput) return;
   const roleId = sel.value;
   const votingPower = parseInt(vpInput.value);
-  if (!roleId) return alert('Please select a role.');
-  if (!votingPower || votingPower < 1) return alert('Voting power must be at least 1.');
+  if (!roleId) return showError('Please select a role.');
+  if (!votingPower || votingPower < 1) return showError('Voting power must be at least 1.');
   const roleName = sel.options[sel.selectedIndex]?.textContent?.replace(/^\u25CF\s*/, '') || '';
   try {
     const res = await fetch('/api/admin/governance/vp-mappings', {
@@ -2728,11 +2728,11 @@ async function addVPMapping() {
       vpInput.value = '1';
       await loadVotingPowerView();
     } else {
-      alert(data.message || 'Failed to add mapping.');
+      showError(data.message || 'Failed to add mapping.');
     }
   } catch (e) {
     console.error('Failed to add VP mapping:', e);
-    alert('Failed to add VP mapping.');
+    showError('Failed to add VP mapping.');
   }
 }
 
@@ -2747,11 +2747,11 @@ async function removeVPMapping(roleId) {
     if (data.success) {
       await loadVotingPowerView();
     } else {
-      alert(data.message || 'Failed to remove mapping.');
+      showError(data.message || 'Failed to remove mapping.');
     }
   } catch (e) {
     console.error('Failed to remove VP mapping:', e);
-    alert('Failed to remove VP mapping.');
+    showError('Failed to remove VP mapping.');
   }
 }
 
@@ -4351,8 +4351,8 @@ async function loadSelfServeRolesView() {
 async function addSelfServeRole() {
   const roleId = document.getElementById('srRoleSelect')?.value;
   const label = document.getElementById('srLabelInput')?.value.trim();
-  if (!roleId) return alert('Please select a role.');
-  if (!label) return alert('Please enter a button label.');
+  if (!roleId) return showError('Please select a role.');
+  if (!label) return showError('Please enter a button label.');
   try {
     const res = await fetch('/api/admin/role-claim/add', {
       method: 'POST', credentials: 'include',
@@ -4360,9 +4360,9 @@ async function addSelfServeRole() {
       body: JSON.stringify({ roleId, label })
     });
     const data = await res.json();
-    if (!data.success) return alert(data.message || 'Failed to add role');
+    if (!data.success) return showError(data.message || 'Failed to add role');
     loadSelfServeRolesView();
-  } catch (e) { alert('Error adding role: ' + e.message); }
+  } catch (e) { showError('Error adding role: ' + e.message); }
 }
 
 async function removeSelfServeRole(roleId) {
@@ -4372,9 +4372,9 @@ async function removeSelfServeRole(roleId) {
       method: 'DELETE', credentials: 'include'
     });
     const data = await res.json();
-    if (!data.success) return alert(data.message || 'Failed to remove role');
+    if (!data.success) return showError(data.message || 'Failed to remove role');
     loadSelfServeRolesView();
-  } catch (e) { alert('Error removing role: ' + e.message); }
+  } catch (e) { showError('Error removing role: ' + e.message); }
 }
 
 async function toggleSelfServeRole(roleId, enabled) {
@@ -4385,8 +4385,8 @@ async function toggleSelfServeRole(roleId, enabled) {
       body: JSON.stringify({ enabled })
     });
     const data = await res.json();
-    if (!data.success) { alert(data.message || 'Failed to toggle role'); loadSelfServeRolesView(); }
-  } catch (e) { alert('Error toggling role: ' + e.message); loadSelfServeRolesView(); }
+    if (!data.success) { showError(data.message || 'Failed to toggle role'); loadSelfServeRolesView(); }
+  } catch (e) { showError('Error toggling role: ' + e.message); loadSelfServeRolesView(); }
 }
 
 async function postSelfServePanel() {
@@ -4394,7 +4394,7 @@ async function postSelfServePanel() {
   const title = document.getElementById('srPanelTitle')?.value.trim();
   const description = document.getElementById('srPanelDesc')?.value.trim();
   const status = document.getElementById('srPanelStatus');
-  if (!channelId) return alert('Please select a channel.');
+  if (!channelId) return showError('Please select a channel.');
   if (status) status.innerHTML = '<p style="color:var(--text-secondary);">Posting panel...</p>';
   try {
     const res = await fetch('/api/admin/roles/post-panel', {
@@ -4705,7 +4705,7 @@ function _showCategoryForm(cat) {
 window.addTemplateField = function() {
   const container = document.getElementById('templateFieldsContainer');
   const count = container ? container.querySelectorAll('[id^="tmplField_"]').length : 0;
-  if (count >= 5) return alert('Max 5 fields allowed (Discord limit)');
+  if (count >= 5) return showError('Max 5 fields allowed (Discord limit)');
 
   const div = document.createElement('div');
   div.id = `tmplField_${count}`;
@@ -4735,7 +4735,7 @@ window.removeTemplateField = function(idx) {
 
 async function saveCategoryFromModal() {
   const name = document.getElementById('catName').value.trim();
-  if (!name) return alert('Name is required');
+  if (!name) return showError('Name is required');
 
   const emoji = document.getElementById('catEmoji').value.trim() || '🎫';
   const description = document.getElementById('catDesc').value.trim();
@@ -4771,10 +4771,10 @@ async function saveCategoryFromModal() {
       body: JSON.stringify(payload)
     });
     const json = await res.json();
-    if (!json.success) return alert(json.message || 'Failed to save category');
+    if (!json.success) return showError(json.message || 'Failed to save category');
     loadTicketCategoriesTab();
   } catch (e) {
-    alert('Error saving category');
+    showError('Error saving category');
   }
 }
 
@@ -4797,10 +4797,10 @@ async function deleteTicketCategory(id) {
       credentials: 'include'
     });
     const json = await res.json();
-    if (!json.success) return alert(json.message || 'Failed to delete');
+    if (!json.success) return showError(json.message || 'Failed to delete');
     loadTicketCategoriesTab();
   } catch (e) {
-    alert('Error deleting category');
+    showError('Error deleting category');
   }
 }
 
@@ -4833,7 +4833,7 @@ function loadTicketPanelTab() {
 
 async function postTicketPanel() {
   const channelId = document.getElementById('ticketPanelChannelId').value;
-  if (!channelId) return alert('Please select a channel');
+  if (!channelId) return showError('Please select a channel');
 
   const title = document.getElementById('ticketPanelTitle').value.trim() || '🎫 Support';
   const description = document.getElementById('ticketPanelDesc').value.trim();
@@ -4909,7 +4909,7 @@ async function viewTicketTranscript(id) {
   try {
     const res = await fetch(`/api/admin/tickets/${id}/transcript`, { credentials: 'include' });
     const json = await res.json();
-    if (!json.success) return alert(json.message || 'Failed to load transcript');
+    if (!json.success) return showError(json.message || 'Failed to load transcript');
 
     const modal = document.getElementById('confirmModal');
     document.getElementById('confirmTitle').textContent = 'Ticket Transcript';
@@ -4918,7 +4918,7 @@ async function viewTicketTranscript(id) {
     confirmCallback = null;
     modal.style.display = 'flex';
   } catch (e) {
-    alert('Error loading transcript');
+    showError('Error loading transcript');
   }
 }
 

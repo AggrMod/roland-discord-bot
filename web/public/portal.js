@@ -398,6 +398,11 @@ function getActiveServerLabel() {
   return activeGuildId ? `Server ${activeGuildId}` : 'Select a server';
 }
 
+function getGuildIconUrl(server) {
+  if (!server || !server.guildId || !server.icon) return '';
+  return `https://cdn.discordapp.com/icons/${server.guildId}/${server.icon}.png?size=64`;
+}
+
 function updateActiveGuildBadge() {
   const badge = document.getElementById('activeGuildBadge');
   const brandTitle = document.getElementById('navBrandTitle');
@@ -408,7 +413,12 @@ function updateActiveGuildBadge() {
     badge.style.display = 'inline-flex';
     badge.textContent = record?.name ? `Active: ${record.name}` : `Active: ${activeGuildId}`;
     badge.title = activeGuildId;
-    if (brandTitle) brandTitle.textContent = `🎩 ${record?.name || 'Portal'}`;
+    if (brandTitle) {
+      const iconUrl = getGuildIconUrl(record);
+      brandTitle.innerHTML = iconUrl
+        ? `<img src="${iconUrl}" alt="" style="width:22px;height:22px;border-radius:50%;vertical-align:middle;margin-right:8px;object-fit:cover;">${escapeHtml(record?.name || 'Portal')}`
+        : `🎩 ${escapeHtml(record?.name || 'Portal')}`;
+    }
   } else {
     badge.style.display = 'inline-flex';
     badge.textContent = 'Select server';

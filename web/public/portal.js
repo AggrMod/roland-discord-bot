@@ -4659,9 +4659,11 @@ function _showCategoryForm(cat) {
         <input type="text" id="catName" value="${isEdit ? escapeHtml(cat.name || '') : ''}" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;" />
       </div>
       <div style="display:flex;gap:10px;">
-        <div style="flex:0 0 80px;">
+        <div style="flex:0 0 140px;">
           <label style="font-size:0.85em;font-weight:600;">Emoji</label>
-          <input type="text" id="catEmoji" value="${isEdit ? (cat.emoji || '🎫') : '🎫'}" maxlength="4" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;text-align:center;" />
+          <select id="catEmoji" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
+            ${['🎫','🛠️','🏆','🤝','💰','🚨','📦','🧾','❓','📣'].map(e => `<option value="${e}" ${(isEdit ? (cat.emoji || '🎫') : '🎫') === e ? 'selected' : ''}>${e}</option>`).join('')}
+          </select>
         </div>
         <div style="flex:1;">
           <label style="font-size:0.85em;font-weight:600;">Description</label>

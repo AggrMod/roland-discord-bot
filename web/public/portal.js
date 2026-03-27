@@ -458,15 +458,58 @@ function setNavSectionVisibility(section, visible) {
 }
 
 function applyTenantModuleNavVisibility(settings = {}) {
-  const map = {
+  const moduleState = {
     governance: !!settings.moduleGovernanceEnabled,
-    wallets: !!settings.moduleVerificationEnabled,
+    verification: !!settings.moduleVerificationEnabled,
     treasury: !!settings.moduleTreasuryEnabled,
-    'nft-activity': !!settings.moduleNftTrackerEnabled,
-    heist: !!settings.moduleMissionsEnabled
+    nfttracker: !!settings.moduleNftTrackerEnabled,
+    heist: !!settings.moduleMissionsEnabled,
+    ticketing: !!settings.moduleTicketingEnabled,
+    roleclaim: !!settings.moduleRoleClaimEnabled
+  };
+  window._tenantModuleState = moduleState;
+
+  const sectionMap = {
+    governance: moduleState.governance,
+    wallets: moduleState.verification,
+    treasury: moduleState.treasury,
+    'nft-activity': moduleState.nfttracker,
+    heist: moduleState.heist
   };
 
-  Object.entries(map).forEach(([section, enabled]) => setNavSectionVisibility(section, enabled));
+  Object.entries(sectionMap).forEach(([section, enabled]) => {
+    setNavSectionVisibility(section, enabled);
+    const sectionEl = document.getElementById(`section-${section}`);
+    if (sectionEl) sectionEl.style.display = enabled ? '' : 'none';
+  });
+
+  const adminMap = {
+    verificationroles: moduleState.verification,
+    votingpower: moduleState.governance,
+    nfttracker: moduleState.nfttracker,
+    ticketing: moduleState.ticketing,
+    selfserveroles: moduleState.roleclaim
+  };
+  Object.entries(adminMap).forEach(([view, enabled]) => {
+    document.querySelectorAll(`.admin-sub-item[data-admin-nav="${view}"]`).forEach(el => {
+      el.style.display = enabled ? '' : 'none';
+    });
+  });
+
+  const recentCard = document.getElementById('dashboardRecentActivityCard');
+  if (recentCard) recentCard.style.display = (moduleState.governance || moduleState.heist) ? '' : 'none';
+
+  const activeSection = document.querySelector('.content-section.active')?.id;
+  const disabledActive = {
+    'section-governance': !moduleState.governance,
+    'section-wallets': !moduleState.verification,
+    'section-treasury': !moduleState.treasury,
+    'section-nft-activity': !moduleState.nfttracker,
+    'section-heist': !moduleState.heist
+  };
+  if (activeSection && disabledActive[activeSection]) {
+    switchSection('dashboard');
+  }
 }
 
 async function syncTenantModuleNavVisibility() {
@@ -1200,6 +1243,20 @@ async function loadAvailableMissions() {
 
 // ==================== NAVIGATION ====================
 function switchSection(sectionName) {
+  const moduleState = window._tenantModuleState || null;
+  const sectionRequiresModule = {
+    governance: 'governance',
+    wallets: 'verification',
+    treasury: 'treasury',
+    'nft-activity': 'nfttracker',
+    heist: 'heist'
+  };
+  const required = sectionRequiresModule[sectionName];
+  if (required && moduleState && moduleState[required] === false) {
+    showInfo('This module is disabled for the selected server.');
+    sectionName = 'dashboard';
+  }
+
   // Update nav items (both sidebar and mobile)
   document.querySelectorAll('.nav-item').forEach(item => {
     item.classList.remove('active');

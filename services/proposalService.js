@@ -4,8 +4,8 @@ const logger = require('../utils/logger');
 const governanceLogger = require('../utils/governanceLogger');
 const settingsManager = require('../config/settings');
 
-// Tier-based VP thresholds per governance rules
-const TIER_VP = [
+// Default tier-based VP thresholds (used only if no role_vp_mappings configured)
+const DEFAULT_TIER_VP = [
   { name: 'Associate', min: 1, max: 2, vp: 1 },
   { name: 'Soldato', min: 3, max: 6, vp: 3 },
   { name: 'Capo', min: 7, max: 14, vp: 6 },
@@ -14,12 +14,26 @@ const TIER_VP = [
   { name: 'Don Holder', min: 150, max: Infinity, vp: 18 }
 ];
 
-function getTierVP(nftCount) {
+function getConfiguredVPForUser(discordId, nftCount, roleMappings) {
+  // If role_vp_mappings has entries, use getUserVotingPower via roleService
+  // (called at vote time with live member). For snapshot we use tier-based from
+  // the tiers config (roles.json) if available, else DEFAULT_TIER_VP.
   if (!nftCount || nftCount < 1) return 0;
-  for (const t of TIER_VP) {
+  try {
+    const roleService = require('./roleService');
+    const tiers = roleService.tiersConfig && roleService.tiersConfig.tiers;
+    if (tiers && tiers.length > 0) {
+      // Use configured tiers from roles.json (which may have custom VP values)
+      for (const t of [...tiers].sort((a, b) => b.minNFTs - a.minNFTs)) {
+        if (nftCount >= t.minNFTs) return t.votingPower || 0;
+      }
+    }
+  } catch (e) { /* fall through to defaults */ }
+  // Fallback to hardcoded defaults
+  for (const t of DEFAULT_TIER_VP) {
     if (nftCount >= t.min && nftCount <= t.max) return t.vp;
   }
-  return TIER_VP[TIER_VP.length - 1].vp;
+  return DEFAULT_TIER_VP[DEFAULT_TIER_VP.length - 1].vp;
 }
 
 class ProposalService {
@@ -172,7 +186,7 @@ class ProposalService {
     let totalVP = 0;
 
     for (const user of users) {
-      const tierVP = getTierVP(user.total_nfts);
+      const tierVP = getConfiguredVPForUser(user.discord_id, user.total_nfts, roleMappings);
 
       // Check if user has a staff trustee role via role_vp_mappings
       let isStaff = false;
@@ -185,8 +199,8 @@ class ProposalService {
         }
       }
 
-      // For snapshot: use tier-based VP. Staff trustee adjustment happens at castVote.
-      const vp = tierVP;
+      // For snapshot: use configurable tier VP (roles.json → defaults)
+      const vp = getConfiguredVPForUser(user.discord_id, user.total_nfts, roleMappings);
       if (vp > 0) {
         voterVPs[user.discord_id] = vp;
         totalVP += vp;

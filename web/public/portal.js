@@ -1174,7 +1174,7 @@ window.addEventListener('unhandledrejection', (event) => {
 
 // ==================== INTEGRATED ADMIN WORKSPACE ====================
 function hideAllAdminCards() {
-  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminAnalyticsCard', 'adminHelpCard', 'adminRolesCard', 'adminActivityCard', 'adminStatsCard', 'adminNftTrackerCard', 'adminVotingPowerCard']
+  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminAnalyticsCard', 'adminHelpCard', 'adminRolesCard', 'adminActivityCard', 'adminStatsCard', 'adminNftTrackerCard', 'adminVotingPowerCard', 'adminSelfServeRolesCard']
     .forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
@@ -1239,7 +1239,8 @@ function showAdminView(view) {
     roles: { card: 'adminRolesCard', load: loadAdminRoles },
     activity: { card: 'adminActivityCard', load: loadAdminActivity },
     votingpower: { card: 'adminVotingPowerCard', load: loadVotingPowerView },
-    nfttracker: { card: 'adminNftTrackerCard', load: loadNftTrackerView }
+    nfttracker: { card: 'adminNftTrackerCard', load: loadNftTrackerView },
+    selfserveroles: { card: 'adminSelfServeRolesCard', load: loadSelfServeRolesView }
   };
 
   const target = map[view] || map.settings;
@@ -1476,6 +1477,7 @@ async function loadAdminSettingsView() {
           ${moduleToggle('moduleMissionsEnabled', 'Heist', '🎯', true)}
           ${moduleToggle('moduleTreasuryEnabled', 'Treasury', '💰', true)}
           ${moduleToggle('moduleNftTrackerEnabled', 'NFT Tracker', '📡', true)}
+          ${moduleToggle('moduleRoleClaimEnabled', 'Self-Serve Roles', '🎖️', true)}
         </div>
       </div>
 
@@ -1965,6 +1967,7 @@ async function savePortalSettings() {
     moduleNftTrackerEnabled: document.getElementById('ps_moduleNftTrackerEnabled')?.checked ?? true,
     moduleRoleResyncEnabled: document.getElementById('ps_moduleRoleResyncEnabled')?.checked ?? true,
     moduleMicroVerifyEnabled: document.getElementById('ps_moduleMicroVerifyEnabled')?.checked ?? false,
+    moduleRoleClaimEnabled: document.getElementById('ps_moduleRoleClaimEnabled')?.checked ?? true,
     proposalsChannelId: document.getElementById('ps_proposalsChannelId').value || '',
     votingChannelId: document.getElementById('ps_votingChannelId').value || '',
     resultsChannelId: document.getElementById('ps_resultsChannelId').value || '',

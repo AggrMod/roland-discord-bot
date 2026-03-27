@@ -473,7 +473,7 @@ class RoleService {
    * CRUD operations for tiers
    */
   
-  addTier(name, minNFTs, maxNFTs, votingPower, roleId = null) {
+  addTier(name, minNFTs, maxNFTs, votingPower, roleId = null, collectionId = null) {
     try {
       if (!this.tiersConfig) {
         this.loadConfigs();
@@ -504,7 +504,8 @@ class RoleService {
         minNFTs,
         maxNFTs,
         votingPower,
-        roleId
+        roleId,
+        collectionId: collectionId || null
       };
 
       this.tiersConfig.tiers.push(newTier);
@@ -536,6 +537,7 @@ class RoleService {
       if (updates.maxNFTs !== undefined) tier.maxNFTs = updates.maxNFTs;
       if (updates.votingPower !== undefined) tier.votingPower = updates.votingPower;
       if (updates.roleId !== undefined) tier.roleId = updates.roleId;
+      if (updates.collectionId !== undefined) tier.collectionId = updates.collectionId || null;
 
       // Validate updated range doesn't overlap with other tiers
       if (updates.minNFTs !== undefined || updates.maxNFTs !== undefined) {

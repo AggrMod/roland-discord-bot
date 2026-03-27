@@ -129,7 +129,8 @@ class SettingsManager {
         'moduleMissionsEnabled',
         'moduleTreasuryEnabled',
         'moduleRoleResyncEnabled',
-        'moduleMicroVerifyEnabled'
+        'moduleMicroVerifyEnabled',
+        'moduleRoleClaimEnabled'
       ];
       
       for (const key of moduleKeys) {
@@ -203,6 +204,7 @@ class SettingsManager {
         moduleNftTrackerEnabled: true,
         moduleRoleResyncEnabled: true,
         moduleMicroVerifyEnabled: false,
+        moduleRoleClaimEnabled: true,
         
         // Micro-Transfer Verification
         verificationReceiveWallet: '',

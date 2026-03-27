@@ -765,13 +765,13 @@ class WebServer {
     // Tier CRUD
     this.app.post('/api/admin/roles/tiers', adminAuthMiddleware, (req, res) => {
       try {
-        const { name, minNFTs, maxNFTs, votingPower, roleId } = req.body;
+        const { name, minNFTs, maxNFTs, votingPower, roleId, collectionId } = req.body;
         
         if (!name || minNFTs === undefined || maxNFTs === undefined || votingPower === undefined) {
           return res.status(400).json({ success: false, message: 'Missing required fields' });
         }
 
-        const result = roleService.addTier(name, minNFTs, maxNFTs, votingPower, roleId || null);
+        const result = roleService.addTier(name, minNFTs, maxNFTs, votingPower, roleId || null, collectionId || null);
         res.json(result);
       } catch (error) {
         logger.error('Error adding tier:', error);

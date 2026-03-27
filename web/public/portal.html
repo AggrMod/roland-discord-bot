@@ -146,6 +146,10 @@
               <span class="nav-icon" aria-hidden="true">📡</span>
               <span class="nav-label">NFT Tracker</span>
             </button>
+            <button class="nav-item admin-sub-item" data-admin-nav="selfserveroles" onclick="showAdminView('selfserveroles')">
+              <span class="nav-icon" aria-hidden="true">🎖️</span>
+              <span class="nav-label">Self-Serve Roles</span>
+            </button>
           </div>
         </div>
       </aside>
@@ -759,6 +763,14 @@
               <button class="btn-secondary" onclick="loadNftTrackerView()">Refresh</button>
             </div>
             <div id="adminNftTrackerContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>NFT Tracker</strong> to load data.</div>
+          </div>
+
+          <div class="card" id="adminSelfServeRolesCard" style="display:none;">
+            <div class="card-header">
+              <h3>🎖️ Self-Serve Roles</h3>
+              <button class="btn-secondary" onclick="loadSelfServeRolesView()">Refresh</button>
+            </div>
+            <div id="adminSelfServeRolesContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>Self-Serve Roles</strong> to load data.</div>
           </div>
 
           <div id="adminAnalyticsCard" style="display:none;">

@@ -658,38 +658,31 @@
 
 
 
-          <div class="card">
-            <h3>Quick Actions</h3>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); margin-top: var(--space-4);">
-              <button class="btn-secondary" onclick="showAdminView('proposals')" style="justify-content: flex-start;">
-                <span>📜</span>
-                <span>Manage Proposals</span>
-              </button>
-              <button class="btn-secondary" onclick="showAdminUsers()" style="justify-content: flex-start;">
-                <span>👥</span>
-                <span>User Management</span>
-              </button>
-              <button class="btn-secondary" onclick="showAdminView('settings')" style="justify-content: flex-start;">
-                <span>⚙️</span>
-                <span>System Settings</span>
-              </button>
-              <button class="btn-secondary" onclick="showAdminView('analytics')" style="justify-content: flex-start;">
-                <span>📊</span>
-                <span>Analytics</span>
-              </button>
-              <button class="btn-secondary" onclick="showAdminView('roles')" style="justify-content: flex-start;">
-                <span>👥</span>
-                <span>Verification Roles</span>
-              </button>
-              <button class="btn-secondary" onclick="showAdminView('activity')" style="justify-content: flex-start;">
-                <span>📋</span>
-                <span>Activity Feed</span>
-              </button>
-              <button class="btn-secondary" onclick="showAdminView('help')" style="justify-content: flex-start;">
-                <span>📘</span>
-                <span>Commands</span>
-              </button>
-            </div>
+          <div class="admin-tab-bar" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:var(--space-4); padding:6px; background:rgba(15,23,42,0.6); border:1px solid rgba(99,102,241,0.15); border-radius:12px;">
+            <button class="admin-tab" data-admin-tab="stats" onclick="showAdminView('stats')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:0.85em;font-weight:600;cursor:pointer;transition:all 0.2s;">
+              <span>📊</span><span>Overview</span>
+            </button>
+            <button class="admin-tab" data-admin-tab="users" onclick="showAdminView('users')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:0.85em;font-weight:600;cursor:pointer;transition:all 0.2s;">
+              <span>👥</span><span>Users</span>
+            </button>
+            <button class="admin-tab" data-admin-tab="proposals" onclick="showAdminView('proposals')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:0.85em;font-weight:600;cursor:pointer;transition:all 0.2s;">
+              <span>📜</span><span>Proposals</span>
+            </button>
+            <button class="admin-tab" data-admin-tab="analytics" onclick="showAdminView('analytics')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:0.85em;font-weight:600;cursor:pointer;transition:all 0.2s;">
+              <span>📊</span><span>Analytics</span>
+            </button>
+            <button class="admin-tab" data-admin-tab="settings" onclick="showAdminView('settings')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:0.85em;font-weight:600;cursor:pointer;transition:all 0.2s;">
+              <span>⚙️</span><span>Settings</span>
+            </button>
+            <button class="admin-tab" data-admin-tab="roles" onclick="showAdminView('roles')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:0.85em;font-weight:600;cursor:pointer;transition:all 0.2s;">
+              <span>👥</span><span>Roles</span>
+            </button>
+            <button class="admin-tab" data-admin-tab="activity" onclick="showAdminView('activity')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:0.85em;font-weight:600;cursor:pointer;transition:all 0.2s;">
+              <span>📋</span><span>Activity</span>
+            </button>
+            <button class="admin-tab" data-admin-tab="help" onclick="showAdminView('help')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:0.85em;font-weight:600;cursor:pointer;transition:all 0.2s;">
+              <span>📘</span><span>Commands</span>
+            </button>
           </div>
 
           <!-- Dashboard Stats -->
@@ -747,12 +740,16 @@
             <div id="adminSettingsContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>System Settings</strong> to load data.</div>
           </div>
 
-          <div class="card" id="adminAnalyticsCard" style="display:none;">
-            <div class="card-header">
-              <h3>📊 Analytics (Integrated)</h3>
-              <button class="btn-secondary" onclick="loadAdminAnalyticsView()">Refresh</button>
+          <div id="adminAnalyticsCard" style="display:none;">
+            <div class="card" style="margin-bottom:0;">
+              <div class="card-header">
+                <h3>📊 Analytics Dashboard</h3>
+                <button class="btn-secondary" onclick="loadAdminAnalyticsView()">
+                  <span>🔄</span><span>Refresh</span>
+                </button>
+              </div>
+              <div id="adminAnalyticsContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Loading analytics...</div>
             </div>
-            <div id="adminAnalyticsContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>Analytics</strong> to load data.</div>
           </div>
 
           <div class="card" id="adminHelpCard" style="display:none;">

@@ -1219,6 +1219,18 @@ function showAdminView(view) {
   if (card) card.style.display = 'block';
   if (typeof target.load === 'function') target.load();
 
+  // Highlight active admin tab
+  document.querySelectorAll('.admin-tab').forEach(btn => {
+    const tab = btn.getAttribute('data-admin-tab');
+    if (tab === view) {
+      btn.style.background = 'rgba(99,102,241,0.25)';
+      btn.style.color = '#c7d2fe';
+    } else {
+      btn.style.background = 'transparent';
+      btn.style.color = 'var(--text-secondary)';
+    }
+  });
+
   loadEnvStatusBar();
 
   setTimeout(() => card?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
@@ -1755,29 +1767,123 @@ async function loadAdminAnalyticsView() {
   if (!isAdmin) return;
   const content = document.getElementById('adminAnalyticsContent');
   if (!content) return;
+  content.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-secondary);">Loading analytics...</div>';
 
   try {
-    const [usersRes, proposalsRes] = await Promise.all([
+    const [usersRes, proposalsRes, missionsRes, treasuryRes, leaderboardRes, statsRes] = await Promise.all([
       fetch('/api/admin/users', { credentials: 'include' }),
-      fetch('/api/admin/proposals', { credentials: 'include' })
+      fetch('/api/admin/proposals', { credentials: 'include' }),
+      fetch('/api/admin/missions', { credentials: 'include' }),
+      fetch('/api/public/treasury').catch(() => null),
+      fetch('/api/public/leaderboard').catch(() => null),
+      fetch('/api/public/stats').catch(() => null)
     ]);
+
     const usersData = await usersRes.json();
     const proposalsData = await proposalsRes.json();
+    const missionsData = missionsRes.ok ? await missionsRes.json() : {};
+    const treasuryData = treasuryRes && treasuryRes.ok ? await treasuryRes.json() : null;
+    const leaderboardData = leaderboardRes && leaderboardRes.ok ? await leaderboardRes.json() : null;
+    const statsData = statsRes && statsRes.ok ? await statsRes.json() : null;
 
     const users = usersData.users || [];
     const proposals = proposalsData.proposals || [];
-    const active = proposals.filter(p => ['supporting','voting'].includes((p.status || '').toLowerCase())).length;
+    const missions = missionsData.missions || [];
+    const verified = users.filter(u => u.walletAddress || u.verified).length;
+    const pending = users.length - verified;
+    const activeVotes = proposals.filter(p => ['supporting','voting','active'].includes((p.status || '').toLowerCase())).length;
+    const concluded = proposals.filter(p => ['passed','concluded','closed','rejected','failed'].includes((p.status || '').toLowerCase()));
+    const passed = concluded.filter(p => ['passed','concluded'].includes((p.status || '').toLowerCase())).length;
+    const passRate = concluded.length > 0 ? Math.round((passed / concluded.length) * 100) : 0;
+    const completedMissions = missions.filter(m => (m.status || '').toLowerCase() === 'completed');
+    const totalPoints = completedMissions.reduce((sum, m) => sum + (m.pointsAwarded || m.points || 0), 0);
+
+    const statCard = (label, value, color) => `
+      <div style="padding:16px; background:rgba(${color},0.12); border:1px solid rgba(${color},0.22); border-radius:10px;">
+        <div style="color:var(--text-secondary); font-size:0.82em; margin-bottom:6px;">${label}</div>
+        <div style="font-size:1.8em; font-weight:700; color:#e0e7ff;">${value}</div>
+      </div>`;
+
+    // Treasury balance
+    let treasuryBalance = '—';
+    if (treasuryData) {
+      const bal = treasuryData.balance ?? treasuryData.sol ?? treasuryData.total;
+      if (bal !== undefined && bal !== null) treasuryBalance = typeof bal === 'number' ? bal.toFixed(2) + ' SOL' : bal;
+    }
+
+    // Leaderboard top 5
+    const leaders = (leaderboardData?.leaderboard || leaderboardData?.entries || leaderboardData || []).slice(0, 5);
+    let leaderboardHTML = '';
+    if (leaders.length > 0) {
+      const rows = leaders.map((l, i) => {
+        const name = escapeHtml(l.displayName || l.username || l.discordId || 'Unknown');
+        const points = l.points ?? l.score ?? 0;
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`;
+        return `<tr style="border-bottom:1px solid rgba(99,102,241,0.1);">
+          <td style="padding:8px 10px;font-size:0.9em;">${medal}</td>
+          <td style="padding:8px 10px;color:#c7d2fe;font-size:0.9em;">${name}</td>
+          <td style="padding:8px 10px;text-align:right;color:#86efac;font-weight:600;font-size:0.9em;">${points}</td>
+        </tr>`;
+      }).join('');
+      leaderboardHTML = `
+        <div style="margin-top:20px;">
+          <h4 style="margin-bottom:10px;color:#e0e7ff;">🏆 Top 5 Leaderboard</h4>
+          <table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="border-bottom:2px solid rgba(99,102,241,0.2);">
+              <th style="padding:8px 10px;text-align:left;color:var(--text-secondary);font-size:0.8em;">Rank</th>
+              <th style="padding:8px 10px;text-align:left;color:var(--text-secondary);font-size:0.8em;">User</th>
+              <th style="padding:8px 10px;text-align:right;color:var(--text-secondary);font-size:0.8em;">Points</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }
+
+    // Recent activity from proposals + missions (last 10 events)
+    const events = [];
+    proposals.forEach(p => {
+      const ts = p.createdAt || p.timestamp;
+      if (ts) events.push({ time: new Date(ts), text: `Proposal "${escapeHtml(p.title || p.name || 'Untitled')}" — ${p.status || 'unknown'}`, icon: '📜' });
+    });
+    missions.forEach(m => {
+      const ts = m.completedAt || m.createdAt || m.timestamp;
+      if (ts) events.push({ time: new Date(ts), text: `Mission "${escapeHtml(m.name || m.title || 'Untitled')}" — ${m.status || 'unknown'}`, icon: '🎯' });
+    });
+    events.sort((a, b) => b.time - a.time);
+    const recentEvents = events.slice(0, 10);
+
+    let activityHTML = '';
+    if (recentEvents.length > 0) {
+      const rows = recentEvents.map(e => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(99,102,241,0.08);">
+          <span style="font-size:1.1em;">${e.icon}</span>
+          <span style="flex:1;color:#c7d2fe;font-size:0.88em;">${e.text}</span>
+          <span style="color:var(--text-secondary);font-size:0.78em;white-space:nowrap;">${e.time.toLocaleDateString()}</span>
+        </div>`).join('');
+      activityHTML = `
+        <div style="margin-top:20px;">
+          <h4 style="margin-bottom:10px;color:#e0e7ff;">📋 Recent Activity</h4>
+          ${rows}
+        </div>`;
+    }
 
     content.innerHTML = `
-      <div style="display:grid; gap:12px; grid-template-columns: repeat(auto-fit,minmax(220px,1fr));">
-        <div class="stat-card"><div class="stat-label">Total Users</div><div class="stat-value">${users.length}</div></div>
-        <div class="stat-card"><div class="stat-label">Total Proposals</div><div class="stat-value">${proposals.length}</div></div>
-        <div class="stat-card"><div class="stat-label">Active Proposals</div><div class="stat-value">${active}</div></div>
+      <div style="display:grid; gap:12px; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); margin-bottom:8px;">
+        ${statCard('Total Users', users.length, '99,102,241')}
+        ${statCard('Verified', verified, '16,185,129')}
+        ${statCard('Pending', pending, '245,158,11')}
+        ${statCard('Total Proposals', proposals.length, '59,130,246')}
+        ${statCard('Pass Rate', passRate + '%', '139,92,246')}
+        ${statCard('Active Votes', activeVotes, '236,72,153')}
+        ${statCard('Missions Done', completedMissions.length, '20,184,166')}
+        ${statCard('Points Awarded', totalPoints.toLocaleString(), '251,146,60')}
+        ${statCard('Treasury', treasuryBalance, '234,179,8')}
       </div>
-      <div style="margin-top:10px; color: var(--text-secondary);">Light analytics inside portal. Deep analytics remain available in advanced tooling.</div>
+      ${leaderboardHTML}
+      ${activityHTML}
     `;
   } catch (e) {
-    content.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;
+    content.innerHTML = `<div class="error-state"><div class="error-message">Failed to load analytics: ${escapeHtml(e.message)}</div></div>`;
   }
 }
 

@@ -1,6 +1,9 @@
 const express = require('express');
 const session = require('express-session');
+const BetterSqlite3Store = require('better-sqlite3-session-store')(session);
+const Database = require('better-sqlite3');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const nacl = require('tweetnacl');
 const bs58Module = require('bs58');
@@ -52,10 +55,28 @@ class WebServer {
     this.app.use(express.json());
     this.app.use(express.static(path.join(__dirname, 'public')));
 
-    // Session management (in-memory for now - sufficient for most use cases)
-    // TODO: Add persistent SQLite store later if needed
+    // Session secret enforcement
+    const sessionSecret = process.env.SESSION_SECRET || 'solpranos-secret-key-change-this-in-production';
+    if (sessionSecret === 'solpranos-secret-key-change-this-in-production') {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('FATAL: SESSION_SECRET must be changed from default value in production. Set a unique SESSION_SECRET environment variable.');
+      }
+      logger.warn('WARNING: Using default SESSION_SECRET. Set a unique value in production!');
+    }
+
+    // Persistent SQLite session store (sessions survive restarts)
+    const sessionsDb = new Database(path.join(__dirname, '..', 'sessions.db'));
+    const sessionStore = new BetterSqlite3Store({
+      client: sessionsDb,
+      expired: {
+        clear: true,
+        intervalMs: 900000 // Clear expired sessions every 15 minutes
+      }
+    });
+
     this.app.use(session({
-      secret: process.env.SESSION_SECRET || 'solpranos-secret-key-change-this-in-production',
+      store: sessionStore,
+      secret: sessionSecret,
       resave: false,
       saveUninitialized: false,
       cookie: {

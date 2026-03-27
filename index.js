@@ -7,40 +7,32 @@ const WebServer = require('./web/server');
 
 // Validate critical environment variables on startup
 function validateEnvVars() {
-  const required = ['DISCORD_TOKEN', 'CLIENT_ID', 'GUILD_ID'];
-  const oauthVars = ['DISCORD_CLIENT_SECRET', 'DISCORD_REDIRECT_URI', 'SESSION_SECRET'];
-  
+  const required = ['DISCORD_TOKEN', 'CLIENT_ID', 'GUILD_ID', 'DISCORD_CLIENT_SECRET', 'SESSION_SECRET'];
+
   const missing = [];
-  
   for (const varName of required) {
     if (!process.env[varName]) {
       missing.push(varName);
     }
   }
 
-  // Check OAuth variables with helpful messaging
-  const oauthMissing = [];
-  for (const varName of oauthVars) {
-    if (!process.env[varName]) {
-      oauthMissing.push(varName);
-    }
-  }
-
   if (missing.length > 0) {
     logger.error(`CRITICAL: Missing required environment variables: ${missing.join(', ')}`);
-    logger.error('Please set these in .env file');
+    logger.error('The bot cannot start without these. Please set them in .env file.');
     process.exit(1);
   }
 
-  if (oauthMissing.length > 0) {
-    logger.warn(`⚠️  OAuth variables missing: ${oauthMissing.join(', ')}`);
-    logger.warn('Portal login will not work until these are set.');
-    logger.warn('See .env.example for details on setting up Discord OAuth2');
+  // Optional vars with specific warnings
+  if (!process.env.HELIUS_API_KEY) {
+    logger.warn('HELIUS_API_KEY not set — NFT verification will use mock mode');
+  }
+  if (!process.env.SOLANA_RPC_URL) {
+    logger.warn('SOLANA_RPC_URL not set — Solana RPC calls may fail or use default endpoint');
   }
 
-  // Check for hardcoded defaults
+  // Check for hardcoded session secret default
   if (process.env.SESSION_SECRET === 'solpranos-secret-key-change-this-in-production') {
-    logger.warn('⚠️  WARNING: Using default SESSION_SECRET. Set a unique value in production!');
+    logger.warn('WARNING: Using default SESSION_SECRET. This should be changed in production!');
   }
 }
 

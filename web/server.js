@@ -422,12 +422,22 @@ class WebServer {
         const guild = await this.client.guilds.fetch(guildId);
         const channels = await guild.channels.fetch();
 
+        const { ChannelType } = require('discord.js');
+        const textTypes = [
+          ChannelType.GuildText,
+          ChannelType.GuildAnnouncement,
+          ChannelType.GuildForum,
+          ChannelType.PublicThread,
+          ChannelType.PrivateThread,
+          ChannelType.AnnouncementThread
+        ];
+
         const channelList = channels
-          .filter(ch => ch.isText() || ch.isThread()) // Only text channels and threads
+          .filter(ch => ch && textTypes.includes(ch.type))
           .map(ch => ({
             id: ch.id,
             name: ch.name,
-            type: ch.isDMBased() ? 'dm' : (ch.isThread() ? 'thread' : 'text'),
+            type: ch.isThread() ? 'thread' : 'text',
             parentName: ch.parent ? ch.parent.name : null
           }))
           .sort((a, b) => (a.parentName || '').localeCompare(b.parentName || '') || a.name.localeCompare(b.name));

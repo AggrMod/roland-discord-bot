@@ -1168,6 +1168,30 @@ function hideAllAdminCards() {
     });
 }
 
+let _envStatusCache = null;
+async function loadEnvStatusBar() {
+  const bar = document.getElementById('adminEnvStatusBar');
+  if (!bar) return;
+  if (_envStatusCache) { renderEnvStatusBar(bar, _envStatusCache); return; }
+  try {
+    const res = await fetch('/api/admin/env-status', { credentials: 'include' });
+    const data = await res.json();
+    _envStatusCache = data;
+    renderEnvStatusBar(bar, data);
+  } catch (e) {
+    bar.innerHTML = '';
+  }
+}
+function renderEnvStatusBar(bar, d) {
+  const pill = (label, color) => `<span style="display:inline-block;background:${color};color:#fff;border-radius:20px;padding:4px 12px;font-size:0.75em;font-weight:600;margin:0 4px 4px 0;">${label}</span>`;
+  bar.innerHTML = `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;">`
+    + (d.mockMode ? pill('🟡 MOCK MODE', '#b8860b') : pill('🟢 LIVE MODE', '#2e7d32'))
+    + (d.heliusConfigured ? pill('Helius ✓', '#2e7d32') : pill('Helius ✗', '#c62828'))
+    + (d.webhookSecretConfigured ? pill('Webhook ✓', '#2e7d32') : pill('Webhook —', '#616161'))
+    + pill('NODE_ENV: ' + (d.nodeEnv || 'development'), d.nodeEnv === 'production' ? '#1565c0' : '#616161')
+    + `</div>`;
+}
+
 function showAdminView(view) {
   if (!isAdmin) {
     showError('Admin access required.');
@@ -1192,6 +1216,8 @@ function showAdminView(view) {
   const card = document.getElementById(target.card);
   if (card) card.style.display = 'block';
   if (typeof target.load === 'function') target.load();
+
+  loadEnvStatusBar();
 
   setTimeout(() => card?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
 }
@@ -1323,6 +1349,9 @@ async function loadAdminSettingsView() {
 
     // Step 2: Inject HTML skeleton
     content.innerHTML = `
+      <!-- ENV STATUS BAR -->
+      <div id="adminEnvStatusBar" style="margin-bottom:var(--space-4);"></div>
+
       <!-- MODULE CONTROL — always visible -->
       <div style="${cardStyle}">
         <h3 style="${cardHeader}">🎮 Module Control</h3>

@@ -376,6 +376,16 @@ class WebServer {
       }
     };
 
+    this.app.get('/api/admin/env-status', adminAuthMiddleware, (req, res) => {
+      res.json({
+        mockMode: process.env.MOCK_MODE === 'true',
+        heliusConfigured: !!process.env.HELIUS_API_KEY,
+        solanaRpc: process.env.SOLANA_RPC_URL || 'default',
+        nodeEnv: process.env.NODE_ENV || 'development',
+        webhookSecretConfigured: !!process.env.NFT_ACTIVITY_WEBHOOK_SECRET
+      });
+    });
+
     this.app.get('/api/admin/settings', adminAuthMiddleware, (req, res) => {
       try {
         const settings = settingsManager.getSettings();

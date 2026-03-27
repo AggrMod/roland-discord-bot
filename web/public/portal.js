@@ -535,6 +535,12 @@ async function loadPortal() {
     const section = urlParams.get('section');
     if (section) {
       switchSection(section);
+    } else if (userData) {
+      // If user can manage multiple servers, force server selection first on login
+      const managedCount = (serverAccessData?.managedServers || []).length;
+      if (managedCount > 1) {
+        switchSection('servers');
+      }
     }
   } catch (error) {
     console.error('Error loading portal:', error);

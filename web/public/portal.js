@@ -404,6 +404,12 @@ function getGuildIconUrl(server) {
   return `https://cdn.discordapp.com/icons/${server.guildId}/${server.icon}.png?size=64`;
 }
 
+function getActiveBrandLogoUrl(server) {
+  const configured = portalSettingsData?.tenantBranding?.logo_url || '';
+  if (configured) return configured;
+  return getGuildIconUrl(server);
+}
+
 function updateActiveGuildBadge() {
   const badge = document.getElementById('activeGuildBadge');
   const brandTitle = document.getElementById('navBrandTitle');
@@ -415,7 +421,7 @@ function updateActiveGuildBadge() {
     badge.textContent = record?.name ? `Active: ${record.name}` : `Active: ${activeGuildId}`;
     badge.title = activeGuildId;
     if (brandTitle) {
-      const iconUrl = getGuildIconUrl(record);
+      const iconUrl = getActiveBrandLogoUrl(record);
       brandTitle.innerHTML = iconUrl
         ? `<img src="${iconUrl}" alt="" style="width:22px;height:22px;border-radius:50%;vertical-align:middle;margin-right:8px;object-fit:cover;">${escapeHtml(record?.name || 'Portal')}`
         : `🎩 ${escapeHtml(record?.name || 'Portal')}`;
@@ -518,7 +524,10 @@ async function syncTenantModuleNavVisibility() {
     const res = await fetch('/api/admin/settings', { credentials: 'include', headers: activeGuildId ? { 'x-guild-id': activeGuildId } : {} });
     const data = await res.json();
     if (data.success && data.settings) {
+      // keep tenant-scoped settings/branding in sync with active guild context
+      portalSettingsData = data.settings;
       applyTenantModuleNavVisibility(data.settings);
+      updateActiveGuildBadge();
     }
   } catch (e) {
     console.warn('Could not sync tenant module nav visibility:', e.message);

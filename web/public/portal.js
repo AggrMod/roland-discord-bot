@@ -1599,7 +1599,45 @@ async function loadAdminSettingsView() {
       <!-- 💰 TREASURY MODULE -->
       <div id="ps_section_treasury" style="${cardStyle}${moduleCardBorder}display:${(s.moduleTreasuryEnabled ?? true) ? 'block' : 'none'};">
         <h3 style="${cardHeader}">💰 Treasury Module</h3>
-        ${noSettingsMsg}
+        <div id="treasuryConfigLoading" style="color:var(--text-secondary);font-size:0.9em;">Loading treasury config...</div>
+        <div id="treasuryConfigForm" style="display:none;">
+          <div style="${gridRow}">
+            <div>
+              <label style="${fieldLabel}">Solana Wallet Address</label>
+              <input type="text" id="treasuryWalletInput" placeholder="Solana wallet address to monitor" style="${fieldInput}">
+            </div>
+            <div>
+              <label style="${fieldLabel}">Balance refresh every X hours</label>
+              <input type="number" id="treasuryRefreshHours" min="1" max="168" value="6" style="${fieldInput}">
+            </div>
+          </div>
+          <div style="margin-top:var(--space-3);">
+            <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
+              <input type="checkbox" id="treasuryTxAlerts"> Transaction Alerts — enable tx monitoring
+            </label>
+          </div>
+          <div id="treasuryTxAlertSubFields" style="display:none;margin-top:var(--space-3);padding:var(--space-3);background:rgba(30,41,59,0.4);border-radius:8px;border:1px solid rgba(99,102,241,0.12);">
+            <div style="${gridRow}">
+              <div>
+                <label style="${fieldLabel}">Alert Channel</label>
+                <select id="treasuryAlertChannelId" style="${selectStyle}"><option value="">Loading channels...</option></select>
+              </div>
+              <div>
+                <label style="${fieldLabel}">Min SOL to alert on</label>
+                <input type="number" id="treasuryMinSol" min="0" step="0.1" value="0" style="${fieldInput}">
+              </div>
+            </div>
+            <div style="margin-top:var(--space-3);">
+              <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
+                <input type="checkbox" id="treasuryIncomingOnly"> Incoming Only — only alert on received SOL
+              </label>
+            </div>
+          </div>
+          <div style="margin-top:var(--space-4);display:flex;align-items:center;gap:var(--space-3);">
+            <button class="btn-primary" id="treasurySaveBtn" style="font-size:0.85em;padding:8px 16px;">💾 Save Treasury Settings</button>
+            <span id="treasuryFeedback" style="font-size:0.85em;font-weight:600;"></span>
+          </div>
+        </div>
       </div>
 
       <!-- 🔐 MICRO-TRANSFER VERIFY MODULE -->
@@ -1665,6 +1703,7 @@ async function loadAdminSettingsView() {
 
     // Step 4: Fetch channels AFTER skeleton is in the DOM, then populate selects
     const channelIds = ['proposalsChannelId', 'votingChannelId', 'resultsChannelId', 'governanceLogChannelId'];
+    let channelsList = [];
     // Verify selects exist in DOM before fetch
     channelIds.forEach(id => {
       const sel = document.getElementById(`ps_${id}`);
@@ -1674,7 +1713,6 @@ async function loadAdminSettingsView() {
       console.log('[Settings] Fetching /api/admin/discord/channels...');
       const channelsRes = await fetch('/api/admin/discord/channels', { credentials: 'include' });
       console.log('[Settings] Channels response status:', channelsRes.status, channelsRes.ok);
-      let channelsList = [];
       if (channelsRes.ok) {
         const channelsJson = await channelsRes.json();
         console.log('[Settings] Channels response:', channelsJson.success, 'count:', (channelsJson.channels || []).length);
@@ -1689,10 +1727,9 @@ async function loadAdminSettingsView() {
           const sel = document.getElementById(`ps_${id}`);
           if (sel) sel.innerHTML = '<option value="">-- No channels available --</option>';
         });
-        return;
       }
 
-      // Group channels by parent category
+      // Group channels by parent category (skip if empty)
       const grouped = {};
       channelsList.forEach(ch => {
         const parent = ch.parentName || 'Other';
@@ -1733,6 +1770,128 @@ async function loadAdminSettingsView() {
         const sel = document.getElementById(`ps_${id}`);
         if (sel) sel.innerHTML = '<option value="">-- Channel load failed --</option>';
       });
+    }
+
+    // Step 5: Load Treasury config and wire up its form
+    try {
+      const treasuryRes = await fetch('/api/admin/treasury', { credentials: 'include' });
+      if (treasuryRes.ok) {
+        const treasuryData = await treasuryRes.json();
+        const tc = treasuryData.config || treasuryData;
+
+        // Populate form fields
+        const walletInput = document.getElementById('treasuryWalletInput');
+        const refreshInput = document.getElementById('treasuryRefreshHours');
+        const txAlertsCheck = document.getElementById('treasuryTxAlerts');
+        const alertChannelSel = document.getElementById('treasuryAlertChannelId');
+        const incomingOnlyCheck = document.getElementById('treasuryIncomingOnly');
+        const minSolInput = document.getElementById('treasuryMinSol');
+        const subFields = document.getElementById('treasuryTxAlertSubFields');
+
+        if (walletInput) walletInput.value = tc.solanaWallet || '';
+        if (refreshInput) refreshInput.value = tc.refreshHours ?? 6;
+        if (txAlertsCheck) txAlertsCheck.checked = !!tc.txAlertsEnabled;
+        if (incomingOnlyCheck) incomingOnlyCheck.checked = !!tc.txAlertIncomingOnly;
+        if (minSolInput) minSolInput.value = tc.txAlertMinSol ?? 0;
+
+        // Show/hide tx alert sub-fields
+        if (subFields) subFields.style.display = txAlertsCheck && txAlertsCheck.checked ? 'block' : 'none';
+        if (txAlertsCheck) {
+          txAlertsCheck.addEventListener('change', () => {
+            if (subFields) subFields.style.display = txAlertsCheck.checked ? 'block' : 'none';
+          });
+        }
+
+        // Populate treasury alert channel dropdown using already-fetched channelsList
+        if (alertChannelSel && channelsList.length > 0) {
+          const tGrouped = {};
+          channelsList.forEach(ch => {
+            const parent = ch.parentName || 'Other';
+            if (!tGrouped[parent]) tGrouped[parent] = [];
+            tGrouped[parent].push(ch);
+          });
+          alertChannelSel.innerHTML = '<option value="">-- Select channel --</option>';
+          Object.keys(tGrouped).sort().forEach(parent => {
+            const optgroup = document.createElement('optgroup');
+            optgroup.label = parent;
+            tGrouped[parent].forEach(ch => {
+              const opt = document.createElement('option');
+              opt.value = ch.id;
+              opt.textContent = '# ' + ch.name;
+              optgroup.appendChild(opt);
+            });
+            alertChannelSel.appendChild(optgroup);
+          });
+          if (tc.txAlertChannelId) alertChannelSel.value = tc.txAlertChannelId;
+        } else if (alertChannelSel) {
+          alertChannelSel.innerHTML = '<option value="">-- No channels available --</option>';
+        }
+
+        // Show form, hide loading
+        const configForm = document.getElementById('treasuryConfigForm');
+        const configLoading = document.getElementById('treasuryConfigLoading');
+        if (configForm) configForm.style.display = 'block';
+        if (configLoading) configLoading.style.display = 'none';
+
+        // Save button handler
+        const saveBtn = document.getElementById('treasurySaveBtn');
+        if (saveBtn) {
+          saveBtn.addEventListener('click', async () => {
+            const feedback = document.getElementById('treasuryFeedback');
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+            try {
+              const payload = {
+                enabled: true,
+                solanaWallet: (document.getElementById('treasuryWalletInput')?.value || '').trim(),
+                refreshHours: parseInt(document.getElementById('treasuryRefreshHours')?.value) || 6,
+                txAlertsEnabled: !!document.getElementById('treasuryTxAlerts')?.checked,
+                txAlertChannelId: document.getElementById('treasuryAlertChannelId')?.value || '',
+                txAlertIncomingOnly: !!document.getElementById('treasuryIncomingOnly')?.checked,
+                txAlertMinSol: parseFloat(document.getElementById('treasuryMinSol')?.value) || 0
+              };
+              const saveRes = await fetch('/api/admin/treasury/config', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(payload)
+              });
+              const saveData = await saveRes.json();
+              if (saveRes.ok && saveData.success !== false) {
+                if (feedback) {
+                  feedback.style.color = '#86efac';
+                  feedback.textContent = '✓ Treasury settings saved!';
+                  setTimeout(() => { feedback.textContent = ''; }, 5000);
+                }
+              } else {
+                if (feedback) {
+                  feedback.style.color = '#fca5a5';
+                  feedback.textContent = saveData.message || 'Failed to save treasury settings';
+                  setTimeout(() => { feedback.textContent = ''; }, 8000);
+                }
+              }
+            } catch (saveErr) {
+              console.error('[Treasury] Save error:', saveErr);
+              if (feedback) {
+                feedback.style.color = '#fca5a5';
+                feedback.textContent = 'Network error saving treasury settings';
+                setTimeout(() => { feedback.textContent = ''; }, 8000);
+              }
+            } finally {
+              saveBtn.disabled = false;
+              saveBtn.textContent = '💾 Save Treasury Settings';
+            }
+          });
+        }
+      } else {
+        console.warn('[Settings] Treasury config fetch failed:', treasuryRes.status);
+        const configLoading = document.getElementById('treasuryConfigLoading');
+        if (configLoading) configLoading.textContent = 'Failed to load treasury config.';
+      }
+    } catch (tErr) {
+      console.error('[Settings] Treasury config error:', tErr);
+      const configLoading = document.getElementById('treasuryConfigLoading');
+      if (configLoading) configLoading.textContent = 'Error loading treasury config.';
     }
   } catch (e) {
     content.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;

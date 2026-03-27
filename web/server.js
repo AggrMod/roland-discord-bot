@@ -505,12 +505,13 @@ class WebServer {
         // Superadmins can manage every tenant/server in this bot instance.
         if (isSuperadmin) {
           const tenants = tenantService.listTenants({});
-          const seen = new Set();
+          const managedSeen = new Set();
+          const unmanagedSeen = new Set();
 
           for (const tenant of tenants) {
             const guildId = tenant.guildId;
-            if (!guildId || seen.has(guildId)) continue;
-            seen.add(guildId);
+            if (!guildId || managedSeen.has(guildId)) continue;
+            managedSeen.add(guildId);
 
             const guild = await fetchGuildById(guildId);
             managedServers.push({
@@ -524,8 +525,9 @@ class WebServer {
 
           // Also include any live bot guilds not yet in tenant table (edge case)
           for (const guildId of botGuildIds) {
-            if (seen.has(guildId)) continue;
+            if (managedSeen.has(guildId)) continue;
             const guild = await fetchGuildById(guildId);
+            managedSeen.add(guildId);
             managedServers.push({
               guildId,
               name: guild?.name || `Server ${guildId}`,
@@ -535,7 +537,22 @@ class WebServer {
             });
           }
 
+          // Superadmin should still see personal unmanaged candidates from Discord OAuth guild list
+          for (const guildSummary of discordGuilds) {
+            if (!hasDiscordAdminPermission(guildSummary)) continue;
+            if (managedSeen.has(guildSummary.id) || unmanagedSeen.has(guildSummary.id)) continue;
+            unmanagedSeen.add(guildSummary.id);
+            unmanagedServers.push({
+              guildId: guildSummary.id,
+              name: guildSummary.name,
+              icon: guildSummary.icon,
+              permissions: guildSummary.permissions,
+              source: 'oauth'
+            });
+          }
+
           managedServers.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+          unmanagedServers.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
           return res.json({
             success: true,
             isSuperadmin,

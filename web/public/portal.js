@@ -1422,6 +1422,19 @@ async function loadAdminSettingsView() {
   }
 }
 
+function showSettingsSuccess(message) {
+  const content = document.getElementById('adminSettingsContent');
+  if (!content) return;
+  const existing = content.querySelector('.settings-success-msg');
+  if (existing) existing.remove();
+  const msg = document.createElement('div');
+  msg.className = 'settings-success-msg';
+  msg.style.cssText = 'padding:var(--space-3) var(--space-4);background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.4);border-radius:var(--radius-md);color:#86efac;font-weight:600;margin-bottom:var(--space-4);';
+  msg.textContent = message;
+  content.prepend(msg);
+  setTimeout(() => msg.remove(), 5000);
+}
+
 async function savePortalSettings() {
   if (!portalSettingsData) return;
 
@@ -1487,7 +1500,7 @@ async function savePortalSettings() {
     });
     const data = await response.json();
     if (data.success) {
-      alert('Settings saved successfully!');
+      showSettingsSuccess('Settings saved successfully!');
       await loadAdminSettingsView();
     } else {
       showError(data.message || 'Failed to save settings');
@@ -1510,7 +1523,7 @@ async function resetPortalSettings() {
     });
     const data = await response.json();
     if (data.success) {
-      alert('Settings reset to defaults!');
+      showSettingsSuccess('Settings reset to defaults!');
       await loadAdminSettingsView();
     } else {
       showError(data.message || 'Failed to reset settings');

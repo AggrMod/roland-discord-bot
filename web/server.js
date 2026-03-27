@@ -577,7 +577,7 @@ class WebServer {
       }
     });
 
-    this.app.get('/api/admin/users', adminAuthMiddleware, (req, res) => {
+    this.app.get('/api/admin/users', adminAuthMiddleware, async (req, res) => {
       try {
         const users = db.prepare(`
           SELECT u.*, COUNT(w.id) as wallet_count
@@ -586,6 +586,20 @@ class WebServer {
           GROUP BY u.discord_id
           ORDER BY u.total_nfts DESC
         `).all();
+
+        // Overlay voting power from role mappings (if any configured)
+        const mappings = db.prepare('SELECT * FROM role_vp_mappings').all();
+        if (mappings.length > 0 && this.client) {
+          const guild = this.client.guilds.cache.first();
+          for (const user of users) {
+            try {
+              const member = guild ? await guild.members.fetch(user.discord_id).catch(() => null) : null;
+              user.voting_power = roleService.getUserVotingPower(user.discord_id, member);
+            } catch (e) {
+              // keep DB value on error
+            }
+          }
+        }
 
         res.json({ success: true, users });
       } catch (error) {

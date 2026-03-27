@@ -1,4 +1,5 @@
 const { Connection, PublicKey } = require('@solana/web3.js');
+const { EmbedBuilder } = require('discord.js');
 const db = require('../database/db');
 const logger = require('../utils/logger');
 
@@ -9,6 +10,14 @@ class TreasuryService {
   constructor() {
     this.connection = new Connection(SOLANA_RPC, 'confirmed');
     this.refreshTimer = null;
+    this.client = null;
+  }
+
+  /**
+   * Store Discord client reference for watch panel updates
+   */
+  setClient(client) {
+    this.client = client;
   }
 
   /**
@@ -42,6 +51,8 @@ class TreasuryService {
       try { db.exec('ALTER TABLE treasury_config ADD COLUMN tx_alert_incoming_only BOOLEAN DEFAULT 0'); } catch (e) {}
       try { db.exec('ALTER TABLE treasury_config ADD COLUMN tx_alert_min_sol REAL DEFAULT 0'); } catch (e) {}
       try { db.exec('ALTER TABLE treasury_config ADD COLUMN tx_last_signature TEXT'); } catch (e) {}
+      try { db.exec('ALTER TABLE treasury_config ADD COLUMN watch_channel_id TEXT'); } catch (e) {}
+      try { db.exec('ALTER TABLE treasury_config ADD COLUMN watch_message_id TEXT'); } catch (e) {}
 
       logger.log('✅ Treasury config table initialized');
     } catch (error) {
@@ -75,7 +86,7 @@ class TreasuryService {
   /**
    * Update treasury configuration (admin only)
    */
-  updateConfig({ enabled, solanaWallet, refreshHours, txAlertsEnabled, txAlertChannelId, txAlertIncomingOnly, txAlertMinSol, txLastSignature }) {
+  updateConfig({ enabled, solanaWallet, refreshHours, txAlertsEnabled, txAlertChannelId, txAlertIncomingOnly, txAlertMinSol, txLastSignature, watchChannelId }) {
     try {
       const updates = [];
       const params = [];
@@ -129,6 +140,11 @@ class TreasuryService {
       if (txLastSignature !== undefined) {
         updates.push('tx_last_signature = ?');
         params.push(txLastSignature || null);
+      }
+
+      if (watchChannelId !== undefined) {
+        updates.push('watch_channel_id = ?');
+        params.push(watchChannelId || null);
       }
 
       if (updates.length === 0) {
@@ -303,7 +319,9 @@ class TreasuryService {
         txAlertsEnabled: config.tx_alerts_enabled === 1,
         txAlertChannelId: config.tx_alert_channel_id || null,
         txAlertIncomingOnly: config.tx_alert_incoming_only === 1,
-        txAlertMinSol: Number(config.tx_alert_min_sol || 0)
+        txAlertMinSol: Number(config.tx_alert_min_sol || 0),
+        watchChannelId: config.watch_channel_id || null,
+        watchMessageId: config.watch_message_id || null
       },
       treasury: {
         sol: config.sol_balance || '0.0000',
@@ -424,6 +442,61 @@ class TreasuryService {
   }
 
   /**
+   * Post or update a persistent watch panel embed in Discord
+   */
+  async postOrUpdateWatchPanel(client) {
+    const c = client || this.client;
+    if (!c) return { success: false, message: 'No Discord client available' };
+
+    const config = this.getConfig();
+    if (!config || !config.watch_channel_id) {
+      return { success: false, message: 'No watch channel configured' };
+    }
+
+    const channel = c.channels.cache.get(config.watch_channel_id);
+    if (!channel) return { success: false, message: 'Watch channel not found' };
+
+    const walletDisplay = config.solana_wallet ? this.maskAddress(config.solana_wallet) : 'Not set';
+    const solBal = config.sol_balance || '0.0000';
+    const usdcBal = config.usdc_balance || '0.00';
+    const refreshHours = config.refresh_hours || 4;
+
+    const embed = new EmbedBuilder()
+      .setTitle('💰 Treasury Watch')
+      .setColor(0xFFD700)
+      .addFields(
+        { name: 'Wallet', value: `\`${walletDisplay}\``, inline: true },
+        { name: 'SOL Balance', value: `${solBal} SOL`, inline: true },
+        { name: 'USDC Balance', value: `$${usdcBal}`, inline: true },
+        { name: 'Last Updated', value: config.last_updated ? `<t:${Math.floor(new Date(config.last_updated).getTime() / 1000)}:R>` : 'Never', inline: true }
+      )
+      .setFooter({ text: `Auto-updates every ${refreshHours} hours` })
+      .setTimestamp();
+
+    try {
+      // Try to edit existing message
+      if (config.watch_message_id) {
+        try {
+          const existing = await channel.messages.fetch(config.watch_message_id);
+          await existing.edit({ embeds: [embed] });
+          return { success: true, messageId: config.watch_message_id };
+        } catch (fetchErr) {
+          logger.warn('Watch panel message not found, posting new one');
+        }
+      }
+
+      // Post new message
+      const msg = await channel.send({ embeds: [embed] });
+      db.prepare('UPDATE treasury_config SET watch_message_id = ? WHERE id = 1').run(msg.id);
+      logger.log(`💰 Treasury watch panel posted in #${channel.name} (${msg.id})`);
+      return { success: true, messageId: msg.id };
+    } catch (error) {
+      logger.error('Error posting treasury watch panel:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
+  /**
    * Check if treasury data is stale
    */
   checkStaleness(lastUpdated, refreshHours) {
@@ -472,14 +545,18 @@ class TreasuryService {
 
     // Initial fetch
     if (moduleGuard.isModuleEnabled('treasury')) {
-      this.fetchBalances().catch(err => logger.error('Initial treasury fetch failed:', err));
+      this.fetchBalances()
+        .then(result => { if (result.success && config.watch_channel_id) this.postOrUpdateWatchPanel().catch(err => logger.error('Watch panel update failed:', err)); })
+        .catch(err => logger.error('Initial treasury fetch failed:', err));
       this.checkAndSendTxAlerts().catch(err => logger.error('Initial treasury tx alert check failed:', err));
     }
 
     // Schedule recurring fetches
     this.refreshTimer = setInterval(() => {
       if (moduleGuard.isModuleEnabled('treasury')) {
-        this.fetchBalances().catch(err => logger.error('Scheduled treasury fetch failed:', err));
+        this.fetchBalances()
+          .then(result => { if (result.success) { const cfg = this.getConfig(); if (cfg && cfg.watch_channel_id) this.postOrUpdateWatchPanel().catch(err => logger.error('Watch panel update failed:', err)); } })
+          .catch(err => logger.error('Scheduled treasury fetch failed:', err));
         this.checkAndSendTxAlerts().catch(err => logger.error('Scheduled treasury tx alert check failed:', err));
       }
     }, intervalMs);

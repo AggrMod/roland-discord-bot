@@ -130,6 +130,7 @@ client.once(Events.ClientReady, () => {
   startRoleResyncScheduler();
 
   // Start treasury monitoring scheduler - only if treasury enabled
+  treasuryService.setClient(client);
   treasuryService.startScheduler();
 
   // Start micro-verify cleanup job (runs every 10 minutes) - only if verification enabled

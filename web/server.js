@@ -1034,9 +1034,13 @@ class WebServer {
 
     this.app.put('/api/admin/treasury/config', adminAuthMiddleware, (req, res) => {
       try {
-        const { enabled, solanaWallet, refreshHours } = req.body;
-        const result = treasuryService.updateConfig({ enabled, solanaWallet, refreshHours });
+        const { enabled, solanaWallet, refreshHours, txAlertsEnabled, txAlertChannelId, txAlertIncomingOnly, txAlertMinSol, watchChannelId } = req.body;
+        const result = treasuryService.updateConfig({ enabled, solanaWallet, refreshHours, txAlertsEnabled, txAlertChannelId, txAlertIncomingOnly, txAlertMinSol, watchChannelId });
         res.json(result);
+        // Fire-and-forget: update watch panel if watchChannelId was included
+        if (watchChannelId !== undefined && this.client) {
+          treasuryService.postOrUpdateWatchPanel(this.client).catch(err => logger.error('Watch panel post after config save failed:', err));
+        }
       } catch (error) {
         logger.error('Error updating treasury config:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });

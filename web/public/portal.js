@@ -1641,6 +1641,11 @@ async function loadAdminSettingsView() {
             </div>
           </div>
           <div style="margin-top:var(--space-3);">
+            <label style="${fieldLabel}">Treasury Watch Channel</label>
+            <select id="treasuryWatchChannelId" style="${selectStyle}"><option value="">Loading channels...</option></select>
+            <div style="color:var(--text-secondary);font-size:0.78em;margin-top:4px;">Post a live treasury panel embed to this channel. Updates on every balance refresh.</div>
+          </div>
+          <div style="margin-top:var(--space-3);">
             <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
               <input type="checkbox" id="treasuryTxAlerts"> Transaction Alerts — enable tx monitoring
             </label>
@@ -1821,6 +1826,32 @@ async function loadAdminSettingsView() {
           alertChannelSel.innerHTML = '<option value="">-- No channels available --</option>';
         }
 
+        // Populate watch channel dropdown
+        const watchChannelSel = document.getElementById('treasuryWatchChannelId');
+        if (watchChannelSel && channelsList.length > 0) {
+          const wGrouped = {};
+          channelsList.forEach(ch => {
+            const parent = ch.parentName || 'Other';
+            if (!wGrouped[parent]) wGrouped[parent] = [];
+            wGrouped[parent].push(ch);
+          });
+          watchChannelSel.innerHTML = '<option value="">-- None (disabled) --</option>';
+          Object.keys(wGrouped).sort().forEach(parent => {
+            const optgroup = document.createElement('optgroup');
+            optgroup.label = parent;
+            wGrouped[parent].forEach(ch => {
+              const opt = document.createElement('option');
+              opt.value = ch.id;
+              opt.textContent = '# ' + ch.name;
+              optgroup.appendChild(opt);
+            });
+            watchChannelSel.appendChild(optgroup);
+          });
+          if (tc.watchChannelId) watchChannelSel.value = tc.watchChannelId;
+        } else if (watchChannelSel) {
+          watchChannelSel.innerHTML = '<option value="">-- No channels available --</option>';
+        }
+
         // Show form, hide loading
         const configForm = document.getElementById('treasuryConfigForm');
         const configLoading = document.getElementById('treasuryConfigLoading');
@@ -1842,7 +1873,8 @@ async function loadAdminSettingsView() {
                 txAlertsEnabled: !!document.getElementById('treasuryTxAlerts')?.checked,
                 txAlertChannelId: document.getElementById('treasuryAlertChannelId')?.value || '',
                 txAlertIncomingOnly: !!document.getElementById('treasuryIncomingOnly')?.checked,
-                txAlertMinSol: parseFloat(document.getElementById('treasuryMinSol')?.value) || 0
+                txAlertMinSol: parseFloat(document.getElementById('treasuryMinSol')?.value) || 0,
+                watchChannelId: document.getElementById('treasuryWatchChannelId')?.value || ''
               };
               const saveRes = await fetch('/api/admin/treasury/config', {
                 method: 'PUT',
@@ -1854,7 +1886,7 @@ async function loadAdminSettingsView() {
               if (saveRes.ok && saveData.success !== false) {
                 if (feedback) {
                   feedback.style.color = '#86efac';
-                  feedback.textContent = '✓ Treasury settings saved!';
+                  feedback.textContent = payload.watchChannelId ? '✓ Treasury settings saved. Watch panel posted to channel.' : '✓ Treasury settings saved!';
                   setTimeout(() => { feedback.textContent = ''; }, 5000);
                 }
               } else {

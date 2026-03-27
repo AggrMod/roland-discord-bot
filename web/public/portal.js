@@ -1668,7 +1668,7 @@ async function loadAdminSettingsView() {
             </div>
           </div>
           <div style="margin-top:var(--space-4);display:flex;align-items:center;gap:var(--space-3);">
-            <button class="btn-primary" id="treasurySaveBtn" style="font-size:0.85em;padding:8px 16px;">💾 Save Treasury Settings</button>
+            <!-- Treasury settings saved via global Save Settings button below -->
             <span id="treasuryFeedback" style="font-size:0.85em;font-weight:600;"></span>
           </div>
         </div>
@@ -1986,12 +1986,33 @@ async function savePortalSettings() {
       body: JSON.stringify(newSettings)
     });
     const data = await response.json();
-    if (data.success) {
-      showSettingsSuccess('Settings saved successfully!');
-      await loadAdminSettingsView();
-    } else {
+    if (!data.success) {
       showError(data.message || 'Failed to save settings');
+      return;
     }
+
+    // Also save treasury-specific config (separate API)
+    const treasuryPayload = {
+      enabled: document.getElementById('ps_moduleTreasuryEnabled')?.checked ?? true,
+      solanaWallet: (document.getElementById('treasuryWalletInput')?.value || '').trim(),
+      refreshHours: parseInt(document.getElementById('treasuryRefreshHours')?.value) || 6,
+      txAlertsEnabled: !!document.getElementById('treasuryTxAlerts')?.checked,
+      txAlertChannelId: document.getElementById('treasuryAlertChannelId')?.value || '',
+      txAlertIncomingOnly: !!document.getElementById('treasuryIncomingOnly')?.checked,
+      txAlertMinSol: parseFloat(document.getElementById('treasuryMinSol')?.value) || 0,
+      watchChannelId: document.getElementById('treasuryWatchChannelId')?.value || ''
+    };
+    if (treasuryPayload.solanaWallet || treasuryPayload.txAlertChannelId || treasuryPayload.watchChannelId) {
+      await fetch('/api/admin/treasury/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(treasuryPayload)
+      });
+    }
+
+    showSettingsSuccess('Settings saved successfully!');
+    await loadAdminSettingsView();
   } catch (error) {
     console.error('Error saving settings:', error);
     showError('Failed to save settings');

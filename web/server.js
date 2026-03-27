@@ -498,6 +498,48 @@ class WebServer {
         const managedServers = [];
         const unmanagedServers = [];
 
+        // Superadmins can manage every tenant/server in this bot instance.
+        if (isSuperadmin) {
+          const tenants = tenantService.listTenants({});
+          const seen = new Set();
+
+          for (const tenant of tenants) {
+            const guildId = tenant.guildId;
+            if (!guildId || seen.has(guildId)) continue;
+            seen.add(guildId);
+
+            const guild = await fetchGuildById(guildId);
+            managedServers.push({
+              guildId,
+              name: guild?.name || tenant.guildName || `Server ${guildId}`,
+              icon: guild?.icon || null,
+              permissions: '8',
+              source: 'tenant'
+            });
+          }
+
+          // Also include any live bot guilds not yet in tenant table (edge case)
+          for (const guildId of botGuildIds) {
+            if (seen.has(guildId)) continue;
+            const guild = await fetchGuildById(guildId);
+            managedServers.push({
+              guildId,
+              name: guild?.name || `Server ${guildId}`,
+              icon: guild?.icon || null,
+              permissions: '8',
+              source: 'bot'
+            });
+          }
+
+          managedServers.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+          return res.json({
+            success: true,
+            isSuperadmin,
+            managedServers,
+            unmanagedServers
+          });
+        }
+
         if (discordGuilds.length === 0) {
           const fallback = fallbackGuildId();
           if (fallback) {

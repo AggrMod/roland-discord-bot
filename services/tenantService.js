@@ -529,13 +529,13 @@ class TenantService {
     `).run(enabled ? 1 : 0, tenantRecord.id);
 
     const after = this.getTenantContext(normalizedGuildId);
-    this.logTenantAudit({
-      guildId: normalizedGuildId,
+    this.logAudit(
+      normalizedGuildId,
       actorId,
-      action: 'tenant.mock_data.update',
+      'tenant.mock_data.update',
       before,
       after
-    });
+    );
 
     return { success: true, message: `Mock data ${enabled ? 'enabled' : 'disabled'}`, tenant: after };
   }

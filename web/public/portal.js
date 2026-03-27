@@ -2462,7 +2462,7 @@ async function loadVotingPowerView() {
     }
 
     content.innerHTML = `
-      <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:16px;">Map Discord roles to voting power. Anyone holding a role gets its VP (cumulative across roles).</p>
+      <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:16px;">Map Discord roles to voting power. Users get the highest VP among all their roles.</p>
       <div id="vpMappingsTableContainer" style="margin-bottom:16px;">${tableHTML}</div>
       <div style="background:rgba(30,41,59,0.5);border:1px solid rgba(99,102,241,0.15);border-radius:10px;padding:16px;margin-top:8px;">
         <h5 style="color:#c9d6ff;font-size:0.88em;font-weight:600;margin:0 0 12px 0;">➕ Add Mapping</h5>

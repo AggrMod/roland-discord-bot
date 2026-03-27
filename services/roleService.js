@@ -132,18 +132,18 @@ class RoleService {
         return user ? user.voting_power : 0;
       }
 
-      // Sum VP for all matching roles the member has
-      let totalVP = 0;
+      // Use highest VP among all matching roles the member has
+      let highestVP = 0;
       if (guildMember && guildMember.roles && guildMember.roles.cache) {
         const memberRoleIds = new Set(guildMember.roles.cache.keys());
         for (const mapping of mappings) {
-          if (memberRoleIds.has(mapping.role_id)) {
-            totalVP += mapping.voting_power;
+          if (memberRoleIds.has(mapping.role_id) && mapping.voting_power > highestVP) {
+            highestVP = mapping.voting_power;
           }
         }
       }
 
-      return totalVP;
+      return highestVP;
     } catch (error) {
       logger.error('Error computing user voting power:', error);
       return 0;

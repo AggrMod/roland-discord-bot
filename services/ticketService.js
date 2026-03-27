@@ -285,8 +285,10 @@ class TicketService {
       }
 
       const ticketNumber = this._nextTicketNumber();
-      const username = interaction.user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const channelName = `ticket-${ticketNumber}-${username}`.slice(0, 100);
+      const username = interaction.user.username.toLowerCase().replace(/[^a-z0-9]/g, '') || 'user';
+      const categorySlug = String(category.name || 'ticket').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'ticket';
+      const ticketDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      const channelName = `${categorySlug}-${username}-${ticketDate}`.slice(0, 100);
 
       const guildId = process.env.GUILD_ID;
       const guild = await this.client.guilds.fetch(guildId);

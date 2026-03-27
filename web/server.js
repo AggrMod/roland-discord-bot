@@ -212,6 +212,11 @@ class WebServer {
       return this.client.guilds.cache.get(normalizedGuildId) || this.client.guilds.fetch(normalizedGuildId).catch(() => null);
     };
 
+    const guildIconUrl = (guild) => {
+      if (!guild?.id || !guild?.icon) return null;
+      return `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=256`;
+    };
+
     const resolveAdminGuildAccess = async (req, { allowFallback = true } = {}) => {
       if (!req.session.discordUser) {
         return { ok: false, status: 401, message: 'Not authenticated' };
@@ -943,16 +948,26 @@ class WebServer {
       }
     });
 
-    this.app.get('/api/superadmin/tenants/:guildId', superadminGuard, logSuperadminTenantAction, (req, res) => {
+    this.app.get('/api/superadmin/tenants/:guildId', superadminGuard, logSuperadminTenantAction, async (req, res) => {
       try {
         const tenant = tenantService.getTenant(req.params.guildId);
         if (!tenant) {
           return res.status(404).json({ success: false, message: 'Tenant not found' });
         }
 
+        const guild = await fetchGuildById(req.params.guildId);
+        const fallbackLogo = guildIconUrl(guild);
+        const branding = {
+          ...(tenant.branding || {}),
+          logo_url: tenant?.branding?.logo_url || fallbackLogo || null
+        };
+
         res.json({
           success: true,
-          tenant
+          tenant: {
+            ...tenant,
+            branding
+          }
         });
       } catch (error) {
         logger.error('Error fetching tenant:', error);
@@ -1088,13 +1103,16 @@ class WebServer {
       });
     });
 
-    this.app.get('/api/admin/settings', adminAuthMiddleware, (req, res) => {
+    this.app.get('/api/admin/settings', adminAuthMiddleware, async (req, res) => {
       try {
         const settings = settingsManager.getSettings();
         const tenantContext = tenantService.getTenantContext(req.guildId);
         const multiTenantEnabled = tenantService.isMultitenantEnabled();
         
         // Smart load: DB override → .env fallback
+        const guild = req.guild || await fetchGuildById(req.guildId);
+        const tenantLogoFallback = guildIconUrl(guild);
+
         const effectiveSettings = {
           ...settings,
           // Channel overrides: if empty in DB, use .env
@@ -1111,7 +1129,9 @@ class WebServer {
           multiTenantEnabled,
           tenantEnabled: multiTenantEnabled && !!tenantContext.tenant,
           readOnlyManaged: multiTenantEnabled ? tenantContext.readOnlyManaged : false,
-          tenantBranding: tenantContext.branding || null
+          tenantBranding: tenantContext.branding
+            ? { ...tenantContext.branding, logo_url: tenantContext.branding.logo_url || tenantLogoFallback || null }
+            : (tenantLogoFallback ? { logo_url: tenantLogoFallback } : null)
         };
 
         // In multitenant mode, module enabled states come from tenant module entitlements

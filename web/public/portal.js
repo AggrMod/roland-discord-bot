@@ -1689,12 +1689,16 @@ function renderTenantDetailPanel(tenant) {
   `).join('');
 
   const moduleToggles = Object.entries(TENANT_MODULE_LABELS).map(([moduleKey, label]) => {
-    const checked = tenant.modules?.[moduleKey] ? ' checked' : '';
+    const isOn = !!tenant.modules?.[moduleKey];
     return `
-      <label style="display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 12px; border:1px solid rgba(99,102,241,0.14); border-radius:10px; background:rgba(14,23,44,0.45);">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 12px; border:1px solid rgba(99,102,241,0.14); border-radius:10px; background:rgba(14,23,44,0.45);">
         <span style="color:#e0e7ff; font-weight:600;">${escapeHtml(label)}</span>
-        <input type="checkbox" ${checked} onchange="toggleTenantModule('${escapeHtml(moduleKey)}', this)" style="width:18px; height:18px; cursor:pointer;">
-      </label>
+        <label style="position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0;">
+          <input type="checkbox" ${isOn ? 'checked' : ''} onchange="toggleTenantModule('${escapeHtml(moduleKey)}', this); this.parentElement.querySelector('.tenant-toggle-track').style.background=this.checked?'var(--gold)':'#555'; this.parentElement.querySelector('.tenant-toggle-knob').style.left=this.checked?'22px':'3px';" style="opacity:0;width:0;height:0;">
+          <span class="tenant-toggle-track" style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:${isOn ? 'var(--gold)' : '#555'};border-radius:24px;transition:.3s;"></span>
+          <span class="tenant-toggle-knob" style="position:absolute;height:18px;width:18px;left:${isOn ? '22px' : '3px'};bottom:3px;background:#fff;border-radius:50%;transition:.3s;pointer-events:none;"></span>
+        </label>
+      </div>
     `;
   }).join('');
 
@@ -2459,6 +2463,7 @@ async function loadAdminSettingsView() {
     if (!settingsJson.success) throw new Error(settingsJson.message || 'Failed to load settings');
     portalSettingsData = settingsJson.settings;
     const s = portalSettingsData;
+    const tenantReadOnlyModules = !!(s.multiTenantEnabled && s.readOnlyManaged && !isSuperadmin);
 
     // Build module toggle helper (styled toggle switch)
     const moduleToggle = (id, label, icon, defaultVal) => {
@@ -2730,6 +2735,22 @@ async function loadAdminSettingsView() {
 
     // Step 3: Attach toggle listeners now that DOM is ready
     attachToggleListeners();
+
+    // In multi-tenant mode, module entitlements are managed by Superadmin only
+    if (tenantReadOnlyModules) {
+      const moduleControlCard = content.querySelector('h3')?.closest('div');
+      const allModuleToggles = content.querySelectorAll('input[type="checkbox"][id^="ps_module"]');
+      allModuleToggles.forEach(cb => {
+        cb.disabled = true;
+        cb.title = 'Managed by Superadmin plan';
+      });
+      if (moduleControlCard) {
+        const note = document.createElement('div');
+        note.style.cssText = 'margin-top:10px;padding:8px 10px;border-radius:8px;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.35);color:#fde68a;font-size:0.82em;';
+        note.textContent = '🔒 Module toggles are managed in Superadmin → Tenant Management.';
+        moduleControlCard.appendChild(note);
+      }
+    }
 
     // Populate base verified role dropdown
     populateRoleSelect('ps_baseVerifiedRoleId', s.baseVerifiedRoleId || '').then(() => {

@@ -17,6 +17,17 @@ function initDatabase() {
   try { db.exec('ALTER TABLE wallets ADD COLUMN is_favorite BOOLEAN DEFAULT 0'); } catch(e) {}
   try { db.exec('CREATE TABLE user_verify_amounts (id INTEGER PRIMARY KEY AUTOINCREMENT, discord_id TEXT UNIQUE NOT NULL, username TEXT, assigned_amount REAL NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'); } catch(e) {}
 
+  // Governance overhaul migrations
+  try { db.exec("ALTER TABLE proposals ADD COLUMN category TEXT DEFAULT 'Other'"); } catch(e) {}
+  try { db.exec('ALTER TABLE proposals ADD COLUMN cost_indication TEXT'); } catch(e) {}
+  try { db.exec('ALTER TABLE proposals ADD COLUMN veto_reason TEXT'); } catch(e) {}
+  try { db.exec('ALTER TABLE proposals ADD COLUMN veto_votes TEXT'); } catch(e) {}
+  try { db.exec('ALTER TABLE proposals ADD COLUMN vp_snapshot TEXT'); } catch(e) {}
+  try { db.exec('ALTER TABLE proposals ADD COLUMN quorum_required INTEGER'); } catch(e) {}
+  try { db.exec('ALTER TABLE proposals ADD COLUMN on_hold_reason TEXT'); } catch(e) {}
+  try { db.exec('ALTER TABLE proposals ADD COLUMN promoted_by TEXT'); } catch(e) {}
+  try { db.exec('ALTER TABLE proposals ADD COLUMN paused INTEGER DEFAULT 0'); } catch(e) {}
+
   // VP decoupling: role-to-voting-power mapping table
   db.exec(`
     CREATE TABLE IF NOT EXISTS role_vp_mappings (
@@ -94,6 +105,35 @@ function initDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (proposal_id) REFERENCES proposals(proposal_id),
       FOREIGN KEY (supporter_id) REFERENCES users(discord_id),
+      UNIQUE(proposal_id, supporter_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS proposal_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      proposal_id TEXT NOT NULL,
+      author_id TEXT NOT NULL,
+      author_name TEXT,
+      content TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (proposal_id) REFERENCES proposals(proposal_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS proposal_veto_votes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      proposal_id TEXT NOT NULL,
+      voter_id TEXT NOT NULL,
+      reason TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (proposal_id) REFERENCES proposals(proposal_id),
+      UNIQUE(proposal_id, voter_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS proposal_support (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      proposal_id TEXT NOT NULL,
+      supporter_id TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (proposal_id) REFERENCES proposals(proposal_id),
       UNIQUE(proposal_id, supporter_id)
     );
 
@@ -197,6 +237,9 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_nft_activity_events_time ON nft_activity_events(event_time);
     CREATE INDEX IF NOT EXISTS idx_nft_activity_events_collection ON nft_activity_events(collection_key);
     CREATE INDEX IF NOT EXISTS idx_nft_activity_events_type ON nft_activity_events(event_type);
+    CREATE INDEX IF NOT EXISTS idx_proposal_comments_proposal ON proposal_comments(proposal_id);
+    CREATE INDEX IF NOT EXISTS idx_proposal_veto_votes_proposal ON proposal_veto_votes(proposal_id);
+    CREATE INDEX IF NOT EXISTS idx_proposal_support_proposal ON proposal_support(proposal_id);
   `);
 
   logger.log('Database initialized successfully');

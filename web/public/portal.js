@@ -514,17 +514,40 @@ function renderProposals() {
     <div class="proposal-item">
       <div class="proposal-header">
         <div class="proposal-title">${escapeHtml(proposal.title)}</div>
-        <span class="status-badge status-${proposal.status}">${proposal.status}</span>
+        <div style="display:flex; gap:6px; align-items:center;">
+          ${proposal.category ? `<span style="padding:2px 8px; border-radius:4px; font-size:0.8em; background:rgba(99,102,241,0.15); color:#818cf8; border:1px solid rgba(99,102,241,0.3);">${escapeHtml(proposal.category)}</span>` : ''}
+          <span class="status-badge status-${proposal.status}">${proposal.status}</span>
+        </div>
       </div>
       <div class="proposal-meta">
         Proposal #${proposal.proposal_id} • Created ${formatDate(new Date(proposal.created_at))}
+        ${proposal.cost_indication ? ` • Cost: ${escapeHtml(proposal.cost_indication)}` : ''}
       </div>
       ${proposal.description ? `<p style="color: var(--text-secondary); margin-top: var(--space-3); line-height: 1.6;">${escapeHtml(proposal.description)}</p>` : ''}
+      ${proposal.status === 'draft' ? `<button onclick="submitProposalForReview('${escapeHtml(proposal.proposal_id)}')" style="margin-top:8px; padding:6px 14px; background:#6366f1; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Submit for Review</button>` : ''}
     </div>
   `).join('') + '</div>';
 
   // Also load active votes
   loadActiveVotes();
+}
+
+async function submitProposalForReview(proposalId) {
+  showConfirmModal('Submit for Review?', 'Once submitted, an admin will review your proposal before it moves to the support phase.', async () => {
+    try {
+      const response = await fetch(`/api/governance/proposals/${proposalId}/submit`, { method: 'POST', credentials: 'include' });
+      const data = await response.json();
+      if (data.success) {
+        showSuccess('Proposal submitted for review!');
+        await loadPortal();
+        switchSection('governance');
+      } else {
+        showError(data.message || 'Failed to submit for review');
+      }
+    } catch (e) {
+      showError('Error: ' + e.message);
+    }
+  }, 'Submit');
 }
 
 async function loadActiveVotes() {
@@ -1065,6 +1088,20 @@ function showCreateProposalForm() {
         <input id="proposalTitleInput" type="text" placeholder="Enter a clear, descriptive title" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
       </div>
       <div>
+        <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Category *</label>
+        <select id="proposalCategoryInput" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
+          <option value="Partnership">Partnership</option>
+          <option value="Treasury Allocation">Treasury Allocation</option>
+          <option value="Rule Change">Rule Change</option>
+          <option value="Community Event">Community Event</option>
+          <option value="Other" selected>Other</option>
+        </select>
+      </div>
+      <div>
+        <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Cost Indication (optional)</label>
+        <input id="proposalCostInput" type="text" placeholder="e.g. ~500 USDC" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
+      </div>
+      <div>
         <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Description *</label>
         <textarea id="proposalDescInput" placeholder="Explain your proposal's purpose and impact" rows="4" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; resize:vertical;"></textarea>
       </div>
@@ -1074,6 +1111,8 @@ function showCreateProposalForm() {
   confirmCallback = async () => {
     const proposalTitle = document.getElementById('proposalTitleInput')?.value.trim();
     const proposalDesc = document.getElementById('proposalDescInput')?.value.trim();
+    const proposalCategory = document.getElementById('proposalCategoryInput')?.value || 'Other';
+    const proposalCost = document.getElementById('proposalCostInput')?.value.trim() || null;
     if (!proposalTitle || !proposalDesc) {
       showError('Please fill in both title and description');
       return;
@@ -1082,7 +1121,7 @@ function showCreateProposalForm() {
       const response = await fetch('/api/user/proposals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: proposalTitle, description: proposalDesc })
+        body: JSON.stringify({ title: proposalTitle, description: proposalDesc, category: proposalCategory, costIndication: proposalCost })
       });
       const data = await response.json();
       if (data.success) {
@@ -1378,18 +1417,159 @@ async function loadAdminProposals() {
       return;
     }
 
-    content.innerHTML = `<div style="display:grid; gap:12px;">${proposals.slice(0, 50).map(p => `
-      <div style="padding:12px; border:1px solid var(--border-default); border-radius:10px; background: var(--bg-tertiary);">
-        <div style="display:flex; justify-content:space-between; gap:12px;">
-          <strong>${escapeHtml(p.title || 'Untitled')}</strong>
-          <span class="status-badge status-${escapeHtml(p.status || 'draft')}">${escapeHtml(p.status || 'draft')}</span>
-        </div>
-        <div style="color:var(--text-secondary); font-size:0.9em; margin-top:6px;">ID: ${escapeHtml(p.proposal_id || '')} • Creator: ${escapeHtml(p.creator_id || '')}</div>
-      </div>
-    `).join('')}</div>`;
+    const statusOrder = ['pending_review', 'on_hold', 'supporting', 'voting', 'concluded', 'vetoed', 'draft', 'expired', 'passed', 'rejected', 'quorum_not_met'];
+    const grouped = {};
+    for (const p of proposals) {
+      const s = p.status || 'draft';
+      if (!grouped[s]) grouped[s] = [];
+      grouped[s].push(p);
+    }
+
+    const statusLabels = {
+      pending_review: 'Pending Review', on_hold: 'On Hold', supporting: 'Supporting',
+      voting: 'Voting', concluded: 'Concluded', vetoed: 'Vetoed', draft: 'Draft',
+      expired: 'Expired', passed: 'Passed', rejected: 'Rejected', quorum_not_met: 'Quorum Not Met'
+    };
+
+    const categoryColors = {
+      'Partnership': '#3b82f6', 'Treasury Allocation': '#f59e0b',
+      'Rule Change': '#ef4444', 'Community Event': '#10b981', 'Other': '#8b5cf6'
+    };
+
+    let html = '';
+    for (const status of statusOrder) {
+      const items = grouped[status];
+      if (!items || !items.length) continue;
+
+      html += `<div style="margin-bottom:20px;">
+        <h4 style="color:var(--text-primary); margin-bottom:10px; font-size:1em; border-bottom:1px solid var(--border-default); padding-bottom:6px;">
+          ${statusLabels[status] || status} (${items.length})
+        </h4>
+        <div style="display:grid; gap:10px;">`;
+
+      for (const p of items) {
+        const catColor = categoryColors[p.category] || '#8b5cf6';
+        const commentCount = p.comment_count || 0;
+        const vetoVotes = p.veto_votes ? JSON.parse(p.veto_votes || '[]').length : 0;
+
+        let actions = '';
+        if (status === 'pending_review') {
+          actions = `<div style="display:flex; gap:8px; margin-top:8px;">
+            <button onclick="adminProposalAction('${p.proposal_id}', 'approve')" style="padding:6px 14px; background:#10b981; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Approve</button>
+            <button onclick="adminProposalHold('${p.proposal_id}')" style="padding:6px 14px; background:#f59e0b; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Hold</button>
+          </div>`;
+        } else if (status === 'on_hold') {
+          actions = `<div style="display:flex; gap:8px; margin-top:8px;">
+            <button onclick="adminProposalAction('${p.proposal_id}', 'approve')" style="padding:6px 14px; background:#10b981; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Approve</button>
+            ${p.on_hold_reason ? `<span style="color:var(--text-secondary); font-size:0.85em; align-self:center;">Reason: ${escapeHtml(p.on_hold_reason)}</span>` : ''}
+          </div>`;
+        } else if (status === 'supporting') {
+          actions = `<div style="display:flex; gap:8px; margin-top:8px;">
+            <button onclick="adminProposalAction('${p.proposal_id}', 'promote')" style="padding:6px 14px; background:#6366f1; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Promote to Voting</button>
+          </div>`;
+        } else if (status === 'voting') {
+          const totalVoted = (p.yes_vp || 0) + (p.no_vp || 0) + (p.abstain_vp || 0);
+          const quorumPct = p.total_vp > 0 ? Math.round((totalVoted / p.total_vp) * 100) : 0;
+          actions = `<div style="margin-top:8px;">
+            <div style="font-size:0.85em; color:var(--text-secondary); margin-bottom:6px;">
+              Yes: ${p.yes_vp || 0} VP | No: ${p.no_vp || 0} VP | Abstain: ${p.abstain_vp || 0} VP | Quorum: ${quorumPct}% / ${p.quorum_required || '?'} VP needed
+              ${vetoVotes > 0 ? ` | Veto votes: ${vetoVotes}` : ''}
+              ${p.paused ? ' | <span style="color:#ef4444;">PAUSED</span>' : ''}
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button onclick="adminProposalAction('${p.proposal_id}', 'conclude')" style="padding:6px 14px; background:#ef4444; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Conclude</button>
+              <button onclick="adminProposalAction('${p.proposal_id}', 'pause')" style="padding:6px 14px; background:#f59e0b; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">${p.paused ? 'Unpause' : 'Pause'}</button>
+            </div>
+          </div>`;
+        } else if (status === 'vetoed') {
+          actions = p.veto_reason ? `<div style="margin-top:6px; font-size:0.85em; color:#ef4444;">Veto reason: ${escapeHtml(p.veto_reason)}</div>` : '';
+        }
+
+        html += `<div style="padding:12px; border:1px solid var(--border-default); border-radius:10px; background: var(--bg-tertiary);">
+          <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+            <strong>${escapeHtml(p.title || 'Untitled')}</strong>
+            <div style="display:flex; gap:6px; align-items:center;">
+              <span style="padding:2px 8px; border-radius:4px; font-size:0.8em; background:${catColor}20; color:${catColor}; border:1px solid ${catColor}40;">${escapeHtml(p.category || 'Other')}</span>
+              <span class="status-badge status-${escapeHtml(p.status || 'draft')}">${escapeHtml(p.status || 'draft')}</span>
+            </div>
+          </div>
+          <div style="color:var(--text-secondary); font-size:0.85em; margin-top:6px;">
+            ID: ${escapeHtml(p.proposal_id || '')} • Creator: ${escapeHtml(p.creator_id || '')}
+            ${p.cost_indication ? ` • Cost: ${escapeHtml(p.cost_indication)}` : ''}
+          </div>
+          ${actions}
+        </div>`;
+      }
+
+      html += '</div></div>';
+    }
+
+    content.innerHTML = html;
   } catch (e) {
     content.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;
   }
+}
+
+async function adminProposalAction(proposalId, action) {
+  const endpoints = {
+    approve: `/api/admin/governance/proposals/${proposalId}/approve`,
+    promote: `/api/admin/governance/proposals/${proposalId}/promote`,
+    conclude: `/api/admin/governance/proposals/${proposalId}/conclude`,
+    pause: `/api/admin/governance/proposals/${proposalId}/pause`
+  };
+  const labels = { approve: 'Approve', promote: 'Promote to Voting', conclude: 'Conclude Voting', pause: 'Toggle Pause' };
+
+  showConfirmModal(`${labels[action]}?`, `Are you sure you want to ${labels[action].toLowerCase()} proposal ${proposalId}?`, async () => {
+    try {
+      const response = await fetch(endpoints[action], { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include' });
+      const data = await response.json();
+      if (data.success) {
+        showSuccess(`Proposal ${proposalId}: ${labels[action]} successful`);
+        await loadAdminProposals();
+      } else {
+        showError(data.message || `Failed to ${action}`);
+      }
+    } catch (e) {
+      showError('Error: ' + e.message);
+    }
+  }, labels[action]);
+}
+
+function adminProposalHold(proposalId) {
+  showConfirmModal('Place on Hold', '', null);
+  const body = document.getElementById('confirmMessage');
+  const btn = document.getElementById('confirmButton');
+  const title = document.getElementById('confirmTitle');
+  title.textContent = 'Place Proposal on Hold';
+  btn.textContent = 'Place on Hold';
+  btn.classList.remove('btn-danger');
+  btn.classList.add('btn-primary');
+
+  body.innerHTML = `
+    <div>
+      <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Reason (optional)</label>
+      <input id="holdReasonInput" type="text" placeholder="Why is this on hold?" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
+    </div>
+  `;
+
+  confirmCallback = async () => {
+    const reason = document.getElementById('holdReasonInput')?.value.trim() || '';
+    try {
+      const response = await fetch(`/api/admin/governance/proposals/${proposalId}/hold`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', body: JSON.stringify({ reason })
+      });
+      const data = await response.json();
+      if (data.success) {
+        showSuccess(`Proposal ${proposalId} placed on hold`);
+        await loadAdminProposals();
+      } else {
+        showError(data.message || 'Failed to hold proposal');
+      }
+    } catch (e) {
+      showError('Error: ' + e.message);
+    }
+  };
 }
 
 let portalSettingsData = null;

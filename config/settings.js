@@ -189,6 +189,10 @@ class SettingsManager {
         quorumPercentage: 25,
         supportThreshold: 4,
         voteDurationDays: 7,
+        governanceQuorum: 25,
+        staffTrusteesVP: 10,
+        staffTrusteeRoles: ['Enforcer', 'Caporegime', 'Consigliere', 'Underboss', 'Don'],
+        proposalCategories: ['Partnership', 'Treasury Allocation', 'Rule Change', 'Community Event', 'Other'],
         
         // Battle Timing
         battleRoundPauseMinSec: 5,

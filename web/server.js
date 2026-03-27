@@ -269,7 +269,7 @@ class WebServer {
         const wallets = db.prepare('SELECT wallet_address, is_favorite, primary_wallet, created_at FROM wallets WHERE discord_id = ? ORDER BY is_favorite DESC, created_at ASC').all(discordId);
         
         // Get user's proposals
-        const proposals = db.prepare('SELECT * FROM proposals WHERE creator_id = ? AND status IN (?, ?) ORDER BY created_at DESC').all(discordId, 'draft', 'voting');
+        const proposals = db.prepare("SELECT * FROM proposals WHERE creator_id = ? AND status NOT IN ('expired') ORDER BY created_at DESC").all(discordId);
         
         // Get user's missions
         const missions = db.prepare(`
@@ -358,12 +358,16 @@ class WebServer {
           return res.status(400).json({ success: false, message: 'Choice must be yes, no, or abstain' });
         }
 
-        // Get user's voting power
+        // Get user's voting power (castVote will use snapshot VP if available)
         const userInfo = await roleService.getUserInfo(discordId);
         if (!userInfo || !userInfo.voting_power || userInfo.voting_power < 1) {
           return res.status(403).json({ success: false, message: 'You need at least 1 verified NFT to vote' });
         }
         const result = proposalService.castVote(proposalId, discordId, choice.toLowerCase(), userInfo.voting_power);
+        if (result.success) {
+          // Update the Discord voting message with new tallies
+          proposalService.updateVotingMessage(proposalId).catch(() => {});
+        }
         res.json(result);
       } catch (error) {
         logger.error('Error casting vote via web:', error);
@@ -380,8 +384,7 @@ class WebServer {
 
       try {
         const discordId = req.session.discordUser.id;
-        const username = req.session.discordUser.username;
-        const { title, description } = req.body;
+        const { title, description, category, costIndication } = req.body;
 
         if (!title || !description) {
           return res.status(400).json({ success: false, message: 'Title and description are required' });
@@ -395,19 +398,98 @@ class WebServer {
           return res.status(400).json({ success: false, message: 'Description must be 2000 characters or less' });
         }
 
-        // Check user has voting power (at least 1 verified NFT)
         const userInfo = await roleService.getUserInfo(discordId);
         if (!userInfo || !userInfo.voting_power || userInfo.voting_power < 1) {
           return res.status(403).json({ success: false, message: 'You need at least 1 verified NFT to create proposals' });
         }
 
-        // Get user's primary wallet for the proposal
-        const primaryWallet = db.prepare('SELECT wallet_address FROM wallets WHERE discord_id = ? AND is_favorite = 1').get(discordId);
-        const walletAddr = primaryWallet ? primaryWallet.wallet_address : '';
-        const result = proposalService.createProposal(discordId, walletAddr, title, description);
+        const result = proposalService.createProposal(discordId, { title, description, category: category || 'Other', costIndication: costIndication || null });
         res.json(result);
       } catch (error) {
         logger.error('Error creating proposal via web:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // ==================== GOVERNANCE LIFECYCLE ENDPOINTS ====================
+
+    // POST /api/governance/proposals — alias for user proposal creation (session auth)
+    this.app.post('/api/governance/proposals', async (req, res) => {
+      if (!req.session.discordUser) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
+      try {
+        const discordId = req.session.discordUser.id;
+        const { title, description, category, costIndication } = req.body;
+        if (!title || !description) return res.status(400).json({ success: false, message: 'Title and description are required' });
+        const userInfo = await roleService.getUserInfo(discordId);
+        if (!userInfo || !userInfo.voting_power || userInfo.voting_power < 1) {
+          return res.status(403).json({ success: false, message: 'You need at least 1 verified NFT to create proposals' });
+        }
+        const result = proposalService.createProposal(discordId, { title, description, category: category || 'Other', costIndication: costIndication || null });
+        res.json(result);
+      } catch (error) {
+        logger.error('Error creating proposal (governance):', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // POST /api/governance/proposals/:id/submit — author submits for review
+    this.app.post('/api/governance/proposals/:id/submit', (req, res) => {
+      if (!req.session.discordUser) return res.status(401).json({ success: false, message: 'Not authenticated' });
+      try {
+        const result = proposalService.submitForReview(req.params.id, req.session.discordUser.id);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error submitting proposal for review:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // POST /api/governance/proposals/:id/support — add support (session auth)
+    this.app.post('/api/governance/proposals/:id/support', async (req, res) => {
+      if (!req.session.discordUser) return res.status(401).json({ success: false, message: 'Not authenticated' });
+      try {
+        const result = proposalService.addSupporter(req.params.id, req.session.discordUser.id);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error adding support:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // GET /api/governance/proposals/:id/comments — public
+    this.app.get('/api/governance/proposals/:id/comments', (req, res) => {
+      try {
+        const comments = proposalService.getComments(req.params.id);
+        res.json({ success: true, comments });
+      } catch (error) {
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // POST /api/governance/proposals/:id/comments — session auth
+    this.app.post('/api/governance/proposals/:id/comments', (req, res) => {
+      if (!req.session.discordUser) return res.status(401).json({ success: false, message: 'Not authenticated' });
+      try {
+        const { content } = req.body;
+        if (!content || !content.trim()) return res.status(400).json({ success: false, message: 'Content is required' });
+        if (content.length > 1000) return res.status(400).json({ success: false, message: 'Comment must be 1000 characters or less' });
+        const result = proposalService.addComment(req.params.id, req.session.discordUser.id, req.session.discordUser.username, content.trim());
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // POST /api/governance/proposals/:id/veto — council member veto vote
+    this.app.post('/api/governance/proposals/:id/veto', async (req, res) => {
+      if (!req.session.discordUser) return res.status(401).json({ success: false, message: 'Not authenticated' });
+      try {
+        const { reason } = req.body;
+        const result = proposalService.vetoProposal(req.params.id, req.session.discordUser.id, reason);
+        res.json(result);
+      } catch (error) {
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });
@@ -671,6 +753,62 @@ class WebServer {
         res.json(result);
       } catch (error) {
         logger.error('Error closing proposal:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // Admin: approve proposal (pending_review → supporting)
+    this.app.post('/api/admin/governance/proposals/:id/approve', adminAuthMiddleware, (req, res) => {
+      try {
+        const result = proposalService.approveProposal(req.params.id, req.session.discordUser.id);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error approving proposal:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // Admin: hold proposal (pending_review → on_hold)
+    this.app.post('/api/admin/governance/proposals/:id/hold', adminAuthMiddleware, (req, res) => {
+      try {
+        const { reason } = req.body;
+        const result = proposalService.holdProposal(req.params.id, req.session.discordUser.id, reason);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error holding proposal:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // Admin: promote to voting (supporting → voting, takes VP snapshot)
+    this.app.post('/api/admin/governance/proposals/:id/promote', adminAuthMiddleware, async (req, res) => {
+      try {
+        const result = await proposalService.promoteToVoting(req.params.id, req.session.discordUser.id);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error promoting proposal:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // Admin: conclude voting
+    this.app.post('/api/admin/governance/proposals/:id/conclude', adminAuthMiddleware, async (req, res) => {
+      try {
+        const result = await proposalService.concludeProposal(req.params.id);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error concluding proposal:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // Admin: emergency pause (Don + Consigliere only — caller must verify roles)
+    this.app.post('/api/admin/governance/proposals/:id/pause', adminAuthMiddleware, (req, res) => {
+      try {
+        const result = proposalService.emergencyPause(req.params.id, req.session.discordUser.id);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error pausing proposal:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });
@@ -1191,7 +1329,7 @@ class WebServer {
 
     this.app.get('/api/public/proposals/active', (req, res) => {
       try {
-        const proposals = db.prepare('SELECT * FROM proposals WHERE status = ? ORDER BY created_at DESC').all('voting');
+        const proposals = db.prepare("SELECT * FROM proposals WHERE status IN ('supporting', 'voting') ORDER BY created_at DESC").all();
         
         const enrichedProposals = proposals.map(p => {
           const votes = {
@@ -1214,7 +1352,10 @@ class WebServer {
               required: p.quorum_threshold,
               current: quorumPercentage
             },
-            deadline: p.end_time
+            deadline: p.end_time,
+            category: p.category || 'Other',
+            costIndication: p.cost_indication,
+            paused: !!p.paused
           };
         });
 
@@ -1227,7 +1368,7 @@ class WebServer {
 
     this.app.get('/api/public/proposals/concluded', (req, res) => {
       try {
-        const proposals = db.prepare('SELECT * FROM proposals WHERE status IN (?, ?, ?) ORDER BY created_at DESC').all('passed', 'rejected', 'quorum_not_met');
+        const proposals = db.prepare("SELECT * FROM proposals WHERE status IN ('passed', 'rejected', 'quorum_not_met', 'concluded', 'vetoed') ORDER BY created_at DESC").all();
         
         const enrichedProposals = proposals.map(p => {
           const votes = {

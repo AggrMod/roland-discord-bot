@@ -386,7 +386,7 @@ async function checkAdminStatus() {
     
     if (data.success) {
       isAdmin = true;
-      document.getElementById('navAdmin').style.display = 'block';
+      document.getElementById('adminSidebarGroup').style.display = 'block';
       document.getElementById('mobileNavAdmin').style.display = 'block';
       
       // Load treasury data for admin
@@ -1194,6 +1194,23 @@ function renderEnvStatusBar(bar, d) {
     + `</div>`;
 }
 
+function toggleAdminSubmenu() {
+  const submenu = document.getElementById('adminSubmenu');
+  const chevron = document.getElementById('adminChevron');
+  if (!submenu) return;
+  const isOpen = submenu.style.display !== 'none';
+  if (isOpen) {
+    submenu.style.display = 'none';
+    if (chevron) chevron.textContent = '▶';
+  } else {
+    submenu.style.display = 'flex';
+    if (chevron) chevron.textContent = '▼';
+    // If no sub-item is active yet, show settings by default
+    const hasActive = submenu.querySelector('.admin-sub-item.active');
+    if (!hasActive) showAdminView('settings');
+  }
+}
+
 function showAdminView(view) {
   if (!isAdmin) {
     showError('Admin access required.');
@@ -1214,22 +1231,24 @@ function showAdminView(view) {
     activity: { card: 'adminActivityCard', load: loadAdminActivity }
   };
 
-  const target = map[view] || map.stats;
+  const target = map[view] || map.settings;
   const card = document.getElementById(target.card);
   if (card) card.style.display = 'block';
   if (typeof target.load === 'function') target.load();
 
-  // Highlight active admin tab
-  document.querySelectorAll('.admin-tab').forEach(btn => {
-    const tab = btn.getAttribute('data-admin-tab');
-    if (tab === view) {
-      btn.style.background = 'rgba(99,102,241,0.25)';
-      btn.style.color = '#c7d2fe';
-    } else {
-      btn.style.background = 'transparent';
-      btn.style.color = 'var(--text-secondary)';
+  // Highlight active admin sub-item in sidebar
+  document.querySelectorAll('.admin-sub-item').forEach(btn => {
+    btn.classList.remove('active');
+    if (btn.getAttribute('data-admin-nav') === view) {
+      btn.classList.add('active');
     }
   });
+
+  // Ensure submenu is open
+  const submenu = document.getElementById('adminSubmenu');
+  const chevron = document.getElementById('adminChevron');
+  if (submenu) submenu.style.display = 'flex';
+  if (chevron) chevron.textContent = '▼';
 
   loadEnvStatusBar();
 

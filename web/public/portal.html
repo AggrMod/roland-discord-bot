@@ -61,7 +61,7 @@
             <span class="nav-icon" aria-hidden="true">❓</span>
             <span class="nav-label">Help</span>
           </button>
-          <button class="nav-item" data-section="admin" onclick="switchSection('admin'); toggleMobileMenu()" id="mobileNavAdmin" style="display:none;">
+          <button class="nav-item" data-section="admin" onclick="showAdminView('settings'); toggleMobileMenu()" id="mobileNavAdmin" style="display:none;">
             <span class="nav-icon" aria-hidden="true">⚙️</span>
             <span class="nav-label">Admin</span>
           </button>
@@ -103,11 +103,42 @@
             <span class="nav-label">Help</span>
           </button>
         </div>
-        <div class="sidebar-footer">
-          <button class="nav-item" data-section="admin" onclick="switchSection('admin'); showAdminView('stats');" id="navAdmin" style="display:none;">
+        <div class="sidebar-footer" id="adminSidebarGroup" style="display:none;">
+          <button class="nav-item" data-section="admin" onclick="toggleAdminSubmenu()" id="navAdmin">
             <span class="nav-icon" aria-hidden="true">⚙️</span>
             <span class="nav-label">Admin</span>
+            <span class="admin-chevron" id="adminChevron" style="margin-left:auto;font-size:0.7em;transition:transform 0.2s;">▶</span>
           </button>
+          <div id="adminSubmenu" class="admin-submenu" style="display:none;">
+            <button class="nav-item admin-sub-item" data-admin-nav="settings" onclick="showAdminView('settings')">
+              <span class="nav-icon" aria-hidden="true">⚙️</span>
+              <span class="nav-label">Settings</span>
+            </button>
+            <button class="nav-item admin-sub-item" data-admin-nav="users" onclick="showAdminView('users')">
+              <span class="nav-icon" aria-hidden="true">👥</span>
+              <span class="nav-label">Users</span>
+            </button>
+            <button class="nav-item admin-sub-item" data-admin-nav="proposals" onclick="showAdminView('proposals')">
+              <span class="nav-icon" aria-hidden="true">📜</span>
+              <span class="nav-label">Proposals</span>
+            </button>
+            <button class="nav-item admin-sub-item" data-admin-nav="analytics" onclick="showAdminView('analytics')">
+              <span class="nav-icon" aria-hidden="true">📊</span>
+              <span class="nav-label">Analytics</span>
+            </button>
+            <button class="nav-item admin-sub-item" data-admin-nav="roles" onclick="showAdminView('roles')">
+              <span class="nav-icon" aria-hidden="true">🎭</span>
+              <span class="nav-label">Verification Roles</span>
+            </button>
+            <button class="nav-item admin-sub-item" data-admin-nav="activity" onclick="showAdminView('activity')">
+              <span class="nav-icon" aria-hidden="true">📋</span>
+              <span class="nav-label">Activity Feed</span>
+            </button>
+            <button class="nav-item admin-sub-item" data-admin-nav="help" onclick="showAdminView('help')">
+              <span class="nav-icon" aria-hidden="true">📘</span>
+              <span class="nav-label">Commands</span>
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -649,41 +680,7 @@
 
         <!-- Admin Section -->
         <section id="section-admin" class="content-section">
-          <header class="section-header">
-            <h2>Admin Portal</h2>
-            <p class="section-subtitle">System administration and DAO management tools</p>
-          </header>
           <div id="adminEnvStatusBar" style="margin-bottom: var(--space-4);"></div>
-          
-
-
-
-          <div class="admin-tab-bar" style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:var(--space-4); padding:6px; background:rgba(15,23,42,0.6); border:1px solid rgba(99,102,241,0.15); border-radius:12px;">
-            <button class="admin-tab" data-admin-tab="stats" onclick="showAdminView('stats')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:0.85em;font-weight:600;cursor:pointer;transition:all 0.2s;">
-              <span>📊</span><span>Overview</span>
-            </button>
-            <button class="admin-tab" data-admin-tab="users" onclick="showAdminView('users')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:0.85em;font-weight:600;cursor:pointer;transition:all 0.2s;">
-              <span>👥</span><span>Users</span>
-            </button>
-            <button class="admin-tab" data-admin-tab="proposals" onclick="showAdminView('proposals')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:0.85em;font-weight:600;cursor:pointer;transition:all 0.2s;">
-              <span>📜</span><span>Proposals</span>
-            </button>
-            <button class="admin-tab" data-admin-tab="analytics" onclick="showAdminView('analytics')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:0.85em;font-weight:600;cursor:pointer;transition:all 0.2s;">
-              <span>📊</span><span>Analytics</span>
-            </button>
-            <button class="admin-tab" data-admin-tab="settings" onclick="showAdminView('settings')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:0.85em;font-weight:600;cursor:pointer;transition:all 0.2s;">
-              <span>⚙️</span><span>Settings</span>
-            </button>
-            <button class="admin-tab" data-admin-tab="roles" onclick="showAdminView('roles')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:0.85em;font-weight:600;cursor:pointer;transition:all 0.2s;">
-              <span>👥</span><span>Roles</span>
-            </button>
-            <button class="admin-tab" data-admin-tab="activity" onclick="showAdminView('activity')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:0.85em;font-weight:600;cursor:pointer;transition:all 0.2s;">
-              <span>📋</span><span>Activity</span>
-            </button>
-            <button class="admin-tab" data-admin-tab="help" onclick="showAdminView('help')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:none;border-radius:8px;background:transparent;color:var(--text-secondary);font-size:0.85em;font-weight:600;cursor:pointer;transition:all 0.2s;">
-              <span>📘</span><span>Commands</span>
-            </button>
-          </div>
 
           <!-- Dashboard Stats -->
           <div class="card" id="adminStatsCard" style="display:none; margin-bottom:24px;">

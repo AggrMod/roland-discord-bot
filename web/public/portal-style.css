@@ -373,6 +373,27 @@ body {
   flex: 1;
 }
 
+/* ==================== ADMIN SUBMENU ==================== */
+.admin-submenu {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-left: 12px;
+  border-left: 1px solid rgba(99, 102, 241, 0.15);
+  margin-left: 22px;
+  margin-top: 2px;
+}
+
+.admin-sub-item {
+  font-size: 0.82em !important;
+  padding: var(--space-2) var(--space-4) !important;
+  opacity: 0.85;
+}
+
+.admin-sub-item.active {
+  opacity: 1;
+}
+
 /* ==================== CONTENT AREA ==================== */
 .content-area {
   padding: var(--space-8);

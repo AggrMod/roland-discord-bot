@@ -1246,8 +1246,8 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(8px);
+  background: rgba(5, 10, 20, 0.75);
+  backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1257,11 +1257,11 @@ body {
 }
 
 .modal {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-emphasis);
+  background: linear-gradient(180deg, rgba(18, 28, 52, 0.98) 0%, rgba(14, 22, 42, 0.98) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.28);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg), 0 0 60px var(--gold-glow);
-  max-width: 500px;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.45), 0 0 24px rgba(99, 102, 241, 0.16);
+  max-width: 560px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
@@ -1281,11 +1281,12 @@ body {
 
 .modal-header {
   padding: var(--space-6);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+  background: rgba(99, 102, 241, 0.05);
 }
 
 .modal-title {
-  color: var(--gold);
+  color: #e0e7ff;
   font-size: var(--font-2xl);
   font-weight: 700;
   margin: 0;
@@ -1293,14 +1294,32 @@ body {
 
 .modal-body {
   padding: var(--space-6);
+  color: #cbd5ff;
+}
+
+.modal-body input,
+.modal-body select,
+.modal-body textarea {
+  background: rgba(15, 23, 42, 0.85) !important;
+  border: 1px solid rgba(99, 102, 241, 0.28) !important;
+  color: #e6ecff !important;
+}
+
+.modal-body input:focus,
+.modal-body select:focus,
+.modal-body textarea:focus {
+  outline: none;
+  border-color: rgba(129, 140, 248, 0.65) !important;
+  box-shadow: 0 0 0 2px rgba(99,102,241,0.18);
 }
 
 .modal-footer {
   padding: var(--space-6);
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid rgba(99, 102, 241, 0.2);
   display: flex;
   justify-content: flex-end;
   gap: var(--space-3);
+  background: rgba(99, 102, 241, 0.04);
 }
 
 /* ==================== HELP CENTER ==================== */

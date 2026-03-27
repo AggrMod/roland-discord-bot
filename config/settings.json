@@ -53,5 +53,8 @@
   ],
   "quorumPercentage": 25,
   "supportThreshold": 4,
-  "voteDurationDays": 7
+  "voteDurationDays": 7,
+  "battleRoundPauseMinSec": 5,
+  "battleRoundPauseMaxSec": 10,
+  "battleElitePrepSec": 12
 }

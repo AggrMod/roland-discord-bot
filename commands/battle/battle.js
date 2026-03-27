@@ -3,6 +3,34 @@ const battleService = require('../../services/battleService');
 const battleDb = require('../../database/battleDb');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
+const settingsManager = require('../../config/settings');
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+function getBattleTimingMs() {
+  const envMin = parseFloat(process.env.BATTLE_ROUND_PAUSE_MIN_MS);
+  const envMax = parseFloat(process.env.BATTLE_ROUND_PAUSE_MAX_MS);
+  const envElite = parseFloat(process.env.BATTLE_ELITE_FOUR_PREP_MS);
+
+  const dbMinSec = parseFloat(settingsManager.getBattleRoundPauseMinSec());
+  const dbMaxSec = parseFloat(settingsManager.getBattleRoundPauseMaxSec());
+  const dbEliteSec = parseFloat(settingsManager.getBattleElitePrepSec());
+
+  // DB settings (seconds) win if valid; otherwise env (ms); otherwise defaults
+  const minMs = Number.isFinite(dbMinSec)
+    ? Math.max(0, Math.round(dbMinSec * 1000))
+    : (Number.isFinite(envMin) ? Math.max(0, Math.round(envMin)) : 5000);
+
+  const maxMs = Number.isFinite(dbMaxSec)
+    ? Math.max(minMs, Math.round(dbMaxSec * 1000))
+    : (Number.isFinite(envMax) ? Math.max(minMs, Math.round(envMax)) : 10000);
+
+  const elitePrepMs = Number.isFinite(dbEliteSec)
+    ? Math.max(0, Math.round(dbEliteSec * 1000))
+    : (Number.isFinite(envElite) ? Math.max(0, Math.round(envElite)) : 12000);
+
+  return { minMs, maxMs, elitePrepMs };
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -260,9 +288,21 @@ module.exports = {
       return interaction.followUp({ content: '❌ Battle simulation failed unexpectedly.' });
     }
 
-    for (const r of sim.rounds) {
+    const timing = getBattleTimingMs();
+
+    for (let i = 0; i < sim.rounds.length; i++) {
+      const r = sim.rounds[i];
       const lines = (r.events || []).slice(0, 8).map(e => `• ${e}`).join('\n');
       const isEliteIntro = !!r.eliteFourActivated;
+
+      if (isEliteIntro && Array.isArray(r.eliteFourUserIds) && r.eliteFourUserIds.length) {
+        const mentions = r.eliteFourUserIds.map(id => `<@${id}>`).join(' ');
+        await interaction.channel.send({
+          content: `🏆 **Elite Four incoming. Prepare yourselves...**\n${mentions}`
+        });
+        await sleep(timing.elitePrepMs);
+      }
+
       const roundEmbed = new EmbedBuilder()
         .setColor(isEliteIntro ? '#ED4245' : '#57F287')
         .setTitle(isEliteIntro ? `🏆 ELITE FOUR • Round ${r.round}` : `Round ${r.round}`)
@@ -270,6 +310,12 @@ module.exports = {
         .setFooter({ text: isEliteIntro ? 'No revivals. No mercy. Final circle.' : 'Era: Solpranos' });
 
       await interaction.channel.send({ embeds: [roundEmbed] });
+
+      // Add pacing pause between rounds (5-10 seconds), except after the final round
+      if (i < sim.rounds.length - 1) {
+        const pauseMs = timing.minMs + Math.floor(Math.random() * (timing.maxMs - timing.minMs + 1));
+        await sleep(pauseMs);
+      }
     }
 
     const winner = sim.winner;

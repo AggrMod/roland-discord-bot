@@ -64,6 +64,34 @@ class SettingsManager {
         }
       }
 
+      // Battle timing (seconds, admin UI)
+      if (newSettings.battleRoundPauseMinSec !== undefined) {
+        const sec = parseFloat(newSettings.battleRoundPauseMinSec);
+        if (isNaN(sec) || sec < 0 || sec > 120) {
+          return { success: false, message: 'Battle round pause min must be between 0 and 120 seconds' };
+        }
+      }
+
+      if (newSettings.battleRoundPauseMaxSec !== undefined) {
+        const sec = parseFloat(newSettings.battleRoundPauseMaxSec);
+        if (isNaN(sec) || sec < 0 || sec > 180) {
+          return { success: false, message: 'Battle round pause max must be between 0 and 180 seconds' };
+        }
+      }
+
+      if (newSettings.battleRoundPauseMinSec !== undefined && newSettings.battleRoundPauseMaxSec !== undefined) {
+        if (parseFloat(newSettings.battleRoundPauseMinSec) > parseFloat(newSettings.battleRoundPauseMaxSec)) {
+          return { success: false, message: 'Battle round pause min cannot exceed max' };
+        }
+      }
+
+      if (newSettings.battleElitePrepSec !== undefined) {
+        const sec = parseFloat(newSettings.battleElitePrepSec);
+        if (isNaN(sec) || sec < 0 || sec > 300) {
+          return { success: false, message: 'Elite prep delay must be between 0 and 300 seconds' };
+        }
+      }
+
       // Merge with existing settings
       this.settings = { ...this.settings, ...newSettings };
       
@@ -112,7 +140,10 @@ class SettingsManager {
         characterRoles: rolesData.characterRoles || [],
         quorumPercentage: 25,
         supportThreshold: 4,
-        voteDurationDays: 7
+        voteDurationDays: 7,
+        battleRoundPauseMinSec: 5,
+        battleRoundPauseMaxSec: 10,
+        battleElitePrepSec: 12
       };
 
       fs.writeFileSync(SETTINGS_FILE, JSON.stringify(this.settings, null, 2));
@@ -143,6 +174,24 @@ class SettingsManager {
 
   getVoteDurationDays() {
     return this.settings.voteDurationDays || 7;
+  }
+
+  getBattleRoundPauseMinSec() {
+    return Number.isFinite(this.settings.battleRoundPauseMinSec)
+      ? this.settings.battleRoundPauseMinSec
+      : 5;
+  }
+
+  getBattleRoundPauseMaxSec() {
+    return Number.isFinite(this.settings.battleRoundPauseMaxSec)
+      ? this.settings.battleRoundPauseMaxSec
+      : 10;
+  }
+
+  getBattleElitePrepSec() {
+    return Number.isFinite(this.settings.battleElitePrepSec)
+      ? this.settings.battleElitePrepSec
+      : 12;
   }
 }
 

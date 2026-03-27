@@ -1,6 +1,7 @@
 const db = require('../database/battleDb');
 const logger = require('../utils/logger');
 const { EmbedBuilder } = require('discord.js');
+const { randomInt } = require('crypto');
 
 // Mafia-themed flavor text
 const ATTACK_LINES = [
@@ -281,6 +282,24 @@ class BattleService {
     this.SWORD_EMOJI = '⚔️';
   }
 
+  rand(maxExclusive) {
+    if (!Number.isFinite(maxExclusive) || maxExclusive <= 0) return 0;
+    return randomInt(maxExclusive);
+  }
+
+  roll() {
+    return randomInt(1_000_000) / 1_000_000;
+  }
+
+  chance(probability) {
+    return this.roll() < probability;
+  }
+
+  pick(arr) {
+    if (!arr || !arr.length) return null;
+    return arr[this.rand(arr.length)];
+  }
+
   createLobby(channelId, messageId, creatorId, minPlayers = 2, maxPlayers = 999, requiredRoleIds = null, excludedRoleIds = null) {
     const lobbyId = `battle_${Date.now()}_${creatorId}`;
     
@@ -478,8 +497,14 @@ class BattleService {
     let eliteFourMode = false;
     while (alivePlayers.length > 1) {
       roundNum++;
+      // Shuffle alive players each round to reduce any order bias
+      alivePlayers = alivePlayers
+        .map(v => ({ v, k: this.roll() }))
+        .sort((a, b) => a.k - b.k)
+        .map(o => o.v);
       const events = [];
       let eliteFourActivatedThisRound = false;
+      let eliteFourUserIds = [];
 
       // Elite Four mode activates once when 4 fighters remain
       if (!eliteFourMode && alivePlayers.length === 4) {
@@ -496,6 +521,8 @@ class BattleService {
             .run(100, lobbyId, p.user_id);
         }
 
+        eliteFourUserIds = alivePlayers.map(p => p.user_id);
+
         const rollCall = alivePlayers
           .map((p, idx) => `${idx + 1}) **${p.username}** — 100 HP`)
           .join('\n');
@@ -505,16 +532,16 @@ class BattleService {
       if (eliteFourMode) {
         events.push(this.getRandomRoundTransition(roundNum));
         // Light narrative spice in Elite mode
-        if (Math.random() < 0.40 && alivePlayers.length > 1) {
-          const attacker = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
-          let defender = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
+        if (this.roll() < 0.40 && alivePlayers.length > 1) {
+          const attacker = alivePlayers[Math.floor(this.roll() * alivePlayers.length)];
+          let defender = alivePlayers[Math.floor(this.roll() * alivePlayers.length)];
           let attempts = 0;
           while (defender.user_id === attacker.user_id && attempts < 10) {
-            defender = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
+            defender = alivePlayers[Math.floor(this.roll() * alivePlayers.length)];
             attempts++;
           }
           if (defender.user_id !== attacker.user_id) {
-            const taunt = TAUNT_LINES[Math.floor(Math.random() * TAUNT_LINES.length)]
+            const taunt = TAUNT_LINES[Math.floor(this.roll() * TAUNT_LINES.length)]
               .replace('{attacker}', `**${attacker.username}**`)
               .replace('{defender}', `**${defender.username}**`);
             events.push(taunt);
@@ -524,7 +551,7 @@ class BattleService {
       
       // Generate 2-5 events per round (scales with player count)
       const eventCount = Math.min(
-        Math.floor(Math.random() * 4) + 2, // 2-5
+        Math.floor(this.roll() * 4) + 2, // 2-5
         Math.max(2, Math.ceil(alivePlayers.length / 2)) // At least 2, max half of players
       );
 
@@ -532,29 +559,29 @@ class BattleService {
         // Event type distribution:
         // Standard: 60% combat, 20% item, 20% flavor
         // Elite Four: 75% combat, 15% item, 10% flavor
-        const rand = Math.random();
+        const rand = this.roll();
         const combatThreshold = eliteFourMode ? 0.75 : 0.60;
         const itemThreshold = eliteFourMode ? 0.90 : 0.80;
         
         if (rand < combatThreshold && alivePlayers.length > 1) {
           // COMBAT EVENT
-          const attacker = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
-          let defender = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
+          const attacker = alivePlayers[Math.floor(this.roll() * alivePlayers.length)];
+          let defender = alivePlayers[Math.floor(this.roll() * alivePlayers.length)];
           
           // Make sure attacker doesn't attack themselves
           let attempts = 0;
           while (defender.user_id === attacker.user_id && alivePlayers.length > 1 && attempts < 10) {
-            defender = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
+            defender = alivePlayers[Math.floor(this.roll() * alivePlayers.length)];
             attempts++;
           }
           if (defender.user_id === attacker.user_id) continue;
 
           // Calculate damage (standard vs elite tuning)
           const critChance = eliteFourMode ? 0.35 : 0.20;
-          const isCrit = Math.random() < critChance;
+          const isCrit = this.roll() < critChance;
           let damage = isCrit 
-            ? Math.floor(Math.random() * 11) + 40 // 40-50
-            : Math.floor(Math.random() * 21) + 10; // 10-30
+            ? Math.floor(this.roll() * 11) + 40 // 40-50
+            : Math.floor(this.roll() * 21) + 10; // 10-30
 
           if (eliteFourMode) {
             damage = Math.floor(damage * 1.25); // Elite Four damage ramp
@@ -567,10 +594,10 @@ class BattleService {
           }
 
           // 15% chance to dodge/miss entirely
-          const dodgeChance = Math.random() < 0.15;
+          const dodgeChance = this.roll() < 0.15;
           
           if (dodgeChance) {
-            const dodgeLine = DODGE_LINES[Math.floor(Math.random() * DODGE_LINES.length)]
+            const dodgeLine = DODGE_LINES[Math.floor(this.roll() * DODGE_LINES.length)]
               .replace('{player}', `**${defender.username}**`)
               .replace('{opponent}', `**${attacker.username}**`);
             events.push(dodgeLine);
@@ -581,8 +608,8 @@ class BattleService {
 
             // Pick flavor text
             const line = isCrit 
-              ? CRIT_LINES[Math.floor(Math.random() * CRIT_LINES.length)]
-              : ATTACK_LINES[Math.floor(Math.random() * ATTACK_LINES.length)];
+              ? CRIT_LINES[Math.floor(this.roll() * CRIT_LINES.length)]
+              : ATTACK_LINES[Math.floor(this.roll() * ATTACK_LINES.length)];
 
             let eventText = line
               .replace('{attacker}', `**${attacker.username}**`)
@@ -593,16 +620,16 @@ class BattleService {
 
             // Trash talk chance increases in Elite Four
             const trashTalkChance = eliteFourMode ? 0.50 : 0.30;
-            if (Math.random() < trashTalkChance) {
-              const trashTalk = TRASH_TALK_LINES[Math.floor(Math.random() * TRASH_TALK_LINES.length)]
+            if (this.roll() < trashTalkChance) {
+              const trashTalk = TRASH_TALK_LINES[Math.floor(this.roll() * TRASH_TALK_LINES.length)]
                 .replace('{attacker}', `**${attacker.username}**`)
                 .replace('{defender}', `**${defender.username}**`);
               events.push(trashTalk);
             }
 
             // Comeback narrative when someone is badly hurt
-            if (defender.hp > 0 && defender.hp <= 30 && Math.random() < 0.35) {
-              const comeback = COMEBACK_LINES[Math.floor(Math.random() * COMEBACK_LINES.length)]
+            if (defender.hp > 0 && defender.hp <= 30 && this.roll() < 0.35) {
+              const comeback = COMEBACK_LINES[Math.floor(this.roll() * COMEBACK_LINES.length)]
                 .replace('{player}', `**${defender.username}**`)
                 .replace('{opponent}', `**${attacker.username}**`);
               events.push(comeback);
@@ -612,9 +639,9 @@ class BattleService {
           // Check for death
           if (defender.hp <= 0) {
             // 5% chance to survive with 1 HP (lucky escape) - disabled in Elite Four
-            if (!eliteFourMode && Math.random() < 0.05 && alivePlayers.length > 2) {
+            if (!eliteFourMode && this.roll() < 0.05 && alivePlayers.length > 2) {
               defender.hp = 1;
-              const luckyLine = LUCKY_ESCAPE_LINES[Math.floor(Math.random() * LUCKY_ESCAPE_LINES.length)]
+              const luckyLine = LUCKY_ESCAPE_LINES[Math.floor(this.roll() * LUCKY_ESCAPE_LINES.length)]
                 .replace('{player}', `**${defender.username}**`);
               events.push(luckyLine);
               
@@ -622,7 +649,7 @@ class BattleService {
                 .run(lobbyId, defender.user_id);
             } else {
               defender.is_alive = false;
-              const deathLine = DEATH_LINES[Math.floor(Math.random() * DEATH_LINES.length)]
+              const deathLine = DEATH_LINES[Math.floor(this.roll() * DEATH_LINES.length)]
                 .replace('{defender}', `**${defender.username}**`);
               events.push(deathLine);
               
@@ -641,15 +668,15 @@ class BattleService {
 
         } else if (rand < itemThreshold && alivePlayers.length > 0) {
           // ITEM FIND EVENT
-          const player = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
-          const itemLine = ITEM_FIND_LINES[Math.floor(Math.random() * ITEM_FIND_LINES.length)];
+          const player = alivePlayers[Math.floor(this.roll() * alivePlayers.length)];
+          const itemLine = ITEM_FIND_LINES[Math.floor(this.roll() * ITEM_FIND_LINES.length)];
           
           if (itemLine.includes('Damage +20%')) {
             playerBuffs[player.user_id] = true;
             events.push(itemLine.replace('{player}', `**${player.username}**`));
           } else {
             // HP boost items
-            const hpBoost = Math.floor(Math.random() * 11) + 8; // 8-18 HP
+            const hpBoost = Math.floor(this.roll() * 11) + 8; // 8-18 HP
             player.hp = Math.min(100, player.hp + hpBoost);
             
             const text = itemLine.replace('{player}', `**${player.username}**`);
@@ -660,8 +687,8 @@ class BattleService {
           }
         } else if (alivePlayers.length > 0) {
           // FLAVOR EVENT (no mechanical effect)
-          const player = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
-          const flavorLine = FLAVOR_LINES[Math.floor(Math.random() * FLAVOR_LINES.length)]
+          const player = alivePlayers[Math.floor(this.roll() * alivePlayers.length)];
+          const flavorLine = FLAVOR_LINES[Math.floor(this.roll() * FLAVOR_LINES.length)]
             .replace('{player}', `**${player.username}**`);
           events.push(flavorLine);
         }
@@ -675,7 +702,8 @@ class BattleService {
         events,
         playersLeft: alivePlayers.length,
         eliteFourActivated: eliteFourActivatedThisRound,
-        eliteFourMode
+        eliteFourMode,
+        eliteFourUserIds
       });
       
       // Safety break
@@ -684,11 +712,11 @@ class BattleService {
 
     // Winner!
     const winner = alivePlayers[0];
-    const winnerLine = WINNER_LINES[Math.floor(Math.random() * WINNER_LINES.length)]
+    const winnerLine = WINNER_LINES[Math.floor(this.roll() * WINNER_LINES.length)]
       .replace('{winner}', `**${winner.username}**`);
 
     // Pick a random finale outro
-    const finaleOutro = FINALE_OUTROS[Math.floor(Math.random() * FINALE_OUTROS.length)]
+    const finaleOutro = FINALE_OUTROS[Math.floor(this.roll() * FINALE_OUTROS.length)]
       .replace('{winner}', `**${winner.username}**`)
       .replace('{rounds}', roundNum)
       .replace('{totalPlayers}', totalPlayers);
@@ -749,44 +777,44 @@ class BattleService {
 
   // Punchline getters
   getRandomAttackLine() {
-    return ATTACK_LINES[Math.floor(Math.random() * ATTACK_LINES.length)];
+    return ATTACK_LINES[Math.floor(this.roll() * ATTACK_LINES.length)];
   }
 
   getRandomCritLine() {
-    return CRIT_LINES[Math.floor(Math.random() * CRIT_LINES.length)];
+    return CRIT_LINES[Math.floor(this.roll() * CRIT_LINES.length)];
   }
 
   getRandomDeathLine() {
-    return DEATH_LINES[Math.floor(Math.random() * DEATH_LINES.length)];
+    return DEATH_LINES[Math.floor(this.roll() * DEATH_LINES.length)];
   }
 
   getRandomTauntLine() {
-    return TAUNT_LINES[Math.floor(Math.random() * TAUNT_LINES.length)];
+    return TAUNT_LINES[Math.floor(this.roll() * TAUNT_LINES.length)];
   }
 
   getRandomTrashTalkLine() {
-    return TRASH_TALK_LINES[Math.floor(Math.random() * TRASH_TALK_LINES.length)];
+    return TRASH_TALK_LINES[Math.floor(this.roll() * TRASH_TALK_LINES.length)];
   }
 
   getRandomDodgeLine() {
-    return DODGE_LINES[Math.floor(Math.random() * DODGE_LINES.length)];
+    return DODGE_LINES[Math.floor(this.roll() * DODGE_LINES.length)];
   }
 
   getRandomComebackLine() {
-    return COMEBACK_LINES[Math.floor(Math.random() * COMEBACK_LINES.length)];
+    return COMEBACK_LINES[Math.floor(this.roll() * COMEBACK_LINES.length)];
   }
 
   getRandomRoundTransition(round) {
-    const line = ROUND_TRANSITION_LINES[Math.floor(Math.random() * ROUND_TRANSITION_LINES.length)];
+    const line = ROUND_TRANSITION_LINES[Math.floor(this.roll() * ROUND_TRANSITION_LINES.length)];
     return line.replace('{round}', round);
   }
 
   getRandomFlavorLine() {
-    return FLAVOR_LINES[Math.floor(Math.random() * FLAVOR_LINES.length)];
+    return FLAVOR_LINES[Math.floor(this.roll() * FLAVOR_LINES.length)];
   }
 
   getRandomLuckyEscapeLine() {
-    return LUCKY_ESCAPE_LINES[Math.floor(Math.random() * LUCKY_ESCAPE_LINES.length)];
+    return LUCKY_ESCAPE_LINES[Math.floor(this.roll() * LUCKY_ESCAPE_LINES.length)];
   }
 
   buildLobbyEmbed(lobby, participants, requiredRoles = null, excludedRoles = null) {

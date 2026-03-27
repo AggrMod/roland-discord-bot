@@ -745,10 +745,49 @@ async function checkSuperadminStatus() {
 }
 
 // ==================== DATA LOADING ====================
-function loadDashboardData() {
+async function loadDashboardData() {
+  let governanceEnabledForTenant = true;
+  let tierConfiguredForTenant = true;
+
+  try {
+    const headers = activeGuildId ? { 'x-guild-id': activeGuildId } : {};
+
+    // Tenant module state (for VP visibility)
+    const settingsRes = await fetch('/api/admin/settings', { credentials: 'include', headers }).catch(() => null);
+    if (settingsRes && settingsRes.ok) {
+      const settingsJson = await settingsRes.json().catch(() => null);
+      if (settingsJson?.success && settingsJson?.settings) {
+        governanceEnabledForTenant = !!settingsJson.settings.moduleGovernanceEnabled;
+      }
+    }
+
+    // Tenant verification tiers state (for tier label validity)
+    const rolesRes = await fetch('/api/admin/roles/config', { credentials: 'include', headers }).catch(() => null);
+    if (rolesRes && rolesRes.ok) {
+      const rolesJson = await rolesRes.json().catch(() => null);
+      const tiers = rolesJson?.config?.tiers || [];
+      tierConfiguredForTenant = Array.isArray(tiers) && tiers.length > 0;
+    }
+  } catch (e) {
+    // Best-effort only; fallback to existing values
+  }
+
   // Load stats
-  document.getElementById('tierStat').textContent = userData.user.tier || 'None';
-  document.getElementById('vpStat').textContent = userData.user.votingPower || 0;
+  document.getElementById('tierStat').textContent = tierConfiguredForTenant
+    ? (userData.user.tier || 'None')
+    : 'Unconfigured';
+
+  const vpEl = document.getElementById('vpStat');
+  if (vpEl) {
+    if (governanceEnabledForTenant) {
+      vpEl.textContent = userData.user.votingPower || 0;
+      vpEl.title = '';
+    } else {
+      vpEl.textContent = '—';
+      vpEl.title = 'Governance module is disabled for this server';
+    }
+  }
+
   document.getElementById('nftsStat').textContent = userData.user.totalNFTs || 0;
   
   if (heistEnabled) {

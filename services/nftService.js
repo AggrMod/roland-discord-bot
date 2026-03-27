@@ -3,6 +3,23 @@ const logger = require('../utils/logger');
 
 const MOCK_MODE = process.env.MOCK_MODE === 'true';
 
+// Helius rate limiter — default 10 req/sec (free tier), set HELIUS_RPS in .env to override
+const HELIUS_RPS = parseInt(process.env.HELIUS_RPS || '10');
+const HELIUS_MIN_INTERVAL_MS = Math.ceil(1000 / HELIUS_RPS);
+let _heliusLastCall = 0;
+let _heliusQueue = Promise.resolve();
+
+function heliusRateLimited(fn) {
+  _heliusQueue = _heliusQueue.then(async () => {
+    const now = Date.now();
+    const wait = HELIUS_MIN_INTERVAL_MS - (now - _heliusLastCall);
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+    _heliusLastCall = Date.now();
+    return fn();
+  });
+  return _heliusQueue;
+}
+
 class NFTService {
   constructor() {
     this.connection = new Connection(process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com');
@@ -31,7 +48,7 @@ class NFTService {
     }
 
     try {
-      const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, {
+      const response = await heliusRateLimited(() => fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -48,7 +65,7 @@ class NFTService {
             limit: 1000
           }
         })
-      });
+      }));
 
       const data = await response.json();
       if (data.error) {

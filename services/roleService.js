@@ -449,6 +449,7 @@ class RoleService {
         maxNFTs: tier.maxNFTs,
         votingPower: tier.votingPower,
         roleId: tier.roleId,
+        collectionId: tier.collectionId || null,
         configured: !!tier.roleId
       });
     }

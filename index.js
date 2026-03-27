@@ -4,6 +4,9 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('./utils/logger');
 const WebServer = require('./web/server');
+const tenantService = require('./services/tenantService');
+const moduleGate = require('./middleware/moduleGate');
+const { getCommandModuleKey } = require('./config/commandModules');
 
 // Validate critical environment variables on startup
 function validateEnvVars() {
@@ -118,6 +121,22 @@ client.once(Events.ClientReady, () => {
   governanceLogger.setClient(client);
   ticketService.setClient(client);
 
+  const currentGuildId = process.env.GUILD_ID;
+  if (currentGuildId) {
+    const currentGuild = client.guilds.cache.get(currentGuildId);
+    try {
+      tenantService.ensureTenant(currentGuildId, currentGuild?.name || null);
+      logger.log(`🏗️ Tenant scaffold ensured for guild ${currentGuildId}${currentGuild?.name ? ` (${currentGuild.name})` : ''}`);
+    } catch (error) {
+      logger.error('Error ensuring startup tenant:', error);
+    }
+  }
+
+  if (tenantService.isMultitenantEnabled() && currentGuildId) {
+    tenantService.syncGuildCommands(client.commands, currentGuildId, client.guilds.cache.get(currentGuildId)?.name || null)
+      .catch(error => logger.error('Error syncing startup guild commands:', error));
+  }
+
   // Initialize and start micro-verify service
   microVerifyService.init();
   microVerifyService.startPolling();
@@ -143,6 +162,19 @@ client.once(Events.ClientReady, () => {
   }, 10 * 60 * 1000);
 });
 
+client.on(Events.GuildCreate, async guild => {
+  try {
+    tenantService.ensureTenant(guild.id, guild.name);
+    logger.log(`🏗️ Tenant scaffold ensured for joined guild ${guild.id} (${guild.name})`);
+
+    if (tenantService.isMultitenantEnabled()) {
+      await tenantService.syncGuildCommands(client.commands, guild.id, guild.name);
+    }
+  } catch (error) {
+    logger.error(`Error handling guildCreate for ${guild.id}:`, error);
+  }
+});
+
 client.on(Events.InteractionCreate, async interaction => {
   // Handle slash commands
   if (interaction.isChatInputCommand()) {
@@ -154,6 +186,11 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     try {
+      const moduleKey = getCommandModuleKey(interaction.commandName);
+      if (!(await moduleGate(interaction, moduleKey))) {
+        return;
+      }
+
       await command.execute(interaction);
       logger.log(`Command executed: ${interaction.commandName} by ${interaction.user.tag}`);
     } catch (error) {

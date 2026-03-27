@@ -1213,7 +1213,7 @@ window.addEventListener('unhandledrejection', (event) => {
 
 // ==================== INTEGRATED ADMIN WORKSPACE ====================
 function hideAllAdminCards() {
-  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminAnalyticsCard', 'adminHelpCard', 'adminRolesCard', 'adminActivityCard', 'adminStatsCard', 'adminNftTrackerCard', 'adminVotingPowerCard', 'adminSelfServeRolesCard', 'adminApiRefCard']
+  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminAnalyticsCard', 'adminHelpCard', 'adminRolesCard', 'adminActivityCard', 'adminStatsCard', 'adminNftTrackerCard', 'adminVotingPowerCard', 'adminSelfServeRolesCard', 'adminApiRefCard', 'adminTicketingCard']
     .forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
@@ -1280,7 +1280,8 @@ function showAdminView(view) {
     votingpower: { card: 'adminVotingPowerCard', load: loadVotingPowerView },
     nfttracker: { card: 'adminNftTrackerCard', load: loadNftTrackerView },
     selfserveroles: { card: 'adminSelfServeRolesCard', load: loadSelfServeRolesView },
-    apiref: { card: 'adminApiRefCard', load: loadApiRefView }
+    apiref: { card: 'adminApiRefCard', load: loadApiRefView },
+    ticketing: { card: 'adminTicketingCard', load: loadTicketingView }
   };
 
   const target = map[view] || map.settings;
@@ -1659,6 +1660,7 @@ async function loadAdminSettingsView() {
           ${moduleToggle('moduleTreasuryEnabled', 'Treasury', '💰', true)}
           ${moduleToggle('moduleNftTrackerEnabled', 'NFT Tracker', '📡', true)}
           ${moduleToggle('moduleRoleClaimEnabled', 'Self-Serve Roles', '🎖️', true)}
+          ${moduleToggle('moduleTicketingEnabled', 'Ticketing', '🎫', true)}
         </div>
       </div>
 
@@ -2149,6 +2151,7 @@ async function savePortalSettings() {
     moduleRoleResyncEnabled: document.getElementById('ps_moduleRoleResyncEnabled')?.checked ?? true,
     moduleMicroVerifyEnabled: document.getElementById('ps_moduleMicroVerifyEnabled')?.checked ?? false,
     moduleRoleClaimEnabled: document.getElementById('ps_moduleRoleClaimEnabled')?.checked ?? true,
+    moduleTicketingEnabled: document.getElementById('ps_moduleTicketingEnabled')?.checked ?? true,
     proposalsChannelId: document.getElementById('ps_proposalsChannelId').value || '',
     votingChannelId: document.getElementById('ps_votingChannelId').value || '',
     resultsChannelId: document.getElementById('ps_resultsChannelId').value || '',
@@ -4499,4 +4502,418 @@ function loadApiRefView() {
       <strong>CORS Note:</strong> For cross-origin requests from your website, contact your server admin to add your domain to the CORS allowlist.
     </div>
   `;
+}
+
+// ==================== TICKETING VIEW ====================
+
+let _ticketCategories = [];
+let _ticketChannelsList = [];
+
+async function loadTicketingView() {
+  const container = document.getElementById('adminTicketingContent');
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:var(--space-4);">
+      <button class="btn-primary" onclick="showTicketTab('categories')" id="ticketTabCategories" style="font-size:0.85em;">Categories</button>
+      <button class="btn-secondary" onclick="showTicketTab('panel')" id="ticketTabPanel" style="font-size:0.85em;">Post Panel</button>
+      <button class="btn-secondary" onclick="showTicketTab('tickets')" id="ticketTabTickets" style="font-size:0.85em;">Open Tickets</button>
+    </div>
+    <div id="ticketTabContent">Loading...</div>
+  `;
+
+  // Fetch channels if not cached
+  if (_ticketChannelsList.length === 0) {
+    try {
+      const res = await fetch('/api/admin/discord/channels', { credentials: 'include' });
+      const json = await res.json();
+      if (json.success) _ticketChannelsList = json.channels || [];
+    } catch (e) { /* ignore */ }
+  }
+
+  showTicketTab('categories');
+}
+
+function showTicketTab(tab) {
+  ['categories', 'panel', 'tickets'].forEach(t => {
+    const btn = document.getElementById('ticketTab' + t.charAt(0).toUpperCase() + t.slice(1));
+    if (btn) btn.className = t === tab ? 'btn-primary' : 'btn-secondary';
+  });
+
+  if (tab === 'categories') loadTicketCategoriesTab();
+  else if (tab === 'panel') loadTicketPanelTab();
+  else if (tab === 'tickets') loadTicketOpenTab();
+}
+
+async function loadTicketCategoriesTab() {
+  const container = document.getElementById('ticketTabContent');
+  container.innerHTML = 'Loading categories...';
+
+  try {
+    const res = await fetch('/api/admin/tickets/categories', { credentials: 'include' });
+    const json = await res.json();
+    if (!json.success) { container.innerHTML = 'Failed to load categories.'; return; }
+
+    _ticketCategories = json.categories || [];
+
+    let html = `<div style="margin-bottom:var(--space-3);"><button class="btn-primary" onclick="showAddCategoryModal()" style="font-size:0.85em;">+ Add Category</button></div>`;
+
+    if (_ticketCategories.length === 0) {
+      html += '<p style="color:var(--text-secondary);">No categories yet. Add one to get started.</p>';
+    } else {
+      html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.85em;">
+        <thead><tr style="border-bottom:1px solid var(--border-color);">
+          <th style="text-align:left;padding:8px;">Emoji</th>
+          <th style="text-align:left;padding:8px;">Name</th>
+          <th style="text-align:left;padding:8px;">Description</th>
+          <th style="text-align:center;padding:8px;">Fields</th>
+          <th style="text-align:center;padding:8px;">Enabled</th>
+          <th style="text-align:center;padding:8px;">Actions</th>
+        </tr></thead><tbody>`;
+
+      for (const cat of _ticketCategories) {
+        const fields = safeJsonArray(cat.template_fields);
+        html += `<tr style="border-bottom:1px solid var(--border-color);">
+          <td style="padding:8px;">${escapeHtml(cat.emoji || '🎫')}</td>
+          <td style="padding:8px;font-weight:600;">${escapeHtml(cat.name)}</td>
+          <td style="padding:8px;color:var(--text-secondary);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(cat.description || '—')}</td>
+          <td style="padding:8px;text-align:center;">${fields.length}</td>
+          <td style="padding:8px;text-align:center;">
+            <label style="cursor:pointer;">
+              <input type="checkbox" ${cat.enabled ? 'checked' : ''} onchange="toggleTicketCategory(${cat.id}, this.checked)" />
+            </label>
+          </td>
+          <td style="padding:8px;text-align:center;">
+            <button class="btn-secondary" onclick="showEditCategoryModal(${cat.id})" style="font-size:0.8em;padding:4px 8px;">Edit</button>
+            <button class="btn-danger" onclick="deleteTicketCategory(${cat.id})" style="font-size:0.8em;padding:4px 8px;">Delete</button>
+          </td>
+        </tr>`;
+      }
+      html += '</tbody></table></div>';
+    }
+
+    container.innerHTML = html;
+  } catch (error) {
+    container.innerHTML = 'Error loading categories.';
+  }
+}
+
+function showAddCategoryModal() {
+  _showCategoryForm(null);
+}
+
+function showEditCategoryModal(id) {
+  const cat = _ticketCategories.find(c => c.id === id);
+  if (!cat) return;
+  _showCategoryForm(cat);
+}
+
+function _showCategoryForm(cat) {
+  const isEdit = !!cat;
+  const fields = cat ? safeJsonArray(cat.template_fields) : [];
+  const allowedRoles = cat ? safeJsonArray(cat.allowed_role_ids) : [];
+  const textChannels = _ticketChannelsList.filter(c => c.kind === 'text');
+
+  let fieldsHtml = '';
+  const renderField = (f, idx) => `
+    <div id="tmplField_${idx}" style="background:rgba(0,0,0,0.15);border-radius:6px;padding:8px;margin-bottom:6px;">
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">
+        <input type="text" id="tmplLabel_${idx}" value="${escapeHtml(f.label || '')}" placeholder="Field label" style="flex:1;padding:4px 8px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:4px;color:var(--text-primary);font-size:0.85em;" />
+        <select id="tmplStyle_${idx}" style="padding:4px 8px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:4px;color:var(--text-primary);font-size:0.85em;">
+          <option value="short" ${f.style !== 'paragraph' ? 'selected' : ''}>Short</option>
+          <option value="paragraph" ${f.style === 'paragraph' ? 'selected' : ''}>Paragraph</option>
+        </select>
+        <label style="font-size:0.8em;display:flex;align-items:center;gap:2px;">
+          <input type="checkbox" id="tmplReq_${idx}" ${f.required !== false ? 'checked' : ''} /> Req
+        </label>
+        <button onclick="removeTemplateField(${idx})" style="background:none;border:none;color:#ed4245;cursor:pointer;font-size:1em;">✕</button>
+      </div>
+      <input type="text" id="tmplPlaceholder_${idx}" value="${escapeHtml(f.placeholder || '')}" placeholder="Placeholder text" style="width:100%;padding:4px 8px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:4px;color:var(--text-primary);font-size:0.85em;" />
+    </div>`;
+
+  fields.forEach((f, i) => { fieldsHtml += renderField(f, i); });
+
+  const modal = document.getElementById('confirmModal');
+  const title = document.getElementById('confirmTitle');
+  const body = document.getElementById('confirmMessage');
+  const btn = document.getElementById('confirmButton');
+
+  title.textContent = isEdit ? 'Edit Category' : 'Add Category';
+  btn.textContent = 'Save';
+  btn.className = 'btn-primary';
+
+  body.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:10px;text-align:left;">
+      <div>
+        <label style="font-size:0.85em;font-weight:600;">Name</label>
+        <input type="text" id="catName" value="${isEdit ? escapeHtml(cat.name || '') : ''}" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;" />
+      </div>
+      <div style="display:flex;gap:10px;">
+        <div style="flex:0 0 80px;">
+          <label style="font-size:0.85em;font-weight:600;">Emoji</label>
+          <input type="text" id="catEmoji" value="${isEdit ? (cat.emoji || '🎫') : '🎫'}" maxlength="4" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;text-align:center;" />
+        </div>
+        <div style="flex:1;">
+          <label style="font-size:0.85em;font-weight:600;">Description</label>
+          <input type="text" id="catDesc" value="${isEdit ? escapeHtml(cat.description || '') : ''}" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;" />
+        </div>
+      </div>
+      <div>
+        <label style="font-size:0.85em;font-weight:600;">Parent Channel (ticket channels created here)</label>
+        <select id="catParentChannel" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
+          <option value="">— None —</option>
+          ${_ticketChannelsList.filter(c => c.kind === 'category').map(c => `<option value="${c.id}" ${isEdit && cat.parent_channel_id === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:0.85em;font-weight:600;">Allowed Roles (comma-separated IDs)</label>
+        <input type="text" id="catRoles" value="${allowedRoles.join(',')}" placeholder="e.g. 12345,67890" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;" />
+      </div>
+      <div>
+        <label style="font-size:0.85em;font-weight:600;">Template Fields (max 5)</label>
+        <div id="templateFieldsContainer">${fieldsHtml}</div>
+        <button onclick="addTemplateField()" class="btn-secondary" style="font-size:0.8em;margin-top:4px;">+ Add Field</button>
+      </div>
+    </div>
+  `;
+
+  window._catEditId = isEdit ? cat.id : null;
+  window._tmplFieldCount = fields.length;
+
+  confirmCallback = async () => {
+    await saveCategoryFromModal();
+  };
+
+  modal.style.display = 'flex';
+}
+
+window.addTemplateField = function() {
+  const container = document.getElementById('templateFieldsContainer');
+  const count = container ? container.querySelectorAll('[id^="tmplField_"]').length : 0;
+  if (count >= 5) return alert('Max 5 fields allowed (Discord limit)');
+
+  const div = document.createElement('div');
+  div.id = `tmplField_${count}`;
+  div.style.cssText = 'background:rgba(0,0,0,0.15);border-radius:6px;padding:8px;margin-bottom:6px;';
+  div.innerHTML = `
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">
+      <input type="text" id="tmplLabel_${count}" placeholder="Field label" style="flex:1;padding:4px 8px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:4px;color:var(--text-primary);font-size:0.85em;" />
+      <select id="tmplStyle_${count}" style="padding:4px 8px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:4px;color:var(--text-primary);font-size:0.85em;">
+        <option value="short">Short</option>
+        <option value="paragraph">Paragraph</option>
+      </select>
+      <label style="font-size:0.8em;display:flex;align-items:center;gap:2px;">
+        <input type="checkbox" id="tmplReq_${count}" checked /> Req
+      </label>
+      <button onclick="removeTemplateField(${count})" style="background:none;border:none;color:#ed4245;cursor:pointer;font-size:1em;">✕</button>
+    </div>
+    <input type="text" id="tmplPlaceholder_${count}" placeholder="Placeholder text" style="width:100%;padding:4px 8px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:4px;color:var(--text-primary);font-size:0.85em;" />
+  `;
+  container.appendChild(div);
+  window._tmplFieldCount = count + 1;
+};
+
+window.removeTemplateField = function(idx) {
+  const el = document.getElementById(`tmplField_${idx}`);
+  if (el) el.remove();
+};
+
+async function saveCategoryFromModal() {
+  const name = document.getElementById('catName').value.trim();
+  if (!name) return alert('Name is required');
+
+  const emoji = document.getElementById('catEmoji').value.trim() || '🎫';
+  const description = document.getElementById('catDesc').value.trim();
+  const parentChannelId = document.getElementById('catParentChannel').value || '';
+  const rolesStr = document.getElementById('catRoles').value.trim();
+  const allowedRoleIds = rolesStr ? rolesStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+  // Collect template fields
+  const templateFields = [];
+  for (let i = 0; i < (window._tmplFieldCount || 0); i++) {
+    const labelEl = document.getElementById(`tmplLabel_${i}`);
+    if (!labelEl) continue;
+    const label = labelEl.value.trim();
+    if (!label) continue;
+    templateFields.push({
+      label,
+      placeholder: document.getElementById(`tmplPlaceholder_${i}`)?.value || '',
+      required: document.getElementById(`tmplReq_${i}`)?.checked !== false,
+      style: document.getElementById(`tmplStyle_${i}`)?.value || 'short'
+    });
+  }
+
+  const payload = { name, emoji, description, parentChannelId, allowedRoleIds, templateFields };
+  const isEdit = window._catEditId != null;
+  const url = isEdit ? `/api/admin/tickets/categories/${window._catEditId}` : '/api/admin/tickets/categories';
+  const method = isEdit ? 'PUT' : 'POST';
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (!json.success) return alert(json.message || 'Failed to save category');
+    loadTicketCategoriesTab();
+  } catch (e) {
+    alert('Error saving category');
+  }
+}
+
+async function toggleTicketCategory(id, enabled) {
+  try {
+    await fetch(`/api/admin/tickets/categories/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ enabled })
+    });
+  } catch (e) { /* ignore */ }
+}
+
+async function deleteTicketCategory(id) {
+  if (!confirm('Delete this category? This cannot be undone.')) return;
+  try {
+    const res = await fetch(`/api/admin/tickets/categories/${id}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+    const json = await res.json();
+    if (!json.success) return alert(json.message || 'Failed to delete');
+    loadTicketCategoriesTab();
+  } catch (e) {
+    alert('Error deleting category');
+  }
+}
+
+function loadTicketPanelTab() {
+  const container = document.getElementById('ticketTabContent');
+  const textChannels = _ticketChannelsList.filter(c => c.kind === 'text');
+
+  container.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:12px;max-width:500px;">
+      <div>
+        <label style="font-size:0.85em;font-weight:600;">Channel</label>
+        <select id="ticketPanelChannelId" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
+          <option value="">— Select Channel —</option>
+          ${textChannels.map(c => `<option value="${c.id}">#${escapeHtml(c.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:0.85em;font-weight:600;">Panel Title</label>
+        <input type="text" id="ticketPanelTitle" value="🎫 Support" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;" />
+      </div>
+      <div>
+        <label style="font-size:0.85em;font-weight:600;">Panel Description</label>
+        <textarea id="ticketPanelDesc" rows="3" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;resize:vertical;">Select a category below to open a support ticket.</textarea>
+      </div>
+      <button class="btn-primary" onclick="postTicketPanel()" style="align-self:flex-start;">Post Panel</button>
+      <div id="ticketPanelResult"></div>
+    </div>
+  `;
+}
+
+async function postTicketPanel() {
+  const channelId = document.getElementById('ticketPanelChannelId').value;
+  if (!channelId) return alert('Please select a channel');
+
+  const title = document.getElementById('ticketPanelTitle').value.trim() || '🎫 Support';
+  const description = document.getElementById('ticketPanelDesc').value.trim();
+  const resultEl = document.getElementById('ticketPanelResult');
+  resultEl.innerHTML = 'Posting...';
+
+  try {
+    const res = await fetch('/api/admin/tickets/panel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ channelId, title, description })
+    });
+    const json = await res.json();
+    if (json.success) {
+      resultEl.innerHTML = `<span style="color:#57f287;">${json.updated ? '✅ Panel updated!' : '✅ Panel posted!'}</span>`;
+    } else {
+      resultEl.innerHTML = `<span style="color:#ed4245;">❌ ${json.message || 'Failed'}</span>`;
+    }
+  } catch (e) {
+    resultEl.innerHTML = '<span style="color:#ed4245;">❌ Error posting panel</span>';
+  }
+}
+
+async function loadTicketOpenTab() {
+  const container = document.getElementById('ticketTabContent');
+  container.innerHTML = 'Loading tickets...';
+
+  try {
+    const res = await fetch('/api/admin/tickets?status=open', { credentials: 'include' });
+    const json = await res.json();
+    if (!json.success) { container.innerHTML = 'Failed to load tickets.'; return; }
+
+    const tickets = json.tickets || [];
+    let html = `<div style="margin-bottom:var(--space-3);"><button class="btn-secondary" onclick="loadTicketOpenTab()" style="font-size:0.85em;">🔄 Refresh</button></div>`;
+
+    if (tickets.length === 0) {
+      html += '<p style="color:var(--text-secondary);">No open tickets.</p>';
+    } else {
+      html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.85em;">
+        <thead><tr style="border-bottom:1px solid var(--border-color);">
+          <th style="text-align:left;padding:8px;">#</th>
+          <th style="text-align:left;padding:8px;">Category</th>
+          <th style="text-align:left;padding:8px;">Opened By</th>
+          <th style="text-align:left;padding:8px;">Claimed By</th>
+          <th style="text-align:left;padding:8px;">Created</th>
+          <th style="text-align:center;padding:8px;">Actions</th>
+        </tr></thead><tbody>`;
+
+      for (const t of tickets) {
+        const created = new Date(t.created_at).toLocaleString();
+        html += `<tr style="border-bottom:1px solid var(--border-color);">
+          <td style="padding:8px;font-weight:600;">${t.ticket_number}</td>
+          <td style="padding:8px;">${escapeHtml(t.category_name || '—')}</td>
+          <td style="padding:8px;">${escapeHtml(t.opener_name || t.opener_id)}</td>
+          <td style="padding:8px;">${escapeHtml(t.claimed_by || '—')}</td>
+          <td style="padding:8px;color:var(--text-secondary);font-size:0.9em;">${created}</td>
+          <td style="padding:8px;text-align:center;">
+            <button class="btn-secondary" onclick="viewTicketTranscript(${t.id})" style="font-size:0.8em;padding:4px 8px;">Transcript</button>
+          </td>
+        </tr>`;
+      }
+      html += '</tbody></table></div>';
+    }
+
+    container.innerHTML = html;
+  } catch (error) {
+    container.innerHTML = 'Error loading tickets.';
+  }
+}
+
+async function viewTicketTranscript(id) {
+  try {
+    const res = await fetch(`/api/admin/tickets/${id}/transcript`, { credentials: 'include' });
+    const json = await res.json();
+    if (!json.success) return alert(json.message || 'Failed to load transcript');
+
+    const modal = document.getElementById('confirmModal');
+    document.getElementById('confirmTitle').textContent = 'Ticket Transcript';
+    document.getElementById('confirmButton').style.display = 'none';
+    document.getElementById('confirmMessage').innerHTML = `<pre style="white-space:pre-wrap;word-break:break-word;max-height:400px;overflow:auto;background:rgba(0,0,0,0.2);padding:12px;border-radius:6px;font-size:0.8em;">${escapeHtml(json.transcript || '')}</pre>`;
+    confirmCallback = null;
+    modal.style.display = 'flex';
+  } catch (e) {
+    alert('Error loading transcript');
+  }
+}
+
+function safeJsonArray(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }

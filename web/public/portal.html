@@ -154,6 +154,10 @@
               <span class="nav-icon" aria-hidden="true">📖</span>
               <span class="nav-label">API Reference</span>
             </button>
+            <button class="nav-item admin-sub-item" data-admin-nav="ticketing" onclick="showAdminView('ticketing')">
+              <span class="nav-icon" aria-hidden="true">🎫</span>
+              <span class="nav-label">Ticketing</span>
+            </button>
           </div>
         </div>
       </aside>
@@ -825,6 +829,12 @@
             <h3 style="margin:0 0 var(--space-2) 0;">📖 API Reference</h3>
             <p style="color:var(--text-secondary);font-size:0.9em;margin:0 0 var(--space-4) 0;">Public endpoints for integrating bot data into your website. Base URL: <code style="background:var(--bg-secondary);padding:2px 6px;border-radius:4px;font-size:0.9em;">https://discordbot.the-solpranos.com</code></p>
             <div id="adminApiRefContent" style="color: var(--text-secondary);">Loading...</div>
+          </div>
+
+          <div class="card" id="adminTicketingCard" style="display:none;">
+            <h3 style="margin:0 0 var(--space-2) 0;">🎫 Support Ticketing</h3>
+            <p style="color:var(--text-secondary);font-size:0.9em;margin:0 0 var(--space-4) 0;">Manage ticket categories, post support panels, and view open tickets.</p>
+            <div id="adminTicketingContent" style="color: var(--text-secondary);">Loading...</div>
           </div>
         </section>
 

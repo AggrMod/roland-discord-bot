@@ -99,6 +99,7 @@ const roleService = require('./services/roleService');
 const treasuryService = require('./services/treasuryService');
 const microVerifyService = require('./services/microVerifyService');
 const governanceLogger = require('./utils/governanceLogger');
+const ticketService = require('./services/ticketService');
 const settings = require('./config/settings.json');
 
 client.once(Events.ClientReady, () => {
@@ -111,10 +112,11 @@ client.once(Events.ClientReady, () => {
   // Set global client reference for microVerifyService
   global.discordClient = client;
 
-  // Pass client to proposalService, webServer, and governanceLogger
+  // Pass client to proposalService, webServer, governanceLogger, ticketService
   proposalService.setClient(client);
   webServer.setClient(client);
   governanceLogger.setClient(client);
+  ticketService.setClient(client);
 
   // Initialize and start micro-verify service
   microVerifyService.init();
@@ -213,6 +215,38 @@ client.on(Events.InteractionCreate, async interaction => {
     // Role claim button handler
     if (customId.startsWith('role_claim_')) {
       await handleRoleClaimButton(interaction);
+      return;
+    }
+
+    // Ticket button handlers
+    if (customId.startsWith('ticket_open_')) {
+      await handleTicketOpenButton(interaction);
+      return;
+    }
+    if (customId === 'ticket_claim') {
+      await handleTicketClaimButton(interaction);
+      return;
+    }
+    if (customId === 'ticket_close') {
+      await handleTicketCloseButton(interaction);
+      return;
+    }
+    if (customId === 'ticket_reopen') {
+      await handleTicketReopenButton(interaction);
+      return;
+    }
+    if (customId === 'ticket_delete') {
+      await handleTicketDeleteButton(interaction);
+      return;
+    }
+  }
+
+  // Handle modal submissions
+  if (interaction.isModalSubmit()) {
+    const customId = interaction.customId;
+
+    if (customId.startsWith('ticket_modal_')) {
+      await handleTicketModalSubmit(interaction);
       return;
     }
   }
@@ -806,6 +840,145 @@ function startRoleResyncScheduler() {
   }, RESYNC_INTERVAL_MS);
 
   logger.log(`⏰ Role resync scheduler started (runs every 4 hours + on startup)`);
+}
+
+// ==================== Ticket Interaction Handlers ====================
+
+async function handleTicketOpenButton(interaction) {
+  try {
+    if (!ticketService.isEnabled()) {
+      return interaction.reply({ content: '❌ Ticketing is currently disabled.', ephemeral: true });
+    }
+
+    const categoryId = parseInt(interaction.customId.replace('ticket_open_', ''));
+    const category = ticketService.getCategory(categoryId);
+
+    if (!category) {
+      return interaction.reply({ content: '❌ This ticket category no longer exists.', ephemeral: true });
+    }
+    if (!category.enabled) {
+      return interaction.reply({ content: '❌ This ticket category is currently disabled.', ephemeral: true });
+    }
+
+    const modal = ticketService.buildTemplateModal(category);
+    await interaction.showModal(modal);
+  } catch (error) {
+    logger.error('Error handling ticket open button:', error);
+    try {
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({ content: '❌ Failed to open ticket form.', ephemeral: true });
+      }
+    } catch (e) { /* ignore */ }
+  }
+}
+
+async function handleTicketModalSubmit(interaction) {
+  try {
+    await interaction.deferReply({ ephemeral: true });
+
+    const categoryId = parseInt(interaction.customId.replace('ticket_modal_', ''));
+    const category = ticketService.getCategory(categoryId);
+    if (!category) {
+      return interaction.editReply({ content: '❌ This ticket category no longer exists.' });
+    }
+
+    const templateResponses = ticketService.extractTemplateResponses(category, interaction);
+
+    const result = await ticketService.createTicket(interaction, categoryId, templateResponses);
+
+    if (!result.success) {
+      return interaction.editReply({ content: `❌ Could not create ticket: ${result.message}` });
+    }
+
+    await interaction.editReply({
+      content: `✅ Ticket #${result.ticketNumber} created! Head to <#${result.channelId}>`
+    });
+    logger.log(`Ticket #${result.ticketNumber} created by ${interaction.user.tag} in category ${categoryId}`);
+  } catch (error) {
+    logger.error('Error handling ticket modal submit:', error);
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content: '❌ An error occurred while creating your ticket.' });
+      }
+    } catch (e) { /* ignore */ }
+  }
+}
+
+async function handleTicketClaimButton(interaction) {
+  try {
+    await interaction.deferReply({ ephemeral: true });
+    const result = await ticketService.claimTicket(interaction, interaction.channelId);
+
+    if (!result.success) {
+      return interaction.editReply({ content: `❌ ${result.message}` });
+    }
+
+    await interaction.editReply({ content: '✅ You have claimed this ticket.' });
+    logger.log(`Ticket claimed by ${interaction.user.tag} in ${interaction.channelId}`);
+  } catch (error) {
+    logger.error('Error handling ticket claim:', error);
+    await interaction.editReply({ content: '❌ Failed to claim ticket.' });
+  }
+}
+
+async function handleTicketCloseButton(interaction) {
+  try {
+    await interaction.deferReply({ ephemeral: true });
+    const result = await ticketService.closeTicket(interaction, interaction.channelId);
+
+    if (!result.success) {
+      return interaction.editReply({ content: `❌ ${result.message}` });
+    }
+
+    await interaction.editReply({ content: '🔒 Ticket closed. A transcript has been saved.' });
+    logger.log(`Ticket closed by ${interaction.user.tag} in ${interaction.channelId}`);
+  } catch (error) {
+    logger.error('Error handling ticket close:', error);
+    await interaction.editReply({ content: '❌ Failed to close ticket.' });
+  }
+}
+
+async function handleTicketReopenButton(interaction) {
+  try {
+    await interaction.deferReply({ ephemeral: true });
+    const result = await ticketService.reopenTicket(interaction.channelId);
+
+    if (!result.success) {
+      return interaction.editReply({ content: `❌ ${result.message}` });
+    }
+
+    await interaction.editReply({ content: '🔓 Ticket reopened.' });
+    logger.log(`Ticket reopened by ${interaction.user.tag} in ${interaction.channelId}`);
+  } catch (error) {
+    logger.error('Error handling ticket reopen:', error);
+    await interaction.editReply({ content: '❌ Failed to reopen ticket.' });
+  }
+}
+
+async function handleTicketDeleteButton(interaction) {
+  try {
+    // Admin only
+    if (!interaction.memberPermissions.has(PermissionFlagsBits.Administrator)) {
+      return interaction.reply({ content: '❌ Only administrators can delete tickets.', ephemeral: true });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+    await interaction.editReply({ content: '🗑️ Deleting ticket channel in 3 seconds...' });
+
+    setTimeout(async () => {
+      try {
+        await ticketService.deleteTicket(interaction.channelId);
+        logger.log(`Ticket deleted by ${interaction.user.tag} in ${interaction.channelId}`);
+      } catch (error) {
+        logger.error('Error deleting ticket channel:', error);
+      }
+    }, 3000);
+  } catch (error) {
+    logger.error('Error handling ticket delete:', error);
+    try {
+      await interaction.reply({ content: '❌ Failed to delete ticket.', ephemeral: true });
+    } catch (e) { /* ignore */ }
+  }
 }
 
 client.on(Events.Error, error => {

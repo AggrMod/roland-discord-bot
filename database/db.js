@@ -240,7 +240,59 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_proposal_comments_proposal ON proposal_comments(proposal_id);
     CREATE INDEX IF NOT EXISTS idx_proposal_veto_votes_proposal ON proposal_veto_votes(proposal_id);
     CREATE INDEX IF NOT EXISTS idx_proposal_support_proposal ON proposal_support(proposal_id);
+
+    CREATE TABLE IF NOT EXISTS ticket_categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      emoji TEXT DEFAULT '🎫',
+      description TEXT,
+      parent_channel_id TEXT,
+      allowed_role_ids TEXT DEFAULT '[]',
+      template_fields TEXT DEFAULT '[]',
+      enabled INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS tickets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ticket_number INTEGER UNIQUE,
+      category_id INTEGER,
+      category_name TEXT,
+      channel_id TEXT UNIQUE,
+      opener_id TEXT NOT NULL,
+      opener_name TEXT,
+      claimed_by TEXT,
+      status TEXT DEFAULT 'open',
+      template_responses TEXT DEFAULT '{}',
+      transcript TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      closed_at DATETIME,
+      FOREIGN KEY (category_id) REFERENCES ticket_categories(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS ticket_panels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_id TEXT NOT NULL UNIQUE,
+      message_id TEXT,
+      title TEXT DEFAULT 'Support',
+      description TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS ticket_sequences (
+      name TEXT PRIMARY KEY,
+      value INTEGER DEFAULT 0
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
+    CREATE INDEX IF NOT EXISTS idx_tickets_opener ON tickets(opener_id);
+    CREATE INDEX IF NOT EXISTS idx_tickets_category ON tickets(category_id);
+    CREATE INDEX IF NOT EXISTS idx_tickets_channel ON tickets(channel_id);
+    CREATE INDEX IF NOT EXISTS idx_ticket_panels_channel ON ticket_panels(channel_id);
   `);
+
+  db.prepare('INSERT OR IGNORE INTO ticket_sequences (name, value) VALUES (?, ?)').run('ticket', 0);
 
   logger.log('Database initialized successfully');
 }

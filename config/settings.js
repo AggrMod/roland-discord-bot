@@ -11,11 +11,62 @@ class SettingsManager {
     this.loadSettings();
   }
 
+  getDefaultSettings() {
+    const rolesData = JSON.parse(fs.readFileSync(ROLES_FILE, 'utf8'));
+
+    return {
+      // Governance
+      tiers: rolesData.tiers,
+      characterRoles: rolesData.characterRoles || [],
+      quorumPercentage: 25,
+      supportThreshold: 4,
+      voteDurationDays: 7,
+      governanceQuorum: 25,
+      staffTrusteesVP: 10,
+      staffTrusteeRoles: ['Enforcer', 'Caporegime', 'Consigliere', 'Underboss', 'Don'],
+      proposalCategories: ['Partnership', 'Treasury Allocation', 'Rule Change', 'Community Event', 'Other'],
+
+      // Battle Timing
+      battleRoundPauseMinSec: 5,
+      battleRoundPauseMaxSec: 10,
+      battleElitePrepSec: 12,
+
+      // Module Toggles (per-module control)
+      moduleBattleEnabled: true,
+      moduleGovernanceEnabled: true,
+      moduleVerificationEnabled: true,
+      moduleMissionsEnabled: true,
+      moduleTreasuryEnabled: true,
+      moduleNftTrackerEnabled: true,
+      moduleRoleResyncEnabled: true,
+      moduleMicroVerifyEnabled: false,
+      moduleRoleClaimEnabled: true,
+      moduleTicketingEnabled: true,
+
+      // Micro-Transfer Verification
+      verificationReceiveWallet: '',
+      nftActivityWebhookSecret: '',
+      verifyRequestTtlMinutes: 15,
+      pollIntervalSeconds: 30,
+      verifyRateLimitMinutes: 5,
+      maxPendingPerUser: 1,
+
+      // Base Verified Role
+      baseVerifiedRoleId: '',
+
+      // Channel Overrides
+      proposalsChannelId: '',
+      votingChannelId: '',
+      resultsChannelId: '',
+      governanceLogChannelId: ''
+    };
+  }
+
   loadSettings() {
     try {
       if (fs.existsSync(SETTINGS_FILE)) {
         const data = fs.readFileSync(SETTINGS_FILE, 'utf8');
-        this.settings = JSON.parse(data);
+        this.settings = { ...this.getDefaultSettings(), ...JSON.parse(data) };
         logger.log('Settings loaded from settings.json');
       } else {
         // Create from defaults
@@ -130,7 +181,8 @@ class SettingsManager {
         'moduleTreasuryEnabled',
         'moduleRoleResyncEnabled',
         'moduleMicroVerifyEnabled',
-        'moduleRoleClaimEnabled'
+        'moduleRoleClaimEnabled',
+        'moduleTicketingEnabled'
       ];
       
       for (const key of moduleKeys) {
@@ -180,53 +232,7 @@ class SettingsManager {
 
   resetDefaults() {
     try {
-      const rolesData = JSON.parse(fs.readFileSync(ROLES_FILE, 'utf8'));
-      
-      this.settings = {
-        // Governance
-        tiers: rolesData.tiers,
-        characterRoles: rolesData.characterRoles || [],
-        quorumPercentage: 25,
-        supportThreshold: 4,
-        voteDurationDays: 7,
-        governanceQuorum: 25,
-        staffTrusteesVP: 10,
-        staffTrusteeRoles: ['Enforcer', 'Caporegime', 'Consigliere', 'Underboss', 'Don'],
-        proposalCategories: ['Partnership', 'Treasury Allocation', 'Rule Change', 'Community Event', 'Other'],
-        
-        // Battle Timing
-        battleRoundPauseMinSec: 5,
-        battleRoundPauseMaxSec: 10,
-        battleElitePrepSec: 12,
-        
-        // Module Toggles (per-module control)
-        moduleBattleEnabled: true,
-        moduleGovernanceEnabled: true,
-        moduleVerificationEnabled: true,
-        moduleMissionsEnabled: true,
-        moduleTreasuryEnabled: true,
-        moduleNftTrackerEnabled: true,
-        moduleRoleResyncEnabled: true,
-        moduleMicroVerifyEnabled: false,
-        moduleRoleClaimEnabled: true,
-        
-        // Micro-Transfer Verification
-        verificationReceiveWallet: '',
-        nftActivityWebhookSecret: '',
-        verifyRequestTtlMinutes: 15,
-        pollIntervalSeconds: 30,
-        verifyRateLimitMinutes: 5,
-        maxPendingPerUser: 1,
-        
-        // Base Verified Role
-        baseVerifiedRoleId: '',
-
-        // Channel Overrides
-        proposalsChannelId: '',
-        votingChannelId: '',
-        resultsChannelId: '',
-        governanceLogChannelId: ''
-      };
+      this.settings = this.getDefaultSettings();
 
       fs.writeFileSync(SETTINGS_FILE, JSON.stringify(this.settings, null, 2));
       logger.log('Settings reset to defaults');

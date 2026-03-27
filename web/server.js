@@ -18,6 +18,7 @@ const missionService = require('../services/missionService');
 const treasuryService = require('../services/treasuryService');
 const microVerifyService = require('../services/microVerifyService');
 const nftActivityService = require('../services/nftActivityService');
+const ticketService = require('../services/ticketService');
 
 class WebServer {
   constructor() {
@@ -30,6 +31,7 @@ class WebServer {
 
   setClient(client) {
     this.client = client;
+    ticketService.setClient(client);
   }
 
   setupMiddleware() {
@@ -615,12 +617,15 @@ class WebServer {
           ChannelType.AnnouncementThread
         ];
 
+        const categoryType = ChannelType.GuildCategory;
+
         const channelList = channels
-          .filter(ch => ch && textTypes.includes(ch.type))
+          .filter(ch => ch && (textTypes.includes(ch.type) || ch.type === categoryType))
           .map(ch => ({
             id: ch.id,
             name: ch.name,
-            type: threadTypes.includes(ch.type) ? 'thread' : 'text',
+            type: ch.type,
+            kind: ch.type === categoryType ? 'category' : (threadTypes.includes(ch.type) ? 'thread' : 'text'),
             parentName: ch.parent ? ch.parent.name : null
           }))
           .sort((a, b) => (a.parentName || '').localeCompare(b.parentName || '') || a.name.localeCompare(b.name));
@@ -1973,6 +1978,90 @@ class WebServer {
         res.json(result);
       } catch (error) {
         logger.error('Error updating tracked collection:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // ==================== TICKET MANAGEMENT (admin) ====================
+
+    this.app.get('/api/admin/tickets/categories', adminAuthMiddleware, (req, res) => {
+      try {
+        const categories = ticketService.getAllCategories();
+        res.json({ success: true, categories });
+      } catch (error) {
+        logger.error('Error fetching ticket categories:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/tickets/categories', adminAuthMiddleware, (req, res) => {
+      try {
+        const { name, emoji, description, parentChannelId, allowedRoleIds, templateFields } = req.body;
+        if (!name) return res.status(400).json({ success: false, message: 'Name is required' });
+        const result = ticketService.addCategory({ name, emoji, description, parentChannelId, allowedRoleIds, templateFields });
+        if (!result.success) return res.status(400).json(result);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error adding ticket category:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.put('/api/admin/tickets/categories/:id', adminAuthMiddleware, (req, res) => {
+      try {
+        const result = ticketService.updateCategory(parseInt(req.params.id), req.body);
+        if (!result.success) return res.status(400).json(result);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error updating ticket category:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.delete('/api/admin/tickets/categories/:id', adminAuthMiddleware, (req, res) => {
+      try {
+        const result = ticketService.deleteCategory(parseInt(req.params.id));
+        if (!result.success) return res.status(400).json(result);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error deleting ticket category:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.get('/api/admin/tickets', adminAuthMiddleware, (req, res) => {
+      try {
+        const { status, category, opener } = req.query;
+        const tickets = ticketService.getAllTickets({ status, category: category ? parseInt(category) : undefined, opener });
+        res.json({ success: true, tickets });
+      } catch (error) {
+        logger.error('Error fetching tickets:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.get('/api/admin/tickets/:id/transcript', adminAuthMiddleware, async (req, res) => {
+      try {
+        const ticket = ticketService.getTicketById(parseInt(req.params.id));
+        if (!ticket) return res.status(404).json({ success: false, message: 'Ticket not found' });
+        const result = await ticketService.getTranscript(ticket.channel_id);
+        if (!result.success) return res.status(404).json(result);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error fetching ticket transcript:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/tickets/panel', adminAuthMiddleware, async (req, res) => {
+      try {
+        const { channelId, title, description } = req.body;
+        if (!channelId) return res.status(400).json({ success: false, message: 'channelId is required' });
+        const result = await ticketService.postOrUpdatePanel(channelId, { title, description });
+        if (!result.success) return res.status(400).json(result);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error posting ticket panel:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });

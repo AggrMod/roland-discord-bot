@@ -349,6 +349,28 @@ class WebServer {
       }
     });
 
+    // ==================== ADMIN CHECK ====================
+
+    this.app.get('/api/user/is-admin', async (req, res) => {
+      if (!req.session.discordUser) {
+        return res.json({ isAdmin: false });
+      }
+
+      if (!this.client) {
+        return res.json({ isAdmin: false });
+      }
+
+      try {
+        const guildId = process.env.GUILD_ID;
+        const guild = await this.client.guilds.fetch(guildId);
+        const member = await guild.members.fetch(req.session.discordUser.id);
+        return res.json({ isAdmin: member.permissions.has('Administrator') });
+      } catch (error) {
+        logger.error('Admin check error:', error);
+        return res.json({ isAdmin: false });
+      }
+    });
+
     // ==================== ADMIN API ====================
 
     const adminAuthMiddleware = async (req, res, next) => {

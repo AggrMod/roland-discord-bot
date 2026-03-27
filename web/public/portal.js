@@ -6,16 +6,7 @@ let confirmCallback = null;
 
 // ==================== INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', () => {
-  // Check for section query param
-  const urlParams = new URLSearchParams(window.location.search);
-  const section = urlParams.get('section');
-  
   loadPortal();
-  
-  // Navigate to specific section if provided
-  if (section) {
-    setTimeout(() => switchSection(section), 500);
-  }
 
   // Close mobile menu when clicking outside
   document.getElementById('mobileMenu')?.addEventListener('click', (e) => {
@@ -329,9 +320,16 @@ async function loadPortal() {
       userData = data;
       showAuthenticatedState();
       loadDashboardData();
-      checkAdminStatus();
+      await checkAdminStatus();
     } else {
       showUnauthenticatedState();
+    }
+
+    // Navigate to section from URL after admin check is complete
+    const urlParams = new URLSearchParams(window.location.search);
+    const section = urlParams.get('section');
+    if (section) {
+      switchSection(section);
     }
   } catch (error) {
     console.error('Error loading portal:', error);
@@ -381,16 +379,29 @@ function showUnauthenticatedState() {
 
 async function checkAdminStatus() {
   try {
-    const response = await fetch('/api/admin/settings', { credentials: 'include' });
+    const response = await fetch('/api/user/is-admin', { credentials: 'include' });
     const data = await response.json();
-    
-    if (data.success) {
+
+    if (data.isAdmin) {
       isAdmin = true;
       document.getElementById('adminSidebarGroup').style.display = 'block';
       document.getElementById('mobileNavAdmin').style.display = 'block';
-      
+      const topNav = document.getElementById('topNavAdmin');
+      if (topNav) topNav.style.display = '';
+
       // Load treasury data for admin
       await loadTreasuryPublicView();
+    } else {
+      isAdmin = false;
+      document.getElementById('adminSidebarGroup').style.display = 'none';
+      document.getElementById('mobileNavAdmin').style.display = 'none';
+
+      // If user navigated directly to admin section, redirect to dashboard
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('section') === 'admin') {
+        switchSection('dashboard');
+        showError('Admin access required.');
+      }
     }
   } catch (error) {
     // User is not admin, keep admin nav hidden

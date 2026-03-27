@@ -211,7 +211,14 @@ class RoleService {
           continue;
         }
 
-        const shouldHave = userTraits.has(`${traitRole.trait_type}:${traitRole.trait_value}`);
+        // Filter NFTs by collection if trait rule specifies one
+        let relevantNFTs = nfts;
+        if (traitRole.trait_collection_id) {
+          relevantNFTs = nfts.filter(nft => nft.collectionKey === traitRole.trait_collection_id);
+        }
+        const filteredTraits = this.extractTraitsFromNFTs(relevantNFTs);
+
+        const shouldHave = filteredTraits.has(`${traitRole.trait_type}:${traitRole.trait_value}`);
         const has = currentMemberRoleIds.has(traitRole.roleId);
 
         if (shouldHave && !has) {
@@ -360,6 +367,7 @@ class RoleService {
         traitValue: traitRole.trait_value,
         roleId: traitRole.roleId,
         configured: !!traitRole.roleId,
+        collectionId: traitRole.trait_collection_id || null,
         description: traitRole.description
       });
     }
@@ -488,8 +496,12 @@ class RoleService {
    * CRUD operations for trait mappings
    */
   
-  addTrait(traitType, traitValue, roleId, description = null) {
+  addTrait(traitType, traitValue, roleId, description = null, collectionId) {
     try {
+      if (!collectionId) {
+        return { success: false, message: 'collectionId is required' };
+      }
+
       if (!this.traitRolesConfig) {
         this.loadConfigs();
       }
@@ -500,9 +512,9 @@ class RoleService {
       );
 
       if (existing) {
-        return { 
-          success: false, 
-          message: `Trait mapping already exists: ${traitType}: ${traitValue}` 
+        return {
+          success: false,
+          message: `Trait mapping already exists: ${traitType}: ${traitValue}`
         };
       }
 
@@ -510,13 +522,14 @@ class RoleService {
         trait_type: traitType,
         trait_value: traitValue,
         roleId,
+        trait_collection_id: collectionId,
         description: description || `Members holding NFTs with ${traitType}: ${traitValue}`
       };
 
       this.traitRolesConfig.traitRoles.push(newTrait);
       this.saveTraitRolesConfig();
-      
-      logger.log(`Added trait mapping: ${traitType}:${traitValue} → ${roleId}`);
+
+      logger.log(`Added trait mapping: ${traitType}:${traitValue} (collection: ${collectionId}) → ${roleId}`);
       return { success: true, trait: newTrait };
     } catch (error) {
       logger.error('Error adding trait:', error);
@@ -524,8 +537,12 @@ class RoleService {
     }
   }
 
-  editTrait(traitType, traitValue, roleId, description = null) {
+  editTrait(traitType, traitValue, roleId, description = null, collectionId) {
     try {
+      if (!collectionId) {
+        return { success: false, message: 'collectionId is required' };
+      }
+
       if (!this.traitRolesConfig) {
         this.loadConfigs();
       }
@@ -535,20 +552,21 @@ class RoleService {
       );
 
       if (!trait) {
-        return { 
-          success: false, 
-          message: `Trait mapping not found: ${traitType}: ${traitValue}` 
+        return {
+          success: false,
+          message: `Trait mapping not found: ${traitType}: ${traitValue}`
         };
       }
 
       trait.roleId = roleId;
+      trait.trait_collection_id = collectionId;
       if (description) {
         trait.description = description;
       }
 
       this.saveTraitRolesConfig();
-      
-      logger.log(`Edited trait mapping: ${traitType}:${traitValue} → ${roleId}`);
+
+      logger.log(`Edited trait mapping: ${traitType}:${traitValue} (collection: ${collectionId}) → ${roleId}`);
       return { success: true, trait };
     } catch (error) {
       logger.error('Error editing trait:', error);

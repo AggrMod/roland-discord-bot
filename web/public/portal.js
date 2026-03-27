@@ -1794,7 +1794,7 @@ async function loadAdminRoles() {
         <tr>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#e0e7ff; font-weight:600;">${escapeHtml(tr.traitType || tr.trait_type || '')}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#c7d2fe;">${escapeHtml(tr.traitValue || tr.trait_value || '')}</td>
-          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#a5b4fc; font-family:monospace; font-size:0.85em;">${escapeHtml(tr.collectionId || 'Any')}</td>
+          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#a5b4fc; font-family:monospace; font-size:0.85em;">${escapeHtml(tr.collectionId || tr.trait_collection_id || '—')}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#93c5fd; font-family:monospace; font-size:0.85em;">${escapeHtml(tr.roleId || '')}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:var(--text-secondary); font-size:0.85em;">${escapeHtml(tr.description || '—')}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); text-align:right;">
@@ -1983,7 +1983,8 @@ function traitFormHTML(tr = {}) {
       <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Trait Value *</label>
         <input id="traitValueInput" type="text" value="${escapeHtml(tr.traitValue || tr.trait_value || '')}" placeholder="e.g. Hitman, Gold Chain" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
       <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Collection ID (optional)</label>
-        <input id="traitCollectionInput" type="text" value="${escapeHtml(tr.collectionId || '')}" placeholder="Leave empty to match any collection" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
+        <input id="traitCollectionInput" type="text" value="${escapeHtml(tr.collectionId || tr.trait_collection_id || '')}" placeholder="Required — Solana collection address" required style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
+        <div id="traitCollectionError" style="color:#fca5a5; font-size:0.8em; margin-top:4px; display:none;">Collection ID is required</div></div>
       <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Discord Role *</label>
         ${roleSelectHTML('traitRoleIdInput', tr.roleId || '')}</div>
       <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Description (optional)</label>
@@ -1995,8 +1996,15 @@ async function saveTraitFromForm(mode, origType, origValue) {
   const traitType = document.getElementById('traitTypeInput')?.value.trim();
   const traitValue = document.getElementById('traitValueInput')?.value.trim();
   const roleId = document.getElementById('traitRoleIdInput')?.value;
-  const collectionId = document.getElementById('traitCollectionInput')?.value.trim() || null;
+  const collectionId = document.getElementById('traitCollectionInput')?.value.trim() || '';
   const description = document.getElementById('traitDescInput')?.value.trim() || null;
+
+  if (!collectionId) {
+    const errEl = document.getElementById('traitCollectionError');
+    if (errEl) errEl.style.display = 'block';
+    showError('Collection ID is required');
+    return;
+  }
 
   if (!traitType || !traitValue || !roleId) {
     showError('Please fill in trait type, value, and role ID');

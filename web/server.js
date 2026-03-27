@@ -697,13 +697,17 @@ class WebServer {
     // Trait CRUD
     this.app.post('/api/admin/roles/traits', adminAuthMiddleware, (req, res) => {
       try {
-        const { traitType, traitValue, roleId, description } = req.body;
-        
+        const { traitType, traitValue, roleId, collectionId, description } = req.body;
+
         if (!traitType || !traitValue || !roleId) {
           return res.status(400).json({ success: false, message: 'Missing required fields' });
         }
 
-        const result = roleService.addTrait(traitType, traitValue, roleId, description);
+        if (!collectionId) {
+          return res.status(400).json({ success: false, message: 'collectionId is required' });
+        }
+
+        const result = roleService.addTrait(traitType, traitValue, roleId, description, collectionId);
         res.json(result);
       } catch (error) {
         logger.error('Error adding trait:', error);
@@ -714,13 +718,17 @@ class WebServer {
     this.app.put('/api/admin/roles/traits/:traitType/:traitValue', adminAuthMiddleware, (req, res) => {
       try {
         const { traitType, traitValue } = req.params;
-        const { roleId, description } = req.body;
+        const { roleId, collectionId, description } = req.body;
 
         if (!roleId) {
           return res.status(400).json({ success: false, message: 'roleId is required' });
         }
 
-        const result = roleService.editTrait(traitType, traitValue, roleId, description);
+        if (!collectionId) {
+          return res.status(400).json({ success: false, message: 'collectionId is required' });
+        }
+
+        const result = roleService.editTrait(traitType, traitValue, roleId, description, collectionId);
         res.json(result);
       } catch (error) {
         logger.error('Error editing trait:', error);

@@ -94,8 +94,29 @@ module.exports = {
                 .addChoices(
                   { name: 'View', value: 'view' },
                   { name: 'Set Tier Role', value: 'set_tier' },
-                  { name: 'Set Trait Role', value: 'set_trait' }
-                )))
+                  { name: 'Set Trait Role', value: 'set_trait' },
+                  { name: 'Remove Trait Role', value: 'remove_trait' }
+                ))
+            .addStringOption(option =>
+              option.setName('trait-type')
+                .setDescription('Trait type (e.g. Background, Role)')
+                .setRequired(false))
+            .addStringOption(option =>
+              option.setName('trait-value')
+                .setDescription('Trait value (e.g. Gold, Hitman)')
+                .setRequired(false))
+            .addStringOption(option =>
+              option.setName('collection-id')
+                .setDescription('Solana collection address (required)')
+                .setRequired(false))
+            .addRoleOption(option =>
+              option.setName('role')
+                .setDescription('Discord role to assign')
+                .setRequired(false))
+            .addStringOption(option =>
+              option.setName('description')
+                .setDescription('Description for the trait rule')
+                .setRequired(false)))
         
         .addSubcommand(subcommand =>
           subcommand
@@ -714,11 +735,51 @@ module.exports = {
         ephemeral: true 
       });
     } else if (action === 'set_trait') {
-      // Placeholder - trait roles should be configured via admin
-      await interaction.editReply({ 
-        content: '🎨 Trait role configuration: Use `/verification admin actions` to view trait settings.\n\nTraits are configured in the web admin panel → Dashboard → Verification Roles tab.', 
-        ephemeral: true 
-      });
+      const traitType = interaction.options.getString('trait-type');
+      const traitValue = interaction.options.getString('trait-value');
+      const collectionId = interaction.options.getString('collection-id');
+      const role = interaction.options.getRole('role');
+      const description = interaction.options.getString('description') || null;
+
+      if (!traitType || !traitValue || !collectionId || !role) {
+        return interaction.editReply({
+          content: '❌ Missing required options. Usage: `trait-type`, `trait-value`, `collection-id`, and `role` are all required.',
+          ephemeral: true
+        });
+      }
+
+      const result = roleService.addTrait(traitType, traitValue, role.id, description, collectionId);
+      if (result.success) {
+        const embed = new EmbedBuilder()
+          .setColor('#00FF88')
+          .setTitle('✅ Trait Rule Added')
+          .addFields(
+            { name: 'Trait', value: `${traitType}: ${traitValue}`, inline: true },
+            { name: 'Collection', value: collectionId, inline: true },
+            { name: 'Role', value: `<@&${role.id}>`, inline: true }
+          )
+          .setTimestamp();
+        await interaction.editReply({ embeds: [embed] });
+      } else {
+        await interaction.editReply({ content: `❌ ${result.message}`, ephemeral: true });
+      }
+    } else if (action === 'remove_trait') {
+      const traitType = interaction.options.getString('trait-type');
+      const traitValue = interaction.options.getString('trait-value');
+
+      if (!traitType || !traitValue) {
+        return interaction.editReply({
+          content: '❌ Missing required options. Usage: `trait-type` and `trait-value` are required for removal.',
+          ephemeral: true
+        });
+      }
+
+      const result = roleService.deleteTrait(traitType, traitValue);
+      if (result.success) {
+        await interaction.editReply({ content: `✅ Removed trait rule: **${traitType}: ${traitValue}**` });
+      } else {
+        await interaction.editReply({ content: `❌ ${result.message}`, ephemeral: true });
+      }
     }
   },
 

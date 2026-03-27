@@ -4020,3 +4020,181 @@ async function loadTreasuryTrackerView() {
     document.getElementById('treasuryTrackerView').innerHTML = '<p style="color:#ef4444;">Failed to load tracker config</p>';
   }
 }
+
+// ==================== SELF-SERVE ROLES ====================
+async function loadSelfServeRolesView() {
+  if (!isAdmin) return;
+  const content = document.getElementById('adminSelfServeRolesContent');
+  if (!content) return;
+  content.innerHTML = '<p style="color:var(--text-secondary);">Loading...</p>';
+
+  try {
+    const res = await fetch('/api/admin/role-claim/config', { credentials: 'include' });
+    const roles = await res.json();
+
+    const tableRows = (roles && roles.length)
+      ? roles.map(r => `<tr>
+          <td style="padding:8px 12px;">${r.name || r.roleId}</td>
+          <td style="padding:8px 12px;">${r.label || '—'}</td>
+          <td style="padding:8px 12px;">${r.memberCount ?? '—'}</td>
+          <td style="padding:8px 12px;">${r.manageable ? '✅' : '⚠️'}</td>
+          <td style="padding:8px 12px;">
+            <label style="position:relative;display:inline-block;width:40px;height:22px;">
+              <input type="checkbox" ${r.enabled !== false ? 'checked' : ''} onchange="toggleSelfServeRole('${r.roleId}', this.checked)" style="opacity:0;width:0;height:0;">
+              <span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:${r.enabled !== false ? 'var(--gold)' : '#555'};border-radius:24px;transition:.3s;"></span>
+              <span style="position:absolute;height:16px;width:16px;left:${r.enabled !== false ? '20px' : '3px'};bottom:3px;background:#fff;border-radius:50%;transition:.3s;pointer-events:none;"></span>
+            </label>
+          </td>
+          <td style="padding:8px 12px;">
+            <button class="btn-secondary" style="padding:4px 10px;font-size:0.8em;" onclick="removeSelfServeRole('${r.roleId}')">Remove</button>
+          </td>
+        </tr>`).join('')
+      : '<tr><td colspan="6" style="padding:12px;color:var(--text-secondary);text-align:center;">No claimable roles configured yet.</td></tr>';
+
+    content.innerHTML = `
+      <p style="color:var(--text-secondary);margin-bottom:var(--space-4);font-size:0.92em;">
+        Configure roles users can self-assign. Post a panel to Discord so users can claim/unclaim roles with buttons.
+      </p>
+
+      <table style="width:100%;border-collapse:collapse;margin-bottom:var(--space-4);">
+        <thead>
+          <tr style="border-bottom:2px solid rgba(99,102,241,0.2);text-align:left;">
+            <th style="padding:8px 12px;color:var(--text-secondary);font-size:0.85em;">Role Name</th>
+            <th style="padding:8px 12px;color:var(--text-secondary);font-size:0.85em;">Label</th>
+            <th style="padding:8px 12px;color:var(--text-secondary);font-size:0.85em;">Members</th>
+            <th style="padding:8px 12px;color:var(--text-secondary);font-size:0.85em;">Status</th>
+            <th style="padding:8px 12px;color:var(--text-secondary);font-size:0.85em;">Enabled</th>
+            <th style="padding:8px 12px;color:var(--text-secondary);font-size:0.85em;"></th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+
+      <div style="background:rgba(30,41,59,0.5);border-radius:8px;padding:var(--space-4);margin-bottom:var(--space-4);border:1px solid rgba(99,102,241,0.15);">
+        <h4 style="margin:0 0 var(--space-3) 0;color:var(--text-primary);">Add Role</h4>
+        <div style="display:flex;gap:var(--space-3);align-items:flex-end;flex-wrap:wrap;">
+          <div style="flex:1;min-width:180px;">
+            <label style="display:block;font-size:0.85em;color:var(--text-secondary);margin-bottom:4px;">Discord Role</label>
+            ${roleSelectHTML('srRoleSelect', '')}
+          </div>
+          <div style="flex:1;min-width:150px;">
+            <label style="display:block;font-size:0.85em;color:var(--text-secondary);margin-bottom:4px;">Button Label</label>
+            <input type="text" id="srLabelInput" placeholder="e.g. Builders, Raiders, Whitelist"
+              style="width:100%;padding:8px 12px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid rgba(99,102,241,0.2);border-radius:6px;font-size:0.9em;">
+          </div>
+          <button class="btn-primary" style="padding:8px 16px;" onclick="addSelfServeRole()">Add Role</button>
+        </div>
+      </div>
+
+      <div style="background:rgba(30,41,59,0.5);border-radius:8px;padding:var(--space-4);border:1px solid rgba(99,102,241,0.15);">
+        <h4 style="margin:0 0 var(--space-3) 0;color:var(--text-primary);">📢 Post Role Claim Panel</h4>
+        <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:var(--space-3);">
+          Creates one button per enabled role. Users click to toggle. Updates the existing panel message if already posted in this channel.
+        </p>
+        <div style="display:flex;flex-direction:column;gap:var(--space-3);">
+          <div>
+            <label style="display:block;font-size:0.85em;color:var(--text-secondary);margin-bottom:4px;">Channel</label>
+            <select id="srPanelChannelId" style="width:100%;padding:8px 12px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid rgba(99,102,241,0.2);border-radius:6px;font-size:0.9em;">
+              <option value="">-- Select Channel --</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:0.85em;color:var(--text-secondary);margin-bottom:4px;">Panel Title</label>
+            <input type="text" id="srPanelTitle" value="🎖️ Get Your Roles"
+              style="width:100%;padding:8px 12px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid rgba(99,102,241,0.2);border-radius:6px;font-size:0.9em;">
+          </div>
+          <div>
+            <label style="display:block;font-size:0.85em;color:var(--text-secondary);margin-bottom:4px;">Panel Description</label>
+            <textarea id="srPanelDesc" rows="2" style="width:100%;padding:8px 12px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid rgba(99,102,241,0.2);border-radius:6px;font-size:0.9em;resize:vertical;">Click a button below to claim or unclaim a community role.</textarea>
+          </div>
+          <button class="btn-primary" style="padding:8px 16px;align-self:flex-start;" onclick="postSelfServePanel()">📢 Post Panel</button>
+          <div id="srPanelStatus"></div>
+        </div>
+      </div>
+    `;
+
+    populateRoleSelect('srRoleSelect', '');
+    try {
+      const chRes = await fetch('/api/admin/discord/channels', { credentials: 'include' });
+      const channels = await chRes.json();
+      const sel = document.getElementById('srPanelChannelId');
+      if (sel && Array.isArray(channels)) {
+        channels.filter(c => c.type === 0).forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = c.parentName ? `${c.parentName} > #${c.name}` : `#${c.name}`;
+          sel.appendChild(opt);
+        });
+      }
+    } catch (e) { console.error('Failed to load channels for SR panel:', e); }
+
+  } catch (error) {
+    console.error('Error loading self-serve roles:', error);
+    content.innerHTML = '<p style="color:#ef4444;">Failed to load self-serve roles.</p>';
+  }
+}
+
+async function addSelfServeRole() {
+  const roleId = document.getElementById('srRoleSelect')?.value;
+  const label = document.getElementById('srLabelInput')?.value.trim();
+  if (!roleId) return alert('Please select a role.');
+  if (!label) return alert('Please enter a button label.');
+  try {
+    const res = await fetch('/api/admin/role-claim/add', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roleId, label })
+    });
+    const data = await res.json();
+    if (!data.success) return alert(data.message || 'Failed to add role');
+    loadSelfServeRolesView();
+  } catch (e) { alert('Error adding role: ' + e.message); }
+}
+
+async function removeSelfServeRole(roleId) {
+  if (!confirm('Remove this claimable role?')) return;
+  try {
+    const res = await fetch(`/api/admin/role-claim/${roleId}`, {
+      method: 'DELETE', credentials: 'include'
+    });
+    const data = await res.json();
+    if (!data.success) return alert(data.message || 'Failed to remove role');
+    loadSelfServeRolesView();
+  } catch (e) { alert('Error removing role: ' + e.message); }
+}
+
+async function toggleSelfServeRole(roleId, enabled) {
+  try {
+    const res = await fetch(`/api/admin/role-claim/${roleId}/toggle`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled })
+    });
+    const data = await res.json();
+    if (!data.success) { alert(data.message || 'Failed to toggle role'); loadSelfServeRolesView(); }
+  } catch (e) { alert('Error toggling role: ' + e.message); loadSelfServeRolesView(); }
+}
+
+async function postSelfServePanel() {
+  const channelId = document.getElementById('srPanelChannelId')?.value;
+  const title = document.getElementById('srPanelTitle')?.value.trim();
+  const description = document.getElementById('srPanelDesc')?.value.trim();
+  const status = document.getElementById('srPanelStatus');
+  if (!channelId) return alert('Please select a channel.');
+  if (status) status.innerHTML = '<p style="color:var(--text-secondary);">Posting panel...</p>';
+  try {
+    const res = await fetch('/api/admin/roles/post-panel', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channelId, title, description })
+    });
+    const data = await res.json();
+    if (data.success) {
+      if (status) status.innerHTML = `<p style="color:#22c55e;">✅ Panel ${data.action || 'posted'} successfully!</p>`;
+    } else {
+      if (status) status.innerHTML = `<p style="color:#ef4444;">❌ ${data.message || 'Failed to post panel'}</p>`;
+    }
+  } catch (e) {
+    if (status) status.innerHTML = `<p style="color:#ef4444;">❌ Error: ${e.message}</p>`;
+  }
+}

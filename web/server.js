@@ -1013,11 +1013,91 @@ class WebServer {
       try {
         const roleClaimService = require('../services/roleClaimService');
         const { roleId } = req.params;
-        
+
         const result = roleClaimService.removeRole(roleId);
         res.json(result);
       } catch (error) {
         logger.error('Error removing claimable role:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/role-claim/:roleId/toggle', adminAuthMiddleware, (req, res) => {
+      try {
+        const roleClaimService = require('../services/roleClaimService');
+        const { roleId } = req.params;
+        const { enabled } = req.body;
+        const result = roleClaimService.updateRole(roleId, { enabled: !!enabled });
+        res.json(result);
+      } catch (error) {
+        logger.error('Error toggling claimable role:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/roles/post-panel', adminAuthMiddleware, async (req, res) => {
+      try {
+        const roleClaimService = require('../services/roleClaimService');
+        const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+        const fs = require('fs');
+        const panelConfigPath = require('path').join(__dirname, '..', 'config', 'role-claim-panels.json');
+
+        const { channelId, title, description } = req.body;
+        if (!channelId) return res.status(400).json({ success: false, message: 'channelId is required' });
+
+        const roles = roleClaimService.getClaimableRoles();
+        if (!roles || roles.length === 0) {
+          return res.status(400).json({ success: false, message: 'No enabled claimable roles configured' });
+        }
+
+        const channel = this.client.channels.cache.get(channelId);
+        if (!channel) return res.status(400).json({ success: false, message: 'Channel not found' });
+
+        const embed = new EmbedBuilder()
+          .setTitle(title || '🎖️ Get Your Roles')
+          .setDescription(description || 'Click a button below to claim or unclaim a community role.')
+          .setColor(0x6366f1)
+          .setFooter({ text: 'Click a button to claim or unclaim a role' });
+
+        const rows = [];
+        for (let i = 0; i < roles.length && rows.length < 5; i += 5) {
+          const row = new ActionRowBuilder();
+          const chunk = roles.slice(i, i + 5);
+          for (const role of chunk) {
+            row.addComponents(
+              new ButtonBuilder()
+                .setCustomId(`claim_role_${role.roleId}`)
+                .setLabel(role.label || role.roleId)
+                .setStyle(ButtonStyle.Secondary)
+            );
+          }
+          rows.push(row);
+        }
+
+        let panelConfig = {};
+        try { panelConfig = JSON.parse(fs.readFileSync(panelConfigPath, 'utf8')); } catch (e) { /* first time */ }
+
+        let action = 'posted';
+        const existingMsgId = panelConfig[channelId];
+        if (existingMsgId) {
+          try {
+            const existingMsg = await channel.messages.fetch(existingMsgId);
+            await existingMsg.edit({ embeds: [embed], components: rows });
+            action = 'updated';
+          } catch (e) {
+            const msg = await channel.send({ embeds: [embed], components: rows });
+            panelConfig[channelId] = msg.id;
+            action = 'posted';
+          }
+        } else {
+          const msg = await channel.send({ embeds: [embed], components: rows });
+          panelConfig[channelId] = msg.id;
+        }
+
+        fs.writeFileSync(panelConfigPath, JSON.stringify(panelConfig, null, 2));
+        res.json({ success: true, messageId: panelConfig[channelId], action });
+      } catch (error) {
+        logger.error('Error posting role claim panel:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });

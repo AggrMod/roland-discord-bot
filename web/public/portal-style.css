@@ -153,6 +153,84 @@ body {
   gap: var(--space-4);
 }
 
+.active-guild-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 215, 0, 0.25);
+  background: rgba(255, 215, 0, 0.1);
+  color: #ffe9a3;
+  font-size: 0.8rem;
+  font-weight: 700;
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.server-card {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  align-items: center;
+  padding: 16px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 12px;
+}
+
+.server-card + .server-card {
+  margin-top: 12px;
+}
+
+.server-card__title {
+  color: #e0e7ff;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.server-card__meta {
+  color: var(--text-secondary);
+  font-size: 0.85em;
+}
+
+.server-card__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.server-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 9999px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.server-status-badge.active {
+  background: rgba(16, 185, 129, 0.14);
+  color: #86efac;
+  border: 1px solid rgba(16, 185, 129, 0.22);
+}
+
+.server-status-badge.managed {
+  background: rgba(99, 102, 241, 0.14);
+  color: #c7d2fe;
+  border: 1px solid rgba(99, 102, 241, 0.22);
+}
+
+.server-status-badge.unmanaged {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.22);
+}
+
 .nav-avatar {
   width: 40px;
   height: 40px;

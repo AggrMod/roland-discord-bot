@@ -23,6 +23,33 @@ const ticketService = require('../services/ticketService');
 const superadminService = require('../services/superadminService');
 const superadminGuard = require('../middleware/superadminGuard');
 
+const DISCORD_ADMIN_PERMISSION = 0x8n;
+const REQUEST_GUILD_HEADER = 'x-guild-id';
+
+function normalizeGuildId(guildId) {
+  return typeof guildId === 'string' ? guildId.trim() : '';
+}
+
+function parseGuildPermissionBits(permissions) {
+  try {
+    if (permissions === null || permissions === undefined || permissions === '') {
+      return 0n;
+    }
+
+    return BigInt(String(permissions));
+  } catch (error) {
+    return 0n;
+  }
+}
+
+function hasDiscordAdminPermission(guildSummary) {
+  if (!guildSummary) {
+    return false;
+  }
+
+  return (parseGuildPermissionBits(guildSummary.permissions) & DISCORD_ADMIN_PERMISSION) === DISCORD_ADMIN_PERMISSION;
+}
+
 class WebServer {
   constructor() {
     this.app = express();
@@ -53,7 +80,7 @@ class WebServer {
       ],
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization'],
+      allowedHeaders: ['Content-Type', 'Authorization', REQUEST_GUILD_HEADER],
       exposedHeaders: ['X-Total-Count'], // For pagination
       maxAge: 86400 // 24 hours preflight cache
     }));
@@ -137,6 +164,150 @@ class WebServer {
     this.app.use('/api/micro-verify/', verifyLimiter);
     this.app.use('/api/admin/', adminLimiter);
 
+    const fallbackGuildId = () => normalizeGuildId(process.env.GUILD_ID || process.env.DISCORD_GUILD_ID);
+
+    const getRequestedGuildId = (req) => {
+      const headerGuildId = normalizeGuildId(req.get(REQUEST_GUILD_HEADER));
+      return headerGuildId || fallbackGuildId();
+    };
+
+    const getDiscordUserGuilds = async (req) => {
+      const accessToken = req.session?.discordUser?.accessToken;
+      if (!accessToken) {
+        return [];
+      }
+
+      const response = await fetch('https://discord.com/api/users/@me/guilds', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        }
+      });
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const guilds = await response.json();
+      return Array.isArray(guilds) ? guilds : [];
+    };
+
+    const getBotGuildIds = () => {
+      if (!this.client) {
+        return new Set();
+      }
+
+      return new Set(this.client.guilds.cache.map(guild => guild.id));
+    };
+
+    const fetchGuildById = async (guildId) => {
+      const normalizedGuildId = normalizeGuildId(guildId);
+      if (!normalizedGuildId || !this.client) {
+        return null;
+      }
+
+      return this.client.guilds.cache.get(normalizedGuildId) || this.client.guilds.fetch(normalizedGuildId).catch(() => null);
+    };
+
+    const resolveAdminGuildAccess = async (req, { allowFallback = true } = {}) => {
+      if (!req.session.discordUser) {
+        return { ok: false, status: 401, message: 'Not authenticated' };
+      }
+
+      if (!this.client) {
+        return { ok: false, status: 500, message: 'Bot not initialized' };
+      }
+
+      const userId = req.session.discordUser.id;
+      const requestedGuildId = allowFallback ? getRequestedGuildId(req) : normalizeGuildId(req.get(REQUEST_GUILD_HEADER));
+
+      if (!requestedGuildId) {
+        return { ok: false, status: 409, message: 'Select a server to continue' };
+      }
+
+      const isSuperadmin = superadminService.isSuperadmin(userId);
+      const guild = await fetchGuildById(requestedGuildId);
+
+      if (!guild) {
+        return { ok: false, status: 404, message: 'Server not found' };
+      }
+
+      const guildSummary = {
+        id: guild.id,
+        name: guild.name,
+        icon: guild.icon,
+        permissions: null
+      };
+
+      if (isSuperadmin) {
+        const headerGuildId = normalizeGuildId(req.get(REQUEST_GUILD_HEADER));
+        const fallback = fallbackGuildId();
+        if (headerGuildId && headerGuildId !== fallback) {
+          logger.log(`[tenant-cross] superadmin=${userId} route=${req.method} ${req.originalUrl} guild=${headerGuildId}`);
+        }
+
+        return {
+          ok: true,
+          isSuperadmin,
+          guild,
+          guildId: requestedGuildId,
+          guildSummary
+        };
+      }
+
+      const discordGuilds = await getDiscordUserGuilds(req);
+      const userGuild = discordGuilds.find(entry => entry.id === requestedGuildId);
+      if (!userGuild || !hasDiscordAdminPermission(userGuild)) {
+        const fallback = fallbackGuildId();
+        if (requestedGuildId === fallback) {
+          const directGuild = await fetchGuildById(requestedGuildId);
+          const member = directGuild ? await directGuild.members.fetch(userId).catch(() => null) : null;
+          if (member?.permissions?.has('Administrator')) {
+            const botGuildIds = getBotGuildIds();
+            if (!botGuildIds.has(requestedGuildId)) {
+              return { ok: false, status: 403, message: 'Bot is not installed in the selected server' };
+            }
+
+            return {
+              ok: true,
+              isSuperadmin,
+              guild: directGuild,
+              guildId: requestedGuildId,
+              guildSummary: {
+                id: directGuild.id,
+                name: directGuild.name,
+                icon: directGuild.icon,
+                permissions: member.permissions.bitfield?.toString?.() || '0'
+              }
+            };
+          }
+        }
+
+        return { ok: false, status: 403, message: 'Admin permission required' };
+      }
+
+      const botGuildIds = getBotGuildIds();
+      if (!botGuildIds.has(requestedGuildId)) {
+        return { ok: false, status: 403, message: 'Bot is not installed in the selected server' };
+      }
+
+      return {
+        ok: true,
+        isSuperadmin,
+        guild,
+        guildId: requestedGuildId,
+        guildSummary: {
+          id: userGuild.id,
+          name: userGuild.name,
+          icon: userGuild.icon,
+          permissions: userGuild.permissions
+        }
+      };
+    };
+
+    const sendSelectServerMessage = (res, status = 409) => {
+      return res.status(status).json({ success: false, message: 'Select a server to continue' });
+    };
+
     // ==================== API V1 (VERSIONED PUBLIC API) ====================
 
     const v1Router = require('./routes/v1');
@@ -195,7 +366,7 @@ class WebServer {
     this.app.get('/auth/discord/login', (req, res) => {
       const clientId = process.env.CLIENT_ID;
       const redirectUri = encodeURIComponent(process.env.DISCORD_REDIRECT_URI || 'http://localhost:3000/auth/discord/callback');
-      const scope = encodeURIComponent('identify');
+      const scope = encodeURIComponent('identify guilds');
       
       const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}`;
       res.redirect(authUrl);
@@ -306,6 +477,101 @@ class WebServer {
         });
       } catch (error) {
         logger.error('Error fetching user data:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.get('/api/servers/me', async (req, res) => {
+      if (!req.session.discordUser) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
+
+      if (!this.client) {
+        return res.status(500).json({ success: false, message: 'Bot not initialized' });
+      }
+
+      try {
+        const userId = req.session.discordUser.id;
+        const isSuperadmin = superadminService.isSuperadmin(userId);
+        const discordGuilds = await getDiscordUserGuilds(req);
+        const botGuildIds = getBotGuildIds();
+        const managedServers = [];
+        const unmanagedServers = [];
+
+        if (discordGuilds.length === 0) {
+          const fallback = fallbackGuildId();
+          if (fallback) {
+            const guild = await fetchGuildById(fallback);
+            const member = guild ? await guild.members.fetch(userId).catch(() => null) : null;
+            if (guild && member?.permissions?.has('Administrator') && botGuildIds.has(guild.id)) {
+              managedServers.push({
+                guildId: guild.id,
+                name: guild.name,
+                icon: guild.icon,
+                permissions: member.permissions.bitfield?.toString?.() || '0'
+              });
+            }
+          }
+        }
+
+        for (const guildSummary of discordGuilds) {
+          if (!hasDiscordAdminPermission(guildSummary)) {
+            continue;
+          }
+
+          const serverRecord = {
+            guildId: guildSummary.id,
+            name: guildSummary.name,
+            icon: guildSummary.icon,
+            permissions: guildSummary.permissions
+          };
+
+          if (botGuildIds.has(guildSummary.id)) {
+            managedServers.push(serverRecord);
+          } else {
+            unmanagedServers.push(serverRecord);
+          }
+        }
+
+        managedServers.sort((a, b) => a.name.localeCompare(b.name));
+        unmanagedServers.sort((a, b) => a.name.localeCompare(b.name));
+
+        res.json({
+          success: true,
+          isSuperadmin,
+          managedServers,
+          unmanagedServers
+        });
+      } catch (error) {
+        logger.error('Error fetching user servers:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.get('/api/servers/invite-link', async (req, res) => {
+      if (!req.session.discordUser) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
+
+      const guildId = normalizeGuildId(req.query.guildId);
+      if (!guildId) {
+        return res.status(400).json({ success: false, message: 'guildId is required' });
+      }
+
+      try {
+        const discordGuilds = await getDiscordUserGuilds(req);
+        const guild = discordGuilds.find(entry => entry.id === guildId);
+        if (!guild || !hasDiscordAdminPermission(guild)) {
+          return res.status(403).json({ success: false, message: 'Admin permission required' });
+        }
+
+        const clientId = process.env.CLIENT_ID;
+        const permissions = process.env.BOT_INVITE_PERMISSIONS || '8';
+        const redirectUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&scope=bot%20applications.commands&permissions=${encodeURIComponent(permissions)}&guild_id=${encodeURIComponent(guildId)}&disable_guild_select=true`;
+
+        res.redirect(redirectUrl);
+      } catch (error) {
+        logger.error('Error building invite link:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });
@@ -507,15 +773,9 @@ class WebServer {
         return res.json({ isAdmin: false });
       }
 
-      if (!this.client) {
-        return res.json({ isAdmin: false });
-      }
-
       try {
-        const guildId = process.env.GUILD_ID;
-        const guild = await this.client.guilds.fetch(guildId);
-        const member = await guild.members.fetch(req.session.discordUser.id);
-        return res.json({ isAdmin: member.permissions.has('Administrator') });
+        const access = await resolveAdminGuildAccess(req, { allowFallback: true });
+        return res.json({ isAdmin: access.ok });
       } catch (error) {
         logger.error('Admin check error:', error);
         return res.json({ isAdmin: false });
@@ -596,7 +856,16 @@ class WebServer {
       }
     });
 
-    this.app.get('/api/superadmin/tenants/:guildId/audit', superadminGuard, (req, res) => {
+    const logSuperadminTenantAction = (req, _res, next) => {
+      const activeGuildId = normalizeGuildId(req.get(REQUEST_GUILD_HEADER));
+      const targetGuildId = normalizeGuildId(req.params.guildId);
+      if (activeGuildId && targetGuildId && activeGuildId !== targetGuildId) {
+        logger.log(`[tenant-cross] superadmin=${req.session.discordUser.id} route=${req.method} ${req.originalUrl} active=${activeGuildId} target=${targetGuildId}`);
+      }
+      next();
+    };
+
+    this.app.get('/api/superadmin/tenants/:guildId/audit', superadminGuard, logSuperadminTenantAction, (req, res) => {
       try {
         const limit = Math.min(Math.max(parseInt(req.query.limit || '10', 10), 1), 100);
         const logs = tenantService.getTenantAuditLogs(req.params.guildId, limit);
@@ -611,7 +880,7 @@ class WebServer {
       }
     });
 
-    this.app.get('/api/superadmin/tenants/:guildId', superadminGuard, (req, res) => {
+    this.app.get('/api/superadmin/tenants/:guildId', superadminGuard, logSuperadminTenantAction, (req, res) => {
       try {
         const tenant = tenantService.getTenant(req.params.guildId);
         if (!tenant) {
@@ -628,7 +897,7 @@ class WebServer {
       }
     });
 
-    this.app.put('/api/superadmin/tenants/:guildId/plan', superadminGuard, (req, res) => {
+    this.app.put('/api/superadmin/tenants/:guildId/plan', superadminGuard, logSuperadminTenantAction, (req, res) => {
       try {
         const result = tenantService.setTenantPlan(
           req.params.guildId,
@@ -647,7 +916,7 @@ class WebServer {
       }
     });
 
-    this.app.put('/api/superadmin/tenants/:guildId/modules', superadminGuard, (req, res) => {
+    this.app.put('/api/superadmin/tenants/:guildId/modules', superadminGuard, logSuperadminTenantAction, (req, res) => {
       try {
         const { moduleKey, enabled } = req.body || {};
         if (!moduleKey) {
@@ -672,7 +941,7 @@ class WebServer {
       }
     });
 
-    this.app.put('/api/superadmin/tenants/:guildId/status', superadminGuard, (req, res) => {
+    this.app.put('/api/superadmin/tenants/:guildId/status', superadminGuard, logSuperadminTenantAction, (req, res) => {
       try {
         const result = tenantService.setTenantStatus(
           req.params.guildId,
@@ -691,7 +960,7 @@ class WebServer {
       }
     });
 
-    this.app.put('/api/superadmin/tenants/:guildId/branding', superadminGuard, async (req, res) => {
+    this.app.put('/api/superadmin/tenants/:guildId/branding', superadminGuard, logSuperadminTenantAction, async (req, res) => {
       try {
         const guildId = req.params.guildId;
         const patch = req.body || {};
@@ -729,23 +998,16 @@ class WebServer {
     // ==================== ADMIN API ====================
 
     const adminAuthMiddleware = async (req, res, next) => {
-      if (!req.session.discordUser) {
-        return res.status(401).json({ success: false, message: 'Not authenticated' });
-      }
-
-      if (!this.client) {
-        return res.status(500).json({ success: false, message: 'Bot not initialized' });
-      }
-
       try {
-        const guildId = process.env.GUILD_ID;
-        const guild = await this.client.guilds.fetch(guildId);
-        const member = await guild.members.fetch(req.session.discordUser.id);
-        
-        if (!member.permissions.has('Administrator')) {
-          return res.status(403).json({ success: false, message: 'Admin permission required' });
+        const access = await resolveAdminGuildAccess(req, { allowFallback: true });
+        if (!access.ok) {
+          return res.status(access.status).json({ success: false, message: access.message });
         }
 
+        req.guildId = access.guildId;
+        req.guild = access.guild;
+        req.guildName = access.guild?.name || null;
+        req.isSuperadmin = access.isSuperadmin;
         next();
       } catch (error) {
         logger.error('Admin auth error:', error);
@@ -766,7 +1028,7 @@ class WebServer {
     this.app.get('/api/admin/settings', adminAuthMiddleware, (req, res) => {
       try {
         const settings = settingsManager.getSettings();
-        const tenantContext = tenantService.getTenantContext(process.env.GUILD_ID);
+        const tenantContext = tenantService.getTenantContext(req.guildId);
         const multiTenantEnabled = tenantService.isMultitenantEnabled();
         
         // Smart load: DB override → .env fallback
@@ -812,8 +1074,7 @@ class WebServer {
           return res.status(500).json({ success: false, message: 'Bot not initialized' });
         }
 
-        const guildId = process.env.GUILD_ID;
-        const guild = await this.client.guilds.fetch(guildId);
+        const guild = req.guild || await fetchGuildById(req.guildId);
         const channels = await guild.channels.fetch();
 
         const { ChannelType } = require('discord.js');
@@ -859,8 +1120,7 @@ class WebServer {
           return res.status(500).json({ success: false, message: 'Bot not initialized' });
         }
 
-        const guildId = process.env.GUILD_ID;
-        const guild = await this.client.guilds.fetch(guildId);
+        const guild = req.guild || await fetchGuildById(req.guildId);
         const roles = await guild.roles.fetch();
 
         const roleList = roles
@@ -892,7 +1152,7 @@ class WebServer {
         // Overlay voting power from role mappings (if any configured)
         const mappings = db.prepare('SELECT * FROM role_vp_mappings').all();
         if (mappings.length > 0 && this.client) {
-          const guild = this.client.guilds.cache.first();
+          const guild = req.guild || this.client.guilds.cache.get(req.guildId) || await fetchGuildById(req.guildId);
           for (const user of users) {
             try {
               const member = guild ? await guild.members.fetch(user.discord_id).catch(() => null) : null;
@@ -1222,8 +1482,7 @@ class WebServer {
         }
 
         const { discordId } = req.body;
-        const guildId = process.env.GUILD_ID;
-        const guild = await this.client.guilds.fetch(guildId);
+        const guild = req.guild || await fetchGuildById(req.guildId);
 
         if (discordId) {
           // Sync single user
@@ -1270,8 +1529,7 @@ class WebServer {
     this.app.get('/api/admin/og-role/config', adminAuthMiddleware, async (req, res) => {
       try {
         const ogRoleService = require('../services/ogRoleService');
-        const guildId = process.env.GUILD_ID;
-        const guild = await this.client.guilds.fetch(guildId);
+        const guild = req.guild || await fetchGuildById(req.guildId);
         
         const status = await ogRoleService.getStatus(guild);
         res.json({ success: true, config: status });
@@ -1314,8 +1572,7 @@ class WebServer {
       try {
         const ogRoleService = require('../services/ogRoleService');
         const { fullSync } = req.body;
-        const guildId = process.env.GUILD_ID;
-        const guild = await this.client.guilds.fetch(guildId);
+        const guild = req.guild || await fetchGuildById(req.guildId);
         
         const result = await ogRoleService.syncRoles(guild, fullSync || false);
         res.json(result);
@@ -1330,8 +1587,7 @@ class WebServer {
     this.app.get('/api/admin/role-claim/config', adminAuthMiddleware, async (req, res) => {
       try {
         const roleClaimService = require('../services/roleClaimService');
-        const guildId = process.env.GUILD_ID;
-        const guild = await this.client.guilds.fetch(guildId);
+        const guild = req.guild || await fetchGuildById(req.guildId);
         
         const status = await roleClaimService.getRoleStatus(guild);
         res.json(status);
@@ -1351,8 +1607,7 @@ class WebServer {
         }
         
         // Validate role first
-        const guildId = process.env.GUILD_ID;
-        const guild = await this.client.guilds.fetch(guildId);
+        const guild = req.guild || await fetchGuildById(req.guildId);
         const validation = await roleClaimService.validateRole(guild, roleId);
         
         if (!validation.valid) {
@@ -2283,7 +2538,7 @@ class WebServer {
       try {
         const { channelId, title, description } = req.body;
         if (!channelId) return res.status(400).json({ success: false, message: 'channelId is required' });
-        const result = await ticketService.postOrUpdatePanel(channelId, { title, description });
+        const result = await ticketService.postOrUpdatePanel(channelId, { title, description }, req.guildId);
         if (!result.success) return res.status(400).json(result);
         res.json(result);
       } catch (error) {

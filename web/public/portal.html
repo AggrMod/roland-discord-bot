@@ -18,12 +18,14 @@
       <div class="top-links" aria-label="Top links">
         <button class="top-link" onclick="switchSection('dashboard')">Home</button>
         <button class="top-link" onclick="switchSection('dashboard')">Dashboard</button>
+        <button class="top-link" onclick="switchSection('servers')">Servers</button>
         <button class="top-link" onclick="switchSection('help')">Docs</button>
         <button class="top-link" id="topNavAdmin" onclick="switchSection('admin'); showAdminView('stats');" style="display:none;">Settings</button>
       </div>
       <div class="nav-user">
         <img id="navAvatar" class="nav-avatar" src="" alt="User avatar" style="display:none;">
         <span id="navUsername" class="nav-username"></span>
+        <span id="activeGuildBadge" class="active-guild-badge" style="display:none;"></span>
         <button id="navAuthBtn" class="btn-secondary" onclick="handleAuth()">Login</button>
       </div>
     </nav>
@@ -36,6 +38,10 @@
           <button class="nav-item active" data-section="dashboard" onclick="switchSection('dashboard'); toggleMobileMenu()">
             <span class="nav-icon" aria-hidden="true">📊</span>
             <span class="nav-label">Dashboard</span>
+          </button>
+          <button class="nav-item" data-section="servers" onclick="switchSection('servers'); toggleMobileMenu()">
+            <span class="nav-icon" aria-hidden="true">🏛️</span>
+            <span class="nav-label">Servers</span>
           </button>
           <button class="nav-item" data-section="governance" onclick="switchSection('governance'); toggleMobileMenu()">
             <span class="nav-icon" aria-hidden="true">📜</span>
@@ -77,6 +83,10 @@
           <button class="nav-item active" data-section="dashboard" onclick="switchSection('dashboard')">
             <span class="nav-icon" aria-hidden="true">📊</span>
             <span class="nav-label">Dashboard</span>
+          </button>
+          <button class="nav-item" data-section="servers" onclick="switchSection('servers')">
+            <span class="nav-icon" aria-hidden="true">🏛️</span>
+            <span class="nav-label">Servers</span>
           </button>
           <button class="nav-item" data-section="governance" onclick="switchSection('governance')">
             <span class="nav-icon" aria-hidden="true">📜</span>
@@ -214,6 +224,41 @@
                 </div>
               </div>
             </div>
+          </div>
+        </section>
+
+        <!-- Servers Section -->
+        <section id="section-servers" class="content-section">
+          <header class="section-header">
+            <h2>Server Selector</h2>
+            <p class="section-subtitle">Choose the guild context for admin and tenant-aware actions</p>
+          </header>
+
+          <div class="card" style="margin-bottom:24px;">
+            <div class="card-header">
+              <h3>Active Server</h3>
+              <button class="btn-secondary" onclick="refreshServerAccess()">
+                <span>🔄</span>
+                <span>Refresh</span>
+              </button>
+            </div>
+            <div id="activeServerStatus" style="margin-top: var(--space-4);"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3>Managed Servers</h3>
+              <span style="color:var(--text-secondary); font-size:0.85em;">Admin access and bot installed</span>
+            </div>
+            <div id="managedServersList" style="margin-top: var(--space-4);"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3>Unmanaged Servers</h3>
+              <span style="color:var(--text-secondary); font-size:0.85em;">Admin access, bot not installed yet</span>
+            </div>
+            <div id="unmanagedServersList" style="margin-top: var(--space-4);"></div>
           </div>
         </section>
 

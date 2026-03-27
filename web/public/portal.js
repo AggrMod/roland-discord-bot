@@ -4,6 +4,42 @@ let isAdmin = false;
 let isSuperadmin = false;
 let heistEnabled = false;
 let confirmCallback = null;
+let activeGuildId = localStorage.getItem('activeGuildId') || '';
+let serverAccessData = { managedServers: [], unmanagedServers: [], isSuperadmin: false };
+let originalFetch = window.fetch.bind(window);
+
+function normalizeGuildId(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function isTenantSensitiveRequest(input) {
+  const rawUrl = typeof input === 'string' ? input : (input?.url || '');
+  try {
+    const url = new URL(rawUrl, window.location.origin);
+    return (
+      url.pathname.startsWith('/api/admin/') ||
+      url.pathname.startsWith('/api/superadmin/') ||
+      url.pathname.startsWith('/api/verification/admin/') ||
+      url.pathname === '/api/user/is-admin'
+    );
+  } catch (error) {
+    return false;
+  }
+}
+
+window.fetch = async function(input, init = {}) {
+  const shouldAttachGuild = isTenantSensitiveRequest(input);
+  if (!shouldAttachGuild) {
+    return originalFetch(input, init);
+  }
+
+  const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+  if (activeGuildId && !headers.has('x-guild-id')) {
+    headers.set('x-guild-id', activeGuildId);
+  }
+
+  return originalFetch(input, { ...init, headers });
+};
 
 // ==================== INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', () => {
@@ -296,6 +332,172 @@ function uint8ToBase58(bytes) {
   return output;
 }
 
+function getServerRecord(guildId) {
+  const normalized = normalizeGuildId(guildId);
+  if (!normalized) return null;
+
+  return (
+    serverAccessData.managedServers.find(server => server.guildId === normalized) ||
+    serverAccessData.unmanagedServers.find(server => server.guildId === normalized) ||
+    null
+  );
+}
+
+function setActiveGuild(guildId, { persist = true, announce = true } = {}) {
+  const normalized = normalizeGuildId(guildId);
+  activeGuildId = normalized;
+
+  if (persist) {
+    if (normalized) {
+      localStorage.setItem('activeGuildId', normalized);
+    } else {
+      localStorage.removeItem('activeGuildId');
+    }
+  }
+
+  updateActiveGuildBadge();
+
+  if (announce && activeGuildId) {
+    showInfo(`Active server set to ${getActiveServerLabel()}`);
+  }
+}
+
+function getActiveServerLabel() {
+  const record = getServerRecord(activeGuildId);
+  if (record?.name) {
+    return record.name;
+  }
+
+  return activeGuildId ? `Server ${activeGuildId}` : 'Select a server';
+}
+
+function updateActiveGuildBadge() {
+  const badge = document.getElementById('activeGuildBadge');
+  if (!badge) return;
+
+  if (activeGuildId) {
+    const record = getServerRecord(activeGuildId);
+    badge.style.display = 'inline-flex';
+    badge.textContent = record?.name ? `Active: ${record.name}` : `Active: ${activeGuildId}`;
+    badge.title = activeGuildId;
+  } else {
+    badge.style.display = 'inline-flex';
+    badge.textContent = 'Select server';
+    badge.title = 'No active server selected';
+  }
+}
+
+function renderServerCard(server, { managed = true } = {}) {
+  const isActive = server.guildId === activeGuildId;
+  const badgeClass = managed ? 'managed' : 'unmanaged';
+  const actionButton = managed
+    ? isActive
+      ? '<button class="btn-secondary" disabled style="opacity:0.65;">Active</button>'
+      : `<button class="btn-primary" onclick="setActiveGuild('${server.guildId}')">Set Active</button>`
+    : `<button class="btn-secondary" onclick="openGuildInvite('${server.guildId}')">Invite Bot</button>`;
+
+  return `
+    <div class="server-card">
+      <div style="min-width:0;">
+        <div class="server-card__title">${escapeHtml(server.name || server.guildId)}</div>
+        <div class="server-card__meta">Guild ID: ${escapeHtml(server.guildId)}</div>
+        <div style="margin-top:8px;">
+          <span class="server-status-badge ${isActive ? 'active' : badgeClass}">
+            ${isActive ? 'Active' : (managed ? 'Managed' : 'Invite needed')}
+          </span>
+        </div>
+      </div>
+      <div class="server-card__actions">
+        ${actionButton}
+      </div>
+    </div>
+  `;
+}
+
+async function openGuildInvite(guildId) {
+  window.location.href = `/api/servers/invite-link?guildId=${encodeURIComponent(guildId)}`;
+}
+
+async function refreshServerAccess() {
+  await loadServerAccess();
+}
+
+async function loadServerAccess() {
+  try {
+    const response = await fetch('/api/servers/me', { credentials: 'include' });
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Unable to load server access');
+    }
+
+    serverAccessData = {
+      isSuperadmin: !!data.isSuperadmin,
+      managedServers: Array.isArray(data.managedServers) ? data.managedServers : [],
+      unmanagedServers: Array.isArray(data.unmanagedServers) ? data.unmanagedServers : []
+    };
+
+    const knownIds = new Set([
+      ...serverAccessData.managedServers.map(server => server.guildId),
+      ...serverAccessData.unmanagedServers.map(server => server.guildId)
+    ]);
+
+    if ((!activeGuildId || !knownIds.has(activeGuildId)) && serverAccessData.managedServers.length === 1) {
+      activeGuildId = serverAccessData.managedServers[0].guildId;
+      localStorage.setItem('activeGuildId', activeGuildId);
+    }
+
+    updateActiveGuildBadge();
+    renderServerAccessView();
+  } catch (error) {
+    console.error('Error loading server access:', error);
+    renderServerAccessView(error.message);
+  }
+}
+
+function renderServerAccessView(errorMessage = '') {
+  const activeStatus = document.getElementById('activeServerStatus');
+  const managedList = document.getElementById('managedServersList');
+  const unmanagedList = document.getElementById('unmanagedServersList');
+
+  if (activeStatus) {
+    if (errorMessage) {
+      activeStatus.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(errorMessage)}</div></div>`;
+    } else if (!activeGuildId) {
+      activeStatus.innerHTML = `
+        <div style="padding:16px; border-radius:12px; border:1px solid rgba(245,158,11,0.22); background:rgba(245,158,11,0.08); color:#fcd34d;">
+          Select a managed server to continue with tenant-aware actions.
+        </div>
+      `;
+    } else {
+      const record = getServerRecord(activeGuildId);
+      activeStatus.innerHTML = `
+        <div class="server-card">
+          <div>
+            <div class="server-card__title">${escapeHtml(record?.name || activeGuildId)}</div>
+            <div class="server-card__meta">Active guild context for admin and tenant-sensitive requests.</div>
+          </div>
+          <div class="server-card__actions">
+            <span class="server-status-badge active">Active</span>
+            <button class="btn-secondary" onclick="setActiveGuild('', { announce: false })">Clear</button>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  if (managedList) {
+    managedList.innerHTML = serverAccessData.managedServers.length > 0
+      ? serverAccessData.managedServers.map(server => renderServerCard(server, { managed: true })).join('')
+      : '<p style="color:var(--text-secondary); text-align:center; padding:20px;">No managed servers found.</p>';
+  }
+
+  if (unmanagedList) {
+    unmanagedList.innerHTML = serverAccessData.unmanagedServers.length > 0
+      ? serverAccessData.unmanagedServers.map(server => renderServerCard(server, { managed: false })).join('')
+      : '<p style="color:var(--text-secondary); text-align:center; padding:20px;">No unmanaged servers found.</p>';
+  }
+}
+
 // ==================== PORTAL LOADING ====================
 async function loadPortal() {
   try {
@@ -320,9 +522,10 @@ async function loadPortal() {
     if (data.success) {
       userData = data;
       showAuthenticatedState();
-      loadDashboardData();
-      await checkAdminStatus();
+      await loadServerAccess();
       await checkSuperadminStatus();
+      await checkAdminStatus();
+      loadDashboardData();
     } else {
       showUnauthenticatedState();
     }
@@ -358,6 +561,8 @@ function showAuthenticatedState() {
   navAuthBtn.classList.remove('btn-secondary');
   navAuthBtn.classList.add('btn-secondary');
 
+  updateActiveGuildBadge();
+
   // Show dashboard content
   document.getElementById('loginPrompt').style.display = 'none';
   document.getElementById('dashboardContent').style.display = 'block';
@@ -370,6 +575,8 @@ function showUnauthenticatedState() {
   
   navAvatar.style.display = 'none';
   navUsername.textContent = '';
+  const activeGuildBadge = document.getElementById('activeGuildBadge');
+  if (activeGuildBadge) activeGuildBadge.style.display = 'none';
   navAuthBtn.textContent = 'Login';
   navAuthBtn.onclick = login;
   navAuthBtn.classList.remove('btn-secondary');
@@ -384,8 +591,9 @@ async function checkAdminStatus() {
     const response = await fetch('/api/user/is-admin', { credentials: 'include' });
     const data = await response.json();
 
-    if (data.isAdmin) {
-      isAdmin = true;
+    isAdmin = !!data.isAdmin || isSuperadmin;
+
+    if (isAdmin) {
       document.getElementById('adminSidebarGroup').style.display = 'block';
       document.getElementById('mobileNavAdmin').style.display = 'block';
       const topNav = document.getElementById('topNavAdmin');
@@ -418,7 +626,7 @@ async function checkSuperadminStatus() {
 
     const navItem = document.getElementById('adminSuperadminNav');
     if (navItem) {
-      navItem.style.display = isAdmin && isSuperadmin ? 'flex' : 'none';
+      navItem.style.display = isSuperadmin ? 'flex' : 'none';
     }
 
     if (!isSuperadmin) {
@@ -867,6 +1075,8 @@ function switchSection(sectionName) {
   // Load section-specific data
   if (sectionName === 'governance' && userData) {
     loadActiveVotes();
+  } else if (sectionName === 'servers') {
+    loadServerAccess();
   } else if (sectionName === 'treasury') {
     loadTreasuryPublicView();
     loadTreasuryTransactions();
@@ -1181,6 +1391,7 @@ function logout() {
     'Confirm Logout',
     'Are you sure you want to log out?',
     () => {
+      setActiveGuild('', { persist: true, announce: false });
       window.location.href = '/auth/discord/logout';
     }
   );
@@ -1295,6 +1506,23 @@ function toggleAdminSubmenu() {
   }
 }
 
+function isTenantSensitiveAdminView(view) {
+  return [
+    'stats',
+    'users',
+    'proposals',
+    'settings',
+    'superadmin',
+    'analytics',
+    'roles',
+    'activity',
+    'votingpower',
+    'nfttracker',
+    'selfserveroles',
+    'ticketing'
+  ].includes(view);
+}
+
 function showAdminView(view) {
   // Admin sidebar is only shown to admins — no need to re-check here
   // (prevents timing issues where isAdmin hasn't been set yet)
@@ -1322,6 +1550,18 @@ function showAdminView(view) {
   const target = map[view] || map.settings;
   const card = document.getElementById(target.card);
   if (card) card.style.display = 'block';
+
+  if (isTenantSensitiveAdminView(view) && serverAccessData.managedServers.length > 0 && !getServerRecord(activeGuildId)) {
+    if (card) {
+      card.innerHTML = `
+        <div style="padding:20px; border:1px solid rgba(245,158,11,0.22); border-radius:10px; background:rgba(245,158,11,0.08); color:#fcd34d;">
+          Select a managed server from the <strong>Servers</strong> section before using tenant-aware admin controls.
+        </div>
+      `;
+    }
+    return;
+  }
+
   if (typeof target.load === 'function') target.load();
 
   // Highlight active admin sub-item in sidebar

@@ -189,12 +189,12 @@ class TicketService {
 
   // ==================== Panel ====================
 
-  async postOrUpdatePanel(channelId, { title, description }) {
+  async postOrUpdatePanel(channelId, { title, description }, guildId = process.env.GUILD_ID) {
     if (!this.client) return { success: false, message: 'Client not initialized' };
 
     try {
-      const guildId = process.env.GUILD_ID;
-      const guild = await this.client.guilds.fetch(guildId);
+      const normalizedGuildId = String(guildId || '').trim();
+      const guild = await this.client.guilds.fetch(normalizedGuildId);
       const channel = await guild.channels.fetch(channelId);
 
       if (!channel || !channel.isTextBased()) {
@@ -277,7 +277,7 @@ class TicketService {
     return next;
   }
 
-  async createTicket(interaction, categoryId, templateResponses) {
+  async createTicket(interaction, categoryId, templateResponses, guildId = process.env.GUILD_ID) {
     if (!this.client) return { success: false, message: 'Client not initialized' };
     if (!this.isEnabled()) return { success: false, message: 'Ticketing is currently disabled' };
 
@@ -295,8 +295,8 @@ class TicketService {
       const ticketDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
       const channelName = `${categorySlug}-${username}-${ticketDate}`.slice(0, 100);
 
-      const guildId = process.env.GUILD_ID;
-      const guild = await this.client.guilds.fetch(guildId);
+      const normalizedGuildId = String(guildId || '').trim();
+      const guild = await this.client.guilds.fetch(normalizedGuildId);
 
       // Build permission overwrites
       const permissionOverwrites = [

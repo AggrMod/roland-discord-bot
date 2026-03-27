@@ -3,16 +3,42 @@ const db = require('../database/db');
 const logger = require('../utils/logger');
 const moduleGuard = require('../utils/moduleGuard');
 const { getCommandModuleKey } = require('../config/commandModules');
+const {
+  getDefaultPlanKey,
+  getModuleKeys,
+  getPlanKeys,
+  getPlanPreset,
+  normalizePlanKey
+} = require('../config/plans');
 
 const MULTITENANT_ENABLED = process.env.MULTITENANT_ENABLED === 'true';
+const TENANT_STATUSES = new Set(['active', 'suspended']);
+const ALL_MODULE_KEYS = getModuleKeys();
 
-const DEFAULT_MODULE_KEYS = [
-  'verification',
-  'governance',
-  'treasury',
-  'battle',
-  'heist'
-];
+function normalizeGuildId(guildId) {
+  return typeof guildId === 'string' ? guildId.trim() : '';
+}
+
+function normalizeString(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const normalized = String(value).trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeBoolean(value) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (value === 1 || value === '1' || value === 'true' || value === 'TRUE') {
+    return true;
+  }
+
+  return false;
+}
 
 function normalizeCommands(commands) {
   if (!commands) {
@@ -38,43 +64,74 @@ function commandToPayload(command) {
   return command.data.toJSON();
 }
 
+function serializeJson(value) {
+  if (value === undefined) {
+    return null;
+  }
+
+  return JSON.stringify(value);
+}
+
 class TenantService {
+  constructor() {
+    this.commandSource = null;
+  }
+
+  setCommandSource(commandSource) {
+    this.commandSource = commandSource;
+  }
+
+  getCommandSource() {
+    if (typeof this.commandSource === 'function') {
+      return this.commandSource();
+    }
+
+    return this.commandSource;
+  }
+
   isMultitenantEnabled() {
     return MULTITENANT_ENABLED;
   }
 
   ensureTenant(guildId, guildName = null) {
-    if (!guildId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) {
       return null;
     }
 
-    const existingTenant = db.prepare('SELECT * FROM tenants WHERE guild_id = ?').get(guildId);
+    const nowTenant = db.prepare('SELECT * FROM tenants WHERE guild_id = ?').get(normalizedGuildId);
+    const defaultPlanKey = getDefaultPlanKey();
+    const defaultPlan = getPlanPreset(defaultPlanKey);
+    let created = false;
 
-    if (!existingTenant) {
+    if (!nowTenant) {
       db.prepare(`
-        INSERT INTO tenants (guild_id, guild_name, read_only_managed)
-        VALUES (?, ?, 0)
-      `).run(guildId, guildName || null);
-    } else if (guildName && existingTenant.guild_name !== guildName) {
+        INSERT INTO tenants (guild_id, guild_name, plan_key, status, read_only_managed)
+        VALUES (?, ?, ?, ?, 0)
+      `).run(normalizedGuildId, normalizeString(guildName), defaultPlanKey, 'active');
+      created = true;
+    } else if (guildName && nowTenant.guild_name !== guildName) {
       db.prepare(`
         UPDATE tenants
         SET guild_name = ?, updated_at = CURRENT_TIMESTAMP
         WHERE guild_id = ?
-      `).run(guildName, guildId);
+      `).run(normalizeString(guildName), normalizedGuildId);
     }
 
-    const tenant = db.prepare('SELECT * FROM tenants WHERE guild_id = ?').get(guildId);
+    const tenant = db.prepare('SELECT * FROM tenants WHERE guild_id = ?').get(normalizedGuildId);
     if (!tenant) {
       return null;
     }
 
     const tenantId = tenant.id;
+    const plan = getPlanPreset(tenant.plan_key || defaultPlanKey);
 
-    for (const moduleKey of DEFAULT_MODULE_KEYS) {
+    for (const moduleKey of ALL_MODULE_KEYS) {
+      const defaultEnabled = plan.modules[moduleKey] === true ? 1 : 0;
       db.prepare(`
         INSERT OR IGNORE INTO tenant_modules (tenant_id, module_key, enabled)
-        VALUES (?, ?, 1)
-      `).run(tenantId, moduleKey);
+        VALUES (?, ?, ?)
+      `).run(tenantId, moduleKey, defaultEnabled);
     }
 
     db.prepare(`
@@ -87,67 +144,50 @@ class TenantService {
       VALUES (?)
     `).run(tenantId);
 
-    return this.getTenantContext(guildId);
+    db.prepare(`
+      UPDATE tenants
+      SET plan_key = COALESCE(NULLIF(plan_key, ''), ?),
+          status = COALESCE(NULLIF(status, ''), 'active'),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(defaultPlanKey, tenantId);
+
+    db.prepare(`
+      UPDATE tenant_limits
+      SET max_commands = COALESCE(max_commands, ?),
+          max_enabled_modules = COALESCE(max_enabled_modules, ?),
+          max_branding_profiles = COALESCE(max_branding_profiles, ?),
+          max_read_only_overrides = COALESCE(max_read_only_overrides, ?),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE tenant_id = ?
+    `).run(
+      defaultPlan.limits.max_commands,
+      defaultPlan.limits.max_enabled_modules,
+      defaultPlan.limits.max_branding_profiles,
+      defaultPlan.limits.max_read_only_overrides,
+      tenantId
+    );
+
+    if (created) {
+      logger.log(`🏗️ Created tenant scaffold for ${normalizedGuildId}${guildName ? ` (${guildName})` : ''}`);
+    }
+
+    return this.getTenantContext(normalizedGuildId);
   }
 
-  getTenantContext(guildId) {
-    if (!guildId) {
-      return {
-        guildId: null,
-        guildName: null,
-        multiTenantEnabled: MULTITENANT_ENABLED,
-        readOnlyManaged: false,
-        tenant: null,
-        modules: {},
-        branding: null,
-        limits: null,
-        enabledModules: [],
-        disabledModules: []
-      };
-    }
-
-    let tenantRecord = db.prepare('SELECT * FROM tenants WHERE guild_id = ?').get(guildId);
+  buildTenantShape(tenantRecord) {
     if (!tenantRecord) {
-      const created = this.ensureTenant(guildId);
-      if (!created) {
-        return {
-          guildId,
-          guildName: null,
-          multiTenantEnabled: MULTITENANT_ENABLED,
-          readOnlyManaged: false,
-          tenant: null,
-          modules: {},
-          branding: null,
-          limits: null,
-          enabledModules: [],
-          disabledModules: []
-        };
-      }
-      tenantRecord = db.prepare('SELECT * FROM tenants WHERE guild_id = ?').get(guildId);
+      return null;
     }
 
-    if (!tenantRecord) {
-      return {
-        guildId,
-        guildName: null,
-        multiTenantEnabled: MULTITENANT_ENABLED,
-        readOnlyManaged: false,
-        tenant: null,
-        modules: {},
-        branding: null,
-        limits: null,
-        enabledModules: [],
-        disabledModules: []
-      };
-    }
-
+    const brandingRow = db.prepare('SELECT * FROM tenant_branding WHERE tenant_id = ?').get(tenantRecord.id) || null;
+    const limitsRow = db.prepare('SELECT * FROM tenant_limits WHERE tenant_id = ?').get(tenantRecord.id) || null;
     const moduleRows = db.prepare(`
       SELECT module_key, enabled
       FROM tenant_modules
       WHERE tenant_id = ?
+      ORDER BY module_key ASC
     `).all(tenantRecord.id);
-    const branding = db.prepare('SELECT * FROM tenant_branding WHERE tenant_id = ?').get(tenantRecord.id) || null;
-    const limits = db.prepare('SELECT * FROM tenant_limits WHERE tenant_id = ?').get(tenantRecord.id) || null;
 
     const modules = {};
     const enabledModules = [];
@@ -163,17 +203,131 @@ class TenantService {
       }
     }
 
+    const planKey = normalizePlanKey(tenantRecord.plan_key || getDefaultPlanKey()) || getDefaultPlanKey();
+    const plan = getPlanPreset(planKey);
+    const branding = brandingRow ? {
+      bot_display_name: brandingRow.bot_display_name || brandingRow.display_name || null,
+      brand_emoji: brandingRow.brand_emoji || null,
+      brand_color: brandingRow.brand_color || brandingRow.primary_color || null,
+      logo_url: brandingRow.logo_url || brandingRow.icon_url || null,
+      support_url: brandingRow.support_url || null,
+      display_name: brandingRow.display_name || brandingRow.bot_display_name || null,
+      primary_color: brandingRow.primary_color || brandingRow.brand_color || null,
+      secondary_color: brandingRow.secondary_color || null,
+      icon_url: brandingRow.icon_url || brandingRow.logo_url || null,
+      raw: brandingRow
+    } : null;
+
+    const limits = limitsRow ? {
+      ...limitsRow,
+      plan_key: planKey
+    } : null;
+
     return {
       guildId: tenantRecord.guild_id,
       guildName: tenantRecord.guild_name,
-      multiTenantEnabled: MULTITENANT_ENABLED,
+      planKey,
+      planLabel: plan.label,
+      planDescription: plan.description,
+      status: tenantRecord.status || 'active',
       readOnlyManaged: tenantRecord.read_only_managed === 1,
       tenant: tenantRecord,
       modules,
       branding,
       limits,
       enabledModules,
-      disabledModules
+      disabledModules,
+      enabledModulesCount: enabledModules.length,
+      totalModulesCount: ALL_MODULE_KEYS.length
+    };
+  }
+
+  getTenant(guildId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) {
+      return null;
+    }
+
+    const tenantRecord = db.prepare('SELECT * FROM tenants WHERE guild_id = ?').get(normalizedGuildId);
+    if (!tenantRecord) {
+      return null;
+    }
+
+    return {
+      ...this.buildTenantShape(tenantRecord),
+      multiTenantEnabled: MULTITENANT_ENABLED
+    };
+  }
+
+  listTenants({ q, status } = {}) {
+    const query = normalizeString(q);
+    const normalizedStatus = normalizeString(status)?.toLowerCase() || null;
+    const params = [];
+    const where = [];
+
+    if (query) {
+      where.push('(LOWER(t.guild_id) LIKE ? OR LOWER(COALESCE(t.guild_name, \'\')) LIKE ?)');
+      params.push(`%${query.toLowerCase()}%`, `%${query.toLowerCase()}%`);
+    }
+
+    if (normalizedStatus && TENANT_STATUSES.has(normalizedStatus)) {
+      where.push('LOWER(COALESCE(t.status, \'active\')) = ?');
+      params.push(normalizedStatus);
+    }
+
+    const rows = db.prepare(`
+      SELECT
+        t.*,
+        COALESCE(SUM(CASE WHEN tm.enabled = 1 THEN 1 ELSE 0 END), 0) AS enabled_module_count,
+        COUNT(tm.id) AS module_count
+      FROM tenants t
+      LEFT JOIN tenant_modules tm ON tm.tenant_id = t.id
+      ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
+      GROUP BY t.id
+      ORDER BY COALESCE(t.guild_name, t.guild_id) COLLATE NOCASE ASC
+    `).all(...params);
+
+    return rows.map(row => {
+      const tenant = this.buildTenantShape(row);
+      return {
+        ...tenant,
+        enabledModulesCount: Number(row.enabled_module_count || 0),
+        totalModulesCount: ALL_MODULE_KEYS.length
+      };
+    });
+  }
+
+  getTenantContext(guildId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) {
+      return {
+        guildId: null,
+        guildName: null,
+        multiTenantEnabled: MULTITENANT_ENABLED,
+        readOnlyManaged: false,
+        tenant: null,
+        planKey: getDefaultPlanKey(),
+        planLabel: getPlanPreset(getDefaultPlanKey()).label,
+        planDescription: getPlanPreset(getDefaultPlanKey()).description,
+        status: 'active',
+        modules: {},
+        branding: null,
+        limits: null,
+        enabledModules: [],
+        disabledModules: [],
+        enabledModulesCount: 0,
+        totalModulesCount: ALL_MODULE_KEYS.length
+      };
+    }
+
+    const tenantRecord = db.prepare('SELECT * FROM tenants WHERE guild_id = ?').get(normalizedGuildId);
+    if (!tenantRecord) {
+      return this.ensureTenant(normalizedGuildId);
+    }
+
+    return {
+      ...this.buildTenantShape(tenantRecord),
+      multiTenantEnabled: MULTITENANT_ENABLED
     };
   }
 
@@ -186,7 +340,7 @@ class TenantService {
       return moduleGuard.isModuleEnabled(moduleKey);
     }
 
-    const context = this.ensureTenant(guildId);
+    const context = this.getTenantContext(guildId);
     if (!context || !context.tenant) {
       return true;
     }
@@ -204,6 +358,302 @@ class TenantService {
     return row.enabled === 1;
   }
 
+  logAudit(guildId, actorId, action, beforeValue, afterValue) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) {
+      return null;
+    }
+
+    db.prepare(`
+      INSERT INTO tenant_audit_logs (guild_id, actor_id, action, before_json, after_json)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(
+      normalizedGuildId,
+      normalizeString(actorId),
+      action,
+      serializeJson(beforeValue),
+      serializeJson(afterValue)
+    );
+
+    return true;
+  }
+
+  applyPlanBundle(guildId, planKey) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const normalizedPlanKey = normalizePlanKey(planKey);
+    const plan = getPlanPreset(normalizedPlanKey);
+
+    if (!normalizedGuildId) {
+      return { success: false, message: 'guildId is required' };
+    }
+
+    if (!getPlanKeys().includes(normalizedPlanKey)) {
+      return { success: false, message: 'Invalid plan' };
+    }
+
+    const context = this.ensureTenant(normalizedGuildId);
+    const tenantId = context?.tenant?.id;
+
+    if (!tenantId) {
+      return { success: false, message: 'Tenant not found' };
+    }
+
+    db.prepare(`
+      UPDATE tenants
+      SET plan_key = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(normalizedPlanKey, tenantId);
+
+    for (const moduleKey of ALL_MODULE_KEYS) {
+      const enabled = plan.modules[moduleKey] === true ? 1 : 0;
+      db.prepare(`
+        INSERT INTO tenant_modules (tenant_id, module_key, enabled)
+        VALUES (?, ?, ?)
+        ON CONFLICT(tenant_id, module_key) DO UPDATE SET
+          enabled = excluded.enabled,
+          updated_at = CURRENT_TIMESTAMP
+      `).run(tenantId, moduleKey, enabled);
+    }
+
+    db.prepare(`
+      INSERT INTO tenant_limits (
+        tenant_id,
+        max_commands,
+        max_enabled_modules,
+        max_branding_profiles,
+        max_read_only_overrides
+      )
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(tenant_id) DO UPDATE SET
+        max_commands = excluded.max_commands,
+        max_enabled_modules = excluded.max_enabled_modules,
+        max_branding_profiles = excluded.max_branding_profiles,
+        max_read_only_overrides = excluded.max_read_only_overrides,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(
+      tenantId,
+      plan.limits.max_commands,
+      plan.limits.max_enabled_modules,
+      plan.limits.max_branding_profiles,
+      plan.limits.max_read_only_overrides
+    );
+
+    return this.getTenantContext(normalizedGuildId);
+  }
+
+  setTenantPlan(guildId, planKey, actorId) {
+    const normalizedPlanKey = normalizePlanKey(planKey);
+
+    if (!getPlanKeys().includes(normalizedPlanKey)) {
+      return { success: false, message: 'Invalid plan' };
+    }
+
+    const before = this.getTenantContext(guildId);
+
+    const after = this.applyPlanBundle(guildId, normalizedPlanKey);
+    if (!after || !after.tenant) {
+      return { success: false, message: 'Tenant not found' };
+    }
+
+    this.logAudit(guildId, actorId, 'set_plan', before, after);
+
+    if (MULTITENANT_ENABLED) {
+      this.syncGuildCommandsForGuild(guildId, after.guildName).catch(error => {
+        logger.error(`Error syncing commands after plan update for ${guildId}:`, error);
+      });
+    }
+
+    return {
+      success: true,
+      tenant: after
+    };
+  }
+
+  setTenantModule(guildId, moduleKey, enabled, actorId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const normalizedModuleKey = normalizeString(moduleKey);
+
+    if (!normalizedGuildId) {
+      return { success: false, message: 'guildId is required' };
+    }
+
+    if (!normalizedModuleKey) {
+      return { success: false, message: 'moduleKey is required' };
+    }
+
+    const before = this.getTenantContext(normalizedGuildId);
+    const context = this.ensureTenant(normalizedGuildId);
+    const tenantId = context?.tenant?.id;
+    if (!tenantId) {
+      return { success: false, message: 'Tenant not found' };
+    }
+
+    db.prepare(`
+      INSERT INTO tenant_modules (tenant_id, module_key, enabled)
+      VALUES (?, ?, ?)
+      ON CONFLICT(tenant_id, module_key) DO UPDATE SET
+        enabled = excluded.enabled,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(tenantId, normalizedModuleKey, normalizeBoolean(enabled) ? 1 : 0);
+
+    const after = this.getTenantContext(normalizedGuildId);
+    this.logAudit(guildId, actorId, 'set_module', before, after);
+
+    if (MULTITENANT_ENABLED) {
+      this.syncGuildCommandsForGuild(guildId, after.guildName).catch(error => {
+        logger.error(`Error syncing commands after module update for ${guildId}:`, error);
+      });
+    }
+
+    return {
+      success: true,
+      tenant: after
+    };
+  }
+
+  setTenantStatus(guildId, status, actorId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const normalizedStatus = normalizeString(status)?.toLowerCase();
+
+    if (!normalizedGuildId) {
+      return { success: false, message: 'guildId is required' };
+    }
+
+    if (!TENANT_STATUSES.has(normalizedStatus)) {
+      return { success: false, message: 'Invalid status' };
+    }
+
+    const before = this.getTenantContext(normalizedGuildId);
+    const context = this.ensureTenant(normalizedGuildId);
+    const tenantId = context?.tenant?.id;
+    if (!tenantId) {
+      return { success: false, message: 'Tenant not found' };
+    }
+
+    db.prepare(`
+      UPDATE tenants
+      SET status = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(normalizedStatus, tenantId);
+
+    const after = this.getTenantContext(normalizedGuildId);
+    this.logAudit(guildId, actorId, 'set_status', before, after);
+
+    return {
+      success: true,
+      tenant: after
+    };
+  }
+
+  updateTenantBranding(guildId, brandingPatch, actorId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) {
+      return { success: false, message: 'guildId is required' };
+    }
+
+    const allowedKeys = [
+      'bot_display_name',
+      'brand_emoji',
+      'brand_color',
+      'logo_url',
+      'support_url',
+      'display_name',
+      'primary_color',
+      'secondary_color',
+      'icon_url'
+    ];
+
+    const patch = {};
+    for (const key of allowedKeys) {
+      if (brandingPatch && Object.prototype.hasOwnProperty.call(brandingPatch, key)) {
+        patch[key] = normalizeString(brandingPatch[key]);
+      }
+    }
+
+    const before = this.getTenantContext(normalizedGuildId);
+    const context = this.ensureTenant(normalizedGuildId);
+    const tenantId = context?.tenant?.id;
+    if (!tenantId) {
+      return { success: false, message: 'Tenant not found' };
+    }
+
+    const brandingRow = db.prepare('SELECT * FROM tenant_branding WHERE tenant_id = ?').get(tenantId) || {};
+
+    const nextBranding = {
+      bot_display_name: patch.bot_display_name !== undefined ? patch.bot_display_name : (brandingRow.bot_display_name || brandingRow.display_name || null),
+      brand_emoji: patch.brand_emoji !== undefined ? patch.brand_emoji : (brandingRow.brand_emoji || null),
+      brand_color: patch.brand_color !== undefined ? patch.brand_color : (brandingRow.brand_color || brandingRow.primary_color || null),
+      logo_url: patch.logo_url !== undefined ? patch.logo_url : (brandingRow.logo_url || brandingRow.icon_url || null),
+      support_url: patch.support_url !== undefined ? patch.support_url : (brandingRow.support_url || null),
+      display_name: patch.display_name !== undefined ? patch.display_name : (brandingRow.display_name || brandingRow.bot_display_name || null),
+      primary_color: patch.primary_color !== undefined ? patch.primary_color : (brandingRow.primary_color || brandingRow.brand_color || null),
+      secondary_color: patch.secondary_color !== undefined ? patch.secondary_color : (brandingRow.secondary_color || null),
+      icon_url: patch.icon_url !== undefined ? patch.icon_url : (brandingRow.icon_url || brandingRow.logo_url || null)
+    };
+
+    db.prepare(`
+      INSERT INTO tenant_branding (
+        tenant_id,
+        bot_display_name,
+        brand_emoji,
+        brand_color,
+        display_name,
+        primary_color,
+        secondary_color,
+        logo_url,
+        icon_url,
+        support_url
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(tenant_id) DO UPDATE SET
+        bot_display_name = excluded.bot_display_name,
+        brand_emoji = excluded.brand_emoji,
+        brand_color = excluded.brand_color,
+        display_name = excluded.display_name,
+        primary_color = excluded.primary_color,
+        secondary_color = excluded.secondary_color,
+        logo_url = excluded.logo_url,
+        icon_url = excluded.icon_url,
+        support_url = excluded.support_url,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(
+      tenantId,
+      nextBranding.bot_display_name,
+      nextBranding.brand_emoji,
+      nextBranding.brand_color,
+      nextBranding.display_name,
+      nextBranding.primary_color,
+      nextBranding.secondary_color,
+      nextBranding.logo_url,
+      nextBranding.icon_url,
+      nextBranding.support_url
+    );
+
+    const after = this.getTenantContext(normalizedGuildId);
+    this.logAudit(guildId, actorId, 'update_branding', before, after);
+
+    return {
+      success: true,
+      tenant: after
+    };
+  }
+
+  getTenantAuditLogs(guildId, limit = 10) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) {
+      return [];
+    }
+
+    const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 100);
+    return db.prepare(`
+      SELECT id, guild_id, actor_id, action, before_json, after_json, created_at
+      FROM tenant_audit_logs
+      WHERE guild_id = ?
+      ORDER BY created_at DESC, id DESC
+      LIMIT ?
+    `).all(normalizedGuildId, safeLimit);
+  }
+
   async syncGuildCommands(commands, guildId, guildName = null) {
     if (!MULTITENANT_ENABLED) {
       return {
@@ -217,11 +667,12 @@ class TenantService {
       throw new Error('DISCORD_TOKEN and CLIENT_ID are required to sync guild commands');
     }
 
-    if (!guildId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) {
       throw new Error('guildId is required to sync guild commands');
     }
 
-    const context = this.ensureTenant(guildId, guildName);
+    const context = this.ensureTenant(normalizedGuildId, guildName);
     const normalized = normalizeCommands(commands);
     const payloads = [];
     const skippedCommands = [];
@@ -233,7 +684,7 @@ class TenantService {
       }
 
       const moduleKey = getCommandModuleKey(payload.name);
-      if (moduleKey && !this.isModuleEnabled(guildId, moduleKey)) {
+      if (moduleKey && !this.isModuleEnabled(normalizedGuildId, moduleKey)) {
         skippedCommands.push(payload.name);
         continue;
       }
@@ -243,12 +694,12 @@ class TenantService {
 
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     const data = await rest.put(
-      Routes.applicationGuildCommands(process.env.CLIENT_ID, guildId),
+      Routes.applicationGuildCommands(process.env.CLIENT_ID, normalizedGuildId),
       { body: payloads }
     );
 
     logger.log(
-      `✅ Synced ${data.length} guild commands for ${guildId}${context?.guildName ? ` (${context.guildName})` : ''}`
+      `✅ Synced ${data.length} guild commands for ${normalizedGuildId}${context?.guildName ? ` (${context.guildName})` : ''}`
     );
 
     if (skippedCommands.length > 0) {
@@ -257,10 +708,25 @@ class TenantService {
 
     return {
       success: true,
-      guildId,
+      guildId: normalizedGuildId,
       commandCount: data.length,
       skippedCommands
     };
+  }
+
+  async syncGuildCommandsForGuild(guildId, guildName = null) {
+    const commands = this.getCommandSource();
+
+    if (!commands) {
+      logger.warn(`No command source available for tenant command sync on ${guildId}`);
+      return {
+        success: false,
+        skipped: true,
+        message: 'No command source available'
+      };
+    }
+
+    return this.syncGuildCommands(commands, guildId, guildName);
   }
 }
 

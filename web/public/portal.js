@@ -1353,6 +1353,211 @@ function showAdminUsers() {
 }
 
 let superadminListCache = [];
+let tenantListCache = [];
+let selectedTenantGuildId = null;
+let selectedTenantDetailCache = null;
+let selectedTenantAuditCache = [];
+
+const TENANT_PLAN_LABELS = {
+  starter: 'Starter',
+  growth: 'Growth',
+  pro: 'Pro',
+  enterprise: 'Enterprise'
+};
+
+const TENANT_MODULE_LABELS = {
+  verification: 'Verification',
+  governance: 'Governance',
+  treasury: 'Treasury',
+  battle: 'Battle',
+  heist: 'Heist',
+  ticketing: 'Ticketing',
+  nfttracker: 'NFT Tracker',
+  selfserveroles: 'Self-Serve Roles',
+  analytics: 'Analytics'
+};
+
+function getTenantPlanLabel(planKey) {
+  return TENANT_PLAN_LABELS[planKey] || planKey || 'Unknown';
+}
+
+function getTenantStatusBadge(status) {
+  const normalized = String(status || 'active').toLowerCase();
+  if (normalized === 'suspended') {
+    return `<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:rgba(239,68,68,0.18);color:#fecaca;font-size:0.78em;font-weight:600;">Suspended</span>`;
+  }
+  return `<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:rgba(34,197,94,0.18);color:#bbf7d0;font-size:0.78em;font-weight:600;">Active</span>`;
+}
+
+function getTenantModuleLabel(moduleKey) {
+  return TENANT_MODULE_LABELS[moduleKey] || moduleKey;
+}
+
+function renderTenantRow(tenant) {
+  const selected = tenant.guildId === selectedTenantGuildId;
+  const statusColor = String(tenant.status || 'active').toLowerCase() === 'suspended'
+    ? 'rgba(239,68,68,0.18)'
+    : 'rgba(34,197,94,0.18)';
+
+  return `
+    <button type="button" onclick="selectTenantGuild('${escapeHtml(tenant.guildId)}')" style="width:100%; text-align:left; display:grid; grid-template-columns:minmax(0,1.6fr) repeat(3,minmax(0,1fr)); gap:12px; align-items:center; padding:12px 14px; border:none; border-bottom:1px solid rgba(99,102,241,0.15); background:${selected ? 'rgba(99,102,241,0.16)' : 'transparent'}; color:inherit; cursor:pointer;">
+      <div style="min-width:0;">
+        <div style="color:#e0e7ff; font-weight:600; word-break:break-word;">${escapeHtml(tenant.guildName || tenant.guildId)}</div>
+        <div style="color:var(--text-secondary); font-size:0.8em; font-family:monospace; word-break:break-all;">${escapeHtml(tenant.guildId)}</div>
+      </div>
+      <div>
+        <div style="color:#c9d6ff; font-weight:600;">${escapeHtml(getTenantPlanLabel(tenant.planKey))}</div>
+        <div style="color:var(--text-secondary); font-size:0.8em;">${escapeHtml(tenant.planKey || 'starter')}</div>
+      </div>
+      <div>${getTenantStatusBadge(tenant.status)}</div>
+      <div style="color:#c9d6ff; font-weight:600;">${escapeHtml(String(tenant.enabledModulesCount || 0))}/${escapeHtml(String(tenant.totalModulesCount || 0))}</div>
+    </button>
+  `;
+}
+
+function renderTenantAuditLog(logs) {
+  if (!logs || logs.length === 0) {
+    return `<div style="padding:14px; text-align:center; color:var(--text-secondary); border:1px dashed rgba(99,102,241,0.18); border-radius:10px;">No audit activity yet.</div>`;
+  }
+
+  return logs.map(log => `
+    <div style="padding:12px 14px; border:1px solid rgba(99,102,241,0.15); border-radius:10px; background:rgba(14,23,44,0.45);">
+      <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
+        <div style="min-width:0;">
+          <div style="color:#e0e7ff; font-weight:600;">${escapeHtml(log.action)}</div>
+          <div style="color:var(--text-secondary); font-size:0.8em; margin-top:4px; word-break:break-all;">Actor: ${escapeHtml(log.actor_id || 'system')}</div>
+        </div>
+        <div style="color:var(--text-secondary); font-size:0.78em; white-space:nowrap;">${escapeHtml(new Date(log.created_at).toLocaleString())}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderTenantDetailPanel(tenant) {
+  if (!tenant) {
+    return `<div style="padding:18px; text-align:center; color:var(--text-secondary);">Select a tenant to manage plan, modules, branding, and status.</div>`;
+  }
+
+  const planOptions = Object.entries(TENANT_PLAN_LABELS).map(([key, label]) => `
+    <option value="${escapeHtml(key)}"${tenant.planKey === key ? ' selected' : ''}>${escapeHtml(label)}</option>
+  `).join('');
+
+  const moduleToggles = Object.entries(TENANT_MODULE_LABELS).map(([moduleKey, label]) => {
+    const checked = tenant.modules?.[moduleKey] ? ' checked' : '';
+    return `
+      <label style="display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 12px; border:1px solid rgba(99,102,241,0.14); border-radius:10px; background:rgba(14,23,44,0.45);">
+        <span style="color:#e0e7ff; font-weight:600;">${escapeHtml(label)}</span>
+        <input type="checkbox" ${checked} onchange="toggleTenantModule('${escapeHtml(moduleKey)}', this)" style="width:18px; height:18px; cursor:pointer;">
+      </label>
+    `;
+  }).join('');
+
+  const branding = tenant.branding || {};
+
+  return `
+    <div style="display:grid; gap:16px;">
+      <div style="display:grid; gap:14px; grid-template-columns:minmax(0,1.2fr) minmax(0,0.8fr);">
+        <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
+            <div>
+              <h4 style="margin:0; color:#c9d6ff;">${escapeHtml(tenant.guildName || tenant.guildId)}</h4>
+              <div style="color:var(--text-secondary); font-size:0.82em; font-family:monospace; word-break:break-all; margin-top:4px;">${escapeHtml(tenant.guildId)}</div>
+            </div>
+            ${getTenantStatusBadge(tenant.status)}
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; color:#c9d6ff; font-size:0.88em;">
+            <div style="padding:10px 12px; background:rgba(30,41,59,0.45); border-radius:10px;">
+              <div style="color:var(--text-secondary); font-size:0.8em;">Plan</div>
+              <div style="font-weight:600; margin-top:4px;">${escapeHtml(getTenantPlanLabel(tenant.planKey))}</div>
+            </div>
+            <div style="padding:10px 12px; background:rgba(30,41,59,0.45); border-radius:10px;">
+              <div style="color:var(--text-secondary); font-size:0.8em;">Modules</div>
+              <div style="font-weight:600; margin-top:4px;">${escapeHtml(String(tenant.enabledModulesCount || 0))}/${escapeHtml(String(tenant.totalModulesCount || 0))}</div>
+            </div>
+            <div style="padding:10px 12px; background:rgba(30,41,59,0.45); border-radius:10px;">
+              <div style="color:var(--text-secondary); font-size:0.8em;">Managed</div>
+              <div style="font-weight:600; margin-top:4px;">${tenant.readOnlyManaged ? 'Read only' : 'Editable'}</div>
+            </div>
+          </div>
+        </div>
+        <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
+          <div style="color:#c9d6ff; font-weight:600; margin-bottom:10px;">Recent Audit</div>
+          <div id="tenantAuditLogList" style="display:grid; gap:10px;">${renderTenantAuditLog(selectedTenantAuditCache)}</div>
+        </div>
+      </div>
+
+      <div style="display:grid; gap:16px; grid-template-columns:minmax(0,0.8fr) minmax(0,1.2fr);">
+        <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
+            <h4 style="margin:0; color:#c9d6ff;">Plan Assignment</h4>
+            <button class="btn-primary" id="tenantPlanApplyBtn" onclick="applyTenantPlan()" style="padding:8px 14px;">Apply</button>
+          </div>
+          <label style="display:grid; gap:8px; color:#e0e7ff; font-size:0.9em;">
+            <span>Plan</span>
+            <select id="tenantPlanSelect" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
+              ${planOptions}
+            </select>
+          </label>
+          <div style="margin-top:12px; color:var(--text-secondary); font-size:0.82em; line-height:1.5;">
+            ${escapeHtml(tenant.planDescription || '')}
+          </div>
+        </div>
+
+        <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
+            <h4 style="margin:0; color:#c9d6ff;">Tenant Status</h4>
+            <button class="btn-secondary" id="tenantStatusSaveBtn" onclick="saveTenantStatus()" style="padding:8px 14px;">Save</button>
+          </div>
+          <label style="display:grid; gap:8px; color:#e0e7ff; font-size:0.9em;">
+            <span>Status</span>
+            <select id="tenantStatusSelect" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
+              <option value="active"${String(tenant.status || 'active') === 'active' ? ' selected' : ''}>Active</option>
+              <option value="suspended"${String(tenant.status || 'active') === 'suspended' ? ' selected' : ''}>Suspended</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div style="display:grid; gap:16px; grid-template-columns:minmax(0,1fr) minmax(0,1fr);">
+        <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
+            <h4 style="margin:0; color:#c9d6ff;">Branding</h4>
+            <button class="btn-primary" id="tenantBrandSaveBtn" onclick="saveTenantBranding()" style="padding:8px 14px;">Save</button>
+          </div>
+          <div style="display:grid; gap:10px;">
+            <label style="display:grid; gap:6px; color:#e0e7ff; font-size:0.9em;">
+              <span>Bot display name</span>
+              <input id="tenantBrandBotDisplayName" type="text" value="${escapeHtml(branding.bot_display_name || '')}" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
+            </label>
+            <label style="display:grid; gap:6px; color:#e0e7ff; font-size:0.9em;">
+              <span>Brand emoji</span>
+              <input id="tenantBrandEmoji" type="text" value="${escapeHtml(branding.brand_emoji || '')}" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
+            </label>
+            <label style="display:grid; gap:6px; color:#e0e7ff; font-size:0.9em;">
+              <span>Brand color</span>
+              <input id="tenantBrandColor" type="text" value="${escapeHtml(branding.brand_color || '')}" placeholder="#FFD700" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
+            </label>
+            <label style="display:grid; gap:6px; color:#e0e7ff; font-size:0.9em;">
+              <span>Logo URL</span>
+              <input id="tenantBrandLogoUrl" type="text" value="${escapeHtml(branding.logo_url || '')}" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
+            </label>
+            <label style="display:grid; gap:6px; color:#e0e7ff; font-size:0.9em;">
+              <span>Support URL</span>
+              <input id="tenantBrandSupportUrl" type="text" value="${escapeHtml(branding.support_url || '')}" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
+            </label>
+          </div>
+        </div>
+
+        <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
+          <h4 style="margin:0 0 12px; color:#c9d6ff;">Module Bundle</h4>
+          <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
+            ${moduleToggles}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
 
 async function loadSuperadminView() {
   if (!isSuperadmin) return;
@@ -1360,19 +1565,36 @@ async function loadSuperadminView() {
   const content = document.getElementById('adminSuperadminContent');
   if (!content) return;
 
-  content.innerHTML = `<div style="text-align:center; padding:20px;"><div class="spinner"></div><p style="margin-top:10px;">Loading superadmins...</p></div>`;
+  content.innerHTML = `<div style="text-align:center; padding:20px;"><div class="spinner"></div><p style="margin-top:10px;">Loading superadmin tenant controls...</p></div>`;
 
   try {
-    const response = await fetch('/api/superadmin/admins', { credentials: 'include' });
-    const data = await response.json();
+    const [adminsResponse, tenantsResponse] = await Promise.all([
+      fetch('/api/superadmin/admins', { credentials: 'include' }),
+      fetch('/api/superadmin/tenants', { credentials: 'include' })
+    ]);
 
-    if (!data.success) {
-      content.innerHTML = `<div style="color:#fca5a5; text-align:center; padding:20px;">${escapeHtml(data.message || 'Unable to load superadmins')}</div>`;
+    const [adminsData, tenantsData] = await Promise.all([
+      adminsResponse.json(),
+      tenantsResponse.json()
+    ]);
+
+    if (!adminsData.success) {
+      content.innerHTML = `<div style="color:#fca5a5; text-align:center; padding:20px;">${escapeHtml(adminsData.message || 'Unable to load superadmins')}</div>`;
       return;
     }
 
-    superadminListCache = data.superadmins || [];
-    const rows = superadminListCache.length > 0
+    if (!tenantsData.success) {
+      content.innerHTML = `<div style="color:#fca5a5; text-align:center; padding:20px;">${escapeHtml(tenantsData.message || 'Unable to load tenants')}</div>`;
+      return;
+    }
+
+    superadminListCache = adminsData.superadmins || [];
+    tenantListCache = tenantsData.tenants || [];
+    if (!selectedTenantGuildId || !tenantListCache.some(tenant => tenant.guildId === selectedTenantGuildId)) {
+      selectedTenantGuildId = tenantListCache[0]?.guildId || null;
+    }
+
+    const superadminRows = superadminListCache.length > 0
       ? superadminListCache.map(entry => {
           const removable = entry.source !== 'env';
           const sourceLabel = entry.source === 'env' ? 'Root env' : 'DB';
@@ -1393,25 +1615,236 @@ async function loadSuperadminView() {
         }).join('')
       : `<div style="padding:18px; text-align:center; color:var(--text-secondary);">No database superadmins configured.</div>`;
 
+    const tenantRows = tenantListCache.length > 0
+      ? tenantListCache.map(renderTenantRow).join('')
+      : `<div style="padding:18px; text-align:center; color:var(--text-secondary);">No tenants found yet. New guilds will bootstrap automatically.</div>`;
+
     content.innerHTML = `
       <div style="display:grid; gap:16px;">
         <div style="display:grid; gap:12px; grid-template-columns:minmax(0,1fr) auto;">
           <input id="adminSuperadminUserIdInput" type="text" placeholder="Discord ID" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; width:100%;">
           <button id="adminSuperadminAddBtn" class="btn-primary" onclick="addSuperadminFromInput()" style="padding:10px 16px;">Add</button>
         </div>
+
         <div style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
             <h4 style="margin:0; color:#c9d6ff;">Current superadmins</h4>
             <span style="color:var(--text-secondary); font-size:0.85em;">Env roots cannot be removed</span>
           </div>
           <div style="border:1px solid rgba(99,102,241,0.15); border-radius:10px; overflow:hidden;">
-            ${rows}
+            ${superadminRows}
           </div>
+        </div>
+
+        <div style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
+            <h4 style="margin:0; color:#c9d6ff;">Tenant Management</h4>
+            <button class="btn-secondary" onclick="loadSuperadminView()" style="padding:8px 12px;">Refresh</button>
+          </div>
+          <div style="border:1px solid rgba(99,102,241,0.15); border-radius:10px; overflow:hidden;">
+            <div style="display:grid; grid-template-columns:minmax(0,1.6fr) repeat(3,minmax(0,1fr)); gap:12px; padding:10px 14px; background:rgba(99,102,241,0.12); color:#c9d6ff; font-weight:600; font-size:0.82em;">
+              <div>Guild</div>
+              <div>Plan</div>
+              <div>Status</div>
+              <div>Modules</div>
+            </div>
+            <div>${tenantRows}</div>
+          </div>
+        </div>
+
+        <div style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
+            <h4 style="margin:0; color:#c9d6ff;">Tenant Detail</h4>
+            <span style="color:var(--text-secondary); font-size:0.85em;">Select a guild to edit plan, modules, branding, and status</span>
+          </div>
+          <div id="adminTenantDetailContent">${renderTenantDetailPanel(null)}</div>
         </div>
       </div>
     `;
+
+    if (selectedTenantGuildId) {
+      await loadSelectedTenantDetail();
+    }
   } catch (error) {
-    content.innerHTML = `<div style="color:#fca5a5; text-align:center; padding:20px;">Error loading superadmins: ${escapeHtml(error.message || 'Unknown error')}</div>`;
+    content.innerHTML = `<div style="color:#fca5a5; text-align:center; padding:20px;">Error loading superadmin view: ${escapeHtml(error.message || 'Unknown error')}</div>`;
+  }
+}
+
+async function loadSelectedTenantDetail() {
+  const content = document.getElementById('adminTenantDetailContent');
+  if (!content) return;
+
+  if (!selectedTenantGuildId) {
+    content.innerHTML = renderTenantDetailPanel(null);
+    return;
+  }
+
+  content.innerHTML = `<div style="text-align:center; padding:20px;"><div class="spinner"></div><p style="margin-top:10px;">Loading tenant details...</p></div>`;
+
+  try {
+    const [tenantResponse, auditResponse] = await Promise.all([
+      fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}`, { credentials: 'include' }),
+      fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/audit?limit=10`, { credentials: 'include' })
+    ]);
+
+    const [tenantData, auditData] = await Promise.all([
+      tenantResponse.json(),
+      auditResponse.json()
+    ]);
+
+    if (!tenantData.success) {
+      content.innerHTML = `<div style="color:#fca5a5; text-align:center; padding:20px;">${escapeHtml(tenantData.message || 'Unable to load tenant')}</div>`;
+      return;
+    }
+
+    if (!auditData.success) {
+      content.innerHTML = `<div style="color:#fca5a5; text-align:center; padding:20px;">${escapeHtml(auditData.message || 'Unable to load audit log')}</div>`;
+      return;
+    }
+
+    selectedTenantDetailCache = tenantData.tenant || null;
+    selectedTenantAuditCache = auditData.auditLogs || [];
+    content.innerHTML = renderTenantDetailPanel(selectedTenantDetailCache);
+  } catch (error) {
+    content.innerHTML = `<div style="color:#fca5a5; text-align:center; padding:20px;">Error loading tenant details: ${escapeHtml(error.message || 'Unknown error')}</div>`;
+  }
+}
+
+function selectTenantGuild(guildId) {
+  selectedTenantGuildId = guildId;
+  loadSuperadminView();
+}
+
+async function applyTenantPlan() {
+  if (!selectedTenantGuildId) return;
+
+  const select = document.getElementById('tenantPlanSelect');
+  const btn = document.getElementById('tenantPlanApplyBtn');
+  if (!select || !btn) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Applying...';
+
+  try {
+    const response = await fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/plan`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ plan: select.value })
+    });
+    const data = await response.json();
+
+    if (data.success) {
+      showSuccess('Tenant plan updated');
+      await loadSuperadminView();
+    } else {
+      showError(data.message || 'Failed to update tenant plan');
+    }
+  } catch (error) {
+    showError(`Failed to update tenant plan: ${error.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Apply';
+  }
+}
+
+async function toggleTenantModule(moduleKey, checkbox) {
+  if (!selectedTenantGuildId || !checkbox) return;
+
+  const previousValue = !checkbox.checked;
+
+  try {
+    const response = await fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/modules`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ moduleKey, enabled: checkbox.checked })
+    });
+    const data = await response.json();
+
+    if (data.success) {
+      showSuccess(`${getTenantModuleLabel(moduleKey)} updated`);
+      await loadSuperadminView();
+    } else {
+      checkbox.checked = previousValue;
+      showError(data.message || 'Failed to update tenant module');
+    }
+  } catch (error) {
+    checkbox.checked = previousValue;
+    showError(`Failed to update tenant module: ${error.message}`);
+  }
+}
+
+async function saveTenantStatus() {
+  if (!selectedTenantGuildId) return;
+
+  const select = document.getElementById('tenantStatusSelect');
+  const btn = document.getElementById('tenantStatusSaveBtn');
+  if (!select || !btn) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  try {
+    const response = await fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ status: select.value })
+    });
+    const data = await response.json();
+
+    if (data.success) {
+      showSuccess('Tenant status updated');
+      await loadSuperadminView();
+    } else {
+      showError(data.message || 'Failed to update tenant status');
+    }
+  } catch (error) {
+    showError(`Failed to update tenant status: ${error.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save';
+  }
+}
+
+async function saveTenantBranding() {
+  if (!selectedTenantGuildId) return;
+
+  const btn = document.getElementById('tenantBrandSaveBtn');
+  if (!btn) return;
+
+  const payload = {
+    bot_display_name: document.getElementById('tenantBrandBotDisplayName')?.value || '',
+    brand_emoji: document.getElementById('tenantBrandEmoji')?.value || '',
+    brand_color: document.getElementById('tenantBrandColor')?.value || '',
+    logo_url: document.getElementById('tenantBrandLogoUrl')?.value || '',
+    support_url: document.getElementById('tenantBrandSupportUrl')?.value || ''
+  };
+
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+
+  try {
+    const response = await fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/branding`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+
+    if (data.success) {
+      showSuccess('Tenant branding saved');
+      await loadSuperadminView();
+    } else {
+      showError(data.message || 'Failed to save tenant branding');
+    }
+  } catch (error) {
+    showError(`Failed to save tenant branding: ${error.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save';
   }
 }
 

@@ -35,6 +35,7 @@ class WebServer {
   setClient(client) {
     this.client = client;
     ticketService.setClient(client);
+    tenantService.setCommandSource(() => this.client?.commands);
   }
 
   setupMiddleware() {
@@ -574,6 +575,137 @@ class WebServer {
         res.json(result);
       } catch (error) {
         logger.error('Error removing superadmin:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.get('/api/superadmin/tenants', superadminGuard, (req, res) => {
+      try {
+        const tenants = tenantService.listTenants({
+          q: req.query.q,
+          status: req.query.status
+        });
+
+        res.json({
+          success: true,
+          tenants
+        });
+      } catch (error) {
+        logger.error('Error fetching tenants:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.get('/api/superadmin/tenants/:guildId/audit', superadminGuard, (req, res) => {
+      try {
+        const limit = Math.min(Math.max(parseInt(req.query.limit || '10', 10), 1), 100);
+        const logs = tenantService.getTenantAuditLogs(req.params.guildId, limit);
+
+        res.json({
+          success: true,
+          auditLogs: logs
+        });
+      } catch (error) {
+        logger.error('Error fetching tenant audit logs:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.get('/api/superadmin/tenants/:guildId', superadminGuard, (req, res) => {
+      try {
+        const tenant = tenantService.getTenant(req.params.guildId);
+        if (!tenant) {
+          return res.status(404).json({ success: false, message: 'Tenant not found' });
+        }
+
+        res.json({
+          success: true,
+          tenant
+        });
+      } catch (error) {
+        logger.error('Error fetching tenant:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.put('/api/superadmin/tenants/:guildId/plan', superadminGuard, (req, res) => {
+      try {
+        const result = tenantService.setTenantPlan(
+          req.params.guildId,
+          req.body?.plan,
+          req.session.discordUser.id
+        );
+
+        if (!result.success) {
+          return res.status(400).json(result);
+        }
+
+        res.json(result);
+      } catch (error) {
+        logger.error('Error updating tenant plan:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.put('/api/superadmin/tenants/:guildId/modules', superadminGuard, (req, res) => {
+      try {
+        const { moduleKey, enabled } = req.body || {};
+        if (!moduleKey) {
+          return res.status(400).json({ success: false, message: 'moduleKey is required' });
+        }
+
+        const result = tenantService.setTenantModule(
+          req.params.guildId,
+          moduleKey,
+          enabled,
+          req.session.discordUser.id
+        );
+
+        if (!result.success) {
+          return res.status(400).json(result);
+        }
+
+        res.json(result);
+      } catch (error) {
+        logger.error('Error updating tenant module:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.put('/api/superadmin/tenants/:guildId/status', superadminGuard, (req, res) => {
+      try {
+        const result = tenantService.setTenantStatus(
+          req.params.guildId,
+          req.body?.status,
+          req.session.discordUser.id
+        );
+
+        if (!result.success) {
+          return res.status(400).json(result);
+        }
+
+        res.json(result);
+      } catch (error) {
+        logger.error('Error updating tenant status:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.put('/api/superadmin/tenants/:guildId/branding', superadminGuard, (req, res) => {
+      try {
+        const result = tenantService.updateTenantBranding(
+          req.params.guildId,
+          req.body || {},
+          req.session.discordUser.id
+        );
+
+        if (!result.success) {
+          return res.status(400).json(result);
+        }
+
+        res.json(result);
+      } catch (error) {
+        logger.error('Error updating tenant branding:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });

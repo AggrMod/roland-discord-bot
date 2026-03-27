@@ -303,6 +303,8 @@ function initDatabase() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       guild_id TEXT NOT NULL UNIQUE,
       guild_name TEXT,
+      plan_key TEXT DEFAULT 'starter',
+      status TEXT DEFAULT 'active',
       read_only_managed INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -322,6 +324,9 @@ function initDatabase() {
     CREATE TABLE IF NOT EXISTS tenant_branding (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tenant_id INTEGER NOT NULL UNIQUE,
+      bot_display_name TEXT,
+      brand_emoji TEXT,
+      brand_color TEXT,
       display_name TEXT,
       primary_color TEXT,
       secondary_color TEXT,
@@ -331,6 +336,16 @@ function initDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS tenant_audit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      actor_id TEXT,
+      action TEXT NOT NULL,
+      before_json TEXT,
+      after_json TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS tenant_limits (
@@ -348,11 +363,25 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_tenants_guild_id ON tenants(guild_id);
     CREATE INDEX IF NOT EXISTS idx_tenant_modules_tenant ON tenant_modules(tenant_id);
     CREATE INDEX IF NOT EXISTS idx_tenant_modules_key ON tenant_modules(module_key);
+    CREATE INDEX IF NOT EXISTS idx_tenant_audit_logs_guild_created ON tenant_audit_logs(guild_id, created_at DESC);
   `);
 
   // Backward-compatible migrations for existing deployments
+  try { db.exec("ALTER TABLE tenants ADD COLUMN plan_key TEXT DEFAULT 'starter'"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenants ADD COLUMN status TEXT DEFAULT 'active'"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_branding ADD COLUMN bot_display_name TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_branding ADD COLUMN brand_emoji TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_branding ADD COLUMN brand_color TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE ticket_categories ADD COLUMN closed_parent_channel_id TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE ticket_categories ADD COLUMN ping_role_ids TEXT DEFAULT '[]'"); } catch (e) {}
+
+  try {
+    db.exec(`
+      UPDATE tenants
+      SET plan_key = COALESCE(NULLIF(plan_key, ''), 'starter'),
+          status = COALESCE(NULLIF(status, ''), 'active')
+    `);
+  } catch (e) {}
 
   db.prepare('INSERT OR IGNORE INTO ticket_sequences (name, value) VALUES (?, ?)').run('ticket', 0);
 

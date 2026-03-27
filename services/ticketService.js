@@ -307,11 +307,17 @@ class TicketService {
         },
       ];
 
-      // Add allowed roles
+      // Add allowed roles (skip stale/invalid role IDs to avoid Discord.js resolver crash)
       const allowedRoleIds = this._normalizeIdArray(category.allowed_role_ids);
       for (const roleId of allowedRoleIds) {
+        if (!roleId) continue;
+        const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
+        if (!role) {
+          logger.warn(`Ticket category ${category.id} has invalid role id: ${roleId} (skipped)`);
+          continue;
+        }
         permissionOverwrites.push({
-          id: roleId,
+          id: role.id,
           allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
         });
       }

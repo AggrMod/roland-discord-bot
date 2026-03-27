@@ -1298,30 +1298,63 @@ async function loadAdminHelpView() {
       </div>`;
   };
 
-  content.innerHTML = cmdSection('Battle', '⚔️', [
-    { name: '/battle', desc: 'Start a new battle between two fighters', options: 'opponent (required)', example: '/battle @user' }
-  ]) + cmdSection('Governance', '📜', [
-    { name: '/governance propose', desc: 'Create a new governance proposal', options: 'title, description, duration (required)', example: '/governance propose title:"Fund project" description:"Allocate 100 SOL" duration:7d' },
-    { name: '/governance vote', desc: 'Vote on an active proposal', options: 'proposal_id, choice (required)', example: '/governance vote proposal_id:1 choice:yes' },
-    { name: '/governance support', desc: 'Show support for a proposal without voting', options: 'proposal_id (required)', example: '/governance support proposal_id:1' }
-  ]) + cmdSection('Verification', '✅', [
-    { name: '/verification verify', desc: 'Verify your wallet to receive holder roles', options: '—', example: '/verification verify' },
-    { name: '/verification status', desc: 'Check your current verification status', options: '—', example: '/verification status' },
-    { name: '/verification admin set_trait', desc: 'Add a trait-based role mapping', options: 'trait_type, trait_value, role (required)', example: '/verification admin set_trait trait_type:Background trait_value:Gold role:@GoldHolder' },
-    { name: '/verification admin remove_trait', desc: 'Remove a trait-based role mapping', options: 'trait_type, trait_value (required)', example: '/verification admin remove_trait trait_type:Background trait_value:Gold' }
+  content.innerHTML = cmdSection('Verification', '🔐', [
+    { name: '/verification status', desc: 'Check your wallet verification status and holdings', options: '—', example: '/verification status' },
+    { name: '/verification wallets', desc: 'List all your linked wallets', options: '—', example: '/verification wallets' },
+    { name: '/verification refresh', desc: 'Refresh your roles based on current holdings', options: '—', example: '/verification refresh' },
+    { name: '/verification quick', desc: 'Quick micro-verification for instant role assignment', options: '—', example: '/verification quick' },
+    { name: '/verification admin panel', desc: 'Post a verification panel to the channel', options: 'title, description, color (all optional)', example: '/verification admin panel title:"Verify Here"' },
+    { name: '/verification admin export-user', desc: "Export a member's verification data", options: 'user (required)', example: '/verification admin export-user user:@member' },
+    { name: '/verification admin remove-user', desc: 'Remove a member from the Family (irreversible)', options: 'user, confirm (required)', example: '/verification admin remove-user user:@member confirm:true' },
+    { name: '/verification admin export-wallets', desc: 'Export all verified wallets as CSV', options: '—', example: '/verification admin export-wallets' },
+    { name: '/verification admin role-config', desc: 'Configure role assignment rules (view/set tier/set trait/remove trait)', options: 'action (required), trait-type, trait-value, collection-id, role, description', example: '/verification admin role-config action:Set Tier Role' },
+    { name: '/verification admin actions', desc: 'View all verification actions and role assignments', options: '—', example: '/verification admin actions' },
+    { name: '/verification admin og-view', desc: 'View OG role configuration and eligible members', options: '—', example: '/verification admin og-view' },
+    { name: '/verification admin og-enable', desc: 'Enable or disable the OG role system', options: 'enabled (required)', example: '/verification admin og-enable enabled:true' },
+    { name: '/verification admin og-role', desc: 'Set the OG role to assign', options: 'role (required)', example: '/verification admin og-role role:@OG' },
+    { name: '/verification admin og-limit', desc: 'Set number of OG slots (first X verified users)', options: 'count (required)', example: '/verification admin og-limit count:50' },
+    { name: '/verification admin og-sync', desc: 'Sync OG role to eligible users', options: 'full (optional — also removes from ineligible)', example: '/verification admin og-sync full:true' },
+    { name: '/verification admin activity-watch-add', desc: 'Add NFT collection to activity watchlist', options: 'collection (required)', example: '/verification admin activity-watch-add collection:abc123' },
+    { name: '/verification admin activity-watch-remove', desc: 'Remove NFT collection from watchlist', options: 'collection (required)', example: '/verification admin activity-watch-remove collection:abc123' },
+    { name: '/verification admin activity-watch-list', desc: 'List all watched NFT collections', options: '—', example: '/verification admin activity-watch-list' },
+    { name: '/verification admin activity-feed', desc: 'Show recent NFT activity feed', options: 'limit (optional, 1-30)', example: '/verification admin activity-feed limit:10' },
+    { name: '/verification admin activity-alerts', desc: 'Configure NFT activity auto-post alerts', options: 'enabled (required), channel, types, min_sol', example: '/verification admin activity-alerts enabled:true channel:#alerts' }
+  ]) + cmdSection('Governance', '🏛️', [
+    { name: '/governance propose', desc: 'Create a new governance proposal', options: 'title, description (required)', example: '/governance propose title:"Fund project" description:"Allocate 100 SOL"' },
+    { name: '/governance support', desc: 'Support a draft proposal to promote it to voting', options: 'proposal_id (required)', example: '/governance support proposal_id:P-001' },
+    { name: '/governance vote', desc: 'Cast your vote on an active proposal', options: 'proposal_id, choice (required: yes/no/abstain)', example: '/governance vote proposal_id:P-001 choice:yes' },
+    { name: '/governance admin list', desc: 'View all proposals (any status)', options: 'status (optional: draft/voting/passed/failed)', example: '/governance admin list status:voting' },
+    { name: '/governance admin cancel', desc: 'Cancel a proposal (emergency)', options: 'proposal_id, confirm (required)', example: '/governance admin cancel proposal_id:P-001 confirm:true' },
+    { name: '/governance admin settings', desc: 'View or update governance settings', options: '—', example: '/governance admin settings' }
+  ]) + cmdSection('Battle', '⚔️', [
+    { name: '/battle create', desc: 'Create a new battle lobby', options: 'max_players (optional), required_role_1-3, excluded_role_1-3 (optional)', example: '/battle create max_players:10' },
+    { name: '/battle start', desc: 'Start the battle (creator only)', options: '—', example: '/battle start' },
+    { name: '/battle cancel', desc: 'Cancel the battle lobby (creator only)', options: '—', example: '/battle cancel' },
+    { name: '/battle stats', desc: 'View battle statistics', options: 'user (optional)', example: '/battle stats user:@member' },
+    { name: '/battle admin list', desc: 'List all active battles', options: '—', example: '/battle admin list' },
+    { name: '/battle admin force-end', desc: 'Force end a battle (emergency)', options: 'battle_id, confirm (required)', example: '/battle admin force-end battle_id:abc123 confirm:true' },
+    { name: '/battle admin settings', desc: 'View current battle settings', options: '—', example: '/battle admin settings' }
+  ]) + cmdSection('Heist', '🎯', [
+    { name: '/heist view', desc: 'View available heist missions', options: '—', example: '/heist view' },
+    { name: '/heist signup', desc: 'Sign up for a heist mission', options: 'mission_id (required), role (required: driver/hacker/muscle/lookout)', example: '/heist signup mission_id:H-001 role:hacker' },
+    { name: '/heist status', desc: 'View your current mission status', options: '—', example: '/heist status' },
+    { name: '/heist admin create', desc: 'Create a new heist mission', options: 'title, description, slots (2-20), reward (required)', example: '/heist admin create title:"Bank Job" description:"Hit the vault" slots:4 reward:100' },
+    { name: '/heist admin list', desc: 'List all missions (any status)', options: '—', example: '/heist admin list' },
+    { name: '/heist admin cancel', desc: 'Cancel a heist mission', options: 'mission_id, confirm (required)', example: '/heist admin cancel mission_id:H-001 confirm:true' }
   ]) + cmdSection('Treasury', '💰', [
-    { name: '/treasury balance', desc: 'View current treasury balance', options: '—', example: '/treasury balance' },
-    { name: '/treasury transactions', desc: 'View recent treasury transactions', options: 'limit (optional)', example: '/treasury transactions limit:10' }
-  ]) + cmdSection('Missions', '🎯', [
-    { name: '/mission join', desc: 'Join an available mission', options: 'mission_id (required)', example: '/mission join mission_id:1' },
-    { name: '/mission status', desc: 'Check your current mission progress', options: '—', example: '/mission status' },
-    { name: '/mission list', desc: 'List all available missions', options: '—', example: '/mission list' }
-  ]) + cmdSection('Roles', '🏷️', [
-    { name: '/roles claim', desc: 'Claim your earned Discord roles based on NFT holdings', options: '—', example: '/roles claim' }
-  ]) + cmdSection('Admin', '🔧', [
-    { name: '/admin users', desc: 'List or search verified users', options: 'search (optional)', example: '/admin users search:username' },
-    { name: '/admin sync', desc: 'Sync roles for all verified users', options: '—', example: '/admin sync' },
-    { name: '/admin settings', desc: 'View or update system settings', options: 'key, value (optional)', example: '/admin settings key:mockMode value:true' }
+    { name: '/treasury view', desc: 'View current treasury balances (public read-only)', options: '—', example: '/treasury view' },
+    { name: '/treasury admin status', desc: 'View full treasury status (admin)', options: '—', example: '/treasury admin status' },
+    { name: '/treasury admin refresh', desc: 'Manually refresh treasury balances', options: '—', example: '/treasury admin refresh' },
+    { name: '/treasury admin enable', desc: 'Enable treasury monitoring', options: '—', example: '/treasury admin enable' },
+    { name: '/treasury admin disable', desc: 'Disable treasury monitoring', options: '—', example: '/treasury admin disable' },
+    { name: '/treasury admin set-wallet', desc: 'Set the treasury wallet address', options: 'address (required)', example: '/treasury admin set-wallet address:So1...' },
+    { name: '/treasury admin set-interval', desc: 'Set refresh interval in hours', options: 'hours (required, 1-168)', example: '/treasury admin set-interval hours:6' },
+    { name: '/treasury admin tx-history', desc: 'Show recent treasury transactions', options: 'limit (optional, 1-20)', example: '/treasury admin tx-history limit:10' },
+    { name: '/treasury admin tx-alerts', desc: 'Configure automatic treasury transaction alerts', options: 'enabled (required), channel, incoming_only, min_sol', example: '/treasury admin tx-alerts enabled:true channel:#treasury' }
+  ]) + cmdSection('Config', '⚙️', [
+    { name: '/config modules', desc: 'View all module toggle states', options: '—', example: '/config modules' },
+    { name: '/config toggle', desc: 'Toggle a module on or off', options: 'module (required: verification/governance/treasury/battle/heist), enabled (required)', example: '/config toggle module:battle enabled:true' },
+    { name: '/config status', desc: 'System status overview (uptime, memory, guilds)', options: '—', example: '/config status' }
   ]);
 }
 
@@ -1416,7 +1449,6 @@ async function loadAdminSettingsView() {
       'ps_moduleVerificationEnabled': 'ps_section_verification',
       'ps_moduleMissionsEnabled': 'ps_section_missions',
       'ps_moduleTreasuryEnabled': 'ps_section_treasury',
-      'ps_moduleRoleResyncEnabled': 'ps_section_roleresync',
       'ps_moduleMicroVerifyEnabled': 'ps_section_micro'
     };
     const updateSectionVisibility = () => {
@@ -1442,9 +1474,8 @@ async function loadAdminSettingsView() {
           ${moduleToggle('moduleBattleEnabled', 'Battle', '⚔️', true)}
           ${moduleToggle('moduleGovernanceEnabled', 'Governance', '🗳️', true)}
           ${moduleToggle('moduleVerificationEnabled', 'Verification', '✅', true)}
-          ${moduleToggle('moduleMissionsEnabled', 'Missions', '🎯', true)}
+          ${moduleToggle('moduleMissionsEnabled', 'Heist', '🎯', true)}
           ${moduleToggle('moduleTreasuryEnabled', 'Treasury', '💰', true)}
-          ${moduleToggle('moduleRoleResyncEnabled', 'Role Resync', '👥', true)}
           ${moduleToggle('moduleMicroVerifyEnabled', 'Micro-Transfer Verify', '🔐', false)}
         </div>
       </div>
@@ -1542,23 +1573,32 @@ async function loadAdminSettingsView() {
           <p style="color:var(--text-secondary);font-size:0.8em;margin:0 0 8px 0;">Assigned to all verified members regardless of NFT holdings</p>
           ${roleSelectHTML('ps_baseVerifiedRoleId', s.baseVerifiedRoleId || '')}
         </div>
+        <div style="margin-top:var(--space-4);padding-top:var(--space-3);border-top:1px solid rgba(99,102,241,0.12);">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-3) var(--space-4);background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;">
+            <label for="ps_moduleRoleResyncEnabled" style="cursor:pointer;font-weight:500;font-size:0.9em;color:#e0e7ff;display:flex;align-items:center;gap:var(--space-2);">
+              <span style="font-size:1.25em;">👥</span> Auto Role Resync
+              <span style="font-size:0.8em;color:var(--text-secondary);margin-left:4px;">(periodically re-syncs holder roles)</span>
+            </label>
+            <label style="position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0;">
+              <input type="checkbox" id="ps_moduleRoleResyncEnabled"${(s.moduleRoleResyncEnabled ?? true) ? ' checked' : ''} style="opacity:0;width:0;height:0;"
+                onchange="this.parentElement.querySelector('span').style.background=this.checked?'var(--gold)':'#555';">
+              <span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:${(s.moduleRoleResyncEnabled ?? true) ? 'var(--gold)' : '#555'};border-radius:24px;transition:.3s;"></span>
+              <span style="position:absolute;content:'';height:18px;width:18px;left:${(s.moduleRoleResyncEnabled ?? true) ? '22px' : '3px'};bottom:3px;background:#fff;border-radius:50%;transition:.3s;pointer-events:none;"
+                class="ps-toggle-knob"></span>
+            </label>
+          </div>
+        </div>
       </div>
 
-      <!-- 🎯 MISSIONS MODULE -->
+      <!-- 🎯 HEIST MODULE -->
       <div id="ps_section_missions" style="${cardStyle}${moduleCardBorder}display:${(s.moduleMissionsEnabled ?? true) ? 'block' : 'none'};">
-        <h3 style="${cardHeader}">🎯 Missions Module</h3>
+        <h3 style="${cardHeader}">🎯 Heist Module</h3>
         ${noSettingsMsg}
       </div>
 
       <!-- 💰 TREASURY MODULE -->
       <div id="ps_section_treasury" style="${cardStyle}${moduleCardBorder}display:${(s.moduleTreasuryEnabled ?? true) ? 'block' : 'none'};">
         <h3 style="${cardHeader}">💰 Treasury Module</h3>
-        ${noSettingsMsg}
-      </div>
-
-      <!-- 👥 ROLE RESYNC MODULE -->
-      <div id="ps_section_roleresync" style="${cardStyle}${moduleCardBorder}display:${(s.moduleRoleResyncEnabled ?? true) ? 'block' : 'none'};">
-        <h3 style="${cardHeader}">👥 Role Resync Module</h3>
         ${noSettingsMsg}
       </div>
 

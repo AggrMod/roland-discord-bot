@@ -383,6 +383,16 @@ function initDatabase() {
     `);
   } catch (e) {}
 
+  // Tenant-scoped verification role configs (tiers + trait rules)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tenant_role_configs (
+      guild_id TEXT PRIMARY KEY,
+      tiers_json TEXT DEFAULT '[]',
+      traits_json TEXT DEFAULT '[]',
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   db.prepare('INSERT OR IGNORE INTO ticket_sequences (name, value) VALUES (?, ?)').run('ticket', 0);
 
   logger.log('Database initialized successfully');

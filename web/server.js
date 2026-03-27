@@ -1446,9 +1446,33 @@ class WebServer {
     });
 
     // Role configuration endpoints
+    const getTenantRoleConfig = (guildId) => {
+      const row = db.prepare('SELECT tiers_json, traits_json FROM tenant_role_configs WHERE guild_id = ?').get(guildId);
+      if (!row) return { tiers: [], traitRoles: [] };
+      let tiers = [];
+      let traitRoles = [];
+      try { tiers = JSON.parse(row.tiers_json || '[]'); } catch {}
+      try { traitRoles = JSON.parse(row.traits_json || '[]'); } catch {}
+      return { tiers: Array.isArray(tiers) ? tiers : [], traitRoles: Array.isArray(traitRoles) ? traitRoles : [] };
+    };
+
+    const saveTenantRoleConfig = (guildId, cfg) => {
+      db.prepare(`
+        INSERT INTO tenant_role_configs (guild_id, tiers_json, traits_json, updated_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(guild_id) DO UPDATE SET
+          tiers_json = excluded.tiers_json,
+          traits_json = excluded.traits_json,
+          updated_at = CURRENT_TIMESTAMP
+      `).run(guildId, JSON.stringify(cfg.tiers || []), JSON.stringify(cfg.traitRoles || []));
+    };
+
     this.app.get('/api/admin/roles/config', adminAuthMiddleware, (req, res) => {
       try {
-        const config = roleService.getRoleConfigSummary();
+        const useTenantScoped = tenantService.isMultitenantEnabled() && !!req.guildId;
+        const config = useTenantScoped
+          ? getTenantRoleConfig(req.guildId)
+          : roleService.getRoleConfigSummary();
         res.json({ success: true, config });
       } catch (error) {
         logger.error('Error fetching role config:', error);
@@ -1465,6 +1489,17 @@ class WebServer {
           return res.status(400).json({ success: false, message: 'Missing required fields' });
         }
 
+        const useTenantScoped = tenantService.isMultitenantEnabled() && !!req.guildId;
+        if (useTenantScoped) {
+          const cfg = getTenantRoleConfig(req.guildId);
+          if ((cfg.tiers || []).some(t => String(t.name).toLowerCase() === String(name).toLowerCase())) {
+            return res.status(400).json({ success: false, message: 'Tier already exists' });
+          }
+          cfg.tiers.push({ name, minNFTs, maxNFTs, votingPower, roleId: roleId || null, collectionId: collectionId || null });
+          saveTenantRoleConfig(req.guildId, cfg);
+          return res.json({ success: true, message: 'Tier added' });
+        }
+
         const result = roleService.addTier(name, minNFTs, maxNFTs, votingPower, roleId || null, collectionId || null);
         res.json(result);
       } catch (error) {
@@ -1478,6 +1513,16 @@ class WebServer {
         const { name } = req.params;
         const updates = req.body;
 
+        const useTenantScoped = tenantService.isMultitenantEnabled() && !!req.guildId;
+        if (useTenantScoped) {
+          const cfg = getTenantRoleConfig(req.guildId);
+          const idx = (cfg.tiers || []).findIndex(t => String(t.name).toLowerCase() === String(name).toLowerCase());
+          if (idx < 0) return res.status(404).json({ success: false, message: 'Tier not found' });
+          cfg.tiers[idx] = { ...cfg.tiers[idx], ...updates };
+          saveTenantRoleConfig(req.guildId, cfg);
+          return res.json({ success: true, message: 'Tier updated' });
+        }
+
         const result = roleService.editTier(name, updates);
         res.json(result);
       } catch (error) {
@@ -1489,6 +1534,16 @@ class WebServer {
     this.app.delete('/api/admin/roles/tiers/:name', adminAuthMiddleware, (req, res) => {
       try {
         const { name } = req.params;
+        const useTenantScoped = tenantService.isMultitenantEnabled() && !!req.guildId;
+        if (useTenantScoped) {
+          const cfg = getTenantRoleConfig(req.guildId);
+          const before = (cfg.tiers || []).length;
+          cfg.tiers = (cfg.tiers || []).filter(t => String(t.name).toLowerCase() !== String(name).toLowerCase());
+          if (cfg.tiers.length === before) return res.status(404).json({ success: false, message: 'Tier not found' });
+          saveTenantRoleConfig(req.guildId, cfg);
+          return res.json({ success: true, message: 'Tier deleted' });
+        }
+
         const result = roleService.deleteTier(name);
         res.json(result);
       } catch (error) {
@@ -1508,6 +1563,19 @@ class WebServer {
 
         if (!collectionId) {
           return res.status(400).json({ success: false, message: 'collectionId is required' });
+        }
+
+        const useTenantScoped = tenantService.isMultitenantEnabled() && !!req.guildId;
+        if (useTenantScoped) {
+          const cfg = getTenantRoleConfig(req.guildId);
+          const exists = (cfg.traitRoles || []).some(t =>
+            String(t.traitType || t.trait_type).toLowerCase() === String(traitType).toLowerCase() &&
+            String(t.traitValue || t.trait_value).toLowerCase() === String(traitValue).toLowerCase()
+          );
+          if (exists) return res.status(400).json({ success: false, message: 'Trait rule already exists' });
+          cfg.traitRoles.push({ traitType, traitValue, roleId, collectionId, description: description || '' });
+          saveTenantRoleConfig(req.guildId, cfg);
+          return res.json({ success: true, message: 'Trait rule added' });
         }
 
         const result = roleService.addTrait(traitType, traitValue, roleId, description, collectionId);
@@ -1531,6 +1599,19 @@ class WebServer {
           return res.status(400).json({ success: false, message: 'collectionId is required' });
         }
 
+        const useTenantScoped = tenantService.isMultitenantEnabled() && !!req.guildId;
+        if (useTenantScoped) {
+          const cfg = getTenantRoleConfig(req.guildId);
+          const idx = (cfg.traitRoles || []).findIndex(t =>
+            String(t.traitType || t.trait_type).toLowerCase() === String(traitType).toLowerCase() &&
+            String(t.traitValue || t.trait_value).toLowerCase() === String(traitValue).toLowerCase()
+          );
+          if (idx < 0) return res.status(404).json({ success: false, message: 'Trait rule not found' });
+          cfg.traitRoles[idx] = { ...cfg.traitRoles[idx], traitType, traitValue, roleId, collectionId, description: description || '' };
+          saveTenantRoleConfig(req.guildId, cfg);
+          return res.json({ success: true, message: 'Trait rule updated' });
+        }
+
         const result = roleService.editTrait(traitType, traitValue, roleId, description, collectionId);
         res.json(result);
       } catch (error) {
@@ -1542,6 +1623,19 @@ class WebServer {
     this.app.delete('/api/admin/roles/traits/:traitType/:traitValue', adminAuthMiddleware, (req, res) => {
       try {
         const { traitType, traitValue } = req.params;
+        const useTenantScoped = tenantService.isMultitenantEnabled() && !!req.guildId;
+        if (useTenantScoped) {
+          const cfg = getTenantRoleConfig(req.guildId);
+          const before = (cfg.traitRoles || []).length;
+          cfg.traitRoles = (cfg.traitRoles || []).filter(t => !(
+            String(t.traitType || t.trait_type).toLowerCase() === String(traitType).toLowerCase() &&
+            String(t.traitValue || t.trait_value).toLowerCase() === String(traitValue).toLowerCase()
+          ));
+          if (cfg.traitRoles.length === before) return res.status(404).json({ success: false, message: 'Trait rule not found' });
+          saveTenantRoleConfig(req.guildId, cfg);
+          return res.json({ success: true, message: 'Trait rule deleted' });
+        }
+
         const result = roleService.deleteTrait(traitType, traitValue);
         res.json(result);
       } catch (error) {

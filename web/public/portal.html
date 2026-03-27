@@ -114,6 +114,10 @@
               <span class="nav-icon" aria-hidden="true">⚙️</span>
               <span class="nav-label">Settings</span>
             </button>
+            <button class="nav-item admin-sub-item" data-admin-nav="superadmin" onclick="showAdminView('superadmin')" id="adminSuperadminNav" style="display:none;">
+              <span class="nav-icon" aria-hidden="true">🛡️</span>
+              <span class="nav-label">Superadmin</span>
+            </button>
             <button class="nav-item admin-sub-item" data-admin-nav="users" onclick="showAdminView('users')">
               <span class="nav-icon" aria-hidden="true">👥</span>
               <span class="nav-label">Users</span>
@@ -755,6 +759,14 @@
               <button class="btn-secondary" onclick="loadAdminSettingsView()">Refresh</button>
             </div>
             <div id="adminSettingsContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>System Settings</strong> to load data.</div>
+          </div>
+
+          <div class="card" id="adminSuperadminCard" style="display:none;">
+            <div class="card-header">
+              <h3>🛡️ Superadmin Management</h3>
+              <button class="btn-secondary" onclick="loadSuperadminView()">Refresh</button>
+            </div>
+            <div id="adminSuperadminContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>Superadmin</strong> to load data.</div>
           </div>
 
           <div class="card" id="adminVotingPowerCard" style="display:none;">

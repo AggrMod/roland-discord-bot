@@ -1,6 +1,7 @@
 // ==================== PORTAL STATE MANAGEMENT ====================
 let userData = null;
 let isAdmin = false;
+let isSuperadmin = false;
 let heistEnabled = false;
 let confirmCallback = null;
 
@@ -321,6 +322,7 @@ async function loadPortal() {
       showAuthenticatedState();
       loadDashboardData();
       await checkAdminStatus();
+      await checkSuperadminStatus();
     } else {
       showUnauthenticatedState();
     }
@@ -405,6 +407,32 @@ async function checkAdminStatus() {
     }
   } catch (error) {
     // User is not admin, keep admin nav hidden
+  }
+}
+
+async function checkSuperadminStatus() {
+  try {
+    const response = await fetch('/api/superadmin/me', { credentials: 'include' });
+    const data = await response.json();
+    isSuperadmin = !!data.isSuperadmin;
+
+    const navItem = document.getElementById('adminSuperadminNav');
+    if (navItem) {
+      navItem.style.display = isAdmin && isSuperadmin ? 'flex' : 'none';
+    }
+
+    if (!isSuperadmin) {
+      const card = document.getElementById('adminSuperadminCard');
+      if (card) card.style.display = 'none';
+
+      if (document.querySelector('.admin-sub-item.active')?.getAttribute('data-admin-nav') === 'superadmin') {
+        showAdminView('settings');
+      }
+    }
+  } catch (error) {
+    isSuperadmin = false;
+    const navItem = document.getElementById('adminSuperadminNav');
+    if (navItem) navItem.style.display = 'none';
   }
 }
 
@@ -1223,7 +1251,7 @@ window.addEventListener('unhandledrejection', (event) => {
 
 // ==================== INTEGRATED ADMIN WORKSPACE ====================
 function hideAllAdminCards() {
-  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminAnalyticsCard', 'adminHelpCard', 'adminRolesCard', 'adminActivityCard', 'adminStatsCard', 'adminNftTrackerCard', 'adminVotingPowerCard', 'adminSelfServeRolesCard', 'adminApiRefCard', 'adminTicketingCard']
+  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminSuperadminCard', 'adminAnalyticsCard', 'adminHelpCard', 'adminRolesCard', 'adminActivityCard', 'adminStatsCard', 'adminNftTrackerCard', 'adminVotingPowerCard', 'adminSelfServeRolesCard', 'adminApiRefCard', 'adminTicketingCard']
     .forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
@@ -1283,6 +1311,7 @@ function showAdminView(view) {
     users: { card: 'adminUsersCard', load: loadAdminUsers },
     proposals: { card: 'adminProposalsCard', load: loadAdminProposals },
     settings: { card: 'adminSettingsCard', load: loadAdminSettingsView },
+    superadmin: { card: 'adminSuperadminCard', load: loadSuperadminView },
     analytics: { card: 'adminAnalyticsCard', load: loadAdminAnalyticsView },
     help: { card: 'adminHelpCard', load: loadAdminHelpView },
     roles: { card: 'adminRolesCard', load: loadAdminRoles },
@@ -1320,6 +1349,133 @@ function showAdminView(view) {
 
 function showAdminUsers() {
   showAdminView('users');
+}
+
+let superadminListCache = [];
+
+async function loadSuperadminView() {
+  if (!isSuperadmin) return;
+
+  const content = document.getElementById('adminSuperadminContent');
+  if (!content) return;
+
+  content.innerHTML = `<div style="text-align:center; padding:20px;"><div class="spinner"></div><p style="margin-top:10px;">Loading superadmins...</p></div>`;
+
+  try {
+    const response = await fetch('/api/superadmin/admins', { credentials: 'include' });
+    const data = await response.json();
+
+    if (!data.success) {
+      content.innerHTML = `<div style="color:#fca5a5; text-align:center; padding:20px;">${escapeHtml(data.message || 'Unable to load superadmins')}</div>`;
+      return;
+    }
+
+    superadminListCache = data.superadmins || [];
+    const rows = superadminListCache.length > 0
+      ? superadminListCache.map(entry => {
+          const removable = entry.source !== 'env';
+          const sourceLabel = entry.source === 'env' ? 'Root env' : 'DB';
+          return `
+            <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; padding:12px 14px; border-bottom:1px solid rgba(99,102,241,0.15);">
+              <div style="min-width:0;">
+                <div style="color:#e0e7ff; font-weight:600; font-family:monospace; word-break:break-all;">${escapeHtml(entry.userId)}</div>
+                <div style="color:var(--text-secondary); font-size:0.82em; margin-top:4px;">
+                  <span style="display:inline-block; padding:2px 8px; border-radius:999px; background:${entry.source === 'env' ? 'rgba(16,185,129,0.18)' : 'rgba(99,102,241,0.18)'}; color:#e0e7ff; margin-right:8px;">${sourceLabel}</span>
+                  ${entry.addedBy ? `Added by ${escapeHtml(entry.addedBy)}` : 'Managed by environment'}
+                </div>
+              </div>
+              <button class="btn-secondary" style="font-size:0.85em; padding:6px 12px; opacity:${removable ? 1 : 0.45};" ${removable ? `onclick="removeSuperadmin('${entry.userId}')"` : 'disabled'}>
+                ${removable ? 'Remove' : 'Protected'}
+              </button>
+            </div>
+          `;
+        }).join('')
+      : `<div style="padding:18px; text-align:center; color:var(--text-secondary);">No database superadmins configured.</div>`;
+
+    content.innerHTML = `
+      <div style="display:grid; gap:16px;">
+        <div style="display:grid; gap:12px; grid-template-columns:minmax(0,1fr) auto;">
+          <input id="adminSuperadminUserIdInput" type="text" placeholder="Discord ID" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; width:100%;">
+          <button id="adminSuperadminAddBtn" class="btn-primary" onclick="addSuperadminFromInput()" style="padding:10px 16px;">Add</button>
+        </div>
+        <div style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
+            <h4 style="margin:0; color:#c9d6ff;">Current superadmins</h4>
+            <span style="color:var(--text-secondary); font-size:0.85em;">Env roots cannot be removed</span>
+          </div>
+          <div style="border:1px solid rgba(99,102,241,0.15); border-radius:10px; overflow:hidden;">
+            ${rows}
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (error) {
+    content.innerHTML = `<div style="color:#fca5a5; text-align:center; padding:20px;">Error loading superadmins: ${escapeHtml(error.message || 'Unknown error')}</div>`;
+  }
+}
+
+async function addSuperadminFromInput() {
+  const input = document.getElementById('adminSuperadminUserIdInput');
+  const btn = document.getElementById('adminSuperadminAddBtn');
+  if (!input || !btn) return;
+
+  const userId = input.value.trim();
+  if (!userId) {
+    showError('Discord ID is required');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Adding...';
+
+  try {
+    const response = await fetch('/api/superadmin/admins', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ userId })
+    });
+    const data = await response.json();
+
+    if (data.success) {
+      input.value = '';
+      showSuccess('Superadmin added');
+      await loadSuperadminView();
+    } else {
+      showError(data.message || 'Failed to add superadmin');
+    }
+  } catch (error) {
+    showError(`Failed to add superadmin: ${error.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Add';
+  }
+}
+
+function removeSuperadmin(userId) {
+  showConfirmModal(
+    'Remove Superadmin?',
+    `Remove ${userId} from the database-managed superadmins list? Root env superadmins stay protected.`,
+    async () => {
+      try {
+        const response = await fetch(`/api/superadmin/admins/${encodeURIComponent(userId)}`, {
+          method: 'DELETE',
+          credentials: 'include'
+        });
+        const data = await response.json();
+
+        if (data.success) {
+          showSuccess('Superadmin removed');
+          await loadSuperadminView();
+        } else {
+          showError(data.message || 'Failed to remove superadmin');
+        }
+      } catch (error) {
+        showError(`Failed to remove superadmin: ${error.message}`);
+      }
+    },
+    'Remove'
+  );
 }
 
 async function loadAdminHelpView() {

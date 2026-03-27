@@ -4515,10 +4515,11 @@ async function loadTicketingView() {
   if (!container) return;
 
   container.innerHTML = `
-    <div style="display:flex;gap:8px;margin-bottom:var(--space-4);">
+    <div style="display:flex;gap:8px;margin-bottom:var(--space-4);flex-wrap:wrap;">
       <button class="btn-primary" onclick="showTicketTab('categories')" id="ticketTabCategories" style="font-size:0.85em;">Categories</button>
       <button class="btn-secondary" onclick="showTicketTab('panel')" id="ticketTabPanel" style="font-size:0.85em;">Post Panel</button>
       <button class="btn-secondary" onclick="showTicketTab('tickets')" id="ticketTabTickets" style="font-size:0.85em;">Open Tickets</button>
+      <button class="btn-secondary" onclick="showTicketTab('archive')" id="ticketTabArchive" style="font-size:0.85em;">Archive</button>
     </div>
     <div id="ticketTabContent">Loading...</div>
   `;
@@ -4545,7 +4546,7 @@ async function loadTicketingView() {
 }
 
 function showTicketTab(tab) {
-  ['categories', 'panel', 'tickets'].forEach(t => {
+  ['categories', 'panel', 'tickets', 'archive'].forEach(t => {
     const btn = document.getElementById('ticketTab' + t.charAt(0).toUpperCase() + t.slice(1));
     if (btn) btn.className = t === tab ? 'btn-primary' : 'btn-secondary';
   });
@@ -4553,6 +4554,7 @@ function showTicketTab(tab) {
   if (tab === 'categories') loadTicketCategoriesTab();
   else if (tab === 'panel') loadTicketPanelTab();
   else if (tab === 'tickets') loadTicketOpenTab();
+  else if (tab === 'archive') loadTicketArchiveTab();
 }
 
 async function loadTicketCategoriesTab() {
@@ -4921,6 +4923,73 @@ async function loadTicketOpenTab() {
     container.innerHTML = 'Error loading tickets.';
   }
 }
+
+async function loadTicketArchiveTab() {
+  const container = document.getElementById('ticketTabContent');
+  container.innerHTML = 'Loading archive...';
+
+  const q = (window._ticketArchiveQuery || '').trim();
+  const params = new URLSearchParams({ statuses: 'closed,deleted' });
+  if (q) params.set('q', q);
+
+  try {
+    const res = await fetch(`/api/admin/tickets?${params.toString()}`, { credentials: 'include' });
+    const json = await res.json();
+    if (!json.success) { container.innerHTML = 'Failed to load archive.'; return; }
+
+    const tickets = json.tickets || [];
+    let html = `
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:var(--space-3);flex-wrap:wrap;">
+        <input id="ticketArchiveSearch" type="text" value="${escapeHtml(q)}" placeholder="Search username, category, transcript text..." style="min-width:320px;flex:1;padding:8px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:8px;color:var(--text-primary);" />
+        <button class="btn-primary" onclick="runTicketArchiveSearch()" style="font-size:0.85em;">Search</button>
+        <button class="btn-secondary" onclick="clearTicketArchiveSearch()" style="font-size:0.85em;">Clear</button>
+      </div>
+    `;
+
+    if (tickets.length === 0) {
+      html += '<p style="color:var(--text-secondary);">No archived tickets found.</p>';
+    } else {
+      html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.85em;">
+        <thead><tr style="border-bottom:1px solid var(--border-color);">
+          <th style="text-align:left;padding:8px;">#</th>
+          <th style="text-align:left;padding:8px;">Status</th>
+          <th style="text-align:left;padding:8px;">Category</th>
+          <th style="text-align:left;padding:8px;">Opened By</th>
+          <th style="text-align:left;padding:8px;">Closed</th>
+          <th style="text-align:center;padding:8px;">Actions</th>
+        </tr></thead><tbody>`;
+
+      for (const t of tickets) {
+        const closed = t.closed_at ? new Date(t.closed_at).toLocaleString() : '—';
+        html += `<tr style="border-bottom:1px solid var(--border-color);">
+          <td style="padding:8px;font-weight:600;">${t.ticket_number || t.id}</td>
+          <td style="padding:8px;">${escapeHtml(t.status || '—')}</td>
+          <td style="padding:8px;">${escapeHtml(t.category_name || '—')}</td>
+          <td style="padding:8px;">${escapeHtml(t.opener_name || t.opener_id || '—')}</td>
+          <td style="padding:8px;color:var(--text-secondary);font-size:0.9em;">${closed}</td>
+          <td style="padding:8px;text-align:center;">
+            <button class="btn-secondary" onclick="viewTicketTranscript(${t.id})" style="font-size:0.8em;padding:4px 8px;">Transcript</button>
+          </td>
+        </tr>`;
+      }
+      html += '</tbody></table></div>';
+    }
+
+    container.innerHTML = html;
+  } catch (error) {
+    container.innerHTML = 'Error loading archive.';
+  }
+}
+
+window.runTicketArchiveSearch = function() {
+  window._ticketArchiveQuery = document.getElementById('ticketArchiveSearch')?.value || '';
+  loadTicketArchiveTab();
+};
+
+window.clearTicketArchiveSearch = function() {
+  window._ticketArchiveQuery = '';
+  loadTicketArchiveTab();
+};
 
 async function viewTicketTranscript(id) {
   try {

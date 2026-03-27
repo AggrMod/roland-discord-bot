@@ -591,12 +591,21 @@ class TicketService {
     return db.prepare('SELECT * FROM tickets WHERE category_id = ? ORDER BY created_at DESC').all(categoryId);
   }
 
-  getAllTickets({ status, category, opener } = {}) {
+  getAllTickets({ status, statuses, category, opener, q } = {}) {
     let query = 'SELECT * FROM tickets WHERE 1=1';
     const params = [];
     if (status) { query += ' AND status = ?'; params.push(status); }
+    if (Array.isArray(statuses) && statuses.length > 0) {
+      query += ` AND status IN (${statuses.map(() => '?').join(',')})`;
+      params.push(...statuses);
+    }
     if (category) { query += ' AND category_id = ?'; params.push(category); }
     if (opener) { query += ' AND opener_id = ?'; params.push(opener); }
+    if (q) {
+      const s = `%${String(q).trim()}%`;
+      query += ' AND (opener_name LIKE ? OR opener_id LIKE ? OR category_name LIKE ? OR transcript LIKE ?)';
+      params.push(s, s, s, s);
+    }
     query += ' ORDER BY created_at DESC';
     return db.prepare(query).all(...params);
   }

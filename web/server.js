@@ -2031,8 +2031,17 @@ class WebServer {
 
     this.app.get('/api/admin/tickets', adminAuthMiddleware, (req, res) => {
       try {
-        const { status, category, opener } = req.query;
-        const tickets = ticketService.getAllTickets({ status, category: category ? parseInt(category) : undefined, opener });
+        const { status, statuses, category, opener, q } = req.query;
+        const statusList = typeof statuses === 'string' && statuses.trim()
+          ? statuses.split(',').map(s => s.trim()).filter(Boolean)
+          : undefined;
+        const tickets = ticketService.getAllTickets({
+          status,
+          statuses: statusList,
+          category: category ? parseInt(category) : undefined,
+          opener,
+          q
+        });
         res.json({ success: true, tickets });
       } catch (error) {
         logger.error('Error fetching tickets:', error);

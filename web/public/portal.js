@@ -4622,6 +4622,7 @@ function _showCategoryForm(cat) {
   const isEdit = !!cat;
   const fields = cat ? safeJsonArray(cat.template_fields) : [];
   const allowedRoles = cat ? safeJsonArray(cat.allowed_role_ids) : [];
+  const pingRoles = cat ? safeJsonArray(cat.ping_role_ids) : [];
   const textChannels = _ticketChannelsList.filter(c => c.kind === 'text');
 
   let fieldsHtml = '';
@@ -4671,10 +4672,17 @@ function _showCategoryForm(cat) {
         </div>
       </div>
       <div>
-        <label style="font-size:0.85em;font-weight:600;">Parent Channel (ticket channels created here)</label>
+        <label style="font-size:0.85em;font-weight:600;">Open Tickets Category</label>
         <select id="catParentChannel" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
           <option value="">— None —</option>
           ${_ticketChannelsList.filter(c => c.kind === 'category').map(c => `<option value="${c.id}" ${isEdit && cat.parent_channel_id === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:0.85em;font-weight:600;">Closed Tickets Category</label>
+        <select id="catClosedParentChannel" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
+          <option value="">— Keep in same category —</option>
+          ${_ticketChannelsList.filter(c => c.kind === 'category').map(c => `<option value="${c.id}" ${isEdit && cat.closed_parent_channel_id === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
         </select>
       </div>
       <div>
@@ -4683,6 +4691,12 @@ function _showCategoryForm(cat) {
           ${_ticketRolesList.map(r => `<option value="${r.id}" ${allowedRoles.includes(r.id) ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('')}
         </select>
         <div style="font-size:0.78em;color:var(--text-secondary);margin-top:4px;">Hold Ctrl/Cmd to select multiple roles.</div>
+      </div>
+      <div>
+        <label style="font-size:0.85em;font-weight:600;">Roles to Ping on New Ticket</label>
+        <select id="catPingRoles" multiple style="width:100%;min-height:120px;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
+          ${_ticketRolesList.map(r => `<option value="${r.id}" ${pingRoles.includes(r.id) ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('')}
+        </select>
       </div>
       <div>
         <label style="font-size:0.85em;font-weight:600;">Template Fields (max 5)</label>
@@ -4740,8 +4754,11 @@ async function saveCategoryFromModal() {
   const emoji = document.getElementById('catEmoji').value.trim() || '🎫';
   const description = document.getElementById('catDesc').value.trim();
   const parentChannelId = document.getElementById('catParentChannel').value || '';
+  const closedParentChannelId = document.getElementById('catClosedParentChannel')?.value || '';
   const roleSelect = document.getElementById('catRoles');
+  const pingRoleSelect = document.getElementById('catPingRoles');
   const allowedRoleIds = roleSelect ? Array.from(roleSelect.selectedOptions || []).map(o => o.value).filter(Boolean) : [];
+  const pingRoleIds = pingRoleSelect ? Array.from(pingRoleSelect.selectedOptions || []).map(o => o.value).filter(Boolean) : [];
 
   // Collect template fields
   const templateFields = [];
@@ -4758,7 +4775,7 @@ async function saveCategoryFromModal() {
     });
   }
 
-  const payload = { name, emoji, description, parentChannelId, allowedRoleIds, templateFields };
+  const payload = { name, emoji, description, parentChannelId, closedParentChannelId, allowedRoleIds, pingRoleIds, templateFields };
   const isEdit = window._catEditId != null;
   const url = isEdit ? `/api/admin/tickets/categories/${window._catEditId}` : '/api/admin/tickets/categories';
   const method = isEdit ? 'PUT' : 'POST';

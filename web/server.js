@@ -1996,9 +1996,9 @@ class WebServer {
 
     this.app.post('/api/admin/tickets/categories', adminAuthMiddleware, (req, res) => {
       try {
-        const { name, emoji, description, parentChannelId, allowedRoleIds, templateFields } = req.body;
+        const { name, emoji, description, parentChannelId, closedParentChannelId, allowedRoleIds, pingRoleIds, templateFields } = req.body;
         if (!name) return res.status(400).json({ success: false, message: 'Name is required' });
-        const result = ticketService.addCategory({ name, emoji, description, parentChannelId, allowedRoleIds, templateFields });
+        const result = ticketService.addCategory({ name, emoji, description, parentChannelId, closedParentChannelId, allowedRoleIds, pingRoleIds, templateFields });
         if (!result.success) return res.status(400).json(result);
         res.json(result);
       } catch (error) {

@@ -247,7 +247,9 @@ function initDatabase() {
       emoji TEXT DEFAULT '🎫',
       description TEXT,
       parent_channel_id TEXT,
+      closed_parent_channel_id TEXT,
       allowed_role_ids TEXT DEFAULT '[]',
+      ping_role_ids TEXT DEFAULT '[]',
       template_fields TEXT DEFAULT '[]',
       enabled INTEGER DEFAULT 1,
       sort_order INTEGER DEFAULT 0,
@@ -291,6 +293,10 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_tickets_channel ON tickets(channel_id);
     CREATE INDEX IF NOT EXISTS idx_ticket_panels_channel ON ticket_panels(channel_id);
   `);
+
+  // Backward-compatible migrations for existing deployments
+  try { db.exec("ALTER TABLE ticket_categories ADD COLUMN closed_parent_channel_id TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE ticket_categories ADD COLUMN ping_role_ids TEXT DEFAULT '[]'"); } catch (e) {}
 
   db.prepare('INSERT OR IGNORE INTO ticket_sequences (name, value) VALUES (?, ?)').run('ticket', 0);
 

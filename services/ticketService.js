@@ -121,20 +121,23 @@ class TicketService {
     return db.prepare('SELECT * FROM ticket_categories WHERE id = ?').get(id);
   }
 
-  addCategory({ name, emoji, description, parentChannelId, allowedRoleIds, templateFields }) {
+  addCategory({ name, emoji, description, parentChannelId, closedParentChannelId, allowedRoleIds, pingRoleIds, templateFields }) {
     try {
       const normalizedAllowedRoleIds = this._normalizeIdArray(allowedRoleIds);
+      const normalizedPingRoleIds = this._normalizeIdArray(pingRoleIds);
       const normalizedTemplateFields = this._normalizeTemplateFields(templateFields);
       const stmt = db.prepare(`
-        INSERT INTO ticket_categories (name, emoji, description, parent_channel_id, allowed_role_ids, template_fields)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO ticket_categories (name, emoji, description, parent_channel_id, closed_parent_channel_id, allowed_role_ids, ping_role_ids, template_fields)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const result = stmt.run(
         String(name || '').trim(),
         emoji || '🎫',
         String(description || ''),
         parentChannelId || null,
+        closedParentChannelId || null,
         JSON.stringify(normalizedAllowedRoleIds),
+        JSON.stringify(normalizedPingRoleIds),
         JSON.stringify(normalizedTemplateFields)
       );
       return { success: true, id: result.lastInsertRowid };
@@ -156,7 +159,9 @@ class TicketService {
       if (updates.emoji !== undefined) { fields.push('emoji = ?'); values.push(updates.emoji || '🎫'); }
       if (updates.description !== undefined) { fields.push('description = ?'); values.push(String(updates.description || '')); }
       if (updates.parentChannelId !== undefined) { fields.push('parent_channel_id = ?'); values.push(updates.parentChannelId || null); }
+      if (updates.closedParentChannelId !== undefined) { fields.push('closed_parent_channel_id = ?'); values.push(updates.closedParentChannelId || null); }
       if (updates.allowedRoleIds !== undefined) { fields.push('allowed_role_ids = ?'); values.push(JSON.stringify(this._normalizeIdArray(updates.allowedRoleIds))); }
+      if (updates.pingRoleIds !== undefined) { fields.push('ping_role_ids = ?'); values.push(JSON.stringify(this._normalizeIdArray(updates.pingRoleIds))); }
       if (updates.templateFields !== undefined) { fields.push('template_fields = ?'); values.push(JSON.stringify(this._normalizeTemplateFields(updates.templateFields))); }
       if (updates.enabled !== undefined) { fields.push('enabled = ?'); values.push(updates.enabled ? 1 : 0); }
       if (updates.sortOrder !== undefined) { fields.push('sort_order = ?'); values.push(updates.sortOrder); }
@@ -368,7 +373,10 @@ class TicketService {
           .setEmoji('🔒'),
       );
 
-      await ticketChannel.send({ content: `<@${interaction.user.id}> welcome to your ticket!`, embeds: [embed], components: [actionRow] });
+      const pingRoleIds = this._normalizeIdArray(category.ping_role_ids);
+      const pingMentions = pingRoleIds.map(id => `<@&${id}>`).join(' ');
+      const intro = [`<@${interaction.user.id}> welcome to your ticket!`, pingMentions].filter(Boolean).join(' ');
+      await ticketChannel.send({ content: intro, embeds: [embed], components: [actionRow] });
 
       // Insert into DB
       db.prepare(`
@@ -439,6 +447,16 @@ class TicketService {
         });
       } catch (e) {
         logger.warn('Could not edit opener permissions on close:', e.message);
+      }
+
+      // Move closed ticket channel into closed category bucket (if configured)
+      try {
+        const category = ticket.category_id ? this.getCategory(ticket.category_id) : null;
+        if (category && category.closed_parent_channel_id) {
+          await channel.setParent(category.closed_parent_channel_id, { lockPermissions: false });
+        }
+      } catch (e) {
+        logger.warn('Could not move closed ticket to closed category:', e.message);
       }
 
       // Update embed

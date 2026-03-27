@@ -2079,6 +2079,7 @@ async function loadAdminRoles() {
       const tierRows = tiers.map((tier, idx) => `
         <tr>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#e0e7ff; font-weight:600;">${escapeHtml(tier.name)}</td>
+          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#a5b4fc; font-family:monospace; font-size:0.82em;">${escapeHtml(tier.collectionId || tier.collection_id || '—')}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#c7d2fe;">${tier.minNFTs}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#c7d2fe;">${tier.maxNFTs === Infinity || tier.maxNFTs >= 999999 ? '∞' : tier.maxNFTs}</td>
 
@@ -2094,10 +2095,10 @@ async function loadAdminRoles() {
           <table style="width:100%; border-collapse:collapse; font-size:0.9em;">
             <thead><tr style="background:rgba(99,102,241,0.12); text-align:left;">
               <th style="padding:10px; color:#c9d6ff;">Tier Name</th>
-              <th style="padding:10px; color:#c9d6ff;">Minimum NFT count</th>
-              <th style="padding:10px; color:#c9d6ff;">Maximum NFT count</th>
-
-              <th style="padding:10px; color:#c9d6ff;">Discord Role ID</th>
+              <th style="padding:10px; color:#c9d6ff;">Collection ID</th>
+              <th style="padding:10px; color:#c9d6ff;">Min NFTs</th>
+              <th style="padding:10px; color:#c9d6ff;">Max NFTs</th>
+              <th style="padding:10px; color:#c9d6ff;">Discord Role</th>
               <th style="padding:10px; color:#c9d6ff; text-align:right;">Actions</th>
             </tr></thead>
             <tbody>${tierRows}</tbody>
@@ -2194,6 +2195,9 @@ function tierFormHTML(tier = {}) {
         <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Maximum NFT count</label>
           <input id="tierMaxInput" type="number" value="${tier.maxNFTs >= 999999 ? '' : (tier.maxNFTs ?? '')}" min="0" placeholder="∞ (leave blank for unlimited)" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
       </div>
+      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Collection ID <span style="color:#f87171; font-size:0.85em;">*</span></label>
+        <input id="tierCollectionInput" type="text" value="${escapeHtml(tier.collectionId || tier.collection_id || '')}" placeholder="Solana collection address" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;" required>
+        <div id="tierCollectionError" style="color:#f87171; font-size:0.82em; margin-top:4px; display:none;">Collection ID is required</div></div>
       <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Discord Role (optional)</label>
         ${roleSelectHTML('tierRoleIdInput', tier.roleId || '')}</div>
     </div>`;
@@ -2203,7 +2207,14 @@ async function saveTierFromForm(mode, originalName) {
   const name = document.getElementById('tierNameInput')?.value.trim();
   const minNFTs = parseInt(document.getElementById('tierMinInput')?.value);
   const maxNFTs = document.getElementById('tierMaxInput')?.value.trim() === '' ? 999999 : parseInt(document.getElementById('tierMaxInput')?.value);
+  const collectionId = document.getElementById('tierCollectionInput')?.value.trim();
   const roleId = document.getElementById('tierRoleIdInput')?.value || null;
+
+  if (!collectionId) {
+    const errEl = document.getElementById('tierCollectionError');
+    if (errEl) errEl.style.display = 'block';
+    return;
+  }
 
   if (!name || isNaN(minNFTs)) {
     showError('Please fill in tier name and minimum NFT count');
@@ -2215,11 +2226,11 @@ async function saveTierFromForm(mode, originalName) {
     if (mode === 'add') {
       url = '/api/admin/roles/tiers';
       method = 'POST';
-      body = { name, minNFTs, maxNFTs, roleId };
+      body = { name, minNFTs, maxNFTs, roleId, collectionId };
     } else {
       url = `/api/admin/roles/tiers/${encodeURIComponent(originalName)}`;
       method = 'PUT';
-      body = { name, minNFTs, maxNFTs, roleId };
+      body = { name, minNFTs, maxNFTs, roleId, collectionId };
     }
 
     const response = await fetch(url, {

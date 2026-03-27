@@ -1475,6 +1475,7 @@ async function loadAdminSettingsView() {
           ${moduleToggle('moduleVerificationEnabled', 'Verification', '✅', true)}
           ${moduleToggle('moduleMissionsEnabled', 'Heist', '🎯', true)}
           ${moduleToggle('moduleTreasuryEnabled', 'Treasury', '💰', true)}
+          ${moduleToggle('moduleNftTrackerEnabled', 'NFT Tracker', '📡', true)}
         </div>
       </div>
 
@@ -1929,8 +1930,9 @@ async function savePortalSettings() {
     moduleVerificationEnabled: document.getElementById('ps_moduleVerificationEnabled').checked,
     moduleMissionsEnabled: document.getElementById('ps_moduleMissionsEnabled').checked,
     moduleTreasuryEnabled: document.getElementById('ps_moduleTreasuryEnabled').checked,
-    moduleRoleResyncEnabled: document.getElementById('ps_moduleRoleResyncEnabled').checked,
-    moduleMicroVerifyEnabled: document.getElementById('ps_moduleMicroVerifyEnabled').checked,
+    moduleNftTrackerEnabled: document.getElementById('ps_moduleNftTrackerEnabled')?.checked ?? true,
+    moduleRoleResyncEnabled: document.getElementById('ps_moduleRoleResyncEnabled')?.checked ?? true,
+    moduleMicroVerifyEnabled: document.getElementById('ps_moduleMicroVerifyEnabled')?.checked ?? false,
     proposalsChannelId: document.getElementById('ps_proposalsChannelId').value || '',
     votingChannelId: document.getElementById('ps_votingChannelId').value || '',
     resultsChannelId: document.getElementById('ps_resultsChannelId').value || '',

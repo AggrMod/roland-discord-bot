@@ -200,6 +200,7 @@ class SettingsManager {
         moduleVerificationEnabled: true,
         moduleMissionsEnabled: true,
         moduleTreasuryEnabled: true,
+        moduleNftTrackerEnabled: true,
         moduleRoleResyncEnabled: true,
         moduleMicroVerifyEnabled: false,
         

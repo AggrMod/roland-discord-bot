@@ -92,6 +92,35 @@ class SettingsManager {
         }
       }
 
+      // Feature flags validation
+      if (newSettings.verifyRequestTtlMinutes !== undefined) {
+        const mins = parseInt(newSettings.verifyRequestTtlMinutes);
+        if (isNaN(mins) || mins < 1 || mins > 1440) {
+          return { success: false, message: 'Verify request TTL must be between 1 and 1440 minutes' };
+        }
+      }
+
+      if (newSettings.pollIntervalSeconds !== undefined) {
+        const secs = parseInt(newSettings.pollIntervalSeconds);
+        if (isNaN(secs) || secs < 5 || secs > 300) {
+          return { success: false, message: 'Poll interval must be between 5 and 300 seconds' };
+        }
+      }
+
+      if (newSettings.verifyRateLimitMinutes !== undefined) {
+        const mins = parseInt(newSettings.verifyRateLimitMinutes);
+        if (isNaN(mins) || mins < 1 || mins > 60) {
+          return { success: false, message: 'Verify rate limit must be between 1 and 60 minutes' };
+        }
+      }
+
+      if (newSettings.maxPendingPerUser !== undefined) {
+        const max = parseInt(newSettings.maxPendingPerUser);
+        if (isNaN(max) || max < 1 || max > 10) {
+          return { success: false, message: 'Max pending per user must be between 1 and 10' };
+        }
+      }
+
       // Merge with existing settings
       this.settings = { ...this.settings, ...newSettings };
       
@@ -136,14 +165,36 @@ class SettingsManager {
       const rolesData = JSON.parse(fs.readFileSync(ROLES_FILE, 'utf8'));
       
       this.settings = {
+        // Governance
         tiers: rolesData.tiers,
         characterRoles: rolesData.characterRoles || [],
         quorumPercentage: 25,
         supportThreshold: 4,
         voteDurationDays: 7,
+        
+        // Battle Timing
         battleRoundPauseMinSec: 5,
         battleRoundPauseMaxSec: 10,
-        battleElitePrepSec: 12
+        battleElitePrepSec: 12,
+        
+        // Feature Flags
+        heistEnabled: false,
+        roleResyncEnabled: true,
+        microVerifyEnabled: false,
+        
+        // Micro-Transfer Verification
+        verificationReceiveWallet: '',
+        nftActivityWebhookSecret: '',
+        verifyRequestTtlMinutes: 15,
+        pollIntervalSeconds: 30,
+        verifyRateLimitMinutes: 5,
+        maxPendingPerUser: 1,
+        
+        // Channel Overrides
+        proposalsChannelId: '',
+        votingChannelId: '',
+        resultsChannelId: '',
+        governanceLogChannelId: ''
       };
 
       fs.writeFileSync(SETTINGS_FILE, JSON.stringify(this.settings, null, 2));

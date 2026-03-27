@@ -323,6 +323,72 @@
             </div>
           </div>
 
+          <h3 style="color: var(--gold); margin-top: var(--space-8); font-size: var(--font-xl);">⚡ Feature Flags</h3>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--space-4); margin-bottom: var(--space-6);">
+            <div style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3); background: var(--bg-secondary); border-radius: var(--radius-md);">
+              <input type="checkbox" id="heistEnabled" style="width: 18px; height: 18px; cursor: pointer;">
+              <label for="heistEnabled" style="cursor: pointer; font-weight: 500;">Heist Mode Enabled</label>
+            </div>
+            <div style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3); background: var(--bg-secondary); border-radius: var(--radius-md);">
+              <input type="checkbox" id="roleResyncEnabled" checked style="width: 18px; height: 18px; cursor: pointer;">
+              <label for="roleResyncEnabled" style="cursor: pointer; font-weight: 500;">Role Resync Enabled</label>
+            </div>
+            <div style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3); background: var(--bg-secondary); border-radius: var(--radius-md);">
+              <input type="checkbox" id="microVerifyEnabled" style="width: 18px; height: 18px; cursor: pointer;">
+              <label for="microVerifyEnabled" style="cursor: pointer; font-weight: 500;">Micro-Transfer Verification</label>
+            </div>
+          </div>
+
+          <h3 style="color: var(--gold); margin-top: var(--space-8); font-size: var(--font-xl);">🔗 Channel Overrides</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Proposals Channel ID</label>
+              <input type="text" id="proposalsChannelId" placeholder="Leave empty to use .env">
+            </div>
+            <div class="form-group">
+              <label>Voting Channel ID</label>
+              <input type="text" id="votingChannelId" placeholder="Leave empty to use .env">
+            </div>
+            <div class="form-group">
+              <label>Results Channel ID</label>
+              <input type="text" id="resultsChannelId" placeholder="Leave empty to use .env">
+            </div>
+            <div class="form-group">
+              <label>Governance Log Channel ID</label>
+              <input type="text" id="governanceLogChannelId" placeholder="Leave empty to use .env">
+            </div>
+          </div>
+
+          <h3 style="color: var(--gold); margin-top: var(--space-8); font-size: var(--font-xl);">🔐 Micro-Transfer Verification Settings</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Verification Receive Wallet</label>
+              <input type="text" id="verificationReceiveWallet" placeholder="Solana wallet address for receiving micro transfers">
+            </div>
+            <div class="form-group">
+              <label>NFT Activity Webhook Secret</label>
+              <input type="text" id="nftActivityWebhookSecret" placeholder="Optional shared secret">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Verify Request TTL (minutes)</label>
+              <input type="number" id="verifyRequestTtlMinutes" min="1" max="1440">
+            </div>
+            <div class="form-group">
+              <label>Poll Interval (seconds)</label>
+              <input type="number" id="pollIntervalSeconds" min="5" max="300">
+            </div>
+            <div class="form-group">
+              <label>Verify Rate Limit (minutes)</label>
+              <input type="number" id="verifyRateLimitMinutes" min="1" max="60">
+            </div>
+            <div class="form-group">
+              <label>Max Pending Per User</label>
+              <input type="number" id="maxPendingPerUser" min="1" max="10">
+            </div>
+          </div>
+
           <h3 style="color: var(--gold); margin-top: var(--space-8); font-size: var(--font-xl);">Tier Configuration</h3>
           <div class="tier-editor" id="tierEditor"></div>
 
@@ -599,12 +665,34 @@
     }
 
     function renderSettings() {
+      // Governance
       document.getElementById('quorumPercentage').value = settingsData.quorumPercentage;
       document.getElementById('supportThreshold').value = settingsData.supportThreshold;
       document.getElementById('voteDurationDays').value = settingsData.voteDurationDays;
+      
+      // Battle Timing
       document.getElementById('battleRoundPauseMinSec').value = settingsData.battleRoundPauseMinSec ?? 5;
       document.getElementById('battleRoundPauseMaxSec').value = settingsData.battleRoundPauseMaxSec ?? 10;
       document.getElementById('battleElitePrepSec').value = settingsData.battleElitePrepSec ?? 12;
+      
+      // Feature Flags
+      document.getElementById('heistEnabled').checked = settingsData.heistEnabled ?? false;
+      document.getElementById('roleResyncEnabled').checked = settingsData.roleResyncEnabled ?? true;
+      document.getElementById('microVerifyEnabled').checked = settingsData.microVerifyEnabled ?? false;
+      
+      // Channel Overrides
+      document.getElementById('proposalsChannelId').value = settingsData.proposalsChannelId ?? '';
+      document.getElementById('votingChannelId').value = settingsData.votingChannelId ?? '';
+      document.getElementById('resultsChannelId').value = settingsData.resultsChannelId ?? '';
+      document.getElementById('governanceLogChannelId').value = settingsData.governanceLogChannelId ?? '';
+      
+      // Micro-Transfer Verification
+      document.getElementById('verificationReceiveWallet').value = settingsData.verificationReceiveWallet ?? '';
+      document.getElementById('nftActivityWebhookSecret').value = settingsData.nftActivityWebhookSecret ?? '';
+      document.getElementById('verifyRequestTtlMinutes').value = settingsData.verifyRequestTtlMinutes ?? 15;
+      document.getElementById('pollIntervalSeconds').value = settingsData.pollIntervalSeconds ?? 30;
+      document.getElementById('verifyRateLimitMinutes').value = settingsData.verifyRateLimitMinutes ?? 5;
+      document.getElementById('maxPendingPerUser').value = settingsData.maxPendingPerUser ?? 1;
 
       const tierEditor = document.getElementById('tierEditor');
       tierEditor.innerHTML = `
@@ -662,13 +750,35 @@
       }
 
       const newSettings = {
+        // Governance & Tiers
         tiers,
         quorumPercentage: parseFloat(document.getElementById('quorumPercentage').value),
         supportThreshold: parseInt(document.getElementById('supportThreshold').value),
         voteDurationDays: parseInt(document.getElementById('voteDurationDays').value),
+        
+        // Battle Timing
         battleRoundPauseMinSec,
         battleRoundPauseMaxSec,
-        battleElitePrepSec
+        battleElitePrepSec,
+        
+        // Feature Flags
+        heistEnabled: document.getElementById('heistEnabled').checked,
+        roleResyncEnabled: document.getElementById('roleResyncEnabled').checked,
+        microVerifyEnabled: document.getElementById('microVerifyEnabled').checked,
+        
+        // Channel Overrides
+        proposalsChannelId: document.getElementById('proposalsChannelId').value.trim() || '',
+        votingChannelId: document.getElementById('votingChannelId').value.trim() || '',
+        resultsChannelId: document.getElementById('resultsChannelId').value.trim() || '',
+        governanceLogChannelId: document.getElementById('governanceLogChannelId').value.trim() || '',
+        
+        // Micro-Transfer Verification
+        verificationReceiveWallet: document.getElementById('verificationReceiveWallet').value.trim() || '',
+        nftActivityWebhookSecret: document.getElementById('nftActivityWebhookSecret').value.trim() || '',
+        verifyRequestTtlMinutes: parseInt(document.getElementById('verifyRequestTtlMinutes').value),
+        pollIntervalSeconds: parseInt(document.getElementById('pollIntervalSeconds').value),
+        verifyRateLimitMinutes: parseInt(document.getElementById('verifyRateLimitMinutes').value),
+        maxPendingPerUser: parseInt(document.getElementById('maxPendingPerUser').value)
       };
 
       try {

@@ -347,10 +347,13 @@ module.exports = {
       const mockWallet = `MOCK${discordId.slice(0, 8)}${Math.random().toString(36).slice(2, 8)}`;
       walletService.linkWallet(discordId, interaction.user.username, mockWallet);
       wallets = walletService.getLinkedWallets(discordId);
-      await roleService.updateUserRoles(discordId, interaction.user.username);
+      await roleService.updateUserRoles(discordId, interaction.user.username, interaction.guildId);
+      if (interaction.guild) {
+        await roleService.syncUserDiscordRoles(interaction.guild, discordId, interaction.guildId || null);
+      }
     }
 
-    await roleService.updateUserRoles(discordId, interaction.user.username);
+    await roleService.updateUserRoles(discordId, interaction.user.username, interaction.guildId);
     const userInfo = await roleService.getUserInfo(discordId);
 
     if (!wallets || wallets.length === 0) {
@@ -382,7 +385,7 @@ module.exports = {
     }
 
     const walletAddresses = wallets.map(w => w.wallet_address);
-    const allNFTs = await nftService.getAllNFTsForWallets(walletAddresses);
+    const allNFTs = await nftService.getAllNFTsForWallets(walletAddresses, { guildId: interaction.guildId || null });
     const totalNFTs = allNFTs.length;
     const userTier = vpService.getTierForNFTCount(totalNFTs);
     
@@ -459,7 +462,10 @@ module.exports = {
     const discordId = interaction.user.id;
     
     try {
-      await roleService.updateUserRoles(discordId, interaction.user.username);
+      await roleService.updateUserRoles(discordId, interaction.user.username, interaction.guildId);
+      if (interaction.guild) {
+        await roleService.syncUserDiscordRoles(interaction.guild, discordId, interaction.guildId || null);
+      }
       const userInfo = await roleService.getUserInfo(discordId);
 
       const embed = new EmbedBuilder()

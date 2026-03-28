@@ -18,6 +18,8 @@ function isTenantSensitiveRequest(input) {
     const url = new URL(rawUrl, window.location.origin);
     return (
       url.pathname.startsWith('/api/admin/') ||
+      url.pathname.startsWith('/api/verify/') ||
+      url.pathname.startsWith('/api/micro-verify/') ||
       url.pathname.startsWith('/api/verification/admin/') ||
       url.pathname === '/api/user/is-admin'
     );

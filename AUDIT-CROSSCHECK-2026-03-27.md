@@ -109,3 +109,28 @@ Crosscheck of:
 
 - The parity fixes were focused on high-impact behavior mismatches, not on flattening every legacy alias.
 - The server-side API contracts were already the source of truth for treasury, governance, NFT activity, and ticketing; the portal was the stale side in the mismatches fixed here.
+
+## Mock Scoping Completion
+
+- `services/nftService.js`
+  - Tenant mock behavior now checks `guildId` on every NFT fetch.
+  - When `tenant.limits.mock_data_enabled` is the reason mock NFTs are returned, the service logs the guild-scoped reason explicitly.
+
+- `services/roleService.js`
+  - Holdings evaluation now accepts and forwards `guildId` consistently through `updateUserRoles()` and `syncUserDiscordRoles()`.
+  - Guild resync discovery can now resolve verified members from the current guild instead of relying only on the global user table.
+
+- `index.js`
+  - The startup and recurring role resync cycle now resolves verified users from the target guild and passes that guild context into role sync calls.
+  - The panel verification button now carries guild context through both the holdings refresh and the role sync step.
+
+- `web/server.js`
+  - `/api/verify` and `/api/verify/signature` now have tenant guild context available via `req.guildId` when the portal sends `x-guild-id`.
+  - Successful wallet-link verification now triggers best-effort holdings refresh plus Discord role sync using the resolved guild.
+  - Admin role resync now iterates guild members for the selected server.
+
+- `web/public/portal.js`
+  - The fetch shim now attaches `x-guild-id` to verification and micro-verification requests so the backend can scope mock data correctly in multitenant mode.
+
+- `test-tenant-mock-scoping.js`
+  - Added lightweight assertions that cover tenant-scoped mock NFT routing and `guildId` forwarding through role refresh/sync helpers.

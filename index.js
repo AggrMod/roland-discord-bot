@@ -325,7 +325,7 @@ async function handlePanelVerifyButton(interaction) {
     }
 
     // Wallet exists: verify holdings now
-    const updateResult = await roleService.updateUserRoles(discordId, username);
+    const updateResult = await roleService.updateUserRoles(discordId, username, interaction.guildId || null);
 
     if (!updateResult.success) {
       return interaction.editReply({
@@ -336,7 +336,7 @@ async function handlePanelVerifyButton(interaction) {
     // Sync Discord roles best-effort
     let roleSyncText = 'Role sync skipped';
     if (interaction.guild) {
-      const syncResult = await roleService.syncUserDiscordRoles(interaction.guild, discordId);
+      const syncResult = await roleService.syncUserDiscordRoles(interaction.guild, discordId, interaction.guildId || null);
       roleSyncText = syncResult.success
         ? `+${syncResult.totalAdded || 0} / -${syncResult.totalRemoved || 0}`
         : 'Role sync partial';
@@ -822,8 +822,8 @@ function startRoleResyncScheduler() {
         return;
       }
 
-      // Get all verified users (users with at least some NFTs)
-      const verifiedUsers = roleService.getAllVerifiedUsers();
+      // Resolve verified guild members for this tenant-scoped resync
+      const verifiedUsers = await roleService.getAllVerifiedUsers(guild);
       logger.log(`📊 Found ${verifiedUsers.length} verified users to resync`);
 
       let syncedCount = 0;
@@ -834,11 +834,11 @@ function startRoleResyncScheduler() {
       for (const user of verifiedUsers) {
         try {
           // Re-fetch holdings and update database
-          const updateResult = await roleService.updateUserRoles(user.discord_id, user.username);
+          const updateResult = await roleService.updateUserRoles(user.discord_id, user.username, guild.id);
           
           if (updateResult.success) {
             // Sync Discord roles (tier + trait)
-            const syncResult = await roleService.syncUserDiscordRoles(guild, user.discord_id);
+            const syncResult = await roleService.syncUserDiscordRoles(guild, user.discord_id, guild.id);
             
             if (syncResult.success) {
               syncedCount++;

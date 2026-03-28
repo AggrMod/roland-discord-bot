@@ -262,6 +262,14 @@ class WebServer {
       return this.client.guilds.cache.get(normalizedGuildId) || this.client.guilds.fetch(normalizedGuildId).catch(() => null);
     };
 
+    this.app.use(['/api/verify', '/api/micro-verify'], (req, _res, next) => {
+      const requestedGuildId = getRequestedGuildId(req);
+      if (requestedGuildId) {
+        req.guildId = requestedGuildId;
+      }
+      next();
+    });
+
     const guildIconUrl = (guild) => {
       if (!guild?.id || !guild?.icon) return null;
       return `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=256`;
@@ -1788,22 +1796,25 @@ class WebServer {
 
         const { discordId } = req.body;
         const guild = req.guild || await fetchGuildById(req.guildId);
+        if (!guild) {
+          return res.status(404).json({ success: false, message: 'Server not found' });
+        }
 
         if (discordId) {
           // Sync single user
           await roleService.updateUserRoles(discordId, req.session.discordUser?.username, req.guildId);
-          const syncResult = await roleService.syncUserDiscordRoles(guild, discordId);
+          const syncResult = await roleService.syncUserDiscordRoles(guild, discordId, req.guildId);
           return res.json(syncResult);
         } else {
           // Sync all users
-          const allUsers = roleService.getAllVerifiedUsers();
+          const allUsers = await roleService.getAllVerifiedUsers(guild);
           let syncedCount = 0;
           let errorCount = 0;
 
           for (const user of allUsers) {
             try {
               await roleService.updateUserRoles(user.discord_id, user.username, guild.id);
-              const syncResult = await roleService.syncUserDiscordRoles(guild, user.discord_id);
+              const syncResult = await roleService.syncUserDiscordRoles(guild, user.discord_id, guild.id);
               
               if (syncResult.success) {
                 syncedCount++;
@@ -2516,7 +2527,11 @@ class WebServer {
 
         // Trigger role update
         try {
+          const guild = req.guild || await fetchGuildById(req.guildId);
           await roleService.updateUserRoles(discordId, req.session.discordUser.username, req.guildId || null);
+          if (guild) {
+            await roleService.syncUserDiscordRoles(guild, discordId, req.guildId || null);
+          }
         } catch (roleErr) {
           logger.error('Role update after verify failed (non-fatal):', roleErr);
         }
@@ -2568,6 +2583,16 @@ class WebServer {
           isPrimary,
           isFavorite
         );
+
+        try {
+          const guild = req.guild || await fetchGuildById(req.guildId);
+          await roleService.updateUserRoles(discordId, 'Web User', req.guildId || null);
+          if (guild) {
+            await roleService.syncUserDiscordRoles(guild, discordId, req.guildId || null);
+          }
+        } catch (roleErr) {
+          logger.error('Role update after legacy verify failed (non-fatal):', roleErr);
+        }
 
         logger.log(`Web verification: User ${discordId} linked wallet ${walletAddress}`);
 

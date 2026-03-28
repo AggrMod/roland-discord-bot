@@ -33,7 +33,13 @@ class NFTService {
       : false;
 
     if (MOCK_MODE || tenantMockEnabled) {
-      return this.getMockNFTs(walletAddress);
+      if (tenantMockEnabled && !MOCK_MODE) {
+        logger.warn(`Tenant mock_data_enabled active for guild ${guildId}; serving mock NFTs for ${walletAddress}`);
+      }
+      return this.getMockNFTs(walletAddress, {
+        guildId,
+        mockReason: tenantMockEnabled && !MOCK_MODE ? 'tenant-mock-data-enabled' : 'global-mock-mode'
+      });
     }
 
     try {
@@ -42,7 +48,10 @@ class NFTService {
     } catch (error) {
       logger.error('Error fetching NFTs:', error);
       // Fallback to mock on error
-      return this.getMockNFTs(walletAddress);
+      return this.getMockNFTs(walletAddress, {
+        guildId,
+        mockReason: 'helius-fallback'
+      });
     }
   }
 
@@ -106,10 +115,12 @@ class NFTService {
     })).filter(a => a.value);
   }
 
-  getMockNFTs(walletAddress) {
+  getMockNFTs(walletAddress, context = {}) {
     const mockCount = Math.floor(Math.random() * 10) + 1;
     const roles = ['The Hitman', 'The Enforcer', 'The Driver', 'The Accountant', 'The Consigliere', 'The Don'];
     const rarities = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'];
+    const guildSuffix = context.guildId ? ` (guild ${context.guildId})` : '';
+    const reasonSuffix = context.mockReason ? ` [reason: ${context.mockReason}]` : '';
     
     const nfts = [];
     for (let i = 0; i < mockCount; i++) {
@@ -130,7 +141,7 @@ class NFTService {
       });
     }
 
-    logger.log(`Mock mode: Generated ${mockCount} NFTs for ${walletAddress}`);
+    logger.log(`Mock mode${guildSuffix}${reasonSuffix}: Generated ${mockCount} NFTs for ${walletAddress}`);
     return nfts;
   }
 

@@ -154,11 +154,11 @@ class RoleService {
    * Sync all Discord roles for a user (both tier and trait roles)
    * This is the main entry point for comprehensive role sync
    */
-  async syncUserDiscordRoles(guild, discordId) {
+  async syncUserDiscordRoles(guild, discordId, guildId = guild?.id || null) {
     try {
       const member = await guild.members.fetch(discordId).catch(() => null);
       if (!member) {
-        logger.warn(`Member ${discordId} not found in guild ${guild.id}`);
+        logger.warn(`Member ${discordId} not found in guild ${guild?.id || guildId || 'unknown'}`);
         return { success: false, message: 'Member not found in guild' };
       }
 
@@ -179,14 +179,14 @@ class RoleService {
       };
 
       // 1. Sync tier roles
-      const tierChanges = await this.syncTierRoles(member, userInfo.tier);
+      const tierChanges = await this.syncTierRoles(member, userInfo.tier, guildId);
       changes.added.push(...tierChanges.added);
       changes.removed.push(...tierChanges.removed);
 
       // 2. Sync trait roles
       const wallets = walletService.getAllUserWallets(discordId);
-      const allNFTs = await nftService.getAllNFTsForWallets(wallets, { guildId: guild.id });
-      const traitChanges = await this.syncTraitRoles(member, allNFTs);
+      const allNFTs = await nftService.getAllNFTsForWallets(wallets, { guildId });
+      const traitChanges = await this.syncTraitRoles(member, allNFTs, guildId);
       changes.added.push(...traitChanges.added);
       changes.removed.push(...traitChanges.removed);
 
@@ -236,7 +236,7 @@ class RoleService {
   /**
    * Sync tier roles for a member
    */
-  async syncTierRoles(member, currentTierName) {
+  async syncTierRoles(member, currentTierName, guildId = null) {
     const changes = { added: [], removed: [] };
 
     try {
@@ -266,7 +266,7 @@ class RoleService {
             if (role) {
               await member.roles.add(role);
               changes.added.push(tier.name);
-              logger.log(`Added tier role ${tier.name} to ${member.user.tag}`);
+              logger.log(`Added tier role ${tier.name} to ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
             }
           } else if (!shouldHave && has) {
             // Remove role
@@ -274,7 +274,7 @@ class RoleService {
             if (role) {
               await member.roles.remove(role);
               changes.removed.push(tier.name);
-              logger.log(`Removed tier role ${tier.name} from ${member.user.tag}`);
+              logger.log(`Removed tier role ${tier.name} from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
             }
           }
         }
@@ -289,7 +289,7 @@ class RoleService {
   /**
    * Sync trait roles for a member based on NFT attributes
    */
-  async syncTraitRoles(member, nfts) {
+  async syncTraitRoles(member, nfts, guildId = null) {
     const changes = { added: [], removed: [] };
 
     try {
@@ -297,8 +297,6 @@ class RoleService {
       const currentMemberRoleIds = new Set(member.roles.cache.keys());
 
       // Extract traits from user's NFTs
-      const userTraits = this.extractTraitsFromNFTs(nfts);
-
       for (const traitRole of traitRoles) {
         if (!traitRole.roleId) {
           // Skip if roleId not configured
@@ -321,7 +319,7 @@ class RoleService {
           if (role) {
             await member.roles.add(role);
             changes.added.push(`${traitRole.trait_value}`);
-            logger.log(`Added trait role ${traitRole.trait_value} to ${member.user.tag}`);
+            logger.log(`Added trait role ${traitRole.trait_value} to ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
           } else {
             logger.warn(`Trait role ${traitRole.roleId} not found in guild`);
           }
@@ -331,7 +329,7 @@ class RoleService {
           if (role) {
             await member.roles.remove(role);
             changes.removed.push(`${traitRole.trait_value}`);
-            logger.log(`Removed trait role ${traitRole.trait_value} from ${member.user.tag}`);
+            logger.log(`Removed trait role ${traitRole.trait_value} from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
           }
         }
       }
@@ -418,8 +416,29 @@ class RoleService {
   /**
    * Get all verified users from database
    */
-  getAllVerifiedUsers() {
+  async getAllVerifiedUsers(guild = null) {
     try {
+      if (guild?.members) {
+        const members = await guild.members.fetch().catch(() => guild.members.cache);
+        const verifiedUsers = [];
+
+        for (const member of members.values()) {
+          const wallets = walletService.getLinkedWallets(member.id);
+          if (wallets.length === 0) {
+            continue;
+          }
+
+          verifiedUsers.push({
+            discord_id: member.id,
+            username: member.user?.username || member.displayName || member.id,
+            guild_id: guild.id
+          });
+        }
+
+        logger.log(`Resolved ${verifiedUsers.length} verified guild members for resync in ${guild.id}`);
+        return verifiedUsers;
+      }
+
       const users = db.prepare('SELECT * FROM users WHERE total_nfts > 0').all();
       return users;
     } catch (error) {

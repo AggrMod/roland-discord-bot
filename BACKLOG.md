@@ -40,3 +40,13 @@
 - `config/settings.js`: add baseVerifiedRoleId to defaults
 - `web/public/portal.js`: add dropdown in Verification module settings card
 - `web/server.js`: include in settings API
+
+## Remove top-nav server selector (redundant)
+
+**Request**: Remove the "Select server" button + server dropdown from the top navigation bar.
+**Reason**: Server context is already handled by the sidebar bottom block (server icon + name + "See all servers →"). The top-nav selector is redundant and clutters the nav.
+**Scope**:
+- `portal.html` — remove `#navServerSelect` dropdown and "Select server" button from top-nav
+- `portal.js` — remove `onNavServerSelect()` wiring and any code that shows/hides these elements
+- Keep `#activeGuildBadge` if it serves a purpose, or remove it too
+- Ensure server switching still works exclusively through the sidebar bottom block

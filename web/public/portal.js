@@ -670,7 +670,8 @@ function enforceInitialServerSelection() {
   const managed = serverAccessData?.managedServers || [];
   const unmanaged = serverAccessData?.unmanagedServers || [];
 
-  if (managed.length === 1 && !activeGuildId) {
+  // Auto-select only when there's exactly one total visible server
+  if ((managed.length + unmanaged.length) === 1 && managed.length === 1 && !activeGuildId) {
     setActiveGuild(managed[0].guildId, { announce: false });
     return true;
   }

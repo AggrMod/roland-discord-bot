@@ -408,9 +408,8 @@ function refreshTenantScopedViews() {
   if (activeSection === 'section-governance') {
     loadActiveVotes();
   } else if (activeSection === 'section-treasury') {
-    loadTreasuryPublicView();
-    loadTreasuryTransactions();
-    loadTreasuryTrackerView();
+    loadTreasuryWalletTable();
+    if (isAdmin) showAdminTreasuryElements();
   } else if (activeSection === 'section-nft-activity') {
     loadNFTActivityView();
     if (isAdmin) loadNFTActivityAdminView();
@@ -1601,9 +1600,8 @@ function switchSection(sectionName) {
   } else if (sectionName === 'wallets' && userData) {
     renderWallets();
   } else if (sectionName === 'treasury') {
-    loadTreasuryPublicView();
-    loadTreasuryTransactions();
-    loadTreasuryTrackerView();
+    loadTreasuryWalletTable();
+    if (isAdmin) showAdminTreasuryElements();
   } else if (sectionName === 'nft-activity') {
     loadNFTActivityView();
     if (isAdmin) loadNFTActivityAdminView();
@@ -1679,9 +1677,6 @@ async function loadTreasuryPublicView() {
   } catch (e) {
     content.innerHTML = `<div style="color:#ef4444; text-align:center; padding:20px;">Error loading treasury: ${e.message}</div>`;
   }
-  
-  // Also load treasury tracker config
-  loadTreasuryTrackerView();
 }
 
 async function loadTreasuryTransactions() {
@@ -1723,6 +1718,299 @@ async function loadTreasuryTransactions() {
   } catch (e) {
     content.innerHTML = `<div style="color:#ef4444; text-align:center; padding:20px;">Error loading transactions</div>`;
   }
+}
+
+// ==================== TREASURY TABS & WALLETS ====================
+function switchTreasuryTab(tabName) {
+  document.querySelectorAll('.treasury-tab-pane').forEach(p => p.style.display = 'none');
+  document.querySelectorAll('#treasuryTabs .settings-tab').forEach(t => t.classList.remove('active'));
+  const pane = document.getElementById('treasuryTab-' + tabName);
+  if (pane) pane.style.display = 'block';
+  const btn = document.querySelector(`#treasuryTabs .settings-tab[data-tab="${tabName}"]`);
+  if (btn) btn.classList.add('active');
+
+  if (tabName === 'treasury-history') {
+    loadTreasuryPublicView();
+    loadTreasuryTransactions();
+  } else if (tabName === 'treasury-alerts') {
+    loadTreasuryAlertsConfig();
+  } else if (tabName === 'treasury-wallets') {
+    loadTreasuryWalletTable();
+  }
+}
+
+function showAdminTreasuryElements() {
+  document.querySelectorAll('.admin-only-treasury').forEach(el => {
+    el.style.display = '';
+  });
+}
+
+async function loadTreasuryWalletTable() {
+  const container = document.getElementById('treasuryWalletTableContainer');
+  if (!container) return;
+
+  try {
+    const response = await fetch('/api/admin/treasury', { credentials: 'include' });
+    if (!response.ok) {
+      // Non-admin: try public endpoint
+      const pubRes = await fetch('/api/public/treasury', { credentials: 'include' });
+      const pubData = await pubRes.json();
+      const t = pubData.data || pubData.treasury || pubData;
+      if (t && t.sol !== undefined) {
+        renderWalletTableFromConfig({ solanaWallet: null, label: 'Treasury' }, t);
+        document.getElementById('treasuryWalletCount').textContent = '1';
+      } else {
+        renderWalletEmptyState(container, false);
+        document.getElementById('treasuryWalletCount').textContent = '0';
+      }
+      return;
+    }
+
+    const data = await response.json();
+    const config = data.config || data;
+    const treasury = data.treasury || {};
+
+    if (config.solanaWallet) {
+      renderWalletTableFromConfig(config, treasury);
+      document.getElementById('treasuryWalletCount').textContent = '1';
+      if (isAdmin) showAdminTreasuryElements();
+    } else {
+      renderWalletEmptyState(container, isAdmin);
+      document.getElementById('treasuryWalletCount').textContent = '0';
+      if (isAdmin) showAdminTreasuryElements();
+    }
+  } catch (err) {
+    console.error('[Treasury] Wallet table load error:', err);
+    container.innerHTML = '<div style="color:#ef4444; text-align:center; padding:20px;">Error loading wallet data</div>';
+  }
+}
+
+function renderWalletTableFromConfig(config, treasury) {
+  const container = document.getElementById('treasuryWalletTableContainer');
+  const wallet = config.solanaWallet || config.wallet || '';
+  const label = config.label || 'Treasury';
+  const truncAddr = wallet ? `${wallet.slice(0,6)}...${wallet.slice(-4)}` : '—';
+  const channel = config.txAlertChannelId ? `<code>#${config.txAlertChannelId}</code>` : '<span style="color:var(--text-secondary);">—</span>';
+  // TODO: multi-wallet support — txTypes per wallet. For now, show based on config flags.
+  const txTypes = ['sol-transfer', 'token-transfer'];
+  const typeBadges = txTypes.slice(0, 2).map(t => `<span class="badge badge-module">${t}</span>`).join('') +
+    (txTypes.length > 2 ? `<span class="badge badge-module">+${txTypes.length - 2} more</span>` : '');
+  const statusBadge = config.enabled !== false
+    ? '<span class="badge badge-active">Active</span>'
+    : '<span class="badge badge-paused">Paused</span>';
+  const balanceInfo = treasury.sol ? ` <span style="color:var(--text-secondary); font-size:0.85em;">(${treasury.sol} SOL)</span>` : '';
+
+  const actionsHtml = isAdmin ? `
+    <div class="treasury-wallet-actions" style="display:flex; gap:4px;">
+      <button title="Refresh" onclick="refreshTreasuryBalances()">🔄</button>
+      <button title="Edit" onclick="openAddWalletModal('${wallet}', '${label}', '${config.txAlertChannelId || ''}')">✏️</button>
+    </div>
+  ` : '';
+
+  container.innerHTML = `
+    <div class="card" style="overflow-x:auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Address</th>
+            <th>Channel</th>
+            <th>TX Types</th>
+            <th>Status</th>
+            ${isAdmin ? '<th>Actions</th>' : ''}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="addr-cell">
+                <span>${truncAddr}</span>${balanceInfo}
+                ${wallet ? `<button class="copy-btn" onclick="navigator.clipboard.writeText('${wallet}');this.textContent='✓';setTimeout(()=>this.textContent='📋',1200)" title="Copy address">📋</button>` : ''}
+                <span style="color:#a5b4fc; font-size:0.85em;">{${label}}</span>
+              </div>
+            </td>
+            <td>${channel}</td>
+            <td><div class="tx-type-badges">${typeBadges}</div></td>
+            <td>${statusBadge}</td>
+            ${isAdmin ? `<td>${actionsHtml}</td>` : ''}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderWalletEmptyState(container, canAdd) {
+  container.innerHTML = `
+    <div class="card treasury-empty-state">
+      <p>No wallets tracked yet. Add a wallet to start monitoring.</p>
+      ${canAdd ? '<button class="btn-primary" onclick="openAddWalletModal()">+ Add Wallet</button>' : ''}
+    </div>
+  `;
+}
+
+async function refreshTreasuryBalances() {
+  try {
+    showSuccess('Refreshing treasury balances...');
+    await fetch('/api/admin/treasury/refresh', { method: 'POST', credentials: 'include' });
+    setTimeout(() => loadTreasuryWalletTable(), 2000);
+  } catch (err) {
+    console.error('[Treasury] Refresh error:', err);
+  }
+}
+
+// ==================== ADD WALLET MODAL ====================
+function openAddWalletModal(existingAddr, existingLabel, existingChannel) {
+  const modal = document.getElementById('addWalletModal');
+  document.getElementById('addWalletAddress').value = existingAddr || '';
+  document.getElementById('addWalletLabel').value = existingLabel || '';
+  document.getElementById('addWalletChannel').value = existingChannel || '';
+  document.getElementById('addWalletError').style.display = 'none';
+  // Reset checkboxes
+  document.querySelectorAll('.addWalletTxType').forEach(cb => {
+    cb.checked = cb.value === 'sol-transfer' || cb.value === 'token-transfer';
+  });
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeAddWalletModal() {
+  document.getElementById('addWalletModal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+async function saveNewWallet() {
+  const addr = document.getElementById('addWalletAddress').value.trim();
+  const label = document.getElementById('addWalletLabel').value.trim();
+  const channel = document.getElementById('addWalletChannel').value.trim();
+  const errEl = document.getElementById('addWalletError');
+
+  if (!addr) {
+    errEl.textContent = 'Wallet address is required.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (addr.length < 32 || addr.length > 44) {
+    errEl.textContent = 'Invalid Solana wallet address.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const saveBtn = document.getElementById('addWalletSaveBtn');
+  saveBtn.textContent = 'Saving...';
+  saveBtn.disabled = true;
+
+  try {
+    // TODO: When multi-wallet API exists, POST to /api/admin/treasury/wallets
+    // For now, wire to the single-wallet config API
+    const payload = {
+      enabled: true,
+      solanaWallet: addr,
+      txAlertChannelId: channel || undefined,
+      txAlertsEnabled: !!channel
+    };
+    const res = await fetch('/api/admin/treasury/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    const result = await res.json();
+    if (result.success) {
+      closeAddWalletModal();
+      showSuccess('Wallet saved successfully!');
+      loadTreasuryWalletTable();
+    } else {
+      errEl.textContent = result.message || 'Failed to save wallet.';
+      errEl.style.display = 'block';
+    }
+  } catch (err) {
+    errEl.textContent = 'Network error saving wallet.';
+    errEl.style.display = 'block';
+  } finally {
+    saveBtn.textContent = 'Save Wallet';
+    saveBtn.disabled = false;
+  }
+}
+
+// ==================== TREASURY ALERTS CONFIG ====================
+async function loadTreasuryAlertsConfig() {
+  const container = document.getElementById('treasuryAlertsConfig');
+  if (!container) return;
+
+  try {
+    const res = await fetch('/api/admin/treasury', { credentials: 'include' });
+    if (!res.ok) { container.innerHTML = '<p style="color:var(--text-secondary);">Admin access required.</p>'; return; }
+    const data = await res.json();
+    const c = data.config || data;
+
+    container.innerHTML = `
+      <div style="display:flex; flex-direction:column; gap:16px; max-width:500px;">
+        <div>
+          <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">TX Alert Channel ID</label>
+          <input id="alertsCfgChannel" type="text" value="${c.txAlertChannelId || ''}" placeholder="Discord channel ID" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; font-family:monospace; box-sizing:border-box;">
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <input id="alertsCfgIncoming" type="checkbox" ${c.txAlertIncomingOnly ? 'checked' : ''} style="width:18px; height:18px;">
+          <label style="color:#e0e7ff; font-size:0.9em;">Incoming only — only alert on received SOL</label>
+        </div>
+        <div>
+          <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Minimum SOL Amount</label>
+          <input id="alertsCfgMinSol" type="number" min="0" step="0.1" value="${c.txAlertMinSol || 0}" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; box-sizing:border-box;">
+        </div>
+        <div>
+          <button class="btn-primary" onclick="saveTreasuryAlertsCfg()">Save Alert Settings</button>
+          <span id="alertsCfgFeedback" style="margin-left:12px; font-size:0.85em; font-weight:600;"></span>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    container.innerHTML = '<p style="color:#ef4444;">Error loading alert config.</p>';
+  }
+}
+
+async function saveTreasuryAlertsCfg() {
+  const feedback = document.getElementById('alertsCfgFeedback');
+  const payload = {
+    txAlertsEnabled: true,
+    txAlertChannelId: document.getElementById('alertsCfgChannel').value.trim(),
+    txAlertIncomingOnly: document.getElementById('alertsCfgIncoming').checked,
+    txAlertMinSol: parseFloat(document.getElementById('alertsCfgMinSol').value) || 0
+  };
+  if (!payload.txAlertChannelId) {
+    payload.txAlertsEnabled = false;
+  }
+  try {
+    const res = await fetch('/api/admin/treasury/config', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      credentials: 'include', body: JSON.stringify(payload)
+    });
+    const result = await res.json();
+    feedback.style.color = result.success ? '#4ade80' : '#ef4444';
+    feedback.textContent = result.success ? '✓ Saved!' : (result.message || 'Save failed');
+    setTimeout(() => { feedback.textContent = ''; }, 3000);
+  } catch (err) {
+    feedback.style.color = '#ef4444';
+    feedback.textContent = 'Network error';
+  }
+}
+
+function exportTreasuryCSV() {
+  // TODO: multi-wallet export. For now, export single wallet info from visible table.
+  const table = document.querySelector('#treasuryWalletTableContainer table');
+  if (!table) { showSuccess('No wallet data to export.'); return; }
+  let csv = 'Address,Channel,Status\n';
+  table.querySelectorAll('tbody tr').forEach(row => {
+    const cells = row.querySelectorAll('td');
+    const addr = cells[0]?.textContent?.trim().replace(/[{}\n]/g, ' ').replace(/\s+/g, ' ') || '';
+    const ch = cells[1]?.textContent?.trim() || '';
+    const status = cells[3]?.textContent?.trim() || '';
+    csv += `"${addr}","${ch}","${status}"\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'treasury-wallets.csv';
+  a.click();
 }
 
 function toggleMobileMenu() {

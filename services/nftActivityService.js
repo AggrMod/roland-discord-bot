@@ -528,7 +528,9 @@ class NFTActivityService {
               logger.log(`[nft-poll] ${col.collection_name} Tensor txs=${txs.length}`);
             }
           } catch (tensorErr) {
-            logger.error(`[nft-poll] Tensor error for ${col.collection_name}:`, tensorErr.message);
+            if (!tensorErr.message?.includes('fetch failed') && !tensorErr.message?.includes('abort')) {
+              logger.error(`[nft-poll] Tensor error for ${col.collection_name}:`, tensorErr.message);
+            }
           }
 
           await new Promise(r => setTimeout(r, 600));

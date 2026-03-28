@@ -436,6 +436,15 @@ function initDatabase() {
   try { db.exec("ALTER TABLE tenant_limits ADD COLUMN mock_data_enabled INTEGER DEFAULT 0"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_modules ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
   try { db.exec("ALTER TABLE nft_tracked_collections ADD COLUMN guild_id TEXT NOT NULL DEFAULT ''"); } catch (e) {}
+  // Add UNIQUE index to tenant_modules for ON CONFLICT upsert — deduplicate first, keep latest
+  try {
+    db.exec(`
+      DELETE FROM tenant_modules WHERE id NOT IN (
+        SELECT MAX(id) FROM tenant_modules GROUP BY tenant_id, module_key
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_modules_unique ON tenant_modules(tenant_id, module_key);
+    `);
+  } catch (e) {}
   try { db.exec("ALTER TABLE tenant_modules ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_branding ADD COLUMN support_url TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_branding ADD COLUMN secondary_color TEXT"); } catch (e) {}

@@ -49,14 +49,14 @@ class NFTActivityService {
     }
   }
 
-  addTrackedCollection({ guildId, collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer }) {
+  addTrackedCollection({ guildId, collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer, meSymbol }) {
     try {
       if (!collectionAddress || !collectionName || !channelId) {
         return { success: false, message: 'collectionAddress, collectionName, and channelId are required' };
       }
       const result = db.prepare(`
-        INSERT INTO nft_tracked_collections (guild_id, collection_address, collection_name, channel_id, track_mint, track_sale, track_list, track_delist, track_transfer)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO nft_tracked_collections (guild_id, collection_address, collection_name, channel_id, track_mint, track_sale, track_list, track_delist, track_transfer, me_symbol)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         guildId || '',
         collectionAddress.trim(),
@@ -66,7 +66,8 @@ class NFTActivityService {
         trackSale !== undefined ? (trackSale ? 1 : 0) : 1,
         trackList !== undefined ? (trackList ? 1 : 0) : 1,
         trackDelist !== undefined ? (trackDelist ? 1 : 0) : 1,
-        trackTransfer !== undefined ? (trackTransfer ? 1 : 0) : 0
+        trackTransfer !== undefined ? (trackTransfer ? 1 : 0) : 0,
+        (meSymbol || '').trim()
       );
       return { success: true, message: 'Collection added', id: result.lastInsertRowid };
     } catch (e) {
@@ -97,7 +98,7 @@ class NFTActivityService {
 
   updateTrackedCollection(id, updates, guildId) {
     try {
-      const allowed = ['collection_name', 'channel_id', 'track_mint', 'track_sale', 'track_list', 'track_delist', 'track_transfer', 'enabled'];
+      const allowed = ['collection_name', 'channel_id', 'track_mint', 'track_sale', 'track_list', 'track_delist', 'track_transfer', 'enabled', 'me_symbol'];
       const fieldMap = {
         collectionName: 'collection_name',
         channelId: 'channel_id',
@@ -106,7 +107,8 @@ class NFTActivityService {
         trackList: 'track_list',
         trackDelist: 'track_delist',
         trackTransfer: 'track_transfer',
-        enabled: 'enabled'
+        enabled: 'enabled',
+        meSymbol: 'me_symbol'
       };
       const setClauses = [];
       const params = [];
@@ -419,8 +421,12 @@ class NFTActivityService {
 
       for (const col of collections) {
         try {
-          // Magic Eden collection activities API — works with verified collection address as symbol
-          const meUrl = `https://api-mainnet.magiceden.dev/v2/collections/${col.collection_address}/activities?offset=0&limit=100&type[]=list&type[]=buyNow&type[]=cancelBid`;
+          if (!col.me_symbol) {
+            logger.log(`[nft-poll] ${col.collection_name} no ME symbol configured, skipping`);
+            continue;
+          }
+          // Magic Eden collection activities API — uses ME collection slug
+          const meUrl = `https://api-mainnet.magiceden.dev/v2/collections/${col.me_symbol}/activities?offset=0&limit=100&type[]=list&type[]=buyNow`;
           const res = await fetch(meUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
 
           if (!res.ok) {

@@ -36,6 +36,7 @@ function initDatabase() {
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN on_hold_reason TEXT'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN promoted_by TEXT'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN paused INTEGER DEFAULT 0'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE nft_tracked_collections ADD COLUMN me_symbol TEXT DEFAULT ""'));
 
   // VP decoupling: role-to-voting-power mapping table
   db.exec(`

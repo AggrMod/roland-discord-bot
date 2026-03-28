@@ -4324,6 +4324,10 @@ async function loadNftTrackerView() {
             <label style="${fieldLabel}">Collection Address</label>
             <input type="text" id="nftAddAddress" placeholder="Solana collection address" style="${fieldInput}" required>
           </div>
+          <div>
+            <label style="${fieldLabel}">Magic Eden Symbol <small style="color:#94a3b8;">(e.g. vault_runners — needed for listing alerts)</small></label>
+            <input type="text" id="nftAddMeSymbol" placeholder="vault_runners" style="${fieldInput}">
+          </div>
         </div>
         <div style="${gridRow}margin-top:var(--space-3);">
           <div>
@@ -4384,7 +4388,8 @@ async function loadNftTrackerView() {
           trackSale: !!document.getElementById('nftAddSale')?.checked,
           trackList: !!document.getElementById('nftAddList')?.checked,
           trackDelist: !!document.getElementById('nftAddDelist')?.checked,
-          trackTransfer: !!document.getElementById('nftAddTransfer')?.checked
+          trackTransfer: !!document.getElementById('nftAddTransfer')?.checked,
+          meSymbol: document.getElementById('nftAddMeSymbol')?.value?.trim() || ''
         };
         const res = await fetch('/api/admin/nft-tracker/collections', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
@@ -4395,6 +4400,7 @@ async function loadNftTrackerView() {
           if (feedback) { feedback.style.color = '#86efac'; feedback.textContent = '✓ Collection added!'; setTimeout(() => { feedback.textContent = ''; }, 5000); }
           document.getElementById('nftAddName').value = '';
           document.getElementById('nftAddAddress').value = '';
+          if (document.getElementById('nftAddMeSymbol')) document.getElementById('nftAddMeSymbol').value = '';
           renderNftCollectionsTable();
         } else {
           if (feedback) { feedback.style.color = '#fca5a5'; feedback.textContent = data.message || 'Failed to add collection'; setTimeout(() => { feedback.textContent = ''; }, 8000); }
@@ -5839,6 +5845,8 @@ function openAddCollectionModal() {
         <input id="watchCollNameInput" type="text" placeholder="Human-readable name" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
       <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Alert Channel ID *</label>
         <input id="watchCollChannelInput" type="text" placeholder="Discord channel ID" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; font-family:monospace;"></div>
+      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Magic Eden Symbol <small style="color:#94a3b8;">(e.g. vault_runners — needed for listing alerts)</small></label>
+        <input id="watchCollMeSymbolInput" type="text" placeholder="vault_runners" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
     </div>
   `;
   confirmCallback = async () => {
@@ -5855,7 +5863,7 @@ function openAddCollectionModal() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ collectionAddress, collectionName, channelId })
+        body: JSON.stringify({ collectionAddress, collectionName, channelId, meSymbol: document.getElementById('watchCollMeSymbolInput')?.value?.trim() || '' })
       });
       const data = await response.json();
       if (data.success) {

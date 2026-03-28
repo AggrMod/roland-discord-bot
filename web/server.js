@@ -2914,8 +2914,8 @@ class WebServer {
 
     this.app.post('/api/admin/nft-tracker/collections', adminAuthMiddleware, (req, res) => {
       try {
-        const { collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer } = req.body;
-        const result = nftActivityService.addTrackedCollection({ guildId: req.guildId, collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer });
+        const { collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer, meSymbol } = req.body;
+        const result = nftActivityService.addTrackedCollection({ guildId: req.guildId, collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer, meSymbol });
         if (!result.success) return res.status(400).json(result);
         nftActivityService.syncAddressToHelius(collectionAddress, 'add').catch(() => {});
         res.json(result);

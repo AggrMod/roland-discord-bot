@@ -721,6 +721,12 @@ async function loadPortal() {
       await checkAdminStatus();
 
       const canProceed = enforceInitialServerSelection();
+      const hardGate = requiresServerSelectionGate();
+      if (hardGate) {
+        switchSection('servers');
+        return;
+      }
+
       if (canProceed) {
         await syncTenantModuleNavVisibility();
         loadDashboardData();

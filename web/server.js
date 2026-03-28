@@ -1764,7 +1764,10 @@ class WebServer {
     // Trait CRUD
     this.app.post('/api/admin/roles/traits', adminAuthMiddleware, (req, res) => {
       try {
-        const { traitType, traitValue, roleId, collectionId, description } = req.body;
+        const { traitType, roleId, collectionId, description } = req.body;
+        // Support traitValues array; fall back to single traitValue for backward compat
+        const traitValues = req.body.traitValues || (req.body.traitValue ? [req.body.traitValue] : []);
+        const traitValue = traitValues[0] || req.body.traitValue;
 
         if (!traitType || !traitValue || !roleId) {
           return res.status(400).json({ success: false, message: 'Missing required fields' });
@@ -1782,7 +1785,7 @@ class WebServer {
             String(t.traitValue || t.trait_value).toLowerCase() === String(traitValue).toLowerCase()
           );
           if (exists) return res.status(400).json({ success: false, message: 'Trait rule already exists' });
-          cfg.traitRoles.push({ traitType, traitValue, roleId, collectionId, description: description || '' });
+          cfg.traitRoles.push({ traitType, traitValue, traitValues, roleId, collectionId, description: description || '' });
           saveTenantRoleConfig(req.guildId, cfg);
           return res.json({ success: true, message: 'Trait rule added' });
         }
@@ -1799,6 +1802,10 @@ class WebServer {
       try {
         const { traitType, traitValue } = req.params;
         const { roleId, collectionId, description } = req.body;
+        // Support traitValues array; fall back to body traitValue or param traitValue
+        const traitValues = req.body.traitValues || (req.body.traitValue ? [req.body.traitValue] : [traitValue]);
+        const newTraitValue = req.body.traitValue || traitValues[0] || traitValue;
+        const newTraitType = req.body.traitType || traitType;
 
         if (!roleId) {
           return res.status(400).json({ success: false, message: 'roleId is required' });
@@ -1816,7 +1823,7 @@ class WebServer {
             String(t.traitValue || t.trait_value).toLowerCase() === String(traitValue).toLowerCase()
           );
           if (idx < 0) return res.status(404).json({ success: false, message: 'Trait rule not found' });
-          cfg.traitRoles[idx] = { ...cfg.traitRoles[idx], traitType, traitValue, roleId, collectionId, description: description || '' };
+          cfg.traitRoles[idx] = { ...cfg.traitRoles[idx], traitType: newTraitType, traitValue: newTraitValue, traitValues, roleId, collectionId, description: description || '' };
           saveTenantRoleConfig(req.guildId, cfg);
           return res.json({ success: true, message: 'Trait rule updated' });
         }

@@ -4584,82 +4584,87 @@ async function loadAdminRoles() {
     // Keep legacy cache for export
     adminRolesCache = [...tiers.map(t => ({ ...t, _type: 'tier' })), ...traitRoles.map(t => ({ ...t, _type: 'trait' }))];
 
+    const allRules = [
+      ...tiers.map((t, idx) => ({ ...t, _type: 'collection', _idx: idx })),
+      ...traitRoles.map((t, idx) => ({ ...t, _type: 'trait', _idx: idx }))
+    ];
+
     let html = '';
+    html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <p style="color:var(--text-secondary); font-size:0.85em; margin:0;">Define collection-based tiers and trait-based roles for automatic Discord role assignment.</p>
+      <button class="btn-primary" onclick="openAddRuleModal()" style="font-size:0.85em; padding:8px 16px; white-space:nowrap;">➕ Add Rule</button>
+    </div>`;
 
-    // === TIERS SECTION ===
-    html += `<h4 style="color:#c9d6ff; margin-bottom:8px;">🏆 NFT Holder Tiers</h4>`;
-    html += `<p style="color:var(--text-secondary); font-size:0.85em; margin-bottom:12px;">Define tier levels based on how many NFTs a holder owns. Each tier grants a Discord role.</p>`;
-    if (tiers.length === 0) {
-      html += `<div style="padding:16px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.15); border-radius:10px; color:var(--text-secondary); margin-bottom:20px;">No tiers configured. Click "➕ Add Tier" to create one.</div>`;
+    if (allRules.length === 0) {
+      html += `<div style="padding:24px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.15); border-radius:10px; color:var(--text-secondary); text-align:center;">No verification rules yet. Click <strong>+ Add Rule</strong> to create one.</div>`;
     } else {
-      const tierRows = tiers.map((tier, idx) => `
-        <tr>
-          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#e0e7ff; font-weight:600;">${escapeHtml(tier.name)}</td>
-          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#a5b4fc; font-family:monospace; font-size:0.82em;">${escapeHtml(tier.collectionId || tier.collection_id || '—')}</td>
-          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#c7d2fe;">${tier.minNFTs}</td>
-          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#c7d2fe;">${tier.maxNFTs === Infinity || tier.maxNFTs >= 999999 ? '∞' : tier.maxNFTs}</td>
+      const truncId = (id) => id && id.length > 16 ? id.slice(0, 8) + '...' + id.slice(-4) : (id || '—');
+      const resolveRole = (roleId) => {
+        if (!roleId) return '<span style="color:var(--text-muted);">Not set</span>';
+        const role = (discordRolesCache || []).find(r => r.id === roleId);
+        if (role) {
+          const dot = role.color && role.color !== '#000000' ? `<span style="color:${role.color};">\u25CF</span> ` : '';
+          return dot + escapeHtml(role.name);
+        }
+        return `<span style="font-family:monospace;font-size:0.85em;">${escapeHtml(roleId)}</span>`;
+      };
 
-          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#93c5fd; font-family:monospace; font-size:0.85em;">${escapeHtml(tier.roleId || 'Not set')}</td>
-          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); text-align:right;">
-            <button onclick="editTier(${idx})" style="width:32px; height:32px; background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.35); border-radius:6px; cursor:pointer; color:#818cf8; font-size:0.9em;">✏️</button>
-            <button onclick="deleteTier(${idx})" style="width:32px; height:32px; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.35); border-radius:6px; cursor:pointer; color:#fca5a5; font-size:0.9em; margin-left:4px;">🗑️</button>
+      const rows = allRules.map(rule => {
+        const isCollection = rule._type === 'collection';
+        const badge = isCollection
+          ? '<span class="badge-collection">Collection</span>'
+          : '<span class="badge-trait">Trait</span>';
+        const ruleName = isCollection
+          ? escapeHtml(rule.name || 'Unnamed')
+          : escapeHtml(rule.traitType || rule.trait_type || '');
+        const colId = isCollection
+          ? (rule.collectionId || rule.collection_id || '')
+          : (rule.collectionId || rule.trait_collection_id || '');
+        const roleId = rule.roleId || '';
+        let details = '';
+        if (isCollection) {
+          const max = (rule.maxNFTs === Infinity || rule.maxNFTs >= 999999) ? '∞' : rule.maxNFTs;
+          details = `Min: ${rule.minNFTs}, Max: ${max} NFTs`;
+        } else {
+          const vals = rule.traitValues || rule.trait_values || (rule.traitValue || rule.trait_value ? [rule.traitValue || rule.trait_value] : []);
+          const valArr = Array.isArray(vals) ? vals : String(vals).split(',').map(v => v.trim()).filter(Boolean);
+          details = valArr.length ? 'Values: ' + valArr.map(v => escapeHtml(v)).join(', ') : '—';
+        }
+        const editFn = isCollection ? `editTier(${rule._idx})` : `editTraitRule(${rule._idx})`;
+        const deleteFn = isCollection ? `deleteTier(${rule._idx})` : `deleteTraitRule(${rule._idx})`;
+
+        return `<tr>
+          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15);">${badge}</td>
+          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#e0e7ff; font-weight:600;">${ruleName}</td>
+          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); font-family:monospace; font-size:0.82em; color:#a5b4fc;" title="${escapeHtml(colId)}">
+            <span style="cursor:pointer;" onclick="navigator.clipboard.writeText('${escapeHtml(colId)}');showSuccess('Copied!')">${escapeHtml(truncId(colId))}</span>
           </td>
-        </tr>
-      `).join('');
+          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#93c5fd; font-size:0.85em;">${resolveRole(roleId)}</td>
+          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:var(--text-secondary); font-size:0.85em;">${details}</td>
+          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); text-align:right; white-space:nowrap;">
+            <button onclick="${editFn}" style="width:32px; height:32px; background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.35); border-radius:6px; cursor:pointer; color:#818cf8; font-size:0.9em;">✏️</button>
+            <button onclick="${deleteFn}" style="width:32px; height:32px; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.35); border-radius:6px; cursor:pointer; color:#fca5a5; font-size:0.9em; margin-left:4px;">🗑️</button>
+          </td>
+        </tr>`;
+      }).join('');
+
       html += `
-        <div style="overflow:auto; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.5); margin-bottom:20px;">
+        <div style="overflow:auto; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.5); margin-bottom:16px;">
           <table style="width:100%; border-collapse:collapse; font-size:0.9em;">
             <thead><tr style="background:rgba(99,102,241,0.12); text-align:left;">
-              <th style="padding:10px; color:#c9d6ff;">Tier Name</th>
+              <th style="padding:10px; color:#c9d6ff;">Type</th>
+              <th style="padding:10px; color:#c9d6ff;">Rule Name</th>
               <th style="padding:10px; color:#c9d6ff;">Collection ID</th>
-              <th style="padding:10px; color:#c9d6ff;">Min NFTs</th>
-              <th style="padding:10px; color:#c9d6ff;">Max NFTs</th>
               <th style="padding:10px; color:#c9d6ff;">Discord Role</th>
+              <th style="padding:10px; color:#c9d6ff;">Details</th>
               <th style="padding:10px; color:#c9d6ff; text-align:right;">Actions</th>
             </tr></thead>
-            <tbody>${tierRows}</tbody>
+            <tbody>${rows}</tbody>
           </table>
         </div>`;
     }
-    html += `<button class="btn-primary" onclick="openAddTierModal()" style="font-size:0.85em; padding:8px 16px; margin-bottom:24px;">➕ Add Tier</button>`;
 
-    // === TRAIT RULES SECTION ===
-    html += `<h4 style="color:#c9d6ff; margin:20px 0 8px;">🎭 Trait-Based Roles</h4>`;
-    html += `<p style="color:var(--text-secondary); font-size:0.85em; margin-bottom:12px;">Assign Discord roles automatically based on specific NFT traits (e.g. "Background: Gold" → Gold Role).</p>`;
-    if (traitRoles.length === 0) {
-      html += `<div style="padding:16px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.15); border-radius:10px; color:var(--text-secondary); margin-bottom:20px;">No trait rules configured. Click "➕ Add Trait Rule" to create one.</div>`;
-    } else {
-      const traitRows = traitRoles.map((tr, idx) => `
-        <tr>
-          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#e0e7ff; font-weight:600;">${escapeHtml(tr.traitType || tr.trait_type || '')}</td>
-          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#c7d2fe;">${escapeHtml(tr.traitValue || tr.trait_value || '')}</td>
-          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#a5b4fc; font-family:monospace; font-size:0.85em;">${escapeHtml(tr.collectionId || tr.trait_collection_id || '—')}</td>
-          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#93c5fd; font-family:monospace; font-size:0.85em;">${escapeHtml(tr.roleId || '')}</td>
-          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:var(--text-secondary); font-size:0.85em;">${escapeHtml(tr.description || '—')}</td>
-          <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); text-align:right;">
-            <button onclick="editTraitRule(${idx})" style="width:32px; height:32px; background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.35); border-radius:6px; cursor:pointer; color:#818cf8; font-size:0.9em;">✏️</button>
-            <button onclick="deleteTraitRule(${idx})" style="width:32px; height:32px; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.35); border-radius:6px; cursor:pointer; color:#fca5a5; font-size:0.9em; margin-left:4px;">🗑️</button>
-          </td>
-        </tr>
-      `).join('');
-      html += `
-        <div style="overflow:auto; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.5); margin-bottom:20px;">
-          <table style="width:100%; border-collapse:collapse; font-size:0.9em;">
-            <thead><tr style="background:rgba(99,102,241,0.12); text-align:left;">
-              <th style="padding:10px; color:#c9d6ff;">Trait Type</th>
-              <th style="padding:10px; color:#c9d6ff;">Trait Value</th>
-              <th style="padding:10px; color:#c9d6ff;">Collection</th>
-              <th style="padding:10px; color:#c9d6ff;">Discord Role ID</th>
-              <th style="padding:10px; color:#c9d6ff;">Description</th>
-              <th style="padding:10px; color:#c9d6ff; text-align:right;">Actions</th>
-            </tr></thead>
-            <tbody>${traitRows}</tbody>
-          </table>
-        </div>`;
-    }
-    html += `<button class="btn-primary" onclick="openAddTraitModal()" style="font-size:0.85em; padding:8px 16px;">➕ Add Trait Rule</button>`;
-
-    html += `<div style="margin-top:16px; color:var(--text-secondary); font-size:0.9em;">Showing ${tiers.length} tier(s) and ${traitRoles.length} trait rule(s)</div>`;
+    html += `<div style="margin-top:8px; color:var(--text-secondary); font-size:0.9em;">Showing ${tiers.length} collection rule(s) and ${traitRoles.length} trait rule(s)</div>`;
 
     content.innerHTML = html;
   } catch (e) {
@@ -4667,104 +4672,265 @@ async function loadAdminRoles() {
   }
 }
 
-// ==================== TIER CRUD ====================
-function openAddTierModal() {
-  if (!isAdmin) return;
-  showConfirmModal('Add Tier', '', null);
-  const title = document.getElementById('confirmTitle');
-  const body = document.getElementById('confirmMessage');
-  const btn = document.getElementById('confirmButton');
-  title.textContent = '🏆 Add NFT Tier';
-  btn.textContent = 'Create Tier';
-  btn.classList.remove('btn-danger');
-  btn.classList.add('btn-primary');
-  body.innerHTML = tierFormHTML();
-  setTimeout(() => populateRoleSelect('tierRoleIdInput', ''), 0);
-  confirmCallback = () => saveTierFromForm('add');
+// ==================== UNIFIED VERIFICATION RULE MODAL ====================
+let _editingRuleType = null; // "tier" or "trait"
+let _editingRuleIdx = null;
+let _traitValues = [];
+
+function _ensureAddRuleModal() {
+  if (document.getElementById('addRuleModal')) return;
+  const modal = document.createElement('div');
+  modal.id = 'addRuleModal';
+  modal.className = 'modal-overlay';
+  modal.style.display = 'none';
+  modal.innerHTML = `
+    <div class="modal-box" style="max-width:520px;">
+      <div class="modal-header">
+        <h3 id="addRuleModalTitle">Add Verification Rule</h3>
+        <button onclick="closeAddRuleModal()" class="modal-close">\u2715</button>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom:20px;">
+          <label style="display:block;font-size:0.85em;color:var(--text-secondary);margin-bottom:8px;">Rule Type</label>
+          <div style="display:flex;gap:12px;">
+            <label class="rule-type-option" id="ruleTypeCollectionLabel">
+              <input type="radio" name="ruleType" value="collection" id="ruleTypeCollection" onchange="onRuleTypeChange()" checked>
+              <span>\uD83C\uDFC6 Collection</span>
+              <small>Min/max NFT count</small>
+            </label>
+            <label class="rule-type-option" id="ruleTypeTraitLabel">
+              <input type="radio" name="ruleType" value="trait" id="ruleTypeTrait" onchange="onRuleTypeChange()">
+              <span>\uD83C\uDFAD Trait</span>
+              <small>Specific NFT traits</small>
+            </label>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:14px;">
+          <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Collection ID <span style="color:#f87171;">*</span></label>
+          <input type="text" id="ruleCollectionId" placeholder="Solana collection address" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
+        </div>
+        <div class="form-group" style="margin-bottom:14px;">
+          <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Discord Role <span style="color:#f87171;">*</span></label>
+          ${roleSelectHTML('ruleRoleId', '')}
+        </div>
+        <div id="collectionFields">
+          <div class="form-group" style="margin-bottom:14px;">
+            <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Tier Name</label>
+            <input type="text" id="ruleTierName" placeholder="e.g. Gold Holder" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+            <div class="form-group">
+              <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Min NFTs</label>
+              <input type="number" id="ruleMinNFTs" value="1" min="0" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
+            </div>
+            <div class="form-group">
+              <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Max NFTs <small style="color:var(--text-secondary);">(blank = \u221E)</small></label>
+              <input type="number" id="ruleMaxNFTs" placeholder="\u221E" min="0" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
+            </div>
+          </div>
+        </div>
+        <div id="traitFields" style="display:none;">
+          <div class="form-group" style="margin-bottom:14px;">
+            <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Trait Type <span style="color:#f87171;">*</span></label>
+            <input type="text" id="ruleTraitType" placeholder="e.g. Background, Headwear, Eyes" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
+          </div>
+          <div class="form-group" style="margin-bottom:14px;">
+            <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Trait Values <span style="color:#f87171;">*</span>
+              <small style="color:var(--text-secondary); font-weight:normal;"> \u2014 press Enter or comma to add</small>
+            </label>
+            <div class="trait-values-container" onclick="document.getElementById('traitValueInput')?.focus()">
+              <div id="traitValueTags" class="trait-value-tags"></div>
+              <input type="text" id="traitValueInput" placeholder="e.g. Gold" class="trait-value-input"
+                onkeydown="onTraitValueKeydown(event)">
+            </div>
+            <input type="hidden" id="ruleTraitValues">
+          </div>
+          <div class="form-group" style="margin-bottom:14px;">
+            <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Description <small style="color:var(--text-secondary);">(optional)</small></label>
+            <input type="text" id="ruleDescription" placeholder="e.g. Gold background holders" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeAddRuleModal()">Cancel</button>
+        <button class="btn-primary" onclick="saveRule()" id="saveRuleBtn">Save Rule</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function onRuleTypeChange() {
+  const isTrait = document.getElementById('ruleTypeTrait').checked;
+  document.getElementById('collectionFields').style.display = isTrait ? 'none' : '';
+  document.getElementById('traitFields').style.display = isTrait ? '' : 'none';
+}
+
+function onTraitValueKeydown(e) {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    const val = e.target.value.trim().replace(/,$/, '');
+    if (val) addTraitValueTag(val);
+    e.target.value = '';
+  } else if (e.key === 'Backspace' && !e.target.value && _traitValues.length) {
+    removeTraitValueTag(_traitValues.length - 1);
+  }
+}
+
+function addTraitValueTag(val) {
+  if (_traitValues.includes(val)) return;
+  _traitValues.push(val);
+  renderTraitValueTags();
+}
+
+function removeTraitValueTag(idx) {
+  _traitValues.splice(idx, 1);
+  renderTraitValueTags();
+}
+
+function renderTraitValueTags() {
+  const container = document.getElementById('traitValueTags');
+  if (!container) return;
+  container.innerHTML = _traitValues.map((v, i) => `
+    <span class="trait-value-tag">${escapeHtml(v)}<button onclick="removeTraitValueTag(${i})" type="button">\u00D7</button></span>
+  `).join('');
+  document.getElementById('ruleTraitValues').value = _traitValues.join(',');
+  document.getElementById('traitValueInput')?.focus();
+}
+
+function openAddRuleModal(editData = null) {
+  _ensureAddRuleModal();
+  _traitValues = [];
+  _editingRuleType = editData?._type || null;
+  _editingRuleIdx = editData?._idx ?? null;
+
+  // Reset form
+  document.getElementById('ruleCollectionId').value = '';
+  document.getElementById('ruleRoleId').value = '';
+  document.getElementById('ruleTierName').value = '';
+  document.getElementById('ruleMinNFTs').value = '1';
+  document.getElementById('ruleMaxNFTs').value = '';
+  document.getElementById('ruleTraitType').value = '';
+  document.getElementById('ruleDescription').value = '';
+  document.getElementById('traitValueTags').innerHTML = '';
+  document.getElementById('traitValueInput').value = '';
+  document.getElementById('ruleTraitValues').value = '';
+
+  // Set type radio
+  const isTrait = editData?._type === 'trait';
+  document.getElementById(isTrait ? 'ruleTypeTrait' : 'ruleTypeCollection').checked = true;
+  onRuleTypeChange();
+
+  // Populate edit data
+  if (editData) {
+    document.getElementById('ruleCollectionId').value = editData.collectionId || editData.collection_id || editData.trait_collection_id || '';
+    document.getElementById('ruleRoleId').value = editData.roleId || '';
+    document.getElementById('addRuleModalTitle').textContent = 'Edit Verification Rule';
+    if (isTrait) {
+      document.getElementById('ruleTraitType').value = editData.traitType || editData.trait_type || '';
+      document.getElementById('ruleDescription').value = editData.description || '';
+      const vals = editData.traitValues || editData.trait_values || (editData.traitValue || editData.trait_value ? [editData.traitValue || editData.trait_value] : []);
+      _traitValues = Array.isArray(vals) ? [...vals] : String(vals).split(',').map(v => v.trim()).filter(Boolean);
+      renderTraitValueTags();
+    } else {
+      document.getElementById('ruleTierName').value = editData.name || '';
+      document.getElementById('ruleMinNFTs').value = editData.minNFTs ?? 1;
+      document.getElementById('ruleMaxNFTs').value = (editData.maxNFTs >= 999999 || editData.maxNFTs === Infinity) ? '' : (editData.maxNFTs ?? '');
+    }
+  } else {
+    document.getElementById('addRuleModalTitle').textContent = 'Add Verification Rule';
+  }
+
+  // Populate role dropdown
+  populateRoleSelect('ruleRoleId', editData?.roleId || '');
+
+  document.getElementById('addRuleModal').style.display = 'flex';
+}
+
+function closeAddRuleModal() {
+  document.getElementById('addRuleModal').style.display = 'none';
+}
+
+async function saveRule() {
+  const isTrait = document.getElementById('ruleTypeTrait').checked;
+  const collectionId = document.getElementById('ruleCollectionId').value.trim();
+  const roleId = document.getElementById('ruleRoleId').value;
+  if (!collectionId || !roleId) { showError('Collection ID and Discord Role are required.'); return; }
+
+  const btn = document.getElementById('saveRuleBtn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+
+  try {
+    if (isTrait) {
+      const traitType = document.getElementById('ruleTraitType').value.trim();
+      const traitValues = [..._traitValues];
+      if (!traitType || !traitValues.length) { showError('Trait type and at least one trait value are required.'); btn.disabled = false; btn.textContent = 'Save Rule'; return; }
+      const description = document.getElementById('ruleDescription').value.trim();
+      // For backward compat, send both traitValue (first) and traitValues (array)
+      const traitValue = traitValues[0];
+
+      if (_editingRuleIdx !== null && _editingRuleType === 'trait') {
+        const existing = adminTraitsCache[_editingRuleIdx];
+        const origType = existing.traitType || existing.trait_type;
+        const origValue = existing.traitValue || existing.trait_value;
+        const response = await fetch(`/api/admin/roles/traits/${encodeURIComponent(origType)}/${encodeURIComponent(origValue)}`, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ traitType, traitValue, traitValues, collectionId, roleId, description })
+        });
+        const data = await response.json();
+        if (!data.success) throw new Error(data.message || 'Failed to update trait rule');
+      } else {
+        const response = await fetch('/api/admin/roles/traits', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ traitType, traitValue, traitValues, collectionId, roleId, description })
+        });
+        const data = await response.json();
+        if (!data.success) throw new Error(data.message || 'Failed to create trait rule');
+      }
+    } else {
+      const name = document.getElementById('ruleTierName').value.trim() || 'Tier';
+      const minNFTs = parseInt(document.getElementById('ruleMinNFTs').value) || 1;
+      const maxNFTsRaw = document.getElementById('ruleMaxNFTs').value;
+      const maxNFTs = maxNFTsRaw === '' ? 999999 : parseInt(maxNFTsRaw);
+
+      if (_editingRuleIdx !== null && _editingRuleType === 'tier') {
+        const existing = adminTiersCache[_editingRuleIdx];
+        const response = await fetch(`/api/admin/roles/tiers/${encodeURIComponent(existing.name)}`, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, minNFTs, maxNFTs, collectionId, roleId })
+        });
+        const data = await response.json();
+        if (!data.success) throw new Error(data.message || 'Failed to update tier');
+      } else {
+        const response = await fetch('/api/admin/roles/tiers', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, minNFTs, maxNFTs, collectionId, roleId })
+        });
+        const data = await response.json();
+        if (!data.success) throw new Error(data.message || 'Failed to create tier');
+      }
+    }
+    closeAddRuleModal();
+    await loadAdminRoles();
+    showSuccess('Rule saved.');
+  } catch(e) {
+    showError('Failed to save rule: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save Rule';
+  }
 }
 
 function editTier(idx) {
   if (!isAdmin || !adminTiersCache[idx]) return;
-  const tier = adminTiersCache[idx];
-  showConfirmModal('Edit Tier', '', null);
-  const title = document.getElementById('confirmTitle');
-  const body = document.getElementById('confirmMessage');
-  const btn = document.getElementById('confirmButton');
-  title.textContent = '✏️ Edit Tier: ' + escapeHtml(tier.name);
-  btn.textContent = 'Save Changes';
-  btn.classList.remove('btn-danger');
-  btn.classList.add('btn-primary');
-  body.innerHTML = tierFormHTML(tier);
-  setTimeout(() => populateRoleSelect('tierRoleIdInput', tier.roleId || ''), 0);
-  body.dataset.editName = tier.name;
-  confirmCallback = () => saveTierFromForm('edit', tier.name);
+  openAddRuleModal({ ...adminTiersCache[idx], _type: 'tier', _idx: idx });
 }
 
-function tierFormHTML(tier = {}) {
-  return `
-    <div style="display:grid; gap:14px;">
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Tier Name *</label>
-        <input id="tierNameInput" type="text" value="${escapeHtml(tier.name || '')}" placeholder="e.g. Whale, Diamond" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-        <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Minimum NFT count *</label>
-          <input id="tierMinInput" type="number" value="${tier.minNFTs ?? ''}" min="0" placeholder="1" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
-        <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Maximum NFT count</label>
-          <input id="tierMaxInput" type="number" value="${tier.maxNFTs >= 999999 ? '' : (tier.maxNFTs ?? '')}" min="0" placeholder="∞ (leave blank for unlimited)" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
-      </div>
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Collection ID <span style="color:#f87171; font-size:0.85em;">*</span></label>
-        <input id="tierCollectionInput" type="text" value="${escapeHtml(tier.collectionId || tier.collection_id || '')}" placeholder="Solana collection address" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;" required>
-        <div id="tierCollectionError" style="color:#f87171; font-size:0.82em; margin-top:4px; display:none;">Collection ID is required</div></div>
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Discord Role (optional)</label>
-        ${roleSelectHTML('tierRoleIdInput', tier.roleId || '')}</div>
-    </div>`;
-}
-
-async function saveTierFromForm(mode, originalName) {
-  const name = document.getElementById('tierNameInput')?.value.trim();
-  const minNFTs = parseInt(document.getElementById('tierMinInput')?.value);
-  const maxNFTs = document.getElementById('tierMaxInput')?.value.trim() === '' ? 999999 : parseInt(document.getElementById('tierMaxInput')?.value);
-  const collectionId = document.getElementById('tierCollectionInput')?.value.trim();
-  const roleId = document.getElementById('tierRoleIdInput')?.value || null;
-
-  if (!collectionId) {
-    const errEl = document.getElementById('tierCollectionError');
-    if (errEl) errEl.style.display = 'block';
-    return;
-  }
-
-  if (!name || isNaN(minNFTs)) {
-    showError('Please fill in tier name and minimum NFT count');
-    return;
-  }
-
-  try {
-    let url, method, body;
-    if (mode === 'add') {
-      url = '/api/admin/roles/tiers';
-      method = 'POST';
-      body = { name, minNFTs, maxNFTs, roleId, collectionId };
-    } else {
-      url = `/api/admin/roles/tiers/${encodeURIComponent(originalName)}`;
-      method = 'PUT';
-      body = { name, minNFTs, maxNFTs, roleId, collectionId };
-    }
-
-    const response = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(body)
-    });
-    const data = await response.json();
-    if (data.success) {
-      showSuccess(`Tier "${name}" ${mode === 'add' ? 'created' : 'updated'} successfully`);
-      await loadAdminRoles();
-    } else {
-      showError(data.message || `Failed to ${mode} tier`);
-    }
-  } catch (e) {
-    showError('Error saving tier: ' + e.message);
-  }
+function editTraitRule(idx) {
+  if (!isAdmin || !adminTraitsCache[idx]) return;
+  openAddRuleModal({ ...adminTraitsCache[idx], _type: 'trait', _idx: idx });
 }
 
 function deleteTier(idx) {
@@ -4784,104 +4950,6 @@ function deleteTier(idx) {
       showError('Error deleting tier: ' + e.message);
     }
   }, 'Delete');
-}
-
-// ==================== TRAIT RULE CRUD ====================
-function openAddTraitModal() {
-  if (!isAdmin) return;
-  showConfirmModal('Add Trait Rule', '', null);
-  const title = document.getElementById('confirmTitle');
-  const body = document.getElementById('confirmMessage');
-  const btn = document.getElementById('confirmButton');
-  title.textContent = '🎭 Add Trait Rule';
-  btn.textContent = 'Create Rule';
-  btn.classList.remove('btn-danger');
-  btn.classList.add('btn-primary');
-  body.innerHTML = traitFormHTML();
-  setTimeout(() => populateRoleSelect('traitRoleIdInput', ''), 0);
-  confirmCallback = () => saveTraitFromForm('add');
-}
-
-function editTraitRule(idx) {
-  if (!isAdmin || !adminTraitsCache[idx]) return;
-  const tr = adminTraitsCache[idx];
-  showConfirmModal('Edit Trait Rule', '', null);
-  const title = document.getElementById('confirmTitle');
-  const body = document.getElementById('confirmMessage');
-  const btn = document.getElementById('confirmButton');
-  title.textContent = '✏️ Edit Trait Rule';
-  btn.textContent = 'Save Changes';
-  btn.classList.remove('btn-danger');
-  btn.classList.add('btn-primary');
-  body.innerHTML = traitFormHTML(tr);
-  setTimeout(() => populateRoleSelect('traitRoleIdInput', tr.roleId || ''), 0);
-  body.dataset.editType = tr.traitType || tr.trait_type;
-  body.dataset.editValue = tr.traitValue || tr.trait_value;
-  confirmCallback = () => saveTraitFromForm('edit', tr.traitType || tr.trait_type, tr.traitValue || tr.trait_value);
-}
-
-function traitFormHTML(tr = {}) {
-  return `
-    <div style="display:grid; gap:14px;">
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Trait Type *</label>
-        <input id="traitTypeInput" type="text" value="${escapeHtml(tr.traitType || tr.trait_type || '')}" placeholder="e.g. Role, Background, Accessory" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Trait Value *</label>
-        <input id="traitValueInput" type="text" value="${escapeHtml(tr.traitValue || tr.trait_value || '')}" placeholder="e.g. Hitman, Gold Chain" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Collection ID *</label>
-        <input id="traitCollectionInput" type="text" value="${escapeHtml(tr.collectionId || tr.trait_collection_id || '')}" placeholder="Solana collection address" required style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
-        <div id="traitCollectionError" style="color:#fca5a5; font-size:0.8em; margin-top:4px; display:none;">Collection ID is required</div></div>
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Discord Role *</label>
-        ${roleSelectHTML('traitRoleIdInput', tr.roleId || '')}</div>
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Description (optional)</label>
-        <input id="traitDescInput" type="text" value="${escapeHtml(tr.description || '')}" placeholder="e.g. Assigned to Hitman trait holders" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
-    </div>`;
-}
-
-async function saveTraitFromForm(mode, origType, origValue) {
-  const traitType = document.getElementById('traitTypeInput')?.value.trim();
-  const traitValue = document.getElementById('traitValueInput')?.value.trim();
-  const roleId = document.getElementById('traitRoleIdInput')?.value;
-  const collectionId = document.getElementById('traitCollectionInput')?.value.trim() || '';
-  const description = document.getElementById('traitDescInput')?.value.trim() || null;
-
-  if (!collectionId) {
-    const errEl = document.getElementById('traitCollectionError');
-    if (errEl) errEl.style.display = 'block';
-    showError('Collection ID is required');
-    return;
-  }
-
-  if (!traitType || !traitValue || !roleId) {
-    showError('Please fill in trait type, value, and role ID');
-    return;
-  }
-
-  try {
-    let url, method;
-    if (mode === 'add') {
-      url = '/api/admin/roles/traits';
-      method = 'POST';
-    } else {
-      url = `/api/admin/roles/traits/${encodeURIComponent(origType)}/${encodeURIComponent(origValue)}`;
-      method = 'PUT';
-    }
-
-    const response = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ traitType, traitValue, roleId, collectionId, description })
-    });
-    const data = await response.json();
-    if (data.success) {
-      showSuccess(`Trait rule ${mode === 'add' ? 'created' : 'updated'} successfully`);
-      await loadAdminRoles();
-    } else {
-      showError(data.message || `Failed to ${mode} trait rule`);
-    }
-  } catch (e) {
-    showError('Error saving trait rule: ' + e.message);
-  }
 }
 
 function deleteTraitRule(idx) {

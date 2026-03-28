@@ -182,17 +182,29 @@ class NFTActivityService {
       const nfts = nftData.nfts || [];
       const mintFromNft = nfts[0]?.mint || null;
 
-      // Collection key: prefer explicit field, then first NFT mint address
-      const collectionKey = (
+      // Collection key: prefer explicit field, then check accountData for a tracked address
+      let collectionKey = (
         event.collectionKey || event.collection ||
-        nftData.collectionKey || nftData.collection ||
-        mintFromNft || ''
+        nftData.collectionKey || nftData.collection || ''
       ).toString().trim().toLowerCase() || null;
+
+      // If no direct collection key, scan accountData for any tracked collection address
+      if (!collectionKey) {
+        const accountAddresses = (event.accountData || []).map(a => (a.account || '').toLowerCase());
+        if (mintFromNft) accountAddresses.push(mintFromNft.toLowerCase());
+        const allTracked = db.prepare('SELECT collection_address FROM nft_tracked_collections WHERE enabled = 1').all();
+        for (const row of allTracked) {
+          if (accountAddresses.includes(row.collection_address.toLowerCase())) {
+            collectionKey = row.collection_address.toLowerCase();
+            break;
+          }
+        }
+      }
 
       // Check both nft_activity_watch (legacy) and nft_tracked_collections (new)
       const trackedByAddress = collectionKey ? this.getTrackedCollectionByAddress(collectionKey) : null;
       const watchedLegacy = collectionKey ? this.isWatched(collectionKey) : false;
-      if (collectionKey && !trackedByAddress && !watchedLegacy) {
+      if (!trackedByAddress && !watchedLegacy) {
         return { success: false, ignored: true, message: 'Collection not watched' };
       }
 

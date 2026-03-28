@@ -259,7 +259,8 @@ class NFTActivityService {
         toWallet,
         priceSol: Number.isFinite(priceSol) ? priceSol : null,
         txSignature,
-        eventTime
+        eventTime,
+        imageUrl: event.imageUrl || null
       }).catch(err => logger.error('Error sending NFT activity alert:', err));
 
       return { success: true };
@@ -344,6 +345,8 @@ class NFTActivityService {
       )
       .setFooter({ text: shortSig ? `Tx: ${shortSig}` : 'No tx' })
       .setTimestamp();
+
+    if (evt.imageUrl) embed.setThumbnail(evt.imageUrl);
 
     const explorer = evt.txSignature ? `https://solscan.io/tx/${evt.txSignature}` : null;
     await channel.send({
@@ -470,6 +473,7 @@ class NFTActivityService {
               toWallet: act.buyer || null,
               priceSol: act.price != null ? Number(act.price) : null,
               txSignature: sig,
+              imageUrl: act.image || null,
               eventTime: act.blockTime ? new Date(act.blockTime * 1000).toISOString() : new Date().toISOString(),
             };
 

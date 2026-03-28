@@ -702,6 +702,16 @@ function updateSidebarModuleNav() {
   if (mobileSettings) {
     mobileSettings.style.display = (hasServer && (isAdmin || isSuperadmin)) ? '' : 'none';
   }
+
+  // Hide dividers that have no visible nav items between them
+  document.querySelectorAll('.sidebar-section-divider').forEach(divider => {
+    let hasPrev = false, hasNext = false;
+    let el = divider.previousElementSibling;
+    while (el) { if (el.style.display !== 'none' && !el.classList.contains('sidebar-section-divider')) { hasPrev = true; break; } el = el.previousElementSibling; }
+    el = divider.nextElementSibling;
+    while (el && !el.classList.contains('sidebar-section-divider')) { if (el.style.display !== 'none') { hasNext = true; break; } el = el.nextElementSibling; }
+    divider.style.display = (hasPrev && hasNext) ? '' : 'none';
+  });
 }
 
 function applyTenantModuleNavVisibility(settings = {}) {

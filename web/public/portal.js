@@ -455,7 +455,7 @@ function updateActiveGuildBadge() {
     badge.style.display = 'inline-flex';
     badge.textContent = 'Select server';
     badge.title = 'No active server selected';
-    if (brandTitle) brandTitle.textContent = 'Solpranos';
+    if (brandTitle) brandTitle.textContent = 'GuildPilot';
   }
 
   renderNavServerSelect();
@@ -4910,7 +4910,7 @@ function openAddWatchCollectionModal() {
       <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Collection Address *</label>
         <input id="watchCollAddrInput" type="text" placeholder="Solana collection address" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; font-family:monospace;"></div>
       <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Collection Name (optional)</label>
-        <input id="watchCollNameInput" type="text" placeholder="e.g. Solpranos" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
+        <input id="watchCollNameInput" type="text" placeholder="e.g. Alpha Collection" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
     </div>
   `;
   confirmCallback = async () => {
@@ -5438,7 +5438,7 @@ function legacyOpenAddCollectionModal() {
   showConfirmModal(
     'Add Watched Collection',
     `
-      <input type="text" id="newCollectionInput" placeholder="Collection address or key (e.g., solpranos)" 
+      <input type="text" id="newCollectionInput" placeholder="Collection address or key (e.g., collection-key)" 
         style="width:100%; padding:12px; background:rgba(0,0,0,0.3); border:1px solid rgba(99,102,241,0.3); border-radius:8px; color:#e0e7ff; font-size:1em; margin-top:12px;" />
     `,
     async () => {

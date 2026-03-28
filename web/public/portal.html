@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Solpranos DAO Portal - Governance, Wallets, and Community Management">
-  <title>Solpranos Portal</title>
+  <meta name="description" content="Multi-tenant community operations portal - governance, wallets, and automation">
+  <title>GuildPilot Portal</title>
   <link rel="stylesheet" href="/portal-style.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
     <nav class="top-nav" role="navigation" aria-label="Main navigation">
       <div class="nav-brand">
         <button class="mobile-menu-btn" onclick="toggleMobileMenu()" aria-label="Open menu">☰</button>
-        <h1 id="navBrandTitle">Solpranos</h1>
+        <h1 id="navBrandTitle">GuildPilot</h1>
       </div>
       <div class="top-links" aria-label="Top links">
         <button class="top-link" onclick="switchSection('dashboard')">Home</button>
@@ -202,11 +202,11 @@
         <section id="section-dashboard" class="content-section">
           <header class="section-header">
             <h2>Dashboard</h2>
-            <p class="section-subtitle">Overview of your Solpranos activity and participation</p>
+            <p class="section-subtitle">Overview of your community activity and participation</p>
           </header>
 
           <div id="loginPrompt" class="card login-card">
-            <h3>Welcome to Solpranos DAO</h3>
+            <h3>Welcome to your community portal</h3>
             <p>Connect with Discord to access your personalized dashboard, manage governance participation, and join the community.</p>
             <button class="btn-primary" onclick="login()">
               <span>🎮</span>
@@ -481,7 +481,7 @@
           <div class="help-categories">
             <div class="card help-card" onclick="toggleHelp('getting-started')">
               <h3>🚀 Getting Started</h3>
-              <p>Learn the fundamentals of Solpranos DAO and how to participate</p>
+              <p>Learn the fundamentals and how to participate</p>
             </div>
             <div class="card help-card" onclick="toggleHelp('wallet-setup')">
               <h3>💼 Wallet Setup</h3>
@@ -503,20 +503,20 @@
 
           <div id="help-getting-started" class="help-content" style="display:none;">
             <div class="card">
-              <h3>🚀 Getting Started with Solpranos</h3>
+              <h3>🚀 Getting Started</h3>
               <div class="help-steps">
                 <div class="help-step">
                   <div class="step-number">1</div>
                   <div class="step-content">
                     <h4>Join the Discord</h4>
-                    <p>Become a member of the Solpranos Discord server to access all DAO features and community benefits.</p>
+                    <p>Become a member of the Discord server to access all features and community benefits.</p>
                   </div>
                 </div>
                 <div class="help-step">
                   <div class="step-number">2</div>
                   <div class="step-content">
                     <h4>Link Your Wallet</h4>
-                    <p>Navigate to the Wallets section and verify ownership of your Solana wallet containing Solpranos NFTs.</p>
+                    <p>Navigate to the Wallets section and verify ownership of your Solana wallet containing your community NFTs.</p>
                   </div>
                 </div>
                 <div class="help-step">
@@ -568,7 +568,7 @@
                 <ul>
                   <li>Never share your private key or seed phrase</li>
                   <li>Only sign messages you understand</li>
-                  <li>Verify you're on the official Solpranos portal before signing</li>
+                  <li>Verify you're on the official portal before signing</li>
                   <li>Keep your wallet software up to date</li>
                 </ul>
               </div>
@@ -905,7 +905,7 @@
 
           <div class="card" id="adminApiRefCard" style="display:none;">
             <h3 style="margin:0 0 var(--space-2) 0;">📖 API Reference</h3>
-            <p style="color:var(--text-secondary);font-size:0.9em;margin:0 0 var(--space-4) 0;">Public endpoints for integrating bot data into your website. Base URL: <code style="background:var(--bg-secondary);padding:2px 6px;border-radius:4px;font-size:0.9em;">https://discordbot.the-solpranos.com</code></p>
+            <p style="color:var(--text-secondary);font-size:0.9em;margin:0 0 var(--space-4) 0;">Public endpoints for integrating bot data into your website. Base URL: <code style="background:var(--bg-secondary);padding:2px 6px;border-radius:4px;font-size:0.9em;">https://your-domain.example.com</code></p>
             <div id="adminApiRefContent" style="color: var(--text-secondary);">Loading...</div>
           </div>
 

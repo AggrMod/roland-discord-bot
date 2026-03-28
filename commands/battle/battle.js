@@ -77,6 +77,11 @@ module.exports = {
           option
             .setName('excluded_role_3')
             .setDescription('Third excluded role (optional)')
+            .setRequired(false))
+        .addStringOption(option =>
+          option
+            .setName('era')
+            .setDescription('Battle theme/era (default: mafia)')
             .setRequired(false)))
     
     .addSubcommand(subcommand =>

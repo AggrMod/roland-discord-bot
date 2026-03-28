@@ -1,7 +1,9 @@
 const db = require('../database/battleDb');
+const mainDb = require('../database/db');
 const logger = require('../utils/logger');
 const { EmbedBuilder } = require('discord.js');
 const { randomInt } = require('crypto');
+const { BATTLE_ERAS } = require('../config/battleEras');
 
 // Mafia-themed flavor text
 const ATTACK_LINES = [
@@ -113,38 +115,7 @@ const ITEM_FIND_LINES = [
   "📿 {player} kisses their grandmother's rosary! (+9 HP)",
 ];
 
-const FLAVOR_LINES = [
-  "🚬 {player} lights up a cigar and contemplates life.",
-  "📞 {player} gets a call from the boss. 'Keep it clean.'",
-  "🎰 {player} checks the numbers from last night's game.",
-  "🚗 {player} hears sirens in the distance. Feds getting close.",
-  "🎵 {player} hums 'That's Amore' while reloading.",
-  "💼 {player} checks the briefcase. Everything's there.",
-  "🍷 {player} swirls a glass of expensive wine.",
-  "🕊️ {player} feeds the pigeons. Even killers have hobbies.",
-  "🎭 {player} practices their alibi in the mirror.",
-  "🌃 {player} admires the skyline. Beautiful city. Violent, but beautiful.",
-  "🔫 {player} cleans their gun. Maintenance is important.",
-  "📰 {player} reads the obituaries. Checking for friends.",
-  "🎪 {player} juggles grenades. Just kidding. Or are they?",
-  "🚪 {player} checks the exits. Always have an escape plan.",
-  "👔 {player} adjusts their tie. Looking sharp for the funeral. Theirs? Who knows.",
-  "🎬 {player} quotes The Godfather. Classic move.",
-  "🍝 {player} debates opening a legitimate restaurant. Nah.",
-  "💰 {player} counts money nervously. Is it all there?",
-  "🚕 {player} hails a cab. Wait, that's not a cab driver...",
-  "🎲 {player} rolls dice on the ground. Snake eyes. Bad omen.",
-  "📱 {player} checks their burner phone. 47 missed calls from mom.",
-  "🏪 {player} window-shops at the corner store. Maybe they'll rob it later.",
-  "⛪ {player} says a quick prayer. Insurance policy.",
-  "🎺 {player} hears jazz in the distance. Classy.",
-  "🌹 {player} smells a rose. Then sneezes violently.",
-  "🚬 {player} offers someone a cigarette. Declined. Rude.",
-  "🎩 {player} tips their fedora at a passing stranger.",
-  "🍕 {player} debates pineapple on pizza. Decides against it. Smart.",
-  "🔮 {player} visits a fortune teller. 'I see violence.' No kidding.",
-  "🎸 {player} air-guitars to Frank Sinatra. Embarrassing.",
-];
+// FLAVOR_LINES moved to config/battleEras.js — accessed via era config
 
 const LUCKY_ESCAPE_LINES = [
   "🍀 {player} dodges a bullet by sheer luck! (Avoided lethal damage)",
@@ -282,6 +253,22 @@ class BattleService {
     this.SWORD_EMOJI = '⚔️';
   }
 
+  getEraConfig(eraKey) {
+    return BATTLE_ERAS[eraKey] || BATTLE_ERAS.mafia;
+  }
+
+  getAssignedEras(guildId) {
+    try {
+      const rows = mainDb.prepare('SELECT era_key FROM battle_era_assignments WHERE guild_id = ?').all(guildId);
+      const assigned = rows.map(r => r.era_key);
+      if (!assigned.includes('mafia')) assigned.unshift('mafia');
+      return assigned;
+    } catch (error) {
+      logger.error('Error getting assigned eras:', error);
+      return ['mafia'];
+    }
+  }
+
   rand(maxExclusive) {
     if (!Number.isFinite(maxExclusive) || maxExclusive <= 0) return 0;
     return randomInt(maxExclusive);
@@ -300,16 +287,16 @@ class BattleService {
     return arr[this.rand(arr.length)];
   }
 
-  createLobby(channelId, messageId, creatorId, minPlayers = 2, maxPlayers = 999, requiredRoleIds = null, excludedRoleIds = null) {
+  createLobby(channelId, messageId, creatorId, minPlayers = 2, maxPlayers = 999, requiredRoleIds = null, excludedRoleIds = null, era = 'mafia') {
     const lobbyId = `battle_${Date.now()}_${creatorId}`;
-    
+
     try {
       const requiredIdsStr = requiredRoleIds && requiredRoleIds.length ? requiredRoleIds.join(',') : null;
       const excludedIdsStr = excludedRoleIds && excludedRoleIds.length ? excludedRoleIds.join(',') : null;
       db.prepare(`
-        INSERT INTO battle_lobbies (lobby_id, channel_id, message_id, creator_id, min_players, max_players, required_role_ids, excluded_role_ids)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(lobbyId, channelId, messageId, creatorId, minPlayers, maxPlayers, requiredIdsStr, excludedIdsStr);
+        INSERT INTO battle_lobbies (lobby_id, channel_id, message_id, creator_id, min_players, max_players, required_role_ids, excluded_role_ids, era)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(lobbyId, channelId, messageId, creatorId, minPlayers, maxPlayers, requiredIdsStr, excludedIdsStr, era);
 
       logger.log(`Battle lobby created: ${lobbyId} by ${creatorId}`);
       return { success: true, lobbyId };
@@ -498,7 +485,14 @@ class BattleService {
     }
   }
 
-  simulateBattle(lobbyId) {
+  simulateBattle(lobbyId, options = {}) {
+    const eraKey = options.era || 'mafia';
+    const era = this.getEraConfig(eraKey);
+    const eraFlavorLines = era.flavorLines || BATTLE_ERAS.mafia.flavorLines;
+    const eraEliminationLines = era.eliminationLines || DEATH_LINES;
+    const eraArrestLines = era.arrestLines || null;
+    const eraCombatLines = era.combatLines || ATTACK_LINES;
+
     const participants = this.getParticipants(lobbyId);
     const totalPlayers = participants.length;
     const rounds = [];
@@ -661,7 +655,11 @@ class BattleService {
                 .run(lobbyId, defender.user_id);
             } else {
               defender.is_alive = false;
-              const deathLine = DEATH_LINES[Math.floor(this.roll() * DEATH_LINES.length)]
+              // 30% chance to use arrestLines if the era has them
+              const useArrest = eraArrestLines && this.roll() < 0.30;
+              const elimPool = useArrest ? eraArrestLines : eraEliminationLines;
+              const deathLine = elimPool[Math.floor(this.roll() * elimPool.length)]
+                .replace('{attacker}', `**${attacker.username}**`)
                 .replace('{defender}', `**${defender.username}**`);
               events.push(deathLine);
               
@@ -700,7 +698,7 @@ class BattleService {
         } else if (alivePlayers.length > 0) {
           // FLAVOR EVENT (no mechanical effect)
           const player = alivePlayers[Math.floor(this.roll() * alivePlayers.length)];
-          const flavorLine = FLAVOR_LINES[Math.floor(this.roll() * FLAVOR_LINES.length)]
+          const flavorLine = eraFlavorLines[Math.floor(this.roll() * eraFlavorLines.length)]
             .replace('{player}', `**${player.username}**`);
           events.push(flavorLine);
         }
@@ -821,8 +819,10 @@ class BattleService {
     return line.replace('{round}', round);
   }
 
-  getRandomFlavorLine() {
-    return FLAVOR_LINES[Math.floor(this.roll() * FLAVOR_LINES.length)];
+  getRandomFlavorLine(eraKey) {
+    const era = this.getEraConfig(eraKey || 'mafia');
+    const lines = era.flavorLines || BATTLE_ERAS.mafia.flavorLines;
+    return lines[Math.floor(this.roll() * lines.length)];
   }
 
   getRandomLuckyEscapeLine() {

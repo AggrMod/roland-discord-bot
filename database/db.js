@@ -469,6 +469,21 @@ function initDatabase() {
       SELECT proposal_id, supporter_id, created_at FROM proposal_support`);
   } catch(e) { /* proposal_support may not have data */ }
 
+  // Battle era assignments (superadmin-managed)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS battle_era_assignments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      era_key TEXT NOT NULL,
+      assigned_by TEXT,
+      assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(guild_id, era_key)
+    )
+  `);
+
+  // Add era column to battle_lobbies
+  try { db.exec('ALTER TABLE battle_lobbies ADD COLUMN era TEXT DEFAULT "mafia"'); } catch (e) {}
+
   // Tenant-scoped verification role configs (tiers + trait rules)
   db.exec(`
     CREATE TABLE IF NOT EXISTS tenant_role_configs (

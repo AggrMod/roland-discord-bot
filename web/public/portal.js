@@ -1762,10 +1762,10 @@ async function loadTreasuryWalletTable() {
   if (!container) return;
 
   try {
-    const response = await fetch('/api/admin/treasury', { credentials: 'include' });
+    const response = await fetch('/api/admin/treasury', { credentials: 'include', headers: buildTenantRequestHeaders() });
     if (!response.ok) {
       // Non-admin: try public endpoint
-      const pubRes = await fetch('/api/public/treasury', { credentials: 'include' });
+      const pubRes = await fetch('/api/public/treasury', { credentials: 'include', headers: buildTenantRequestHeaders() });
       const pubData = await pubRes.json();
       const t = pubData.data || pubData.treasury || pubData;
       if (t && t.sol !== undefined) {
@@ -1816,6 +1816,7 @@ function renderWalletTableFromConfig(config, treasury) {
     <div class="treasury-wallet-actions" style="display:flex; gap:4px;">
       <button title="Refresh" onclick="refreshTreasuryBalances()">🔄</button>
       <button title="Edit" onclick="openAddWalletModal('${wallet}', '${label}', '${config.txAlertChannelId || ''}')">✏️</button>
+      <button title="Remove wallet" style="color:#ef4444;" onclick="removeTreasuryWallet()">🗑️</button>
     </div>
   ` : '';
 
@@ -1858,6 +1859,27 @@ function renderWalletEmptyState(container, canAdd) {
       ${canAdd ? '<button class="btn-primary" onclick="openAddWalletModal()">+ Add Wallet</button>' : ''}
     </div>
   `;
+}
+
+async function removeTreasuryWallet() {
+  if (!confirm('Remove this treasury wallet? This clears the wallet address from settings.')) return;
+  try {
+    const res = await fetch('/api/admin/treasury/config', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({ solanaWallet: '' })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showSuccess('Wallet removed.');
+      loadTreasuryWalletTable();
+    } else {
+      showError(data.message || 'Failed to remove wallet.');
+    }
+  } catch (e) {
+    showError('Error removing wallet.');
+  }
 }
 
 async function refreshTreasuryBalances() {

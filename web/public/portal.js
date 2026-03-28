@@ -19,6 +19,11 @@ if (!activeGuildId) {
   localStorage.removeItem('activeGuildId');
 }
 
+function requiresServerSelectionGate() {
+  const managed = serverAccessData?.managedServers || [];
+  return !!userData && managed.length > 1 && !activeGuildId;
+}
+
 function isTenantSensitiveRequest(input) {
   const rawUrl = typeof input === 'string' ? input : (input?.url || '');
   try {
@@ -659,6 +664,24 @@ function renderServerAccessView(errorMessage = '') {
 }
 
 // ==================== PORTAL LOADING ====================
+function enforceInitialServerSelection() {
+  const managed = serverAccessData?.managedServers || [];
+
+  if (managed.length === 1 && !activeGuildId) {
+    setActiveGuild(managed[0].guildId, { announce: false });
+    return true;
+  }
+
+  if (managed.length > 1) {
+    // Force explicit selection on login to prevent cross-tenant mistakes
+    setActiveGuild('', { announce: false });
+    switchSection('servers');
+    return false;
+  }
+
+  return true;
+}
+
 async function loadPortal() {
   try {
     // Check feature flags
@@ -685,8 +708,12 @@ async function loadPortal() {
       await loadServerAccess();
       await checkSuperadminStatus();
       await checkAdminStatus();
-      await syncTenantModuleNavVisibility();
-      loadDashboardData();
+
+      const canProceed = enforceInitialServerSelection();
+      if (canProceed) {
+        await syncTenantModuleNavVisibility();
+        loadDashboardData();
+      }
     } else {
       showUnauthenticatedState();
     }
@@ -694,14 +721,10 @@ async function loadPortal() {
     // Navigate to section from URL after admin check is complete
     const urlParams = new URLSearchParams(window.location.search);
     const section = urlParams.get('section');
-    if (section) {
+    if (section && !requiresServerSelectionGate()) {
       switchSection(section);
-    } else if (userData) {
-      // If user can manage multiple servers, force server selection first on login
-      const managedCount = (serverAccessData?.managedServers || []).length;
-      if (managedCount > 1) {
-        switchSection('servers');
-      }
+    } else if (userData && requiresServerSelectionGate()) {
+      switchSection('servers');
     }
   } catch (error) {
     console.error('Error loading portal:', error);
@@ -1272,6 +1295,10 @@ async function loadAvailableMissions() {
 
 // ==================== NAVIGATION ====================
 function switchSection(sectionName) {
+  if (requiresServerSelectionGate() && sectionName !== 'servers') {
+    sectionName = 'servers';
+  }
+
   const moduleState = window._tenantModuleState || null;
   const sectionRequiresModule = {
     governance: 'governance',

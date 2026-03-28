@@ -137,6 +137,7 @@ class WebServer {
       maxAge: 86400 // 24 hours preflight cache
     }));
 
+    this.app.use(require('cookie-parser')());
     this.app.use(express.json());
     this.app.use(express.static(path.join(__dirname, 'public')));
 

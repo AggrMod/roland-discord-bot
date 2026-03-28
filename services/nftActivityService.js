@@ -136,7 +136,8 @@ class NFTActivityService {
 
   getTrackedCollectionByAddress(address) {
     try {
-      return db.prepare('SELECT * FROM nft_tracked_collections WHERE collection_address = ? AND enabled = 1').get(address);
+      // Case-insensitive match — ingestEvent lowercases collectionKey but DB stores original case
+      return db.prepare('SELECT * FROM nft_tracked_collections WHERE LOWER(collection_address) = LOWER(?) AND enabled = 1').get(address);
     } catch (e) {
       return null;
     }

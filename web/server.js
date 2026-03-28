@@ -2942,6 +2942,7 @@ class WebServer {
         const { collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer } = req.body;
         const result = nftActivityService.addTrackedCollection({ guildId: req.guildId, collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer });
         if (!result.success) return res.status(400).json(result);
+        nftActivityService.syncAddressToHelius(collectionAddress, 'add').catch(() => {});
         res.json(result);
       } catch (error) {
         logger.error('Error adding tracked collection:', error);
@@ -2951,8 +2952,14 @@ class WebServer {
 
     this.app.delete('/api/admin/nft-tracker/collections/:id', adminAuthMiddleware, (req, res) => {
       try {
+        // Look up collection address before deleting so we can unsync from Helius
+        const collections = nftActivityService.getTrackedCollections(req.guildId);
+        const collection = collections && collections.find(c => String(c.id) === String(req.params.id));
         const result = nftActivityService.removeTrackedCollection(req.params.id, req.guildId);
         if (!result.success) return res.status(400).json(result);
+        if (collection && collection.collection_address) {
+          nftActivityService.syncAddressToHelius(collection.collection_address, 'remove').catch(() => {});
+        }
         res.json(result);
       } catch (error) {
         logger.error('Error removing tracked collection:', error);

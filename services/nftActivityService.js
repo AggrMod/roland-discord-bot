@@ -314,6 +314,58 @@ class NFTActivityService {
       return [];
     }
   }
+  async syncAddressToHelius(collectionAddress, action) {
+    const apiKey = process.env.HELIUS_API_KEY;
+    const webhookId = process.env.HELIUS_WEBHOOK_ID;
+    if (!apiKey || !webhookId) {
+      logger.warn('HELIUS_API_KEY or HELIUS_WEBHOOK_ID not set — skipping webhook sync');
+      return;
+    }
+
+    try {
+      const baseUrl = `https://api.helius.xyz/v0/webhooks/${webhookId}?api-key=${apiKey}`;
+
+      // GET current webhook config
+      const getRes = await fetch(baseUrl);
+      if (!getRes.ok) {
+        logger.error(`Helius GET webhook failed: ${getRes.status} ${await getRes.text()}`);
+        return;
+      }
+      const webhook = await getRes.json();
+
+      let addresses = Array.isArray(webhook.accountAddresses) ? [...webhook.accountAddresses] : [];
+
+      if (action === 'add') {
+        if (!addresses.includes(collectionAddress)) {
+          addresses.push(collectionAddress);
+        }
+      } else if (action === 'remove') {
+        addresses = addresses.filter(a => a !== collectionAddress);
+      }
+
+      // PUT updated webhook
+      const putRes = await fetch(baseUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          webhookURL: webhook.webhookURL,
+          transactionTypes: webhook.transactionTypes,
+          accountAddresses: addresses,
+          webhookType: webhook.webhookType || 'enhanced',
+          authHeader: webhook.authHeader,
+        }),
+      });
+
+      if (!putRes.ok) {
+        logger.error(`Helius PUT webhook failed: ${putRes.status} ${await putRes.text()}`);
+        return;
+      }
+
+      logger.log(`Helius webhook synced: ${action} ${collectionAddress} (${addresses.length} addresses total)`);
+    } catch (e) {
+      logger.error('Error syncing address to Helius webhook:', e);
+    }
+  }
 }
 
 module.exports = new NFTActivityService();

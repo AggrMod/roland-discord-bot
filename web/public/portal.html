@@ -36,9 +36,9 @@
       <div class="mobile-menu-content">
         <button class="mobile-menu-close" onclick="toggleMobileMenu()" aria-label="Close menu">✕</button>
         <div class="mobile-menu-items">
-          <button class="nav-item active" data-section="dashboard" onclick="switchSection('dashboard'); toggleMobileMenu()">
-            <span class="nav-icon" aria-hidden="true">📊</span>
-            <span class="nav-label">Dashboard</span>
+          <button class="nav-item active" data-section="landing" onclick="switchSection('landing'); toggleMobileMenu()">
+            <span class="nav-icon" aria-hidden="true">🏠</span>
+            <span class="nav-label">Home</span>
           </button>
           <button class="nav-item" data-section="servers" onclick="switchSection('servers'); toggleMobileMenu()" style="display:none;">
             <span class="nav-icon" aria-hidden="true">🏛️</span>
@@ -81,9 +81,9 @@
       <!-- Sidebar Navigation -->
       <aside class="sidebar" role="navigation" aria-label="Section navigation">
         <div class="sidebar-section">
-          <button class="nav-item active" data-section="dashboard" onclick="switchSection('dashboard')">
-            <span class="nav-icon" aria-hidden="true">📊</span>
-            <span class="nav-label">Dashboard</span>
+          <button class="nav-item active" data-section="landing" onclick="switchSection('landing')">
+            <span class="nav-icon" aria-hidden="true">🏠</span>
+            <span class="nav-label">Home</span>
           </button>
           <button class="nav-item" data-section="servers" onclick="switchSection('servers')" style="display:none;">
             <span class="nav-icon" aria-hidden="true">🏛️</span>
@@ -179,8 +179,27 @@
 
       <!-- Content Sections -->
       <main class="content-area">
+        <!-- Landing Section -->
+        <section id="section-landing" class="content-section active">
+          <div class="section-header">
+            <h2>Choose where to go</h2>
+            <p>Select a server to enter tenant settings, or open your global profile.</p>
+          </div>
+
+          <div class="admin-card" style="max-width:820px;">
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px;">
+              <button class="btn-primary" onclick="switchSection('servers')">Select Server</button>
+              <button class="btn-secondary" onclick="switchSection('wallets')">My Profile</button>
+              <button id="landingSuperadminBtn" class="btn-secondary" onclick="switchSection('admin'); showAdminView('superadmin')" style="display:none;">Go to Superadmin</button>
+            </div>
+            <p style="margin-top:12px; color:var(--text-secondary); font-size:.9em;">
+              Tenant-specific pages remain locked until a server is selected.
+            </p>
+          </div>
+        </section>
+
         <!-- Dashboard Section -->
-        <section id="section-dashboard" class="content-section active">
+        <section id="section-dashboard" class="content-section">
           <header class="section-header">
             <h2>Dashboard</h2>
             <p class="section-subtitle">Overview of your Solpranos activity and participation</p>

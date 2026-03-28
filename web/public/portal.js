@@ -680,13 +680,13 @@ function enforceInitialServerSelection() {
   // For multi-server users, always require explicit server pick on each fresh login
   if (managed.length > 1) {
     setActiveGuild('', { announce: false });
-    switchSection('servers');
+    switchSection('landing');
     return false;
   }
 
   if ((managed.length + unmanaged.length) > 0 && !activeGuildId) {
     setActiveGuild('', { announce: false });
-    switchSection('servers');
+    switchSection('landing');
     return false;
   }
 
@@ -723,7 +723,7 @@ async function loadPortal() {
       const canProceed = enforceInitialServerSelection();
       const hardGate = requiresServerSelectionGate();
       if (hardGate) {
-        switchSection('servers');
+        switchSection('landing');
         return;
       }
 
@@ -741,7 +741,7 @@ async function loadPortal() {
     if (section && !requiresServerSelectionGate()) {
       switchSection(section);
     } else if (userData && requiresServerSelectionGate()) {
-      switchSection('servers');
+      switchSection('landing');
     }
   } catch (error) {
     console.error('Error loading portal:', error);
@@ -837,6 +837,10 @@ async function checkSuperadminStatus() {
     if (navItem) {
       navItem.style.display = isSuperadmin ? 'flex' : 'none';
     }
+    const landingBtn = document.getElementById('landingSuperadminBtn');
+    if (landingBtn) {
+      landingBtn.style.display = isSuperadmin ? 'inline-block' : 'none';
+    }
 
     if (!isSuperadmin) {
       const card = document.getElementById('adminSuperadminCard');
@@ -846,6 +850,8 @@ async function checkSuperadminStatus() {
     isSuperadmin = false;
     const navItem = document.getElementById('adminSuperadminNav');
     if (navItem) navItem.style.display = 'none';
+    const landingBtn = document.getElementById('landingSuperadminBtn');
+    if (landingBtn) landingBtn.style.display = 'none';
   }
 }
 
@@ -1312,8 +1318,8 @@ async function loadAvailableMissions() {
 
 // ==================== NAVIGATION ====================
 function switchSection(sectionName) {
-  if (requiresServerSelectionGate() && sectionName !== 'servers') {
-    sectionName = 'servers';
+  if (requiresServerSelectionGate() && !['landing', 'servers', 'wallets'].includes(sectionName)) {
+    sectionName = 'landing';
   }
 
   const moduleState = window._tenantModuleState || null;

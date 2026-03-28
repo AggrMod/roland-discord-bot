@@ -660,6 +660,7 @@ function switchSettingsTab(tab) {
     nfttracker:   () => { if (typeof loadNftTrackerView === 'function') loadNftTrackerView(); },
     selfserve:    () => { if (typeof loadSelfServeRolesView === 'function') loadSelfServeRolesView(); },
     ticketing:    () => { if (typeof loadTicketingView === 'function') loadTicketingView(); },
+    battle:       () => loadBattleTimingSettings(),
   };
   const loader = tabLoaders[tab];
   if (loader) loader();
@@ -3498,6 +3499,43 @@ function adminProposalHold(proposalId) {
 }
 
 let portalSettingsData = null;
+
+async function loadBattleTimingSettings() {
+  try {
+    const res = await fetch('/api/admin/settings', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json();
+    const s = data.settings || {};
+    const minEl = document.getElementById('battlePauseMinInput');
+    const maxEl = document.getElementById('battlePauseMaxInput');
+    const eliteEl = document.getElementById('battleElitePrepInput');
+    if (minEl) minEl.value = s.battleRoundPauseMinSec ?? 5;
+    if (maxEl) maxEl.value = s.battleRoundPauseMaxSec ?? 10;
+    if (eliteEl) eliteEl.value = s.battleElitePrepSec ?? 12;
+  } catch (e) {
+    console.error('[Battle settings] load error:', e);
+  }
+}
+
+async function saveBattleTimingSettings() {
+  const minVal = parseFloat(document.getElementById('battlePauseMinInput')?.value);
+  const maxVal = parseFloat(document.getElementById('battlePauseMaxInput')?.value);
+  const eliteVal = parseFloat(document.getElementById('battleElitePrepInput')?.value);
+  if (isNaN(minVal) || isNaN(maxVal) || isNaN(eliteVal)) return showError('Please enter valid numbers for all timing fields.');
+  if (minVal > maxVal) return showError('Minimum pause cannot be greater than maximum pause.');
+  try {
+    const res = await fetch('/api/admin/settings', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({ battleRoundPauseMinSec: minVal, battleRoundPauseMaxSec: maxVal, battleElitePrepSec: eliteVal })
+    });
+    const data = await res.json();
+    if (data.success) showSuccess('Battle timing saved!');
+    else showError(data.message || 'Failed to save battle settings.');
+  } catch (e) {
+    showError('Error saving battle settings.');
+  }
+}
 
 async function loadAdminSettingsView() {
   if (!isAdmin) return;

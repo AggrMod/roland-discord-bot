@@ -1133,7 +1133,30 @@
               <!-- adminNftTrackerCard content loaded here dynamically -->
             </div>
             <div id="settingsTab-battle" class="settings-tab-pane" style="display:none;">
-              <div class="card"><p style="color:var(--text-secondary);">Battle settings are configured via the Discord bot commands or will be available in a future update.</p></div>
+              <div class="card">
+                <h3>⚔️ Battle Timing</h3>
+                <p style="color:var(--text-secondary); margin-bottom:16px; font-size:0.9em;">Control the pacing of battle rounds. Lower = faster battles, higher = more dramatic tension.</p>
+                <div style="display:grid; gap:16px;">
+                  <div>
+                    <label class="form-label">Round Pause — Minimum (seconds)</label>
+                    <input type="number" id="battlePauseMinInput" min="1" max="60" step="1" class="form-input" placeholder="5" style="width:160px;">
+                    <p style="color:var(--text-secondary); font-size:0.82em; margin-top:4px;">Shortest delay between round events. Default: 5s</p>
+                  </div>
+                  <div>
+                    <label class="form-label">Round Pause — Maximum (seconds)</label>
+                    <input type="number" id="battlePauseMaxInput" min="1" max="120" step="1" class="form-input" placeholder="10" style="width:160px;">
+                    <p style="color:var(--text-secondary); font-size:0.82em; margin-top:4px;">Longest delay between round events. Default: 10s</p>
+                  </div>
+                  <div>
+                    <label class="form-label">Elite Four Prep Delay (seconds)</label>
+                    <input type="number" id="battleElitePrepInput" min="1" max="120" step="1" class="form-input" placeholder="12" style="width:160px;">
+                    <p style="color:var(--text-secondary); font-size:0.82em; margin-top:4px;">Extra suspense delay when only 4 players remain. Default: 12s</p>
+                  </div>
+                  <div>
+                    <button class="btn-primary" onclick="saveBattleTimingSettings()" style="width:fit-content;">Save Battle Settings</button>
+                  </div>
+                </div>
+              </div>
             </div>
             <div id="settingsTab-heist" class="settings-tab-pane" style="display:none;">
               <div class="card"><p style="color:var(--text-secondary);">Heist settings are configured via the Discord bot commands or will be available in a future update.</p></div>

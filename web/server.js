@@ -1437,7 +1437,7 @@ class WebServer {
           'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleTreasuryEnabled',
           'moduleNftTrackerEnabled', 'moduleMissionsEnabled', 'moduleBattleEnabled',
           'moduleTicketingEnabled', 'moduleRoleClaimEnabled',
-          'battleRoundPauseMin', 'battleRoundPauseMax', 'battleElitePrepDelay',
+          'battleRoundPauseMinSec', 'battleRoundPauseMaxSec', 'battleElitePrepSec',
           'baseVerifiedRoleId', 'autoResyncEnabled', 'ogRoleId', 'ogRoleLimit',
           'treasuryWalletAddress', 'treasuryRefreshInterval', 'txAlertChannelId',
           'txAlertEnabled', 'txAlertIncomingOnly', 'txAlertMinSol',

@@ -251,7 +251,7 @@ class WebServer {
       max: 5,
       standardHeaders: true,
       legacyHeaders: false,
-      keyGenerator: (req) => req.session?.discordUser?.id || req.ip,
+      keyGenerator: (req) => req.session?.discordUser?.id || (req.ip || '').replace(/^::ffff:/, ''),
       message: rateLimitMessage
     });
 
@@ -2188,6 +2188,14 @@ class WebServer {
 
     // ==================== TREASURY API ====================
 
+    // Deprecation headers for legacy public API (superseded by /api/public/v1/)
+    const deprecationHeaders = (req, res, next) => {
+      res.set('Deprecation', 'true');
+      res.set('Sunset', '2026-12-31');
+      res.set('Link', '</api/public/v1/>; rel="successor-version"');
+      next();
+    };
+
     // Public treasury endpoint (no wallet address exposed)
     this.app.get('/api/public/treasury', deprecationHeaders, (req, res) => {
       try {
@@ -2273,15 +2281,7 @@ class WebServer {
 
     // ==================== PUBLIC API - GOVERNANCE ====================
 
-    // Deprecation headers for legacy public API (superseded by /api/public/v1/)
-    const deprecationHeaders = (req, res, next) => {
-      res.set('Deprecation', 'true');
-      res.set('Sunset', '2026-12-31');
-      res.set('Link', '</api/public/v1/>; rel="successor-version"');
-      next();
-    };
-
-    this.app.get('/api/public/proposals/active', deprecationHeaders, (req, res) => {
+        this.app.get('/api/public/proposals/active', deprecationHeaders, (req, res) => {
       try {
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
         const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);

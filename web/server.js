@@ -2949,7 +2949,7 @@ class WebServer {
 
     this.app.get('/api/admin/nft-tracker/collections', adminAuthMiddleware, (req, res) => {
       try {
-        const collections = nftActivityService.getTrackedCollections();
+        const collections = nftActivityService.getTrackedCollections(req.guildId);
         res.json({ success: true, collections });
       } catch (error) {
         logger.error('Error getting tracked collections:', error);
@@ -2960,7 +2960,7 @@ class WebServer {
     this.app.post('/api/admin/nft-tracker/collections', adminAuthMiddleware, (req, res) => {
       try {
         const { collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer } = req.body;
-        const result = nftActivityService.addTrackedCollection({ collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer });
+        const result = nftActivityService.addTrackedCollection({ guildId: req.guildId, collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer });
         if (!result.success) return res.status(400).json(result);
         res.json(result);
       } catch (error) {
@@ -2971,7 +2971,7 @@ class WebServer {
 
     this.app.delete('/api/admin/nft-tracker/collections/:id', adminAuthMiddleware, (req, res) => {
       try {
-        const result = nftActivityService.removeTrackedCollection(req.params.id);
+        const result = nftActivityService.removeTrackedCollection(req.params.id, req.guildId);
         if (!result.success) return res.status(400).json(result);
         res.json(result);
       } catch (error) {
@@ -2982,7 +2982,7 @@ class WebServer {
 
     this.app.put('/api/admin/nft-tracker/collections/:id', adminAuthMiddleware, (req, res) => {
       try {
-        const result = nftActivityService.updateTrackedCollection(req.params.id, req.body);
+        const result = nftActivityService.updateTrackedCollection(req.params.id, req.body, req.guildId);
         if (!result.success) return res.status(400).json(result);
         res.json(result);
       } catch (error) {

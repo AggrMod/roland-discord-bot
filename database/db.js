@@ -234,7 +234,8 @@ function initDatabase() {
 
     CREATE TABLE IF NOT EXISTS nft_tracked_collections (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      collection_address TEXT NOT NULL UNIQUE,
+      guild_id TEXT NOT NULL DEFAULT '',
+      collection_address TEXT NOT NULL,
       collection_name TEXT NOT NULL,
       channel_id TEXT NOT NULL,
       track_mint INTEGER DEFAULT 1,
@@ -243,7 +244,8 @@ function initDatabase() {
       track_delist INTEGER DEFAULT 1,
       track_transfer INTEGER DEFAULT 0,
       enabled INTEGER DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(guild_id, collection_address)
     );
 
     CREATE INDEX IF NOT EXISTS idx_micro_verify_discord_id ON micro_verify_requests(discord_id);
@@ -433,6 +435,7 @@ function initDatabase() {
   try { db.exec("ALTER TABLE ticket_categories ADD COLUMN ping_role_ids TEXT DEFAULT '[]'"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_limits ADD COLUMN mock_data_enabled INTEGER DEFAULT 0"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_modules ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
+  try { db.exec("ALTER TABLE nft_tracked_collections ADD COLUMN guild_id TEXT NOT NULL DEFAULT ''"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_modules ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_branding ADD COLUMN support_url TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_branding ADD COLUMN secondary_color TEXT"); } catch (e) {}

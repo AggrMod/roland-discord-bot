@@ -37,8 +37,11 @@ class NFTActivityService {
     }
   }
 
-  getTrackedCollections() {
+  getTrackedCollections(guildId) {
     try {
+      if (guildId) {
+        return db.prepare('SELECT * FROM nft_tracked_collections WHERE guild_id = ? ORDER BY created_at DESC').all(guildId);
+      }
       return db.prepare('SELECT * FROM nft_tracked_collections ORDER BY created_at DESC').all();
     } catch (e) {
       logger.error('Error getting tracked collections:', e);
@@ -46,15 +49,16 @@ class NFTActivityService {
     }
   }
 
-  addTrackedCollection({ collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer }) {
+  addTrackedCollection({ guildId, collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer }) {
     try {
       if (!collectionAddress || !collectionName || !channelId) {
         return { success: false, message: 'collectionAddress, collectionName, and channelId are required' };
       }
       const result = db.prepare(`
-        INSERT INTO nft_tracked_collections (collection_address, collection_name, channel_id, track_mint, track_sale, track_list, track_delist, track_transfer)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO nft_tracked_collections (guild_id, collection_address, collection_name, channel_id, track_mint, track_sale, track_list, track_delist, track_transfer)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
+        guildId || '',
         collectionAddress.trim(),
         collectionName.trim(),
         channelId,
@@ -67,16 +71,23 @@ class NFTActivityService {
       return { success: true, message: 'Collection added', id: result.lastInsertRowid };
     } catch (e) {
       if (e.message && e.message.includes('UNIQUE constraint')) {
-        return { success: false, message: 'Collection address already tracked' };
+        return { success: false, message: 'Collection address already tracked for this server' };
       }
       logger.error('Error adding tracked collection:', e);
       return { success: false, message: 'Failed to add tracked collection' };
     }
   }
 
-  removeTrackedCollection(id) {
+  removeTrackedCollection(id, guildId) {
     try {
-      const result = db.prepare('DELETE FROM nft_tracked_collections WHERE id = ?').run(id);
+      const query = guildId
+        ? 'DELETE FROM nft_tracked_collections WHERE id = ? AND guild_id = ?'
+        : 'DELETE FROM nft_tracked_collections WHERE id = ?';
+      const params = guildId ? [id, guildId] : [id];
+      const result = db.prepare(query).run(...params);
+      if (guildId && result.changes === 0) {
+        return { success: false, message: 'Collection not found or access denied' };
+      }
       return { success: true, removed: result.changes };
     } catch (e) {
       logger.error('Error removing tracked collection:', e);
@@ -84,7 +95,7 @@ class NFTActivityService {
     }
   }
 
-  updateTrackedCollection(id, updates) {
+  updateTrackedCollection(id, updates, guildId) {
     try {
       const allowed = ['collection_name', 'channel_id', 'track_mint', 'track_sale', 'track_list', 'track_delist', 'track_transfer', 'enabled'];
       const fieldMap = {
@@ -107,8 +118,13 @@ class NFTActivityService {
         }
       }
       if (!setClauses.length) return { success: false, message: 'No valid updates provided' };
-      params.push(id);
-      db.prepare(`UPDATE nft_tracked_collections SET ${setClauses.join(', ')} WHERE id = ?`).run(...params);
+      if (guildId) {
+        params.push(id, guildId);
+        db.prepare(`UPDATE nft_tracked_collections SET ${setClauses.join(', ')} WHERE id = ? AND guild_id = ?`).run(...params);
+      } else {
+        params.push(id);
+        db.prepare(`UPDATE nft_tracked_collections SET ${setClauses.join(', ')} WHERE id = ?`).run(...params);
+      }
       return { success: true };
     } catch (e) {
       logger.error('Error updating tracked collection:', e);

@@ -109,6 +109,7 @@ const treasuryService = require('./services/treasuryService');
 const microVerifyService = require('./services/microVerifyService');
 const governanceLogger = require('./utils/governanceLogger');
 const ticketService = require('./services/ticketService');
+const nftActivityService = require('./services/nftActivityService');
 const settings = require('./config/settings.json');
 
 const intervals = [];
@@ -177,6 +178,15 @@ client.once(Events.ClientReady, () => {
       microVerifyService.expireStaleRequests();
     }
   }, 10 * 60 * 1000));
+
+  // NFT activity polling cron — catches Magic Eden/Tensor listings that webhooks miss
+  const pollAllCollections = () => {
+    nftActivityService.pollCollectionActivity().catch(err => {
+      logger.error('[nft-poll] Error in scheduled poll:', err);
+    });
+  };
+  intervals.push(setInterval(pollAllCollections, 5 * 60 * 1000));
+  setTimeout(pollAllCollections, 30 * 1000); // first poll 30s after startup
 });
 
 client.on(Events.GuildCreate, async guild => {

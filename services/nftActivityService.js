@@ -222,6 +222,12 @@ class NFTActivityService {
       const txSignature = event.txSignature || event.signature || null;
       const eventTime = event.eventTime || event.timestamp || new Date().toISOString();
 
+      // Dedup: skip if tx_signature already recorded (webhook + poll overlap)
+      if (txSignature) {
+        const existing = db.prepare('SELECT id FROM nft_activity_events WHERE tx_signature = ?').get(txSignature);
+        if (existing) return { success: false, ignored: true, message: 'Duplicate tx' };
+      }
+
       const insert = db.prepare(`
         INSERT INTO nft_activity_events
         (event_type, collection_key, token_mint, token_name, from_wallet, to_wallet, price_sol, tx_signature, source, event_time, raw_json)
@@ -395,6 +401,63 @@ class NFTActivityService {
       logger.log(`Helius webhook synced: ${action} ${collectionAddress} (${addresses.length} addresses total)`);
     } catch (e) {
       logger.error('Error syncing address to Helius webhook:', e);
+    }
+  }
+
+  /**
+   * Poll Helius enhanced transactions API for each tracked collection.
+   * Catches Magic Eden/Tensor listings that webhooks miss.
+   * @param {string} [guildId] - optional guild filter; polls all if omitted
+   */
+  async pollCollectionActivity(guildId) {
+    try {
+      const apiKey = process.env.HELIUS_API_KEY;
+      if (!apiKey) return;
+
+      const collections = this.getTrackedCollections(guildId).filter(c => c.enabled);
+      if (!collections.length) return;
+
+      for (const col of collections) {
+        try {
+          const url = `https://api.helius.xyz/v0/addresses/${col.collection_address}/transactions?api-key=${apiKey}`;
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ types: ['NFT_LISTING', 'NFT_SALE', 'NFT_MINT', 'NFT_CANCEL_LISTING'] }),
+          });
+
+          if (!res.ok) {
+            logger.error(`[nft-poll] Helius API error for ${col.collection_name}: ${res.status}`);
+            await new Promise(r => setTimeout(r, 500));
+            continue;
+          }
+
+          const txns = await res.json();
+          let newCount = 0;
+          let skipped = 0;
+
+          for (const tx of txns) {
+            const sig = tx.signature || tx.txSignature || null;
+            if (sig) {
+              const exists = db.prepare('SELECT id FROM nft_activity_events WHERE tx_signature = ?').get(sig);
+              if (exists) { skipped++; continue; }
+            }
+            const result = this.ingestEvent(tx, 'poll');
+            if (result.success) newCount++;
+            else skipped++;
+          }
+
+          logger.log(`[nft-poll] guild=${col.guild_id} collection=${col.collection_name} new=${newCount} skipped=${skipped}`);
+
+          // Rate limit: 500ms between collection requests
+          await new Promise(r => setTimeout(r, 500));
+        } catch (colErr) {
+          logger.error(`[nft-poll] Error polling ${col.collection_name}:`, colErr);
+          await new Promise(r => setTimeout(r, 500));
+        }
+      }
+    } catch (e) {
+      logger.error('[nft-poll] Fatal error in pollCollectionActivity:', e);
     }
   }
 }

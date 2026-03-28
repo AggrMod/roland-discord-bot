@@ -419,37 +419,51 @@ class NFTActivityService {
 
       for (const col of collections) {
         try {
-          const url = `https://api.helius.xyz/v0/addresses/${col.collection_address}/transactions?api-key=${apiKey}&limit=50`;
-          const res = await fetch(url, { method: 'GET' });
+          // Magic Eden collection activities API — works with verified collection address as symbol
+          const meUrl = `https://api-mainnet.magiceden.dev/v2/collections/${col.collection_address}/activities?offset=0&limit=100&type[]=list&type[]=buyNow&type[]=cancelBid`;
+          const res = await fetch(meUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
 
           if (!res.ok) {
-            logger.error(`[nft-poll] Helius API error for ${col.collection_name}: ${res.status}`);
+            logger.error(`[nft-poll] ME API error for ${col.collection_name}: ${res.status}`);
             await new Promise(r => setTimeout(r, 500));
             continue;
           }
 
-          const allTxns = await res.json();
-          logger.log(`[nft-poll] ${col.collection_name} raw=${Array.isArray(allTxns) ? allTxns.length : 0} types=${Array.isArray(allTxns) ? [...new Set(allTxns.map(t => t.type))].join(',') : 'n/a'}`);
-          const nftTypes = new Set(['NFT_LISTING', 'NFT_SALE', 'NFT_MINT', 'NFT_CANCEL_LISTING', 'NFT_BID', 'LIST_NFT', 'SELL_NFT', 'DELIST_NFT']);
-          const txns = Array.isArray(allTxns) ? allTxns.filter(tx => nftTypes.has((tx.type || '').toUpperCase())) : [];
+          const activities = await res.json();
+          const list = Array.isArray(activities) ? activities : (activities?.results || []);
+          logger.log(`[nft-poll] ${col.collection_name} ME raw=${list.length}`);
+
           let newCount = 0;
           let skipped = 0;
 
-          for (const tx of txns) {
-            const sig = tx.signature || tx.txSignature || null;
+          for (const act of list) {
+            const sig = act.txId || act.signature || null;
             if (sig) {
               const exists = db.prepare('SELECT id FROM nft_activity_events WHERE tx_signature = ?').get(sig);
               if (exists) { skipped++; continue; }
             }
-            const result = this.ingestEvent(tx, 'poll');
+
+            // Normalise ME activity to ingestEvent shape
+            const meTypeMap = { list: 'list', buyNow: 'sell', cancelBid: 'delist', bid: 'bid', cancelListing: 'delist' };
+            const normalized = {
+              type: meTypeMap[act.type] || act.type || 'unknown',
+              collectionKey: col.collection_address,
+              tokenMint: act.tokenMint || act.mint || null,
+              tokenName: act.tokenMint || null,
+              fromWallet: act.seller || act.creatorAddress || null,
+              toWallet: act.buyer || null,
+              priceSol: act.price != null ? Number(act.price) : null,
+              txSignature: sig,
+              eventTime: act.blockTime ? new Date(act.blockTime * 1000).toISOString() : new Date().toISOString(),
+            };
+
+            const result = this.ingestEvent(normalized, 'poll');
             if (result.success) newCount++;
             else skipped++;
           }
 
           logger.log(`[nft-poll] guild=${col.guild_id} collection=${col.collection_name} new=${newCount} skipped=${skipped}`);
-
-          // Rate limit: 500ms between collection requests
-          await new Promise(r => setTimeout(r, 500));
+          await new Promise(r => setTimeout(r, 600));
         } catch (colErr) {
           logger.error(`[nft-poll] Error polling ${col.collection_name}:`, colErr);
           await new Promise(r => setTimeout(r, 500));

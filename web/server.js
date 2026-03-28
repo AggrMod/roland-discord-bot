@@ -203,37 +203,12 @@ class WebServer {
 
     const rateLimitMessage = { success: false, message: 'Too many requests, please try again later.' };
 
-    const publicApiLimiter = rateLimit({
-      windowMs: 15 * 60 * 1000, // 15 minutes
-      max: 100,
-      standardHeaders: true,
-      legacyHeaders: false,
-      message: rateLimitMessage
-    });
+    const rateLimitDefaults = { standardHeaders: true, legacyHeaders: false, validate: { xForwardedForHeader: false } };
 
-    const authLimiter = rateLimit({
-      windowMs: 15 * 60 * 1000,
-      max: 10,
-      standardHeaders: true,
-      legacyHeaders: false,
-      message: rateLimitMessage
-    });
-
-    const verifyLimiter = rateLimit({
-      windowMs: 60 * 60 * 1000, // 1 hour
-      max: 20,
-      standardHeaders: true,
-      legacyHeaders: false,
-      message: rateLimitMessage
-    });
-
-    const adminLimiter = rateLimit({
-      windowMs: 15 * 60 * 1000,
-      max: 200,
-      standardHeaders: true,
-      legacyHeaders: false,
-      message: rateLimitMessage
-    });
+    const publicApiLimiter = rateLimit({ ...rateLimitDefaults, windowMs: 15 * 60 * 1000, max: 100, message: rateLimitMessage });
+    const authLimiter = rateLimit({ ...rateLimitDefaults, windowMs: 15 * 60 * 1000, max: 10, message: rateLimitMessage });
+    const verifyLimiter = rateLimit({ ...rateLimitDefaults, windowMs: 60 * 60 * 1000, max: 20, message: rateLimitMessage });
+    const adminLimiter = rateLimit({ ...rateLimitDefaults, windowMs: 15 * 60 * 1000, max: 200, message: rateLimitMessage });
 
     const commentLimiter = rateLimit({
       windowMs: 60 * 1000, // 1 minute

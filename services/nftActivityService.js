@@ -419,12 +419,9 @@ class NFTActivityService {
 
       for (const col of collections) {
         try {
-          const url = `https://api.helius.xyz/v0/addresses/${col.collection_address}/transactions?api-key=${apiKey}`;
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ types: ['NFT_LISTING', 'NFT_SALE', 'NFT_MINT', 'NFT_CANCEL_LISTING'] }),
-          });
+          const typeParams = ['NFT_LISTING', 'NFT_SALE', 'NFT_MINT', 'NFT_CANCEL_LISTING'].map(t => `type=${t}`).join('&');
+          const url = `https://api.helius.xyz/v0/addresses/${col.collection_address}/transactions?api-key=${apiKey}&${typeParams}`;
+          const res = await fetch(url, { method: 'GET' });
 
           if (!res.ok) {
             logger.error(`[nft-poll] Helius API error for ${col.collection_name}: ${res.status}`);

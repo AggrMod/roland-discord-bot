@@ -30,7 +30,9 @@ const DISCORD_MANAGE_GUILD_PERMISSION = 0x20n;
 const REQUEST_GUILD_HEADER = 'x-guild-id';
 
 function normalizeGuildId(guildId) {
-  return typeof guildId === 'string' ? guildId.trim() : '';
+  if (typeof guildId !== 'string') return '';
+  const trimmed = guildId.trim();
+  return /^\d{17,20}$/.test(trimmed) ? trimmed : '';
 }
 
 function parseGuildPermissionBits(permissions) {

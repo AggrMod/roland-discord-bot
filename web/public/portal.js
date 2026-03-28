@@ -9,7 +9,14 @@ let serverAccessData = { managedServers: [], unmanagedServers: [], isSuperadmin:
 let originalFetch = window.fetch.bind(window);
 
 function normalizeGuildId(value) {
-  return typeof value === 'string' ? value.trim() : '';
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  return /^\d{17,20}$/.test(trimmed) ? trimmed : '';
+}
+
+activeGuildId = normalizeGuildId(activeGuildId);
+if (!activeGuildId) {
+  localStorage.removeItem('activeGuildId');
 }
 
 function isTenantSensitiveRequest(input) {

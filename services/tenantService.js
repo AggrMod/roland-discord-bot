@@ -16,7 +16,9 @@ const TENANT_STATUSES = new Set(['active', 'suspended']);
 const ALL_MODULE_KEYS = getModuleKeys();
 
 function normalizeGuildId(guildId) {
-  return typeof guildId === 'string' ? guildId.trim() : '';
+  if (typeof guildId !== 'string') return '';
+  const trimmed = guildId.trim();
+  return /^\d{17,20}$/.test(trimmed) ? trimmed : '';
 }
 
 function normalizeString(value) {

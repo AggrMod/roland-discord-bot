@@ -183,7 +183,7 @@ class WebServer {
 
     // CSRF protection (double-submit cookie pattern)
     const { doubleCsrf } = require('csrf-csrf');
-    const { generateToken, doubleCsrfProtection } = doubleCsrf({
+    const { generateCsrfToken: generateToken, doubleCsrfProtection } = doubleCsrf({
       getSecret: () => process.env.SESSION_SECRET || 'csrf-secret',
       cookieName: 'x-csrf-token',
       cookieOptions: { sameSite: 'lax', secure: process.env.NODE_ENV === 'production', httpOnly: true },

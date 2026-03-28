@@ -432,6 +432,14 @@ function initDatabase() {
   try { db.exec("ALTER TABLE ticket_categories ADD COLUMN closed_parent_channel_id TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE ticket_categories ADD COLUMN ping_role_ids TEXT DEFAULT '[]'"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_limits ADD COLUMN mock_data_enabled INTEGER DEFAULT 0"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_modules ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_modules ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_branding ADD COLUMN support_url TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_branding ADD COLUMN secondary_color TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_branding ADD COLUMN icon_url TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_branding ADD COLUMN logo_url TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_branding ADD COLUMN primary_color TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_branding ADD COLUMN display_name TEXT"); } catch (e) {}
 
   try {
     db.exec(`

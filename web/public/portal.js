@@ -5909,6 +5909,7 @@ async function loadNFTActivityAdminView(preloadedCollections = null) {
           </div>
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="color:${isEnabled ? '#10b981' : '#ef4444'}; font-size:0.85em;">${isEnabled ? '● Enabled' : '● Disabled'}</span>
+            <button onclick="openEditCollectionModal(${JSON.stringify(String(col.id))}, ${JSON.stringify(String(name))}, ${JSON.stringify(String(addr))}, ${JSON.stringify(String(col.me_symbol||''))}, ${JSON.stringify(String(col.channel_id||''))})" style="font-size:0.8em;padding:6px 12px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️ Edit</button>
             <button class="btn-danger" onclick="removeWatchedCollection(${JSON.stringify(String(col.id))}, ${JSON.stringify(String(name))})" style="font-size:0.8em; padding:6px 12px;">
               <span>🗑️</span><span>Remove</span>
             </button>
@@ -5922,6 +5923,46 @@ async function loadNFTActivityAdminView(preloadedCollections = null) {
     console.error('Error loading NFT activity admin:', error);
     container.innerHTML = `<div style="color:#ef4444; padding:12px;">Error loading watchlist: ${escapeHtml(error.message)}</div>`;
   }
+}
+
+function openEditCollectionModal(id, name, addr, meSymbol, channelId) {
+  if (!isAdmin) return;
+  showConfirmModal('Edit Collection', '', null);
+  const title = document.getElementById('confirmTitle');
+  const body = document.getElementById('confirmMessage');
+  const btn = document.getElementById('confirmButton');
+  title.textContent = '✏️ Edit Collection';
+  btn.textContent = 'Save Changes';
+  btn.classList.remove('btn-danger');
+  btn.classList.add('btn-primary');
+  const fieldStyle = 'width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;';
+  const labelStyle = 'display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;';
+  body.innerHTML = `
+    <div style="display:grid; gap:14px;">
+      <div><label style="${labelStyle}">Collection Name *</label>
+        <input id="editCollNameInput" type="text" value="${escapeHtml(name)}" style="${fieldStyle}"></div>
+      <div><label style="${labelStyle}">Alert Channel ID *</label>
+        <input id="editCollChannelInput" type="text" value="${escapeHtml(channelId)}" style="${fieldStyle} font-family:monospace;"></div>
+      <div><label style="${labelStyle}">Magic Eden Symbol <small style="color:#94a3b8;">(e.g. vault_runners)</small></label>
+        <input id="editCollMeSymbolInput" type="text" value="${escapeHtml(meSymbol)}" placeholder="vault_runners" style="${fieldStyle}"></div>
+      <div style="color:#94a3b8; font-size:0.8em; font-family:monospace;">${escapeHtml(addr)}</div>
+    </div>`;
+  confirmCallback = async () => {
+    const newName = document.getElementById('editCollNameInput')?.value.trim();
+    const newChannel = document.getElementById('editCollChannelInput')?.value.trim();
+    const newMe = document.getElementById('editCollMeSymbolInput')?.value.trim() || '';
+    if (!newName || !newChannel) { showError('Name and channel are required'); return; }
+    try {
+      const res = await fetch(`/api/admin/nft-tracker/collections/${encodeURIComponent(id)}`, {
+        method: 'PUT', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ collectionName: newName, channelId: newChannel, meSymbol: newMe })
+      });
+      const data = await res.json();
+      if (data.success) { showSuccess('Collection updated'); loadNFTActivityView(); loadNFTActivityAdminView(); }
+      else showError(data.message || 'Failed to update');
+    } catch (e) { showError('Error updating collection'); }
+  };
 }
 
 function openAddCollectionModal() {

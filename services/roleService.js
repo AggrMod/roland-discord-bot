@@ -310,7 +310,12 @@ class RoleService {
         }
         const filteredTraits = this.extractTraitsFromNFTs(relevantNFTs);
 
-        const shouldHave = filteredTraits.has(`${traitRole.trait_type}:${traitRole.trait_value}`);
+        // Support multi-value traits (traitValues array) and legacy single traitValue
+        const traitValues = Array.isArray(traitRole.traitValues) && traitRole.traitValues.length
+          ? traitRole.traitValues
+          : (traitRole.trait_values ? String(traitRole.trait_values).split(',').map(v => v.trim()).filter(Boolean)
+          : [traitRole.trait_value].filter(Boolean));
+        const shouldHave = traitValues.some(v => filteredTraits.has(`${traitRole.trait_type}:${v}`));
         const has = currentMemberRoleIds.has(traitRole.roleId);
 
         if (shouldHave && !has) {

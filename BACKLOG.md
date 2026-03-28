@@ -1,46 +1,3 @@
-
-## Voting Power Decoupling (Governance refactor)
-
-**Decision**: Decouple VP from NFT verification tiers.
-
-**Current flow**: Wallet verify → NFT count → Tier → VP
-**Target flow**:
-- Verification module: Wallet verify → NFT holdings → assigns Discord roles
-- Governance module: Discord Role → VP mapping (independent table, admin-configurable)
-
-**Benefits**:
-- Give VP to advisors/team/contributors without wallet verify
-- Governance works even if verification module is disabled
-- Manual role grants still get VP
-- Cleaner module separation
-
-**Scope**:
-- New DB table: `role_vp_mappings (role_id, voting_power)`
-- Admin UI: Governance card gets a "Voting Power Mappings" sub-section
-- `proposalService` reads VP from role mappings instead of tier config
-- `/verification admin` shows role→VP table separately from tier table
-
-## Base Verified Role (post-verification flat assignment)
-
-**Request**: Assign a role to everyone who completes wallet verification, regardless of NFT holdings.
-
-**Examples**:
-- "Verified" role → assigned to all wallet-verified members
-- "OG" role → assigned to first 250 verifications (already partially built via ogRoleService)
-
-**Design**:
-- New admin setting: `baseVerifiedRoleId` — a role ID assigned to every successfully verified user
-- Assigned in `roleService.syncUserDiscordRoles()` after all tier/trait roles are processed
-- Independent of NFT count (holding 0 NFTs still gets this role)
-- Admin UI: Verification module card gets a "Base Verified Role" dropdown (uses Discord role dropdown)
-- Stack with OG role system: OG = first X verifications, Verified = everyone
-
-**Scope**:
-- `services/roleService.js`: assign baseVerifiedRoleId in syncUserDiscordRoles()
-- `config/settings.js`: add baseVerifiedRoleId to defaults
-- `web/public/portal.js`: add dropdown in Verification module settings card
-- `web/server.js`: include in settings API
-
 ## Remove top-nav server selector (redundant)
 
 **Request**: Remove the "Select server" button + server dropdown from the top navigation bar.
@@ -77,10 +34,12 @@
 - `portal.js` — `loadServerAccess()` renders server cards
 - `portal-style.css` — server card sizing
 
-## Rename bot activity status from "The Commission" to something generic
+## Bot activity status — configurable per tenant
 
-**Request**: The bot currently shows "The Commission" as its activity/status in Discord. Change to something more generic that works for any server (not Solpranos-specific).
+**Request**: Replace hardcoded "The Commission" bot activity status with the tenant's display name from branding settings, falling back to a generic default.
+**Details**:
+- Bot activity should show tenant branding name (e.g. "Serving The Solpranos") or generic "Serving your community"
+- Configurable per server via the Branding settings panel (bot_display_name field)
 **Scope**:
-- Search codebase for hardcoded "The Commission" string
-- Replace with a generic default (e.g. "Serving your community" or configurable via branding settings)
-- Ideally make it configurable per tenant via the Branding settings panel
+- Search and replace hardcoded "The Commission" in `index.js` or wherever bot presence is set
+- Pull from tenant branding config if available

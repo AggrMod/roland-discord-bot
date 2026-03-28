@@ -187,6 +187,7 @@ client.once(Events.ClientReady, () => {
   };
   intervals.push(setInterval(pollAllCollections, 5 * 60 * 1000));
   setTimeout(pollAllCollections, 30 * 1000); // first poll 30s after startup
+  logger.log('🔔 NFT activity poll scheduled (30s startup delay, then every 5 min)');
 });
 
 client.on(Events.GuildCreate, async guild => {

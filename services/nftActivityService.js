@@ -435,9 +435,6 @@ class NFTActivityService {
    */
   async pollCollectionActivity(guildId) {
     try {
-      const apiKey = process.env.HELIUS_API_KEY;
-      if (!apiKey) return;
-
       const collections = this.getTrackedCollections(guildId).filter(c => c.enabled);
       if (!collections.length) return;
 

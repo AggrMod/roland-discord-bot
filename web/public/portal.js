@@ -2843,6 +2843,90 @@ async function loadSelectedTenantDetail() {
   }
 }
 
+async function loadEraAssignments() {
+  const table = document.getElementById('eraAssignmentsTable');
+  const select = document.getElementById('eraAssignKey');
+
+  try {
+    const [erasRes, assignRes] = await Promise.all([
+      fetch('/api/superadmin/eras', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      fetch('/api/superadmin/era-assignments', { credentials: 'include', headers: buildTenantRequestHeaders() })
+    ]);
+    const [erasData, assignData] = await Promise.all([erasRes.json(), assignRes.json()]);
+
+    // Populate era dropdown
+    if (select && erasData.success && erasData.eras) {
+      select.innerHTML = erasData.eras.map(e =>
+        `<option value="${escapeHtml(e.key)}">${escapeHtml(e.name)} — ${escapeHtml(e.description)}</option>`
+      ).join('');
+      if (erasData.eras.length === 0) {
+        select.innerHTML = '<option value="">No exclusive eras</option>';
+      }
+    }
+
+    // Populate assignments table
+    if (table && assignData.success) {
+      const rows = (assignData.assignments || []);
+      if (rows.length === 0) {
+        table.innerHTML = '<div style="padding:18px; text-align:center; color:var(--text-secondary);">No era assignments yet.</div>';
+      } else {
+        table.innerHTML = `
+          <div style="display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) auto; gap:12px; padding:10px 14px; background:rgba(99,102,241,0.12); color:#c9d6ff; font-weight:600; font-size:0.82em;">
+            <div>Guild</div><div>Era</div><div>Assigned By</div><div></div>
+          </div>
+        ` + rows.map(a => `
+          <div style="display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) auto; gap:12px; padding:10px 14px; border-top:1px solid rgba(99,102,241,0.12); align-items:center;">
+            <div style="color:#e0e7ff; font-family:monospace; font-size:0.88em; word-break:break-all;">${escapeHtml(a.guild_name || a.guild_id)}<br><span style="color:var(--text-secondary); font-size:0.82em;">${escapeHtml(a.guild_id)}</span></div>
+            <div style="color:#c9d6ff;">${escapeHtml(a.era_key)}</div>
+            <div style="color:var(--text-secondary); font-size:0.88em;">${escapeHtml(a.assigned_by || '—')}</div>
+            <button class="btn-secondary" style="font-size:0.85em; padding:6px 12px;" onclick="revokeEra('${escapeHtml(a.guild_id)}', '${escapeHtml(a.era_key)}')">Revoke</button>
+          </div>
+        `).join('');
+      }
+    }
+  } catch (error) {
+    if (table) table.innerHTML = `<div style="padding:18px; text-align:center; color:#fca5a5;">Error: ${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function assignEra() {
+  const guildId = document.getElementById('eraAssignGuildId')?.value?.trim();
+  const eraKey = document.getElementById('eraAssignKey')?.value;
+  if (!guildId || !eraKey) return alert('Please enter a Guild ID and select an era.');
+
+  try {
+    const res = await fetch('/api/superadmin/era-assignments', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { ...Object.fromEntries(buildTenantRequestHeaders().entries()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guildId, eraKey })
+    });
+    const data = await res.json();
+    if (!data.success) return alert(data.message || 'Failed to assign era');
+    document.getElementById('eraAssignGuildId').value = '';
+    loadEraAssignments();
+  } catch (error) {
+    alert('Error assigning era: ' + error.message);
+  }
+}
+
+async function revokeEra(guildId, eraKey) {
+  if (!confirm(`Revoke era "${eraKey}" from guild ${guildId}?`)) return;
+
+  try {
+    const res = await fetch(`/api/superadmin/era-assignments/${encodeURIComponent(guildId)}/${encodeURIComponent(eraKey)}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: buildTenantRequestHeaders()
+    });
+    const data = await res.json();
+    if (!data.success) return alert(data.message || 'Failed to revoke era');
+    loadEraAssignments();
+  } catch (error) {
+    alert('Error revoking era: ' + error.message);
+  }
+}
+
 function selectTenantGuild(guildId) {
   selectedTenantGuildId = guildId;
   loadSuperadminView();

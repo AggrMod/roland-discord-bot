@@ -675,8 +675,14 @@ function enforceInitialServerSelection() {
     return true;
   }
 
+  // For multi-server users, always require explicit server pick on each fresh login
+  if (managed.length > 1) {
+    setActiveGuild('', { announce: false });
+    switchSection('servers');
+    return false;
+  }
+
   if ((managed.length + unmanaged.length) > 0 && !activeGuildId) {
-    // Force explicit selection on login to prevent cross-tenant mistakes
     setActiveGuild('', { announce: false });
     switchSection('servers');
     return false;

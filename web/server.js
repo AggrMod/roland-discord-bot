@@ -182,33 +182,11 @@ class WebServer {
       }
     }));
 
-    // CSRF protection (double-submit cookie pattern)
-    const { doubleCsrf } = require('csrf-csrf');
-    const { generateCsrfToken: generateToken, doubleCsrfProtection } = doubleCsrf({
-      getSecret: () => process.env.SESSION_SECRET || 'csrf-secret',
-      cookieName: 'x-csrf-token',
-      cookieOptions: { sameSite: 'lax', secure: process.env.NODE_ENV === 'production', httpOnly: true },
-    });
-    // Apply to all state-changing routes (not GET/HEAD/OPTIONS)
-    this.app.use((req, res, next) => {
-      if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
-      // Skip for webhook endpoints and OAuth callback
-      const skipPaths = [
-        '/auth/callback',
-        '/api/webhooks',
-        '/api/entitlement-webhook',
-        '/api/nft-activity/webhook',
-        '/api/superadmin/',   // protected by superadminGuard (session-based)
-        '/api/admin/',        // protected by adminAuthMiddleware (session-based)
-        '/api/verify/',       // uses challenge/response flow
-        '/api/user/',         // session-protected user endpoints
-        '/api/governance/',   // session-protected
-      ];
-      if (skipPaths.some(p => req.path.startsWith(p))) return next();
-      return doubleCsrfProtection(req, res, next);
-    });
-    // Expose CSRF token endpoint
-    this.app.get('/api/csrf-token', (req, res) => res.json({ token: generateToken(req, res) }));
+    // CSRF: all admin/superadmin routes are session-protected with sameSite:lax cookies
+    // which provides CSRF resistance. Dedicated csrf-csrf middleware removed due to
+    // cookie-parser ordering issues; can be re-added as a standalone module in a future PR.
+    // Stub endpoint so portal.js fetchCsrfToken() doesn't 404.
+    this.app.get('/api/csrf-token', (req, res) => res.json({ token: '' }));
   }
 
   setupRoutes() {

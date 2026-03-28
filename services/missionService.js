@@ -5,8 +5,8 @@ const logger = require('../utils/logger');
 
 class MissionService {
   generateMissionId() {
-    const count = db.prepare('SELECT COUNT(*) as count FROM missions').get().count;
-    return `M-${String(count + 1).padStart(3, '0')}`;
+    const { randomUUID } = require('crypto');
+    return `M-${randomUUID().split('-')[0].toUpperCase()}`;
   }
 
   createMission(title, description, requiredRoles, minTier, totalSlots, rewardPoints) {
@@ -91,31 +91,41 @@ class MissionService {
         return { success: false, message: 'Mission is not accepting signups' };
       }
 
-      if (mission.filled_slots >= mission.total_slots) {
-        return { success: false, message: 'Mission is full' };
-      }
+      // Wrap slot check + INSERT in a transaction to prevent race conditions
+      const signupTransaction = db.transaction(() => {
+        const current = db.prepare('SELECT filled_slots, total_slots FROM missions WHERE mission_id = ?').get(missionId);
+        if (current.filled_slots >= current.total_slots) {
+          throw new Error('Mission is full');
+        }
 
-      const existing = db.prepare(
-        'SELECT * FROM mission_participants WHERE mission_id = ? AND participant_id = ?'
-      ).get(missionId, participantId);
+        const existing = db.prepare(
+          'SELECT * FROM mission_participants WHERE mission_id = ? AND participant_id = ?'
+        ).get(missionId, participantId);
 
-      if (existing) {
-        return { success: false, message: 'You are already signed up for this mission' };
-      }
+        if (existing) {
+          throw new Error('You are already signed up for this mission');
+        }
 
-      db.prepare(`
-        INSERT INTO mission_participants 
-        (mission_id, participant_id, wallet_address, assigned_nft_mint, assigned_nft_name, assigned_role)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(missionId, participantId, walletAddress, nftMint, nftName, assignedRole);
+        db.prepare(`
+          INSERT INTO mission_participants
+          (mission_id, participant_id, wallet_address, assigned_nft_mint, assigned_nft_name, assigned_role)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(missionId, participantId, walletAddress, nftMint, nftName, assignedRole);
 
-      db.prepare(
-        'UPDATE missions SET filled_slots = filled_slots + 1 WHERE mission_id = ?'
-      ).run(missionId);
+        db.prepare(
+          'UPDATE missions SET filled_slots = filled_slots + 1 WHERE mission_id = ?'
+        ).run(missionId);
 
-      const updatedMission = this.getMission(missionId);
-      if (updatedMission.filled_slots >= updatedMission.total_slots) {
-        db.prepare('UPDATE missions SET status = ? WHERE mission_id = ?').run('ready', missionId);
+        const updatedMission = db.prepare('SELECT filled_slots, total_slots FROM missions WHERE mission_id = ?').get(missionId);
+        if (updatedMission.filled_slots >= updatedMission.total_slots) {
+          db.prepare('UPDATE missions SET status = ? WHERE mission_id = ?').run('ready', missionId);
+        }
+      });
+
+      try {
+        signupTransaction();
+      } catch (txErr) {
+        return { success: false, message: txErr.message };
       }
 
       logger.log(`User ${participantId} signed up for mission ${missionId} with NFT ${nftMint}`);

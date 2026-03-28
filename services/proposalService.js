@@ -46,8 +46,8 @@ class ProposalService {
   }
 
   generateProposalId() {
-    const count = db.prepare('SELECT COUNT(*) as count FROM proposals').get().count;
-    return `P-${String(count + 1).padStart(3, '0')}`;
+    const { randomUUID } = require('crypto');
+    return `P-${randomUUID().split('-')[0].toUpperCase()}`;
   }
 
   // ==================== PROPOSAL LIFECYCLE ====================

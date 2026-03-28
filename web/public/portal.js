@@ -7,6 +7,14 @@ let confirmCallback = null;
 let activeGuildId = localStorage.getItem('activeGuildId') || '';
 let serverAccessData = { managedServers: [], unmanagedServers: [], isSuperadmin: false };
 let originalFetch = window.fetch.bind(window);
+let _csrfToken = '';
+async function fetchCsrfToken() {
+  try {
+    const r = await originalFetch('/api/csrf-token', { credentials: 'include' });
+    const d = await r.json();
+    _csrfToken = d.token || '';
+  } catch(_) {}
+}
 
 function normalizeGuildId(value) {
   if (typeof value !== 'string') return '';
@@ -51,18 +59,25 @@ function buildTenantRequestHeaders(initHeaders) {
 }
 
 window.fetch = async function(input, init = {}) {
-  const shouldAttachGuild = isTenantSensitiveRequest(input);
-  if (!shouldAttachGuild) {
-    return originalFetch(input, init);
+  const headers = buildTenantRequestHeaders(init.headers || (input instanceof Request ? input.headers : undefined));
+
+  // Attach CSRF token to all state-changing requests
+  const method = (init.method || 'GET').toUpperCase();
+  if (_csrfToken && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    headers.set('x-csrf-token', _csrfToken);
   }
 
-  const headers = buildTenantRequestHeaders(init.headers || (input instanceof Request ? input.headers : undefined));
+  const shouldAttachGuild = isTenantSensitiveRequest(input);
+  if (!shouldAttachGuild && method === 'GET') {
+    return originalFetch(input, init);
+  }
 
   return originalFetch(input, { ...init, headers });
 };
 
 // ==================== INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', () => {
+  fetchCsrfToken();
   loadPortal();
 
   // Close mobile menu when clicking outside
@@ -244,7 +259,7 @@ async function verifyByMicroTx() {
     // Build and send transaction using Solana web3
     // We need @solana/web3.js — load it dynamically if not present
     if (!window.solanaWeb3) {
-      await loadScript('https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js');
+      await loadScript('https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js');
     }
     const { Connection, PublicKey, Transaction, SystemProgram } = window.solanaWeb3;
 
@@ -1685,7 +1700,7 @@ async function loadTreasuryPublicView() {
       content.innerHTML = `<div style="color:var(--text-secondary); text-align:center; padding:20px;">Treasury data unavailable</div>`;
     }
   } catch (e) {
-    content.innerHTML = `<div style="color:#ef4444; text-align:center; padding:20px;">Error loading treasury: ${e.message}</div>`;
+    content.innerHTML = `<div style="color:#ef4444; text-align:center; padding:20px;">Error loading treasury: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -5492,7 +5507,7 @@ async function legacyLoadNFTActivityAdminView() {
 
     listEl.innerHTML = `<div style="border:1px solid rgba(99,102,241,0.22); border-radius:10px; overflow:hidden;">${rows}</div>`;
   } catch (e) {
-    document.getElementById('nftActivityAdminList').innerHTML = `<div style="color:#ef4444; padding:12px;">Error loading list: ${e.message}</div>`;
+    document.getElementById('nftActivityAdminList').innerHTML = `<div style="color:#ef4444; padding:12px;">Error loading list: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -6359,7 +6374,7 @@ async function postSelfServePanel() {
       if (status) status.innerHTML = `<p style="color:#ef4444;">❌ ${data.message || 'Failed to post panel'}</p>`;
     }
   } catch (e) {
-    if (status) status.innerHTML = `<p style="color:#ef4444;">❌ Error: ${e.message}</p>`;
+    if (status) status.innerHTML = `<p style="color:#ef4444;">❌ Error: ${escapeHtml(e.message)}</p>`;
   }
 }
 

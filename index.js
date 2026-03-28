@@ -37,6 +37,11 @@ function validateEnvVars() {
   if (process.env.SESSION_SECRET === 'solpranos-secret-key-change-this-in-production') {
     logger.warn('WARNING: Using default SESSION_SECRET. This should be changed in production!');
   }
+
+  // Block mock mode in production
+  if (process.env.NODE_ENV === 'production' && process.env.MOCK_MODE === 'true') {
+    throw new Error('FATAL: MOCK_MODE=true is not allowed in production');
+  }
 }
 
 validateEnvVars();

@@ -117,13 +117,18 @@ class WebServer {
 
     // CORS for public API - explicitly configured for the-solpranos.com integration
     // Allows cross-origin requests for public endpoints
+    const allowedOrigins = [
+      process.env.WEB_URL,
+      'https://the-solpranos.com',
+      'https://www.the-solpranos.com',
+      'https://discordbot.the-solpranos.com',
+    ].filter(Boolean);
+    if (process.env.NODE_ENV !== 'production') {
+      allowedOrigins.push('http://localhost:3000', 'http://localhost:5173');
+    }
+
     this.app.use(cors({
-      origin: [
-        'https://the-solpranos.com',
-        'https://www.the-solpranos.com',
-        'http://localhost:3000',
-        'http://localhost:5173' // Vite dev server
-      ],
+      origin: allowedOrigins,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', REQUEST_GUILD_HEADER, 'x-entitlement-secret'],
@@ -144,11 +149,12 @@ class WebServer {
 
     // Session secret enforcement
     const sessionSecret = process.env.SESSION_SECRET || 'solpranos-secret-key-change-this-in-production';
-    if (sessionSecret === 'solpranos-secret-key-change-this-in-production') {
+    if (!process.env.SESSION_SECRET || sessionSecret === 'solpranos-secret-key-change-this-in-production') {
       if (process.env.NODE_ENV === 'production') {
-        throw new Error('FATAL: SESSION_SECRET must be changed from default value in production. Set a unique SESSION_SECRET environment variable.');
+        console.error('FATAL: SESSION_SECRET is not set or uses the default value in production. Refusing to start.');
+        process.exit(1);
       }
-      logger.warn('WARNING: Using default SESSION_SECRET. Set a unique value in production!');
+      logger.warn('WARNING: Using default session secret. Set SESSION_SECRET in production.');
     }
 
     // Persistent SQLite session store (sessions survive restarts)
@@ -173,6 +179,24 @@ class WebServer {
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
       }
     }));
+
+    // CSRF protection (double-submit cookie pattern)
+    const { doubleCsrf } = require('csrf-csrf');
+    const { generateToken, doubleCsrfProtection } = doubleCsrf({
+      getSecret: () => process.env.SESSION_SECRET || 'csrf-secret',
+      cookieName: 'x-csrf-token',
+      cookieOptions: { sameSite: 'lax', secure: process.env.NODE_ENV === 'production', httpOnly: true },
+    });
+    // Apply to all state-changing routes (not GET/HEAD/OPTIONS)
+    this.app.use((req, res, next) => {
+      if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+      // Skip for webhook endpoints and OAuth callback
+      const skipPaths = ['/auth/callback', '/api/webhooks', '/api/entitlement-webhook', '/api/nft-activity/webhook'];
+      if (skipPaths.some(p => req.path.startsWith(p))) return next();
+      return doubleCsrfProtection(req, res, next);
+    });
+    // Expose CSRF token endpoint
+    this.app.get('/api/csrf-token', (req, res) => res.json({ token: generateToken(req, res) }));
   }
 
   setupRoutes() {
@@ -489,13 +513,12 @@ class WebServer {
 
         const userData = await userResponse.json();
 
-        // Store in session
+        // Store in session (do NOT persist access token — use transiently only)
         req.session.discordUser = {
           id: userData.id,
           username: userData.username,
           discriminator: userData.discriminator,
-          avatar: userData.avatar,
-          accessToken: tokenData.access_token
+          avatar: userData.avatar
         };
 
         const returnTo = req.session.returnTo || '/dashboard';
@@ -2210,7 +2233,7 @@ class WebServer {
             title: p.title,
             description: p.description,
             status: p.status,
-            creator: p.creator_id,
+            creator: p.creator_id ? p.creator_id.slice(0, 4) + '****' : null,
             votes,
             quorum: {
               required: p.quorum_threshold,
@@ -2249,7 +2272,7 @@ class WebServer {
             title: p.title,
             description: p.description,
             status: p.status,
-            creator: p.creator_id,
+            creator: p.creator_id ? p.creator_id.slice(0, 4) + '****' : null,
             votes,
             quorum: {
               required: p.quorum_threshold,
@@ -2292,7 +2315,7 @@ class WebServer {
             title: proposal.title,
             description: proposal.description,
             status: proposal.status,
-            creator: proposal.creator_id,
+            creator: proposal.creator_id ? proposal.creator_id.slice(0, 4) + '****' : null,
             votes,
             quorum: {
               required: proposal.quorum_threshold,
@@ -2354,7 +2377,7 @@ class WebServer {
             filledSlots: m.filled_slots,
             rewardPoints: m.reward_points,
             participants: participants.map(p => ({
-              participantId: p.participant_id,
+              participantId: p.participant_id ? p.participant_id.slice(0, 4) + '****' : null,
               nftName: p.assigned_nft_name,
               role: p.assigned_role
             })),
@@ -2384,7 +2407,7 @@ class WebServer {
             totalSlots: m.total_slots,
             rewardPoints: m.reward_points,
             participants: participants.map(p => ({
-              participantId: p.participant_id,
+              participantId: p.participant_id ? p.participant_id.slice(0, 4) + '****' : null,
               nftName: p.assigned_nft_name,
               role: p.assigned_role,
               pointsAwarded: p.points_awarded
@@ -2423,9 +2446,8 @@ class WebServer {
             filledSlots: mission.filled_slots,
             rewardPoints: mission.reward_points,
             participants: participants.map(p => ({
-              participantId: p.participant_id,
-              walletAddress: p.wallet_address,
-              nftMint: p.assigned_nft_mint,
+              participantId: p.participant_id ? p.participant_id.slice(0, 4) + '****' : null,
+              walletAddress: p.wallet_address ? p.wallet_address.slice(0, 4) + '...' + p.wallet_address.slice(-4) : null,
               nftName: p.assigned_nft_name,
               role: p.assigned_role,
               pointsAwarded: p.points_awarded,
@@ -2462,7 +2484,7 @@ class WebServer {
           success: true,
           leaderboard: leaderboard.map((entry, index) => ({
             rank: index + 1,
-            discordId: entry.discord_id,
+            discordId: entry.discord_id ? entry.discord_id.slice(0, 4) + '****' : null,
             username: entry.username,
             tier: entry.tier,
             totalPoints: entry.total_points,
@@ -2516,7 +2538,7 @@ class WebServer {
         res.json({
           success: true,
           user: {
-            discordId: userPoints.discord_id,
+            discordId: userPoints.discord_id ? userPoints.discord_id.slice(0, 4) + '****' : null,
             username: userPoints.username,
             tier: userPoints.tier,
             totalPoints: userPoints.total_points,
@@ -2617,17 +2639,31 @@ class WebServer {
       }
     });
 
-    // Legacy verify endpoint (kept for API consumers)
+    // Legacy verify endpoint (kept for API consumers — requires session auth)
     this.app.post('/api/verify', async (req, res) => {
-      try {
-        const { discordId, walletAddress, signature, message } = req.body;
+      if (!req.session?.discordUser?.id) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
 
-        if (!discordId || !walletAddress || !signature || !message) {
+      try {
+        const discordId = req.session.discordUser.id; // ignore body discordId
+        const { walletAddress, signature } = req.body;
+
+        if (!walletAddress || !signature) {
           return res.status(400).json({ success: false, message: 'Missing required fields' });
         }
 
-        const isValid = this.verifySignature(walletAddress, signature, message);
-        
+        // Validate challenge from session (must use /api/verify/challenge first)
+        const challenge = req.session.verifyChallenge;
+        if (!challenge || (Date.now() - challenge.createdAt) > 5 * 60 * 1000) {
+          return res.status(400).json({ success: false, message: 'Challenge expired. Request a new challenge first.' });
+        }
+
+        const isValid = this.verifySignature(walletAddress, signature, challenge.message);
+
+        // Clear challenge after use
+        delete req.session.verifyChallenge;
+
         if (!isValid) {
           return res.status(400).json({ success: false, message: 'Invalid signature' });
         }
@@ -2677,11 +2713,18 @@ class WebServer {
     });
 
     this.app.get('/api/wallets/:discordId', (req, res) => {
+      if (!req.session?.discordUser?.id) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
+      if (req.session.discordUser.id !== req.params.discordId) {
+        return res.status(403).json({ success: false, message: 'Forbidden' });
+      }
+
       try {
         const { discordId } = req.params;
-        
+
         const wallets = db.prepare('SELECT wallet_address, is_favorite, primary_wallet, created_at FROM wallets WHERE discord_id = ? ORDER BY is_favorite DESC, created_at ASC').all(discordId);
-        
+
         res.json({ success: true, wallets });
       } catch (error) {
         logger.error('Error fetching wallets:', error);
@@ -2690,6 +2733,13 @@ class WebServer {
     });
 
     this.app.post('/api/wallets/:discordId/favorite', (req, res) => {
+      if (!req.session?.discordUser?.id) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
+      if (req.session.discordUser.id !== req.params.discordId) {
+        return res.status(403).json({ success: false, message: 'Forbidden' });
+      }
+
       try {
         const { discordId } = req.params;
         const { walletAddress } = req.body;
@@ -3083,11 +3133,12 @@ class WebServer {
     this.app.post('/api/webhooks/nft-activity', (req, res) => {
       try {
         const configuredSecret = process.env.NFT_ACTIVITY_WEBHOOK_SECRET;
-        if (configuredSecret) {
-          const provided = req.headers['x-webhook-secret'];
-          if (provided !== configuredSecret) {
-            return res.status(401).json({ success: false, message: 'Unauthorized' });
-          }
+        if (!configuredSecret) {
+          return res.status(503).json({ error: 'Webhook not configured' });
+        }
+        const provided = req.headers['x-webhook-secret'];
+        if (!provided || !timingSafeEquals(provided, configuredSecret)) {
+          return res.status(401).json({ success: false, message: 'Unauthorized' });
         }
 
         const event = req.body || {};

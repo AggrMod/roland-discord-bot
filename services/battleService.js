@@ -385,17 +385,29 @@ class BattleService {
         }
       }
 
-      const participants = this.getParticipants(lobbyId);
-      
-      // Check max players (999 = effectively unlimited)
-      if (lobby.max_players < 999 && participants.length >= lobby.max_players) {
+      // Use INSERT OR IGNORE + transaction to prevent race conditions
+      const joinResult = db.transaction(() => {
+        const participants = db.prepare('SELECT COUNT(*) as c FROM battle_participants WHERE lobby_id = ?').get(lobbyId);
+
+        // Check max players (999 = effectively unlimited)
+        if (lobby.max_players < 999 && participants.c >= lobby.max_players) {
+          return { full: true };
+        }
+
+        const info = db.prepare(`
+          INSERT OR IGNORE INTO battle_participants (lobby_id, user_id, username)
+          VALUES (?, ?, ?)
+        `).run(lobbyId, userId, username);
+
+        return { full: false, inserted: info.changes > 0 };
+      })();
+
+      if (joinResult.full) {
         return { success: false, message: 'Lobby is full' };
       }
-
-      db.prepare(`
-        INSERT INTO battle_participants (lobby_id, user_id, username)
-        VALUES (?, ?, ?)
-      `).run(lobbyId, userId, username);
+      if (!joinResult.inserted) {
+        return { success: false, message: 'You are already in this lobby' };
+      }
 
       logger.log(`User ${username} joined battle lobby ${lobbyId}`);
       return { success: true, count: participants.length + 1 };

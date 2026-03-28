@@ -267,14 +267,18 @@ class TicketService {
   // ==================== Ticket Lifecycle ====================
 
   _nextTicketNumber() {
-    const row = db.prepare('SELECT value FROM ticket_sequences WHERE name = ?').get('ticket');
-    if (!row) {
-      db.prepare('INSERT INTO ticket_sequences (name, value) VALUES (?, ?)').run('ticket', 1);
-      return 1;
-    }
-    const next = row.value + 1;
-    db.prepare('UPDATE ticket_sequences SET value = ? WHERE name = ?').run(next, 'ticket');
-    return next;
+    // Wrap in transaction to prevent ticket number collisions
+    const getNext = db.transaction(() => {
+      const row = db.prepare('SELECT value FROM ticket_sequences WHERE name = ?').get('ticket');
+      if (!row) {
+        db.prepare('INSERT INTO ticket_sequences (name, value) VALUES (?, ?)').run('ticket', 1);
+        return 1;
+      }
+      const next = row.value + 1;
+      db.prepare('UPDATE ticket_sequences SET value = ? WHERE name = ?').run(next, 'ticket');
+      return next;
+    });
+    return getNext();
   }
 
   async createTicket(interaction, categoryId, templateResponses, guildId = process.env.GUILD_ID) {

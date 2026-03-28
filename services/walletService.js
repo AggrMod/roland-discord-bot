@@ -4,35 +4,42 @@ const logger = require('../utils/logger');
 class WalletService {
   linkWallet(discordId, username, walletAddress) {
     try {
-      let user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(discordId);
-      
-      if (!user) {
-        db.prepare('INSERT INTO users (discord_id, username) VALUES (?, ?)').run(discordId, username);
-      }
+      // Wrap existence check + INSERT in a transaction to prevent race conditions
+      const linkTransaction = db.transaction(() => {
+        let user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(discordId);
 
-      const existingWallet = db.prepare('SELECT * FROM wallets WHERE wallet_address = ?').get(walletAddress);
-      
-      if (existingWallet) {
-        if (existingWallet.discord_id === discordId) {
-          return { success: true, message: 'Wallet already linked to your account' };
+        if (!user) {
+          db.prepare('INSERT INTO users (discord_id, username) VALUES (?, ?)').run(discordId, username);
         }
-        return { success: false, message: 'This wallet is already linked to another account' };
-      }
 
-      const walletCount = db.prepare('SELECT COUNT(*) as count FROM wallets WHERE discord_id = ?').get(discordId).count;
-      const isPrimary = walletCount === 0 ? 1 : 0;
-      const isFirstWallet = walletCount === 0;
+        const existingWallet = db.prepare('SELECT * FROM wallets WHERE wallet_address = ?').get(walletAddress);
 
-      db.prepare('INSERT INTO wallets (discord_id, wallet_address, primary_wallet) VALUES (?, ?, ?)').run(discordId, walletAddress, isPrimary);
+        if (existingWallet) {
+          if (existingWallet.discord_id === discordId) {
+            return { success: true, message: 'Wallet already linked to your account', isFirstWallet: false };
+          }
+          return { success: false, message: 'This wallet is already linked to another account' };
+        }
 
-      logger.log(`Wallet ${walletAddress} linked to user ${discordId}`);
-      
-      // Trigger OG role assignment if this is first wallet
-      if (isFirstWallet) {
+        const walletCount = db.prepare('SELECT COUNT(*) as count FROM wallets WHERE discord_id = ?').get(discordId).count;
+        const isPrimary = walletCount === 0 ? 1 : 0;
+        const isFirstWallet = walletCount === 0;
+
+        db.prepare('INSERT INTO wallets (discord_id, wallet_address, primary_wallet) VALUES (?, ?, ?)').run(discordId, walletAddress, isPrimary);
+
+        return { success: true, message: 'Wallet linked successfully', isFirstWallet };
+      });
+
+      const result = linkTransaction();
+
+      if (result.success && result.isFirstWallet) {
+        logger.log(`Wallet ${walletAddress} linked to user ${discordId}`);
         this.triggerOGRoleAssignment(discordId, username);
+      } else if (result.success) {
+        logger.log(`Wallet ${walletAddress} linked to user ${discordId}`);
       }
-      
-      return { success: true, message: 'Wallet linked successfully', isFirstWallet };
+
+      return result;
     } catch (error) {
       logger.error('Error linking wallet:', error);
       return { success: false, message: 'Failed to link wallet' };

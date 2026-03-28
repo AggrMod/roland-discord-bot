@@ -7,6 +7,7 @@ class MicroVerifyService {
     this.connection = null;
     this.pollingInterval = null;
     this.lastSignature = null;
+    this._configOverrides = {};
   }
 
   /**
@@ -26,7 +27,7 @@ class MicroVerifyService {
    * Check if micro verify is enabled
    */
   isEnabled() {
-    return process.env.MICRO_VERIFY_ENABLED === 'true';
+    return this._getConfigValue('MICRO_VERIFY_ENABLED') === 'true';
   }
 
   /**
@@ -35,16 +36,16 @@ class MicroVerifyService {
   getConfig() {
     return {
       enabled: this.isEnabled(),
-      receiveWallet: process.env.VERIFICATION_RECEIVE_WALLET || null,
-      ttlMinutes: parseInt(process.env.VERIFY_REQUEST_TTL_MINUTES || '15'),
-      pollIntervalSeconds: parseInt(process.env.POLL_INTERVAL_SECONDS || '30'),
-      rateLimitMinutes: parseInt(process.env.VERIFY_RATE_LIMIT_MINUTES || '5'),
-      maxPendingPerUser: parseInt(process.env.MAX_PENDING_PER_USER || '1')
+      receiveWallet: this._getConfigValue('VERIFICATION_RECEIVE_WALLET') || null,
+      ttlMinutes: parseInt(this._getConfigValue('VERIFY_REQUEST_TTL_MINUTES') || '15'),
+      pollIntervalSeconds: parseInt(this._getConfigValue('POLL_INTERVAL_SECONDS') || '30'),
+      rateLimitMinutes: parseInt(this._getConfigValue('VERIFY_RATE_LIMIT_MINUTES') || '5'),
+      maxPendingPerUser: parseInt(this._getConfigValue('MAX_PENDING_PER_USER') || '1')
     };
   }
 
   /**
-   * Update configuration
+   * Update configuration (uses module-level config, NOT process.env)
    */
   updateConfig(updates) {
     try {
@@ -54,7 +55,7 @@ class MicroVerifyService {
       for (const [key, value] of Object.entries(updates)) {
         const envKey = key.toUpperCase();
         if (validKeys.includes(envKey)) {
-          process.env[envKey] = value.toString();
+          this._configOverrides[envKey] = String(value);
           updated.push(key);
         }
       }
@@ -65,6 +66,10 @@ class MicroVerifyService {
       logger.error('Error updating config:', error);
       return { success: false, message: 'Failed to update configuration' };
     }
+  }
+
+  _getConfigValue(key) {
+    return this._configOverrides[key] !== undefined ? this._configOverrides[key] : process.env[key];
   }
 
   /**
@@ -96,29 +101,39 @@ class MicroVerifyService {
         };
       }
 
-      // Generate new amount (with collision check)
-      let amount, attempts = 0;
-      do {
-        amount = this.generateUniqueAmount();
-        attempts++;
-        const collision = db.prepare('SELECT id FROM user_verify_amounts WHERE assigned_amount = ?').get(amount);
-        if (!collision) break;
-      } while (attempts < 10);
+      // Wrap amount uniqueness check + insert in a transaction to prevent collisions
+      const assignAmount = db.transaction(() => {
+        let amt, tries = 0;
+        do {
+          amt = this.generateUniqueAmount();
+          tries++;
+          const collision = db.prepare('SELECT id FROM user_verify_amounts WHERE assigned_amount = ?').get(amt);
+          if (!collision) break;
+        } while (tries < 10);
 
-      if (attempts >= 10) {
-        return { success: false, message: 'Failed to generate unique amount' };
+        if (tries >= 10) {
+          throw new Error('Failed to generate unique amount');
+        }
+
+        db.prepare(`
+          INSERT INTO user_verify_amounts (discord_id, username, assigned_amount)
+          VALUES (?, ?, ?)
+        `).run(discordId, username, amt);
+
+        return amt;
+      });
+
+      let amount;
+      try {
+        amount = assignAmount();
+      } catch (txErr) {
+        return { success: false, message: txErr.message };
       }
 
-      // Store it
-      db.prepare(`
-        INSERT INTO user_verify_amounts (discord_id, username, assigned_amount)
-        VALUES (?, ?, ?)
-      `).run(discordId, username, amount);
-
-      return { 
-        success: true, 
+      return {
+        success: true,
         amount,
-        isNew: true 
+        isNew: true
       };
     } catch (error) {
       logger.error('Error getting/creating user verify amount:', error);

@@ -6,27 +6,36 @@ const dbPath = path.join(__dirname, 'solpranos.db');
 const db = new Database(dbPath);
 
 db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
 
 function initDatabase() {
   logger.log('Initializing database...');
 
   // Migration: add missing columns
-  try { db.exec('ALTER TABLE proposals ADD COLUMN voting_message_id TEXT'); } catch(e) {}
-  try { db.exec('ALTER TABLE proposals ADD COLUMN message_id TEXT'); } catch(e) {}
-  try { db.exec('ALTER TABLE proposals ADD COLUMN channel_id TEXT'); } catch(e) {}
-  try { db.exec('ALTER TABLE wallets ADD COLUMN is_favorite BOOLEAN DEFAULT 0'); } catch(e) {}
-  try { db.exec('CREATE TABLE user_verify_amounts (id INTEGER PRIMARY KEY AUTOINCREMENT, discord_id TEXT UNIQUE NOT NULL, username TEXT, assigned_amount REAL NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'); } catch(e) {}
+  const ignoreDuplicateMigration = (fn) => {
+    try { fn(); } catch(e) {
+      if (!e.message.includes('duplicate column name') && !e.message.includes('already exists')) {
+        throw e;
+      }
+    }
+  };
+
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN voting_message_id TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN message_id TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN channel_id TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE wallets ADD COLUMN is_favorite BOOLEAN DEFAULT 0'));
+  ignoreDuplicateMigration(() => db.exec('CREATE TABLE user_verify_amounts (id INTEGER PRIMARY KEY AUTOINCREMENT, discord_id TEXT UNIQUE NOT NULL, username TEXT, assigned_amount REAL NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'));
 
   // Governance overhaul migrations
-  try { db.exec("ALTER TABLE proposals ADD COLUMN category TEXT DEFAULT 'Other'"); } catch(e) {}
-  try { db.exec('ALTER TABLE proposals ADD COLUMN cost_indication TEXT'); } catch(e) {}
-  try { db.exec('ALTER TABLE proposals ADD COLUMN veto_reason TEXT'); } catch(e) {}
-  try { db.exec('ALTER TABLE proposals ADD COLUMN veto_votes TEXT'); } catch(e) {}
-  try { db.exec('ALTER TABLE proposals ADD COLUMN vp_snapshot TEXT'); } catch(e) {}
-  try { db.exec('ALTER TABLE proposals ADD COLUMN quorum_required INTEGER'); } catch(e) {}
-  try { db.exec('ALTER TABLE proposals ADD COLUMN on_hold_reason TEXT'); } catch(e) {}
-  try { db.exec('ALTER TABLE proposals ADD COLUMN promoted_by TEXT'); } catch(e) {}
-  try { db.exec('ALTER TABLE proposals ADD COLUMN paused INTEGER DEFAULT 0'); } catch(e) {}
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE proposals ADD COLUMN category TEXT DEFAULT 'Other'"));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN cost_indication TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN veto_reason TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN veto_votes TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN vp_snapshot TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN quorum_required INTEGER'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN on_hold_reason TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN promoted_by TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN paused INTEGER DEFAULT 0'));
 
   // VP decoupling: role-to-voting-power mapping table
   db.exec(`

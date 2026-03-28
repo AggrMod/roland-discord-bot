@@ -192,7 +192,17 @@ class WebServer {
     this.app.use((req, res, next) => {
       if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
       // Skip for webhook endpoints and OAuth callback
-      const skipPaths = ['/auth/callback', '/api/webhooks', '/api/entitlement-webhook', '/api/nft-activity/webhook'];
+      const skipPaths = [
+        '/auth/callback',
+        '/api/webhooks',
+        '/api/entitlement-webhook',
+        '/api/nft-activity/webhook',
+        '/api/superadmin/',   // protected by superadminGuard (session-based)
+        '/api/admin/',        // protected by adminAuthMiddleware (session-based)
+        '/api/verify/',       // uses challenge/response flow
+        '/api/user/',         // session-protected user endpoints
+        '/api/governance/',   // session-protected
+      ];
       if (skipPaths.some(p => req.path.startsWith(p))) return next();
       return doubleCsrfProtection(req, res, next);
     });

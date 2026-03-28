@@ -823,14 +823,15 @@ function showUnauthenticatedState() {
 }
 
 function refreshAdminEntryVisibility() {
-  const canShowAdminEntry = !!isAdmin && (!!activeGuildId || !!isSuperadmin);
+  // Tenant Admin is strictly server-scoped.
+  const canShowTenantAdminEntry = !!isAdmin && !!activeGuildId;
   const adminSidebarGroup = document.getElementById('adminSidebarGroup');
   const mobileNavAdmin = document.getElementById('mobileNavAdmin');
   const topNav = document.getElementById('topNavAdmin');
 
-  if (adminSidebarGroup) adminSidebarGroup.style.display = canShowAdminEntry ? 'block' : 'none';
-  if (mobileNavAdmin) mobileNavAdmin.style.display = canShowAdminEntry ? 'block' : 'none';
-  if (topNav) topNav.style.display = canShowAdminEntry ? '' : 'none';
+  if (adminSidebarGroup) adminSidebarGroup.style.display = canShowTenantAdminEntry ? 'block' : 'none';
+  if (mobileNavAdmin) mobileNavAdmin.style.display = canShowTenantAdminEntry ? 'block' : 'none';
+  if (topNav) topNav.style.display = canShowTenantAdminEntry ? '' : 'none';
 }
 
 async function checkAdminStatus() {

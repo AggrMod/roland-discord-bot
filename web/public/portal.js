@@ -21,7 +21,9 @@ if (!activeGuildId) {
 
 function requiresServerSelectionGate() {
   const managed = serverAccessData?.managedServers || [];
-  return !!userData && managed.length > 1 && !activeGuildId;
+  const unmanaged = serverAccessData?.unmanagedServers || [];
+  const hasAnyServerContext = (managed.length + unmanaged.length) > 0;
+  return !!userData && hasAnyServerContext && !activeGuildId;
 }
 
 function isTenantSensitiveRequest(input) {
@@ -666,13 +668,14 @@ function renderServerAccessView(errorMessage = '') {
 // ==================== PORTAL LOADING ====================
 function enforceInitialServerSelection() {
   const managed = serverAccessData?.managedServers || [];
+  const unmanaged = serverAccessData?.unmanagedServers || [];
 
   if (managed.length === 1 && !activeGuildId) {
     setActiveGuild(managed[0].guildId, { announce: false });
     return true;
   }
 
-  if (managed.length > 1) {
+  if ((managed.length + unmanaged.length) > 0 && !activeGuildId) {
     // Force explicit selection on login to prevent cross-tenant mistakes
     setActiveGuild('', { announce: false });
     switchSection('servers');

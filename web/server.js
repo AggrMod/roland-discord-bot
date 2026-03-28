@@ -1326,7 +1326,8 @@ class WebServer {
       }
     };
 
-    this.app.get('/api/admin/env-status', adminAuthMiddleware, (req, res) => {
+    this.app.get('/api/admin/env-status', (req, res) => {
+      if (!req.session?.discordUser) return res.status(401).json({ success: false, message: 'Not authenticated' });
       res.json({
         mockMode: process.env.MOCK_MODE === 'true',
         heliusConfigured: !!process.env.HELIUS_API_KEY,

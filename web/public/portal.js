@@ -2311,7 +2311,7 @@ let _envStatusCache = null;
 async function loadEnvStatusBar() {
   const bar = document.getElementById('adminEnvStatusBar');
   if (!bar) return;
-  if (_envStatusCache) { renderEnvStatusBar(bar, _envStatusCache); return; }
+  if (_envStatusCache && _envStatusCache.nodeEnv) { renderEnvStatusBar(bar, _envStatusCache); return; }
   try {
     const res = await fetch('/api/admin/env-status', { credentials: 'include' });
     const data = await res.json();

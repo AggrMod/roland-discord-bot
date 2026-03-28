@@ -98,3 +98,12 @@
 - Debounce rapid-fire delist/relist events (don't spam if someone relists quickly)
 - Configurable min-price filter per collection (ignore dust listings)
 - Poll interval configurable per server (default 5 min)
+
+## NFT Tracker: buyer identity resolution
+
+**Request**: When an NFT sale/mint alert fires, check if the buyer's wallet address exists in the verification table. If it does, resolve to their Discord username and:
+- Show Discord username in the embed instead of shortened wallet address
+- Tag the user in the alert message: "🎉 Congrats <@userId> on your new Vault Runner!"
+- Fall back to shortened wallet address if wallet not linked to any Discord account
+**Data source**: `verified_wallets` (or equivalent) table — join on `wallet_address = buyer_wallet`
+**Scope**: Only applies to `sale` and `mint` event types (not list/delist)

@@ -429,6 +429,7 @@ class NFTActivityService {
           }
 
           const allTxns = await res.json();
+          logger.log(`[nft-poll] ${col.collection_name} raw=${Array.isArray(allTxns) ? allTxns.length : 0} types=${Array.isArray(allTxns) ? [...new Set(allTxns.map(t => t.type))].join(',') : 'n/a'}`);
           const nftTypes = new Set(['NFT_LISTING', 'NFT_SALE', 'NFT_MINT', 'NFT_CANCEL_LISTING', 'NFT_BID', 'LIST_NFT', 'SELL_NFT', 'DELIST_NFT']);
           const txns = Array.isArray(allTxns) ? allTxns.filter(tx => nftTypes.has((tx.type || '').toUpperCase())) : [];
           let newCount = 0;

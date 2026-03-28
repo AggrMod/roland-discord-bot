@@ -201,10 +201,13 @@ module.exports = {
     const channelId = interaction.channelId;
     const guildId = interaction.guildId;
     const maxPlayers = interaction.options.getInteger('max_players') || 999;
-    const requestedEra = interaction.options.getString('era') || 'mafia';
 
-    // Validate era against guild's assigned eras
+    // Determine era: explicit option → guild's assigned exclusive era → mafia default
     const availableEras = battleService.getAssignedEras(guildId);
+    const exclusiveEras = availableEras.filter(e => e !== 'mafia');
+    const defaultEra = exclusiveEras.length === 1 ? exclusiveEras[0] : 'mafia';
+    const requestedEra = interaction.options.getString('era') || defaultEra;
+
     if (!availableEras.includes(requestedEra)) {
       return interaction.editReply({ content: `❌ Era "${requestedEra}" is not available for this server. Available eras: ${availableEras.join(', ')}`, ephemeral: true });
     }

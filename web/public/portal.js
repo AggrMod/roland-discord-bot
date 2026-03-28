@@ -681,14 +681,19 @@ function updateSidebarModuleNav() {
     { id: 'sidebarNavTreasury', module: 'treasury' },
     { id: 'sidebarNavNftActivity', module: 'nfttracker' },
     { id: 'sidebarNavHeist', module: 'heist' },
+    { id: 'sidebarNavPlans', module: null },
   ];
 
   moduleItems.forEach(({ id, module }) => {
     const el = document.getElementById(id);
     if (!el) return;
-    const enabled = state[module] !== false;
+    const enabled = module === null || state[module] !== false;
     el.style.display = (hasServer && enabled) ? '' : 'none';
   });
+
+  // Mobile plans nav
+  const mobilePlans = document.getElementById('mobileNavPlans');
+  if (mobilePlans) mobilePlans.style.display = hasServer ? '' : 'none';
 
   const sidebarSettings = document.getElementById('sidebarNavSettings');
   if (sidebarSettings) {
@@ -1608,6 +1613,9 @@ function switchSection(sectionName) {
     loadEnvStatusBar();
   } else if (sectionName === 'heist' && userData && heistEnabled) {
     loadAvailableMissions();
+  } else if (sectionName === 'plans') {
+    updatePlanPrices();
+    if (isAdmin) loadCurrentPlan();
   }
 
   // Update URL without reload
@@ -6711,4 +6719,115 @@ function safeJsonArray(value) {
   } catch {
     return [];
   }
+}
+
+// ── Plans ──────────────────────────────────────────────
+const PLAN_CATALOG = [
+  {
+    id: "free",
+    name: "Free",
+    monthlyPrice: 0,
+    features: [
+      "1 Discord server",
+      "Basic verification",
+      "Up to 3 wallet trackers",
+      "Community governance",
+      "Standard support",
+    ],
+    cta: "Current Plan",
+    ctaDisabled: true,
+  },
+  {
+    id: "plus",
+    name: "Plus",
+    monthlyPrice: 15,
+    popular: true,
+    features: [
+      "1 Discord server",
+      "Advanced verification + traits",
+      "Up to 50 wallet trackers",
+      "NFT activity alerts",
+      "Battle module",
+      "Priority support",
+    ],
+    cta: "Upgrade to Plus",
+    ctaAction: "upgrade_plus",
+  },
+  {
+    id: "pro",
+    name: "Pro",
+    monthlyPrice: 30,
+    features: [
+      "Up to 3 Discord servers",
+      "Everything in Plus",
+      "Unlimited wallet trackers",
+      "Snapshot exports",
+      "Custom branding",
+      "Dedicated support",
+    ],
+    cta: "Upgrade to Pro",
+    ctaAction: "upgrade_pro",
+  },
+];
+
+function updatePlanPrices() {
+  const annual = document.getElementById('billingAnnualToggle')?.checked;
+  const grid = document.getElementById('plansGrid');
+  if (!grid) return;
+
+  grid.innerHTML = PLAN_CATALOG.map(plan => {
+    const price = annual ? Math.round(plan.monthlyPrice * 0.85) : plan.monthlyPrice;
+    const period = plan.monthlyPrice === 0 ? "" : annual ? "/mo, billed annually" : "/month";
+    return `
+      <div class="plan-card ${plan.popular ? 'popular' : ''}">
+        <div class="plan-name">${plan.name}</div>
+        <div class="plan-price">$${price}<span>${period}</span></div>
+        <ul class="plan-features">
+          ${plan.features.map(f => `<li>${escapeHtml(f)}</li>`).join('')}
+        </ul>
+        <div class="plan-cta">
+          <button class="btn-primary" style="width:100%;"
+            ${plan.ctaDisabled ? 'disabled' : ''}
+            onclick="handlePlanCta('${plan.ctaAction || ''}')">
+            ${escapeHtml(plan.cta)}
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function handlePlanCta(action) {
+  if (!action) return;
+  showInfo('Billing integration coming soon. Contact support to upgrade.');
+}
+
+async function loadCurrentPlan() {
+  try {
+    const res = await apiFetch('/api/admin/plan');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.plan && data.plan !== 'free') {
+      const card = document.getElementById('currentPlanCard');
+      const content = document.getElementById('currentPlanContent');
+      if (card && content) {
+        const record = getServerRecord(activeGuildId);
+        content.innerHTML = `
+          <div style="display:flex;align-items:center;gap:16px;">
+            ${record?.iconUrl ? `<img src="${record.iconUrl}" style="width:48px;height:48px;border-radius:10px;object-fit:cover;">` : ''}
+            <div>
+              <div style="font-size:1.1em;font-weight:700;color:#e0e7ff;">${escapeHtml(record?.name || activeGuildId)}</div>
+              <div style="margin-top:4px;"><span class="badge badge-active">${escapeHtml(data.plan)}</span></div>
+              ${data.expiresAt ? `<div style="color:var(--text-secondary);font-size:0.82em;margin-top:4px;">Until ${new Date(data.expiresAt).toLocaleDateString()}</div>` : ''}
+            </div>
+            <div style="margin-left:auto;display:flex;gap:8px;">
+              <button class="btn-primary" onclick="handlePlanCta('manage')">Manage Plan</button>
+              <button class="btn-secondary" onclick="handlePlanCta('cancel')">Cancel Plan</button>
+            </div>
+          </div>
+        `;
+        card.style.display = 'block';
+      }
+    }
+  } catch(e) { /* no plan API yet, silent fail */ }
 }

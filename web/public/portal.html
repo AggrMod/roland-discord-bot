@@ -73,6 +73,10 @@
             <span class="nav-icon" aria-hidden="true">🎯</span>
             <span class="nav-label">Heist</span>
           </button>
+          <button class="nav-item" data-section="plans" onclick="switchSection('plans'); toggleMobileMenu()" id="mobileNavPlans" style="display:none;">
+            <span class="nav-icon" aria-hidden="true">💎</span>
+            <span class="nav-label">Plans</span>
+          </button>
           <button class="nav-item" data-section="settings" onclick="switchSection('settings'); toggleMobileMenu()" id="mobileNavSettings" style="display:none;">
             <span class="nav-icon" aria-hidden="true">⚙️</span>
             <span class="nav-label">Settings</span>
@@ -130,6 +134,10 @@
           <button class="nav-item" data-section="heist" data-module="heist" onclick="switchSection('heist')" id="sidebarNavHeist">
             <span class="nav-icon" aria-hidden="true">🎯</span>
             <span class="nav-label">Heist</span>
+          </button>
+          <button class="nav-item" data-section="plans" onclick="switchSection('plans')" id="sidebarNavPlans" style="display:none;">
+            <span class="nav-icon" aria-hidden="true">💎</span>
+            <span class="nav-label">Plans</span>
           </button>
           <div class="sidebar-section-divider"></div>
           <button class="nav-item" data-section="settings" onclick="switchSection('settings')" id="sidebarNavSettings" style="display:none;">
@@ -450,27 +458,61 @@
         <!-- Treasury Section -->
         <section id="section-treasury" class="content-section">
           <header class="section-header">
-            <h2>DAO Treasury</h2>
-            <p class="section-subtitle">Real-time treasury balances and transaction history</p>
+            <div class="treasury-header-row">
+              <div>
+                <h2>Treasury Wallets <span id="treasuryWalletCount" class="count-badge">0</span></h2>
+                <p class="section-subtitle">Real-time treasury balances and transaction history</p>
+              </div>
+              <div class="treasury-header-actions admin-only-treasury" style="display:none;">
+                <button class="btn-primary" onclick="openAddWalletModal()">+ Add Wallet</button>
+                <button class="btn-secondary" onclick="exportTreasuryCSV()">↓ Export</button>
+              </div>
+            </div>
           </header>
 
-          <div class="card">
-            <div class="card-header">
-              <h3>💰 Treasury Status</h3>
-              <button class="btn-secondary" onclick="loadTreasuryPublicView()">
-                <span>🔄</span>
-                <span>Refresh</span>
-              </button>
-            </div>
-            <div id="publicTreasuryView" style="margin-top: var(--space-4); color: var(--text-secondary);">
-              <div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading treasury...</p></div>
+          <!-- Treasury Tabs -->
+          <div class="settings-tabs" id="treasuryTabs">
+            <button class="settings-tab active" data-tab="treasury-wallets" onclick="switchTreasuryTab('treasury-wallets')">Wallets</button>
+            <button class="settings-tab" data-tab="treasury-history" onclick="switchTreasuryTab('treasury-history')">Transaction History</button>
+            <button class="settings-tab admin-only-treasury" data-tab="treasury-alerts" onclick="switchTreasuryTab('treasury-alerts')" style="display:none;">Alerts</button>
+          </div>
+
+          <!-- Wallets Tab -->
+          <div id="treasuryTab-treasury-wallets" class="treasury-tab-pane" style="margin-top: var(--space-4);">
+            <div id="treasuryWalletTableContainer">
+              <div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading wallets...</p></div>
             </div>
           </div>
 
-          <div class="card">
-            <h3>Recent Transactions</h3>
-            <div id="publicTreasuryTransactions" style="margin-top: var(--space-4); color: var(--text-secondary);">
-              <div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading transactions...</p></div>
+          <!-- Transaction History Tab -->
+          <div id="treasuryTab-treasury-history" class="treasury-tab-pane" style="display:none; margin-top: var(--space-4);">
+            <div class="card">
+              <div class="card-header">
+                <h3>💰 Treasury Status</h3>
+                <button class="btn-secondary" onclick="loadTreasuryPublicView()">
+                  <span>🔄</span>
+                  <span>Refresh</span>
+                </button>
+              </div>
+              <div id="publicTreasuryView" style="margin-top: var(--space-4); color: var(--text-secondary);">
+                <div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading treasury...</p></div>
+              </div>
+            </div>
+            <div class="card" style="margin-top: var(--space-4);">
+              <h3>Recent Transactions</h3>
+              <div id="publicTreasuryTransactions" style="margin-top: var(--space-4); color: var(--text-secondary);">
+                <div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading transactions...</p></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Alerts Tab (admin-only) -->
+          <div id="treasuryTab-treasury-alerts" class="treasury-tab-pane admin-only-treasury" style="display:none; margin-top: var(--space-4);">
+            <div class="card">
+              <h3>Transaction Alert Settings</h3>
+              <div id="treasuryAlertsConfig" style="margin-top: var(--space-4);">
+                <div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading alert config...</p></div>
+              </div>
             </div>
           </div>
         </section>
@@ -920,6 +962,37 @@
           </div>
         </section>
 
+        <!-- Plans Section -->
+        <section id="section-plans" class="content-section">
+          <header class="section-header">
+            <h2>Plans</h2>
+            <p class="section-subtitle">Choose the right plan for your community</p>
+          </header>
+
+          <!-- Current Plan Card (shown when on a paid plan) -->
+          <div id="currentPlanCard" class="card" style="display:none; margin-bottom:24px;">
+            <div class="card-header">
+              <h3>Current Plan</h3>
+            </div>
+            <div id="currentPlanContent" style="margin-top:16px;"></div>
+          </div>
+
+          <!-- Billing Period Toggle -->
+          <div style="display:flex; align-items:center; justify-content:center; gap:12px; margin:24px 0; font-size:0.9em; color:var(--text-secondary);">
+            <span>Monthly</span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="billingAnnualToggle" onchange="updatePlanPrices()">
+              <span class="toggle-slider"></span>
+            </label>
+            <span>Annually <span style="background:rgba(74,222,128,0.15);color:#4ade80;padding:2px 8px;border-radius:10px;font-size:0.8em;font-weight:600;">Save 15%</span></span>
+          </div>
+
+          <!-- Pricing Cards -->
+          <div class="plans-grid" id="plansGrid">
+            <!-- Rendered by JS -->
+          </div>
+        </section>
+
         <!-- Settings Section (admin-only, tabbed) -->
         <section id="section-settings" class="content-section">
           <header class="section-header">
@@ -984,6 +1057,46 @@
       <div class="modal-footer">
         <button class="btn-secondary" onclick="closeConfirmModal()">Cancel</button>
         <button class="btn-danger" id="confirmButton" onclick="confirmAction()">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Wallet Modal -->
+  <div id="addWalletModal" class="modal-overlay" style="display:none;">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Add Treasury Wallet</h3>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex; flex-direction:column; gap:16px;">
+          <div>
+            <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Wallet Address <span style="color:#ef4444;">*</span></label>
+            <input id="addWalletAddress" type="text" placeholder="Solana wallet address" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; font-family:monospace; box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Label <span style="color:var(--text-secondary); font-size:0.85em;">(optional)</span></label>
+            <input id="addWalletLabel" type="text" placeholder="e.g. Main Treasury" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Alert Channel ID</label>
+            <input id="addWalletChannel" type="text" placeholder="Discord channel ID for alerts" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; font-family:monospace; box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Transaction Types</label>
+            <div style="display:flex; flex-wrap:wrap; gap:10px; padding:8px 0;">
+              <label style="display:flex; align-items:center; gap:5px; color:#e0e7ff; font-size:0.88em; cursor:pointer;"><input type="checkbox" class="addWalletTxType" value="sol-transfer" checked> sol-transfer</label>
+              <label style="display:flex; align-items:center; gap:5px; color:#e0e7ff; font-size:0.88em; cursor:pointer;"><input type="checkbox" class="addWalletTxType" value="token-transfer" checked> token-transfer</label>
+              <label style="display:flex; align-items:center; gap:5px; color:#e0e7ff; font-size:0.88em; cursor:pointer;"><input type="checkbox" class="addWalletTxType" value="nft-sale"> nft-sale</label>
+              <label style="display:flex; align-items:center; gap:5px; color:#e0e7ff; font-size:0.88em; cursor:pointer;"><input type="checkbox" class="addWalletTxType" value="nft-listing"> nft-listing</label>
+              <label style="display:flex; align-items:center; gap:5px; color:#e0e7ff; font-size:0.88em; cursor:pointer;"><input type="checkbox" class="addWalletTxType" value="swap"> swap</label>
+            </div>
+          </div>
+          <p id="addWalletError" style="color:#ef4444; font-size:0.85em; display:none;"></p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeAddWalletModal()">Cancel</button>
+        <button class="btn-primary" id="addWalletSaveBtn" onclick="saveNewWallet()">Save Wallet</button>
       </div>
     </div>
   </div>

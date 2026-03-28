@@ -455,7 +455,7 @@ function updateActiveGuildBadge() {
     badge.style.display = 'inline-flex';
     badge.textContent = 'Select server';
     badge.title = 'No active server selected';
-    if (brandTitle) brandTitle.innerHTML = '<img src="/assets/branding/guildpilot-logo.jpg" alt="" style="width:22px;height:22px;border-radius:50%;vertical-align:middle;margin-right:8px;object-fit:cover;">GuildPilot';
+    if (brandTitle) brandTitle.innerHTML = '<img src="/assets/branding/guildpilot-logo.png" alt="" style="width:22px;height:22px;border-radius:50%;vertical-align:middle;margin-right:8px;object-fit:cover;">GuildPilot';
   }
 
   renderNavServerSelect();

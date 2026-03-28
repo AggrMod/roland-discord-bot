@@ -72,3 +72,16 @@
 **Scope**:
 - `web/server.js` — verify `adminAuthMiddleware` resolves guild admin correctly
 - `portal.js` — verify `isAdmin` is set for guild owners/admins, not just superadmin
+
+## NFT Tracker: polling fallback for collection activity (replaces pure webhook approach)
+
+**Problem**: Helius webhooks fire when a watched address appears in a transaction. Magic Eden/Tensor listing transactions reference the individual NFT mint, not the verified collection address — so collection-level webhooks never trigger for listings.
+
+**Solution**: Add a polling cron alongside the existing webhook:
+- Every 5 minutes, call Helius DAS `GET /v0/addresses/{collection}/transactions?type=NFT_LISTING,NFT_SALE` for each tracked collection
+- Deduplicate by `tx_signature` against `nft_activity_events` table (already have the column)
+- Process new events through existing `ingestEvent()` → `maybeSendAlert()` pipeline
+- Webhook stays as fast path; polling is the reliable fallback
+
+**Helius endpoint**: `POST https://api.helius.xyz/v0/addresses/{address}/transactions?api-key={key}` with `{ "types": ["NFT_LISTING", "NFT_SALE", "NFT_MINT"] }`
+**Scope**: New cron in `index.js` + `nftActivityService.pollCollectionActivity()` method

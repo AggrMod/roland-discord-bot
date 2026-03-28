@@ -2862,7 +2862,7 @@ async function loadEraAssignments() {
     if (guildSelect && tenantsData.tenants) {
       const current = guildSelect.value;
       guildSelect.innerHTML = '<option value="">— Select server —</option>' +
-        tenantsData.tenants.map(t => `<option value="${escapeHtml(t.guild_id)}"${t.guild_id === current ? ' selected' : ''}>${escapeHtml(t.name || t.guild_id)}</option>`).join('');
+        tenantsData.tenants.map(t => `<option value="${escapeHtml(t.guild_id)}"${t.guild_id === current ? ' selected' : ''}>${escapeHtml(t.guild_name || t.guildName || t.guild_id)}</option>`).join('');
     }
 
     // Populate era dropdown

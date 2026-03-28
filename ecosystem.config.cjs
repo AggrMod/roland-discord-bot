@@ -2,7 +2,6 @@ module.exports = {
   apps: [{
     name: "guildpilot",
     script: "index.js",
-    cwd: "/home/tjdot/roland-discord-bot",
     watch: false,
     env_file: ".env",
     env: {

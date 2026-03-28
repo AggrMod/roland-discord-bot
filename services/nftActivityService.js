@@ -420,11 +420,7 @@ class NFTActivityService {
       for (const col of collections) {
         try {
           const url = `https://api.helius.xyz/v0/addresses/${col.collection_address}/transactions?api-key=${apiKey}&limit=50`;
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ transactionTypes: ['NFT_LISTING', 'NFT_SALE', 'NFT_MINT', 'NFT_CANCEL_LISTING'] }),
-          });
+          const res = await fetch(url, { method: 'GET' });
 
           if (!res.ok) {
             logger.error(`[nft-poll] Helius API error for ${col.collection_name}: ${res.status}`);
@@ -432,7 +428,9 @@ class NFTActivityService {
             continue;
           }
 
-          const txns = await res.json();
+          const allTxns = await res.json();
+          const nftTypes = new Set(['NFT_LISTING', 'NFT_SALE', 'NFT_MINT', 'NFT_CANCEL_LISTING', 'NFT_BID', 'LIST_NFT', 'SELL_NFT', 'DELIST_NFT']);
+          const txns = Array.isArray(allTxns) ? allTxns.filter(tx => nftTypes.has((tx.type || '').toUpperCase())) : [];
           let newCount = 0;
           let skipped = 0;
 

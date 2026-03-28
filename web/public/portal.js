@@ -661,7 +661,7 @@ function switchSettingsTab(tab) {
   const tabLoaders = {
     general:      () => { if (typeof loadAdminSettingsView === 'function') loadAdminSettingsView(); },
     governance:   () => { if (typeof loadVotingPowerView === 'function') loadVotingPowerView(); },
-    verification: () => { if (typeof loadVerificationRoles === 'function') loadVerificationRoles(); },
+    verification: () => { if (typeof loadAdminRoles === 'function') loadAdminRoles(); },
     nfttracker:   () => { if (typeof loadNftTrackerView === 'function') loadNftTrackerView(); },
     selfserve:    () => { if (typeof loadSelfServeRolesView === 'function') loadSelfServeRolesView(); },
     ticketing:    () => { if (typeof loadTicketingView === 'function') loadTicketingView(); },

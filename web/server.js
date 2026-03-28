@@ -211,10 +211,10 @@ class WebServer {
     const adminLimiter = rateLimit({ ...rateLimitDefaults, windowMs: 15 * 60 * 1000, max: 200, message: rateLimitMessage });
 
     const commentLimiter = rateLimit({
-      windowMs: 60 * 1000, // 1 minute
+      ...rateLimitDefaults,
+      windowMs: 60 * 1000,
       max: 5,
-      standardHeaders: true,
-      legacyHeaders: false,
+      validate: { xForwardedForHeader: false, ip: false },
       keyGenerator: (req) => req.session?.discordUser?.id || (req.ip || '').replace(/^::ffff:/, ''),
       message: rateLimitMessage
     });

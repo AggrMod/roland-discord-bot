@@ -2774,12 +2774,30 @@ async function loadSuperadminView() {
           </div>
           <div id="adminTenantDetailContent">${renderTenantDetailPanel(null)}</div>
         </div>
+
+        <div style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
+            <h4 style="margin:0; color:#c9d6ff;">Era Assignments</h4>
+            <button class="btn-secondary" onclick="loadEraAssignments()" style="padding:8px 12px;">Refresh</button>
+          </div>
+          <div style="display:grid; gap:10px; grid-template-columns:1fr 1fr auto; margin-bottom:14px;">
+            <input id="eraAssignGuildId" type="text" placeholder="Guild ID" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
+            <select id="eraAssignKey" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
+              <option value="">Loading eras...</option>
+            </select>
+            <button class="btn-primary" onclick="assignEra()" style="padding:10px 16px;">Assign</button>
+          </div>
+          <div id="eraAssignmentsTable" style="border:1px solid rgba(99,102,241,0.15); border-radius:10px; overflow:hidden;">
+            <div style="padding:18px; text-align:center; color:var(--text-secondary);">Loading era assignments...</div>
+          </div>
+        </div>
       </div>
     `;
 
     if (selectedTenantGuildId) {
       await loadSelectedTenantDetail();
     }
+    loadEraAssignments();
   } catch (error) {
     content.innerHTML = `<div style="color:#fca5a5; text-align:center; padding:20px;">Error loading superadmin view: ${escapeHtml(error.message || 'Unknown error')}</div>`;
   }

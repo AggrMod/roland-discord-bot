@@ -26,6 +26,7 @@ const nftActivityService = require('../services/nftActivityService');
 const ticketService = require('../services/ticketService');
 const superadminService = require('../services/superadminService');
 const superadminGuard = require('../middleware/superadminGuard');
+const { BATTLE_ERAS } = require('../config/battleEras');
 
 const DISCORD_ADMIN_PERMISSION = 0x8n;
 const DISCORD_MANAGE_GUILD_PERMISSION = 0x20n;
@@ -286,7 +287,7 @@ class WebServer {
       return `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=256`;
     };
 
-    const resolveAdminGuildAccess = async (req, { allowFallback = true } = {}) => {
+    const resolveAdminGuildAccess = async (req, { allowFallback = false } = {}) => {
       if (!req.session.discordUser) {
         return { ok: false, status: 401, message: 'Not authenticated' };
       }
@@ -921,7 +922,7 @@ class WebServer {
       }
 
       try {
-        const access = await resolveAdminGuildAccess(req, { allowFallback: !tenantService.isMultitenantEnabled() });
+        const access = await resolveAdminGuildAccess(req, { allowFallback: false });
         if (!access.ok) {
           return res.status(access.status).json({ isAdmin: false, message: access.message });
         }
@@ -1281,11 +1282,77 @@ class WebServer {
       }
     });
 
+    // ==================== SUPERADMIN ERA ASSIGNMENTS ====================
+
+    this.app.get('/api/superadmin/eras', superadminGuard, (req, res) => {
+      try {
+        const exclusiveEras = Object.values(BATTLE_ERAS)
+          .filter(e => e.exclusive)
+          .map(e => ({ key: e.key, name: e.name, description: e.description }));
+        res.json({ success: true, eras: exclusiveEras });
+      } catch (error) {
+        logger.error('Error fetching eras:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch eras' });
+      }
+    });
+
+    this.app.get('/api/superadmin/era-assignments', superadminGuard, (req, res) => {
+      try {
+        const assignments = db.prepare(`
+          SELECT bea.*, t.guild_name
+          FROM battle_era_assignments bea
+          LEFT JOIN tenants t ON t.guild_id = bea.guild_id
+          ORDER BY bea.assigned_at DESC
+        `).all();
+        res.json({ success: true, assignments });
+      } catch (error) {
+        logger.error('Error fetching era assignments:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch era assignments' });
+      }
+    });
+
+    this.app.post('/api/superadmin/era-assignments', superadminGuard, (req, res) => {
+      try {
+        const { guildId, eraKey } = req.body;
+        if (!guildId || !eraKey) {
+          return res.status(400).json({ success: false, message: 'guildId and eraKey are required' });
+        }
+        if (!BATTLE_ERAS[eraKey]) {
+          return res.status(400).json({ success: false, message: 'Unknown era key' });
+        }
+        if (!BATTLE_ERAS[eraKey].exclusive) {
+          return res.status(400).json({ success: false, message: 'Era is not exclusive — already available to all guilds' });
+        }
+        db.prepare(`
+          INSERT OR IGNORE INTO battle_era_assignments (guild_id, era_key, assigned_by)
+          VALUES (?, ?, ?)
+        `).run(guildId, eraKey, req.session.discordUser.id);
+        res.json({ success: true, message: `Era "${eraKey}" assigned to guild ${guildId}` });
+      } catch (error) {
+        logger.error('Error assigning era:', error);
+        res.status(500).json({ success: false, message: 'Failed to assign era' });
+      }
+    });
+
+    this.app.delete('/api/superadmin/era-assignments/:guildId/:eraKey', superadminGuard, (req, res) => {
+      try {
+        const { guildId, eraKey } = req.params;
+        const result = db.prepare('DELETE FROM battle_era_assignments WHERE guild_id = ? AND era_key = ?').run(guildId, eraKey);
+        if (result.changes === 0) {
+          return res.status(404).json({ success: false, message: 'Assignment not found' });
+        }
+        res.json({ success: true, message: `Era "${eraKey}" revoked from guild ${guildId}` });
+      } catch (error) {
+        logger.error('Error revoking era:', error);
+        res.status(500).json({ success: false, message: 'Failed to revoke era' });
+      }
+    });
+
     // ==================== ADMIN API ====================
 
     const adminAuthMiddleware = async (req, res, next) => {
       try {
-        const access = await resolveAdminGuildAccess(req, { allowFallback: !tenantService.isMultitenantEnabled() });
+        const access = await resolveAdminGuildAccess(req, { allowFallback: false });
         if (!access.ok) {
           return res.status(access.status).json({ success: false, message: access.message });
         }

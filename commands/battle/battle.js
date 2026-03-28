@@ -199,7 +199,16 @@ module.exports = {
 
     const creatorId = interaction.user.id;
     const channelId = interaction.channelId;
+    const guildId = interaction.guildId;
     const maxPlayers = interaction.options.getInteger('max_players') || 999;
+    const requestedEra = interaction.options.getString('era') || 'mafia';
+
+    // Validate era against guild's assigned eras
+    const availableEras = battleService.getAssignedEras(guildId);
+    if (!availableEras.includes(requestedEra)) {
+      return interaction.editReply({ content: `❌ Era "${requestedEra}" is not available for this server. Available eras: ${availableEras.join(', ')}`, ephemeral: true });
+    }
+
     const requiredRoleArray = [];
     const requiredRoles = [];
     for (let i = 1; i <= 3; i++) {
@@ -239,7 +248,8 @@ module.exports = {
       2,
       maxPlayers,
       requiredRoleArray.length ? requiredRoleArray : null,
-      excludedRoleArray.length ? excludedRoleArray : null
+      excludedRoleArray.length ? excludedRoleArray : null,
+      requestedEra
     );
 
     if (!createResult.success) {
@@ -283,7 +293,7 @@ module.exports = {
     await interaction.editReply({ content: `⚔️ Battle started with ${startResult.participants.length} fighters. Let the chaos begin...` });
 
     // Simulate and post rounds
-    const sim = battleService.simulateBattle(lobby.lobby_id);
+    const sim = battleService.simulateBattle(lobby.lobby_id, { era: lobby.era || 'mafia' });
     if (!sim || !sim.winner) {
       return interaction.followUp({ content: '❌ Battle simulation failed unexpectedly.' });
     }
@@ -307,7 +317,7 @@ module.exports = {
         .setColor(isEliteIntro ? '#ED4245' : '#57F287')
         .setTitle(isEliteIntro ? `🏆 ELITE FOUR • Round ${r.round}` : `Round ${r.round}`)
         .setDescription(`${lines}\n\n**Players Left:** ${r.playersLeft}`)
-        .setFooter({ text: isEliteIntro ? 'No revivals. No mercy. Final circle.' : 'Era: Solpranos' });
+        .setFooter({ text: isEliteIntro ? 'No revivals. No mercy. Final circle.' : `Era: ${battleService.getEraConfig(lobby.era || 'mafia').name}` });
 
       await interaction.channel.send({ embeds: [roundEmbed] });
 

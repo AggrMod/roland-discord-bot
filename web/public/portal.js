@@ -7103,7 +7103,7 @@ function handlePlanCta(action) {
 
 async function loadCurrentPlan() {
   try {
-    const res = await apiFetch('/api/admin/plan');
+    const res = await fetch('/api/admin/plan', { credentials: 'include', headers: buildTenantRequestHeaders() });
     if (!res.ok) return;
     const data = await res.json();
     if (data.plan && data.plan !== 'free') {
@@ -7138,7 +7138,7 @@ async function loadSystemStatus() {
   if (!el) return;
   el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
   try {
-    const res = await apiFetch('/api/superadmin/system-status');
+    const res = await fetch('/api/superadmin/system-status', { credentials: 'include' });
     if (!res.ok) throw new Error('Failed');
     const d = await res.json();
 

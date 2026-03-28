@@ -363,7 +363,7 @@ function getServerRecord(guildId) {
   );
 }
 
-function setActiveGuild(guildId, { persist = true, announce = true } = {}) {
+function setActiveGuild(guildId, { persist = true, announce = true, goToSettings = false } = {}) {
   const normalized = normalizeGuildId(guildId);
   const previous = activeGuildId;
   activeGuildId = normalized;
@@ -385,6 +385,11 @@ function setActiveGuild(guildId, { persist = true, announce = true } = {}) {
   // Refresh tenant-sensitive screens when switching active server context
   if (previous !== activeGuildId) {
     refreshTenantScopedViews();
+  }
+
+  if (goToSettings && activeGuildId) {
+    switchSection('admin');
+    showAdminView('settings');
   }
 }
 
@@ -560,7 +565,7 @@ function renderServerCard(server, { managed = true } = {}) {
   const actionButton = managed
     ? isActive
       ? '<button class="btn-secondary" disabled style="opacity:0.65;">Active</button>'
-      : `<button class="btn-primary" onclick="setActiveGuild('${server.guildId}')">Set Active</button>`
+      : `<button class="btn-primary" onclick="setActiveGuild('${server.guildId}', { goToSettings: true })">Open Settings</button>`
     : `<button class="btn-secondary" onclick="openGuildInvite('${server.guildId}')">Invite Bot</button>`;
 
   return `
@@ -1318,8 +1323,13 @@ async function loadAvailableMissions() {
 
 // ==================== NAVIGATION ====================
 function switchSection(sectionName) {
-  if (requiresServerSelectionGate() && !['landing', 'servers', 'wallets'].includes(sectionName)) {
-    sectionName = 'landing';
+  if (requiresServerSelectionGate()) {
+    const allowWithoutServer = ['landing', 'servers', 'wallets'];
+    if (isSuperadmin && sectionName === 'admin') {
+      // allow superadmin control plane without tenant selection
+    } else if (!allowWithoutServer.includes(sectionName)) {
+      sectionName = 'landing';
+    }
   }
 
   const moduleState = window._tenantModuleState || null;
@@ -1809,6 +1819,12 @@ function isTenantSensitiveAdminView(view) {
 function showAdminView(view) {
   // Admin sidebar is only shown to admins — no need to re-check here
   // (prevents timing issues where isAdmin hasn't been set yet)
+
+  if (requiresServerSelectionGate() && !(isSuperadmin && view === 'superadmin')) {
+    switchSection('landing');
+    showInfo('Select a server first for tenant admin controls.');
+    return;
+  }
 
   switchSection('admin');
   hideAllAdminCards();

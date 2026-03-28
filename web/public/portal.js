@@ -2274,7 +2274,7 @@ window.addEventListener('unhandledrejection', (event) => {
 
 // ==================== INTEGRATED ADMIN WORKSPACE ====================
 function hideAllAdminCards() {
-  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminSuperadminCard', 'adminAnalyticsCard', 'adminHelpCard', 'adminRolesCard', 'adminActivityCard', 'adminStatsCard', 'adminNftTrackerCard', 'adminVotingPowerCard', 'adminSelfServeRolesCard', 'adminApiRefCard', 'adminTicketingCard']
+  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminSuperadminCard', 'adminSystemMonitorCard', 'adminAnalyticsCard', 'adminHelpCard', 'adminRolesCard', 'adminActivityCard', 'adminStatsCard', 'adminNftTrackerCard', 'adminVotingPowerCard', 'adminSelfServeRolesCard', 'adminApiRefCard', 'adminTicketingCard']
     .forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
@@ -2342,7 +2342,7 @@ function showAdminView(view) {
   // Admin sidebar is only shown to admins — no need to re-check here
   // (prevents timing issues where isAdmin hasn't been set yet)
 
-  if (requiresServerSelectionGate() && !(isSuperadmin && view === 'superadmin')) {
+  if (requiresServerSelectionGate() && !(isSuperadmin && (view === 'superadmin' || view === 'monitor'))) {
     switchSection('landing');
     showInfo('Select a server first for tenant admin controls.');
     return;
@@ -2357,6 +2357,7 @@ function showAdminView(view) {
     proposals: { card: 'adminProposalsCard', load: loadAdminProposals },
     settings: { card: 'adminSettingsCard', load: loadAdminSettingsView },
     superadmin: { card: 'adminSuperadminCard', load: loadSuperadminView },
+    monitor: { card: 'adminSystemMonitorCard', load: loadSystemStatus },
     analytics: { card: 'adminAnalyticsCard', load: loadAdminAnalyticsView },
     help: { card: 'adminHelpCard', load: loadAdminHelpView },
     roles: { card: 'adminRolesCard', load: loadAdminRoles },
@@ -2396,7 +2397,7 @@ function showAdminView(view) {
   // Keep Admin submenu behavior isolated from standalone Superadmin nav item
   const submenu = document.getElementById('adminSubmenu');
   const chevron = document.getElementById('adminChevron');
-  if (view === 'superadmin') {
+  if (view === 'superadmin' || view === 'monitor') {
     if (submenu) submenu.style.display = 'none';
     if (chevron) chevron.textContent = '▶';
   } else {
@@ -7118,4 +7119,77 @@ async function loadCurrentPlan() {
       }
     }
   } catch(e) { /* no plan API yet, silent fail */ }
+}
+
+// ==================== SYSTEM MONITOR ====================
+
+async function loadSystemStatus() {
+  const el = document.getElementById('systemStatusContent');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
+  try {
+    const res = await apiFetch('/api/superadmin/system-status');
+    if (!res.ok) throw new Error('Failed');
+    const d = await res.json();
+
+    const fmtBytes = b => b > 1073741824 ? (b/1073741824).toFixed(1)+'GB' : (b/1048576).toFixed(0)+'MB';
+    const fmtUptime = ms => {
+      const h = Math.floor(ms/3600000), m = Math.floor((ms%3600000)/60000);
+      return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    };
+
+    const memBar = `<div style="background:rgba(99,102,241,0.1);border-radius:4px;height:6px;margin-top:4px;overflow:hidden;"><div style="background:${d.memory.pct>85?'#f87171':d.memory.pct>65?'#fbbf24':'#4ade80'};height:100%;width:${d.memory.pct}%;border-radius:4px;transition:width 0.3s;"></div></div>`;
+
+    const pm2Rows = d.pm2.length ? d.pm2.map(p => `
+      <tr>
+        <td>${escapeHtml(p.name)}</td>
+        <td><span class="badge ${p.status==='online'?'badge-active':'badge-paused'}">${p.status}</span></td>
+        <td>${p.uptime ? fmtUptime(p.uptime) : '\u2014'}</td>
+        <td>${p.restarts}</td>
+        <td>${fmtBytes(p.memory)}</td>
+        <td>${p.cpu}%</td>
+      </tr>`).join('') : '<tr><td colspan="6" style="color:var(--text-secondary);text-align:center;">No PM2 processes found</td></tr>';
+
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px;">
+        <div class="stat-mini">
+          <div class="stat-mini-label">RAM Usage</div>
+          <div class="stat-mini-value">${d.memory.pct}%</div>
+          <div style="font-size:0.75em;color:var(--text-secondary);">${fmtBytes(d.memory.used)} / ${fmtBytes(d.memory.total)}</div>
+          ${memBar}
+        </div>
+        <div class="stat-mini">
+          <div class="stat-mini-label">CPU</div>
+          <div class="stat-mini-value">${d.cpu.cores} cores</div>
+          <div style="font-size:0.75em;color:var(--text-secondary);">${escapeHtml(d.cpu.model.split('@')[0].trim())}</div>
+        </div>
+        <div class="stat-mini">
+          <div class="stat-mini-label">System Uptime</div>
+          <div class="stat-mini-value">${d.uptime.display}</div>
+          <div style="font-size:0.75em;color:var(--text-secondary);">Node ${d.node.version}</div>
+        </div>
+        <div class="stat-mini">
+          <div class="stat-mini-label">Disk</div>
+          <div class="stat-mini-value">${d.disk?.pct || '\u2014'}</div>
+          <div style="font-size:0.75em;color:var(--text-secondary);">${d.disk?.used||''} used of ${d.disk?.total||''}</div>
+        </div>
+        <div class="stat-mini">
+          <div class="stat-mini-label">Heap</div>
+          <div class="stat-mini-value">${fmtBytes(d.node.heapUsed)}</div>
+          <div style="font-size:0.75em;color:var(--text-secondary);">of ${fmtBytes(d.node.heapTotal)} allocated</div>
+        </div>
+      </div>
+
+      <h4 style="margin-bottom:12px;color:var(--text-secondary);font-size:0.85em;text-transform:uppercase;letter-spacing:0.05em;">PM2 Processes</h4>
+      <div style="overflow-x:auto;">
+        <table class="data-table">
+          <thead><tr><th>Name</th><th>Status</th><th>Uptime</th><th>Restarts</th><th>Memory</th><th>CPU</th></tr></thead>
+          <tbody>${pm2Rows}</tbody>
+        </table>
+      </div>
+      <div style="color:var(--text-secondary);font-size:0.75em;margin-top:8px;text-align:right;">Last updated: ${new Date(d.timestamp).toLocaleTimeString()}</div>
+    `;
+  } catch(e) {
+    el.innerHTML = '<p style="color:var(--text-secondary);">Failed to load system status: ' + escapeHtml(e.message) + '</p>';
+  }
 }

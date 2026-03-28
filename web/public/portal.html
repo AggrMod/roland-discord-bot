@@ -153,6 +153,10 @@
               <span class="nav-icon" aria-hidden="true">🛡️</span>
               <span class="nav-label">Superadmin</span>
             </button>
+            <button class="nav-item" data-section="admin" onclick="switchSection('admin'); showAdminView('monitor')">
+              <span class="nav-icon" aria-hidden="true">🖥️</span>
+              <span class="nav-label">Monitor</span>
+            </button>
           </div>
         </div>
         <div id="sidebarServerContext" class="sidebar-server-context" style="display:none;">
@@ -879,6 +883,16 @@
               <button class="btn-secondary" onclick="loadSuperadminView()">Refresh</button>
             </div>
             <div id="adminSuperadminContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>Superadmin</strong> to load data.</div>
+          </div>
+
+          <div class="card" id="adminSystemMonitorCard" style="display:none;">
+            <div class="card-header">
+              <h3>🖥️ Server Monitor</h3>
+              <button class="btn-secondary" onclick="loadSystemStatus()" style="font-size:0.8em;padding:6px 12px;">↻ Refresh</button>
+            </div>
+            <div id="systemStatusContent" style="margin-top:16px;">
+              <div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>
+            </div>
           </div>
 
           <div class="card" id="adminVotingPowerCard" style="display:none;">

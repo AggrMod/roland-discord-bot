@@ -5,6 +5,8 @@ const Database = require('better-sqlite3');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
+const os = require('os');
+const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const nacl = require('tweetnacl');
@@ -1203,6 +1205,60 @@ class WebServer {
       } catch (error) {
         logger.error('Error updating tenant branding:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // ==================== SUPERADMIN SYSTEM STATUS ====================
+
+    this.app.get('/api/superadmin/system-status', superadminGuard, (req, res) => {
+      try {
+        const cpus = os.cpus();
+        const cpuModel = cpus[0]?.model || 'Unknown';
+        const cpuCount = cpus.length;
+
+        const totalMem = os.totalmem();
+        const freeMem = os.freemem();
+        const usedMem = totalMem - freeMem;
+        const memPct = Math.round((usedMem / totalMem) * 100);
+
+        const uptimeSecs = os.uptime();
+        const uptimeHours = Math.floor(uptimeSecs / 3600);
+        const uptimeMins = Math.floor((uptimeSecs % 3600) / 60);
+
+        const nodeMemory = process.memoryUsage();
+
+        let disk = null;
+        try {
+          const dfOut = execSync('df -BM / | tail -1').toString().trim();
+          const parts = dfOut.split(/\s+/);
+          disk = { total: parts[1], used: parts[2], available: parts[3], pct: parts[4] };
+        } catch (_) {}
+
+        let pm2Processes = [];
+        try {
+          const pm2Out = execSync('pm2 jlist 2>/dev/null || echo []').toString().trim();
+          const pm2List = JSON.parse(pm2Out);
+          pm2Processes = pm2List.map(p => ({
+            name: p.name,
+            status: p.pm2_env?.status || 'unknown',
+            uptime: p.pm2_env?.pm_uptime ? Date.now() - p.pm2_env.pm_uptime : null,
+            restarts: p.pm2_env?.restart_time || 0,
+            memory: p.monit?.memory || 0,
+            cpu: p.monit?.cpu || 0,
+          }));
+        } catch (_) {}
+
+        res.json({
+          cpu: { model: cpuModel, cores: cpuCount },
+          memory: { total: totalMem, used: usedMem, free: freeMem, pct: memPct },
+          node: { heapUsed: nodeMemory.heapUsed, heapTotal: nodeMemory.heapTotal, rss: nodeMemory.rss, version: process.version },
+          uptime: { seconds: uptimeSecs, display: `${uptimeHours}h ${uptimeMins}m` },
+          disk,
+          pm2: pm2Processes,
+          timestamp: new Date().toISOString(),
+        });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
       }
     });
 

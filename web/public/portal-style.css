@@ -2050,3 +2050,24 @@ body {
 }
 .toggle-switch input:checked + .toggle-slider { background: rgba(99,102,241,0.4); }
 .toggle-switch input:checked + .toggle-slider:before { transform: translateX(18px); }
+
+/* ==================== STAT MINI CARDS ==================== */
+.stat-mini {
+  padding: 14px 16px;
+  background: rgba(99,102,241,0.08);
+  border: 1px solid rgba(99,102,241,0.14);
+  border-radius: 10px;
+}
+.stat-mini-label {
+  font-size: 0.75em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.stat-mini-value {
+  font-size: 1.6em;
+  font-weight: 700;
+  color: #e0e7ff;
+  line-height: 1.2;
+}

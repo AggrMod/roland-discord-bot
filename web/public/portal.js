@@ -2874,7 +2874,7 @@ async function toggleTenantModule(moduleKey, checkbox) {
       await loadSuperadminView();
     } else {
       checkbox.checked = previousValue;
-      showError(data.message || 'Failed to update tenant module');
+      showError(`Failed to update module (${response.status}): ${data.message || data.error?.message || JSON.stringify(data)}`);
     }
   } catch (error) {
     checkbox.checked = previousValue;

@@ -85,3 +85,16 @@
 
 **Helius endpoint**: `POST https://api.helius.xyz/v0/addresses/{address}/transactions?api-key={key}` with `{ "types": ["NFT_LISTING", "NFT_SALE", "NFT_MINT"] }`
 **Scope**: New cron in `index.js` + `nftActivityService.pollCollectionActivity()` method
+
+## NFT Tracker: embed polish & optimization
+
+**Request**: Improve the Discord alert embed quality and UX
+**Ideas**:
+- Show the actual NFT name/number (e.g. "Vault Runner #1043") instead of shortened mint address — fetch from Helius DAS or ME metadata
+- Show floor price alongside listing price (context for whether it's a good deal)
+- Add rarity rank if available
+- Seller wallet as a clickable Solscan profile link
+- Smarter price display: show "Listed below floor 🔥" or "Above floor" label
+- Debounce rapid-fire delist/relist events (don't spam if someone relists quickly)
+- Configurable min-price filter per collection (ignore dust listings)
+- Poll interval configurable per server (default 5 min)

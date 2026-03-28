@@ -444,13 +444,13 @@ function updateActiveGuildBadge() {
       const iconUrl = getActiveBrandLogoUrl(record);
       brandTitle.innerHTML = iconUrl
         ? `<img src="${iconUrl}" alt="" style="width:22px;height:22px;border-radius:50%;vertical-align:middle;margin-right:8px;object-fit:cover;">${escapeHtml(record?.name || 'Portal')}`
-        : `🎩 ${escapeHtml(record?.name || 'Portal')}`;
+        : `${escapeHtml(record?.name || 'Portal')}`;
     }
   } else {
     badge.style.display = 'inline-flex';
     badge.textContent = 'Select server';
     badge.title = 'No active server selected';
-    if (brandTitle) brandTitle.textContent = '🎩 Solpranos';
+    if (brandTitle) brandTitle.textContent = 'Solpranos';
   }
 
   renderNavServerSelect();

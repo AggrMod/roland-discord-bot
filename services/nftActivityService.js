@@ -177,17 +177,36 @@ class NFTActivityService {
 
   ingestEvent(event, source = 'webhook') {
     try {
-      const collectionKey = (event.collectionKey || event.collection || '').toString().trim().toLowerCase() || null;
-      if (collectionKey && !this.isWatched(collectionKey)) {
+      // Parse Helius enhanced transaction format
+      const nftData = event.events?.nft || {};
+      const nfts = nftData.nfts || [];
+      const mintFromNft = nfts[0]?.mint || null;
+
+      // Collection key: prefer explicit field, then first NFT mint address
+      const collectionKey = (
+        event.collectionKey || event.collection ||
+        nftData.collectionKey || nftData.collection ||
+        mintFromNft || ''
+      ).toString().trim().toLowerCase() || null;
+
+      // Check both nft_activity_watch (legacy) and nft_tracked_collections (new)
+      const trackedByAddress = collectionKey ? this.getTrackedCollectionByAddress(collectionKey) : null;
+      const watchedLegacy = collectionKey ? this.isWatched(collectionKey) : false;
+      if (collectionKey && !trackedByAddress && !watchedLegacy) {
         return { success: false, ignored: true, message: 'Collection not watched' };
       }
 
-      const eventType = (event.type || event.eventType || 'unknown').toString().toLowerCase();
-      const tokenMint = event.tokenMint || event.mint || null;
-      const tokenName = event.tokenName || event.name || null;
-      const fromWallet = event.fromWallet || event.from || null;
-      const toWallet = event.toWallet || event.to || null;
-      const priceSol = event.priceSol !== undefined && event.priceSol !== null ? Number(event.priceSol) : null;
+      // Map Helius event types to internal types
+      const rawType = (event.type || event.eventType || 'unknown').toString().toUpperCase();
+      const typeMap = { NFT_LISTING: 'list', NFT_SALE: 'sell', NFT_MINT: 'mint', NFT_BID: 'bid', NFT_CANCEL_LISTING: 'delist', TRANSFER: 'transfer' };
+      const eventType = typeMap[rawType] || rawType.toLowerCase();
+
+      const tokenMint = event.tokenMint || mintFromNft || nftData.mint || event.mint || null;
+      const tokenName = event.tokenName || nfts[0]?.name || nftData.name || event.name || null;
+      const fromWallet = event.fromWallet || nftData.seller || nftData.from || event.from || null;
+      const toWallet = event.toWallet || nftData.buyer || nftData.to || event.to || null;
+      const rawPrice = nftData.amount ?? event.priceSol ?? event.price ?? null;
+      const priceSol = rawPrice !== null ? Number(rawPrice) / (rawPrice > 1000 ? 1e9 : 1) : null; // convert lamports if needed
       const txSignature = event.txSignature || event.signature || null;
       const eventTime = event.eventTime || event.timestamp || new Date().toISOString();
 

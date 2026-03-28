@@ -3218,14 +3218,16 @@ class WebServer {
           return res.status(401).json({ success: false, message: 'Unauthorized' });
         }
 
-        const event = req.body || {};
-        const result = nftActivityService.ingestEvent(event, 'webhook');
-
-        if (!result.success && !result.ignored) {
-          return res.status(400).json({ success: false, message: result.message || 'Invalid event' });
+        // Helius sends an array of events
+        const events = Array.isArray(req.body) ? req.body : [req.body];
+        let processed = 0, ignored = 0;
+        for (const event of events) {
+          const result = nftActivityService.ingestEvent(event, 'webhook');
+          if (result.ignored) ignored++;
+          else if (result.success) processed++;
         }
-
-        return res.json({ success: true, ignored: !!result.ignored });
+        logger.log(`[nft-webhook] received ${events.length} events: ${processed} processed, ${ignored} ignored`);
+        return res.json({ success: true, processed, ignored });
       } catch (error) {
         logger.error('Error in nft activity webhook:', error);
         return res.status(500).json({ success: false, message: 'Internal server error' });

@@ -76,3 +76,11 @@
 - `portal.html` — server card HTML in managed/unmanaged server lists
 - `portal.js` — `loadServerAccess()` renders server cards
 - `portal-style.css` — server card sizing
+
+## Rename bot activity status from "The Commission" to something generic
+
+**Request**: The bot currently shows "The Commission" as its activity/status in Discord. Change to something more generic that works for any server (not Solpranos-specific).
+**Scope**:
+- Search codebase for hardcoded "The Commission" string
+- Replace with a generic default (e.g. "Serving your community" or configurable via branding settings)
+- Ideally make it configurable per tenant via the Branding settings panel

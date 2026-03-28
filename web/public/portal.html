@@ -81,100 +81,113 @@
     <div class="portal-layout">
       <!-- Sidebar Navigation -->
       <aside class="sidebar" role="navigation" aria-label="Section navigation">
-        <div class="sidebar-section">
-          <button class="nav-item active" data-section="landing" onclick="switchSection('landing')">
-            <span class="nav-icon" aria-hidden="true">🏠</span>
-            <span class="nav-label">Home</span>
-          </button>
-          <button class="nav-item" data-section="servers" onclick="switchSection('servers')" style="display:none;">
-            <span class="nav-icon" aria-hidden="true">🏛️</span>
-            <span class="nav-label">Servers</span>
-          </button>
-          <button class="nav-item" data-section="governance" onclick="switchSection('governance')">
-            <span class="nav-icon" aria-hidden="true">📜</span>
-            <span class="nav-label">Governance</span>
-          </button>
-          <button class="nav-item" data-section="wallets" onclick="switchSection('wallets')">
-            <span class="nav-icon" aria-hidden="true">💼</span>
-            <span class="nav-label">Wallets</span>
-          </button>
-          <button class="nav-item" data-section="treasury" onclick="switchSection('treasury')">
-            <span class="nav-icon" aria-hidden="true">💰</span>
-            <span class="nav-label">Treasury</span>
-          </button>
-          <button class="nav-item" data-section="nft-activity" onclick="switchSection('nft-activity')">
-            <span class="nav-icon" aria-hidden="true">🎨</span>
-            <span class="nav-label">NFT Activity</span>
-          </button>
-          <button class="nav-item" data-section="heist" onclick="switchSection('heist')" id="navHeist" style="display:none;">
-            <span class="nav-icon" aria-hidden="true">🎯</span>
-            <span class="nav-label">Heist</span>
-          </button>
-          <button class="nav-item" data-section="help" onclick="switchSection('help')">
-            <span class="nav-icon" aria-hidden="true">❓</span>
-            <span class="nav-label">Help</span>
-          </button>
-        </div>
-        <div class="sidebar-footer" id="adminSidebarGroup" style="display:none;">
-          <button class="nav-item" data-section="admin" onclick="toggleAdminSubmenu()" id="navAdmin">
-            <span class="nav-icon" aria-hidden="true">⚙️</span>
-            <span class="nav-label">Admin</span>
-            <span class="admin-chevron" id="adminChevron" style="margin-left:auto;font-size:0.7em;transition:transform 0.2s;">▶</span>
-          </button>
-          <div id="adminSubmenu" class="admin-submenu" style="display:none;">
-            <button class="nav-item admin-sub-item" data-admin-nav="settings" onclick="showAdminView('settings')">
-              <span class="nav-icon" aria-hidden="true">⚙️</span>
-              <span class="nav-label">Settings</span>
+        <div class="sidebar-nav-items">
+          <div class="sidebar-section">
+            <button class="nav-item active" data-section="landing" onclick="switchSection('landing')">
+              <span class="nav-icon" aria-hidden="true">🏠</span>
+              <span class="nav-label">Home</span>
             </button>
-            <button class="nav-item admin-sub-item" data-admin-nav="users" onclick="showAdminView('users')">
-              <span class="nav-icon" aria-hidden="true">👥</span>
-              <span class="nav-label">Users</span>
+            <button class="nav-item" data-section="servers" onclick="switchSection('servers')" style="display:none;">
+              <span class="nav-icon" aria-hidden="true">🏛️</span>
+              <span class="nav-label">Servers</span>
             </button>
-            <button class="nav-item admin-sub-item" data-admin-nav="proposals" onclick="showAdminView('proposals')">
+            <button class="nav-item" data-section="governance" onclick="switchSection('governance')">
               <span class="nav-icon" aria-hidden="true">📜</span>
-              <span class="nav-label">Proposals</span>
+              <span class="nav-label">Governance</span>
             </button>
-            <button class="nav-item admin-sub-item" data-admin-nav="analytics" onclick="showAdminView('analytics')">
-              <span class="nav-icon" aria-hidden="true">📊</span>
-              <span class="nav-label">Analytics</span>
+            <button class="nav-item" data-section="wallets" onclick="switchSection('wallets')">
+              <span class="nav-icon" aria-hidden="true">💼</span>
+              <span class="nav-label">Wallets</span>
             </button>
-            <button class="nav-item admin-sub-item" data-admin-nav="roles" onclick="showAdminView('roles')">
-              <span class="nav-icon" aria-hidden="true">🎭</span>
-              <span class="nav-label">Verification Roles</span>
+            <button class="nav-item" data-section="treasury" onclick="switchSection('treasury')">
+              <span class="nav-icon" aria-hidden="true">💰</span>
+              <span class="nav-label">Treasury</span>
             </button>
-            <button class="nav-item admin-sub-item" data-admin-nav="activity" onclick="showAdminView('activity')">
-              <span class="nav-icon" aria-hidden="true">📋</span>
-              <span class="nav-label">Activity Feed</span>
+            <button class="nav-item" data-section="nft-activity" onclick="switchSection('nft-activity')">
+              <span class="nav-icon" aria-hidden="true">🎨</span>
+              <span class="nav-label">NFT Activity</span>
             </button>
-            <button class="nav-item admin-sub-item" data-admin-nav="help" onclick="showAdminView('help')">
-              <span class="nav-icon" aria-hidden="true">📘</span>
-              <span class="nav-label">Commands</span>
+            <button class="nav-item" data-section="heist" onclick="switchSection('heist')" id="navHeist" style="display:none;">
+              <span class="nav-icon" aria-hidden="true">🎯</span>
+              <span class="nav-label">Heist</span>
             </button>
-            <button class="nav-item admin-sub-item" data-admin-nav="votingpower" onclick="showAdminView('votingpower')">
-              <span class="nav-icon" aria-hidden="true">🗳️</span>
-              <span class="nav-label">Voting Power</span>
-            </button>
-            <button class="nav-item admin-sub-item" data-admin-nav="nfttracker" onclick="showAdminView('nfttracker')">
-              <span class="nav-icon" aria-hidden="true">📡</span>
-              <span class="nav-label">NFT Tracker</span>
-            </button>
-            <button class="nav-item admin-sub-item" data-admin-nav="selfserveroles" onclick="showAdminView('selfserveroles')">
-              <span class="nav-icon" aria-hidden="true">🎖️</span>
-              <span class="nav-label">Self-Serve Roles</span>
-            </button>
-            <button class="nav-item admin-sub-item" data-admin-nav="apiref" onclick="showAdminView('apiref')">
-              <span class="nav-icon" aria-hidden="true">📖</span>
-              <span class="nav-label">API Reference</span>
-            </button>
-            <button class="nav-item admin-sub-item" data-admin-nav="ticketing" onclick="showAdminView('ticketing')">
-              <span class="nav-icon" aria-hidden="true">🎫</span>
-              <span class="nav-label">Ticketing</span>
+            <button class="nav-item" data-section="help" onclick="switchSection('help')">
+              <span class="nav-icon" aria-hidden="true">❓</span>
+              <span class="nav-label">Help</span>
             </button>
           </div>
-          <button class="nav-item" data-section="admin" onclick="switchSection('admin'); showAdminView('superadmin')" id="adminSuperadminNav" style="display:none; margin-top:6px;">
-            <span class="nav-icon" aria-hidden="true">🛡️</span>
-            <span class="nav-label">Superadmin</span>
-          </button>
+          <div class="sidebar-footer" id="adminSidebarGroup" style="display:none;">
+            <button class="nav-item" data-section="admin" onclick="toggleAdminSubmenu()" id="navAdmin">
+              <span class="nav-icon" aria-hidden="true">⚙️</span>
+              <span class="nav-label">Admin</span>
+              <span class="admin-chevron" id="adminChevron" style="margin-left:auto;font-size:0.7em;transition:transform 0.2s;">▶</span>
+            </button>
+            <div id="adminSubmenu" class="admin-submenu" style="display:none;">
+              <button class="nav-item admin-sub-item" data-admin-nav="settings" onclick="showAdminView('settings')">
+                <span class="nav-icon" aria-hidden="true">⚙️</span>
+                <span class="nav-label">Settings</span>
+              </button>
+              <button class="nav-item admin-sub-item" data-admin-nav="users" onclick="showAdminView('users')">
+                <span class="nav-icon" aria-hidden="true">👥</span>
+                <span class="nav-label">Users</span>
+              </button>
+              <button class="nav-item admin-sub-item" data-admin-nav="proposals" onclick="showAdminView('proposals')">
+                <span class="nav-icon" aria-hidden="true">📜</span>
+                <span class="nav-label">Proposals</span>
+              </button>
+              <button class="nav-item admin-sub-item" data-admin-nav="analytics" onclick="showAdminView('analytics')">
+                <span class="nav-icon" aria-hidden="true">📊</span>
+                <span class="nav-label">Analytics</span>
+              </button>
+              <button class="nav-item admin-sub-item" data-admin-nav="roles" onclick="showAdminView('roles')">
+                <span class="nav-icon" aria-hidden="true">🎭</span>
+                <span class="nav-label">Verification Roles</span>
+              </button>
+              <button class="nav-item admin-sub-item" data-admin-nav="activity" onclick="showAdminView('activity')">
+                <span class="nav-icon" aria-hidden="true">📋</span>
+                <span class="nav-label">Activity Feed</span>
+              </button>
+              <button class="nav-item admin-sub-item" data-admin-nav="help" onclick="showAdminView('help')">
+                <span class="nav-icon" aria-hidden="true">📘</span>
+                <span class="nav-label">Commands</span>
+              </button>
+              <button class="nav-item admin-sub-item" data-admin-nav="votingpower" onclick="showAdminView('votingpower')">
+                <span class="nav-icon" aria-hidden="true">🗳️</span>
+                <span class="nav-label">Voting Power</span>
+              </button>
+              <button class="nav-item admin-sub-item" data-admin-nav="nfttracker" onclick="showAdminView('nfttracker')">
+                <span class="nav-icon" aria-hidden="true">📡</span>
+                <span class="nav-label">NFT Tracker</span>
+              </button>
+              <button class="nav-item admin-sub-item" data-admin-nav="selfserveroles" onclick="showAdminView('selfserveroles')">
+                <span class="nav-icon" aria-hidden="true">🎖️</span>
+                <span class="nav-label">Self-Serve Roles</span>
+              </button>
+              <button class="nav-item admin-sub-item" data-admin-nav="apiref" onclick="showAdminView('apiref')">
+                <span class="nav-icon" aria-hidden="true">📖</span>
+                <span class="nav-label">API Reference</span>
+              </button>
+              <button class="nav-item admin-sub-item" data-admin-nav="ticketing" onclick="showAdminView('ticketing')">
+                <span class="nav-icon" aria-hidden="true">🎫</span>
+                <span class="nav-label">Ticketing</span>
+              </button>
+            </div>
+            <button class="nav-item" data-section="admin" onclick="switchSection('admin'); showAdminView('superadmin')" id="adminSuperadminNav" style="display:none; margin-top:6px;">
+              <span class="nav-icon" aria-hidden="true">🛡️</span>
+              <span class="nav-label">Superadmin</span>
+            </button>
+          </div>
+        </div>
+        <div id="sidebarServerContext" class="sidebar-server-context" style="display:none;">
+          <div class="sidebar-server-card" onclick="switchSection('servers')">
+            <img id="sidebarServerIcon" class="sidebar-server-icon" src="" alt="" style="display:none;">
+            <div class="sidebar-server-initials" id="sidebarServerInitials" style="display:none;"></div>
+            <div class="sidebar-server-info">
+              <div id="sidebarServerName" class="sidebar-server-name"></div>
+              <div class="sidebar-server-switch">Switch server</div>
+            </div>
+          </div>
+          <button class="sidebar-see-all" onclick="switchSection('servers')">See all servers &rarr;</button>
         </div>
       </aside>
 

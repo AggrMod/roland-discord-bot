@@ -461,6 +461,36 @@ function updateActiveGuildBadge() {
   renderNavServerSelect();
   applyPreSelectionVisibility();
   refreshAdminEntryVisibility();
+  updateSidebarServerContext();
+}
+
+function updateSidebarServerContext() {
+  const ctx = document.getElementById('sidebarServerContext');
+  if (!ctx) return;
+
+  if (!activeGuildId) {
+    ctx.style.display = 'none';
+    return;
+  }
+
+  const record = getServerRecord(activeGuildId);
+  const name = record?.name || activeGuildId;
+  const iconUrl = record ? getGuildIconUrl(record) : '';
+
+  const iconEl = document.getElementById('sidebarServerIcon');
+  const initialsEl = document.getElementById('sidebarServerInitials');
+  if (iconUrl) {
+    iconEl.src = iconUrl;
+    iconEl.style.display = 'block';
+    initialsEl.style.display = 'none';
+  } else {
+    iconEl.style.display = 'none';
+    initialsEl.textContent = name.slice(0, 2).toUpperCase();
+    initialsEl.style.display = 'flex';
+  }
+
+  document.getElementById('sidebarServerName').textContent = name;
+  ctx.style.display = 'block';
 }
 
 function renderNavServerSelect() {

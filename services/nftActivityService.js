@@ -273,30 +273,31 @@ class NFTActivityService {
   async maybeSendAlert(evt) {
     // Per-collection tracked config takes priority
     const tracked = evt.collectionKey ? this.getTrackedCollectionByAddress(evt.collectionKey) : null;
+    logger.log(`[nft-alert] type=${evt.eventType} key=${evt.collectionKey} tracked=${!!tracked}`);
 
     let alertChannelId = null;
     if (tracked) {
-      // Use per-collection event flags
       const eventFlagMap = { mint: 'track_mint', sell: 'track_sale', list: 'track_list', delist: 'track_delist', transfer: 'track_transfer' };
       const flagCol = eventFlagMap[evt.eventType];
-      if (flagCol && !tracked[flagCol]) return;
+      logger.log(`[nft-alert] flagCol=${flagCol} flagVal=${tracked[flagCol]} channelId=${tracked.channel_id}`);
+      if (flagCol && !tracked[flagCol]) { logger.log('[nft-alert] dropped: flag disabled'); return; }
       alertChannelId = tracked.channel_id;
     } else {
-      // Fallback to global config
       const cfg = this.getAlertConfig();
-      if (!cfg || cfg.enabled !== 1 || !cfg.channel_id) return;
+      logger.log(`[nft-alert] no tracked row — global cfg=${JSON.stringify(cfg)}`);
+      if (!cfg || cfg.enabled !== 1 || !cfg.channel_id) { logger.log('[nft-alert] dropped: no global config'); return; }
       const typeSet = new Set((cfg.event_types || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
-      if (typeSet.size && !typeSet.has(evt.eventType)) return;
+      if (typeSet.size && !typeSet.has(evt.eventType)) { logger.log(`[nft-alert] dropped: type ${evt.eventType} not in ${[...typeSet]}`); return; }
       const minSol = Number(cfg.min_sol || 0);
       const price = Number(evt.priceSol || 0);
-      if (price < minSol) return;
+      if (price < minSol) { logger.log(`[nft-alert] dropped: price ${price} < minSol ${minSol}`); return; }
       alertChannelId = cfg.channel_id;
     }
 
-    if (!alertChannelId) return;
+    if (!alertChannelId) { logger.log('[nft-alert] dropped: no alertChannelId'); return; }
 
     const client = clientProvider.getClient();
-    if (!client) return;
+    if (!client) { logger.log('[nft-alert] dropped: no discord client'); return; }
 
     const channel = await client.channels.fetch(alertChannelId).catch(() => null);
     if (!channel || !channel.send) return;

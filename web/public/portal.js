@@ -530,13 +530,30 @@ function applyPreSelectionVisibility() {
     if (sectionEl) sectionEl.style.display = locked ? 'none' : '';
   });
 
-  // Profile/wallets and server selection remain available pre-selection
+  // Profile/wallets remain available pre-selection
   setNavSectionVisibility('wallets', true);
-  setNavSectionVisibility('servers', true);
   setNavSectionVisibility('landing', true);
 
   const walletsSection = document.getElementById('section-wallets');
   if (walletsSection) walletsSection.style.display = '';
+}
+
+function updateModuleVisibility() {
+  const state = window._tenantModuleState || {};
+  const moduleNav = [
+    { id: 'sidebarNavBattle', key: 'battle' },
+    { id: 'sidebarNavSelfServe', key: 'selfseveroles' },
+    { id: 'sidebarNavTicketing', key: 'ticketing' },
+    { id: 'sidebarNavHeist', key: 'heist' },
+    { id: 'mobileNavBattle', key: 'battle' },
+    { id: 'mobileNavSelfServe', key: 'selfseveroles' },
+    { id: 'mobileNavTicketing', key: 'ticketing' },
+    { id: 'mobileNavHeist', key: 'heist' },
+  ];
+  moduleNav.forEach(({ id, key }) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = (state[key] === false) ? 'none' : '';
+  });
 }
 
 function applyTenantModuleNavVisibility(settings = {}) {
@@ -547,7 +564,9 @@ function applyTenantModuleNavVisibility(settings = {}) {
     nfttracker: !!settings.moduleNftTrackerEnabled,
     heist: !!settings.moduleMissionsEnabled,
     ticketing: !!settings.moduleTicketingEnabled,
-    roleclaim: !!settings.moduleRoleClaimEnabled
+    roleclaim: !!settings.moduleRoleClaimEnabled,
+    battle: !!settings.moduleBattleEnabled,
+    selfseveroles: !!settings.moduleRoleClaimEnabled
   };
   window._tenantModuleState = moduleState;
 
@@ -565,18 +584,8 @@ function applyTenantModuleNavVisibility(settings = {}) {
     if (sectionEl) sectionEl.style.display = enabled ? '' : 'none';
   });
 
-  const adminMap = {
-    verificationroles: moduleState.verification,
-    votingpower: moduleState.governance,
-    nfttracker: moduleState.nfttracker,
-    ticketing: moduleState.ticketing,
-    selfserveroles: moduleState.roleclaim
-  };
-  Object.entries(adminMap).forEach(([view, enabled]) => {
-    document.querySelectorAll(`.admin-sub-item[data-admin-nav="${view}"]`).forEach(el => {
-      el.style.display = enabled ? '' : 'none';
-    });
-  });
+  // Update module-specific sidebar nav items with dedicated IDs
+  updateModuleVisibility();
 
   const recentCard = document.getElementById('dashboardRecentActivityCard');
   if (recentCard) recentCard.style.display = (moduleState.governance || moduleState.heist) ? '' : 'none';
@@ -853,15 +862,15 @@ function showUnauthenticatedState() {
 }
 
 function refreshAdminEntryVisibility() {
-  // Tenant Admin is strictly server-scoped.
-  const canShowTenantAdminEntry = !!isAdmin && !!activeGuildId;
-  const adminSidebarGroup = document.getElementById('adminSidebarGroup');
+  // Superadmin controls are only visible for superadmin users
+  const canShowSuperadminEntry = !!isSuperadmin;
+  const superadminSidebarGroup = document.getElementById('adminSuperadminSidebarGroup');
   const mobileNavAdmin = document.getElementById('mobileNavAdmin');
   const topNav = document.getElementById('topNavAdmin');
 
-  if (adminSidebarGroup) adminSidebarGroup.style.display = canShowTenantAdminEntry ? 'block' : 'none';
-  if (mobileNavAdmin) mobileNavAdmin.style.display = canShowTenantAdminEntry ? 'block' : 'none';
-  if (topNav) topNav.style.display = canShowTenantAdminEntry ? '' : 'none';
+  if (superadminSidebarGroup) superadminSidebarGroup.style.display = canShowSuperadminEntry ? 'block' : 'none';
+  if (mobileNavAdmin) mobileNavAdmin.style.display = canShowSuperadminEntry ? 'block' : 'none';
+  if (topNav) topNav.style.display = canShowSuperadminEntry ? '' : 'none';
 }
 
 async function checkAdminStatus() {
@@ -898,10 +907,6 @@ async function checkSuperadminStatus() {
     const data = await response.json();
     isSuperadmin = !!data.isSuperadmin;
 
-    const navItem = document.getElementById('adminSuperadminNav');
-    if (navItem) {
-      navItem.style.display = isSuperadmin ? 'flex' : 'none';
-    }
     const landingBtn = document.getElementById('landingSuperadminBtn');
     if (landingBtn) {
       landingBtn.style.display = isSuperadmin ? 'inline-block' : 'none';
@@ -915,8 +920,6 @@ async function checkSuperadminStatus() {
     refreshAdminEntryVisibility();
   } catch (error) {
     isSuperadmin = false;
-    const navItem = document.getElementById('adminSuperadminNav');
-    if (navItem) navItem.style.display = 'none';
     const landingBtn = document.getElementById('landingSuperadminBtn');
     if (landingBtn) landingBtn.style.display = 'none';
     refreshAdminEntryVisibility();
@@ -1401,7 +1404,10 @@ function switchSection(sectionName) {
     wallets: 'verification',
     treasury: 'treasury',
     'nft-activity': 'nfttracker',
-    heist: 'heist'
+    heist: 'heist',
+    battle: 'battle',
+    'self-serve-roles': 'selfseveroles',
+    ticketing: 'ticketing'
   };
   const required = sectionRequiresModule[sectionName];
   if (required && moduleState && moduleState[required] === false) {

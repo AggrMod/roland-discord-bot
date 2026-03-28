@@ -459,6 +459,7 @@ function updateActiveGuildBadge() {
   }
 
   renderNavServerSelect();
+  applyPreSelectionVisibility();
 }
 
 function renderNavServerSelect() {
@@ -486,6 +487,25 @@ function setNavSectionVisibility(section, visible) {
   document.querySelectorAll(`[data-section="${section}"]`).forEach(el => {
     el.style.display = visible ? '' : 'none';
   });
+}
+
+function applyPreSelectionVisibility() {
+  const locked = requiresServerSelectionGate();
+  const tenantSections = ['governance', 'treasury', 'nft-activity', 'heist'];
+
+  tenantSections.forEach(section => {
+    setNavSectionVisibility(section, !locked);
+    const sectionEl = document.getElementById(`section-${section}`);
+    if (sectionEl) sectionEl.style.display = locked ? 'none' : '';
+  });
+
+  // Profile/wallets and server selection remain available pre-selection
+  setNavSectionVisibility('wallets', true);
+  setNavSectionVisibility('servers', true);
+  setNavSectionVisibility('landing', true);
+
+  const walletsSection = document.getElementById('section-wallets');
+  if (walletsSection) walletsSection.style.display = '';
 }
 
 function applyTenantModuleNavVisibility(settings = {}) {
@@ -722,6 +742,7 @@ async function loadPortal() {
       userData = data;
       showAuthenticatedState();
       await loadServerAccess();
+      applyPreSelectionVisibility();
       await checkSuperadminStatus();
       await checkAdminStatus();
 

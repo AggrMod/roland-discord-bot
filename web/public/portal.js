@@ -4240,6 +4240,97 @@ async function loadNftTrackerView() {
     }
   };
 
+  const editNftCollection = (btn) => {
+    const id = btn.dataset.id;
+    // Remove any existing edit modal
+    const old = document.getElementById('nftEditModal');
+    if (old) old.remove();
+
+    const modalFieldInput = 'width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;';
+    const modalLabel = 'display:block;font-weight:600;font-size:0.85em;color:#c9d6ff;margin-bottom:6px;';
+    const overlay = document.createElement('div');
+    overlay.id = 'nftEditModal';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;';
+    overlay.innerHTML = `
+      <div style="background:var(--card-bg, #1e293b);border:1px solid rgba(99,102,241,0.3);border-radius:12px;padding:24px;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto;">
+        <h3 style="margin:0 0 16px;color:var(--text-primary, #e0e7ff);">✏️ Edit Collection</h3>
+        <div style="margin-bottom:12px;">
+          <label style="${modalLabel}">Collection Name</label>
+          <input type="text" id="nftEditName" value="${btn.dataset.name}" style="${modalFieldInput}">
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="${modalLabel}">Alert Channel</label>
+          <select id="nftEditChannel" style="${modalFieldInput}"><option value="">-- Select channel --</option></select>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="${modalLabel}">Magic Eden Symbol <small style="color:#94a3b8;">(slug for listing alerts)</small></label>
+          <input type="text" id="nftEditMeSymbol" value="${btn.dataset.me}" style="${modalFieldInput}">
+        </div>
+        <div style="margin-bottom:16px;">
+          <label style="${modalLabel}">Track Events</label>
+          <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:4px;">
+            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditMint" ${btn.dataset.mint === '1' ? 'checked' : ''}> 🪙 Mint</label>
+            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditSale" ${btn.dataset.sale === '1' ? 'checked' : ''}> 💰 Sale</label>
+            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditList" ${btn.dataset.list === '1' ? 'checked' : ''}> 📋 List</label>
+            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditDelist" ${btn.dataset.delist === '1' ? 'checked' : ''}> ❌ Delist</label>
+            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditTransfer" ${btn.dataset.transfer === '1' ? 'checked' : ''}> 🔄 Transfer</label>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <button id="nftEditSaveBtn" style="padding:8px 18px;background:#6366f1;color:#fff;border:none;border-radius:8px;font-size:0.85em;font-weight:600;cursor:pointer;">Save</button>
+          <button id="nftEditCancelBtn" style="padding:8px 18px;background:transparent;color:#94a3b8;border:1px solid rgba(255,255,255,0.12);border-radius:8px;font-size:0.85em;cursor:pointer;">Cancel</button>
+          <span id="nftEditFeedback" style="font-size:0.85em;font-weight:600;"></span>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    // Populate channel dropdown and select current
+    populateNftChannelDropdown(document.getElementById('nftEditChannel'));
+    const editChSel = document.getElementById('nftEditChannel');
+    if (editChSel) editChSel.value = btn.dataset.channel;
+
+    // Close on overlay click
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    document.getElementById('nftEditCancelBtn').addEventListener('click', () => overlay.remove());
+
+    document.getElementById('nftEditSaveBtn').addEventListener('click', async () => {
+      const saveBtn = document.getElementById('nftEditSaveBtn');
+      const feedback = document.getElementById('nftEditFeedback');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+      try {
+        const payload = {
+          collectionName: document.getElementById('nftEditName').value.trim(),
+          channelId: document.getElementById('nftEditChannel').value,
+          meSymbol: document.getElementById('nftEditMeSymbol').value.trim(),
+          trackMint: !!document.getElementById('nftEditMint').checked,
+          trackSale: !!document.getElementById('nftEditSale').checked,
+          trackList: !!document.getElementById('nftEditList').checked,
+          trackDelist: !!document.getElementById('nftEditDelist').checked,
+          trackTransfer: !!document.getElementById('nftEditTransfer').checked,
+        };
+        const res = await fetch('/api/admin/nft-tracker/collections/' + id, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          overlay.remove();
+          renderNftCollectionsTable();
+        } else {
+          if (feedback) { feedback.style.color = '#fca5a5'; feedback.textContent = data.message || 'Failed to save'; }
+        }
+      } catch (err) {
+        console.error('[NFT Tracker] Edit save error:', err);
+        if (feedback) { feedback.style.color = '#fca5a5'; feedback.textContent = 'Network error'; }
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save';
+      }
+    });
+  };
+
   const renderNftCollectionsTable = async () => {
     const wrap = document.getElementById('nftCollectionsTableWrap');
     if (!wrap) return;
@@ -4269,7 +4360,10 @@ async function loadNftTrackerView() {
           <td style="padding:8px 10px;font-size:0.85em;color:var(--text-secondary);">${escapeHtml(channelName(c.channel_id))}</td>
           <td style="padding:8px 10px;font-size:0.85em;">${eventIcons(c)}</td>
           <td style="padding:8px 10px;font-size:0.85em;color:${c.enabled ? '#86efac' : '#fca5a5'};">${c.enabled ? 'Yes' : 'No'}</td>
-          <td style="padding:8px 10px;"><button class="btn-danger nft-remove-btn" data-id="${c.id}" style="font-size:0.8em;padding:4px 10px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">Remove</button></td>
+          <td style="padding:8px 10px;display:flex;gap:6px;">
+            <button class="nft-edit-btn" data-id="${c.id}" data-name="${escapeHtml(c.collection_name)}" data-channel="${c.channel_id}" data-me="${escapeHtml(c.me_symbol || '')}" data-mint="${c.track_mint}" data-sale="${c.track_sale}" data-list="${c.track_list}" data-delist="${c.track_delist}" data-transfer="${c.track_transfer}" style="font-size:0.8em;padding:4px 10px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️ Edit</button>
+            <button class="btn-danger nft-remove-btn" data-id="${c.id}" style="font-size:0.8em;padding:4px 10px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">Remove</button>
+          </td>
         </tr>
       `).join('');
       wrap.innerHTML = `
@@ -4297,6 +4391,9 @@ async function loadNftTrackerView() {
           } catch (e) { console.error('[NFT Tracker] Remove error:', e); }
           renderNftCollectionsTable();
         });
+      });
+      wrap.querySelectorAll('.nft-edit-btn').forEach(btn => {
+        btn.addEventListener('click', () => editNftCollection(btn));
       });
     } catch (e) {
       wrap.innerHTML = '<p style="color:#fca5a5;font-size:0.9em;">Failed to load tracked collections.</p>';

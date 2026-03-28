@@ -421,12 +421,9 @@ class NFTActivityService {
 
       for (const col of collections) {
         try {
-          if (!col.me_symbol) {
-            logger.log(`[nft-poll] ${col.collection_name} no ME symbol configured, skipping`);
-            continue;
-          }
-          // Magic Eden collection activities API — uses ME collection slug
-          const meUrl = `https://api-mainnet.magiceden.dev/v2/collections/${col.me_symbol}/activities?offset=0&limit=100&type[]=list&type[]=buyNow`;
+          // Magic Eden poll — only if me_symbol is configured
+          if (col.me_symbol) {
+          const meUrl = `https://api-mainnet.magiceden.dev/v2/collections/${col.me_symbol}/activities?offset=0&limit=100&type[]=list&type[]=buyNow&type[]=delist&type[]=cancelBid`;
           const res = await fetch(meUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
 
           if (!res.ok) {
@@ -468,7 +465,44 @@ class NFTActivityService {
             else skipped++;
           }
 
-          logger.log(`[nft-poll] guild=${col.guild_id} collection=${col.collection_name} new=${newCount} skipped=${skipped}`);
+          logger.log(`[nft-poll] guild=${col.guild_id} collection=${col.collection_name} ME new=${newCount} skipped=${skipped}`);
+          await new Promise(r => setTimeout(r, 600));
+          } // end ME block
+
+          // Tensor poll — always runs using collection_address as collId directly
+          try {
+            const tensorQuery = `query { recentTransactions(collId: "${col.collection_address}", limit: 100) { txs { tx { txType signature grossAmount seller buyer mintOnchainId blockTime } } } }`;
+            const tensorRes = await fetch("https://api.tensor.trade/graphql", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "User-Agent": "GuildPilot/1.0" },
+              body: JSON.stringify({ query: tensorQuery }),
+            });
+            if (tensorRes.ok) {
+              const tensorData = await tensorRes.json();
+              const txs = tensorData?.data?.recentTransactions?.txs || [];
+              const tensorTypeMap = { LIST: "list", SALE_BUY_NOW: "sell", DELIST: "delist", BID: "bid" };
+              for (const { tx } of txs) {
+                if (!tx?.signature) continue;
+                const exists = db.prepare("SELECT id FROM nft_activity_events WHERE tx_signature = ?").get(tx.signature);
+                if (exists) continue;
+                const normalized = {
+                  type: tensorTypeMap[tx.txType] || tx.txType?.toLowerCase() || "unknown",
+                  collectionKey: col.collection_address,
+                  tokenMint: tx.mintOnchainId || null,
+                  fromWallet: tx.seller || null,
+                  toWallet: tx.buyer || null,
+                  priceSol: tx.grossAmount ? Number(tx.grossAmount) / 1e9 : null,
+                  txSignature: tx.signature,
+                  eventTime: tx.blockTime ? new Date(tx.blockTime * 1000).toISOString() : new Date().toISOString(),
+                };
+                this.ingestEvent(normalized, "poll");
+              }
+              logger.log(`[nft-poll] ${col.collection_name} Tensor txs=${txs.length}`);
+            }
+          } catch (tensorErr) {
+            logger.error(`[nft-poll] Tensor error for ${col.collection_name}:`, tensorErr.message);
+          }
+
           await new Promise(r => setTimeout(r, 600));
         } catch (colErr) {
           logger.error(`[nft-poll] Error polling ${col.collection_name}:`, colErr);

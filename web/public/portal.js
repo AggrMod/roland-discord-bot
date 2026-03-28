@@ -460,6 +460,7 @@ function updateActiveGuildBadge() {
 
   renderNavServerSelect();
   applyPreSelectionVisibility();
+  refreshAdminEntryVisibility();
 }
 
 function renderNavServerSelect() {
@@ -821,35 +822,42 @@ function showUnauthenticatedState() {
   document.getElementById('dashboardContent').style.display = 'none';
 }
 
+function refreshAdminEntryVisibility() {
+  const canShowAdminEntry = !!isAdmin && (!!activeGuildId || !!isSuperadmin);
+  const adminSidebarGroup = document.getElementById('adminSidebarGroup');
+  const mobileNavAdmin = document.getElementById('mobileNavAdmin');
+  const topNav = document.getElementById('topNavAdmin');
+
+  if (adminSidebarGroup) adminSidebarGroup.style.display = canShowAdminEntry ? 'block' : 'none';
+  if (mobileNavAdmin) mobileNavAdmin.style.display = canShowAdminEntry ? 'block' : 'none';
+  if (topNav) topNav.style.display = canShowAdminEntry ? '' : 'none';
+}
+
 async function checkAdminStatus() {
   try {
     const response = await fetch('/api/user/is-admin', { credentials: 'include' });
     const data = await response.json();
 
     isAdmin = !!data.isAdmin || isSuperadmin;
+    refreshAdminEntryVisibility();
 
     if (isAdmin) {
-      document.getElementById('adminSidebarGroup').style.display = 'block';
-      document.getElementById('mobileNavAdmin').style.display = 'block';
-      const topNav = document.getElementById('topNavAdmin');
-      if (topNav) topNav.style.display = '';
-
       // Load treasury data for admin
       await loadTreasuryPublicView();
     } else {
       isAdmin = false;
-      document.getElementById('adminSidebarGroup').style.display = 'none';
-      document.getElementById('mobileNavAdmin').style.display = 'none';
+      refreshAdminEntryVisibility();
 
-      // If user navigated directly to admin section, redirect to dashboard
+      // If user navigated directly to admin section, redirect to landing
       const params = new URLSearchParams(window.location.search);
       if (params.get('section') === 'admin') {
-        switchSection('dashboard');
+        switchSection('landing');
         showError('Admin access required.');
       }
     }
   } catch (error) {
-    // User is not admin, keep admin nav hidden
+    isAdmin = false;
+    refreshAdminEntryVisibility();
   }
 }
 
@@ -872,12 +880,15 @@ async function checkSuperadminStatus() {
       const card = document.getElementById('adminSuperadminCard');
       if (card) card.style.display = 'none';
     }
+
+    refreshAdminEntryVisibility();
   } catch (error) {
     isSuperadmin = false;
     const navItem = document.getElementById('adminSuperadminNav');
     if (navItem) navItem.style.display = 'none';
     const landingBtn = document.getElementById('landingSuperadminBtn');
     if (landingBtn) landingBtn.style.display = 'none';
+    refreshAdminEntryVisibility();
   }
 }
 

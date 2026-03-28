@@ -320,18 +320,29 @@ class NFTActivityService {
     };
     const typeIcon = iconMap[typeUpper] || '🧩';
 
+    // Resolve collection name from DB (tracked) — fall back to shortened address
+    const collectionDisplay = tracked?.collection_name ||
+      (evt.collectionKey ? `${evt.collectionKey.slice(0, 6)}...${evt.collectionKey.slice(-4)}` : 'Unknown');
+
+    // Token display: prefer name, then shorten mint address
+    const tokenDisplay = (evt.tokenName && !evt.tokenName.match(/^[A-Za-z0-9]{32,}$/))
+      ? evt.tokenName
+      : evt.tokenMint ? `\`${evt.tokenMint.slice(0, 6)}...${evt.tokenMint.slice(-4)}\`` : '—';
+
+    const priceDisplay = evt.priceSol != null && evt.priceSol > 0 ? `◎ ${Number(evt.priceSol).toFixed(3)} SOL` : '—';
+
     const embed = new EmbedBuilder()
       .setColor(colorMap[typeUpper] || '#5865F2')
-      .setTitle(`${typeIcon} NFT Activity • ${typeUpper}`)
+      .setTitle(`${typeIcon} ${collectionDisplay} • ${typeUpper}`)
       .addFields(
-        { name: 'Collection', value: evt.collectionKey || 'unknown', inline: true },
-        { name: 'Token', value: evt.tokenName || evt.tokenMint || 'unknown', inline: true },
-        { name: 'Price', value: evt.priceSol !== null && evt.priceSol !== undefined ? `${evt.priceSol} SOL` : '—', inline: true },
+        { name: 'Token', value: tokenDisplay, inline: true },
+        { name: 'Price', value: priceDisplay, inline: true },
+        { name: 'When', value: whenTs ? `<t:${whenTs}:R>` : 'now', inline: true },
         { name: 'From', value: evt.fromWallet ? `\`${evt.fromWallet.slice(0, 6)}...${evt.fromWallet.slice(-4)}\`` : '—', inline: true },
         { name: 'To', value: evt.toWallet ? `\`${evt.toWallet.slice(0, 6)}...${evt.toWallet.slice(-4)}\`` : '—', inline: true },
-        { name: 'When', value: whenTs ? `<t:${whenTs}:R>` : 'now', inline: true }
+        { name: 'Collection', value: collectionDisplay, inline: true }
       )
-      .setFooter({ text: shortSig ? `Tx: ${shortSig}` : 'No tx signature provided' })
+      .setFooter({ text: shortSig ? `Tx: ${shortSig}` : 'No tx' })
       .setTimestamp();
 
     const explorer = evt.txSignature ? `https://solscan.io/tx/${evt.txSignature}` : null;

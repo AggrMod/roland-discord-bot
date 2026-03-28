@@ -1,6 +1,6 @@
 const db = require('../database/db');
 const logger = require('../utils/logger');
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const clientProvider = require('../utils/clientProvider');
 
 class NFTActivityService {
@@ -349,10 +349,17 @@ class NFTActivityService {
     if (evt.imageUrl) embed.setThumbnail(evt.imageUrl);
 
     const explorer = evt.txSignature ? `https://solscan.io/tx/${evt.txSignature}` : null;
-    await channel.send({
-      content: explorer ? `🔗 ${explorer}` : undefined,
-      embeds: [embed]
-    });
+    const meLink = evt.tokenMint ? `https://magiceden.io/item-details/${evt.tokenMint}` : null;
+
+    if (explorer) embed.setURL(explorer);
+
+    const buttons = [];
+    if (explorer) buttons.push(new ButtonBuilder().setLabel('View Tx').setURL(explorer).setStyle(ButtonStyle.Link).setEmoji('🔍'));
+    if (meLink) buttons.push(new ButtonBuilder().setLabel('Magic Eden').setURL(meLink).setStyle(ButtonStyle.Link).setEmoji('🌊'));
+
+    const components = buttons.length ? [new ActionRowBuilder().addComponents(...buttons)] : [];
+
+    await channel.send({ embeds: [embed], components });
   }
 
   listEvents(limit = 20) {

@@ -263,7 +263,8 @@ async function verifyByMicroTx() {
     }
     const { Connection, PublicKey, Transaction, SystemProgram } = window.solanaWeb3;
 
-    const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+    const SOLANA_RPC = window.GUILDPILOT_CONFIG?.solanaRpc || 'https://api.mainnet-beta.solana.com';
+    const connection = new Connection(SOLANA_RPC, 'confirmed');
     const transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey,
@@ -3710,15 +3711,11 @@ async function loadAdminSettingsView() {
     // Verify selects exist in DOM before fetch
     channelIds.forEach(id => {
       const sel = document.getElementById(`ps_${id}`);
-      console.log(`[Settings] Channel select ps_${id} in DOM:`, !!sel);
     });
     try {
-      console.log('[Settings] Fetching /api/admin/discord/channels...');
       const channelsRes = await fetch('/api/admin/discord/channels', { credentials: 'include' });
-      console.log('[Settings] Channels response status:', channelsRes.status, channelsRes.ok);
       if (channelsRes.ok) {
         const channelsJson = await channelsRes.json();
-        console.log('[Settings] Channels response:', channelsJson.success, 'count:', (channelsJson.channels || []).length);
         if (channelsJson.success) channelsList = channelsJson.channels || [];
       } else {
         console.error('[Settings] Channels fetch failed with status:', channelsRes.status);
@@ -3739,7 +3736,6 @@ async function loadAdminSettingsView() {
         if (!grouped[parent]) grouped[parent] = [];
         grouped[parent].push(ch);
       });
-      console.log('[Settings] Channel groups:', Object.keys(grouped).length, 'categories');
 
       // Populate each select element that exists in the DOM
       channelIds.forEach(id => {
@@ -3763,10 +3759,8 @@ async function loadAdminSettingsView() {
         // Set selected value AFTER all options are in the DOM
         if (s[id]) {
           sel.value = s[id];
-          console.log(`[Settings] Set ps_${id} selected value:`, s[id], '-> matched:', sel.value === s[id]);
         }
       });
-      console.log('[Settings] Channel dropdowns populated successfully');
     } catch (chErr) {
       console.error('[Settings] Failed to load channels:', chErr);
       channelIds.forEach(id => {

@@ -1,6 +1,7 @@
 const db = require('../database/db');
 const logger = require('../utils/logger');
 const { Connection, PublicKey, LAMPORTS_PER_SOL } = require('@solana/web3.js');
+const clientProvider = require('../utils/clientProvider');
 
 class MicroVerifyService {
   constructor() {
@@ -443,7 +444,7 @@ class MicroVerifyService {
    */
   async notifyUserVerified(discordId, walletAddress) {
     try {
-      const client = global.discordClient;
+      const client = clientProvider.getClient();
       if (!client) return;
 
       const user = await client.users.fetch(discordId).catch(() => null);

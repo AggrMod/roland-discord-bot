@@ -136,17 +136,12 @@ module.exports = {
         }
       }
     } catch (error) {
-      logger.error('Error executing heist command:', error);
-      
-      const reply = { 
-        content: `❌ Something went wrong: ${error.message}`, 
-        ephemeral: true 
-      };
-      
+      console.error('[CommandError]', error);
+      const userMsg = 'An error occurred. Please try again or contact an admin.';
       if (interaction.deferred || interaction.replied) {
-        await interaction.editReply(reply);
+        await interaction.editReply({ content: userMsg });
       } else {
-        await interaction.reply(reply);
+        await interaction.reply({ content: userMsg, ephemeral: true });
       }
     }
   },

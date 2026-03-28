@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node index.js",
     "deploy": "node deploy-commands.js",
-    "dev": "node --watch index.js"
+    "dev": "node --watch index.js",
+    "lint": "eslint . --ext .js --ignore-path .gitignore",
+    "audit": "npm audit --production"
   },
   "dependencies": {
     "@solana/web3.js": "^1.95.8",
@@ -21,5 +23,9 @@
     "express-rate-limit": "^8.3.1",
     "express-session": "^1.18.0",
     "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "eslint-plugin-security": "^2.1.1"
   }
 }

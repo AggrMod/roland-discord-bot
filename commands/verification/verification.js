@@ -317,17 +317,12 @@ module.exports = {
         }
       }
     } catch (error) {
-      logger.error('Error executing verification command:', error);
-      
-      const reply = { 
-        content: `❌ Something went wrong: ${error.message}`, 
-        ephemeral: true 
-      };
-      
+      console.error('[CommandError]', error);
+      const userMsg = 'An error occurred. Please try again or contact an admin.';
       if (interaction.deferred || interaction.replied) {
-        await interaction.editReply(reply);
+        await interaction.editReply({ content: userMsg });
       } else {
-        await interaction.reply(reply);
+        await interaction.reply({ content: userMsg, ephemeral: true });
       }
     }
   },
@@ -551,6 +546,10 @@ module.exports = {
   // ==================== ADMIN COMMANDS ====================
 
   async handleAdminPanel(interaction) {
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ ephemeral: true });
+    }
+
     const webUrl = process.env.WEB_URL || 'http://localhost:3000';
 
     const title = interaction.options.getString('title') || '🔗 Verify your wallet!';
@@ -559,9 +558,8 @@ module.exports = {
 
     const colorValue = colorHex.startsWith('#') ? colorHex : `#${colorHex}`;
     if (!/^#[0-9A-F]{6}$/i.test(colorValue)) {
-      return interaction.reply({
-        content: '❌ Invalid color format. Use hex code (e.g., #FFD700)',
-        ephemeral: true
+      return interaction.editReply({
+        content: '❌ Invalid color format. Use hex code (e.g., #FFD700)'
       });
     }
 
@@ -588,7 +586,7 @@ module.exports = {
       );
 
     await interaction.channel.send({ embeds: [embed], components: [row] });
-    await interaction.reply({ content: '✅ Verification panel posted!', ephemeral: true });
+    await interaction.editReply({ content: '✅ Verification panel posted!' });
     logger.log(`Admin ${interaction.user.username} posted verification panel`);
   },
 

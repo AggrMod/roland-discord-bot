@@ -1,6 +1,7 @@
 const db = require('../database/db');
 const logger = require('../utils/logger');
 const { EmbedBuilder } = require('discord.js');
+const clientProvider = require('../utils/clientProvider');
 
 class NFTActivityService {
   getAlertConfig() {
@@ -237,7 +238,7 @@ class NFTActivityService {
 
     if (!alertChannelId) return;
 
-    const client = global.discordClient;
+    const client = clientProvider.getClient();
     if (!client) return;
 
     const channel = await client.channels.fetch(alertChannelId).catch(() => null);

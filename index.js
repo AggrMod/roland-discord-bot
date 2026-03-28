@@ -7,10 +7,11 @@ const WebServer = require('./web/server');
 const tenantService = require('./services/tenantService');
 const moduleGate = require('./middleware/moduleGate');
 const { getCommandModuleKey } = require('./config/commandModules');
+const clientProvider = require('./utils/clientProvider');
 
 // Validate critical environment variables on startup
 function validateEnvVars() {
-  const required = ['DISCORD_TOKEN', 'CLIENT_ID', 'GUILD_ID', 'DISCORD_CLIENT_SECRET', 'SESSION_SECRET'];
+  const required = ['DISCORD_TOKEN', 'CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DISCORD_REDIRECT_URI', 'SESSION_SECRET'];
 
   const missing = [];
   for (const varName of required) {
@@ -110,6 +111,8 @@ const governanceLogger = require('./utils/governanceLogger');
 const ticketService = require('./services/ticketService');
 const settings = require('./config/settings.json');
 
+const intervals = [];
+
 client.once(Events.ClientReady, () => {
   logger.log(`✅ Bot is online as ${client.user.tag}`);
   logger.log(`📊 Loaded ${client.commands.size} commands`);
@@ -117,8 +120,8 @@ client.once(Events.ClientReady, () => {
   
   client.user.setActivity('The Commission', { type: 0 });
 
-  // Set global client reference for microVerifyService
-  global.discordClient = client;
+  // Set client reference via clientProvider
+  clientProvider.setClient(client);
 
   // Pass client to proposalService, webServer, governanceLogger, ticketService
   proposalService.setClient(client);
@@ -160,11 +163,11 @@ client.once(Events.ClientReady, () => {
   treasuryService.startScheduler();
 
   // Start micro-verify cleanup job (runs every 10 minutes) - only if verification enabled
-  setInterval(() => {
+  intervals.push(setInterval(() => {
     if (moduleGuard.isModuleEnabled('verification')) {
       microVerifyService.expireStaleRequests();
     }
-  }, 10 * 60 * 1000);
+  }, 10 * 60 * 1000));
 });
 
 client.on(Events.GuildCreate, async guild => {
@@ -773,7 +776,7 @@ function buildTreasuryPanelFromService() {
 
 function startVoteCheckInterval() {
   // Check every 5 minutes for votes that need to be closed and stale drafts
-  setInterval(async () => {
+  intervals.push(setInterval(async () => {
     // Check if governance module is enabled
     const moduleGuard = require('./utils/moduleGuard');
     if (!moduleGuard.isModuleEnabled('governance')) {
@@ -793,7 +796,7 @@ function startVoteCheckInterval() {
     } catch (error) {
       logger.error('Error in vote check interval:', error);
     }
-  }, 5 * 60 * 1000); // 5 minutes
+  }, 5 * 60 * 1000)); // 5 minutes
 
   logger.log('📅 Vote auto-close and draft expiry checker started (runs every 5 minutes)');
 }
@@ -877,9 +880,9 @@ function startRoleResyncScheduler() {
   }, STARTUP_DELAY_MS);
 
   // Schedule recurring resync every 4 hours
-  setInterval(() => {
+  intervals.push(setInterval(() => {
     performRoleResync();
-  }, RESYNC_INTERVAL_MS);
+  }, RESYNC_INTERVAL_MS));
 
   logger.log(`⏰ Role resync scheduler started (runs every 4 hours + on startup)`);
 }
@@ -1027,6 +1030,34 @@ client.on(Events.Error, error => {
   logger.error('Discord client error:', error);
 });
 
+async function fetchLobbyRolesAndBuildEmbed(battleService, lobby, reaction, participants) {
+  let requiredRoles = [];
+  let excludedRoles = [];
+  if (lobby.required_role_ids) {
+    const requiredIds = lobby.required_role_ids.split(',');
+    for (const requiredId of requiredIds) {
+      try {
+        const role = await reaction.message.guild.roles.fetch(requiredId);
+        requiredRoles.push(role);
+      } catch (error) {
+        logger.error('Failed to fetch required role:', error);
+      }
+    }
+  }
+  if (lobby.excluded_role_ids) {
+    const excludedIds = lobby.excluded_role_ids.split(',');
+    for (const excludedId of excludedIds) {
+      try {
+        const role = await reaction.message.guild.roles.fetch(excludedId);
+        excludedRoles.push(role);
+      } catch (error) {
+        logger.error('Failed to fetch excluded role:', error);
+      }
+    }
+  }
+  return battleService.buildLobbyEmbed(lobby, participants, requiredRoles.length ? requiredRoles : null, excludedRoles.length ? excludedRoles : null);
+}
+
 // Battle reaction handlers
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
   try {
@@ -1060,39 +1091,11 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
         }
 
         const result = battleService.addParticipant(lobby.lobby_id, user.id, user.username, userRoles);
-        
+
         if (result.success) {
           // Update lobby embed
           const participants = battleService.getParticipants(lobby.lobby_id);
-          
-          // Fetch required/excluded roles if set
-          let requiredRoles = [];
-          let excludedRoles = [];
-          if (lobby.required_role_ids) {
-            const requiredIds = lobby.required_role_ids.split(',');
-            for (const requiredId of requiredIds) {
-              try {
-                const role = await reaction.message.guild.roles.fetch(requiredId);
-                requiredRoles.push(role);
-              } catch (error) {
-                logger.error('Failed to fetch required role:', error);
-              }
-            }
-          }
-          if (lobby.excluded_role_ids) {
-            const excludedIds = lobby.excluded_role_ids.split(',');
-            for (const excludedId of excludedIds) {
-              try {
-                const role = await reaction.message.guild.roles.fetch(excludedId);
-                excludedRoles.push(role);
-              } catch (error) {
-                logger.error('Failed to fetch excluded role:', error);
-              }
-            }
-          }
-          
-          const updatedEmbed = battleService.buildLobbyEmbed(lobby, participants, requiredRoles.length ? requiredRoles : null, excludedRoles.length ? excludedRoles : null);
-          
+          const updatedEmbed = await fetchLobbyRolesAndBuildEmbed(battleService, lobby, reaction, participants);
           await reaction.message.edit({ embeds: [updatedEmbed] });
           logger.log(`User ${user.username} joined battle lobby ${lobby.lobby_id} via reaction`);
         } else if (result.message === 'Already in this lobby') {
@@ -1145,39 +1148,11 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
       
       if (lobby && lobby.status === 'open') {
         const result = battleService.removeParticipant(lobby.lobby_id, user.id);
-        
+
         if (result.success) {
           // Update lobby embed
           const participants = battleService.getParticipants(lobby.lobby_id);
-          
-          // Fetch required/excluded roles if set
-          let requiredRoles = [];
-          let excludedRoles = [];
-          if (lobby.required_role_ids) {
-            const requiredIds = lobby.required_role_ids.split(',');
-            for (const requiredId of requiredIds) {
-              try {
-                const role = await reaction.message.guild.roles.fetch(requiredId);
-                requiredRoles.push(role);
-              } catch (error) {
-                logger.error('Failed to fetch required role:', error);
-              }
-            }
-          }
-          if (lobby.excluded_role_ids) {
-            const excludedIds = lobby.excluded_role_ids.split(',');
-            for (const excludedId of excludedIds) {
-              try {
-                const role = await reaction.message.guild.roles.fetch(excludedId);
-                excludedRoles.push(role);
-              } catch (error) {
-                logger.error('Failed to fetch excluded role:', error);
-              }
-            }
-          }
-          
-          const updatedEmbed = battleService.buildLobbyEmbed(lobby, participants, requiredRoles.length ? requiredRoles : null, excludedRoles.length ? excludedRoles : null);
-          
+          const updatedEmbed = await fetchLobbyRolesAndBuildEmbed(battleService, lobby, reaction, participants);
           await reaction.message.edit({ embeds: [updatedEmbed] });
           logger.log(`User ${user.username} left battle lobby ${lobby.lobby_id} via reaction removal`);
         }
@@ -1197,9 +1172,17 @@ process.on('uncaughtException', error => {
   process.exit(1);
 });
 
-if (!process.env.DISCORD_TOKEN) {
-  logger.error('❌ DISCORD_TOKEN is not set in .env file');
-  process.exit(1);
-}
+process.on('SIGTERM', () => {
+  logger.log('[Bot] Graceful shutdown...');
+  intervals.forEach(clearInterval);
+  client.destroy();
+  process.exit(0);
+});
+process.on('SIGINT', () => {
+  logger.log('[Bot] Graceful shutdown...');
+  intervals.forEach(clearInterval);
+  client.destroy();
+  process.exit(0);
+});
 
 client.login(process.env.DISCORD_TOKEN);

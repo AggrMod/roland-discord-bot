@@ -2,7 +2,7 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const logger = require('../utils/logger');
 
-const dbPath = path.join(__dirname, 'solpranos.db');
+const dbPath = process.env.DATABASE_PATH || path.join(__dirname, 'solpranos.db');
 const db = new Database(dbPath);
 
 db.pragma('journal_mode = WAL');
@@ -395,6 +395,34 @@ function initDatabase() {
       ON billing_entitlement_events(event_type);
   `);
 
+  // [DB-003] Additional performance indexes
+  const indexes = [
+    'CREATE INDEX IF NOT EXISTS idx_votes_voter_id ON votes(voter_id)',
+    'CREATE INDEX IF NOT EXISTS idx_micro_verify_sender ON micro_verify_requests(sender_wallet)',
+    'CREATE INDEX IF NOT EXISTS idx_micro_verify_dest ON micro_verify_requests(destination_wallet)',
+    'CREATE INDEX IF NOT EXISTS idx_nft_activity_wallet ON nft_activity_log(wallet_address)',
+    'CREATE INDEX IF NOT EXISTS idx_tickets_guild ON tickets(guild_id)',
+    'CREATE INDEX IF NOT EXISTS idx_tickets_status_v2 ON tickets(status)',
+    'CREATE INDEX IF NOT EXISTS idx_proposals_guild ON proposals(guild_id)',
+    'CREATE INDEX IF NOT EXISTS idx_wallets_discord ON user_wallets(discord_id)',
+  ];
+  indexes.forEach(sql => { try { db.exec(sql); } catch(e) { /* index may already exist or table missing */ } });
+
+  // [DB-004] Auto-update updated_at timestamps
+  const triggers = [
+    `CREATE TRIGGER IF NOT EXISTS update_proposals_timestamp AFTER UPDATE ON proposals BEGIN UPDATE proposals SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
+    `CREATE TRIGGER IF NOT EXISTS update_settings_timestamp AFTER UPDATE ON guild_settings BEGIN UPDATE guild_settings SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
+    `CREATE TRIGGER IF NOT EXISTS update_votes_timestamp AFTER UPDATE ON votes BEGIN UPDATE votes SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
+    `CREATE TRIGGER IF NOT EXISTS update_micro_verify_timestamp AFTER UPDATE ON micro_verify_requests BEGIN UPDATE micro_verify_requests SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
+    `CREATE TRIGGER IF NOT EXISTS update_tenants_timestamp AFTER UPDATE ON tenants BEGIN UPDATE tenants SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
+    `CREATE TRIGGER IF NOT EXISTS update_tenant_modules_timestamp AFTER UPDATE ON tenant_modules BEGIN UPDATE tenant_modules SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
+    `CREATE TRIGGER IF NOT EXISTS update_tenant_branding_timestamp AFTER UPDATE ON tenant_branding BEGIN UPDATE tenant_branding SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
+    `CREATE TRIGGER IF NOT EXISTS update_tenant_limits_timestamp AFTER UPDATE ON tenant_limits BEGIN UPDATE tenant_limits SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
+    `CREATE TRIGGER IF NOT EXISTS update_nft_alert_config_timestamp AFTER UPDATE ON nft_activity_alert_config BEGIN UPDATE nft_activity_alert_config SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
+    `CREATE TRIGGER IF NOT EXISTS update_tenant_role_configs_timestamp AFTER UPDATE ON tenant_role_configs BEGIN UPDATE tenant_role_configs SET updated_at = CURRENT_TIMESTAMP WHERE rowid = NEW.rowid; END`,
+  ];
+  triggers.forEach(sql => { try { db.exec(sql); } catch(e) {} });
+
   // Backward-compatible migrations for existing deployments
   try { db.exec("ALTER TABLE tenants ADD COLUMN plan_key TEXT DEFAULT 'starter'"); } catch (e) {}
   try { db.exec("ALTER TABLE tenants ADD COLUMN status TEXT DEFAULT 'active'"); } catch (e) {}
@@ -413,6 +441,13 @@ function initDatabase() {
     `);
   } catch (e) {}
 
+  // DB-005: Consolidate duplicate proposal support tables
+  // proposal_supporters is canonical; proposal_support is deprecated
+  try {
+    db.exec(`INSERT OR IGNORE INTO proposal_supporters (proposal_id, supporter_id, created_at)
+      SELECT proposal_id, supporter_id, created_at FROM proposal_support`);
+  } catch(e) { /* proposal_support may not have data */ }
+
   // Tenant-scoped verification role configs (tiers + trait rules)
   db.exec(`
     CREATE TABLE IF NOT EXISTS tenant_role_configs (
@@ -430,4 +465,20 @@ function initDatabase() {
 
 initDatabase();
 
+function runMaintenance() {
+  try {
+    const result = db.pragma('integrity_check');
+    if (result[0]?.integrity_check !== 'ok') {
+      logger.error('[DB] Integrity check failed:', result);
+    } else {
+      logger.log('[DB] Integrity check passed');
+    }
+    db.exec('VACUUM');
+    logger.log('[DB] Vacuum complete');
+  } catch(e) {
+    logger.error('[DB] Maintenance error:', e);
+  }
+}
+
 module.exports = db;
+module.exports.runMaintenance = runMaintenance;

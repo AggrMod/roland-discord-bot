@@ -1,5 +1,6 @@
 const db = require('../database/db');
 const logger = require('../utils/logger');
+const clientProvider = require('../utils/clientProvider');
 
 class WalletService {
   linkWallet(discordId, username, walletAddress) {
@@ -52,7 +53,7 @@ class WalletService {
       setImmediate(async () => {
         try {
           const ogRoleService = require('./ogRoleService');
-          const client = global.discordClient;
+          const client = clientProvider.getClient();
           
           if (!client) {
             logger.warn('Discord client not available for OG role assignment');

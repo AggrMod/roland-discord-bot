@@ -6,7 +6,7 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 const os = require('os');
-const { execSync } = require('child_process');
+const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const nacl = require('tweetnacl');
@@ -113,6 +113,7 @@ class WebServer {
 
   setupMiddleware() {
     // Trust proxy - CRITICAL for production (AWS ELB, Nginx, etc.)
+    // Set to 1 assuming exactly one reverse proxy (nginx). Adjust if architecture changes.
     this.app.set('trust proxy', 1);
 
     // CORS for public API - explicitly configured for the-solpranos.com integration
@@ -200,6 +201,15 @@ class WebServer {
   }
 
   setupRoutes() {
+    // Standardized API response helpers
+    function apiError(res, status, code, message) {
+      return res.status(status).json({ success: false, error: { code, message } });
+    }
+    function apiSuccess(res, data, meta = {}) {
+      return res.json({ success: true, data, ...meta });
+    }
+    // Note: existing endpoints will be migrated to use apiError/apiSuccess gradually
+
     // ==================== RATE LIMITING ====================
 
     const rateLimitMessage = { success: false, message: 'Too many requests, please try again later.' };
@@ -233,6 +243,15 @@ class WebServer {
       max: 200,
       standardHeaders: true,
       legacyHeaders: false,
+      message: rateLimitMessage
+    });
+
+    const commentLimiter = rateLimit({
+      windowMs: 60 * 1000, // 1 minute
+      max: 5,
+      standardHeaders: true,
+      legacyHeaders: false,
+      keyGenerator: (req) => req.session?.discordUser?.id || req.ip,
       message: rateLimitMessage
     });
 
@@ -451,7 +470,7 @@ class WebServer {
 
     // ==================== FEATURE FLAGS ====================
 
-    this.app.get('/api/features', (req, res) => {
+    this.app.get('/api/features', publicApiLimiter, (req, res) => {
       try {
         const heistEnabled = process.env.HEIST_ENABLED === 'true';
         res.json({ 
@@ -521,9 +540,10 @@ class WebServer {
           avatar: userData.avatar
         };
 
-        const returnTo = req.session.returnTo || '/dashboard';
+        const returnTo = req.session.returnTo;
         delete req.session.returnTo;
-        res.redirect(returnTo);
+        const safeReturn = returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/';
+        res.redirect(safeReturn);
       } catch (error) {
         logger.error('OAuth callback error:', error);
         res.redirect('/dashboard?error=auth_failed');
@@ -808,6 +828,16 @@ class WebServer {
       }
     });
 
+    // Shared proposal input validation
+    function validateProposalInput(body) {
+      const { title, description } = body;
+      if (!title?.trim()) return 'Title is required';
+      if (title.length > 200) return 'Title must be 200 characters or less';
+      if (!description?.trim()) return 'Description is required';
+      if (description.length > 5000) return 'Description must be 5000 characters or less';
+      return null;
+    }
+
     // ==================== USER PROPOSAL CREATION ====================
 
     this.app.post('/api/user/proposals', async (req, res) => {
@@ -819,17 +849,8 @@ class WebServer {
         const discordId = req.session.discordUser.id;
         const { title, description, category, costIndication } = req.body;
 
-        if (!title || !description) {
-          return res.status(400).json({ success: false, message: 'Title and description are required' });
-        }
-
-        if (title.length > 200) {
-          return res.status(400).json({ success: false, message: 'Title must be 200 characters or less' });
-        }
-
-        if (description.length > 2000) {
-          return res.status(400).json({ success: false, message: 'Description must be 2000 characters or less' });
-        }
+        const validationErr = validateProposalInput(req.body);
+        if (validationErr) return res.status(400).json({ success: false, message: validationErr });
 
         const userInfo = await roleService.getUserInfo(discordId);
         if (!userInfo || !userInfo.voting_power || userInfo.voting_power < 1) {
@@ -854,7 +875,8 @@ class WebServer {
       try {
         const discordId = req.session.discordUser.id;
         const { title, description, category, costIndication } = req.body;
-        if (!title || !description) return res.status(400).json({ success: false, message: 'Title and description are required' });
+        const validationErr = validateProposalInput(req.body);
+        if (validationErr) return res.status(400).json({ success: false, message: validationErr });
         const userInfo = await roleService.getUserInfo(discordId);
         if (!userInfo || !userInfo.voting_power || userInfo.voting_power < 1) {
           return res.status(403).json({ success: false, message: 'You need at least 1 verified NFT to create proposals' });
@@ -902,7 +924,7 @@ class WebServer {
     });
 
     // POST /api/governance/proposals/:id/comments — session auth
-    this.app.post('/api/governance/proposals/:id/comments', (req, res) => {
+    this.app.post('/api/governance/proposals/:id/comments', commentLimiter, (req, res) => {
       if (!req.session.discordUser) return res.status(401).json({ success: false, message: 'Not authenticated' });
       try {
         const { content } = req.body;
@@ -1199,7 +1221,11 @@ class WebServer {
     this.app.put('/api/superadmin/tenants/:guildId/branding', superadminGuard, logSuperadminTenantAction, async (req, res) => {
       try {
         const guildId = req.params.guildId;
-        const patch = req.body || {};
+        const ALLOWED_BRANDING_FIELDS = ['displayName', 'description', 'logoUrl', 'primaryColor', 'supportUrl', 'bot_display_name', 'brand_emoji', 'brand_color', 'display_name', 'primary_color', 'secondary_color', 'logo_url', 'icon_url', 'support_url'];
+        const patch = {};
+        for (const key of ALLOWED_BRANDING_FIELDS) {
+          if ((req.body || {})[key] !== undefined) patch[key] = req.body[key];
+        }
         const result = tenantService.updateTenantBranding(
           guildId,
           patch,
@@ -1233,7 +1259,7 @@ class WebServer {
 
     // ==================== SUPERADMIN SYSTEM STATUS ====================
 
-    this.app.get('/api/superadmin/system-status', superadminGuard, (req, res) => {
+    this.app.get('/api/superadmin/system-status', superadminGuard, async (req, res) => {
       try {
         const cpus = os.cpus();
         const cpuModel = cpus[0]?.model || 'Unknown';
@@ -1250,26 +1276,31 @@ class WebServer {
 
         const nodeMemory = process.memoryUsage();
 
-        let disk = null;
-        try {
-          const dfOut = execSync('df -BM / | tail -1').toString().trim();
-          const parts = dfOut.split(/\s+/);
-          disk = { total: parts[1], used: parts[2], available: parts[3], pct: parts[4] };
-        } catch (_) {}
+        const getDisk = () => new Promise((resolve) => {
+          exec('df -BM / | tail -1', (err, stdout) => {
+            if (err) { resolve(null); return; }
+            const parts = stdout.trim().split(/\s+/);
+            resolve({ total: parts[1], used: parts[2], available: parts[3], pct: parts[4] });
+          });
+        });
+        const getPm2 = () => new Promise((resolve) => {
+          exec('pm2 jlist 2>/dev/null || echo []', (err, stdout) => {
+            if (err) { resolve([]); return; }
+            try {
+              const pm2List = JSON.parse(stdout.trim());
+              resolve(pm2List.map(p => ({
+                name: p.name,
+                status: p.pm2_env?.status || 'unknown',
+                uptime: p.pm2_env?.pm_uptime ? Date.now() - p.pm2_env.pm_uptime : null,
+                restarts: p.pm2_env?.restart_time || 0,
+                memory: p.monit?.memory || 0,
+                cpu: p.monit?.cpu || 0,
+              })));
+            } catch (_) { resolve([]); }
+          });
+        });
 
-        let pm2Processes = [];
-        try {
-          const pm2Out = execSync('pm2 jlist 2>/dev/null || echo []').toString().trim();
-          const pm2List = JSON.parse(pm2Out);
-          pm2Processes = pm2List.map(p => ({
-            name: p.name,
-            status: p.pm2_env?.status || 'unknown',
-            uptime: p.pm2_env?.pm_uptime ? Date.now() - p.pm2_env.pm_uptime : null,
-            restarts: p.pm2_env?.restart_time || 0,
-            memory: p.monit?.memory || 0,
-            cpu: p.monit?.cpu || 0,
-          }));
-        } catch (_) {}
+        const [disk, pm2Processes] = await Promise.all([getDisk(), getPm2()]);
 
         res.json({
           cpu: { model: cpuModel, cores: cpuCount },
@@ -1281,7 +1312,8 @@ class WebServer {
           timestamp: new Date().toISOString(),
         });
       } catch (err) {
-        res.status(500).json({ error: err.message });
+        logger.error('[SystemStatus]', err);
+        res.status(500).json({ error: 'Internal server error' });
       }
     });
 
@@ -1367,7 +1399,24 @@ class WebServer {
 
     this.app.put('/api/admin/settings', adminAuthMiddleware, (req, res) => {
       try {
-        const result = settingsManager.updateSettings(req.body);
+        const ALLOWED_SETTINGS_FIELDS = [
+          'proposalsChannelId', 'votingChannelId', 'resultsChannelId', 'governanceLogChannelId',
+          'quorumPercentage', 'supportThreshold', 'voteDurationHours',
+          'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleTreasuryEnabled',
+          'moduleNftTrackerEnabled', 'moduleMissionsEnabled', 'moduleBattleEnabled',
+          'moduleTicketingEnabled', 'moduleRoleClaimEnabled',
+          'battleRoundPauseMin', 'battleRoundPauseMax', 'battleElitePrepDelay',
+          'baseVerifiedRoleId', 'autoResyncEnabled', 'ogRoleId', 'ogRoleLimit',
+          'treasuryWalletAddress', 'treasuryRefreshInterval', 'txAlertChannelId',
+          'txAlertEnabled', 'txAlertIncomingOnly', 'txAlertMinSol',
+          'displayName', 'displayEmoji', 'displayColor',
+          'verificationReceiveWallet', 'nftActivityWebhookSecret',
+        ];
+        const sanitized = {};
+        for (const key of ALLOWED_SETTINGS_FIELDS) {
+          if (req.body[key] !== undefined) sanitized[key] = req.body[key];
+        }
+        const result = settingsManager.updateSettings(sanitized);
         res.json(result);
       } catch (error) {
         logger.error('Error updating settings:', error);
@@ -1449,13 +1498,17 @@ class WebServer {
 
     this.app.get('/api/admin/users', adminAuthMiddleware, async (req, res) => {
       try {
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+        const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+        const totalCount = db.prepare('SELECT COUNT(DISTINCT discord_id) as cnt FROM users').get().cnt;
         const users = db.prepare(`
           SELECT u.*, COUNT(w.id) as wallet_count
           FROM users u
           LEFT JOIN wallets w ON u.discord_id = w.discord_id
           GROUP BY u.discord_id
           ORDER BY u.total_nfts DESC
-        `).all();
+          LIMIT ? OFFSET ?
+        `).all(limit, offset);
 
         // Overlay voting power from role mappings (if any configured)
         const mappings = db.prepare('SELECT * FROM role_vp_mappings').all();
@@ -1471,7 +1524,7 @@ class WebServer {
           }
         }
 
-        res.json({ success: true, users });
+        res.json({ success: true, users, total: totalCount, limit, offset });
       } catch (error) {
         logger.error('Error fetching users:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
@@ -1526,8 +1579,11 @@ class WebServer {
 
     this.app.get('/api/admin/proposals', adminAuthMiddleware, (req, res) => {
       try {
-        const proposals = db.prepare('SELECT * FROM proposals ORDER BY created_at DESC').all();
-        res.json({ success: true, proposals });
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+        const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+        const totalCount = db.prepare('SELECT COUNT(*) as cnt FROM proposals').get().cnt;
+        const proposals = db.prepare('SELECT * FROM proposals ORDER BY created_at DESC LIMIT ? OFFSET ?').all(limit, offset);
+        res.json({ success: true, proposals, total: totalCount, limit, offset });
       } catch (error) {
         logger.error('Error fetching proposals:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
@@ -1603,13 +1659,16 @@ class WebServer {
 
     this.app.get('/api/admin/missions', adminAuthMiddleware, (req, res) => {
       try {
-        const missions = db.prepare('SELECT * FROM missions ORDER BY created_at DESC').all();
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+        const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+        const totalCount = db.prepare('SELECT COUNT(*) as cnt FROM missions').get().cnt;
+        const missions = db.prepare('SELECT * FROM missions ORDER BY created_at DESC LIMIT ? OFFSET ?').all(limit, offset);
         const missionsWithParticipants = missions.map(m => {
           const participants = db.prepare('SELECT * FROM mission_participants WHERE mission_id = ?').all(m.mission_id);
           return { ...m, participants };
         });
 
-        res.json({ success: true, missions: missionsWithParticipants });
+        res.json({ success: true, missions: missionsWithParticipants, total: totalCount, limit, offset });
       } catch (error) {
         logger.error('Error fetching missions:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
@@ -2130,7 +2189,7 @@ class WebServer {
     // ==================== TREASURY API ====================
 
     // Public treasury endpoint (no wallet address exposed)
-    this.app.get('/api/public/treasury', (req, res) => {
+    this.app.get('/api/public/treasury', deprecationHeaders, (req, res) => {
       try {
         const summary = treasuryService.getSummary();
         res.json(summary);
@@ -2214,9 +2273,20 @@ class WebServer {
 
     // ==================== PUBLIC API - GOVERNANCE ====================
 
-    this.app.get('/api/public/proposals/active', (req, res) => {
+    // Deprecation headers for legacy public API (superseded by /api/public/v1/)
+    const deprecationHeaders = (req, res, next) => {
+      res.set('Deprecation', 'true');
+      res.set('Sunset', '2026-12-31');
+      res.set('Link', '</api/public/v1/>; rel="successor-version"');
+      next();
+    };
+
+    this.app.get('/api/public/proposals/active', deprecationHeaders, (req, res) => {
       try {
-        const proposals = db.prepare("SELECT * FROM proposals WHERE status IN ('supporting', 'voting') ORDER BY created_at DESC").all();
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+        const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+        const totalCount = db.prepare("SELECT COUNT(*) as cnt FROM proposals WHERE status IN ('supporting', 'voting')").get().cnt;
+        const proposals = db.prepare("SELECT * FROM proposals WHERE status IN ('supporting', 'voting') ORDER BY created_at DESC LIMIT ? OFFSET ?").all(limit, offset);
         
         const enrichedProposals = proposals.map(p => {
           const votes = {
@@ -2246,16 +2316,19 @@ class WebServer {
           };
         });
 
-        res.json({ success: true, proposals: enrichedProposals });
+        res.json({ success: true, proposals: enrichedProposals, total: totalCount, limit, offset });
       } catch (error) {
         logger.error('Error fetching active proposals:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });
 
-    this.app.get('/api/public/proposals/concluded', (req, res) => {
+    this.app.get('/api/public/proposals/concluded', deprecationHeaders, (req, res) => {
       try {
-        const proposals = db.prepare("SELECT * FROM proposals WHERE status IN ('passed', 'rejected', 'quorum_not_met', 'concluded', 'vetoed') ORDER BY created_at DESC").all();
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+        const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+        const totalCount = db.prepare("SELECT COUNT(*) as cnt FROM proposals WHERE status IN ('passed', 'rejected', 'quorum_not_met', 'concluded', 'vetoed')").get().cnt;
+        const proposals = db.prepare("SELECT * FROM proposals WHERE status IN ('passed', 'rejected', 'quorum_not_met', 'concluded', 'vetoed') ORDER BY created_at DESC LIMIT ? OFFSET ?").all(limit, offset);
         
         const enrichedProposals = proposals.map(p => {
           const votes = {
@@ -2283,14 +2356,14 @@ class WebServer {
           };
         });
 
-        res.json({ success: true, proposals: enrichedProposals });
+        res.json({ success: true, proposals: enrichedProposals, total: totalCount, limit, offset });
       } catch (error) {
         logger.error('Error fetching concluded proposals:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });
 
-    this.app.get('/api/public/proposals/:id', (req, res) => {
+    this.app.get('/api/public/proposals/:id', deprecationHeaders, (req, res) => {
       try {
         const { id } = req.params;
         const proposal = db.prepare('SELECT * FROM proposals WHERE proposal_id = ?').get(id);
@@ -2332,7 +2405,7 @@ class WebServer {
       }
     });
 
-    this.app.get('/api/public/stats', (req, res) => {
+    this.app.get('/api/public/stats', deprecationHeaders, (req, res) => {
       try {
         const totalProposals = db.prepare('SELECT COUNT(*) as count FROM proposals').get().count;
         const passedProposals = db.prepare('SELECT COUNT(*) as count FROM proposals WHERE status = ?').get('passed').count;
@@ -2361,9 +2434,12 @@ class WebServer {
 
     // ==================== PUBLIC API - HEIST/MISSIONS ====================
 
-    this.app.get('/api/public/missions/active', (req, res) => {
+    this.app.get('/api/public/missions/active', deprecationHeaders, (req, res) => {
       try {
-        const missions = db.prepare('SELECT * FROM missions WHERE status IN (?, ?) ORDER BY created_at DESC').all('recruiting', 'active');
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+        const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+        const totalCount = db.prepare('SELECT COUNT(*) as cnt FROM missions WHERE status IN (?, ?)').get('recruiting', 'active').cnt;
+        const missions = db.prepare('SELECT * FROM missions WHERE status IN (?, ?) ORDER BY created_at DESC LIMIT ? OFFSET ?').all('recruiting', 'active', limit, offset);
         
         const enrichedMissions = missions.map(m => {
           const participants = db.prepare('SELECT participant_id, assigned_nft_name, assigned_role FROM mission_participants WHERE mission_id = ?').all(m.mission_id);
@@ -2385,14 +2461,14 @@ class WebServer {
           };
         });
 
-        res.json({ success: true, missions: enrichedMissions });
+        res.json({ success: true, missions: enrichedMissions, total: totalCount, limit, offset });
       } catch (error) {
         logger.error('Error fetching active missions:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });
 
-    this.app.get('/api/public/missions/completed', (req, res) => {
+    this.app.get('/api/public/missions/completed', deprecationHeaders, (req, res) => {
       try {
         const missions = db.prepare('SELECT * FROM missions WHERE status = ? ORDER BY created_at DESC LIMIT 50').all('completed');
         
@@ -2424,7 +2500,7 @@ class WebServer {
       }
     });
 
-    this.app.get('/api/public/missions/:id', (req, res) => {
+    this.app.get('/api/public/missions/:id', deprecationHeaders, (req, res) => {
       try {
         const { id } = req.params;
         const mission = db.prepare('SELECT * FROM missions WHERE mission_id = ?').get(id);
@@ -2463,7 +2539,7 @@ class WebServer {
       }
     });
 
-    this.app.get('/api/public/leaderboard', (req, res) => {
+    this.app.get('/api/public/leaderboard', deprecationHeaders, (req, res) => {
       try {
         const leaderboard = db.prepare(`
           SELECT 
@@ -2497,7 +2573,7 @@ class WebServer {
       }
     });
 
-    this.app.get('/api/public/leaderboard/:userId', (req, res) => {
+    this.app.get('/api/public/leaderboard/:userId', deprecationHeaders, (req, res) => {
       try {
         const { userId } = req.params;
         
@@ -2958,7 +3034,9 @@ class WebServer {
         const statusList = typeof statuses === 'string' && statuses.trim()
           ? statuses.split(',').map(s => s.trim()).filter(Boolean)
           : undefined;
-        const tickets = ticketService.getAllTickets({
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+        const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+        const allTickets = ticketService.getAllTickets({
           status,
           statuses: statusList,
           category: category ? parseInt(category) : undefined,
@@ -2967,7 +3045,9 @@ class WebServer {
           from,
           to
         });
-        res.json({ success: true, tickets });
+        const totalCount = allTickets.length;
+        const tickets = allTickets.slice(offset, offset + limit);
+        res.json({ success: true, tickets, total: totalCount, limit, offset });
       } catch (error) {
         logger.error('Error fetching tickets:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });

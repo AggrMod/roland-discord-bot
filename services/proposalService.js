@@ -387,9 +387,9 @@ class ProposalService {
         return { success: false, message: 'You cannot support your own proposal' };
       }
 
-      // Use both tables for compatibility
+      // DB-005: proposal_supporters is the canonical table
       try {
-        db.prepare('INSERT INTO proposal_support (proposal_id, supporter_id) VALUES (?, ?)').run(proposalId, supporterId);
+        db.prepare('INSERT INTO proposal_supporters (proposal_id, supporter_id) VALUES (?, ?)').run(proposalId, supporterId);
       } catch (e) {
         if (e.message.includes('UNIQUE constraint failed')) {
           return { success: false, message: 'You already support this proposal' };
@@ -397,12 +397,7 @@ class ProposalService {
         throw e;
       }
 
-      // Also insert into legacy table
-      try {
-        db.prepare('INSERT INTO proposal_supporters (proposal_id, supporter_id) VALUES (?, ?)').run(proposalId, supporterId);
-      } catch (e) { /* ignore duplicate */ }
-
-      const supporterCount = db.prepare('SELECT COUNT(*) as count FROM proposal_support WHERE proposal_id = ?').get(proposalId).count;
+      const supporterCount = db.prepare('SELECT COUNT(*) as count FROM proposal_supporters WHERE proposal_id = ?').get(proposalId).count;
 
       governanceLogger.log('support_added', { proposalId, supporterId, supporterCount });
       logger.log(`User ${supporterId} supported proposal ${proposalId} (${supporterCount} supporters)`);
@@ -416,9 +411,7 @@ class ProposalService {
 
   getSupporterCount(proposalId) {
     try {
-      const fromNew = db.prepare('SELECT COUNT(*) as count FROM proposal_support WHERE proposal_id = ?').get(proposalId);
-      if (fromNew.count > 0) return fromNew.count;
-      // Fallback to legacy table
+      // DB-005: proposal_supporters is the canonical table
       return db.prepare('SELECT COUNT(*) as count FROM proposal_supporters WHERE proposal_id = ?').get(proposalId).count;
     } catch (e) {
       return 0;

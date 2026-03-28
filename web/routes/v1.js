@@ -66,8 +66,8 @@ router.get('/proposals/active', asyncHandler(async (req, res) => {
  * Returns concluded proposals (passed, rejected, quorum_not_met)
  */
 router.get('/proposals/concluded', asyncHandler(async (req, res) => {
-  const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100);
-  const offset = Math.max(parseInt(req.query.offset) || 0, 0);
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
 
   const proposals = db.prepare(
     'SELECT * FROM proposals WHERE status IN (?, ?, ?) ORDER BY created_at DESC LIMIT ? OFFSET ?'
@@ -306,8 +306,8 @@ router.get('/missions/active', asyncHandler(async (req, res) => {
  * Returns completed missions
  */
 router.get('/missions/completed', asyncHandler(async (req, res) => {
-  const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100);
-  const offset = Math.max(parseInt(req.query.offset) || 0, 0);
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
 
   const missions = db.prepare(
     'SELECT * FROM missions WHERE status = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
@@ -397,7 +397,7 @@ router.get('/missions/:id', asyncHandler(async (req, res) => {
  * Returns top 100 leaderboard
  */
 router.get('/leaderboard', asyncHandler(async (req, res) => {
-  const limit = Math.min(Math.max(parseInt(req.query.limit) || 100, 1), 100);
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 100);
 
   const leaderboard = db.prepare(`
     SELECT 

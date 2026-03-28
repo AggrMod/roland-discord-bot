@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const proposalService = require('../../services/proposalService');
 const roleService = require('../../services/roleService');
-const settings = require('../../config/settings.json');
+const settingsManager = require('../../config/settings');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
 
@@ -147,17 +147,12 @@ module.exports = {
         }
       }
     } catch (error) {
-      logger.error('Error executing governance command:', error);
-      
-      const reply = { 
-        content: `❌ Something went wrong: ${error.message}`, 
-        ephemeral: true 
-      };
-      
+      console.error('[CommandError]', error);
+      const userMsg = 'An error occurred. Please try again or contact an admin.';
       if (interaction.deferred || interaction.replied) {
-        await interaction.editReply(reply);
+        await interaction.editReply({ content: userMsg });
       } else {
-        await interaction.reply(reply);
+        await interaction.reply({ content: userMsg, ephemeral: true });
       }
     }
   },
@@ -203,6 +198,7 @@ module.exports = {
       return interaction.editReply({ embeds: [embed] });
     }
 
+    const settings = settingsManager.getSettings();
     const supportThreshold = settings.supportThreshold || 4;
 
     const embed = new EmbedBuilder()
@@ -307,6 +303,7 @@ module.exports = {
       return interaction.editReply({ embeds: [embed] });
     }
 
+    const settings = settingsManager.getSettings();
     const supportThreshold = settings.supportThreshold || 4;
     const supporterCount = result.supporterCount;
     const isPromoted = result.promoted;
@@ -488,9 +485,9 @@ module.exports = {
       .setTitle('⚙️ Governance Settings')
       .setDescription('Current governance configuration')
       .addFields(
-        { name: 'Support Threshold', value: `${settings.supportThreshold} supporters`, inline: true },
-        { name: 'Quorum Percentage', value: `${settings.quorumPercentage}%`, inline: true },
-        { name: 'Vote Duration', value: `${settings.voteDurationDays} days`, inline: true }
+        { name: 'Support Threshold', value: `${settingsManager.getSettings().supportThreshold} supporters`, inline: true },
+        { name: 'Quorum Percentage', value: `${settingsManager.getSettings().quorumPercentage}%`, inline: true },
+        { name: 'Vote Duration', value: `${settingsManager.getSettings().voteDurationDays} days`, inline: true }
       )
       .setFooter({ text: 'Edit config/settings.json to change (Sprint B: admin UI)' })
       .setTimestamp();

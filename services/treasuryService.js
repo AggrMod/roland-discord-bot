@@ -2,6 +2,7 @@ const { Connection, PublicKey } = require('@solana/web3.js');
 const { EmbedBuilder } = require('discord.js');
 const db = require('../database/db');
 const logger = require('../utils/logger');
+const clientProvider = require('../utils/clientProvider');
 
 const SOLANA_RPC = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'; // USDC mainnet
@@ -424,7 +425,7 @@ class TreasuryService {
 
     if (!filtered.length) return;
 
-    const client = global.discordClient;
+    const client = clientProvider.getClient();
     if (!client) return;
 
     const channel = await client.channels.fetch(config.tx_alert_channel_id).catch(() => null);

@@ -43,3 +43,32 @@
 **Scope**:
 - Search and replace hardcoded "The Commission" in `index.js` or wherever bot presence is set
 - Pull from tenant branding config if available
+
+## Battle: more built-in eras + custom era support
+
+**Request**: Expand the battle system with more historical/thematic eras, and allow server admins to create custom eras via the branding/settings panel.
+**Details**:
+- Add more built-in eras (beyond current set — e.g. Medieval, Cyberpunk, Wild West, Space Age, etc.)
+- Custom eras: admin can define era name, theme description, weapon/ability flavor text
+- Custom eras stored per-tenant in DB
+- Accessible via Branding or Battle settings tab
+
+## Branding as a visible module/settings section
+
+**Request**: Branding settings (bot display name, logo, colors, emoji, support URL) should be visible to server admins in their Settings panel — not just superadmins.
+**Details**:
+- Currently branding is only editable in the superadmin tenant panel
+- Add a "Branding" tab or card in the admin Settings section (`section-settings`)
+- Fields: bot display name, brand emoji, brand color, logo URL, support URL
+- Writes to the same `tenant_branding` table via a new `/api/admin/branding` endpoint (session-scoped to own guild)
+
+## BUG: Settings not visible to admins without superadmin rights
+
+**Priority**: High — blocks all non-superadmin guild admins from configuring their server
+**Details**:
+- Regular guild admins (Discord server owners/admins) can log in but Settings tab content doesn't load or is inaccessible
+- Only the superadmin (SUPERADMIN_DISCORD_ID in .env) can see full settings
+- Need to audit `adminAuthMiddleware` and settings endpoint auth — regular admins should be able to manage their own server settings
+**Scope**:
+- `web/server.js` — verify `adminAuthMiddleware` resolves guild admin correctly
+- `portal.js` — verify `isAdmin` is set for guild owners/admins, not just superadmin

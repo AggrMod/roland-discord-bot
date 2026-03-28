@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="GuildPilot — Pilot your community operations.">
   <title>GuildPilot Portal</title>
+  <link rel="icon" type="image/jpeg" href="/assets/branding/guildpilot-logo.jpg">
   <link rel="stylesheet" href="/portal-style.css">
 </head>
 <body>
@@ -13,10 +14,10 @@
     <nav class="top-nav" role="navigation" aria-label="Main navigation">
       <div class="nav-brand">
         <button class="mobile-menu-btn" onclick="toggleMobileMenu()" aria-label="Open menu">☰</button>
-        <h1 id="navBrandTitle">GuildPilot</h1>
+        <h1 id="navBrandTitle"><img src="/assets/branding/guildpilot-logo.jpg" alt="" style="width:22px;height:22px;border-radius:50%;vertical-align:middle;margin-right:8px;object-fit:cover;">GuildPilot</h1>
       </div>
       <div class="top-links" aria-label="Top links">
-        <button class="top-link" onclick="switchSection('dashboard')">Home</button>
+        <button class="top-link" onclick="switchSection('landing')">Home</button>
         <button class="top-link" onclick="switchSection('dashboard')">Dashboard</button>
         <button class="top-link" onclick="switchSection('servers')" style="display:none;">Servers</button>
         <button class="top-link" onclick="switchSection('help')">Docs</button>
@@ -182,6 +183,7 @@
         <!-- Landing Section -->
         <section id="section-landing" class="content-section active">
           <div class="section-header">
+            <img src="/assets/branding/guildpilot-logo.jpg" alt="GuildPilot" style="width:64px;height:64px;border-radius:14px;object-fit:cover;margin-bottom:10px;">
             <h2>Choose where to go</h2>
             <p><strong>GuildPilot</strong> — Pilot your community operations.</p>
             <p>Select a server to enter tenant settings, or open your global profile.</p>

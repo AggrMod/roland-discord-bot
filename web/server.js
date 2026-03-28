@@ -410,6 +410,14 @@ class WebServer {
       res.redirect('/?section=admin');
     });
 
+    // Legal pages (required for Discord app verification)
+    this.app.get('/privacy-policy', (req, res) => {
+      res.sendFile(path.join(__dirname, 'public', 'privacy-policy.html'));
+    });
+    this.app.get('/terms-of-service', (req, res) => {
+      res.sendFile(path.join(__dirname, 'public', 'terms-of-service.html'));
+    });
+
     // Keep advanced admin dashboard accessible for deep management tools
     this.app.get('/admin-panel', (req, res) => {
       res.sendFile(path.join(__dirname, 'public', 'admin.html'));

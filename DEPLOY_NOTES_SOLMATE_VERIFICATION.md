@@ -101,7 +101,7 @@ Expected output:
 pm2 restart roland-discord-bot
 
 # Or if using systemd:
-sudo systemctl restart roland-bot
+sudo systemctl restart guildpilot
 
 # Or manual:
 npm start

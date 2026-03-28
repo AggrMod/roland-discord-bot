@@ -60,7 +60,7 @@ npm install
 node deploy-commands.js
 
 # 4. Start bot with pm2
-pm2 start index.js --name roland-bot
+pm2 start index.js --name guildpilot
 pm2 save
 
 # 5. Start web server (if not running via bot)
@@ -74,17 +74,17 @@ cd ~/roland-discord-bot
 git pull origin main
 npm install
 node deploy-commands.js
-pm2 restart roland-bot
+pm2 restart guildpilot
 ```
 
 ### Restarting Bot
 ```bash
-pm2 restart roland-bot
+pm2 restart guildpilot
 ```
 
 ### Viewing Logs
 ```bash
-pm2 logs roland-bot
+pm2 logs guildpilot
 ```
 
 ## Verification
@@ -109,7 +109,7 @@ pm2 logs roland-bot
 
 ### 3. Session Persistence Test
 ```bash
-pm2 restart roland-bot
+pm2 restart guildpilot
 # Visit portal, should still be logged in (session persists)
 ```
 
@@ -126,7 +126,7 @@ pm2 restart roland-bot
 1. **Check**: DISCORD_CLIENT_SECRET is set in .env
 2. **Check**: DISCORD_REDIRECT_URI matches Discord Developer Portal exactly
 3. **Check**: OAuth2 redirect URL is HTTPS in production
-4. **Logs**: Check `pm2 logs roland-bot` for token exchange errors
+4. **Logs**: Check `pm2 logs guildpilot` for token exchange errors
 
 ### Sessions Lost After Restart
 - ✅ Fixed in v1.1.0 (now uses persistent SQLite store)
@@ -139,7 +139,7 @@ pm2 restart roland-bot
 
 ### Role-Config Command Shows Stub Text
 - **Check**: You're running v1.1.0 or later
-- **Update**: `git pull origin main && npm install && pm2 restart roland-bot`
+- **Update**: `git pull origin main && npm install && pm2 restart guildpilot`
 
 ## Production Checklist
 
@@ -160,7 +160,7 @@ pm2 restart roland-bot
 ## Support
 
 For issues:
-1. Check logs: `pm2 logs roland-bot`
+1. Check logs: `pm2 logs guildpilot`
 2. Verify .env variables
 3. Check Discord Developer Portal settings match .env
 4. Ensure bot has necessary permissions in Discord server

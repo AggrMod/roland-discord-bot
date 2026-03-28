@@ -75,9 +75,9 @@ node deploy-commands.js
 
 ### 4. Restart Bot
 ```bash
-pm2 restart roland-bot
+pm2 restart guildpilot
 # OR
-systemctl restart roland-bot
+systemctl restart guildpilot
 # OR your deployment method
 ```
 

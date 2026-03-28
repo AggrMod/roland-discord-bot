@@ -113,7 +113,7 @@ node test-module-refactor.js
 node deploy-commands.js
 
 # 3. Restart bot
-pm2 restart roland-bot  # or your restart method
+pm2 restart guildpilot  # or your restart method
 
 # 4. Verify in Discord
 /config modules

@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-This document outlines the new module-first command architecture for the Roland Discord bot. All commands are now organized by functional module with user/admin subcommand groups, and all modules are toggleable.
+This document outlines the new module-first command architecture for the GuildPilot Discord bot. All commands are now organized by functional module with user/admin subcommand groups, and all modules are toggleable.
 
 ---
 

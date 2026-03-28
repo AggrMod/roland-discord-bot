@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-PM2_PROCESS_NAME="${PM2_PROCESS_NAME:-roland-bot}"
+PM2_PROCESS_NAME="${PM2_PROCESS_NAME:-guildpilot}"
 PM2_RESTART_THRESHOLD="${PM2_RESTART_THRESHOLD:-10}"
 WEB_PORT="${WEB_PORT:-3000}"
 HEALTHCHECK_URL="${HEALTHCHECK_URL:-http://127.0.0.1:${WEB_PORT}/health}"

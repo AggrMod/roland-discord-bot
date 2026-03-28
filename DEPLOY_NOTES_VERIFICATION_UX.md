@@ -214,10 +214,10 @@ Successfully registered X application commands globally.
 ### 3. Restart Bot
 ```bash
 # If using PM2:
-pm2 restart roland-bot
+pm2 restart guildpilot
 
 # If using systemd:
-sudo systemctl restart roland-bot
+sudo systemctl restart guildpilot
 
 # If running manually:
 npm start
@@ -251,7 +251,7 @@ If issues arise:
    ```bash
    git checkout HEAD~1 commands/admin/verification.js
    npm run deploy
-   pm2 restart roland-bot
+   pm2 restart guildpilot
    ```
 
 2. **Fallback to role-config:**

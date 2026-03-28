@@ -153,7 +153,7 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setColor('#FFD700')
       .setTitle('📊 System Status')
-      .setDescription('Roland Discord Bot system overview')
+      .setDescription('GuildPilot system overview')
       .addFields(
         { name: '🟢 Uptime', value: uptimeStr, inline: true },
         { name: '💾 Memory', value: `${memUsageMB} MB`, inline: true },

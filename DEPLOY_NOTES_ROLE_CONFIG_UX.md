@@ -95,7 +95,7 @@ This registers the new `/role-config` subcommands with Discord.
 
 ### 3. Restart Bot
 ```bash
-pm2 restart roland-bot
+pm2 restart guildpilot
 # OR
 systemctl restart roland-discord-bot
 ```
@@ -157,7 +157,7 @@ If issues arise:
 ```bash
 git revert c3ac380
 node deploy-commands.js
-pm2 restart roland-bot
+pm2 restart guildpilot
 ```
 
 ## Next Steps (Optional Enhancements)
@@ -172,7 +172,7 @@ pm2 restart roland-bot
 ## Support
 
 For issues or questions:
-- Check logs: `pm2 logs roland-bot`
+- Check logs: `pm2 logs guildpilot`
 - Review deployment notes: `/tmp/roland-discord-bot/DEPLOY_NOTES_*.md`
 - Discord command help: `/role-config` (shows all subcommands)
 

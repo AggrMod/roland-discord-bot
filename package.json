@@ -1,7 +1,7 @@
 {
-  "name": "solpranos-bot",
+  "name": "guildpilot",
   "version": "1.0.0",
-  "description": "Discord bot for the Solpranos ecosystem",
+  "description": "GuildPilot Discord bot",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",

@@ -33,7 +33,7 @@ node deploy-commands.js
 
 1. **Stop the bot** (if running):
    ```bash
-   pm2 stop roland-bot
+   pm2 stop guildpilot
    # OR
    pkill -f "node index.js"
    ```
@@ -55,7 +55,7 @@ node deploy-commands.js
 
 5. **Start the bot**:
    ```bash
-   pm2 start index.js --name roland-bot
+   pm2 start index.js --name guildpilot
    # OR
    node index.js
    ```

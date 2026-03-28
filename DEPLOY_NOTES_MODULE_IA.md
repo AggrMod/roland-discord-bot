@@ -110,10 +110,10 @@ Stop and restart the bot process:
 
 ```bash
 # If using PM2:
-pm2 restart roland-bot
+pm2 restart guildpilot
 
 # If using systemd:
-sudo systemctl restart roland-bot
+sudo systemctl restart guildpilot
 
 # If manual:
 # Stop old process (Ctrl+C or kill)

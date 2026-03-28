@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PM2_PROCESS_NAME="${PM2_PROCESS_NAME:-roland-bot}"
+PM2_PROCESS_NAME="${PM2_PROCESS_NAME:-guildpilot}"
 RESTART_ALERT_THRESHOLD="${RESTART_ALERT_THRESHOLD:-10}"
 
 if ! command -v pm2 >/dev/null 2>&1; then

@@ -68,7 +68,7 @@
 **Deployment Steps**:
 1. ✅ Pull latest: `git pull origin main`
 2. ⏳ Deploy commands: `node deploy-commands.js`
-3. ⏳ Restart bot: `pm2 restart roland-bot`
+3. ⏳ Restart bot: `pm2 restart guildpilot`
 4. ⏳ Initial setup: Configure OG role + role claim via commands
 
 ---
@@ -237,7 +237,7 @@ Sprint A is **complete and ready for deployment**.
 
 **Next Steps**:
 1. Deploy commands: `node deploy-commands.js`
-2. Restart bot: `pm2 restart roland-bot`
+2. Restart bot: `pm2 restart guildpilot`
 3. Configure OG role system via `/og-config`
 4. Configure role claim panel via `/role-claim`
 5. Test auto-assignment on new verification

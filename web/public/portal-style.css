@@ -1800,6 +1800,69 @@ body {
   outline-offset: 2px;
 }
 
+/* ==================== Quick Actions Grid (General Hub) ==================== */
+.quick-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.quick-action-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px 16px;
+  background: rgba(99,102,241,0.08);
+  border: 1px solid rgba(99,102,241,0.18);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  color: #e0e7ff;
+  font-weight: 500;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.quick-action-tile:hover {
+  background: rgba(99,102,241,0.18);
+  border-color: rgba(99,102,241,0.4);
+  transform: translateY(-2px);
+}
+
+.qa-icon { font-size: 2em; }
+.qa-label { font-size: 0.88em; }
+
+/* ==================== Settings Tabs ==================== */
+.settings-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid rgba(99,102,241,0.15);
+  flex-wrap: wrap;
+}
+
+.settings-tab {
+  padding: 10px 18px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.9em;
+  font-weight: 500;
+  font-family: inherit;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -1px;
+}
+
+.settings-tab:hover { color: #e0e7ff; }
+.settings-tab.active {
+  color: #818cf8;
+  border-bottom-color: #818cf8;
+}
+
 /* Reduce motion for users who prefer it */
 @media (prefers-reduced-motion: reduce) {
   *,

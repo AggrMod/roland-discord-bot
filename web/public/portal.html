@@ -73,6 +73,10 @@
             <span class="nav-icon" aria-hidden="true">🎯</span>
             <span class="nav-label">Heist</span>
           </button>
+          <button class="nav-item" data-section="settings" onclick="switchSection('settings'); toggleMobileMenu()" id="mobileNavSettings" style="display:none;">
+            <span class="nav-icon" aria-hidden="true">⚙️</span>
+            <span class="nav-label">Settings</span>
+          </button>
           <button class="nav-item" data-section="help" onclick="switchSection('help'); toggleMobileMenu()">
             <span class="nav-icon" aria-hidden="true">❓</span>
             <span class="nav-label">Help</span>
@@ -95,11 +99,11 @@
             <span class="nav-label">Home</span>
           </button>
           <div class="sidebar-section-divider"></div>
-          <button class="nav-item" data-section="governance" data-module="governance" onclick="switchSection('governance')">
+          <button class="nav-item" data-section="governance" data-module="governance" onclick="switchSection('governance')" id="sidebarNavGovernance">
             <span class="nav-icon" aria-hidden="true">📜</span>
             <span class="nav-label">Governance</span>
           </button>
-          <button class="nav-item" data-section="wallets" data-module="verification" onclick="switchSection('wallets')">
+          <button class="nav-item" data-section="wallets" data-module="verification" onclick="switchSection('wallets')" id="sidebarNavWallets">
             <span class="nav-icon" aria-hidden="true">💼</span>
             <span class="nav-label">Verification</span>
           </button>
@@ -107,11 +111,11 @@
             <span class="nav-icon" aria-hidden="true">⚔️</span>
             <span class="nav-label">Battle</span>
           </button>
-          <button class="nav-item" data-section="treasury" data-module="treasury" onclick="switchSection('treasury')">
+          <button class="nav-item" data-section="treasury" data-module="treasury" onclick="switchSection('treasury')" id="sidebarNavTreasury">
             <span class="nav-icon" aria-hidden="true">💰</span>
             <span class="nav-label">Treasury</span>
           </button>
-          <button class="nav-item" data-section="nft-activity" data-module="nfttracker" onclick="switchSection('nft-activity')">
+          <button class="nav-item" data-section="nft-activity" data-module="nfttracker" onclick="switchSection('nft-activity')" id="sidebarNavNftActivity">
             <span class="nav-icon" aria-hidden="true">🎨</span>
             <span class="nav-label">NFT Tracker</span>
           </button>
@@ -128,6 +132,10 @@
             <span class="nav-label">Heist</span>
           </button>
           <div class="sidebar-section-divider"></div>
+          <button class="nav-item" data-section="settings" onclick="switchSection('settings')" id="sidebarNavSettings" style="display:none;">
+            <span class="nav-icon" aria-hidden="true">⚙️</span>
+            <span class="nav-label">Settings</span>
+          </button>
           <button class="nav-item" data-section="help" onclick="switchSection('help')">
             <span class="nav-icon" aria-hidden="true">❓</span>
             <span class="nav-label">Help</span>
@@ -154,24 +162,43 @@
 
       <!-- Content Sections -->
       <main class="content-area">
-        <!-- Landing Section -->
+        <!-- Landing / General Section -->
         <section id="section-landing" class="content-section active">
-          <div class="section-header">
-            <img src="/assets/branding/guildpilot-logo.png" alt="GuildPilot" style="width:64px;height:64px;border-radius:14px;object-fit:cover;margin-bottom:10px;">
-            <h2>Choose where to go</h2>
-            <p><strong>GuildPilot</strong> — Pilot your community operations.</p>
-            <p>Select a server to enter tenant settings, or open your global profile.</p>
+          <!-- Pre-selection fallback: shown when no server is selected -->
+          <div id="generalPreSelection">
+            <div class="section-header">
+              <img src="/assets/branding/guildpilot-logo.png" alt="GuildPilot" style="width:64px;height:64px;border-radius:14px;object-fit:cover;margin-bottom:10px;">
+              <h2>Choose where to go</h2>
+              <p><strong>GuildPilot</strong> — Pilot your community operations.</p>
+              <p>Select a server to enter tenant settings, or open your global profile.</p>
+            </div>
+            <div class="admin-card" style="max-width:820px;">
+              <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px;">
+                <button class="btn-primary" onclick="switchSection('servers')">Select Server</button>
+                <button class="btn-secondary" onclick="switchSection('wallets')">My Profile</button>
+                <button id="landingSuperadminBtn" class="btn-secondary" onclick="switchSection('admin'); showAdminView('superadmin')" style="display:none;">Go to Superadmin</button>
+              </div>
+              <p style="margin-top:12px; color:var(--text-secondary); font-size:.9em;">
+                Tenant-specific pages remain locked until a server is selected.
+              </p>
+            </div>
           </div>
 
-          <div class="admin-card" style="max-width:820px;">
-            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px;">
-              <button class="btn-primary" onclick="switchSection('servers')">Select Server</button>
-              <button class="btn-secondary" onclick="switchSection('wallets')">My Profile</button>
-              <button id="landingSuperadminBtn" class="btn-secondary" onclick="switchSection('admin'); showAdminView('superadmin')" style="display:none;">Go to Superadmin</button>
+          <!-- Post-selection: General hub with server info + quick actions -->
+          <div id="generalPostSelection" style="display:none;">
+            <header class="section-header">
+              <h2>General</h2>
+              <p class="section-subtitle">Your server hub — quick access to all enabled modules</p>
+            </header>
+            <div class="card" style="margin-bottom:24px;">
+              <div id="generalServerInfo">
+                <!-- Rendered dynamically by renderGeneralSection() -->
+              </div>
             </div>
-            <p style="margin-top:12px; color:var(--text-secondary); font-size:.9em;">
-              Tenant-specific pages remain locked until a server is selected.
-            </p>
+            <h3 style="margin-bottom:4px; color:#e0e7ff;">Quick Actions</h3>
+            <div class="quick-actions-grid" id="generalQuickActions">
+              <!-- Rendered dynamically by renderGeneralSection() -->
+            </div>
           </div>
         </section>
 
@@ -890,6 +917,54 @@
             <h3 style="margin:0 0 var(--space-2) 0;">🎫 Support Ticketing</h3>
             <p style="color:var(--text-secondary);font-size:0.9em;margin:0 0 var(--space-4) 0;">Manage ticket categories, post support panels, and view open tickets.</p>
             <div id="adminTicketingContent" style="color: var(--text-secondary);">Loading...</div>
+          </div>
+        </section>
+
+        <!-- Settings Section (admin-only, tabbed) -->
+        <section id="section-settings" class="content-section">
+          <header class="section-header">
+            <h2>Server Settings</h2>
+            <p class="section-subtitle">Configure modules and behavior for this server</p>
+          </header>
+          <div class="settings-tabs">
+            <button class="settings-tab active" data-tab="general" onclick="switchSettingsTab('general')">General Settings</button>
+            <button class="settings-tab" data-tab="governance" onclick="switchSettingsTab('governance')">Governance</button>
+            <button class="settings-tab" data-tab="verification" onclick="switchSettingsTab('verification')">Verification</button>
+            <button class="settings-tab" data-tab="treasury" onclick="switchSettingsTab('treasury')">Treasury</button>
+            <button class="settings-tab" data-tab="nfttracker" onclick="switchSettingsTab('nfttracker')">NFT Tracker</button>
+            <button class="settings-tab" data-tab="battle" onclick="switchSettingsTab('battle')">Battle</button>
+            <button class="settings-tab" data-tab="heist" onclick="switchSettingsTab('heist')">Heist</button>
+            <button class="settings-tab" data-tab="selfserve" onclick="switchSettingsTab('selfserve')">Self-Serve Roles</button>
+            <button class="settings-tab" data-tab="ticketing" onclick="switchSettingsTab('ticketing')">Ticketing</button>
+          </div>
+          <div id="settingsTabContent" style="margin-top:24px;">
+            <div id="settingsTab-general" class="settings-tab-pane">
+              <!-- adminSettingsCard content loaded here dynamically -->
+            </div>
+            <div id="settingsTab-governance" class="settings-tab-pane" style="display:none;">
+              <!-- governance-specific settings loaded here dynamically -->
+            </div>
+            <div id="settingsTab-verification" class="settings-tab-pane" style="display:none;">
+              <!-- adminRolesCard content loaded here dynamically -->
+            </div>
+            <div id="settingsTab-treasury" class="settings-tab-pane" style="display:none;">
+              <div class="card"><p style="color:var(--text-secondary);">Treasury settings are configured via the Discord bot commands or will be available in a future update.</p></div>
+            </div>
+            <div id="settingsTab-nfttracker" class="settings-tab-pane" style="display:none;">
+              <!-- adminNftTrackerCard content loaded here dynamically -->
+            </div>
+            <div id="settingsTab-battle" class="settings-tab-pane" style="display:none;">
+              <div class="card"><p style="color:var(--text-secondary);">Battle settings are configured via the Discord bot commands or will be available in a future update.</p></div>
+            </div>
+            <div id="settingsTab-heist" class="settings-tab-pane" style="display:none;">
+              <div class="card"><p style="color:var(--text-secondary);">Heist settings are configured via the Discord bot commands or will be available in a future update.</p></div>
+            </div>
+            <div id="settingsTab-selfserve" class="settings-tab-pane" style="display:none;">
+              <!-- adminSelfServeRolesCard content loaded here dynamically -->
+            </div>
+            <div id="settingsTab-ticketing" class="settings-tab-pane" style="display:none;">
+              <!-- adminTicketingCard content loaded here dynamically -->
+            </div>
           </div>
         </section>
 

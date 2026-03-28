@@ -395,6 +395,8 @@ function setActiveGuild(guildId, { persist = true, announce = true, goToSettings
 
 function refreshTenantScopedViews() {
   syncTenantModuleNavVisibility();
+  updateSidebarModuleNav();
+  renderGeneralSection();
   const activeSection = document.querySelector('.content-section.active')?.id || '';
   const activeAdminView = document.querySelector('.admin-sub-item.active')?.getAttribute('data-admin-nav');
 
@@ -536,6 +538,9 @@ function applyPreSelectionVisibility() {
 
   const walletsSection = document.getElementById('section-wallets');
   if (walletsSection) walletsSection.style.display = '';
+
+  updateSidebarModuleNav();
+  renderGeneralSection();
 }
 
 function updateModuleVisibility() {
@@ -554,6 +559,145 @@ function updateModuleVisibility() {
     const el = document.getElementById(id);
     if (el) el.style.display = (state[key] === false) ? 'none' : '';
   });
+}
+
+// ==================== GENERAL HUB & SETTINGS ====================
+
+function renderGeneralSection() {
+  const preEl = document.getElementById('generalPreSelection');
+  const postEl = document.getElementById('generalPostSelection');
+  if (!preEl || !postEl) return;
+
+  if (!activeGuildId) {
+    preEl.style.display = '';
+    postEl.style.display = 'none';
+    return;
+  }
+
+  preEl.style.display = 'none';
+  postEl.style.display = '';
+
+  const record = getServerRecord(activeGuildId);
+  const name = record?.name || activeGuildId;
+  const iconUrl = record ? getGuildIconUrl(record) : '';
+
+  const infoEl = document.getElementById('generalServerInfo');
+  if (infoEl) {
+    infoEl.innerHTML = `
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:8px;">
+        ${iconUrl
+          ? `<img src="${iconUrl}" style="width:64px;height:64px;border-radius:14px;object-fit:cover;">`
+          : `<div style="width:64px;height:64px;border-radius:14px;background:rgba(99,102,241,0.3);display:flex;align-items:center;justify-content:center;font-size:1.5em;font-weight:700;color:#e0e7ff;">${escapeHtml(name.slice(0, 2).toUpperCase())}</div>`}
+        <div>
+          <div style="font-size:1.4em;font-weight:700;color:#e0e7ff;">${escapeHtml(name)}</div>
+          <div style="color:var(--text-secondary);font-size:0.85em;display:flex;align-items:center;gap:6px;">
+            ID: ${escapeHtml(activeGuildId)}
+            <button onclick="navigator.clipboard.writeText('${escapeHtml(activeGuildId)}');showSuccess('Server ID copied!')" style="background:none;border:1px solid rgba(99,102,241,0.2);border-radius:4px;color:var(--text-secondary);padding:2px 6px;cursor:pointer;font-size:0.8em;">Copy</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  const qaEl = document.getElementById('generalQuickActions');
+  const state = window._tenantModuleState || {};
+  if (qaEl) {
+    const modules = [
+      { key: 'governance', icon: '\ud83d\udcdc', label: 'Governance', section: 'governance' },
+      { key: 'verification', icon: '\ud83d\udcbc', label: 'Verification', section: 'wallets' },
+      { key: 'treasury', icon: '\ud83d\udcb0', label: 'Treasury', section: 'treasury' },
+      { key: 'nfttracker', icon: '\ud83c\udfa8', label: 'NFT Tracker', section: 'nft-activity' },
+      { key: 'heist', icon: '\ud83c\udfaf', label: 'Heist', section: 'heist' },
+    ];
+    const adminTile = (isAdmin || isSuperadmin) ? `
+      <button class="quick-action-tile" onclick="switchSection('settings')">
+        <span class="qa-icon">\u2699\ufe0f</span>
+        <span class="qa-label">Settings</span>
+      </button>` : '';
+
+    qaEl.innerHTML = modules
+      .filter(m => state[m.key] !== false)
+      .map(m => `
+        <button class="quick-action-tile" onclick="switchSection('${m.section}')">
+          <span class="qa-icon">${m.icon}</span>
+          <span class="qa-label">${m.label}</span>
+        </button>
+      `).join('') + adminTile;
+  }
+}
+
+function switchSettingsTab(tab) {
+  document.querySelectorAll('.settings-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.tab === tab);
+  });
+  document.querySelectorAll('.settings-tab-pane').forEach(p => {
+    p.style.display = 'none';
+  });
+  const pane = document.getElementById('settingsTab-' + tab);
+  if (pane) pane.style.display = '';
+
+  // Load the appropriate admin card content into the pane
+  const tabCardMap = {
+    general:      'adminSettingsCard',
+    governance:   'adminVotingPowerCard',
+    verification: 'adminRolesCard',
+    nfttracker:   'adminNftTrackerCard',
+    selfserve:    'adminSelfServeRolesCard',
+    ticketing:    'adminTicketingCard',
+  };
+  const cardId = tabCardMap[tab];
+  if (cardId && pane) {
+    const card = document.getElementById(cardId);
+    if (card) {
+      // Move the actual card into the settings tab pane (preserves event handlers)
+      if (!pane.contains(card)) {
+        pane.innerHTML = '';
+        card.style.display = '';
+        pane.appendChild(card);
+      }
+    }
+  }
+
+  // Trigger data loads for the relevant tab
+  const tabLoaders = {
+    general:      () => { if (typeof loadAdminSettingsView === 'function') loadAdminSettingsView(); },
+    governance:   () => { if (typeof loadVotingPowerView === 'function') loadVotingPowerView(); },
+    verification: () => { if (typeof loadVerificationRoles === 'function') loadVerificationRoles(); },
+    nfttracker:   () => { if (typeof loadNftTrackerView === 'function') loadNftTrackerView(); },
+    selfserve:    () => { if (typeof loadSelfServeRolesView === 'function') loadSelfServeRolesView(); },
+    ticketing:    () => { if (typeof loadTicketingView === 'function') loadTicketingView(); },
+  };
+  const loader = tabLoaders[tab];
+  if (loader) loader();
+}
+
+function updateSidebarModuleNav() {
+  const hasServer = !!activeGuildId;
+  const state = window._tenantModuleState || {};
+
+  const moduleItems = [
+    { id: 'sidebarNavGovernance', module: 'governance' },
+    { id: 'sidebarNavWallets', module: 'verification' },
+    { id: 'sidebarNavTreasury', module: 'treasury' },
+    { id: 'sidebarNavNftActivity', module: 'nfttracker' },
+    { id: 'sidebarNavHeist', module: 'heist' },
+  ];
+
+  moduleItems.forEach(({ id, module }) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const enabled = state[module] !== false;
+    el.style.display = (hasServer && enabled) ? '' : 'none';
+  });
+
+  const sidebarSettings = document.getElementById('sidebarNavSettings');
+  if (sidebarSettings) {
+    sidebarSettings.style.display = (hasServer && (isAdmin || isSuperadmin)) ? '' : 'none';
+  }
+  const mobileSettings = document.getElementById('mobileNavSettings');
+  if (mobileSettings) {
+    mobileSettings.style.display = (hasServer && (isAdmin || isSuperadmin)) ? '' : 'none';
+  }
 }
 
 function applyTenantModuleNavVisibility(settings = {}) {
@@ -586,6 +730,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
 
   // Update module-specific sidebar nav items with dedicated IDs
   updateModuleVisibility();
+  updateSidebarModuleNav();
 
   const recentCard = document.getElementById('dashboardRecentActivityCard');
   if (recentCard) recentCard.style.display = (moduleState.governance || moduleState.heist) ? '' : 'none';
@@ -1398,6 +1543,12 @@ function switchSection(sectionName) {
     }
   }
 
+  // Gate settings section to admins only
+  if (sectionName === 'settings' && !(isAdmin || isSuperadmin)) {
+    showInfo('Admin access required for Settings.');
+    sectionName = 'landing';
+  }
+
   const moduleState = window._tenantModuleState || null;
   const sectionRequiresModule = {
     governance: 'governance',
@@ -1436,7 +1587,9 @@ function switchSection(sectionName) {
   }
 
   // Load section-specific data
-  if (sectionName === 'governance' && userData) {
+  if (sectionName === 'landing') {
+    renderGeneralSection();
+  } else if (sectionName === 'governance' && userData) {
     loadActiveVotes();
   } else if (sectionName === 'servers') {
     loadServerAccess();
@@ -1449,6 +1602,8 @@ function switchSection(sectionName) {
   } else if (sectionName === 'nft-activity') {
     loadNFTActivityView();
     if (isAdmin) loadNFTActivityAdminView();
+  } else if (sectionName === 'settings') {
+    switchSettingsTab('general');
   } else if (sectionName === 'admin') {
     loadEnvStatusBar();
   } else if (sectionName === 'heist' && userData && heistEnabled) {

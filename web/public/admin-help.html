@@ -16,6 +16,7 @@
         <li>Canonical public API is <code>/api/public/v1/*</code>. Legacy <code>/api/public/*</code> aliases remain for compatibility.</li>
         <li>Legacy governance aliases <code>/propose</code>, <code>/support</code>, <code>/vote</code> are still available.</li>
         <li><code>/og-config</code> is deprecated; use <code>/verification admin og-*</code>.</li>
+        <li><code>/governance propose</code> and the portal proposal form both support optional <code>category</code> and <code>cost</code>/<code>costIndication</code> fields.</li>
       </ul>
     </div>
 
@@ -27,13 +28,13 @@
         <li><code>/verification refresh</code> — Re-scan holdings and refresh user data.</li>
         <li><code>/verification quick</code> — Start micro-transfer quick verification.</li>
       </ul>
-      <p><strong>Admin:</strong> <code>/verification admin panel</code>, <code>export-user</code>, <code>remove-user</code>, <code>export-wallets</code>, <code>role-config</code>, <code>actions</code>, <code>og-view</code>, <code>og-enable</code>, <code>og-role</code>, <code>og-limit</code>, <code>og-sync</code>, <code>activity-watch-add</code>, <code>activity-watch-remove</code>, <code>activity-watch-list</code>, <code>activity-feed</code>, <code>activity-alerts</code>.</p>
+      <p><strong>Admin:</strong> <code>/verification admin panel</code>, <code>export-user</code>, <code>remove-user</code>, <code>export-wallets</code>, <code>role-config</code> (tier config is portal-managed), <code>actions</code>, <code>og-view</code>, <code>og-enable</code>, <code>og-role</code>, <code>og-limit</code>, <code>og-sync</code>, <code>activity-watch-add</code>, <code>activity-watch-remove</code>, <code>activity-watch-list</code>, <code>activity-feed</code>, <code>activity-alerts</code>.</p>
     </section>
 
     <section class="card" style="padding:16px;margin:16px 0;">
       <h2>🏛️ Governance</h2>
       <ul>
-        <li><code>/governance propose</code> — Create proposal.</li>
+      <li><code>/governance propose</code> — Create proposal. Optional <code>category</code> and <code>cost</code> fields are supported.</li>
         <li><code>/governance support</code> — Support draft proposal.</li>
         <li><code>/governance vote</code> — Vote yes/no/abstain.</li>
         <li><code>/propose</code>, <code>/support</code>, <code>/vote</code> — legacy aliases (still supported).</li>

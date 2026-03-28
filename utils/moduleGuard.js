@@ -71,7 +71,21 @@ class ModuleGuard {
    * Returns true if enabled, false if disabled (and sends reply).
    */
   async checkModuleEnabled(interaction, moduleName) {
-    if (this.isModuleEnabled(moduleName)) {
+    const guildId = interaction?.guildId || null;
+    let enabled = this.isModuleEnabled(moduleName);
+
+    if (guildId) {
+      try {
+        const tenantService = require('../services/tenantService');
+        if (tenantService.isMultitenantEnabled()) {
+          enabled = tenantService.isModuleEnabled(guildId, moduleName);
+        }
+      } catch (error) {
+        logger.warn(`Falling back to global module toggle for ${moduleName}: ${error.message}`);
+      }
+    }
+
+    if (enabled) {
       return true;
     }
 

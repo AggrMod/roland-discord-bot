@@ -2781,7 +2781,9 @@ async function loadSuperadminView() {
             <button class="btn-secondary" onclick="loadEraAssignments()" style="padding:8px 12px;">Refresh</button>
           </div>
           <div style="display:grid; gap:10px; grid-template-columns:1fr 1fr auto; margin-bottom:14px;">
-            <input id="eraAssignGuildId" type="text" placeholder="Guild ID" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
+            <select id="eraAssignGuildId" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
+              <option value="">Loading servers...</option>
+            </select>
             <select id="eraAssignKey" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
               <option value="">Loading eras...</option>
             </select>
@@ -2846,13 +2848,22 @@ async function loadSelectedTenantDetail() {
 async function loadEraAssignments() {
   const table = document.getElementById('eraAssignmentsTable');
   const select = document.getElementById('eraAssignKey');
+  const guildSelect = document.getElementById('eraAssignGuildId');
 
   try {
-    const [erasRes, assignRes] = await Promise.all([
+    const [erasRes, assignRes, tenantsRes] = await Promise.all([
       fetch('/api/superadmin/eras', { credentials: 'include', headers: buildTenantRequestHeaders() }),
-      fetch('/api/superadmin/era-assignments', { credentials: 'include', headers: buildTenantRequestHeaders() })
+      fetch('/api/superadmin/era-assignments', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      fetch('/api/superadmin/tenants', { credentials: 'include', headers: buildTenantRequestHeaders() })
     ]);
-    const [erasData, assignData] = await Promise.all([erasRes.json(), assignRes.json()]);
+    const [erasData, assignData, tenantsData] = await Promise.all([erasRes.json(), assignRes.json(), tenantsRes.json()]);
+
+    // Populate guild dropdown from tenant list
+    if (guildSelect && tenantsData.tenants) {
+      const current = guildSelect.value;
+      guildSelect.innerHTML = '<option value="">— Select server —</option>' +
+        tenantsData.tenants.map(t => `<option value="${escapeHtml(t.guild_id)}"${t.guild_id === current ? ' selected' : ''}>${escapeHtml(t.name || t.guild_id)}</option>`).join('');
+    }
 
     // Populate era dropdown
     if (select && erasData.success && erasData.eras) {
@@ -2892,7 +2903,7 @@ async function loadEraAssignments() {
 async function assignEra() {
   const guildId = document.getElementById('eraAssignGuildId')?.value?.trim();
   const eraKey = document.getElementById('eraAssignKey')?.value;
-  if (!guildId || !eraKey) return alert('Please enter a Guild ID and select an era.');
+  if (!guildId || !eraKey) return alert('Please select a server and an era.');
 
   try {
     const res = await fetch('/api/superadmin/era-assignments', {

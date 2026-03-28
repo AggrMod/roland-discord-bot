@@ -6001,7 +6001,7 @@ function openAddCollectionModal() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ collectionAddress, collectionName, channelId, meSymbol: document.getElementById('watchCollMeSymbolInput')?.value?.trim() || '' })
+        body: JSON.stringify({ collectionAddress, collectionName, channelId, meSymbol: document.getElementById('watchCollMeSymbolInput')?.value?.trim() || '', trackMint: true, trackSale: true, trackList: true, trackDelist: true })
       });
       const data = await response.json();
       if (data.success) {

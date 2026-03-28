@@ -1026,7 +1026,7 @@ function refreshAdminEntryVisibility() {
 
 async function checkAdminStatus() {
   try {
-    const response = await fetch('/api/user/is-admin', { credentials: 'include' });
+    const response = await fetch('/api/user/is-admin', { credentials: 'include', headers: buildTenantRequestHeaders() });
     const data = await response.json();
 
     isAdmin = !!data.isAdmin || isSuperadmin;

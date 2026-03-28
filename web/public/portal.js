@@ -1404,6 +1404,8 @@ function switchSection(sectionName) {
     loadActiveVotes();
   } else if (sectionName === 'servers') {
     loadServerAccess();
+  } else if (sectionName === 'wallets' && userData) {
+    renderWallets();
   } else if (sectionName === 'treasury') {
     loadTreasuryPublicView();
     loadTreasuryTransactions();

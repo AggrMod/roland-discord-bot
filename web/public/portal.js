@@ -608,7 +608,8 @@ async function loadServerAccess() {
       ...serverAccessData.unmanagedServers.map(server => server.guildId)
     ]);
 
-    if ((!activeGuildId || !knownIds.has(activeGuildId)) && serverAccessData.managedServers.length === 1) {
+    const totalServerCount = serverAccessData.managedServers.length + serverAccessData.unmanagedServers.length;
+    if ((!activeGuildId || !knownIds.has(activeGuildId)) && totalServerCount === 1 && serverAccessData.managedServers.length === 1) {
       activeGuildId = serverAccessData.managedServers[0].guildId;
       localStorage.setItem('activeGuildId', activeGuildId);
     }

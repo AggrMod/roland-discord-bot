@@ -3206,7 +3206,7 @@ class WebServer {
         if (!configuredSecret) {
           return res.status(503).json({ error: 'Webhook not configured' });
         }
-        const provided = req.headers['x-webhook-secret'];
+        const provided = req.headers['authorization'] || req.headers['x-webhook-secret'];
         if (!provided || !timingSafeEquals(provided, configuredSecret)) {
           return res.status(401).json({ success: false, message: 'Unauthorized' });
         }

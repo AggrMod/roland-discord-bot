@@ -423,7 +423,8 @@ class NFTActivityService {
         try {
           // Magic Eden poll — only if me_symbol is configured
           if (col.me_symbol) {
-          const meUrl = `https://api-mainnet.magiceden.dev/v2/collections/${col.me_symbol}/activities?offset=0&limit=100&type[]=list&type[]=buyNow&type[]=delist&type[]=cancelBid`;
+          // No type filter — ME returns all activity types; we filter client-side
+          const meUrl = `https://api-mainnet.magiceden.dev/v2/collections/${encodeURIComponent(col.me_symbol)}/activities?offset=0&limit=100`;
           const res = await fetch(meUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
 
           if (!res.ok) {
@@ -472,11 +473,15 @@ class NFTActivityService {
           // Tensor poll — always runs using collection_address as collId directly
           try {
             const tensorQuery = `query { recentTransactions(collId: "${col.collection_address}", limit: 100) { txs { tx { txType signature grossAmount seller buyer mintOnchainId blockTime } } } }`;
+            const tensorCtrl = new AbortController();
+            const tensorTimeout = setTimeout(() => tensorCtrl.abort(), 8000);
             const tensorRes = await fetch("https://api.tensor.trade/graphql", {
               method: "POST",
               headers: { "Content-Type": "application/json", "User-Agent": "GuildPilot/1.0" },
               body: JSON.stringify({ query: tensorQuery }),
+              signal: tensorCtrl.signal,
             });
+            clearTimeout(tensorTimeout);
             if (tensorRes.ok) {
               const tensorData = await tensorRes.json();
               const txs = tensorData?.data?.recentTransactions?.txs || [];

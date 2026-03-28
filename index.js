@@ -118,7 +118,16 @@ client.once(Events.ClientReady, () => {
   logger.log(`📊 Loaded ${client.commands.size} commands`);
   logger.log(`🏛️ Serving ${client.guilds.cache.size} guild(s)`);
   
-  client.user.setActivity('The Commission', { type: 0 });
+  // Bot activity status — use tenant branding if available, else generic fallback
+  const currentGuildIdForActivity = process.env.GUILD_ID;
+  let activityName = 'Serving your community';
+  if (currentGuildIdForActivity) {
+    try {
+      const tenantCtx = tenantService.ensureTenant(currentGuildIdForActivity);
+      activityName = tenantCtx?.branding?.bot_display_name || tenantCtx?.branding?.display_name || activityName;
+    } catch (_) { /* fallback to default */ }
+  }
+  client.user.setActivity(activityName, { type: 0 });
 
   // Set client reference via clientProvider
   clientProvider.setClient(client);

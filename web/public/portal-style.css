@@ -170,19 +170,31 @@ body {
   text-overflow: ellipsis;
 }
 
+/* Server grid layout — compact tiles, ~3 per row */
+.server-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
 .server-card {
   display: flex;
-  justify-content: space-between;
-  gap: var(--space-4);
+  gap: 10px;
   align-items: center;
-  padding: 16px;
+  padding: 12px 14px;
+  min-height: 70px;
+  max-height: 80px;
+  cursor: pointer;
+  transition: var(--transition-base);
   background: rgba(99, 102, 241, 0.08);
   border: 1px solid rgba(99, 102, 241, 0.2);
   border-radius: 12px;
 }
 
-.server-card + .server-card {
-  margin-top: 12px;
+.server-card:hover {
+  border-color: rgba(255, 215, 0, 0.3);
+  background: rgba(255, 215, 0, 0.06);
+  transform: translateY(-1px);
 }
 
 .server-card__title {
@@ -201,6 +213,28 @@ body {
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.server-card__icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.server-card__initials {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(99, 102, 241, 0.35);
+  color: #e0e7ff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .server-status-badge {
@@ -461,6 +495,82 @@ body {
 .sidebar-see-all:hover {
   color: #818cf8;
   background: rgba(99,102,241,0.08);
+}
+
+/* Sidebar hidden state — used on landing/marketing page */
+.portal-layout.sidebar-hidden .sidebar {
+  display: none;
+}
+.portal-layout.sidebar-hidden {
+  grid-template-columns: 1fr;
+}
+
+/* ==================== MARKETING / LANDING PAGE ==================== */
+.marketing-hero {
+  text-align: center;
+  padding: 80px 24px 48px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+.marketing-hero h1 {
+  font-size: 3rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  background: linear-gradient(135deg, var(--gold), #fff 60%, var(--gold-light));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 16px;
+}
+.marketing-hero .hero-sub {
+  font-size: 1.2rem;
+  color: var(--text-secondary);
+  max-width: 600px;
+  margin: 0 auto 32px;
+  line-height: 1.7;
+}
+.marketing-cta {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 64px;
+}
+.marketing-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 24px;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 24px 64px;
+}
+.marketing-feature-card {
+  background: rgba(99, 102, 241, 0.06);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  border-radius: var(--radius-lg);
+  padding: 28px 24px;
+  text-align: center;
+  transition: var(--transition-base);
+}
+.marketing-feature-card:hover {
+  border-color: rgba(255, 215, 0, 0.3);
+  background: rgba(255, 215, 0, 0.04);
+  transform: translateY(-2px);
+}
+.marketing-feature-card .feature-icon {
+  font-size: 2rem;
+  margin-bottom: 12px;
+}
+.marketing-feature-card h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+.marketing-feature-card p {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
 }
 
 .sidebar-section {

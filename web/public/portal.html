@@ -27,7 +27,6 @@
         <img id="navAvatar" class="nav-avatar" src="" alt="User avatar" style="display:none;">
         <span id="navUsername" class="nav-username"></span>
         <span id="activeGuildBadge" class="active-guild-badge" style="display:none;"></span>
-        <select id="navServerSelect" onchange="onNavServerSelect(this.value)" style="display:none;max-width:220px;padding:6px 10px;border:1px solid rgba(99,102,241,0.25);border-radius:8px;background:rgba(30,41,59,0.85);color:#e0e7ff;font-size:0.85em;"></select>
         <button id="navAuthBtn" class="btn-secondary" onclick="handleAuth()">Login</button>
       </div>
     </nav>
@@ -176,23 +175,49 @@
       <main class="content-area">
         <!-- Landing / General Section -->
         <section id="section-landing" class="content-section active">
-          <!-- Pre-selection fallback: shown when no server is selected -->
+          <!-- Pre-selection: Marketing / Landing page -->
           <div id="generalPreSelection">
-            <div class="section-header">
-              <img src="/assets/branding/guildpilot-logo.png" alt="GuildPilot" style="width:64px;height:64px;border-radius:14px;object-fit:cover;margin-bottom:10px;">
-              <h2>Choose where to go</h2>
-              <p><strong>GuildPilot</strong> — Pilot your community operations.</p>
-              <p>Select a server to enter tenant settings, or open your global profile.</p>
-            </div>
-            <div class="admin-card" style="max-width:820px;">
-              <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px;">
-                <button class="btn-primary" onclick="switchSection('servers')">Select Server</button>
-                <button class="btn-secondary" onclick="switchSection('wallets')">My Profile</button>
-                <button id="landingSuperadminBtn" class="btn-secondary" onclick="switchSection('admin'); showAdminView('superadmin')" style="display:none;">Go to Superadmin</button>
+            <div class="marketing-hero">
+              <img src="/assets/branding/guildpilot-logo.png" alt="GuildPilot" style="width:80px;height:80px;border-radius:18px;object-fit:cover;margin-bottom:20px;box-shadow:0 4px 24px rgba(255,215,0,0.2);">
+              <h1>Pilot Your Community</h1>
+              <p class="hero-sub">GuildPilot gives Discord server owners a powerful, all-in-one command center — governance, treasury, NFT tracking, verification, and more.</p>
+              <div class="marketing-cta">
+                <button class="btn-primary" onclick="switchSection('servers')" style="padding:12px 32px;font-size:1rem;">Get Started</button>
+                <button class="btn-secondary" onclick="switchSection('help')" style="padding:12px 32px;font-size:1rem;">View Docs</button>
+                <button id="landingSuperadminBtn" class="btn-secondary" onclick="switchSection('admin'); showAdminView('superadmin')" style="display:none;padding:12px 32px;font-size:1rem;">Superadmin</button>
               </div>
-              <p style="margin-top:12px; color:var(--text-secondary); font-size:.9em;">
-                Tenant-specific pages remain locked until a server is selected.
-              </p>
+            </div>
+            <div class="marketing-features">
+              <div class="marketing-feature-card">
+                <div class="feature-icon">📜</div>
+                <h3>Governance</h3>
+                <p>On-chain and off-chain proposals with tiered voting power based on NFT holdings.</p>
+              </div>
+              <div class="marketing-feature-card">
+                <div class="feature-icon">💰</div>
+                <h3>Treasury</h3>
+                <p>Multi-wallet oversight with real-time balances, transaction history, and alerts.</p>
+              </div>
+              <div class="marketing-feature-card">
+                <div class="feature-icon">🎨</div>
+                <h3>NFT Tracker</h3>
+                <p>Automatic sales and listing feeds powered by Helius webhooks — zero config required.</p>
+              </div>
+              <div class="marketing-feature-card">
+                <div class="feature-icon">💼</div>
+                <h3>Verification</h3>
+                <p>Link wallets to Discord accounts with tiered role assignment and proof of ownership.</p>
+              </div>
+              <div class="marketing-feature-card">
+                <div class="feature-icon">⚔️</div>
+                <h3>Battle &amp; Heist</h3>
+                <p>Gamified engagement modules that keep your community active and rewarded.</p>
+              </div>
+              <div class="marketing-feature-card">
+                <div class="feature-icon">⚙️</div>
+                <h3>Multi-Tenant</h3>
+                <p>One bot, many servers — each with isolated config, branding, and module toggles.</p>
+              </div>
             </div>
           </div>
 
@@ -286,7 +311,7 @@
               <h3>Managed Servers</h3>
               <span style="color:var(--text-secondary); font-size:0.85em;">Admin access and bot installed</span>
             </div>
-            <div id="managedServersList" style="margin-top: var(--space-4);"></div>
+            <div id="managedServersList" class="server-grid" style="margin-top: var(--space-4);"></div>
           </div>
 
           <div class="card">
@@ -294,7 +319,7 @@
               <h3>Unmanaged Servers</h3>
               <span style="color:var(--text-secondary); font-size:0.85em;">Admin access, bot not installed yet</span>
             </div>
-            <div id="unmanagedServersList" style="margin-top: var(--space-4);"></div>
+            <div id="unmanagedServersList" class="server-grid" style="margin-top: var(--space-4);"></div>
           </div>
         </section>
 

@@ -475,7 +475,6 @@ function updateActiveGuildBadge() {
     if (brandTitle) brandTitle.innerHTML = '<img src="/assets/branding/guildpilot-logo.png" alt="" style="width:22px;height:22px;border-radius:50%;vertical-align:middle;margin-right:8px;object-fit:cover;">GuildPilot';
   }
 
-  renderNavServerSelect();
   applyPreSelectionVisibility();
   refreshAdminEntryVisibility();
   updateSidebarServerContext();
@@ -510,26 +509,6 @@ function updateSidebarServerContext() {
   ctx.style.display = 'block';
 }
 
-function renderNavServerSelect() {
-  const sel = document.getElementById('navServerSelect');
-  if (!sel) return;
-
-  const managed = serverAccessData?.managedServers || [];
-  if (!userData || managed.length === 0) {
-    sel.style.display = 'none';
-    sel.innerHTML = '';
-    return;
-  }
-
-  sel.innerHTML = managed
-    .map(s => `<option value="${escapeHtml(s.guildId)}" ${s.guildId === activeGuildId ? 'selected' : ''}>${escapeHtml(s.name || s.guildId)}</option>`)
-    .join('');
-  sel.style.display = 'inline-block';
-}
-
-function onNavServerSelect(guildId) {
-  setActiveGuild(guildId);
-}
 
 function setNavSectionVisibility(section, visible) {
   document.querySelectorAll(`[data-section="${section}"]`).forEach(el => {
@@ -796,26 +775,25 @@ async function syncTenantModuleNavVisibility() {
 
 function renderServerCard(server, { managed = true } = {}) {
   const isActive = server.guildId === activeGuildId;
-  const badgeClass = managed ? 'managed' : 'unmanaged';
-  const actionButton = managed
-    ? isActive
-      ? '<button class="btn-secondary" disabled style="opacity:0.65;">Active</button>'
-      : `<button class="btn-primary" onclick="setActiveGuild('${server.guildId}', { goToSettings: true })">Open Settings</button>`
-    : `<button class="btn-secondary" onclick="openGuildInvite('${server.guildId}')">Invite Bot</button>`;
+  const iconUrl = getGuildIconUrl(server);
+  const name = server.name || server.guildId;
+  const initials = name.slice(0, 2).toUpperCase();
+  const iconHtml = iconUrl
+    ? `<img class="server-card__icon" src="${escapeHtml(iconUrl)}" alt="">`
+    : `<div class="server-card__initials">${escapeHtml(initials)}</div>`;
+
+  const onclick = managed
+    ? `onclick="setActiveGuild('${server.guildId}', { goToSettings: true })"`
+    : `onclick="openGuildInvite('${server.guildId}')"`;
+
+  const borderStyle = isActive ? 'border-color:rgba(16,185,129,0.4);background:rgba(16,185,129,0.08);' : '';
 
   return `
-    <div class="server-card">
-      <div style="min-width:0;">
-        <div class="server-card__title">${escapeHtml(server.name || server.guildId)}</div>
-        <div class="server-card__meta">Guild ID: ${escapeHtml(server.guildId)}</div>
-        <div style="margin-top:8px;">
-          <span class="server-status-badge ${isActive ? 'active' : badgeClass}">
-            ${isActive ? 'Active' : (managed ? 'Managed' : 'Invite needed')}
-          </span>
-        </div>
-      </div>
-      <div class="server-card__actions">
-        ${actionButton}
+    <div class="server-card" ${onclick} style="${borderStyle}">
+      ${iconHtml}
+      <div style="min-width:0;overflow:hidden;">
+        <div class="server-card__title" style="font-size:0.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(name)}</div>
+        <div class="server-card__meta" style="font-size:0.75em;">${isActive ? 'Active' : (managed ? 'Managed' : 'Invite needed')}</div>
       </div>
     </div>
   `;
@@ -1025,8 +1003,6 @@ function showUnauthenticatedState() {
   navUsername.textContent = '';
   const activeGuildBadge = document.getElementById('activeGuildBadge');
   if (activeGuildBadge) activeGuildBadge.style.display = 'none';
-  const navServerSelect = document.getElementById('navServerSelect');
-  if (navServerSelect) navServerSelect.style.display = 'none';
   navAuthBtn.textContent = 'Login';
   navAuthBtn.onclick = login;
   navAuthBtn.classList.remove('btn-secondary');
@@ -1640,6 +1616,16 @@ function switchSection(sectionName) {
   } else if (sectionName === 'plans') {
     updatePlanPrices();
     if (isAdmin) loadCurrentPlan();
+  }
+
+  // Toggle sidebar visibility — hide on landing/home, show on bot management sections
+  const portalLayout = document.querySelector('.portal-layout');
+  if (portalLayout) {
+    if (sectionName === 'landing') {
+      portalLayout.classList.add('sidebar-hidden');
+    } else {
+      portalLayout.classList.remove('sidebar-hidden');
+    }
   }
 
   // Update URL without reload

@@ -830,12 +830,22 @@ class BattleService {
   }
 
   buildLobbyEmbed(lobby, participants, requiredRoles = null, excludedRoles = null) {
+    const eraKey = lobby.era || 'mafia';
+    const eraConfig = this.getEraConfig(eraKey);
+    const eraName = eraConfig.name || 'Mafia';
+    const eraIcon = eraKey === 'vault_runners' ? '🏦' : '⚔️';
+
+    const openingLines = {
+      vault_runners: `The crew is assembling. Time to hit the vault.\nReact with ${this.SWORD_EMOJI} to join the heist!`,
+      mafia: `The family is gathering for a showdown.\nReact with ${this.SWORD_EMOJI} to join the fight!`,
+    };
+    const opening = openingLines[eraKey] || openingLines.mafia;
+
     const maxPlayersText = (!lobby.max_players || lobby.max_players >= 999) 
       ? '∞' 
       : lobby.max_players;
     
-    let description = `The family is gathering for a showdown.\n` +
-      `React with ${this.SWORD_EMOJI} to join the fight!\n\n` +
+    let description = `${opening}\n\n` +
       `**Status:** ${lobby.status === 'open' ? '🟢 Open' : '🔴 Closed'}\n` +
       `**Players:** ${participants.length}/${maxPlayersText}\n` +
       `**Minimum:** ${lobby.min_players} players to start`;
@@ -859,10 +869,10 @@ class BattleService {
     }
 
     const embed = new EmbedBuilder()
-      .setColor('#FFD700')
-      .setTitle('⚔️ Mafia Battle Lobby')
+      .setColor(eraKey === 'vault_runners' ? '#22c55e' : '#FFD700')
+      .setTitle(`${eraIcon} ${eraName} Battle Lobby`)
       .setDescription(description)
-      .setFooter({ text: 'Creator can /battle start when ready | Era: Solpranos' })
+      .setFooter({ text: `Creator can /battle start when ready | Era: ${eraName}` })
       .setTimestamp();
 
     if (participants.length > 0) {

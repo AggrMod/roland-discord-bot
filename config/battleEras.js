@@ -14,6 +14,7 @@ const BATTLE_ERAS = {
     lobbyIcon: '⚔️',
     lobbyColor: '#FFD700',
     lobbyOpening: 'The family is gathering for a showdown.',
+    lobbyPlayersLabel: '🥊 Fighters',
     eliminationLines: [
       "☠️ {defender} has been iced. Room temperature.",
       "☠️ {defender} sleeps with the fishes now.",
@@ -102,6 +103,7 @@ const BATTLE_ERAS = {
     lobbyIcon: '🏦',
     lobbyColor: '#22c55e',
     lobbyOpening: 'The crew is assembling. Someone remembered the drill this time. Probably.',
+    lobbyPlayersLabel: '🦹 The Crew',
     eliminationLines: [
       "💀 {defender} triggered the alarm by sneezing into the motion sensor. {attacker} shoved them into the laser grid on the way out.",
       "💀 {attacker} \"accidentally\" closed the vault door on {defender}. The time lock is set for 72 hours. Good luck in there.",

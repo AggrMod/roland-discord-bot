@@ -873,7 +873,7 @@ class BattleService {
 
     if (participants.length > 0) {
       const playerList = participants.map(p => `• ${p.username}`).join('\n');
-      embed.addFields({ name: '🥊 Fighters', value: playerList, inline: false });
+      embed.addFields({ name: eraConfig.lobbyPlayersLabel || '🥊 Fighters', value: playerList, inline: false });
     }
 
     return embed;

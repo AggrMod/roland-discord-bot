@@ -656,10 +656,21 @@ function switchSettingsTab(tab) {
   const tabLoaders = {
     general:      () => { if (typeof loadAdminSettingsView === 'function') loadAdminSettingsView(); },
     governance:   () => { if (typeof loadVotingPowerView === 'function') loadVotingPowerView(); },
-    verification: () => { if (typeof loadAdminRoles === 'function') loadAdminRoles(); },
+    verification: () => {
+      // Ensure verification settings container exists before the roles card
+      const vPane = document.getElementById('settingsTab-verification');
+      if (vPane && !document.getElementById('verificationSettingsCard')) {
+        const div = document.createElement('div');
+        div.id = 'verificationSettingsCard';
+        vPane.insertBefore(div, vPane.firstChild);
+      }
+      if (typeof loadVerificationSettings === 'function') loadVerificationSettings();
+      if (typeof loadAdminRoles === 'function') loadAdminRoles();
+    },
     nfttracker:   () => { if (typeof loadNftTrackerView === 'function') loadNftTrackerView(); },
     selfserve:    () => { if (typeof loadSelfServeRolesView === 'function') loadSelfServeRolesView(); },
     ticketing:    () => { if (typeof loadTicketingView === 'function') loadTicketingView(); },
+    treasury:     () => { if (typeof loadTreasuryModuleSettings === 'function') loadTreasuryModuleSettings(); },
     battle:       () => loadBattleTimingSettings(),
   };
   const loader = tabLoaders[tab];
@@ -4191,6 +4202,310 @@ async function loadNftTrackerView() {
         addBtn.textContent = 'Add Collection';
       }
     });
+  }
+}
+
+// ==================== SHARED CHANNEL SELECT HELPER ====================
+
+function populateChannelSelects(selectIds, channels, settings, settingKeys) {
+  const grouped = {};
+  channels.forEach(ch => {
+    const parent = ch.parentName || 'Other';
+    if (!grouped[parent]) grouped[parent] = [];
+    grouped[parent].push(ch);
+  });
+  selectIds.forEach((selId, i) => {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— None —</option>';
+    Object.keys(grouped).sort().forEach(parent => {
+      const optgroup = document.createElement('optgroup');
+      optgroup.label = parent;
+      grouped[parent].forEach(ch => {
+        const opt = document.createElement('option');
+        opt.value = ch.id;
+        opt.textContent = '# ' + ch.name;
+        optgroup.appendChild(opt);
+      });
+      sel.appendChild(optgroup);
+    });
+    const key = settingKeys ? settingKeys[i] : null;
+    if (key && settings[key]) sel.value = settings[key];
+  });
+}
+
+// ==================== GOVERNANCE SETTINGS ====================
+
+async function saveGovernanceSettings() {
+  const payload = {
+    quorumPercentage: parseFloat(document.getElementById('gov_quorumPercentage')?.value) || 0,
+    supportThreshold: parseInt(document.getElementById('gov_supportThreshold')?.value) || 0,
+    voteDurationDays: parseInt(document.getElementById('gov_voteDurationDays')?.value) || 0,
+    proposalsChannelId: document.getElementById('gov_proposalsChannelId')?.value || '',
+    votingChannelId: document.getElementById('gov_votingChannelId')?.value || '',
+    resultsChannelId: document.getElementById('gov_resultsChannelId')?.value || '',
+    governanceLogChannelId: document.getElementById('gov_governanceLogChannelId')?.value || '',
+  };
+  try {
+    const res = await fetch('/api/admin/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.success) showSuccess('Governance settings saved!');
+    else showError(data.message || 'Failed to save governance settings');
+  } catch (e) {
+    console.error('[Governance] Save error:', e);
+    showError('Failed to save governance settings');
+  }
+}
+
+// ==================== VERIFICATION SETTINGS ====================
+
+async function loadVerificationSettings() {
+  const container = document.getElementById('verificationSettingsCard');
+  if (!container) return;
+
+  const cardStyle = 'background:rgba(14,23,44,0.5);border:1px solid rgba(99,102,241,0.22);border-radius:10px;padding:var(--space-5);margin-bottom:var(--space-5);';
+  const cardHeader = 'color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0 0 var(--space-4) 0;padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);';
+  const gridRow = 'display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);';
+  const fieldLabel = 'display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;';
+  const fieldInput = 'width:100%;padding:10px 12px;border:1px solid rgba(99,102,241,0.22);border-radius:8px;background:rgba(30,41,59,0.8);color:#e0e7ff;font-size:0.9em;';
+
+  try {
+    const settingsRes = await fetch('/api/admin/settings', { credentials: 'include' });
+    const settingsJson = await settingsRes.json();
+    const vs = settingsJson.success ? settingsJson.settings : {};
+
+    container.innerHTML = `
+      <div style="${cardStyle}">
+        <h3 style="${cardHeader}">✅ Verification Settings</h3>
+        <div>
+          <label style="${fieldLabel}">Base Verified Role</label>
+          <p style="color:var(--text-secondary);font-size:0.8em;margin:0 0 8px 0;">Assigned to all verified members regardless of NFT holdings</p>
+          ${roleSelectHTML('ver_baseVerifiedRoleId', vs.baseVerifiedRoleId || '')}
+        </div>
+        <div style="${gridRow}margin-top:var(--space-4);">
+          <div>
+            <label style="${fieldLabel}">OG Role</label>
+            ${roleSelectHTML('ver_ogRoleId', vs.ogRoleId || '')}
+          </div>
+          <div>
+            <label style="${fieldLabel}">OG Role Limit</label>
+            <p style="color:var(--text-secondary);font-size:0.8em;margin:0 0 8px 0;">First N verifiers get OG role</p>
+            <input type="number" id="ver_ogRoleLimit" min="0" value="${vs.ogRoleLimit ?? ''}" style="${fieldInput}">
+          </div>
+        </div>
+        <div style="margin-top:var(--space-4);padding-top:var(--space-3);border-top:1px solid rgba(99,102,241,0.12);">
+          <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
+            <input type="checkbox" id="ver_autoResyncEnabled"${(vs.moduleRoleResyncEnabled ?? true) ? ' checked' : ''}> Auto Role Resync
+            <span style="font-size:0.8em;color:var(--text-secondary);">(periodically re-syncs holder roles)</span>
+          </label>
+        </div>
+        <div style="margin-top:var(--space-4);padding-top:var(--space-3);border-top:1px solid rgba(99,102,241,0.12);">
+          <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
+            <input type="checkbox" id="ver_moduleMicroVerifyEnabled"${(vs.moduleMicroVerifyEnabled ?? false) ? ' checked' : ''}
+              onchange="document.getElementById('verMicroSubFields').style.display=this.checked?'block':'none';"> 🔐 Enable Micro-Transfer Verification
+          </label>
+        </div>
+        <div id="verMicroSubFields" style="display:${(vs.moduleMicroVerifyEnabled ?? false) ? 'block' : 'none'};margin-top:var(--space-3);padding:var(--space-3);background:rgba(30,41,59,0.4);border-radius:8px;border:1px solid rgba(99,102,241,0.12);">
+          <div style="${gridRow}">
+            <div>
+              <label style="${fieldLabel}">Verification Receive Wallet</label>
+              <input type="text" id="ver_verificationReceiveWallet" placeholder="Solana wallet address" value="${escapeHtml(vs.verificationReceiveWallet ?? '')}" style="${fieldInput}">
+            </div>
+            <div>
+              <label style="${fieldLabel}">NFT Activity Webhook Secret</label>
+              <input type="text" id="ver_nftActivityWebhookSecret" placeholder="Optional shared secret" value="${escapeHtml(vs.nftActivityWebhookSecret ?? '')}" style="${fieldInput}">
+            </div>
+          </div>
+          <div style="${gridRow}margin-top:var(--space-3);">
+            <div>
+              <label style="${fieldLabel}">Verify Request TTL (minutes)</label>
+              <input type="number" id="ver_verifyRequestTtlMinutes" min="1" max="1440" value="${vs.verifyRequestTtlMinutes ?? 15}" style="${fieldInput}">
+            </div>
+            <div>
+              <label style="${fieldLabel}">Poll Interval (seconds)</label>
+              <input type="number" id="ver_pollIntervalSeconds" min="5" max="300" value="${vs.pollIntervalSeconds ?? 30}" style="${fieldInput}">
+            </div>
+          </div>
+          <div style="${gridRow}margin-top:var(--space-3);">
+            <div>
+              <label style="${fieldLabel}">Verify Rate Limit (minutes)</label>
+              <input type="number" id="ver_verifyRateLimitMinutes" min="1" max="60" value="${vs.verifyRateLimitMinutes ?? 5}" style="${fieldInput}">
+            </div>
+            <div>
+              <label style="${fieldLabel}">Max Pending Per User</label>
+              <input type="number" id="ver_maxPendingPerUser" min="1" max="10" value="${vs.maxPendingPerUser ?? 1}" style="${fieldInput}">
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);margin-top:var(--space-4);">
+          <button class="btn-primary" onclick="saveVerificationSettings()" style="font-size:0.85em;padding:8px 16px;">💾 Save Verification Settings</button>
+        </div>
+      </div>
+    `;
+
+    // Populate role selects
+    populateRoleSelect('ver_baseVerifiedRoleId', vs.baseVerifiedRoleId || '').then(() => {
+      const sel = document.getElementById('ver_baseVerifiedRoleId');
+      if (sel && sel.options.length > 0) sel.options[0].textContent = '-- None (disabled) --';
+    });
+    populateRoleSelect('ver_ogRoleId', vs.ogRoleId || '').then(() => {
+      const sel = document.getElementById('ver_ogRoleId');
+      if (sel && sel.options.length > 0) sel.options[0].textContent = '-- None --';
+    });
+  } catch (e) {
+    console.error('[Verification] Settings load error:', e);
+    container.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;">Failed to load verification settings.</p>';
+  }
+}
+
+async function saveVerificationSettings() {
+  const payload = {
+    baseVerifiedRoleId: document.getElementById('ver_baseVerifiedRoleId')?.value || '',
+    ogRoleId: document.getElementById('ver_ogRoleId')?.value || '',
+    ogRoleLimit: parseInt(document.getElementById('ver_ogRoleLimit')?.value) || 0,
+    moduleRoleResyncEnabled: !!document.getElementById('ver_autoResyncEnabled')?.checked,
+    moduleMicroVerifyEnabled: !!document.getElementById('ver_moduleMicroVerifyEnabled')?.checked,
+    verificationReceiveWallet: (document.getElementById('ver_verificationReceiveWallet')?.value || '').trim(),
+    nftActivityWebhookSecret: (document.getElementById('ver_nftActivityWebhookSecret')?.value || '').trim(),
+    verifyRequestTtlMinutes: parseInt(document.getElementById('ver_verifyRequestTtlMinutes')?.value) || 15,
+    pollIntervalSeconds: parseInt(document.getElementById('ver_pollIntervalSeconds')?.value) || 30,
+    verifyRateLimitMinutes: parseInt(document.getElementById('ver_verifyRateLimitMinutes')?.value) || 5,
+    maxPendingPerUser: parseInt(document.getElementById('ver_maxPendingPerUser')?.value) || 1,
+  };
+  try {
+    const res = await fetch('/api/admin/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.success) showSuccess('Verification settings saved!');
+    else showError(data.message || 'Failed to save verification settings');
+  } catch (e) {
+    console.error('[Verification] Save error:', e);
+    showError('Failed to save verification settings');
+  }
+}
+
+// ==================== TREASURY MODULE SETTINGS ====================
+
+async function loadTreasuryModuleSettings() {
+  const pane = document.getElementById('settingsTab-treasury');
+  if (!pane) return;
+
+  const cardStyle = 'background:rgba(14,23,44,0.5);border:1px solid rgba(99,102,241,0.22);border-radius:10px;padding:var(--space-5);margin-bottom:var(--space-5);';
+  const cardHeader = 'color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0 0 var(--space-4) 0;padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);';
+  const gridRow = 'display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);';
+  const fieldLabel = 'display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;';
+  const fieldInput = 'width:100%;padding:10px 12px;border:1px solid rgba(99,102,241,0.22);border-radius:8px;background:rgba(30,41,59,0.8);color:#e0e7ff;font-size:0.9em;';
+  const selectStyle = 'width:100%;padding:10px 12px;border:1px solid rgba(99,102,241,0.22);border-radius:8px;background:rgba(30,41,59,0.8);color:#e0e7ff;font-size:0.9em;';
+
+  pane.innerHTML = `<div style="${cardStyle}"><div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);"><div class="spinner"></div><p>Loading treasury settings...</p></div></div>`;
+
+  try {
+    const [settingsRes, treasuryRes] = await Promise.all([
+      fetch('/api/admin/settings', { credentials: 'include' }),
+      fetch('/api/admin/treasury', { credentials: 'include' })
+    ]);
+    const settingsJson = await settingsRes.json();
+    const ts = settingsJson.success ? settingsJson.settings : {};
+    const treasuryData = treasuryRes.ok ? await treasuryRes.json() : {};
+    const tc = treasuryData.config || treasuryData;
+
+    pane.innerHTML = `
+      <div style="${cardStyle}">
+        <h3 style="${cardHeader}">💰 Treasury Settings</h3>
+        <div style="${gridRow}">
+          <div>
+            <label style="${fieldLabel}">Solana Wallet Address</label>
+            <input type="text" id="trs_walletAddress" placeholder="Solana wallet address to monitor" value="${escapeHtml(tc.solanaWallet || ts.treasuryWalletAddress || '')}" style="${fieldInput}">
+          </div>
+          <div>
+            <label style="${fieldLabel}">Balance Refresh Interval (hours)</label>
+            <input type="number" id="trs_refreshInterval" min="1" max="168" value="${tc.refreshHours ?? 6}" style="${fieldInput}">
+          </div>
+        </div>
+        <div style="${gridRow}margin-top:var(--space-3);">
+          <div>
+            <label style="${fieldLabel}">Treasury Watch Channel</label>
+            <select id="trs_watchChannelId" style="${selectStyle}"><option value="">Loading channels...</option></select>
+            <div style="color:var(--text-secondary);font-size:0.78em;margin-top:4px;">Post a live treasury panel embed to this channel.</div>
+          </div>
+          <div>
+            <label style="${fieldLabel}">TX Alert Channel</label>
+            <select id="trs_txAlertChannelId" style="${selectStyle}"><option value="">Loading channels...</option></select>
+          </div>
+        </div>
+        <div style="${gridRow}margin-top:var(--space-3);">
+          <div>
+            <label style="${fieldLabel}">TX Alert Min SOL</label>
+            <input type="number" id="trs_txAlertMinSol" min="0" step="0.1" value="${tc.txAlertMinSol ?? 0}" style="${fieldInput}">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:var(--space-3);justify-content:center;">
+            <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
+              <input type="checkbox" id="trs_txAlertEnabled"${tc.txAlertsEnabled ? ' checked' : ''}> TX Alerts Enabled
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
+              <input type="checkbox" id="trs_txAlertIncomingOnly"${tc.txAlertIncomingOnly ? ' checked' : ''}> Incoming Only
+            </label>
+          </div>
+        </div>
+        <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);margin-top:var(--space-4);">
+          <button class="btn-primary" onclick="saveTreasuryModuleSettings()" style="font-size:0.85em;padding:8px 16px;">💾 Save Treasury Settings</button>
+        </div>
+      </div>
+    `;
+
+    // Populate channel selects
+    try {
+      const chRes = await fetch('/api/admin/discord/channels', { credentials: 'include' });
+      if (chRes.ok) {
+        const chJson = await chRes.json();
+        const channels = chJson.success ? (chJson.channels || []) : [];
+        populateChannelSelects(
+          ['trs_watchChannelId', 'trs_txAlertChannelId'],
+          channels,
+          { watchChannelId: tc.watchChannelId || '', txAlertChannelId: tc.txAlertChannelId || '' },
+          ['watchChannelId', 'txAlertChannelId']
+        );
+      }
+    } catch (e) { console.error('[Treasury] Channel load error:', e); }
+  } catch (e) {
+    console.error('[Treasury] Settings load error:', e);
+    pane.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;padding:var(--space-4);">Failed to load treasury settings.</p>';
+  }
+}
+
+async function saveTreasuryModuleSettings() {
+  const payload = {
+    enabled: true,
+    solanaWallet: (document.getElementById('trs_walletAddress')?.value || '').trim(),
+    refreshHours: parseInt(document.getElementById('trs_refreshInterval')?.value) || 6,
+    watchChannelId: document.getElementById('trs_watchChannelId')?.value || '',
+    txAlertsEnabled: !!document.getElementById('trs_txAlertEnabled')?.checked,
+    txAlertChannelId: document.getElementById('trs_txAlertChannelId')?.value || '',
+    txAlertIncomingOnly: !!document.getElementById('trs_txAlertIncomingOnly')?.checked,
+    txAlertMinSol: parseFloat(document.getElementById('trs_txAlertMinSol')?.value) || 0,
+  };
+  try {
+    const res = await fetch('/api/admin/treasury/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (res.ok && data.success !== false) showSuccess('Treasury settings saved!');
+    else showError(data.message || 'Failed to save treasury settings');
+  } catch (e) {
+    console.error('[Treasury] Save error:', e);
+    showError('Failed to save treasury settings');
   }
 }
 

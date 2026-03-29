@@ -11,6 +11,9 @@ const BATTLE_ERAS = {
     name: 'Mafia',
     description: 'Classic Solpranos mafia warfare — concrete shoes, cannoli, and family honor.',
     exclusive: false,
+    lobbyIcon: '⚔️',
+    lobbyColor: '#FFD700',
+    lobbyOpening: 'The family is gathering for a showdown.',
     eliminationLines: [
       "☠️ {defender} has been iced. Room temperature.",
       "☠️ {defender} sleeps with the fishes now.",
@@ -96,6 +99,9 @@ const BATTLE_ERAS = {
     name: 'Vault Runners',
     description: 'Incompetent criminals pulling a heist. Ocean\'s Eleven meets Arrested Development.',
     exclusive: true,
+    lobbyIcon: '🏦',
+    lobbyColor: '#22c55e',
+    lobbyOpening: 'The crew is assembling. Someone remembered the drill this time. Probably.',
     eliminationLines: [
       "💀 {defender} triggered the alarm by sneezing into the motion sensor. {attacker} shoved them into the laser grid on the way out.",
       "💀 {attacker} \"accidentally\" closed the vault door on {defender}. The time lock is set for 72 hours. Good luck in there.",

@@ -833,13 +833,9 @@ class BattleService {
     const eraKey = lobby.era || 'mafia';
     const eraConfig = this.getEraConfig(eraKey);
     const eraName = eraConfig.name || 'Mafia';
-    const eraIcon = eraKey === 'vault_runners' ? '🏦' : '⚔️';
-
-    const openingLines = {
-      vault_runners: `The crew is assembling. Time to hit the vault.\nReact with ${this.SWORD_EMOJI} to join the heist!`,
-      mafia: `The family is gathering for a showdown.\nReact with ${this.SWORD_EMOJI} to join the fight!`,
-    };
-    const opening = openingLines[eraKey] || openingLines.mafia;
+    const eraIcon = eraConfig.lobbyIcon || '⚔️';
+    const eraColor = eraConfig.lobbyColor || '#FFD700';
+    const opening = `${eraConfig.lobbyOpening || 'A battle is about to begin.'}\nReact with ${this.SWORD_EMOJI} to join!`;
 
     const maxPlayersText = (!lobby.max_players || lobby.max_players >= 999) 
       ? '∞' 
@@ -869,7 +865,7 @@ class BattleService {
     }
 
     const embed = new EmbedBuilder()
-      .setColor(eraKey === 'vault_runners' ? '#22c55e' : '#FFD700')
+      .setColor(eraColor)
       .setTitle(`${eraIcon} ${eraName} Battle Lobby`)
       .setDescription(description)
       .setFooter({ text: `Creator can /battle start when ready | Era: ${eraName}` })

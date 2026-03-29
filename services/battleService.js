@@ -397,7 +397,7 @@ class BattleService {
       }
 
       logger.log(`User ${username} joined battle lobby ${lobbyId}`);
-      return { success: true, count: participants.length + 1 };
+      return { success: true };
     } catch (error) {
       if (error.message.includes('UNIQUE constraint')) {
         return { success: false, message: 'Already in this lobby' };

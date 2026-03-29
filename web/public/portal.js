@@ -3544,13 +3544,9 @@ async function loadAdminSettingsView() {
 
   content.innerHTML = `<div style="text-align:center; padding: var(--space-5); color: var(--text-secondary);"><div class="spinner"></div><p>Loading settings...</p></div>`;
 
-  // --- Shared inline-style constants (matched to Verification Roles tab) ---
+  // --- Shared inline-style constants ---
   const cardStyle = 'background:rgba(14,23,44,0.5);border:1px solid rgba(99,102,241,0.22);border-radius:10px;padding:var(--space-5);margin-bottom:var(--space-5);';
   const cardHeader = 'color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0 0 var(--space-4) 0;padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);';
-  const gridRow = 'display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);';
-  const fieldLabel = 'display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;';
-  const fieldInput = 'width:100%;padding:10px 12px;border:1px solid rgba(99,102,241,0.22);border-radius:8px;background:rgba(30,41,59,0.8);color:#e0e7ff;font-size:0.9em;';
-  const selectStyle = 'width:100%;padding:10px 12px;border:1px solid rgba(99,102,241,0.22);border-radius:8px;background:rgba(30,41,59,0.8);color:#e0e7ff;font-size:0.9em;';
 
   try {
     // Step 1: Fetch settings first
@@ -3636,146 +3632,7 @@ async function loadAdminSettingsView() {
     }
 
 
-    // NFT tracker and other module settings are now in their own tabs
-        const alertChannelSel = document.getElementById('treasuryAlertChannelId');
-        const incomingOnlyCheck = document.getElementById('treasuryIncomingOnly');
-        const minSolInput = document.getElementById('treasuryMinSol');
-        const subFields = document.getElementById('treasuryTxAlertSubFields');
-
-        if (walletInput) walletInput.value = tc.solanaWallet || '';
-        if (refreshInput) refreshInput.value = tc.refreshHours ?? 6;
-        if (txAlertsCheck) txAlertsCheck.checked = !!tc.txAlertsEnabled;
-        if (incomingOnlyCheck) incomingOnlyCheck.checked = !!tc.txAlertIncomingOnly;
-        if (minSolInput) minSolInput.value = tc.txAlertMinSol ?? 0;
-
-        // Show/hide tx alert sub-fields
-        if (subFields) subFields.style.display = txAlertsCheck && txAlertsCheck.checked ? 'block' : 'none';
-        if (txAlertsCheck) {
-          txAlertsCheck.addEventListener('change', () => {
-            if (subFields) subFields.style.display = txAlertsCheck.checked ? 'block' : 'none';
-          });
-        }
-
-        // Populate treasury alert channel dropdown using already-fetched channelsList
-        if (alertChannelSel && channelsList.length > 0) {
-          const tGrouped = {};
-          channelsList.forEach(ch => {
-            const parent = ch.parentName || 'Other';
-            if (!tGrouped[parent]) tGrouped[parent] = [];
-            tGrouped[parent].push(ch);
-          });
-          alertChannelSel.innerHTML = '<option value="">-- Select channel --</option>';
-          Object.keys(tGrouped).sort().forEach(parent => {
-            const optgroup = document.createElement('optgroup');
-            optgroup.label = parent;
-            tGrouped[parent].forEach(ch => {
-              const opt = document.createElement('option');
-              opt.value = ch.id;
-              opt.textContent = '# ' + ch.name;
-              optgroup.appendChild(opt);
-            });
-            alertChannelSel.appendChild(optgroup);
-          });
-          if (tc.txAlertChannelId) alertChannelSel.value = tc.txAlertChannelId;
-        } else if (alertChannelSel) {
-          alertChannelSel.innerHTML = '<option value="">-- No channels available --</option>';
-        }
-
-        // Populate watch channel dropdown
-        const watchChannelSel = document.getElementById('treasuryWatchChannelId');
-        if (watchChannelSel && channelsList.length > 0) {
-          const wGrouped = {};
-          channelsList.forEach(ch => {
-            const parent = ch.parentName || 'Other';
-            if (!wGrouped[parent]) wGrouped[parent] = [];
-            wGrouped[parent].push(ch);
-          });
-          watchChannelSel.innerHTML = '<option value="">-- None (disabled) --</option>';
-          Object.keys(wGrouped).sort().forEach(parent => {
-            const optgroup = document.createElement('optgroup');
-            optgroup.label = parent;
-            wGrouped[parent].forEach(ch => {
-              const opt = document.createElement('option');
-              opt.value = ch.id;
-              opt.textContent = '# ' + ch.name;
-              optgroup.appendChild(opt);
-            });
-            watchChannelSel.appendChild(optgroup);
-          });
-          if (tc.watchChannelId) watchChannelSel.value = tc.watchChannelId;
-        } else if (watchChannelSel) {
-          watchChannelSel.innerHTML = '<option value="">-- No channels available --</option>';
-        }
-
-        // Show form, hide loading
-        const configForm = document.getElementById('treasuryConfigForm');
-        const configLoading = document.getElementById('treasuryConfigLoading');
-        if (configForm) configForm.style.display = 'block';
-        if (configLoading) configLoading.style.display = 'none';
-
-        // Save button handler
-        const saveBtn = document.getElementById('treasurySaveBtn');
-        if (saveBtn) {
-          saveBtn.addEventListener('click', async () => {
-            const feedback = document.getElementById('treasuryFeedback');
-            saveBtn.disabled = true;
-            saveBtn.textContent = 'Saving...';
-            try {
-              const payload = {
-                enabled: true,
-                solanaWallet: (document.getElementById('treasuryWalletInput')?.value || '').trim(),
-                refreshHours: parseInt(document.getElementById('treasuryRefreshHours')?.value) || 6,
-                txAlertsEnabled: !!document.getElementById('treasuryTxAlerts')?.checked,
-                txAlertChannelId: document.getElementById('treasuryAlertChannelId')?.value || '',
-                txAlertIncomingOnly: !!document.getElementById('treasuryIncomingOnly')?.checked,
-                txAlertMinSol: parseFloat(document.getElementById('treasuryMinSol')?.value) || 0,
-                watchChannelId: document.getElementById('treasuryWatchChannelId')?.value || ''
-              };
-              const saveRes = await fetch('/api/admin/treasury/config', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify(payload)
-              });
-              const saveData = await saveRes.json();
-              if (saveRes.ok && saveData.success !== false) {
-                if (feedback) {
-                  feedback.style.color = '#86efac';
-                  feedback.textContent = payload.watchChannelId ? '✓ Treasury settings saved. Watch panel posted to channel.' : '✓ Treasury settings saved!';
-                  setTimeout(() => { feedback.textContent = ''; }, 5000);
-                }
-              } else {
-                if (feedback) {
-                  feedback.style.color = '#fca5a5';
-                  feedback.textContent = saveData.message || 'Failed to save treasury settings';
-                  setTimeout(() => { feedback.textContent = ''; }, 8000);
-                }
-              }
-            } catch (saveErr) {
-              console.error('[Treasury] Save error:', saveErr);
-              if (feedback) {
-                feedback.style.color = '#fca5a5';
-                feedback.textContent = 'Network error saving treasury settings';
-                setTimeout(() => { feedback.textContent = ''; }, 8000);
-              }
-            } finally {
-              saveBtn.disabled = false;
-              saveBtn.textContent = '💾 Save Treasury Settings';
-            }
-          });
-        }
-      } else {
-        console.warn('[Settings] Treasury config fetch failed:', treasuryRes.status);
-        const configLoading = document.getElementById('treasuryConfigLoading');
-        if (configLoading) configLoading.textContent = 'Failed to load treasury config.';
-      }
-    } catch (tErr) {
-      console.error('[Settings] Treasury config error:', tErr);
-      const configLoading = document.getElementById('treasuryConfigLoading');
-      if (configLoading) configLoading.textContent = 'Error loading treasury config.';
-    }
-
-    // NFT tracker is now in its own tab — see loadNftTrackerView()
+    // Module-specific settings are now in their own tabs
   } catch (e) {
     content.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;
   }
@@ -3798,30 +3655,14 @@ async function savePortalSettings() {
   if (!portalSettingsData) return;
 
   const newSettings = {
-    quorumPercentage: parseFloat(document.getElementById('ps_quorumPercentage').value),
-    supportThreshold: parseInt(document.getElementById('ps_supportThreshold').value),
-    voteDurationDays: parseInt(document.getElementById('ps_voteDurationDays').value),
     moduleBattleEnabled: document.getElementById('ps_moduleBattleEnabled').checked,
     moduleGovernanceEnabled: document.getElementById('ps_moduleGovernanceEnabled').checked,
     moduleVerificationEnabled: document.getElementById('ps_moduleVerificationEnabled').checked,
     moduleMissionsEnabled: document.getElementById('ps_moduleMissionsEnabled').checked,
     moduleTreasuryEnabled: document.getElementById('ps_moduleTreasuryEnabled').checked,
     moduleNftTrackerEnabled: document.getElementById('ps_moduleNftTrackerEnabled')?.checked ?? true,
-    moduleRoleResyncEnabled: document.getElementById('ps_moduleRoleResyncEnabled')?.checked ?? true,
-    moduleMicroVerifyEnabled: document.getElementById('ps_moduleMicroVerifyEnabled')?.checked ?? false,
     moduleRoleClaimEnabled: document.getElementById('ps_moduleRoleClaimEnabled')?.checked ?? true,
     moduleTicketingEnabled: document.getElementById('ps_moduleTicketingEnabled')?.checked ?? true,
-    proposalsChannelId: document.getElementById('ps_proposalsChannelId').value || '',
-    votingChannelId: document.getElementById('ps_votingChannelId').value || '',
-    resultsChannelId: document.getElementById('ps_resultsChannelId').value || '',
-    governanceLogChannelId: document.getElementById('ps_governanceLogChannelId').value || '',
-    verificationReceiveWallet: document.getElementById('ps_verificationReceiveWallet').value.trim() || '',
-    nftActivityWebhookSecret: document.getElementById('ps_nftActivityWebhookSecret').value.trim() || '',
-    verifyRequestTtlMinutes: parseInt(document.getElementById('ps_verifyRequestTtlMinutes').value),
-    pollIntervalSeconds: parseInt(document.getElementById('ps_pollIntervalSeconds').value),
-    verifyRateLimitMinutes: parseInt(document.getElementById('ps_verifyRateLimitMinutes').value),
-    maxPendingPerUser: parseInt(document.getElementById('ps_maxPendingPerUser').value),
-    baseVerifiedRoleId: document.getElementById('ps_baseVerifiedRoleId').value || ''
   };
 
   try {
@@ -3837,27 +3678,7 @@ async function savePortalSettings() {
       return;
     }
 
-    // Also save treasury-specific config (separate API)
-    const treasuryPayload = {
-      enabled: document.getElementById('ps_moduleTreasuryEnabled')?.checked ?? true,
-      solanaWallet: (document.getElementById('treasuryWalletInput')?.value || '').trim(),
-      refreshHours: parseInt(document.getElementById('treasuryRefreshHours')?.value) || 6,
-      txAlertsEnabled: !!document.getElementById('treasuryTxAlerts')?.checked,
-      txAlertChannelId: document.getElementById('treasuryAlertChannelId')?.value || '',
-      txAlertIncomingOnly: !!document.getElementById('treasuryIncomingOnly')?.checked,
-      txAlertMinSol: parseFloat(document.getElementById('treasuryMinSol')?.value) || 0,
-      watchChannelId: document.getElementById('treasuryWatchChannelId')?.value || ''
-    };
-    if (treasuryPayload.solanaWallet || treasuryPayload.txAlertChannelId || treasuryPayload.watchChannelId) {
-      await fetch('/api/admin/treasury/config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(treasuryPayload)
-      });
-    }
-
-    showSettingsSuccess('Settings saved successfully!');
+    showSettingsSuccess('Module toggles saved!');
     await loadAdminSettingsView();
   } catch (error) {
     console.error('Error saving settings:', error);
@@ -4411,7 +4232,86 @@ async function loadVotingPowerView() {
       </div>`;
     }
 
+    // --- Governance Settings Card (before VP mappings) ---
+    const govCardStyle = 'background:rgba(14,23,44,0.5);border:1px solid rgba(99,102,241,0.22);border-radius:10px;padding:var(--space-5);margin-bottom:var(--space-5);';
+    const govCardHeader = 'color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0 0 var(--space-4) 0;padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);';
+    const govGridRow = 'display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);';
+    const govFieldLabel = 'display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;';
+    const govFieldInput = 'width:100%;padding:10px 12px;border:1px solid rgba(99,102,241,0.22);border-radius:8px;background:rgba(30,41,59,0.8);color:#e0e7ff;font-size:0.9em;';
+    const govSelectStyle = 'width:100%;padding:10px 12px;border:1px solid rgba(99,102,241,0.22);border-radius:8px;background:rgba(30,41,59,0.8);color:#e0e7ff;font-size:0.9em;';
+
+    let govSettingsHTML = '';
+    try {
+      const settingsRes = await fetch('/api/admin/settings', { credentials: 'include' });
+      const settingsJson = await settingsRes.json();
+      const gs = settingsJson.success ? settingsJson.settings : {};
+
+      govSettingsHTML = `
+        <div style="${govCardStyle}">
+          <h3 style="${govCardHeader}">🗳️ Governance Settings</h3>
+          <div style="${govGridRow}">
+            <div>
+              <label style="${govFieldLabel}">Quorum Percentage (%)</label>
+              <input type="number" id="gov_quorumPercentage" min="1" max="100" value="${gs.quorumPercentage ?? ''}" style="${govFieldInput}">
+            </div>
+            <div>
+              <label style="${govFieldLabel}">Support Threshold</label>
+              <input type="number" id="gov_supportThreshold" min="1" value="${gs.supportThreshold ?? ''}" style="${govFieldInput}">
+            </div>
+          </div>
+          <div style="${govGridRow}margin-top:var(--space-3);">
+            <div>
+              <label style="${govFieldLabel}">Vote Duration (Days)</label>
+              <input type="number" id="gov_voteDurationDays" min="1" max="30" value="${gs.voteDurationDays ?? ''}" style="${govFieldInput}">
+            </div>
+            <div></div>
+          </div>
+          <h4 style="color:#c9d6ff;font-size:0.95em;font-weight:600;margin:var(--space-4) 0 var(--space-3) 0;padding-top:var(--space-3);border-top:1px solid rgba(99,102,241,0.12);">🔗 Channel Overrides</h4>
+          <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:12px;">Leave empty to use .env defaults.</p>
+          <div style="${govGridRow}">
+            <div>
+              <label style="${govFieldLabel}">Proposals Channel</label>
+              <select id="gov_proposalsChannelId" style="${govSelectStyle}"><option value="">Loading channels...</option></select>
+            </div>
+            <div>
+              <label style="${govFieldLabel}">Voting Channel</label>
+              <select id="gov_votingChannelId" style="${govSelectStyle}"><option value="">Loading channels...</option></select>
+            </div>
+          </div>
+          <div style="${govGridRow}margin-top:var(--space-3);">
+            <div>
+              <label style="${govFieldLabel}">Results Channel</label>
+              <select id="gov_resultsChannelId" style="${govSelectStyle}"><option value="">Loading channels...</option></select>
+            </div>
+            <div>
+              <label style="${govFieldLabel}">Governance Log Channel</label>
+              <select id="gov_governanceLogChannelId" style="${govSelectStyle}"><option value="">Loading channels...</option></select>
+            </div>
+          </div>
+          <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);margin-top:var(--space-4);">
+            <button class="btn-primary" onclick="saveGovernanceSettings()" style="font-size:0.85em;padding:8px 16px;">💾 Save Governance Settings</button>
+          </div>
+        </div>
+      `;
+
+      // Populate channel selects after DOM insertion (deferred below)
+      setTimeout(async () => {
+        try {
+          const chRes = await fetch('/api/admin/discord/channels', { credentials: 'include' });
+          if (!chRes.ok) return;
+          const chJson = await chRes.json();
+          const channels = chJson.success ? (chJson.channels || []) : [];
+          const ids = ['proposalsChannelId', 'votingChannelId', 'resultsChannelId', 'governanceLogChannelId'];
+          populateChannelSelects(ids.map(id => `gov_${id}`), channels, gs, ids);
+        } catch (e) { console.error('[Governance] Channel load error:', e); }
+      }, 0);
+    } catch (e) {
+      console.error('[Governance] Settings load error:', e);
+      govSettingsHTML = '<p style="color:#fca5a5;font-size:0.85em;">Failed to load governance settings.</p>';
+    }
+
     content.innerHTML = `
+      ${govSettingsHTML}
       <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:16px;">Map Discord roles to voting power. Users get the highest VP among all their roles.</p>
       <div id="vpMappingsTableContainer" style="margin-bottom:16px;">${tableHTML}</div>
       <div style="background:rgba(30,41,59,0.5);border:1px solid rgba(99,102,241,0.15);border-radius:10px;padding:16px;margin-top:8px;">

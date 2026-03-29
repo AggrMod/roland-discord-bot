@@ -3627,28 +3627,6 @@ async function loadAdminSettingsView() {
         </div>
       </div>
 
-      <!-- ⚔️ BATTLE MODULE -->
-      <div id="ps_section_battle" style="${cardStyle}${moduleCardBorder}display:${(s.moduleBattleEnabled ?? true) ? 'block' : 'none'};">
-        <h3 style="${cardHeader}">⚔️ Battle Module</h3>
-        <div style="${gridRow}">
-          <div>
-            <label style="${fieldLabel}">Round Pause Min (s)</label>
-            <input type="number" id="ps_battleRoundPauseMinSec" min="0" max="120" step="1" value="${s.battleRoundPauseMinSec ?? 5}" style="${fieldInput}">
-          </div>
-          <div>
-            <label style="${fieldLabel}">Round Pause Max (s)</label>
-            <input type="number" id="ps_battleRoundPauseMaxSec" min="0" max="180" step="1" value="${s.battleRoundPauseMaxSec ?? 10}" style="${fieldInput}">
-          </div>
-        </div>
-        <div style="${gridRow}margin-top:var(--space-3);">
-          <div>
-            <label style="${fieldLabel}">Elite Four Prep Delay (s)</label>
-            <input type="number" id="ps_battleElitePrepSec" min="0" max="300" step="1" value="${s.battleElitePrepSec ?? 12}" style="${fieldInput}">
-          </div>
-          <div></div>
-        </div>
-      </div>
-
       <!-- 🗳️ GOVERNANCE MODULE -->
       <div id="ps_section_governance" style="${cardStyle}${moduleCardBorder}display:${(s.moduleGovernanceEnabled ?? true) ? 'block' : 'none'};">
         <h3 style="${cardHeader}">🗳️ Governance Module</h3>
@@ -4099,21 +4077,10 @@ function showSettingsSuccess(message) {
 async function savePortalSettings() {
   if (!portalSettingsData) return;
 
-  const battleRoundPauseMinSec = parseInt(document.getElementById('ps_battleRoundPauseMinSec').value);
-  const battleRoundPauseMaxSec = parseInt(document.getElementById('ps_battleRoundPauseMaxSec').value);
-  const battleElitePrepSec = parseInt(document.getElementById('ps_battleElitePrepSec').value);
-
-  if (Number.isFinite(battleRoundPauseMinSec) && Number.isFinite(battleRoundPauseMaxSec) && battleRoundPauseMinSec > battleRoundPauseMaxSec) {
-    return showError('Round Pause Min cannot be greater than Round Pause Max');
-  }
-
   const newSettings = {
     quorumPercentage: parseFloat(document.getElementById('ps_quorumPercentage').value),
     supportThreshold: parseInt(document.getElementById('ps_supportThreshold').value),
     voteDurationDays: parseInt(document.getElementById('ps_voteDurationDays').value),
-    battleRoundPauseMinSec,
-    battleRoundPauseMaxSec,
-    battleElitePrepSec,
     moduleBattleEnabled: document.getElementById('ps_moduleBattleEnabled').checked,
     moduleGovernanceEnabled: document.getElementById('ps_moduleGovernanceEnabled').checked,
     moduleVerificationEnabled: document.getElementById('ps_moduleVerificationEnabled').checked,

@@ -6369,10 +6369,6 @@ async function loadNFTActivityAdminView(preloadedCollections = null) {
       collections = data.success ? (data.collections || []) : [];
     }
 
-    const configRes = await fetch('/api/admin/nft-activity/config', { credentials: 'include' });
-    const configData = await configRes.json();
-    const alertCfg = configData.success ? configData.config || {} : {};
-
     container.innerHTML = `
       <div style="display:grid; gap:12px;">
         <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
@@ -6380,13 +6376,6 @@ async function loadNFTActivityAdminView(preloadedCollections = null) {
             <span>➕</span>
             <span>Add Collection</span>
           </button>
-          <button class="btn-secondary" onclick="openEditActivityAlertsModal()" style="justify-content:center;">
-            <span>⚙️</span>
-            <span>Edit Alert Settings</span>
-          </button>
-        </div>
-        <div style="padding:12px 14px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.18); border-radius:10px; color:var(--text-secondary); font-size:0.88em;">
-          Alerts: ${alertCfg.enabled ? 'enabled' : 'disabled'} • Channel: ${escapeHtml(alertCfg.channel_id || 'not set')} • Types: ${escapeHtml(alertCfg.event_types || 'mint,sell,list,delist,transfer')} • Min SOL: ${alertCfg.min_sol ?? 0}
         </div>
         <div id="nftActivityAdminList" style="margin-top:8px;"></div>
       </div>

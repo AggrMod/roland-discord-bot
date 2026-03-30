@@ -1,6 +1,6 @@
 const db = require('../database/db');
 const logger = require('../utils/logger');
-const { applyEmbedBranding } = require('./embedBranding');
+const { applyEmbedBranding, getBranding } = require('./embedBranding');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const clientProvider = require('../utils/clientProvider');
 
@@ -333,24 +333,31 @@ class NFTActivityService {
     const priceDisplay = evt.priceSol != null && evt.priceSol > 0 ? `◎ ${Number(evt.priceSol).toFixed(3)} SOL` : '—';
 
     const embed = new EmbedBuilder()
-      .setTitle(`${typeIcon} ${collectionDisplay} • ${typeUpper}`)
+      .setTitle(`│ ${typeIcon} ${collectionDisplay} • ${typeUpper}`)
       .addFields(
-        { name: 'Token', value: tokenDisplay, inline: true },
+        { name: 'Token Name', value: tokenDisplay, inline: true },
         { name: 'Price', value: priceDisplay, inline: true },
         { name: 'When', value: whenTs ? `<t:${whenTs}:R>` : 'now', inline: true },
-        { name: 'From', value: evt.fromWallet ? `\`${evt.fromWallet.slice(0, 6)}...${evt.fromWallet.slice(-4)}\`` : '—', inline: true },
-        { name: 'To', value: evt.toWallet ? `\`${evt.toWallet.slice(0, 6)}...${evt.toWallet.slice(-4)}\`` : '—', inline: true },
+        { name: 'From', value: walletToDisplay(evt.fromWallet), inline: true },
+        { name: 'To', value: walletToDisplay(evt.toWallet), inline: true },
         { name: 'Collection', value: collectionDisplay, inline: true }
       )
       .setTimestamp();
+
+    const branding = getBranding(tracked?.guild_id || '', 'nfttracker');
+    const fallbackLogo = branding.logo || client?.user?.displayAvatarURL?.() || null;
+    try {
+      if (fallbackLogo) embed.setAuthor({ name: ' ', iconURL: fallbackLogo });
+    } catch {}
 
     applyEmbedBranding(embed, {
       guildId: tracked?.guild_id || '',
       moduleKey: 'nfttracker',
       defaultColor: colorMap[typeUpper] || '#5865F2',
       defaultFooter: 'Powered by Guild Pilot',
-      fallbackLogoUrl: client?.user?.displayAvatarURL?.() || null,
+      fallbackLogoUrl: fallbackLogo,
       footerPrefix: shortSig ? `Tx: ${shortSig}` : 'No tx',
+      useThumbnail: false,
     });
 
     if (evt.imageUrl) embed.setThumbnail(evt.imageUrl);

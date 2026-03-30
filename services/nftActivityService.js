@@ -326,16 +326,25 @@ class NFTActivityService {
       (evt.collectionKey ? `${evt.collectionKey.slice(0, 6)}...${evt.collectionKey.slice(-4)}` : 'Unknown');
 
     // Token display: prefer name, then shorten mint address
+    const tokenIdShort = evt.tokenMint ? `\`${evt.tokenMint.slice(0, 6)}...${evt.tokenMint.slice(-4)}\`` : null;
     const tokenDisplay = (evt.tokenName && !evt.tokenName.match(/^[A-Za-z0-9]{32,}$/))
       ? evt.tokenName
-      : evt.tokenMint ? `\`${evt.tokenMint.slice(0, 6)}...${evt.tokenMint.slice(-4)}\`` : '—';
+      : (collectionDisplay !== 'Unknown' && evt.tokenMint)
+        ? `${collectionDisplay} #${evt.tokenMint.slice(-4)}`
+        : (tokenIdShort || '—');
 
-    const priceDisplay = evt.priceSol !== null && evt.priceSol !== undefined && evt.priceSol > 0 ? `◎ ${Number(evt.priceSol).toFixed(3)} SOL` : '—';
+    const priceDisplay = evt.priceSol !== null && evt.priceSol !== undefined && evt.priceSol > 0 ? `🔷 ${Number(evt.priceSol).toFixed(3)} SOL` : '—';
 
     const walletToDisplay = (wallet) => {
       if (!wallet) return '—';
       try {
-        const row = db.prepare('SELECT username FROM users WHERE lower(wallet_address) = lower(?) LIMIT 1').get(wallet);
+        const row = db.prepare(`
+          SELECT u.username
+          FROM wallets w
+          JOIN users u ON u.discord_id = w.discord_id
+          WHERE lower(w.wallet_address) = lower(?)
+          LIMIT 1
+        `).get(wallet);
         if (row?.username) return `@${row.username}`;
       } catch {}
       return `\`${wallet.slice(0, 6)}...${wallet.slice(-4)}\``;
@@ -345,6 +354,7 @@ class NFTActivityService {
       .setTitle(`│ ${typeIcon} ${collectionDisplay} • ${typeUpper}`)
       .addFields(
         { name: 'Token Name', value: tokenDisplay, inline: true },
+        { name: 'Token ID', value: tokenIdShort || '—', inline: true },
         { name: 'Price', value: priceDisplay, inline: true },
         { name: 'When', value: whenTs ? `<t:${whenTs}:R>` : 'now', inline: true },
         { name: 'From', value: walletToDisplay(evt.fromWallet), inline: true },

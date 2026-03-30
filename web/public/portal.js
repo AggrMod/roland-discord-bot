@@ -2651,6 +2651,9 @@ function renderTenantDetailPanel(tenant) {
 
   return `
     <div style="display:grid; gap:16px;">
+      <div style="padding:10px 12px;border:1px solid rgba(99,102,241,0.2);border-radius:10px;background:rgba(30,41,59,0.45);color:#cbd5e1;font-size:0.82em;">
+        <strong style="color:#e2e8f0;">You are editing tenant:</strong> ${escapeHtml(tenant.guildName || tenant.guildId)} <span style="font-family:monospace;opacity:.85;">(${escapeHtml(tenant.guildId)})</span>
+      </div>
       <div style="display:grid; gap:14px; grid-template-columns:minmax(0,1.2fr) minmax(0,0.8fr);">
         <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
@@ -2829,8 +2832,19 @@ async function loadSuperadminView() {
       ? tenantListCache.map(renderTenantRow).join('')
       : `<div style="padding:18px; text-align:center; color:var(--text-secondary);">No tenants found yet. New guilds will bootstrap automatically.</div>`;
 
+    const activeTenant = tenantListCache.find(t => t.guildId === selectedTenantGuildId) || null;
+    const activeTenantName = activeTenant?.guildName || selectedTenantGuildId || 'No tenant selected';
+
     content.innerHTML = `
       <div style="display:grid; gap:16px;">
+        <div style="padding:14px 16px;border:1px solid rgba(99,102,241,0.28);border-radius:12px;background:linear-gradient(135deg,rgba(99,102,241,0.16),rgba(30,41,59,0.52));display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+          <div>
+            <div style="color:#c9d6ff;font-size:0.82em;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;">Active Tenant Context</div>
+            <div style="color:#e0e7ff;font-size:1em;font-weight:700;margin-top:2px;">${escapeHtml(activeTenantName)}</div>
+            <div style="color:var(--text-secondary);font-size:0.82em;font-family:monospace;margin-top:2px;">${escapeHtml(selectedTenantGuildId || '—')}</div>
+          </div>
+          <div style="color:#cbd5e1;font-size:0.82em;max-width:520px;">Tenant-scoped actions below (plan/modules/branding/status) apply to this server. Superadmin list + era catalog are global controls.</div>
+        </div>
         <div style="display:grid; gap:12px; grid-template-columns:minmax(0,1fr) auto;">
           <input id="adminSuperadminUserIdInput" type="text" placeholder="Discord ID" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; width:100%;">
           <button id="adminSuperadminAddBtn" class="btn-primary" onclick="addSuperadminFromInput()" style="padding:10px 16px;">Add</button>
@@ -2838,7 +2852,7 @@ async function loadSuperadminView() {
 
         <div style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
-            <h4 style="margin:0; color:#c9d6ff;">Current superadmins</h4>
+            <h4 style="margin:0; color:#c9d6ff;">Current superadmins <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
             <span style="color:var(--text-secondary); font-size:0.85em;">Env roots cannot be removed</span>
           </div>
           <div style="border:1px solid rgba(99,102,241,0.15); border-radius:10px; overflow:hidden;">
@@ -2848,7 +2862,7 @@ async function loadSuperadminView() {
 
         <div style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
-            <h4 style="margin:0; color:#c9d6ff;">Tenant Management</h4>
+            <h4 style="margin:0; color:#c9d6ff;">Tenant Management <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(99,102,241,0.2);font-size:0.72em;vertical-align:middle;">Tenant Scoped</span></h4>
             <button class="btn-secondary" onclick="loadSuperadminView()" style="padding:8px 12px;">Refresh</button>
           </div>
           <div style="border:1px solid rgba(99,102,241,0.15); border-radius:10px; overflow:hidden;">
@@ -2864,7 +2878,7 @@ async function loadSuperadminView() {
 
         <div style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
-            <h4 style="margin:0; color:#c9d6ff;">Tenant Detail</h4>
+            <h4 style="margin:0; color:#c9d6ff;">Tenant Detail <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(99,102,241,0.2);font-size:0.72em;vertical-align:middle;">Tenant Scoped</span></h4>
             <span style="color:var(--text-secondary); font-size:0.85em;">Select a guild to edit plan, modules, branding, and status</span>
           </div>
           <div id="adminTenantDetailContent">${renderTenantDetailPanel(null)}</div>
@@ -2872,7 +2886,7 @@ async function loadSuperadminView() {
 
         <div style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
-            <h4 style="margin:0; color:#c9d6ff;">Era Assignments</h4>
+            <h4 style="margin:0; color:#c9d6ff;">Era Assignments <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global Control</span></h4>
             <button class="btn-secondary" onclick="loadEraAssignments()" style="padding:8px 12px;">Refresh</button>
           </div>
           <div style="display:grid; gap:10px; grid-template-columns:1fr 1fr auto; margin-bottom:14px;">

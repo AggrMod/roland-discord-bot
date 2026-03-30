@@ -2868,7 +2868,6 @@ async function loadSuperadminView() {
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button data-superadmin-tab-btn="tenants" class="btn-primary" onclick="showSuperadminTab('tenants')" style="padding:8px 12px;">Tenants</button>
-          <button data-superadmin-tab-btn="detail" class="btn-secondary" onclick="showSuperadminTab('detail')" style="padding:8px 12px;">Tenant Detail</button>
           <button data-superadmin-tab-btn="eras" class="btn-secondary" onclick="showSuperadminTab('eras')" style="padding:8px 12px;">Era Assignments</button>
           <button data-superadmin-tab-btn="superadmins" class="btn-secondary" onclick="showSuperadminTab('superadmins')" style="padding:8px 12px;">Superadmins</button>
         </div>
@@ -3077,8 +3076,7 @@ function showSuperadminTab(tab) {
   superadminActiveTab = tab;
   const sections = {
     superadmins: ['superadminSection-superadminsInput', 'superadminSection-superadmins'],
-    tenants: ['superadminSection-tenants'],
-    detail: ['superadminSection-detail'],
+    tenants: ['superadminSection-tenants', 'superadminSection-detail'],
     eras: ['superadminSection-eras'],
   };
   Object.entries(sections).forEach(([key, ids]) => {

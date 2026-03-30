@@ -6476,33 +6476,63 @@ async function loadNFTActivityAdminView(preloadedCollections = null) {
   }
 }
 
-function openEditCollectionModal(id, name, addr, meSymbol, channelId) {
+async function openEditCollectionModal(id, name, addr, meSymbol, channelId) {
   if (!isAdmin) return;
-  showConfirmModal('Edit Collection', '', null);
-  const title = document.getElementById('confirmTitle');
-  const body = document.getElementById('confirmMessage');
-  const btn = document.getElementById('confirmButton');
-  title.textContent = '✏️ Edit Collection';
-  btn.textContent = 'Save Changes';
-  btn.classList.remove('btn-danger');
-  btn.classList.add('btn-primary');
-  const fieldStyle = 'width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;';
-  const labelStyle = 'display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;';
-  body.innerHTML = `
-    <div style="display:grid; gap:14px;">
-      <div><label style="${labelStyle}">Collection Name *</label>
-        <input id="editCollNameInput" type="text" value="${escapeHtml(name)}" style="${fieldStyle}"></div>
-      <div><label style="${labelStyle}">Alert Channel ID *</label>
-        <input id="editCollChannelInput" type="text" value="${escapeHtml(channelId)}" style="${fieldStyle} font-family:monospace;"></div>
-      <div><label style="${labelStyle}">Magic Eden Symbol <small style="color:#94a3b8;">(e.g. vault_runners)</small></label>
-        <input id="editCollMeSymbolInput" type="text" value="${escapeHtml(meSymbol)}" placeholder="vault_runners" style="${fieldStyle}"></div>
-      <div style="color:#94a3b8; font-size:0.8em; font-family:monospace;">${escapeHtml(addr)}</div>
+  const old = document.getElementById('collEditOverlay');
+  if (old) old.remove();
+
+  const fi = 'width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;';
+  const lb = 'display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;';
+
+  const overlay = document.createElement('div');
+  overlay.id = 'collEditOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;';
+  overlay.innerHTML = `
+    <div style="background:var(--card-bg,#1e293b);border:1px solid rgba(99,102,241,0.3);border-radius:12px;padding:24px;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto;">
+      <h3 style="margin:0 0 16px;color:var(--text-primary,#e0e7ff);">✏️ Edit Collection</h3>
+      <div style="display:grid;gap:14px;">
+        <div><label style="${lb}">Collection Name</label><input type="text" id="ceNameInput" value="${escapeHtml(name)}" style="${fi}"></div>
+        <div><label style="${lb}">Alert Channel</label><select id="ceChannelInput" style="${fi}"><option value="">Loading...</option></select></div>
+        <div><label style="${lb}">Magic Eden Symbol</label><input type="text" id="ceMeInput" value="${escapeHtml(meSymbol||'')}" placeholder="vault_runners" style="${fi}"></div>
+        <div style="color:#94a3b8;font-size:0.8em;font-family:monospace;">${escapeHtml(addr)}</div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:20px;">
+        <button id="ceSaveBtn" style="padding:8px 18px;background:#6366f1;color:#fff;border:none;border-radius:8px;font-size:0.85em;font-weight:600;cursor:pointer;">Save</button>
+        <button id="ceCancelBtn" style="padding:8px 18px;background:transparent;color:#94a3b8;border:1px solid rgba(255,255,255,0.12);border-radius:8px;font-size:0.85em;cursor:pointer;">Cancel</button>
+        <span id="ceFeedback" style="font-size:0.85em;font-weight:600;"></span>
+      </div>
     </div>`;
-  confirmCallback = async () => {
-    const newName = document.getElementById('editCollNameInput')?.value.trim();
-    const newChannel = document.getElementById('editCollChannelInput')?.value.trim();
-    const newMe = document.getElementById('editCollMeSymbolInput')?.value.trim() || '';
-    if (!newName || !newChannel) { showError('Name and channel are required'); return; }
+  document.body.appendChild(overlay);
+
+  // Populate channel dropdown
+  const sel = document.getElementById('ceChannelInput');
+  try {
+    const chRes = await fetch('/api/admin/discord/channels', { credentials: 'include' });
+    if (chRes.ok) {
+      const chData = await chRes.json();
+      const channels = chData.channels || [];
+      const grouped = {};
+      channels.forEach(ch => { const p = ch.parentName || 'Other'; if (!grouped[p]) grouped[p] = []; grouped[p].push(ch); });
+      sel.innerHTML = '<option value="">-- Select channel --</option>';
+      Object.keys(grouped).sort().forEach(parent => {
+        const og = document.createElement('optgroup'); og.label = parent;
+        grouped[parent].forEach(ch => { const o = document.createElement('option'); o.value = ch.id; o.textContent = '# ' + ch.name; og.appendChild(o); });
+        sel.appendChild(og);
+      });
+    }
+  } catch (e) { sel.innerHTML = '<option value="">-- Could not load channels --</option>'; }
+  if (channelId) sel.value = channelId;
+
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.getElementById('ceCancelBtn').addEventListener('click', () => overlay.remove());
+  document.getElementById('ceSaveBtn').addEventListener('click', async () => {
+    const saveBtn = document.getElementById('ceSaveBtn');
+    const feedback = document.getElementById('ceFeedback');
+    const newName = document.getElementById('ceNameInput').value.trim();
+    const newChannel = document.getElementById('ceChannelInput').value;
+    const newMe = document.getElementById('ceMeInput').value.trim();
+    if (!newName) { if (feedback) { feedback.style.color='#fca5a5'; feedback.textContent='Name is required'; } return; }
+    saveBtn.disabled = true; saveBtn.textContent = 'Saving...';
     try {
       const res = await fetch(`/api/admin/nft-tracker/collections/${encodeURIComponent(id)}`, {
         method: 'PUT', credentials: 'include',
@@ -6510,62 +6540,108 @@ function openEditCollectionModal(id, name, addr, meSymbol, channelId) {
         body: JSON.stringify({ collectionName: newName, channelId: newChannel, meSymbol: newMe })
       });
       const data = await res.json();
-      if (data.success) { showSuccess('Collection updated'); loadNFTActivityView(); loadNFTActivityAdminView(); }
-      else showError(data.message || 'Failed to update');
-    } catch (e) { showError('Error updating collection'); }
-  };
-}
-
-function openAddCollectionModal() {
-  if (!isAdmin) return;
-  showConfirmModal('Add Watched Collection', '', null);
-  const title = document.getElementById('confirmTitle');
-  const body = document.getElementById('confirmMessage');
-  const btn = document.getElementById('confirmButton');
-  title.textContent = '➕ Watch New Collection';
-  btn.textContent = 'Add Collection';
-  btn.classList.remove('btn-danger');
-  btn.classList.add('btn-primary');
-  body.innerHTML = `
-    <div style="display:grid; gap:14px;">
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Collection Address *</label>
-        <input id="watchCollAddrInput" type="text" placeholder="Solana collection address" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; font-family:monospace;"></div>
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Collection Name *</label>
-        <input id="watchCollNameInput" type="text" placeholder="Human-readable name" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Alert Channel ID *</label>
-        <input id="watchCollChannelInput" type="text" placeholder="Discord channel ID" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; font-family:monospace;"></div>
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Magic Eden Symbol <small style="color:#94a3b8;">(e.g. vault_runners — needed for listing alerts)</small></label>
-        <input id="watchCollMeSymbolInput" type="text" placeholder="vault_runners" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
-    </div>
-  `;
-  confirmCallback = async () => {
-    const collectionAddress = document.getElementById('watchCollAddrInput')?.value.trim();
-    const collectionName = document.getElementById('watchCollNameInput')?.value.trim();
-    const channelId = document.getElementById('watchCollChannelInput')?.value.trim();
-    if (!collectionAddress || !collectionName || !channelId) {
-      showError('Collection address, collection name, and alert channel are required');
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/admin/nft-tracker/collections', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ collectionAddress, collectionName, channelId, meSymbol: document.getElementById('watchCollMeSymbolInput')?.value?.trim() || '', trackMint: true, trackSale: true, trackList: true, trackDelist: true })
-      });
-      const data = await response.json();
-      if (data.success) {
-        showSuccess('Collection added to watchlist');
+      if (res.ok && data.success) {
+        overlay.remove();
+        showSuccess('Collection updated');
         loadNFTActivityView();
         loadNFTActivityAdminView();
       } else {
-        showError(data.message || 'Failed to add collection');
+        if (feedback) { feedback.style.color = '#fca5a5'; feedback.textContent = data.message || 'Failed to save'; }
       }
-    } catch (error) {
-      showError(`Failed to add collection: ${error.message}`);
+    } catch (err) {
+      if (feedback) { feedback.style.color = '#fca5a5'; feedback.textContent = 'Network error'; }
     }
-  };
+    saveBtn.disabled = false; saveBtn.textContent = 'Save';
+  });
+}
+
+async function openAddCollectionModal() {
+  if (!isAdmin) return;
+  const old = document.getElementById('collAddOverlay');
+  if (old) old.remove();
+
+  const fi = 'width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;';
+  const lb = 'display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;';
+
+  const overlay = document.createElement('div');
+  overlay.id = 'collAddOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;';
+  overlay.innerHTML = `
+    <div style="background:var(--card-bg,#1e293b);border:1px solid rgba(99,102,241,0.3);border-radius:12px;padding:24px;width:500px;max-width:95vw;max-height:90vh;overflow-y:auto;">
+      <h3 style="margin:0 0 16px;color:var(--text-primary,#e0e7ff);">➕ Watch New Collection</h3>
+      <div style="display:grid;gap:14px;">
+        <div><label style="${lb}">Collection Address *</label><input type="text" id="caAddrInput" placeholder="Solana collection address" style="${fi}font-family:monospace;"></div>
+        <div><label style="${lb}">Collection Name *</label><input type="text" id="caNameInput" placeholder="e.g. Vault Runners" style="${fi}"></div>
+        <div><label style="${lb}">Alert Channel</label><select id="caChannelInput" style="${fi}"><option value="">Loading...</option></select></div>
+        <div><label style="${lb}">Magic Eden Symbol <small style="color:#94a3b8;">(e.g. vault_runners)</small></label><input type="text" id="caMeInput" placeholder="vault_runners" style="${fi}"></div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;">
+          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caMint" checked> 🪙 Mint</label>
+          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caSale" checked> 💰 Sale</label>
+          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caList" checked> 📋 List</label>
+          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caDelist"> ❌ Delist</label>
+          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caTransfer"> 🔄 Transfer</label>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:20px;">
+        <button id="caAddBtn" style="padding:8px 18px;background:#6366f1;color:#fff;border:none;border-radius:8px;font-size:0.85em;font-weight:600;cursor:pointer;">Add Collection</button>
+        <button id="caCancelBtn" style="padding:8px 18px;background:transparent;color:#94a3b8;border:1px solid rgba(255,255,255,0.12);border-radius:8px;font-size:0.85em;cursor:pointer;">Cancel</button>
+        <span id="caFeedback" style="font-size:0.85em;font-weight:600;"></span>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  // Populate channel dropdown
+  const sel = document.getElementById('caChannelInput');
+  try {
+    const chRes = await fetch('/api/admin/discord/channels', { credentials: 'include' });
+    if (chRes.ok) {
+      const chData = await chRes.json();
+      const channels = chData.channels || [];
+      const grouped = {};
+      channels.forEach(ch => { const p = ch.parentName || 'Other'; if (!grouped[p]) grouped[p] = []; grouped[p].push(ch); });
+      sel.innerHTML = '<option value="">-- Select channel (optional) --</option>';
+      Object.keys(grouped).sort().forEach(parent => {
+        const og = document.createElement('optgroup'); og.label = parent;
+        grouped[parent].forEach(ch => { const o = document.createElement('option'); o.value = ch.id; o.textContent = '# ' + ch.name; og.appendChild(o); });
+        sel.appendChild(og);
+      });
+    }
+  } catch (e) { sel.innerHTML = '<option value="">-- Could not load channels --</option>'; }
+
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.getElementById('caCancelBtn').addEventListener('click', () => overlay.remove());
+  document.getElementById('caAddBtn').addEventListener('click', async () => {
+    const addBtn = document.getElementById('caAddBtn');
+    const feedback = document.getElementById('caFeedback');
+    const addr = document.getElementById('caAddrInput').value.trim();
+    const name = document.getElementById('caNameInput').value.trim();
+    const chId = document.getElementById('caChannelInput').value;
+    if (!addr || !name) { if (feedback) { feedback.style.color='#fca5a5'; feedback.textContent='Address and name are required'; } return; }
+    addBtn.disabled = true; addBtn.textContent = 'Adding...';
+    try {
+      const res = await fetch('/api/admin/nft-tracker/collections', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          collectionAddress: addr, collectionName: name, channelId: chId,
+          meSymbol: document.getElementById('caMeInput').value.trim(),
+          trackMint: !!document.getElementById('caMint').checked,
+          trackSale: !!document.getElementById('caSale').checked,
+          trackList: !!document.getElementById('caList').checked,
+          trackDelist: !!document.getElementById('caDelist').checked,
+          trackTransfer: !!document.getElementById('caTransfer').checked,
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success !== false) {
+        overlay.remove(); showSuccess('Collection added!');
+        loadNFTActivityView(); loadNFTActivityAdminView();
+      } else {
+        if (feedback) { feedback.style.color='#fca5a5'; feedback.textContent = data.message || 'Failed to add'; }
+      }
+    } catch (err) { if (feedback) { feedback.style.color='#fca5a5'; feedback.textContent='Network error'; } }
+    addBtn.disabled = false; addBtn.textContent = 'Add Collection';
+  });
 }
 
 async function removeWatchedCollection(id, collectionName) {

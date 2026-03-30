@@ -262,7 +262,7 @@ class TenantService {
     };
   }
 
-  listTenants({ q, status } = {}) {
+  listTenants({ q, status, page = 1, pageSize = 25 } = {}) {
     const query = normalizeString(q);
     const normalizedStatus = normalizeString(status)?.toLowerCase() || null;
     const params = [];
@@ -278,6 +278,17 @@ class TenantService {
       params.push(normalizedStatus);
     }
 
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const sizeNum = Math.min(Math.max(parseInt(pageSize, 10) || 25, 1), 200);
+    const offset = (pageNum - 1) * sizeNum;
+
+    const totalRow = db.prepare(`
+      SELECT COUNT(*) AS total
+      FROM tenants t
+      ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
+    `).get(...params);
+    const total = Number(totalRow?.total || 0);
+
     const rows = db.prepare(`
       SELECT
         t.*,
@@ -288,9 +299,10 @@ class TenantService {
       ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
       GROUP BY t.id
       ORDER BY COALESCE(t.guild_name, t.guild_id) COLLATE NOCASE ASC
-    `).all(...params);
+      LIMIT ? OFFSET ?
+    `).all(...params, sizeNum, offset);
 
-    return rows.map(row => {
+    const tenants = rows.map(row => {
       const tenant = this.buildTenantShape(row);
       return {
         ...tenant,
@@ -298,6 +310,16 @@ class TenantService {
         totalModulesCount: ALL_MODULE_KEYS.length
       };
     });
+
+    return {
+      tenants,
+      pagination: {
+        page: pageNum,
+        pageSize: sizeNum,
+        total,
+        totalPages: Math.max(Math.ceil(total / sizeNum), 1)
+      }
+    };
   }
 
   getTenantContext(guildId) {

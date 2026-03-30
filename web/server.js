@@ -1077,14 +1077,17 @@ class WebServer {
 
     this.app.get('/api/superadmin/tenants', superadminGuard, (req, res) => {
       try {
-        const tenants = tenantService.listTenants({
+        const result = tenantService.listTenants({
           q: req.query.q,
-          status: req.query.status
+          status: req.query.status,
+          page: req.query.page,
+          pageSize: req.query.pageSize
         });
 
         res.json({
           success: true,
-          tenants
+          tenants: result.tenants,
+          pagination: result.pagination
         });
       } catch (error) {
         logger.error('Error fetching tenants:', error);

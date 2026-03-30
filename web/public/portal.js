@@ -2552,6 +2552,10 @@ let superadminTenantSearch = '';
 let superadminActiveTab = 'tenants';
 let tenantDetailActiveTab = 'overview';
 let superadminTenantDirectoryCollapsed = false;
+let superadminTenantPage = 1;
+let superadminTenantPageSize = 25;
+let superadminTenantTotalPages = 1;
+let superadminTenantTotalCount = 0;
 
 const TENANT_PLAN_LABELS = {
   starter: 'Starter',
@@ -2788,9 +2792,14 @@ async function loadSuperadminView() {
   content.innerHTML = `<div style="text-align:center; padding:20px;"><div class="spinner"></div><p style="margin-top:10px;">Loading superadmin tenant controls...</p></div>`;
 
   try {
+    const tenantQs = new URLSearchParams();
+    if (superadminTenantSearch.trim()) tenantQs.set('q', superadminTenantSearch.trim());
+    tenantQs.set('page', String(superadminTenantPage));
+    tenantQs.set('pageSize', String(superadminTenantPageSize));
+
     const [adminsResponse, tenantsResponse] = await Promise.all([
       fetch('/api/superadmin/admins', { credentials: 'include' }),
-      fetch('/api/superadmin/tenants', { credentials: 'include' })
+      fetch(`/api/superadmin/tenants?${tenantQs.toString()}`, { credentials: 'include' })
     ]);
 
     const [adminsData, tenantsData] = await Promise.all([
@@ -2810,8 +2819,15 @@ async function loadSuperadminView() {
 
     superadminListCache = adminsData.superadmins || [];
     tenantListCache = tenantsData.tenants || [];
+    superadminTenantTotalPages = Number(tenantsData.pagination?.totalPages || 1);
+    superadminTenantTotalCount = Number(tenantsData.pagination?.total || tenantListCache.length || 0);
+
+    if (superadminTenantPage > superadminTenantTotalPages) {
+      superadminTenantPage = superadminTenantTotalPages;
+    }
+
     if (!selectedTenantGuildId || !tenantListCache.some(tenant => tenant.guildId === selectedTenantGuildId)) {
-      selectedTenantGuildId = tenantListCache[0]?.guildId || null;
+      selectedTenantGuildId = tenantListCache[0]?.guildId || selectedTenantGuildId || null;
     }
     // Scale UX: collapse long tenant directory by default once a tenant is selected
     if (selectedTenantGuildId && superadminTenantSearch.trim() === '') {
@@ -2908,7 +2924,7 @@ async function loadSuperadminView() {
             <select id="superadminTenantSelect" onchange="selectTenantGuild(this.value)" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; width:100%;">
               ${tenantListCache.map(t => `<option value="${escapeHtml(t.guildId)}"${t.guildId === selectedTenantGuildId ? ' selected' : ''}>${escapeHtml(t.guildName || t.guildId)} (${escapeHtml(t.guildId)})</option>`).join('')}
             </select>
-            <div style="color:var(--text-secondary);font-size:0.82em;text-align:right;">Showing ${filteredTenants.length}/${tenantListCache.length}</div>
+            <div style="color:var(--text-secondary);font-size:0.82em;text-align:right;">Page ${superadminTenantPage}/${superadminTenantTotalPages} • ${filteredTenants.length} shown • ${superadminTenantTotalCount} total</div>
           </div>
 
           <div id="superadminTenantDirectoryBody" style="display:${superadminTenantDirectoryCollapsed ? 'none' : ''}; border:1px solid rgba(99,102,241,0.15); border-radius:10px; overflow:hidden;">
@@ -2919,6 +2935,11 @@ async function loadSuperadminView() {
               <div>Modules</div>
             </div>
             <div style="max-height:320px; overflow:auto;">${tenantRows}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-top:1px solid rgba(99,102,241,0.12);background:rgba(30,41,59,0.35);">
+              <button class="btn-secondary" onclick="superadminTenantPrevPage()" style="padding:6px 10px;" ${superadminTenantPage <= 1 ? 'disabled' : ''}>← Prev</button>
+              <div style="color:var(--text-secondary);font-size:0.82em;">Page ${superadminTenantPage} of ${superadminTenantTotalPages}</div>
+              <button class="btn-secondary" onclick="superadminTenantNextPage()" style="padding:6px 10px;" ${superadminTenantPage >= superadminTenantTotalPages ? 'disabled' : ''}>Next →</button>
+            </div>
           </div>
         </div>
 
@@ -3111,7 +3132,20 @@ function selectTenantGuild(guildId) {
 
 function applySuperadminTenantFilter(query) {
   superadminTenantSearch = String(query || '');
+  superadminTenantPage = 1;
   if (superadminTenantSearch.trim() !== '') superadminTenantDirectoryCollapsed = false;
+  loadSuperadminView();
+}
+
+function superadminTenantPrevPage() {
+  if (superadminTenantPage <= 1) return;
+  superadminTenantPage -= 1;
+  loadSuperadminView();
+}
+
+function superadminTenantNextPage() {
+  if (superadminTenantPage >= superadminTenantTotalPages) return;
+  superadminTenantPage += 1;
   loadSuperadminView();
 }
 

@@ -566,6 +566,92 @@ class WebServer {
       }
     });
 
+    this.app.get('/api/user/tickets', async (req, res) => {
+      if (!req.session.discordUser) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
+      try {
+        const discordId = req.session.discordUser.id;
+        const guildId = getRequestedGuildId(req, { allowFallback: true });
+        if (!guildId) return res.status(400).json({ success: false, message: 'Select a server first' });
+        const tickets = ticketService.getAllTickets({ guildId, opener: discordId });
+        res.json({ success: true, tickets });
+      } catch (error) {
+        logger.error('Error fetching user tickets:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.get('/api/user/role-panels', async (req, res) => {
+      if (!req.session.discordUser) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
+      try {
+        const guildId = getRequestedGuildId(req, { allowFallback: true });
+        if (!guildId) return res.status(400).json({ success: false, message: 'Select a server first' });
+        const rolePanelService = require('../services/rolePanelService');
+        const panels = rolePanelService.listPanels(guildId)
+          .map(p => ({ ...p, roles: (p.roles || []).filter(r => r.enabled !== 0) }))
+          .filter(p => (p.roles || []).length > 0);
+        res.json({ success: true, panels });
+      } catch (error) {
+        logger.error('Error fetching user role panels:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/user/roles/toggle', async (req, res) => {
+      if (!req.session.discordUser) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
+      try {
+        const guildId = getRequestedGuildId(req, { allowFallback: true });
+        const { roleId, panelId } = req.body || {};
+        if (!guildId || !roleId) return res.status(400).json({ success: false, message: 'guild and role are required' });
+        const guild = await fetchGuildById(guildId);
+        if (!guild) return res.status(404).json({ success: false, message: 'Guild not found' });
+        const member = await guild.members.fetch(req.session.discordUser.id).catch(() => null);
+        if (!member) return res.status(404).json({ success: false, message: 'Member not found' });
+
+        const rolePanelService = require('../services/rolePanelService');
+        const panel = panelId ? rolePanelService.getPanel(parseInt(panelId), guildId) : rolePanelService.getPanelByRole(roleId, guildId);
+        if (!panel) return res.status(400).json({ success: false, message: 'Panel not found' });
+        if (!(panel.roles || []).some(r => r.role_id === roleId && r.enabled !== 0)) {
+          return res.status(400).json({ success: false, message: 'Role not claimable in this panel' });
+        }
+
+        const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
+        if (!role) return res.status(404).json({ success: false, message: 'Role not found in server' });
+
+        const botMember = guild.members.me || await guild.members.fetch(this.client.user.id).catch(() => null);
+        if (!botMember) return res.status(500).json({ success: false, message: 'Bot member not available' });
+        if (!botMember.permissions.has('ManageRoles')) return res.status(403).json({ success: false, message: 'Bot lacks ManageRoles permission' });
+        if (role.position >= botMember.roles.highest.position) return res.status(403).json({ success: false, message: 'Bot cannot manage this role (hierarchy)' });
+
+        const hasRole = member.roles.cache.has(roleId);
+        if (hasRole) {
+          await member.roles.remove(role, 'Self-serve web role unclaim');
+        } else {
+          await member.roles.add(role, 'Self-serve web role claim');
+        }
+
+        if (!hasRole && panel.single_select === 1) {
+          for (const r of panel.roles || []) {
+            if (r.role_id === roleId) continue;
+            if (member.roles.cache.has(r.role_id)) {
+              const roleObj = guild.roles.cache.get(r.role_id);
+              if (roleObj) await member.roles.remove(roleObj, 'Single-select panel enforcement (web)');
+            }
+          }
+        }
+
+        res.json({ success: true, action: hasRole ? 'removed' : 'added', roleName: role.name, message: `${hasRole ? 'Removed' : 'Added'} role: ${role.name}` });
+      } catch (error) {
+        logger.error('Error toggling user role via web:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
     this.app.get('/api/servers/me', async (req, res) => {
       if (!req.session.discordUser) {
         return res.status(401).json({ success: false, message: 'Not authenticated' });
@@ -3355,6 +3441,7 @@ class WebServer {
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
         const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
         const allTickets = ticketService.getAllTickets({
+          guildId: req.guildId || '',
           status,
           statuses: statusList,
           category: category ? parseInt(category) : undefined,

@@ -384,9 +384,9 @@ class TicketService {
 
       // Insert into DB
       db.prepare(`
-        INSERT INTO tickets (ticket_number, category_id, category_name, channel_id, opener_id, opener_name, template_responses)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(ticketNumber, categoryId, category.name, ticketChannel.id, interaction.user.id, interaction.user.username, JSON.stringify(templateResponses || {}));
+        INSERT INTO tickets (ticket_number, guild_id, category_id, category_name, channel_id, opener_id, opener_name, template_responses)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(ticketNumber, normalizedGuildId, categoryId, category.name, ticketChannel.id, interaction.user.id, interaction.user.username, JSON.stringify(templateResponses || {}));
 
       return { success: true, channelId: ticketChannel.id, ticketNumber };
     } catch (error) {
@@ -595,9 +595,10 @@ class TicketService {
     return db.prepare('SELECT * FROM tickets WHERE category_id = ? ORDER BY created_at DESC').all(categoryId);
   }
 
-  getAllTickets({ status, statuses, category, opener, q, from, to } = {}) {
+  getAllTickets({ guildId, status, statuses, category, opener, q, from, to } = {}) {
     let query = 'SELECT * FROM tickets WHERE 1=1';
-    const params = [];
+    if (guildId) { query += ' AND guild_id = ?'; }
+    const params = guildId ? [guildId] : [];
     if (status) { query += ' AND status = ?'; params.push(status); }
     if (Array.isArray(statuses) && statuses.length > 0) {
       query += ` AND status IN (${statuses.map(() => '?').join(',')})`;

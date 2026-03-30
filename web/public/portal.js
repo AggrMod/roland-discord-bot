@@ -1678,6 +1678,10 @@ function switchSection(sectionName) {
     loadEnvStatusBar();
   } else if (sectionName === 'heist' && userData && heistEnabled) {
     loadAvailableMissions();
+  } else if (sectionName === 'self-serve-roles') {
+    loadSelfServeRolesPublic();
+  } else if (sectionName === 'ticketing') {
+    loadUserTicketOverview();
   } else if (sectionName === 'plans') {
     updatePlanPrices();
     if (isAdmin) loadCurrentPlan();
@@ -7273,11 +7277,102 @@ function loadApiRefView() {
   `;
 }
 
+// ==================== SELF-SERVE ROLES (PUBLIC WEB CLAIM) ====================
+
+async function loadSelfServeRolesPublic() {
+  const container = document.getElementById('selfServeRolesView');
+  if (!container) return;
+  container.innerHTML = `<div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading claimable roles...</p></div>`;
+  try {
+    const res = await fetch('/api/user/role-panels', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.message || 'Failed to load role panels');
+    const panels = json.panels || [];
+    if (!panels.length) {
+      container.innerHTML = `<p style="color:var(--text-secondary);">No self-serve role panels are configured for this server yet.</p>`;
+      return;
+    }
+    container.innerHTML = panels.map(p => {
+      const roles = (p.roles || []).filter(r => r.enabled !== 0);
+      const buttons = roles.map(r => `<button class="btn-secondary" onclick="toggleWebClaimRole(${p.id}, '${escapeHtml(r.role_id)}', this)" style="font-size:0.85em;padding:8px 12px;">${escapeHtml(r.label || r.role_id)}</button>`).join(' ');
+      return `
+        <div style="padding:14px;border:1px solid rgba(99,102,241,0.2);border-radius:10px;background:rgba(14,23,44,0.5);margin-bottom:12px;">
+          <div style="font-weight:700;color:#e0e7ff;margin-bottom:4px;">${escapeHtml(p.title || 'Role Panel')}</div>
+          <div style="color:var(--text-secondary);font-size:0.85em;margin-bottom:10px;">${escapeHtml(p.description || '')}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">${buttons || '<span style="color:var(--text-secondary);">No claimable roles</span>'}</div>
+          ${p.single_select ? '<div style="margin-top:8px;color:#fbbf24;font-size:0.8em;">Single-select: choosing one role removes other roles from this panel.</div>' : ''}
+        </div>`;
+    }).join('');
+  } catch (e) {
+    container.innerHTML = `<p style="color:#ef4444;">${escapeHtml(e.message || 'Failed to load roles')}</p>`;
+  }
+}
+
+async function toggleWebClaimRole(panelId, roleId, btn) {
+  try {
+    if (btn) { btn.disabled = true; }
+    const res = await fetch('/api/user/roles/toggle', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({ panelId, roleId })
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.message || 'Failed to toggle role');
+    showSuccess(json.message || 'Role updated');
+  } catch (e) {
+    showError(e.message || 'Failed to toggle role');
+  } finally {
+    if (btn) { btn.disabled = false; }
+  }
+}
+
 // ==================== TICKETING VIEW ====================
 
 let _ticketCategories = [];
 let _ticketChannelsList = [];
 let _ticketRolesList = [];
+
+async function loadUserTicketOverview() {
+  const section = document.querySelector('#section-ticketing .card');
+  if (!section) return;
+  section.innerHTML = `<div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading your tickets...</p></div>`;
+  try {
+    const res = await fetch('/api/user/tickets', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.message || 'Failed to load tickets');
+    const tickets = json.tickets || [];
+    if (!tickets.length) {
+      section.innerHTML = `<p style="color:var(--text-secondary);">No tickets found for this server yet.</p>`;
+      return;
+    }
+    const rows = tickets.map(t => `
+      <tr>
+        <td style="padding:8px;">${escapeHtml(String(t.ticket_number || t.id))}</td>
+        <td style="padding:8px;">${escapeHtml(t.status || '')}</td>
+        <td style="padding:8px;">${escapeHtml(t.category_name || '')}</td>
+        <td style="padding:8px;">${t.closed_at ? new Date(t.closed_at).toLocaleString() : '—'}</td>
+        <td style="padding:8px;">${new Date(t.created_at).toLocaleString()}</td>
+      </tr>
+    `).join('');
+    section.innerHTML = `
+      <div style="margin-bottom:10px;color:var(--text-secondary);font-size:0.85em;">Showing all your tickets in this tenant context (including deleted/closed).</div>
+      <div style="overflow:auto;border:1px solid rgba(99,102,241,0.2);border-radius:10px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr style="background:rgba(99,102,241,0.12);text-align:left;">
+            <th style="padding:8px;">#</th>
+            <th style="padding:8px;">Status</th>
+            <th style="padding:8px;">Category</th>
+            <th style="padding:8px;">Closed</th>
+            <th style="padding:8px;">Created</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  } catch (e) {
+    section.innerHTML = `<p style="color:#ef4444;">${escapeHtml(e.message || 'Failed to load tickets')}</p>`;
+  }
+}
 
 async function loadTicketingView() {
   const container = document.getElementById('adminTicketingContent');

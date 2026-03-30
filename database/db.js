@@ -278,6 +278,7 @@ function initDatabase() {
     CREATE TABLE IF NOT EXISTS tickets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       ticket_number INTEGER UNIQUE,
+      guild_id TEXT DEFAULT '',
       category_id INTEGER,
       category_name TEXT,
       channel_id TEXT UNIQUE,
@@ -419,6 +420,7 @@ function initDatabase() {
     `CREATE TRIGGER IF NOT EXISTS update_votes_timestamp AFTER UPDATE ON votes BEGIN UPDATE votes SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
     `CREATE TRIGGER IF NOT EXISTS update_micro_verify_timestamp AFTER UPDATE ON micro_verify_requests BEGIN UPDATE micro_verify_requests SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
     'ALTER TABLE micro_verify_requests ADD COLUMN guild_id TEXT DEFAULT ""',
+    'ALTER TABLE tickets ADD COLUMN guild_id TEXT DEFAULT ""',
     `CREATE TRIGGER IF NOT EXISTS update_tenants_timestamp AFTER UPDATE ON tenants BEGIN UPDATE tenants SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
     `CREATE TRIGGER IF NOT EXISTS update_tenant_modules_timestamp AFTER UPDATE ON tenant_modules BEGIN UPDATE tenant_modules SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
     `CREATE TRIGGER IF NOT EXISTS update_tenant_branding_timestamp AFTER UPDATE ON tenant_branding BEGIN UPDATE tenant_branding SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,

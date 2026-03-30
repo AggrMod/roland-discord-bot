@@ -5164,9 +5164,8 @@ async function loadAdminRoles() {
     ];
 
     let html = '';
-    html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+    html += `<div style="margin-bottom:12px;">
       <p style="color:var(--text-secondary); font-size:0.85em; margin:0;">Define collection-based tiers and trait-based roles for automatic Discord role assignment.</p>
-      <button class="btn-primary" onclick="openAddRuleModal()" style="font-size:0.85em; padding:8px 16px; white-space:nowrap;">➕ Add Rule</button>
     </div>`;
 
     if (allRules.length === 0) {

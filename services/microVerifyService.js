@@ -145,7 +145,7 @@ class MicroVerifyService {
   /**
    * Create a new verification request
    */
-  createRequest(discordId, username) {
+  createRequest(discordId, username, guildId = '') {
     try {
       const config = this.getConfig();
 
@@ -211,9 +211,9 @@ class MicroVerifyService {
       // Create request
       const result = db.prepare(`
         INSERT INTO micro_verify_requests 
-        (discord_id, username, expected_amount, destination_wallet, expires_at, status)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(discordId, username, amount, config.receiveWallet, expiresAt, 'pending');
+        (discord_id, username, guild_id, expected_amount, destination_wallet, expires_at, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(discordId, username, guildId || '', amount, config.receiveWallet, expiresAt, 'pending');
 
       logger.log(`Micro-verify request created: ${discordId} -> ${amount} SOL`);
 
@@ -303,7 +303,7 @@ class MicroVerifyService {
 
       // Link wallet to user
       const walletService = require('./walletService');
-      const linkResult = walletService.linkWallet(request.discord_id, request.username, senderWallet);
+      const linkResult = walletService.linkWallet(request.discord_id, request.username, senderWallet, request.guild_id || '');
 
       logger.log(`Micro-verify completed: ${request.discord_id} -> ${senderWallet} (${txSignature})`);
 

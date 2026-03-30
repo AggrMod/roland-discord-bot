@@ -1489,6 +1489,26 @@ class WebServer {
         }
 
         const result = settingsManager.updateSettings(sanitized);
+
+        // Sync OG role service with portal verification settings (global config)
+        try {
+          const ogRoleService = require('../services/ogRoleService');
+          const fresh = settingsManager.getSettings();
+          if (fresh.ogRoleId !== undefined) {
+            if (fresh.ogRoleId) {
+              ogRoleService.setRole(fresh.ogRoleId);
+              ogRoleService.setEnabled(true);
+            } else {
+              ogRoleService.setEnabled(false);
+            }
+          }
+          if (fresh.ogRoleLimit !== undefined) {
+            ogRoleService.setLimit(fresh.ogRoleLimit || 1);
+          }
+        } catch (e) {
+          logger.warn('OG role config sync warning:', e?.message || e);
+        }
+
         res.json(result);
       } catch (error) {
         logger.error('Error updating settings:', error);
@@ -3133,7 +3153,7 @@ class WebServer {
         const discordId = req.session.discordUser.id;
         const username = req.session.discordUser.username;
 
-        const result = microVerifyService.createRequest(discordId, username);
+        const result = microVerifyService.createRequest(discordId, username, req.guildId || '');
         res.json(result);
       } catch (error) {
         logger.error('Error creating micro-verify request:', error);

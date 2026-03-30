@@ -4424,44 +4424,7 @@ async function loadVerificationSettings() {
             <span style="font-size:0.8em;color:var(--text-secondary);">(periodically re-syncs holder roles)</span>
           </label>
         </div>
-        <div style="display:${isSuperadmin ? 'block' : 'none'};margin-top:var(--space-4);padding-top:var(--space-3);border-top:1px solid rgba(99,102,241,0.12);">
-          <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
-            <input type="checkbox" id="ver_moduleMicroVerifyEnabled"${(vs.moduleMicroVerifyEnabled ?? false) ? ' checked' : ''}
-              onchange="document.getElementById('verMicroSubFields').style.display=this.checked?'block':'none';"> 🔐 Enable Micro-Transfer Verification (Global / Superadmin)
-          </label>
-        </div>
-        <div id="verMicroSubFields" style="display:${isSuperadmin && (vs.moduleMicroVerifyEnabled ?? false) ? 'block' : 'none'};margin-top:var(--space-3);padding:var(--space-3);background:rgba(30,41,59,0.4);border-radius:8px;border:1px solid rgba(99,102,241,0.12);">
-          <div style="${gridRow}">
-            <div>
-              <label style="${fieldLabel}">Verification Receive Wallet</label>
-              <input type="text" id="ver_verificationReceiveWallet" placeholder="Solana wallet address" value="${escapeHtml(vs.verificationReceiveWallet ?? '')}" style="${fieldInput}">
-            </div>
-            <div>
-              <label style="${fieldLabel}">NFT Activity Webhook Secret</label>
-              <input type="text" id="ver_nftActivityWebhookSecret" placeholder="Optional shared secret" value="${escapeHtml(vs.nftActivityWebhookSecret ?? '')}" style="${fieldInput}">
-            </div>
-          </div>
-          <div style="${gridRow}margin-top:var(--space-3);">
-            <div>
-              <label style="${fieldLabel}">Verify Request TTL (minutes)</label>
-              <input type="number" id="ver_verifyRequestTtlMinutes" min="1" max="1440" value="${vs.verifyRequestTtlMinutes ?? 15}" style="${fieldInput}">
-            </div>
-            <div>
-              <label style="${fieldLabel}">Poll Interval (seconds)</label>
-              <input type="number" id="ver_pollIntervalSeconds" min="5" max="300" value="${vs.pollIntervalSeconds ?? 30}" style="${fieldInput}">
-            </div>
-          </div>
-          <div style="${gridRow}margin-top:var(--space-3);">
-            <div>
-              <label style="${fieldLabel}">Verify Rate Limit (minutes)</label>
-              <input type="number" id="ver_verifyRateLimitMinutes" min="1" max="60" value="${vs.verifyRateLimitMinutes ?? 5}" style="${fieldInput}">
-            </div>
-            <div>
-              <label style="${fieldLabel}">Max Pending Per User</label>
-              <input type="number" id="ver_maxPendingPerUser" min="1" max="10" value="${vs.maxPendingPerUser ?? 1}" style="${fieldInput}">
-            </div>
-          </div>
-        </div>
+
         <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);margin-top:var(--space-4);">
           <button class="btn-primary" onclick="saveVerificationSettings()" style="font-size:0.85em;padding:8px 16px;">💾 Save Verification Settings</button>
         </div>
@@ -4491,16 +4454,7 @@ async function saveVerificationSettings() {
     moduleRoleResyncEnabled: !!document.getElementById('ver_autoResyncEnabled')?.checked,
   };
 
-  // Global micro-verify settings are superadmin-only
-  if (isSuperadmin) {
-    payload.moduleMicroVerifyEnabled = !!document.getElementById('ver_moduleMicroVerifyEnabled')?.checked;
-    payload.verificationReceiveWallet = (document.getElementById('ver_verificationReceiveWallet')?.value || '').trim();
-    payload.nftActivityWebhookSecret = (document.getElementById('ver_nftActivityWebhookSecret')?.value || '').trim();
-    payload.verifyRequestTtlMinutes = parseInt(document.getElementById('ver_verifyRequestTtlMinutes')?.value) || 15;
-    payload.pollIntervalSeconds = parseInt(document.getElementById('ver_pollIntervalSeconds')?.value) || 30;
-    payload.verifyRateLimitMinutes = parseInt(document.getElementById('ver_verifyRateLimitMinutes')?.value) || 5;
-    payload.maxPendingPerUser = parseInt(document.getElementById('ver_maxPendingPerUser')?.value) || 1;
-  }
+
   try {
     const res = await fetch('/api/admin/settings', {
       method: 'PUT',

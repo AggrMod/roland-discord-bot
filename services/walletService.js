@@ -3,7 +3,7 @@ const logger = require('../utils/logger');
 const clientProvider = require('../utils/clientProvider');
 
 class WalletService {
-  linkWallet(discordId, username, walletAddress) {
+  linkWallet(discordId, username, walletAddress, guildId = '') {
     try {
       // Wrap existence check + INSERT in a transaction to prevent race conditions
       const linkTransaction = db.transaction(() => {
@@ -35,7 +35,7 @@ class WalletService {
 
       if (result.success && result.isFirstWallet) {
         logger.log(`Wallet ${walletAddress} linked to user ${discordId}`);
-        this.triggerOGRoleAssignment(discordId, username);
+        this.triggerOGRoleAssignment(discordId, username, guildId);
       } else if (result.success) {
         logger.log(`Wallet ${walletAddress} linked to user ${discordId}`);
       }
@@ -47,7 +47,7 @@ class WalletService {
     }
   }
 
-  async triggerOGRoleAssignment(discordId, username) {
+  async triggerOGRoleAssignment(discordId, username, guildIdHint = '') {
     try {
       // Defer OG role assignment to avoid blocking verification
       setImmediate(async () => {
@@ -60,9 +60,9 @@ class WalletService {
             return;
           }
 
-          const guildId = process.env.GUILD_ID || process.env.DISCORD_GUILD_ID;
+          const guildId = guildIdHint || process.env.GUILD_ID || process.env.DISCORD_GUILD_ID;
           if (!guildId) {
-            logger.warn('GUILD_ID not configured for OG role assignment');
+            logger.warn('No guild context available for OG role assignment');
             return;
           }
 

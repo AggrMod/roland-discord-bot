@@ -2549,6 +2549,7 @@ let selectedTenantGuildId = null;
 let selectedTenantDetailCache = null;
 let selectedTenantAuditCache = [];
 let superadminTenantSearch = '';
+let superadminActiveTab = 'tenants';
 
 const TENANT_PLAN_LABELS = {
   starter: 'Starter',
@@ -2854,12 +2855,19 @@ async function loadSuperadminView() {
           </div>
           <div style="color:#cbd5e1;font-size:0.82em;max-width:520px;">Tenant-scoped actions below (plan/modules/branding/status) apply to this server. Superadmin list + era catalog are global controls.</div>
         </div>
-        <div style="display:grid; gap:12px; grid-template-columns:minmax(0,1fr) auto;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button data-superadmin-tab-btn="tenants" class="btn-primary" onclick="showSuperadminTab('tenants')" style="padding:8px 12px;">Tenants</button>
+          <button data-superadmin-tab-btn="detail" class="btn-secondary" onclick="showSuperadminTab('detail')" style="padding:8px 12px;">Tenant Detail</button>
+          <button data-superadmin-tab-btn="eras" class="btn-secondary" onclick="showSuperadminTab('eras')" style="padding:8px 12px;">Era Assignments</button>
+          <button data-superadmin-tab-btn="superadmins" class="btn-secondary" onclick="showSuperadminTab('superadmins')" style="padding:8px 12px;">Superadmins</button>
+        </div>
+
+        <div id="superadminSection-superadminsInput" style="display:grid; gap:12px; grid-template-columns:minmax(0,1fr) auto;">
           <input id="adminSuperadminUserIdInput" type="text" placeholder="Discord ID" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; width:100%;">
           <button id="adminSuperadminAddBtn" class="btn-primary" onclick="addSuperadminFromInput()" style="padding:10px 16px;">Add</button>
         </div>
 
-        <div style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+        <div id="superadminSection-superadmins" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
             <h4 style="margin:0; color:#c9d6ff;">Current superadmins <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
             <span style="color:var(--text-secondary); font-size:0.85em;">Env roots cannot be removed</span>
@@ -2869,7 +2877,7 @@ async function loadSuperadminView() {
           </div>
         </div>
 
-        <div style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+        <div id="superadminSection-tenants" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
             <h4 style="margin:0; color:#c9d6ff;">Tenant Management <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(99,102,241,0.2);font-size:0.72em;vertical-align:middle;">Tenant Scoped</span></h4>
             <button class="btn-secondary" onclick="loadSuperadminView()" style="padding:8px 12px;">Refresh</button>
@@ -2894,7 +2902,7 @@ async function loadSuperadminView() {
           </div>
         </div>
 
-        <div style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+        <div id="superadminSection-detail" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
             <h4 style="margin:0; color:#c9d6ff;">Tenant Detail <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(99,102,241,0.2);font-size:0.72em;vertical-align:middle;">Tenant Scoped</span></h4>
             <span style="color:var(--text-secondary); font-size:0.85em;">Select a guild to edit plan, modules, branding, and status</span>
@@ -2902,7 +2910,7 @@ async function loadSuperadminView() {
           <div id="adminTenantDetailContent">${renderTenantDetailPanel(null)}</div>
         </div>
 
-        <div style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+        <div id="superadminSection-eras" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
             <h4 style="margin:0; color:#c9d6ff;">Era Assignments <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global Control</span></h4>
             <button class="btn-secondary" onclick="loadEraAssignments()" style="padding:8px 12px;">Refresh</button>
@@ -2927,6 +2935,7 @@ async function loadSuperadminView() {
       await loadSelectedTenantDetail();
     }
     loadEraAssignments();
+    showSuperadminTab(superadminActiveTab || 'tenants');
   } catch (error) {
     content.innerHTML = `<div style="color:#fca5a5; text-align:center; padding:20px;">Error loading superadmin view: ${escapeHtml(error.message || 'Unknown error')}</div>`;
   }
@@ -3063,6 +3072,25 @@ async function revokeEra(guildId, eraKey) {
   } catch (error) {
     alert('Error revoking era: ' + error.message);
   }
+}
+
+function showSuperadminTab(tab) {
+  superadminActiveTab = tab;
+  const sections = {
+    superadmins: ['superadminSection-superadminsInput', 'superadminSection-superadmins'],
+    tenants: ['superadminSection-tenants'],
+    detail: ['superadminSection-detail'],
+    eras: ['superadminSection-eras'],
+  };
+  Object.entries(sections).forEach(([key, ids]) => {
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = (key === tab) ? '' : 'none';
+    });
+  });
+  document.querySelectorAll('[data-superadmin-tab-btn]').forEach(btn => {
+    btn.className = (btn.dataset.superadminTabBtn === tab) ? 'btn-primary' : 'btn-secondary';
+  });
 }
 
 function selectTenantGuild(guildId) {

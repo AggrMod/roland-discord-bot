@@ -36,8 +36,13 @@ function applyEmbedBranding(embed, {
   embed.setColor(color);
 
   const logo = br.logo || fallbackLogoUrl || null;
-  if (useThumbnail && logo && typeof embed.setThumbnail === 'function') {
-    try { embed.setThumbnail(logo); } catch {}
+  if (typeof embed.setThumbnail === 'function') {
+    if (useThumbnail && logo) {
+      try { embed.setThumbnail(logo); } catch {}
+    } else if (!useThumbnail) {
+      // Explicitly clear thumbnail so edited messages don't retain old right-side logo
+      try { embed.setThumbnail(null); } catch {}
+    }
   }
 
   const baseFooter = br.footer || defaultFooter;

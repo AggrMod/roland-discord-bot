@@ -333,7 +333,7 @@ class NFTActivityService {
         ? `${collectionDisplay} #${evt.tokenMint.slice(-4)}`
         : (tokenIdShort || '—');
 
-    const solIcon = process.env.SOL_EMOJI || '◎';
+    const solIcon = process.env.SOL_EMOJI || '<:1000042064:1488241763222290564>';
     const priceDisplay = evt.priceSol !== null && evt.priceSol !== undefined && evt.priceSol > 0 ? `${solIcon} ${Number(evt.priceSol).toFixed(3)} SOL` : '—';
 
     const walletToDisplay = (wallet) => {

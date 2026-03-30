@@ -631,6 +631,30 @@ class TreasuryService {
     }
   }
 
+  updateWallet(id, { address, label, enabled } = {}, guildId = null) {
+    try {
+      const sets = [];
+      const params = [];
+      if (address !== undefined) {
+        if (!this.isValidSolanaAddress(address)) return { success: false, message: 'Invalid Solana wallet address' };
+        sets.push('address = ?');
+        params.push(address);
+      }
+      if (label !== undefined) { sets.push('label = ?'); params.push(label || ''); }
+      if (enabled !== undefined) { sets.push('enabled = ?'); params.push(enabled ? 1 : 0); }
+      if (!sets.length) return { success: false, message: 'Nothing to update' };
+
+      if (guildId) params.push(id, guildId); else params.push(id);
+      const q = `UPDATE treasury_wallets SET ${sets.join(', ')} WHERE id = ?${guildId ? ' AND guild_id = ?' : ''}`;
+      const info = db.prepare(q).run(...params);
+      if (!info.changes) return { success: false, message: 'Wallet not found' };
+      return { success: true };
+    } catch (e) {
+      logger.error('Error updating treasury wallet:', e);
+      return { success: false, message: 'Failed to update wallet' };
+    }
+  }
+
   removeWallet(id, guildId = null) {
     try {
       let info;

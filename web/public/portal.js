@@ -4543,7 +4543,7 @@ async function loadTreasuryModuleSettings() {
 
     pane.innerHTML = `
       <div style="${cardStyle}">
-        <h3 style="${cardHeader}">💰 Treasury Settings</h3>
+        <h3 style="${cardHeader}">💰 Wallet Tracker Settings</h3>
         <div style="${gridRow}">
           <div>
             <label style="${fieldLabel}">Solana Wallet Address</label>
@@ -4580,7 +4580,7 @@ async function loadTreasuryModuleSettings() {
           </div>
         </div>
         <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);margin-top:var(--space-4);">
-          <button class="btn-primary" onclick="saveTreasuryModuleSettings()" style="font-size:0.85em;padding:8px 16px;">💾 Save Treasury Settings</button>
+          <button class="btn-primary" onclick="saveTreasuryModuleSettings()" style="font-size:0.85em;padding:8px 16px;">💾 Save Wallet Tracker Settings</button>
         </div>
       </div>
       <!-- Wallet list injected below -->
@@ -4619,29 +4619,44 @@ async function loadTreasuryWalletList() {
     const res = await fetch('/api/admin/treasury/wallets', { credentials: 'include' });
     const data = await res.json();
     const wallets = data.wallets || [];
-    const rows = wallets.length ? wallets.map(w => `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid rgba(99,102,241,0.08);">
-        <div>
-          <div style="font-size:0.85em;color:#e0e7ff;font-family:monospace;">${escapeHtml(w.address)}</div>
-          ${w.label ? `<div style="font-size:0.78em;color:#94a3b8;">${escapeHtml(w.label)}</div>` : ''}
-        </div>
-        <button class="trs-remove-wallet-btn btn-danger" data-id="${w.id}" style="font-size:0.8em;padding:4px 10px;">🗑️ Remove</button>
-      </div>
-    `).join('') : `<div style="color:var(--text-secondary);font-size:0.85em;padding:12px;">No additional wallets. The primary wallet above is always tracked.</div>`;
+
+    const truncAddr = (a) => a && a.length > 12 ? a.slice(0, 6) + '...' + a.slice(-4) : (a || '—');
+    const tableRows = wallets.length ? wallets.map(w => `
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
+        <td style="padding:8px 10px;font-size:0.85em;color:var(--text-primary);">${escapeHtml(w.label || 'Wallet')}</td>
+        <td style="padding:8px 10px;font-size:0.85em;color:var(--text-secondary);font-family:monospace;" title="${escapeHtml(w.address)}">${truncAddr(w.address)}</td>
+        <td style="padding:8px 10px;font-size:0.85em;color:${w.enabled !== 0 ? '#86efac' : '#fca5a5'};">${w.enabled !== 0 ? 'Yes' : 'No'}</td>
+        <td style="padding:8px 10px;">
+          <button class="trs-edit-wallet-btn" data-id="${w.id}" data-address="${escapeHtml(w.address)}" data-label="${escapeHtml(w.label || '')}" data-enabled="${w.enabled !== 0 ? 1 : 0}" style="font-size:0.8em;padding:4px 10px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-right:4px;">✏️ Edit</button>
+          <button class="trs-remove-wallet-btn" data-id="${w.id}" style="font-size:0.8em;padding:4px 10px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
+        </td>
+      </tr>
+    `).join('') : `<tr><td colspan="4" style="padding:12px;color:var(--text-secondary);font-size:0.85em;text-align:center;">No tracked wallets yet. Add one below.</td></tr>`;
+
     card.innerHTML = `
-      <h3 style="${cardHeader}">💼 Additional Tracked Wallets</h3>
-      <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:12px;">Track multiple Solana wallets for alerts. The primary wallet above receives full balance tracking; additional wallets receive TX alerts only.</p>
-      <div id="trs_walletRows" style="border:1px solid rgba(99,102,241,0.18);border-radius:8px;overflow:hidden;margin-bottom:14px;">${rows}</div>
-      <div style="display:flex;gap:8px;align-items:flex-end;">
-        <div style="flex:1;">
-          <input type="text" id="trs_newWalletAddr" placeholder="Solana wallet address" style="${fieldInput}">
+      <h3 style="${cardHeader}">📡 Tracked Wallets</h3>
+      <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:12px;">Manage all tracked wallets with custom labels. This mirrors the NFT Tracker settings layout.</p>
+      <div style="overflow-x:auto;margin-bottom:14px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr style="border-bottom:2px solid rgba(255,255,255,0.1);">
+            <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;">Label</th>
+            <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;">Address</th>
+            <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;">On</th>
+            <th style="padding:8px 10px;"></th>
+          </tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </div>
+      <div style="padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);">
+        <h4 style="color:#c9d6ff;font-size:0.9em;font-weight:600;margin:0 0 10px;">➕ Add Wallet</h4>
+        <div style="display:flex;gap:8px;align-items:flex-end;">
+          <div style="flex:1;"><input type="text" id="trs_newWalletAddr" placeholder="Solana wallet address" style="${fieldInput}"></div>
+          <div style="width:180px;"><input type="text" id="trs_newWalletLabel" placeholder="Label (optional)" style="${fieldInput}"></div>
+          <button class="btn-primary" onclick="addTreasuryWallet()" style="font-size:0.85em;padding:10px 16px;white-space:nowrap;">Add Wallet</button>
         </div>
-        <div style="width:160px;">
-          <input type="text" id="trs_newWalletLabel" placeholder="Label (optional)" style="${fieldInput}">
-        </div>
-        <button class="btn-primary" onclick="addTreasuryWallet()" style="font-size:0.85em;padding:10px 16px;white-space:nowrap;">+ Add Wallet</button>
       </div>
     `;
+
     card.querySelectorAll('.trs-remove-wallet-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         if (!confirm('Remove this wallet?')) return;
@@ -4653,6 +4668,10 @@ async function loadTreasuryWalletList() {
           else showError(d.message || 'Failed to remove wallet');
         } catch { showError('Error removing wallet'); btn.disabled = false; }
       });
+    });
+
+    card.querySelectorAll('.trs-edit-wallet-btn').forEach(btn => {
+      btn.addEventListener('click', () => openEditTreasuryWalletModal(btn.dataset.id, btn.dataset.address, btn.dataset.label, btn.dataset.enabled === '1'));
     });
   } catch (e) {
     console.error('[Treasury] Wallet list error:', e);
@@ -4680,6 +4699,62 @@ async function addTreasuryWallet() {
   } catch { showError('Error adding wallet'); }
 }
 
+async function openEditTreasuryWalletModal(id, address, label, enabled) {
+  const old = document.getElementById('trsEditWalletModal');
+  if (old) old.remove();
+  const fi = 'width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;';
+  const lb = 'display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;';
+  const overlay = document.createElement('div');
+  overlay.id = 'trsEditWalletModal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;';
+  overlay.innerHTML = `
+    <div style="background:var(--card-bg,#1e293b);border:1px solid rgba(99,102,241,0.3);border-radius:12px;padding:24px;width:480px;max-width:95vw;">
+      <h3 style="margin:0 0 16px;color:var(--text-primary,#e0e7ff);">✏️ Edit Wallet</h3>
+      <div style="display:grid;gap:14px;">
+        <div><label style="${lb}">Wallet Label</label><input id="trsEditLabel" type="text" value="${escapeHtml(label || '')}" style="${fi}"></div>
+        <div><label style="${lb}">Wallet Address</label><input id="trsEditAddr" type="text" value="${escapeHtml(address || '')}" style="${fi};font-family:monospace;"></div>
+        <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input id="trsEditEnabled" type="checkbox" ${enabled ? 'checked' : ''}> Enabled</label>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:18px;">
+        <button id="trsEditSaveBtn" class="btn-primary" style="font-size:0.85em;padding:8px 16px;">Save</button>
+        <button id="trsEditCancelBtn" class="btn-secondary" style="font-size:0.85em;padding:8px 16px;">Cancel</button>
+        <span id="trsEditFeedback" style="font-size:0.82em;"></span>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.getElementById('trsEditCancelBtn').addEventListener('click', () => overlay.remove());
+  document.getElementById('trsEditSaveBtn').addEventListener('click', async () => {
+    const saveBtn = document.getElementById('trsEditSaveBtn');
+    const feedback = document.getElementById('trsEditFeedback');
+    saveBtn.disabled = true; saveBtn.textContent = 'Saving...';
+    try {
+      const res = await fetch('/api/admin/treasury/wallets/' + id, {
+        method: 'PUT', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          address: (document.getElementById('trsEditAddr')?.value || '').trim(),
+          label: (document.getElementById('trsEditLabel')?.value || '').trim(),
+          enabled: !!document.getElementById('trsEditEnabled')?.checked,
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        overlay.remove();
+        showSuccess('Wallet updated');
+        loadTreasuryWalletList();
+      } else {
+        feedback.style.color = '#fca5a5';
+        feedback.textContent = data.message || 'Failed to save';
+      }
+    } catch {
+      feedback.style.color = '#fca5a5';
+      feedback.textContent = 'Network error';
+    }
+    saveBtn.disabled = false; saveBtn.textContent = 'Save';
+  });
+}
+
 async function saveTreasuryModuleSettings() {
   const payload = {
     enabled: true,
@@ -4699,8 +4774,8 @@ async function saveTreasuryModuleSettings() {
       body: JSON.stringify(payload)
     });
     const data = await res.json();
-    if (res.ok && data.success !== false) showSuccess('Treasury settings saved!');
-    else showError(data.message || 'Failed to save treasury settings');
+    if (res.ok && data.success !== false) showSuccess('Wallet tracker settings saved!');
+    else showError(data.message || 'Failed to save wallet tracker settings');
   } catch (e) {
     console.error('[Treasury] Save error:', e);
     showError('Failed to save treasury settings');

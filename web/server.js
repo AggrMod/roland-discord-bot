@@ -2593,6 +2593,18 @@ class WebServer {
       }
     });
 
+    this.app.put('/api/admin/treasury/wallets/:id', adminAuthMiddleware, (req, res) => {
+      try {
+        const { address, label, enabled } = req.body || {};
+        const result = treasuryService.updateWallet(parseInt(req.params.id), { address, label, enabled }, req.guildId);
+        if (!result.success) return res.status(400).json(result);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error updating treasury wallet:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
     this.app.delete('/api/admin/treasury/wallets/:id', adminAuthMiddleware, (req, res) => {
       try {
         const result = treasuryService.removeWallet(parseInt(req.params.id), req.guildId);

@@ -16,7 +16,8 @@ function getBranding(guildId, moduleKey) {
     const color = (brandingEnabled && mk && b[mk]) || b.brand_color || b.primary_color || null;
     const logo = (brandingEnabled && (b.logo_url || b.icon_url)) || null;
     const footer = (brandingEnabled && b.footer_text) || null;
-    return { brandingEnabled, color, logo, footer };
+    const brandName = (brandingEnabled && (b.bot_display_name || b.display_name)) || 'Guild Pilot';
+    return { brandingEnabled, color, logo, footer, brandName };
   } catch {
     return { brandingEnabled: false, color: null, logo: null, footer: null };
   }

@@ -211,15 +211,20 @@ class TicketService {
       const normalizedDescription = String(description || 'Select a category below to open a support ticket.');
 
       const embed = new EmbedBuilder()
-        .setTitle(`│ ${normalizedTitle}`)
         .setDescription(normalizedDescription)
         .setTimestamp();
 
       const branding = getBranding(normalizedGuildId, 'ticketing');
       const logo = branding.logo || this.client?.user?.displayAvatarURL?.() || null;
+      const cleanTitle = String(normalizedTitle || 'Support').replace(/^\p{Extended_Pictographic}[\uFE0F\u200D\s]*/u, '').trim() || 'Support';
+      const authorText = `${branding.brandName || 'Guild Pilot'} | ${cleanTitle}`;
       if (logo) {
         try {
-          embed.setAuthor({ name: 'Guild Pilot', iconURL: logo });
+          embed.setAuthor({ name: authorText, iconURL: logo });
+        } catch {}
+      } else {
+        try {
+          embed.setAuthor({ name: authorText });
         } catch {}
       }
 

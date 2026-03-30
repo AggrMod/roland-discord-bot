@@ -333,7 +333,8 @@ class NFTActivityService {
         ? `${collectionDisplay} #${evt.tokenMint.slice(-4)}`
         : (tokenIdShort || '—');
 
-    const priceDisplay = evt.priceSol !== null && evt.priceSol !== undefined && evt.priceSol > 0 ? `🔷 ${Number(evt.priceSol).toFixed(3)} SOL` : '—';
+    const solIcon = process.env.SOL_EMOJI || '◎';
+    const priceDisplay = evt.priceSol !== null && evt.priceSol !== undefined && evt.priceSol > 0 ? `${solIcon} ${Number(evt.priceSol).toFixed(3)} SOL` : '—';
 
     const walletToDisplay = (wallet) => {
       if (!wallet) return '—';
@@ -354,7 +355,6 @@ class NFTActivityService {
       .setTitle(`│ ${typeIcon} ${collectionDisplay} • ${typeUpper}`)
       .addFields(
         { name: 'Token Name', value: tokenDisplay, inline: true },
-        { name: 'Token ID', value: tokenIdShort || '—', inline: true },
         { name: 'Price', value: priceDisplay, inline: true },
         { name: 'When', value: whenTs ? `<t:${whenTs}:R>` : 'now', inline: true },
         { name: 'From', value: walletToDisplay(evt.fromWallet), inline: true },

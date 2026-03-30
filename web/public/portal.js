@@ -4718,15 +4718,12 @@ async function loadNftTrackerSettingsView() {
   pane.innerHTML = `<div style="${cardStyle}"><div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);"><div class="spinner"></div><p>Loading NFT tracker settings...</p></div></div>`;
 
   try {
-    // Fetch channels + alert config + collections in parallel
-    const [chRes, cfgRes, colRes] = await Promise.all([
+    // Fetch channels + collections in parallel
+    const [chRes, colRes] = await Promise.all([
       fetch('/api/admin/discord/channels', { credentials: 'include' }),
-      fetch('/api/admin/nft-activity/config', { credentials: 'include' }),
       fetch('/api/admin/nft-tracker/collections', { credentials: 'include' }),
     ]);
     const channels = chRes.ok ? ((await chRes.json()).channels || []) : [];
-    const cfgData = cfgRes.ok ? await cfgRes.json() : {};
-    const alertCfg = cfgData.config || cfgData || {};
     const colData = colRes.ok ? await colRes.json() : {};
     const collections = colData.collections || [];
 
@@ -4766,32 +4763,6 @@ async function loadNftTrackerSettingsView() {
     `).join('') : `<tr><td colspan="5" style="padding:12px;color:var(--text-secondary);font-size:0.85em;text-align:center;">No tracked collections yet. Add one below.</td></tr>`;
 
     pane.innerHTML = `
-      <div style="${cardStyle}">
-        <h3 style="${cardHeader}">⚙️ Alert Settings</h3>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);">
-          <div>
-            <label style="display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;">Alert Channel</label>
-            <select id="nts_alertChannel" style="${fieldInput}">${chOptions(alertCfg.channel_id || '')}</select>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:var(--space-3);justify-content:center;">
-            <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
-              <input type="checkbox" id="nts_enabled"${alertCfg.enabled ? ' checked' : ''}> Alerts Enabled
-            </label>
-          </div>
-          <div>
-            <label style="display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;">Minimum Sale SOL</label>
-            <input type="number" id="nts_minSol" min="0" step="0.1" value="${alertCfg.min_sol ?? 0}" style="${fieldInput};width:120px;">
-          </div>
-          <div>
-            <label style="display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;">Event Types</label>
-            <input type="text" id="nts_eventTypes" value="${escapeHtml(alertCfg.event_types || 'mint,sale,list,delist,transfer')}" placeholder="mint,sale,list,delist,transfer" style="${fieldInput}">
-            <div style="color:var(--text-secondary);font-size:0.78em;margin-top:4px;">Comma-separated list of event types to alert on.</div>
-          </div>
-        </div>
-        <div style="display:flex;justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);margin-top:var(--space-4);">
-          <button class="btn-primary" id="nts_saveAlertBtn" style="font-size:0.85em;padding:8px 16px;">💾 Save Alert Settings</button>
-        </div>
-      </div>
       <div style="${cardStyle}">
         <h3 style="${cardHeader}">📡 Tracked Collections</h3>
         <div style="overflow-x:auto;margin-bottom:14px;">
@@ -4837,28 +4808,6 @@ async function loadNftTrackerSettingsView() {
         </div>
       </div>
     `;
-
-    // Wire save alert settings
-    document.getElementById('nts_saveAlertBtn')?.addEventListener('click', async () => {
-      const btn = document.getElementById('nts_saveAlertBtn');
-      btn.disabled = true; btn.textContent = 'Saving...';
-      try {
-        const r = await fetch('/api/admin/nft-activity/config', {
-          method: 'PUT', credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            enabled: !!document.getElementById('nts_enabled')?.checked,
-            channelId: document.getElementById('nts_alertChannel')?.value || '',
-            eventTypes: document.getElementById('nts_eventTypes')?.value.trim() || 'mint,sale,list,delist,transfer',
-            minSol: parseFloat(document.getElementById('nts_minSol')?.value) || 0,
-          })
-        });
-        const d = await r.json();
-        if (d.success !== false) showSuccess('Alert settings saved!');
-        else showError(d.message || 'Failed to save');
-      } catch { showError('Error saving alert settings'); }
-      btn.disabled = false; btn.textContent = '💾 Save Alert Settings';
-    });
 
     // Wire add collection
     document.getElementById('nts_addBtn')?.addEventListener('click', async () => {

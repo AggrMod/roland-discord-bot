@@ -387,22 +387,30 @@ class NFTActivityService {
       return `\`${wallet.slice(0, 6)}...${wallet.slice(-4)}\``;
     };
 
+    const fields = [
+      { name: 'Token Name', value: tokenDisplay, inline: true },
+      { name: 'When', value: whenTs ? `<t:${whenTs}:R>` : null, inline: true },
+    ];
+    if (evt.priceSol !== null && evt.priceSol !== undefined && evt.priceSol > 0) {
+      fields.push({ name: 'Price', value: priceDisplay, inline: true });
+    }
+    if (evt.fromWallet) {
+      fields.push({ name: 'From', value: walletToDisplay(evt.fromWallet), inline: true });
+    }
+    if (evt.toWallet) {
+      fields.push({ name: 'To', value: walletToDisplay(evt.toWallet), inline: true });
+    }
+
     const embed = new EmbedBuilder()
-      .setTitle(`│ ${typeIcon} ${collectionDisplay} • ${typeUpper}`)
-      .addFields(
-        { name: 'Token Name', value: tokenDisplay, inline: true },
-        { name: 'Price', value: priceDisplay, inline: true },
-        { name: 'When', value: whenTs ? `<t:${whenTs}:R>` : 'now', inline: true },
-        { name: 'From', value: walletToDisplay(evt.fromWallet), inline: true },
-        { name: 'To', value: walletToDisplay(evt.toWallet), inline: true },
-        { name: 'Collection', value: collectionDisplay, inline: true }
-      )
+      .addFields(fields.filter(f => f.value))
       .setTimestamp();
 
     const branding = getBranding(tracked?.guild_id || '', 'nfttracker');
     const fallbackLogo = branding.logo || client?.user?.displayAvatarURL?.() || null;
+    const authorText = `${branding.brandName || 'Guild Pilot'} | ${collectionDisplay} ${typeUpper}`;
     try {
-      if (fallbackLogo) embed.setAuthor({ name: 'Guild Pilot', iconURL: fallbackLogo });
+      if (fallbackLogo) embed.setAuthor({ name: authorText, iconURL: fallbackLogo });
+      else embed.setAuthor({ name: authorText });
     } catch {}
 
     applyEmbedBranding(embed, {

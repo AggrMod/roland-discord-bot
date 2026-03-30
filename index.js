@@ -278,7 +278,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     // Role claim button handler
-    if (customId.startsWith('role_claim_')) {
+    if (customId.startsWith('role_claim_') || customId.startsWith('claim_role_')) {
       await handleRoleClaimButton(interaction);
       return;
     }

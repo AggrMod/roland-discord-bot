@@ -540,11 +540,9 @@ function applyPreSelectionVisibility() {
 function updateModuleVisibility() {
   const state = window._tenantModuleState || {};
   const moduleNav = [
-    { id: 'sidebarNavBattle', key: 'battle' },
     { id: 'sidebarNavSelfServe', key: 'selfseveroles' },
     { id: 'sidebarNavTicketing', key: 'ticketing' },
     { id: 'sidebarNavHeist', key: 'heist' },
-    { id: 'mobileNavBattle', key: 'battle' },
     { id: 'mobileNavSelfServe', key: 'selfseveroles' },
     { id: 'mobileNavTicketing', key: 'ticketing' },
     { id: 'mobileNavHeist', key: 'heist' },
@@ -599,7 +597,7 @@ function renderGeneralSection() {
     const modules = [
       { key: 'governance', icon: '\ud83d\udcdc', label: 'Governance', section: 'governance' },
       { key: 'verification', icon: '\ud83d\udcbc', label: 'Verification', section: 'wallets' },
-      { key: 'treasury', icon: '\ud83d\udcb0', label: 'Treasury', section: 'treasury' },
+
       { key: 'nfttracker', icon: '\ud83c\udfa8', label: 'NFT Tracker', section: 'nft-activity' },
       { key: 'heist', icon: '\ud83c\udfaf', label: 'Heist', section: 'heist' },
     ];
@@ -697,6 +695,16 @@ function updateSidebarModuleNav() {
     el.style.display = (hasServer && enabled) ? '' : 'none';
   });
 
+  // Force-hide Battle and Treasury nav in portal (Discord-only modules)
+  const battleNav = document.getElementById('sidebarNavBattle');
+  if (battleNav) battleNav.style.display = 'none';
+  const battleNavMobile = document.getElementById('mobileNavBattle');
+  if (battleNavMobile) battleNavMobile.style.display = 'none';
+  const treasuryNav = document.getElementById('sidebarNavTreasury');
+  if (treasuryNav) treasuryNav.style.display = 'none';
+  const treasuryNavMobile = document.getElementById('mobileNavTreasury');
+  if (treasuryNavMobile) treasuryNavMobile.style.display = 'none';
+
   // Plans nav — superadmin only (not yet ready for general use)
   const plansNav = document.getElementById('sidebarNavPlans');
   if (plansNav) plansNav.style.display = (hasServer && isSuperadmin) ? '' : 'none';
@@ -729,12 +737,13 @@ function applyTenantModuleNavVisibility(settings = {}) {
   const moduleState = {
     governance: !!settings.moduleGovernanceEnabled,
     verification: !!settings.moduleVerificationEnabled,
-    treasury: !!settings.moduleTreasuryEnabled,
+    // Portal hides treasury + battle (Discord-only surfaces)
+    treasury: false,
     nfttracker: !!settings.moduleNftTrackerEnabled,
     heist: !!settings.moduleMissionsEnabled,
     ticketing: !!settings.moduleTicketingEnabled,
     roleclaim: !!settings.moduleRoleClaimEnabled,
-    battle: !!settings.moduleBattleEnabled,
+    battle: false,
     selfseveroles: !!settings.moduleRoleClaimEnabled
   };
   window._tenantModuleState = moduleState;
@@ -789,19 +798,25 @@ function applySettingsTabVisibility(settings = {}) {
   // assignedModuleKeys is only present when multiTenant is on and a tenant exists.
   // null means all modules are available (single-tenant mode).
   const assigned = settings.assignedModuleKeys || null;
+  const enabledByModule = {
+    governance: !!settings.moduleGovernanceEnabled,
+    verification: !!settings.moduleVerificationEnabled,
+    treasury: false, // hidden in portal
+    nfttracker: !!settings.moduleNftTrackerEnabled,
+    battle: false, // hidden in portal
+    heist: !!settings.moduleMissionsEnabled,
+    selfserveroles: !!settings.moduleRoleClaimEnabled,
+    ticketing: !!settings.moduleTicketingEnabled,
+  };
 
   document.querySelectorAll('#section-settings .settings-tabs .settings-tab[data-tab]').forEach(btn => {
     const tab = btn.dataset.tab;
     const moduleKey = SETTINGS_TAB_MODULE_MAP[tab];
     if (!moduleKey) return; // 'general' has no module key — always visible
 
-    if (assigned === null) {
-      // Single-tenant: show all tabs
-      btn.style.display = '';
-    } else {
-      // Multi-tenant: only show tab if module is assigned (key exists in tenant_modules)
-      btn.style.display = assigned.includes(moduleKey) ? '' : 'none';
-    }
+    const assignedOk = (assigned === null) ? true : assigned.includes(moduleKey);
+    const enabledOk = enabledByModule[moduleKey] !== false;
+    btn.style.display = (assignedOk && enabledOk) ? '' : 'none';
   });
 }
 
@@ -3602,13 +3617,13 @@ async function loadBattleTimingSettings() {
         if (eraData.eras && eraData.eras.length) eras = eraData.eras;
       }
       const currentEra = s.battleDefaultEra || 'mafia';
-      const opts = eras.map(e => `<option value="${escapeHtml(e.key)}"${e.key === currentEra ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('');
+      const opts = eras.map(e => `<option style="background:rgba(30,41,59,1);color:#e0e7ff;" value="${escapeHtml(e.key)}"${e.key === currentEra ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('');
       const eraWrap = document.createElement('div');
       eraWrap.id = 'battleDefaultEraWrap';
       eraWrap.style.cssText = 'margin-top:16px;border-top:1px solid rgba(99,102,241,0.15);padding-top:16px;position:relative;z-index:1;';
       eraWrap.innerHTML = `
         <label class="form-label">Default Battle Era</label>
-        <select id="battleDefaultEraSelect" class="form-input" style="width:220px;">
+        <select id="battleDefaultEraSelect" class="form-input" style="width:220px;background:rgba(30,41,59,0.95);color:#e0e7ff;border:1px solid rgba(99,102,241,0.22);">
           ${opts}
         </select>
         <p style="color:var(--text-secondary); font-size:0.82em; margin-top:4px;">Era used when no era is specified in /battle create. Custom eras must be assigned by a Superadmin.</p>
@@ -3705,9 +3720,11 @@ async function loadAdminSettingsView() {
       </div>`;
     };
 
-    // Only render toggles for assigned modules (or all if single-tenant)
+    // Only render toggles for assigned + globally-enabled modules.
+    // If superadmin disabled a module, hide it here for everyone (including superadmins in tenant context).
     const visibleToggles = MODULE_TOGGLE_DEFS
-      .filter(m => assignedKeys === null || assignedKeys.includes(m.moduleKey))
+      .filter(m => (assignedKeys === null || assignedKeys.includes(m.moduleKey)) && (s[m.id] !== false))
+      .filter(m => !['moduleTreasuryEnabled', 'moduleBattleEnabled'].includes(m.id)) // hidden in portal
       .map(m => moduleToggle(m.id, m.label, m.icon, true))
       .join('');
 
@@ -5473,7 +5490,7 @@ async function saveRule() {
         const response = await fetch(`/api/admin/roles/tiers/${encodeURIComponent(existing.name)}`, {
           method: 'PUT', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, minNFTs, maxNFTs, collectionId, roleId })
+          body: JSON.stringify({ name, minNFTs, maxNFTs, votingPower: 1, collectionId, roleId })
         });
         const data = await response.json();
         if (!data.success) throw new Error(data.message || 'Failed to update tier');
@@ -5481,7 +5498,7 @@ async function saveRule() {
         const response = await fetch('/api/admin/roles/tiers', {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, minNFTs, maxNFTs, collectionId, roleId })
+          body: JSON.stringify({ name, minNFTs, maxNFTs, votingPower: 1, collectionId, roleId })
         });
         const data = await response.json();
         if (!data.success) throw new Error(data.message || 'Failed to create tier');

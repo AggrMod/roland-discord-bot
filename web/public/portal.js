@@ -540,9 +540,11 @@ function applyPreSelectionVisibility() {
 function updateModuleVisibility() {
   const state = window._tenantModuleState || {};
   const moduleNav = [
+    { id: 'sidebarNavTreasury', key: 'treasury' },
     { id: 'sidebarNavSelfServe', key: 'selfseveroles' },
     { id: 'sidebarNavTicketing', key: 'ticketing' },
     { id: 'sidebarNavHeist', key: 'heist' },
+    { id: 'mobileNavTreasury', key: 'treasury' },
     { id: 'mobileNavSelfServe', key: 'selfseveroles' },
     { id: 'mobileNavTicketing', key: 'ticketing' },
     { id: 'mobileNavHeist', key: 'heist' },
@@ -597,7 +599,7 @@ function renderGeneralSection() {
     const modules = [
       { key: 'governance', icon: '\ud83d\udcdc', label: 'Governance', section: 'governance' },
       { key: 'verification', icon: '\ud83d\udcbc', label: 'Verification', section: 'wallets' },
-
+      { key: 'treasury', icon: '\ud83d\udcb0', label: 'Wallet Tracker', section: 'treasury' },
       { key: 'nfttracker', icon: '\ud83c\udfa8', label: 'NFT Tracker', section: 'nft-activity' },
       { key: 'heist', icon: '\ud83c\udfaf', label: 'Heist', section: 'heist' },
     ];
@@ -695,15 +697,11 @@ function updateSidebarModuleNav() {
     el.style.display = (hasServer && enabled) ? '' : 'none';
   });
 
-  // Force-hide Battle and Treasury nav in portal (Discord-only modules)
+  // Force-hide Battle nav in portal (Discord-only runtime; settings still available)
   const battleNav = document.getElementById('sidebarNavBattle');
   if (battleNav) battleNav.style.display = 'none';
   const battleNavMobile = document.getElementById('mobileNavBattle');
   if (battleNavMobile) battleNavMobile.style.display = 'none';
-  const treasuryNav = document.getElementById('sidebarNavTreasury');
-  if (treasuryNav) treasuryNav.style.display = 'none';
-  const treasuryNavMobile = document.getElementById('mobileNavTreasury');
-  if (treasuryNavMobile) treasuryNavMobile.style.display = 'none';
 
   // Plans nav — superadmin only (not yet ready for general use)
   const plansNav = document.getElementById('sidebarNavPlans');
@@ -737,13 +735,12 @@ function applyTenantModuleNavVisibility(settings = {}) {
   const moduleState = {
     governance: !!settings.moduleGovernanceEnabled,
     verification: !!settings.moduleVerificationEnabled,
-    // Portal hides treasury + battle (Discord-only surfaces)
-    treasury: false,
+    treasury: !!settings.moduleTreasuryEnabled,
     nfttracker: !!settings.moduleNftTrackerEnabled,
     heist: !!settings.moduleMissionsEnabled,
     ticketing: !!settings.moduleTicketingEnabled,
     roleclaim: !!settings.moduleRoleClaimEnabled,
-    battle: false,
+    battle: !!settings.moduleBattleEnabled,
     selfseveroles: !!settings.moduleRoleClaimEnabled
   };
   window._tenantModuleState = moduleState;
@@ -801,9 +798,9 @@ function applySettingsTabVisibility(settings = {}) {
   const enabledByModule = {
     governance: !!settings.moduleGovernanceEnabled,
     verification: !!settings.moduleVerificationEnabled,
-    treasury: false, // hidden in portal
+    treasury: !!settings.moduleTreasuryEnabled,
     nfttracker: !!settings.moduleNftTrackerEnabled,
-    battle: false, // hidden in portal
+    battle: !!settings.moduleBattleEnabled,
     heist: !!settings.moduleMissionsEnabled,
     selfserveroles: !!settings.moduleRoleClaimEnabled,
     ticketing: !!settings.moduleTicketingEnabled,
@@ -3701,7 +3698,7 @@ async function loadAdminSettingsView() {
       { id: 'moduleGovernanceEnabled',   label: 'Governance',      icon: '🗳️',  moduleKey: 'governance'    },
       { id: 'moduleVerificationEnabled', label: 'Verification',    icon: '✅',  moduleKey: 'verification'  },
       { id: 'moduleMissionsEnabled',     label: 'Heist',           icon: '🎯',  moduleKey: 'heist'         },
-      { id: 'moduleTreasuryEnabled',     label: 'Treasury',        icon: '💰',  moduleKey: 'treasury'      },
+      { id: 'moduleTreasuryEnabled',     label: 'Wallet Tracker',  icon: '💰',  moduleKey: 'treasury'      },
       { id: 'moduleNftTrackerEnabled',   label: 'NFT Tracker',     icon: '📡',  moduleKey: 'nfttracker'    },
       { id: 'moduleRoleClaimEnabled',    label: 'Self-Serve Roles',icon: '🎖️',  moduleKey: 'selfserveroles'},
       { id: 'moduleTicketingEnabled',    label: 'Ticketing',       icon: '🎫',  moduleKey: 'ticketing'     },
@@ -3728,7 +3725,6 @@ async function loadAdminSettingsView() {
     const visibleToggles = MODULE_TOGGLE_DEFS
       .filter(m => assignedKeys === null || assignedKeys.includes(m.moduleKey))
       .filter(m => s[m.id] !== false)
-      .filter(m => !['moduleTreasuryEnabled', 'moduleBattleEnabled'].includes(m.id)) // hidden in portal
       .map(m => moduleToggle(m.id, m.label, m.icon, true))
       .join('');
 

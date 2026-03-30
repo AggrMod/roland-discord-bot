@@ -2658,13 +2658,6 @@ function renderTenantDetailPanel(tenant) {
         <strong style="color:#e2e8f0;">You are editing tenant:</strong> ${escapeHtml(tenant.guildName || tenant.guildId)} <span style="font-family:monospace;opacity:.85;">(${escapeHtml(tenant.guildId)})</span>
       </div>
 
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button data-tenant-detail-tab="overview" class="btn-primary" onclick="showTenantDetailTab('overview')" style="padding:8px 12px;">Overview</button>
-        <button data-tenant-detail-tab="controls" class="btn-secondary" onclick="showTenantDetailTab('controls')" style="padding:8px 12px;">Plan & Status</button>
-        <button data-tenant-detail-tab="branding" class="btn-secondary" onclick="showTenantDetailTab('branding')" style="padding:8px 12px;">Branding</button>
-        <button data-tenant-detail-tab="modules" class="btn-secondary" onclick="showTenantDetailTab('modules')" style="padding:8px 12px;">Modules</button>
-      </div>
-
       <div id="tenantDetail-overview" style="display:grid; gap:14px; grid-template-columns:minmax(0,1.2fr) minmax(0,0.8fr);">
         <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
@@ -2866,10 +2859,19 @@ async function loadSuperadminView() {
           </div>
           <div style="color:#cbd5e1;font-size:0.82em;max-width:520px;">Tenant-scoped actions below (plan/modules/branding/status) apply to this server. Superadmin list + era catalog are global controls.</div>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           <button data-superadmin-tab-btn="tenants" class="btn-primary" onclick="showSuperadminTab('tenants')" style="padding:8px 12px;">Tenants</button>
           <button data-superadmin-tab-btn="eras" class="btn-secondary" onclick="showSuperadminTab('eras')" style="padding:8px 12px;">Era Assignments</button>
           <button data-superadmin-tab-btn="superadmins" class="btn-secondary" onclick="showSuperadminTab('superadmins')" style="padding:8px 12px;">Superadmins</button>
+
+          <span style="width:1px;height:24px;background:rgba(99,102,241,0.25);margin:0 4px;"></span>
+
+          <div id="superadminTenantDetailTabGroup" style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button data-tenant-detail-tab="overview" class="btn-primary" onclick="showTenantDetailTab('overview')" style="padding:8px 12px;">Overview</button>
+            <button data-tenant-detail-tab="controls" class="btn-secondary" onclick="showTenantDetailTab('controls')" style="padding:8px 12px;">Plan & Status</button>
+            <button data-tenant-detail-tab="branding" class="btn-secondary" onclick="showTenantDetailTab('branding')" style="padding:8px 12px;">Branding</button>
+            <button data-tenant-detail-tab="modules" class="btn-secondary" onclick="showTenantDetailTab('modules')" style="padding:8px 12px;">Modules</button>
+          </div>
         </div>
 
         <div id="superadminSection-superadminsInput" style="display:grid; gap:12px; grid-template-columns:minmax(0,1fr) auto;">
@@ -3088,6 +3090,8 @@ function showSuperadminTab(tab) {
   document.querySelectorAll('[data-superadmin-tab-btn]').forEach(btn => {
     btn.className = (btn.dataset.superadminTabBtn === tab) ? 'btn-primary' : 'btn-secondary';
   });
+  const tenantDetailGroup = document.getElementById('superadminTenantDetailTabGroup');
+  if (tenantDetailGroup) tenantDetailGroup.style.display = (tab === 'tenants') ? 'flex' : 'none';
 }
 
 function selectTenantGuild(guildId) {

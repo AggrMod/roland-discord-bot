@@ -172,6 +172,14 @@ class NFTActivityService {
     }
   }
 
+  getTrackedCollectionsByAddress(address) {
+    try {
+      return db.prepare('SELECT * FROM nft_tracked_collections WHERE LOWER(collection_address) = LOWER(?) AND enabled = 1').all(address);
+    } catch (e) {
+      return [];
+    }
+  }
+
   listWatchedCollections() {
     try {
       return db.prepare('SELECT collection_key, created_at FROM nft_activity_watch ORDER BY created_at DESC').all();
@@ -303,15 +311,20 @@ class NFTActivityService {
   }
 
   async maybeSendAlert(evt) {
-    // Per-collection tracked config takes priority
-    const tracked = evt.collectionKey ? this.getTrackedCollectionByAddress(evt.collectionKey) : null;
-    let alertChannelId = null;
-    if (tracked) {
-      const eventFlagMap = { mint: 'track_mint', sell: 'track_sale', list: 'track_list', delist: 'track_delist', transfer: 'track_transfer' };
+    // Per-collection tracked config (can be multiple tenants/channels for same collection)
+    const trackedRows = evt.collectionKey ? this.getTrackedCollectionsByAddress(evt.collectionKey) : [];
+    const eventFlagMap = { mint: 'track_mint', sell: 'track_sale', list: 'track_list', delist: 'track_delist', transfer: 'track_transfer' };
+
+    const targetRows = trackedRows.filter(row => {
       const flagCol = eventFlagMap[evt.eventType];
-      if (flagCol && !tracked[flagCol]) return;
-      alertChannelId = tracked.channel_id;
-    } else {
+      if (flagCol && !row[flagCol]) return false;
+      return !!row.channel_id;
+    });
+
+    const client = clientProvider.getClient();
+    if (!client) return;
+
+    if (!targetRows.length) {
       const cfg = this.getAlertConfig();
       if (!cfg || cfg.enabled !== 1 || !cfg.channel_id) return;
       const typeSet = new Set((cfg.event_types || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
@@ -319,16 +332,9 @@ class NFTActivityService {
       const minSol = Number(cfg.min_sol || 0);
       const price = Number(evt.priceSol || 0);
       if (price < minSol) return;
-      alertChannelId = cfg.channel_id;
+      targetRows.push({ channel_id: cfg.channel_id, guild_id: '' });
     }
 
-    if (!alertChannelId) return;
-
-    const client = clientProvider.getClient();
-    if (!client) return;
-
-    const channel = await client.channels.fetch(alertChannelId).catch(() => null);
-    if (!channel || !channel.send) return;
 
     const whenTs = evt.eventTime ? Math.floor(new Date(evt.eventTime).getTime() / 1000) : null;
     const shortSig = evt.txSignature ? `${evt.txSignature.slice(0, 12)}...${evt.txSignature.slice(-8)}` : null;
@@ -350,18 +356,6 @@ class NFTActivityService {
     };
     const typeIcon = iconMap[typeUpper] || '🧩';
 
-    // Resolve collection name from DB (tracked) — fall back to shortened address
-    const collectionDisplay = tracked?.collection_name ||
-      (evt.collectionKey ? `${evt.collectionKey.slice(0, 6)}...${evt.collectionKey.slice(-4)}` : 'Unknown');
-
-    // Token display: prefer name, then shorten mint address
-    const tokenIdShort = evt.tokenMint ? `\`${evt.tokenMint.slice(0, 6)}...${evt.tokenMint.slice(-4)}\`` : null;
-    const tokenDisplay = (evt.tokenName && !evt.tokenName.match(/^[A-Za-z0-9]{32,}$/))
-      ? evt.tokenName
-      : (collectionDisplay !== 'Unknown' && evt.tokenMint)
-        ? `${collectionDisplay} #${evt.tokenMint.slice(-4)}`
-        : (tokenIdShort || '—');
-
     const chainMeta = getChainPriceMeta(evt.chain);
     const chainKey = normalizeChain(evt.chain);
     const chainEmojiMap = settings.getSettings().chainEmojiMap || {};
@@ -371,6 +365,8 @@ class NFTActivityService {
     const priceDisplay = evt.priceSol !== null && evt.priceSol !== undefined && evt.priceSol > 0
       ? `${mappedIcon} ${Number(evt.priceSol).toFixed(3)} ${chainMeta.unit}`
       : '—';
+
+    const displayType = typeUpper === 'SELL' ? 'BUY' : typeUpper;
 
     const walletToDisplay = (wallet) => {
       if (!wallet) return '—';
@@ -387,57 +383,69 @@ class NFTActivityService {
       return `\`${wallet.slice(0, 6)}...${wallet.slice(-4)}\``;
     };
 
-    const fields = [
-      { name: 'Token Name', value: tokenDisplay, inline: true },
-      { name: 'When', value: whenTs ? `<t:${whenTs}:R>` : null, inline: true },
-    ];
-    if (evt.priceSol !== null && evt.priceSol !== undefined && evt.priceSol > 0) {
-      fields.push({ name: 'Price', value: priceDisplay, inline: true });
-    }
-    if (evt.fromWallet) {
-      fields.push({ name: 'From', value: walletToDisplay(evt.fromWallet), inline: true });
-    }
-    if (evt.toWallet) {
-      fields.push({ name: 'To', value: walletToDisplay(evt.toWallet), inline: true });
-    }
-
-    const embed = new EmbedBuilder()
-      .addFields(fields.filter(f => f.value))
-      .setTimestamp();
-
-    const branding = getBranding(tracked?.guild_id || '', 'nfttracker');
-    const fallbackLogo = branding.logo || client?.user?.displayAvatarURL?.() || null;
-    const authorText = `${branding.brandName || 'Guild Pilot'}`;
-    try {
-      if (fallbackLogo) embed.setAuthor({ name: authorText, iconURL: fallbackLogo });
-      else embed.setAuthor({ name: authorText });
-    } catch {}
-    embed.setTitle(`${typeIcon} ${collectionDisplay} ${typeUpper}`);
-
-    applyEmbedBranding(embed, {
-      guildId: tracked?.guild_id || '',
-      moduleKey: 'nfttracker',
-      defaultColor: colorMap[typeUpper] || '#5865F2',
-      defaultFooter: 'Powered by Guild Pilot',
-      fallbackLogoUrl: fallbackLogo,
-      footerPrefix: shortSig ? `Tx: ${shortSig}` : 'No tx',
-      useThumbnail: true,
-    });
-
-    if (evt.imageUrl) embed.setThumbnail(evt.imageUrl);
-
     const explorer = evt.txSignature ? `https://solscan.io/tx/${evt.txSignature}` : null;
     const meLink = evt.tokenMint ? `https://magiceden.io/item-details/${evt.tokenMint}` : null;
-
-    if (explorer) embed.setURL(explorer);
-
     const buttons = [];
     if (explorer) buttons.push(new ButtonBuilder().setLabel('View Tx').setURL(explorer).setStyle(ButtonStyle.Link).setEmoji('🔍'));
     if (meLink) buttons.push(new ButtonBuilder().setLabel('Magic Eden').setURL(meLink).setStyle(ButtonStyle.Link).setEmoji('🌊'));
-
     const components = buttons.length ? [new ActionRowBuilder().addComponents(...buttons)] : [];
 
-    await channel.send({ embeds: [embed], components });
+    for (const target of targetRows) {
+      const channel = await client.channels.fetch(target.channel_id).catch(() => null);
+      if (!channel || !channel.send) continue;
+
+      const collectionDisplay = target.collection_name ||
+        (evt.collectionKey ? `${evt.collectionKey.slice(0, 6)}...${evt.collectionKey.slice(-4)}` : 'Unknown');
+
+      const tokenIdShort = evt.tokenMint ? `\`${evt.tokenMint.slice(0, 6)}...${evt.tokenMint.slice(-4)}\`` : null;
+      const tokenDisplay = (evt.tokenName && !evt.tokenName.match(/^[A-Za-z0-9]{32,}$/))
+        ? evt.tokenName
+        : (collectionDisplay !== 'Unknown' && evt.tokenMint)
+          ? `${collectionDisplay} #${evt.tokenMint.slice(-4)}`
+          : (tokenIdShort || '—');
+
+      const fields = [
+        { name: 'Token Name', value: tokenDisplay, inline: true },
+        { name: 'When', value: whenTs ? `<t:${whenTs}:R>` : null, inline: true },
+      ];
+      if (evt.priceSol !== null && evt.priceSol !== undefined && evt.priceSol > 0) {
+        fields.push({ name: 'Price', value: priceDisplay, inline: true });
+      }
+      if (evt.fromWallet) {
+        fields.push({ name: 'From', value: walletToDisplay(evt.fromWallet), inline: true });
+      }
+      if (evt.toWallet) {
+        fields.push({ name: 'To', value: walletToDisplay(evt.toWallet), inline: true });
+      }
+
+      const embed = new EmbedBuilder()
+        .addFields(fields.filter(f => f.value))
+        .setTimestamp()
+        .setTitle(`${typeIcon} ${collectionDisplay} ${displayType}`);
+
+      const branding = getBranding(target.guild_id || '', 'nfttracker');
+      const fallbackLogo = branding.logo || client?.user?.displayAvatarURL?.() || null;
+      const authorText = `${branding.brandName || 'Guild Pilot'}`;
+      try {
+        if (fallbackLogo) embed.setAuthor({ name: authorText, iconURL: fallbackLogo });
+        else embed.setAuthor({ name: authorText });
+      } catch {}
+
+      applyEmbedBranding(embed, {
+        guildId: target.guild_id || '',
+        moduleKey: 'nfttracker',
+        defaultColor: colorMap[typeUpper] || '#5865F2',
+        defaultFooter: 'Powered by Guild Pilot',
+        fallbackLogoUrl: fallbackLogo,
+        footerPrefix: shortSig ? `Tx: ${shortSig}` : 'No tx',
+        useThumbnail: true,
+      });
+
+      if (evt.imageUrl) embed.setThumbnail(evt.imageUrl);
+      if (explorer) embed.setURL(explorer);
+
+      await channel.send({ embeds: [embed], components });
+    }
   }
 
   listEvents(limit = 20) {

@@ -7,6 +7,7 @@ const MODULE_KEYS = Object.freeze([
   'ticketing',
   'nfttracker',
   'selfserveroles',
+  'branding',
   'analytics'
 ]);
 
@@ -30,6 +31,7 @@ const PLAN_PRESETS = Object.freeze({
       ticketing: true,
       nfttracker: false,
       selfserveroles: false,
+      branding: true,
       analytics: true
     }
   },
@@ -52,6 +54,7 @@ const PLAN_PRESETS = Object.freeze({
       ticketing: true,
       nfttracker: true,
       selfserveroles: true,
+      branding: true,
       analytics: true
     }
   },
@@ -74,6 +77,7 @@ const PLAN_PRESETS = Object.freeze({
       ticketing: true,
       nfttracker: true,
       selfserveroles: true,
+      branding: true,
       analytics: true
     }
   },
@@ -96,6 +100,7 @@ const PLAN_PRESETS = Object.freeze({
       ticketing: true,
       nfttracker: true,
       selfserveroles: true,
+      branding: true,
       analytics: true
     }
   }

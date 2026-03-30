@@ -1532,6 +1532,7 @@ class WebServer {
           effectiveSettings.moduleMissionsEnabled = !!tenantContext.modules.heist;
           effectiveSettings.moduleTreasuryEnabled = !!tenantContext.modules.treasury;
           effectiveSettings.moduleNftTrackerEnabled = !!tenantContext.modules.nfttracker;
+          effectiveSettings.moduleBrandingEnabled = !!tenantContext.modules.branding;
           effectiveSettings.moduleRoleClaimEnabled = !!tenantContext.modules.selfserveroles;
           effectiveSettings.moduleTicketingEnabled = !!tenantContext.modules.ticketing;
           // Tell the frontend which module keys are actually assigned (exist in tenant_modules)
@@ -1551,7 +1552,7 @@ class WebServer {
           'proposalsChannelId', 'votingChannelId', 'resultsChannelId', 'governanceLogChannelId',
           'quorumPercentage', 'supportThreshold', 'voteDurationHours',
           'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleTreasuryEnabled',
-          'moduleNftTrackerEnabled', 'moduleMissionsEnabled', 'moduleBattleEnabled',
+          'moduleNftTrackerEnabled', 'moduleBrandingEnabled', 'moduleMissionsEnabled', 'moduleBattleEnabled',
           'moduleTicketingEnabled', 'moduleRoleClaimEnabled',
           'battleRoundPauseMinSec', 'battleRoundPauseMaxSec', 'battleElitePrepSec', 'battleDefaultEra',
           'baseVerifiedRoleId', 'autoResyncEnabled', 'ogRoleId', 'ogRoleLimit',
@@ -1589,6 +1590,7 @@ class WebServer {
               moduleMissionsEnabled: 'heist',
               moduleTreasuryEnabled: 'treasury',
               moduleNftTrackerEnabled: 'nfttracker',
+              moduleBrandingEnabled: 'branding',
               moduleRoleClaimEnabled: 'selfserveroles',
               moduleTicketingEnabled: 'ticketing',
             };

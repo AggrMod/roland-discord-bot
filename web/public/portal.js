@@ -736,6 +736,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
   const moduleState = {
     governance: !!settings.moduleGovernanceEnabled,
     verification: !!settings.moduleVerificationEnabled,
+    branding: !!settings.moduleBrandingEnabled,
     treasury: !!settings.moduleTreasuryEnabled,
     nfttracker: !!settings.moduleNftTrackerEnabled,
     heist: !!settings.moduleMissionsEnabled,
@@ -784,7 +785,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
 const SETTINGS_TAB_MODULE_MAP = {
   governance:   'governance',
   verification: 'verification',
-  branding:     'verification',
+  branding:     'branding',
   treasury:     'treasury',
   nfttracker:   'nfttracker',
   battle:       'battle',
@@ -800,6 +801,7 @@ function applySettingsTabVisibility(settings = {}) {
   const enabledByModule = {
     governance: !!settings.moduleGovernanceEnabled,
     verification: !!settings.moduleVerificationEnabled,
+    branding: !!settings.moduleBrandingEnabled,
     treasury: !!settings.moduleTreasuryEnabled,
     nfttracker: !!settings.moduleNftTrackerEnabled,
     battle: !!settings.moduleBattleEnabled,
@@ -2570,12 +2572,13 @@ const TENANT_PLAN_LABELS = {
 const TENANT_MODULE_LABELS = {
   verification: 'Verification',
   governance: 'Governance',
-  treasury: 'Treasury',
+  treasury: 'Wallet Tracker',
   battle: 'Battle',
   heist: 'Heist',
   ticketing: 'Ticketing',
   nfttracker: 'NFT Tracker',
   selfserveroles: 'Self-Serve Roles',
+  branding: 'Branding',
   analytics: 'Analytics'
 };
 
@@ -3852,6 +3855,7 @@ async function loadAdminSettingsView() {
       { id: 'moduleBattleEnabled',       label: 'Battle',          icon: '⚔️',  moduleKey: 'battle'        },
       { id: 'moduleGovernanceEnabled',   label: 'Governance',      icon: '🗳️',  moduleKey: 'governance'    },
       { id: 'moduleVerificationEnabled', label: 'Verification',    icon: '✅',  moduleKey: 'verification'  },
+      { id: 'moduleBrandingEnabled',     label: 'Branding',        icon: '🎨',  moduleKey: 'branding'      },
       { id: 'moduleMissionsEnabled',     label: 'Heist',           icon: '🎯',  moduleKey: 'heist'         },
       { id: 'moduleTreasuryEnabled',     label: 'Wallet Tracker',  icon: '💰',  moduleKey: 'treasury'      },
       { id: 'moduleNftTrackerEnabled',   label: 'NFT Tracker',     icon: '📡',  moduleKey: 'nfttracker'    },
@@ -3956,7 +3960,7 @@ async function savePortalSettings() {
 
   // Only save module toggles that are actually rendered (handles assigned-module filtering)
   const moduleIds = [
-    'moduleBattleEnabled', 'moduleGovernanceEnabled', 'moduleVerificationEnabled',
+    'moduleBattleEnabled', 'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleBrandingEnabled',
     'moduleMissionsEnabled', 'moduleTreasuryEnabled', 'moduleNftTrackerEnabled',
     'moduleRoleClaimEnabled', 'moduleTicketingEnabled',
   ];

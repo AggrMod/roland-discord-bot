@@ -330,7 +330,7 @@ class NFTActivityService {
       ? evt.tokenName
       : evt.tokenMint ? `\`${evt.tokenMint.slice(0, 6)}...${evt.tokenMint.slice(-4)}\`` : '—';
 
-    const priceDisplay = evt.priceSol != null && evt.priceSol > 0 ? `◎ ${Number(evt.priceSol).toFixed(3)} SOL` : '—';
+    const priceDisplay = evt.priceSol !== null && evt.priceSol !== undefined && evt.priceSol > 0 ? `◎ ${Number(evt.priceSol).toFixed(3)} SOL` : '—';
 
     const walletToDisplay = (wallet) => {
       if (!wallet) return '—';
@@ -521,7 +521,7 @@ class NFTActivityService {
               tokenName: act.tokenMint || null,
               fromWallet: act.seller || act.creatorAddress || null,
               toWallet: act.buyer || null,
-              priceSol: act.price != null ? Number(act.price) : null,
+              priceSol: act.price !== null && act.price !== undefined ? Number(act.price) : null,
               txSignature: sig,
               imageUrl: act.image || null,
               eventTime: act.blockTime ? new Date(act.blockTime * 1000).toISOString() : new Date().toISOString(),

@@ -3673,11 +3673,21 @@ class WebServer {
         });
       } catch (error) {
         if (error && String(error.message || error).includes('UNIQUE constraint failed: billing_entitlement_events.payload_hash')) {
+          const payload = req.body && typeof req.body === 'object' ? req.body : {};
+          const normalizedPayload = {
+            eventType: normalizeWebhookValue(payload.eventType),
+            customerId: normalizeWebhookValue(payload.customerId),
+            guildId: normalizeWebhookValue(payload.guildId),
+            plan: normalizeWebhookValue(payload.plan),
+            status: normalizeWebhookValue(payload.status),
+            metadata: payload.metadata === undefined ? undefined : payload.metadata
+          };
+          const duplicateHash = hashWebhookPayload(normalizedPayload);
           const duplicateEvent = db.prepare(`
             SELECT id, result
             FROM billing_entitlement_events
             WHERE payload_hash = ?
-          `).get(payloadHash);
+          `).get(duplicateHash);
 
           return res.json({
             success: true,

@@ -2804,14 +2804,16 @@ async function loadSuperadminView() {
     tenantQs.set('page', String(superadminTenantPage));
     tenantQs.set('pageSize', String(superadminTenantPageSize));
 
-    const [adminsResponse, tenantsResponse] = await Promise.all([
+    const [adminsResponse, tenantsResponse, settingsResponse] = await Promise.all([
       fetch('/api/superadmin/admins', { credentials: 'include' }),
-      fetch(`/api/superadmin/tenants?${tenantQs.toString()}`, { credentials: 'include' })
+      fetch(`/api/superadmin/tenants?${tenantQs.toString()}`, { credentials: 'include' }),
+      fetch('/api/admin/settings', { credentials: 'include', headers: buildTenantRequestHeaders() })
     ]);
 
-    const [adminsData, tenantsData] = await Promise.all([
+    const [adminsData, tenantsData, settingsData] = await Promise.all([
       adminsResponse.json(),
-      tenantsResponse.json()
+      tenantsResponse.json(),
+      settingsResponse.json()
     ]);
 
     if (!adminsData.success) {
@@ -2876,6 +2878,7 @@ async function loadSuperadminView() {
 
     const activeTenant = tenantListCache.find(t => t.guildId === selectedTenantGuildId) || null;
     const activeTenantName = activeTenant?.guildName || selectedTenantGuildId || 'No tenant selected';
+    const chainEmojiMap = settingsData?.settings?.chainEmojiMap || {};
 
     content.innerHTML = `
       <div style="display:grid; gap:16px;">
@@ -2914,6 +2917,25 @@ async function loadSuperadminView() {
           </div>
           <div style="border:1px solid rgba(99,102,241,0.15); border-radius:10px; overflow:hidden;">
             ${superadminRows}
+          </div>
+        </div>
+
+        <div id="superadminSection-chainEmojis" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
+            <h4 style="margin:0; color:#c9d6ff;">Chain Emoji Map <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
+            <span style="color:var(--text-secondary); font-size:0.85em;">Used by NFT tracker price display</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+            ${['solana','ethereum','base','polygon','arbitrum','optimism','bsc','avalanche'].map(chain => `
+              <label style="display:grid;gap:6px;">
+                <span style="font-size:0.82em;color:var(--text-secondary);text-transform:capitalize;">${chain}</span>
+                <input id="sa_chainEmoji_${chain}" type="text" value="${escapeHtml(chainEmojiMap[chain] || '')}" placeholder="<:emoji:123...> or unicode" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+              </label>
+            `).join('')}
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+            <button class="btn-secondary" onclick="loadSuperadminView()" style="padding:8px 12px;">Reset</button>
+            <button class="btn-primary" onclick="saveChainEmojiMap()" style="padding:8px 12px;">Save Chain Emojis</button>
           </div>
         </div>
 
@@ -3123,7 +3145,7 @@ async function revokeEra(guildId, eraKey) {
 function showSuperadminTab(tab) {
   superadminActiveTab = tab;
   const sections = {
-    superadmins: ['superadminSection-superadminsInput', 'superadminSection-superadmins'],
+    superadmins: ['superadminSection-superadminsInput', 'superadminSection-superadmins', 'superadminSection-chainEmojis'],
     tenants: ['superadminSection-tenants', 'superadminSection-detail', 'superadminSection-eras'],
   };
   Object.entries(sections).forEach(([key, ids]) => {
@@ -3472,6 +3494,33 @@ function removeSuperadmin(userId) {
     },
     'Remove'
   );
+}
+
+async function saveChainEmojiMap() {
+  const chains = ['solana', 'ethereum', 'base', 'polygon', 'arbitrum', 'optimism', 'bsc', 'avalanche'];
+  const chainEmojiMap = {};
+  chains.forEach(chain => {
+    const el = document.getElementById(`sa_chainEmoji_${chain}`);
+    if (el) chainEmojiMap[chain] = String(el.value || '').trim();
+  });
+
+  try {
+    const response = await fetch('/api/admin/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      credentials: 'include',
+      body: JSON.stringify({ chainEmojiMap })
+    });
+    const data = await response.json();
+    if (!data.success) {
+      showError(data.message || 'Failed to save chain emoji map');
+      return;
+    }
+    showSuccess('Chain emoji map saved');
+    await loadSuperadminView();
+  } catch (error) {
+    showError(`Failed to save chain emoji map: ${error.message}`);
+  }
 }
 
 async function loadAdminHelpView() {

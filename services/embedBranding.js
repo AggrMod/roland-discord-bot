@@ -29,13 +29,14 @@ function applyEmbedBranding(embed, {
   defaultFooter = 'Powered by Guild Pilot',
   fallbackLogoUrl = null,
   footerPrefix = null,
+  useThumbnail = true,
 } = {}) {
   const br = getBranding(guildId, moduleKey);
   const color = br.color || defaultColor;
   embed.setColor(color);
 
   const logo = br.logo || fallbackLogoUrl || null;
-  if (logo && typeof embed.setThumbnail === 'function') {
+  if (useThumbnail && logo && typeof embed.setThumbnail === 'function') {
     try { embed.setThumbnail(logo); } catch {}
   }
 

@@ -1,6 +1,7 @@
 const db = require('../database/battleDb');
 const mainDb = require('../database/db');
 const logger = require('../utils/logger');
+const { applyEmbedBranding } = require('./embedBranding');
 const { EmbedBuilder } = require('discord.js');
 const { randomInt } = require('crypto');
 const { BATTLE_ERAS } = require('../config/battleEras');
@@ -865,11 +866,18 @@ class BattleService {
     }
 
     const embed = new EmbedBuilder()
-      .setColor(eraColor)
       .setTitle(`${eraIcon} ${eraName} Battle Lobby`)
       .setDescription(description)
       .setFooter({ text: `Creator can /battle start when ready | Era: ${eraName}` })
       .setTimestamp();
+
+    applyEmbedBranding(embed, {
+      guildId: lobby.guild_id || '',
+      moduleKey: 'battle',
+      defaultColor: eraColor,
+      defaultFooter: 'Powered by Guild Pilot',
+      fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
+    });
 
     if (participants.length > 0) {
       const playerList = participants.map(p => `• ${p.username}`).join('\n');

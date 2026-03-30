@@ -1,6 +1,7 @@
 const db = require('../database/db');
 const vpService = require('./vpService');
 const logger = require('../utils/logger');
+const { applyEmbedBranding } = require('./embedBranding');
 const governanceLogger = require('../utils/governanceLogger');
 const settingsManager = require('../config/settings');
 
@@ -540,7 +541,6 @@ class ProposalService {
 
       const endDate = new Date(proposal.end_time);
       const embed = new EmbedBuilder()
-        .setColor('#FFD700')
         .setTitle(`🗳️ ${proposal.title}`)
         .setDescription(proposal.description)
         .addFields(
@@ -555,6 +555,14 @@ class ProposalService {
         )
         .setFooter({ text: 'Vote below! VP is locked at snapshot.' })
         .setTimestamp();
+
+      applyEmbedBranding(embed, {
+        guildId: process.env.GUILD_ID || process.env.DISCORD_GUILD_ID || '',
+        moduleKey: 'governance',
+        defaultColor: '#FFD700',
+        defaultFooter: 'Powered by Guild Pilot',
+        fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
+      });
 
       const row = new ActionRowBuilder()
         .addComponents(
@@ -623,9 +631,16 @@ class ProposalService {
       else { statusText = '⚠️ QUORUM NOT MET'; color = '#808080'; }
 
       const embed = EmbedBuilder.from(message.embeds[0])
-        .setColor(color)
         .setTitle(`🗳️ ${proposal.title} - ${statusText}`)
         .setFooter({ text: 'Voting has closed. See results channel for full summary.' });
+
+      applyEmbedBranding(embed, {
+        guildId: process.env.GUILD_ID || process.env.DISCORD_GUILD_ID || '',
+        moduleKey: 'governance',
+        defaultColor: color,
+        defaultFooter: 'Powered by Guild Pilot',
+        fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
+      });
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`vote_yes_${proposalId}_disabled`).setLabel('Yes').setStyle(ButtonStyle.Success).setEmoji('✅').setDisabled(true),
@@ -662,7 +677,6 @@ class ProposalService {
       else { statusText = '⚠️ QUORUM NOT MET'; color = '#808080'; }
 
       const embed = new EmbedBuilder()
-        .setColor(color)
         .setTitle(`📊 Vote Results: ${proposal.title}`)
         .setDescription(`**${statusText}**`)
         .addFields(
@@ -678,6 +692,14 @@ class ProposalService {
         )
         .setFooter({ text: `Proposal concluded: ${new Date().toLocaleString()}` })
         .setTimestamp();
+
+      applyEmbedBranding(embed, {
+        guildId: process.env.GUILD_ID || process.env.DISCORD_GUILD_ID || '',
+        moduleKey: 'governance',
+        defaultColor: color,
+        defaultFooter: 'Powered by Guild Pilot',
+        fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
+      });
 
       await channel.send({ embeds: [embed] });
     } catch (error) {

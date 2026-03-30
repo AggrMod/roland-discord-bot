@@ -3724,9 +3724,11 @@ async function loadAdminSettingsView() {
       </div>`;
     };
 
-    // Render all assigned module toggles (show disabled modules as OFF for visibility/parity)
+    // Render only assigned + enabled modules in tenant settings
     const visibleToggles = MODULE_TOGGLE_DEFS
       .filter(m => assignedKeys === null || assignedKeys.includes(m.moduleKey))
+      .filter(m => s[m.id] !== false)
+      .filter(m => !['moduleTreasuryEnabled', 'moduleBattleEnabled'].includes(m.id)) // hidden in portal
       .map(m => moduleToggle(m.id, m.label, m.icon, true))
       .join('');
 

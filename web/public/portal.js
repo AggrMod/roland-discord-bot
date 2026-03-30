@@ -687,7 +687,7 @@ function updateSidebarModuleNav() {
     { id: 'sidebarNavTreasury', module: 'treasury' },
     { id: 'sidebarNavNftActivity', module: 'nfttracker' },
     { id: 'sidebarNavHeist', module: 'heist' },
-    { id: 'sidebarNavPlans', module: null },
+    // Plans nav handled separately (superadmin-only)
   ];
 
   moduleItems.forEach(({ id, module }) => {
@@ -697,9 +697,13 @@ function updateSidebarModuleNav() {
     el.style.display = (hasServer && enabled) ? '' : 'none';
   });
 
-  // Mobile plans nav
+  // Plans nav — superadmin only (not yet ready for general use)
+  const plansNav = document.getElementById('sidebarNavPlans');
+  if (plansNav) plansNav.style.display = (hasServer && isSuperadmin) ? '' : 'none';
+
+  // Mobile plans nav — superadmin only
   const mobilePlans = document.getElementById('mobileNavPlans');
-  if (mobilePlans) mobilePlans.style.display = hasServer ? '' : 'none';
+  if (mobilePlans) mobilePlans.style.display = (hasServer && isSuperadmin) ? '' : 'none';
 
   const sidebarSettings = document.getElementById('sidebarNavSettings');
   if (sidebarSettings) {

@@ -2548,6 +2548,7 @@ let tenantListCache = [];
 let selectedTenantGuildId = null;
 let selectedTenantDetailCache = null;
 let selectedTenantAuditCache = [];
+let superadminTenantSearch = '';
 
 const TENANT_PLAN_LABELS = {
   starter: 'Starter',
@@ -2828,9 +2829,17 @@ async function loadSuperadminView() {
         }).join('')
       : `<div style="padding:18px; text-align:center; color:var(--text-secondary);">No database superadmins configured.</div>`;
 
-    const tenantRows = tenantListCache.length > 0
-      ? tenantListCache.map(renderTenantRow).join('')
-      : `<div style="padding:18px; text-align:center; color:var(--text-secondary);">No tenants found yet. New guilds will bootstrap automatically.</div>`;
+    const filteredTenants = tenantListCache.filter(t => {
+      const q = String(superadminTenantSearch || '').trim().toLowerCase();
+      if (!q) return true;
+      return String(t.guildName || '').toLowerCase().includes(q)
+        || String(t.guildId || '').toLowerCase().includes(q)
+        || String(t.planKey || '').toLowerCase().includes(q);
+    });
+
+    const tenantRows = filteredTenants.length > 0
+      ? filteredTenants.map(renderTenantRow).join('')
+      : `<div style="padding:18px; text-align:center; color:var(--text-secondary);">No tenants match this search.</div>`;
 
     const activeTenant = tenantListCache.find(t => t.guildId === selectedTenantGuildId) || null;
     const activeTenantName = activeTenant?.guildName || selectedTenantGuildId || 'No tenant selected';
@@ -2865,6 +2874,15 @@ async function loadSuperadminView() {
             <h4 style="margin:0; color:#c9d6ff;">Tenant Management <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(99,102,241,0.2);font-size:0.72em;vertical-align:middle;">Tenant Scoped</span></h4>
             <button class="btn-secondary" onclick="loadSuperadminView()" style="padding:8px 12px;">Refresh</button>
           </div>
+
+          <div style="display:grid; grid-template-columns:minmax(240px,0.45fr) minmax(220px,0.35fr) auto; gap:10px; margin-bottom:12px; align-items:center;">
+            <input id="superadminTenantSearch" type="text" value="${escapeHtml(superadminTenantSearch)}" placeholder="Search tenant by name, id, or plan..." oninput="applySuperadminTenantFilter(this.value)" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; width:100%;">
+            <select id="superadminTenantSelect" onchange="selectTenantGuild(this.value)" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; width:100%;">
+              ${tenantListCache.map(t => `<option value="${escapeHtml(t.guildId)}"${t.guildId === selectedTenantGuildId ? ' selected' : ''}>${escapeHtml(t.guildName || t.guildId)} (${escapeHtml(t.guildId)})</option>`).join('')}
+            </select>
+            <div style="color:var(--text-secondary);font-size:0.82em;text-align:right;">Showing ${filteredTenants.length}/${tenantListCache.length}</div>
+          </div>
+
           <div style="border:1px solid rgba(99,102,241,0.15); border-radius:10px; overflow:hidden;">
             <div style="display:grid; grid-template-columns:minmax(0,1.6fr) repeat(3,minmax(0,1fr)); gap:12px; padding:10px 14px; background:rgba(99,102,241,0.12); color:#c9d6ff; font-weight:600; font-size:0.82em;">
               <div>Guild</div>
@@ -3049,6 +3067,11 @@ async function revokeEra(guildId, eraKey) {
 
 function selectTenantGuild(guildId) {
   selectedTenantGuildId = guildId;
+  loadSuperadminView();
+}
+
+function applySuperadminTenantFilter(query) {
+  superadminTenantSearch = String(query || '');
   loadSuperadminView();
 }
 

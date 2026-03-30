@@ -2550,6 +2550,7 @@ let selectedTenantDetailCache = null;
 let selectedTenantAuditCache = [];
 let superadminTenantSearch = '';
 let superadminActiveTab = 'tenants';
+let tenantDetailActiveTab = 'overview';
 
 const TENANT_PLAN_LABELS = {
   starter: 'Starter',
@@ -2656,7 +2657,15 @@ function renderTenantDetailPanel(tenant) {
       <div style="padding:10px 12px;border:1px solid rgba(99,102,241,0.2);border-radius:10px;background:rgba(30,41,59,0.45);color:#cbd5e1;font-size:0.82em;">
         <strong style="color:#e2e8f0;">You are editing tenant:</strong> ${escapeHtml(tenant.guildName || tenant.guildId)} <span style="font-family:monospace;opacity:.85;">(${escapeHtml(tenant.guildId)})</span>
       </div>
-      <div style="display:grid; gap:14px; grid-template-columns:minmax(0,1.2fr) minmax(0,0.8fr);">
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button data-tenant-detail-tab="overview" class="btn-primary" onclick="showTenantDetailTab('overview')" style="padding:8px 12px;">Overview</button>
+        <button data-tenant-detail-tab="controls" class="btn-secondary" onclick="showTenantDetailTab('controls')" style="padding:8px 12px;">Plan & Status</button>
+        <button data-tenant-detail-tab="branding" class="btn-secondary" onclick="showTenantDetailTab('branding')" style="padding:8px 12px;">Branding</button>
+        <button data-tenant-detail-tab="modules" class="btn-secondary" onclick="showTenantDetailTab('modules')" style="padding:8px 12px;">Modules</button>
+      </div>
+
+      <div id="tenantDetail-overview" style="display:grid; gap:14px; grid-template-columns:minmax(0,1.2fr) minmax(0,0.8fr);">
         <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
             <div>
@@ -2686,7 +2695,7 @@ function renderTenantDetailPanel(tenant) {
         </div>
       </div>
 
-      <div style="display:grid; gap:16px; grid-template-columns:minmax(0,0.8fr) minmax(0,1.2fr);">
+      <div id="tenantDetail-controls" style="display:none;gap:16px; grid-template-columns:minmax(0,0.8fr) minmax(0,1.2fr);">
         <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
             <h4 style="margin:0; color:#c9d6ff;">Plan Assignment</h4>
@@ -2729,7 +2738,7 @@ function renderTenantDetailPanel(tenant) {
         </div>
       </div>
 
-      <div style="display:grid; gap:16px; grid-template-columns:minmax(0,1fr) minmax(0,1fr);">
+      <div id="tenantDetail-branding" style="display:none;">
         <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
             <h4 style="margin:0; color:#c9d6ff;">Branding</h4>
@@ -2762,7 +2771,9 @@ function renderTenantDetailPanel(tenant) {
             </label>
           </div>
         </div>
+      </div>
 
+      <div id="tenantDetail-modules" style="display:none;">
         <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
           <h4 style="margin:0 0 12px; color:#c9d6ff;">Module Bundle</h4>
           <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
@@ -2915,10 +2926,8 @@ async function loadSuperadminView() {
             <h4 style="margin:0; color:#c9d6ff;">Era Assignments <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global Control</span></h4>
             <button class="btn-secondary" onclick="loadEraAssignments()" style="padding:8px 12px;">Refresh</button>
           </div>
-          <div style="display:grid; gap:10px; grid-template-columns:1fr 1fr auto; margin-bottom:14px;">
-            <select id="eraAssignGuildId" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
-              <option value="">Loading servers...</option>
-            </select>
+          <div style="margin-bottom:10px;color:var(--text-secondary);font-size:0.82em;">Applying era assignment to active tenant context: <span style="color:#e2e8f0;font-weight:700;">${escapeHtml(activeTenantName)}</span> <span style="font-family:monospace;">${escapeHtml(selectedTenantGuildId || '—')}</span></div>
+          <div style="display:grid; gap:10px; grid-template-columns:1fr auto; margin-bottom:14px;">
             <select id="eraAssignKey" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
               <option value="">Loading eras...</option>
             </select>
@@ -2976,6 +2985,7 @@ async function loadSelectedTenantDetail() {
     selectedTenantDetailCache = tenantData.tenant || null;
     selectedTenantAuditCache = auditData.auditLogs || [];
     content.innerHTML = renderTenantDetailPanel(selectedTenantDetailCache);
+    showTenantDetailTab(tenantDetailActiveTab || 'overview');
   } catch (error) {
     content.innerHTML = `<div style="color:#fca5a5; text-align:center; padding:20px;">Error loading tenant details: ${escapeHtml(error.message || 'Unknown error')}</div>`;
   }
@@ -2984,22 +2994,12 @@ async function loadSelectedTenantDetail() {
 async function loadEraAssignments() {
   const table = document.getElementById('eraAssignmentsTable');
   const select = document.getElementById('eraAssignKey');
-  const guildSelect = document.getElementById('eraAssignGuildId');
-
   try {
-    const [erasRes, assignRes, tenantsRes] = await Promise.all([
+    const [erasRes, assignRes] = await Promise.all([
       fetch('/api/superadmin/eras', { credentials: 'include', headers: buildTenantRequestHeaders() }),
-      fetch('/api/superadmin/era-assignments', { credentials: 'include', headers: buildTenantRequestHeaders() }),
-      fetch('/api/superadmin/tenants', { credentials: 'include', headers: buildTenantRequestHeaders() })
+      fetch('/api/superadmin/era-assignments', { credentials: 'include', headers: buildTenantRequestHeaders() })
     ]);
-    const [erasData, assignData, tenantsData] = await Promise.all([erasRes.json(), assignRes.json(), tenantsRes.json()]);
-
-    // Populate guild dropdown from tenant list
-    if (guildSelect && tenantsData.tenants) {
-      const current = guildSelect.value;
-      guildSelect.innerHTML = '<option value="">— Select server —</option>' +
-        tenantsData.tenants.map(t => { const gid = t.guildId || t.guild_id || ''; const gname = t.guildName || t.guild_name || gid; return `<option value="${escapeHtml(gid)}"${gid === current ? ' selected' : ''}>${escapeHtml(gname)}</option>`; }).join('');
-    }
+    const [erasData, assignData] = await Promise.all([erasRes.json(), assignRes.json()]);
 
     // Populate era dropdown
     if (select && erasData.success && erasData.eras) {
@@ -3013,7 +3013,7 @@ async function loadEraAssignments() {
 
     // Populate assignments table
     if (table && assignData.success) {
-      const rows = (assignData.assignments || []);
+      const rows = (assignData.assignments || []).filter(a => !selectedTenantGuildId || a.guild_id === selectedTenantGuildId);
       if (rows.length === 0) {
         table.innerHTML = '<div style="padding:18px; text-align:center; color:var(--text-secondary);">No era assignments yet.</div>';
       } else {
@@ -3037,9 +3037,9 @@ async function loadEraAssignments() {
 }
 
 async function assignEra() {
-  const guildId = document.getElementById('eraAssignGuildId')?.value?.trim();
+  const guildId = String(selectedTenantGuildId || '').trim();
   const eraKey = document.getElementById('eraAssignKey')?.value;
-  if (!guildId || !eraKey) return alert('Please select a server and an era.');
+  if (!guildId || !eraKey) return alert('Please select an active tenant context and an era.');
 
   try {
     const res = await fetch('/api/superadmin/era-assignments', {
@@ -3050,7 +3050,6 @@ async function assignEra() {
     });
     const data = await res.json();
     if (!data.success) return alert(data.message || 'Failed to assign era');
-    document.getElementById('eraAssignGuildId').value = '';
     loadEraAssignments();
   } catch (error) {
     alert('Error assigning era: ' + error.message);
@@ -3101,6 +3100,25 @@ function selectTenantGuild(guildId) {
 function applySuperadminTenantFilter(query) {
   superadminTenantSearch = String(query || '');
   loadSuperadminView();
+}
+
+function showTenantDetailTab(tab) {
+  tenantDetailActiveTab = tab;
+  const ids = {
+    overview: ['tenantDetail-overview'],
+    controls: ['tenantDetail-controls'],
+    branding: ['tenantDetail-branding'],
+    modules: ['tenantDetail-modules'],
+  };
+  Object.entries(ids).forEach(([key, list]) => {
+    list.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = (key === tab) ? '' : 'none';
+    });
+  });
+  document.querySelectorAll('[data-tenant-detail-tab]').forEach(btn => {
+    btn.className = (btn.dataset.tenantDetailTab === tab) ? 'btn-primary' : 'btn-secondary';
+  });
 }
 
 async function applyTenantPlan() {

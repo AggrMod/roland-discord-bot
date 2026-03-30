@@ -2353,6 +2353,7 @@ class WebServer {
     this.app.post('/api/admin/roles/post-panel', adminAuthMiddleware, async (req, res) => {
       try {
         const roleClaimService = require('../services/roleClaimService');
+        const { applyEmbedBranding } = require('../services/embedBranding');
         const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
         const fs = require('fs');
         const panelConfigPath = require('path').join(__dirname, '..', 'config', 'role-claim-panels.json');
@@ -2370,9 +2371,15 @@ class WebServer {
 
         const embed = new EmbedBuilder()
           .setTitle(title || '🎖️ Get Your Roles')
-          .setDescription(description || 'Click a button below to claim or unclaim a community role.')
-          .setColor(0x6366f1)
-          .setFooter({ text: 'Click a button to claim or unclaim a role' });
+          .setDescription(description || 'Click a button below to claim or unclaim a community role.');
+
+        applyEmbedBranding(embed, {
+          guildId: req.guildId || channel.guild?.id || '',
+          moduleKey: 'selfserve',
+          defaultColor: '#6366f1',
+          defaultFooter: 'Powered by Guild Pilot',
+          fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
+        });
 
         const rows = [];
         for (let i = 0; i < roles.length && rows.length < 5; i += 5) {

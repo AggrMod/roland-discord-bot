@@ -8,6 +8,7 @@ const tenantService = require('./services/tenantService');
 const moduleGate = require('./middleware/moduleGate');
 const { getCommandModuleKey } = require('./config/commandModules');
 const clientProvider = require('./utils/clientProvider');
+const { applyEmbedBranding } = require('./services/embedBranding');
 
 // Validate critical environment variables on startup
 function validateEnvVars() {
@@ -329,13 +330,19 @@ async function handlePanelVerifyButton(interaction) {
     // If no wallets linked, send to portal
     if (!wallets || wallets.length === 0) {
       const embed = new EmbedBuilder()
-        .setColor('#FFD700')
         .setTitle('🔗 Verification Portal')
         .setDescription('No wallet linked yet. Connect your wallet to join the Family, then we\'ll sync your holdings automatically.')
         .addFields(
           { name: 'Next Steps', value: '1) Open portal\n2) Connect/sign\n3) Click Verify again', inline: false }
         )
         .setTimestamp();
+      applyEmbedBranding(embed, {
+        guildId: interaction.guildId || '',
+        moduleKey: 'verification',
+        defaultColor: '#FFD700',
+        defaultFooter: 'Powered by Guild Pilot',
+        fallbackLogoUrl: client?.user?.displayAvatarURL?.() || null,
+      });
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -440,10 +447,16 @@ async function handleSupportButton(interaction) {
 
     if (!result.success) {
       const embed = new EmbedBuilder()
-        .setColor('#FF0000')
         .setTitle('❌ Cannot Support')
         .setDescription(result.message || 'An error occurred.')
         .setTimestamp();
+      applyEmbedBranding(embed, {
+        guildId: interaction.guildId || '',
+        moduleKey: 'governance',
+        defaultColor: '#FF0000',
+        defaultFooter: 'Powered by Guild Pilot',
+        fallbackLogoUrl: client?.user?.displayAvatarURL?.() || null,
+      });
 
       return interaction.editReply({ embeds: [embed] });
     }
@@ -455,13 +468,19 @@ async function handleSupportButton(interaction) {
     await updateProposalMessage(interaction.message, proposalId, supporterCount, isPromoted);
 
     const embed = new EmbedBuilder()
-      .setColor('#FFD700')
       .setTitle(isPromoted ? '🗳️ Promoted to Voting!' : '✅ Support Added')
       .setDescription(isPromoted 
         ? 'This proposal has been promoted to voting! Check the voting channel to cast your vote.'
         : `You've supported this proposal! (${supporterCount}/4 supporters)`
       )
       .setTimestamp();
+    applyEmbedBranding(embed, {
+      guildId: interaction.guildId || '',
+      moduleKey: 'governance',
+      defaultColor: '#FFD700',
+      defaultFooter: 'Powered by Guild Pilot',
+      fallbackLogoUrl: client?.user?.displayAvatarURL?.() || null,
+    });
 
     await interaction.editReply({ embeds: [embed] });
     logger.log(`User ${discordId} supported proposal ${proposalId} (${supporterCount}/4)${isPromoted ? ' - PROMOTED' : ''}`);
@@ -541,10 +560,16 @@ async function handleVoteButton(interaction) {
     const userInfo = await roleService.getUserInfo(discordId);
     if (!userInfo || !userInfo.voting_power || userInfo.voting_power === 0) {
       const embed = new EmbedBuilder()
-        .setColor('#FF0000')
         .setTitle('❌ Not Eligible')
         .setDescription('You must own at least 1 SOLPRANOS NFT to vote.')
         .setTimestamp();
+      applyEmbedBranding(embed, {
+        guildId: interaction.guildId || '',
+        moduleKey: 'governance',
+        defaultColor: '#FF0000',
+        defaultFooter: 'Powered by Guild Pilot',
+        fallbackLogoUrl: client?.user?.displayAvatarURL?.() || null,
+      });
 
       return interaction.editReply({ embeds: [embed] });
     }
@@ -553,10 +578,16 @@ async function handleVoteButton(interaction) {
 
     if (!result.success) {
       const embed = new EmbedBuilder()
-        .setColor('#FF0000')
         .setTitle('❌ Cannot Vote')
         .setDescription(result.message || 'An error occurred.')
         .setTimestamp();
+      applyEmbedBranding(embed, {
+        guildId: interaction.guildId || '',
+        moduleKey: 'governance',
+        defaultColor: '#FF0000',
+        defaultFooter: 'Powered by Guild Pilot',
+        fallbackLogoUrl: client?.user?.displayAvatarURL?.() || null,
+      });
 
       return interaction.editReply({ embeds: [embed] });
     }
@@ -571,11 +602,17 @@ async function handleVoteButton(interaction) {
     };
 
     const embed = new EmbedBuilder()
-      .setColor('#FFD700')
       .setTitle('🗳️ Vote Recorded!')
       .setDescription(`Your ${choiceEmoji[voteChoice]} **${voteChoice.toUpperCase()}** vote has been recorded!\n\n**Voting Power:** ${userInfo.voting_power} VP`)
       .setFooter({ text: 'You can change your vote any time before voting closes.' })
       .setTimestamp();
+    applyEmbedBranding(embed, {
+      guildId: interaction.guildId || '',
+      moduleKey: 'governance',
+      defaultColor: '#FFD700',
+      defaultFooter: 'Powered by Guild Pilot',
+      fallbackLogoUrl: client?.user?.displayAvatarURL?.() || null,
+    });
 
     await interaction.editReply({ embeds: [embed] });
     logger.log(`User ${discordId} voted ${voteChoice} on proposal ${proposalId} with ${userInfo.voting_power} VP`);
@@ -719,10 +756,16 @@ async function handleRoleClaimButton(interaction) {
     }
 
     const embed = new EmbedBuilder()
-      .setColor(result.success ? (result.action === 'added' ? '#57F287' : '#FEE75C') : '#ED4245')
       .setTitle(result.success ? (result.action === 'added' ? '✅ Role Added' : '➖ Role Removed') : '❌ Error')
       .setDescription(result.message)
       .setTimestamp();
+    applyEmbedBranding(embed, {
+      guildId: interaction.guildId || '',
+      moduleKey: 'selfserve',
+      defaultColor: result.success ? (result.action === 'added' ? '#57F287' : '#FEE75C') : '#ED4245',
+      defaultFooter: 'Powered by Guild Pilot',
+      fallbackLogoUrl: client?.user?.displayAvatarURL?.() || null,
+    });
 
     await interaction.editReply({ embeds: [embed] });
     

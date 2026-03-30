@@ -4589,8 +4589,7 @@ async function loadVerificationSettings() {
             ${roleSelectHTML('ver_ogRoleId', vs.ogRoleId || '')}
           </div>
           <div>
-            <label style="${fieldLabel}">OG Role Limit</label>
-            <p style="color:var(--text-secondary);font-size:0.8em;margin:0 0 8px 0;">First N verifiers get OG role</p>
+            <label style="${fieldLabel}">OG Role Limit (First N verifiers)</label>
             <input type="number" id="ver_ogRoleLimit" min="0" value="${vs.ogRoleLimit ?? ''}" style="${fieldInput}">
           </div>
         </div>

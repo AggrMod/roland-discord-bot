@@ -2556,6 +2556,7 @@ let superadminTenantPage = 1;
 let superadminTenantPageSize = 25;
 let superadminTenantTotalPages = 1;
 let superadminTenantTotalCount = 0;
+let superadminTenantSearchTimer = null;
 
 const TENANT_PLAN_LABELS = {
   starter: 'Starter',
@@ -2970,6 +2971,16 @@ async function loadSuperadminView() {
       </div>
     `;
 
+    // Preserve search focus/caret across rerenders
+    requestAnimationFrame(() => {
+      const searchEl = document.getElementById('superadminTenantSearch');
+      if (searchEl && superadminTenantSearch) {
+        searchEl.focus();
+        const len = searchEl.value.length;
+        searchEl.setSelectionRange(len, len);
+      }
+    });
+
     if (selectedTenantGuildId) {
       await loadSelectedTenantDetail();
     }
@@ -3134,7 +3145,10 @@ function applySuperadminTenantFilter(query) {
   superadminTenantSearch = String(query || '');
   superadminTenantPage = 1;
   if (superadminTenantSearch.trim() !== '') superadminTenantDirectoryCollapsed = false;
-  loadSuperadminView();
+  if (superadminTenantSearchTimer) clearTimeout(superadminTenantSearchTimer);
+  superadminTenantSearchTimer = setTimeout(() => {
+    loadSuperadminView();
+  }, 220);
 }
 
 function superadminTenantPrevPage() {

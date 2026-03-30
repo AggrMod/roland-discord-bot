@@ -1,6 +1,6 @@
 const db = require('../database/db');
 const logger = require('../utils/logger');
-const { applyEmbedBranding, getBranding } = require('./embedBranding');
+const { applyEmbedBranding, createBrandedPanelEmbed } = require('./embedBranding');
 const settingsManager = require('../config/settings');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 
@@ -210,27 +210,11 @@ class TicketService {
       const normalizedTitle = String(title || '🎫 Support').slice(0, 256);
       const normalizedDescription = String(description || 'Select a category below to open a support ticket.');
 
-      const embed = new EmbedBuilder()
-        .setDescription(normalizedDescription)
-        .setTimestamp();
-
-      const branding = getBranding(normalizedGuildId, 'ticketing');
-      const logo = branding.logo || this.client?.user?.displayAvatarURL?.() || null;
-      const cleanTitle = String(normalizedTitle || 'Support').replace(/^\p{Extended_Pictographic}[\uFE0F\u200D\s]*/u, '').trim() || 'Support';
-      const authorText = `${branding.brandName || 'Guild Pilot'} | ${cleanTitle}`;
-      if (logo) {
-        try {
-          embed.setAuthor({ name: authorText, iconURL: logo });
-        } catch {}
-      } else {
-        try {
-          embed.setAuthor({ name: authorText });
-        } catch {}
-      }
-
-      applyEmbedBranding(embed, {
+      const embed = createBrandedPanelEmbed({
         guildId: normalizedGuildId,
         moduleKey: 'ticketing',
+        panelTitle: normalizedTitle,
+        description: normalizedDescription,
         defaultColor: '#5865F2',
         defaultFooter: 'Powered by Guild Pilot',
         fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,

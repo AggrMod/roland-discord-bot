@@ -2353,8 +2353,8 @@ class WebServer {
     this.app.post('/api/admin/roles/post-panel', adminAuthMiddleware, async (req, res) => {
       try {
         const roleClaimService = require('../services/roleClaimService');
-        const { applyEmbedBranding } = require('../services/embedBranding');
-        const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+        const { createBrandedPanelEmbed } = require('../services/embedBranding');
+        const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
         const fs = require('fs');
         const panelConfigPath = require('path').join(__dirname, '..', 'config', 'role-claim-panels.json');
 
@@ -2369,16 +2369,15 @@ class WebServer {
         const channel = this.client.channels.cache.get(channelId);
         if (!channel) return res.status(400).json({ success: false, message: 'Channel not found' });
 
-        const embed = new EmbedBuilder()
-          .setTitle(title || '🎖️ Get Your Roles')
-          .setDescription(description || 'Click a button below to claim or unclaim a community role.');
-
-        applyEmbedBranding(embed, {
+        const embed = createBrandedPanelEmbed({
           guildId: req.guildId || channel.guild?.id || '',
           moduleKey: 'selfserve',
+          panelTitle: title || '🎖️ Get Your Roles',
+          description: description || 'Click a button below to claim or unclaim a community role.',
           defaultColor: '#6366f1',
           defaultFooter: 'Powered by Guild Pilot',
           fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
+          useThumbnail: false,
         });
 
         const rows = [];
@@ -2515,8 +2514,8 @@ class WebServer {
     this.app.post('/api/admin/role-panels/:id/post', adminAuthMiddleware, async (req, res) => {
       try {
         const rolePanelService = require('../services/rolePanelService');
-        const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-        const { applyEmbedBranding } = require('../services/embedBranding');
+        const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+        const { createBrandedPanelEmbed } = require('../services/embedBranding');
         const panelId = parseInt(req.params.id);
         const panel = rolePanelService.getPanel(panelId, req.guildId);
         if (!panel) return res.status(404).json({ success: false, message: 'Panel not found' });
@@ -2531,16 +2530,15 @@ class WebServer {
         const channel = this.client.channels.cache.get(targetChannelId) || await this.client.channels.fetch(targetChannelId).catch(() => null);
         if (!channel) return res.status(400).json({ success: false, message: 'Channel not found' });
 
-        const embed = new EmbedBuilder()
-          .setTitle(panel.title || '🎖️ Get Your Roles')
-          .setDescription(panel.description || 'Click a button below to claim or unclaim a community role.');
-
-        applyEmbedBranding(embed, {
+        const embed = createBrandedPanelEmbed({
           guildId: req.guildId,
           moduleKey: 'selfserve',
+          panelTitle: panel.title || '🎖️ Get Your Roles',
+          description: panel.description || 'Click a button below to claim or unclaim a community role.',
           defaultColor: '#6366f1',
           defaultFooter: 'Powered by Guild Pilot',
           fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
+          useThumbnail: false,
         });
 
         const rows = [];

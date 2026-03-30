@@ -53,4 +53,43 @@ function applyEmbedBranding(embed, {
   return embed;
 }
 
-module.exports = { applyEmbedBranding, getBranding };
+function createBrandedPanelEmbed({
+  guildId,
+  moduleKey,
+  panelTitle,
+  description,
+  defaultColor = '#6366f1',
+  defaultFooter = 'Powered by Guild Pilot',
+  fallbackLogoUrl = null,
+  useThumbnail = false,
+}) {
+  const { EmbedBuilder } = require('discord.js');
+  const embed = new EmbedBuilder()
+    .setDescription(String(description || '').trim() || 'No description provided.')
+    .setTimestamp();
+
+  const br = getBranding(guildId, moduleKey);
+  const logo = br.logo || fallbackLogoUrl || null;
+  const cleanedTitle = String(panelTitle || 'Panel')
+    .replace(/^\p{Extended_Pictographic}[\uFE0F\u200D\s]*/u, '')
+    .trim() || 'Panel';
+  const authorText = `${br.brandName || 'Guild Pilot'} | ${cleanedTitle}`;
+
+  try {
+    if (logo) embed.setAuthor({ name: authorText, iconURL: logo });
+    else embed.setAuthor({ name: authorText });
+  } catch {}
+
+  applyEmbedBranding(embed, {
+    guildId,
+    moduleKey,
+    defaultColor,
+    defaultFooter,
+    fallbackLogoUrl,
+    useThumbnail,
+  });
+
+  return embed;
+}
+
+module.exports = { applyEmbedBranding, getBranding, createBrandedPanelEmbed };

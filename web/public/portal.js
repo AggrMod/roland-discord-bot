@@ -1939,11 +1939,10 @@ async function refreshTreasuryBalances() {
 }
 
 // ==================== ADD WALLET MODAL ====================
-function openAddWalletModal(existingAddr, existingLabel, existingChannel) {
+async function openAddWalletModal(existingAddr, existingLabel, existingChannel) {
   const modal = document.getElementById('addWalletModal');
   document.getElementById('addWalletAddress').value = existingAddr || '';
   document.getElementById('addWalletLabel').value = existingLabel || '';
-  document.getElementById('addWalletChannel').value = existingChannel || '';
   document.getElementById('addWalletError').style.display = 'none';
   // Reset checkboxes
   document.querySelectorAll('.addWalletTxType').forEach(cb => {
@@ -1951,6 +1950,36 @@ function openAddWalletModal(existingAddr, existingLabel, existingChannel) {
   });
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
+
+  // Populate channel dropdown
+  const sel = document.getElementById('addWalletChannel');
+  sel.innerHTML = '<option value="">-- No alert channel --</option>';
+  try {
+    const chRes = await fetch('/api/admin/discord/channels', { credentials: 'include' });
+    if (chRes.ok) {
+      const chData = await chRes.json();
+      const channels = chData.channels || [];
+      const grouped = {};
+      channels.forEach(ch => {
+        const parent = ch.parentName || 'Other';
+        if (!grouped[parent]) grouped[parent] = [];
+        grouped[parent].push(ch);
+      });
+      Object.keys(grouped).sort().forEach(parent => {
+        const og = document.createElement('optgroup');
+        og.label = parent;
+        grouped[parent].forEach(ch => {
+          const opt = document.createElement('option');
+          opt.value = ch.id;
+          opt.textContent = '# ' + ch.name;
+          og.appendChild(opt);
+        });
+        sel.appendChild(og);
+      });
+    }
+  } catch (e) { console.error('[AddWalletModal] Channel load error:', e); }
+  // Set current value after populating
+  if (existingChannel) sel.value = existingChannel;
 }
 
 function closeAddWalletModal() {

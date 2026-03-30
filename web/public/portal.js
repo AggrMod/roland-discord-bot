@@ -6875,139 +6875,226 @@ async function legacyLoadTreasuryTrackerView() {
 // ==================== SELF-SERVE ROLES ====================
 async function loadSelfServeRolesView() {
   if (!isAdmin) return;
-  const content = document.getElementById('adminSelfServeRolesContent');
+  // Route to settings tab if in settings section, else admin panel content
+  const pane = document.getElementById('settingsTab-selfserve');
+  const content = pane || document.getElementById('adminSelfServeRolesContent');
   if (!content) return;
-  content.innerHTML = '<p style="color:var(--text-secondary);">Loading...</p>';
+  content.innerHTML = '<p style="color:var(--text-secondary);">Loading panels...</p>';
 
   try {
-    const res = await fetch('/api/admin/role-claim/config', { credentials: 'include' });
-    const roles = await res.json();
+    const [panelsRes, chRes] = await Promise.all([
+      fetch('/api/admin/role-panels', { credentials: 'include' }),
+      fetch('/api/admin/discord/channels', { credentials: 'include' }),
+    ]);
+    const panelsData = panelsRes.ok ? await panelsRes.json() : {};
+    const panels = panelsData.panels || [];
+    const channels = chRes.ok ? ((await chRes.json()).channels || []) : [];
 
-    const tableRows = (roles && roles.length)
-      ? roles.map(r => `<tr>
-          <td style="padding:8px 12px;">${r.name || r.roleId}</td>
-          <td style="padding:8px 12px;">${r.label || '—'}</td>
-          <td style="padding:8px 12px;">${r.memberCount ?? '—'}</td>
-          <td style="padding:8px 12px;">${r.manageable ? '✅' : '⚠️'}</td>
-          <td style="padding:8px 12px;">
-            <label style="position:relative;display:inline-block;width:40px;height:22px;">
-              <input type="checkbox" ${r.enabled !== false ? 'checked' : ''} onchange="toggleSelfServeRole('${r.roleId}', this.checked)" style="opacity:0;width:0;height:0;">
-              <span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:${r.enabled !== false ? 'var(--gold)' : '#555'};border-radius:24px;transition:.3s;"></span>
-              <span style="position:absolute;height:16px;width:16px;left:${r.enabled !== false ? '20px' : '3px'};bottom:3px;background:#fff;border-radius:50%;transition:.3s;pointer-events:none;"></span>
+    // Build grouped channel options
+    const grouped = {};
+    channels.forEach(ch => { const p = ch.parentName || 'Other'; if (!grouped[p]) grouped[p] = []; grouped[p].push(ch); });
+    const chOpts = (selId) => {
+      let h = '<option value="">-- Select channel --</option>';
+      Object.keys(grouped).sort().forEach(parent => {
+        h += `<optgroup label="${escapeHtml(parent)}">`;
+        grouped[parent].forEach(ch => { h += `<option value="${ch.id}"${ch.id === selId ? ' selected' : ''}># ${escapeHtml(ch.name)}</option>`; });
+        h += '</optgroup>';
+      });
+      return h;
+    };
+
+    const cardStyle = 'background:rgba(14,23,44,0.5);border:1px solid rgba(99,102,241,0.22);border-radius:10px;padding:20px;margin-bottom:16px;';
+    const fi = 'width:100%;padding:8px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;';
+
+    const panelCards = panels.map(p => {
+      const roleRows = p.roles.length ? p.roles.map(r => `
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+          <td style="padding:6px 10px;font-size:0.85em;color:#e0e7ff;">${escapeHtml(r.label || r.role_id)}</td>
+          <td style="padding:6px 10px;font-size:0.8em;color:#94a3b8;font-family:monospace;">${escapeHtml(r.role_id)}</td>
+          <td style="padding:6px 10px;">
+            <label style="position:relative;display:inline-block;width:36px;height:20px;">
+              <input type="checkbox" class="panel-role-toggle" data-panel="${p.id}" data-role="${escapeHtml(r.role_id)}" ${r.enabled ? 'checked' : ''} style="opacity:0;width:0;height:0;">
+              <span style="position:absolute;cursor:pointer;inset:0;background:${r.enabled ? 'var(--gold,#f59e0b)' : '#555'};border-radius:20px;transition:.3s;"></span>
+              <span style="position:absolute;height:14px;width:14px;left:${r.enabled ? '19px' : '3px'};bottom:3px;background:#fff;border-radius:50%;transition:.3s;pointer-events:none;"></span>
             </label>
           </td>
-          <td style="padding:8px 12px;">
-            <button class="btn-secondary" style="padding:4px 10px;font-size:0.8em;" onclick="removeSelfServeRole('${r.roleId}')">Remove</button>
+          <td style="padding:6px 10px;">
+            <button class="panel-role-remove btn-danger" data-panel="${p.id}" data-role="${escapeHtml(r.role_id)}" style="font-size:0.78em;padding:3px 8px;">🗑️</button>
           </td>
-        </tr>`).join('')
-      : '<tr><td colspan="6" style="padding:12px;color:var(--text-secondary);text-align:center;">No claimable roles configured yet.</td></tr>';
+        </tr>
+      `).join('') : `<tr><td colspan="4" style="padding:10px;color:var(--text-secondary);font-size:0.85em;text-align:center;">No roles yet — add one below.</td></tr>`;
+
+      return `
+        <div style="${cardStyle}" data-panel-id="${p.id}">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+            <div style="flex:1;min-width:200px;">
+              <input type="text" class="panel-title-input" data-panel="${p.id}" value="${escapeHtml(p.title)}" style="${fi}font-weight:600;font-size:1em;margin-bottom:6px;">
+              <textarea class="panel-desc-input" data-panel="${p.id}" rows="2" style="${fi}resize:vertical;font-size:0.88em;">${escapeHtml(p.description)}</textarea>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;">
+              <button class="panel-save-meta btn-secondary" data-panel="${p.id}" style="font-size:0.8em;padding:6px 12px;">💾 Save</button>
+              <button class="panel-delete btn-danger" data-panel="${p.id}" style="font-size:0.8em;padding:6px 12px;">🗑️ Delete Panel</button>
+            </div>
+          </div>
+          <table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+            <thead><tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
+              <th style="text-align:left;padding:6px 10px;font-size:0.8em;color:var(--text-secondary);">Label</th>
+              <th style="text-align:left;padding:6px 10px;font-size:0.8em;color:var(--text-secondary);">Role ID</th>
+              <th style="padding:6px 10px;font-size:0.8em;color:var(--text-secondary);">On</th>
+              <th style="padding:6px 10px;"></th>
+            </tr></thead>
+            <tbody class="panel-roles-tbody" data-panel="${p.id}">${roleRows}</tbody>
+          </table>
+          <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;padding-top:10px;border-top:1px solid rgba(99,102,241,0.12);">
+            <div style="flex:1;min-width:160px;">
+              <div style="font-size:0.8em;color:#94a3b8;margin-bottom:4px;">Add Role</div>
+              <select class="panel-add-role-select" data-panel="${p.id}" style="${fi}"></select>
+            </div>
+            <div style="flex:1;min-width:120px;">
+              <div style="font-size:0.8em;color:#94a3b8;margin-bottom:4px;">Button Label</div>
+              <input type="text" class="panel-add-role-label" data-panel="${p.id}" placeholder="e.g. Artists" style="${fi}">
+            </div>
+            <button class="panel-add-role-btn btn-primary" data-panel="${p.id}" style="font-size:0.8em;padding:8px 14px;white-space:nowrap;">+ Add Role</button>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;padding-top:10px;margin-top:10px;border-top:1px solid rgba(99,102,241,0.12);">
+            <div style="flex:1;min-width:180px;">
+              <div style="font-size:0.8em;color:#94a3b8;margin-bottom:4px;">Post to Channel</div>
+              <select class="panel-channel-select" data-panel="${p.id}" style="${fi}">${chOpts(p.channel_id || '')}</select>
+            </div>
+            <button class="panel-post-btn btn-primary" data-panel="${p.id}" style="font-size:0.8em;padding:8px 14px;">📢 ${p.message_id ? 'Update Panel' : 'Post Panel'}</button>
+            <span class="panel-post-status" data-panel="${p.id}" style="font-size:0.82em;font-weight:600;"></span>
+          </div>
+        </div>
+      `;
+    }).join('');
 
     content.innerHTML = `
-      <p style="color:var(--text-secondary);margin-bottom:var(--space-4);font-size:0.92em;">
-        Configure roles users can self-assign. Post a panel to Discord so users can claim/unclaim roles with buttons.
-      </p>
-
-      <table style="width:100%;border-collapse:collapse;margin-bottom:var(--space-4);">
-        <thead>
-          <tr style="border-bottom:2px solid rgba(99,102,241,0.2);text-align:left;">
-            <th style="padding:8px 12px;color:var(--text-secondary);font-size:0.85em;">Role Name</th>
-            <th style="padding:8px 12px;color:var(--text-secondary);font-size:0.85em;">Label</th>
-            <th style="padding:8px 12px;color:var(--text-secondary);font-size:0.85em;">Members</th>
-            <th style="padding:8px 12px;color:var(--text-secondary);font-size:0.85em;">Status</th>
-            <th style="padding:8px 12px;color:var(--text-secondary);font-size:0.85em;">Enabled</th>
-            <th style="padding:8px 12px;color:var(--text-secondary);font-size:0.85em;"></th>
-          </tr>
-        </thead>
-        <tbody>${tableRows}</tbody>
-      </table>
-
-      <div style="background:rgba(30,41,59,0.5);border-radius:8px;padding:var(--space-4);margin-bottom:var(--space-4);border:1px solid rgba(99,102,241,0.15);">
-        <h4 style="margin:0 0 var(--space-3) 0;color:var(--text-primary);">Add Role</h4>
-        <div style="display:flex;gap:var(--space-3);align-items:flex-end;flex-wrap:wrap;">
-          <div style="flex:1;min-width:180px;">
-            <label style="display:block;font-size:0.85em;color:var(--text-secondary);margin-bottom:4px;">Discord Role</label>
-            ${roleSelectHTML('srRoleSelect', '')}
-          </div>
-          <div style="flex:1;min-width:150px;">
-            <label style="display:block;font-size:0.85em;color:var(--text-secondary);margin-bottom:4px;">Button Label</label>
-            <input type="text" id="srLabelInput" placeholder="e.g. Builders, Raiders, Whitelist"
-              style="width:100%;padding:8px 12px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid rgba(99,102,241,0.2);border-radius:6px;font-size:0.9em;">
-          </div>
-          <button class="btn-primary" style="padding:8px 16px;" onclick="addSelfServeRole()">Add Role</button>
-        </div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+        <button id="srCreatePanelBtn" class="btn-primary" style="font-size:0.85em;padding:8px 18px;">➕ New Panel</button>
       </div>
-
-      <div style="background:rgba(30,41,59,0.5);border-radius:8px;padding:var(--space-4);border:1px solid rgba(99,102,241,0.15);">
-        <h4 style="margin:0 0 var(--space-3) 0;color:var(--text-primary);">📢 Post Role Claim Panel</h4>
-        <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:var(--space-3);">
-          Creates one button per enabled role. Users click to toggle. Updates the existing panel message if already posted in this channel.
-        </p>
-        <div style="display:flex;flex-direction:column;gap:var(--space-3);">
-          <div>
-            <label style="display:block;font-size:0.85em;color:var(--text-secondary);margin-bottom:4px;">Channel</label>
-            <select id="srPanelChannelId" style="width:100%;padding:8px 12px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid rgba(99,102,241,0.2);border-radius:6px;font-size:0.9em;">
-              <option value="">-- Select Channel --</option>
-            </select>
-          </div>
-          <div>
-            <label style="display:block;font-size:0.85em;color:var(--text-secondary);margin-bottom:4px;">Panel Title</label>
-            <input type="text" id="srPanelTitle" value="🎖️ Get Your Roles"
-              style="width:100%;padding:8px 12px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid rgba(99,102,241,0.2);border-radius:6px;font-size:0.9em;">
-          </div>
-          <div>
-            <label style="display:block;font-size:0.85em;color:var(--text-secondary);margin-bottom:4px;">Panel Description</label>
-            <textarea id="srPanelDesc" rows="2" style="width:100%;padding:8px 12px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid rgba(99,102,241,0.2);border-radius:6px;font-size:0.9em;resize:vertical;">Click a button below to claim or unclaim a community role.</textarea>
-          </div>
-          <button class="btn-primary" style="padding:8px 16px;align-self:flex-start;" onclick="postSelfServePanel()">📢 Post Panel</button>
-          <div id="srPanelStatus"></div>
-        </div>
-      </div>
+      ${panels.length ? panelCards : `<div style="${cardStyle}text-align:center;color:var(--text-secondary);"><p>No panels yet. Create your first panel above.</p></div>`}
     `;
 
-    populateRoleSelect('srRoleSelect', '');
-    // Populate channel dropdown — use cached channelsList if available
-    setTimeout(() => {
-      const sel = document.getElementById('srPanelChannelId');
-      if (!sel) return;
-      const list = (typeof channelsList !== 'undefined' && channelsList.length > 0)
-        ? channelsList
-        : [];
-      if (list.length > 0) {
-        const grouped = {};
-        list.forEach(ch => {
-          const parent = ch.parentName || 'Other';
-          if (!grouped[parent]) grouped[parent] = [];
-          grouped[parent].push(ch);
+    // Populate role dropdowns
+    const discordRoles = (typeof fetchDiscordRoles === 'function') ? await fetchDiscordRoles() : [];
+    content.querySelectorAll('.panel-add-role-select').forEach(sel => {
+      sel.innerHTML = '<option value="">-- Select Role --</option>';
+      discordRoles.filter(r => !r.everyone).forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r.id; opt.textContent = r.name;
+        sel.appendChild(opt);
+      });
+    });
+
+    // Wire toggle role enabled/disabled
+    content.querySelectorAll('.panel-role-toggle').forEach(cb => {
+      cb.addEventListener('change', async function() {
+        const knob = this.parentElement.querySelector('span:last-child');
+        const track = this.parentElement.querySelector('span:first-of-type');
+        if (knob) knob.style.left = this.checked ? '19px' : '3px';
+        if (track) track.style.background = this.checked ? 'var(--gold,#f59e0b)' : '#555';
+        await fetch(`/api/admin/role-panels/${this.dataset.panel}/roles/${encodeURIComponent(this.dataset.role)}`, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: this.checked })
         });
-        sel.innerHTML = '<option value="">-- Select Channel --</option>';
-        Object.keys(grouped).sort().forEach(parent => {
-          const og = document.createElement('optgroup');
-          og.label = parent;
-          grouped[parent].forEach(ch => {
-            const opt = document.createElement('option');
-            opt.value = ch.id;
-            opt.textContent = '# ' + ch.name;
-            og.appendChild(opt);
+      });
+    });
+
+    // Wire remove role
+    content.querySelectorAll('.panel-role-remove').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Remove this role from the panel?')) return;
+        await fetch(`/api/admin/role-panels/${btn.dataset.panel}/roles/${encodeURIComponent(btn.dataset.role)}`, { method: 'DELETE', credentials: 'include' });
+        loadSelfServeRolesView();
+      });
+    });
+
+    // Wire save panel meta (title/desc)
+    content.querySelectorAll('.panel-save-meta').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const panelId = btn.dataset.panel;
+        const title = content.querySelector(`.panel-title-input[data-panel="${panelId}"]`)?.value.trim();
+        const description = content.querySelector(`.panel-desc-input[data-panel="${panelId}"]`)?.value.trim();
+        const r = await fetch(`/api/admin/role-panels/${panelId}`, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, description })
+        });
+        const d = await r.json();
+        if (d.success) showSuccess('Panel saved!');
+        else showError(d.message || 'Failed to save');
+      });
+    });
+
+    // Wire delete panel
+    content.querySelectorAll('.panel-delete').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this panel? This cannot be undone.')) return;
+        await fetch(`/api/admin/role-panels/${btn.dataset.panel}`, { method: 'DELETE', credentials: 'include' });
+        loadSelfServeRolesView();
+      });
+    });
+
+    // Wire add role to panel
+    content.querySelectorAll('.panel-add-role-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const panelId = btn.dataset.panel;
+        const roleId = content.querySelector(`.panel-add-role-select[data-panel="${panelId}"]`)?.value;
+        const label = content.querySelector(`.panel-add-role-label[data-panel="${panelId}"]`)?.value.trim();
+        if (!roleId) return showError('Please select a role');
+        btn.disabled = true;
+        const r = await fetch(`/api/admin/role-panels/${panelId}/roles`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roleId, label })
+        });
+        const d = await r.json();
+        btn.disabled = false;
+        if (d.success) loadSelfServeRolesView();
+        else showError(d.message || 'Failed to add role');
+      });
+    });
+
+    // Wire post panel
+    content.querySelectorAll('.panel-post-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const panelId = btn.dataset.panel;
+        const channelId = content.querySelector(`.panel-channel-select[data-panel="${panelId}"]`)?.value;
+        if (!channelId) return showError('Please select a channel');
+        const statusEl = content.querySelector(`.panel-post-status[data-panel="${panelId}"]`);
+        btn.disabled = true; btn.textContent = 'Posting...';
+        if (statusEl) statusEl.textContent = '';
+        try {
+          const r = await fetch(`/api/admin/role-panels/${panelId}/post`, {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channelId })
           });
-          sel.appendChild(og);
-        });
-      } else {
-        // Fallback: fetch directly
-        fetch('/api/admin/discord/channels', { credentials: 'include' })
-          .then(r => r.json())
-          .then(data => {
-            const chs = data.channels || data || [];
-            sel.innerHTML = '<option value="">-- Select Channel --</option>';
-            chs.forEach(ch => {
-              const opt = document.createElement('option');
-              opt.value = ch.id;
-              opt.textContent = (ch.parentName ? ch.parentName + ' > ' : '') + '# ' + ch.name;
-              sel.appendChild(opt);
-            });
-          })
-          .catch(e => console.error('Failed to load channels:', e));
-      }
-    }, 100);
+          const d = await r.json();
+          if (d.success) {
+            if (statusEl) { statusEl.style.color = '#22c55e'; statusEl.textContent = `✅ ${d.action === 'updated' ? 'Updated' : 'Posted'}!`; }
+            loadSelfServeRolesView();
+          } else {
+            if (statusEl) { statusEl.style.color = '#fca5a5'; statusEl.textContent = '❌ ' + (d.message || 'Failed'); }
+          }
+        } catch { if (statusEl) { statusEl.style.color = '#fca5a5'; statusEl.textContent = '❌ Network error'; } }
+        btn.disabled = false;
+        btn.textContent = '📢 Post Panel';
+      });
+    });
+
+    // Wire create new panel
+    document.getElementById('srCreatePanelBtn')?.addEventListener('click', async () => {
+      const r = await fetch('/api/admin/role-panels', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: '🎖️ Get Your Roles', description: 'Click a button below to claim or unclaim a community role.' })
+      });
+      const d = await r.json();
+      if (d.success) loadSelfServeRolesView();
+      else showError(d.message || 'Failed to create panel');
+    });
 
   } catch (error) {
     console.error('Error loading self-serve roles:', error);
@@ -7015,70 +7102,10 @@ async function loadSelfServeRolesView() {
   }
 }
 
-async function addSelfServeRole() {
-  const roleId = document.getElementById('srRoleSelect')?.value;
-  const label = document.getElementById('srLabelInput')?.value.trim();
-  if (!roleId) return showError('Please select a role.');
-  if (!label) return showError('Please enter a button label.');
-  try {
-    const res = await fetch('/api/admin/role-claim/add', {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roleId, label })
-    });
-    const data = await res.json();
-    if (!data.success) return showError(data.message || 'Failed to add role');
-    loadSelfServeRolesView();
-  } catch (e) { showError('Error adding role: ' + e.message); }
-}
-
-async function removeSelfServeRole(roleId) {
-  if (!confirm('Remove this claimable role?')) return;
-  try {
-    const res = await fetch(`/api/admin/role-claim/${roleId}`, {
-      method: 'DELETE', credentials: 'include'
-    });
-    const data = await res.json();
-    if (!data.success) return showError(data.message || 'Failed to remove role');
-    loadSelfServeRolesView();
-  } catch (e) { showError('Error removing role: ' + e.message); }
-}
-
-async function toggleSelfServeRole(roleId, enabled) {
-  try {
-    const res = await fetch(`/api/admin/role-claim/${roleId}/toggle`, {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled })
-    });
-    const data = await res.json();
-    if (!data.success) { showError(data.message || 'Failed to toggle role'); loadSelfServeRolesView(); }
-  } catch (e) { showError('Error toggling role: ' + e.message); loadSelfServeRolesView(); }
-}
-
-async function postSelfServePanel() {
-  const channelId = document.getElementById('srPanelChannelId')?.value;
-  const title = document.getElementById('srPanelTitle')?.value.trim();
-  const description = document.getElementById('srPanelDesc')?.value.trim();
-  const status = document.getElementById('srPanelStatus');
-  if (!channelId) return showError('Please select a channel.');
-  if (status) status.innerHTML = '<p style="color:var(--text-secondary);">Posting panel...</p>';
-  try {
-    const res = await fetch('/api/admin/roles/post-panel', {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channelId, title, description })
-    });
-    const data = await res.json();
-    if (data.success) {
-      if (status) status.innerHTML = `<p style="color:#22c55e;">✅ Panel ${data.action || 'posted'} successfully!</p>`;
-    } else {
-      if (status) status.innerHTML = `<p style="color:#ef4444;">❌ ${data.message || 'Failed to post panel'}</p>`;
-    }
-  } catch (e) {
-    if (status) status.innerHTML = `<p style="color:#ef4444;">❌ Error: ${escapeHtml(e.message)}</p>`;
-  }
-}
+async function addSelfServeRole() {} // kept for legacy compatibility
+async function removeSelfServeRole() {}
+async function toggleSelfServeRole() {}
+async function postSelfServePanel() {}
 
 // ==================== API REFERENCE ====================
 function loadApiRefView() {

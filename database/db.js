@@ -496,6 +496,29 @@ function initDatabase() {
 
   db.prepare('INSERT OR IGNORE INTO ticket_sequences (name, value) VALUES (?, ?)').run('ticket', 0);
 
+  // Role panels (multi-panel self-serve roles)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS role_panels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL DEFAULT '',
+      channel_id TEXT,
+      message_id TEXT,
+      title TEXT DEFAULT '🎖️ Get Your Roles',
+      description TEXT DEFAULT 'Click a button below to claim or unclaim a community role.',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS role_panel_roles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      panel_id INTEGER NOT NULL REFERENCES role_panels(id) ON DELETE CASCADE,
+      role_id TEXT NOT NULL,
+      label TEXT,
+      enabled INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      UNIQUE(panel_id, role_id)
+    );
+  `);
+
   logger.log('Database initialized successfully');
 }
 

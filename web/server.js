@@ -2247,6 +2247,154 @@ class WebServer {
       }
     });
 
+    // ==================== ROLE PANELS API (multi-panel self-serve roles) ====================
+
+    this.app.get('/api/admin/role-panels', adminAuthMiddleware, (req, res) => {
+      try {
+        const rolePanelService = require('../services/rolePanelService');
+        const panels = rolePanelService.listPanels(req.guildId);
+        res.json({ success: true, panels });
+      } catch (e) {
+        logger.error('Error listing role panels:', e);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/role-panels', adminAuthMiddleware, (req, res) => {
+      try {
+        const rolePanelService = require('../services/rolePanelService');
+        const { title, description, channelId } = req.body;
+        const result = rolePanelService.createPanel({ guildId: req.guildId || '', title, description, channelId });
+        res.json(result);
+      } catch (e) {
+        logger.error('Error creating role panel:', e);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.put('/api/admin/role-panels/:id', adminAuthMiddleware, (req, res) => {
+      try {
+        const rolePanelService = require('../services/rolePanelService');
+        const { title, description, channelId } = req.body;
+        const result = rolePanelService.updatePanel(parseInt(req.params.id), { title, description, channelId }, req.guildId);
+        res.json(result);
+      } catch (e) {
+        logger.error('Error updating role panel:', e);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.delete('/api/admin/role-panels/:id', adminAuthMiddleware, (req, res) => {
+      try {
+        const rolePanelService = require('../services/rolePanelService');
+        const result = rolePanelService.deletePanel(parseInt(req.params.id), req.guildId);
+        res.json(result);
+      } catch (e) {
+        logger.error('Error deleting role panel:', e);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/role-panels/:id/roles', adminAuthMiddleware, async (req, res) => {
+      try {
+        const rolePanelService = require('../services/rolePanelService');
+        const { roleId, label } = req.body;
+        if (!roleId) return res.status(400).json({ success: false, message: 'roleId is required' });
+        // Validate the Discord role exists and is manageable
+        const guild = req.guild || await fetchGuildById(req.guildId);
+        const gRole = guild.roles.cache.get(roleId);
+        if (!gRole) return res.status(400).json({ success: false, message: 'Role not found in this server' });
+        const result = rolePanelService.addRole(parseInt(req.params.id), { roleId, label: label || gRole.name }, req.guildId);
+        res.json(result);
+      } catch (e) {
+        logger.error('Error adding role to panel:', e);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.delete('/api/admin/role-panels/:id/roles/:roleId', adminAuthMiddleware, (req, res) => {
+      try {
+        const rolePanelService = require('../services/rolePanelService');
+        const result = rolePanelService.removeRole(parseInt(req.params.id), req.params.roleId, req.guildId);
+        res.json(result);
+      } catch (e) {
+        logger.error('Error removing role from panel:', e);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.put('/api/admin/role-panels/:id/roles/:roleId', adminAuthMiddleware, (req, res) => {
+      try {
+        const rolePanelService = require('../services/rolePanelService');
+        const { label, enabled } = req.body;
+        const result = rolePanelService.updateRole(parseInt(req.params.id), req.params.roleId, { label, enabled }, req.guildId);
+        res.json(result);
+      } catch (e) {
+        logger.error('Error updating role in panel:', e);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/role-panels/:id/post', adminAuthMiddleware, async (req, res) => {
+      try {
+        const rolePanelService = require('../services/rolePanelService');
+        const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+        const panelId = parseInt(req.params.id);
+        const panel = rolePanelService.getPanel(panelId, req.guildId);
+        if (!panel) return res.status(404).json({ success: false, message: 'Panel not found' });
+
+        const { channelId } = req.body;
+        const targetChannelId = channelId || panel.channel_id;
+        if (!targetChannelId) return res.status(400).json({ success: false, message: 'channelId is required' });
+
+        const enabledRoles = panel.roles.filter(r => r.enabled !== 0);
+        if (!enabledRoles.length) return res.status(400).json({ success: false, message: 'No enabled roles on this panel' });
+
+        const channel = this.client.channels.cache.get(targetChannelId) || await this.client.channels.fetch(targetChannelId).catch(() => null);
+        if (!channel) return res.status(400).json({ success: false, message: 'Channel not found' });
+
+        const embed = new EmbedBuilder()
+          .setTitle(panel.title || '🎖️ Get Your Roles')
+          .setDescription(panel.description || 'Click a button below to claim or unclaim a community role.')
+          .setColor(0x6366f1)
+          .setFooter({ text: 'Click a button to claim or unclaim a role' });
+
+        const rows = [];
+        for (let i = 0; i < enabledRoles.length && rows.length < 5; i += 5) {
+          const row = new ActionRowBuilder();
+          enabledRoles.slice(i, i + 5).forEach(role => {
+            row.addComponents(
+              new ButtonBuilder()
+                .setCustomId(`claim_role_${role.role_id}`)
+                .setLabel(role.label || role.role_id)
+                .setStyle(ButtonStyle.Secondary)
+            );
+          });
+          rows.push(row);
+        }
+
+        let action = 'posted';
+        if (panel.channel_id === targetChannelId && panel.message_id) {
+          try {
+            const existingMsg = await channel.messages.fetch(panel.message_id);
+            await existingMsg.edit({ embeds: [embed], components: rows });
+            action = 'updated';
+          } catch {
+            const msg = await channel.send({ embeds: [embed], components: rows });
+            rolePanelService.updatePanel(panelId, { channelId: targetChannelId, messageId: msg.id });
+          }
+        } else {
+          const msg = await channel.send({ embeds: [embed], components: rows });
+          rolePanelService.updatePanel(panelId, { channelId: targetChannelId, messageId: msg.id });
+        }
+
+        res.json({ success: true, action });
+      } catch (e) {
+        logger.error('Error posting role panel:', e);
+        res.status(500).json({ success: false, message: 'Failed to post panel' });
+      }
+    });
+
     // ==================== TREASURY API ====================
 
     // Deprecation headers for legacy public API (superseded by /api/public/v1/)

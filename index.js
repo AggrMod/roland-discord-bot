@@ -673,13 +673,23 @@ async function handleMicroVerifyCopyAmount(interaction) {
 
 async function handleRoleClaimButton(interaction) {
   const roleClaimService = require('./services/roleClaimService');
+  const rolePanelService = require('./services/rolePanelService');
   
   try {
     await interaction.deferReply({ ephemeral: true });
 
-    // Extract role ID from customId: role_claim_<roleId>
-    const roleId = interaction.customId.replace('role_claim_', '');
-    
+    // Extract role ID from customId: claim_role_<roleId>
+    const roleId = interaction.customId.replace('claim_role_', '').replace('role_claim_', '');
+
+    // Check legacy pool first, then new multi-panel system
+    const inLegacyPool = !!roleClaimService.getAllRoles().find(r => r.roleId === roleId);
+    const inPanelSystem = !inLegacyPool && rolePanelService.isRoleClaimable(roleId, interaction.guildId);
+
+    if (!inLegacyPool && !inPanelSystem) {
+      await interaction.editReply({ content: '❌ This role is no longer available for self-assignment.', ephemeral: true });
+      return;
+    }
+
     const result = await roleClaimService.toggleRole(
       interaction.guild,
       interaction.member,

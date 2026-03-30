@@ -2551,6 +2551,7 @@ let selectedTenantAuditCache = [];
 let superadminTenantSearch = '';
 let superadminActiveTab = 'tenants';
 let tenantDetailActiveTab = 'overview';
+let superadminTenantDirectoryCollapsed = false;
 
 const TENANT_PLAN_LABELS = {
   starter: 'Starter',
@@ -2812,6 +2813,10 @@ async function loadSuperadminView() {
     if (!selectedTenantGuildId || !tenantListCache.some(tenant => tenant.guildId === selectedTenantGuildId)) {
       selectedTenantGuildId = tenantListCache[0]?.guildId || null;
     }
+    // Scale UX: collapse long tenant directory by default once a tenant is selected
+    if (selectedTenantGuildId && superadminTenantSearch.trim() === '') {
+      superadminTenantDirectoryCollapsed = true;
+    }
 
     const superadminRows = superadminListCache.length > 0
       ? superadminListCache.map(entry => {
@@ -2892,7 +2897,10 @@ async function loadSuperadminView() {
         <div id="superadminSection-tenants" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
             <h4 style="margin:0; color:#c9d6ff;">Tenant Management <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(99,102,241,0.2);font-size:0.72em;vertical-align:middle;">Tenant Scoped</span></h4>
-            <button class="btn-secondary" onclick="loadSuperadminView()" style="padding:8px 12px;">Refresh</button>
+            <div style="display:flex;gap:8px;">
+              <button id="superadminTenantDirectoryToggleBtn" class="btn-secondary" onclick="toggleSuperadminTenantDirectory()" style="padding:8px 12px;">${superadminTenantDirectoryCollapsed ? 'Show Directory' : 'Hide Directory'}</button>
+              <button class="btn-secondary" onclick="loadSuperadminView()" style="padding:8px 12px;">Refresh</button>
+            </div>
           </div>
 
           <div style="display:grid; grid-template-columns:minmax(240px,0.45fr) minmax(220px,0.35fr) auto; gap:10px; margin-bottom:12px; align-items:center;">
@@ -2903,14 +2911,14 @@ async function loadSuperadminView() {
             <div style="color:var(--text-secondary);font-size:0.82em;text-align:right;">Showing ${filteredTenants.length}/${tenantListCache.length}</div>
           </div>
 
-          <div style="border:1px solid rgba(99,102,241,0.15); border-radius:10px; overflow:hidden;">
+          <div id="superadminTenantDirectoryBody" style="display:${superadminTenantDirectoryCollapsed ? 'none' : ''}; border:1px solid rgba(99,102,241,0.15); border-radius:10px; overflow:hidden;">
             <div style="display:grid; grid-template-columns:minmax(0,1.6fr) repeat(3,minmax(0,1fr)); gap:12px; padding:10px 14px; background:rgba(99,102,241,0.12); color:#c9d6ff; font-weight:600; font-size:0.82em;">
               <div>Guild</div>
               <div>Plan</div>
               <div>Status</div>
               <div>Modules</div>
             </div>
-            <div>${tenantRows}</div>
+            <div style="max-height:320px; overflow:auto;">${tenantRows}</div>
           </div>
         </div>
 
@@ -3103,7 +3111,16 @@ function selectTenantGuild(guildId) {
 
 function applySuperadminTenantFilter(query) {
   superadminTenantSearch = String(query || '');
+  if (superadminTenantSearch.trim() !== '') superadminTenantDirectoryCollapsed = false;
   loadSuperadminView();
+}
+
+function toggleSuperadminTenantDirectory() {
+  superadminTenantDirectoryCollapsed = !superadminTenantDirectoryCollapsed;
+  const body = document.getElementById('superadminTenantDirectoryBody');
+  const btn = document.getElementById('superadminTenantDirectoryToggleBtn');
+  if (body) body.style.display = superadminTenantDirectoryCollapsed ? 'none' : '';
+  if (btn) btn.textContent = superadminTenantDirectoryCollapsed ? 'Show Directory' : 'Hide Directory';
 }
 
 function showTenantDetailTab(tab) {

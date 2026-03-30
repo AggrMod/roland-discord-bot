@@ -1418,6 +1418,8 @@ class WebServer {
           effectiveSettings.moduleNftTrackerEnabled = !!tenantContext.modules.nfttracker;
           effectiveSettings.moduleRoleClaimEnabled = !!tenantContext.modules.selfserveroles;
           effectiveSettings.moduleTicketingEnabled = !!tenantContext.modules.ticketing;
+          // Tell the frontend which module keys are actually assigned (exist in tenant_modules)
+          effectiveSettings.assignedModuleKeys = Object.keys(tenantContext.modules);
         }
         
         res.json({ success: true, settings: effectiveSettings });
@@ -1446,6 +1448,35 @@ class WebServer {
         for (const key of ALLOWED_SETTINGS_FIELDS) {
           if (req.body[key] !== undefined) sanitized[key] = req.body[key];
         }
+
+        // In multi-tenant mode, module toggle states live in tenant_modules — NOT settings.json.
+        // Route them through setTenantModule so reads from GET /api/admin/settings reflect the change.
+        const multiTenantEnabled = tenantService.isMultitenantEnabled();
+        if (multiTenantEnabled && req.guildId) {
+          const tenantContext = tenantService.getTenantContext(req.guildId);
+          if (tenantContext?.tenant) {
+            const moduleFieldMap = {
+              moduleBattleEnabled: 'battle',
+              moduleGovernanceEnabled: 'governance',
+              moduleVerificationEnabled: 'verification',
+              moduleMissionsEnabled: 'heist',
+              moduleTreasuryEnabled: 'treasury',
+              moduleNftTrackerEnabled: 'nfttracker',
+              moduleRoleClaimEnabled: 'selfserveroles',
+              moduleTicketingEnabled: 'ticketing',
+            };
+            for (const [field, moduleKey] of Object.entries(moduleFieldMap)) {
+              if (sanitized[field] !== undefined) {
+                // Only allow toggling modules that are actually assigned to this tenant
+                if (tenantContext.modules && moduleKey in tenantContext.modules) {
+                  tenantService.setTenantModule(req.guildId, moduleKey, !!sanitized[field], req.session?.discordUser?.id);
+                }
+                delete sanitized[field]; // Remove from settings.json payload regardless
+              }
+            }
+          }
+        }
+
         const result = settingsManager.updateSettings(sanitized);
         res.json(result);
       } catch (error) {

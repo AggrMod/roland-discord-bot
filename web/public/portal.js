@@ -769,6 +769,38 @@ function applyTenantModuleNavVisibility(settings = {}) {
   }
 }
 
+// Settings tab -> module key mapping
+const SETTINGS_TAB_MODULE_MAP = {
+  governance:   'governance',
+  verification: 'verification',
+  treasury:     'treasury',
+  nfttracker:   'nfttracker',
+  battle:       'battle',
+  heist:        'heist',
+  selfserve:    'selfserveroles',
+  ticketing:    'ticketing',
+};
+
+function applySettingsTabVisibility(settings = {}) {
+  // assignedModuleKeys is only present when multiTenant is on and a tenant exists.
+  // null means all modules are available (single-tenant mode).
+  const assigned = settings.assignedModuleKeys || null;
+
+  document.querySelectorAll('#section-settings .settings-tabs .settings-tab[data-tab]').forEach(btn => {
+    const tab = btn.dataset.tab;
+    const moduleKey = SETTINGS_TAB_MODULE_MAP[tab];
+    if (!moduleKey) return; // 'general' has no module key — always visible
+
+    if (assigned === null) {
+      // Single-tenant: show all tabs
+      btn.style.display = '';
+    } else {
+      // Multi-tenant: only show tab if module is assigned (key exists in tenant_modules)
+      btn.style.display = assigned.includes(moduleKey) ? '' : 'none';
+    }
+  });
+}
+
 async function syncTenantModuleNavVisibility() {
   if (!isAdmin || !activeGuildId) return;
   try {
@@ -778,6 +810,7 @@ async function syncTenantModuleNavVisibility() {
       // keep tenant-scoped settings/branding in sync with active guild context
       portalSettingsData = data.settings;
       applyTenantModuleNavVisibility(data.settings);
+      applySettingsTabVisibility(data.settings);
       updateActiveGuildBadge();
     }
   } catch (e) {
@@ -1620,6 +1653,7 @@ function switchSection(sectionName) {
     loadNFTActivityView();
     if (isAdmin) loadNFTActivityAdminView();
   } else if (sectionName === 'settings') {
+    applySettingsTabVisibility(portalSettingsData || {});
     switchSettingsTab('general');
   } else if (sectionName === 'admin') {
     loadEnvStatusBar();
@@ -3603,6 +3637,23 @@ async function loadAdminSettingsView() {
     portalSettingsData = settingsJson.settings;
     const s = portalSettingsData;
     const tenantReadOnlyModules = !!(s.multiTenantEnabled && s.readOnlyManaged && !isSuperadmin);
+    // assignedModuleKeys: null = single-tenant (all visible), array = multi-tenant assigned keys
+    const assignedKeys = s.assignedModuleKeys || null;
+
+    // Update settings tab visibility immediately (assigned-only filtering)
+    applySettingsTabVisibility(s);
+
+    // Module toggle mapping: settingsKey -> { label, icon, moduleKey (for assigned check) }
+    const MODULE_TOGGLE_DEFS = [
+      { id: 'moduleBattleEnabled',       label: 'Battle',          icon: '⚔️',  moduleKey: 'battle'        },
+      { id: 'moduleGovernanceEnabled',   label: 'Governance',      icon: '🗳️',  moduleKey: 'governance'    },
+      { id: 'moduleVerificationEnabled', label: 'Verification',    icon: '✅',  moduleKey: 'verification'  },
+      { id: 'moduleMissionsEnabled',     label: 'Heist',           icon: '🎯',  moduleKey: 'heist'         },
+      { id: 'moduleTreasuryEnabled',     label: 'Treasury',        icon: '💰',  moduleKey: 'treasury'      },
+      { id: 'moduleNftTrackerEnabled',   label: 'NFT Tracker',     icon: '📡',  moduleKey: 'nfttracker'    },
+      { id: 'moduleRoleClaimEnabled',    label: 'Self-Serve Roles',icon: '🎖️',  moduleKey: 'selfserveroles'},
+      { id: 'moduleTicketingEnabled',    label: 'Ticketing',       icon: '🎫',  moduleKey: 'ticketing'     },
+    ];
 
     // Build module toggle helper (styled toggle switch)
     const moduleToggle = (id, label, icon, defaultVal) => {
@@ -3620,6 +3671,12 @@ async function loadAdminSettingsView() {
         </label>
       </div>`;
     };
+
+    // Only render toggles for assigned modules (or all if single-tenant)
+    const visibleToggles = MODULE_TOGGLE_DEFS
+      .filter(m => assignedKeys === null || assignedKeys.includes(m.moduleKey))
+      .map(m => moduleToggle(m.id, m.label, m.icon, true))
+      .join('');
 
     // Attach toggle animation via event delegation (after HTML injected)
     const attachToggleListeners = () => {
@@ -3640,16 +3697,7 @@ async function loadAdminSettingsView() {
       <!-- MODULE CONTROL — always visible -->
       <div style="${cardStyle}">
         <h3 style="${cardHeader}">🎮 Module Control</h3>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--space-3);">
-          ${moduleToggle('moduleBattleEnabled', 'Battle', '⚔️', true)}
-          ${moduleToggle('moduleGovernanceEnabled', 'Governance', '🗳️', true)}
-          ${moduleToggle('moduleVerificationEnabled', 'Verification', '✅', true)}
-          ${moduleToggle('moduleMissionsEnabled', 'Heist', '🎯', true)}
-          ${moduleToggle('moduleTreasuryEnabled', 'Treasury', '💰', true)}
-          ${moduleToggle('moduleNftTrackerEnabled', 'NFT Tracker', '📡', true)}
-          ${moduleToggle('moduleRoleClaimEnabled', 'Self-Serve Roles', '🎖️', true)}
-          ${moduleToggle('moduleTicketingEnabled', 'Ticketing', '🎫', true)}
-        </div>
+        ${visibleToggles ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--space-3);">${visibleToggles}</div>` : '<p style="color:var(--text-secondary);font-size:0.9em;">No modules assigned. Contact your Superadmin to enable modules for this server.</p>'}
       </div>
 
       <!-- Action Buttons — always visible -->
@@ -3701,16 +3749,17 @@ function showSettingsSuccess(message) {
 async function savePortalSettings() {
   if (!portalSettingsData) return;
 
-  const newSettings = {
-    moduleBattleEnabled: document.getElementById('ps_moduleBattleEnabled').checked,
-    moduleGovernanceEnabled: document.getElementById('ps_moduleGovernanceEnabled').checked,
-    moduleVerificationEnabled: document.getElementById('ps_moduleVerificationEnabled').checked,
-    moduleMissionsEnabled: document.getElementById('ps_moduleMissionsEnabled').checked,
-    moduleTreasuryEnabled: document.getElementById('ps_moduleTreasuryEnabled').checked,
-    moduleNftTrackerEnabled: document.getElementById('ps_moduleNftTrackerEnabled')?.checked ?? true,
-    moduleRoleClaimEnabled: document.getElementById('ps_moduleRoleClaimEnabled')?.checked ?? true,
-    moduleTicketingEnabled: document.getElementById('ps_moduleTicketingEnabled')?.checked ?? true,
-  };
+  // Only save module toggles that are actually rendered (handles assigned-module filtering)
+  const moduleIds = [
+    'moduleBattleEnabled', 'moduleGovernanceEnabled', 'moduleVerificationEnabled',
+    'moduleMissionsEnabled', 'moduleTreasuryEnabled', 'moduleNftTrackerEnabled',
+    'moduleRoleClaimEnabled', 'moduleTicketingEnabled',
+  ];
+  const newSettings = {};
+  for (const id of moduleIds) {
+    const el = document.getElementById('ps_' + id);
+    if (el) newSettings[id] = el.checked; // only include rendered toggles
+  }
 
   try {
     const response = await fetch('/api/admin/settings', {

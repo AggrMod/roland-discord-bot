@@ -214,6 +214,7 @@ class TenantService {
       brand_color: brandingRow.brand_color || brandingRow.primary_color || null,
       logo_url: brandingRow.logo_url || brandingRow.icon_url || null,
       support_url: brandingRow.support_url || null,
+      footer_text: brandingRow.footer_text || null,
       display_name: brandingRow.display_name || brandingRow.bot_display_name || null,
       primary_color: brandingRow.primary_color || brandingRow.brand_color || null,
       secondary_color: brandingRow.secondary_color || null,
@@ -619,6 +620,7 @@ class TenantService {
       'brand_color',
       'logo_url',
       'support_url',
+      'footer_text',
       'display_name',
       'primary_color',
       'secondary_color',
@@ -656,6 +658,7 @@ class TenantService {
       brand_color: patch.brand_color !== undefined ? patch.brand_color : (brandingRow.brand_color || brandingRow.primary_color || null),
       logo_url: patch.logo_url !== undefined ? patch.logo_url : (brandingRow.logo_url || brandingRow.icon_url || null),
       support_url: patch.support_url !== undefined ? patch.support_url : (brandingRow.support_url || null),
+      footer_text: patch.footer_text !== undefined ? patch.footer_text : (brandingRow.footer_text || null),
       display_name: patch.display_name !== undefined ? patch.display_name : (brandingRow.display_name || brandingRow.bot_display_name || null),
       primary_color: patch.primary_color !== undefined ? patch.primary_color : (brandingRow.primary_color || brandingRow.brand_color || null),
       secondary_color: patch.secondary_color !== undefined ? patch.secondary_color : (brandingRow.secondary_color || null),
@@ -683,6 +686,7 @@ class TenantService {
         logo_url,
         icon_url,
         support_url,
+        footer_text,
         ticketing_color,
         selfserve_color,
         nfttracker_color,
@@ -693,7 +697,7 @@ class TenantService {
         nfttracker_panel_title,
         nfttracker_panel_description
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(tenant_id) DO UPDATE SET
         bot_display_name = excluded.bot_display_name,
         brand_emoji = excluded.brand_emoji,
@@ -704,6 +708,7 @@ class TenantService {
         logo_url = excluded.logo_url,
         icon_url = excluded.icon_url,
         support_url = excluded.support_url,
+        footer_text = excluded.footer_text,
         ticketing_color = excluded.ticketing_color,
         selfserve_color = excluded.selfserve_color,
         nfttracker_color = excluded.nfttracker_color,
@@ -725,6 +730,7 @@ class TenantService {
       nextBranding.logo_url,
       nextBranding.icon_url,
       nextBranding.support_url,
+      nextBranding.footer_text,
       nextBranding.ticketing_color,
       nextBranding.selfserve_color,
       nextBranding.nfttracker_color,

@@ -1,5 +1,6 @@
 const db = require('../database/db');
 const logger = require('../utils/logger');
+const { applyEmbedBranding } = require('./embedBranding');
 const settingsManager = require('../config/settings');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 
@@ -210,11 +211,17 @@ class TicketService {
       const normalizedDescription = String(description || 'Select a category below to open a support ticket.');
 
       const embed = new EmbedBuilder()
-        .setColor('#5865F2')
         .setTitle(normalizedTitle)
         .setDescription(normalizedDescription)
-        .setFooter({ text: 'Click a button to open a ticket' })
         .setTimestamp();
+
+      applyEmbedBranding(embed, {
+        guildId: normalizedGuildId,
+        moduleKey: 'ticketing',
+        defaultColor: '#5865F2',
+        defaultFooter: 'Powered by Guild Pilot',
+        fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
+      });
 
       // Build button rows (max 5 buttons per row)
       const rows = [];

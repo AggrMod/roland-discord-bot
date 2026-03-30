@@ -1486,7 +1486,7 @@ class WebServer {
 
     this.app.put('/api/admin/branding', adminAuthMiddleware, (req, res) => {
       try {
-        const ALLOWED_BRANDING_FIELDS = ['bot_display_name', 'brand_emoji', 'brand_color', 'logo_url', 'support_url', 'display_name', 'primary_color', 'secondary_color', 'icon_url', 'ticketing_color', 'selfserve_color', 'nfttracker_color', 'ticket_panel_title', 'ticket_panel_description', 'selfserve_panel_title', 'selfserve_panel_description', 'nfttracker_panel_title', 'nfttracker_panel_description'];
+        const ALLOWED_BRANDING_FIELDS = ['bot_display_name', 'brand_emoji', 'brand_color', 'logo_url', 'support_url', 'footer_text', 'display_name', 'primary_color', 'secondary_color', 'icon_url', 'ticketing_color', 'selfserve_color', 'nfttracker_color', 'ticket_panel_title', 'ticket_panel_description', 'selfserve_panel_title', 'selfserve_panel_description', 'nfttracker_panel_title', 'nfttracker_panel_description'];
         const patch = {};
         for (const key of ALLOWED_BRANDING_FIELDS) {
           if (req.body[key] !== undefined) patch[key] = req.body[key];
@@ -2495,6 +2495,7 @@ class WebServer {
       try {
         const rolePanelService = require('../services/rolePanelService');
         const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+        const { applyEmbedBranding } = require('../services/embedBranding');
         const panelId = parseInt(req.params.id);
         const panel = rolePanelService.getPanel(panelId, req.guildId);
         if (!panel) return res.status(404).json({ success: false, message: 'Panel not found' });
@@ -2511,9 +2512,15 @@ class WebServer {
 
         const embed = new EmbedBuilder()
           .setTitle(panel.title || '🎖️ Get Your Roles')
-          .setDescription(panel.description || 'Click a button below to claim or unclaim a community role.')
-          .setColor(0x6366f1)
-          .setFooter({ text: 'Click a button to claim or unclaim a role' });
+          .setDescription(panel.description || 'Click a button below to claim or unclaim a community role.');
+
+        applyEmbedBranding(embed, {
+          guildId: req.guildId,
+          moduleKey: 'selfserve',
+          defaultColor: '#6366f1',
+          defaultFooter: 'Powered by Guild Pilot',
+          fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
+        });
 
         const rows = [];
         for (let i = 0; i < enabledRoles.length && rows.length < 5; i += 5) {

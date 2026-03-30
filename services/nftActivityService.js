@@ -1,5 +1,6 @@
 const db = require('../database/db');
 const logger = require('../utils/logger');
+const { applyEmbedBranding } = require('./embedBranding');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const clientProvider = require('../utils/clientProvider');
 
@@ -332,7 +333,6 @@ class NFTActivityService {
     const priceDisplay = evt.priceSol != null && evt.priceSol > 0 ? `◎ ${Number(evt.priceSol).toFixed(3)} SOL` : '—';
 
     const embed = new EmbedBuilder()
-      .setColor(colorMap[typeUpper] || '#5865F2')
       .setTitle(`${typeIcon} ${collectionDisplay} • ${typeUpper}`)
       .addFields(
         { name: 'Token', value: tokenDisplay, inline: true },
@@ -342,8 +342,16 @@ class NFTActivityService {
         { name: 'To', value: evt.toWallet ? `\`${evt.toWallet.slice(0, 6)}...${evt.toWallet.slice(-4)}\`` : '—', inline: true },
         { name: 'Collection', value: collectionDisplay, inline: true }
       )
-      .setFooter({ text: shortSig ? `Tx: ${shortSig}` : 'No tx' })
       .setTimestamp();
+
+    applyEmbedBranding(embed, {
+      guildId: tracked?.guild_id || '',
+      moduleKey: 'nfttracker',
+      defaultColor: colorMap[typeUpper] || '#5865F2',
+      defaultFooter: 'Powered by Guild Pilot',
+      fallbackLogoUrl: client?.user?.displayAvatarURL?.() || null,
+      footerPrefix: shortSig ? `Tx: ${shortSig}` : 'No tx',
+    });
 
     if (evt.imageUrl) embed.setThumbnail(evt.imageUrl);
 

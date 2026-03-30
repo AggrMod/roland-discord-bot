@@ -608,6 +608,48 @@ class TenantService {
     };
   }
 
+  getTenantVerificationSettings(guildId) {
+    const guild = String(guildId || '').trim();
+    if (!guild) return { ogRoleId: null, ogRoleLimit: 0 };
+    const tenantRow = this.getTenantByGuildId(guild);
+    if (!tenantRow) return { ogRoleId: null, ogRoleLimit: 0 };
+
+    const row = db.prepare('SELECT og_role_id, og_role_limit FROM tenant_verification_settings WHERE tenant_id = ?').get(tenantRow.id);
+    return {
+      ogRoleId: row?.og_role_id || null,
+      ogRoleLimit: Number(row?.og_role_limit || 0)
+    };
+  }
+
+  updateTenantVerificationSettings(guildId, patch = {}, actorId = 'system') {
+    const guild = String(guildId || '').trim();
+    if (!guild) return { success: false, message: 'guildId is required' };
+    const tenantRow = this.getTenantByGuildId(guild);
+    if (!tenantRow) return { success: false, message: 'Tenant not found' };
+
+    const current = this.getTenantVerificationSettings(guild);
+    const next = {
+      ogRoleId: patch.ogRoleId !== undefined ? (patch.ogRoleId || null) : current.ogRoleId,
+      ogRoleLimit: patch.ogRoleLimit !== undefined ? Number(patch.ogRoleLimit || 0) : current.ogRoleLimit,
+    };
+
+    db.prepare(`
+      INSERT INTO tenant_verification_settings (tenant_id, og_role_id, og_role_limit)
+      VALUES (?, ?, ?)
+      ON CONFLICT(tenant_id) DO UPDATE SET
+        og_role_id = excluded.og_role_id,
+        og_role_limit = excluded.og_role_limit,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(tenantRow.id, next.ogRoleId, next.ogRoleLimit);
+
+    this.logTenantAudit(tenantRow.id, actorId, 'verification_settings_update', {
+      changed: Object.keys(patch),
+      next
+    });
+
+    return { success: true, settings: next };
+  }
+
   updateTenantBranding(guildId, brandingPatch, actorId) {
     const normalizedGuildId = normalizeGuildId(guildId);
     if (!normalizedGuildId) {

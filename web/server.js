@@ -1542,6 +1542,10 @@ class WebServer {
           effectiveSettings.moduleBrandingEnabled = !!tenantContext.modules.branding;
           effectiveSettings.moduleRoleClaimEnabled = !!tenantContext.modules.selfserveroles;
           effectiveSettings.moduleTicketingEnabled = !!tenantContext.modules.ticketing;
+          // tenant-specific verification settings (avoid cross-tenant OG leakage)
+          const tenantVerification = tenantService.getTenantVerificationSettings(req.guildId);
+          if (tenantVerification.ogRoleId !== undefined) effectiveSettings.ogRoleId = tenantVerification.ogRoleId || '';
+          if (tenantVerification.ogRoleLimit !== undefined) effectiveSettings.ogRoleLimit = tenantVerification.ogRoleLimit || 0;
           // Tell the frontend which module keys are actually assigned (exist in tenant_modules)
           effectiveSettings.assignedModuleKeys = Object.keys(tenantContext.modules);
         }
@@ -1609,6 +1613,16 @@ class WebServer {
                 }
                 delete sanitized[field]; // Remove from settings.json payload regardless
               }
+            }
+
+            // Tenant-specific OG settings (do not write globally)
+            const ogPatch = {};
+            if (sanitized.ogRoleId !== undefined) ogPatch.ogRoleId = sanitized.ogRoleId;
+            if (sanitized.ogRoleLimit !== undefined) ogPatch.ogRoleLimit = sanitized.ogRoleLimit;
+            if (Object.keys(ogPatch).length > 0) {
+              tenantService.updateTenantVerificationSettings(req.guildId, ogPatch, req.session?.discordUser?.id || 'unknown');
+              delete sanitized.ogRoleId;
+              delete sanitized.ogRoleLimit;
             }
           }
         }

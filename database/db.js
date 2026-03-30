@@ -335,6 +335,16 @@ function initDatabase() {
       UNIQUE(tenant_id, module_key)
     );
 
+    CREATE TABLE IF NOT EXISTS tenant_verification_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id INTEGER NOT NULL UNIQUE,
+      og_role_id TEXT,
+      og_role_limit INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS tenant_branding (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tenant_id INTEGER NOT NULL UNIQUE,
@@ -431,6 +441,8 @@ function initDatabase() {
     `CREATE TRIGGER IF NOT EXISTS update_micro_verify_timestamp AFTER UPDATE ON micro_verify_requests BEGIN UPDATE micro_verify_requests SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
     'ALTER TABLE micro_verify_requests ADD COLUMN guild_id TEXT DEFAULT ""',
     'ALTER TABLE tickets ADD COLUMN guild_id TEXT DEFAULT ""',
+    'ALTER TABLE tenant_verification_settings ADD COLUMN og_role_id TEXT',
+    'ALTER TABLE tenant_verification_settings ADD COLUMN og_role_limit INTEGER DEFAULT 0',
     'ALTER TABLE tenant_branding ADD COLUMN footer_text TEXT',
     'ALTER TABLE tenant_branding ADD COLUMN ticketing_color TEXT',
     'ALTER TABLE tenant_branding ADD COLUMN selfserve_color TEXT',

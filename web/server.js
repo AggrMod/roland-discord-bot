@@ -671,7 +671,8 @@ class WebServer {
 
         // Superadmins can manage every tenant/server in this bot instance.
         if (isSuperadmin) {
-          const tenants = tenantService.listTenants({});
+          const tenantResult = tenantService.listTenants({ page: 1, pageSize: 10000 });
+          const tenants = Array.isArray(tenantResult) ? tenantResult : (tenantResult?.tenants || []);
           const managedSeen = new Set();
           const unmanagedSeen = new Set();
 

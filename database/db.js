@@ -505,6 +505,7 @@ function initDatabase() {
       message_id TEXT,
       title TEXT DEFAULT '🎖️ Get Your Roles',
       description TEXT DEFAULT 'Click a button below to claim or unclaim a community role.',
+      single_select INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -518,6 +519,7 @@ function initDatabase() {
       UNIQUE(panel_id, role_id)
     );
   `);
+  try { db.exec('ALTER TABLE role_panels ADD COLUMN single_select INTEGER DEFAULT 0'); } catch (e) {}
 
   logger.log('Database initialized successfully');
 }

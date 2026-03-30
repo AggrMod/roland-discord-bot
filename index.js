@@ -678,12 +678,23 @@ async function handleRoleClaimButton(interaction) {
   try {
     await interaction.deferReply({ ephemeral: true });
 
-    // Extract role ID from customId: claim_role_<roleId>
-    const roleId = interaction.customId.replace('claim_role_', '').replace('role_claim_', '');
+    // Extract role ID from customId:
+    // new format: claim_role_<panelId>__<roleId>
+    // legacy:     claim_role_<roleId> or role_claim_<roleId>
+    let panelId = null;
+    let roleId = interaction.customId.replace('claim_role_', '').replace('role_claim_', '');
+    if (interaction.customId.startsWith('claim_role_') && roleId.includes('__')) {
+      const [p, ...rest] = roleId.split('__');
+      panelId = parseInt(p, 10);
+      roleId = rest.join('__');
+    }
 
     // Check legacy pool first, then new multi-panel system
     const inLegacyPool = !!roleClaimService.getAllRoles().find(r => r.roleId === roleId);
-    const inPanelSystem = !inLegacyPool && rolePanelService.isRoleClaimable(roleId, interaction.guildId);
+    const panelForRole = !inLegacyPool
+      ? (panelId ? rolePanelService.getPanel(panelId, interaction.guildId) : rolePanelService.getPanelByRole(roleId, interaction.guildId))
+      : null;
+    const inPanelSystem = !!panelForRole && rolePanelService.isRoleClaimable(roleId, interaction.guildId);
 
     if (!inLegacyPool && !inPanelSystem) {
       await interaction.editReply({ content: '❌ This role is no longer available for self-assignment.', ephemeral: true });
@@ -695,6 +706,17 @@ async function handleRoleClaimButton(interaction) {
       interaction.member,
       roleId
     );
+
+    // Single-select panel: if user just claimed one role, remove other panel roles
+    if (result.success && result.action === 'added' && panelForRole && panelForRole.single_select === 1) {
+      const allPanelRoles = (panelForRole.roles || []).map(r => r.role_id).filter(r => r !== roleId);
+      for (const otherRoleId of allPanelRoles) {
+        const roleObj = interaction.guild.roles.cache.get(otherRoleId);
+        if (roleObj && interaction.member.roles.cache.has(otherRoleId)) {
+          try { await interaction.member.roles.remove(roleObj, 'Single-select role panel enforced'); } catch {}
+        }
+      }
+    }
 
     const embed = new EmbedBuilder()
       .setColor(result.success ? (result.action === 'added' ? '#57F287' : '#FEE75C') : '#ED4245')

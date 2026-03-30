@@ -4424,13 +4424,13 @@ async function loadVerificationSettings() {
             <span style="font-size:0.8em;color:var(--text-secondary);">(periodically re-syncs holder roles)</span>
           </label>
         </div>
-        <div style="margin-top:var(--space-4);padding-top:var(--space-3);border-top:1px solid rgba(99,102,241,0.12);">
+        <div style="display:${isSuperadmin ? 'block' : 'none'};margin-top:var(--space-4);padding-top:var(--space-3);border-top:1px solid rgba(99,102,241,0.12);">
           <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
             <input type="checkbox" id="ver_moduleMicroVerifyEnabled"${(vs.moduleMicroVerifyEnabled ?? false) ? ' checked' : ''}
-              onchange="document.getElementById('verMicroSubFields').style.display=this.checked?'block':'none';"> 🔐 Enable Micro-Transfer Verification
+              onchange="document.getElementById('verMicroSubFields').style.display=this.checked?'block':'none';"> 🔐 Enable Micro-Transfer Verification (Global / Superadmin)
           </label>
         </div>
-        <div id="verMicroSubFields" style="display:${(vs.moduleMicroVerifyEnabled ?? false) ? 'block' : 'none'};margin-top:var(--space-3);padding:var(--space-3);background:rgba(30,41,59,0.4);border-radius:8px;border:1px solid rgba(99,102,241,0.12);">
+        <div id="verMicroSubFields" style="display:${isSuperadmin && (vs.moduleMicroVerifyEnabled ?? false) ? 'block' : 'none'};margin-top:var(--space-3);padding:var(--space-3);background:rgba(30,41,59,0.4);border-radius:8px;border:1px solid rgba(99,102,241,0.12);">
           <div style="${gridRow}">
             <div>
               <label style="${fieldLabel}">Verification Receive Wallet</label>
@@ -4489,14 +4489,18 @@ async function saveVerificationSettings() {
     ogRoleId: document.getElementById('ver_ogRoleId')?.value || '',
     ogRoleLimit: parseInt(document.getElementById('ver_ogRoleLimit')?.value) || 0,
     moduleRoleResyncEnabled: !!document.getElementById('ver_autoResyncEnabled')?.checked,
-    moduleMicroVerifyEnabled: !!document.getElementById('ver_moduleMicroVerifyEnabled')?.checked,
-    verificationReceiveWallet: (document.getElementById('ver_verificationReceiveWallet')?.value || '').trim(),
-    nftActivityWebhookSecret: (document.getElementById('ver_nftActivityWebhookSecret')?.value || '').trim(),
-    verifyRequestTtlMinutes: parseInt(document.getElementById('ver_verifyRequestTtlMinutes')?.value) || 15,
-    pollIntervalSeconds: parseInt(document.getElementById('ver_pollIntervalSeconds')?.value) || 30,
-    verifyRateLimitMinutes: parseInt(document.getElementById('ver_verifyRateLimitMinutes')?.value) || 5,
-    maxPendingPerUser: parseInt(document.getElementById('ver_maxPendingPerUser')?.value) || 1,
   };
+
+  // Global micro-verify settings are superadmin-only
+  if (isSuperadmin) {
+    payload.moduleMicroVerifyEnabled = !!document.getElementById('ver_moduleMicroVerifyEnabled')?.checked;
+    payload.verificationReceiveWallet = (document.getElementById('ver_verificationReceiveWallet')?.value || '').trim();
+    payload.nftActivityWebhookSecret = (document.getElementById('ver_nftActivityWebhookSecret')?.value || '').trim();
+    payload.verifyRequestTtlMinutes = parseInt(document.getElementById('ver_verifyRequestTtlMinutes')?.value) || 15;
+    payload.pollIntervalSeconds = parseInt(document.getElementById('ver_pollIntervalSeconds')?.value) || 30;
+    payload.verifyRateLimitMinutes = parseInt(document.getElementById('ver_verifyRateLimitMinutes')?.value) || 5;
+    payload.maxPendingPerUser = parseInt(document.getElementById('ver_maxPendingPerUser')?.value) || 1;
+  }
   try {
     const res = await fetch('/api/admin/settings', {
       method: 'PUT',
@@ -5980,7 +5984,10 @@ async function loadNFTActivityView() {
 
   try {
     const [activityRes, collectionsRes] = await Promise.all([
-      fetch('/api/public/v1/nft/activity?limit=20', { credentials: 'include' }).catch(() => null),
+      (isAdmin
+        ? fetch('/api/admin/nft-activity/events?limit=20', { credentials: 'include', headers: buildTenantRequestHeaders() })
+        : fetch('/api/public/v1/nft/activity?limit=20', { credentials: 'include' })
+      ).catch(() => null),
       isAdmin ? fetch('/api/admin/nft-tracker/collections', { credentials: 'include' }).catch(() => null) : Promise.resolve(null)
     ]);
 
@@ -6930,6 +6937,9 @@ async function loadSelfServeRolesView() {
             <div style="flex:1;min-width:200px;">
               <input type="text" class="panel-title-input" data-panel="${p.id}" value="${escapeHtml(p.title)}" style="${fi}font-weight:600;font-size:1em;margin-bottom:6px;">
               <textarea class="panel-desc-input" data-panel="${p.id}" rows="2" style="${fi}resize:vertical;font-size:0.88em;">${escapeHtml(p.description)}</textarea>
+              <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.85em;margin-top:8px;cursor:pointer;">
+                <input type="checkbox" class="panel-single-select" data-panel="${p.id}" ${p.single_select ? 'checked' : ''}> Single-select (user can hold only one role from this panel)
+              </label>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;">
               <button class="panel-save-meta btn-secondary" data-panel="${p.id}" style="font-size:0.8em;padding:6px 12px;">💾 Save</button>
@@ -7016,10 +7026,11 @@ async function loadSelfServeRolesView() {
         const panelId = btn.dataset.panel;
         const title = content.querySelector(`.panel-title-input[data-panel="${panelId}"]`)?.value.trim();
         const description = content.querySelector(`.panel-desc-input[data-panel="${panelId}"]`)?.value.trim();
+        const singleSelect = !!content.querySelector(`.panel-single-select[data-panel="${panelId}"]`)?.checked;
         const r = await fetch(`/api/admin/role-panels/${panelId}`, {
           method: 'PUT', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, description })
+          body: JSON.stringify({ title, description, singleSelect })
         });
         const d = await r.json();
         if (d.success) showSuccess('Panel saved!');

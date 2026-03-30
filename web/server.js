@@ -1449,6 +1449,17 @@ class WebServer {
           if (req.body[key] !== undefined) sanitized[key] = req.body[key];
         }
 
+        // Micro-transfer verification settings are global -> superadmin-only writes
+        if (!req.isSuperadmin) {
+          delete sanitized.moduleMicroVerifyEnabled;
+          delete sanitized.verificationReceiveWallet;
+          delete sanitized.nftActivityWebhookSecret;
+          delete sanitized.verifyRequestTtlMinutes;
+          delete sanitized.pollIntervalSeconds;
+          delete sanitized.verifyRateLimitMinutes;
+          delete sanitized.maxPendingPerUser;
+        }
+
         // In multi-tenant mode, module toggle states live in tenant_modules — NOT settings.json.
         // Route them through setTenantModule so reads from GET /api/admin/settings reflect the change.
         const multiTenantEnabled = tenantService.isMultitenantEnabled();
@@ -2263,8 +2274,8 @@ class WebServer {
     this.app.post('/api/admin/role-panels', adminAuthMiddleware, (req, res) => {
       try {
         const rolePanelService = require('../services/rolePanelService');
-        const { title, description, channelId } = req.body;
-        const result = rolePanelService.createPanel({ guildId: req.guildId || '', title, description, channelId });
+        const { title, description, channelId, singleSelect } = req.body;
+        const result = rolePanelService.createPanel({ guildId: req.guildId || '', title, description, channelId, singleSelect });
         res.json(result);
       } catch (e) {
         logger.error('Error creating role panel:', e);
@@ -2275,8 +2286,8 @@ class WebServer {
     this.app.put('/api/admin/role-panels/:id', adminAuthMiddleware, (req, res) => {
       try {
         const rolePanelService = require('../services/rolePanelService');
-        const { title, description, channelId } = req.body;
-        const result = rolePanelService.updatePanel(parseInt(req.params.id), { title, description, channelId }, req.guildId);
+        const { title, description, channelId, singleSelect } = req.body;
+        const result = rolePanelService.updatePanel(parseInt(req.params.id), { title, description, channelId, singleSelect }, req.guildId);
         res.json(result);
       } catch (e) {
         logger.error('Error updating role panel:', e);
@@ -2365,7 +2376,7 @@ class WebServer {
           enabledRoles.slice(i, i + 5).forEach(role => {
             row.addComponents(
               new ButtonBuilder()
-                .setCustomId(`claim_role_${role.role_id}`)
+                .setCustomId(`claim_role_${panelId}__${role.role_id}`)
                 .setLabel(role.label || role.role_id)
                 .setStyle(ButtonStyle.Secondary)
             );
@@ -3180,6 +3191,17 @@ class WebServer {
     });
 
     // ==================== NFT ACTIVITY ADMIN CONFIG ====================
+
+    this.app.get('/api/admin/nft-activity/events', adminAuthMiddleware, (req, res) => {
+      try {
+        const limit = Math.min(Math.max(parseInt(req.query.limit || '20', 10), 1), 100);
+        const events = nftActivityService.listEventsForGuild(req.guildId, limit);
+        res.json({ success: true, events });
+      } catch (error) {
+        logger.error('Error fetching nft activity events:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
 
     this.app.get('/api/admin/nft-activity/config', adminAuthMiddleware, (req, res) => {
       try {

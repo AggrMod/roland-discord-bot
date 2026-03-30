@@ -374,6 +374,29 @@ class NFTActivityService {
       return [];
     }
   }
+
+  listEventsForGuild(guildId, limit = 20) {
+    try {
+      if (!guildId) return this.listEvents(limit);
+      return db.prepare(`
+        SELECT e.event_type, e.collection_key, e.token_name, e.token_mint, e.from_wallet, e.to_wallet, e.price_sol, e.tx_signature, e.source, e.event_time, e.created_at
+        FROM nft_activity_events e
+        WHERE EXISTS (
+          SELECT 1 FROM nft_tracked_collections c
+          WHERE c.guild_id = ?
+            AND (
+              LOWER(COALESCE(c.collection_address, '')) = LOWER(COALESCE(e.collection_key, ''))
+              OR LOWER(COALESCE(c.me_symbol, '')) = LOWER(COALESCE(e.collection_key, ''))
+            )
+        )
+        ORDER BY datetime(COALESCE(e.event_time, e.created_at)) DESC
+        LIMIT ?
+      `).all(guildId, Math.min(Math.max(limit, 1), 100));
+    } catch (e) {
+      logger.error('Error listing NFT activity events for guild:', e);
+      return [];
+    }
+  }
   async syncAddressToHelius(collectionAddress, action) {
     const apiKey = process.env.HELIUS_API_KEY;
     const webhookId = process.env.HELIUS_WEBHOOK_ID;

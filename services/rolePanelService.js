@@ -31,16 +31,17 @@ class RolePanelService {
     }
   }
 
-  createPanel({ guildId = '', title, description, channelId } = {}) {
+  createPanel({ guildId = '', title, description, channelId, singleSelect = false } = {}) {
     try {
       const info = db.prepare(`
-        INSERT INTO role_panels (guild_id, title, description, channel_id)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO role_panels (guild_id, title, description, channel_id, single_select)
+        VALUES (?, ?, ?, ?, ?)
       `).run(
         guildId,
         title || '🎖️ Get Your Roles',
         description || 'Click a button below to claim or unclaim a community role.',
-        channelId || null
+        channelId || null,
+        singleSelect ? 1 : 0
       );
       return { success: true, id: info.lastInsertRowid };
     } catch (e) {
@@ -49,7 +50,7 @@ class RolePanelService {
     }
   }
 
-  updatePanel(id, { title, description, channelId, messageId } = {}, guildId) {
+  updatePanel(id, { title, description, channelId, messageId, singleSelect } = {}, guildId) {
     try {
       const sets = [];
       const params = [];
@@ -57,6 +58,7 @@ class RolePanelService {
       if (description !== undefined) { sets.push('description = ?'); params.push(description); }
       if (channelId !== undefined)   { sets.push('channel_id = ?'); params.push(channelId); }
       if (messageId !== undefined)   { sets.push('message_id = ?'); params.push(messageId); }
+      if (singleSelect !== undefined){ sets.push('single_select = ?'); params.push(singleSelect ? 1 : 0); }
       if (!sets.length) return { success: false, message: 'Nothing to update' };
       sets.push('updated_at = CURRENT_TIMESTAMP');
       if (guildId) { params.push(id, guildId); }
@@ -137,6 +139,32 @@ class RolePanelService {
     } catch (e) {
       logger.error('Error updating role in panel:', e);
       return { success: false, message: 'Failed to update role' };
+    }
+  }
+
+  // Look up panel by role
+  getPanelByRole(roleId, guildId) {
+    try {
+      const row = guildId
+        ? db.prepare(`
+            SELECT rp.* FROM role_panels rp
+            JOIN role_panel_roles rpr ON rpr.panel_id = rp.id
+            WHERE rpr.role_id = ? AND rpr.enabled = 1 AND rp.guild_id = ?
+            ORDER BY rp.id ASC
+            LIMIT 1
+          `).get(roleId, guildId)
+        : db.prepare(`
+            SELECT rp.* FROM role_panels rp
+            JOIN role_panel_roles rpr ON rpr.panel_id = rp.id
+            WHERE rpr.role_id = ? AND rpr.enabled = 1
+            ORDER BY rp.id ASC
+            LIMIT 1
+          `).get(roleId);
+      if (!row) return null;
+      row.roles = db.prepare('SELECT * FROM role_panel_roles WHERE panel_id = ? AND enabled = 1 ORDER BY sort_order ASC, id ASC').all(row.id);
+      return row;
+    } catch {
+      return null;
     }
   }
 

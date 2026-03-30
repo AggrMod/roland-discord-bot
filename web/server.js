@@ -27,6 +27,7 @@ const ticketService = require('../services/ticketService');
 const superadminService = require('../services/superadminService');
 const superadminGuard = require('../middleware/superadminGuard');
 const { BATTLE_ERAS } = require('../config/battleEras');
+const battleService = require('../services/battleService');
 
 const DISCORD_ADMIN_PERMISSION = 0x8n;
 const DISCORD_MANAGE_GUILD_PERMISSION = 0x20n;
@@ -1434,7 +1435,7 @@ class WebServer {
           'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleTreasuryEnabled',
           'moduleNftTrackerEnabled', 'moduleMissionsEnabled', 'moduleBattleEnabled',
           'moduleTicketingEnabled', 'moduleRoleClaimEnabled',
-          'battleRoundPauseMinSec', 'battleRoundPauseMaxSec', 'battleElitePrepSec',
+          'battleRoundPauseMinSec', 'battleRoundPauseMaxSec', 'battleElitePrepSec', 'battleDefaultEra',
           'baseVerifiedRoleId', 'autoResyncEnabled', 'ogRoleId', 'ogRoleLimit',
           'treasuryWalletAddress', 'treasuryRefreshInterval', 'txAlertChannelId',
           'txAlertEnabled', 'txAlertIncomingOnly', 'txAlertMinSol',
@@ -2268,6 +2269,66 @@ class WebServer {
         res.json(result);
       } catch (error) {
         logger.error('Error refreshing treasury:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // Treasury multi-wallet management
+    this.app.get('/api/admin/treasury/wallets', adminAuthMiddleware, (req, res) => {
+      try {
+        const wallets = treasuryService.listWallets(req.guildId);
+        res.json({ success: true, wallets });
+      } catch (error) {
+        logger.error('Error listing treasury wallets:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/treasury/wallets', adminAuthMiddleware, (req, res) => {
+      try {
+        const { address, label } = req.body;
+        if (!address) return res.status(400).json({ success: false, message: 'address is required' });
+        const result = treasuryService.addWallet(address, label || '', req.guildId);
+        if (!result.success) return res.status(400).json(result);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error adding treasury wallet:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.delete('/api/admin/treasury/wallets/:id', adminAuthMiddleware, (req, res) => {
+      try {
+        const result = treasuryService.removeWallet(parseInt(req.params.id), req.guildId);
+        if (!result.success) return res.status(400).json(result);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error removing treasury wallet:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // ==================== ADMIN API - BATTLE ERAS ====================
+
+    this.app.get('/api/admin/battle/eras', adminAuthMiddleware, (req, res) => {
+      try {
+        const guildId = req.guildId;
+        // Always include mafia (built-in, non-exclusive)
+        const available = Object.values(BATTLE_ERAS)
+          .filter(e => !e.exclusive)
+          .map(e => ({ key: e.key, name: e.name }));
+        // Add eras assigned to this guild
+        if (guildId) {
+          const assigned = battleService.getAssignedEras(guildId);
+          assigned.forEach(key => {
+            if (!available.find(e => e.key === key) && BATTLE_ERAS[key]) {
+              available.push({ key, name: BATTLE_ERAS[key].name });
+            }
+          });
+        }
+        res.json({ success: true, eras: available });
+      } catch (error) {
+        logger.error('Error fetching battle eras:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });

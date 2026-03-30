@@ -55,6 +55,18 @@ class TreasuryService {
       try { db.exec('ALTER TABLE treasury_config ADD COLUMN watch_channel_id TEXT'); } catch (e) {}
       try { db.exec('ALTER TABLE treasury_config ADD COLUMN watch_message_id TEXT'); } catch (e) {}
 
+      // Multi-wallet tracking table
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS treasury_wallets (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          guild_id TEXT,
+          address TEXT NOT NULL,
+          label TEXT DEFAULT '',
+          enabled BOOLEAN DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
       logger.log('✅ Treasury config table initialized');
     } catch (error) {
       logger.error('Error initializing treasury table:', error);
@@ -583,6 +595,56 @@ class TreasuryService {
   restartScheduler() {
     this.stopScheduler();
     this.startScheduler();
+  }
+
+  // ==================== MULTI-WALLET MANAGEMENT ====================
+
+  listWallets(guildId) {
+    try {
+      if (guildId) {
+        return db.prepare('SELECT * FROM treasury_wallets WHERE guild_id = ? ORDER BY created_at ASC').all(guildId);
+      }
+      return db.prepare('SELECT * FROM treasury_wallets ORDER BY created_at ASC').all();
+    } catch (e) {
+      logger.error('Error listing treasury wallets:', e);
+      return [];
+    }
+  }
+
+  addWallet(address, label = '', guildId = null) {
+    try {
+      if (!this.isValidSolanaAddress(address)) {
+        return { success: false, message: 'Invalid Solana wallet address' };
+      }
+      // Check for duplicate within same guild
+      const existing = guildId
+        ? db.prepare('SELECT id FROM treasury_wallets WHERE address = ? AND guild_id = ?').get(address, guildId)
+        : db.prepare('SELECT id FROM treasury_wallets WHERE address = ? AND guild_id IS NULL').get(address);
+      if (existing) return { success: false, message: 'This wallet is already in the list' };
+      const info = db.prepare(
+        'INSERT INTO treasury_wallets (address, label, guild_id) VALUES (?, ?, ?)'
+      ).run(address, label || '', guildId || null);
+      return { success: true, id: info.lastInsertRowid };
+    } catch (e) {
+      logger.error('Error adding treasury wallet:', e);
+      return { success: false, message: 'Failed to add wallet' };
+    }
+  }
+
+  removeWallet(id, guildId = null) {
+    try {
+      let info;
+      if (guildId) {
+        info = db.prepare('DELETE FROM treasury_wallets WHERE id = ? AND guild_id = ?').run(id, guildId);
+      } else {
+        info = db.prepare('DELETE FROM treasury_wallets WHERE id = ?').run(id);
+      }
+      if (!info.changes) return { success: false, message: 'Wallet not found' };
+      return { success: true };
+    } catch (e) {
+      logger.error('Error removing treasury wallet:', e);
+      return { success: false, message: 'Failed to remove wallet' };
+    }
   }
 }
 

@@ -635,7 +635,6 @@ function switchSettingsTab(tab) {
     general:      'adminSettingsCard',
     governance:   'adminVotingPowerCard',
     verification: 'adminRolesCard',
-    nfttracker:   'adminNftTrackerCard',
     selfserve:    'adminSelfServeRolesCard',
     ticketing:    'adminTicketingCard',
   };
@@ -668,7 +667,7 @@ function switchSettingsTab(tab) {
       if (typeof loadVerificationSettings === 'function') loadVerificationSettings();
       if (typeof loadAdminRoles === 'function') loadAdminRoles();
     },
-    nfttracker:   () => { if (typeof loadNftTrackerView === 'function') loadNftTrackerView(); },
+    nfttracker:   () => { if (typeof loadNftTrackerSettingsView === 'function') loadNftTrackerSettingsView(); },
     selfserve:    () => { if (typeof loadSelfServeRolesView === 'function') loadSelfServeRolesView(); },
     ticketing:    () => { if (typeof loadTicketingView === 'function') loadTicketingView(); },
     treasury:     () => { if (typeof loadTreasuryModuleSettings === 'function') loadTreasuryModuleSettings(); },
@@ -3514,8 +3513,11 @@ let portalSettingsData = null;
 
 async function loadBattleTimingSettings() {
   try {
-    const res = await fetch('/api/admin/settings', { credentials: 'include', headers: buildTenantRequestHeaders() });
-    const data = await res.json();
+    const [settingsRes, erasRes] = await Promise.all([
+      fetch('/api/admin/settings', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      fetch('/api/admin/battle/eras', { credentials: 'include', headers: buildTenantRequestHeaders() }).catch(() => null),
+    ]);
+    const data = await settingsRes.json();
     const s = data.settings || {};
     const minEl = document.getElementById('battlePauseMinInput');
     const maxEl = document.getElementById('battlePauseMaxInput');
@@ -3523,6 +3525,38 @@ async function loadBattleTimingSettings() {
     if (minEl) minEl.value = s.battleRoundPauseMinSec ?? 5;
     if (maxEl) maxEl.value = s.battleRoundPauseMaxSec ?? 10;
     if (eliteEl) eliteEl.value = s.battleElitePrepSec ?? 12;
+
+    // Inject era selector if not already present
+    const battlePane = document.getElementById('settingsTab-battle');
+    if (battlePane && !document.getElementById('battleDefaultEraWrap')) {
+      let eras = [{ key: 'mafia', name: 'Mafia (default)' }];
+      if (erasRes && erasRes.ok) {
+        const eraData = await erasRes.json();
+        if (eraData.eras && eraData.eras.length) eras = eraData.eras;
+      }
+      const currentEra = s.battleDefaultEra || 'mafia';
+      const opts = eras.map(e => `<option value="${escapeHtml(e.key)}"${e.key === currentEra ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('');
+      const eraWrap = document.createElement('div');
+      eraWrap.id = 'battleDefaultEraWrap';
+      eraWrap.style.cssText = 'margin-top:16px;border-top:1px solid rgba(99,102,241,0.15);padding-top:16px;';
+      eraWrap.innerHTML = `
+        <label class="form-label">Default Battle Era</label>
+        <select id="battleDefaultEraSelect" class="form-input" style="width:220px;">
+          ${opts}
+        </select>
+        <p style="color:var(--text-secondary); font-size:0.82em; margin-top:4px;">Era used when no era is specified in /battle create. Custom eras must be assigned by a Superadmin.</p>
+      `;
+      // Insert before the save button div
+      const saveBtn = battlePane.querySelector('button');
+      const saveBtnContainer = saveBtn ? saveBtn.closest('div') : null;
+      if (saveBtnContainer) {
+        saveBtnContainer.parentElement.insertBefore(eraWrap, saveBtnContainer);
+      } else {
+        battlePane.querySelector('.card > div')?.appendChild(eraWrap);
+      }
+    } else if (document.getElementById('battleDefaultEraSelect')) {
+      document.getElementById('battleDefaultEraSelect').value = s.battleDefaultEra || 'mafia';
+    }
   } catch (e) {
     console.error('[Battle settings] load error:', e);
   }
@@ -3534,15 +3568,16 @@ async function saveBattleTimingSettings() {
   const eliteVal = parseFloat(document.getElementById('battleElitePrepInput')?.value);
   if (isNaN(minVal) || isNaN(maxVal) || isNaN(eliteVal)) return showError('Please enter valid numbers for all timing fields.');
   if (minVal > maxVal) return showError('Minimum pause cannot be greater than maximum pause.');
+  const eraVal = document.getElementById('battleDefaultEraSelect')?.value || 'mafia';
   try {
     const res = await fetch('/api/admin/settings', {
       method: 'PUT',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
-      body: JSON.stringify({ battleRoundPauseMinSec: minVal, battleRoundPauseMaxSec: maxVal, battleElitePrepSec: eliteVal })
+      body: JSON.stringify({ battleRoundPauseMinSec: minVal, battleRoundPauseMaxSec: maxVal, battleElitePrepSec: eliteVal, battleDefaultEra: eraVal })
     });
     const data = await res.json();
-    if (data.success) showSuccess('Battle timing saved!');
+    if (data.success) showSuccess('Battle settings saved!');
     else showError(data.message || 'Failed to save battle settings.');
   } catch (e) {
     showError('Error saving battle settings.');
@@ -4463,6 +4498,8 @@ async function loadTreasuryModuleSettings() {
           <button class="btn-primary" onclick="saveTreasuryModuleSettings()" style="font-size:0.85em;padding:8px 16px;">💾 Save Treasury Settings</button>
         </div>
       </div>
+      <!-- Wallet list injected below -->
+      <div id="trs_walletListCard" style="${cardStyle}margin-top:0;"></div>
     `;
 
     // Populate channel selects
@@ -4479,10 +4516,83 @@ async function loadTreasuryModuleSettings() {
         );
       }
     } catch (e) { console.error('[Treasury] Channel load error:', e); }
+
+    // Load multi-wallet list
+    loadTreasuryWalletList();
   } catch (e) {
     console.error('[Treasury] Settings load error:', e);
     pane.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;padding:var(--space-4);">Failed to load treasury settings.</p>';
   }
+}
+
+async function loadTreasuryWalletList() {
+  const card = document.getElementById('trs_walletListCard');
+  if (!card) return;
+  const fieldInput = 'width:100%;padding:10px 12px;border:1px solid rgba(99,102,241,0.22);border-radius:8px;background:rgba(30,41,59,0.8);color:#e0e7ff;font-size:0.9em;';
+  const cardHeader = 'color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0 0 var(--space-4) 0;padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);';
+  try {
+    const res = await fetch('/api/admin/treasury/wallets', { credentials: 'include' });
+    const data = await res.json();
+    const wallets = data.wallets || [];
+    const rows = wallets.length ? wallets.map(w => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid rgba(99,102,241,0.08);">
+        <div>
+          <div style="font-size:0.85em;color:#e0e7ff;font-family:monospace;">${escapeHtml(w.address)}</div>
+          ${w.label ? `<div style="font-size:0.78em;color:#94a3b8;">${escapeHtml(w.label)}</div>` : ''}
+        </div>
+        <button class="trs-remove-wallet-btn btn-danger" data-id="${w.id}" style="font-size:0.8em;padding:4px 10px;">🗑️ Remove</button>
+      </div>
+    `).join('') : `<div style="color:var(--text-secondary);font-size:0.85em;padding:12px;">No additional wallets. The primary wallet above is always tracked.</div>`;
+    card.innerHTML = `
+      <h3 style="${cardHeader}">💼 Additional Tracked Wallets</h3>
+      <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:12px;">Track multiple Solana wallets for alerts. The primary wallet above receives full balance tracking; additional wallets receive TX alerts only.</p>
+      <div id="trs_walletRows" style="border:1px solid rgba(99,102,241,0.18);border-radius:8px;overflow:hidden;margin-bottom:14px;">${rows}</div>
+      <div style="display:flex;gap:8px;align-items:flex-end;">
+        <div style="flex:1;">
+          <input type="text" id="trs_newWalletAddr" placeholder="Solana wallet address" style="${fieldInput}">
+        </div>
+        <div style="width:160px;">
+          <input type="text" id="trs_newWalletLabel" placeholder="Label (optional)" style="${fieldInput}">
+        </div>
+        <button class="btn-primary" onclick="addTreasuryWallet()" style="font-size:0.85em;padding:10px 16px;white-space:nowrap;">+ Add Wallet</button>
+      </div>
+    `;
+    card.querySelectorAll('.trs-remove-wallet-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Remove this wallet?')) return;
+        btn.disabled = true;
+        try {
+          const r = await fetch('/api/admin/treasury/wallets/' + btn.dataset.id, { method: 'DELETE', credentials: 'include' });
+          const d = await r.json();
+          if (d.success) { showSuccess('Wallet removed'); loadTreasuryWalletList(); }
+          else showError(d.message || 'Failed to remove wallet');
+        } catch { showError('Error removing wallet'); btn.disabled = false; }
+      });
+    });
+  } catch (e) {
+    console.error('[Treasury] Wallet list error:', e);
+    card.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;">Failed to load wallets.</p>';
+  }
+}
+
+async function addTreasuryWallet() {
+  const addr = (document.getElementById('trs_newWalletAddr')?.value || '').trim();
+  const label = (document.getElementById('trs_newWalletLabel')?.value || '').trim();
+  if (!addr) return showError('Wallet address is required');
+  try {
+    const res = await fetch('/api/admin/treasury/wallets', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address: addr, label })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showSuccess('Wallet added');
+      document.getElementById('trs_newWalletAddr').value = '';
+      document.getElementById('trs_newWalletLabel').value = '';
+      loadTreasuryWalletList();
+    } else showError(data.message || 'Failed to add wallet');
+  } catch { showError('Error adding wallet'); }
 }
 
 async function saveTreasuryModuleSettings() {
@@ -4509,6 +4619,281 @@ async function saveTreasuryModuleSettings() {
   } catch (e) {
     console.error('[Treasury] Save error:', e);
     showError('Failed to save treasury settings');
+  }
+}
+
+// ==================== NFT TRACKER SETTINGS ====================
+
+async function loadNftTrackerSettingsView() {
+  if (!isAdmin) return;
+  const pane = document.getElementById('settingsTab-nfttracker');
+  if (!pane) return;
+
+  const cardStyle = 'background:rgba(14,23,44,0.5);border:1px solid rgba(99,102,241,0.22);border-radius:10px;padding:var(--space-5);margin-bottom:var(--space-5);';
+  const cardHeader = 'color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0 0 var(--space-4) 0;padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);';
+  const fieldInput = 'width:100%;padding:10px 12px;border:1px solid rgba(99,102,241,0.22);border-radius:8px;background:rgba(30,41,59,0.8);color:#e0e7ff;font-size:0.9em;';
+
+  pane.innerHTML = `<div style="${cardStyle}"><div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);"><div class="spinner"></div><p>Loading NFT tracker settings...</p></div></div>`;
+
+  try {
+    // Fetch channels + alert config + collections in parallel
+    const [chRes, cfgRes, colRes] = await Promise.all([
+      fetch('/api/admin/discord/channels', { credentials: 'include' }),
+      fetch('/api/admin/nft-activity/config', { credentials: 'include' }),
+      fetch('/api/admin/nft-tracker/collections', { credentials: 'include' }),
+    ]);
+    const channels = chRes.ok ? ((await chRes.json()).channels || []) : [];
+    const cfgData = cfgRes.ok ? await cfgRes.json() : {};
+    const alertCfg = cfgData.config || cfgData || {};
+    const colData = colRes.ok ? await colRes.json() : {};
+    const collections = colData.collections || [];
+
+    // Build channel options
+    const grouped = {};
+    channels.forEach(ch => {
+      const parent = ch.parentName || 'Other';
+      if (!grouped[parent]) grouped[parent] = [];
+      grouped[parent].push(ch);
+    });
+    const chOptions = (sel) => {
+      let html = `<option value="">-- Select channel --</option>`;
+      Object.keys(grouped).sort().forEach(parent => {
+        html += `<optgroup label="${escapeHtml(parent)}">`;
+        grouped[parent].forEach(ch => {
+          html += `<option value="${ch.id}"${ch.id === sel ? ' selected' : ''}># ${escapeHtml(ch.name)}</option>`;
+        });
+        html += `</optgroup>`;
+      });
+      return html;
+    };
+
+    const truncAddr = (a) => a && a.length > 12 ? a.slice(0, 6) + '...' + a.slice(-4) : (a || '—');
+    const eventIcons = (c) => [c.track_mint && '🪙', c.track_sale && '💰', c.track_list && '📋', c.track_delist && '❌', c.track_transfer && '🔄'].filter(Boolean).join(' ') || '—';
+
+    const collectionRows = collections.length ? collections.map(c => `
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
+        <td style="padding:8px 10px;font-size:0.85em;color:var(--text-primary);">${escapeHtml(c.collection_name)}</td>
+        <td style="padding:8px 10px;font-size:0.85em;color:var(--text-secondary);font-family:monospace;" title="${escapeHtml(c.collection_address)}">${truncAddr(c.collection_address)}</td>
+        <td style="padding:8px 10px;font-size:0.85em;">${eventIcons(c)}</td>
+        <td style="padding:8px 10px;font-size:0.85em;color:${c.enabled ? '#86efac' : '#fca5a5'};">${c.enabled ? 'Yes' : 'No'}</td>
+        <td style="padding:8px 10px;">
+          <button class="nft-settings-edit-btn" data-id="${c.id}" data-name="${escapeHtml(c.collection_name)}" data-channel="${escapeHtml(c.channel_id||'')}" data-me="${escapeHtml(c.me_symbol||'')}" data-mint="${c.track_mint?1:0}" data-sale="${c.track_sale?1:0}" data-list="${c.track_list?1:0}" data-delist="${c.track_delist?1:0}" data-transfer="${c.track_transfer?1:0}" style="font-size:0.8em;padding:4px 10px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-right:4px;">✏️ Edit</button>
+          <button class="nft-settings-remove-btn" data-id="${c.id}" style="font-size:0.8em;padding:4px 10px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
+        </td>
+      </tr>
+    `).join('') : `<tr><td colspan="5" style="padding:12px;color:var(--text-secondary);font-size:0.85em;text-align:center;">No tracked collections yet. Add one below.</td></tr>`;
+
+    pane.innerHTML = `
+      <div style="${cardStyle}">
+        <h3 style="${cardHeader}">⚙️ Alert Settings</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);">
+          <div>
+            <label style="display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;">Alert Channel</label>
+            <select id="nts_alertChannel" style="${fieldInput}">${chOptions(alertCfg.channel_id || '')}</select>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:var(--space-3);justify-content:center;">
+            <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
+              <input type="checkbox" id="nts_enabled"${alertCfg.enabled ? ' checked' : ''}> Alerts Enabled
+            </label>
+          </div>
+          <div>
+            <label style="display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;">Minimum Sale SOL</label>
+            <input type="number" id="nts_minSol" min="0" step="0.1" value="${alertCfg.min_sol ?? 0}" style="${fieldInput};width:120px;">
+          </div>
+          <div>
+            <label style="display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;">Event Types</label>
+            <input type="text" id="nts_eventTypes" value="${escapeHtml(alertCfg.event_types || 'mint,sale,list,delist,transfer')}" placeholder="mint,sale,list,delist,transfer" style="${fieldInput}">
+            <div style="color:var(--text-secondary);font-size:0.78em;margin-top:4px;">Comma-separated list of event types to alert on.</div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);margin-top:var(--space-4);">
+          <button class="btn-primary" id="nts_saveAlertBtn" style="font-size:0.85em;padding:8px 16px;">💾 Save Alert Settings</button>
+        </div>
+      </div>
+      <div style="${cardStyle}">
+        <h3 style="${cardHeader}">📡 Tracked Collections</h3>
+        <div style="overflow-x:auto;margin-bottom:14px;">
+          <table style="width:100%;border-collapse:collapse;" id="nts_collectionsTable">
+            <thead><tr style="border-bottom:2px solid rgba(255,255,255,0.1);">
+              <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;">Name</th>
+              <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;">Address</th>
+              <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;">Events</th>
+              <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;">On</th>
+              <th style="padding:8px 10px;"></th>
+            </tr></thead>
+            <tbody>${collectionRows}</tbody>
+          </table>
+        </div>
+        <div style="padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);">
+          <h4 style="color:#c9d6ff;font-size:0.9em;font-weight:600;margin:0 0 10px;">➕ Add Collection</h4>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);margin-bottom:var(--space-3);">
+            <div>
+              <label style="display:block;color:#c9d6ff;font-size:0.85em;margin-bottom:4px;">Collection Name</label>
+              <input type="text" id="nts_addName" placeholder="e.g. Vault Runners" style="${fieldInput}">
+            </div>
+            <div>
+              <label style="display:block;color:#c9d6ff;font-size:0.85em;margin-bottom:4px;">Collection Address</label>
+              <input type="text" id="nts_addAddr" placeholder="Solana collection address" style="${fieldInput};font-family:monospace;">
+            </div>
+            <div>
+              <label style="display:block;color:#c9d6ff;font-size:0.85em;margin-bottom:4px;">Alert Channel</label>
+              <select id="nts_addChannel" style="${fieldInput}">${chOptions('')}</select>
+            </div>
+            <div>
+              <label style="display:block;color:#c9d6ff;font-size:0.85em;margin-bottom:4px;">Magic Eden Symbol (optional)</label>
+              <input type="text" id="nts_addMe" placeholder="vault_runners" style="${fieldInput}">
+            </div>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:var(--space-3);">
+            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.85em;cursor:pointer;"><input type="checkbox" id="nts_addMint"> 🪙 Mint</label>
+            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.85em;cursor:pointer;"><input type="checkbox" id="nts_addSale" checked> 💰 Sale</label>
+            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.85em;cursor:pointer;"><input type="checkbox" id="nts_addList"> 📋 List</label>
+            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.85em;cursor:pointer;"><input type="checkbox" id="nts_addDelist"> ❌ Delist</label>
+            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.85em;cursor:pointer;"><input type="checkbox" id="nts_addTransfer"> 🔄 Transfer</label>
+          </div>
+          <button class="btn-primary" id="nts_addBtn" style="font-size:0.85em;padding:8px 16px;">Add Collection</button>
+        </div>
+      </div>
+    `;
+
+    // Wire save alert settings
+    document.getElementById('nts_saveAlertBtn')?.addEventListener('click', async () => {
+      const btn = document.getElementById('nts_saveAlertBtn');
+      btn.disabled = true; btn.textContent = 'Saving...';
+      try {
+        const r = await fetch('/api/admin/nft-activity/config', {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            enabled: !!document.getElementById('nts_enabled')?.checked,
+            channelId: document.getElementById('nts_alertChannel')?.value || '',
+            eventTypes: document.getElementById('nts_eventTypes')?.value.trim() || 'mint,sale,list,delist,transfer',
+            minSol: parseFloat(document.getElementById('nts_minSol')?.value) || 0,
+          })
+        });
+        const d = await r.json();
+        if (d.success !== false) showSuccess('Alert settings saved!');
+        else showError(d.message || 'Failed to save');
+      } catch { showError('Error saving alert settings'); }
+      btn.disabled = false; btn.textContent = '💾 Save Alert Settings';
+    });
+
+    // Wire add collection
+    document.getElementById('nts_addBtn')?.addEventListener('click', async () => {
+      const btn = document.getElementById('nts_addBtn');
+      const name = document.getElementById('nts_addName')?.value.trim();
+      const addr = document.getElementById('nts_addAddr')?.value.trim();
+      const chId = document.getElementById('nts_addChannel')?.value;
+      if (!name || !addr || !chId) return showError('Name, address, and channel are required');
+      btn.disabled = true; btn.textContent = 'Adding...';
+      try {
+        const r = await fetch('/api/admin/nft-tracker/collections', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            collectionName: name, collectionAddress: addr, channelId: chId,
+            meSymbol: document.getElementById('nts_addMe')?.value.trim() || '',
+            trackMint: !!document.getElementById('nts_addMint')?.checked,
+            trackSale: !!document.getElementById('nts_addSale')?.checked,
+            trackList: !!document.getElementById('nts_addList')?.checked,
+            trackDelist: !!document.getElementById('nts_addDelist')?.checked,
+            trackTransfer: !!document.getElementById('nts_addTransfer')?.checked,
+          })
+        });
+        const d = await r.json();
+        if (d.success !== false) { showSuccess('Collection added!'); loadNftTrackerSettingsView(); }
+        else showError(d.message || 'Failed to add collection');
+      } catch { showError('Error adding collection'); }
+      btn.disabled = false; btn.textContent = 'Add Collection';
+    });
+
+    // Wire edit/remove buttons
+    pane.querySelectorAll('.nft-settings-edit-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        // Reuse the modal from the full tracker view
+        const fakeBtn = { dataset: { id: btn.dataset.id, name: btn.dataset.name, channel: btn.dataset.channel, me: btn.dataset.me, mint: btn.dataset.mint, sale: btn.dataset.sale, list: btn.dataset.list, delist: btn.dataset.delist, transfer: btn.dataset.transfer } };
+        // Build inline edit modal (same as loadNftTrackerView's editNftCollection)
+        const old = document.getElementById('nftEditModal');
+        if (old) old.remove();
+        const modalFieldInput = 'width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;';
+        const modalLabel = 'display:block;font-weight:600;font-size:0.85em;color:#c9d6ff;margin-bottom:6px;';
+        const overlay = document.createElement('div');
+        overlay.id = 'nftEditModal';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;';
+        overlay.innerHTML = `
+          <div style="background:var(--card-bg,#1e293b);border:1px solid rgba(99,102,241,0.3);border-radius:12px;padding:24px;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto;">
+            <h3 style="margin:0 0 16px;color:var(--text-primary,#e0e7ff);">✏️ Edit Collection</h3>
+            <div style="margin-bottom:12px;"><label style="${modalLabel}">Collection Name</label><input type="text" id="nftEditName" value="${escapeHtml(btn.dataset.name||'')}" style="${modalFieldInput}"></div>
+            <div style="margin-bottom:12px;"><label style="${modalLabel}">Alert Channel</label><select id="nftEditChannel" style="${modalFieldInput}"><option value="">Loading...</option></select></div>
+            <div style="margin-bottom:12px;"><label style="${modalLabel}">Magic Eden Symbol</label><input type="text" id="nftEditMeSymbol" value="${escapeHtml(btn.dataset.me||'')}" style="${modalFieldInput}"></div>
+            <div style="margin-bottom:16px;"><label style="${modalLabel}">Track Events</label>
+              <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:4px;">
+                <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditMint" ${btn.dataset.mint==='1'?'checked':''}> 🪙 Mint</label>
+                <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditSale" ${btn.dataset.sale==='1'?'checked':''}> 💰 Sale</label>
+                <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditList" ${btn.dataset.list==='1'?'checked':''}> 📋 List</label>
+                <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditDelist" ${btn.dataset.delist==='1'?'checked':''}> ❌ Delist</label>
+                <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditTransfer" ${btn.dataset.transfer==='1'?'checked':''}> 🔄 Transfer</label>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;">
+              <button id="nftEditSaveBtn" style="padding:8px 18px;background:#6366f1;color:#fff;border:none;border-radius:8px;font-size:0.85em;font-weight:600;cursor:pointer;">Save</button>
+              <button id="nftEditCancelBtn" style="padding:8px 18px;background:transparent;color:#94a3b8;border:1px solid rgba(255,255,255,0.12);border-radius:8px;font-size:0.85em;cursor:pointer;">Cancel</button>
+              <span id="nftEditFeedback" style="font-size:0.85em;font-weight:600;"></span>
+            </div>
+          </div>`;
+        document.body.appendChild(overlay);
+        // Populate channel dropdown
+        const sel = document.getElementById('nftEditChannel');
+        sel.innerHTML = '<option value="">-- Select channel --</option>';
+        Object.keys(grouped).sort().forEach(parent => {
+          const og = document.createElement('optgroup'); og.label = parent;
+          grouped[parent].forEach(ch => { const o = document.createElement('option'); o.value = ch.id; o.textContent = '# ' + ch.name; og.appendChild(o); });
+          sel.appendChild(og);
+        });
+        sel.value = btn.dataset.channel || '';
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+        document.getElementById('nftEditCancelBtn').addEventListener('click', () => overlay.remove());
+        document.getElementById('nftEditSaveBtn').addEventListener('click', async () => {
+          const saveBtn = document.getElementById('nftEditSaveBtn');
+          const feedback = document.getElementById('nftEditFeedback');
+          saveBtn.disabled = true; saveBtn.textContent = 'Saving...';
+          try {
+            const r = await fetch('/api/admin/nft-tracker/collections/' + btn.dataset.id, {
+              method: 'PUT', credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                collectionName: document.getElementById('nftEditName').value.trim(),
+                channelId: document.getElementById('nftEditChannel').value,
+                meSymbol: document.getElementById('nftEditMeSymbol').value.trim(),
+                trackMint: !!document.getElementById('nftEditMint').checked,
+                trackSale: !!document.getElementById('nftEditSale').checked,
+                trackList: !!document.getElementById('nftEditList').checked,
+                trackDelist: !!document.getElementById('nftEditDelist').checked,
+                trackTransfer: !!document.getElementById('nftEditTransfer').checked,
+              })
+            });
+            const d = await r.json();
+            if (r.ok && d.success) { overlay.remove(); loadNftTrackerSettingsView(); }
+            else { if (feedback) { feedback.style.color='#fca5a5'; feedback.textContent = d.message || 'Failed to save'; } }
+          } catch (err) { if (feedback) { feedback.style.color='#fca5a5'; feedback.textContent='Network error'; } }
+          saveBtn.disabled = false; saveBtn.textContent = 'Save';
+        });
+      });
+    });
+
+    pane.querySelectorAll('.nft-settings-remove-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Remove this tracked collection?')) return;
+        btn.disabled = true;
+        try {
+          await fetch('/api/admin/nft-tracker/collections/' + btn.dataset.id, { method: 'DELETE', credentials: 'include' });
+          loadNftTrackerSettingsView();
+        } catch { btn.disabled = false; }
+      });
+    });
+  } catch (e) {
+    console.error('[NFT Tracker Settings] error:', e);
+    pane.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;padding:var(--space-4);">Failed to load NFT tracker settings.</p>';
   }
 }
 
@@ -5987,8 +6372,8 @@ async function loadNFTActivityAdminView(preloadedCollections = null) {
           </div>
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="color:${isEnabled ? '#10b981' : '#ef4444'}; font-size:0.85em;">${isEnabled ? '● Enabled' : '● Disabled'}</span>
-            <button onclick="openEditCollectionModal(${JSON.stringify(String(col.id))}, ${JSON.stringify(String(name))}, ${JSON.stringify(String(addr))}, ${JSON.stringify(String(col.me_symbol||''))}, ${JSON.stringify(String(col.channel_id||''))})" style="font-size:0.8em;padding:6px 12px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️ Edit</button>
-            <button class="btn-danger" onclick="removeWatchedCollection(${JSON.stringify(String(col.id))}, ${JSON.stringify(String(name))})" style="font-size:0.8em; padding:6px 12px;">
+            <button class="nft-activity-edit-btn" data-id="${escapeHtml(String(col.id))}" data-name="${escapeHtml(name)}" data-addr="${escapeHtml(addr)}" data-me="${escapeHtml(col.me_symbol||'')}" data-channel="${escapeHtml(col.channel_id||'')}" style="font-size:0.8em;padding:6px 12px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️ Edit</button>
+            <button class="nft-activity-remove-btn btn-danger" data-id="${escapeHtml(String(col.id))}" data-name="${escapeHtml(name)}" style="font-size:0.8em; padding:6px 12px;">
               <span>🗑️</span><span>Remove</span>
             </button>
           </div>
@@ -5997,6 +6382,12 @@ async function loadNFTActivityAdminView(preloadedCollections = null) {
     }).join('');
 
     listEl.innerHTML = `<div style="border:1px solid rgba(99,102,241,0.22); border-radius:10px; overflow:hidden;">${rows}</div>`;
+    listEl.querySelectorAll('.nft-activity-edit-btn').forEach(btn => {
+      btn.addEventListener('click', () => openEditCollectionModal(btn.dataset.id, btn.dataset.name, btn.dataset.addr, btn.dataset.me, btn.dataset.channel));
+    });
+    listEl.querySelectorAll('.nft-activity-remove-btn').forEach(btn => {
+      btn.addEventListener('click', () => removeWatchedCollection(btn.dataset.id, btn.dataset.name));
+    });
   } catch (error) {
     console.error('Error loading NFT activity admin:', error);
     container.innerHTML = `<div style="color:#ef4444; padding:12px;">Error loading watchlist: ${escapeHtml(error.message)}</div>`;

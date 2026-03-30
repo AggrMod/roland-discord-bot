@@ -332,6 +332,15 @@ class NFTActivityService {
 
     const priceDisplay = evt.priceSol != null && evt.priceSol > 0 ? `◎ ${Number(evt.priceSol).toFixed(3)} SOL` : '—';
 
+    const walletToDisplay = (wallet) => {
+      if (!wallet) return '—';
+      try {
+        const row = db.prepare('SELECT username FROM users WHERE lower(wallet_address) = lower(?) LIMIT 1').get(wallet);
+        if (row?.username) return `@${row.username}`;
+      } catch {}
+      return `\`${wallet.slice(0, 6)}...${wallet.slice(-4)}\``;
+    };
+
     const embed = new EmbedBuilder()
       .setTitle(`│ ${typeIcon} ${collectionDisplay} • ${typeUpper}`)
       .addFields(

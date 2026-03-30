@@ -801,7 +801,8 @@ function applySettingsTabVisibility(settings = {}) {
   const enabledByModule = {
     governance: !!settings.moduleGovernanceEnabled,
     verification: !!settings.moduleVerificationEnabled,
-    branding: !!settings.moduleBrandingEnabled,
+    // default visible unless explicitly disabled
+    branding: settings.moduleBrandingEnabled !== false,
     treasury: !!settings.moduleTreasuryEnabled,
     nfttracker: !!settings.moduleNftTrackerEnabled,
     battle: !!settings.moduleBattleEnabled,

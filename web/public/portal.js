@@ -4426,6 +4426,7 @@ async function loadVerificationSettings() {
         </div>
 
         <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);margin-top:var(--space-4);">
+          <button class="btn-secondary" id="verOgSyncBtn" onclick="runOgSync()" style="font-size:0.85em;padding:8px 16px;">✨ Run OG Sync</button>
           <button class="btn-primary" onclick="saveVerificationSettings()" style="font-size:0.85em;padding:8px 16px;">💾 Save Verification Settings</button>
         </div>
       </div>
@@ -4468,6 +4469,29 @@ async function saveVerificationSettings() {
   } catch (e) {
     console.error('[Verification] Save error:', e);
     showError('Failed to save verification settings');
+  }
+}
+
+async function runOgSync(fullSync = false) {
+  const btn = document.getElementById('verOgSyncBtn');
+  try {
+    if (btn) { btn.disabled = true; btn.textContent = 'Syncing...'; }
+    const res = await fetch('/api/admin/og-role/sync', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fullSync })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showSuccess(data.message || 'OG sync complete');
+    } else {
+      showError(data.message || 'OG sync failed');
+    }
+  } catch (e) {
+    showError('Error running OG sync: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✨ Run OG Sync'; }
   }
 }
 

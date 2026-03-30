@@ -4714,8 +4714,8 @@ async function loadBrandingSettingsView() {
             <input id="br_support_url" type="text" value="${escapeHtml(b.support_url || '')}" style="${fieldInput}" placeholder="https://...">
           </div>
           <div style="grid-column:1 / span 2;">
-            ${brandHelp('Logo URL', 'Logo image used in branded embeds where applicable.')}
-            <input id="br_logo_url" type="text" value="${escapeHtml(b.logo_url || b.icon_url || '')}" style="${fieldInput}" placeholder="https://...">
+            ${brandHelp('Logo URL', 'Logo image used in branded embeds where applicable. Defaults to tenant server icon when empty.')}
+            <input id="br_logo_url" type="text" value="${escapeHtml(b.logo_url || b.icon_url || '')}" style="${fieldInput}" placeholder="Defaults to server icon if empty">
           </div>
         </div>
 

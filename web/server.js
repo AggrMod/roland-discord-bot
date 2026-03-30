@@ -1467,10 +1467,17 @@ class WebServer {
       });
     });
 
-    this.app.get('/api/admin/branding', adminAuthMiddleware, (req, res) => {
+    this.app.get('/api/admin/branding', adminAuthMiddleware, async (req, res) => {
       try {
         const tenant = tenantService.getTenantContext(req.guildId);
-        res.json({ success: true, branding: tenant?.branding || {} });
+        const guild = req.guild || await fetchGuildById(req.guildId);
+        const fallbackLogo = guildIconUrl(guild);
+        const branding = {
+          ...(tenant?.branding || {}),
+          logo_url: (tenant?.branding?.logo_url || tenant?.branding?.icon_url || fallbackLogo || null),
+          icon_url: (tenant?.branding?.icon_url || tenant?.branding?.logo_url || fallbackLogo || null)
+        };
+        res.json({ success: true, branding });
       } catch (error) {
         logger.error('Error fetching admin branding:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });

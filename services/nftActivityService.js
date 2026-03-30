@@ -4,6 +4,31 @@ const { applyEmbedBranding, getBranding } = require('./embedBranding');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const clientProvider = require('../utils/clientProvider');
 
+const CHAIN_PRICE_META = {
+  solana: { unit: 'SOL', icon: '<:1000042064:1488241763222290564>' },
+  ethereum: { unit: 'ETH', icon: '⟠' },
+  base: { unit: 'ETH', icon: '🔵' },
+  polygon: { unit: 'MATIC', icon: '🟣' },
+  arbitrum: { unit: 'ETH', icon: '🔷' },
+  optimism: { unit: 'ETH', icon: '🔴' },
+  bsc: { unit: 'BNB', icon: '🟡' },
+  avalanche: { unit: 'AVAX', icon: '🔺' },
+};
+
+function normalizeChain(input) {
+  const raw = String(input || '').trim().toLowerCase();
+  if (!raw) return 'solana';
+  if (['sol', 'solana'].includes(raw)) return 'solana';
+  if (['eth', 'ethereum', 'mainnet'].includes(raw)) return 'ethereum';
+  if (['matic', 'polygon', 'polygon-pos'].includes(raw)) return 'polygon';
+  return raw;
+}
+
+function getChainPriceMeta(chainRaw) {
+  const chain = normalizeChain(chainRaw);
+  return CHAIN_PRICE_META[chain] || { unit: 'USD', icon: '💠' };
+}
+
 class NFTActivityService {
   getAlertConfig() {
     try {
@@ -227,6 +252,8 @@ class NFTActivityService {
       const priceSol = rawPrice !== null ? Number(rawPrice) / (rawPrice > 1000 ? 1e9 : 1) : null; // convert lamports if needed
       const txSignature = event.txSignature || event.signature || null;
       const eventTime = event.eventTime || event.timestamp || new Date().toISOString();
+      const source = String(event.source || nftData.source || 'solana').toLowerCase();
+      const chain = normalizeChain(event.chain || event.network || source);
 
       // Dedup: skip if tx_signature already recorded (webhook + poll overlap)
       if (txSignature) {
@@ -263,6 +290,7 @@ class NFTActivityService {
         priceSol: Number.isFinite(priceSol) ? priceSol : null,
         txSignature,
         eventTime,
+        chain,
         imageUrl: event.imageUrl || null
       }).catch(err => logger.error('Error sending NFT activity alert:', err));
 
@@ -333,8 +361,12 @@ class NFTActivityService {
         ? `${collectionDisplay} #${evt.tokenMint.slice(-4)}`
         : (tokenIdShort || '—');
 
+    const chainMeta = getChainPriceMeta(evt.chain);
     const solIcon = process.env.SOL_EMOJI || '<:1000042064:1488241763222290564>';
-    const priceDisplay = evt.priceSol !== null && evt.priceSol !== undefined && evt.priceSol > 0 ? `${solIcon} ${Number(evt.priceSol).toFixed(3)} SOL` : '—';
+    const priceIcon = normalizeChain(evt.chain) === 'solana' ? solIcon : chainMeta.icon;
+    const priceDisplay = evt.priceSol !== null && evt.priceSol !== undefined && evt.priceSol > 0
+      ? `${priceIcon} ${Number(evt.priceSol).toFixed(3)} ${chainMeta.unit}`
+      : '—';
 
     const walletToDisplay = (wallet) => {
       if (!wallet) return '—';
@@ -528,12 +560,13 @@ class NFTActivityService {
               type: meTypeMap[act.type] || act.type || 'unknown',
               collectionKey: col.collection_address,
               tokenMint: act.tokenMint || act.mint || null,
-              tokenName: act.tokenMint || null,
+              tokenName: act.tokenName || act.name || act.tokenMint || null,
               fromWallet: act.seller || act.creatorAddress || null,
               toWallet: act.buyer || null,
               priceSol: act.price !== null && act.price !== undefined ? Number(act.price) : null,
               txSignature: sig,
               imageUrl: act.image || null,
+              chain: 'solana',
               eventTime: act.blockTime ? new Date(act.blockTime * 1000).toISOString() : new Date().toISOString(),
             };
 
@@ -570,10 +603,12 @@ class NFTActivityService {
                   type: tensorTypeMap[tx.txType] || tx.txType?.toLowerCase() || "unknown",
                   collectionKey: col.collection_address,
                   tokenMint: tx.mintOnchainId || null,
+                  tokenName: tx.name || null,
                   fromWallet: tx.seller || null,
                   toWallet: tx.buyer || null,
                   priceSol: tx.grossAmount ? Number(tx.grossAmount) / 1e9 : null,
                   txSignature: tx.signature,
+                  chain: 'solana',
                   eventTime: tx.blockTime ? new Date(tx.blockTime * 1000).toISOString() : new Date().toISOString(),
                 };
                 this.ingestEvent(normalized, "poll");

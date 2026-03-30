@@ -3724,11 +3724,9 @@ async function loadAdminSettingsView() {
       </div>`;
     };
 
-    // Only render toggles for assigned + globally-enabled modules.
-    // If superadmin disabled a module, hide it here for everyone (including superadmins in tenant context).
+    // Render all assigned module toggles (show disabled modules as OFF for visibility/parity)
     const visibleToggles = MODULE_TOGGLE_DEFS
-      .filter(m => (assignedKeys === null || assignedKeys.includes(m.moduleKey)) && (s[m.id] !== false))
-      .filter(m => !['moduleTreasuryEnabled', 'moduleBattleEnabled'].includes(m.id)) // hidden in portal
+      .filter(m => assignedKeys === null || assignedKeys.includes(m.moduleKey))
       .map(m => moduleToggle(m.id, m.label, m.icon, true))
       .join('');
 

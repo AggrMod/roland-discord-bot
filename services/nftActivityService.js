@@ -398,11 +398,16 @@ class NFTActivityService {
         (evt.collectionKey ? `${evt.collectionKey.slice(0, 6)}...${evt.collectionKey.slice(-4)}` : 'Unknown');
 
       const tokenIdShort = evt.tokenMint ? `\`${evt.tokenMint.slice(0, 6)}...${evt.tokenMint.slice(-4)}\`` : null;
-      const tokenDisplay = (evt.tokenName && !evt.tokenName.match(/^[A-Za-z0-9]{32,}$/))
-        ? evt.tokenName
-        : (collectionDisplay !== 'Unknown' && evt.tokenMint)
-          ? `${collectionDisplay} #${evt.tokenMint.slice(-4)}`
-          : (tokenIdShort || '—');
+      const tokenNameRaw = String(evt.tokenName || '').trim();
+      const tokenNumberMatch = tokenNameRaw.match(/#\s*(\d{1,8})\b/) || tokenNameRaw.match(/\b(\d{1,8})\b/);
+      const tokenNumber = tokenNumberMatch?.[1] || null;
+      const tokenDisplay = (tokenNameRaw && !tokenNameRaw.match(/^[A-Za-z0-9]{32,}$/))
+        ? tokenNameRaw
+        : (collectionDisplay !== 'Unknown' && tokenNumber)
+          ? `${collectionDisplay} #${tokenNumber}`
+          : (collectionDisplay !== 'Unknown' && evt.tokenMint)
+            ? `${collectionDisplay} NFT`
+            : (tokenIdShort || '—');
 
       const fields = [
         { name: 'Token Name', value: tokenDisplay, inline: true },
@@ -445,6 +450,7 @@ class NFTActivityService {
       if (explorer) embed.setURL(explorer);
 
       await channel.send({ embeds: [embed], components });
+      logger.log(`[nft-alert] sent guild=${target.guild_id || 'global'} channel=${target.channel_id} type=${evt.eventType} tx=${evt.txSignature || 'none'}`);
     }
   }
 

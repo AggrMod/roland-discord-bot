@@ -347,7 +347,7 @@ class NFTActivityService {
     const branding = getBranding(tracked?.guild_id || '', 'nfttracker');
     const fallbackLogo = branding.logo || client?.user?.displayAvatarURL?.() || null;
     try {
-      if (fallbackLogo) embed.setAuthor({ name: ' ', iconURL: fallbackLogo });
+      if (fallbackLogo) embed.setAuthor({ name: 'Guild Pilot', iconURL: fallbackLogo });
     } catch {}
 
     applyEmbedBranding(embed, {
@@ -357,7 +357,7 @@ class NFTActivityService {
       defaultFooter: 'Powered by Guild Pilot',
       fallbackLogoUrl: fallbackLogo,
       footerPrefix: shortSig ? `Tx: ${shortSig}` : 'No tx',
-      useThumbnail: false,
+      useThumbnail: true,
     });
 
     if (evt.imageUrl) embed.setThumbnail(evt.imageUrl);

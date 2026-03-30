@@ -219,7 +219,7 @@ class TicketService {
       const logo = branding.logo || this.client?.user?.displayAvatarURL?.() || null;
       if (logo) {
         try {
-          embed.setAuthor({ name: ' ', iconURL: logo });
+          embed.setAuthor({ name: 'Guild Pilot', iconURL: logo });
         } catch {}
       }
 

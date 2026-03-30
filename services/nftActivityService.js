@@ -407,11 +407,12 @@ class NFTActivityService {
 
     const branding = getBranding(tracked?.guild_id || '', 'nfttracker');
     const fallbackLogo = branding.logo || client?.user?.displayAvatarURL?.() || null;
-    const authorText = `${branding.brandName || 'Guild Pilot'} | ${collectionDisplay} ${typeUpper}`;
+    const authorText = `${branding.brandName || 'Guild Pilot'}`;
     try {
       if (fallbackLogo) embed.setAuthor({ name: authorText, iconURL: fallbackLogo });
       else embed.setAuthor({ name: authorText });
     } catch {}
+    embed.setTitle(`│ ${branding.brandName || 'Guild Pilot'} | ${collectionDisplay} ${typeUpper}`);
 
     applyEmbedBranding(embed, {
       guildId: tracked?.guild_id || '',

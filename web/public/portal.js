@@ -2861,7 +2861,6 @@ async function loadSuperadminView() {
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           <button data-superadmin-tab-btn="tenants" class="btn-primary" onclick="showSuperadminTab('tenants')" style="padding:8px 12px;">Tenants</button>
-          <button data-superadmin-tab-btn="eras" class="btn-secondary" onclick="showSuperadminTab('eras')" style="padding:8px 12px;">Era Assignments</button>
           <button data-superadmin-tab-btn="superadmins" class="btn-secondary" onclick="showSuperadminTab('superadmins')" style="padding:8px 12px;">Superadmins</button>
 
           <span style="width:1px;height:24px;background:rgba(99,102,241,0.25);margin:0 4px;"></span>
@@ -2871,6 +2870,7 @@ async function loadSuperadminView() {
             <button data-tenant-detail-tab="controls" class="btn-secondary" onclick="showTenantDetailTab('controls')" style="padding:8px 12px;">Plan & Status</button>
             <button data-tenant-detail-tab="branding" class="btn-secondary" onclick="showTenantDetailTab('branding')" style="padding:8px 12px;">Branding</button>
             <button data-tenant-detail-tab="modules" class="btn-secondary" onclick="showTenantDetailTab('modules')" style="padding:8px 12px;">Modules</button>
+            <button data-tenant-detail-tab="eras" class="btn-secondary" onclick="showTenantDetailTab('eras')" style="padding:8px 12px;">Era Assignments</button>
           </div>
         </div>
 
@@ -3078,8 +3078,7 @@ function showSuperadminTab(tab) {
   superadminActiveTab = tab;
   const sections = {
     superadmins: ['superadminSection-superadminsInput', 'superadminSection-superadmins'],
-    tenants: ['superadminSection-tenants', 'superadminSection-detail'],
-    eras: ['superadminSection-eras'],
+    tenants: ['superadminSection-tenants', 'superadminSection-detail', 'superadminSection-eras'],
   };
   Object.entries(sections).forEach(([key, ids]) => {
     ids.forEach(id => {
@@ -3092,6 +3091,9 @@ function showSuperadminTab(tab) {
   });
   const tenantDetailGroup = document.getElementById('superadminTenantDetailTabGroup');
   if (tenantDetailGroup) tenantDetailGroup.style.display = (tab === 'tenants') ? 'flex' : 'none';
+  if (tab === 'tenants') {
+    showTenantDetailTab(tenantDetailActiveTab || 'overview');
+  }
 }
 
 function selectTenantGuild(guildId) {
@@ -3111,6 +3113,7 @@ function showTenantDetailTab(tab) {
     controls: ['tenantDetail-controls'],
     branding: ['tenantDetail-branding'],
     modules: ['tenantDetail-modules'],
+    eras: ['superadminSection-eras'],
   };
   Object.entries(ids).forEach(([key, list]) => {
     list.forEach(id => {

@@ -5280,12 +5280,13 @@ function _ensureAddRuleModal() {
   modal.className = 'modal-overlay';
   modal.style.display = 'none';
   modal.innerHTML = `
-    <div class="modal-box" style="max-width:520px;">
+    <div class="modal-box" style="max-width:520px;width:520px;min-height:620px;display:flex;flex-direction:column;">
+
       <div class="modal-header">
         <h3 id="addRuleModalTitle">Add Verification Rule</h3>
         <button onclick="closeAddRuleModal()" class="modal-close">\u2715</button>
       </div>
-      <div class="modal-body">
+      <div class="modal-body" style="flex:1;overflow:auto;">
         <div style="margin-bottom:20px;">
           <label style="display:block;font-size:0.85em;color:var(--text-secondary);margin-bottom:8px;">Rule Type</label>
           <div style="display:flex;gap:12px;">

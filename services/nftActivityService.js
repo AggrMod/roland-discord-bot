@@ -412,7 +412,7 @@ class NFTActivityService {
       if (fallbackLogo) embed.setAuthor({ name: authorText, iconURL: fallbackLogo });
       else embed.setAuthor({ name: authorText });
     } catch {}
-    embed.setTitle(`│ ${typeIcon} ${collectionDisplay} ${typeUpper}`);
+    embed.setTitle(`${typeIcon} ${collectionDisplay} ${typeUpper}`);
 
     applyEmbedBranding(embed, {
       guildId: tracked?.guild_id || '',

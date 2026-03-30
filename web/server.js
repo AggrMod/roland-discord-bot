@@ -1571,6 +1571,7 @@ class WebServer {
           'txAlertEnabled', 'txAlertIncomingOnly', 'txAlertMinSol',
           'displayName', 'displayEmoji', 'displayColor',
           'verificationReceiveWallet', 'nftActivityWebhookSecret',
+          'chainEmojiMap',
         ];
         const sanitized = {};
         for (const key of ALLOWED_SETTINGS_FIELDS) {
@@ -1586,6 +1587,7 @@ class WebServer {
           delete sanitized.pollIntervalSeconds;
           delete sanitized.verifyRateLimitMinutes;
           delete sanitized.maxPendingPerUser;
+          delete sanitized.chainEmojiMap;
         }
 
         // In multi-tenant mode, module toggle states live in tenant_modules — NOT settings.json.

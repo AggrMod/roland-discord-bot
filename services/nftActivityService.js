@@ -3,6 +3,7 @@ const logger = require('../utils/logger');
 const { applyEmbedBranding, getBranding } = require('./embedBranding');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const clientProvider = require('../utils/clientProvider');
+const settings = require('../config/settings');
 
 const CHAIN_PRICE_META = {
   solana: { unit: 'SOL', icon: '<:1000042064:1488241763222290564>' },
@@ -362,10 +363,13 @@ class NFTActivityService {
         : (tokenIdShort || '—');
 
     const chainMeta = getChainPriceMeta(evt.chain);
-    const solIcon = process.env.SOL_EMOJI || '<:1000042064:1488241763222290564>';
-    const priceIcon = normalizeChain(evt.chain) === 'solana' ? solIcon : chainMeta.icon;
+    const chainKey = normalizeChain(evt.chain);
+    const chainEmojiMap = settings.getSettings().chainEmojiMap || {};
+    const envSolIcon = process.env.SOL_EMOJI || '<:1000042064:1488241763222290564>';
+    const defaultChainIcon = chainMeta.icon;
+    const mappedIcon = chainEmojiMap[chainKey] || (chainKey === 'solana' ? envSolIcon : defaultChainIcon);
     const priceDisplay = evt.priceSol !== null && evt.priceSol !== undefined && evt.priceSol > 0
-      ? `${priceIcon} ${Number(evt.priceSol).toFixed(3)} ${chainMeta.unit}`
+      ? `${mappedIcon} ${Number(evt.priceSol).toFixed(3)} ${chainMeta.unit}`
       : '—';
 
     const walletToDisplay = (wallet) => {

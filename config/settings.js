@@ -55,6 +55,18 @@ class SettingsManager {
       // Base Verified Role
       baseVerifiedRoleId: '',
 
+      // Global chain emoji map (used by NFT tracker price display)
+      chainEmojiMap: {
+        solana: '<:1000042064:1488241763222290564>',
+        ethereum: '⟠',
+        base: '🔵',
+        polygon: '🟣',
+        arbitrum: '🔷',
+        optimism: '🔴',
+        bsc: '🟡',
+        avalanche: '🔺'
+      },
+
       // Channel Overrides
       proposalsChannelId: '',
       votingChannelId: '',
@@ -170,6 +182,12 @@ class SettingsManager {
         const max = parseInt(newSettings.maxPendingPerUser);
         if (isNaN(max) || max < 1 || max > 10) {
           return { success: false, message: 'Max pending per user must be between 1 and 10' };
+        }
+      }
+
+      if (newSettings.chainEmojiMap !== undefined) {
+        if (!newSettings.chainEmojiMap || typeof newSettings.chainEmojiMap !== 'object' || Array.isArray(newSettings.chainEmojiMap)) {
+          return { success: false, message: 'chainEmojiMap must be an object' };
         }
       }
 

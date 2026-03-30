@@ -3605,7 +3605,7 @@ async function loadBattleTimingSettings() {
       const opts = eras.map(e => `<option value="${escapeHtml(e.key)}"${e.key === currentEra ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('');
       const eraWrap = document.createElement('div');
       eraWrap.id = 'battleDefaultEraWrap';
-      eraWrap.style.cssText = 'margin-top:16px;border-top:1px solid rgba(99,102,241,0.15);padding-top:16px;';
+      eraWrap.style.cssText = 'margin-top:16px;border-top:1px solid rgba(99,102,241,0.15);padding-top:16px;position:relative;z-index:1;';
       eraWrap.innerHTML = `
         <label class="form-label">Default Battle Era</label>
         <select id="battleDefaultEraSelect" class="form-input" style="width:220px;">

@@ -1133,8 +1133,8 @@
               <!-- adminNftTrackerCard content loaded here dynamically -->
             </div>
             <div id="settingsTab-battle" class="settings-tab-pane" style="display:none;">
-              <div class="card">
-                <h3>⚔️ Battle Timing</h3>
+              <div class="card" style="overflow:visible;">
+                <h3>⚔️ Battle</h3>
                 <p style="color:var(--text-secondary); margin-bottom:16px; font-size:0.9em;">Control the pacing of battle rounds. Lower = faster battles, higher = more dramatic tension.</p>
                 <div style="display:grid; gap:16px;">
                   <div>
@@ -1152,7 +1152,7 @@
                     <input type="number" id="battleElitePrepInput" min="1" max="120" step="1" class="form-input" placeholder="12" style="width:160px;">
                     <p style="color:var(--text-secondary); font-size:0.82em; margin-top:4px;">Extra suspense delay when only 4 players remain. Default: 12s</p>
                   </div>
-                  <div>
+                  <div style="position:relative;z-index:0;">
                     <button class="btn-primary" onclick="saveBattleTimingSettings()" style="width:fit-content;">Save Battle Settings</button>
                   </div>
                 </div>

@@ -336,29 +336,26 @@ class WebServer {
       const discordGuilds = await getDiscordUserGuilds(req);
       const userGuild = discordGuilds.find(entry => entry.id === requestedGuildId);
       if (!userGuild || !hasDiscordAdminPermission(userGuild)) {
-        const fallback = fallbackGuildId();
-        if (requestedGuildId === fallback) {
-          const directGuild = await fetchGuildById(requestedGuildId);
-          const member = directGuild ? await directGuild.members.fetch(userId).catch(() => null) : null;
-          if (member?.permissions && (member.permissions.has('Administrator') || member.permissions.has('ManageGuild'))) {
-            const botGuildIds = getBotGuildIds();
-            if (!botGuildIds.has(requestedGuildId)) {
-              return { ok: false, status: 403, message: 'Bot is not installed in the selected server' };
-            }
-
-            return {
-              ok: true,
-              isSuperadmin,
-              guild: directGuild,
-              guildId: requestedGuildId,
-              guildSummary: {
-                id: directGuild.id,
-                name: directGuild.name,
-                icon: directGuild.icon,
-                permissions: member.permissions.bitfield?.toString?.() || '0'
-              }
-            };
+        // Fallback: fetch user as guild member directly (covers guilds where OAuth scope is limited)
+        const member = guild ? await guild.members.fetch(userId).catch(() => null) : null;
+        if (member?.permissions && (member.permissions.has('Administrator') || member.permissions.has('ManageGuild'))) {
+          const botGuildIds = getBotGuildIds();
+          if (!botGuildIds.has(requestedGuildId)) {
+            return { ok: false, status: 403, message: 'Bot is not installed in the selected server' };
           }
+
+          return {
+            ok: true,
+            isSuperadmin,
+            guild,
+            guildId: requestedGuildId,
+            guildSummary: {
+              id: guild.id,
+              name: guild.name,
+              icon: guild.icon,
+              permissions: member.permissions.bitfield?.toString?.() || '0'
+            }
+          };
         }
 
         return { ok: false, status: 403, message: 'Admin permission required' };

@@ -646,9 +646,10 @@ function switchSettingsTab(tab) {
       // Move the actual card into the settings tab pane (preserves event handlers)
       if (!pane.contains(card)) {
         pane.innerHTML = '';
-        card.style.display = '';
         pane.appendChild(card);
       }
+      // Always ensure card is visible (hideAllAdminCards may have hidden it)
+      card.style.display = '';
     }
   }
 
@@ -3934,6 +3935,8 @@ async function loadNftTrackerView() {
 
   const editNftCollection = (btn) => {
     const id = btn.dataset.id;
+    const nameVal = escapeHtml(btn.dataset.name || '');
+    const meVal = escapeHtml(btn.dataset.me || '');
     // Remove any existing edit modal
     const old = document.getElementById('nftEditModal');
     if (old) old.remove();
@@ -3948,7 +3951,7 @@ async function loadNftTrackerView() {
         <h3 style="margin:0 0 16px;color:var(--text-primary, #e0e7ff);">✏️ Edit Collection</h3>
         <div style="margin-bottom:12px;">
           <label style="${modalLabel}">Collection Name</label>
-          <input type="text" id="nftEditName" value="${btn.dataset.name}" style="${modalFieldInput}">
+          <input type="text" id="nftEditName" value="${nameVal}" style="${modalFieldInput}">
         </div>
         <div style="margin-bottom:12px;">
           <label style="${modalLabel}">Alert Channel</label>
@@ -3956,7 +3959,7 @@ async function loadNftTrackerView() {
         </div>
         <div style="margin-bottom:12px;">
           <label style="${modalLabel}">Magic Eden Symbol <small style="color:#94a3b8;">(slug for listing alerts)</small></label>
-          <input type="text" id="nftEditMeSymbol" value="${btn.dataset.me}" style="${modalFieldInput}">
+          <input type="text" id="nftEditMeSymbol" value="${meVal}" style="${modalFieldInput}">
         </div>
         <div style="margin-bottom:16px;">
           <label style="${modalLabel}">Track Events</label>

@@ -120,13 +120,15 @@ class NFTActivityService {
         }
       }
       if (!setClauses.length) return { success: false, message: 'No valid updates provided' };
+      let info;
       if (guildId) {
         params.push(id, guildId);
-        db.prepare(`UPDATE nft_tracked_collections SET ${setClauses.join(', ')} WHERE id = ? AND guild_id = ?`).run(...params);
+        info = db.prepare(`UPDATE nft_tracked_collections SET ${setClauses.join(', ')} WHERE id = ? AND guild_id = ?`).run(...params);
       } else {
         params.push(id);
-        db.prepare(`UPDATE nft_tracked_collections SET ${setClauses.join(', ')} WHERE id = ?`).run(...params);
+        info = db.prepare(`UPDATE nft_tracked_collections SET ${setClauses.join(', ')} WHERE id = ?`).run(...params);
       }
+      if (!info.changes) return { success: false, message: 'Collection not found or not owned by this server' };
       return { success: true };
     } catch (e) {
       logger.error('Error updating tracked collection:', e);

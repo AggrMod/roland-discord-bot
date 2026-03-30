@@ -218,6 +218,15 @@ class TenantService {
       primary_color: brandingRow.primary_color || brandingRow.brand_color || null,
       secondary_color: brandingRow.secondary_color || null,
       icon_url: brandingRow.icon_url || brandingRow.logo_url || null,
+      ticketing_color: brandingRow.ticketing_color || null,
+      selfserve_color: brandingRow.selfserve_color || null,
+      nfttracker_color: brandingRow.nfttracker_color || null,
+      ticket_panel_title: brandingRow.ticket_panel_title || null,
+      ticket_panel_description: brandingRow.ticket_panel_description || null,
+      selfserve_panel_title: brandingRow.selfserve_panel_title || null,
+      selfserve_panel_description: brandingRow.selfserve_panel_description || null,
+      nfttracker_panel_title: brandingRow.nfttracker_panel_title || null,
+      nfttracker_panel_description: brandingRow.nfttracker_panel_description || null,
       raw: brandingRow
     } : null;
 
@@ -613,7 +622,16 @@ class TenantService {
       'display_name',
       'primary_color',
       'secondary_color',
-      'icon_url'
+      'icon_url',
+      'ticketing_color',
+      'selfserve_color',
+      'nfttracker_color',
+      'ticket_panel_title',
+      'ticket_panel_description',
+      'selfserve_panel_title',
+      'selfserve_panel_description',
+      'nfttracker_panel_title',
+      'nfttracker_panel_description'
     ];
 
     const patch = {};
@@ -641,7 +659,16 @@ class TenantService {
       display_name: patch.display_name !== undefined ? patch.display_name : (brandingRow.display_name || brandingRow.bot_display_name || null),
       primary_color: patch.primary_color !== undefined ? patch.primary_color : (brandingRow.primary_color || brandingRow.brand_color || null),
       secondary_color: patch.secondary_color !== undefined ? patch.secondary_color : (brandingRow.secondary_color || null),
-      icon_url: patch.icon_url !== undefined ? patch.icon_url : (brandingRow.icon_url || brandingRow.logo_url || null)
+      icon_url: patch.icon_url !== undefined ? patch.icon_url : (brandingRow.icon_url || brandingRow.logo_url || null),
+      ticketing_color: patch.ticketing_color !== undefined ? patch.ticketing_color : (brandingRow.ticketing_color || null),
+      selfserve_color: patch.selfserve_color !== undefined ? patch.selfserve_color : (brandingRow.selfserve_color || null),
+      nfttracker_color: patch.nfttracker_color !== undefined ? patch.nfttracker_color : (brandingRow.nfttracker_color || null),
+      ticket_panel_title: patch.ticket_panel_title !== undefined ? patch.ticket_panel_title : (brandingRow.ticket_panel_title || null),
+      ticket_panel_description: patch.ticket_panel_description !== undefined ? patch.ticket_panel_description : (brandingRow.ticket_panel_description || null),
+      selfserve_panel_title: patch.selfserve_panel_title !== undefined ? patch.selfserve_panel_title : (brandingRow.selfserve_panel_title || null),
+      selfserve_panel_description: patch.selfserve_panel_description !== undefined ? patch.selfserve_panel_description : (brandingRow.selfserve_panel_description || null),
+      nfttracker_panel_title: patch.nfttracker_panel_title !== undefined ? patch.nfttracker_panel_title : (brandingRow.nfttracker_panel_title || null),
+      nfttracker_panel_description: patch.nfttracker_panel_description !== undefined ? patch.nfttracker_panel_description : (brandingRow.nfttracker_panel_description || null)
     };
 
     db.prepare(`
@@ -655,9 +682,18 @@ class TenantService {
         secondary_color,
         logo_url,
         icon_url,
-        support_url
+        support_url,
+        ticketing_color,
+        selfserve_color,
+        nfttracker_color,
+        ticket_panel_title,
+        ticket_panel_description,
+        selfserve_panel_title,
+        selfserve_panel_description,
+        nfttracker_panel_title,
+        nfttracker_panel_description
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(tenant_id) DO UPDATE SET
         bot_display_name = excluded.bot_display_name,
         brand_emoji = excluded.brand_emoji,
@@ -668,6 +704,15 @@ class TenantService {
         logo_url = excluded.logo_url,
         icon_url = excluded.icon_url,
         support_url = excluded.support_url,
+        ticketing_color = excluded.ticketing_color,
+        selfserve_color = excluded.selfserve_color,
+        nfttracker_color = excluded.nfttracker_color,
+        ticket_panel_title = excluded.ticket_panel_title,
+        ticket_panel_description = excluded.ticket_panel_description,
+        selfserve_panel_title = excluded.selfserve_panel_title,
+        selfserve_panel_description = excluded.selfserve_panel_description,
+        nfttracker_panel_title = excluded.nfttracker_panel_title,
+        nfttracker_panel_description = excluded.nfttracker_panel_description,
         updated_at = CURRENT_TIMESTAMP
     `).run(
       tenantId,
@@ -679,7 +724,16 @@ class TenantService {
       nextBranding.secondary_color,
       nextBranding.logo_url,
       nextBranding.icon_url,
-      nextBranding.support_url
+      nextBranding.support_url,
+      nextBranding.ticketing_color,
+      nextBranding.selfserve_color,
+      nextBranding.nfttracker_color,
+      nextBranding.ticket_panel_title,
+      nextBranding.ticket_panel_description,
+      nextBranding.selfserve_panel_title,
+      nextBranding.selfserve_panel_description,
+      nextBranding.nfttracker_panel_title,
+      nextBranding.nfttracker_panel_description
     );
 
     const after = this.getTenantContext(normalizedGuildId);

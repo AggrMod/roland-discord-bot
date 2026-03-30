@@ -1486,7 +1486,7 @@ class WebServer {
 
     this.app.put('/api/admin/branding', adminAuthMiddleware, (req, res) => {
       try {
-        const ALLOWED_BRANDING_FIELDS = ['bot_display_name', 'brand_emoji', 'brand_color', 'logo_url', 'support_url', 'display_name', 'primary_color', 'secondary_color', 'icon_url'];
+        const ALLOWED_BRANDING_FIELDS = ['bot_display_name', 'brand_emoji', 'brand_color', 'logo_url', 'support_url', 'display_name', 'primary_color', 'secondary_color', 'icon_url', 'ticketing_color', 'selfserve_color', 'nfttracker_color', 'ticket_panel_title', 'ticket_panel_description', 'selfserve_panel_title', 'selfserve_panel_description', 'nfttracker_panel_title', 'nfttracker_panel_description'];
         const patch = {};
         for (const key of ALLOWED_BRANDING_FIELDS) {
           if (req.body[key] !== undefined) patch[key] = req.body[key];

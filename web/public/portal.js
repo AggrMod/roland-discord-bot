@@ -4672,8 +4672,29 @@ async function runOgSync(fullSync = false) {
 
 // ==================== BRANDING SETTINGS ====================
 
+function showBrandingHelp(anchorEl, text) {
+  const existing = document.getElementById('brandingHelpPopover');
+  if (existing) existing.remove();
+  const pop = document.createElement('div');
+  pop.id = 'brandingHelpPopover';
+  pop.style.cssText = 'position:fixed;z-index:10000;max-width:320px;padding:10px 12px;border:1px solid rgba(99,102,241,0.3);border-radius:8px;background:rgba(15,23,42,0.98);color:#e2e8f0;font-size:0.82em;line-height:1.35;box-shadow:0 8px 26px rgba(0,0,0,0.45);';
+  pop.textContent = text;
+  document.body.appendChild(pop);
+  const rect = anchorEl.getBoundingClientRect();
+  pop.style.left = `${Math.min(rect.left, window.innerWidth - pop.offsetWidth - 10)}px`;
+  pop.style.top = `${rect.bottom + 8}px`;
+  const close = (e) => {
+    if (!pop.contains(e.target) && e.target !== anchorEl) {
+      pop.remove();
+      document.removeEventListener('mousedown', close);
+    }
+  };
+  document.addEventListener('mousedown', close);
+}
+
 function brandHelp(label, helpText) {
-  return `<label style="display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;">${label} <span title="${escapeHtml(helpText)}" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:999px;background:rgba(99,102,241,0.28);color:#e0e7ff;font-size:0.72em;cursor:help;vertical-align:middle;">?</span></label>`;
+  const safe = escapeHtml(helpText);
+  return `<label style="display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;">${label} <button type="button" onclick="showBrandingHelp(this,'${safe.replace(/'/g, "\\'")}')" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:999px;background:rgba(99,102,241,0.28);color:#e0e7ff;font-size:0.72em;cursor:pointer;vertical-align:middle;border:none;padding:0;">?</button></label>`;
 }
 
 async function loadBrandingSettingsView() {
@@ -4718,11 +4739,63 @@ async function loadBrandingSettingsView() {
           </div>
         </div>
 
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(99,102,241,0.15);display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+          <div>
+            ${brandHelp('Ticketing Color Override', 'Optional. If set, ticketing embeds/panels use this instead of global brand color.')}
+            <input id="br_ticketing_color" type="text" value="${escapeHtml(b.ticketing_color || '')}" style="${fieldInput}" placeholder="(fallback to global)">
+          </div>
+          <div>
+            ${brandHelp('Self-Serve Color Override', 'Optional. If set, self-serve role panels use this color.')}
+            <input id="br_selfserve_color" type="text" value="${escapeHtml(b.selfserve_color || '')}" style="${fieldInput}" placeholder="(fallback to global)">
+          </div>
+          <div>
+            ${brandHelp('NFT Tracker Color Override', 'Optional. If set, NFT tracker embeds/panels use this color.')}
+            <input id="br_nfttracker_color" type="text" value="${escapeHtml(b.nfttracker_color || '')}" style="${fieldInput}" placeholder="(fallback to global)">
+          </div>
+        </div>
+
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(99,102,241,0.15);display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            ${brandHelp('Ticket Panel Title', 'Default title for ticket module panels/messages.')}
+            <input id="br_ticket_panel_title" type="text" value="${escapeHtml(b.ticket_panel_title || '')}" style="${fieldInput}" placeholder="Support Tickets">
+          </div>
+          <div>
+            ${brandHelp('Ticket Panel Description', 'Default description text used in ticket panel embeds.')}
+            <input id="br_ticket_panel_description" type="text" value="${escapeHtml(b.ticket_panel_description || '')}" style="${fieldInput}" placeholder="Open a support ticket">
+          </div>
+          <div>
+            ${brandHelp('Self-Serve Panel Title', 'Default title for self-serve role panel embeds.')}
+            <input id="br_selfserve_panel_title" type="text" value="${escapeHtml(b.selfserve_panel_title || '')}" style="${fieldInput}" placeholder="Get Your Roles">
+          </div>
+          <div>
+            ${brandHelp('Self-Serve Panel Description', 'Default description for role claim panels.')}
+            <input id="br_selfserve_panel_description" type="text" value="${escapeHtml(b.selfserve_panel_description || '')}" style="${fieldInput}" placeholder="Click to claim roles">
+          </div>
+          <div>
+            ${brandHelp('NFT Tracker Panel Title', 'Default title for NFT tracker announcements.')}
+            <input id="br_nfttracker_panel_title" type="text" value="${escapeHtml(b.nfttracker_panel_title || '')}" style="${fieldInput}" placeholder="NFT Activity">
+          </div>
+          <div>
+            ${brandHelp('NFT Tracker Panel Description', 'Default subtitle/description in NFT tracker panels.')}
+            <input id="br_nfttracker_panel_description" type="text" value="${escapeHtml(b.nfttracker_panel_description || '')}" style="${fieldInput}" placeholder="Collection updates">
+          </div>
+        </div>
+
         <div style="margin-top:14px;padding:12px;border:1px solid rgba(99,102,241,0.18);border-radius:10px;background:rgba(14,23,44,0.42);">
-          <div style="color:#c9d6ff;font-weight:600;margin-bottom:6px;">Preview</div>
-          <div id="brandingPreviewCard" style="padding:10px;border-radius:8px;background:rgba(30,41,59,0.55);border-left:4px solid ${escapeHtml(b.brand_color || b.primary_color || '#6366f1')};">
-            <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || '✨') + ' ' + (b.bot_display_name || b.display_name || 'Your Brand'))}</div>
-            <div style="color:#94a3b8;font-size:0.84em;margin-top:4px;">Example panel intro text for your tenant.</div>
+          <div style="color:#c9d6ff;font-weight:600;margin-bottom:8px;">Preview Variants</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+            <div id="brandingPreviewTicket" style="padding:10px;border-radius:8px;background:rgba(30,41,59,0.55);border-left:4px solid ${escapeHtml(b.ticketing_color || b.brand_color || b.primary_color || '#6366f1')};">
+              <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || '🎟️') + ' ' + (b.ticket_panel_title || 'Support Tickets'))}</div>
+              <div style="color:#94a3b8;font-size:0.8em;margin-top:4px;">${escapeHtml(b.ticket_panel_description || 'Open a support ticket')}</div>
+            </div>
+            <div id="brandingPreviewSelfserve" style="padding:10px;border-radius:8px;background:rgba(30,41,59,0.55);border-left:4px solid ${escapeHtml(b.selfserve_color || b.brand_color || b.primary_color || '#6366f1')};">
+              <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || '🎖️') + ' ' + (b.selfserve_panel_title || 'Get Your Roles'))}</div>
+              <div style="color:#94a3b8;font-size:0.8em;margin-top:4px;">${escapeHtml(b.selfserve_panel_description || 'Click to claim roles')}</div>
+            </div>
+            <div id="brandingPreviewNft" style="padding:10px;border-radius:8px;background:rgba(30,41,59,0.55);border-left:4px solid ${escapeHtml(b.nfttracker_color || b.brand_color || b.primary_color || '#6366f1')};">
+              <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || '📡') + ' ' + (b.nfttracker_panel_title || 'NFT Activity'))}</div>
+              <div style="color:#94a3b8;font-size:0.8em;margin-top:4px;">${escapeHtml(b.nfttracker_panel_description || 'Collection updates')}</div>
+            </div>
           </div>
         </div>
 
@@ -4732,18 +4805,27 @@ async function loadBrandingSettingsView() {
       </div>
     `;
 
-    ['br_bot_display_name', 'br_brand_emoji', 'br_brand_color'].forEach(id => {
-      document.getElementById(id)?.addEventListener('input', () => {
-        const name = document.getElementById('br_bot_display_name')?.value || 'Your Brand';
-        const emoji = document.getElementById('br_brand_emoji')?.value || '✨';
-        const color = document.getElementById('br_brand_color')?.value || '#6366f1';
-        const card = document.getElementById('brandingPreviewCard');
-        if (card) {
-          card.style.borderLeftColor = color;
-          const title = card.querySelector('div');
-          if (title) title.textContent = `${emoji} ${name}`;
-        }
-      });
+    const updatePreview = () => {
+      const emoji = document.getElementById('br_brand_emoji')?.value || '✨';
+      const gColor = document.getElementById('br_brand_color')?.value || '#6366f1';
+      const tTitle = document.getElementById('br_ticket_panel_title')?.value || 'Support Tickets';
+      const tDesc = document.getElementById('br_ticket_panel_description')?.value || 'Open a support ticket';
+      const sTitle = document.getElementById('br_selfserve_panel_title')?.value || 'Get Your Roles';
+      const sDesc = document.getElementById('br_selfserve_panel_description')?.value || 'Click to claim roles';
+      const nTitle = document.getElementById('br_nfttracker_panel_title')?.value || 'NFT Activity';
+      const nDesc = document.getElementById('br_nfttracker_panel_description')?.value || 'Collection updates';
+      const tColor = document.getElementById('br_ticketing_color')?.value || gColor;
+      const sColor = document.getElementById('br_selfserve_color')?.value || gColor;
+      const nColor = document.getElementById('br_nfttracker_color')?.value || gColor;
+      const ticketCard = document.getElementById('brandingPreviewTicket');
+      const selfCard = document.getElementById('brandingPreviewSelfserve');
+      const nftCard = document.getElementById('brandingPreviewNft');
+      if (ticketCard) { ticketCard.style.borderLeftColor = tColor; ticketCard.children[0].textContent = `${emoji} ${tTitle}`; ticketCard.children[1].textContent = tDesc; }
+      if (selfCard) { selfCard.style.borderLeftColor = sColor; selfCard.children[0].textContent = `${emoji} ${sTitle}`; selfCard.children[1].textContent = sDesc; }
+      if (nftCard) { nftCard.style.borderLeftColor = nColor; nftCard.children[0].textContent = `${emoji} ${nTitle}`; nftCard.children[1].textContent = nDesc; }
+    };
+    ['br_brand_emoji','br_brand_color','br_ticketing_color','br_selfserve_color','br_nfttracker_color','br_ticket_panel_title','br_ticket_panel_description','br_selfserve_panel_title','br_selfserve_panel_description','br_nfttracker_panel_title','br_nfttracker_panel_description'].forEach(id => {
+      document.getElementById(id)?.addEventListener('input', updatePreview);
     });
   } catch (e) {
     pane.innerHTML = `<p style="color:#fca5a5;font-size:0.85em;padding:var(--space-4);">Failed to load branding settings.</p>`;
@@ -4761,6 +4843,15 @@ async function saveBrandingSettingsView() {
       display_name: (document.getElementById('br_bot_display_name')?.value || '').trim(),
       primary_color: (document.getElementById('br_brand_color')?.value || '').trim(),
       icon_url: (document.getElementById('br_logo_url')?.value || '').trim(),
+      ticketing_color: (document.getElementById('br_ticketing_color')?.value || '').trim(),
+      selfserve_color: (document.getElementById('br_selfserve_color')?.value || '').trim(),
+      nfttracker_color: (document.getElementById('br_nfttracker_color')?.value || '').trim(),
+      ticket_panel_title: (document.getElementById('br_ticket_panel_title')?.value || '').trim(),
+      ticket_panel_description: (document.getElementById('br_ticket_panel_description')?.value || '').trim(),
+      selfserve_panel_title: (document.getElementById('br_selfserve_panel_title')?.value || '').trim(),
+      selfserve_panel_description: (document.getElementById('br_selfserve_panel_description')?.value || '').trim(),
+      nfttracker_panel_title: (document.getElementById('br_nfttracker_panel_title')?.value || '').trim(),
+      nfttracker_panel_description: (document.getElementById('br_nfttracker_panel_description')?.value || '').trim(),
     };
     const res = await fetch('/api/admin/branding', {
       method: 'PUT',

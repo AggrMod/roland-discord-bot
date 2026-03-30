@@ -667,6 +667,7 @@ function switchSettingsTab(tab) {
       if (typeof loadVerificationSettings === 'function') loadVerificationSettings();
       if (typeof loadAdminRoles === 'function') loadAdminRoles();
     },
+    branding:     () => { if (typeof loadBrandingSettingsView === 'function') loadBrandingSettingsView(); },
     nfttracker:   () => { if (typeof loadNftTrackerSettingsView === 'function') loadNftTrackerSettingsView(); },
     selfserve:    () => { if (typeof loadSelfServeRolesView === 'function') loadSelfServeRolesView(); },
     ticketing:    () => { if (typeof loadTicketingView === 'function') loadTicketingView(); },
@@ -783,6 +784,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
 const SETTINGS_TAB_MODULE_MAP = {
   governance:   'governance',
   verification: 'verification',
+  branding:     'verification',
   treasury:     'treasury',
   nfttracker:   'nfttracker',
   battle:       'battle',
@@ -4662,6 +4664,112 @@ async function runOgSync(fullSync = false) {
     showError('Error running OG sync: ' + e.message);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '✨ Run OG Sync'; }
+  }
+}
+
+// ==================== BRANDING SETTINGS ====================
+
+function brandHelp(label, helpText) {
+  return `<label style="display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;">${label} <span title="${escapeHtml(helpText)}" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:999px;background:rgba(99,102,241,0.28);color:#e0e7ff;font-size:0.72em;cursor:help;vertical-align:middle;">?</span></label>`;
+}
+
+async function loadBrandingSettingsView() {
+  const pane = document.getElementById('settingsTab-branding');
+  if (!pane) return;
+  const cardStyle = 'background:rgba(14,23,44,0.5);border:1px solid rgba(99,102,241,0.22);border-radius:10px;padding:var(--space-5);margin-bottom:var(--space-5);';
+  const cardHeader = 'color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0 0 var(--space-4) 0;padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);';
+  const fieldInput = 'width:100%;padding:10px 12px;border:1px solid rgba(99,102,241,0.22);border-radius:8px;background:rgba(30,41,59,0.8);color:#e0e7ff;font-size:0.9em;';
+
+  pane.innerHTML = `<div style="${cardStyle}"><div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);"><div class="spinner"></div><p>Loading branding settings...</p></div></div>`;
+
+  try {
+    const res = await fetch('/api/admin/branding', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json();
+    const b = data.branding || {};
+
+    pane.innerHTML = `
+      <div style="${cardStyle}">
+        <h3 style="${cardHeader}">🎨 Branding Module</h3>
+        <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:14px;">Tenant admins can configure how this server's bot/panels look and feel.</p>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            ${brandHelp('Bot Display Name', 'Shown in panel titles and tenant-facing bot identity text.')}
+            <input id="br_bot_display_name" type="text" value="${escapeHtml(b.bot_display_name || b.display_name || '')}" style="${fieldInput}">
+          </div>
+          <div>
+            ${brandHelp('Brand Emoji', 'Used as visual prefix in embeds/panels where supported.')}
+            <input id="br_brand_emoji" type="text" value="${escapeHtml(b.brand_emoji || '')}" style="${fieldInput}" placeholder="🚀">
+          </div>
+          <div>
+            ${brandHelp('Brand Color', 'Primary color used in branded embeds and cards.')}
+            <input id="br_brand_color" type="text" value="${escapeHtml(b.brand_color || b.primary_color || '#6366f1')}" style="${fieldInput}" placeholder="#6366f1">
+          </div>
+          <div>
+            ${brandHelp('Support URL', 'Link shown in support/help references in tenant outputs.')}
+            <input id="br_support_url" type="text" value="${escapeHtml(b.support_url || '')}" style="${fieldInput}" placeholder="https://...">
+          </div>
+          <div style="grid-column:1 / span 2;">
+            ${brandHelp('Logo URL', 'Logo image used in branded embeds where applicable.')}
+            <input id="br_logo_url" type="text" value="${escapeHtml(b.logo_url || b.icon_url || '')}" style="${fieldInput}" placeholder="https://...">
+          </div>
+        </div>
+
+        <div style="margin-top:14px;padding:12px;border:1px solid rgba(99,102,241,0.18);border-radius:10px;background:rgba(14,23,44,0.42);">
+          <div style="color:#c9d6ff;font-weight:600;margin-bottom:6px;">Preview</div>
+          <div id="brandingPreviewCard" style="padding:10px;border-radius:8px;background:rgba(30,41,59,0.55);border-left:4px solid ${escapeHtml(b.brand_color || b.primary_color || '#6366f1')};">
+            <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || '✨') + ' ' + (b.bot_display_name || b.display_name || 'Your Brand'))}</div>
+            <div style="color:#94a3b8;font-size:0.84em;margin-top:4px;">Example panel intro text for your tenant.</div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);margin-top:var(--space-4);">
+          <button class="btn-primary" onclick="saveBrandingSettingsView()" style="font-size:0.85em;padding:8px 16px;">💾 Save Branding</button>
+        </div>
+      </div>
+    `;
+
+    ['br_bot_display_name', 'br_brand_emoji', 'br_brand_color'].forEach(id => {
+      document.getElementById(id)?.addEventListener('input', () => {
+        const name = document.getElementById('br_bot_display_name')?.value || 'Your Brand';
+        const emoji = document.getElementById('br_brand_emoji')?.value || '✨';
+        const color = document.getElementById('br_brand_color')?.value || '#6366f1';
+        const card = document.getElementById('brandingPreviewCard');
+        if (card) {
+          card.style.borderLeftColor = color;
+          const title = card.querySelector('div');
+          if (title) title.textContent = `${emoji} ${name}`;
+        }
+      });
+    });
+  } catch (e) {
+    pane.innerHTML = `<p style="color:#fca5a5;font-size:0.85em;padding:var(--space-4);">Failed to load branding settings.</p>`;
+  }
+}
+
+async function saveBrandingSettingsView() {
+  try {
+    const payload = {
+      bot_display_name: (document.getElementById('br_bot_display_name')?.value || '').trim(),
+      brand_emoji: (document.getElementById('br_brand_emoji')?.value || '').trim(),
+      brand_color: (document.getElementById('br_brand_color')?.value || '').trim(),
+      logo_url: (document.getElementById('br_logo_url')?.value || '').trim(),
+      support_url: (document.getElementById('br_support_url')?.value || '').trim(),
+      display_name: (document.getElementById('br_bot_display_name')?.value || '').trim(),
+      primary_color: (document.getElementById('br_brand_color')?.value || '').trim(),
+      icon_url: (document.getElementById('br_logo_url')?.value || '').trim(),
+    };
+    const res = await fetch('/api/admin/branding', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (res.ok && data.success) showSuccess('Branding saved');
+    else showError(data.message || 'Failed to save branding');
+  } catch (e) {
+    showError('Error saving branding: ' + e.message);
   }
 }
 

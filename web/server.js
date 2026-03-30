@@ -1466,6 +1466,32 @@ class WebServer {
       });
     });
 
+    this.app.get('/api/admin/branding', adminAuthMiddleware, (req, res) => {
+      try {
+        const tenant = tenantService.getTenantContext(req.guildId);
+        res.json({ success: true, branding: tenant?.branding || {} });
+      } catch (error) {
+        logger.error('Error fetching admin branding:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.put('/api/admin/branding', adminAuthMiddleware, (req, res) => {
+      try {
+        const ALLOWED_BRANDING_FIELDS = ['bot_display_name', 'brand_emoji', 'brand_color', 'logo_url', 'support_url', 'display_name', 'primary_color', 'secondary_color', 'icon_url'];
+        const patch = {};
+        for (const key of ALLOWED_BRANDING_FIELDS) {
+          if (req.body[key] !== undefined) patch[key] = req.body[key];
+        }
+        const result = tenantService.updateTenantBranding(req.guildId, patch, req.session?.discordUser?.id || 'unknown');
+        if (!result.success) return res.status(400).json(result);
+        res.json({ success: true, branding: result.branding || null });
+      } catch (error) {
+        logger.error('Error updating admin branding:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
     this.app.get('/api/admin/settings', adminAuthMiddleware, async (req, res) => {
       try {
         const settings = settingsManager.getSettings();

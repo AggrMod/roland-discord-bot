@@ -1109,6 +1109,7 @@
             <button class="settings-tab active" data-tab="general" onclick="switchSettingsTab('general')">General Settings</button>
             <button class="settings-tab" data-tab="governance" onclick="switchSettingsTab('governance')">Governance</button>
             <button class="settings-tab" data-tab="verification" onclick="switchSettingsTab('verification')">Verification</button>
+            <button class="settings-tab" data-tab="branding" onclick="switchSettingsTab('branding')">Branding</button>
             <button class="settings-tab" data-tab="treasury" onclick="switchSettingsTab('treasury')">Wallet Tracker</button>
             <button class="settings-tab" data-tab="nfttracker" onclick="switchSettingsTab('nfttracker')">NFT Tracker</button>
             <button class="settings-tab" data-tab="battle" onclick="switchSettingsTab('battle')">Battle</button>
@@ -1126,8 +1127,11 @@
             <div id="settingsTab-verification" class="settings-tab-pane" style="display:none;">
               <!-- adminRolesCard content loaded here dynamically -->
             </div>
+            <div id="settingsTab-branding" class="settings-tab-pane" style="display:none;">
+              <!-- Branding settings loaded dynamically by loadBrandingSettingsView() -->
+            </div>
             <div id="settingsTab-treasury" class="settings-tab-pane" style="display:none;">
-              <!-- Treasury settings loaded dynamically by loadTreasuryModuleSettings() -->
+              <!-- Wallet tracker settings loaded dynamically by loadTreasuryModuleSettings() -->
             </div>
             <div id="settingsTab-nfttracker" class="settings-tab-pane" style="display:none;">
               <!-- adminNftTrackerCard content loaded here dynamically -->

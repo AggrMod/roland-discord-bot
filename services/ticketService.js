@@ -477,17 +477,30 @@ class TicketService {
         const embed = EmbedBuilder.from(botMsg.embeds[0]);
         const statusIdx = embed.data.fields?.findIndex(f => f.name === 'Status');
         if (statusIdx >= 0) embed.data.fields[statusIdx].value = '🔴 Closed';
-        embed.setColor('#ED4245');
+        applyEmbedBranding(embed, {
+          guildId: ticket.guild_id || '',
+          moduleKey: 'ticketing',
+          defaultColor: '#ED4245',
+          defaultFooter: 'Powered by Guild Pilot',
+          fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
+        });
         await botMsg.edit({ embeds: [embed], components: [] });
       }
 
       // Post close embed with reopen/delete buttons
       const closeEmbed = new EmbedBuilder()
-        .setColor('#ED4245')
         .setTitle('🔒 Ticket Closed')
         .setDescription(`Closed by <@${interaction.user.id}>`)
         .addFields({ name: 'Transcript', value: 'Saved to the database for admin retrieval.', inline: false })
         .setTimestamp();
+
+      applyEmbedBranding(closeEmbed, {
+        guildId: ticket.guild_id || '',
+        moduleKey: 'ticketing',
+        defaultColor: '#ED4245',
+        defaultFooter: 'Powered by Guild Pilot',
+        fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
+      });
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -537,7 +550,13 @@ class TicketService {
         const embed = EmbedBuilder.from(botMsg.embeds[0]);
         const statusIdx = embed.data.fields?.findIndex(f => f.name === 'Status');
         if (statusIdx >= 0) embed.data.fields[statusIdx].value = '🟢 Open';
-        embed.setColor('#5865F2');
+        applyEmbedBranding(embed, {
+          guildId: ticket.guild_id || '',
+          moduleKey: 'ticketing',
+          defaultColor: '#5865F2',
+          defaultFooter: 'Powered by Guild Pilot',
+          fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
+        });
 
         const actionRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
@@ -554,7 +573,15 @@ class TicketService {
         await botMsg.edit({ embeds: [embed], components: [actionRow] });
       }
 
-      await channel.send({ embeds: [new EmbedBuilder().setColor('#57F287').setTitle('🔓 Ticket Reopened').setTimestamp()] });
+      const reopenEmbed = new EmbedBuilder().setTitle('🔓 Ticket Reopened').setTimestamp();
+      applyEmbedBranding(reopenEmbed, {
+        guildId: ticket.guild_id || '',
+        moduleKey: 'ticketing',
+        defaultColor: '#57F287',
+        defaultFooter: 'Powered by Guild Pilot',
+        fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
+      });
+      await channel.send({ embeds: [reopenEmbed] });
 
       return { success: true };
     } catch (error) {

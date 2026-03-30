@@ -2,6 +2,7 @@ const { Connection, PublicKey } = require('@solana/web3.js');
 const { EmbedBuilder } = require('discord.js');
 const db = require('../database/db');
 const logger = require('../utils/logger');
+const { applyEmbedBranding } = require('./embedBranding');
 const clientProvider = require('../utils/clientProvider');
 
 const SOLANA_RPC = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
@@ -477,7 +478,6 @@ class TreasuryService {
 
     const embed = new EmbedBuilder()
       .setTitle('💰 Treasury Watch')
-      .setColor(0xFFD700)
       .addFields(
         { name: 'Wallet', value: `\`${walletDisplay}\``, inline: true },
         { name: 'SOL Balance', value: `${solBal} SOL`, inline: true },
@@ -486,6 +486,14 @@ class TreasuryService {
       )
       .setFooter({ text: `Auto-updates every ${refreshHours} hours` })
       .setTimestamp();
+
+    applyEmbedBranding(embed, {
+      guildId: channel.guild?.id || config.guild_id || '',
+      moduleKey: 'treasury',
+      defaultColor: '#FFD700',
+      defaultFooter: 'Powered by Guild Pilot',
+      fallbackLogoUrl: c.user?.displayAvatarURL?.() || null,
+    });
 
     try {
       // Try to edit existing message

@@ -151,6 +151,29 @@ When creating a lobby, you can gate participation:
 
 ---
 
+## Game Night 🎉
+> **Admin/Mod only** · **Growth plan minimum**
+> Orchestrates all 9 mini-games in sequence, tracking cross-game scores and crowning a champion.
+
+- `/gamenight start [join_time] [games]` — Open lobby. React 🎉 to join. Starts in 90s (configurable 30–180s).
+  - `games` = optional comma-separated list, e.g. `trivia,slots,diceduel` (default: all 9)
+- `/gamenight skip` — Skip the current game (host only)
+- `/gamenight cancel` — Cancel the lobby or running session (host only)
+- `/gamenight leaderboard` — Show current standings mid-session
+
+**Scoring per game:**
+| Place | Points |
+|---|---|
+| 🥇 1st | 10 pts |
+| 🥈 2nd | 7 pts |
+| 🥉 3rd | 5 pts |
+| 4th | 3 pts |
+| 5th+ | 1 pt |
+
+**Game lineup:** Dice Duel → Higher or Lower → Reaction Race → Number Guess → Slots → Trivia → Word Scramble → RPS → Blackjack (or your custom order)
+
+---
+
 ## Heist 🎯
 - `/heist view|signup|status`
 - Admin: `/heist admin create|list|cancel`

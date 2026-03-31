@@ -1,202 +1,141 @@
 const { SlashCommandBuilder } = require('discord.js');
-const gnService = require('../../services/gameNightService');
+const gnService   = require('../../services/gameNightService');
 const moduleGuard = require('../../utils/moduleGuard');
-const logger = require('../../utils/logger');
+const logger      = require('../../utils/logger');
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-const VALID_GAME_KEYS = gnService.GAME_KEYS;
-const GAME_META = gnService.GAME_META;
-
-// ── Main game night runner ─────────────────────────────────────────────────
-async function runGameNight(session, lobbyMessage, guildId) {
-  const channel = lobbyMessage.channel;
-  session.status = 'playing';
-
-  // Edit lobby to "started"
-  try {
-    await lobbyMessage.edit({ embeds: [gnService.buildCancelledEmbed('🎮 Game Night has started! Get ready...', guildId)] });
-    await lobbyMessage.reactions.removeAll().catch(() => {});
-  } catch (_) {}
-
-  const players = [...session.players];
-  const total = session.games.length;
-
-  for (let i = 0; i < total; i++) {
-    if (session.status === 'ended') break;
-    const gameKey = session.games[i];
-    session.currentGameIndex = i;
-
-    // Pre-game announcement
-    await sleep(3000);
-    await channel.send({ embeds: [gnService.buildPreGameEmbed({ gameIndex: i, total, gameKey, guildId })] });
-    await sleep(10000);
-
-    // Run the game
-    let ranked = [];
-    try {
-      ranked = await gnService.runGame(gameKey, channel, guildId, players);
-    } catch (err) {
-      logger.error(`[GameNight] Error in game ${gameKey}:`, err);
-      await channel.send({ embeds: [gnService.buildCancelledEmbed(`⚠️ Error in ${GAME_META[gameKey]?.name || gameKey} — skipping.`, guildId)] });
-      ranked = [...players]; // No change to scores
-    }
-
-    // Award points
-    gnService.awardPoints(session, ranked);
-
-    // Leaderboard
-    await sleep(2000);
-    await channel.send({ embeds: [gnService.buildLeaderboardEmbed({ session, gameIndex: i, total, lastGameKey: gameKey, ranked, guildId })] });
-
-    if (i < total - 1) {
-      await sleep(8000); // Breather between games
-    }
-  }
-
-  // Crown champion
-  await sleep(3000);
-  const sorted = gnService.sortedScores(session);
-  const champMention = sorted.length ? `<@${sorted[0][0]}>` : '';
-  await channel.send({ content: champMention, embeds: [gnService.buildChampionEmbed({ session, guildId })] });
-  gnService.endSession(session.lobbyMessageId);
-}
-
-// ── Reaction handler (lobby join/leave) ───────────────────────────────────
-// Registered in index.js via gameRegistry — see JOIN_EMOJI
-const gameRegistry = require('../../services/gameRegistry');
-gameRegistry.register(gnService.JOIN_EMOJI, {
-  JOIN_EMOJI: gnService.JOIN_EMOJI,
-  getGameByLobby: (id) => gnService.getByLobby(id),
-  addPlayer: (id, userId, username) => gnService.addPlayer(id, userId, username),
-  removePlayer: (id, userId) => gnService.removePlayer(id, userId),
-  buildLobbyEmbed: (session, guildId) => gnService.buildLobbyEmbed(session, guildId),
+const GAME_CHOICES = gnService.GAME_ROSTER.map(g => {
+  const labels = { diceduel:'Dice Duel', higherlower:'Higher or Lower', reactionrace:'Reaction Race', numberguess:'Number Guess', slots:'Slots', trivia:'Trivia', wordscramble:'Word Scramble', rps:'RPS Tournament', blackjack:'Blackjack' };
+  return { name: labels[g] || g, value: g };
 });
 
-// ── Command definition ─────────────────────────────────────────────────────
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('gamenight')
-    .setDescription('🎮 Game Night — multi-game community event!')
-    .addSubcommand(s => s.setName('start')
-      .setDescription('Start a Game Night session (Growth plan required)')
-      .addStringOption(o => o.setName('games')
-        .setDescription('Comma-separated game keys to include (default: all). E.g: diceduel,trivia,slots')
-        .setRequired(false))
-      .addIntegerOption(o => o.setName('join_time')
-        .setDescription('Seconds to gather players (30–180, default 90)')
-        .setMinValue(30).setMaxValue(180).setRequired(false)))
-    .addSubcommand(s => s.setName('skip')
-      .setDescription('Skip the current game in the rotation (host only)'))
-    .addSubcommand(s => s.setName('cancel')
-      .setDescription('Cancel the current Game Night session (host only)'))
-    .addSubcommand(s => s.setName('games')
-      .setDescription('List all available game keys and their descriptions')),
+    .setDescription('🎉 Game Night — multi-game session with cross-game scoring (Growth plan)')
+    .addSubcommand(s => s
+      .setName('start')
+      .setDescription('Start a Game Night lobby')
+      .addIntegerOption(o => o.setName('join_time').setDescription('Seconds to gather players (30–180, default 90)').setMinValue(30).setMaxValue(180).setRequired(false))
+      .addStringOption(o => o.setName('games').setDescription('Comma-separated game list, e.g. diceduel,trivia,slots (default: all 9)').setRequired(false))
+    )
+    .addSubcommand(s => s.setName('skip').setDescription('Skip the current game (host only)'))
+    .addSubcommand(s => s.setName('cancel').setDescription('Cancel the Game Night lobby or session (host only)'))
+    .addSubcommand(s => s.setName('leaderboard').setDescription('Show current Game Night leaderboard')),
 
   async execute(interaction) {
     try {
-      const sub = interaction.options.getSubcommand();
-      const { guildId, user, channel } = interaction;
-
-      // ── /gamenight games ── (no auth needed)
-      if (sub === 'games') {
-        const list = VALID_GAME_KEYS.map(k => {
-          const m = GAME_META[k];
-          return `${m.icon} \`${k}\` — **${m.name}**: ${m.desc}`;
-        }).join('\n');
-        return interaction.reply({
-          content: `**🎮 Available Game Night games:**\n${list}\n\nUse in \`/gamenight start games:diceduel,trivia,slots\``,
-          ephemeral: true,
-        });
-      }
-
-      // ── Auth gates ─────────────────────────────────────────────────────
+      // Module + permission check
       if (!await moduleGuard.checkModuleEnabled(interaction, 'battle')) return;
       if (!await moduleGuard.checkAdminOrModerator(interaction)) return;
+      // Plan check — Growth minimum
       if (!await moduleGuard.checkMinimumPlan(interaction, 'growth')) return;
 
-      // ── /gamenight start ───────────────────────────────────────────────
+      const sub     = interaction.options.getSubcommand();
+      const { guildId, user, channel } = interaction;
+
+      // ── /gamenight start ────────────────────────────────────────────────
       if (sub === 'start') {
+        const gatherSecs = interaction.options.getInteger('join_time') || 90;
+        const gamesRaw   = interaction.options.getString('games');
+        const selectedGames = gamesRaw
+          ? gamesRaw.split(',').map(s => s.trim().toLowerCase()).filter(s => gnService.GAME_ROSTER.includes(s))
+          : [];
+
         await interaction.deferReply({ ephemeral: true });
 
-        // Check for existing session
-        const existing = gnService.getByChannel(channel.id);
-        if (existing) return interaction.editReply({ content: '❌ A Game Night session is already active in this channel.' });
-
-        const gatherSecs = interaction.options.getInteger('join_time') || 90;
-        const gamesInput = interaction.options.getString('games');
-        let games = [...VALID_GAME_KEYS]; // default: all
-
-        if (gamesInput) {
-          const keys = gamesInput.split(',').map(k => k.trim().toLowerCase()).filter(k => VALID_GAME_KEYS.includes(k));
-          if (keys.length === 0) {
-            return interaction.editReply({
-              content: `❌ No valid game keys found. Valid keys: \`${VALID_GAME_KEYS.join(', ')}\``,
-            });
-          }
-          games = keys;
+        // Only one Game Night per channel
+        if (gnService.getSession(channel.id)) {
+          return interaction.editReply({ content: '❌ A Game Night is already running in this channel.' });
         }
 
-        const placeholder = await channel.send({ content: '🎮 Setting up Game Night...' });
-        const session = gnService.createSession({ channelId: channel.id, messageId: placeholder.id, creatorId: user.id, gatherSecs, games });
+        if (selectedGames.length === 0 && gamesRaw) {
+          return interaction.editReply({ content: `❌ None of those game names are valid.\nValid: \`${gnService.GAME_ROSTER.join(', ')}\`` });
+        }
+
+        const placeholder = await channel.send({ content: '🎉 Setting up Game Night...' });
+        const session = gnService.createSession({
+          channelId: channel.id, messageId: placeholder.id,
+          creatorId: user.id, gatherSecs,
+          selectedGames: selectedGames.length > 0 ? selectedGames : [...gnService.GAME_ROSTER],
+        });
 
         await placeholder.edit({ content: '', embeds: [gnService.buildLobbyEmbed(session, guildId)] });
         await placeholder.react(gnService.JOIN_EMOJI).catch(() => {});
-        await interaction.editReply({ content: `✅ Game Night lobby created with **${games.length} game${games.length === 1 ? '' : 's'}**! React ${gnService.JOIN_EMOJI} to join. Starting in **${gatherSecs}s**.` });
+
+        const gameList = (selectedGames.length > 0 ? selectedGames : gnService.GAME_ROSTER).length;
+        await interaction.editReply({ content: `✅ Game Night lobby open! ${gameList} games queued.\nReact ${gnService.JOIN_EMOJI} to join. Starts in **${gatherSecs}s**.` });
 
         session.gatherTimer = setTimeout(async () => {
           try {
             if (session.status !== 'waiting') return;
+
             if (session.players.size < 2) {
-              await placeholder.edit({ embeds: [gnService.buildCancelledEmbed('❌ Not enough players. Game Night cancelled.', guildId)] });
+              await placeholder.edit({ embeds: [gnService.buildCancelledEmbed('❌ Not enough players — Game Night cancelled.', guildId)] });
               await placeholder.reactions.removeAll().catch(() => {});
-              gnService.endSession(session.lobbyMessageId);
+              gnService.endSession(channel.id);
               return;
             }
-            await runGameNight(session, placeholder, guildId);
+
+            // Lock lobby
+            await placeholder.edit({ embeds: [gnService.buildCancelledEmbed(`✅ Lobby closed — **${session.players.size} players** locked in! Game Night starting shortly...`, guildId)] });
+            await placeholder.reactions.removeAll().catch(() => {});
+
+            await gnService.run(session, channel, guildId);
           } catch (err) {
-            logger.error('[GameNight] Fatal error:', err);
-            try { await channel.send({ embeds: [gnService.buildCancelledEmbed('❌ Game Night encountered an error. Session ended.', guildId)] }); } catch (_) {}
-            gnService.endSession(session.lobbyMessageId);
+            logger.error('[GameNight] run error:', err);
+            await channel.send({ embeds: [gnService.buildCancelledEmbed('❌ An error occurred during Game Night.', guildId)] }).catch(() => {});
+            gnService.endSession(channel.id);
           }
         }, gatherSecs * 1000);
 
         return;
       }
 
-      // ── /gamenight skip ────────────────────────────────────────────────
+      // ── /gamenight skip ─────────────────────────────────────────────────
       if (sub === 'skip') {
         await interaction.deferReply({ ephemeral: true });
-        const session = gnService.getByChannel(channel.id);
-        if (!session) return interaction.editReply({ content: '❌ No active Game Night session in this channel.' });
-        if (session.creatorId !== user.id) return interaction.editReply({ content: '❌ Only the host can skip games.' });
-        if (session.status !== 'playing') return interaction.editReply({ content: '❌ Game Night is not currently running.' });
-        session.skipped = true;
-        await channel.send({ embeds: [gnService.buildCancelledEmbed('⏭️ Host skipped this game. Moving on...', guildId)] });
-        return interaction.editReply({ content: '✅ Skip signal sent.' });
+        const session = gnService.getSession(channel.id);
+        if (!session) return interaction.editReply({ content: '❌ No active Game Night in this channel.' });
+        if (session.creatorId !== user.id) return interaction.editReply({ content: '❌ Only the Game Night host can skip games.' });
+        if (session.status !== 'playing') return interaction.editReply({ content: '❌ Game Night isn\'t in progress yet.' });
+        session.skipRequested = true;
+        const GL = gnService.GAME_INFO;
+        const current = GL[session.games[session.currentGameIndex]]?.name || session.games[session.currentGameIndex];
+        await channel.send(`⏭️ **${user.username}** skipped **${current}**. Moving to next game...`);
+        return interaction.editReply({ content: `✅ Skipped ${current}.` });
       }
 
-      // ── /gamenight cancel ──────────────────────────────────────────────
+      // ── /gamenight cancel ───────────────────────────────────────────────
       if (sub === 'cancel') {
         await interaction.deferReply({ ephemeral: true });
-        const session = gnService.getByChannel(channel.id);
-        if (!session) return interaction.editReply({ content: '❌ No active Game Night session in this channel.' });
-        if (session.creatorId !== user.id) return interaction.editReply({ content: '❌ Only the host can cancel.' });
-
+        const session = gnService.getSession(channel.id);
+        if (!session) return interaction.editReply({ content: '❌ No active Game Night in this channel.' });
+        if (session.creatorId !== user.id) return interaction.editReply({ content: '❌ Only the host can cancel Game Night.' });
         try {
           const msg = await channel.messages.fetch(session.lobbyMessageId);
           await msg.edit({ embeds: [gnService.buildCancelledEmbed('❌ Game Night cancelled by host.', guildId)] });
           await msg.reactions.removeAll().catch(() => {});
         } catch (_) {}
-
-        gnService.endSession(session.lobbyMessageId);
+        gnService.endSession(channel.id);
         return interaction.editReply({ content: '✅ Game Night cancelled.' });
       }
 
+      // ── /gamenight leaderboard ──────────────────────────────────────────
+      if (sub === 'leaderboard') {
+        const session = gnService.getSession(channel.id);
+        if (!session || session.status === 'waiting') {
+          return interaction.reply({ content: '❌ No active Game Night in progress.', ephemeral: true });
+        }
+        const GL = gnService.GAME_INFO;
+        const currentGame = GL[session.games[session.currentGameIndex]]?.name || '?';
+        const gamesLeft = session.games.length - session.currentGameIndex - 1;
+        await interaction.reply({ embeds: [gnService.buildLeaderboardEmbed(session, guildId, `game ${session.currentGameIndex + 1}`, gamesLeft)], ephemeral: false });
+      }
+
     } catch (err) {
-      logger.error('[GameNight] execute error:', err);
+      logger.error('[GameNight] command error:', err);
       try {
-        const r = { content: '❌ An error occurred.', ephemeral: true };
+        const r = { content: '❌ Something went wrong.', ephemeral: true };
         if (interaction.deferred || interaction.replied) await interaction.editReply(r);
         else await interaction.reply(r);
       } catch (_) {}

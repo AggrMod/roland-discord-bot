@@ -1186,6 +1186,20 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
       }
     }
 
+    // ── Game Night: lobby join ──────────────────────────────────────────────
+    const gnService = require('./services/gameNightService');
+    if (emojiName === gnService.JOIN_EMOJI) {
+      const gnSession = gnService.getByMessage(reaction.message.id);
+      if (gnSession && gnSession.status === 'waiting') {
+        const r = gnService.addPlayer(gnSession.channelId, user.id, user.username);
+        if (r.success) {
+          try {
+            await reaction.message.edit({ embeds: [gnService.buildLobbyEmbed(gnSession, reaction.message.guildId)] });
+          } catch (e) { logger.error('[GameNight] lobby update error:', e); }
+        }
+      }
+    }
+
     // ── Higher or Lower: round guess ────────────────────────────────────────
     const hlService = require('./services/higherLowerService');
     if (emojiName === hlService.HIGHER_EMOJI || emojiName === hlService.LOWER_EMOJI) {
@@ -1275,6 +1289,20 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
         if (r.success) {
           try {
             await reaction.message.edit({ embeds: [gameSvc.buildLobbyEmbed(game, reaction.message.guildId)] });
+          } catch (_) {}
+        }
+      }
+    }
+
+    // ── Game Night: lobby leave ─────────────────────────────────────────────
+    const gnService = require('./services/gameNightService');
+    if (reaction.emoji.name === gnService.JOIN_EMOJI) {
+      const gnSession = gnService.getByMessage(reaction.message.id);
+      if (gnSession && gnSession.status === 'waiting') {
+        const r = gnService.removePlayer(gnSession.channelId, user.id);
+        if (r.success) {
+          try {
+            await reaction.message.edit({ embeds: [gnService.buildLobbyEmbed(gnSession, reaction.message.guildId)] });
           } catch (_) {}
         }
       }

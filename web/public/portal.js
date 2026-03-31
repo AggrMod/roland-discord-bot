@@ -3714,7 +3714,11 @@ async function loadAdminHelpView() {
       { name: '/rps start', desc: '🪨 RPS Tournament — rock/paper/scissors bracket (mod/admin only)', options: 'join_time (10–120s, default 60)', example: '/rps start' },
       { name: '/rps cancel', desc: 'Cancel RPS Tournament', options: '—', example: '/rps cancel' },
       { name: '/blackjack start', desc: '🎴 Blackjack — beat the dealer, react 👆 hit / ✋ stand (mod/admin only)', options: 'join_time (10–120s, default 60)', example: '/blackjack start' },
-      { name: '/blackjack cancel', desc: 'Cancel Blackjack table', options: '—', example: '/blackjack cancel' }
+      { name: '/blackjack cancel', desc: 'Cancel Blackjack table', options: '—', example: '/blackjack cancel' },
+      { name: '/gamenight start', desc: '🎉 Game Night — run all 9 mini-games in sequence with cross-game scoring (Growth plan)', options: 'join_time (30–180s, default 90), games (optional comma list)', example: '/gamenight start join_time:90 games:trivia,slots,rps' },
+      { name: '/gamenight skip', desc: 'Skip the current game (host only)', options: '—', example: '/gamenight skip' },
+      { name: '/gamenight cancel', desc: 'Cancel the Game Night session (host only)', options: '—', example: '/gamenight cancel' },
+      { name: '/gamenight leaderboard', desc: 'Show current Game Night standings', options: '—', example: '/gamenight leaderboard' }
     ], '🔒 Admin/Mod only to start · Games: free on all plans · Game Night: Growth plan+')}
     ${cmdSection('Game Night', '🎮', [
       { name: '/gamenight start', desc: '🎮 Start a multi-game Game Night session (Growth plan required)', options: 'games (optional, comma-separated keys), join_time (30–180s, default 90)', example: '/gamenight start games:trivia,slots,diceduel join_time:90' },

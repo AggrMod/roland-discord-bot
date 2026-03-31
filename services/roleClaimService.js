@@ -167,9 +167,16 @@ class RoleClaimService {
    */
   async toggleRole(guild, member, roleId) {
     try {
-      // Check if role is claimable and enabled
-      const claimableRole = this.config.claimableRoles.find(r => r.roleId === roleId);
-      if (!claimableRole || claimableRole.enabled === false) {
+      const db = require('../database/db');
+      
+      // Check if role is in the guild's role panels (database-driven, not static config)
+      const panelRole = db.prepare(`
+        SELECT rpr.* FROM role_panel_roles rpr
+        JOIN role_panels rp ON rp.id = rpr.panel_id
+        WHERE rp.guild_id = ? AND rpr.role_id = ?
+      `).get(guild.id, roleId);
+      
+      if (!panelRole) {
         return { 
           success: false, 
           message: 'This role is not available for claiming' 

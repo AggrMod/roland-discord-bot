@@ -2791,7 +2791,7 @@ async function loadSuperadminView() {
     const [adminsResponse, tenantsResponse, settingsResponse] = await Promise.all([
       fetch('/api/superadmin/admins', { credentials: 'include' }),
       fetch(`/api/superadmin/tenants?${tenantQs.toString()}`, { credentials: 'include' }),
-      fetch('/api/admin/settings', { credentials: 'include', headers: buildTenantRequestHeaders() })
+      fetch('/api/superadmin/global-settings', { credentials: 'include' })
     ]);
 
     const [adminsData, tenantsData, settingsData] = await Promise.all([
@@ -3538,21 +3538,11 @@ async function saveMicroVerifySettings() {
   const ttl = parseInt(document.getElementById('sa_verifyTtlMinutes')?.value) || 15;
   const pollInterval = parseInt(document.getElementById('sa_pollIntervalSeconds')?.value) || 30;
 
-  // Global superadmin settings need a guild context for the auth middleware.
-  // Auto-use the currently active guild, or fall back to the first tenant in the list.
-  const guildId = activeGuildId || tenantListCache?.[0]?.guildId || '';
-  if (!guildId) {
-    showError('No server found. Select a server from the Servers section first.');
-    return;
-  }
-
-  const headers = new Headers({ 'Content-Type': 'application/json' });
-  headers.set('x-guild-id', guildId);
-
   try {
-    const response = await fetch('/api/admin/settings', {
+    // Use the dedicated global-settings endpoint — no guild context required
+    const response = await fetch('/api/superadmin/global-settings', {
       method: 'PUT',
-      headers,
+      headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({
         moduleMicroVerifyEnabled: enabled,

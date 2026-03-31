@@ -216,7 +216,12 @@ class NFTActivityService {
 
   getTrackedCollectionsByAddress(address) {
     try {
-      return db.prepare('SELECT * FROM nft_tracked_collections WHERE LOWER(collection_address) = LOWER(?) AND enabled = 1').all(address);
+      return db.prepare(`
+        SELECT *
+        FROM nft_tracked_collections
+        WHERE enabled = 1
+          AND LOWER(TRIM(collection_address)) = LOWER(TRIM(?))
+      `).all(address);
     } catch (e) {
       return [];
     }
@@ -363,6 +368,8 @@ class NFTActivityService {
       return !!row.channel_id;
     });
 
+    logger.log(`[nft-alert] targets tx=${evt.txSignature || 'none'} event=${evt.eventType} collection=${evt.collectionKey || 'none'} tracked=${trackedRows.length} eligible=${targetRows.length} channels=${targetRows.map(r => r.channel_id).join(',')}`);
+
     const client = clientProvider.getClient();
     if (!client) return;
 
@@ -487,7 +494,7 @@ class NFTActivityService {
         defaultFooter: 'Powered by Guild Pilot',
         fallbackLogoUrl: fallbackLogo,
         footerPrefix: shortSig ? `Tx: ${shortSig}` : 'No tx',
-        useThumbnail: true,
+        useThumbnail: false,
       });
 
       if (evt.imageUrl) embed.setThumbnail(evt.imageUrl);

@@ -120,7 +120,10 @@ class NFTActivityService {
 
   addTrackedCollection({ guildId, collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer, meSymbol }) {
     try {
-      if (!collectionAddress || !collectionName || !channelId) {
+      const normalizedAddress = String(collectionAddress || '').trim();
+      const normalizedName = String(collectionName || '').trim();
+      const normalizedChannelId = String(channelId || '').trim();
+      if (!normalizedAddress || !normalizedName || !normalizedChannelId) {
         return { success: false, message: 'collectionAddress, collectionName, and channelId are required' };
       }
       const result = db.prepare(`
@@ -128,9 +131,9 @@ class NFTActivityService {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         guildId || '',
-        collectionAddress.trim(),
-        collectionName.trim(),
-        channelId,
+        normalizedAddress,
+        normalizedName,
+        normalizedChannelId,
         trackMint !== undefined ? (trackMint ? 1 : 0) : 1,
         trackSale !== undefined ? (trackSale ? 1 : 0) : 1,
         trackList !== undefined ? (trackList ? 1 : 0) : 1,
@@ -184,6 +187,15 @@ class NFTActivityService {
       for (const [key, val] of Object.entries(updates)) {
         const col = fieldMap[key];
         if (col && allowed.includes(col)) {
+          if (col === 'channel_id') {
+            const normalizedChannelId = String(val || '').trim();
+            if (!normalizedChannelId) {
+              return { success: false, message: 'channelId cannot be empty' };
+            }
+            setClauses.push(`${col} = ?`);
+            params.push(normalizedChannelId);
+            continue;
+          }
           setClauses.push(`${col} = ?`);
           params.push(typeof val === 'boolean' ? (val ? 1 : 0) : val);
         }
@@ -365,7 +377,7 @@ class NFTActivityService {
     const targetRows = trackedRows.filter(row => {
       const flagCol = eventFlagMap[evt.eventType];
       if (flagCol && !row[flagCol]) return false;
-      return !!row.channel_id;
+      return !!String(row.channel_id || '').trim();
     });
 
     logger.log(`[nft-alert] targets tx=${evt.txSignature || 'none'} event=${evt.eventType} collection=${evt.collectionKey || 'none'} tracked=${trackedRows.length} eligible=${targetRows.length} channels=${targetRows.map(r => r.channel_id).join(',')}`);

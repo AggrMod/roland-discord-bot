@@ -473,6 +473,7 @@ function initDatabase() {
   try { db.exec("ALTER TABLE tenant_limits ADD COLUMN mock_data_enabled INTEGER DEFAULT 0"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_modules ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
   try { db.exec("ALTER TABLE nft_tracked_collections ADD COLUMN guild_id TEXT NOT NULL DEFAULT ''"); } catch (e) {}
+  try { db.exec("ALTER TABLE nft_tracked_collections ADD COLUMN me_symbol TEXT DEFAULT ''"); } catch (e) {}
 
   // Ensure nft_tracked_collections supports per-tenant duplicate collection addresses.
   // Legacy deployments may still have a global UNIQUE(collection_address) constraint.
@@ -507,6 +508,7 @@ function initDatabase() {
           track_list INTEGER DEFAULT 1,
           track_delist INTEGER DEFAULT 1,
           track_transfer INTEGER DEFAULT 0,
+          me_symbol TEXT DEFAULT '',
           enabled INTEGER DEFAULT 1,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           UNIQUE(guild_id, collection_address)
@@ -515,7 +517,7 @@ function initDatabase() {
         INSERT INTO nft_tracked_collections (
           id, guild_id, collection_address, collection_name, channel_id,
           track_mint, track_sale, track_list, track_delist, track_transfer,
-          enabled, created_at
+          me_symbol, enabled, created_at
         )
         SELECT
           id,
@@ -528,6 +530,7 @@ function initDatabase() {
           COALESCE(track_list, 1),
           COALESCE(track_delist, 1),
           COALESCE(track_transfer, 0),
+          COALESCE(me_symbol, ''),
           COALESCE(enabled, 1),
           COALESCE(created_at, CURRENT_TIMESTAMP)
         FROM nft_tracked_collections_legacy;

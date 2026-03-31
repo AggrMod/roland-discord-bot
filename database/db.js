@@ -473,6 +473,70 @@ function initDatabase() {
   try { db.exec("ALTER TABLE tenant_limits ADD COLUMN mock_data_enabled INTEGER DEFAULT 0"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_modules ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
   try { db.exec("ALTER TABLE nft_tracked_collections ADD COLUMN guild_id TEXT NOT NULL DEFAULT ''"); } catch (e) {}
+
+  // Ensure nft_tracked_collections supports per-tenant duplicate collection addresses.
+  // Legacy deployments may still have a global UNIQUE(collection_address) constraint.
+  try {
+    const idxList = db.prepare("PRAGMA index_list('nft_tracked_collections')").all();
+    let hasCompositeUnique = false;
+    let hasLegacySingleAddressUnique = false;
+
+    for (const idx of idxList) {
+      if (!idx?.unique) continue;
+      const cols = db.prepare(`PRAGMA index_info(${JSON.stringify(idx.name)})`).all().map(c => c.name);
+      if (cols.length === 2 && cols.includes('guild_id') && cols.includes('collection_address')) {
+        hasCompositeUnique = true;
+      }
+      if (cols.length === 1 && cols[0] === 'collection_address') {
+        hasLegacySingleAddressUnique = true;
+      }
+    }
+
+    if (hasLegacySingleAddressUnique && !hasCompositeUnique) {
+      db.exec(`
+        ALTER TABLE nft_tracked_collections RENAME TO nft_tracked_collections_legacy;
+
+        CREATE TABLE nft_tracked_collections (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          guild_id TEXT NOT NULL DEFAULT '',
+          collection_address TEXT NOT NULL,
+          collection_name TEXT NOT NULL,
+          channel_id TEXT NOT NULL,
+          track_mint INTEGER DEFAULT 1,
+          track_sale INTEGER DEFAULT 1,
+          track_list INTEGER DEFAULT 1,
+          track_delist INTEGER DEFAULT 1,
+          track_transfer INTEGER DEFAULT 0,
+          enabled INTEGER DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(guild_id, collection_address)
+        );
+
+        INSERT INTO nft_tracked_collections (
+          id, guild_id, collection_address, collection_name, channel_id,
+          track_mint, track_sale, track_list, track_delist, track_transfer,
+          enabled, created_at
+        )
+        SELECT
+          id,
+          COALESCE(guild_id, ''),
+          collection_address,
+          collection_name,
+          channel_id,
+          COALESCE(track_mint, 1),
+          COALESCE(track_sale, 1),
+          COALESCE(track_list, 1),
+          COALESCE(track_delist, 1),
+          COALESCE(track_transfer, 0),
+          COALESCE(enabled, 1),
+          COALESCE(created_at, CURRENT_TIMESTAMP)
+        FROM nft_tracked_collections_legacy;
+
+        DROP TABLE nft_tracked_collections_legacy;
+      `);
+    }
+  } catch (e) {}
+
   // Add UNIQUE index to tenant_modules for ON CONFLICT upsert — deduplicate first, keep latest
   try {
     db.exec(`

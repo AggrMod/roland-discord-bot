@@ -1644,28 +1644,53 @@ class WebServer {
               delete sanitized.ogRoleId;
               delete sanitized.ogRoleLimit;
             }
+
+            // Sync OG role service from tenant settings directly (not global settings.json)
+            // This must happen inside the multi-tenant block to avoid the global-settings
+            // path below clobbering the just-saved tenant value with a stale/empty override.
+            if (Object.keys(ogPatch).length > 0) {
+              try {
+                const ogRoleService = require('../services/ogRoleService');
+                if (ogPatch.ogRoleId !== undefined) {
+                  if (ogPatch.ogRoleId) {
+                    ogRoleService.setRole(ogPatch.ogRoleId);
+                    ogRoleService.setEnabled(true);
+                  } else {
+                    ogRoleService.setEnabled(false);
+                  }
+                }
+                if (ogPatch.ogRoleLimit !== undefined) {
+                  ogRoleService.setLimit(ogPatch.ogRoleLimit || 1);
+                }
+              } catch (e) {
+                logger.warn('OG role config sync warning (tenant):', e?.message || e);
+              }
+            }
           }
         }
 
         const result = settingsManager.updateSettings(sanitized);
 
-        // Sync OG role service with portal verification settings (global config)
-        try {
-          const ogRoleService = require('../services/ogRoleService');
-          const fresh = settingsManager.getSettings();
-          if (fresh.ogRoleId !== undefined) {
-            if (fresh.ogRoleId) {
-              ogRoleService.setRole(fresh.ogRoleId);
-              ogRoleService.setEnabled(true);
-            } else {
-              ogRoleService.setEnabled(false);
+        // Sync OG role service with portal verification settings (global / single-tenant only)
+        // Skip in multi-tenant mode — OG settings are per-tenant and synced above.
+        if (!tenantService.isMultitenantEnabled() || !req.guildId) {
+          try {
+            const ogRoleService = require('../services/ogRoleService');
+            const fresh = settingsManager.getSettings();
+            if (fresh.ogRoleId !== undefined) {
+              if (fresh.ogRoleId) {
+                ogRoleService.setRole(fresh.ogRoleId);
+                ogRoleService.setEnabled(true);
+              } else {
+                ogRoleService.setEnabled(false);
+              }
             }
+            if (fresh.ogRoleLimit !== undefined) {
+              ogRoleService.setLimit(fresh.ogRoleLimit || 1);
+            }
+          } catch (e) {
+            logger.warn('OG role config sync warning:', e?.message || e);
           }
-          if (fresh.ogRoleLimit !== undefined) {
-            ogRoleService.setLimit(fresh.ogRoleLimit || 1);
-          }
-        } catch (e) {
-          logger.warn('OG role config sync warning:', e?.message || e);
         }
 
         res.json(result);

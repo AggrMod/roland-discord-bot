@@ -31,6 +31,48 @@ function getChainPriceMeta(chainRaw) {
 }
 
 class NFTActivityService {
+  async resolveTokenName(tokenMint) {
+    if (!tokenMint) return null;
+
+    // 1) Reuse a previously seen readable name from DB if available
+    try {
+      const row = db.prepare(`
+        SELECT token_name
+        FROM nft_activity_events
+        WHERE LOWER(token_mint) = LOWER(?)
+          AND token_name IS NOT NULL
+          AND LENGTH(TRIM(token_name)) > 0
+        ORDER BY datetime(created_at) DESC
+        LIMIT 1
+      `).get(tokenMint);
+      const cached = String(row?.token_name || '').trim();
+      if (cached && !/^[A-Za-z0-9]{32,}$/.test(cached)) return cached;
+    } catch {}
+
+    // 2) Helius DAS fallback for proper collection/item number naming
+    try {
+      const heliusKey = process.env.HELIUS_API_KEY;
+      if (!heliusKey) return null;
+      const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
+      const res = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'gp-token-name',
+          method: 'getAsset',
+          params: { id: tokenMint },
+        }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      const name = String(data?.result?.content?.metadata?.name || '').trim();
+      if (name && !/^[A-Za-z0-9]{32,}$/.test(name)) return name;
+    } catch {}
+
+    return null;
+  }
+
   getAlertConfig() {
     try {
       let cfg = db.prepare('SELECT * FROM nft_activity_alert_config WHERE id = 1').get();
@@ -390,6 +432,8 @@ class NFTActivityService {
     if (meLink) buttons.push(new ButtonBuilder().setLabel('Magic Eden').setURL(meLink).setStyle(ButtonStyle.Link).setEmoji('🌊'));
     const components = buttons.length ? [new ActionRowBuilder().addComponents(...buttons)] : [];
 
+    const resolvedTokenName = await this.resolveTokenName(evt.tokenMint);
+
     for (const target of targetRows) {
       const channel = await client.channels.fetch(target.channel_id).catch(() => null);
       if (!channel || !channel.send) continue;
@@ -398,7 +442,7 @@ class NFTActivityService {
         (evt.collectionKey ? `${evt.collectionKey.slice(0, 6)}...${evt.collectionKey.slice(-4)}` : 'Unknown');
 
       const tokenIdShort = evt.tokenMint ? `\`${evt.tokenMint.slice(0, 6)}...${evt.tokenMint.slice(-4)}\`` : null;
-      const tokenNameRaw = String(evt.tokenName || '').trim();
+      const tokenNameRaw = String(resolvedTokenName || evt.tokenName || '').trim();
       const tokenNumberMatch = tokenNameRaw.match(/#\s*(\d{1,8})\b/) || tokenNameRaw.match(/\b(\d{1,8})\b/);
       const tokenNumber = tokenNumberMatch?.[1] || null;
       const tokenDisplay = (tokenNameRaw && !tokenNameRaw.match(/^[A-Za-z0-9]{32,}$/))
@@ -406,7 +450,7 @@ class NFTActivityService {
         : (collectionDisplay !== 'Unknown' && tokenNumber)
           ? `${collectionDisplay} #${tokenNumber}`
           : (collectionDisplay !== 'Unknown' && evt.tokenMint)
-            ? `${collectionDisplay} NFT`
+            ? `${collectionDisplay} #${evt.tokenMint.slice(-4)}`
             : (tokenIdShort || '—');
 
       const fields = [

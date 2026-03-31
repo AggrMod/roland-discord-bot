@@ -612,7 +612,7 @@ class TenantService {
     try {
       const guild = String(guildId || '').trim();
       if (!guild) return { ogRoleId: null, ogRoleLimit: 0 };
-      const tenantRow = this.getTenantByGuildId(guild);
+      const tenantRow = this.getTenant(guild);
       if (!tenantRow) return { ogRoleId: null, ogRoleLimit: 0 };
 
       const row = db.prepare('SELECT og_role_id, og_role_limit FROM tenant_verification_settings WHERE tenant_id = ?').get(tenantRow.id);
@@ -630,7 +630,7 @@ class TenantService {
     try {
       const guild = String(guildId || '').trim();
       if (!guild) return { success: false, message: 'guildId is required' };
-      const tenantRow = this.getTenantByGuildId(guild);
+      const tenantRow = this.getTenant(guild);
       if (!tenantRow) return { success: false, message: 'Tenant not found' };
 
       const current = this.getTenantVerificationSettings(guild);

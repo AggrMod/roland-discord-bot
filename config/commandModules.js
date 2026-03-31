@@ -4,6 +4,7 @@ const COMMAND_MODULE_MAP = Object.freeze({
   treasury: 'treasury',
   battle: 'battle',
   heist: 'heist',
+  higherlower: 'battle',
   'og-config': 'verification'
 });
 

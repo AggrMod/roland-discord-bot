@@ -1169,6 +1169,39 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
       }
     }
 
+    // ── Higher or Lower: lobby join ─────────────────────────────────────────
+    const hlService = require('./services/higherLowerService');
+    const emojiName = reaction.emoji.name;
+
+    if (emojiName === hlService.JOIN_EMOJI) {
+      const game = hlService.getGameByLobby(reaction.message.id);
+      if (game && game.status === 'waiting') {
+        const result = hlService.addPlayer(reaction.message.id, user.id, user.username);
+        if (result.success) {
+          try {
+            const lobbyEmbed = hlService.buildLobbyEmbed(game, reaction.message.guildId);
+            await reaction.message.edit({ embeds: [lobbyEmbed] });
+            logger.log(`[HigherLower] ${user.username} joined lobby (${result.count} total)`);
+          } catch (e) {
+            logger.error('[HigherLower] Failed to update lobby embed:', e);
+          }
+        }
+      }
+    }
+
+    // ── Higher or Lower: round guess ────────────────────────────────────────
+    if (emojiName === hlService.HIGHER_EMOJI || emojiName === hlService.LOWER_EMOJI) {
+      const game = hlService.getGameByRound(reaction.message.id);
+      if (game && game.status === 'playing') {
+        const guess = emojiName === hlService.HIGHER_EMOJI ? 'higher' : 'lower';
+        const result = hlService.recordGuess(reaction.message.id, user.id, guess);
+        if (!result.success) {
+          // Remove invalid reaction (not a player, already guessed, eliminated)
+          await reaction.users.remove(user.id).catch(() => {});
+        }
+      }
+    }
+
     const battleService = require('./services/battleService');
 
     // Check if this is a battle lobby reaction
@@ -1232,6 +1265,21 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
       } catch (error) {
         logger.error('Failed to fetch reaction:', error);
         return;
+      }
+    }
+
+    // ── Higher or Lower: lobby leave ────────────────────────────────────────
+    const hlService = require('./services/higherLowerService');
+    if (reaction.emoji.name === hlService.JOIN_EMOJI) {
+      const game = hlService.getGameByLobby(reaction.message.id);
+      if (game && game.status === 'waiting') {
+        const result = hlService.removePlayer(reaction.message.id, user.id);
+        if (result.success) {
+          try {
+            const lobbyEmbed = hlService.buildLobbyEmbed(game, reaction.message.guildId);
+            await reaction.message.edit({ embeds: [lobbyEmbed] });
+          } catch (_) {}
+        }
       }
     }
 

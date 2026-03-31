@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const { applyEmbedBranding } = require('./embedBranding');
+const { applyEmbedBranding, getBranding } = require('./embedBranding');
 const logger = require('../utils/logger');
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -167,112 +167,148 @@ class HigherLowerService {
     return [...game.players].filter(id => !game.eliminated.has(id));
   }
 
+  // ── Embed helpers ──────────────────────────────────────────────────────────
+  _applyAuthor(embed, guildId) {
+    try {
+      const br = getBranding(guildId, 'battle');
+      const name = br.brandName || 'Guild Pilot';
+      if (br.logo) embed.setAuthor({ name, iconURL: br.logo });
+      else embed.setAuthor({ name });
+    } catch {}
+    return embed;
+  }
+
   // ── Embeds ─────────────────────────────────────────────────────────────────
   buildLobbyEmbed(game, guildId) {
     const embed = new EmbedBuilder()
       .setTitle('🃏 Higher or Lower — Join Now!')
       .setDescription(
-        `A card game is about to begin!\n\n` +
-        `React with ${JOIN_EMOJI} to join the game.\n\n` +
+        `React with ${JOIN_EMOJI} to enter the game!\n\n` +
         `**How it works:**\n` +
-        `A card is drawn each round. Guess if the next card is **⬆️ Higher** or **⬇️ Lower**.\n` +
-        `Wrong guess? You're out. Last one standing wins! 🏆\n\n` +
-        `**Players joined: ${game.players.size}**\n` +
-        (game.players.size > 0 ? `*(${game.players.size} waiting)*` : '*Be the first to join!*')
+        `Each round a card is revealed. Guess if the next card is ⬆️ **Higher** or ⬇️ **Lower**.\n` +
+        `Wrong guess or no guess? You're eliminated.\n` +
+        `Last one standing wins! 🏆\n\n` +
+        `> Card values: **2 (low) → A (highest)**\n` +
+        `> Ties: both cards same value → everyone survives`
       )
-      .setColor('#f59e0b')
-      .setFooter({ text: `Game starts in ${game.gatherSecs}s · Need at least 2 players` });
+      .addFields({ name: '👥 Players Joined', value: game.players.size > 0 ? `${game.players.size} waiting` : '*Be the first to join!*', inline: true })
+      .setTimestamp();
 
-    applyEmbedBranding(embed, { guildId });
+    this._applyAuthor(embed, guildId);
+    applyEmbedBranding(embed, {
+      guildId,
+      moduleKey: 'battle',
+      defaultColor: '#f59e0b',
+      defaultFooter: `Starts in ${game.gatherSecs}s · Need at least 2 players`,
+    });
     return embed;
   }
 
   buildRoundEmbed(game, guildId) {
     const card = game.currentCard;
     const alive = this.activePlayers(game);
-    const suit = card.suit;
+    const isRed = card.suit.name === 'Hearts' || card.suit.name === 'Diamonds';
 
     const embed = new EmbedBuilder()
       .setTitle(`🃏 Round ${game.roundNumber} — Higher or Lower?`)
-      .setDescription(
-        `**Current card:** ${cardLabel(card)}\n\n` +
-        `Will the next card be **⬆️ Higher** or **⬇️ Lower**?\n\n` +
-        `React to vote! You have **60 seconds**.\n\n` +
-        `👥 **${alive.length}** player${alive.length === 1 ? '' : 's'} remaining\n` +
-        `🃏 **${game.deck.length}** cards left in deck`
+      .setDescription(`Will the **next card** be ⬆️ **Higher** or ⬇️ **Lower**?\nReact now — you have **60 seconds**. First reaction counts!`)
+      .addFields(
+        { name: '🃏 Current Card', value: cardLabel(card), inline: true },
+        { name: '👥 Players Left', value: `${alive.length}`, inline: true },
+        { name: '🎴 Cards in Deck', value: `${game.deck.length}`, inline: true },
       )
-      .setColor(suit.color === '#e74c3c' ? 0xe74c3c : 0x2c3e50)
-      .setFooter({ text: `Round ${game.roundNumber} · React ⬆️ or ⬇️ — first react counts` });
+      .setTimestamp();
 
-    applyEmbedBranding(embed, { guildId });
+    this._applyAuthor(embed, guildId);
+    applyEmbedBranding(embed, {
+      guildId,
+      moduleKey: 'battle',
+      defaultColor: isRed ? '#e74c3c' : '#2c3e50',
+      defaultFooter: `Round ${game.roundNumber} · ⬆️ Higher or ⬇️ Lower`,
+    });
     return embed;
   }
 
   buildResultEmbed({ game, result, guildId }) {
-    const { survivors, losers, nextCard, prevCard, correct, tieBreaker } = result;
+    const { losers, nextCard, prevCard, correct, tieBreaker } = result;
     const alive = this.activePlayers(game);
 
-    let outcome = '';
+    let outcomeTitle, outcomeDesc;
     if (tieBreaker) {
-      outcome = `🤝 **Tie!** Both cards were **${prevCard.rank}** — everyone survives this round!`;
+      outcomeTitle = `🤝 Tie! Both **${prevCard.rank}** — everyone survives`;
+      outcomeDesc  = `${cardLabel(prevCard)} → ${cardLabel(nextCard)}`;
     } else if (correct === 'higher') {
-      outcome = `📈 **Higher!** ${cardLabel(nextCard)} beats ${cardLabel(prevCard)}`;
+      outcomeTitle = `📈 Higher! Correct answer was ⬆️`;
+      outcomeDesc  = `${cardLabel(prevCard)} → ${cardLabel(nextCard)}`;
     } else {
-      outcome = `📉 **Lower!** ${cardLabel(nextCard)} is under ${cardLabel(prevCard)}`;
+      outcomeTitle = `📉 Lower! Correct answer was ⬇️`;
+      outcomeDesc  = `${cardLabel(prevCard)} → ${cardLabel(nextCard)}`;
     }
-
-    const loserText = losers.length
-      ? `☠️ **Eliminated:** ${losers.map(id => `<@${id}>`).join(', ')}`
-      : '✅ Everyone guessed correctly!';
-
-    const survivorText = alive.length > 0
-      ? `👥 **${alive.length}** player${alive.length === 1 ? '' : 's'} remain: ${alive.map(id => `<@${id}>`).join(', ')}`
-      : '';
 
     const embed = new EmbedBuilder()
       .setTitle(`🃏 Round ${game.roundNumber - 1} Result`)
-      .setDescription([outcome, '', loserText, survivorText].filter(Boolean).join('\n'))
-      .setColor(losers.length > 0 ? 0xef4444 : 0x4ade80)
-      .setFooter({ text: alive.length <= 1 ? 'Game ending...' : 'Next round starting shortly...' });
+      .setDescription(outcomeDesc)
+      .addFields(
+        { name: outcomeTitle, value: losers.length ? `☠️ Eliminated: ${losers.map(id => `<@${id}>`).join(', ')}` : '✅ Everyone guessed correctly!', inline: false },
+        ...(alive.length > 0 ? [{ name: `👥 ${alive.length} Remaining`, value: alive.map(id => `<@${id}>`).join(', '), inline: false }] : []),
+      )
+      .setTimestamp();
 
-    applyEmbedBranding(embed, { guildId });
+    this._applyAuthor(embed, guildId);
+    applyEmbedBranding(embed, {
+      guildId,
+      moduleKey: 'battle',
+      defaultColor: losers.length > 0 ? '#ef4444' : '#4ade80',
+      defaultFooter: alive.length <= 1 ? 'Game ending...' : 'Next round starting shortly...',
+    });
     return embed;
   }
 
   buildWinnerEmbed({ winnerId, roundsPlayed, guildId }) {
     const embed = new EmbedBuilder()
-      .setTitle('🏆 We Have a Winner!')
-      .setDescription(
-        `🎉 <@${winnerId}> has survived all ${roundsPlayed} rounds and wins the game!\n\n` +
-        `**🃏 Higher or Lower Champion!**`
-      )
-      .setColor(0xf59e0b)
-      .setFooter({ text: 'GuildPilot · Higher or Lower' });
+      .setTitle('🏆 Higher or Lower — We Have a Winner!')
+      .setDescription(`🎉 <@${winnerId}> outlasted everyone over **${roundsPlayed} round${roundsPlayed === 1 ? '' : 's'}**!\n\n**🃏 Higher or Lower Champion!**`)
+      .setTimestamp();
 
-    applyEmbedBranding(embed, { guildId });
+    this._applyAuthor(embed, guildId);
+    applyEmbedBranding(embed, {
+      guildId,
+      moduleKey: 'battle',
+      defaultColor: '#f59e0b',
+      defaultFooter: 'GuildPilot · Higher or Lower',
+    });
     return embed;
   }
 
   buildNoSurvivorsEmbed({ roundsPlayed, guildId }) {
     const embed = new EmbedBuilder()
-      .setTitle('💀 Everyone Eliminated!')
-      .setDescription(
-        `No survivors in round ${roundsPlayed}! It's a draw — the cards win this time.\n\n` +
-        `Better luck next game! 🃏`
-      )
-      .setColor(0x6366f1)
-      .setFooter({ text: 'GuildPilot · Higher or Lower' });
+      .setTitle('💀 Higher or Lower — Everyone Eliminated!')
+      .setDescription(`No survivors after round ${roundsPlayed}! The deck wins this time. Better luck next game! 🃏`)
+      .setTimestamp();
 
-    applyEmbedBranding(embed, { guildId });
+    this._applyAuthor(embed, guildId);
+    applyEmbedBranding(embed, {
+      guildId,
+      moduleKey: 'battle',
+      defaultColor: '#6366f1',
+      defaultFooter: 'GuildPilot · Higher or Lower',
+    });
     return embed;
   }
 
   buildCancelledEmbed(reason, guildId) {
     const embed = new EmbedBuilder()
-      .setTitle('🃏 Higher or Lower — Cancelled')
+      .setTitle('🃏 Higher or Lower')
       .setDescription(reason)
-      .setColor(0x64748b);
-    applyEmbedBranding(embed, { guildId });
+      .setTimestamp();
+
+    this._applyAuthor(embed, guildId);
+    applyEmbedBranding(embed, {
+      guildId,
+      moduleKey: 'battle',
+      defaultColor: '#64748b',
+      defaultFooter: 'GuildPilot · Higher or Lower',
+    });
     return embed;
   }
 }

@@ -43,6 +43,7 @@ class SettingsManager {
       moduleMicroVerifyEnabled: false,
       moduleRoleClaimEnabled: true,
       moduleTicketingEnabled: true,
+      moduleEngagementEnabled: true,
 
       // Micro-Transfer Verification
       verificationReceiveWallet: '',
@@ -203,7 +204,8 @@ class SettingsManager {
         'moduleRoleResyncEnabled',
         'moduleMicroVerifyEnabled',
         'moduleRoleClaimEnabled',
-        'moduleTicketingEnabled'
+        'moduleTicketingEnabled',
+        'moduleEngagementEnabled'
       ];
       
       for (const key of moduleKeys) {

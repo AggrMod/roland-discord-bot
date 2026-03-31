@@ -3509,6 +3509,65 @@ class WebServer {
       }
     });
 
+    // ==================== ENGAGEMENT & POINTS ====================
+
+    this.app.get('/api/admin/engagement/config', adminAuthMiddleware, (req, res) => {
+      try {
+        const guildId = req.session?.guildId;
+        const eng = require('../services/engagementService');
+        res.json({ success: true, config: eng.getConfig(guildId) });
+      } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    });
+
+    this.app.put('/api/admin/engagement/config', adminAuthMiddleware, (req, res) => {
+      try {
+        const guildId = req.session?.guildId;
+        const eng = require('../services/engagementService');
+        const allowed = ['enabled','points_message','points_reaction','cooldown_message_mins','cooldown_reaction_daily'];
+        const patch = {};
+        for (const k of allowed) { if (req.body[k] !== undefined) patch[k] = req.body[k]; }
+        const updated = eng.setConfig(guildId, patch);
+        res.json({ success: true, config: updated });
+      } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    });
+
+    this.app.get('/api/admin/engagement/leaderboard', adminAuthMiddleware, (req, res) => {
+      try {
+        const guildId = req.session?.guildId;
+        const limit = Math.min(parseInt(req.query.limit || '25', 10), 100);
+        const eng = require('../services/engagementService');
+        res.json({ success: true, leaderboard: eng.getLeaderboard(guildId, limit) });
+      } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    });
+
+    this.app.get('/api/admin/engagement/shop', adminAuthMiddleware, (req, res) => {
+      try {
+        const guildId = req.session?.guildId;
+        const eng = require('../services/engagementService');
+        res.json({ success: true, items: eng.getShopItems(guildId) });
+      } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    });
+
+    this.app.post('/api/admin/engagement/shop', adminAuthMiddleware, (req, res) => {
+      try {
+        const guildId = req.session?.guildId;
+        const { name, description, type, cost, roleId, codes, quantity } = req.body;
+        if (!name || cost == null) return res.status(400).json({ success: false, message: 'name and cost are required' });
+        const eng = require('../services/engagementService');
+        const result = eng.addShopItem(guildId, { name, description, type: type || 'role', cost: parseInt(cost, 10), roleId, codes, quantity_remaining: quantity != null ? parseInt(quantity, 10) : -1 });
+        res.json(result);
+      } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    });
+
+    this.app.delete('/api/admin/engagement/shop/:id', adminAuthMiddleware, (req, res) => {
+      try {
+        const guildId = req.session?.guildId;
+        const itemId = parseInt(req.params.id, 10);
+        const eng = require('../services/engagementService');
+        res.json(eng.removeShopItem(guildId, itemId));
+      } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    });
+
     // ==================== NFT ACTIVITY ADMIN CONFIG ====================
 
     this.app.get('/api/admin/nft-activity/events', adminAuthMiddleware, (req, res) => {

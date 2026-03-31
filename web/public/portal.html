@@ -130,6 +130,10 @@
             <span class="nav-icon" aria-hidden="true">🎫</span>
             <span class="nav-label">Ticketing</span>
           </button>
+          <button class="nav-item" data-section="engagement" data-module="engagement" onclick="switchSection('engagement')" id="sidebarNavEngagement" style="display:none;">
+            <span class="nav-icon" aria-hidden="true">🏅</span>
+            <span class="nav-label">Engagement</span>
+          </button>
           <button class="nav-item" data-section="heist" data-module="heist" onclick="switchSection('heist')" id="sidebarNavHeist">
             <span class="nav-icon" aria-hidden="true">🎯</span>
             <span class="nav-label">Heist</span>
@@ -513,6 +517,84 @@
               <div class="empty-state-icon">⚔️</div>
               <h4 class="empty-state-title">Use Discord to Battle</h4>
               <p class="empty-state-message">Battles are run via the <strong>/battle</strong> command in Discord. Join active battles from there.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Engagement & Points Section -->
+        <section id="section-engagement" class="content-section">
+          <header class="section-header">
+            <h2>Engagement &amp; Points</h2>
+            <p class="section-subtitle">Reward activity, run a shop, and track your top community members</p>
+          </header>
+
+          <!-- Config Card -->
+          <div class="card" id="engagementConfigCard">
+            <div class="card-header-row">
+              <h3 class="card-title">⚙️ Settings</h3>
+              <button class="btn-primary btn-sm" onclick="saveEngagementConfig()">Save</button>
+            </div>
+            <div class="settings-grid" id="engagementConfigGrid">
+              <div class="settings-row">
+                <div class="settings-info">
+                  <div class="settings-label">Enable Engagement</div>
+                  <div class="settings-desc">Award points for messages and reactions</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="engEnabled">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="settings-row">
+                <div class="settings-info">
+                  <div class="settings-label">Points per message</div>
+                  <div class="settings-desc">Awarded once per cooldown window</div>
+                </div>
+                <input type="number" id="engPtsMsg" min="1" max="100" class="input-sm" style="width:80px;">
+              </div>
+              <div class="settings-row">
+                <div class="settings-info">
+                  <div class="settings-label">Points per reaction</div>
+                  <div class="settings-desc">Subject to daily cap</div>
+                </div>
+                <input type="number" id="engPtsReact" min="1" max="100" class="input-sm" style="width:80px;">
+              </div>
+              <div class="settings-row">
+                <div class="settings-info">
+                  <div class="settings-label">Message cooldown (minutes)</div>
+                  <div class="settings-desc">Min time between message point awards per user</div>
+                </div>
+                <input type="number" id="engCooldownMsg" min="1" max="1440" class="input-sm" style="width:80px;">
+              </div>
+              <div class="settings-row">
+                <div class="settings-info">
+                  <div class="settings-label">Reaction daily cap</div>
+                  <div class="settings-desc">Max reactions awarded per user per day</div>
+                </div>
+                <input type="number" id="engCooldownReact" min="1" max="100" class="input-sm" style="width:80px;">
+              </div>
+            </div>
+          </div>
+
+          <!-- Leaderboard Card -->
+          <div class="card">
+            <div class="card-header-row">
+              <h3 class="card-title">🏆 Leaderboard</h3>
+              <button class="btn-secondary btn-sm" onclick="loadEngagementLeaderboard()">Refresh</button>
+            </div>
+            <div id="engagementLeaderboardView">
+              <div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>
+            </div>
+          </div>
+
+          <!-- Shop Card -->
+          <div class="card">
+            <div class="card-header-row">
+              <h3 class="card-title">🛍️ Points Shop</h3>
+              <button class="btn-primary btn-sm" onclick="openEngShopModal()">+ Add Item</button>
+            </div>
+            <div id="engagementShopView">
+              <div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>
             </div>
           </div>
         </section>
@@ -1251,5 +1333,31 @@
   </footer>
 
   <script src="/portal.js"></script>
+
+  <!-- Engagement Shop Add Item Modal -->
+  <div id="engShopModal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeEngShopModal()">
+    <div class="modal-box" style="max-width:480px;">
+      <div class="modal-header"><h3>Add Shop Item</h3><button class="modal-close" onclick="closeEngShopModal()">✕</button></div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
+        <div><label class="form-label">Name *</label><input type="text" id="engShopName" class="form-input" placeholder="e.g. OG Role"></div>
+        <div><label class="form-label">Description</label><input type="text" id="engShopDesc" class="form-input" placeholder="Optional description"></div>
+        <div><label class="form-label">Type</label>
+          <select id="engShopType" class="form-input" onchange="onEngShopTypeChange()">
+            <option value="role">Role assignment</option>
+            <option value="code">Code / coupon</option>
+            <option value="custom">Custom (manual fulfillment)</option>
+          </select>
+        </div>
+        <div id="engShopRoleRow"><label class="form-label">Role ID <span style="color:var(--text-muted);font-size:.85em;">(Discord role ID)</span></label><input type="text" id="engShopRoleId" class="form-input" placeholder="e.g. 1234567890"></div>
+        <div id="engShopCodesRow" style="display:none;"><label class="form-label">Codes <span style="color:var(--text-muted);font-size:.85em;">(one per line)</span></label><textarea id="engShopCodes" class="form-input" rows="3" placeholder="CODE123&#10;CODE456"></textarea></div>
+        <div><label class="form-label">Cost (points) *</label><input type="number" id="engShopCost" class="form-input" min="1" placeholder="e.g. 500"></div>
+        <div><label class="form-label">Stock <span style="color:var(--text-muted);font-size:.85em;">(-1 = unlimited)</span></label><input type="number" id="engShopQty" class="form-input" value="-1"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeEngShopModal()">Cancel</button>
+        <button class="btn-primary" onclick="submitEngShopItem()">Add Item</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

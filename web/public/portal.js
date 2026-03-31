@@ -527,10 +527,12 @@ function updateModuleVisibility() {
     { id: 'sidebarNavTreasury', key: 'treasury' },
     { id: 'sidebarNavSelfServe', key: 'selfseveroles' },
     { id: 'sidebarNavTicketing', key: 'ticketing' },
+    { id: 'sidebarNavEngagement', key: 'engagement' },
     { id: 'sidebarNavHeist', key: 'heist' },
     { id: 'mobileNavTreasury', key: 'treasury' },
     { id: 'mobileNavSelfServe', key: 'selfseveroles' },
     { id: 'mobileNavTicketing', key: 'ticketing' },
+    { id: 'mobileNavEngagement', key: 'engagement' },
     { id: 'mobileNavHeist', key: 'heist' },
   ];
   moduleNav.forEach(({ id, key }) => {
@@ -725,6 +727,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     nfttracker: !!settings.moduleNftTrackerEnabled,
     heist: !!settings.moduleMissionsEnabled,
     ticketing: !!settings.moduleTicketingEnabled,
+    engagement: !!settings.moduleEngagementEnabled,
     roleclaim: !!settings.moduleRoleClaimEnabled,
     battle: !!settings.moduleBattleEnabled,
     selfseveroles: !!settings.moduleRoleClaimEnabled
@@ -776,6 +779,7 @@ const SETTINGS_TAB_MODULE_MAP = {
   heist:        'heist',
   selfserve:    'selfserveroles',
   ticketing:    'ticketing',
+  engagement:   'engagement',
 };
 
 function applySettingsTabVisibility(settings = {}) {
@@ -793,6 +797,7 @@ function applySettingsTabVisibility(settings = {}) {
     heist: !!settings.moduleMissionsEnabled,
     selfserveroles: !!settings.moduleRoleClaimEnabled,
     ticketing: !!settings.moduleTicketingEnabled,
+    engagement: !!settings.moduleEngagementEnabled,
   };
 
   document.querySelectorAll('#section-settings .settings-tabs .settings-tab[data-tab]').forEach(btn => {
@@ -1614,7 +1619,8 @@ function switchSection(sectionName) {
     heist: 'heist',
     battle: 'battle',
     'self-serve-roles': 'selfseveroles',
-    ticketing: 'ticketing'
+    ticketing: 'ticketing',
+    engagement: 'engagement'
   };
   const required = sectionRequiresModule[sectionName];
   if (required && moduleState && moduleState[required] === false) {
@@ -1668,6 +1674,8 @@ function switchSection(sectionName) {
     loadSelfServeRolesPublic();
   } else if (sectionName === 'ticketing') {
     loadUserTicketOverview();
+  } else if (sectionName === 'engagement') {
+    loadEngagementSection();
   } else if (sectionName === 'plans') {
     updatePlanPrices();
     if (isAdmin) loadCurrentPlan();
@@ -4040,6 +4048,7 @@ async function loadAdminSettingsView() {
       { id: 'moduleNftTrackerEnabled',   label: 'NFT Tracker',     icon: '📡',  moduleKey: 'nfttracker'    },
       { id: 'moduleRoleClaimEnabled',    label: 'Self-Serve Roles',icon: '🎖️',  moduleKey: 'selfserveroles'},
       { id: 'moduleTicketingEnabled',    label: 'Ticketing',       icon: '🎫',  moduleKey: 'ticketing'     },
+      { id: 'moduleEngagementEnabled',   label: 'Engagement',      icon: '🏅',  moduleKey: 'engagement'    },
     ];
 
     // Build module toggle helper (styled toggle switch)
@@ -4141,7 +4150,7 @@ async function savePortalSettings() {
   const moduleIds = [
     'moduleBattleEnabled', 'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleBrandingEnabled',
     'moduleMissionsEnabled', 'moduleTreasuryEnabled', 'moduleNftTrackerEnabled',
-    'moduleRoleClaimEnabled', 'moduleTicketingEnabled',
+    'moduleRoleClaimEnabled', 'moduleTicketingEnabled', 'moduleEngagementEnabled',
   ];
   const newSettings = {};
   for (const id of moduleIds) {
@@ -8720,4 +8729,156 @@ async function loadSystemStatus() {
   } catch(e) {
     el.innerHTML = '<p style="color:var(--text-secondary);">Failed to load system status: ' + escapeHtml(e.message) + '</p>';
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ENGAGEMENT & POINTS SECTION
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function loadEngagementSection() {
+  await Promise.all([loadEngagementConfig(), loadEngagementLeaderboard(), loadEngagementShop()]);
+}
+
+async function loadEngagementConfig() {
+  try {
+    const res = await fetch('/api/admin/engagement/config', { credentials: 'include' });
+    const data = await res.json();
+    if (!data.success) return;
+    const cfg = data.config;
+    document.getElementById('engEnabled').checked = !!cfg.enabled;
+    document.getElementById('engPtsMsg').value = cfg.points_message ?? 5;
+    document.getElementById('engPtsReact').value = cfg.points_reaction ?? 2;
+    document.getElementById('engCooldownMsg').value = cfg.cooldown_message_mins ?? 60;
+    document.getElementById('engCooldownReact').value = cfg.cooldown_reaction_daily ?? 5;
+  } catch (e) { console.error('[Engagement] config load error:', e); }
+}
+
+async function saveEngagementConfig() {
+  try {
+    const body = {
+      enabled: document.getElementById('engEnabled').checked,
+      points_message: parseInt(document.getElementById('engPtsMsg').value, 10),
+      points_reaction: parseInt(document.getElementById('engPtsReact').value, 10),
+      cooldown_message_mins: parseInt(document.getElementById('engCooldownMsg').value, 10),
+      cooldown_reaction_daily: parseInt(document.getElementById('engCooldownReact').value, 10),
+    };
+    const res = await fetch('/api/admin/engagement/config', {
+      method: 'PUT', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.success) showSuccess('Engagement settings saved!');
+    else showError(data.message || 'Failed to save.');
+  } catch (e) { showError('Error saving engagement config.'); }
+}
+
+async function loadEngagementLeaderboard() {
+  const el = document.getElementById('engagementLeaderboardView');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
+  try {
+    const res = await fetch('/api/admin/engagement/leaderboard?limit=25', { credentials: 'include' });
+    const data = await res.json();
+    if (!data.success || !data.leaderboard?.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🏅</div><h4 class="empty-state-title">No data yet</h4><p class="empty-state-message">Points will appear here once members start chatting.</p></div>';
+      return;
+    }
+    const medals = ['🥇','🥈','🥉'];
+    const rows = data.leaderboard.map((r, i) => `
+      <div class="table-row">
+        <span style="width:36px;text-align:center;">${medals[i] || (i+1)}</span>
+        <span style="flex:1;font-weight:500;">${escapeHtml(r.username || r.user_id)}</span>
+        <span style="color:var(--accent-gold);font-weight:600;">${r.total_points.toLocaleString()} pts</span>
+      </div>`).join('');
+    el.innerHTML = `<div class="table-list" style="display:flex;flex-direction:column;gap:6px;">${rows}</div>`;
+  } catch (e) { el.innerHTML = '<p style="color:var(--error);">Failed to load leaderboard.</p>'; }
+}
+
+async function loadEngagementShop() {
+  const el = document.getElementById('engagementShopView');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
+  try {
+    const res = await fetch('/api/admin/engagement/shop', { credentials: 'include' });
+    const data = await res.json();
+    if (!data.success || !data.items?.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🛍️</div><h4 class="empty-state-title">Shop is empty</h4><p class="empty-state-message">Add items to reward your community.</p></div>';
+      return;
+    }
+    const rows = data.items.map(item => {
+      const stock = item.quantity_remaining < 0 ? '∞' : item.quantity_remaining;
+      const typeLabel = { role: '🎭 Role', code: '🎟️ Code', custom: '✨ Custom' }[item.type] || item.type;
+      return `
+        <div class="table-row" style="align-items:flex-start;">
+          <span style="width:36px;font-size:0.8em;color:var(--text-muted);">#${item.id}</span>
+          <div style="flex:1;">
+            <div style="font-weight:600;">${escapeHtml(item.name)}</div>
+            ${item.description ? `<div style="font-size:0.85em;color:var(--text-muted);">${escapeHtml(item.description)}</div>` : ''}
+            <div style="font-size:0.8em;color:var(--text-muted);margin-top:2px;">${typeLabel} · Stock: ${stock}</div>
+          </div>
+          <span style="color:var(--accent-gold);font-weight:600;white-space:nowrap;">${item.cost.toLocaleString()} pts</span>
+          <button class="btn-danger btn-sm" style="margin-left:10px;" onclick="deleteEngShopItem(${item.id})">Remove</button>
+        </div>`;
+    }).join('');
+    el.innerHTML = `<div class="table-list" style="display:flex;flex-direction:column;gap:8px;">${rows}</div>`;
+  } catch (e) { el.innerHTML = '<p style="color:var(--error);">Failed to load shop items.</p>'; }
+}
+
+function openEngShopModal() {
+  document.getElementById('engShopName').value = '';
+  document.getElementById('engShopDesc').value = '';
+  document.getElementById('engShopType').value = 'role';
+  document.getElementById('engShopRoleId').value = '';
+  document.getElementById('engShopCodes').value = '';
+  document.getElementById('engShopCost').value = '';
+  document.getElementById('engShopQty').value = '-1';
+  onEngShopTypeChange();
+  document.getElementById('engShopModal').style.display = 'flex';
+}
+
+function closeEngShopModal() {
+  document.getElementById('engShopModal').style.display = 'none';
+}
+
+function onEngShopTypeChange() {
+  const type = document.getElementById('engShopType').value;
+  document.getElementById('engShopRoleRow').style.display = type === 'role' ? '' : 'none';
+  document.getElementById('engShopCodesRow').style.display = type === 'code' ? '' : 'none';
+}
+
+async function submitEngShopItem() {
+  const name = document.getElementById('engShopName').value.trim();
+  const cost = parseInt(document.getElementById('engShopCost').value, 10);
+  if (!name || !cost || cost < 1) { showError('Name and a valid cost are required.'); return; }
+  const type = document.getElementById('engShopType').value;
+  const body = {
+    name,
+    description: document.getElementById('engShopDesc').value.trim() || null,
+    type,
+    cost,
+    quantity: parseInt(document.getElementById('engShopQty').value, 10) || -1,
+    roleId: type === 'role' ? (document.getElementById('engShopRoleId').value.trim() || null) : null,
+    codes: type === 'code' ? document.getElementById('engShopCodes').value.trim().split('\n').map(s=>s.trim()).filter(Boolean) : null,
+  };
+  try {
+    const res = await fetch('/api/admin/engagement/shop', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.success) { showSuccess('Shop item added!'); closeEngShopModal(); loadEngagementShop(); }
+    else showError(data.message || 'Failed to add item.');
+  } catch (e) { showError('Error adding shop item.'); }
+}
+
+async function deleteEngShopItem(itemId) {
+  if (!confirm('Remove this shop item?')) return;
+  try {
+    const res = await fetch(`/api/admin/engagement/shop/${itemId}`, { method: 'DELETE', credentials: 'include' });
+    const data = await res.json();
+    if (data.success) { showSuccess('Item removed.'); loadEngagementShop(); }
+    else showError(data.message || 'Failed to remove item.');
+  } catch (e) { showError('Error removing item.'); }
 }

@@ -502,6 +502,44 @@ class NFTActivityService {
     }
   }
 
+  getEventByTx(txSignature) {
+    try {
+      if (!txSignature) return null;
+      return db.prepare(`
+        SELECT event_type, collection_key, token_name, token_mint, from_wallet, to_wallet, price_sol, tx_signature, source, event_time, created_at
+        FROM nft_activity_events
+        WHERE tx_signature = ?
+        ORDER BY datetime(COALESCE(event_time, created_at)) DESC
+        LIMIT 1
+      `).get(txSignature);
+    } catch (e) {
+      logger.error('Error getting NFT activity event by tx:', e);
+      return null;
+    }
+  }
+
+  async replayEventByTx(txSignature) {
+    const row = this.getEventByTx(txSignature);
+    if (!row) return { success: false, message: 'Event not found for tx signature' };
+
+    const evt = {
+      eventType: row.event_type,
+      collectionKey: row.collection_key,
+      tokenName: row.token_name,
+      tokenMint: row.token_mint,
+      fromWallet: row.from_wallet,
+      toWallet: row.to_wallet,
+      priceSol: row.price_sol !== null && row.price_sol !== undefined ? Number(row.price_sol) : null,
+      txSignature: row.tx_signature,
+      eventTime: row.event_time || row.created_at,
+      chain: row.source || 'solana',
+      imageUrl: null,
+    };
+
+    await this.maybeSendAlert(evt);
+    return { success: true, txSignature: row.tx_signature };
+  }
+
   listEvents(limit = 20) {
     try {
       return db.prepare(`

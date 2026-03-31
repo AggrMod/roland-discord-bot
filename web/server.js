@@ -1436,6 +1436,24 @@ class WebServer {
       }
     });
 
+    this.app.post('/api/superadmin/nft-activity/replay', superadminGuard, async (req, res) => {
+      try {
+        const txSignature = String(req.body?.txSignature || req.body?.tx || '').trim();
+        if (!txSignature) {
+          return res.status(400).json({ success: false, message: 'txSignature is required' });
+        }
+
+        const result = await nftActivityService.replayEventByTx(txSignature);
+        if (!result.success) {
+          return res.status(404).json(result);
+        }
+        return res.json(result);
+      } catch (error) {
+        logger.error('Error replaying nft activity event:', error);
+        return res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
     // ==================== ADMIN API ====================
 
     const adminAuthMiddleware = async (req, res, next) => {

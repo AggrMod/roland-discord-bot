@@ -2937,6 +2937,14 @@ async function loadSuperadminView() {
             <button class="btn-secondary" onclick="loadSuperadminView()" style="padding:8px 12px;">Reset</button>
             <button class="btn-primary" onclick="saveChainEmojiMap()" style="padding:8px 12px;">Save Chain Emojis</button>
           </div>
+
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(99,102,241,0.18);display:grid;gap:8px;">
+            <div style="color:#c9d6ff;font-weight:600;">Replay NFT Event by Tx <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></div>
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;">
+              <input id="sa_nftReplayTx" type="text" placeholder="Paste tx signature to replay alerts" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+              <button class="btn-primary" onclick="replayNftActivityTx()" style="padding:8px 12px;">Replay Tx</button>
+            </div>
+          </div>
         </div>
 
         <div id="superadminSection-tenants" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
@@ -3520,6 +3528,33 @@ async function saveChainEmojiMap() {
     await loadSuperadminView();
   } catch (error) {
     showError(`Failed to save chain emoji map: ${error.message}`);
+  }
+}
+
+async function replayNftActivityTx() {
+  const el = document.getElementById('sa_nftReplayTx');
+  const txSignature = String(el?.value || '').trim();
+  if (!txSignature) {
+    showError('Please paste a tx signature');
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/superadmin/nft-activity/replay', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ txSignature }),
+    });
+    const data = await response.json();
+    if (!data.success) {
+      showError(data.message || 'Failed to replay NFT activity tx');
+      return;
+    }
+    showSuccess(`Replayed tx: ${txSignature}`);
+    if (el) el.value = '';
+  } catch (error) {
+    showError(`Failed to replay tx: ${error.message}`);
   }
 }
 

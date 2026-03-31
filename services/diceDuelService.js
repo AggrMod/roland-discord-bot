@@ -31,6 +31,7 @@ class DiceDuelService {
       gatherSecs,
       status: 'waiting',
       players: new Set(),      // userId
+      playerNames: new Map(),  // userId → username
       eliminated: new Set(),
       roundNumber: 0,
       gatherTimer: null,
@@ -41,11 +42,12 @@ class DiceDuelService {
 
   getGameByLobby(messageId) { return this._games.get(messageId) || null; }
 
-  addPlayer(lobbyMessageId, userId) {
+  addPlayer(lobbyMessageId, userId, username) {
     const game = this._games.get(lobbyMessageId);
     if (!game || game.status !== 'waiting') return { success: false };
     if (game.players.has(userId)) return { success: false, reason: 'already_joined' };
     game.players.add(userId);
+    game.playerNames.set(userId, username || userId);
     return { success: true, count: game.players.size };
   }
 
@@ -53,6 +55,7 @@ class DiceDuelService {
     const game = this._games.get(lobbyMessageId);
     if (!game || game.status !== 'waiting') return { success: false };
     game.players.delete(userId);
+    game.playerNames.delete(userId);
     return { success: true, count: game.players.size };
   }
 
@@ -126,12 +129,12 @@ class DiceDuelService {
       .setDescription(
         `React with ${JOIN_EMOJI} to enter!\n\n` +
         `**How it works:**\n` +
-        `Each round the bot rolls a die for every player.\n` +
+        `Each round the bot rolls a 🎲 for every player simultaneously.\n` +
         `Lowest roll? You're eliminated.\n` +
         `Ties at the bottom? Tiebreaker roll between those players.\n` +
         `Last one standing wins! 🏆`
       )
-      .addFields({ name: '👥 Players Joined', value: game.players.size > 0 ? `${game.players.size} waiting` : '*Be the first to join!*', inline: true })
+      .addFields({ name: `👥 Players (${game.players.size})`, value: game.players.size > 0 ? [...game.playerNames.values()].map(n => `• ${n}`).join('\n') : '*Be the first to join!*', inline: false })
       .setTimestamp();
 
     this._applyAuthor(embed, guildId);
@@ -220,4 +223,6 @@ class DiceDuelService {
   }
 }
 
-module.exports = new DiceDuelService();
+const instance = new DiceDuelService();
+require('./gameRegistry').register(JOIN_EMOJI, instance);
+module.exports = instance;

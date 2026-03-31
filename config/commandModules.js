@@ -6,6 +6,13 @@ const COMMAND_MODULE_MAP = Object.freeze({
   heist: 'heist',
   higherlower: 'battle',
   diceduel: 'battle',
+  reactionrace: 'battle',
+  numberguess: 'battle',
+  slots: 'battle',
+  trivia: 'battle',
+  wordscramble: 'battle',
+  rps: 'battle',
+  blackjack: 'battle',
   'og-config': 'verification'
 });
 

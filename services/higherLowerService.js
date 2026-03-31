@@ -313,4 +313,6 @@ class HigherLowerService {
   }
 }
 
-module.exports = new HigherLowerService();
+const instance = new HigherLowerService();
+require('./gameRegistry').register(JOIN_EMOJI, instance);
+module.exports = instance;

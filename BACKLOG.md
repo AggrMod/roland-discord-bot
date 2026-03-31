@@ -16,6 +16,36 @@ _Last updated: 2026-03-31_
 
 ---
 
+### Portal: Engagement & Points — module toggle + settings panel
+**Priority**: High (feature exists but has no portal UI)
+**Details**: The `/points` system is live but there's no way to configure or enable/disable it from the portal.
+
+**Module toggle** (Settings → Modules card):
+- Enable/disable Engagement module per server (currently always on)
+- Wire to `engagementService.getConfig(guildId).enabled` flag
+
+**Settings panel** (new "Engagement" tab or card in Settings):
+- Enable/disable toggle
+- Points per message (default: 5)
+- Points per reaction (default: 2)
+- Message cooldown in minutes (default: 60)
+- Reaction daily cap (default: 5)
+- Save button → `PUT /api/admin/engagement/config`
+
+**Shop admin UI** (sub-section or separate tab):
+- List all shop items (id, name, cost, type, stock)
+- Add item form: name, cost, type (role/code/custom), role picker, description, quantity (-1 = unlimited)
+- Remove item button per row
+- API: `GET/POST /api/admin/engagement/shop`, `DELETE /api/admin/engagement/shop/:id`
+
+**Leaderboard view** (read-only tab):
+- Paginated top-N list, cached 5 min
+- API: `GET /api/admin/engagement/leaderboard`
+
+**Scope**: `web/server.js` (new endpoints), `portal.html`, `portal.js`, `portal-style.css`
+
+---
+
 ### Portal: Home page → full marketing/landing page
 **Details**:
 - Home page hides the left sidebar entirely — full-width commercial layout

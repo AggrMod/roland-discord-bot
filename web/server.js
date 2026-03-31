@@ -1660,21 +1660,16 @@ class WebServer {
               delete sanitized.ogRoleLimit;
             }
 
-            // Sync OG role service from tenant settings directly (not global settings.json)
-            // This must happen inside the multi-tenant block to avoid the global-settings
-            // path below clobbering the just-saved tenant value with a stale/empty override.
+            // Sync OG role service from tenant settings directly (not global settings.json).
+            // Same rule: only update when a real roleId was submitted.
             if (Object.keys(ogPatch).length > 0) {
               try {
                 const ogRoleService = require('../services/ogRoleService');
-                if (ogPatch.ogRoleId !== undefined) {
-                  if (ogPatch.ogRoleId) {
-                    ogRoleService.setRole(ogPatch.ogRoleId);
-                    ogRoleService.setEnabled(true);
-                  } else {
-                    ogRoleService.setEnabled(false);
-                  }
+                if (ogPatch.ogRoleId) {
+                  ogRoleService.setRole(ogPatch.ogRoleId);
+                  ogRoleService.setEnabled(true);
                 }
-                if (ogPatch.ogRoleLimit !== undefined) {
+                if (ogPatch.ogRoleLimit !== undefined && ogPatch.ogRoleId) {
                   ogRoleService.setLimit(ogPatch.ogRoleLimit || 1);
                 }
               } catch (e) {
@@ -1691,9 +1686,10 @@ class WebServer {
         if (!tenantService.isMultitenantEnabled() || !req.guildId) {
           try {
             const ogRoleService = require('../services/ogRoleService');
-            // Only sync ogRoleService when a non-empty ogRoleId was explicitly submitted.
-            // An empty string just means the user didn't change it (or the form defaulted
-            // to blank); do NOT disable the OG role in that case.
+            // Only update ogRoleService when a real (non-empty) roleId was submitted.
+            // Empty string = form had no role selected (common on first load before the
+            // GET fix kicks in); never treat that as an intentional "clear".
+            // To disable the OG role, use PUT /api/admin/og-role/config explicitly.
             const submittedOgRoleId = sanitized.ogRoleId;
             if (submittedOgRoleId) {
               ogRoleService.setRole(submittedOgRoleId);
@@ -1701,12 +1697,6 @@ class WebServer {
               if (sanitized.ogRoleLimit !== undefined) {
                 ogRoleService.setLimit(sanitized.ogRoleLimit || 1);
               }
-            }
-            // Explicit clear: only disable if ogRoleId key was sent AND is empty AND
-            // the request body had no prior non-empty value (user explicitly cleared it).
-            // We check req.body directly to distinguish "not sent" from "sent as empty".
-            if (req.body.ogRoleId === '' && !submittedOgRoleId) {
-              ogRoleService.setEnabled(false);
             }
           } catch (e) {
             logger.warn('OG role config sync warning:', e?.message || e);

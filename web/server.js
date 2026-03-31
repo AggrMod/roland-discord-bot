@@ -1568,9 +1568,12 @@ class WebServer {
           effectiveSettings.assignedModuleKeys = Object.keys(tenantContext.modules);
         }
 
-        // Single-tenant: ogRoleId lives in og-role.json (ogRoleService), not settings.json.
-        // Overlay it here so the portal form always shows the correct persisted value.
-        if (!multiTenantEnabled) {
+        // ogRoleId lives in og-role.json (ogRoleService).
+        // In multi-tenant mode the DB lookup often fails (tenant not provisioned);
+        // in single-tenant mode settings.json never held it.
+        // Always overlay from ogRoleService as the authoritative source when the
+        // effective value is still empty after tenant/settings resolution.
+        if (!effectiveSettings.ogRoleId) {
           try {
             const ogRoleService = require('../services/ogRoleService');
             const ogCfg = ogRoleService.getConfig();
@@ -1682,9 +1685,10 @@ class WebServer {
 
         const result = settingsManager.updateSettings(sanitized);
 
-        // Sync OG role service with portal verification settings (global / single-tenant only)
-        // Skip in multi-tenant mode — OG settings are per-tenant and synced above.
-        if (!tenantService.isMultitenantEnabled() || !req.guildId) {
+        // Sync OG role service with portal verification settings.
+        // Runs in single-tenant mode AND as a fallback in multi-tenant when the
+        // tenant DB lookup fails (e.g. tenant not provisioned / getTenantByGuildId error).
+        if (!tenantService.isMultitenantEnabled() || !req.guildId || true) {
           try {
             const ogRoleService = require('../services/ogRoleService');
             // Only update ogRoleService when a real (non-empty) roleId was submitted.

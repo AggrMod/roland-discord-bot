@@ -139,12 +139,12 @@ function showWalletAddForm() {
         <div style="font-size:2.5em; margin-bottom:12px;">💸</div>
         <h4 style="color:#e0e7ff; margin-bottom:12px; font-size:1.15em;">Micro Transaction</h4>
         <p style="color:var(--text-secondary); font-size:0.9em; line-height:1.6; margin-bottom:20px;">
-          Send a tiny SOL amount (~0.001) to verify.<br>Your wallet opens automatically — <strong>funds returned after</strong>.
+          Send a unique tiny SOL amount from <strong>any wallet</strong>.<br>No browser extension needed — Phantom, CEX, hardware, anything.
         </p>
         <button id="microVerifyBtn" onclick="verifyByMicroTx()" class="btn-primary" style="padding:14px 24px; width:100%; font-size:1em;">
-          💰 Send & Verify
+          💰 Get Verification Address
         </button>
-        <p style="color:var(--text-muted); font-size:0.8em; margin-top:10px;">Any Solana wallet that supports transfers</p>
+        <p style="color:var(--text-muted); font-size:0.8em; margin-top:10px;">Any wallet · No extension required</p>
       </div>
     </div>
     <div id="verifyStatus" style="margin-top:16px;"></div>
@@ -232,84 +232,68 @@ async function verifyByMicroTx() {
   const btn = document.getElementById('microVerifyBtn');
   const statusEl = document.getElementById('verifyStatus');
 
-  const provider = getSolanaProvider();
-  if (!provider) {
-    showError('No Solana wallet detected. Please install Phantom, Solflare, or Backpack.');
-    return;
-  }
-
   btn.disabled = true;
-  btn.innerHTML = '⏳ Requesting verification...';
+  btn.innerHTML = '⏳ Generating address...';
 
   try {
-    // 1. Create micro-verify request on server
+    // 1. Create micro-verify request on server — no wallet connection needed
     const reqRes = await fetch('/api/micro-verify/request', { method: 'POST', credentials: 'include' });
     const reqData = await reqRes.json();
     if (!reqData.success) throw new Error(reqData.message || 'Failed to create verification request');
 
-    const { amount, destinationWallet, id: requestId } = reqData.request || reqData;
-    const lamports = Math.round((amount || 0.001) * 1e9);
+    const { amount, destinationWallet, expiresAt, ttlMinutes } = reqData.request || reqData;
+    const expiryDisplay = expiresAt ? new Date(expiresAt).toLocaleTimeString() : `~${ttlMinutes || 15} min`;
 
-    btn.innerHTML = '⏳ Approve transaction in your wallet...';
-
-    // 2. Connect wallet and send micro transaction
-    const resp = await provider.connect();
-    const fromPubkey = resp.publicKey;
-
-    // Build and send transaction using Solana web3
-    // We need @solana/web3.js — load it dynamically if not present
-    if (!window.solanaWeb3) {
-      await loadScript('https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js');
-    }
-    const { Connection, PublicKey, Transaction, SystemProgram } = window.solanaWeb3;
-
-    const SOLANA_RPC = window.GUILDPILOT_CONFIG?.solanaRpc || 'https://api.mainnet-beta.solana.com';
-    const connection = new Connection(SOLANA_RPC, 'confirmed');
-    const transaction = new Transaction().add(
-      SystemProgram.transfer({
-        fromPubkey,
-        toPubkey: new PublicKey(destinationWallet),
-        lamports
-      })
-    );
-
-    transaction.feePayer = fromPubkey;
-    const { blockhash } = await connection.getLatestBlockhash();
-    transaction.recentBlockhash = blockhash;
-
-    const signed = await provider.signTransaction(transaction);
-    btn.innerHTML = '⏳ Sending transaction...';
-    const txSig = await connection.sendRawTransaction(signed.serialize());
-
-    btn.innerHTML = '⏳ Confirming...';
-    await connection.confirmTransaction(txSig, 'confirmed');
-
-    showSuccess('Transaction sent! Verification is processing — your wallet will appear shortly.');
-
-    // Show status area with polling
+    // 2. Show the "send manually" instruction UI — no wallet extension involved
     if (statusEl) {
       statusEl.innerHTML = `
-        <div style="padding:16px; background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3); border-radius:10px; text-align:center;">
-          <div class="spinner" style="width:24px; height:24px; margin:0 auto 8px;"></div>
-          <p style="color:#86efac; font-weight:600;">Transaction sent! Waiting for server confirmation...</p>
-          <p style="color:var(--text-secondary); font-size:0.85em; margin-top:6px;">TX: ${txSig.slice(0, 16)}...</p>
+        <div style="margin-top:20px; padding:24px; background:rgba(99,102,241,0.08); border:2px solid rgba(99,102,241,0.35); border-radius:14px;">
+          <h4 style="color:#e0e7ff; margin:0 0 16px 0; font-size:1.05em;">📋 Send this exact amount to verify your wallet</h4>
+
+          <div style="margin-bottom:14px;">
+            <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:0.05em;">Amount (exact)</p>
+            <div style="display:flex; align-items:center; gap:10px; background:rgba(0,0,0,0.3); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:12px 14px;">
+              <span id="microAmountDisplay" style="color:#fbbf24; font-size:1.2em; font-weight:700; font-family:monospace; flex:1;">${amount} SOL</span>
+              <button onclick="navigator.clipboard.writeText('${amount}'); showSuccess('Amount copied!');" style="background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 12px; cursor:pointer; font-size:0.8em; white-space:nowrap;">Copy</button>
+            </div>
+          </div>
+
+          <div style="margin-bottom:20px;">
+            <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:0.05em;">Destination Wallet</p>
+            <div style="display:flex; align-items:center; gap:10px; background:rgba(0,0,0,0.3); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:12px 14px;">
+              <span style="color:#c7d2fe; font-size:0.88em; font-family:monospace; flex:1; word-break:break-all;">${destinationWallet}</span>
+              <button onclick="navigator.clipboard.writeText('${destinationWallet}'); showSuccess('Address copied!');" style="background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 12px; cursor:pointer; font-size:0.8em; white-space:nowrap;">Copy</button>
+            </div>
+          </div>
+
+          <div style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:8px; padding:12px 14px; margin-bottom:20px;">
+            <p style="color:#fcd34d; font-size:0.85em; margin:0; line-height:1.5;">
+              ⚠️ Send the <strong>exact amount</strong> shown — it's your unique identifier.<br>
+              Any Solana wallet works (Phantom, mobile, hardware, exchange withdrawal, etc.).<br>
+              Expires at <strong>${expiryDisplay}</strong>.
+            </p>
+          </div>
+
+          <div style="text-align:center;">
+            <div style="display:flex; align-items:center; justify-content:center; gap:10px; color:var(--text-secondary); margin-bottom:12px;">
+              <div class="spinner" style="width:18px; height:18px;"></div>
+              <span style="font-size:0.9em;">Waiting for transaction on-chain...</span>
+            </div>
+            <button onclick="pollMicroVerifyStatus(document.getElementById('verifyStatus'))" style="background:none; border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 14px; cursor:pointer; font-size:0.82em;">↻ Check status</button>
+          </div>
         </div>
       `;
     }
 
-    // Poll for completion
+    // 3. Start polling — server detects the transfer on-chain automatically
     pollMicroVerifyStatus(statusEl);
 
   } catch (error) {
-    if (error.code === 4001 || error.message?.includes('reject')) {
-      showInfo('Transaction cancelled. No changes made.');
-    } else {
-      showError('Verification failed: ' + (error.message || 'Unknown error'));
-      console.error('Micro-tx verification error:', error);
-    }
+    showError(error.message || 'Failed to start verification');
+    console.error('Micro-tx verification error:', error);
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '💰 Send & Verify';
+    btn.innerHTML = '💰 Get Verification Address';
   }
 }
 
@@ -2947,6 +2931,50 @@ async function loadSuperadminView() {
           </div>
         </div>
 
+        <div id="superadminSection-microVerify" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
+            <h4 style="margin:0; color:#c9d6ff;">💸 Micro-Transaction Verification <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
+            <span style="color:var(--text-secondary); font-size:0.85em;">Wallet-extension-free verification</span>
+          </div>
+          <div style="display:grid; gap:12px;">
+            <label style="display:flex; align-items:center; gap:10px; color:#c9d6ff; font-size:0.9em; cursor:pointer;">
+              <input type="checkbox" id="sa_microVerifyEnabled" ${settingsData?.settings?.moduleMicroVerifyEnabled ? 'checked' : ''}
+                style="width:16px;height:16px;accent-color:#6366f1;">
+              <span>Enable micro-transaction verification</span>
+            </label>
+            <label style="display:grid; gap:6px;">
+              <span style="font-size:0.82em; color:var(--text-secondary);">Receive Wallet Address <span style="color:#f87171;">(superadmin only)</span></span>
+              <input id="sa_verificationReceiveWallet" type="text"
+                value="${escapeHtml(settingsData?.settings?.verificationReceiveWallet || '')}"
+                placeholder="Solana wallet address that receives micro-payments"
+                style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.88em;">
+            </label>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+              <label style="display:grid; gap:6px;">
+                <span style="font-size:0.82em; color:var(--text-secondary);">Request TTL (minutes)</span>
+                <input id="sa_verifyTtlMinutes" type="number" min="1" max="60"
+                  value="${escapeHtml(String(settingsData?.settings?.verifyRequestTtlMinutes || 15))}"
+                  style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
+              </label>
+              <label style="display:grid; gap:6px;">
+                <span style="font-size:0.82em; color:var(--text-secondary);">Poll Interval (seconds)</span>
+                <input id="sa_pollIntervalSeconds" type="number" min="10" max="300"
+                  value="${escapeHtml(String(settingsData?.settings?.pollIntervalSeconds || 30))}"
+                  style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
+              </label>
+            </div>
+            <div style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); border-radius:8px; padding:10px 12px;">
+              <p style="color:#fcd34d; font-size:0.82em; margin:0; line-height:1.5;">
+                ⚠️ The receive wallet collects small SOL payments used to identify users. Keep it secure — only this superadmin panel can change it.
+              </p>
+            </div>
+          </div>
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+            <button class="btn-secondary" onclick="loadSuperadminView()" style="padding:8px 12px;">Reset</button>
+            <button class="btn-primary" onclick="saveMicroVerifySettings()" style="padding:8px 12px;">Save Micro-Verify Settings</button>
+          </div>
+        </div>
+
         <div id="superadminSection-tenants" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
             <h4 style="margin:0; color:#c9d6ff;">Tenant Management <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(99,102,241,0.2);font-size:0.72em;vertical-align:middle;">Tenant Scoped</span></h4>
@@ -3153,7 +3181,7 @@ async function revokeEra(guildId, eraKey) {
 function showSuperadminTab(tab) {
   superadminActiveTab = tab;
   const sections = {
-    superadmins: ['superadminSection-superadminsInput', 'superadminSection-superadmins', 'superadminSection-chainEmojis'],
+    superadmins: ['superadminSection-superadminsInput', 'superadminSection-superadmins', 'superadminSection-chainEmojis', 'superadminSection-microVerify'],
     tenants: ['superadminSection-tenants', 'superadminSection-detail', 'superadminSection-eras'],
   };
   Object.entries(sections).forEach(([key, ids]) => {
@@ -3502,6 +3530,36 @@ function removeSuperadmin(userId) {
     },
     'Remove'
   );
+}
+
+async function saveMicroVerifySettings() {
+  const enabled = !!document.getElementById('sa_microVerifyEnabled')?.checked;
+  const receiveWallet = document.getElementById('sa_verificationReceiveWallet')?.value?.trim() || '';
+  const ttl = parseInt(document.getElementById('sa_verifyTtlMinutes')?.value) || 15;
+  const pollInterval = parseInt(document.getElementById('sa_pollIntervalSeconds')?.value) || 30;
+
+  try {
+    const response = await fetch('/api/admin/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      credentials: 'include',
+      body: JSON.stringify({
+        moduleMicroVerifyEnabled: enabled,
+        verificationReceiveWallet: receiveWallet,
+        verifyRequestTtlMinutes: ttl,
+        pollIntervalSeconds: pollInterval
+      })
+    });
+    const data = await response.json();
+    if (!data.success) {
+      showError(data.message || 'Failed to save micro-verify settings');
+      return;
+    }
+    showSuccess('Micro-verify settings saved');
+    await loadSuperadminView();
+  } catch (error) {
+    showError(`Failed to save micro-verify settings: ${error.message}`);
+  }
 }
 
 async function saveChainEmojiMap() {

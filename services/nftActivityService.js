@@ -449,8 +449,12 @@ class NFTActivityService {
       if (evt.imageUrl) embed.setThumbnail(evt.imageUrl);
       if (explorer) embed.setURL(explorer);
 
-      await channel.send({ embeds: [embed], components });
-      logger.log(`[nft-alert] sent guild=${target.guild_id || 'global'} channel=${target.channel_id} type=${evt.eventType} tx=${evt.txSignature || 'none'}`);
+      try {
+        await channel.send({ embeds: [embed], components });
+        logger.log(`[nft-alert] sent guild=${target.guild_id || 'global'} channel=${target.channel_id} type=${evt.eventType} tx=${evt.txSignature || 'none'}`);
+      } catch (sendErr) {
+        logger.error(`[nft-alert] failed guild=${target.guild_id || 'global'} channel=${target.channel_id} type=${evt.eventType} tx=${evt.txSignature || 'none'}`, sendErr);
+      }
     }
   }
 

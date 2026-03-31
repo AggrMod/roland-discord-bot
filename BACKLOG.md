@@ -1,109 +1,130 @@
-## Remove top-nav server selector (redundant)
+# GuildPilot Backlog
 
-**Request**: Remove the "Select server" button + server dropdown from the top navigation bar.
-**Reason**: Server context is already handled by the sidebar bottom block (server icon + name + "See all servers →"). The top-nav selector is redundant and clutters the nav.
-**Scope**:
-- `portal.html` — remove `#navServerSelect` dropdown and "Select server" button from top-nav
-- `portal.js` — remove `onNavServerSelect()` wiring and any code that shows/hides these elements
-- Keep `#activeGuildBadge` if it serves a purpose, or remove it too
-- Ensure server switching still works exclusively through the sidebar bottom block
+_Last updated: 2026-03-31_
 
-## Home page = full commercial/marketing page
+---
 
-**Request**: Transform the Home page into a proper public-facing marketing/landing page, similar to Solmate's homepage.
+## 🔴 Open
+
+### CH1 — EVM Wallet Support
+**Priority**: High  
+**Details**: Verification and NFT/token tracking for EVM chains (ETH, Base, Polygon, etc.)  
+- EVM wallet linking in portal (connect via signature challenge like Solana)
+- NFT balance check via Alchemy/Moralis/QuickNode for ERC-721/1155
+- Token-gated role assignment for ERC-20 holdings
+- OG role support for EVM collections
+
+---
+
+### Portal: Home page → full marketing/landing page
 **Details**:
 - Home page hides the left sidebar entirely — full-width commercial layout
-- Add a top-nav button next to "Home" (e.g. "Dashboard" or "Go to Bot") that takes you to server selection
-- Left sidebar only appears when user is in bot management or profile sections (post-server-selection)
-- Home page content: hero section, feature highlights, CTAs (Invite bot, Open Dashboard)
-**Scope**:
-- `portal.html` — toggle sidebar visibility based on current section
-- `portal.js` — hide sidebar on `section-landing`, show on all other sections
-- `portal-style.css` — full-width layout mode when sidebar is hidden
+- Hero, feature highlights, CTAs (Invite bot / Open Dashboard)
+- "Dashboard" button in top nav takes you to server selection
+- Sidebar only appears post-server-selection
+**Scope**: `portal.html`, `portal.js`, `portal-style.css`
 
-## Server selection tiles: smaller + server logo + 3 per row
+---
 
-**Request**: In the server selection / "See all servers" view, make the server cards smaller and add the server icon/logo to each tile. Show 3 tiles per row.
+### Portal: Server selection tiles — smaller, logo, 3 per row
 **Details**:
 - Current tiles are too large and sparse
-- Each tile should show: server icon/initials (36-40px) + server name
+- Each tile: server icon/initials (36–40px) + server name
 - Grid: `repeat(3, 1fr)` or `repeat(auto-fill, minmax(180px, 1fr))`
-- Compact card height (~70-80px)
-**Scope**:
-- `portal.html` — server card HTML in managed/unmanaged server lists
-- `portal.js` — `loadServerAccess()` renders server cards
-- `portal-style.css` — server card sizing
+- Compact card height (~70–80px)
+**Scope**: `portal.html`, `portal.js`, `portal-style.css`
 
-## Bot activity status — configurable per tenant
+---
 
-**Request**: Replace hardcoded "The Commission" bot activity status with the tenant's display name from branding settings, falling back to a generic default.
+### Portal: Branding settings visible to guild admins
 **Details**:
-- Bot activity should show tenant branding name (e.g. "Serving The Solpranos") or generic "Serving your community"
-- Configurable per server via the Branding settings panel (bot_display_name field)
-**Scope**:
-- Search and replace hardcoded "The Commission" in `index.js` or wherever bot presence is set
-- Pull from tenant branding config if available
-
-## Battle: more built-in eras + custom era support
-
-**Request**: Expand the battle system with more historical/thematic eras, and allow server admins to create custom eras via the branding/settings panel.
-**Details**:
-- Add more built-in eras (beyond current set — e.g. Medieval, Cyberpunk, Wild West, Space Age, etc.)
-- Custom eras: admin can define era name, theme description, weapon/ability flavor text
-- Custom eras stored per-tenant in DB
-- Accessible via Branding or Battle settings tab
-
-## Branding as a visible module/settings section
-
-**Request**: Branding settings (bot display name, logo, colors, emoji, support URL) should be visible to server admins in their Settings panel — not just superadmins.
-**Details**:
-- Currently branding is only editable in the superadmin tenant panel
-- Add a "Branding" tab or card in the admin Settings section (`section-settings`)
+- Currently branding is superadmin-only
+- Add "Branding" tab in admin Settings section
 - Fields: bot display name, brand emoji, brand color, logo URL, support URL
-- Writes to the same `tenant_branding` table via a new `/api/admin/branding` endpoint (session-scoped to own guild)
+- New `/api/admin/branding` endpoint (session-scoped to own guild)
+**Scope**: `web/server.js`, `portal.html`, `portal.js`
 
-## BUG: Settings not visible to admins without superadmin rights
+---
 
-**Priority**: High — blocks all non-superadmin guild admins from configuring their server
+### Portal: Remove top-nav server selector (redundant)
+**Details**: Server context is already in the sidebar bottom block. Top-nav "Select server" button clutters the nav.  
+**Scope**: `portal.html`, `portal.js`
+
+---
+
+### Engagement: Phase 2 — X (Twitter) Integration (E5–E6)
 **Details**:
-- Regular guild admins (Discord server owners/admins) can log in but Settings tab content doesn't load or is inaccessible
-- Only the superadmin (SUPERADMIN_DISCORD_ID in .env) can see full settings
-- Need to audit `adminAuthMiddleware` and settings endpoint auth — regular admins should be able to manage their own server settings
-**Scope**:
-- `web/server.js` — verify `adminAuthMiddleware` resolves guild admin correctly
-- `portal.js` — verify `isAdmin` is set for guild owners/admins, not just superadmin
+- X OAuth connect flow (link X account to Discord profile in portal)
+- X task tracking: repost/reply/quote/follow tracked posts & accounts
+- X-based point awards (repost=25pts, quote=40pts, reply=30pts, follow=50pts one-time)
+- Anti-abuse: one X account per Discord user, bot account age check (>30 days), cooldowns
+- Requires paid X API ($10–25/mo pay-per-use tier recommended)
+- npm: `twitter-api-v2`
+**DB tables needed**: `social_accounts`, `social_tasks`
 
-## NFT Tracker: polling fallback for collection activity (replaces pure webhook approach)
+---
 
-**Problem**: Helius webhooks fire when a watched address appears in a transaction. Magic Eden/Tensor listing transactions reference the individual NFT mint, not the verified collection address — so collection-level webhooks never trigger for listings.
+### Engagement: Phase 3 — Web Portal Leaderboard + Shop Admin UI (E4, E7)
+**Details**:
+- Full leaderboard tab in portal (paginated, cached 5min)
+- Shop admin UI (add/edit/remove items, set quantity, view redemptions)
+- Anti-abuse hardening (cooldown visibility, alt-account prevention)
 
-**Solution**: Add a polling cron alongside the existing webhook:
-- Every 5 minutes, call Helius DAS `GET /v0/addresses/{collection}/transactions?type=NFT_LISTING,NFT_SALE` for each tracked collection
-- Deduplicate by `tx_signature` against `nft_activity_events` table (already have the column)
-- Process new events through existing `ingestEvent()` → `maybeSendAlert()` pipeline
-- Webhook stays as fast path; polling is the reliable fallback
+---
 
-**Helius endpoint**: `POST https://api.helius.xyz/v0/addresses/{address}/transactions?api-key={key}` with `{ "types": ["NFT_LISTING", "NFT_SALE", "NFT_MINT"] }`
-**Scope**: New cron in `index.js` + `nftActivityService.pollCollectionActivity()` method
+### Engagement: E9 — Hashtag Campaign Tasks
+**Details**:
+- Award points when community members post a configured #hashtag on X
+- 7-day rolling scan via X search/recent API
+- Dedup by tweet ID
 
-## NFT Tracker: embed polish & optimization
+---
 
-**Request**: Improve the Discord alert embed quality and UX
+### Battle: Custom era support (admin-defined eras)
+**Details**:
+- Admins can define custom era name, theme description, weapon/ability flavor text via portal
+- Custom eras stored per-tenant in DB
+- Accessible via Battle settings tab
+
+---
+
+### NFT Tracker: Embed polish & optimization
 **Ideas**:
-- Show the actual NFT name/number (e.g. "Vault Runner #1043") instead of shortened mint address — fetch from Helius DAS or ME metadata
-- Show floor price alongside listing price (context for whether it's a good deal)
-- Add rarity rank if available
-- Seller wallet as a clickable Solscan profile link
-- Smarter price display: show "Listed below floor 🔥" or "Above floor" label
-- Debounce rapid-fire delist/relist events (don't spam if someone relists quickly)
+- Show actual NFT name/number (e.g. "Vault Runner #1043") — fetch from Helius DAS or ME metadata
+- Floor price alongside listing price + "Listed below floor 🔥" label
+- Rarity rank if available
+- Seller wallet as clickable Solscan profile link
+- Debounce rapid-fire delist/relist events
 - Configurable min-price filter per collection (ignore dust listings)
 - Poll interval configurable per server (default 5 min)
 
-## NFT Tracker: buyer identity resolution
+---
 
-**Request**: When an NFT sale/mint alert fires, check if the buyer's wallet address exists in the verification table. If it does, resolve to their Discord username and:
-- Show Discord username in the embed instead of shortened wallet address
-- Tag the user in the alert message: "🎉 Congrats <@userId> on your new Vault Runner!"
-- Fall back to shortened wallet address if wallet not linked to any Discord account
-**Data source**: `verified_wallets` (or equivalent) table — join on `wallet_address = buyer_wallet`
-**Scope**: Only applies to `sale` and `mint` event types (not list/delist)
+## ✅ Completed
+
+| Item | Commit | Notes |
+|------|--------|-------|
+| OG role reset fix (multi-tenant settings save) | `f569a94` | |
+| OG role always blank in portal (GET/PUT) | `20d93ec`, `3c07eb0` | `og-role.json` as authoritative source |
+| Micro-verify: remove browser wallet extension | `dfded10` | Static send card with copy buttons |
+| Micro-verify settings persistence | `da8472f`, `0cd5b76` | Dedicated `/api/superadmin/global-settings` endpoint |
+| Mobile responsiveness overhaul | `189e506`, `d8c8487`, `bdb4ffa`, `aced2b7` | Landing + portal + superadmin |
+| Pricing/plans page (Starter/Growth/Pro) | `fa4c078`, `afa5992` | Bocto competitor callout |
+| Higher or Lower card game | `062e213`, `21ab08f` | `/higherlower` |
+| Dice Duel | `321e8f5` | `/diceduel` |
+| 7 more mini-games | `ee4f2e4` | reactionrace, numberguess, slots, trivia, wordscramble, rps, blackjack |
+| Admin/mod permission gate on all game commands | `6f08a79` | checkAdminOrModerator() |
+| Pricing + docs update for games | `6f08a79` | Games free; Game Night = Growth+ |
+| Game Night orchestrator | `daffe32`, `4b5c8d0` | 9 games, lobby→leaderboard→champion |
+| 4 new battle eras | `56a0dd8` | Medieval ⚔️ Cyberpunk 🤖 Wild West 🤠 Space Age 🚀 |
+| Role claim buttons fix (Discord) | `f77fa98`, `fb163a7` | Was checking empty static config; now queries DB |
+| Engagement & Points System (E1–E3, E7 partial) | `c329409` | `/points` command, message/reaction awards, shop, leaderboard |
+| getTenantByGuildId TypeError (log spam) | `1274d00` | Method is getTenant() — 2 callsites fixed |
+| N1 — NFT polling fallback | already live | 5-min cron + 30s startup delay; confirmed working |
+| N2 — NFT embed polish | earlier | |
+| N3 — Buyer identity resolution | earlier | |
+| B2 — Settings NFT tracker tab edit button fix | earlier | |
+| P1–P4 — Portal UX polish | earlier | |
+| C1–C2 — Bot activity status + branding visible | earlier | |
+| BT2 — Custom era support (UI) | earlier | |
+| SOL distributor script | workspace | Ready to deploy to Roland's server |

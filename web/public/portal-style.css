@@ -170,6 +170,13 @@ body {
   text-overflow: ellipsis;
 }
 
+@media (max-width: 768px) {
+  /* Server badge in top nav is redundant on mobile — sidebar handles server switching */
+  #activeGuildBadge {
+    display: none !important;
+  }
+}
+
 /* Server grid layout — compact tiles, ~3 per row */
 .server-grid {
   display: grid;

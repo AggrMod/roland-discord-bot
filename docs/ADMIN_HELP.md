@@ -106,6 +106,51 @@ When creating a lobby, you can gate participation:
 
 ---
 
+## Game Night 🎮
+> **Admin/Mod only · Growth plan required**
+> Runs multiple games in sequence with a shared leaderboard across all games.
+
+### Commands
+- `/gamenight start [games] [join_time]` — Start a Game Night lobby
+  - `games` (optional): comma-separated keys, e.g. `diceduel,trivia,slots` (default: all 9)
+  - `join_time` (optional): 30–180s gather window (default 90s)
+- `/gamenight skip` — Skip the current game (host only)
+- `/gamenight cancel` — Cancel the session (host only)
+- `/gamenight games` — List all valid game keys
+
+### Scoring (per game)
+| Place | Points |
+|---|---|
+| 🥇 1st | 10 pts |
+| 🥈 2nd | 7 pts |
+| 🥉 3rd | 5 pts |
+| 4th | 3 pts |
+| 5th+ | 1 pt |
+
+### Available Games
+| Key | Game | Type |
+|---|---|---|
+| `diceduel` | 🎲 Dice Duel | Lowest roll eliminated |
+| `higherlower` | 🃏 Higher or Lower | Wrong guess = out |
+| `reactionrace` | ⚡ Reaction Race | Slowest to react is out |
+| `numberguess` | 🔢 Number Guess | Closest to secret number |
+| `slots` | 🎰 Slots | Best spin combo |
+| `trivia` | ❓ Trivia | Most correct answers |
+| `wordscramble` | 🧩 Word Scramble | First to unscramble |
+| `rps` | 🪨 RPS Tournament | Bracket elimination |
+| `blackjack` | 🎴 Blackjack | Beat the dealer |
+
+### How It Works
+1. `/gamenight start` posts a lobby — players react 🎉 to join
+2. After gather time, games run sequentially
+3. Each game runs compressed (no lobby phase — players already set)
+4. Points awarded per placement after each game
+5. Leaderboard shown between games
+6. Champion crowned at the end with final standings
+
+
+---
+
 ## Heist 🎯
 - `/heist view|signup|status`
 - Admin: `/heist admin create|list|cancel`

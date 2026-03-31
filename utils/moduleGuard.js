@@ -167,6 +167,47 @@ class ModuleGuard {
 
     return true;
   }
+  /**
+   * Plan tier check — returns true if guild is on minPlan or higher.
+   * Tiers: starter(0) < growth(1) < pro(2) < enterprise(3)
+   * In single-tenant mode (no multitenant), always passes.
+   */
+  async checkMinimumPlan(interaction, minPlan) {
+    const TIER = { starter: 0, free: 0, growth: 1, pro: 2, enterprise: 3 };
+    const minTier = TIER[minPlan] ?? 1;
+
+    let planKey = 'starter';
+    try {
+      const tenantService = require('../services/tenantService');
+      if (tenantService.isMultitenantEnabled && tenantService.isMultitenantEnabled()) {
+        const guildId = interaction?.guildId;
+        if (guildId) {
+          const t = tenantService.getTenant ? tenantService.getTenant(guildId) : null;
+          if (t && t.planKey) planKey = t.planKey;
+        }
+      } else {
+        // Single-tenant: no plan enforcement
+        return true;
+      }
+    } catch {
+      return true; // Can't check plan → allow
+    }
+
+    const currentTier = TIER[planKey] ?? 0;
+    if (currentTier >= minTier) return true;
+
+    const planNames = { starter: 'Starter (Free)', growth: 'Growth ($14/mo)', pro: 'Pro ($34/mo)' };
+    const reply = {
+      content: `🔒 **${planNames[minPlan] || minPlan} plan required.**
+This feature isn't available on your current plan. Upgrade at the Plans page in your GuildPilot portal.`,
+      ephemeral: true,
+    };
+    if (interaction.deferred || interaction.replied) await interaction.editReply(reply);
+    else await interaction.reply(reply);
+    return false;
+  }
+
+
 }
 
 // Singleton instance

@@ -3716,6 +3716,12 @@ async function loadAdminHelpView() {
       { name: '/blackjack start', desc: '🎴 Blackjack — beat the dealer, react 👆 hit / ✋ stand (mod/admin only)', options: 'join_time (10–120s, default 60)', example: '/blackjack start' },
       { name: '/blackjack cancel', desc: 'Cancel Blackjack table', options: '—', example: '/blackjack cancel' }
     ], '🔒 Admin/Mod only to start · Games: free on all plans · Game Night: Growth plan+')}
+    ${cmdSection('Game Night', '🎮', [
+      { name: '/gamenight start', desc: '🎮 Start a multi-game Game Night session (Growth plan required)', options: 'games (optional, comma-separated keys), join_time (30–180s, default 90)', example: '/gamenight start games:trivia,slots,diceduel join_time:90' },
+      { name: '/gamenight skip', desc: 'Skip the current game in the rotation (host only)', options: '—', example: '/gamenight skip' },
+      { name: '/gamenight cancel', desc: 'Cancel the current Game Night session (host only)', options: '—', example: '/gamenight cancel' },
+      { name: '/gamenight games', desc: 'List all available game keys and descriptions', options: '—', example: '/gamenight games' }
+    ], '🔒 Admin/Mod only · Requires Growth plan · Players join by reacting 🎉 · Scoring: 1st=10pts, 2nd=7pts, 3rd=5pts, 4th=3pts, 5th+=1pt')}
     ${cmdSection('Heist', '🎯', [
       { name: '/heist view', desc: 'View available heist missions', options: '—', example: '/heist view' },
       { name: '/heist signup', desc: 'Sign up for a heist mission', options: 'mission_id (required), role (required: driver/hacker/muscle/lookout)', example: '/heist signup mission_id:H-001 role:hacker' },

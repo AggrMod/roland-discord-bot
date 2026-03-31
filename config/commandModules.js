@@ -13,6 +13,7 @@ const COMMAND_MODULE_MAP = Object.freeze({
   wordscramble: 'battle',
   rps: 'battle',
   blackjack: 'battle',
+  gamenight: 'battle',
   'og-config': 'verification'
 });
 

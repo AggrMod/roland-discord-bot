@@ -1169,6 +1169,14 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
       }
     }
 
+    // ── Engagement: award reaction points ──────────────────────────────────────
+    if (reaction.message?.guild) {
+      try {
+        const eng = require('./services/engagementService');
+        eng.tryAwardReaction(reaction.message.guild.id, user.id, user.username, `react:${reaction.message.id}`);
+      } catch (_) {}
+    }
+
     const emojiName = reaction.emoji.name;
 
     // ── Game registry: lobby join (all mini-games) ──────────────────────────
@@ -1351,6 +1359,15 @@ process.on('SIGINT', () => {
   intervals.forEach(clearInterval);
   client.destroy();
   process.exit(0);
+});
+
+// ── Engagement: award points for chat messages ───────────────────────────────
+client.on(Events.MessageCreate, async (message) => {
+  if (message.author.bot || !message.guild) return;
+  try {
+    const eng = require('./services/engagementService');
+    eng.tryAwardMessage(message.guild.id, message.author.id, message.author.username);
+  } catch (_) {}
 });
 
 client.login(process.env.DISCORD_TOKEN);

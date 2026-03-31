@@ -14,6 +14,7 @@ const COMMAND_MODULE_MAP = Object.freeze({
   rps: 'battle',
   blackjack: 'battle',
   gamenight: 'battle',
+  points: 'verification',
   'og-config': 'verification'
 });
 

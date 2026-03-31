@@ -624,6 +624,82 @@ function initDatabase() {
   `);
   try { db.exec('ALTER TABLE role_panels ADD COLUMN single_select INTEGER DEFAULT 0'); } catch (e) {}
 
+
+  // ── Engagement & Points System (E1-E9) ───────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS points_ledger (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      username TEXT,
+      action_type TEXT NOT NULL,
+      points INTEGER NOT NULL DEFAULT 0,
+      reference_id TEXT,
+      note TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS points_totals (
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      username TEXT,
+      total_points INTEGER NOT NULL DEFAULT 0,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (guild_id, user_id)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS action_cooldowns (
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      action_type TEXT NOT NULL,
+      last_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (guild_id, user_id, action_type)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS shop_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      type TEXT NOT NULL DEFAULT 'role',
+      cost INTEGER NOT NULL DEFAULT 100,
+      role_id TEXT,
+      code_pool TEXT DEFAULT '[]',
+      quantity_remaining INTEGER DEFAULT -1,
+      enabled INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS shop_redemptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      item_id INTEGER NOT NULL REFERENCES shop_items(id),
+      cost INTEGER NOT NULL,
+      fulfilled INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS engagement_config (
+      guild_id TEXT PRIMARY KEY,
+      enabled INTEGER DEFAULT 1,
+      points_message INTEGER DEFAULT 5,
+      points_reaction INTEGER DEFAULT 2,
+      cooldown_message_mins INTEGER DEFAULT 60,
+      cooldown_reaction_daily INTEGER DEFAULT 5,
+      leaderboard_channel TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  // Unique dedup index for ledger
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_ref ON points_ledger (guild_id, user_id, reference_id) WHERE reference_id IS NOT NULL'); } catch (e) {}
+  try { db.exec('ALTER TABLE points_ledger ADD COLUMN expired INTEGER DEFAULT 0'); } catch (e) {}
+
   logger.log('Database initialized successfully');
 }
 

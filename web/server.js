@@ -1574,6 +1574,7 @@ class WebServer {
           try {
             const ogRoleService = require('../services/ogRoleService');
             const ogCfg = ogRoleService.getConfig();
+            logger.log(`[OG-DEBUG] GET /api/admin/settings ogRoleService config: ${JSON.stringify(ogCfg)}`);
             if (ogCfg.roleId) {
               effectiveSettings.ogRoleId = ogCfg.roleId;
               effectiveSettings.ogRoleLimit = ogCfg.limit || 0;
@@ -1691,12 +1692,17 @@ class WebServer {
             // GET fix kicks in); never treat that as an intentional "clear".
             // To disable the OG role, use PUT /api/admin/og-role/config explicitly.
             const submittedOgRoleId = sanitized.ogRoleId;
+            logger.log(`[OG-DEBUG] PUT /api/admin/settings ogRoleId received: "${submittedOgRoleId}" (raw body: "${req.body.ogRoleId}")`);
             if (submittedOgRoleId) {
-              ogRoleService.setRole(submittedOgRoleId);
+              const setResult = ogRoleService.setRole(submittedOgRoleId);
               ogRoleService.setEnabled(true);
+              logger.log(`[OG-DEBUG] ogRoleService.setRole("${submittedOgRoleId}") => ${JSON.stringify(setResult)}`);
+              logger.log(`[OG-DEBUG] og-role.json after save: ${JSON.stringify(ogRoleService.getConfig())}`);
               if (sanitized.ogRoleLimit !== undefined) {
                 ogRoleService.setLimit(sanitized.ogRoleLimit || 1);
               }
+            } else {
+              logger.log(`[OG-DEBUG] ogRoleId was empty/falsy — skipping ogRoleService update. Current config: ${JSON.stringify(ogRoleService.getConfig())}`);
             }
           } catch (e) {
             logger.warn('OG role config sync warning:', e?.message || e);

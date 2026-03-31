@@ -152,36 +152,41 @@ This document outlines the new module-first command architecture for the GuildPi
 
 ---
 
-### 4. BATTLE MODULE
+### 4. MINI-GAMES MODULE
 
 **Module Toggle**: `battleEnabled` (default: `true`)
+**Permission Gate**: All game commands require Moderator or Admin (ManageGuild, ManageMessages, ModerateMembers, or KickMembers).
+**Plan Requirement**: Individual games = Starter (Free). Game Night = Growth+.
 
-#### User Commands (namespace: `/battle`)
+#### Commands
 
-| Old Command | New Command | Notes |
-|------------|-------------|-------|
-| `/battle create` | `/battle create` | Kept in module |
-| `/battle start` | `/battle start` | Kept in module |
-| `/battle cancel` | `/battle cancel` | Kept in module |
-| `/battle stats` | `/battle stats` | Kept in module |
+| Command | Game | Description |
+|---|---|---|
+| `/battle create/start/cancel/stats` | ⚔️ Battle Royale | HP-based lobby, role gating, Elite Four mode |
+| `/higherlower start/cancel` | 🃏 Higher or Lower | Guess higher/lower, wrong = eliminated |
+| `/diceduel start/cancel` | 🎲 Dice Duel | Lowest d6 roll eliminated each round |
+| `/reactionrace start/cancel` | ⚡ Reaction Race | Last to react is eliminated each round |
+| `/numberguess start/cancel` | 🔢 Number Guess | 3 rounds, closest to secret number wins |
+| `/slots start/cancel` | 🎰 Slots | Simultaneous spins, best combo wins |
+| `/trivia start/cancel` | ❓ Trivia | 5 Qs, react 🇦🇧🇨🇩, most correct wins |
+| `/wordscramble start/cancel` | 🧩 Word Scramble | Type unscrambled word first, 5 rounds |
+| `/rps start/cancel` | 🪨 RPS Tournament | Bracket; react 🪨✂️📄 per matchup |
+| `/blackjack start/cancel` | 🎴 Blackjack | Beat dealer; 👆 hit / ✋ stand per turn |
 
-**New structure**:
-```
-/battle create                - Create battle lobby
-/battle start                 - Start battle (creator only)
-/battle cancel                - Cancel battle (creator only)
-/battle stats                 - View battle stats
-```
+All games:
+- React with game emoji to join lobby (join window: 10–120s configurable)
+- Require minimum 2 players to start
+- Gate on `battleEnabled` module toggle
+- Self-register with `services/gameRegistry.js` for lobby join routing
 
 #### Admin Commands (namespace: `/battle admin`)
 
-| Old Command | New Command | Notes |
-|------------|-------------|-------|
-| N/A | `/battle admin list` | New: list all battles |
-| N/A | `/battle admin force-end` | New: emergency end |
-| N/A | `/battle admin settings` | New: configure battle system |
+| Command | Description |
+|---|---|
+| `/battle admin list` | List all active battles |
+| `/battle admin force-end` | Force end a battle (emergency) |
+| `/battle admin settings` | Configure battle parameters |
 
-**New admin structure**:
 ```
 /battle admin list            - List all active battles
 /battle admin force-end       - Force end a battle (emergency)

@@ -114,6 +114,7 @@ module.exports = {
     try {
       const allowed = await moduleGuard.checkModuleEnabled(interaction, 'battle');
       if (!allowed) return;
+      if (!await moduleGuard.checkAdminOrModerator(interaction)) return;
 
       const sub     = interaction.options.getSubcommand();
       const guildId = interaction.guildId;

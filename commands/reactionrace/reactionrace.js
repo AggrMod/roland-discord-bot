@@ -83,6 +83,7 @@ module.exports = {
   async execute(interaction) {
     try {
       if (!await moduleGuard.checkModuleEnabled(interaction, 'battle')) return;
+      if (!await moduleGuard.checkAdminOrModerator(interaction)) return;
       const sub = interaction.options.getSubcommand();
       const { guildId, user, channel } = interaction;
 

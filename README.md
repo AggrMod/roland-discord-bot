@@ -26,13 +26,24 @@ Discord bot for the Solpranos NFT ecosystem featuring wallet verification, DAO g
 - Quorum checking (25% minimum)
 - 7-day voting periods with auto-close
 
-### ⚔️ Battle Lobbies
-- Create and join battle lobbies with community members
-- **Multi-role gating**: Require any of up to 3 roles (OR logic)
-- **Role exclusion**: Block users with any of up to 3 roles (AND logic)
-- Reaction-based joining (⚔️ emoji)
-- Configurable max players and minimum thresholds
-- Real-time participant tracking and lobby updates
+### 🎮 Mini-Games Suite (10 games)
+> All game commands require **Moderator or Admin** permissions.
+> Individual games: **Free**. Game Night orchestration: **Growth+**.
+
+| Game | Command | Type |
+|---|---|---|
+| ⚔️ Battle Royale | `/battle` | HP-based elimination |
+| 🃏 Higher or Lower | `/higherlower` | Card guessing, wrong = out |
+| 🎲 Dice Duel | `/diceduel` | Lowest d6 roll eliminated |
+| ⚡ Reaction Race | `/reactionrace` | Slowest to react is out |
+| 🔢 Number Guess | `/numberguess` | Closest to secret number wins |
+| 🎰 Slots | `/slots` | Best spin combo wins |
+| ❓ Trivia | `/trivia` | Most correct answers wins |
+| 🧩 Word Scramble | `/wordscramble` | First to unscramble wins |
+| 🪨 RPS Tournament | `/rps` | Rock-paper-scissors bracket |
+| 🎴 Blackjack | `/blackjack` | Beat the dealer |
+
+All games use reaction-based lobbies. Players join by reacting with the game emoji.
 
 ### 🎯 Heist Mission System
 - Role-based mission requirements
@@ -111,10 +122,16 @@ Discord bot for the Solpranos NFT ecosystem featuring wallet verification, DAO g
 - `/verification wallets` - View linked wallets and NFT holdings
 - `/verification refresh` - Update roles based on current NFT count
 - `/verification quick` - Quick micro-verification
-- `/battle create` - Create a battle lobby with optional role gating
-- `/battle start` - Start your open battle lobby
-- `/battle cancel` - Cancel your open battle lobby
-- `/battle stats` - View battle statistics and leaderboards
+- `/battle create/start/cancel/stats` - Battle Royale *(mod/admin only)*
+- `/higherlower start/cancel` - 🃏 Higher or Lower *(mod/admin only)*
+- `/diceduel start/cancel` - 🎲 Dice Duel *(mod/admin only)*
+- `/reactionrace start/cancel` - ⚡ Reaction Race *(mod/admin only)*
+- `/numberguess start/cancel` - 🔢 Number Guess *(mod/admin only)*
+- `/slots start/cancel` - 🎰 Slots *(mod/admin only)*
+- `/trivia start/cancel` - ❓ Trivia *(mod/admin only)*
+- `/wordscramble start/cancel` - 🧩 Word Scramble *(mod/admin only)*
+- `/rps start/cancel` - 🪨 RPS Tournament *(mod/admin only)*
+- `/blackjack start/cancel` - 🎴 Blackjack *(mod/admin only)*
 - `/governance propose` - Create a governance proposal
 - `/governance support` - Support a draft proposal
 - `/governance vote` - Vote on an active proposal

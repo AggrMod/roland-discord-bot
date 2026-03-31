@@ -3556,8 +3556,7 @@ async function saveMicroVerifySettings() {
       showError(data.message || 'Failed to save micro-verify settings');
       return;
     }
-    const dbg = data._debug;
-    showSuccess(`Saved ✅ — enabled=${dbg?.saved?.moduleMicroVerifyEnabled}, wallet=${dbg?.saved?.verificationReceiveWallet}`);
+    showSuccess('Micro-verify settings saved ✅');
     await loadSuperadminView();
   } catch (error) {
     showError(`Failed to save micro-verify settings: ${error.message}`);

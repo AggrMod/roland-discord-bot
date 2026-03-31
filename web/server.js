@@ -1067,14 +1067,9 @@ class WebServer {
         for (const key of ALLOWED) {
           if (req.body[key] !== undefined) patch[key] = req.body[key];
         }
-        logger.log(`[GS-DEBUG] PUT /api/superadmin/global-settings patch: ${JSON.stringify(patch)}`);
         const result = settingsManager.updateSettings(patch);
-        logger.log(`[GS-DEBUG] updateSettings result: ${JSON.stringify(result)}`);
         if (!result.success) return res.status(400).json(result);
-
-        // Verify what was actually written
         const afterSave = settingsManager.getSettings();
-        logger.log(`[GS-DEBUG] after save — moduleMicroVerifyEnabled=${afterSave.moduleMicroVerifyEnabled}, receiveWallet="${afterSave.verificationReceiveWallet}"`);
 
         // Sync microVerifyService config overrides in memory
         try {
@@ -1099,7 +1094,7 @@ class WebServer {
         }
 
         logger.log(`[superadmin] global-settings updated by ${req.session?.discordUser?.id}: ${Object.keys(patch).join(', ')}`);
-        res.json({ success: true, message: 'Global settings updated', _debug: { patch, saved: { moduleMicroVerifyEnabled: afterSave.moduleMicroVerifyEnabled, verificationReceiveWallet: !!afterSave.verificationReceiveWallet } } });
+        res.json({ success: true, message: 'Global settings updated' });
       } catch (error) {
         logger.error('Error updating global settings:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });

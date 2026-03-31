@@ -170,11 +170,12 @@ class RoleClaimService {
       const db = require('../database/db');
       
       // Check if role is in the guild's role panels (database-driven, not static config)
+      // Must match the enabled=1 check from rolePanelService.isRoleClaimable
       const panelRole = db.prepare(`
-        SELECT rpr.* FROM role_panel_roles rpr
+        SELECT rpr.role_id FROM role_panel_roles rpr
         JOIN role_panels rp ON rp.id = rpr.panel_id
-        WHERE rp.guild_id = ? AND rpr.role_id = ?
-      `).get(guild.id, roleId);
+        WHERE rpr.role_id = ? AND rpr.enabled = 1 AND rp.guild_id = ?
+      `).get(roleId, guild.id);
       
       if (!panelRole) {
         return { 

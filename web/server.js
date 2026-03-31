@@ -3450,7 +3450,7 @@ class WebServer {
         res.json(result);
       } catch (error) {
         logger.error('Error adding tracked collection:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
+        res.status(500).json({ success: false, message: 'Failed to add tracked collection', detail: error?.message || 'unknown_error' });
       }
     });
 

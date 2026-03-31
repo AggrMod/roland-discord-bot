@@ -45,6 +45,20 @@ Discord bot for the Solpranos NFT ecosystem featuring wallet verification, DAO g
 
 All games use reaction-based lobbies. Players join by reacting with the game emoji.
 
+### 🎉 Game Night (Growth plan)
+Run a full multi-game session in sequence with cross-game scoring.
+
+```
+/gamenight start [join_time:90] [games:trivia,slots,rps,diceduel]
+/gamenight skip          # host skips current game
+/gamenight cancel        # host cancels
+/gamenight leaderboard   # mid-session standings
+```
+
+**Scoring:** 🥇 1st=10pts · 🥈 2nd=7pts · 🥉 3rd=5pts · 4th=3pts · 5th+=1pt
+
+At the end a champion is crowned with total points across all games.
+
 ### 🎯 Heist Mission System
 - Role-based mission requirements
 - NFT assignment and locking

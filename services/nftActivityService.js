@@ -411,7 +411,7 @@ class NFTActivityService {
     const typeUpper = (evt.eventType || 'unknown').toUpperCase();
     const colorMap = {
       MINT: '#57F287',
-      SELL: '#ED4245',
+      SELL: '#57F287',
       LIST: '#FEE75C',
       DELIST: '#5865F2',
       TRANSFER: '#EB459E'

@@ -1,6 +1,9 @@
 # Admin Help (Live Command Reference)
 
-This file mirrors the current module-first command set.
+> **Permission note:** All game & mini-game commands require **Admin or Moderator** permissions.
+> Moderator = any member with Administrator, Manage Server, Manage Messages, Moderate Members, or Kick Members permission.
+
+---
 
 ## Verification
 - `/verification status`
@@ -19,39 +22,14 @@ This file mirrors the current module-first command set.
 - `/treasury view`
 - Admin: `/treasury admin status|refresh|enable|disable|set-wallet|set-interval|tx-history|tx-alerts`
 
-## Mini-Games 🎮
+---
 
-> **All game commands require Moderator or Admin permissions.**
-> Individual games are available on the **Starter (Free)** plan.
-> Game Night orchestration requires **Growth** plan or higher.
+## Battle ⚔️
+> **Admin/Mod only**
 
-### Standalone Games
-
-| Command | Game | How it works |
-|---|---|---|
-| `/battle create/start/cancel` | ⚔️ Battle Royale | Players fight in rounds, HP-based elimination |
-| `/higherlower start/cancel` | 🃏 Higher or Lower | Guess if next card is higher or lower — wrong = out |
-| `/diceduel start/cancel` | 🎲 Dice Duel | Lowest 🎲 roll each round is eliminated |
-| `/reactionrace start/cancel` | ⚡ Reaction Race | React fastest to survive — slowest is out |
-| `/numberguess start/cancel` | 🔢 Number Guess | Type closest to the secret number (3 rounds) |
-| `/slots start/cancel` | 🎰 Slots | Everyone spins simultaneously — best combo wins |
-| `/trivia start/cancel` | ❓ Trivia | 5 questions, react 🇦🇧🇨🇩 — most correct wins |
-| `/wordscramble start/cancel` | 🧩 Word Scramble | Type the unscrambled word first (5 rounds) |
-| `/rps start/cancel` | 🪨 RPS Tournament | Bracket — react 🪨✂️📄 per matchup |
-| `/blackjack start/cancel` | 🎴 Blackjack | Beat the dealer — 👆 hit / ✋ stand |
-
-### Options (all games)
-- `join_time` — Lobby gather time in seconds (10–120, default 60 or 45 for Slots)
-
-### Game Night (Growth+ only)
-- `/gamenight start [games]` — Launch a full multi-game rotation *(coming soon)*
-- `/gamenight skip` — Skip the current game *(coming soon)*
-- `/gamenight end` — End Game Night session *(coming soon)*
-
-### Battle Details
-- `/battle create` — Create battle lobby (optional: role gating, max players) **[Admins/Mods only]**
-- `/battle start` — Start your open lobby (requires min players) **[Admins/Mods only]**
-- `/battle cancel` — Cancel your open lobby (updates lobby message + removes reactions)
+- `/battle create` — Create battle lobby (optional: role gating, max players)
+- `/battle start` — Start your open lobby (requires min players)
+- `/battle cancel` — Cancel your open lobby
 - `/battle stats` — Show battle stats and leaderboards
 - Admin: `/battle admin list|force-end|settings`
 
@@ -61,35 +39,97 @@ When creating a lobby, you can gate participation:
 **Required Roles (ANY Logic):**
 - `required_role_1`, `required_role_2`, `required_role_3`
 - User must have **at least ONE** of these roles to join
-- If not met: user is blocked with DM notification
 
 **Excluded Roles (NONE Logic):**
 - `excluded_role_1`, `excluded_role_2`, `excluded_role_3`
 - User **cannot have ANY** of these roles
-- If found: reaction removed, user sent DM
 
 **Example:**
 ```
-/battle create max_players:10 required_role_1:@Member required_role_2:@Supporter excluded_role_1:@Bot excluded_role_2:@Muted
+/battle create max_players:10 required_role_1:@Member excluded_role_1:@Muted
 ```
 
-Users with @Member OR @Supporter can join, but NOT @Bot or @Muted holders.
+**Elite Four Mode (Auto):** Activates when 4 players remain — all reset to 100 HP, increased drama.
 
-**Channel Rule:**
-- Only one active battle per channel at a time (`open` or `in_progress`).
+---
 
-**Elite Four Mode (Auto):**
-- Activates when 4 players remain
-- All 4 reset to 100 HP
-- Lucky escapes/revivals disabled
-- Increased combat intensity + narrative drama
+## Mini-Games 🎮
+> **Admin/Mod only to start** — Anyone can join by reacting
+> Individual games: **free on all plans**
+> Game Night (multi-game sessions): **Growth plan minimum**
 
-## Heist
+### 🃏 Higher or Lower
+- `/higherlower start [join_time]` — Card game: is the next card higher or lower?
+- `/higherlower cancel` — Cancel lobby (host only)
+- Players react ⬆️ (Higher) or ⬇️ (Lower) each round. Wrong guess = eliminated. Last player wins.
+- Ace = highest card (14). Ties = everyone survives.
+
+### 🎲 Dice Duel
+- `/diceduel start [join_time]` — Everyone rolls a d6 each round. Lowest roll is eliminated.
+- `/diceduel cancel` — Cancel lobby (host only)
+- Ties at the bottom → tiebreaker roll. Last player standing wins.
+
+### ⚡ Reaction Race
+- `/reactionrace start [join_time]` — React ⚡ as fast as possible each round. Slowest is eliminated.
+- `/reactionrace cancel` — Cancel lobby (host only)
+- Random delay before GO signal. Last to react (or doesn't react) is eliminated.
+
+### 🔢 Number Guess
+- `/numberguess start [join_time]` — Type a number 1–100 in chat. Closest to the secret number wins the round.
+- `/numberguess cancel` — Cancel lobby (host only)
+- 3 rounds. Most points accumulated wins overall.
+
+### 🎰 Slots
+- `/slots start [join_time]` — Everyone spins simultaneously. Highest combo wins.
+- `/slots cancel` — Cancel lobby (host only)
+- Combos: 3-of-a-kind 💎 > 3-of-a-kind 🍒 > pairs > mixed. Ties = shared win.
+
+### ❓ Trivia
+- `/trivia start [join_time]` — 5 questions from a 30-item bank. React 🇦🇧🇨🇩 to answer.
+- `/trivia cancel` — Cancel lobby (host only)
+- 20 seconds per question. Most correct answers wins.
+
+### 🧩 Word Scramble
+- `/wordscramble start [join_time]` — Unscramble the word by typing it in chat. First correct answer wins the round.
+- `/wordscramble cancel` — Cancel lobby (host only)
+- 5 rounds, 30 seconds each. Most rounds won wins.
+
+### 🪨 RPS Tournament
+- `/rps start [join_time]` — Rock Paper Scissors bracket tournament.
+- `/rps cancel` — Cancel lobby (host only)
+- Random bracket matchups each round. React 🪨✂️📄. Loser eliminated. Ties → both survive and re-match. Last one wins.
+
+### 🎴 Blackjack
+- `/blackjack start [join_time]` — Everyone plays against the dealer. Get closest to 21 without busting.
+- `/blackjack cancel` — Cancel lobby (host only)
+- React 👆 Hit or ✋ Stand. Ace = 11 or 1. Dealer hits until 17+. All who beat the dealer win.
+
+---
+
+## Heist 🎯
 - `/heist view|signup|status`
 - Admin: `/heist admin create|list|cancel`
 - Note: module disabled by default.
 
-## Config
-- `/config modules`
-- `/config toggle`
-- `/config status`
+---
+
+## Config ⚙️
+- `/config modules` — View all module toggle states
+- `/config toggle` — Toggle a module on or off (verification/governance/treasury/battle/heist)
+- `/config status` — System status overview (uptime, memory, guilds)
+
+---
+
+## Plans Summary
+
+| Feature | Starter (Free) | Growth ($14/mo) | Pro ($34/mo) |
+|---|---|---|---|
+| Verification | ✅ | ✅ | ✅ |
+| Governance | ✅ | ✅ | ✅ |
+| Treasury | ✅ (3 wallets) | ✅ (25 wallets) | ✅ (unlimited) |
+| All 10 mini-games | ✅ | ✅ | ✅ |
+| Game Night orchestration | ✕ | ✅ | ✅ |
+| Trait-based roles | ✕ | ✅ | ✅ |
+| Custom branding | ✕ | ✅ | ✅ |
+| Multi-server | ✕ | ✕ | ✅ |
+| Engagement & points | ✕ | ✕ | ✅ |

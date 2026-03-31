@@ -3622,7 +3622,7 @@ async function loadAdminHelpView() {
   const content = document.getElementById('adminHelpContent');
   if (!content) return;
 
-  const cmdSection = (title, icon, commands) => {
+  const cmdSection = (title, icon, commands, note) => {
     const rows = commands.map(c => `
       <tr>
         <td style="padding:8px 10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#c7d2fe; font-family:monospace; font-size:0.85em; white-space:nowrap;">${escapeHtml(c.name)}</td>
@@ -3642,7 +3642,8 @@ async function loadAdminHelpView() {
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
-      </div>`;
+      </div>
+      ${note ? `<div style="margin:-12px 0 16px;padding:7px 12px;border-radius:0 0 10px 10px;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.12);border-top:none;color:#94a3b8;font-size:0.8em;">ℹ️ ${note}</div>` : ''}`;
   };
 
   content.innerHTML = `
@@ -3714,7 +3715,7 @@ async function loadAdminHelpView() {
       { name: '/rps cancel', desc: 'Cancel RPS Tournament', options: '—', example: '/rps cancel' },
       { name: '/blackjack start', desc: '🎴 Blackjack — beat the dealer, react 👆 hit / ✋ stand (mod/admin only)', options: 'join_time (10–120s, default 60)', example: '/blackjack start' },
       { name: '/blackjack cancel', desc: 'Cancel Blackjack table', options: '—', example: '/blackjack cancel' }
-    ])}
+    ], '🔒 Admin/Mod only to start · Games: free on all plans · Game Night: Growth plan+')}
     ${cmdSection('Heist', '🎯', [
       { name: '/heist view', desc: 'View available heist missions', options: '—', example: '/heist view' },
       { name: '/heist signup', desc: 'Sign up for a heist mission', options: 'mission_id (required), role (required: driver/hacker/muscle/lookout)', example: '/heist signup mission_id:H-001 role:hacker' },

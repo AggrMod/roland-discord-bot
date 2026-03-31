@@ -1567,7 +1567,22 @@ class WebServer {
           // Tell the frontend which module keys are actually assigned (exist in tenant_modules)
           effectiveSettings.assignedModuleKeys = Object.keys(tenantContext.modules);
         }
-        
+
+        // Single-tenant: ogRoleId lives in og-role.json (ogRoleService), not settings.json.
+        // Overlay it here so the portal form always shows the correct persisted value.
+        if (!multiTenantEnabled) {
+          try {
+            const ogRoleService = require('../services/ogRoleService');
+            const ogCfg = ogRoleService.getConfig();
+            if (ogCfg.roleId) {
+              effectiveSettings.ogRoleId = ogCfg.roleId;
+              effectiveSettings.ogRoleLimit = ogCfg.limit || 0;
+            }
+          } catch (e) {
+            logger.warn('OG role config read warning:', e?.message || e);
+          }
+        }
+
         res.json({ success: true, settings: effectiveSettings });
       } catch (error) {
         logger.error('Error fetching settings:', error);
@@ -1676,17 +1691,22 @@ class WebServer {
         if (!tenantService.isMultitenantEnabled() || !req.guildId) {
           try {
             const ogRoleService = require('../services/ogRoleService');
-            const fresh = settingsManager.getSettings();
-            if (fresh.ogRoleId !== undefined) {
-              if (fresh.ogRoleId) {
-                ogRoleService.setRole(fresh.ogRoleId);
-                ogRoleService.setEnabled(true);
-              } else {
-                ogRoleService.setEnabled(false);
+            // Only sync ogRoleService when a non-empty ogRoleId was explicitly submitted.
+            // An empty string just means the user didn't change it (or the form defaulted
+            // to blank); do NOT disable the OG role in that case.
+            const submittedOgRoleId = sanitized.ogRoleId;
+            if (submittedOgRoleId) {
+              ogRoleService.setRole(submittedOgRoleId);
+              ogRoleService.setEnabled(true);
+              if (sanitized.ogRoleLimit !== undefined) {
+                ogRoleService.setLimit(sanitized.ogRoleLimit || 1);
               }
             }
-            if (fresh.ogRoleLimit !== undefined) {
-              ogRoleService.setLimit(fresh.ogRoleLimit || 1);
+            // Explicit clear: only disable if ogRoleId key was sent AND is empty AND
+            // the request body had no prior non-empty value (user explicitly cleared it).
+            // We check req.body directly to distinguish "not sent" from "sent as empty".
+            if (req.body.ogRoleId === '' && !submittedOgRoleId) {
+              ogRoleService.setEnabled(false);
             }
           } catch (e) {
             logger.warn('OG role config sync warning:', e?.message || e);

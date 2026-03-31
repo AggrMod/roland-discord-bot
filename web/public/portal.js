@@ -4408,7 +4408,7 @@ async function loadNftTrackerView() {
     const wrap = document.getElementById('nftCollectionsTableWrap');
     if (!wrap) return;
     try {
-      const res = await fetch('/api/admin/nft-tracker/collections', { credentials: 'include' });
+      const res = await fetch('/api/admin/nft-tracker/collections', { credentials: 'include', headers: buildTenantRequestHeaders() });
       const data = await res.json();
       const collections = data.collections || [];
       if (!collections.length) {
@@ -5206,9 +5206,10 @@ async function loadNftTrackerSettingsView() {
 
   try {
     // Fetch channels + collections in parallel
+    const tenantHeaders = buildTenantRequestHeaders();
     const [chRes, colRes] = await Promise.all([
-      fetch('/api/admin/discord/channels', { credentials: 'include' }),
-      fetch('/api/admin/nft-tracker/collections', { credentials: 'include' }),
+      fetch('/api/admin/discord/channels', { credentials: 'include', headers: tenantHeaders }),
+      fetch('/api/admin/nft-tracker/collections', { credentials: 'include', headers: tenantHeaders }),
     ]);
     const channels = chRes.ok ? ((await chRes.json()).channels || []) : [];
     const colData = colRes.ok ? await colRes.json() : {};
@@ -5307,7 +5308,7 @@ async function loadNftTrackerSettingsView() {
       try {
         const r = await fetch('/api/admin/nft-tracker/collections', {
           method: 'POST', credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
           body: JSON.stringify({
             collectionName: name, collectionAddress: addr, channelId: chId,
             meSymbol: document.getElementById('nts_addMe')?.value.trim() || '',
@@ -5378,7 +5379,7 @@ async function loadNftTrackerSettingsView() {
           try {
             const r = await fetch('/api/admin/nft-tracker/collections/' + btn.dataset.id, {
               method: 'PUT', credentials: 'include',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
               body: JSON.stringify({
                 collectionName: document.getElementById('nftEditName').value.trim(),
                 channelId: document.getElementById('nftEditChannel').value,
@@ -5404,7 +5405,7 @@ async function loadNftTrackerSettingsView() {
         if (!confirm('Remove this tracked collection?')) return;
         btn.disabled = true;
         try {
-          await fetch('/api/admin/nft-tracker/collections/' + btn.dataset.id, { method: 'DELETE', credentials: 'include' });
+          await fetch('/api/admin/nft-tracker/collections/' + btn.dataset.id, { method: 'DELETE', credentials: 'include', headers: buildTenantRequestHeaders() });
           loadNftTrackerSettingsView();
         } catch { btn.disabled = false; }
       });
@@ -6471,7 +6472,7 @@ async function loadNFTActivityView() {
         ? fetch('/api/admin/nft-activity/events?limit=20', { credentials: 'include', headers: buildTenantRequestHeaders() })
         : fetch('/api/public/v1/nft/activity?limit=20', { credentials: 'include' })
       ).catch(() => null),
-      isAdmin ? fetch('/api/admin/nft-tracker/collections', { credentials: 'include' }).catch(() => null) : Promise.resolve(null)
+      isAdmin ? fetch('/api/admin/nft-tracker/collections', { credentials: 'include', headers: buildTenantRequestHeaders() }).catch(() => null) : Promise.resolve(null)
     ]);
 
     const activityData = activityRes ? await activityRes.json() : {};
@@ -6789,7 +6790,7 @@ async function legacyLoadNFTActivityView() {
   try {
     const [activityRes, collectionsRes] = await Promise.all([
       fetch('/api/public/v1/nft/activity?limit=20', { credentials: 'include' }).catch(() => null),
-      isAdmin ? fetch('/api/admin/nft-tracker/collections', { credentials: 'include' }).catch(() => null) : Promise.resolve(null)
+      isAdmin ? fetch('/api/admin/nft-tracker/collections', { credentials: 'include', headers: buildTenantRequestHeaders() }).catch(() => null) : Promise.resolve(null)
     ]);
 
     const activityData = activityRes ? await activityRes.json() : {};
@@ -6847,7 +6848,7 @@ async function loadNFTActivityAdminView(preloadedCollections = null) {
   try {
     let collections = preloadedCollections;
     if (!collections) {
-      const response = await fetch('/api/admin/nft-tracker/collections', { credentials: 'include' });
+      const response = await fetch('/api/admin/nft-tracker/collections', { credentials: 'include', headers: buildTenantRequestHeaders() });
       const data = await response.json();
       collections = data.success ? (data.collections || []) : [];
     }
@@ -6935,7 +6936,7 @@ async function openEditCollectionModal(id, name, addr, meSymbol, channelId) {
   // Populate channel dropdown
   const sel = document.getElementById('ceChannelInput');
   try {
-    const chRes = await fetch('/api/admin/discord/channels', { credentials: 'include' });
+    const chRes = await fetch('/api/admin/discord/channels', { credentials: 'include', headers: buildTenantRequestHeaders() });
     if (chRes.ok) {
       const chData = await chRes.json();
       const channels = chData.channels || [];
@@ -6964,7 +6965,7 @@ async function openEditCollectionModal(id, name, addr, meSymbol, channelId) {
     try {
       const res = await fetch(`/api/admin/nft-tracker/collections/${encodeURIComponent(id)}`, {
         method: 'PUT', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
         body: JSON.stringify({ collectionName: newName, channelId: newChannel, meSymbol: newMe })
       });
       const data = await res.json();
@@ -7021,7 +7022,7 @@ async function openAddCollectionModal() {
   // Populate channel dropdown
   const sel = document.getElementById('caChannelInput');
   try {
-    const chRes = await fetch('/api/admin/discord/channels', { credentials: 'include' });
+    const chRes = await fetch('/api/admin/discord/channels', { credentials: 'include', headers: buildTenantRequestHeaders() });
     if (chRes.ok) {
       const chData = await chRes.json();
       const channels = chData.channels || [];
@@ -7049,7 +7050,7 @@ async function openAddCollectionModal() {
     try {
       const res = await fetch('/api/admin/nft-tracker/collections', {
         method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
         body: JSON.stringify({
           collectionAddress: addr, collectionName: name, channelId: chId,
           meSymbol: document.getElementById('caMeInput').value.trim(),
@@ -7082,7 +7083,8 @@ async function removeWatchedCollection(id, collectionName) {
       try {
         const response = await fetch(`/api/admin/nft-tracker/collections/${encodeURIComponent(id)}`, {
           method: 'DELETE',
-          credentials: 'include'
+          credentials: 'include',
+          headers: buildTenantRequestHeaders()
         });
         const data = await response.json();
         if (data.success) {

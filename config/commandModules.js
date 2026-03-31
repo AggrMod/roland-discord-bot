@@ -5,6 +5,7 @@ const COMMAND_MODULE_MAP = Object.freeze({
   battle: 'battle',
   heist: 'heist',
   higherlower: 'battle',
+  diceduel: 'battle',
   'og-config': 'verification'
 });
 

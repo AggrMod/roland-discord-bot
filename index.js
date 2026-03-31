@@ -1169,6 +1169,20 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
       }
     }
 
+    // ── Dice Duel: lobby join ───────────────────────────────────────────────
+    const ddService = require('./services/diceDuelService');
+    if (emojiName === ddService.JOIN_EMOJI) {
+      const ddGame = ddService.getGameByLobby(reaction.message.id);
+      if (ddGame && ddGame.status === 'waiting') {
+        const r = ddService.addPlayer(reaction.message.id, user.id);
+        if (r.success) {
+          try {
+            await reaction.message.edit({ embeds: [ddService.buildLobbyEmbed(ddGame, reaction.message.guildId)] });
+          } catch (e) { logger.error('[DiceDuel] lobby update error:', e); }
+        }
+      }
+    }
+
     // ── Higher or Lower: lobby join ─────────────────────────────────────────
     const hlService = require('./services/higherLowerService');
     const emojiName = reaction.emoji.name;
@@ -1265,6 +1279,20 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
       } catch (error) {
         logger.error('Failed to fetch reaction:', error);
         return;
+      }
+    }
+
+    // ── Dice Duel: lobby leave ──────────────────────────────────────────────
+    const ddService = require('./services/diceDuelService');
+    if (reaction.emoji.name === ddService.JOIN_EMOJI) {
+      const ddGame = ddService.getGameByLobby(reaction.message.id);
+      if (ddGame && ddGame.status === 'waiting') {
+        const r = ddService.removePlayer(reaction.message.id, user.id);
+        if (r.success) {
+          try {
+            await reaction.message.edit({ embeds: [ddService.buildLobbyEmbed(ddGame, reaction.message.guildId)] });
+          } catch (_) {}
+        }
       }
     }
 

@@ -8460,48 +8460,73 @@ function safeJsonArray(value) {
 }
 
 // ── Plans ──────────────────────────────────────────────
+// feature: { label, included: true/false/'partial', note? }
 const PLAN_CATALOG = [
   {
     id: "free",
-    name: "Free",
+    name: "Starter",
+    tagline: "Perfect for small communities getting started",
     monthlyPrice: 0,
+    color: "#64748b",
     features: [
-      "1 Discord server",
-      "Basic verification",
-      "Up to 3 wallet trackers",
-      "Community governance",
-      "Standard support",
+      { label: "1 Discord server", included: true },
+      { label: "Solana wallet verification", included: true },
+      { label: "Up to 5 verification roles", included: true },
+      { label: "Up to 3 treasury wallets", included: true },
+      { label: "Governance & proposals", included: true },
+      { label: "Battle & Heist modules", included: true },
+      { label: "NFT activity feed", included: true },
+      { label: "Trait-based roles", included: false },
+      { label: "Custom branding", included: false },
+      { label: "Multi-server (multi-tenant)", included: false },
+      { label: "Engagement & points system", included: false },
     ],
-    cta: "Current Plan",
-    ctaDisabled: true,
+    cta: "Get Started Free",
+    ctaAction: "signup_free",
   },
   {
-    id: "plus",
-    name: "Plus",
-    monthlyPrice: 15,
+    id: "growth",
+    name: "Growth",
+    tagline: "Everything you need to run a thriving community",
+    monthlyPrice: 14,
     popular: true,
+    color: "#6366f1",
     features: [
-      "1 Discord server",
-      "Advanced verification + traits",
-      "Up to 50 wallet trackers",
-      "NFT activity alerts",
-      "Battle module",
-      "Priority support",
+      { label: "1 Discord server", included: true },
+      { label: "Solana wallet verification", included: true },
+      { label: "Unlimited verification roles", included: true },
+      { label: "Up to 25 treasury wallets", included: true },
+      { label: "Governance & proposals", included: true },
+      { label: "Battle & Heist modules", included: true },
+      { label: "NFT activity feed + Helius webhooks", included: true },
+      { label: "Trait-based roles", included: true },
+      { label: "Custom branding (logo, colors)", included: true },
+      { label: "Self-serve roles & ticketing", included: true },
+      { label: "Multi-server (multi-tenant)", included: false },
+      { label: "Engagement & points system", included: false },
     ],
-    cta: "Upgrade to Plus",
-    ctaAction: "upgrade_plus",
+    cta: "Upgrade to Growth",
+    ctaAction: "upgrade_growth",
   },
   {
     id: "pro",
     name: "Pro",
-    monthlyPrice: 30,
+    tagline: "For serious projects that need the full stack",
+    monthlyPrice: 34,
+    color: "#f59e0b",
     features: [
-      "Up to 3 Discord servers",
-      "Everything in Plus",
-      "Unlimited wallet trackers",
-      "Snapshot exports",
-      "Custom branding",
-      "Dedicated support",
+      { label: "Up to 5 Discord servers", included: true },
+      { label: "Solana + EVM wallet verification", included: true },
+      { label: "Unlimited verification roles", included: true },
+      { label: "Unlimited treasury wallets", included: true },
+      { label: "Governance & proposals", included: true },
+      { label: "Battle & Heist modules", included: true },
+      { label: "NFT activity feed + Helius webhooks", included: true },
+      { label: "Trait-based roles", included: true },
+      { label: "Custom branding (logo, colors)", included: true },
+      { label: "Self-serve roles & ticketing", included: true },
+      { label: "Multi-server (multi-tenant)", included: true },
+      { label: "Engagement & points system", included: true },
     ],
     cta: "Upgrade to Pro",
     ctaAction: "upgrade_pro",
@@ -8514,17 +8539,33 @@ function updatePlanPrices() {
   if (!grid) return;
 
   grid.innerHTML = PLAN_CATALOG.map(plan => {
-    const price = annual ? Math.round(plan.monthlyPrice * 0.85) : plan.monthlyPrice;
-    const period = plan.monthlyPrice === 0 ? "" : annual ? "/mo, billed annually" : "/month";
+    const price = annual ? (plan.monthlyPrice === 0 ? 0 : (plan.monthlyPrice * 0.85).toFixed(0)) : plan.monthlyPrice;
+    const annualTotal = annual && plan.monthlyPrice > 0 ? `$${(plan.monthlyPrice * 0.85 * 12).toFixed(0)}/yr` : '';
+    const period = plan.monthlyPrice === 0 ? '' : annual ? '/mo' : '/month';
+    const accentColor = plan.color || '#6366f1';
+
+    const featureRows = plan.features.map(f => {
+      const included = f.included === true;
+      const icon = included
+        ? `<span style="color:#4ade80;font-size:1em;line-height:1;flex-shrink:0;">✓</span>`
+        : `<span style="color:rgba(148,163,184,0.35);font-size:1em;line-height:1;flex-shrink:0;">✕</span>`;
+      return `<li style="opacity:${included ? '1' : '0.5'};">${icon}<span>${escapeHtml(f.label)}</span></li>`;
+    }).join('');
+
     return `
-      <div class="plan-card ${plan.popular ? 'popular' : ''}">
-        <div class="plan-name">${plan.name}</div>
-        <div class="plan-price">$${price}<span>${period}</span></div>
-        <ul class="plan-features">
-          ${plan.features.map(f => `<li>${escapeHtml(f)}</li>`).join('')}
-        </ul>
+      <div class="plan-card ${plan.popular ? 'popular' : ''}" style="--plan-accent:${accentColor};">
+        <div class="plan-header">
+          <div class="plan-name" style="color:${accentColor};">${escapeHtml(plan.name)}</div>
+          <div class="plan-tagline">${escapeHtml(plan.tagline)}</div>
+          <div class="plan-price">
+            <span class="plan-price-amount">$${price}</span>
+            <span class="plan-price-period">${period}</span>
+          </div>
+          ${annualTotal ? `<div class="plan-annual-note">Billed as ${annualTotal} · Save 15%</div>` : ''}
+        </div>
+        <ul class="plan-features">${featureRows}</ul>
         <div class="plan-cta">
-          <button class="btn-primary" style="width:100%;"
+          <button class="${plan.popular ? 'btn-primary' : 'btn-secondary'}" style="width:100%;${plan.popular ? '' : `border-color:${accentColor}33;color:${accentColor};`}"
             ${plan.ctaDisabled ? 'disabled' : ''}
             onclick="handlePlanCta('${plan.ctaAction || ''}')">
             ${escapeHtml(plan.cta)}

@@ -1877,7 +1877,7 @@ function renderWalletTableFromConfig(config, treasury) {
 
   container.innerHTML = `
     <div class="card" style="overflow-x:auto;">
-      <table class="data-table">
+      <div class="data-table-wrap"><table class="data-table">
         <thead>
           <tr>
             <th>Address</th>
@@ -1902,7 +1902,7 @@ function renderWalletTableFromConfig(config, treasury) {
             ${isAdmin ? `<td>${actionsHtml}</td>` : ''}
           </tr>
         </tbody>
-      </table>
+      </table></div>
     </div>
   `;
 }
@@ -8631,10 +8631,10 @@ async function loadSystemStatus() {
 
       <h4 style="margin-bottom:12px;color:var(--text-secondary);font-size:0.85em;text-transform:uppercase;letter-spacing:0.05em;">PM2 Processes</h4>
       <div style="overflow-x:auto;">
-        <table class="data-table">
+        <div class="data-table-wrap"><table class="data-table">
           <thead><tr><th>Name</th><th>Status</th><th>Uptime</th><th>Restarts</th><th>Memory</th><th>CPU</th></tr></thead>
           <tbody>${pm2Rows}</tbody>
-        </table>
+        </table></div>
       </div>
       <div style="color:var(--text-secondary);font-size:0.75em;margin-top:8px;text-align:right;">Last updated: ${new Date(d.timestamp).toLocaleTimeString()}</div>
     `;

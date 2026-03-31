@@ -1955,6 +1955,111 @@ body {
   }
 }
 
+/* ==================== ADMIN / SUPERADMIN MOBILE ==================== */
+@media (max-width: 768px) {
+  /* Settings tabs: shrink padding, allow wrapping */
+  .settings-tabs {
+    gap: 2px;
+  }
+  .settings-tab {
+    padding: 8px 12px;
+    font-size: 0.8em;
+  }
+
+  /* Card padding tighter in admin panels */
+  #adminSuperadminContent .card,
+  #adminSuperadminContent [style*="padding:14px"] {
+    padding: 12px !important;
+  }
+
+  /* Superadmin add-admin input row: stack input + button */
+  #superadminSection-superadminsInput {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Chain emoji map: 2 columns instead of 4+ */
+  #superadminSection-chainEmojis [style*="repeat(auto-fit,minmax(220px"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Micro-verify TTL/poll row: stack vertically */
+  #superadminSection-microVerify [style*="grid-template-columns:1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Tenant search row: stack all 3 controls */
+  #superadminSection-tenants [style*="minmax(240px,0.45fr)"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Tenant list header row: hide Plan/Status/Modules columns, show Name only */
+  #superadminSection-tenants [style*="minmax(0,1.6fr) repeat(3"] {
+    grid-template-columns: 1fr auto !important;
+  }
+  #superadminSection-tenants [style*="minmax(0,1.6fr) repeat(3"] > *:nth-child(n+3) {
+    display: none !important;
+  }
+
+  /* Tenant row items */
+  #superadminSection-tenants button[style*="grid-template-columns:minmax(0,1.6fr)"] {
+    grid-template-columns: 1fr auto !important;
+  }
+  #superadminSection-tenants button[style*="grid-template-columns:minmax(0,1.6fr)"] > *:nth-child(n+3) {
+    display: none !important;
+  }
+
+  /* Tenant detail: overview 2-col → 1-col */
+  #tenantDetail-overview {
+    grid-template-columns: 1fr !important;
+  }
+  #tenantDetail-controls {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Era table: 4-col → compact 2-col */
+  #superadminSection-eras [style*="minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) auto"] {
+    grid-template-columns: 1fr auto !important;
+  }
+  #superadminSection-eras [style*="minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) auto"] > *:nth-child(2),
+  #superadminSection-eras [style*="minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) auto"] > *:nth-child(3) {
+    display: none !important;
+  }
+
+  /* Replay TX row: stack */
+  #superadminSection-chainEmojis [style*="grid-template-columns:minmax(0,1fr) auto"] {
+    grid-template-columns: 1fr !important;
+  }
+  #superadminSection-chainEmojis [style*="grid-template-columns:minmax(0,1fr) auto"] > button {
+    width: 100%;
+  }
+
+  /* Action button rows: wrap */
+  #adminSuperadminContent [style*="display:flex"][style*="justify-content:space-between"] {
+    flex-wrap: wrap;
+    gap: 8px !important;
+  }
+
+  /* Pagination row */
+  #adminSuperadminContent [style*="justify-content:space-between"][style*="align-items:center"] {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+
+  /* Save/Reset button rows: full width on mobile */
+  #superadminSection-microVerify [style*="justify-content:flex-end"],
+  #superadminSection-chainEmojis [style*="justify-content:flex-end"],
+  #superadminSection-tenants [style*="justify-content:flex-end"] {
+    justify-content: stretch !important;
+    flex-direction: column !important;
+  }
+  #superadminSection-microVerify [style*="justify-content:flex-end"] button,
+  #superadminSection-chainEmojis [style*="justify-content:flex-end"] button,
+  #superadminSection-tenants [style*="justify-content:flex-end"] button {
+    width: 100% !important;
+  }
+}
+
 /* ==================== ACCESSIBILITY ==================== */
 .sr-only {
   position: absolute;

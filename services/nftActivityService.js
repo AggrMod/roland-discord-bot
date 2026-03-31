@@ -31,46 +31,54 @@ function getChainPriceMeta(chainRaw) {
 }
 
 class NFTActivityService {
-  async resolveTokenName(tokenMint) {
-    if (!tokenMint) return null;
+  async resolveTokenAssetMeta(tokenMint) {
+    if (!tokenMint) return { name: null, image: null };
 
-    // 1) Reuse a previously seen readable name from DB if available
+    // 1) Reuse a previously seen readable name/image from DB if available
     try {
       const row = db.prepare(`
-        SELECT token_name
+        SELECT token_name, raw_json
         FROM nft_activity_events
         WHERE LOWER(token_mint) = LOWER(?)
-          AND token_name IS NOT NULL
-          AND LENGTH(TRIM(token_name)) > 0
         ORDER BY datetime(created_at) DESC
         LIMIT 1
       `).get(tokenMint);
-      const cached = String(row?.token_name || '').trim();
-      if (cached && !/^[A-Za-z0-9]{32,}$/.test(cached)) return cached;
+
+      const cachedName = String(row?.token_name || '').trim();
+      let cachedImage = null;
+      try {
+        const raw = row?.raw_json ? JSON.parse(row.raw_json) : null;
+        cachedImage = raw?.imageUrl || raw?.image || raw?.content?.files?.[0]?.uri || null;
+      } catch {}
+
+      if (cachedName && !/^[A-Za-z0-9]{32,}$/.test(cachedName)) {
+        return { name: cachedName, image: cachedImage };
+      }
     } catch {}
 
-    // 2) Helius DAS fallback for proper collection/item number naming
+    // 2) Helius DAS fallback for proper metadata naming/image
     try {
       const heliusKey = process.env.HELIUS_API_KEY;
-      if (!heliusKey) return null;
+      if (!heliusKey) return { name: null, image: null };
       const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`;
       const res = await fetch(rpcUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           jsonrpc: '2.0',
-          id: 'gp-token-name',
+          id: 'gp-token-asset',
           method: 'getAsset',
           params: { id: tokenMint },
         }),
       });
-      if (!res.ok) return null;
+      if (!res.ok) return { name: null, image: null };
       const data = await res.json();
-      const name = String(data?.result?.content?.metadata?.name || '').trim();
-      if (name && !/^[A-Za-z0-9]{32,}$/.test(name)) return name;
+      const name = String(data?.result?.content?.metadata?.name || '').trim() || null;
+      const image = data?.result?.content?.files?.[0]?.uri || data?.result?.content?.links?.image || null;
+      return { name, image };
     } catch {}
 
-    return null;
+    return { name: null, image: null };
   }
 
   getAlertConfig() {
@@ -451,7 +459,9 @@ class NFTActivityService {
     if (meLink) buttons.push(new ButtonBuilder().setLabel('Magic Eden').setURL(meLink).setStyle(ButtonStyle.Link).setEmoji('🌊'));
     const components = buttons.length ? [new ActionRowBuilder().addComponents(...buttons)] : [];
 
-    const resolvedTokenName = await this.resolveTokenName(evt.tokenMint);
+    const resolvedMeta = await this.resolveTokenAssetMeta(evt.tokenMint);
+    const resolvedTokenName = resolvedMeta?.name || null;
+    const resolvedTokenImage = resolvedMeta?.image || null;
 
     for (const target of targetRows) {
       const channel = await client.channels.fetch(target.channel_id).catch(() => null);
@@ -509,7 +519,8 @@ class NFTActivityService {
         useThumbnail: false,
       });
 
-      if (evt.imageUrl) embed.setThumbnail(evt.imageUrl);
+      const tokenImage = evt.imageUrl || resolvedTokenImage;
+      if (tokenImage) embed.setThumbnail(tokenImage);
       if (explorer) embed.setURL(explorer);
 
       try {

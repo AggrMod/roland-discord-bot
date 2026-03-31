@@ -5195,7 +5195,7 @@ async function saveTreasuryModuleSettings() {
 
 async function loadNftTrackerSettingsView() {
   if (!isAdmin) return;
-  const pane = document.getElementById('settingsTab-nfttracker');
+  const pane = document.getElementById('settingsTab-nfttracker') || document.getElementById('nftActivityTrackerSettingsPanel');
   if (!pane) return;
 
   const cardStyle = 'background:rgba(14,23,44,0.5);border:1px solid rgba(99,102,241,0.22);border-radius:10px;padding:var(--space-5);margin-bottom:var(--space-5);';
@@ -6464,24 +6464,31 @@ async function loadNFTActivityView() {
   const container = document.getElementById('nftActivityPublicView');
   if (!container) return;
 
+  // Inject shared settings panel into tracker tab (same as Settings → NFT Tracker)
+  if (isAdmin) {
+    const settingsPanel = document.getElementById('nftActivityTrackerSettingsPanel');
+    if (settingsPanel && !settingsPanel.hasAttribute('data-loaded')) {
+      settingsPanel.setAttribute('id', 'settingsTab-nfttracker');
+      settingsPanel.setAttribute('data-loaded', '1');
+      settingsPanel.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-secondary);"><div class="spinner"></div><p>Loading tracker settings...</p></div>`;
+      await loadNftTrackerSettingsView();
+      // Restore panel id so activity refresh doesn't collide
+      settingsPanel.setAttribute('id', 'nftActivityTrackerSettingsPanel');
+    }
+  }
+
   container.innerHTML = `<div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading...</p></div>`;
 
   try {
-    const [activityRes, collectionsRes] = await Promise.all([
-      (isAdmin
-        ? fetch('/api/admin/nft-activity/events?limit=20', { credentials: 'include', headers: buildTenantRequestHeaders() })
-        : fetch('/api/public/v1/nft/activity?limit=20', { credentials: 'include' })
-      ).catch(() => null),
-      isAdmin ? fetch('/api/admin/nft-tracker/collections', { credentials: 'include', headers: buildTenantRequestHeaders() }).catch(() => null) : Promise.resolve(null)
-    ]);
+    const activityRes = await (isAdmin
+      ? fetch('/api/admin/nft-activity/events?limit=20', { credentials: 'include', headers: buildTenantRequestHeaders() })
+      : fetch('/api/public/v1/nft/activity?limit=20', { credentials: 'include' })
+    ).catch(() => null);
 
     const activityData = activityRes ? await activityRes.json() : {};
-    const collectionsData = collectionsRes ? await collectionsRes.json() : {};
     const events = activityData?.data?.events || activityData?.events || [];
-    const collections = collectionsData?.collections || [];
 
     let html = '';
-
     if (events.length > 0) {
       html += `<div style="display:grid; gap:12px; margin-bottom:16px;">${events.slice(0, 10).map((event) => `
         <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
@@ -6499,22 +6506,7 @@ async function loadNFTActivityView() {
       html += '<p style="text-align:center; padding:20px; color:var(--text-secondary);">No recent NFT activity yet.</p>';
     }
 
-    if (isAdmin) {
-      html += `<div style="margin-top:16px;">
-        <button class="btn-primary" onclick="loadNFTActivityAdminView()">
-          <span>⚙️</span>
-          <span>Manage Watchlist</span>
-        </button>
-      </div>`;
-    }
-
     container.innerHTML = html;
-
-    if (isAdmin) {
-      const adminCard = document.getElementById('nftActivityAdminCard');
-      if (adminCard) adminCard.style.display = 'block';
-      loadNFTActivityAdminView(collections);
-    }
   } catch (error) {
     console.error('Error loading NFT activity:', error);
     container.innerHTML = '<p style="color:#ef4444;">Failed to load NFT activity</p>';

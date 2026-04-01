@@ -4358,6 +4358,56 @@ async function loadNftTrackerView() {
   await renderNftCollectionsCard('nftCollectionsTableWrap');
 }
 
+async function openAddCollectionModal(existingId, existingData) {
+  const isEdit = !!existingId;
+  document.getElementById('colEditId').value = existingId || '';
+  document.getElementById('colName').value = (existingData && existingData.name) || '';
+  const addrEl = document.getElementById('colAddress');
+  addrEl.value = (existingData && existingData.address) || '';
+  addrEl.disabled = isEdit;
+  document.getElementById('colMeSymbol').value = (existingData && existingData.meSymbol) || '';
+  document.getElementById('colMint').checked    = existingData ? !!existingData.trackMint     : true;
+  document.getElementById('colSale').checked    = existingData ? !!existingData.trackSale     : true;
+  document.getElementById('colBid').checked     = existingData ? !!existingData.trackBid      : true;
+  document.getElementById('colList').checked    = existingData ? !!existingData.trackList     : false;
+  document.getElementById('colDelist').checked  = existingData ? !!existingData.trackDelist   : false;
+  document.getElementById('colTransfer').checked= existingData ? !!existingData.trackTransfer : false;
+  document.getElementById('colError').style.display = 'none';
+  const modal = document.getElementById('addCollectionModal');
+  modal.querySelector('.modal-title').textContent = isEdit ? 'Edit Collection' : 'Add Tracked Collection';
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+
+  // Populate channel dropdown
+  const chSel = document.getElementById('colChannel');
+  chSel.innerHTML = '<option value="">-- Select alert channel --</option>';
+  try {
+    const chRes = await fetch('/api/admin/discord/channels', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    if (chRes.ok) {
+      const chData = await chRes.json();
+      const channels = chData.channels || [];
+      const grouped = {};
+      channels.forEach(ch => {
+        const parent = ch.parentName || 'Other';
+        if (!grouped[parent]) grouped[parent] = [];
+        grouped[parent].push(ch);
+      });
+      Object.keys(grouped).sort().forEach(parent => {
+        const og = document.createElement('optgroup');
+        og.label = parent;
+        grouped[parent].forEach(ch => {
+          const opt = document.createElement('option');
+          opt.value = ch.id;
+          opt.textContent = '# ' + ch.name;
+          og.appendChild(opt);
+        });
+        chSel.appendChild(og);
+      });
+      if (existingData && existingData.channelId) chSel.value = existingData.channelId;
+    }
+  } catch (e) { console.error('[CollectionModal] Channel load error:', e); }
+}
+
 function closeAddCollectionModal() {
   document.getElementById('addCollectionModal').style.display = 'none';
   document.getElementById('colAddress').disabled = false;
@@ -4459,9 +4509,20 @@ async function renderNftCollectionsCard(wrapId) {
         <td style="padding:10px 12px;font-size:0.85em;color:${c.enabled ? '#86efac' : '#fca5a5'};">${c.enabled ? 'Yes' : 'No'}</td>
         <td style="padding:10px 12px;">
           <div style="display:flex;gap:6px;">
-            <button onclick="openAddCollectionModal('${c.id}',{name:'${escapeHtml(c.collection_name)}',address:'${escapeHtml(c.collection_address)}',channelId:'${c.channel_id||''}',meSymbol:'${escapeHtml(c.me_symbol||'')}',trackMint:${!!c.track_mint},trackSale:${!!c.track_sale},trackBid:${!!c.track_bid},trackList:${!!c.track_list},trackDelist:${!!c.track_delist},trackTransfer:${!!c.track_transfer}})"
+            <button class="nc-edit-btn"
+              data-id="${c.id}"
+              data-name="${escapeHtml(c.collection_name)}"
+              data-addr="${escapeHtml(c.collection_address)}"
+              data-channelid="${c.channel_id||''}"
+              data-mesymbol="${escapeHtml(c.me_symbol||'')}"
+              data-mint="${!!c.track_mint}"
+              data-sale="${!!c.track_sale}"
+              data-bid="${!!c.track_bid}"
+              data-list="${!!c.track_list}"
+              data-delist="${!!c.track_delist}"
+              data-transfer="${!!c.track_transfer}"
               style="font-size:0.8em;padding:4px 10px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️ Edit</button>
-            <button onclick="removeNftCollection(${c.id})"
+            <button class="nc-remove-btn" data-id="${c.id}"
               style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
           </div>
         </td>
@@ -4479,6 +4540,26 @@ async function renderNftCollectionsCard(wrapId) {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+    // Event delegation — avoids inline onclick + escapeHtml quote issues
+    wrap.querySelectorAll('.nc-edit-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        openAddCollectionModal(btn.dataset.id, {
+          name:          btn.dataset.name,
+          address:       btn.dataset.addr,
+          channelId:     btn.dataset.channelid,
+          meSymbol:      btn.dataset.mesymbol,
+          trackMint:     btn.dataset.mint === 'true',
+          trackSale:     btn.dataset.sale === 'true',
+          trackBid:      btn.dataset.bid  === 'true',
+          trackList:     btn.dataset.list === 'true',
+          trackDelist:   btn.dataset.delist === 'true',
+          trackTransfer: btn.dataset.transfer === 'true',
+        });
+      });
+    });
+    wrap.querySelectorAll('.nc-remove-btn').forEach(btn => {
+      btn.addEventListener('click', () => removeNftCollection(btn.dataset.id));
+    });
   } catch (e) {
     wrap.innerHTML = '<p style="color:#fca5a5;font-size:0.9em;padding:12px;">Failed to load tracked collections.</p>';
   }

@@ -2574,7 +2574,8 @@ const TENANT_MODULE_LABELS = {
   nfttracker: 'NFT Tracker',
   selfserveroles: 'Self-Serve Roles',
   branding: 'Branding',
-  analytics: 'Analytics'
+  analytics: 'Analytics',
+  engagement: 'Engagement & Points'
 };
 
 function getTenantPlanLabel(planKey) {

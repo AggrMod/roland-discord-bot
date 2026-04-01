@@ -1714,6 +1714,7 @@ class WebServer {
               moduleBrandingEnabled: 'branding',
               moduleRoleClaimEnabled: 'selfserveroles',
               moduleTicketingEnabled: 'ticketing',
+              moduleEngagementEnabled: 'engagement',
             };
             for (const [field, moduleKey] of Object.entries(moduleFieldMap)) {
               if (sanitized[field] !== undefined) {

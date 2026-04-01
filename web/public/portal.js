@@ -1832,6 +1832,12 @@ function showAdminTreasuryElements() {
   document.querySelectorAll('.admin-only-treasury').forEach(el => {
     el.style.display = '';
   });
+  // Show wallet action buttons in card header
+  const actions = document.getElementById('treasuryWalletActions');
+  if (actions) actions.style.display = 'flex';
+  // Show alerts card
+  const alertsCard = document.getElementById('treasuryAlertsCard');
+  if (alertsCard) alertsCard.style.display = '';
 }
 
 async function loadTreasuryWalletTable() {

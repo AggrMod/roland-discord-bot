@@ -632,63 +632,52 @@
 
         <!-- Treasury Section -->
         <section id="section-treasury" class="content-section">
-          <div id="treasuryTrackerSettingsPanel"></div>
           <header class="section-header">
-            <div class="treasury-header-row">
-              <div>
-                <h2>Wallet Tracker <span id="treasuryWalletCount" class="count-badge">0</span></h2>
-                <p class="section-subtitle">Real-time treasury balances and transaction history</p>
-              </div>
-              <div class="treasury-header-actions admin-only-treasury" style="display:none;">
-                <button class="btn-primary" onclick="openAddWalletModal()">+ Add Wallet</button>
-                <button class="btn-secondary" onclick="exportTreasuryCSV()">↓ Export</button>
-              </div>
-            </div>
+            <h2>Wallet Tracker <span id="treasuryWalletCount" class="count-badge">0</span></h2>
+            <p class="section-subtitle">Manage tracked wallets, balances, and transaction alerts</p>
           </header>
 
-          <!-- Treasury Tabs -->
-          <div class="settings-tabs" id="treasuryTabs">
-            <button class="settings-tab active" data-tab="treasury-wallets" onclick="switchTreasuryTab('treasury-wallets')">Wallets</button>
-            <button class="settings-tab" data-tab="treasury-history" onclick="switchTreasuryTab('treasury-history')">Transaction History</button>
-            <button class="settings-tab admin-only-treasury" data-tab="treasury-alerts" onclick="switchTreasuryTab('treasury-alerts')" style="display:none;">Alerts</button>
-          </div>
+          <!-- Admin settings panel (same as Settings → Wallet Tracker tab) -->
+          <div id="treasuryTrackerSettingsPanel"></div>
 
-          <!-- Wallets Tab -->
-          <div id="treasuryTab-treasury-wallets" class="treasury-tab-pane" style="margin-top: var(--space-4);">
-            <div id="treasuryWalletTableContainer">
+          <!-- Wallets card -->
+          <div class="card" style="margin-top:var(--space-4);">
+            <div class="card-header-row">
+              <h3>💼 Tracked Wallets</h3>
+              <div class="admin-only-treasury" style="display:none;gap:8px;display:none;" id="treasuryWalletActions">
+                <button class="btn-primary btn-sm" onclick="openAddWalletModal()">+ Add Wallet</button>
+                <button class="btn-secondary btn-sm" onclick="exportTreasuryCSV()">↓ Export</button>
+              </div>
+            </div>
+            <div id="treasuryWalletTableContainer" style="margin-top:var(--space-3);">
               <div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading wallets...</p></div>
             </div>
           </div>
 
-          <!-- Transaction History Tab -->
-          <div id="treasuryTab-treasury-history" class="treasury-tab-pane" style="display:none; margin-top: var(--space-4);">
-            <div class="card">
-              <div class="card-header">
-                <h3>💰 Treasury Status</h3>
-                <button class="btn-secondary" onclick="loadTreasuryPublicView()">
-                  <span>🔄</span>
-                  <span>Refresh</span>
-                </button>
-              </div>
-              <div id="publicTreasuryView" style="margin-top: var(--space-4); color: var(--text-secondary);">
-                <div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading treasury...</p></div>
-              </div>
+          <!-- Balances / Status card -->
+          <div class="card" style="margin-top:var(--space-4);">
+            <div class="card-header-row">
+              <h3>💰 Balances</h3>
+              <button class="btn-secondary btn-sm" onclick="loadTreasuryPublicView()">🔄 Refresh</button>
             </div>
-            <div class="card" style="margin-top: var(--space-4);">
-              <h3>Recent Transactions</h3>
-              <div id="publicTreasuryTransactions" style="margin-top: var(--space-4); color: var(--text-secondary);">
-                <div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading transactions...</p></div>
-              </div>
+            <div id="publicTreasuryView" style="margin-top:var(--space-3); color:var(--text-secondary);">
+              <div style="text-align:center; padding:var(--space-5);"><div class="spinner"></div><p>Loading...</p></div>
             </div>
           </div>
 
-          <!-- Alerts Tab (admin-only) -->
-          <div id="treasuryTab-treasury-alerts" class="treasury-tab-pane admin-only-treasury" style="display:none; margin-top: var(--space-4);">
-            <div class="card">
-              <h3>Transaction Alert Settings</h3>
-              <div id="treasuryAlertsConfig" style="margin-top: var(--space-4);">
-                <div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading alert config...</p></div>
-              </div>
+          <!-- Recent Transactions card -->
+          <div class="card" style="margin-top:var(--space-4);">
+            <h3>Recent Transactions</h3>
+            <div id="publicTreasuryTransactions" style="margin-top:var(--space-3); color:var(--text-secondary);">
+              <div style="text-align:center; padding:var(--space-5);"><div class="spinner"></div><p>Loading transactions...</p></div>
+            </div>
+          </div>
+
+          <!-- TX Alerts card (admin-only) -->
+          <div class="card admin-only-treasury" style="display:none;margin-top:var(--space-4);" id="treasuryAlertsCard">
+            <h3>🔔 Transaction Alert Settings</h3>
+            <div id="treasuryAlertsConfig" style="margin-top:var(--space-3);">
+              <div style="text-align:center; padding:var(--space-5);"><div class="spinner"></div><p>Loading alert config...</p></div>
             </div>
           </div>
         </section>

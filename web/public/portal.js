@@ -623,6 +623,7 @@ function switchSettingsTab(tab) {
     verification: 'adminRolesCard',
     selfserve:    'adminSelfServeRolesCard',
     ticketing:    'adminTicketingCard',
+    engagement:   'adminEngagementCard',
   };
   const cardId = tabCardMap[tab];
   if (cardId && pane) {
@@ -657,6 +658,7 @@ function switchSettingsTab(tab) {
     nfttracker:   () => { if (typeof loadNftTrackerSettingsView === 'function') loadNftTrackerSettingsView(); },
     selfserve:    () => { if (typeof loadSelfServeRolesView === 'function') loadSelfServeRolesView(); },
     ticketing:    () => { if (typeof loadTicketingView === 'function') loadTicketingView(); },
+    engagement:   () => { loadEngagementSettingsTab(); },
     treasury:     () => { if (typeof loadTreasuryModuleSettings === 'function') loadTreasuryModuleSettings(); },
     battle:       () => loadBattleTimingSettings(),
   };
@@ -8881,4 +8883,43 @@ async function deleteEngShopItem(itemId) {
     if (data.success) { showSuccess('Item removed.'); loadEngagementShop(); }
     else showError(data.message || 'Failed to remove item.');
   } catch (e) { showError('Error removing item.'); }
+}
+
+async function loadEngagementSettingsTab() {
+  try {
+    const res = await fetch('/api/admin/engagement/config', { credentials: 'include' });
+    const data = await res.json();
+    if (!data.success) return;
+    const cfg = data.config;
+    const en = document.getElementById('ps_moduleEngagementEnabled');
+    const pm = document.getElementById('ps_engPtsMsg');
+    const pr = document.getElementById('ps_engPtsReact');
+    const cm = document.getElementById('ps_engCooldownMsg');
+    const cr = document.getElementById('ps_engCooldownReact');
+    if (en) en.checked = !!cfg.enabled;
+    if (pm) pm.value = cfg.points_message ?? 5;
+    if (pr) pr.value = cfg.points_reaction ?? 2;
+    if (cm) cm.value = cfg.cooldown_message_mins ?? 60;
+    if (cr) cr.value = cfg.cooldown_reaction_daily ?? 5;
+  } catch (e) { console.error('[Engagement] settings tab load error:', e); }
+}
+
+async function saveEngagementConfigFromSettings() {
+  try {
+    const body = {
+      enabled: document.getElementById('ps_moduleEngagementEnabled')?.checked ?? true,
+      points_message: parseInt(document.getElementById('ps_engPtsMsg')?.value || '5', 10),
+      points_reaction: parseInt(document.getElementById('ps_engPtsReact')?.value || '2', 10),
+      cooldown_message_mins: parseInt(document.getElementById('ps_engCooldownMsg')?.value || '60', 10),
+      cooldown_reaction_daily: parseInt(document.getElementById('ps_engCooldownReact')?.value || '5', 10),
+    };
+    const res = await fetch('/api/admin/engagement/config', {
+      method: 'PUT', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.success) showSuccess('Engagement settings saved!');
+    else showError(data.message || 'Failed to save.');
+  } catch (e) { showError('Error saving engagement settings.'); }
 }

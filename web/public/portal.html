@@ -1208,6 +1208,7 @@
             <button class="settings-tab" data-tab="heist" onclick="switchSettingsTab('heist')">Heist</button>
             <button class="settings-tab" data-tab="selfserve" onclick="switchSettingsTab('selfserve')">Self-Serve Roles</button>
             <button class="settings-tab" data-tab="ticketing" onclick="switchSettingsTab('ticketing')">Ticketing</button>
+            <button class="settings-tab" data-tab="engagement" onclick="switchSettingsTab('engagement')">Engagement</button>
           </div>
           <div id="settingsTabContent" style="margin-top:24px;">
             <div id="settingsTab-general" class="settings-tab-pane">
@@ -1262,6 +1263,51 @@
             </div>
             <div id="settingsTab-ticketing" class="settings-tab-pane" style="display:none;">
               <!-- adminTicketingCard content loaded here dynamically -->
+            </div>
+            <div id="settingsTab-engagement" class="settings-tab-pane" style="display:none;">
+              <div class="card" id="adminEngagementCard">
+                <div class="card-header-row">
+                  <h3 class="card-title">🏅 Engagement &amp; Points</h3>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="ps_moduleEngagementEnabled" onchange="onModuleToggleChange('moduleEngagementEnabled', this.checked)">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+                <p style="color:var(--text-secondary);font-size:0.9em;margin-bottom:16px;">Award points for messages and reactions. Run a points shop with role rewards, codes, and custom prizes.</p>
+                <div class="settings-grid">
+                  <div class="settings-row">
+                    <div class="settings-info">
+                      <div class="settings-label">Points per message</div>
+                      <div class="settings-desc">Awarded once per cooldown window per user</div>
+                    </div>
+                    <input type="number" id="ps_engPtsMsg" min="1" max="100" class="input-sm" style="width:80px;" value="5">
+                  </div>
+                  <div class="settings-row">
+                    <div class="settings-info">
+                      <div class="settings-label">Points per reaction</div>
+                      <div class="settings-desc">Subject to daily cap</div>
+                    </div>
+                    <input type="number" id="ps_engPtsReact" min="1" max="100" class="input-sm" style="width:80px;" value="2">
+                  </div>
+                  <div class="settings-row">
+                    <div class="settings-info">
+                      <div class="settings-label">Message cooldown (minutes)</div>
+                      <div class="settings-desc">Min time between point awards per user</div>
+                    </div>
+                    <input type="number" id="ps_engCooldownMsg" min="1" max="1440" class="input-sm" style="width:80px;" value="60">
+                  </div>
+                  <div class="settings-row">
+                    <div class="settings-info">
+                      <div class="settings-label">Reaction daily cap</div>
+                      <div class="settings-desc">Max reactions awarded per user per day</div>
+                    </div>
+                    <input type="number" id="ps_engCooldownReact" min="1" max="100" class="input-sm" style="width:80px;" value="5">
+                  </div>
+                </div>
+                <div style="margin-top:16px;">
+                  <button class="btn-primary" onclick="saveEngagementConfigFromSettings()">Save Engagement Settings</button>
+                </div>
+              </div>
             </div>
           </div>
         </section>

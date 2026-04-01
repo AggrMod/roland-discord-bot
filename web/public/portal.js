@@ -4454,43 +4454,10 @@ async function loadNftTrackerView() {
   const content = document.getElementById('adminNftTrackerContent');
   if (!content) return;
 
-  content.innerHTML = '<p style="color:var(--text-secondary);font-size:0.9em;">Loading tracked collections...</p>';
+  // Dead-code tombstone kept for reference — editNftCollection and renderNftCollectionsTable
+  // were replaced by openAddCollectionModal() and renderNftCollectionsCard() respectively.
 
-  // Fetch channels for dropdown
-  let channelsList = [];
-  try {
-    const chRes = await fetch('/api/admin/discord/channels', { credentials: 'include' });
-    const chData = await chRes.json();
-    channelsList = chData.channels || [];
-  } catch (e) { console.error('[NFT Tracker] Channels fetch error:', e); }
-
-  const populateNftChannelDropdown = (selectEl) => {
-    if (!selectEl) return;
-    if (channelsList.length > 0) {
-      const grouped = {};
-      channelsList.forEach(ch => {
-        const parent = ch.parentName || 'Other';
-        if (!grouped[parent]) grouped[parent] = [];
-        grouped[parent].push(ch);
-      });
-      selectEl.innerHTML = '<option value="">-- Select channel --</option>';
-      Object.keys(grouped).sort().forEach(parent => {
-        const optgroup = document.createElement('optgroup');
-        optgroup.label = parent;
-        grouped[parent].forEach(ch => {
-          const opt = document.createElement('option');
-          opt.value = ch.id;
-          opt.textContent = '# ' + ch.name;
-          optgroup.appendChild(opt);
-        });
-        selectEl.appendChild(optgroup);
-      });
-    } else {
-      selectEl.innerHTML = '<option value="">-- No channels available --</option>';
-    }
-  };
-
-  const editNftCollection = (btn) => {
+  const _deadCode_editNftCollection = (btn) => {
     const id = btn.dataset.id;
     const nameVal = escapeHtml(btn.dataset.name || '');
     const meVal = escapeHtml(btn.dataset.me || '');
@@ -4585,7 +4552,7 @@ async function loadNftTrackerView() {
     });
   };
 
-  const renderNftCollectionsTable = async () => {
+  const _deadCode_renderNftCollectionsTable = async () => {
     const wrap = document.getElementById('nftCollectionsTableWrap');
     if (!wrap) return;
     try {
@@ -4687,7 +4654,7 @@ async function openAddCollectionModal(existingId, existingData) {
   document.getElementById('colMeSymbol').value = existingData?.meSymbol || '';
   document.getElementById('colMint').checked   = existingData ? !!existingData.trackMint   : true;
   document.getElementById('colSale').checked   = existingData ? !!existingData.trackSale   : true;
-  document.getElementById('colBid').checked    = existingData ? !!existingData.trackBid    : false;
+  document.getElementById('colBid').checked    = existingData ? !!existingData.trackBid    : true;
   document.getElementById('colList').checked   = existingData ? !!existingData.trackList   : true;
   document.getElementById('colDelist').checked = existingData ? !!existingData.trackDelist : true;
   document.getElementById('colTransfer').checked = existingData ? !!existingData.trackTransfer : false;

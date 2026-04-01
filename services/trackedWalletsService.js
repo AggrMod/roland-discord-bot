@@ -195,7 +195,7 @@ class TrackedWalletsService {
     const logoUrl = branding.logo || botAvatar;
 
     // Chain emoji icons (configurable via Superadmin → Chain Emoji Map)
-    const settingsManager = require('../utils/settingsManager');
+    const settingsManager = require('../config/settings');
     const chainEmojiMap = settingsManager.getSettings().chainEmojiMap || {};
     const solEmoji  = chainEmojiMap['solana'] || process.env.SOL_EMOJI  || '◎';
     const usdcEmoji = chainEmojiMap['usdc']   || process.env.USDC_EMOJI || '💵';

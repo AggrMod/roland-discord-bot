@@ -162,7 +162,7 @@ client.once(Events.ClientReady, () => {
   // Sync persisted DB settings into microVerifyService on startup
   // (in-memory _configOverrides are lost on restart; re-apply from settingsManager)
   try {
-    const settingsManager = require('./utils/settingsManager');
+    const settingsManager = require('./config/settings');
     const saved = settingsManager.getSettings();
     const startupOverrides = {};
     if (saved.moduleMicroVerifyEnabled !== undefined) startupOverrides['MICRO_VERIFY_ENABLED'] = String(saved.moduleMicroVerifyEnabled);

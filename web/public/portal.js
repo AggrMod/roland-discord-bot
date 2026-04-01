@@ -162,6 +162,59 @@ function showWalletAddForm() {
     <div id="verifyStatus" style="margin-top:16px;"></div>
   `;
   walletsList.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  // Auto-show any pending micro-verify request so user doesn't need to click again
+  autoShowPendingMicroVerify();
+}
+
+async function autoShowPendingMicroVerify() {
+  try {
+    const res = await fetch('/api/micro-verify/status', { credentials: 'include' });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.success || !data.request || data.request.status !== 'pending') return;
+
+    const r = data.request;
+    const expiryDisplay = r.expiresAt ? new Date(r.expiresAt).toLocaleTimeString() : `${r.timeLeftMinutes || 15} min`;
+    const statusEl = document.getElementById('verifyStatus');
+    if (!statusEl) return;
+
+    statusEl.innerHTML = `
+      <div style="margin-top:20px; padding:24px; background:rgba(99,102,241,0.08); border:2px solid rgba(99,102,241,0.35); border-radius:14px;">
+        <h4 style="color:#e0e7ff; margin:0 0 4px 0; font-size:1.05em;">📋 Pending verification — send this exact amount</h4>
+        <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 14px 0;">Already generated a unique amount for you. Just send it to complete verification.</p>
+
+        <div style="margin-bottom:14px;">
+          <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:0.05em;">Amount (exact)</p>
+          <div style="display:flex; align-items:center; gap:10px; background:rgba(0,0,0,0.3); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:12px 14px;">
+            <span style="color:#fbbf24; font-size:1.2em; font-weight:700; font-family:monospace; flex:1;">${r.amount} SOL</span>
+            <button onclick="navigator.clipboard.writeText('${r.amount}'); showSuccess('Amount copied!');" style="background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 12px; cursor:pointer; font-size:0.8em;">Copy</button>
+          </div>
+        </div>
+
+        <div style="margin-bottom:20px;">
+          <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:0.05em;">Destination Wallet</p>
+          <div style="display:flex; align-items:center; gap:10px; background:rgba(0,0,0,0.3); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:12px 14px;">
+            <span style="color:#c7d2fe; font-size:0.88em; font-family:monospace; flex:1; word-break:break-all;">${r.destinationWallet}</span>
+            <button onclick="navigator.clipboard.writeText('${r.destinationWallet}'); showSuccess('Address copied!');" style="background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 12px; cursor:pointer; font-size:0.8em;">Copy</button>
+          </div>
+        </div>
+
+        <div style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:8px; padding:12px 14px; margin-bottom:20px;">
+          <p style="color:#fcd34d; font-size:0.85em; margin:0;">⚠️ Send the <strong>exact amount</strong> shown — it's your unique identifier. Expires at <strong>${expiryDisplay}</strong>.</p>
+        </div>
+
+        <div style="text-align:center;">
+          <div style="display:flex; align-items:center; justify-content:center; gap:10px; color:var(--text-secondary); margin-bottom:12px;">
+            <div class="spinner" style="width:18px; height:18px;"></div>
+            <span style="font-size:0.9em;">Waiting for transaction on-chain...</span>
+          </div>
+          <button onclick="manualCheckMicroVerify(document.getElementById('verifyStatus'))" style="background:none; border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 14px; cursor:pointer; font-size:0.82em;">↻ Check status</button>
+        </div>
+      </div>`;
+
+    pollMicroVerifyStatus(statusEl);
+  } catch (e) { /* silent — user just won't see auto-loaded panel */ }
 }
 
 // Detect available Solana wallet provider

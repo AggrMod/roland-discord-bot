@@ -40,7 +40,7 @@ class MicroVerifyService {
       receiveWallet: this._getConfigValue('VERIFICATION_RECEIVE_WALLET') || null,
       ttlMinutes: parseInt(this._getConfigValue('VERIFY_REQUEST_TTL_MINUTES') || '15'),
       pollIntervalSeconds: parseInt(this._getConfigValue('POLL_INTERVAL_SECONDS') || '30'),
-      rateLimitMinutes: parseInt(this._getConfigValue('VERIFY_RATE_LIMIT_MINUTES') || '5'),
+      rateLimitMinutes: parseInt(this._getConfigValue('VERIFY_RATE_LIMIT_MINUTES') || '1'),
       maxPendingPerUser: parseInt(this._getConfigValue('MAX_PENDING_PER_USER') || '1')
     };
   }

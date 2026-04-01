@@ -224,7 +224,8 @@ class WebServer {
     this.app.use('/api/public/', publicApiLimiter);
     this.app.use('/auth/', authLimiter);
     this.app.use('/api/verify/', verifyLimiter);
-    this.app.use('/api/micro-verify/', verifyLimiter);
+    // Only rate-limit new request creation — not status/config/check-now
+    this.app.use('/api/micro-verify/request', verifyLimiter);
     this.app.use('/api/admin/', adminLimiter);
 
     const fallbackGuildId = () => normalizeGuildId(process.env.GUILD_ID || process.env.DISCORD_GUILD_ID);

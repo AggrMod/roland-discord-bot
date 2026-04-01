@@ -163,8 +163,7 @@ function getSolanaProvider() {
 
 async function verifyBySignature() {
   const btn = document.getElementById('signVerifyBtn');
-  const statusEl = document.getElementById('verifyStatus');
-  
+
   const provider = getSolanaProvider();
   if (!provider) {
     showError('No Solana wallet detected. Please install Phantom, Solflare, or Backpack.');
@@ -193,10 +192,6 @@ async function verifyBySignature() {
     
     // Extract signature bytes → base58
     const signatureBytes = signedMessage.signature || signedMessage;
-    const signatureBase58 = btoa(String.fromCharCode(...new Uint8Array(signatureBytes)))
-      // We need base58, not base64. Use a lightweight encoder.
-      ;
-    // Actually, convert Uint8Array to base58 using a small helper
     const sig58 = uint8ToBase58(new Uint8Array(signatureBytes));
 
     btn.innerHTML = '⏳ Verifying on server...';
@@ -317,17 +312,6 @@ async function pollMicroVerifyStatus(statusEl, attempts = 0) {
   setTimeout(() => pollMicroVerifyStatus(statusEl, attempts + 1), 5000);
 }
 
-// Load external script dynamically
-function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
-    const s = document.createElement('script');
-    s.src = src;
-    s.onload = resolve;
-    s.onerror = reject;
-    document.head.appendChild(s);
-  });
-}
 
 // Lightweight base58 encoder (Bitcoin/Solana alphabet)
 function uint8ToBase58(bytes) {
@@ -1798,23 +1782,6 @@ async function loadTreasuryTransactions() {
 }
 
 // ==================== TREASURY TABS & WALLETS ====================
-function switchTreasuryTab(tabName) {
-  document.querySelectorAll('.treasury-tab-pane').forEach(p => p.style.display = 'none');
-  document.querySelectorAll('#treasuryTabs .settings-tab').forEach(t => t.classList.remove('active'));
-  const pane = document.getElementById('treasuryTab-' + tabName);
-  if (pane) pane.style.display = 'block';
-  const btn = document.querySelector(`#treasuryTabs .settings-tab[data-tab="${tabName}"]`);
-  if (btn) btn.classList.add('active');
-
-  if (tabName === 'treasury-history') {
-    loadTreasuryPublicView();
-    loadTreasuryTransactions();
-  } else if (tabName === 'treasury-alerts') {
-    loadTreasuryAlertsConfig();
-  } else if (tabName === 'treasury-wallets') {
-    loadTreasuryWalletTable();
-  }
-}
 
 function showAdminTreasuryElements() {
   document.querySelectorAll('.admin-only-treasury').forEach(el => {
@@ -1924,69 +1891,6 @@ async function removeTrackedWallet(id) {
   } catch { showError('Error removing wallet'); }
 }
 
-function renderWalletTableFromConfig(config, treasury) {
-  const container = document.getElementById('treasuryWalletTableContainer');
-  const wallet = config.solanaWallet || config.wallet || '';
-  const label = config.label || 'Treasury';
-  const truncAddr = wallet ? `${wallet.slice(0,6)}...${wallet.slice(-4)}` : '—';
-  const channel = config.txAlertChannelId ? `<code>#${config.txAlertChannelId}</code>` : '<span style="color:var(--text-secondary);">—</span>';
-  // TODO: multi-wallet support — txTypes per wallet. For now, show based on config flags.
-  const txTypes = ['sol-transfer', 'token-transfer'];
-  const typeBadges = txTypes.slice(0, 2).map(t => `<span class="badge badge-module">${t}</span>`).join('') +
-    (txTypes.length > 2 ? `<span class="badge badge-module">+${txTypes.length - 2} more</span>` : '');
-  const statusBadge = config.enabled !== false
-    ? '<span class="badge badge-active">Active</span>'
-    : '<span class="badge badge-paused">Paused</span>';
-  const balanceInfo = treasury.sol ? ` <span style="color:var(--text-secondary); font-size:0.85em;">(${treasury.sol} SOL)</span>` : '';
-
-  const actionsHtml = isAdmin ? `
-    <div class="treasury-wallet-actions" style="display:flex; gap:4px;">
-      <button title="Refresh" onclick="refreshTreasuryBalances()">🔄</button>
-      <button title="Edit" onclick="openAddWalletModal('${wallet}', '${label}', '${config.txAlertChannelId || ''}')">✏️</button>
-      <button title="Remove wallet" style="color:#ef4444;" onclick="removeTreasuryWallet()">🗑️</button>
-    </div>
-  ` : '';
-
-  container.innerHTML = `
-    <div class="card" style="overflow-x:auto;">
-      <div class="data-table-wrap"><table class="data-table">
-        <thead>
-          <tr>
-            <th>Address</th>
-            <th>Channel</th>
-            <th>TX Types</th>
-            <th>Status</th>
-            ${isAdmin ? '<th>Actions</th>' : ''}
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>
-              <div class="addr-cell">
-                <span>${truncAddr}</span>${balanceInfo}
-                ${wallet ? `<button class="copy-btn" onclick="navigator.clipboard.writeText('${wallet}');this.textContent='✓';setTimeout(()=>this.textContent='📋',1200)" title="Copy address">📋</button>` : ''}
-                <span style="color:#a5b4fc; font-size:0.85em;">{${label}}</span>
-              </div>
-            </td>
-            <td>${channel}</td>
-            <td><div class="tx-type-badges">${typeBadges}</div></td>
-            <td>${statusBadge}</td>
-            ${isAdmin ? `<td>${actionsHtml}</td>` : ''}
-          </tr>
-        </tbody>
-      </table></div>
-    </div>
-  `;
-}
-
-function renderWalletEmptyState(container, canAdd) {
-  container.innerHTML = `
-    <div class="card treasury-empty-state">
-      <p>No wallets tracked yet. Add a wallet to start monitoring.</p>
-      ${canAdd ? '<button class="btn-primary" onclick="openAddWalletModal()">+ Add Wallet</button>' : ''}
-    </div>
-  `;
-}
 
 async function removeTreasuryWallet() {
   if (!confirm('Remove this treasury wallet? This clears the wallet address from settings.')) return;
@@ -2454,15 +2358,6 @@ function formatDate(date) {
   });
 }
 
-function formatNumber(num) {
-  if (num >= 1000000) {
-    return (num / 1000000).toFixed(1) + 'M';
-  }
-  if (num >= 1000) {
-    return (num / 1000).toFixed(1) + 'K';
-  }
-  return num.toString();
-}
 
 // ==================== ERROR HANDLING ====================
 window.addEventListener('error', (event) => {
@@ -2506,22 +2401,6 @@ function renderEnvStatusBar(bar, d) {
     + `</div>`;
 }
 
-function toggleAdminSubmenu() {
-  const submenu = document.getElementById('adminSubmenu');
-  const chevron = document.getElementById('adminChevron');
-  if (!submenu) return;
-  const isOpen = submenu.style.display !== 'none';
-  if (isOpen) {
-    submenu.style.display = 'none';
-    if (chevron) chevron.textContent = '▶';
-  } else {
-    submenu.style.display = 'flex';
-    if (chevron) chevron.textContent = '▼';
-    // If no sub-item is active yet, show settings by default
-    const hasActive = submenu.querySelector('.admin-sub-item.active');
-    if (!hasActive) showAdminView('settings');
-  }
-}
 
 function isTenantSensitiveAdminView(view) {
   return [
@@ -2611,9 +2490,6 @@ function showAdminView(view) {
   setTimeout(() => card?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
 }
 
-function showAdminUsers() {
-  showAdminView('users');
-}
 
 let superadminListCache = [];
 let tenantListCache = [];
@@ -4454,175 +4330,6 @@ async function loadNftTrackerView() {
   const content = document.getElementById('adminNftTrackerContent');
   if (!content) return;
 
-  // Dead-code tombstone kept for reference — editNftCollection and renderNftCollectionsTable
-  // were replaced by openAddCollectionModal() and renderNftCollectionsCard() respectively.
-
-  const _deadCode_editNftCollection = (btn) => {
-    const id = btn.dataset.id;
-    const nameVal = escapeHtml(btn.dataset.name || '');
-    const meVal = escapeHtml(btn.dataset.me || '');
-    // Remove any existing edit modal
-    const old = document.getElementById('nftEditModal');
-    if (old) old.remove();
-
-    const modalFieldInput = 'width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;';
-    const modalLabel = 'display:block;font-weight:600;font-size:0.85em;color:#c9d6ff;margin-bottom:6px;';
-    const overlay = document.createElement('div');
-    overlay.id = 'nftEditModal';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;';
-    overlay.innerHTML = `
-      <div style="background:var(--card-bg, #1e293b);border:1px solid rgba(99,102,241,0.3);border-radius:12px;padding:24px;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto;">
-        <h3 style="margin:0 0 16px;color:var(--text-primary, #e0e7ff);">✏️ Edit Collection</h3>
-        <div style="margin-bottom:12px;">
-          <label style="${modalLabel}">Collection Name</label>
-          <input type="text" id="nftEditName" value="${nameVal}" style="${modalFieldInput}">
-        </div>
-        <div style="margin-bottom:12px;">
-          <label style="${modalLabel}">Alert Channel</label>
-          <select id="nftEditChannel" style="${modalFieldInput}"><option value="">-- Select channel --</option></select>
-        </div>
-        <div style="margin-bottom:12px;">
-          <label style="${modalLabel}">Magic Eden Symbol <small style="color:#94a3b8;">(slug for listing alerts)</small></label>
-          <input type="text" id="nftEditMeSymbol" value="${meVal}" style="${modalFieldInput}">
-        </div>
-        <div style="margin-bottom:16px;">
-          <label style="${modalLabel}">Track Events</label>
-          <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:4px;">
-            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditMint" ${btn.dataset.mint === '1' ? 'checked' : ''}> 🪙 Mint</label>
-            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditSale" ${btn.dataset.sale === '1' ? 'checked' : ''}> 💰 Sale</label>
-            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditList" ${btn.dataset.list === '1' ? 'checked' : ''}> 📋 List</label>
-            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditBid" ${btn.dataset.bid === '1' ? 'checked' : ''}> 🤝 Bid</label>
-            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditDelist" ${btn.dataset.delist === '1' ? 'checked' : ''}> ❌ Delist</label>
-            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditTransfer" ${btn.dataset.transfer === '1' ? 'checked' : ''}> 🔄 Transfer</label>
-          </div>
-        </div>
-        <div style="display:flex;gap:10px;align-items:center;">
-          <button id="nftEditSaveBtn" style="padding:8px 18px;background:#6366f1;color:#fff;border:none;border-radius:8px;font-size:0.85em;font-weight:600;cursor:pointer;">Save</button>
-          <button id="nftEditCancelBtn" style="padding:8px 18px;background:transparent;color:#94a3b8;border:1px solid rgba(255,255,255,0.12);border-radius:8px;font-size:0.85em;cursor:pointer;">Cancel</button>
-          <span id="nftEditFeedback" style="font-size:0.85em;font-weight:600;"></span>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-
-    // Populate channel dropdown and select current
-    populateNftChannelDropdown(document.getElementById('nftEditChannel'));
-    const editChSel = document.getElementById('nftEditChannel');
-    if (editChSel) editChSel.value = btn.dataset.channel;
-
-    // Close on overlay click
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
-    document.getElementById('nftEditCancelBtn').addEventListener('click', () => overlay.remove());
-
-    document.getElementById('nftEditSaveBtn').addEventListener('click', async () => {
-      const saveBtn = document.getElementById('nftEditSaveBtn');
-      const feedback = document.getElementById('nftEditFeedback');
-      saveBtn.disabled = true;
-      saveBtn.textContent = 'Saving...';
-      try {
-        const payload = {
-          collectionName: document.getElementById('nftEditName').value.trim(),
-          channelId: document.getElementById('nftEditChannel').value,
-          meSymbol: document.getElementById('nftEditMeSymbol').value.trim(),
-          trackMint: !!document.getElementById('nftEditMint').checked,
-          trackSale: !!document.getElementById('nftEditSale').checked,
-          trackList: !!document.getElementById('nftEditList').checked,
-          trackBid: !!document.getElementById('nftEditBid')?.checked,
-          trackDelist: !!document.getElementById('nftEditDelist').checked,
-          trackTransfer: !!document.getElementById('nftEditTransfer').checked,
-        };
-        const res = await fetch('/api/admin/nft-tracker/collections/' + id, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-          body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-        if (res.ok && data.success) {
-          overlay.remove();
-          renderNftCollectionsTable();
-        } else {
-          if (feedback) { feedback.style.color = '#fca5a5'; feedback.textContent = data.message || 'Failed to save'; }
-        }
-      } catch (err) {
-        console.error('[NFT Tracker] Edit save error:', err);
-        if (feedback) { feedback.style.color = '#fca5a5'; feedback.textContent = 'Network error'; }
-      } finally {
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Save';
-      }
-    });
-  };
-
-  const _deadCode_renderNftCollectionsTable = async () => {
-    const wrap = document.getElementById('nftCollectionsTableWrap');
-    if (!wrap) return;
-    try {
-      const res = await fetch('/api/admin/nft-tracker/collections', { credentials: 'include', headers: buildTenantRequestHeaders() });
-      const data = await res.json();
-      const collections = data.collections || [];
-      if (!collections.length) {
-        wrap.innerHTML = '<p style="color:var(--text-secondary);font-size:0.9em;margin:0;">No tracked collections yet. Add one below.</p>';
-        return;
-      }
-      const channelName = (id) => { const ch = channelsList.find(c => c.id === id); return ch ? '#' + ch.name : id; };
-      const truncAddr = (a) => a && a.length > 12 ? a.slice(0, 6) + '...' + a.slice(-4) : a;
-      const eventIcons = (c) => {
-        let s = '';
-        if (c.track_mint) s += '🪙 ';
-        if (c.track_sale) s += '💰 ';
-        if (c.track_list) s += '📋 ';
-        if (c.track_delist) s += '❌ ';
-        if (c.track_transfer) s += '🔄 ';
-        if (c.track_bid) s += '🤝 ';
-        return s.trim() || '—';
-      };
-      const rows = collections.map(c => `
-        <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
-          <td style="padding:8px 10px;font-size:0.85em;color:var(--text-primary);">${escapeHtml(c.collection_name)}</td>
-          <td style="padding:8px 10px;font-size:0.85em;color:var(--text-secondary);font-family:monospace;" title="${escapeHtml(c.collection_address)}">${truncAddr(c.collection_address)}</td>
-          <td style="padding:8px 10px;font-size:0.85em;color:var(--text-secondary);">${escapeHtml(channelName(c.channel_id))}</td>
-          <td style="padding:8px 10px;font-size:0.85em;">${eventIcons(c)}</td>
-          <td style="padding:8px 10px;font-size:0.85em;color:${c.enabled ? '#86efac' : '#fca5a5'};">${c.enabled ? 'Yes' : 'No'}</td>
-          <td style="padding:8px 10px;display:flex;gap:6px;">
-            <button class="nft-edit-btn" data-id="${c.id}" data-name="${escapeHtml(c.collection_name)}" data-channel="${c.channel_id}" data-me="${escapeHtml(c.me_symbol || '')}" data-mint="${c.track_mint}" data-sale="${c.track_sale}" data-list="${c.track_list}" data-delist="${c.track_delist}" data-transfer="${c.track_transfer}" data-bid="${c.track_bid?1:0}" style="font-size:0.8em;padding:4px 10px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️ Edit</button>
-            <button class="btn-danger nft-remove-btn" data-id="${c.id}" style="font-size:0.8em;padding:4px 10px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">Remove</button>
-          </td>
-        </tr>
-      `).join('');
-      wrap.innerHTML = `
-        <table style="width:100%;border-collapse:collapse;">
-          <thead>
-            <tr style="border-bottom:2px solid rgba(255,255,255,0.1);">
-              <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Name</th>
-              <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Address</th>
-              <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Channel</th>
-              <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Events</th>
-              <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Enabled</th>
-              <th style="padding:8px 10px;"></th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      `;
-      wrap.querySelectorAll('.nft-remove-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          if (!confirm('Remove this tracked collection?')) return;
-          btn.disabled = true;
-          btn.textContent = '...';
-          try {
-            await fetch('/api/admin/nft-tracker/collections/' + btn.dataset.id, { method: 'DELETE', credentials: 'include' });
-          } catch (e) { console.error('[NFT Tracker] Remove error:', e); }
-          renderNftCollectionsTable();
-        });
-      });
-      wrap.querySelectorAll('.nft-edit-btn').forEach(btn => {
-        btn.addEventListener('click', () => editNftCollection(btn));
-      });
-    } catch (e) {
-      wrap.innerHTML = '<p style="color:#fca5a5;font-size:0.9em;">Failed to load tracked collections.</p>';
-      console.error('[NFT Tracker] Table render error:', e);
-    }
-  };
-
   const cardStyle = 'background:var(--card-bg);border:1px solid var(--border-default);border-radius:var(--radius-lg);padding:var(--space-5);margin-bottom:var(--space-4);';
   const gridRow = 'display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);';
   const fieldLabel = 'display:block;font-weight:600;font-size:0.85em;color:#c9d6ff;margin-bottom:6px;';
@@ -4640,51 +4347,6 @@ async function loadNftTrackerView() {
   `;
 
   await renderNftCollectionsCard('nftCollectionsTableWrap');
-}
-
-// ==================== NFT TRACKER COLLECTION MODAL ====================
-
-async function openAddCollectionModal(existingId, existingData) {
-  const isEdit = !!existingId;
-  document.getElementById('addCollectionModalTitle').textContent = isEdit ? 'Edit Tracked Collection' : 'Add Tracked Collection';
-  document.getElementById('colEditId').value = existingId || '';
-  document.getElementById('colName').value = existingData?.name || '';
-  document.getElementById('colAddress').value = existingData?.address || '';
-  document.getElementById('colAddress').disabled = isEdit;
-  document.getElementById('colMeSymbol').value = existingData?.meSymbol || '';
-  document.getElementById('colMint').checked   = existingData ? !!existingData.trackMint   : true;
-  document.getElementById('colSale').checked   = existingData ? !!existingData.trackSale   : true;
-  document.getElementById('colBid').checked    = existingData ? !!existingData.trackBid    : true;
-  document.getElementById('colList').checked   = existingData ? !!existingData.trackList   : true;
-  document.getElementById('colDelist').checked = existingData ? !!existingData.trackDelist : true;
-  document.getElementById('colTransfer').checked = existingData ? !!existingData.trackTransfer : false;
-  document.getElementById('colError').style.display = 'none';
-  document.getElementById('addCollectionModal').style.display = 'flex';
-  document.body.style.overflow = 'hidden';
-
-  // Populate channel dropdown
-  const sel = document.getElementById('colChannel');
-  sel.innerHTML = '<option value="">-- Select channel --</option>';
-  try {
-    const chRes = await fetch('/api/admin/discord/channels', { credentials: 'include' });
-    if (chRes.ok) {
-      const channels = (await chRes.json()).channels || [];
-      const grouped = {};
-      channels.forEach(ch => { const p = ch.parentName || 'Other'; if (!grouped[p]) grouped[p] = []; grouped[p].push(ch); });
-      Object.keys(grouped).sort().forEach(parent => {
-        const og = document.createElement('optgroup');
-        og.label = parent;
-        grouped[parent].forEach(ch => {
-          const opt = document.createElement('option');
-          opt.value = ch.id;
-          opt.textContent = '# ' + ch.name;
-          og.appendChild(opt);
-        });
-        sel.appendChild(og);
-      });
-    }
-  } catch (e) { console.error('[CollectionModal] Channel load error:', e); }
-  if (existingData?.channelId) sel.value = existingData.channelId;
 }
 
 function closeAddCollectionModal() {
@@ -5639,36 +5301,6 @@ async function loadVotingPowerView() {
   }
 }
 
-async function loadVPMappings() {
-  const container = document.getElementById('vpMappingsTableContainer');
-  if (!container) return;
-  try {
-    const res = await fetch('/api/admin/governance/vp-mappings', { credentials: 'include' });
-    const data = await res.json();
-    if (!data.success || !data.mappings || data.mappings.length === 0) {
-      container.innerHTML = '<p style="color:var(--text-secondary);font-size:0.85em;font-style:italic;">No VP mappings configured. Falling back to tier-based VP.</p>';
-      return;
-    }
-    const rows = data.mappings.map(m => `<tr style="border-bottom:1px solid rgba(99,102,241,0.08);">
-      <td style="padding:10px 12px;color:#e0e7ff;">${m.role_name || m.role_id}</td>
-      <td style="padding:10px 12px;color:#a5b4fc;font-weight:600;">${m.voting_power}</td>
-      <td style="padding:10px 12px;"><button onclick="removeVPMapping('${m.role_id}')" style="padding:4px 12px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:6px;color:#fca5a5;font-size:0.82em;cursor:pointer;">Remove</button></td>
-    </tr>`).join('');
-    container.innerHTML = `<div style="overflow-x:auto;border-radius:10px;border:1px solid rgba(99,102,241,0.12);">
-      <table style="width:100%;border-collapse:collapse;">
-        <thead><tr style="background:rgba(30,41,59,0.7);">
-          <th style="padding:10px 12px;text-align:left;color:#94a3b8;font-size:0.82em;font-weight:600;">Role</th>
-          <th style="padding:10px 12px;text-align:left;color:#94a3b8;font-size:0.82em;font-weight:600;">Voting Power</th>
-          <th style="padding:10px 12px;text-align:left;color:#94a3b8;font-size:0.82em;font-weight:600;">Actions</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
-  } catch (e) {
-    console.error('Failed to load VP mappings:', e);
-    container.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;">Failed to load VP mappings.</p>';
-  }
-}
 
 async function addVPMapping() {
   const sel = document.getElementById('vpRoleSelect') || document.getElementById('vpMappingRoleSelect');
@@ -5740,8 +5372,6 @@ async function loadAdminRoles() {
     const traitRoles = config.traitRoles || [];
     adminTiersCache = tiers;
     adminTraitsCache = traitRoles;
-    // Keep legacy cache for export
-    adminRolesCache = [...tiers.map(t => ({ ...t, _type: 'tier' })), ...traitRoles.map(t => ({ ...t, _type: 'trait' }))];
 
     const allRules = [
       ...tiers.map((t, idx) => ({ ...t, _type: 'collection', _idx: idx })),
@@ -6210,12 +5840,7 @@ function reverifyAllRoles() {
   });
 }
 
-function openAddRoleModal() {
-  // Legacy: redirect to the new split UI
-  openAddTraitModal();
-}
 
-let adminRolesCache = [];
 
 async function loadAdminStats() {
   if (!isAdmin) return;
@@ -6693,29 +6318,6 @@ function openAddWatchCollectionModal() {
   };
 }
 
-async function removeWatchedCollection(identifier) {
-  if (!isAdmin) return;
-  showConfirmModal('Remove Collection', `Stop watching "${identifier}"? You can re-add it later.`, async () => {
-    try {
-      const response = await fetch('/api/admin/activity/watch-remove', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ address: identifier })
-      });
-      const data = await response.json();
-      if (data.success) {
-        showSuccess('Collection removed from watch list');
-        loadNFTActivityView();
-        loadNFTActivityAdminView();
-      } else {
-        showError(data.message || 'Failed to remove collection');
-      }
-    } catch (e) {
-      showError('Error: ' + e.message);
-    }
-  }, 'Remove');
-}
 
 function openEditActivityAlertsModal() {
   if (!isAdmin) return;
@@ -7306,125 +6908,6 @@ async function legacyLoadNFTActivityAdminView() {
   }
 }
 
-function legacyOpenAddCollectionModal() {
-  showConfirmModal(
-    'Add Watched Collection',
-    `
-      <input type="text" id="newCollectionInput" placeholder="Collection address or key (e.g., collection-key)" 
-        style="width:100%; padding:12px; background:rgba(0,0,0,0.3); border:1px solid rgba(99,102,241,0.3); border-radius:8px; color:#e0e7ff; font-size:1em; margin-top:12px;" />
-    `,
-    async () => {
-      const collection = document.getElementById('newCollectionInput').value.trim();
-      if (!collection) {
-        showError('Please enter a collection address or key');
-        return;
-      }
-      
-      try {
-        const response = await fetch('/api/verification/admin/activity-watch-add', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ collection })
-        });
-        const data = await response.json();
-        
-        if (data.success) {
-          showSuccess('Collection added to watchlist');
-          loadNFTActivityAdminView();
-          loadNFTActivityView();
-        } else {
-          showError(data.message || 'Failed to add collection');
-        }
-      } catch (error) {
-        showError('Failed to add collection');
-      }
-    },
-    null,
-    true // Don't auto-close
-  );
-}
-
-async function legacyRemoveWatchedCollection(idx, collectionEncoded) {
-  const collection = decodeURIComponent(collectionEncoded);
-  
-  showConfirmModal(
-    'Remove Collection',
-    `Are you sure you want to stop watching "${collection}"? This cannot be undone.`,
-    async () => {
-      try {
-        const response = await fetch('/api/verification/admin/activity-watch-remove', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ collection })
-        });
-        const data = await response.json();
-        
-        if (data.success) {
-          showSuccess('Collection removed from watchlist');
-          loadNFTActivityAdminView();
-          loadNFTActivityView();
-        } else {
-          showError(data.message || 'Failed to remove collection');
-        }
-      } catch (error) {
-        showError('Failed to remove collection');
-      }
-    }
-  );
-}
-
-// ==================== TREASURY TRACKER ====================
-async function legacyLoadTreasuryTrackerView() {
-  try {
-    const response = await fetch('/api/admin/settings', { credentials: 'include' });
-    const data = await response.json();
-    
-    const container = document.getElementById('treasuryTrackerView');
-    if (!container) return;
-    
-    if (data.success && data.settings) {
-      const s = data.settings;
-      container.innerHTML = `
-        <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
-          <div class="stat-card">
-            <div class="stat-label">Treasury Wallet</div>
-            <div class="stat-value" style="font-size:0.9em;">${s.treasuryWallet ? s.treasuryWallet.slice(0,8) + '...' + s.treasuryWallet.slice(-8) : 'Not configured'}</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Refresh Interval</div>
-            <div class="stat-value">${s.treasuryRefreshInterval || '—'} hours</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Last Sync</div>
-            <div class="stat-value" style="font-size:0.9em;">${s.treasuryLastSync ? new Date(s.treasuryLastSync).toLocaleString() : 'Never'}</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">TX Alerts</div>
-            <div class="stat-value">${s.treasuryTxAlertsEnabled ? '✅ Enabled' : '❌ Disabled'}</div>
-          </div>
-        </div>
-        ${isAdmin ? `
-          <div style="margin-top:16px; padding:12px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span style="color:var(--text-secondary); font-size:0.9em;">Configure treasury settings via Discord: <code style="background:rgba(0,0,0,0.3); padding:4px 8px; border-radius:4px;">/treasury admin set-wallet</code></span>
-              <button class="btn-secondary" onclick="loadTreasuryPublicView()" style="padding:8px 16px;">
-                <span>🔄</span>
-                <span>Refresh</span>
-              </button>
-            </div>
-          </div>
-        ` : ''}
-      `;
-    } else {
-      container.innerHTML = '<p style="color:var(--text-secondary);">Treasury tracker not configured</p>';
-    }
-  } catch (error) {
-    console.error('Error loading treasury tracker:', error);
-    document.getElementById('treasuryTrackerView').innerHTML = '<p style="color:#ef4444;">Failed to load tracker config</p>';
-  }
-}
 
 // ==================== SELF-SERVE ROLES ====================
 async function loadSelfServeRolesView() {
@@ -7660,10 +7143,7 @@ async function loadSelfServeRolesView() {
   }
 }
 
-async function addSelfServeRole() {} // kept for legacy compatibility
-async function removeSelfServeRole() {}
-async function toggleSelfServeRole() {}
-async function postSelfServePanel() {}
+
 
 // ==================== API REFERENCE ====================
 function loadApiRefView() {

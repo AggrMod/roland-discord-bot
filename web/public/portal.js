@@ -325,7 +325,16 @@ async function manualCheckMicroVerify(statusEl) {
   const btn = document.querySelector('[onclick*="manualCheckMicroVerify"]');
   if (btn) { btn.disabled = true; btn.textContent = 'Scanning chain...'; }
   try {
-    const res = await fetch('/api/micro-verify/check-now', { method: 'POST', credentials: 'include' });
+    const res = await fetch('/api/micro-verify/check-now', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      throw new Error(`Server returned ${res.status} (not JSON) — try restarting the bot`);
+    }
     const data = await res.json();
     if (data.status === 'verified') {
       showSuccess('Wallet verified via micro-transaction!');

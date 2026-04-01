@@ -2922,7 +2922,7 @@ async function loadSuperadminView() {
             <span style="color:var(--text-secondary); font-size:0.85em;">Used by NFT tracker price display</span>
           </div>
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
-            ${['solana','ethereum','base','polygon','arbitrum','optimism','bsc','avalanche'].map(chain => `
+            ${['solana','usdc','ethereum','base','polygon','arbitrum','optimism','bsc','avalanche'].map(chain => `
               <label style="display:grid;gap:6px;">
                 <span style="font-size:0.82em;color:var(--text-secondary);text-transform:capitalize;">${chain}</span>
                 <input id="sa_chainEmoji_${chain}" type="text" value="${escapeHtml(chainEmojiMap[chain] || '')}" placeholder="<:emoji:123...> or unicode" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
@@ -3576,7 +3576,7 @@ async function saveMicroVerifySettings() {
 }
 
 async function saveChainEmojiMap() {
-  const chains = ['solana', 'ethereum', 'base', 'polygon', 'arbitrum', 'optimism', 'bsc', 'avalanche'];
+  const chains = ['solana', 'usdc', 'ethereum', 'base', 'polygon', 'arbitrum', 'optimism', 'bsc', 'avalanche'];
   const chainEmojiMap = {};
   chains.forEach(chain => {
     const el = document.getElementById(`sa_chainEmoji_${chain}`);

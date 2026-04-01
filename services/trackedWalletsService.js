@@ -4,6 +4,34 @@ const nftService = require('./nftService');
 const clientProvider = require('../utils/clientProvider');
 const { applyEmbedBranding, getBranding } = require('./embedBranding');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { Connection, PublicKey, LAMPORTS_PER_SOL } = require('@solana/web3.js');
+
+const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+
+async function _getSolanaBalances(walletAddress) {
+  try {
+    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const connection = new Connection(rpcUrl, 'confirmed');
+    const pubkey = new PublicKey(walletAddress);
+
+    const [lamports, tokenAccounts] = await Promise.all([
+      connection.getBalance(pubkey),
+      connection.getParsedTokenAccountsByOwner(pubkey, { mint: new PublicKey(USDC_MINT) })
+    ]);
+
+    const sol = lamports / LAMPORTS_PER_SOL;
+    let usdc = 0;
+    if (tokenAccounts.value.length > 0) {
+      const info = tokenAccounts.value[0].account.data.parsed.info.tokenAmount;
+      usdc = info.uiAmount || 0;
+    }
+
+    return { sol, usdc };
+  } catch (e) {
+    logger.warn('Could not fetch Solana balances:', e.message);
+    return { sol: null, usdc: null };
+  }
+}
 
 class TrackedWalletsService {
   // ─── CRUD ────────────────────────────────────────────────────────────────
@@ -121,11 +149,16 @@ class TrackedWalletsService {
     const addr = walletRow.wallet_address;
     const label = walletRow.label || `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
+    // Fetch NFTs and SOL/USDC balances in parallel
     let nfts = [];
+    let balances = { sol: null, usdc: null };
     try {
-      nfts = await nftService.getNFTsForWallet(addr, { guildId });
+      [nfts, balances] = await Promise.all([
+        nftService.getNFTsForWallet(addr, { guildId }).catch(e => { logger.error('Error fetching NFTs:', e); return []; }),
+        _getSolanaBalances(addr)
+      ]);
     } catch (e) {
-      logger.error('Error fetching NFTs for holdings panel:', e);
+      logger.error('Error fetching holdings data:', e);
     }
 
     const total = nfts.length;
@@ -161,6 +194,12 @@ class TrackedWalletsService {
     const botAvatar = client?.user?.displayAvatarURL?.() || null;
     const logoUrl = branding.logo || botAvatar;
 
+    // Chain emoji icons (configurable via Superadmin → Chain Emoji Map)
+    const settingsManager = require('../utils/settingsManager');
+    const chainEmojiMap = settingsManager.getSettings().chainEmojiMap || {};
+    const solEmoji  = chainEmojiMap['solana'] || process.env.SOL_EMOJI  || '◎';
+    const usdcEmoji = chainEmojiMap['usdc']   || process.env.USDC_EMOJI || '💵';
+
     const embed = new EmbedBuilder()
       .setTitle(`💼 Holdings: ${label}`)
       .setDescription(
@@ -168,12 +207,22 @@ class TrackedWalletsService {
           ? '_No NFTs found in this wallet_'
           : collectionLines.join('\n')
       )
-      .addFields(
-        { name: '🖼️ Total NFTs', value: total.toString(), inline: true },
-        { name: '📍 Address', value: `\`${addr.slice(0, 6)}...${addr.slice(-4)}\``, inline: true }
-      )
       .setTimestamp()
       .setFooter({ text: `Last updated` });
+
+    // SOL and USDC balance row
+    if (balances.sol !== null) {
+      embed.addFields(
+        { name: `${solEmoji} SOL`, value: balances.sol.toFixed(4), inline: true },
+        { name: `${usdcEmoji} USDC`, value: balances.usdc !== null ? balances.usdc.toFixed(2) : '—', inline: true },
+        { name: '\u200b', value: '\u200b', inline: true } // spacer
+      );
+    }
+
+    embed.addFields(
+      { name: '🖼️ Total NFTs', value: total.toString(), inline: true },
+      { name: '📍 Address', value: `\`${addr.slice(0, 6)}...${addr.slice(-4)}\``, inline: true }
+    );
 
     if (traitSection) {
       embed.addFields({ name: '🎨 Traits', value: traitSection, inline: false });

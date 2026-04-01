@@ -3406,6 +3406,15 @@ class WebServer {
           logger.error('Role update after verify failed (non-fatal):', roleErr);
         }
 
+        // Auto-assign OG role on first verification (same behavior as walletService.linkWallet)
+        if (isPrimary) {
+          walletService.triggerOGRoleAssignment(
+            discordId,
+            req.session.discordUser.username || 'Web User',
+            req.guildId || null
+          );
+        }
+
         logger.log(`Web signature verification: User ${discordId} linked wallet ${walletAddress}`);
         res.json({ success: true, message: 'Wallet verified successfully!' });
       } catch (error) {
@@ -3476,6 +3485,15 @@ class WebServer {
           }
         } catch (roleErr) {
           logger.error('Role update after legacy verify failed (non-fatal):', roleErr);
+        }
+
+        // Auto-assign OG role on first verification (same behavior as walletService.linkWallet)
+        if (isPrimary) {
+          walletService.triggerOGRoleAssignment(
+            discordId,
+            req.session.discordUser?.username || 'Web User',
+            req.guildId || null
+          );
         }
 
         logger.log(`Web verification: User ${discordId} linked wallet ${walletAddress}`);

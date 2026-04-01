@@ -1631,6 +1631,7 @@ class WebServer {
           effectiveSettings.moduleBrandingEnabled = !!tenantContext.modules.branding;
           effectiveSettings.moduleRoleClaimEnabled = !!tenantContext.modules.selfserveroles;
           effectiveSettings.moduleTicketingEnabled = !!tenantContext.modules.ticketing;
+          effectiveSettings.moduleEngagementEnabled = !!tenantContext.modules.engagement;
           // tenant-specific verification settings (avoid cross-tenant OG leakage)
           const tenantVerification = tenantService.getTenantVerificationSettings(req.guildId);
           if (tenantVerification.ogRoleId !== undefined) effectiveSettings.ogRoleId = tenantVerification.ogRoleId || '';

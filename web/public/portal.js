@@ -1662,7 +1662,18 @@ function switchSection(sectionName) {
     renderWallets();
   } else if (sectionName === 'treasury') {
     loadTreasuryWalletTable();
-    if (isAdmin) showAdminTreasuryElements();
+    if (isAdmin) {
+      showAdminTreasuryElements();
+      const settingsPanel = document.getElementById('treasuryTrackerSettingsPanel');
+      if (settingsPanel && !settingsPanel.hasAttribute('data-loaded')) {
+        settingsPanel.setAttribute('id', 'settingsTab-treasury');
+        settingsPanel.setAttribute('data-loaded', '1');
+        settingsPanel.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-secondary);"><div class="spinner"></div><p>Loading tracker settings...</p></div>';
+        loadTreasuryModuleSettings().then(() => {
+          settingsPanel.setAttribute('id', 'treasuryTrackerSettingsPanel');
+        });
+      }
+    }
   } else if (sectionName === 'nft-activity') {
     loadNFTActivityView();
     if (isAdmin) loadNFTActivityAdminView();

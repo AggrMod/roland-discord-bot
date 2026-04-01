@@ -1892,36 +1892,7 @@ async function removeTrackedWallet(id) {
 }
 
 
-async function removeTreasuryWallet() {
-  if (!confirm('Remove this treasury wallet? This clears the wallet address from settings.')) return;
-  try {
-    const res = await fetch('/api/admin/treasury/config', {
-      method: 'PUT',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
-      body: JSON.stringify({ solanaWallet: '' })
-    });
-    const data = await res.json();
-    if (data.success) {
-      showSuccess('Wallet removed.');
-      loadTreasuryWalletTable();
-    } else {
-      showError(data.message || 'Failed to remove wallet.');
-    }
-  } catch (e) {
-    showError('Error removing wallet.');
-  }
-}
 
-async function refreshTreasuryBalances() {
-  try {
-    showSuccess('Refreshing treasury balances...');
-    await fetch('/api/admin/treasury/refresh', { method: 'POST', credentials: 'include' });
-    setTimeout(() => loadTreasuryWalletTable(), 2000);
-  } catch (err) {
-    console.error('[Treasury] Refresh error:', err);
-  }
-}
 
 // ==================== ADD WALLET MODAL ====================
 async function openAddWalletModal(existingId, existingAddr, existingLabel, existingAlertCh, existingPanelCh) {
@@ -4910,150 +4881,6 @@ async function loadTreasuryModuleSettings() {
   }
 }
 
-async function loadTreasuryWalletList() {
-  const card = document.getElementById('trs_walletListCard');
-  if (!card) return;
-  const fieldInput = 'width:100%;padding:10px 12px;border:1px solid rgba(99,102,241,0.22);border-radius:8px;background:rgba(30,41,59,0.8);color:#e0e7ff;font-size:0.9em;';
-  const cardHeader = 'color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0 0 var(--space-4) 0;padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);';
-  try {
-    const res = await fetch('/api/admin/treasury/wallets', { credentials: 'include' });
-    const data = await res.json();
-    const wallets = data.wallets || [];
-
-    const truncAddr = (a) => a && a.length > 12 ? a.slice(0, 6) + '...' + a.slice(-4) : (a || '—');
-    const tableRows = wallets.length ? wallets.map(w => `
-      <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
-        <td style="padding:8px 10px;font-size:0.85em;color:var(--text-primary);">${escapeHtml(w.label || 'Wallet')}</td>
-        <td style="padding:8px 10px;font-size:0.85em;color:var(--text-secondary);font-family:monospace;" title="${escapeHtml(w.address)}">${truncAddr(w.address)}</td>
-        <td style="padding:8px 10px;font-size:0.85em;color:${w.enabled !== 0 ? '#86efac' : '#fca5a5'};">${w.enabled !== 0 ? 'Yes' : 'No'}</td>
-        <td style="padding:8px 10px;">
-          <button class="trs-edit-wallet-btn" data-id="${w.id}" data-address="${escapeHtml(w.address)}" data-label="${escapeHtml(w.label || '')}" data-enabled="${w.enabled !== 0 ? 1 : 0}" style="font-size:0.8em;padding:4px 10px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-right:4px;">✏️ Edit</button>
-          <button class="trs-remove-wallet-btn" data-id="${w.id}" style="font-size:0.8em;padding:4px 10px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
-        </td>
-      </tr>
-    `).join('') : `<tr><td colspan="4" style="padding:12px;color:var(--text-secondary);font-size:0.85em;text-align:center;">No tracked wallets yet. Add one below.</td></tr>`;
-
-    card.innerHTML = `
-      <h3 style="${cardHeader}">📡 Tracked Wallets</h3>
-      <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:12px;">Manage all tracked wallets with custom labels. This mirrors the NFT Tracker settings layout.</p>
-      <div style="overflow-x:auto;margin-bottom:14px;">
-        <table style="width:100%;border-collapse:collapse;">
-          <thead><tr style="border-bottom:2px solid rgba(255,255,255,0.1);">
-            <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;">Label</th>
-            <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;">Address</th>
-            <th style="text-align:left;padding:8px 10px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;">On</th>
-            <th style="padding:8px 10px;"></th>
-          </tr></thead>
-          <tbody>${tableRows}</tbody>
-        </table>
-      </div>
-      <div style="padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);">
-        <h4 style="color:#c9d6ff;font-size:0.9em;font-weight:600;margin:0 0 10px;">➕ Add Wallet</h4>
-        <div style="display:flex;gap:8px;align-items:flex-end;">
-          <div style="flex:1;"><input type="text" id="trs_newWalletAddr" placeholder="Solana wallet address" style="${fieldInput}"></div>
-          <div style="width:180px;"><input type="text" id="trs_newWalletLabel" placeholder="Label (optional)" style="${fieldInput}"></div>
-          <button class="btn-primary" onclick="addTreasuryWallet()" style="font-size:0.85em;padding:10px 16px;white-space:nowrap;">Add Wallet</button>
-        </div>
-      </div>
-    `;
-
-    card.querySelectorAll('.trs-remove-wallet-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        if (!confirm('Remove this wallet?')) return;
-        btn.disabled = true;
-        try {
-          const r = await fetch('/api/admin/treasury/wallets/' + btn.dataset.id, { method: 'DELETE', credentials: 'include' });
-          const d = await r.json();
-          if (d.success) { showSuccess('Wallet removed'); loadTreasuryWalletList(); }
-          else showError(d.message || 'Failed to remove wallet');
-        } catch { showError('Error removing wallet'); btn.disabled = false; }
-      });
-    });
-
-    card.querySelectorAll('.trs-edit-wallet-btn').forEach(btn => {
-      btn.addEventListener('click', () => openEditTreasuryWalletModal(btn.dataset.id, btn.dataset.address, btn.dataset.label, btn.dataset.enabled === '1'));
-    });
-  } catch (e) {
-    console.error('[Treasury] Wallet list error:', e);
-    card.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;">Failed to load wallets.</p>';
-  }
-}
-
-async function addTreasuryWallet() {
-  const addr = (document.getElementById('trs_newWalletAddr')?.value || '').trim();
-  const label = (document.getElementById('trs_newWalletLabel')?.value || '').trim();
-  if (!addr) return showError('Wallet address is required');
-  try {
-    const res = await fetch('/api/admin/treasury/wallets', {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address: addr, label })
-    });
-    const data = await res.json();
-    if (data.success) {
-      showSuccess('Wallet added');
-      document.getElementById('trs_newWalletAddr').value = '';
-      document.getElementById('trs_newWalletLabel').value = '';
-      loadTreasuryWalletList();
-    } else showError(data.message || 'Failed to add wallet');
-  } catch { showError('Error adding wallet'); }
-}
-
-async function openEditTreasuryWalletModal(id, address, label, enabled) {
-  const old = document.getElementById('trsEditWalletModal');
-  if (old) old.remove();
-  const fi = 'width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;';
-  const lb = 'display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;';
-  const overlay = document.createElement('div');
-  overlay.id = 'trsEditWalletModal';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;';
-  overlay.innerHTML = `
-    <div style="background:var(--card-bg,#1e293b);border:1px solid rgba(99,102,241,0.3);border-radius:12px;padding:24px;width:480px;max-width:95vw;">
-      <h3 style="margin:0 0 16px;color:var(--text-primary,#e0e7ff);">✏️ Edit Wallet</h3>
-      <div style="display:grid;gap:14px;">
-        <div><label style="${lb}">Wallet Label</label><input id="trsEditLabel" type="text" value="${escapeHtml(label || '')}" style="${fi}"></div>
-        <div><label style="${lb}">Wallet Address</label><input id="trsEditAddr" type="text" value="${escapeHtml(address || '')}" style="${fi};font-family:monospace;"></div>
-        <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input id="trsEditEnabled" type="checkbox" ${enabled ? 'checked' : ''}> Enabled</label>
-      </div>
-      <div style="display:flex;gap:10px;align-items:center;margin-top:18px;">
-        <button id="trsEditSaveBtn" class="btn-primary" style="font-size:0.85em;padding:8px 16px;">Save</button>
-        <button id="trsEditCancelBtn" class="btn-secondary" style="font-size:0.85em;padding:8px 16px;">Cancel</button>
-        <span id="trsEditFeedback" style="font-size:0.82em;"></span>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
-  document.getElementById('trsEditCancelBtn').addEventListener('click', () => overlay.remove());
-  document.getElementById('trsEditSaveBtn').addEventListener('click', async () => {
-    const saveBtn = document.getElementById('trsEditSaveBtn');
-    const feedback = document.getElementById('trsEditFeedback');
-    saveBtn.disabled = true; saveBtn.textContent = 'Saving...';
-    try {
-      const res = await fetch('/api/admin/treasury/wallets/' + id, {
-        method: 'PUT', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          address: (document.getElementById('trsEditAddr')?.value || '').trim(),
-          label: (document.getElementById('trsEditLabel')?.value || '').trim(),
-          enabled: !!document.getElementById('trsEditEnabled')?.checked,
-        })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        overlay.remove();
-        showSuccess('Wallet updated');
-        loadTreasuryWalletList();
-      } else {
-        feedback.style.color = '#fca5a5';
-        feedback.textContent = data.message || 'Failed to save';
-      }
-    } catch {
-      feedback.style.color = '#fca5a5';
-      feedback.textContent = 'Network error';
-    }
-    saveBtn.disabled = false; saveBtn.textContent = 'Save';
-  });
-}
 
 async function saveTreasuryModuleSettings() {
   const payload = {
@@ -6529,7 +6356,7 @@ async function loadNFTActivityAdminView(preloadedCollections = null) {
     container.innerHTML = `
       <div style="display:grid; gap:12px;">
         <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
-          <button class="btn-primary" onclick="openAddCollectionModal()" style="justify-content:center;">
+          <button class="btn-primary" onclick="openNftActivityAddCollectionModal()" style="justify-content:center;">
             <span>➕</span>
             <span>Add Collection</span>
           </button>
@@ -6657,7 +6484,7 @@ async function openEditCollectionModal(id, name, addr, meSymbol, channelId) {
   });
 }
 
-async function openAddCollectionModal() {
+async function openNftActivityAddCollectionModal() {
   if (!isAdmin) return;
   const old = document.getElementById('collAddOverlay');
   if (old) old.remove();
@@ -6882,7 +6709,7 @@ async function legacyLoadNFTActivityAdminView() {
     
     container.innerHTML = `
       <div style="margin-bottom:16px;">
-        <button class="btn-primary" onclick="openAddCollectionModal()">
+        <button class="btn-primary" onclick="openNftActivityAddCollectionModal()">
           <span>➕</span>
           <span>Add Collection</span>
         </button>

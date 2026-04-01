@@ -379,6 +379,34 @@ class NFTActivityService {
     }
   }
 
+  async _fireWalletAlerts(evt) {
+    // Lazy-require to avoid circular dependency
+    const trackedWalletsService = require('./trackedWalletsService');
+    const involvedWallets = [evt.fromWallet, evt.toWallet].filter(Boolean);
+    const typeUpper = (evt.eventType || 'unknown').toUpperCase();
+    const iconMap = { MINT: '🪄', SELL: '💸', LIST: '🏷️', DELIST: '📦', TRANSFER: '🔁' };
+    const typeIcon = iconMap[typeUpper] || '🧩';
+    const chainMeta = getChainPriceMeta(evt.chain);
+    const priceDisplay = evt.priceSol !== null && evt.priceSol !== undefined && evt.priceSol > 0
+      ? `${chainMeta.icon} ${Number(evt.priceSol).toFixed(3)} ${chainMeta.unit}`
+      : '—';
+
+    for (const addr of involvedWallets) {
+      const rows = trackedWalletsService.getTrackedWalletsByAddress(addr);
+      for (const row of rows) {
+        if (!row.alert_channel_id) continue;
+        trackedWalletsService.sendWalletAlert({
+          walletRow: row,
+          guildId: row.guild_id,
+          evt,
+          typeIcon,
+          priceDisplay,
+          chain: evt.chain,
+        }).catch(err => logger.error('[wallet-alert] error:', err));
+      }
+    }
+  }
+
   async maybeSendAlert(evt) {
     // Per-collection tracked config (can be multiple tenants/channels for same collection)
     const trackedRows = evt.collectionKey ? this.getTrackedCollectionsByAddress(evt.collectionKey) : [];
@@ -536,6 +564,9 @@ class NFTActivityService {
         logger.error(`[nft-alert] failed guild=${target.guild_id || 'global'} channel=${target.channel_id} type=${evt.eventType} tx=${evt.txSignature || 'none'}`, sendErr);
       }
     }
+
+    // Also fire per-wallet alerts for any tracked_wallets that match from/to
+    this._fireWalletAlerts(evt).catch(err => logger.error('[wallet-alert] _fireWalletAlerts error:', err));
   }
 
   getEventByTx(txSignature) {

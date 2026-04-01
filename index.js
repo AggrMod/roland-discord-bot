@@ -189,6 +189,17 @@ client.once(Events.ClientReady, () => {
   intervals.push(setInterval(pollAllCollections, 5 * 60 * 1000));
   setTimeout(pollAllCollections, 30 * 1000); // first poll 30s after startup
   logger.log('🔔 NFT activity poll scheduled (30s startup delay, then every 5 min)');
+
+  // Holdings panel refresh cron — keep wallet holding panels up to date
+  const trackedWalletsService = require('./services/trackedWalletsService');
+  const refreshAllHoldingsPanels = () => {
+    trackedWalletsService.refreshAllPanels().catch(err => {
+      logger.error('[wallet-panel] Error in scheduled refresh:', err);
+    });
+  };
+  intervals.push(setInterval(refreshAllHoldingsPanels, 30 * 60 * 1000)); // every 30 min
+  setTimeout(refreshAllHoldingsPanels, 2 * 60 * 1000); // first refresh 2 min after startup
+  logger.log('📋 Wallet holdings panel refresh scheduled (2 min startup delay, then every 30 min)');
 });
 
 client.on(Events.GuildCreate, async guild => {

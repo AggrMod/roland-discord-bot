@@ -701,6 +701,26 @@ function initDatabase() {
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_ref ON points_ledger (guild_id, user_id, reference_id) WHERE reference_id IS NOT NULL'); } catch (e) {}
   try { db.exec('ALTER TABLE points_ledger ADD COLUMN expired INTEGER DEFAULT 0'); } catch (e) {}
 
+  // ── Wallet Tracker ─────────────────────────────────────────────────────────
+  // Admin-defined wallets to monitor for TX alerts + live holdings panels
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tracked_wallets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      wallet_address TEXT NOT NULL,
+      label TEXT,
+      alert_channel_id TEXT,
+      panel_channel_id TEXT,
+      panel_message_id TEXT,
+      enabled INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(guild_id, wallet_address)
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_wallets_guild ON tracked_wallets(guild_id)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_wallets_address ON tracked_wallets(wallet_address)'); } catch (e) {}
+
   logger.log('Database initialized successfully');
 }
 

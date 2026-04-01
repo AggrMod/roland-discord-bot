@@ -555,7 +555,9 @@ function updateModuleVisibility() {
   ];
   moduleNav.forEach(({ id, key }) => {
     const el = document.getElementById(id);
-    if (el) el.style.display = (state[key] === false) ? 'none' : '';
+    if (!el) return;
+    // Hide if no server selected OR if the module is explicitly disabled for this guild
+    el.style.display = (!activeGuildId || state[key] === false) ? 'none' : '';
   });
 }
 

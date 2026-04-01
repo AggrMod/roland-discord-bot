@@ -637,9 +637,6 @@
             <p class="section-subtitle">Manage tracked wallets, balances, and transaction alerts</p>
           </header>
 
-          <!-- Admin settings panel (same as Settings → Wallet Tracker tab) -->
-          <div id="treasuryTrackerSettingsPanel"></div>
-
           <!-- Wallets card -->
           <div class="card" style="margin-top:var(--space-4);">
             <div class="card-header-row">
@@ -1324,35 +1321,37 @@
 
   <!-- Add Wallet Modal -->
   <div id="addWalletModal" class="modal-overlay" style="display:none;">
-    <div class="modal">
+    <div class="modal" style="max-width:520px;width:100%;">
       <div class="modal-header">
-        <h3 class="modal-title">Add Treasury Wallet</h3>
+        <h3 class="modal-title" id="addWalletModalTitle">Add Tracked Wallet</h3>
       </div>
       <div class="modal-body">
         <div style="display:flex; flex-direction:column; gap:16px;">
+          <!-- Wallet Address -->
           <div>
             <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Wallet Address <span style="color:#ef4444;">*</span></label>
             <input id="addWalletAddress" type="text" placeholder="Solana wallet address" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; font-family:monospace; box-sizing:border-box;">
           </div>
+          <!-- Label -->
           <div>
             <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Label <span style="color:var(--text-secondary); font-size:0.85em;">(optional)</span></label>
-            <input id="addWalletLabel" type="text" placeholder="e.g. Main Treasury" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; box-sizing:border-box;">
+            <input id="addWalletLabel" type="text" placeholder="e.g. Whale #1, Team Wallet" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; box-sizing:border-box;">
           </div>
+          <!-- Wallet Watch Channel -->
           <div>
-            <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Alert Channel</label>
-            <select id="addWalletChannel" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; box-sizing:border-box;"><option value="">Loading channels...</option></select>
+            <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:4px;">📋 Wallet Watch Channel</label>
+            <div style="color:var(--text-secondary);font-size:0.78em;margin-bottom:6px;">Holdings panel will be posted (and auto-refreshed) in this channel.</div>
+            <select id="addWalletPanelChannel" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; box-sizing:border-box;"><option value="">-- No holdings panel --</option></select>
           </div>
+          <!-- TX Alert Channel -->
           <div>
-            <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Transaction Types</label>
-            <div style="display:flex; flex-wrap:wrap; gap:10px; padding:8px 0;">
-              <label style="display:flex; align-items:center; gap:5px; color:#e0e7ff; font-size:0.88em; cursor:pointer;"><input type="checkbox" class="addWalletTxType" value="sol-transfer" checked> sol-transfer</label>
-              <label style="display:flex; align-items:center; gap:5px; color:#e0e7ff; font-size:0.88em; cursor:pointer;"><input type="checkbox" class="addWalletTxType" value="token-transfer" checked> token-transfer</label>
-              <label style="display:flex; align-items:center; gap:5px; color:#e0e7ff; font-size:0.88em; cursor:pointer;"><input type="checkbox" class="addWalletTxType" value="nft-sale"> nft-sale</label>
-              <label style="display:flex; align-items:center; gap:5px; color:#e0e7ff; font-size:0.88em; cursor:pointer;"><input type="checkbox" class="addWalletTxType" value="nft-listing"> nft-listing</label>
-              <label style="display:flex; align-items:center; gap:5px; color:#e0e7ff; font-size:0.88em; cursor:pointer;"><input type="checkbox" class="addWalletTxType" value="swap"> swap</label>
-            </div>
+            <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:4px;">🔔 TX Alert Channel</label>
+            <div style="color:var(--text-secondary);font-size:0.78em;margin-bottom:6px;">Receive a Discord alert for every transaction involving this wallet.</div>
+            <select id="addWalletChannel" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; box-sizing:border-box;"><option value="">-- No TX alerts --</option></select>
           </div>
-          <p id="addWalletError" style="color:#ef4444; font-size:0.85em; display:none;"></p>
+          <!-- Hidden edit ID -->
+          <input type="hidden" id="addWalletEditId" value="">
+          <p id="addWalletError" style="color:#ef4444; font-size:0.85em; display:none; margin:0;"></p>
         </div>
       </div>
       <div class="modal-footer">

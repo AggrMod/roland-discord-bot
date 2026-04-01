@@ -2819,6 +2819,89 @@ class WebServer {
       }
     });
 
+    // ==================== ADMIN API - TRACKED WALLETS (NFT Tracker) ====================
+
+    this.app.get('/api/admin/tracked-wallets', adminAuthMiddleware, (req, res) => {
+      try {
+        const trackedWalletsService = require('../services/trackedWalletsService');
+        const wallets = trackedWalletsService.getTrackedWallets(req.guildId);
+        res.json({ success: true, wallets });
+      } catch (error) {
+        logger.error('Error listing tracked wallets:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/tracked-wallets', adminAuthMiddleware, async (req, res) => {
+      try {
+        const trackedWalletsService = require('../services/trackedWalletsService');
+        const { walletAddress, label, alertChannelId, panelChannelId } = req.body;
+        const result = trackedWalletsService.addTrackedWallet({
+          guildId: req.guildId,
+          walletAddress,
+          label,
+          alertChannelId: alertChannelId || null,
+          panelChannelId: panelChannelId || null,
+        });
+        if (!result.success) return res.json({ success: false, message: result.message });
+
+        // Auto-post holdings panel to watch channel if one is configured
+        if (panelChannelId) {
+          const wallet = trackedWalletsService.getTrackedWalletById(result.id, req.guildId);
+          if (wallet) {
+            trackedWalletsService.postHoldingsPanel(wallet, panelChannelId, req.guildId)
+              .catch(err => logger.error('[tracked-wallets] Auto panel post error:', err));
+          }
+        }
+
+        res.json({ success: true, id: result.id });
+      } catch (error) {
+        logger.error('Error adding tracked wallet:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.put('/api/admin/tracked-wallets/:id', adminAuthMiddleware, (req, res) => {
+      try {
+        const trackedWalletsService = require('../services/trackedWalletsService');
+        const { label, alertChannelId, panelChannelId, enabled } = req.body;
+        const updates = {};
+        if (label !== undefined) updates.label = label;
+        if (alertChannelId !== undefined) updates.alertChannelId = alertChannelId;
+        if (panelChannelId !== undefined) updates.panelChannelId = panelChannelId;
+        if (enabled !== undefined) updates.enabled = enabled;
+        const result = trackedWalletsService.updateTrackedWallet(parseInt(req.params.id), updates, req.guildId);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error updating tracked wallet:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.delete('/api/admin/tracked-wallets/:id', adminAuthMiddleware, (req, res) => {
+      try {
+        const trackedWalletsService = require('../services/trackedWalletsService');
+        const result = trackedWalletsService.removeTrackedWallet(parseInt(req.params.id), req.guildId);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error removing tracked wallet:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/tracked-wallets/:id/panel', adminAuthMiddleware, async (req, res) => {
+      try {
+        const trackedWalletsService = require('../services/trackedWalletsService');
+        const wallet = trackedWalletsService.getTrackedWalletById(parseInt(req.params.id), req.guildId);
+        if (!wallet) return res.json({ success: false, message: 'Wallet not found' });
+        const result = await trackedWalletsService.postHoldingsPanel(wallet, req.body.channelId || null, req.guildId);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error posting holdings panel:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
     // ==================== ADMIN API - BATTLE ERAS ====================
 
     this.app.get('/api/admin/battle/eras', adminAuthMiddleware, (req, res) => {

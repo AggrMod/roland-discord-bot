@@ -1662,18 +1662,6 @@ function switchSection(sectionName) {
     renderWallets();
   } else if (sectionName === 'treasury') {
     loadTreasuryWalletTable();
-    if (isAdmin) {
-      showAdminTreasuryElements();
-      const settingsPanel = document.getElementById('treasuryTrackerSettingsPanel');
-      if (settingsPanel && !settingsPanel.hasAttribute('data-loaded')) {
-        settingsPanel.setAttribute('id', 'settingsTab-treasury');
-        settingsPanel.setAttribute('data-loaded', '1');
-        settingsPanel.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-secondary);"><div class="spinner"></div><p>Loading tracker settings...</p></div>';
-        loadTreasuryModuleSettings().then(() => {
-          settingsPanel.setAttribute('id', 'treasuryTrackerSettingsPanel');
-        });
-      }
-    }
   } else if (sectionName === 'nft-activity') {
     loadNFTActivityView();
     if (isAdmin) loadNFTActivityAdminView();
@@ -1841,43 +1829,99 @@ function showAdminTreasuryElements() {
 }
 
 async function loadTreasuryWalletTable() {
+  // Alias — now delegates to tracked wallets list
+  if (isAdmin) showAdminTreasuryElements();
+  await loadTrackedWalletList();
+}
+
+async function loadTrackedWalletList() {
   const container = document.getElementById('treasuryWalletTableContainer');
   if (!container) return;
 
   try {
-    const response = await fetch('/api/admin/treasury', { credentials: 'include', headers: buildTenantRequestHeaders() });
-    if (!response.ok) {
-      // Non-admin: try public endpoint
-      const pubRes = await fetch('/api/public/treasury', { credentials: 'include', headers: buildTenantRequestHeaders() });
-      const pubData = await pubRes.json();
-      const t = pubData.data || pubData.treasury || pubData;
-      if (t && t.sol !== undefined) {
-        renderWalletTableFromConfig({ solanaWallet: null, label: 'Treasury' }, t);
-        document.getElementById('treasuryWalletCount').textContent = '1';
-      } else {
-        renderWalletEmptyState(container, false);
-        document.getElementById('treasuryWalletCount').textContent = '0';
-      }
+    const res = await fetch('/api/admin/tracked-wallets', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    if (!res.ok) {
+      container.innerHTML = '<div style="color:var(--text-secondary); text-align:center; padding:20px;">Admin access required to manage tracked wallets.</div>';
+      return;
+    }
+    const data = await res.json();
+    const wallets = data.wallets || [];
+    document.getElementById('treasuryWalletCount').textContent = wallets.length;
+
+    if (!wallets.length) {
+      container.innerHTML = `
+        <div style="text-align:center; padding:var(--space-5); color:var(--text-secondary);">
+          <p style="margin-bottom:16px;">No wallets tracked yet. Add a wallet to start monitoring.</p>
+          <button class="btn-primary" onclick="openAddWalletModal()">+ Add Wallet</button>
+        </div>`;
       return;
     }
 
-    const data = await response.json();
-    const config = data.config || data;
-    const treasury = data.treasury || {};
+    const rows = wallets.map(w => {
+      const addr = `${w.wallet_address.slice(0,6)}...${w.wallet_address.slice(-4)}`;
+      const lbl = escapeHtml(w.label || '—');
+      const alertCh = w.alert_channel_id ? `<code>#${w.alert_channel_id}</code>` : '<span style="color:var(--text-secondary);">—</span>';
+      const panelCh = w.panel_channel_id ? `<code>#${w.panel_channel_id}</code>` : '<span style="color:var(--text-secondary);">—</span>';
+      const status = w.enabled ? '<span class="badge badge-active">Active</span>' : '<span class="badge badge-paused">Paused</span>';
+      return `
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
+          <td style="padding:10px 12px;">
+            <span style="font-family:monospace;font-size:0.85em;" title="${escapeHtml(w.wallet_address)}">${addr}</span>
+            <button class="copy-btn" onclick="navigator.clipboard.writeText('${escapeHtml(w.wallet_address)}');this.textContent='✓';setTimeout(()=>this.textContent='📋',1200)" title="Copy address" style="margin-left:4px;background:none;border:none;cursor:pointer;font-size:0.85em;">📋</button>
+          </td>
+          <td style="padding:10px 12px;color:#c9d6ff;">${lbl}</td>
+          <td style="padding:10px 12px;">${alertCh}</td>
+          <td style="padding:10px 12px;">${panelCh}</td>
+          <td style="padding:10px 12px;">${status}</td>
+          <td style="padding:10px 12px;">
+            <div style="display:flex;gap:6px;">
+              <button title="Refresh Holdings Panel" onclick="refreshTrackedWalletPanel(${w.id})" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">📋 Panel</button>
+              <button title="Edit" onclick="openAddWalletModal('${w.id}','${escapeHtml(w.wallet_address)}','${escapeHtml(w.label || '')}','${w.alert_channel_id || ''}','${w.panel_channel_id || ''}')" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️</button>
+              <button title="Remove" onclick="removeTrackedWallet(${w.id})" style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
 
-    if (config.solanaWallet) {
-      renderWalletTableFromConfig(config, treasury);
-      document.getElementById('treasuryWalletCount').textContent = '1';
-      if (isAdmin) showAdminTreasuryElements();
-    } else {
-      renderWalletEmptyState(container, isAdmin);
-      document.getElementById('treasuryWalletCount').textContent = '0';
-      if (isAdmin) showAdminTreasuryElements();
-    }
+    container.innerHTML = `
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="border-bottom:2px solid rgba(255,255,255,0.1);">
+              <th style="text-align:left;padding:8px 12px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;">Address</th>
+              <th style="text-align:left;padding:8px 12px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;">Label</th>
+              <th style="text-align:left;padding:8px 12px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;">TX Alert Ch.</th>
+              <th style="text-align:left;padding:8px 12px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;">Watch Ch.</th>
+              <th style="text-align:left;padding:8px 12px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;">Status</th>
+              <th style="padding:8px 12px;"></th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
   } catch (err) {
-    console.error('[Treasury] Wallet table load error:', err);
-    container.innerHTML = '<div style="color:#ef4444; text-align:center; padding:20px;">Error loading wallet data</div>';
+    console.error('[TrackedWallets] Load error:', err);
+    container.innerHTML = '<div style="color:#ef4444;text-align:center;padding:20px;">Error loading wallets.</div>';
   }
+}
+
+async function refreshTrackedWalletPanel(id) {
+  try {
+    const res = await fetch(`/api/admin/tracked-wallets/${id}/panel`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } });
+    const d = await res.json();
+    if (d.success) showSuccess('Holdings panel ' + (d.action === 'updated' ? 'updated!' : 'posted!'));
+    else showError(d.message || 'Failed to post panel');
+  } catch { showError('Error posting holdings panel'); }
+}
+
+async function removeTrackedWallet(id) {
+  if (!confirm('Remove this tracked wallet?')) return;
+  try {
+    const res = await fetch('/api/admin/tracked-wallets/' + id, { method: 'DELETE', credentials: 'include' });
+    const d = await res.json();
+    if (d.success) { showSuccess('Wallet removed'); loadTrackedWalletList(); }
+    else showError(d.message || 'Failed to remove wallet');
+  } catch { showError('Error removing wallet'); }
 }
 
 function renderWalletTableFromConfig(config, treasury) {
@@ -1976,21 +2020,24 @@ async function refreshTreasuryBalances() {
 }
 
 // ==================== ADD WALLET MODAL ====================
-async function openAddWalletModal(existingAddr, existingLabel, existingChannel) {
+async function openAddWalletModal(existingId, existingAddr, existingLabel, existingAlertCh, existingPanelCh) {
   const modal = document.getElementById('addWalletModal');
+  const isEdit = !!existingId;
+  document.getElementById('addWalletModalTitle').textContent = isEdit ? 'Edit Tracked Wallet' : 'Add Tracked Wallet';
+  document.getElementById('addWalletEditId').value = existingId || '';
   document.getElementById('addWalletAddress').value = existingAddr || '';
+  document.getElementById('addWalletAddress').disabled = isEdit; // can't change address on edit
   document.getElementById('addWalletLabel').value = existingLabel || '';
   document.getElementById('addWalletError').style.display = 'none';
-  // Reset checkboxes
-  document.querySelectorAll('.addWalletTxType').forEach(cb => {
-    cb.checked = cb.value === 'sol-transfer' || cb.value === 'token-transfer';
-  });
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
 
-  // Populate channel dropdown
-  const sel = document.getElementById('addWalletChannel');
-  sel.innerHTML = '<option value="">-- No alert channel --</option>';
+  // Populate both channel dropdowns
+  const alertSel = document.getElementById('addWalletChannel');
+  const panelSel = document.getElementById('addWalletPanelChannel');
+  alertSel.innerHTML = '<option value="">-- No TX alerts --</option>';
+  panelSel.innerHTML = '<option value="">-- No holdings panel --</option>';
+
   try {
     const chRes = await fetch('/api/admin/discord/channels', { credentials: 'include' });
     if (chRes.ok) {
@@ -2002,41 +2049,42 @@ async function openAddWalletModal(existingAddr, existingLabel, existingChannel) 
         if (!grouped[parent]) grouped[parent] = [];
         grouped[parent].push(ch);
       });
-      Object.keys(grouped).sort().forEach(parent => {
-        const og = document.createElement('optgroup');
-        og.label = parent;
-        grouped[parent].forEach(ch => {
-          const opt = document.createElement('option');
-          opt.value = ch.id;
-          opt.textContent = '# ' + ch.name;
-          og.appendChild(opt);
+      [alertSel, panelSel].forEach(sel => {
+        Object.keys(grouped).sort().forEach(parent => {
+          const og = document.createElement('optgroup');
+          og.label = parent;
+          grouped[parent].forEach(ch => {
+            const opt = document.createElement('option');
+            opt.value = ch.id;
+            opt.textContent = '# ' + ch.name;
+            og.appendChild(opt);
+          });
+          sel.appendChild(og.cloneNode(true));
         });
-        sel.appendChild(og);
       });
     }
   } catch (e) { console.error('[AddWalletModal] Channel load error:', e); }
-  // Set current value after populating
-  if (existingChannel) sel.value = existingChannel;
+
+  if (existingAlertCh) alertSel.value = existingAlertCh;
+  if (existingPanelCh) panelSel.value = existingPanelCh;
 }
 
 function closeAddWalletModal() {
   document.getElementById('addWalletModal').style.display = 'none';
+  document.getElementById('addWalletAddress').disabled = false;
   document.body.style.overflow = '';
 }
 
 async function saveNewWallet() {
+  const editId = document.getElementById('addWalletEditId').value;
   const addr = document.getElementById('addWalletAddress').value.trim();
   const label = document.getElementById('addWalletLabel').value.trim();
-  const channel = document.getElementById('addWalletChannel').value.trim();
+  const alertChannelId = document.getElementById('addWalletChannel').value.trim();
+  const panelChannelId = document.getElementById('addWalletPanelChannel').value.trim();
   const errEl = document.getElementById('addWalletError');
 
-  if (!addr) {
-    errEl.textContent = 'Wallet address is required.';
-    errEl.style.display = 'block';
-    return;
-  }
-  if (addr.length < 32 || addr.length > 44) {
-    errEl.textContent = 'Invalid Solana wallet address.';
+  if (!editId && (!addr || addr.length < 32 || addr.length > 44)) {
+    errEl.textContent = 'A valid Solana wallet address is required.';
     errEl.style.display = 'block';
     return;
   }
@@ -2046,25 +2094,32 @@ async function saveNewWallet() {
   saveBtn.disabled = true;
 
   try {
-    // TODO: When multi-wallet API exists, POST to /api/admin/treasury/wallets
-    // For now, wire to the single-wallet config API
-    const payload = {
-      enabled: true,
-      solanaWallet: addr,
-      txAlertChannelId: channel || undefined,
-      txAlertsEnabled: !!channel
-    };
-    const res = await fetch('/api/admin/treasury/config', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(payload)
-    });
-    const result = await res.json();
+    let res, result;
+    if (editId) {
+      // Edit existing
+      res = await fetch('/api/admin/tracked-wallets/' + editId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ label: label || null, alertChannelId: alertChannelId || null, panelChannelId: panelChannelId || null })
+      });
+    } else {
+      // Add new
+      res = await fetch('/api/admin/tracked-wallets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ walletAddress: addr, label: label || null, alertChannelId: alertChannelId || null, panelChannelId: panelChannelId || null })
+      });
+    }
+    result = await res.json();
     if (result.success) {
       closeAddWalletModal();
-      showSuccess('Wallet saved successfully!');
-      loadTreasuryWalletTable();
+      const msg = panelChannelId
+        ? (editId ? 'Wallet updated! Holdings panel refreshed.' : 'Wallet added! Holdings panel posted to watch channel.')
+        : (editId ? 'Wallet updated.' : 'Wallet added.');
+      showSuccess(msg);
+      loadTrackedWalletList();
     } else {
       errEl.textContent = result.message || 'Failed to save wallet.';
       errEl.style.display = 'block';
@@ -5092,9 +5147,9 @@ async function loadTreasuryModuleSettings() {
         </div>
         <div style="${gridRow}margin-top:var(--space-3);">
           <div>
-            <label style="${fieldLabel}">Treasury Watch Channel</label>
+            <label style="${fieldLabel}">Wallet Watch Channel</label>
             <select id="trs_watchChannelId" style="${selectStyle}"><option value="">Loading channels...</option></select>
-            <div style="color:var(--text-secondary);font-size:0.78em;margin-top:4px;">Post a live treasury panel embed to this channel.</div>
+            <div style="color:var(--text-secondary);font-size:0.78em;margin-top:4px;">Post a live holdings panel embed to this channel.</div>
           </div>
           <div>
             <label style="${fieldLabel}">TX Alert Channel</label>

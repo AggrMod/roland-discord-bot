@@ -401,11 +401,14 @@ class WebServer {
 
     this.app.get('/verify', (req, res) => {
       // Unified UI: send verification flow to portal wallets section
+      const qs = new URLSearchParams({ section: 'wallets' });
+      if (req.query.guild) qs.set('guild', req.query.guild);
+      const dest = '/?' + qs.toString();
       if (!req.session.discordUser) {
-        req.session.returnTo = '/?section=wallets';
+        req.session.returnTo = dest;
         return res.redirect('/auth/discord/login');
       }
-      return res.redirect('/?section=wallets');
+      return res.redirect(dest);
     });
 
     this.app.get('/dashboard', (req, res) => {
@@ -449,10 +452,21 @@ class WebServer {
     // ==================== DISCORD OAUTH ====================
 
     this.app.get('/auth/discord/login', (req, res) => {
+      // Preserve returnTo context through OAuth so users land in the right place
+      const rawReturn = req.query.returnTo || '';
+      if (rawReturn && rawReturn.startsWith('/') && !rawReturn.startsWith('//')) {
+        req.session.returnTo = rawReturn;
+      } else if (req.query.guild || req.query.section) {
+        // Legacy / bot-generated links: ?guild=ID&section=dashboard
+        const qs = new URLSearchParams();
+        if (req.query.guild) qs.set('guild', req.query.guild);
+        if (req.query.section) qs.set('section', req.query.section);
+        req.session.returnTo = '/?' + qs.toString();
+      }
+
       const clientId = process.env.CLIENT_ID;
       const redirectUri = encodeURIComponent(process.env.DISCORD_REDIRECT_URI || 'http://localhost:3000/auth/discord/callback');
       const scope = encodeURIComponent('identify guilds');
-      
       const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}`;
       res.redirect(authUrl);
     });

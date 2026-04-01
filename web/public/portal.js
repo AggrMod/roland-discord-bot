@@ -27,6 +27,18 @@ if (!activeGuildId) {
   localStorage.removeItem('activeGuildId');
 }
 
+// ── Auto-select guild from URL param (?guild=GUILDID) ──────────────────
+// Lets Discord bot post links like /?guild=123&section=dashboard
+// and the user lands with the right server already selected.
+(function applyUrlGuildContext() {
+  const up = new URLSearchParams(window.location.search);
+  const urlGuild = normalizeGuildId(up.get('guild') || '');
+  if (urlGuild && urlGuild !== activeGuildId) {
+    activeGuildId = urlGuild;
+    localStorage.setItem('activeGuildId', activeGuildId);
+  }
+})();
+
 function requiresServerSelectionGate() {
   const managed = serverAccessData?.managedServers || [];
   const unmanaged = serverAccessData?.unmanagedServers || [];
@@ -999,10 +1011,12 @@ async function loadPortal() {
     // Navigate to section from URL after admin check is complete
     const urlParams = new URLSearchParams(window.location.search);
     const section = urlParams.get('section');
-    if (section && !requiresServerSelectionGate()) {
-      switchSection(section);
+    if (section) {
+      switchSection(section); // switchSection itself gates non-public sections if needed
     } else if (userData && requiresServerSelectionGate()) {
       switchSection('landing');
+    } else if (userData) {
+      switchSection('dashboard');
     }
   } catch (error) {
     console.error('Error loading portal:', error);
@@ -1583,7 +1597,7 @@ async function loadAvailableMissions() {
 // ==================== NAVIGATION ====================
 function switchSection(sectionName) {
   if (requiresServerSelectionGate()) {
-    const allowWithoutServer = ['landing', 'servers', 'wallets'];
+    const allowWithoutServer = ['landing', 'servers', 'wallets', 'dashboard', 'help', 'docs'];
     if (isSuperadmin && sectionName === 'admin') {
       // allow superadmin control plane without tenant selection
     } else if (!allowWithoutServer.includes(sectionName)) {
@@ -2307,7 +2321,13 @@ function showCreateProposalForm() {
 
 // ==================== AUTH ====================
 function login() {
-  window.location.href = '/auth/discord/login';
+  // Preserve guild + current section so user lands back in the right place
+  const qs = new URLSearchParams();
+  const currentSection = (document.querySelector('.nav-item.active') || {}).dataset?.section || '';
+  if (activeGuildId) qs.set('guild', activeGuildId);
+  if (currentSection && currentSection !== 'landing') qs.set('section', currentSection);
+  const returnTo = '/' + (qs.toString() ? '?' + qs.toString() : '');
+  window.location.href = '/auth/discord/login?returnTo=' + encodeURIComponent(returnTo);
 }
 
 function logout() {

@@ -7077,8 +7077,9 @@ async function openAddCollectionModal() {
         <div style="display:flex;flex-wrap:wrap;gap:12px;">
           <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caMint" checked> 🪙 Mint</label>
           <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caSale" checked> 💰 Sale</label>
+          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caBid" checked> 🤝 Bid</label>
           <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caList" checked> 📋 List</label>
-          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caDelist"> ❌ Delist</label>
+          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caDelist" checked> ❌ Delist</label>
           <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caTransfer"> 🔄 Transfer</label>
         </div>
       </div>
@@ -7127,6 +7128,7 @@ async function openAddCollectionModal() {
           meSymbol: document.getElementById('caMeInput').value.trim(),
           trackMint: !!document.getElementById('caMint').checked,
           trackSale: !!document.getElementById('caSale').checked,
+          trackBid: !!document.getElementById('caBid').checked,
           trackList: !!document.getElementById('caList').checked,
           trackDelist: !!document.getElementById('caDelist').checked,
           trackTransfer: !!document.getElementById('caTransfer').checked,

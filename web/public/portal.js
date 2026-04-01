@@ -693,6 +693,7 @@ function updateSidebarModuleNav() {
   const moduleItems = [
     { id: 'sidebarNavGovernance', module: 'governance' },
     { id: 'sidebarNavWallets', module: 'verification' },
+    { id: 'mobileNavWallets', module: 'verification' },
     { id: 'sidebarNavTreasury', module: 'treasury' },
     { id: 'sidebarNavNftActivity', module: 'nfttracker' },
     { id: 'sidebarNavHeist', module: 'heist' },
@@ -700,11 +701,15 @@ function updateSidebarModuleNav() {
     // Plans nav handled separately (superadmin-only)
   ];
 
+  // Sections accessible without a server (user-facing, no tenant context needed)
+  const noServerRequired = new Set(['verification']);
+
   moduleItems.forEach(({ id, module }) => {
     const el = document.getElementById(id);
     if (!el) return;
     const enabled = module === null || state[module] !== false;
-    el.style.display = (hasServer && enabled) ? '' : 'none';
+    const visibleWithoutServer = noServerRequired.has(module);
+    el.style.display = ((hasServer || visibleWithoutServer) && enabled) ? '' : 'none';
   });
 
   // Force-hide Battle nav in portal (Discord-only runtime; settings still available)

@@ -126,7 +126,7 @@ class NFTActivityService {
     }
   }
 
-  addTrackedCollection({ guildId, collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer, meSymbol }) {
+  addTrackedCollection({ guildId, collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer, trackBid, meSymbol }) {
     try {
       const normalizedAddress = String(collectionAddress || '').trim();
       const normalizedName = String(collectionName || '').trim();
@@ -135,8 +135,8 @@ class NFTActivityService {
         return { success: false, message: 'collectionAddress, collectionName, and channelId are required' };
       }
       const result = db.prepare(`
-        INSERT INTO nft_tracked_collections (guild_id, collection_address, collection_name, channel_id, track_mint, track_sale, track_list, track_delist, track_transfer, me_symbol)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO nft_tracked_collections (guild_id, collection_address, collection_name, channel_id, track_mint, track_sale, track_list, track_delist, track_transfer, track_bid, me_symbol)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         guildId || '',
         normalizedAddress,
@@ -147,6 +147,7 @@ class NFTActivityService {
         trackList !== undefined ? (trackList ? 1 : 0) : 1,
         trackDelist !== undefined ? (trackDelist ? 1 : 0) : 1,
         trackTransfer !== undefined ? (trackTransfer ? 1 : 0) : 0,
+        trackBid !== undefined ? (trackBid ? 1 : 0) : 0,
         (meSymbol || '').trim()
       );
       return { success: true, message: 'Collection added', id: result.lastInsertRowid };
@@ -178,7 +179,7 @@ class NFTActivityService {
 
   updateTrackedCollection(id, updates, guildId) {
     try {
-      const allowed = ['collection_name', 'channel_id', 'track_mint', 'track_sale', 'track_list', 'track_delist', 'track_transfer', 'enabled', 'me_symbol'];
+      const allowed = ['collection_name', 'channel_id', 'track_mint', 'track_sale', 'track_list', 'track_delist', 'track_transfer', 'track_bid', 'enabled', 'me_symbol'];
       const fieldMap = {
         collectionName: 'collection_name',
         channelId: 'channel_id',
@@ -187,6 +188,7 @@ class NFTActivityService {
         trackList: 'track_list',
         trackDelist: 'track_delist',
         trackTransfer: 'track_transfer',
+        trackBid: 'track_bid',
         enabled: 'enabled',
         meSymbol: 'me_symbol'
       };
@@ -380,7 +382,7 @@ class NFTActivityService {
   async maybeSendAlert(evt) {
     // Per-collection tracked config (can be multiple tenants/channels for same collection)
     const trackedRows = evt.collectionKey ? this.getTrackedCollectionsByAddress(evt.collectionKey) : [];
-    const eventFlagMap = { mint: 'track_mint', sell: 'track_sale', list: 'track_list', delist: 'track_delist', transfer: 'track_transfer' };
+    const eventFlagMap = { mint: 'track_mint', sell: 'track_sale', list: 'track_list', delist: 'track_delist', transfer: 'track_transfer', bid: 'track_bid' };
     // Event types with no flag (bid, pool_update, etc.) are not user-configurable
     // — block them unless explicitly mapped to a flag column
     const KNOWN_TYPES = new Set(Object.keys(eventFlagMap));

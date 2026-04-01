@@ -474,6 +474,7 @@ function initDatabase() {
   try { db.exec("ALTER TABLE tenant_modules ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
   try { db.exec("ALTER TABLE nft_tracked_collections ADD COLUMN guild_id TEXT NOT NULL DEFAULT ''"); } catch (e) {}
   try { db.exec("ALTER TABLE nft_tracked_collections ADD COLUMN me_symbol TEXT DEFAULT ''"); } catch (e) {}
+  try { db.exec('ALTER TABLE nft_tracked_collections ADD COLUMN track_bid INTEGER DEFAULT 0'); } catch (e) {}
 
   // Ensure nft_tracked_collections supports per-tenant duplicate collection addresses.
   // Legacy deployments may still have a global UNIQUE(collection_address) constraint.

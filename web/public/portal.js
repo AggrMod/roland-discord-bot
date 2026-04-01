@@ -4451,6 +4451,7 @@ async function loadNftTrackerView() {
             <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditMint" ${btn.dataset.mint === '1' ? 'checked' : ''}> 🪙 Mint</label>
             <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditSale" ${btn.dataset.sale === '1' ? 'checked' : ''}> 💰 Sale</label>
             <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditList" ${btn.dataset.list === '1' ? 'checked' : ''}> 📋 List</label>
+            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditBid" ${btn.dataset.bid === '1' ? 'checked' : ''}> 🤝 Bid</label>
             <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditDelist" ${btn.dataset.delist === '1' ? 'checked' : ''}> ❌ Delist</label>
             <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="nftEditTransfer" ${btn.dataset.transfer === '1' ? 'checked' : ''}> 🔄 Transfer</label>
           </div>
@@ -4486,6 +4487,7 @@ async function loadNftTrackerView() {
           trackMint: !!document.getElementById('nftEditMint').checked,
           trackSale: !!document.getElementById('nftEditSale').checked,
           trackList: !!document.getElementById('nftEditList').checked,
+          trackBid: !!document.getElementById('nftEditBid')?.checked,
           trackDelist: !!document.getElementById('nftEditDelist').checked,
           trackTransfer: !!document.getElementById('nftEditTransfer').checked,
         };
@@ -4530,6 +4532,7 @@ async function loadNftTrackerView() {
         if (c.track_list) s += '📋 ';
         if (c.track_delist) s += '❌ ';
         if (c.track_transfer) s += '🔄 ';
+        if (c.track_bid) s += '🤝 ';
         return s.trim() || '—';
       };
       const rows = collections.map(c => `
@@ -4540,7 +4543,7 @@ async function loadNftTrackerView() {
           <td style="padding:8px 10px;font-size:0.85em;">${eventIcons(c)}</td>
           <td style="padding:8px 10px;font-size:0.85em;color:${c.enabled ? '#86efac' : '#fca5a5'};">${c.enabled ? 'Yes' : 'No'}</td>
           <td style="padding:8px 10px;display:flex;gap:6px;">
-            <button class="nft-edit-btn" data-id="${c.id}" data-name="${escapeHtml(c.collection_name)}" data-channel="${c.channel_id}" data-me="${escapeHtml(c.me_symbol || '')}" data-mint="${c.track_mint}" data-sale="${c.track_sale}" data-list="${c.track_list}" data-delist="${c.track_delist}" data-transfer="${c.track_transfer}" style="font-size:0.8em;padding:4px 10px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️ Edit</button>
+            <button class="nft-edit-btn" data-id="${c.id}" data-name="${escapeHtml(c.collection_name)}" data-channel="${c.channel_id}" data-me="${escapeHtml(c.me_symbol || '')}" data-mint="${c.track_mint}" data-sale="${c.track_sale}" data-list="${c.track_list}" data-delist="${c.track_delist}" data-transfer="${c.track_transfer}" data-bid="${c.track_bid?1:0}" style="font-size:0.8em;padding:4px 10px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️ Edit</button>
             <button class="btn-danger nft-remove-btn" data-id="${c.id}" style="font-size:0.8em;padding:4px 10px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">Remove</button>
           </td>
         </tr>
@@ -5341,7 +5344,7 @@ async function loadNftTrackerSettingsView() {
     };
 
     const truncAddr = (a) => a && a.length > 12 ? a.slice(0, 6) + '...' + a.slice(-4) : (a || '—');
-    const eventIcons = (c) => [c.track_mint && '🪙', c.track_sale && '💰', c.track_list && '📋', c.track_delist && '❌', c.track_transfer && '🔄'].filter(Boolean).join(' ') || '—';
+    const eventIcons = (c) => [c.track_mint && '🪙', c.track_sale && '💰', c.track_list && '📋', c.track_delist && '❌', c.track_transfer && '🔄', c.track_bid && '🤝'].filter(Boolean).join(' ') || '—';
 
     const collectionRows = collections.length ? collections.map(c => `
       <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
@@ -5350,7 +5353,7 @@ async function loadNftTrackerSettingsView() {
         <td style="padding:8px 10px;font-size:0.85em;">${eventIcons(c)}</td>
         <td style="padding:8px 10px;font-size:0.85em;color:${c.enabled ? '#86efac' : '#fca5a5'};">${c.enabled ? 'Yes' : 'No'}</td>
         <td style="padding:8px 10px;">
-          <button class="nft-settings-edit-btn" data-id="${c.id}" data-name="${escapeHtml(c.collection_name)}" data-channel="${escapeHtml(c.channel_id||'')}" data-me="${escapeHtml(c.me_symbol||'')}" data-mint="${c.track_mint?1:0}" data-sale="${c.track_sale?1:0}" data-list="${c.track_list?1:0}" data-delist="${c.track_delist?1:0}" data-transfer="${c.track_transfer?1:0}" style="font-size:0.8em;padding:4px 10px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-right:4px;">✏️ Edit</button>
+          <button class="nft-settings-edit-btn" data-id="${c.id}" data-name="${escapeHtml(c.collection_name)}" data-channel="${escapeHtml(c.channel_id||'')}" data-me="${escapeHtml(c.me_symbol||'')}" data-mint="${c.track_mint?1:0}" data-sale="${c.track_sale?1:0}" data-list="${c.track_list?1:0}" data-delist="${c.track_delist?1:0}" data-transfer="${c.track_transfer?1:0}" data-bid="${c.track_bid?1:0}" style="font-size:0.8em;padding:4px 10px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-right:4px;">✏️ Edit</button>
           <button class="nft-settings-remove-btn" data-id="${c.id}" style="font-size:0.8em;padding:4px 10px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
         </td>
       </tr>
@@ -5394,6 +5397,7 @@ async function loadNftTrackerSettingsView() {
           <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:var(--space-3);">
             <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.85em;cursor:pointer;"><input type="checkbox" id="nts_addMint"> 🪙 Mint</label>
             <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.85em;cursor:pointer;"><input type="checkbox" id="nts_addSale" checked> 💰 Sale</label>
+            <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.85em;cursor:pointer;"><input type="checkbox" id="nts_addBid"> 🤝 Bid</label>
             <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.85em;cursor:pointer;"><input type="checkbox" id="nts_addList"> 📋 List</label>
             <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.85em;cursor:pointer;"><input type="checkbox" id="nts_addDelist"> ❌ Delist</label>
             <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.85em;cursor:pointer;"><input type="checkbox" id="nts_addTransfer"> 🔄 Transfer</label>
@@ -5420,6 +5424,7 @@ async function loadNftTrackerSettingsView() {
             meSymbol: document.getElementById('nts_addMe')?.value.trim() || '',
             trackMint: !!document.getElementById('nts_addMint')?.checked,
             trackSale: !!document.getElementById('nts_addSale')?.checked,
+            trackBid: !!document.getElementById('nts_addBid')?.checked,
             trackList: !!document.getElementById('nts_addList')?.checked,
             trackDelist: !!document.getElementById('nts_addDelist')?.checked,
             trackTransfer: !!document.getElementById('nts_addTransfer')?.checked,

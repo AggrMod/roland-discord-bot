@@ -286,7 +286,7 @@ async function verifyByMicroTx() {
               <div class="spinner" style="width:18px; height:18px;"></div>
               <span style="font-size:0.9em;">Waiting for transaction on-chain...</span>
             </div>
-            <button onclick="pollMicroVerifyStatus(document.getElementById('verifyStatus'))" style="background:none; border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 14px; cursor:pointer; font-size:0.82em;">↻ Check status</button>
+            <button onclick="manualCheckMicroVerify(document.getElementById('verifyStatus'))" style="background:none; border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 14px; cursor:pointer; font-size:0.82em;">↻ Check status</button>
           </div>
         </div>
       `;
@@ -306,22 +306,38 @@ async function verifyByMicroTx() {
 
 async function pollMicroVerifyStatus(statusEl, attempts = 0) {
   if (attempts > 30) {
-    if (statusEl) statusEl.innerHTML = `<div style="padding:12px; background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); border-radius:10px; text-align:center; color:#fcd34d;">Verification is still processing. It may take a few minutes — refresh the page to check.</div>`;
+    if (statusEl) statusEl.innerHTML = `<div style="padding:12px; background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); border-radius:10px; text-align:center; color:#fcd34d;">Still processing. Click <strong>↻ Check status</strong> to scan the chain manually, or refresh the page.</div>`;
     return;
   }
-  
   try {
     const res = await fetch('/api/micro-verify/status', { credentials: 'include' });
     const data = await res.json();
-    
     if (data.success && data.request?.status === 'verified') {
       showSuccess('Wallet verified via micro-transaction!');
       await loadPortal();
       return;
     }
   } catch (e) { /* continue polling */ }
-
   setTimeout(() => pollMicroVerifyStatus(statusEl, attempts + 1), 5000);
+}
+
+async function manualCheckMicroVerify(statusEl) {
+  const btn = document.querySelector('[onclick*="manualCheckMicroVerify"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Scanning chain...'; }
+  try {
+    const res = await fetch('/api/micro-verify/check-now', { method: 'POST', credentials: 'include' });
+    const data = await res.json();
+    if (data.status === 'verified') {
+      showSuccess('Wallet verified via micro-transaction!');
+      await loadPortal();
+    } else if (statusEl) {
+      statusEl.innerHTML += `<div style="padding:8px 12px;background:rgba(245,158,11,0.1);border-radius:8px;color:#fcd34d;font-size:0.85em;margin-top:8px;">Transaction not yet detected on-chain. Sent the exact amount? It may take 10–30s to confirm — try again shortly.</div>`;
+    }
+  } catch (e) {
+    if (statusEl) statusEl.innerHTML += `<div style="color:#fca5a5;font-size:0.85em;margin-top:8px;">Check failed: ${escapeHtml(e.message)}</div>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Check status'; }
+  }
 }
 
 

@@ -319,6 +319,43 @@ class MicroVerifyService {
   }
 
   /**
+   * Manually scan the chain right now for a specific user's pending request.
+   * Called by the "Check Status" button — handles tx sent before/during restart.
+   */
+  async checkNow(discordId) {
+    try {
+      const config = this.getConfig();
+      if (!config.enabled || !config.receiveWallet) {
+        return { success: false, message: 'Micro-verification not configured' };
+      }
+      const pendingResult = this.getPendingRequest(discordId);
+      if (!pendingResult.success || !pendingResult.request) {
+        return { success: false, message: 'No pending request found' };
+      }
+      const request = pendingResult.request;
+      if (request.status === 'verified') {
+        return { success: true, status: 'verified', request };
+      }
+
+      const publicKey = new PublicKey(config.receiveWallet);
+      const signatures = await this.connection.getSignaturesForAddress(publicKey, { limit: 20 });
+
+      for (const sig of signatures) {
+        const result = await this.checkTransaction(sig.signature, publicKey);
+        if (result && result.success) {
+          const updated = this.getPendingRequest(discordId);
+          return { success: true, status: 'verified', request: updated.request };
+        }
+      }
+
+      return { success: true, status: request.status, request };
+    } catch (e) {
+      logger.error('checkNow error:', e);
+      return { success: false, message: e.message };
+    }
+  }
+
+  /**
    * Poll Solana for incoming transactions
    */
   async pollTransactions() {
@@ -340,10 +377,14 @@ class MicroVerifyService {
         return;
       }
 
-      // Start from most recent if first run
+      // On first run, process recent txs against pending requests (don't skip)
       if (!this.lastSignature) {
         this.lastSignature = signatures[0].signature;
-        logger.log('Started monitoring transactions for micro-verify');
+        logger.log('Micro-verify: first poll — scanning recent txs for pending requests');
+        // Process all recent signatures in case a tx arrived before/during restart
+        for (const sig of signatures) {
+          await this.checkTransaction(sig.signature, publicKey);
+        }
         return;
       }
 

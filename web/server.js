@@ -3594,6 +3594,20 @@ class WebServer {
       }
     });
 
+    this.app.post('/api/micro-verify/check-now', async (req, res) => {
+      if (!req.session.discordUser) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
+      try {
+        const discordId = req.session.discordUser.id;
+        const result = await microVerifyService.checkNow(discordId);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error in check-now:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
     this.app.get('/api/micro-verify/config', (req, res) => {
       try {
         const config = microVerifyService.getConfig();

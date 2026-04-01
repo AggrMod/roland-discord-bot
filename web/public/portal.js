@@ -1886,8 +1886,11 @@ async function removeTrackedWallet(id) {
   try {
     const res = await fetch('/api/admin/tracked-wallets/' + id, { method: 'DELETE', credentials: 'include' });
     const d = await res.json();
-    if (d.success) { showSuccess('Wallet removed'); loadTrackedWalletList(); }
-    else showError(d.message || 'Failed to remove wallet');
+    if (d.success) {
+      showSuccess('Wallet removed');
+      loadTrackedWalletList();
+      renderSettingsWalletList();
+    } else showError(d.message || 'Failed to remove wallet');
   } catch { showError('Error removing wallet'); }
 }
 
@@ -1995,6 +1998,7 @@ async function saveNewWallet() {
         : (editId ? 'Wallet updated.' : 'Wallet added.');
       showSuccess(msg);
       loadTrackedWalletList();
+      renderSettingsWalletList();
     } else {
       errEl.textContent = result.message || 'Failed to save wallet.';
       errEl.style.display = 'block';
@@ -4397,7 +4401,11 @@ async function renderNftCollectionsCard(wrapId) {
   const wrap = document.getElementById(wrapId || 'nftCollectionsTableWrap');
   if (!wrap) return;
   try {
-    const res = await fetch('/api/admin/nft-tracker/collections', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out')), 10000));
+    const res = await Promise.race([
+      fetch('/api/admin/nft-tracker/collections', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      timeout
+    ]);
     const data = await res.json();
     const collections = data.collections || [];
 
@@ -4803,87 +4811,79 @@ async function loadTreasuryModuleSettings() {
   if (!pane) return;
 
   const cardStyle = 'background:rgba(14,23,44,0.5);border:1px solid rgba(99,102,241,0.22);border-radius:10px;padding:var(--space-5);margin-bottom:var(--space-5);';
-  const cardHeader = 'color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0 0 var(--space-4) 0;padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);';
-  const gridRow = 'display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);';
-  const fieldLabel = 'display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;';
-  const fieldInput = 'width:100%;padding:10px 12px;border:1px solid rgba(99,102,241,0.22);border-radius:8px;background:rgba(30,41,59,0.8);color:#e0e7ff;font-size:0.9em;';
-  const selectStyle = 'width:100%;padding:10px 12px;border:1px solid rgba(99,102,241,0.22);border-radius:8px;background:rgba(30,41,59,0.8);color:#e0e7ff;font-size:0.9em;';
 
-  pane.innerHTML = `<div style="${cardStyle}"><div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);"><div class="spinner"></div><p>Loading treasury settings...</p></div></div>`;
-
-  try {
-    const [settingsRes, treasuryRes] = await Promise.all([
-      fetch('/api/admin/settings', { credentials: 'include' }),
-      fetch('/api/admin/treasury', { credentials: 'include' })
-    ]);
-    const settingsJson = await settingsRes.json();
-    const ts = settingsJson.success ? settingsJson.settings : {};
-    const treasuryData = treasuryRes.ok ? await treasuryRes.json() : {};
-    const tc = treasuryData.config || treasuryData;
-
-    pane.innerHTML = `
-      <div style="${cardStyle}">
-        <h3 style="${cardHeader}">💰 Wallet Tracker Settings</h3>
-        <div style="${gridRow}">
-          <div>
-            <label style="${fieldLabel}">Solana Wallet Address</label>
-            <input type="text" id="trs_walletAddress" placeholder="Solana wallet address to monitor" value="${escapeHtml(tc.solanaWallet || ts.treasuryWalletAddress || '')}" style="${fieldInput}">
-          </div>
-          <div>
-            <label style="${fieldLabel}">Balance Refresh Interval (hours)</label>
-            <input type="number" id="trs_refreshInterval" min="1" max="168" value="${tc.refreshHours ?? 6}" style="${fieldInput}">
-          </div>
-        </div>
-        <div style="${gridRow}margin-top:var(--space-3);">
-          <div>
-            <label style="${fieldLabel}">Wallet Watch Channel</label>
-            <select id="trs_watchChannelId" style="${selectStyle}"><option value="">Loading channels...</option></select>
-            <div style="color:var(--text-secondary);font-size:0.78em;margin-top:4px;">Post a live holdings panel embed to this channel.</div>
-          </div>
-          <div>
-            <label style="${fieldLabel}">TX Alert Channel</label>
-            <select id="trs_txAlertChannelId" style="${selectStyle}"><option value="">Loading channels...</option></select>
-          </div>
-        </div>
-        <div style="${gridRow}margin-top:var(--space-3);">
-          <div>
-            <label style="${fieldLabel}">TX Alert Min SOL</label>
-            <input type="number" id="trs_txAlertMinSol" min="0" step="0.1" value="${tc.txAlertMinSol ?? 0}" style="${fieldInput}">
-          </div>
-          <div style="display:flex;flex-direction:column;gap:var(--space-3);justify-content:center;">
-            <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
-              <input type="checkbox" id="trs_txAlertEnabled"${tc.txAlertsEnabled ? ' checked' : ''}> TX Alerts Enabled
-            </label>
-            <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
-              <input type="checkbox" id="trs_txAlertIncomingOnly"${tc.txAlertIncomingOnly ? ' checked' : ''}> Incoming Only
-            </label>
-          </div>
-        </div>
-        <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);margin-top:var(--space-4);">
-          <button class="btn-primary" onclick="saveTreasuryModuleSettings()" style="font-size:0.85em;padding:8px 16px;">💾 Save Wallet Tracker Settings</button>
-        </div>
+  // Render same layout as sidebar Wallet Tracker
+  pane.innerHTML = `
+    <div style="${cardStyle}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4);padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);">
+        <h3 style="color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0;">💼 Tracked Wallets</h3>
+        <button class="btn-primary" onclick="openAddWalletModal()" style="font-size:0.85em;padding:8px 16px;">+ Add Wallet</button>
       </div>
-    `;
+      <div id="settings_walletListWrap"><div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);"><div class="spinner"></div><p>Loading wallets...</p></div></div>
+    </div>
+  `;
 
-    // Populate channel selects
-    try {
-      const chRes = await fetch('/api/admin/discord/channels', { credentials: 'include' });
-      if (chRes.ok) {
-        const chJson = await chRes.json();
-        const channels = chJson.success ? (chJson.channels || []) : [];
-        populateChannelSelects(
-          ['trs_watchChannelId', 'trs_txAlertChannelId'],
-          channels,
-          { watchChannelId: tc.watchChannelId || '', txAlertChannelId: tc.txAlertChannelId || '' },
-          ['watchChannelId', 'txAlertChannelId']
-        );
-      }
-    } catch (e) { console.error('[Treasury] Channel load error:', e); }
+  await renderSettingsWalletList();
+}
 
-    // Load multi-wallet list
+async function renderSettingsWalletList() {
+  const wrap = document.getElementById('settings_walletListWrap');
+  if (!wrap) return;
+  try {
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out')), 10000));
+    const res = await Promise.race([
+      fetch('/api/admin/tracked-wallets', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      timeout
+    ]);
+    if (!res.ok) { wrap.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;">Failed to load wallets.</p>'; return; }
+    const data = await res.json();
+    const wallets = data.wallets || [];
+
+    if (!wallets.length) {
+      wrap.innerHTML = `<div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);">
+        <p style="margin-bottom:16px;">No wallets tracked yet.</p>
+        <button class="btn-primary" onclick="openAddWalletModal()">+ Add Wallet</button>
+      </div>`;
+      return;
+    }
+
+    const rows = wallets.map(w => {
+      const addr = `${w.wallet_address.slice(0,6)}...${w.wallet_address.slice(-4)}`;
+      const lbl = escapeHtml(w.label || '—');
+      const alertCh = w.alert_channel_id ? `<code>#${w.alert_channel_id}</code>` : '<span style="color:var(--text-secondary);">—</span>';
+      const panelCh = w.panel_channel_id ? `<code>#${w.panel_channel_id}</code>` : '<span style="color:var(--text-secondary);">—</span>';
+      const status = w.enabled ? '<span class="badge badge-active">Active</span>' : '<span class="badge badge-paused">Paused</span>';
+      return `<tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
+        <td style="padding:10px 12px;"><span style="font-family:monospace;font-size:0.85em;" title="${escapeHtml(w.wallet_address)}">${addr}</span></td>
+        <td style="padding:10px 12px;color:#c9d6ff;">${lbl}</td>
+        <td style="padding:10px 12px;">${alertCh}</td>
+        <td style="padding:10px 12px;">${panelCh}</td>
+        <td style="padding:10px 12px;">${status}</td>
+        <td style="padding:10px 12px;">
+          <div style="display:flex;gap:6px;">
+            <button onclick="refreshTrackedWalletPanel(${w.id})" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">📋</button>
+            <button onclick="openAddWalletModal('${w.id}','${escapeHtml(w.wallet_address)}','${escapeHtml(w.label||'')}','${w.alert_channel_id||''}','${w.panel_channel_id||''}')" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️</button>
+            <button onclick="removeTrackedWallet(${w.id})" style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+
+    wrap.innerHTML = `<div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="border-bottom:2px solid rgba(255,255,255,0.1);">
+          <th style="text-align:left;padding:8px 12px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;">Address</th>
+          <th style="text-align:left;padding:8px 12px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;">Label</th>
+          <th style="text-align:left;padding:8px 12px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;">TX Alert Ch.</th>
+          <th style="text-align:left;padding:8px 12px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;">Watch Ch.</th>
+          <th style="text-align:left;padding:8px 12px;font-size:0.8em;color:var(--text-secondary);text-transform:uppercase;">Status</th>
+          <th style="padding:8px 12px;"></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
   } catch (e) {
-    console.error('[Treasury] Settings load error:', e);
-    pane.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;padding:var(--space-4);">Failed to load treasury settings.</p>';
+    if (wrap) wrap.innerHTML = `<p style="color:#fca5a5;font-size:0.85em;padding:12px;">Error: ${escapeHtml(e.message)}</p>`;
   }
 }
 

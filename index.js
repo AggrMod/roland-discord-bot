@@ -158,6 +158,22 @@ client.once(Events.ClientReady, () => {
 
   // Initialize and start micro-verify service
   microVerifyService.init();
+
+  // Sync persisted DB settings into microVerifyService on startup
+  // (in-memory _configOverrides are lost on restart; re-apply from settingsManager)
+  try {
+    const settingsManager = require('./utils/settingsManager');
+    const saved = settingsManager.getSettings();
+    const startupOverrides = {};
+    if (saved.moduleMicroVerifyEnabled !== undefined) startupOverrides['MICRO_VERIFY_ENABLED'] = String(saved.moduleMicroVerifyEnabled);
+    if (saved.verificationReceiveWallet)              startupOverrides['VERIFICATION_RECEIVE_WALLET'] = saved.verificationReceiveWallet;
+    if (saved.verifyRequestTtlMinutes)                startupOverrides['VERIFY_REQUEST_TTL_MINUTES'] = String(saved.verifyRequestTtlMinutes);
+    if (saved.pollIntervalSeconds)                    startupOverrides['POLL_INTERVAL_SECONDS'] = String(saved.pollIntervalSeconds);
+    if (Object.keys(startupOverrides).length) microVerifyService.updateConfig(startupOverrides);
+  } catch (e) {
+    logger.warn('microVerifyService startup sync warning:', e?.message || e);
+  }
+
   microVerifyService.startPolling();
 
   // Import module guard for scheduler checks

@@ -676,6 +676,7 @@ function updateSidebarModuleNav() {
     { id: 'sidebarNavTreasury', module: 'treasury' },
     { id: 'sidebarNavNftActivity', module: 'nfttracker' },
     { id: 'sidebarNavHeist', module: 'heist' },
+    { id: 'sidebarNavEngagement', module: 'engagement' },
     // Plans nav handled separately (superadmin-only)
   ];
 

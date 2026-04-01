@@ -393,6 +393,28 @@ function refreshTenantScopedViews() {
   syncTenantModuleNavVisibility();
   updateSidebarModuleNav();
   renderGeneralSection();
+
+  // Always stale-clear any rendered collection/wallet lists so they can't
+  // be edited under the wrong guild. They'll re-render when the user next
+  // navigates to those cards. Also close any open collection/wallet modals.
+  ['nftCollectionsTableWrap', 'nts_collectionsWrap'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.innerHTML.trim()) {
+      el.innerHTML = '<div style="text-align:center;padding:var(--space-4);color:var(--text-secondary);"><div class="spinner"></div><p>Refreshing...</p></div>';
+      renderNftCollectionsCard(id);
+    }
+  });
+  const addColModal = document.getElementById('addCollectionModal');
+  if (addColModal && addColModal.style.display !== 'none') closeAddCollectionModal();
+  const addWalModal = document.getElementById('addWalletModal');
+  if (addWalModal && addWalModal.style.display !== 'none') closeAddWalletModal();
+
+  // Re-render wallet lists if already loaded
+  const twContainer = document.getElementById('treasuryWalletTableContainer');
+  if (twContainer && twContainer.innerHTML.trim()) loadTrackedWalletList();
+  const swWrap = document.getElementById('settings_walletListWrap');
+  if (swWrap && swWrap.innerHTML.trim()) renderSettingsWalletList();
+
   const activeSection = document.querySelector('.content-section.active')?.id || '';
   const activeAdminView = document.querySelector('.admin-sub-item.active')?.getAttribute('data-admin-nav');
 
@@ -6155,7 +6177,7 @@ async function legacyLoadNFTActivityAdminView() {
 
   // Load the list with remove buttons
   try {
-    const response = await fetch('/api/admin/activity/watch-list', { credentials: 'include' });
+    const response = await fetch('/api/admin/activity/watch-list', { credentials: 'include', headers: buildTenantRequestHeaders() });
     const data = await response.json();
     const listEl = document.getElementById('nftActivityAdminList');
     

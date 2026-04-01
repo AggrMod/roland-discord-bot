@@ -4918,70 +4918,18 @@ async function loadNftTrackerSettingsView() {
 
   const cardStyle = 'background:rgba(14,23,44,0.5);border:1px solid rgba(99,102,241,0.22);border-radius:10px;padding:var(--space-5);margin-bottom:var(--space-5);';
   const cardHeader = 'color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0 0 var(--space-4) 0;padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);';
-  const fieldInput = 'width:100%;padding:10px 12px;border:1px solid rgba(99,102,241,0.22);border-radius:8px;background:rgba(30,41,59,0.8);color:#e0e7ff;font-size:0.9em;';
 
-  pane.innerHTML = `<div style="${cardStyle}"><div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);"><div class="spinner"></div><p>Loading NFT tracker settings...</p></div></div>`;
-
-  try {
-    // Fetch channels + collections in parallel
-    const tenantHeaders = buildTenantRequestHeaders();
-    const [chRes, colRes] = await Promise.all([
-      fetch('/api/admin/discord/channels', { credentials: 'include', headers: tenantHeaders }),
-      fetch('/api/admin/nft-tracker/collections', { credentials: 'include', headers: tenantHeaders }),
-    ]);
-    const channels = chRes.ok ? ((await chRes.json()).channels || []) : [];
-    const colData = colRes.ok ? await colRes.json() : {};
-    const collections = colData.collections || [];
-
-    // Build channel options
-    const grouped = {};
-    channels.forEach(ch => {
-      const parent = ch.parentName || 'Other';
-      if (!grouped[parent]) grouped[parent] = [];
-      grouped[parent].push(ch);
-    });
-    const chOptions = (sel) => {
-      let html = `<option value="">-- Select channel --</option>`;
-      Object.keys(grouped).sort().forEach(parent => {
-        html += `<optgroup label="${escapeHtml(parent)}">`;
-        grouped[parent].forEach(ch => {
-          html += `<option value="${ch.id}"${ch.id === sel ? ' selected' : ''}># ${escapeHtml(ch.name)}</option>`;
-        });
-        html += `</optgroup>`;
-      });
-      return html;
-    };
-
-    const truncAddr = (a) => a && a.length > 12 ? a.slice(0, 6) + '...' + a.slice(-4) : (a || '—');
-    const eventIcons = (c) => [c.track_mint && '🪙', c.track_sale && '💰', c.track_list && '📋', c.track_delist && '❌', c.track_transfer && '🔄', c.track_bid && '🤝'].filter(Boolean).join(' ') || '—';
-
-    const collectionRows = collections.length ? collections.map(c => `
-      <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
-        <td style="padding:8px 10px;font-size:0.85em;color:var(--text-primary);">${escapeHtml(c.collection_name)}</td>
-        <td style="padding:8px 10px;font-size:0.85em;color:var(--text-secondary);font-family:monospace;" title="${escapeHtml(c.collection_address)}">${truncAddr(c.collection_address)}</td>
-        <td style="padding:8px 10px;font-size:0.85em;">${eventIcons(c)}</td>
-        <td style="padding:8px 10px;font-size:0.85em;color:${c.enabled ? '#86efac' : '#fca5a5'};">${c.enabled ? 'Yes' : 'No'}</td>
-        <td style="padding:8px 10px;">
-          <button class="nft-settings-edit-btn" data-id="${c.id}" data-name="${escapeHtml(c.collection_name)}" data-channel="${escapeHtml(c.channel_id||'')}" data-me="${escapeHtml(c.me_symbol||'')}" data-mint="${c.track_mint?1:0}" data-sale="${c.track_sale?1:0}" data-list="${c.track_list?1:0}" data-delist="${c.track_delist?1:0}" data-transfer="${c.track_transfer?1:0}" data-bid="${c.track_bid?1:0}" style="font-size:0.8em;padding:4px 10px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;margin-right:4px;">✏️ Edit</button>
-          <button class="nft-settings-remove-btn" data-id="${c.id}" style="font-size:0.8em;padding:4px 10px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
-        </td>
-      </tr>
-    `).join('') : `<tr><td colspan="5" style="padding:12px;color:var(--text-secondary);font-size:0.85em;text-align:center;">No tracked collections yet. Add one below.</td></tr>`;
-
-    pane.innerHTML = `
-      <div style="${cardStyle}">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4);padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);">
-          <h3 style="${cardHeader}margin:0;padding:0;border:none;">📡 Tracked Collections</h3>
-          <button class="btn-primary" onclick="openAddCollectionModal()" style="font-size:0.85em;padding:8px 16px;">+ Add Collection</button>
-        </div>
-        <div id="nts_collectionsWrap"></div>
+  pane.innerHTML = `
+    <div style="${cardStyle}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4);padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);">
+        <h3 style="${cardHeader}margin:0;padding:0;border:none;">📡 Tracked Collections</h3>
+        <button class="btn-primary" onclick="openAddCollectionModal()" style="font-size:0.85em;padding:8px 16px;">+ Add Collection</button>
       </div>
-    `;
-    await renderNftCollectionsCard('nts_collectionsWrap');
-  } catch (e) {
-    console.error('[NFT Tracker Settings] error:', e);
-    pane.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;padding:var(--space-4);">Failed to load NFT tracker settings.</p>';
-  }
+      <div id="nts_collectionsWrap"><div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);"><div class="spinner"></div><p>Loading collections...</p></div></div>
+    </div>
+  `;
+
+  await renderNftCollectionsCard('nts_collectionsWrap');
 }
 
 // ==================== VP MAPPINGS ====================

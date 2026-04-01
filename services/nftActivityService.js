@@ -381,9 +381,13 @@ class NFTActivityService {
     // Per-collection tracked config (can be multiple tenants/channels for same collection)
     const trackedRows = evt.collectionKey ? this.getTrackedCollectionsByAddress(evt.collectionKey) : [];
     const eventFlagMap = { mint: 'track_mint', sell: 'track_sale', list: 'track_list', delist: 'track_delist', transfer: 'track_transfer' };
+    // Event types with no flag (bid, pool_update, etc.) are not user-configurable
+    // — block them unless explicitly mapped to a flag column
+    const KNOWN_TYPES = new Set(Object.keys(eventFlagMap));
 
     const targetRows = trackedRows.filter(row => {
       const flagCol = eventFlagMap[evt.eventType];
+      if (!KNOWN_TYPES.has(evt.eventType)) return false; // block bid, pool_update, etc.
       if (flagCol && !row[flagCol]) return false;
       return !!String(row.channel_id || '').trim();
     });

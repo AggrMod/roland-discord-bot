@@ -4049,7 +4049,13 @@ async function loadAdminSettingsView() {
 
     // Module-specific settings are now in their own tabs
   } catch (e) {
-    content.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;
+    const isAuthErr = e.message === 'Not authenticated' || e.message?.includes('authenticated') || e.message?.includes('Select a server');
+    content.innerHTML = isAuthErr
+      ? `<div style="text-align:center;padding:var(--space-5);">
+           <p style="color:#fca5a5;font-size:0.9em;margin-bottom:16px;">⚠️ Your session has expired. Please log out and log back in.</p>
+           <button class="btn-primary" onclick="logout()" style="font-size:0.9em;padding:10px 24px;">Log Out & Re-Login</button>
+         </div>`
+      : `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;
   }
 }
 

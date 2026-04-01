@@ -1834,7 +1834,7 @@ async function loadTrackedWalletList() {
         <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
           <td style="padding:10px 12px;">
             <span style="font-family:monospace;font-size:0.85em;" title="${escapeHtml(w.wallet_address)}">${addr}</span>
-            <button class="copy-btn" onclick="navigator.clipboard.writeText('${escapeHtml(w.wallet_address)}');this.textContent='✓';setTimeout(()=>this.textContent='📋',1200)" title="Copy address" style="margin-left:4px;background:none;border:none;cursor:pointer;font-size:0.85em;">📋</button>
+            <button class="tw-copy-btn" data-addr="${escapeHtml(w.wallet_address)}" title="Copy address" style="margin-left:4px;background:none;border:none;cursor:pointer;font-size:0.85em;">📋</button>
           </td>
           <td style="padding:10px 12px;color:#c9d6ff;">${lbl}</td>
           <td style="padding:10px 12px;">${alertCh}</td>
@@ -1842,9 +1842,9 @@ async function loadTrackedWalletList() {
           <td style="padding:10px 12px;">${status}</td>
           <td style="padding:10px 12px;">
             <div style="display:flex;gap:6px;">
-              <button title="Refresh Holdings Panel" onclick="refreshTrackedWalletPanel(${w.id})" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">📋 Panel</button>
-              <button title="Edit" onclick="openAddWalletModal('${w.id}','${escapeHtml(w.wallet_address)}','${escapeHtml(w.label || '')}','${w.alert_channel_id || ''}','${w.panel_channel_id || ''}')" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️</button>
-              <button title="Remove" onclick="removeTrackedWallet(${w.id})" style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
+              <button class="tw-panel-btn" data-id="${w.id}" title="Refresh Holdings Panel" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">📋 Panel</button>
+              <button class="tw-edit-btn" data-id="${w.id}" data-addr="${escapeHtml(w.wallet_address)}" data-label="${escapeHtml(w.label||'')}" data-alertch="${w.alert_channel_id||''}" data-panelch="${w.panel_channel_id||''}" title="Edit" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️</button>
+              <button class="tw-remove-btn" data-id="${w.id}" title="Remove" style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
             </div>
           </td>
         </tr>`;
@@ -1866,6 +1866,7 @@ async function loadTrackedWalletList() {
           <tbody>${rows}</tbody>
         </table>
       </div>`;
+    attachTrackedWalletListeners(container);
   } catch (err) {
     console.error('[TrackedWallets] Load error:', err);
     container.innerHTML = '<div style="color:#ef4444;text-align:center;padding:20px;">Error loading wallets.</div>';
@@ -1892,6 +1893,33 @@ async function removeTrackedWallet(id) {
       renderSettingsWalletList();
     } else showError(d.message || 'Failed to remove wallet');
   } catch { showError('Error removing wallet'); }
+}
+
+function attachTrackedWalletListeners(container) {
+  container.querySelectorAll('.tw-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      openAddWalletModal(
+        btn.dataset.id,
+        btn.dataset.addr,
+        btn.dataset.label,
+        btn.dataset.alertch,
+        btn.dataset.panelch
+      );
+    });
+  });
+  container.querySelectorAll('.tw-panel-btn').forEach(btn => {
+    btn.addEventListener('click', () => refreshTrackedWalletPanel(btn.dataset.id));
+  });
+  container.querySelectorAll('.tw-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => removeTrackedWallet(btn.dataset.id));
+  });
+  container.querySelectorAll('.tw-copy-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      navigator.clipboard.writeText(this.dataset.addr);
+      this.textContent = '✓';
+      setTimeout(() => this.textContent = '📋', 1200);
+    });
+  });
 }
 
 
@@ -4861,9 +4889,9 @@ async function renderSettingsWalletList() {
         <td style="padding:10px 12px;">${status}</td>
         <td style="padding:10px 12px;">
           <div style="display:flex;gap:6px;">
-            <button onclick="refreshTrackedWalletPanel(${w.id})" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">📋</button>
-            <button onclick="openAddWalletModal('${w.id}','${escapeHtml(w.wallet_address)}','${escapeHtml(w.label||'')}','${w.alert_channel_id||''}','${w.panel_channel_id||''}')" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️</button>
-            <button onclick="removeTrackedWallet(${w.id})" style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
+            <button class="tw-panel-btn" data-id="${w.id}" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">📋</button>
+            <button class="tw-edit-btn" data-id="${w.id}" data-addr="${escapeHtml(w.wallet_address)}" data-label="${escapeHtml(w.label||'')}" data-alertch="${w.alert_channel_id||''}" data-panelch="${w.panel_channel_id||''}" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️</button>
+            <button class="tw-remove-btn" data-id="${w.id}" style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
           </div>
         </td>
       </tr>`;
@@ -4882,6 +4910,7 @@ async function renderSettingsWalletList() {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+    attachTrackedWalletListeners(wrap);
   } catch (e) {
     if (wrap) wrap.innerHTML = `<p style="color:#fca5a5;font-size:0.85em;padding:12px;">Error: ${escapeHtml(e.message)}</p>`;
   }

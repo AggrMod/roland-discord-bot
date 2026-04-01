@@ -5119,8 +5119,6 @@ async function loadTreasuryModuleSettings() {
           <button class="btn-primary" onclick="saveTreasuryModuleSettings()" style="font-size:0.85em;padding:8px 16px;">💾 Save Wallet Tracker Settings</button>
         </div>
       </div>
-      <!-- Wallet list injected below -->
-      <div id="trs_walletListCard" style="${cardStyle}margin-top:0;"></div>
     `;
 
     // Populate channel selects
@@ -5139,7 +5137,6 @@ async function loadTreasuryModuleSettings() {
     } catch (e) { console.error('[Treasury] Channel load error:', e); }
 
     // Load multi-wallet list
-    loadTreasuryWalletList();
   } catch (e) {
     console.error('[Treasury] Settings load error:', e);
     pane.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;padding:var(--space-4);">Failed to load treasury settings.</p>';

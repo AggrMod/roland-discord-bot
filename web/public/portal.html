@@ -1361,6 +1361,57 @@
     </div>
   </div>
 
+  <!-- Add / Edit Collection Modal -->
+  <div id="addCollectionModal" class="modal-overlay" style="display:none;">
+    <div class="modal" style="max-width:540px;width:100%;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="addCollectionModalTitle">Add Tracked Collection</h3>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <input type="hidden" id="colEditId" value="">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div>
+              <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Collection Name <span style="color:#ef4444;">*</span></label>
+              <input id="colName" type="text" placeholder="e.g. Vault Runners" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;box-sizing:border-box;">
+            </div>
+            <div>
+              <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Collection Address <span style="color:#ef4444;">*</span></label>
+              <input id="colAddress" type="text" placeholder="Solana collection address" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;font-family:monospace;box-sizing:border-box;">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div>
+              <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Alert Channel <span style="color:#ef4444;">*</span></label>
+              <select id="colChannel" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;box-sizing:border-box;"><option value="">-- Select channel --</option></select>
+            </div>
+            <div>
+              <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:4px;">Magic Eden Symbol <span style="color:var(--text-secondary);font-size:0.8em;">(optional)</span></label>
+              <div style="color:var(--text-secondary);font-size:0.75em;margin-bottom:6px;">Needed for listing alerts via ME poll</div>
+              <input id="colMeSymbol" type="text" placeholder="vault_runners" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;box-sizing:border-box;">
+            </div>
+          </div>
+          <div>
+            <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:8px;">Track Events</label>
+            <div style="display:flex;flex-wrap:wrap;gap:14px;">
+              <label style="display:flex;align-items:center;gap:6px;color:#e0e7ff;font-size:0.88em;cursor:pointer;"><input type="checkbox" id="colMint" checked> 🪙 Mint</label>
+              <label style="display:flex;align-items:center;gap:6px;color:#e0e7ff;font-size:0.88em;cursor:pointer;"><input type="checkbox" id="colSale" checked> 💰 Sale</label>
+              <label style="display:flex;align-items:center;gap:6px;color:#e0e7ff;font-size:0.88em;cursor:pointer;"><input type="checkbox" id="colBid"> 🤝 Bid</label>
+              <label style="display:flex;align-items:center;gap:6px;color:#e0e7ff;font-size:0.88em;cursor:pointer;"><input type="checkbox" id="colList" checked> 📋 List</label>
+              <label style="display:flex;align-items:center;gap:6px;color:#e0e7ff;font-size:0.88em;cursor:pointer;"><input type="checkbox" id="colDelist" checked> ❌ Delist</label>
+              <label style="display:flex;align-items:center;gap:6px;color:#e0e7ff;font-size:0.88em;cursor:pointer;"><input type="checkbox" id="colTransfer"> 🔄 Transfer</label>
+            </div>
+          </div>
+          <p id="colError" style="color:#ef4444;font-size:0.85em;display:none;margin:0;"></p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeAddCollectionModal()">Cancel</button>
+        <button class="btn-primary" id="colSaveBtn" onclick="saveCollection()">Save Collection</button>
+      </div>
+    </div>
+  </div>
+
   <footer style="text-align:center; padding:16px; color:var(--text-muted); font-size:0.78em; border-top:1px solid var(--border-subtle); margin-top:auto;">
     <a href="/privacy-policy" target="_blank" style="color:var(--gold-dark); text-decoration:none; margin:0 8px;">Privacy Policy</a>
     <a href="/terms-of-service" target="_blank" style="color:var(--gold-dark); text-decoration:none; margin:0 8px;">Terms of Service</a>

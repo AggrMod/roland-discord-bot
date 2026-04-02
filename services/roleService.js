@@ -20,6 +20,19 @@ class RoleService {
     }
   }
 
+  canBotManageRole(member, role) {
+    try {
+      if (!member || !role) return false;
+      if (role.managed) return false; // integration-managed role
+      if (role.id === member.guild.id) return false; // @everyone
+      const me = member.guild?.members?.me;
+      if (!me) return false;
+      return me.roles.highest.position > role.position;
+    } catch {
+      return false;
+    }
+  }
+
   loadConfigs() {
     try {
       this.tiersConfig = require('../config/roles.json');
@@ -364,9 +377,13 @@ class RoleService {
             // Add role
             const role = member.guild.roles.cache.get(tier.roleId);
             if (role) {
-              await member.roles.add(role);
-              changes.added.push(tier.name);
-              logger.log(`Added tier role ${tier.name} to ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+              if (!this.canBotManageRole(member, role)) {
+                logger.warn(`Skipped adding unmanaged tier role ${role.name} (${role.id}) for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+              } else {
+                await member.roles.add(role);
+                changes.added.push(tier.name);
+                logger.log(`Added tier role ${tier.name} to ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+              }
             }
           } else if (!shouldHave && has) {
             // Remove role
@@ -374,6 +391,8 @@ class RoleService {
             if (role) {
               if (this.isProtectedRole(role)) {
                 logger.warn(`Skipped removing protected role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+              } else if (!this.canBotManageRole(member, role)) {
+                logger.warn(`Skipped removing unmanaged tier role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
               } else {
                 await member.roles.remove(role);
                 changes.removed.push(tier.name);
@@ -428,6 +447,8 @@ class RoleService {
           if (role) {
             if (this.isProtectedRole(role)) {
               logger.warn(`Skipped adding protected role ${role.name} (${role.id}) via trait sync for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            } else if (!this.canBotManageRole(member, role)) {
+              logger.warn(`Skipped adding unmanaged trait role ${role.name} (${role.id}) for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
             } else {
               await member.roles.add(role);
               changes.added.push(`${traitRole.trait_value}`);
@@ -442,6 +463,8 @@ class RoleService {
           if (role) {
             if (this.isProtectedRole(role)) {
               logger.warn(`Skipped removing protected role ${role.name} (${role.id}) via trait sync for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            } else if (!this.canBotManageRole(member, role)) {
+              logger.warn(`Skipped removing unmanaged trait role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
             } else {
               await member.roles.remove(role);
               changes.removed.push(`${traitRole.trait_value}`);

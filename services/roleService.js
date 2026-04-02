@@ -1,7 +1,6 @@
 const db = require('../database/db');
 const walletService = require('./walletService');
 const nftService = require('./nftService');
-const vpService = require('./vpService');
 const logger = require('../utils/logger');
 
 class RoleService {
@@ -42,21 +41,24 @@ class RoleService {
         return { success: false, message: 'No wallets linked' };
       }
 
-      const totalNFTs = await nftService.countNFTsForWallets(wallets, { guildId });
-      const tier = vpService.getTierForNFTCount(totalNFTs);
-      const votingPower = vpService.calculateVotingPower(totalNFTs);
+      const allNFTs = await nftService.getAllNFTsForWallets(wallets, { guildId });
+      const tierInfo = this.getTierForNFTs(allNFTs, guildId);
+      const scopedNFTCount = tierInfo.count;
+      const tier = tierInfo.tier;
+      const votingPower = tier ? (tier.votingPower || 0) : 0;
 
       db.prepare(`
         UPDATE users 
         SET total_nfts = ?, tier = ?, voting_power = ?, username = ?, updated_at = CURRENT_TIMESTAMP
         WHERE discord_id = ?
-      `).run(totalNFTs, tier ? tier.name : null, votingPower, username, discordId);
+      `).run(scopedNFTCount, tier ? tier.name : null, votingPower, username, discordId);
 
-      logger.log(`Updated user ${discordId}: ${totalNFTs} NFTs, Tier: ${tier ? tier.name : 'None'}, VP: ${votingPower}`);
+      logger.log(`Updated user ${discordId}: scopedNFTs=${scopedNFTCount} (raw=${allNFTs.length}), Tier: ${tier ? tier.name : 'None'}, VP: ${votingPower}${guildId ? ` [guild ${guildId}]` : ''}`);
 
       return {
         success: true,
-        totalNFTs,
+        totalNFTs: scopedNFTCount,
+        rawNFTs: allNFTs.length,
         tier: tier ? tier.name : 'None',
         votingPower
       };
@@ -251,6 +253,50 @@ class RoleService {
 
     // Fallback to global config file
     return (this.tiersConfig?.tiers || []);
+  }
+
+  getTierForNFTs(nfts, guildId = null) {
+    const tiers = this.getEffectiveTiers(guildId);
+    if (!Array.isArray(tiers) || tiers.length === 0) {
+      return { tier: null, count: Array.isArray(nfts) ? nfts.length : 0 };
+    }
+
+    const allNFTs = Array.isArray(nfts) ? nfts : [];
+    const countsByCollection = new Map();
+    for (const nft of allNFTs) {
+      const key = nft?.collectionKey || null;
+      if (!key) continue;
+      countsByCollection.set(key, (countsByCollection.get(key) || 0) + 1);
+    }
+
+    const sorted = [...tiers].sort((a, b) => (Number(a.minNFTs || 0) - Number(b.minNFTs || 0)));
+    let matched = null;
+    let matchedCount = 0;
+
+    for (const tier of sorted) {
+      const min = Number(tier.minNFTs || 0);
+      const max = Number(tier.maxNFTs ?? Number.MAX_SAFE_INTEGER);
+      const count = tier.collectionId
+        ? (countsByCollection.get(tier.collectionId) || 0)
+        : allNFTs.length;
+
+      if (count >= min && count <= max) {
+        matched = tier;
+        matchedCount = count;
+      }
+    }
+
+    // If no tier range matched, return highest tier for overflow if applicable
+    if (!matched) {
+      const last = sorted[sorted.length - 1];
+      const count = last?.collectionId ? (countsByCollection.get(last.collectionId) || 0) : allNFTs.length;
+      if (count >= Number(last?.minNFTs || 0)) {
+        return { tier: last, count };
+      }
+      return { tier: null, count };
+    }
+
+    return { tier: matched, count: matchedCount };
   }
 
   /**

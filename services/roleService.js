@@ -233,6 +233,26 @@ class RoleService {
     }
   }
 
+  getEffectiveTiers(guildId = null) {
+    try {
+      // Prefer tenant-scoped tier config when available
+      if (guildId) {
+        const row = db.prepare('SELECT tiers_json FROM tenant_role_configs WHERE guild_id = ?').get(guildId);
+        if (row?.tiers_json) {
+          const parsed = JSON.parse(row.tiers_json);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed;
+          }
+        }
+      }
+    } catch (e) {
+      logger.warn(`Failed to load tenant tier config for guild ${guildId}: ${e.message}`);
+    }
+
+    // Fallback to global config file
+    return (this.tiersConfig?.tiers || []);
+  }
+
   /**
    * Sync tier roles for a member
    */
@@ -240,7 +260,7 @@ class RoleService {
     const changes = { added: [], removed: [] };
 
     try {
-      const allTiers = this.tiersConfig.tiers || [];
+      const allTiers = this.getEffectiveTiers(guildId);
       const currentMemberRoleIds = new Set(member.roles.cache.keys());
 
       // Determine which tier role should be active

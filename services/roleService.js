@@ -10,6 +10,16 @@ class RoleService {
     this.collectionsConfig = null;
   }
 
+  isProtectedRole(role) {
+    try {
+      if (!role || !role.permissions) return false;
+      // Never auto-manage server-admin level roles from verification sync
+      return role.permissions.has('Administrator') || role.permissions.has('ManageGuild');
+    } catch {
+      return false;
+    }
+  }
+
   loadConfigs() {
     try {
       this.tiersConfig = require('../config/roles.json');
@@ -362,9 +372,13 @@ class RoleService {
             // Remove role
             const role = member.guild.roles.cache.get(tier.roleId);
             if (role) {
-              await member.roles.remove(role);
-              changes.removed.push(tier.name);
-              logger.log(`Removed tier role ${tier.name} from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+              if (this.isProtectedRole(role)) {
+                logger.warn(`Skipped removing protected role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+              } else {
+                await member.roles.remove(role);
+                changes.removed.push(tier.name);
+                logger.log(`Removed tier role ${tier.name} from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+              }
             }
           }
         }
@@ -412,9 +426,13 @@ class RoleService {
           // Add trait role
           const role = member.guild.roles.cache.get(traitRole.roleId);
           if (role) {
-            await member.roles.add(role);
-            changes.added.push(`${traitRole.trait_value}`);
-            logger.log(`Added trait role ${traitRole.trait_value} to ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            if (this.isProtectedRole(role)) {
+              logger.warn(`Skipped adding protected role ${role.name} (${role.id}) via trait sync for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            } else {
+              await member.roles.add(role);
+              changes.added.push(`${traitRole.trait_value}`);
+              logger.log(`Added trait role ${traitRole.trait_value} to ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            }
           } else {
             logger.warn(`Trait role ${traitRole.roleId} not found in guild`);
           }
@@ -422,9 +440,13 @@ class RoleService {
           // Remove trait role
           const role = member.guild.roles.cache.get(traitRole.roleId);
           if (role) {
-            await member.roles.remove(role);
-            changes.removed.push(`${traitRole.trait_value}`);
-            logger.log(`Removed trait role ${traitRole.trait_value} from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            if (this.isProtectedRole(role)) {
+              logger.warn(`Skipped removing protected role ${role.name} (${role.id}) via trait sync for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            } else {
+              await member.roles.remove(role);
+              changes.removed.push(`${traitRole.trait_value}`);
+              logger.log(`Removed trait role ${traitRole.trait_value} from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            }
           }
         }
       }

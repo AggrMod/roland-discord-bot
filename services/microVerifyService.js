@@ -369,8 +369,9 @@ class MicroVerifyService {
       const publicKey = new PublicKey(config.receiveWallet);
       
       // Get recent transactions
+      const scanLimit = Math.max(5, Math.min(20, parseInt(process.env.MICRO_VERIFY_SCAN_LIMIT || '8', 10)));
       const signatures = await this.connection.getSignaturesForAddress(publicKey, {
-        limit: 10
+        limit: scanLimit
       });
 
       if (signatures.length === 0) {
@@ -383,7 +384,12 @@ class MicroVerifyService {
         logger.log('Micro-verify: first poll — scanning recent txs for pending requests');
         // Process all recent signatures in case a tx arrived before/during restart
         for (const sig of signatures) {
-          await this.checkTransaction(sig.signature, publicKey);
+          const result = await this.checkTransaction(sig.signature, publicKey);
+          if (result && result.rateLimited) {
+            logger.warn('Micro-verify RPC rate-limited during first scan; retrying on next interval');
+            break;
+          }
+          await new Promise(r => setTimeout(r, 250));
         }
         return;
       }
@@ -402,9 +408,15 @@ class MicroVerifyService {
         this.lastSignature = signatures[0].signature;
       }
 
-      // Check each transaction
+      // Check each transaction (throttled to avoid RPC 429)
       for (const sig of newTxs) {
-        await this.checkTransaction(sig.signature, publicKey);
+        const result = await this.checkTransaction(sig.signature, publicKey);
+        // If provider is rate-limiting, stop this cycle and retry next interval
+        if (result && result.rateLimited) {
+          logger.warn('Micro-verify RPC rate-limited; pausing tx checks until next poll');
+          break;
+        }
+        await new Promise(r => setTimeout(r, 250));
       }
     } catch (error) {
       logger.error('Error polling transactions:', error);
@@ -476,6 +488,11 @@ class MicroVerifyService {
 
       return result;
     } catch (error) {
+      const msg = String(error?.message || error || '');
+      if (msg.includes('429') || msg.includes('Too many requests')) {
+        logger.warn(`Rate-limited while checking tx ${signature}: ${msg}`);
+        return { rateLimited: true };
+      }
       logger.error(`Error checking transaction ${signature}:`, error);
     }
   }

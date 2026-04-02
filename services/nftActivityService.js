@@ -706,17 +706,23 @@ class NFTActivityService {
       const collections = this.getTrackedCollections(guildId).filter(c => c.enabled);
       if (!collections.length) return;
 
+      const ME_LIMIT = Math.max(10, Math.min(50, parseInt(process.env.NFT_ME_POLL_LIMIT || '25', 10)));
+      const TENSOR_LIMIT = Math.max(10, Math.min(60, parseInt(process.env.NFT_TENSOR_POLL_LIMIT || '30', 10)));
+      const POLL_DELAY_MS = Math.max(500, parseInt(process.env.NFT_POLL_DELAY_MS || '1500', 10));
+
       for (const col of collections) {
         try {
           // Magic Eden poll — only if me_symbol is configured
           if (col.me_symbol) {
           // No type filter — ME returns all activity types; we filter client-side
-          const meUrl = `https://api-mainnet.magiceden.dev/v2/collections/${encodeURIComponent(col.me_symbol)}/activities?offset=0&limit=100`;
+          const meUrl = `https://api-mainnet.magiceden.dev/v2/collections/${encodeURIComponent(col.me_symbol)}/activities?offset=0&limit=${ME_LIMIT}`;
           const res = await fetch(meUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
 
           if (!res.ok) {
             logger.error(`[nft-poll] ME API error for ${col.collection_name}: ${res.status}`);
-            await new Promise(r => setTimeout(r, 500));
+            // Back off harder on rate-limit responses
+            const backoff = res.status === 429 ? 5000 : 1200;
+            await new Promise(r => setTimeout(r, backoff));
             continue;
           }
 
@@ -756,12 +762,12 @@ class NFTActivityService {
           }
 
           logger.log(`[nft-poll] guild=${col.guild_id} collection=${col.collection_name} ME new=${newCount} skipped=${skipped}`);
-          await new Promise(r => setTimeout(r, 600));
+          await new Promise(r => setTimeout(r, POLL_DELAY_MS));
           } // end ME block
 
           // Tensor poll — always runs using collection_address as collId directly
           try {
-            const tensorQuery = `query { recentTransactions(collId: "${col.collection_address}", limit: 100) { txs { tx { txType signature grossAmount seller buyer mintOnchainId blockTime } } } }`;
+            const tensorQuery = `query { recentTransactions(collId: "${col.collection_address}", limit: ${TENSOR_LIMIT}) { txs { tx { txType signature grossAmount seller buyer mintOnchainId blockTime } } } }`;
             const tensorCtrl = new AbortController();
             const tensorTimeout = setTimeout(() => tensorCtrl.abort(), 8000);
             const tensorRes = await fetch("https://api.tensor.trade/graphql", {
@@ -799,9 +805,12 @@ class NFTActivityService {
             if (!tensorErr.message?.includes('fetch failed') && !tensorErr.message?.includes('abort')) {
               logger.error(`[nft-poll] Tensor error for ${col.collection_name}:`, tensorErr.message);
             }
+            if (String(tensorErr.message || '').includes('429')) {
+              await new Promise(r => setTimeout(r, 5000));
+            }
           }
 
-          await new Promise(r => setTimeout(r, 600));
+          await new Promise(r => setTimeout(r, POLL_DELAY_MS));
         } catch (colErr) {
           logger.error(`[nft-poll] Error polling ${col.collection_name}:`, colErr);
           await new Promise(r => setTimeout(r, 500));

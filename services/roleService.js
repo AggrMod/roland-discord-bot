@@ -237,22 +237,46 @@ class RoleService {
 
   getEffectiveTiers(guildId = null) {
     try {
-      // Prefer tenant-scoped tier config when available
+      // Tenant-strict mode: if guild is provided, only use that guild's saved verification tiers
       if (guildId) {
         const row = db.prepare('SELECT tiers_json FROM tenant_role_configs WHERE guild_id = ?').get(guildId);
         if (row?.tiers_json) {
           const parsed = JSON.parse(row.tiers_json);
-          if (Array.isArray(parsed) && parsed.length > 0) {
+          if (Array.isArray(parsed)) {
             return parsed;
           }
         }
+        // No tenant tier config -> touch nothing for safety
+        return [];
       }
     } catch (e) {
       logger.warn(`Failed to load tenant tier config for guild ${guildId}: ${e.message}`);
+      if (guildId) return [];
     }
 
-    // Fallback to global config file
+    // Global fallback only when no guild context is provided
     return (this.tiersConfig?.tiers || []);
+  }
+
+  getEffectiveTraitRoles(guildId = null) {
+    try {
+      // Tenant-strict mode: if guild is provided, only use that guild's saved verification trait rules
+      if (guildId) {
+        const row = db.prepare('SELECT traits_json FROM tenant_role_configs WHERE guild_id = ?').get(guildId);
+        if (row?.traits_json) {
+          const parsed = JSON.parse(row.traits_json);
+          if (Array.isArray(parsed)) {
+            return parsed;
+          }
+        }
+        return [];
+      }
+    } catch (e) {
+      logger.warn(`Failed to load tenant trait config for guild ${guildId}: ${e.message}`);
+      if (guildId) return [];
+    }
+
+    return (this.traitRolesConfig?.traitRoles || []);
   }
 
   getTierForNFTs(nfts, guildId = null) {
@@ -359,7 +383,7 @@ class RoleService {
     const changes = { added: [], removed: [] };
 
     try {
-      const traitRoles = this.traitRolesConfig.traitRoles || [];
+      const traitRoles = this.getEffectiveTraitRoles(guildId);
       const currentMemberRoleIds = new Set(member.roles.cache.keys());
 
       // Extract traits from user's NFTs

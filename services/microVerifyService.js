@@ -205,6 +205,12 @@ class MicroVerifyService {
       }
       const amount = amountResult.amount;
 
+      // Ensure user exists in users table before inserting (micro-verify is the registration mechanism;
+      // the FK on micro_verify_requests requires a users row, so upsert a stub if needed)
+      db.prepare(`
+        INSERT OR IGNORE INTO users (discord_id, username) VALUES (?, ?)
+      `).run(discordId, username);
+
       // Calculate expiry
       const expiresAt = new Date(Date.now() + config.ttlMinutes * 60 * 1000).toISOString();
 

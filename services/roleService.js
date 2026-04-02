@@ -203,14 +203,15 @@ class RoleService {
         removed: []
       };
 
-      // 1. Sync tier roles
-      const tierChanges = await this.syncTierRoles(member, userInfo.tier, guildId);
+      const wallets = walletService.getAllUserWallets(discordId);
+      const allNFTs = await nftService.getAllNFTsForWallets(wallets, { guildId });
+
+      // 1. Sync collection tier roles (based on configured rules only)
+      const tierChanges = await this.syncTierRoles(member, allNFTs, guildId);
       changes.added.push(...tierChanges.added);
       changes.removed.push(...tierChanges.removed);
 
       // 2. Sync trait roles
-      const wallets = walletService.getAllUserWallets(discordId);
-      const allNFTs = await nftService.getAllNFTsForWallets(wallets, { guildId });
       const traitChanges = await this.syncTraitRoles(member, allNFTs, guildId);
       changes.added.push(...traitChanges.added);
       changes.removed.push(...traitChanges.removed);
@@ -348,56 +349,56 @@ class RoleService {
 
   /**
    * Sync tier roles for a member
+   * Applies rules exactly as configured in Verification settings.
    */
-  async syncTierRoles(member, currentTierName, guildId = null) {
+  async syncTierRoles(member, nfts, guildId = null) {
     const changes = { added: [], removed: [] };
 
     try {
-      const allTiers = this.getEffectiveTiers(guildId);
+      const allTiers = this.getEffectiveTiers(guildId).filter(t => t && t.roleId);
       const currentMemberRoleIds = new Set(member.roles.cache.keys());
+      const allNFTs = Array.isArray(nfts) ? nfts : [];
 
-      // Determine which tier role should be active
-      let targetTierRoleId = null;
-      if (currentTierName) {
-        const tier = allTiers.find(t => t.name === currentTierName);
-        if (tier && tier.roleId) {
-          targetTierRoleId = tier.roleId;
-        } else if (tier && !tier.roleId) {
-          logger.warn(`Tier ${currentTierName} has no roleId configured`);
-        }
+      // Pre-count NFTs by collection key for fast tier evaluation
+      const countsByCollection = new Map();
+      for (const nft of allNFTs) {
+        const key = nft?.collectionKey || null;
+        if (!key) continue;
+        countsByCollection.set(key, (countsByCollection.get(key) || 0) + 1);
       }
 
-      // Remove all tier roles except the target
       for (const tier of allTiers) {
-        if (tier.roleId) {
-          const shouldHave = tier.roleId === targetTierRoleId;
-          const has = currentMemberRoleIds.has(tier.roleId);
+        const min = Number(tier.minNFTs || 0);
+        const max = Number(tier.maxNFTs ?? Number.MAX_SAFE_INTEGER);
+        const count = tier.collectionId
+          ? (countsByCollection.get(tier.collectionId) || 0)
+          : allNFTs.length;
 
-          if (shouldHave && !has) {
-            // Add role
-            const role = member.guild.roles.cache.get(tier.roleId);
-            if (role) {
-              if (!this.canBotManageRole(member, role)) {
-                logger.warn(`Skipped adding unmanaged tier role ${role.name} (${role.id}) for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-              } else {
-                await member.roles.add(role);
-                changes.added.push(tier.name);
-                logger.log(`Added tier role ${tier.name} to ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-              }
+        const shouldHave = count >= min && count <= max;
+        const has = currentMemberRoleIds.has(tier.roleId);
+
+        if (shouldHave && !has) {
+          const role = member.guild.roles.cache.get(tier.roleId);
+          if (role) {
+            if (!this.canBotManageRole(member, role)) {
+              logger.warn(`Skipped adding unmanaged tier role ${role.name} (${role.id}) for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            } else {
+              await member.roles.add(role);
+              changes.added.push(tier.name);
+              logger.log(`Added tier role ${tier.name} to ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
             }
-          } else if (!shouldHave && has) {
-            // Remove role
-            const role = member.guild.roles.cache.get(tier.roleId);
-            if (role) {
-              if (this.isProtectedRole(role)) {
-                logger.warn(`Skipped removing protected role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-              } else if (!this.canBotManageRole(member, role)) {
-                logger.warn(`Skipped removing unmanaged tier role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-              } else {
-                await member.roles.remove(role);
-                changes.removed.push(tier.name);
-                logger.log(`Removed tier role ${tier.name} from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-              }
+          }
+        } else if (!shouldHave && has) {
+          const role = member.guild.roles.cache.get(tier.roleId);
+          if (role) {
+            if (this.isProtectedRole(role)) {
+              logger.warn(`Skipped removing protected role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            } else if (!this.canBotManageRole(member, role)) {
+              logger.warn(`Skipped removing unmanaged tier role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            } else {
+              await member.roles.remove(role);
+              changes.removed.push(tier.name);
+              logger.log(`Removed tier role ${tier.name} from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
             }
           }
         }

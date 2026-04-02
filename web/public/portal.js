@@ -221,8 +221,29 @@ async function autoShowPendingMicroVerify() {
 function getSolanaProvider() {
   if (window.phantom?.solana?.isPhantom) return window.phantom.solana;
   if (window.solflare?.isSolflare) return window.solflare;
+  if (window.solflare?.solana?.isSolflare) return window.solflare.solana;
   if (window.backpack?.isBackpack) return window.backpack;
   if (window.solana) return window.solana;
+  return null;
+}
+
+function extractWalletAddress(provider, connectResp) {
+  const candidates = [
+    connectResp?.publicKey,
+    provider?.publicKey,
+    connectResp?.wallet?.publicKey,
+    connectResp?.address,
+    provider?.address
+  ];
+
+  for (const c of candidates) {
+    if (!c) continue;
+    if (typeof c === 'string') return c;
+    if (typeof c.toString === 'function') {
+      const s = c.toString();
+      if (s && s !== '[object Object]') return s;
+    }
+  }
   return null;
 }
 
@@ -241,7 +262,10 @@ async function verifyBySignature() {
   try {
     // 1. Connect wallet
     const resp = await provider.connect();
-    const walletAddress = resp.publicKey.toString();
+    const walletAddress = extractWalletAddress(provider, resp);
+    if (!walletAddress) {
+      throw new Error('Connected wallet but could not read public address. Please unlock wallet and try again.');
+    }
     btn.innerHTML = '⏳ Requesting challenge...';
 
     // 2. Get challenge from server

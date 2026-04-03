@@ -3725,9 +3725,11 @@ async function saveChainEmojiMap() {
   });
 
   try {
-    const response = await fetch('/api/admin/settings', {
+    // chainEmojiMap is a global (superadmin) setting — use the superadmin endpoint
+    // which does not require a guild/server to be selected.
+    const response = await fetch('/api/superadmin/global-settings', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({ chainEmojiMap })
     });

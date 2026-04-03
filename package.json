@@ -7,7 +7,7 @@
     "start": "node index.js",
     "deploy": "node deploy-commands.js",
     "dev": "node --watch index.js",
-    "lint": "eslint . --ext .js --ignore-path .gitignore",
+    "lint": "eslint .",
     "audit": "npm audit --production"
   },
   "dependencies": {

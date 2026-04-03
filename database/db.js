@@ -14,7 +14,7 @@ function initDatabase() {
   // Migration: add missing columns
   const ignoreDuplicateMigration = (fn) => {
     try { fn(); } catch(e) {
-      if (!e.message.includes('duplicate column name') && !e.message.includes('already exists')) {
+      if (!e.message.includes('duplicate column name') && !e.message.includes('already exists') && !e.message.includes('no such table')) {
         throw e;
       }
     }

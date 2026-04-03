@@ -557,6 +557,46 @@ function getActiveBrandLogoUrl(server) {
   return getGuildIconUrl(server);
 }
 
+function sanitizeImageUrl(rawUrl) {
+  if (typeof rawUrl !== 'string') return '';
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return '';
+
+  try {
+    const parsed = new URL(trimmed, window.location.origin);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return '';
+    }
+
+    if (trimmed.startsWith('/') && !trimmed.startsWith('//')) {
+      return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+    return parsed.href;
+  } catch (_error) {
+    return '';
+  }
+}
+
+function setNavBrandTitle(brandTitle, iconUrl, label) {
+  if (!brandTitle) return;
+  brandTitle.textContent = '';
+
+  if (iconUrl) {
+    const img = document.createElement('img');
+    img.src = iconUrl;
+    img.alt = '';
+    img.style.width = '22px';
+    img.style.height = '22px';
+    img.style.borderRadius = '50%';
+    img.style.verticalAlign = 'middle';
+    img.style.marginRight = '8px';
+    img.style.objectFit = 'cover';
+    brandTitle.appendChild(img);
+  }
+
+  brandTitle.appendChild(document.createTextNode(label || 'Portal'));
+}
+
 function updateActiveGuildBadge() {
   const badge = document.getElementById('activeGuildBadge');
   const brandTitle = document.getElementById('navBrandTitle');
@@ -568,16 +608,14 @@ function updateActiveGuildBadge() {
     badge.textContent = record?.name ? `Active: ${record.name}` : `Active: ${activeGuildId}`;
     badge.title = activeGuildId;
     if (brandTitle) {
-      const iconUrl = getActiveBrandLogoUrl(record);
-      brandTitle.innerHTML = iconUrl
-        ? `<img src="${iconUrl}" alt="" style="width:22px;height:22px;border-radius:50%;vertical-align:middle;margin-right:8px;object-fit:cover;">${escapeHtml(record?.name || 'Portal')}`
-        : `${escapeHtml(record?.name || 'Portal')}`;
+      const iconUrl = sanitizeImageUrl(getActiveBrandLogoUrl(record));
+      setNavBrandTitle(brandTitle, iconUrl, record?.name || 'Portal');
     }
   } else {
     badge.style.display = 'inline-flex';
     badge.textContent = 'Select server';
     badge.title = 'No active server selected';
-    if (brandTitle) brandTitle.innerHTML = '<img src="/assets/branding/guildpilot-logo.png" alt="" style="width:22px;height:22px;border-radius:50%;vertical-align:middle;margin-right:8px;object-fit:cover;">GuildPilot';
+    setNavBrandTitle(brandTitle, '/assets/branding/guildpilot-logo.png', 'GuildPilot');
   }
 
   applyPreSelectionVisibility();
@@ -6297,6 +6335,7 @@ async function legacyLoadNFTActivityAdminView() {
     }
 
     const rows = data.collections.map(col => {
+      const id = col.id != null ? String(col.id) : '';
       const name = col.name || col.collection_name || col.address || 'Unknown';
       const addr = col.address || col.collection_address || '';
       return `
@@ -6305,7 +6344,7 @@ async function legacyLoadNFTActivityAdminView() {
             <div style="color:#e0e7ff; font-weight:600;">${escapeHtml(name)}</div>
             <div style="color:var(--text-secondary); font-size:0.8em; font-family:monospace;">${escapeHtml(addr)}</div>
           </div>
-          <button class="btn-danger" onclick="removeWatchedCollection('${escapeHtml(addr || name)}')" style="font-size:0.8em; padding:6px 12px;">
+          <button class="btn-danger" onclick="removeWatchedCollection('${escapeHtml(id)}', '${escapeHtml(name)}')" style="font-size:0.8em; padding:6px 12px;">
             <span>🗑️</span><span>Remove</span>
           </button>
         </div>

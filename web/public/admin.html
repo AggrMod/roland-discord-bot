@@ -609,6 +609,21 @@
       }, 5000);
     }
 
+    function escapeHtml(value) {
+      const div = document.createElement('div');
+      div.textContent = value == null ? '' : String(value);
+      return div.innerHTML;
+    }
+
+    function escapeJsString(value) {
+      return String(value == null ? '' : value)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/\r/g, '\\r')
+        .replace(/\n/g, '\\n')
+        .replace(/</g, '\\x3c');
+    }
+
     async function loadAllData() {
       await Promise.all([
         loadSettings(),
@@ -930,15 +945,16 @@
       tbody.innerHTML = '';
 
       usersData.forEach(user => {
+        const discordId = String(user.discord_id || '');
         const row = document.createElement('tr');
         row.innerHTML = `
-          <td>${user.discord_id}</td>
-          <td>${user.username}</td>
-          <td>${user.tier || 'None'}</td>
-          <td>${user.total_nfts}</td>
-          <td>${user.voting_power}</td>
-          <td>${user.wallet_count}</td>
-          <td><button class="btn-secondary btn-sm" onclick="viewUser('${user.discord_id}')">View</button></td>
+          <td>${escapeHtml(discordId)}</td>
+          <td>${escapeHtml(user.username)}</td>
+          <td>${escapeHtml(user.tier || 'None')}</td>
+          <td>${escapeHtml(user.total_nfts)}</td>
+          <td>${escapeHtml(user.voting_power)}</td>
+          <td>${escapeHtml(user.wallet_count)}</td>
+          <td><button class="btn-secondary btn-sm" onclick="viewUser('${escapeJsString(discordId)}')">View</button></td>
         `;
         tbody.appendChild(row);
       });
@@ -963,16 +979,17 @@
       tbody.innerHTML = '';
 
       proposalsData.forEach(proposal => {
+        const proposalId = String(proposal.proposal_id || '');
         const row = document.createElement('tr');
         row.innerHTML = `
-          <td>${proposal.proposal_id}</td>
-          <td>${proposal.title}</td>
-          <td>${proposal.creator_id}</td>
-          <td>${proposal.status}</td>
-          <td>${proposal.yes_vp}</td>
-          <td>${proposal.no_vp}</td>
+          <td>${escapeHtml(proposalId)}</td>
+          <td>${escapeHtml(proposal.title)}</td>
+          <td>${escapeHtml(proposal.creator_id)}</td>
+          <td>${escapeHtml(proposal.status)}</td>
+          <td>${escapeHtml(proposal.yes_vp)}</td>
+          <td>${escapeHtml(proposal.no_vp)}</td>
           <td>
-            ${proposal.status === 'voting' ? `<button class="btn-danger btn-sm" onclick="closeProposal('${proposal.proposal_id}')">Close Vote</button>` : '-'}
+            ${proposal.status === 'voting' ? `<button class="btn-danger btn-sm" onclick="closeProposal('${escapeJsString(proposalId)}')">Close Vote</button>` : '-'}
           </td>
         `;
         tbody.appendChild(row);
@@ -1023,16 +1040,17 @@
       tbody.innerHTML = '';
 
       missionsData.forEach(mission => {
+        const missionId = String(mission.mission_id || '');
         const row = document.createElement('tr');
         row.innerHTML = `
-          <td>${mission.mission_id}</td>
-          <td>${mission.title}</td>
-          <td>${mission.status}</td>
-          <td>${mission.filled_slots}/${mission.total_slots}</td>
-          <td>${mission.reward_points}</td>
+          <td>${escapeHtml(missionId)}</td>
+          <td>${escapeHtml(mission.title)}</td>
+          <td>${escapeHtml(mission.status)}</td>
+          <td>${escapeHtml(mission.filled_slots)}/${escapeHtml(mission.total_slots)}</td>
+          <td>${escapeHtml(mission.reward_points)}</td>
           <td>
-            ${mission.status === 'ready' ? `<button class="btn-primary btn-sm" onclick="startMission('${mission.mission_id}')">Start</button>` : ''}
-            ${mission.status === 'active' ? `<button class="btn-primary btn-sm" onclick="completeMission('${mission.mission_id}')">Complete</button>` : ''}
+            ${mission.status === 'ready' ? `<button class="btn-primary btn-sm" onclick="startMission('${escapeJsString(missionId)}')">Start</button>` : ''}
+            ${mission.status === 'active' ? `<button class="btn-primary btn-sm" onclick="completeMission('${escapeJsString(missionId)}')">Complete</button>` : ''}
           </td>
         `;
         tbody.appendChild(row);

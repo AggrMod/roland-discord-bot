@@ -1560,8 +1560,7 @@ class WebServer {
       }
     };
 
-    this.app.get('/api/admin/env-status', (req, res) => {
-      if (!req.session?.discordUser) return res.status(401).json({ success: false, message: 'Not authenticated' });
+    this.app.get('/api/admin/env-status', adminAuthMiddleware, (req, res) => {
       res.json({
         mockMode: process.env.MOCK_MODE === 'true',
         heliusConfigured: !!process.env.HELIUS_API_KEY,
@@ -1597,7 +1596,7 @@ class WebServer {
         }
         const result = tenantService.updateTenantBranding(req.guildId, patch, req.session?.discordUser?.id || 'unknown');
         if (!result.success) return res.status(400).json(result);
-        res.json({ success: true, branding: result.branding || null });
+        res.json({ success: true, branding: result.tenant?.branding || null });
       } catch (error) {
         logger.error('Error updating admin branding:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
@@ -1624,7 +1623,9 @@ class WebServer {
           
           // Verification wallet
           verificationReceiveWallet: settings.verificationReceiveWallet || process.env.VERIFICATION_RECEIVE_WALLET || '',
-          nftActivityWebhookSecret: settings.nftActivityWebhookSecret || process.env.NFT_ACTIVITY_WEBHOOK_SECRET || '',
+          nftActivityWebhookSecret: req.isSuperadmin
+            ? (settings.nftActivityWebhookSecret || process.env.NFT_ACTIVITY_WEBHOOK_SECRET || '')
+            : '',
 
           // Tenant scaffold flags
           multiTenantEnabled,
@@ -1677,6 +1678,17 @@ class WebServer {
         res.json({ success: true, settings: effectiveSettings });
       } catch (error) {
         logger.error('Error fetching settings:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.get('/api/admin/plan', adminAuthMiddleware, (req, res) => {
+      try {
+        const tenantContext = tenantService.getTenantContext(req.guildId);
+        const plan = tenantContext?.planKey || 'starter';
+        res.json({ success: true, plan });
+      } catch (error) {
+        logger.error('Error fetching admin plan:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });
@@ -3645,7 +3657,7 @@ class WebServer {
 
     this.app.get('/api/admin/engagement/config', adminAuthMiddleware, (req, res) => {
       try {
-        const guildId = req.session?.guildId;
+        const guildId = req.guildId;
         const eng = require('../services/engagementService');
         res.json({ success: true, config: eng.getConfig(guildId) });
       } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -3653,7 +3665,7 @@ class WebServer {
 
     this.app.put('/api/admin/engagement/config', adminAuthMiddleware, (req, res) => {
       try {
-        const guildId = req.session?.guildId;
+        const guildId = req.guildId;
         const eng = require('../services/engagementService');
         const allowed = ['enabled','points_message','points_reaction','cooldown_message_mins','cooldown_reaction_daily'];
         const patch = {};
@@ -3665,7 +3677,7 @@ class WebServer {
 
     this.app.get('/api/admin/engagement/leaderboard', adminAuthMiddleware, (req, res) => {
       try {
-        const guildId = req.session?.guildId;
+        const guildId = req.guildId;
         const limit = Math.min(parseInt(req.query.limit || '25', 10), 100);
         const eng = require('../services/engagementService');
         res.json({ success: true, leaderboard: eng.getLeaderboard(guildId, limit) });
@@ -3674,7 +3686,7 @@ class WebServer {
 
     this.app.get('/api/admin/engagement/shop', adminAuthMiddleware, (req, res) => {
       try {
-        const guildId = req.session?.guildId;
+        const guildId = req.guildId;
         const eng = require('../services/engagementService');
         res.json({ success: true, items: eng.getShopItems(guildId) });
       } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -3682,7 +3694,7 @@ class WebServer {
 
     this.app.post('/api/admin/engagement/shop', adminAuthMiddleware, (req, res) => {
       try {
-        const guildId = req.session?.guildId;
+        const guildId = req.guildId;
         const { name, description, type, cost, roleId, codes, quantity } = req.body;
         if (!name || cost == null) return res.status(400).json({ success: false, message: 'name and cost are required' });
         const eng = require('../services/engagementService');
@@ -3693,7 +3705,7 @@ class WebServer {
 
     this.app.delete('/api/admin/engagement/shop/:id', adminAuthMiddleware, (req, res) => {
       try {
-        const guildId = req.session?.guildId;
+        const guildId = req.guildId;
         const itemId = parseInt(req.params.id, 10);
         const eng = require('../services/engagementService');
         res.json(eng.removeShopItem(guildId, itemId));
@@ -3732,6 +3744,78 @@ class WebServer {
         res.json({ success: true, message: 'NFT activity config updated' });
       } catch (error) {
         logger.error('Error updating NFT activity config:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // Legacy compatibility routes retained for older portal code paths.
+    this.app.get('/api/admin/activity/watch-list', adminAuthMiddleware, (req, res) => {
+      try {
+        const collections = nftActivityService.getTrackedCollections(req.guildId).map(col => ({
+          id: col.id,
+          name: col.collection_name,
+          address: col.collection_address,
+          collection_name: col.collection_name,
+          collection_address: col.collection_address,
+          created_at: col.created_at
+        }));
+        res.json({ success: true, collections });
+      } catch (error) {
+        logger.error('Error loading legacy activity watch list:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/activity/watch-add', adminAuthMiddleware, (req, res) => {
+      try {
+        const collectionAddress = String(req.body?.address || req.body?.collectionAddress || '').trim();
+        const collectionName = String(req.body?.name || req.body?.collectionName || collectionAddress).trim();
+        if (!collectionAddress) {
+          return res.status(400).json({ success: false, message: 'Collection address is required' });
+        }
+
+        const config = nftActivityService.getAlertConfig();
+        const channelId = String(req.body?.channelId || config?.channel_id || '').trim();
+        if (!channelId) {
+          return res.status(400).json({ success: false, message: 'Configure an NFT alert channel first' });
+        }
+
+        const result = nftActivityService.addTrackedCollection({
+          guildId: req.guildId,
+          collectionAddress,
+          collectionName: collectionName || collectionAddress,
+          channelId,
+          trackMint: true,
+          trackSale: true,
+          trackList: true,
+          trackDelist: true,
+          trackTransfer: false,
+          trackBid: false,
+          meSymbol: String(req.body?.meSymbol || '').trim()
+        });
+
+        if (!result.success) {
+          return res.status(400).json(result);
+        }
+        nftActivityService.syncAddressToHelius(collectionAddress, 'add').catch(() => {});
+        return res.json(result);
+      } catch (error) {
+        logger.error('Error adding legacy activity watch collection:', error);
+        return res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.get('/api/verification/admin/activity-watch-list', adminAuthMiddleware, (req, res) => {
+      try {
+        const collections = nftActivityService.getTrackedCollections(req.guildId).map(col => ({
+          id: col.id,
+          collection: col.collection_name,
+          key: col.collection_address,
+          created_at: col.created_at
+        }));
+        res.json({ success: true, collections });
+      } catch (error) {
+        logger.error('Error loading legacy verification activity watch list:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });

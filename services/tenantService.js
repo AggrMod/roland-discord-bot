@@ -30,6 +30,34 @@ function normalizeString(value) {
   return normalized.length > 0 ? normalized : null;
 }
 
+function normalizeBrandingUrl(value, { allowRelative = false } = {}) {
+  const normalized = normalizeString(value);
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized.length > 2048) {
+    return null;
+  }
+
+  if (allowRelative && normalized.startsWith('/') && !normalized.startsWith('//')) {
+    return normalized;
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(normalized);
+  } catch (_error) {
+    return null;
+  }
+
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return null;
+  }
+
+  return parsed.toString();
+}
+
 function normalizeBoolean(value) {
   if (typeof value === 'boolean') {
     return value;
@@ -693,6 +721,21 @@ class TenantService {
       if (brandingPatch && Object.prototype.hasOwnProperty.call(brandingPatch, key)) {
         patch[key] = normalizeString(brandingPatch[key]);
       }
+    }
+
+    for (const key of ['logo_url', 'icon_url', 'support_url']) {
+      if (!Object.prototype.hasOwnProperty.call(patch, key)) {
+        continue;
+      }
+      if (patch[key] === null) {
+        continue;
+      }
+
+      const normalizedUrl = normalizeBrandingUrl(patch[key], { allowRelative: true });
+      if (!normalizedUrl) {
+        return { success: false, message: `Invalid ${key}` };
+      }
+      patch[key] = normalizedUrl;
     }
 
     const before = this.getTenantContext(normalizedGuildId);

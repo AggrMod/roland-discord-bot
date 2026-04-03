@@ -148,15 +148,15 @@ function showWalletAddForm() {
 
       <!-- Micro Transaction Method -->
       <div style="padding:28px; background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(99,102,241,0.05)); border:2px solid rgba(99,102,241,0.30); border-radius:14px; text-align:center;">
-        <div style="font-size:2.5em; margin-bottom:12px;">💸</div>
-        <h4 style="color:#e0e7ff; margin-bottom:12px; font-size:1.15em;">Micro Transaction</h4>
+        <div style="font-size:2.5em; margin-bottom:12px;">🔐</div>
+        <h4 style="color:#e0e7ff; margin-bottom:12px; font-size:1.15em;">On-Chain Proof</h4>
         <p style="color:var(--text-secondary); font-size:0.9em; line-height:1.6; margin-bottom:20px;">
-          Send a unique tiny SOL amount from <strong>any wallet</strong>.<br>No browser extension needed — Phantom, CEX, hardware, anything.
+          Confirm NFT ownership by initiating a tiny on-chain proof from <strong>any Solana wallet</strong>.<br>No browser extension required — works with Phantom, hardware wallets, and more.
         </p>
         <button id="microVerifyBtn" onclick="verifyByMicroTx()" class="btn-primary" style="padding:14px 24px; width:100%; font-size:1em;">
-          💰 Get Verification Address
+          🔑 Generate Proof Address
         </button>
-        <p style="color:var(--text-muted); font-size:0.8em; margin-top:10px;">Any wallet · No extension required</p>
+        <p style="color:var(--text-muted); font-size:0.8em; margin-top:10px;">Any wallet · No extension required · NFT ownership proof only</p>
       </div>
     </div>
     <div id="verifyStatus" style="margin-top:16px;"></div>
@@ -181,8 +181,8 @@ async function autoShowPendingMicroVerify() {
 
     statusEl.innerHTML = `
       <div style="margin-top:20px; padding:24px; background:rgba(99,102,241,0.08); border:2px solid rgba(99,102,241,0.35); border-radius:14px;">
-        <h4 style="color:#e0e7ff; margin:0 0 4px 0; font-size:1.05em;">📋 Pending verification — send this exact amount</h4>
-        <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 14px 0;">Already generated a unique amount for you. Just send it to complete verification.</p>
+        <h4 style="color:#e0e7ff; margin:0 0 4px 0; font-size:1.05em;">🔐 NFT Ownership Proof — Awaiting On-Chain Confirmation</h4>
+        <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 14px 0;">Your unique proof amount has been generated. Complete the on-chain confirmation to verify NFT membership. We confirm wallet ownership only — no passwords or personal data collected. <a href="/privacy-policy" target="_blank" style="color:#a5b4fc;">Privacy Policy</a></p>
 
         <div style="margin-bottom:14px;">
           <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:0.05em;">Amount (exact)</p>
@@ -193,21 +193,21 @@ async function autoShowPendingMicroVerify() {
         </div>
 
         <div style="margin-bottom:20px;">
-          <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:0.05em;">Destination Wallet</p>
+          <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:0.05em;">Community Proof Address</p>
           <div style="display:flex; align-items:center; gap:10px; background:rgba(0,0,0,0.3); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:12px 14px;">
             <span style="color:#c7d2fe; font-size:0.88em; font-family:monospace; flex:1; word-break:break-all;">${r.destinationWallet}</span>
             <button onclick="navigator.clipboard.writeText('${r.destinationWallet}'); showSuccess('Address copied!');" style="background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 12px; cursor:pointer; font-size:0.8em;">Copy</button>
           </div>
         </div>
 
-        <div style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:8px; padding:12px 14px; margin-bottom:20px;">
-          <p style="color:#fcd34d; font-size:0.85em; margin:0;">⚠️ Send the <strong>exact amount</strong> shown — it's your unique identifier. Expires at <strong>${expiryDisplay}</strong>.</p>
+        <div style="background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:12px 14px; margin-bottom:20px;">
+          <p style="color:#c7d2fe; font-size:0.85em; margin:0;">ℹ️ Use the <strong>exact proof amount</strong> above — it's your unique membership identifier. Compatible with any Solana wallet. Proof expires at <strong>${expiryDisplay}</strong>.</p>
         </div>
 
         <div style="text-align:center;">
           <div style="display:flex; align-items:center; justify-content:center; gap:10px; color:var(--text-secondary); margin-bottom:12px;">
             <div class="spinner" style="width:18px; height:18px;"></div>
-            <span style="font-size:0.9em;">Waiting for transaction on-chain...</span>
+            <span style="font-size:0.9em;">Awaiting on-chain confirmation...</span>
           </div>
           <button onclick="manualCheckMicroVerify(document.getElementById('verifyStatus'))" style="background:none; border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 14px; cursor:pointer; font-size:0.82em;">↻ Check status</button>
         </div>
@@ -317,7 +317,7 @@ async function verifyByMicroTx() {
   const statusEl = document.getElementById('verifyStatus');
 
   btn.disabled = true;
-  btn.innerHTML = '⏳ Generating address...';
+  btn.innerHTML = '⏳ Generating proof address...';
 
   try {
     // 1. Create micro-verify request on server — no wallet connection needed
@@ -328,14 +328,15 @@ async function verifyByMicroTx() {
     const { amount, destinationWallet, expiresAt, ttlMinutes } = reqData.request || reqData;
     const expiryDisplay = expiresAt ? new Date(expiresAt).toLocaleTimeString() : `~${ttlMinutes || 15} min`;
 
-    // 2. Show the "send manually" instruction UI — no wallet extension involved
+    // 2. Show the on-chain proof instruction UI — no wallet extension involved
     if (statusEl) {
       statusEl.innerHTML = `
         <div style="margin-top:20px; padding:24px; background:rgba(99,102,241,0.08); border:2px solid rgba(99,102,241,0.35); border-radius:14px;">
-          <h4 style="color:#e0e7ff; margin:0 0 16px 0; font-size:1.05em;">📋 Send this exact amount to verify your wallet</h4>
+          <h4 style="color:#e0e7ff; margin:0 0 6px 0; font-size:1.05em;">🔐 NFT Ownership Proof — On-Chain Confirmation</h4>
+          <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 16px 0; line-height:1.5;">This is a wallet ownership proof tool for NFT community membership. It does <strong>not</strong> collect passwords, seed phrases, or personal data. We only confirm that you control the wallet. <a href="/privacy-policy" target="_blank" style="color:#a5b4fc;">Privacy Policy</a></p>
 
           <div style="margin-bottom:14px;">
-            <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:0.05em;">Amount (exact)</p>
+            <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:0.05em;">Unique Proof Amount</p>
             <div style="display:flex; align-items:center; gap:10px; background:rgba(0,0,0,0.3); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:12px 14px;">
               <span id="microAmountDisplay" style="color:#fbbf24; font-size:1.2em; font-weight:700; font-family:monospace; flex:1;">${amount} SOL</span>
               <button onclick="navigator.clipboard.writeText('${amount}'); showSuccess('Amount copied!');" style="background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 12px; cursor:pointer; font-size:0.8em; white-space:nowrap;">Copy</button>
@@ -343,25 +344,25 @@ async function verifyByMicroTx() {
           </div>
 
           <div style="margin-bottom:20px;">
-            <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:0.05em;">Destination Wallet</p>
+            <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:0.05em;">Community Proof Address</p>
             <div style="display:flex; align-items:center; gap:10px; background:rgba(0,0,0,0.3); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:12px 14px;">
               <span style="color:#c7d2fe; font-size:0.88em; font-family:monospace; flex:1; word-break:break-all;">${destinationWallet}</span>
               <button onclick="navigator.clipboard.writeText('${destinationWallet}'); showSuccess('Address copied!');" style="background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 12px; cursor:pointer; font-size:0.8em; white-space:nowrap;">Copy</button>
             </div>
           </div>
 
-          <div style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.25); border-radius:8px; padding:12px 14px; margin-bottom:20px;">
-            <p style="color:#fcd34d; font-size:0.85em; margin:0; line-height:1.5;">
-              ⚠️ Send the <strong>exact amount</strong> shown — it's your unique identifier.<br>
-              Any Solana wallet works (Phantom, mobile, hardware, exchange withdrawal, etc.).<br>
-              Expires at <strong>${expiryDisplay}</strong>.
+          <div style="background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:12px 14px; margin-bottom:20px;">
+            <p style="color:#c7d2fe; font-size:0.85em; margin:0; line-height:1.5;">
+              ℹ️ Use the <strong>exact proof amount</strong> above — it's your unique wallet identifier used only for membership confirmation.<br>
+              Compatible with any Solana wallet (Phantom, mobile, hardware wallet, etc.).<br>
+              Proof expires at <strong>${expiryDisplay}</strong>.
             </p>
           </div>
 
           <div style="text-align:center;">
             <div style="display:flex; align-items:center; justify-content:center; gap:10px; color:var(--text-secondary); margin-bottom:12px;">
               <div class="spinner" style="width:18px; height:18px;"></div>
-              <span style="font-size:0.9em;">Waiting for transaction on-chain...</span>
+              <span style="font-size:0.9em;">Awaiting on-chain confirmation...</span>
             </div>
             <button onclick="manualCheckMicroVerify(document.getElementById('verifyStatus'))" style="background:none; border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 14px; cursor:pointer; font-size:0.82em;">↻ Check status</button>
           </div>
@@ -377,7 +378,7 @@ async function verifyByMicroTx() {
     console.error('Micro-tx verification error:', error);
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '💰 Get Verification Address';
+    btn.innerHTML = '🔑 Generate Proof Address';
   }
 }
 

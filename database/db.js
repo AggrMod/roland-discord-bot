@@ -267,6 +267,7 @@ function initDatabase() {
       description TEXT,
       parent_channel_id TEXT,
       closed_parent_channel_id TEXT,
+      handler_role_ids TEXT DEFAULT '[]',
       allowed_role_ids TEXT DEFAULT '[]',
       ping_role_ids TEXT DEFAULT '[]',
       template_fields TEXT DEFAULT '[]',
@@ -285,6 +286,7 @@ function initDatabase() {
       opener_id TEXT NOT NULL,
       opener_name TEXT,
       claimed_by TEXT,
+      handler_role_ids TEXT DEFAULT '[]',
       status TEXT DEFAULT 'open',
       template_responses TEXT DEFAULT '{}',
       transcript TEXT,
@@ -469,7 +471,23 @@ function initDatabase() {
   try { db.exec("ALTER TABLE tenant_branding ADD COLUMN brand_emoji TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_branding ADD COLUMN brand_color TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE ticket_categories ADD COLUMN closed_parent_channel_id TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE ticket_categories ADD COLUMN handler_role_ids TEXT DEFAULT '[]'"); } catch (e) {}
   try { db.exec("ALTER TABLE ticket_categories ADD COLUMN ping_role_ids TEXT DEFAULT '[]'"); } catch (e) {}
+  try { db.exec("ALTER TABLE tickets ADD COLUMN handler_role_ids TEXT DEFAULT '[]'"); } catch (e) {}
+  try { db.exec(`
+    UPDATE ticket_categories
+    SET handler_role_ids = COALESCE(NULLIF(allowed_role_ids, ''), '[]')
+    WHERE handler_role_ids IS NULL OR handler_role_ids = '' OR handler_role_ids = '[]'
+  `); } catch (e) {}
+  try { db.exec(`
+    UPDATE tickets
+    SET handler_role_ids = COALESCE(
+      NULLIF(handler_role_ids, ''),
+      (SELECT COALESCE(tc.handler_role_ids, tc.allowed_role_ids, '[]') FROM ticket_categories tc WHERE tc.id = tickets.category_id),
+      '[]'
+    )
+    WHERE handler_role_ids IS NULL OR handler_role_ids = '' OR handler_role_ids = '[]'
+  `); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_limits ADD COLUMN mock_data_enabled INTEGER DEFAULT 0"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_modules ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
   try { db.exec("ALTER TABLE nft_tracked_collections ADD COLUMN guild_id TEXT NOT NULL DEFAULT ''"); } catch (e) {}

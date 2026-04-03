@@ -20,10 +20,20 @@ class TicketService {
   _normalizeIdArray(value) {
     if (!value) return [];
     if (Array.isArray(value)) {
-      return value.map(v => String(v).trim()).filter(Boolean);
+      return [...new Set(value.map(v => String(v).trim()).filter(Boolean))];
     }
     if (typeof value === 'string') {
-      return value.split(',').map(v => v.trim()).filter(Boolean);
+      const trimmed = value.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return [...new Set(parsed.map(v => String(v).trim()).filter(Boolean))];
+        }
+      } catch {
+        // Fallback to comma-separated IDs for legacy values.
+      }
+      return [...new Set(trimmed.split(',').map(v => v.trim()).filter(Boolean))];
     }
     return [];
   }
@@ -47,6 +57,30 @@ class TicketService {
         return [];
       }
     }
+    return [];
+  }
+
+  _getCategoryHandlerRoleIds(category) {
+    if (!category) return [];
+    const handlerRoles = this._normalizeIdArray(category.handler_role_ids);
+    if (handlerRoles.length > 0) return handlerRoles;
+    return this._normalizeIdArray(category.allowed_role_ids);
+  }
+
+  _getTicketHandlerRoleIds(ticket) {
+    if (!ticket) return [];
+
+    const storedHandlerRoles = this._normalizeIdArray(ticket.handler_role_ids);
+    if (storedHandlerRoles.length > 0) return storedHandlerRoles;
+
+    const legacyAllowedRoles = this._normalizeIdArray(ticket.allowed_role_ids);
+    if (legacyAllowedRoles.length > 0) return legacyAllowedRoles;
+
+    if (ticket.category_id) {
+      const category = this.getCategory(ticket.category_id);
+      return this._getCategoryHandlerRoleIds(category);
+    }
+
     return [];
   }
 
@@ -103,7 +137,7 @@ class TicketService {
     if (!interaction || !ticket) return false;
     if (interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return true;
     if (interaction.user?.id === ticket.opener_id) return true;
-    const allowedRoles = this._normalizeIdArray(ticket.allowed_role_ids);
+    const allowedRoles = this._getTicketHandlerRoleIds(ticket);
     if (!interaction.member?.roles?.cache) return false;
     return allowedRoles.some(roleId => interaction.member.roles.cache.has(roleId));
   }
@@ -122,14 +156,14 @@ class TicketService {
     return db.prepare('SELECT * FROM ticket_categories WHERE id = ?').get(id);
   }
 
-  addCategory({ name, emoji, description, parentChannelId, closedParentChannelId, allowedRoleIds, pingRoleIds, templateFields }) {
+  addCategory({ name, emoji, description, parentChannelId, closedParentChannelId, allowedRoleIds, handlerRoleIds, pingRoleIds, templateFields }) {
     try {
-      const normalizedAllowedRoleIds = this._normalizeIdArray(allowedRoleIds);
+      const normalizedHandlerRoleIds = this._normalizeIdArray(handlerRoleIds !== undefined ? handlerRoleIds : allowedRoleIds);
       const normalizedPingRoleIds = this._normalizeIdArray(pingRoleIds);
       const normalizedTemplateFields = this._normalizeTemplateFields(templateFields);
       const stmt = db.prepare(`
-        INSERT INTO ticket_categories (name, emoji, description, parent_channel_id, closed_parent_channel_id, allowed_role_ids, ping_role_ids, template_fields)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO ticket_categories (name, emoji, description, parent_channel_id, closed_parent_channel_id, handler_role_ids, allowed_role_ids, ping_role_ids, template_fields)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const result = stmt.run(
         String(name || '').trim(),
@@ -137,7 +171,8 @@ class TicketService {
         String(description || ''),
         parentChannelId || null,
         closedParentChannelId || null,
-        JSON.stringify(normalizedAllowedRoleIds),
+        JSON.stringify(normalizedHandlerRoleIds),
+        JSON.stringify(normalizedHandlerRoleIds),
         JSON.stringify(normalizedPingRoleIds),
         JSON.stringify(normalizedTemplateFields)
       );
@@ -161,7 +196,16 @@ class TicketService {
       if (updates.description !== undefined) { fields.push('description = ?'); values.push(String(updates.description || '')); }
       if (updates.parentChannelId !== undefined) { fields.push('parent_channel_id = ?'); values.push(updates.parentChannelId || null); }
       if (updates.closedParentChannelId !== undefined) { fields.push('closed_parent_channel_id = ?'); values.push(updates.closedParentChannelId || null); }
-      if (updates.allowedRoleIds !== undefined) { fields.push('allowed_role_ids = ?'); values.push(JSON.stringify(this._normalizeIdArray(updates.allowedRoleIds))); }
+      if (updates.handlerRoleIds !== undefined || updates.allowedRoleIds !== undefined) {
+        const normalizedHandlerRoleIds = this._normalizeIdArray(
+          updates.handlerRoleIds !== undefined ? updates.handlerRoleIds : updates.allowedRoleIds
+        );
+        fields.push('handler_role_ids = ?');
+        values.push(JSON.stringify(normalizedHandlerRoleIds));
+        // Keep legacy column in sync for backward compatibility.
+        fields.push('allowed_role_ids = ?');
+        values.push(JSON.stringify(normalizedHandlerRoleIds));
+      }
       if (updates.pingRoleIds !== undefined) { fields.push('ping_role_ids = ?'); values.push(JSON.stringify(this._normalizeIdArray(updates.pingRoleIds))); }
       if (updates.templateFields !== undefined) { fields.push('template_fields = ?'); values.push(JSON.stringify(this._normalizeTemplateFields(updates.templateFields))); }
       if (updates.enabled !== undefined) { fields.push('enabled = ?'); values.push(updates.enabled ? 1 : 0); }
@@ -323,9 +367,9 @@ class TicketService {
         },
       ];
 
-      // Add allowed roles (skip stale/invalid role IDs to avoid Discord.js resolver crash)
-      const allowedRoleIds = this._normalizeIdArray(category.allowed_role_ids);
-      for (const roleId of allowedRoleIds) {
+      // Add handler roles (skip stale/invalid role IDs to avoid Discord.js resolver crash)
+      const handlerRoleIds = this._getCategoryHandlerRoleIds(category);
+      for (const roleId of handlerRoleIds) {
         if (!roleId) continue;
         const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
         if (!role) {
@@ -383,15 +427,26 @@ class TicketService {
       );
 
       const pingRoleIds = this._normalizeIdArray(category.ping_role_ids);
-      const pingMentions = pingRoleIds.map(id => `<@&${id}>`).join(' ');
+      const notifyRoleIds = pingRoleIds.length > 0 ? pingRoleIds : handlerRoleIds;
+      const pingMentions = [...new Set(notifyRoleIds)].map(id => `<@&${id}>`).join(' ');
       const intro = [`<@${interaction.user.id}> welcome to your ticket!`, pingMentions].filter(Boolean).join(' ');
       await ticketChannel.send({ content: intro, embeds: [embed], components: [actionRow] });
 
       // Insert into DB
       db.prepare(`
-        INSERT INTO tickets (ticket_number, guild_id, category_id, category_name, channel_id, opener_id, opener_name, template_responses)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(ticketNumber, normalizedGuildId, categoryId, category.name, ticketChannel.id, interaction.user.id, interaction.user.username, JSON.stringify(templateResponses || {}));
+        INSERT INTO tickets (ticket_number, guild_id, category_id, category_name, channel_id, opener_id, opener_name, handler_role_ids, template_responses)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        ticketNumber,
+        normalizedGuildId,
+        categoryId,
+        category.name,
+        ticketChannel.id,
+        interaction.user.id,
+        interaction.user.username,
+        JSON.stringify(handlerRoleIds),
+        JSON.stringify(templateResponses || {})
+      );
 
       return { success: true, channelId: ticketChannel.id, ticketNumber };
     } catch (error) {
@@ -409,7 +464,7 @@ class TicketService {
         return { success: false, message: 'This ticket has already been claimed' };
       }
       if (!this._canManageTicket(interaction, ticket)) {
-        return { success: false, message: 'Only the ticket opener or staff can claim this ticket' };
+        return { success: false, message: 'Only the ticket opener or assigned handlers can claim this ticket' };
       }
 
       db.prepare('UPDATE tickets SET claimed_by = ? WHERE channel_id = ?').run(interaction.user.id, channelId);
@@ -440,6 +495,9 @@ class TicketService {
       const ticket = this.getTicket(channelId);
       if (!ticket) return { success: false, message: 'Ticket not found' };
       if (ticket.status === 'closed') return { success: false, message: 'Ticket is already closed' };
+      if (!this._canManageTicket(interaction, ticket)) {
+        return { success: false, message: 'Only the ticket opener or assigned handlers can close this ticket' };
+      }
 
       const channel = await this.client.channels.fetch(channelId);
 
@@ -522,11 +580,14 @@ class TicketService {
     }
   }
 
-  async reopenTicket(channelId) {
+  async reopenTicket(interaction, channelId) {
     try {
       const ticket = this.getTicket(channelId);
       if (!ticket) return { success: false, message: 'Ticket not found' };
       if (ticket.status === 'open') return { success: false, message: 'Ticket is already open' };
+      if (!this._canManageTicket(interaction, ticket)) {
+        return { success: false, message: 'Only the ticket opener or assigned handlers can reopen this ticket' };
+      }
 
       db.prepare('UPDATE tickets SET status = ?, closed_at = NULL WHERE channel_id = ?').run('open', channelId);
 

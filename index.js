@@ -1108,7 +1108,7 @@ async function handleTicketCloseButton(interaction) {
 async function handleTicketReopenButton(interaction) {
   try {
     await interaction.deferReply({ ephemeral: true });
-    const result = await ticketService.reopenTicket(interaction.channelId);
+    const result = await ticketService.reopenTicket(interaction, interaction.channelId);
 
     if (!result.success) {
       return interaction.editReply({ content: `❌ ${result.message}` });

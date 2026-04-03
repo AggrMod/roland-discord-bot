@@ -7610,7 +7610,7 @@ function showEditCategoryModal(id) {
 function _showCategoryForm(cat) {
   const isEdit = !!cat;
   const fields = cat ? safeJsonArray(cat.template_fields) : [];
-  const allowedRoles = cat ? safeJsonArray(cat.allowed_role_ids) : [];
+  const handlerRoles = cat ? safeJsonArray(cat.handler_role_ids || cat.allowed_role_ids) : [];
   const pingRoles = cat ? safeJsonArray(cat.ping_role_ids) : [];
   const textChannels = _ticketChannelsList.filter(c => c.kind === 'text');
 
@@ -7675,11 +7675,11 @@ function _showCategoryForm(cat) {
         </select>
       </div>
       <div>
-        <label style="font-size:0.85em;font-weight:600;">Allowed Roles</label>
-        <select id="catRoles" multiple style="width:100%;min-height:120px;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
-          ${_ticketRolesList.map(r => `<option value="${r.id}" ${allowedRoles.includes(r.id) ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('')}
+        <label style="font-size:0.85em;font-weight:600;">Handler Roles (Support Team)</label>
+        <select id="catHandlerRoles" multiple style="width:100%;min-height:120px;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
+          ${_ticketRolesList.map(r => `<option value="${r.id}" ${handlerRoles.includes(r.id) ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('')}
         </select>
-        <div style="font-size:0.78em;color:var(--text-secondary);margin-top:4px;">Hold Ctrl/Cmd to select multiple roles.</div>
+        <div style="font-size:0.78em;color:var(--text-secondary);margin-top:4px;">These roles can claim, close, and reopen tickets in this category.</div>
       </div>
       <div>
         <label style="font-size:0.85em;font-weight:600;">Roles to Ping on New Ticket</label>
@@ -7744,9 +7744,9 @@ async function saveCategoryFromModal() {
   const description = document.getElementById('catDesc').value.trim();
   const parentChannelId = document.getElementById('catParentChannel').value || '';
   const closedParentChannelId = document.getElementById('catClosedParentChannel')?.value || '';
-  const roleSelect = document.getElementById('catRoles');
+  const roleSelect = document.getElementById('catHandlerRoles');
   const pingRoleSelect = document.getElementById('catPingRoles');
-  const allowedRoleIds = roleSelect ? Array.from(roleSelect.selectedOptions || []).map(o => o.value).filter(Boolean) : [];
+  const handlerRoleIds = roleSelect ? Array.from(roleSelect.selectedOptions || []).map(o => o.value).filter(Boolean) : [];
   const pingRoleIds = pingRoleSelect ? Array.from(pingRoleSelect.selectedOptions || []).map(o => o.value).filter(Boolean) : [];
 
   // Collect template fields
@@ -7764,7 +7764,18 @@ async function saveCategoryFromModal() {
     });
   }
 
-  const payload = { name, emoji, description, parentChannelId, closedParentChannelId, allowedRoleIds, pingRoleIds, templateFields };
+  const payload = {
+    name,
+    emoji,
+    description,
+    parentChannelId,
+    closedParentChannelId,
+    handlerRoleIds,
+    // Keep legacy field for older server versions.
+    allowedRoleIds: handlerRoleIds,
+    pingRoleIds,
+    templateFields
+  };
   const isEdit = window._catEditId != null;
   const url = isEdit ? `/api/admin/tickets/categories/${window._catEditId}` : '/api/admin/tickets/categories';
   const method = isEdit ? 'PUT' : 'POST';

@@ -415,8 +415,8 @@ class TicketService {
 
       const actionRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId('ticket_claim')
-          .setLabel('Claim')
+          .setCustomId('ticket_assign_me')
+          .setLabel('Assign to Me')
           .setStyle(ButtonStyle.Success)
           .setEmoji('✅'),
         new ButtonBuilder()
@@ -467,7 +467,8 @@ class TicketService {
         return { success: false, message: 'Only the ticket opener or assigned handlers can claim this ticket' };
       }
 
-      db.prepare('UPDATE tickets SET claimed_by = ? WHERE channel_id = ?').run(interaction.user.id, channelId);
+      db.prepare('UPDATE tickets SET claimed_by = ?, last_activity_at = CURRENT_TIMESTAMP, inactive_warning_sent_at = NULL WHERE channel_id = ?')
+        .run(interaction.user.id, channelId);
 
       // Update the embed in the channel
       const channel = await this.client.channels.fetch(channelId);
@@ -490,12 +491,12 @@ class TicketService {
     }
   }
 
-  async closeTicket(interaction, channelId) {
+  async closeTicket(interaction, channelId, options = {}) {
     try {
       const ticket = this.getTicket(channelId);
       if (!ticket) return { success: false, message: 'Ticket not found' };
       if (ticket.status === 'closed') return { success: false, message: 'Ticket is already closed' };
-      if (!this._canManageTicket(interaction, ticket)) {
+      if (!options.skipPermission && !this._canManageTicket(interaction, ticket)) {
         return { success: false, message: 'Only the ticket opener or assigned handlers can close this ticket' };
       }
 
@@ -504,7 +505,7 @@ class TicketService {
       const transcript = await this._buildTranscript(channel, ticket);
 
       // Update DB
-      db.prepare('UPDATE tickets SET status = ?, closed_at = CURRENT_TIMESTAMP, transcript = ? WHERE channel_id = ?')
+      db.prepare('UPDATE tickets SET status = ?, closed_at = CURRENT_TIMESTAMP, transcript = ?, inactive_warning_sent_at = NULL WHERE channel_id = ?')
         .run('closed', transcript, channelId);
 
       // Remove opener write permission
@@ -543,10 +544,16 @@ class TicketService {
         await botMsg.edit({ embeds: [embed], components: [] });
       }
 
+      const closeDescription = options.closedByText
+        ? options.closedByText
+        : interaction?.user?.id
+          ? `Closed by <@${interaction.user.id}>`
+          : 'Closed';
+
       // Post close embed with reopen/delete buttons
       const closeEmbed = new EmbedBuilder()
         .setTitle('🔒 Ticket Closed')
-        .setDescription(`Closed by <@${interaction.user.id}>`)
+        .setDescription(closeDescription)
         .addFields({ name: 'Transcript', value: 'Saved to the database for admin retrieval.', inline: false })
         .setTimestamp();
 
@@ -589,7 +596,8 @@ class TicketService {
         return { success: false, message: 'Only the ticket opener or assigned handlers can reopen this ticket' };
       }
 
-      db.prepare('UPDATE tickets SET status = ?, closed_at = NULL WHERE channel_id = ?').run('open', channelId);
+      db.prepare('UPDATE tickets SET status = ?, closed_at = NULL, last_activity_at = CURRENT_TIMESTAMP, inactive_warning_sent_at = NULL WHERE channel_id = ?')
+        .run('open', channelId);
 
       const channel = await this.client.channels.fetch(channelId);
 
@@ -619,8 +627,8 @@ class TicketService {
 
         const actionRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
-            .setCustomId('ticket_claim')
-            .setLabel('Claim')
+            .setCustomId('ticket_assign_me')
+            .setLabel('Assign to Me')
             .setStyle(ButtonStyle.Success)
             .setEmoji('✅'),
           new ButtonBuilder()
@@ -664,6 +672,100 @@ class TicketService {
       logger.error('Error deleting ticket:', error);
       return { success: false, message: error.message };
     }
+  }
+
+  markTicketActivity(channelId) {
+    if (!channelId) return false;
+    try {
+      const result = db.prepare(`
+        UPDATE tickets
+        SET last_activity_at = CURRENT_TIMESTAMP,
+            inactive_warning_sent_at = NULL
+        WHERE channel_id = ?
+          AND status = 'open'
+      `).run(channelId);
+      return result.changes > 0;
+    } catch (error) {
+      logger.error('Error marking ticket activity:', error);
+      return false;
+    }
+  }
+
+  async runInactivitySweep({ inactiveHours = 168, warningHours = 24, maxPerRun = 20 } = {}) {
+    if (!this.client) return { success: false, message: 'Client not initialized' };
+    if (!this.isEnabled()) return { success: false, message: 'Ticketing is currently disabled' };
+
+    const normalizedInactiveHours = Number(inactiveHours);
+    if (!Number.isFinite(normalizedInactiveHours) || normalizedInactiveHours <= 0) {
+      return { success: false, message: 'Auto-close inactivity is disabled' };
+    }
+
+    const normalizedWarningHours = Math.max(
+      0,
+      Math.min(Number(warningHours) || 0, normalizedInactiveHours)
+    );
+    const normalizedMaxPerRun = Math.max(1, Math.min(Number(maxPerRun) || 20, 200));
+    const warningWindowStartHours = Math.max(0, normalizedInactiveHours - normalizedWarningHours);
+    const cutoff = `-${warningWindowStartHours} hours`;
+
+    const candidates = db.prepare(`
+      SELECT *
+      FROM tickets
+      WHERE status = 'open'
+        AND DATETIME(COALESCE(last_activity_at, created_at)) <= DATETIME('now', ?)
+      ORDER BY DATETIME(COALESCE(last_activity_at, created_at)) ASC
+      LIMIT ?
+    `).all(cutoff, normalizedMaxPerRun);
+
+    let warnedCount = 0;
+    let closedCount = 0;
+    let errorCount = 0;
+
+    for (const ticket of candidates) {
+      try {
+        const lastActivityText = ticket.last_activity_at || ticket.created_at;
+        const lastActivityDate = lastActivityText ? new Date(lastActivityText) : null;
+        if (!lastActivityDate || Number.isNaN(lastActivityDate.getTime())) continue;
+
+        const inactiveForHours = (Date.now() - lastActivityDate.getTime()) / (60 * 60 * 1000);
+
+        if (inactiveForHours >= normalizedInactiveHours) {
+          const closeResult = await this.closeTicket(null, ticket.channel_id, {
+            skipPermission: true,
+            closedByText: `Automatically closed after ${Math.round(normalizedInactiveHours)} hour(s) of inactivity.`,
+          });
+          if (closeResult.success) {
+            closedCount += 1;
+          } else {
+            errorCount += 1;
+            logger.warn(`Auto-close failed for ticket ${ticket.ticket_number}: ${closeResult.message}`);
+          }
+          continue;
+        }
+
+        if (normalizedWarningHours <= 0 || ticket.inactive_warning_sent_at) continue;
+
+        const channel = await this.client.channels.fetch(ticket.channel_id).catch(() => null);
+        if (!channel || !channel.isTextBased()) {
+          errorCount += 1;
+          continue;
+        }
+
+        const hoursLeft = Math.max(1, Math.ceil(normalizedInactiveHours - inactiveForHours));
+        await channel.send({
+          content: `⏳ This ticket will auto-close in about ${hoursLeft} hour(s) if there are no new replies.`,
+        });
+
+        db.prepare('UPDATE tickets SET inactive_warning_sent_at = CURRENT_TIMESTAMP WHERE channel_id = ?')
+          .run(ticket.channel_id);
+        warnedCount += 1;
+      } catch (error) {
+        errorCount += 1;
+        logger.error(`Error processing inactive ticket ${ticket?.ticket_number || ticket?.id || 'unknown'}:`, error);
+      }
+    }
+
+    return { success: true, warnedCount, closedCount, errorCount, processed: candidates.length };
   }
 
   // ==================== Queries ====================

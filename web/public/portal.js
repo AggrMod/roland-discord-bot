@@ -7507,6 +7507,7 @@ async function loadTicketingView() {
       <button class="btn-secondary" onclick="showTicketTab('panel')" id="ticketTabPanel" style="font-size:0.85em;">Post Panel</button>
       <button class="btn-secondary" onclick="showTicketTab('tickets')" id="ticketTabTickets" style="font-size:0.85em;">Open Tickets</button>
       <button class="btn-secondary" onclick="showTicketTab('archive')" id="ticketTabArchive" style="font-size:0.85em;">Archive</button>
+      <button class="btn-secondary" onclick="showTicketTab('settings')" id="ticketTabSettings" style="font-size:0.85em;">Settings</button>
     </div>
     <div id="ticketTabContent">Loading...</div>
   `;
@@ -7533,7 +7534,7 @@ async function loadTicketingView() {
 }
 
 function showTicketTab(tab) {
-  ['categories', 'panel', 'tickets', 'archive'].forEach(t => {
+  ['categories', 'panel', 'tickets', 'archive', 'settings'].forEach(t => {
     const btn = document.getElementById('ticketTab' + t.charAt(0).toUpperCase() + t.slice(1));
     if (btn) btn.className = t === tab ? 'btn-primary' : 'btn-secondary';
   });
@@ -7542,6 +7543,110 @@ function showTicketTab(tab) {
   else if (tab === 'panel') loadTicketPanelTab();
   else if (tab === 'tickets') loadTicketOpenTab();
   else if (tab === 'archive') loadTicketArchiveTab();
+  else if (tab === 'settings') loadTicketSettingsTab();
+}
+
+async function loadTicketSettingsTab() {
+  const container = document.getElementById('ticketTabContent');
+  if (!container) return;
+  container.innerHTML = 'Loading ticket settings...';
+
+  try {
+    const res = await fetch('/api/admin/settings', { credentials: 'include' });
+    const json = await res.json();
+    if (!json.success) {
+      container.innerHTML = 'Failed to load ticket settings.';
+      return;
+    }
+
+    const s = json.settings || {};
+    const autoCloseEnabled = s.ticketAutoCloseEnabled !== false;
+    const inactiveHours = Number.isFinite(Number(s.ticketAutoCloseInactiveHours)) ? Number(s.ticketAutoCloseInactiveHours) : 168;
+    const warningHours = Number.isFinite(Number(s.ticketAutoCloseWarningHours)) ? Number(s.ticketAutoCloseWarningHours) : 24;
+
+    container.innerHTML = `
+      <div style="max-width:680px;display:flex;flex-direction:column;gap:12px;">
+        <div style="padding:12px;border:1px solid rgba(99,102,241,0.2);border-radius:10px;background:rgba(14,23,44,0.5);">
+          <h3 style="margin:0 0 6px 0;color:#e0e7ff;">Ticket Automation</h3>
+          <p style="margin:0;color:var(--text-secondary);font-size:0.85em;">Configure inactivity warning and automatic close behavior for open tickets.</p>
+        </div>
+
+        <label style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-secondary);">
+          <span style="font-weight:600;">Enable auto-close for inactive tickets</span>
+          <input type="checkbox" id="ticketAutoCloseEnabled" ${autoCloseEnabled ? 'checked' : ''} />
+        </label>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+          <div>
+            <label style="font-size:0.85em;font-weight:600;">Auto-close after (hours)</label>
+            <input type="number" id="ticketAutoCloseInactiveHours" min="1" max="8760" step="1" value="${Math.max(1, Math.round(inactiveHours))}" style="width:100%;padding:8px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;" />
+          </div>
+          <div>
+            <label style="font-size:0.85em;font-weight:600;">Warn before close (hours)</label>
+            <input type="number" id="ticketAutoCloseWarningHours" min="0" max="8760" step="1" value="${Math.max(0, Math.round(warningHours))}" style="width:100%;padding:8px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;" />
+          </div>
+        </div>
+
+        <div style="font-size:0.8em;color:var(--text-secondary);">The inactivity timer resets when anyone sends a new message in the ticket channel.</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn-primary" onclick="saveTicketSettingsTab()">Save Ticket Settings</button>
+          <span id="ticketSettingsStatus" style="font-size:0.82em;color:var(--text-secondary);"></span>
+        </div>
+      </div>
+    `;
+  } catch (error) {
+    container.innerHTML = 'Error loading ticket settings.';
+  }
+}
+
+async function saveTicketSettingsTab() {
+  const statusEl = document.getElementById('ticketSettingsStatus');
+  if (statusEl) statusEl.textContent = 'Saving...';
+
+  const autoCloseEnabled = !!document.getElementById('ticketAutoCloseEnabled')?.checked;
+  const inactiveHours = parseInt(document.getElementById('ticketAutoCloseInactiveHours')?.value || '0', 10);
+  const warningHours = parseInt(document.getElementById('ticketAutoCloseWarningHours')?.value || '0', 10);
+
+  if (!Number.isFinite(inactiveHours) || inactiveHours < 1 || inactiveHours > 8760) {
+    if (statusEl) statusEl.textContent = '';
+    return showError('Auto-close inactivity must be between 1 and 8760 hours.');
+  }
+  if (!Number.isFinite(warningHours) || warningHours < 0 || warningHours > 8760) {
+    if (statusEl) statusEl.textContent = '';
+    return showError('Warning window must be between 0 and 8760 hours.');
+  }
+  if (warningHours > inactiveHours) {
+    if (statusEl) statusEl.textContent = '';
+    return showError('Warning window cannot be greater than auto-close inactivity.');
+  }
+
+  try {
+    const payload = {
+      ticketAutoCloseEnabled: autoCloseEnabled,
+      ticketAutoCloseInactiveHours: inactiveHours,
+      ticketAutoCloseWarningHours: warningHours,
+    };
+    const res = await fetch('/api/admin/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!json.success) {
+      if (statusEl) statusEl.textContent = '';
+      return showError(json.message || 'Failed to save ticket settings.');
+    }
+
+    if (statusEl) {
+      statusEl.style.color = '#57f287';
+      statusEl.textContent = 'Saved.';
+    }
+    showSuccess('Ticket settings saved!');
+  } catch (error) {
+    if (statusEl) statusEl.textContent = '';
+    showError('Error saving ticket settings.');
+  }
 }
 
 async function loadTicketCategoriesTab() {

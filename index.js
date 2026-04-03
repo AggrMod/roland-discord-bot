@@ -185,6 +185,9 @@ client.once(Events.ClientReady, () => {
   // Start role resync scheduler (every 4 hours) - only if verification enabled
   startRoleResyncScheduler();
 
+  // Start ticket inactivity auto-close scheduler
+  startTicketInactivityScheduler();
+
   // Start treasury monitoring scheduler - only if treasury enabled
   treasuryService.setClient(client);
   treasuryService.startScheduler();
@@ -316,7 +319,7 @@ client.on(Events.InteractionCreate, async interaction => {
       await handleTicketOpenButton(interaction);
       return;
     }
-    if (customId === 'ticket_claim') {
+    if (customId === 'ticket_assign_me' || customId === 'ticket_claim') {
       await handleTicketClaimButton(interaction);
       return;
     }
@@ -1009,6 +1012,56 @@ function startRoleResyncScheduler() {
   logger.log(`⏰ Role resync scheduler started (runs every 4 hours + on startup)`);
 }
 
+function startTicketInactivityScheduler() {
+  const SWEEP_INTERVAL_MINUTES = 15;
+  const DEFAULT_INACTIVE_HOURS = 168;
+  const DEFAULT_WARNING_HOURS = 24;
+  const MAX_PER_RUN = 20;
+
+  const runSweep = async () => {
+    try {
+      const moduleGuard = require('./utils/moduleGuard');
+      if (!moduleGuard.isModuleEnabled('ticketing')) return;
+
+      const settingsManager = require('./config/settings');
+      const currentSettings = settingsManager.getSettings();
+
+      const automationEnabled = currentSettings.ticketAutoCloseEnabled !== false;
+      const configuredInactive = Number.parseInt(currentSettings.ticketAutoCloseInactiveHours, 10);
+      const inactiveHours = Number.isFinite(configuredInactive) && configuredInactive > 0
+        ? configuredInactive
+        : DEFAULT_INACTIVE_HOURS;
+      const configuredWarning = Number.parseInt(currentSettings.ticketAutoCloseWarningHours, 10);
+      const warningHours = Math.max(
+        0,
+        Math.min(
+          Number.isFinite(configuredWarning) ? configuredWarning : DEFAULT_WARNING_HOURS,
+          inactiveHours
+        )
+      );
+
+      if (!automationEnabled || inactiveHours <= 0) return;
+
+      const result = await ticketService.runInactivitySweep({
+        inactiveHours,
+        warningHours,
+        maxPerRun: MAX_PER_RUN,
+      });
+
+      if (!result?.success) return;
+      if (result.warnedCount || result.closedCount || result.errorCount) {
+        logger.log(`Ticket inactivity sweep: warned=${result.warnedCount}, closed=${result.closedCount}, errors=${result.errorCount}`);
+      }
+    } catch (error) {
+      logger.error('Error in ticket inactivity scheduler:', error);
+    }
+  };
+
+  setTimeout(runSweep, 2 * 60 * 1000); // first run after startup
+  intervals.push(setInterval(runSweep, SWEEP_INTERVAL_MINUTES * 60 * 1000));
+  logger.log(`Ticket inactivity scheduler started (reads Settings -> Ticketing every ${SWEEP_INTERVAL_MINUTES}m).`);
+}
+
 // ==================== Ticket Interaction Handlers ====================
 
 async function handleTicketOpenButton(interaction) {
@@ -1080,11 +1133,11 @@ async function handleTicketClaimButton(interaction) {
       return interaction.editReply({ content: `❌ ${result.message}` });
     }
 
-    await interaction.editReply({ content: '✅ You have claimed this ticket.' });
-    logger.log(`Ticket claimed by ${interaction.user.tag} in ${interaction.channelId}`);
+    await interaction.editReply({ content: 'Ticket assigned to you.' });
+    logger.log(`Ticket assigned to ${interaction.user.tag} in ${interaction.channelId}`);
   } catch (error) {
-    logger.error('Error handling ticket claim:', error);
-    await interaction.editReply({ content: '❌ Failed to claim ticket.' });
+    logger.error('Error handling ticket assignment:', error);
+    await interaction.editReply({ content: 'Failed to assign ticket.' });
   }
 }
 
@@ -1391,6 +1444,9 @@ process.on('SIGINT', () => {
 // ── Engagement: award points for chat messages ───────────────────────────────
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot || !message.guild) return;
+  try {
+    ticketService.markTicketActivity(message.channelId);
+  } catch (_) {}
   try {
     const eng = require('./services/engagementService');
     eng.tryAwardMessage(message.guild.id, message.author.id, message.author.username);

@@ -1707,6 +1707,7 @@ class WebServer {
           'txAlertEnabled', 'txAlertIncomingOnly', 'txAlertMinSol',
           'displayName', 'displayEmoji', 'displayColor',
           'verificationReceiveWallet', 'nftActivityWebhookSecret',
+          'ticketAutoCloseEnabled', 'ticketAutoCloseInactiveHours', 'ticketAutoCloseWarningHours',
           'chainEmojiMap',
         ];
         const sanitized = {};

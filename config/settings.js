@@ -45,6 +45,11 @@ class SettingsManager {
       moduleTicketingEnabled: true,
       moduleEngagementEnabled: true,
 
+      // Ticketing automation
+      ticketAutoCloseEnabled: true,
+      ticketAutoCloseInactiveHours: 168,
+      ticketAutoCloseWarningHours: 24,
+
       // Micro-Transfer Verification
       verificationReceiveWallet: '',
       nftActivityWebhookSecret: '',
@@ -183,6 +188,36 @@ class SettingsManager {
         const max = parseInt(newSettings.maxPendingPerUser);
         if (isNaN(max) || max < 1 || max > 10) {
           return { success: false, message: 'Max pending per user must be between 1 and 10' };
+        }
+      }
+
+      if (newSettings.ticketAutoCloseEnabled !== undefined && typeof newSettings.ticketAutoCloseEnabled !== 'boolean') {
+        return { success: false, message: 'ticketAutoCloseEnabled must be a boolean' };
+      }
+
+      if (newSettings.ticketAutoCloseInactiveHours !== undefined) {
+        const hours = parseInt(newSettings.ticketAutoCloseInactiveHours);
+        if (isNaN(hours) || hours < 1 || hours > 8760) {
+          return { success: false, message: 'Auto-close inactivity must be between 1 and 8760 hours' };
+        }
+      }
+
+      if (newSettings.ticketAutoCloseWarningHours !== undefined) {
+        const warning = parseInt(newSettings.ticketAutoCloseWarningHours);
+        if (isNaN(warning) || warning < 0 || warning > 8760) {
+          return { success: false, message: 'Auto-close warning must be between 0 and 8760 hours' };
+        }
+      }
+
+      if (newSettings.ticketAutoCloseInactiveHours !== undefined || newSettings.ticketAutoCloseWarningHours !== undefined) {
+        const mergedInactive = newSettings.ticketAutoCloseInactiveHours !== undefined
+          ? parseInt(newSettings.ticketAutoCloseInactiveHours)
+          : parseInt(this.settings.ticketAutoCloseInactiveHours ?? 168);
+        const mergedWarning = newSettings.ticketAutoCloseWarningHours !== undefined
+          ? parseInt(newSettings.ticketAutoCloseWarningHours)
+          : parseInt(this.settings.ticketAutoCloseWarningHours ?? 24);
+        if (!isNaN(mergedInactive) && !isNaN(mergedWarning) && mergedWarning > mergedInactive) {
+          return { success: false, message: 'Auto-close warning cannot exceed auto-close inactivity hours' };
         }
       }
 

@@ -290,6 +290,8 @@ function initDatabase() {
       status TEXT DEFAULT 'open',
       template_responses TEXT DEFAULT '{}',
       transcript TEXT,
+      last_activity_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      inactive_warning_sent_at DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       closed_at DATETIME,
       FOREIGN KEY (category_id) REFERENCES ticket_categories(id)
@@ -313,6 +315,7 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_tickets_opener ON tickets(opener_id);
     CREATE INDEX IF NOT EXISTS idx_tickets_category ON tickets(category_id);
     CREATE INDEX IF NOT EXISTS idx_tickets_channel ON tickets(channel_id);
+    CREATE INDEX IF NOT EXISTS idx_tickets_last_activity ON tickets(last_activity_at);
     CREATE INDEX IF NOT EXISTS idx_ticket_panels_channel ON ticket_panels(channel_id);
 
     CREATE TABLE IF NOT EXISTS tenants (
@@ -474,6 +477,8 @@ function initDatabase() {
   try { db.exec("ALTER TABLE ticket_categories ADD COLUMN handler_role_ids TEXT DEFAULT '[]'"); } catch (e) {}
   try { db.exec("ALTER TABLE ticket_categories ADD COLUMN ping_role_ids TEXT DEFAULT '[]'"); } catch (e) {}
   try { db.exec("ALTER TABLE tickets ADD COLUMN handler_role_ids TEXT DEFAULT '[]'"); } catch (e) {}
+  try { db.exec("ALTER TABLE tickets ADD COLUMN last_activity_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
+  try { db.exec("ALTER TABLE tickets ADD COLUMN inactive_warning_sent_at DATETIME"); } catch (e) {}
   try { db.exec(`
     UPDATE ticket_categories
     SET handler_role_ids = COALESCE(NULLIF(allowed_role_ids, ''), '[]')
@@ -487,6 +492,11 @@ function initDatabase() {
       '[]'
     )
     WHERE handler_role_ids IS NULL OR handler_role_ids = '' OR handler_role_ids = '[]'
+  `); } catch (e) {}
+  try { db.exec(`
+    UPDATE tickets
+    SET last_activity_at = COALESCE(last_activity_at, created_at, CURRENT_TIMESTAMP)
+    WHERE last_activity_at IS NULL OR last_activity_at = ''
   `); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_limits ADD COLUMN mock_data_enabled INTEGER DEFAULT 0"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_modules ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}

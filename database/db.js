@@ -315,7 +315,6 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_tickets_opener ON tickets(opener_id);
     CREATE INDEX IF NOT EXISTS idx_tickets_category ON tickets(category_id);
     CREATE INDEX IF NOT EXISTS idx_tickets_channel ON tickets(channel_id);
-    CREATE INDEX IF NOT EXISTS idx_tickets_last_activity ON tickets(last_activity_at);
     CREATE INDEX IF NOT EXISTS idx_ticket_panels_channel ON ticket_panels(channel_id);
 
     CREATE TABLE IF NOT EXISTS tenants (
@@ -477,7 +476,7 @@ function initDatabase() {
   try { db.exec("ALTER TABLE ticket_categories ADD COLUMN handler_role_ids TEXT DEFAULT '[]'"); } catch (e) {}
   try { db.exec("ALTER TABLE ticket_categories ADD COLUMN ping_role_ids TEXT DEFAULT '[]'"); } catch (e) {}
   try { db.exec("ALTER TABLE tickets ADD COLUMN handler_role_ids TEXT DEFAULT '[]'"); } catch (e) {}
-  try { db.exec("ALTER TABLE tickets ADD COLUMN last_activity_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
+  try { db.exec("ALTER TABLE tickets ADD COLUMN last_activity_at DATETIME"); } catch (e) {}
   try { db.exec("ALTER TABLE tickets ADD COLUMN inactive_warning_sent_at DATETIME"); } catch (e) {}
   try { db.exec(`
     UPDATE ticket_categories
@@ -498,6 +497,7 @@ function initDatabase() {
     SET last_activity_at = COALESCE(last_activity_at, created_at, CURRENT_TIMESTAMP)
     WHERE last_activity_at IS NULL OR last_activity_at = ''
   `); } catch (e) {}
+  try { db.exec("CREATE INDEX IF NOT EXISTS idx_tickets_last_activity ON tickets(last_activity_at)"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_limits ADD COLUMN mock_data_enabled INTEGER DEFAULT 0"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_modules ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
   try { db.exec("ALTER TABLE nft_tracked_collections ADD COLUMN guild_id TEXT NOT NULL DEFAULT ''"); } catch (e) {}

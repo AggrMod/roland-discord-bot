@@ -82,6 +82,7 @@ module.exports = {
           option
             .setName('era')
             .setDescription('Battle theme/era (default: mafia)')
+            .setAutocomplete(true)
             .setRequired(false)))
     
     .addSubcommand(subcommand =>
@@ -134,6 +135,36 @@ module.exports = {
           subcommand
             .setName('settings')
             .setDescription('View/configure battle settings'))),
+
+  async autocomplete(interaction) {
+    try {
+      if (interaction.options.getSubcommand(false) !== 'create') return;
+      const focused = interaction.options.getFocused(true);
+      if (!focused || focused.name !== 'era') return;
+
+      const guildId = interaction.guildId;
+      const allAvailable = battleService.getAvailableEras(guildId);
+      const rawQuery = String(focused.value || '').trim().toLowerCase();
+      const normalizedQuery = battleService.normalizeEraKey(rawQuery);
+
+      const filtered = allAvailable
+        .filter(era => {
+          if (!rawQuery) return true;
+          const key = era.key.toLowerCase();
+          const name = String(era.name || '').toLowerCase();
+          return key.includes(rawQuery) || name.includes(rawQuery) || (normalizedQuery && key.includes(normalizedQuery));
+        })
+        .slice(0, 25)
+        .map(era => ({ name: era.name, value: era.key }));
+
+      await interaction.respond(filtered);
+    } catch (error) {
+      logger.error('Battle era autocomplete failed:', error);
+      try {
+        await interaction.respond([]);
+      } catch (_) {}
+    }
+  },
 
   async execute(interaction) {
     // Check if battle module is enabled
@@ -203,13 +234,22 @@ module.exports = {
     const maxPlayers = interaction.options.getInteger('max_players') || 999;
 
     // Determine era: explicit option → guild's assigned exclusive era → mafia default
-    const availableEras = battleService.getAssignedEras(guildId);
-    const exclusiveEras = availableEras.filter(e => e !== 'mafia');
-    const defaultEra = exclusiveEras.length === 1 ? exclusiveEras[0] : 'mafia';
-    const requestedEra = interaction.options.getString('era') || defaultEra;
+    const availableEras = battleService.getAvailableEras(guildId);
+    const availableEraKeys = availableEras.map(era => era.key);
+    const configuredDefaultEra = settingsManager.getSettings()?.battleDefaultEra || 'mafia';
+    const defaultEra = battleService.getDefaultAvailableEra(guildId, configuredDefaultEra);
+    const requestedEraInput = interaction.options.getString('era');
+    const requestedEra = requestedEraInput
+      ? battleService.normalizeEraKey(requestedEraInput)
+      : defaultEra;
 
-    if (!availableEras.includes(requestedEra)) {
-      return interaction.editReply({ content: `❌ Era "${requestedEra}" is not available for this server. Available eras: ${availableEras.join(', ')}`, ephemeral: true });
+    if (!availableEraKeys.includes(requestedEra)) {
+      const availableList = availableEras.map(era => era.name).join(', ') || 'none';
+      const requestedDisplay = requestedEraInput || requestedEra || 'unknown';
+      return interaction.editReply({
+        content: `❌ Era "${requestedDisplay}" is not available for this server. Available eras: ${availableList}`,
+        ephemeral: true
+      });
     }
 
     const requiredRoleArray = [];
@@ -263,12 +303,13 @@ module.exports = {
     const lobby = battleService.getLobby(createResult.lobbyId);
     const participants = battleService.getParticipants(createResult.lobbyId);
     const lobbyEmbed = battleService.buildLobbyEmbed(lobby, participants, requiredRoles.length ? requiredRoles : null, excludedRoles.length ? excludedRoles : null);
+    const joinEmoji = battleService.getLobbyJoinEmoji(requestedEra);
 
     await placeholder.edit({ content: '', embeds: [lobbyEmbed] });
-    await placeholder.react(battleService.SWORD_EMOJI);
+    await placeholder.react(joinEmoji);
 
     await interaction.editReply({
-      content: `✅ Battle lobby created! Players can join by reacting ${battleService.SWORD_EMOJI} on the lobby message.`
+      content: `✅ Battle lobby created! Players can join by reacting ${joinEmoji} on the lobby message.`
     });
 
     logger.log(`User ${interaction.user.username} created battle lobby ${createResult.lobbyId}`);
@@ -513,3 +554,4 @@ module.exports = {
     logger.log(`Admin ${interaction.user.tag} viewed battle settings`);
   }
 };
+

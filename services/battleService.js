@@ -249,25 +249,124 @@ const ROUND_TRANSITION_LINES = [
   "😤 Both soldiers nod at each other. There's still fuel in the tank. Round {round}!",
 ];
 
+const ERA_ALIASES = Object.freeze({
+  vaultrunners: 'vault_runners',
+  vault_runner: 'vault_runners',
+  vault_runners: 'vault_runners',
+  yellow_catz: 'yellowcatz',
+  yellow_cats: 'yellowcatz',
+  maffia: 'mafia',
+});
+
+const ASSIGNMENT_REQUIRED_ERAS = new Set([
+  'mafia',
+  'vault_runners',
+]);
+
 class BattleService {
   constructor() {
     this.SWORD_EMOJI = '⚔️';
   }
 
   getEraConfig(eraKey) {
-    return BATTLE_ERAS[eraKey] || BATTLE_ERAS.mafia;
+    const normalized = this.normalizeEraKey(eraKey);
+    return BATTLE_ERAS[normalized] || BATTLE_ERAS.mafia;
+  }
+
+  getLobbyJoinEmoji(eraKey) {
+    const era = this.getEraConfig(eraKey);
+    return era.joinEmoji || this.SWORD_EMOJI;
+  }
+
+  getLobbyTitle(eraKey) {
+    const era = this.getEraConfig(eraKey);
+    if (era.lobbyTitle) return era.lobbyTitle;
+    const eraIcon = era.lobbyIcon || this.SWORD_EMOJI;
+    const eraName = era.name || 'Battle';
+    return `${eraIcon} ${eraName} Battle Lobby`;
+  }
+
+  getLobbyFooter(eraKey) {
+    const era = this.getEraConfig(eraKey);
+    if (era.lobbyFooter) return era.lobbyFooter;
+    const eraName = era.name || 'Battle';
+    return `Creator can /battle start when ready | Era: ${eraName}`;
+  }
+
+  normalizeEraKey(eraKey) {
+    if (!eraKey) return '';
+    const normalized = String(eraKey).trim().toLowerCase().replace(/[\s-]+/g, '_');
+    return ERA_ALIASES[normalized] || normalized;
+  }
+
+  isEraAssignmentRequired(eraKey) {
+    const normalized = this.normalizeEraKey(eraKey);
+    if (!normalized || !BATTLE_ERAS[normalized]) return false;
+    return ASSIGNMENT_REQUIRED_ERAS.has(normalized) || BATTLE_ERAS[normalized].exclusive === true;
   }
 
   getAssignedEras(guildId) {
     try {
+      if (!guildId) return [];
       const rows = mainDb.prepare('SELECT era_key FROM battle_era_assignments WHERE guild_id = ?').all(guildId);
-      const assigned = rows.map(r => r.era_key);
-      if (!assigned.includes('mafia')) assigned.unshift('mafia');
-      return assigned;
+      return [...new Set(
+        rows
+          .map(r => this.normalizeEraKey(r.era_key))
+          .filter(key => key && BATTLE_ERAS[key])
+      )];
     } catch (error) {
       logger.error('Error getting assigned eras:', error);
-      return ['mafia'];
+      return [];
     }
+  }
+
+  getAvailableEras(guildId) {
+    const assignedSet = new Set(this.getAssignedEras(guildId));
+
+    return Object.values(BATTLE_ERAS)
+      .map(era => ({
+        key: this.normalizeEraKey(era.key),
+        name: era.name,
+        description: era.description,
+      }))
+      .filter(era => era.key && BATTLE_ERAS[era.key])
+      .filter(era => !this.isEraAssignmentRequired(era.key) || assignedSet.has(era.key));
+  }
+
+  getAvailableEraKeys(guildId) {
+    return this.getAvailableEras(guildId).map(era => era.key);
+  }
+
+  getAssignableEras() {
+    return Object.values(BATTLE_ERAS)
+      .map(era => ({
+        key: this.normalizeEraKey(era.key),
+        name: era.name,
+        description: era.description,
+      }))
+      .filter(era => era.key && BATTLE_ERAS[era.key] && this.isEraAssignmentRequired(era.key));
+  }
+
+  isEraAssignable(eraKey) {
+    const normalized = this.normalizeEraKey(eraKey);
+    return !!(normalized && BATTLE_ERAS[normalized] && this.isEraAssignmentRequired(normalized));
+  }
+
+  getEraName(eraKey) {
+    const normalized = this.normalizeEraKey(eraKey);
+    return BATTLE_ERAS[normalized]?.name || normalized;
+  }
+
+  getDefaultAvailableEra(guildId, preferredEra = null) {
+    const availableEraKeys = this.getAvailableEraKeys(guildId);
+    if (!availableEraKeys.length) return 'mafia';
+
+    const normalizedPreferred = this.normalizeEraKey(preferredEra);
+    if (normalizedPreferred && availableEraKeys.includes(normalizedPreferred)) {
+      return normalizedPreferred;
+    }
+
+    return availableEraKeys[0];
   }
 
   rand(maxExclusive) {
@@ -833,10 +932,10 @@ class BattleService {
   buildLobbyEmbed(lobby, participants, requiredRoles = null, excludedRoles = null) {
     const eraKey = lobby.era || 'mafia';
     const eraConfig = this.getEraConfig(eraKey);
-    const eraName = eraConfig.name || 'Mafia';
-    const eraIcon = eraConfig.lobbyIcon || '⚔️';
     const eraColor = eraConfig.lobbyColor || '#FFD700';
-    const opening = `${eraConfig.lobbyOpening || 'A battle is about to begin.'}\nReact with ${this.SWORD_EMOJI} to join!`;
+    const joinEmoji = this.getLobbyJoinEmoji(eraKey);
+    const joinPrompt = eraConfig.lobbyJoinPrompt || `React with ${joinEmoji} to join!`;
+    const opening = `${eraConfig.lobbyOpening || 'A battle is about to begin.'}\n${joinPrompt}`;
 
     const maxPlayersText = (!lobby.max_players || lobby.max_players >= 999) 
       ? '∞' 
@@ -866,9 +965,9 @@ class BattleService {
     }
 
     const embed = new EmbedBuilder()
-      .setTitle(`${eraIcon} ${eraName} Battle Lobby`)
+      .setTitle(this.getLobbyTitle(eraKey))
       .setDescription(description)
-      .setFooter({ text: `Creator can /battle start when ready | Era: ${eraName}` })
+      .setFooter({ text: this.getLobbyFooter(eraKey) })
       .setTimestamp();
 
     applyEmbedBranding(embed, {

@@ -1582,10 +1582,8 @@ class WebServer {
 
     this.app.get('/api/superadmin/eras', superadminGuard, (req, res) => {
       try {
-        const exclusiveEras = Object.values(BATTLE_ERAS)
-          .filter(e => e.exclusive)
-          .map(e => ({ key: e.key, name: e.name, description: e.description }));
-        res.json({ success: true, eras: exclusiveEras });
+        const eras = battleService.getAssignableEras();
+        res.json({ success: true, eras });
       } catch (error) {
         logger.error('Error fetching eras:', error);
         res.status(500).json({ success: false, message: 'Failed to fetch eras' });
@@ -1613,17 +1611,18 @@ class WebServer {
         if (!guildId || !eraKey) {
           return res.status(400).json({ success: false, message: 'guildId and eraKey are required' });
         }
-        if (!BATTLE_ERAS[eraKey]) {
+        const normalizedEraKey = battleService.normalizeEraKey(eraKey);
+        if (!BATTLE_ERAS[normalizedEraKey]) {
           return res.status(400).json({ success: false, message: 'Unknown era key' });
         }
-        if (!BATTLE_ERAS[eraKey].exclusive) {
-          return res.status(400).json({ success: false, message: 'Era is not exclusive — already available to all guilds' });
+        if (!battleService.isEraAssignable(normalizedEraKey)) {
+          return res.status(400).json({ success: false, message: 'Era is not assignable via superadmin panel' });
         }
         db.prepare(`
           INSERT OR IGNORE INTO battle_era_assignments (guild_id, era_key, assigned_by)
           VALUES (?, ?, ?)
-        `).run(guildId, eraKey, req.session.discordUser.id);
-        res.json({ success: true, message: `Era "${eraKey}" assigned to guild ${guildId}` });
+        `).run(guildId, normalizedEraKey, req.session.discordUser.id);
+        res.json({ success: true, message: `Era "${normalizedEraKey}" assigned to guild ${guildId}` });
       } catch (error) {
         logger.error('Error assigning era:', error);
         res.status(500).json({ success: false, message: 'Failed to assign era' });
@@ -1633,11 +1632,12 @@ class WebServer {
     this.app.delete('/api/superadmin/era-assignments/:guildId/:eraKey', superadminGuard, (req, res) => {
       try {
         const { guildId, eraKey } = req.params;
-        const result = db.prepare('DELETE FROM battle_era_assignments WHERE guild_id = ? AND era_key = ?').run(guildId, eraKey);
+        const normalizedEraKey = battleService.normalizeEraKey(eraKey);
+        const result = db.prepare('DELETE FROM battle_era_assignments WHERE guild_id = ? AND era_key = ?').run(guildId, normalizedEraKey);
         if (result.changes === 0) {
           return res.status(404).json({ success: false, message: 'Assignment not found' });
         }
-        res.json({ success: true, message: `Era "${eraKey}" revoked from guild ${guildId}` });
+        res.json({ success: true, message: `Era "${normalizedEraKey}" revoked from guild ${guildId}` });
       } catch (error) {
         logger.error('Error revoking era:', error);
         res.status(500).json({ success: false, message: 'Failed to revoke era' });
@@ -3057,19 +3057,7 @@ class WebServer {
     this.app.get('/api/admin/battle/eras', adminAuthMiddleware, (req, res) => {
       try {
         const guildId = req.guildId;
-        // Always include mafia (built-in, non-exclusive)
-        const available = Object.values(BATTLE_ERAS)
-          .filter(e => !e.exclusive)
-          .map(e => ({ key: e.key, name: e.name }));
-        // Add eras assigned to this guild
-        if (guildId) {
-          const assigned = battleService.getAssignedEras(guildId);
-          assigned.forEach(key => {
-            if (!available.find(e => e.key === key) && BATTLE_ERAS[key]) {
-              available.push({ key, name: BATTLE_ERAS[key].name });
-            }
-          });
-        }
+        const available = battleService.getAvailableEras(guildId).map(era => ({ key: era.key, name: era.name }));
         res.json({ success: true, eras: available });
       } catch (error) {
         logger.error('Error fetching battle eras:', error);
@@ -4304,3 +4292,4 @@ class WebServer {
 }
 
 module.exports = WebServer;
+

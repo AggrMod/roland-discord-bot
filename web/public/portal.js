@@ -3281,7 +3281,7 @@ async function loadEraAssignments() {
         `<option value="${escapeHtml(e.key)}">${escapeHtml(e.name)} — ${escapeHtml(e.description)}</option>`
       ).join('');
       if (erasData.eras.length === 0) {
-        select.innerHTML = '<option value="">No exclusive eras</option>';
+        select.innerHTML = '<option value="">No assignable eras</option>';
       }
     }
 

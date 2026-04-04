@@ -235,6 +235,22 @@ client.on(Events.GuildCreate, async guild => {
 });
 
 client.on(Events.InteractionCreate, async interaction => {
+  // Handle autocomplete interactions
+  if (interaction.isAutocomplete()) {
+    const command = client.commands.get(interaction.commandName);
+    if (!command || typeof command.autocomplete !== 'function') return;
+
+    try {
+      await command.autocomplete(interaction);
+    } catch (error) {
+      logger.error(`Error handling autocomplete for ${interaction.commandName}:`, error);
+      try {
+        await interaction.respond([]);
+      } catch (_) {}
+    }
+    return;
+  }
+
   // Handle slash commands
   if (interaction.isChatInputCommand()) {
     const command = client.commands.get(interaction.commandName);
@@ -1304,10 +1320,10 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
     const battleService = require('./services/battleService');
 
     // Check if this is a battle lobby reaction
-    if (reaction.emoji.name === battleService.SWORD_EMOJI) {
-      const lobby = battleService.getLobbyByMessage(reaction.message.id);
-      
-      if (lobby && lobby.status === 'open') {
+    const lobby = battleService.getLobbyByMessage(reaction.message.id);
+    if (lobby && lobby.status === 'open') {
+      const expectedJoinEmoji = battleService.getLobbyJoinEmoji(lobby.era || 'mafia');
+      if (reaction.emoji.name === expectedJoinEmoji) {
         // Fetch member to get roles
         let userRoles = [];
         try {
@@ -1399,10 +1415,10 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
     const battleService = require('./services/battleService');
 
     // Check if this is a battle lobby reaction
-    if (reaction.emoji.name === battleService.SWORD_EMOJI) {
-      const lobby = battleService.getLobbyByMessage(reaction.message.id);
-      
-      if (lobby && lobby.status === 'open') {
+    const lobby = battleService.getLobbyByMessage(reaction.message.id);
+    if (lobby && lobby.status === 'open') {
+      const expectedJoinEmoji = battleService.getLobbyJoinEmoji(lobby.era || 'mafia');
+      if (reaction.emoji.name === expectedJoinEmoji) {
         const result = battleService.removeParticipant(lobby.lobby_id, user.id);
 
         if (result.success) {

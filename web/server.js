@@ -489,30 +489,78 @@ class WebServer {
     
     // ==================== PUBLIC PAGES ====================
     
+    const appendQueryParam = (params, key, value) => {
+      if (value === undefined || value === null || value === '') return;
+      if (Array.isArray(value)) {
+        if (value.length > 0) params.set(key, String(value[0]));
+        return;
+      }
+      params.set(key, String(value));
+    };
+
+    const redirectToPortalSection = (req, res, section, options = {}) => {
+      const { requireAuth = false, forcedParams = {} } = options;
+      const qs = new URLSearchParams();
+      qs.set('section', section);
+
+      Object.entries(req.query || {}).forEach(([key, value]) => {
+        if (key === 'section') return;
+        appendQueryParam(qs, key, value);
+      });
+
+      Object.entries(forcedParams).forEach(([key, value]) => {
+        appendQueryParam(qs, key, value);
+      });
+
+      const dest = '/?' + qs.toString();
+      if (requireAuth && !req.session.discordUser) {
+        req.session.returnTo = dest;
+        return res.redirect('/auth/discord/login');
+      }
+      return res.redirect(dest);
+    };
+
     this.app.get('/', (req, res) => {
       res.sendFile(path.join(__dirname, 'public', 'portal.html'));
     });
 
     this.app.get('/verify', (req, res) => {
       // Unified UI: send verification flow to portal wallets section
-      const qs = new URLSearchParams({ section: 'wallets' });
-      if (req.query.guild) qs.set('guild', req.query.guild);
-      const dest = '/?' + qs.toString();
-      if (!req.session.discordUser) {
-        req.session.returnTo = dest;
-        return res.redirect('/auth/discord/login');
-      }
-      return res.redirect(dest);
+      return redirectToPortalSection(req, res, 'wallets', { requireAuth: true });
     });
 
-    this.app.get('/dashboard', (req, res) => {
-      // Redirect to portal for unified experience
-      res.redirect('/?section=dashboard');
+    const portalAliasRoutes = {
+      '/dashboard': 'dashboard',
+      '/servers': 'servers',
+      '/governance': 'governance',
+      '/wallets': 'wallets',
+      '/heist': 'heist',
+      '/nft-activity': 'nft-activity',
+      '/battle': 'battle',
+      '/engagement': 'engagement',
+      '/self-serve-roles': 'self-serve-roles',
+      '/ticketing': 'ticketing',
+      '/treasury': 'treasury',
+      '/help': 'help',
+      '/plans': 'plans',
+      '/settings': 'settings',
+      '/admin': 'admin'
+    };
+
+    Object.entries(portalAliasRoutes).forEach(([routePath, section]) => {
+      this.app.get(routePath, (req, res) => redirectToPortalSection(req, res, section));
     });
 
-    this.app.get('/admin', (req, res) => {
-      // Redirect to portal admin section for unified UI
-      res.redirect('/?section=admin');
+    this.app.get('/superadmin', (req, res) => {
+      return redirectToPortalSection(req, res, 'admin', {
+        forcedParams: { adminView: 'superadmin' }
+      });
+    });
+
+    this.app.get('/monitor', (req, res) => {
+      return redirectToPortalSection(req, res, 'admin', {
+        forcedParams: { adminView: 'monitor' }
+      });
     });
 
     // Legal pages (required for Discord app verification)

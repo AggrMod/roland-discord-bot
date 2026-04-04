@@ -8,6 +8,57 @@ let activeGuildId = localStorage.getItem('activeGuildId') || '';
 let serverAccessData = { managedServers: [], unmanagedServers: [], isSuperadmin: false };
 let originalFetch = window.fetch.bind(window);
 let _csrfToken = '';
+const PORTAL_PAGE_EXPECTATIONS = Object.freeze({
+  sections: [
+    'landing',
+    'dashboard',
+    'servers',
+    'governance',
+    'wallets',
+    'heist',
+    'nft-activity',
+    'battle',
+    'engagement',
+    'self-serve-roles',
+    'ticketing',
+    'treasury',
+    'help',
+    'admin',
+    'plans',
+    'settings'
+  ],
+  adminCards: [
+    'adminStatsCard',
+    'adminUsersCard',
+    'adminProposalsCard',
+    'adminSettingsCard',
+    'adminSuperadminCard',
+    'adminSystemMonitorCard',
+    'adminVotingPowerCard',
+    'adminNftTrackerCard',
+    'adminSelfServeRolesCard',
+    'adminAnalyticsCard',
+    'adminHelpCard',
+    'adminActivityCard',
+    'adminRolesCard',
+    'adminApiRefCard',
+    'adminTicketingCard',
+    'adminEngagementCard'
+  ],
+  settingsTabs: [
+    'general',
+    'governance',
+    'verification',
+    'branding',
+    'treasury',
+    'nfttracker',
+    'battle',
+    'heist',
+    'selfserve',
+    'ticketing',
+    'engagement'
+  ]
+});
 async function fetchCsrfToken() {
   try {
     const r = await originalFetch('/api/csrf-token', { credentials: 'include' });
@@ -87,8 +138,65 @@ window.fetch = async function(input, init = {}) {
   return originalFetch(input, { ...init, headers });
 };
 
+function initializePortalPages() {
+  const missing = [];
+  const existingSections = [];
+  const existingAdminCards = [];
+  const existingSettingsTabs = [];
+
+  PORTAL_PAGE_EXPECTATIONS.sections.forEach(section => {
+    const sectionId = `section-${section}`;
+    const sectionEl = document.getElementById(sectionId);
+    if (!sectionEl) {
+      missing.push(sectionId);
+      return;
+    }
+    sectionEl.dataset.page = section;
+    existingSections.push(section);
+  });
+
+  PORTAL_PAGE_EXPECTATIONS.adminCards.forEach(cardId => {
+    if (!document.getElementById(cardId)) {
+      missing.push(cardId);
+      return;
+    }
+    existingAdminCards.push(cardId);
+  });
+
+  PORTAL_PAGE_EXPECTATIONS.settingsTabs.forEach(tab => {
+    const paneId = `settingsTab-${tab}`;
+    if (!document.getElementById(paneId)) {
+      missing.push(paneId);
+      return;
+    }
+    existingSettingsTabs.push(tab);
+  });
+
+  window._portalPageInventory = {
+    initializedAt: new Date().toISOString(),
+    sections: existingSections,
+    adminCards: existingAdminCards,
+    settingsTabs: existingSettingsTabs
+  };
+
+  if (document.body) {
+    document.body.setAttribute('data-portal-pages-initialized', 'true');
+  }
+
+  if (missing.length > 0) {
+    console.warn('Portal page initialization missing expected elements:', missing.join(', '));
+  }
+}
+
+function normalizePortalSectionName(sectionName) {
+  const requested = String(sectionName || '').trim();
+  if (!requested) return 'landing';
+  return PORTAL_PAGE_EXPECTATIONS.sections.includes(requested) ? requested : 'landing';
+}
+
 // ==================== INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', () => {
+  initializePortalPages();
   fetchCsrfToken();
   loadPortal();
 
@@ -1182,9 +1290,15 @@ async function loadPortal() {
 
     // Navigate to section from URL after admin check is complete
     const urlParams = new URLSearchParams(window.location.search);
-    const section = urlParams.get('section');
-    if (section) {
-      switchSection(section); // switchSection itself gates non-public sections if needed
+    const sectionParam = urlParams.get('section');
+    const adminView = urlParams.get('adminView');
+    if (sectionParam) {
+      const section = normalizePortalSectionName(sectionParam);
+      if (section === 'admin' && adminView) {
+        showAdminView(adminView);
+      } else {
+        switchSection(section); // switchSection itself gates non-public sections if needed
+      }
     } else if (userData && requiresServerSelectionGate()) {
       switchSection('landing');
     } else if (userData) {
@@ -1768,6 +1882,8 @@ async function loadAvailableMissions() {
 
 // ==================== NAVIGATION ====================
 function switchSection(sectionName) {
+  sectionName = normalizePortalSectionName(sectionName);
+
   if (requiresServerSelectionGate()) {
     const allowWithoutServer = ['landing', 'servers', 'wallets', 'dashboard', 'help', 'docs'];
     if (isSuperadmin && sectionName === 'admin') {

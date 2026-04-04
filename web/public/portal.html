@@ -180,72 +180,115 @@
         <!-- Landing / General Section -->
         <section id="section-landing" class="content-section active">
           <!-- Pre-selection: Marketing / Landing page -->
-          <div id="generalPreSelection">
-            <div class="marketing-hero">
-              <div class="hero-kicker">Community OS for Discord + Web3</div>
-              <img src="/assets/branding/guildpilot-logo.png" alt="GuildPilot" style="width:80px;height:80px;border-radius:18px;object-fit:cover;margin-bottom:20px;box-shadow:0 6px 26px rgba(99,102,241,0.42);">
-              <h1>Turn Discord Into a Revenue-Ready Community Hub</h1>
-              <p class="hero-sub">GuildPilot combines verification, governance, ticketing, engagement and wallet intelligence into one clean operator console for your team.</p>
-              <div class="hero-proof-strip">
-                <span>Wallet verification</span>
-                <span>Role automation</span>
-                <span>Tenant-safe settings</span>
-                <span>Support workflows</span>
-              </div>
-              <div class="hero-metrics">
-                <div class="hero-metric">
-                  <div class="hero-metric-value">10+</div>
-                  <div class="hero-metric-label">core modules</div>
+          <div id="generalPreSelection" class="home-page">
+            <div class="home-hero-grid">
+              <div class="marketing-hero">
+                <div class="hero-kicker">Community operations for Discord + Web3</div>
+                <img src="/assets/branding/guildpilot-logo.png" alt="GuildPilot" style="width:80px;height:80px;border-radius:18px;object-fit:cover;margin-bottom:20px;box-shadow:0 6px 26px rgba(99,102,241,0.42);">
+                <h1>Run your community from one control center</h1>
+                <p class="hero-sub">GuildPilot unifies wallet verification, governance, ticketing, engagement and wallet intelligence into one clean experience for operators and members.</p>
+                <div class="hero-proof-strip">
+                  <span>Wallet verification</span>
+                  <span>Role automation</span>
+                  <span>Ticket routing</span>
+                  <span>Tenant-safe settings</span>
                 </div>
-                <div class="hero-metric">
-                  <div class="hero-metric-value">1</div>
-                  <div class="hero-metric-label">control panel</div>
+                <div class="hero-metrics">
+                  <div class="hero-metric">
+                    <div class="hero-metric-value">10+</div>
+                    <div class="hero-metric-label">core modules</div>
+                  </div>
+                  <div class="hero-metric">
+                    <div class="hero-metric-value">1</div>
+                    <div class="hero-metric-label">portal shell</div>
+                  </div>
+                  <div class="hero-metric">
+                    <div class="hero-metric-value">0</div>
+                    <div class="hero-metric-label">tool sprawl</div>
+                  </div>
                 </div>
-                <div class="hero-metric">
-                  <div class="hero-metric-value">0</div>
-                  <div class="hero-metric-label">tool sprawl</div>
+                <div class="marketing-cta">
+                  <button class="btn-primary" id="homePrimaryCta" onclick="switchSection('servers')" style="padding:12px 32px;font-size:1rem;">Get Started</button>
+                  <button class="btn-secondary" onclick="switchSection('help')" style="padding:12px 32px;font-size:1rem;">View Docs</button>
+                  <button id="landingSuperadminBtn" class="btn-secondary" onclick="switchSection('admin'); showAdminView('superadmin')" style="display:none;padding:12px 32px;font-size:1rem;">Superadmin</button>
                 </div>
+                <div id="homeActiveContext" class="home-active-context" style="display:none;"></div>
               </div>
-              <div class="marketing-cta">
-                <button class="btn-primary" id="homePrimaryCta" onclick="switchSection('servers')" style="padding:12px 32px;font-size:1rem;">Get Started</button>
-                <button class="btn-secondary" onclick="switchSection('help')" style="padding:12px 32px;font-size:1rem;">View Docs</button>
-                <button id="landingSuperadminBtn" class="btn-secondary" onclick="switchSection('admin'); showAdminView('superadmin')" style="display:none;padding:12px 32px;font-size:1rem;">Superadmin</button>
-              </div>
+              <aside class="home-value-panel">
+                <h3>Launch Sequence</h3>
+                <p>Set up a community in minutes with clear next actions.</p>
+                <ol class="home-value-list">
+                  <li>Select your Discord server</li>
+                  <li>Enable the modules you need</li>
+                  <li>Configure verification and ticketing</li>
+                  <li>Go live with one invite link</li>
+                </ol>
+                <div class="home-value-actions">
+                  <button class="btn-primary" onclick="switchSection('servers')">Select Server</button>
+                  <button class="btn-secondary" onclick="switchSection('settings')">Open Settings</button>
+                </div>
+              </aside>
             </div>
-            <div class="marketing-features">
+
+            <div class="home-section-head">
+              <h2>Module Overview</h2>
+              <p>Every feature is available in one unified interface.</p>
+            </div>
+            <div class="marketing-features home-feature-grid">
               <div class="marketing-feature-card">
-                <div class="feature-icon">📜</div>
+                <div class="feature-icon">Governance</div>
                 <h3>Governance</h3>
                 <p>On-chain and off-chain proposals with tiered voting power based on NFT holdings.</p>
               </div>
               <div class="marketing-feature-card">
-                <div class="feature-icon">💰</div>
+                <div class="feature-icon">Treasury</div>
                 <h3>Wallet Tracker</h3>
                 <p>Multi-wallet oversight with real-time balances, transaction history, and alerts.</p>
               </div>
               <div class="marketing-feature-card">
-                <div class="feature-icon">🎨</div>
+                <div class="feature-icon">NFT</div>
                 <h3>NFT Tracker</h3>
-                <p>Automatic sales and listing feeds powered by Helius webhooks — zero config required.</p>
+                <p>Automatic sales and listing feeds powered by Helius webhooks with zero config required.</p>
               </div>
               <div class="marketing-feature-card">
-                <div class="feature-icon">💼</div>
+                <div class="feature-icon">Verify</div>
                 <h3>Verification</h3>
                 <p>Link wallets to Discord accounts with tiered role assignment and proof of ownership.</p>
               </div>
               <div class="marketing-feature-card">
-                <div class="feature-icon">⚔️</div>
-                <h3>Battle &amp; Heist</h3>
+                <div class="feature-icon">Engage</div>
+                <h3>Battle and Heist</h3>
                 <p>Gamified engagement modules that keep your community active and rewarded.</p>
               </div>
               <div class="marketing-feature-card">
-                <div class="feature-icon">⚙️</div>
+                <div class="feature-icon">Tenant</div>
                 <h3>Multi-Tenant</h3>
-                <p>One bot, many servers — each with isolated config, branding, and module toggles.</p>
+                <p>One bot, many servers, each with isolated config, branding, and module toggles.</p>
               </div>
             </div>
-          </div>
 
+            <div class="home-section-head">
+              <h2>How Teams Use It</h2>
+              <p>Simple flow from install to daily operations.</p>
+            </div>
+            <div class="home-flow-grid">
+              <article class="home-flow-card">
+                <span class="home-flow-step">Step 1</span>
+                <h3>Connect and assign</h3>
+                <p>Add the bot, choose your server, and assign module access by plan.</p>
+              </article>
+              <article class="home-flow-card">
+                <span class="home-flow-step">Step 2</span>
+                <h3>Configure once</h3>
+                <p>Set verification, ticket categories, role routing and channel targets.</p>
+              </article>
+              <article class="home-flow-card">
+                <span class="home-flow-step">Step 3</span>
+                <h3>Operate daily</h3>
+                <p>Manage support, engagement and governance from one place with clear tenant context.</p>
+              </article>
+            </div>
+          </div>
           <!-- Post-selection: General hub with server info + quick actions -->
           <div id="generalPostSelection" style="display:none;">
             <header class="section-header">
@@ -1683,4 +1726,3 @@
   </div>
 </body>
 </html>
-

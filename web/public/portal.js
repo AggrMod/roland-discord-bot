@@ -931,9 +931,30 @@ function renderGeneralSection() {
   if (primaryCta) {
     if (activeGuildId) {
       const record = getServerRecord(activeGuildId);
-      primaryCta.textContent = record?.name ? `Manage ${record.name}` : 'Manage Server';
+      const canManage = isAdmin || isSuperadmin;
+      primaryCta.textContent = record?.name
+        ? (canManage ? `Manage ${record.name}` : `Open ${record.name}`)
+        : (canManage ? 'Manage Server' : 'Open Server');
+      primaryCta.onclick = () => switchSection(canManage ? 'settings' : 'servers');
     } else {
       primaryCta.textContent = 'Get Started';
+      primaryCta.onclick = () => switchSection('servers');
+    }
+  }
+
+  const homeContext = document.getElementById('homeActiveContext');
+  if (homeContext) {
+    if (activeGuildId) {
+      const activeRecord = getServerRecord(activeGuildId);
+      const activeName = activeRecord?.name || activeGuildId;
+      homeContext.style.display = '';
+      homeContext.innerHTML = `
+        Active server context: <strong>${escapeHtml(activeName)}</strong>.
+        <button class="btn-secondary" style="margin-left:10px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="switchSection('servers')">Switch</button>
+      `;
+    } else {
+      homeContext.style.display = 'none';
+      homeContext.innerHTML = '';
     }
   }
 

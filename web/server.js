@@ -98,6 +98,87 @@ function timingSafeEquals(a, b) {
   return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
+function parseCommaSeparated(value) {
+  return String(value || '')
+    .split(',')
+    .map(entry => entry.trim())
+    .filter(Boolean);
+}
+
+function normalizeOrigin(value) {
+  const input = String(value || '').trim();
+  if (!input) return '';
+  try {
+    const parsed = new URL(input);
+    return parsed.origin;
+  } catch (_error) {
+    try {
+      const parsed = new URL(`https://${input}`);
+      return parsed.origin;
+    } catch (_error2) {
+      return '';
+    }
+  }
+}
+
+function normalizeCallbackUrl(value) {
+  const input = String(value || '').trim();
+  if (!input) return '';
+  try {
+    const parsed = new URL(input);
+    const pathname = parsed.pathname.endsWith('/') && parsed.pathname !== '/'
+      ? parsed.pathname.slice(0, -1)
+      : parsed.pathname;
+    return `${parsed.origin}${pathname}`;
+  } catch (_error) {
+    try {
+      const parsed = new URL(`https://${input}`);
+      const pathname = parsed.pathname.endsWith('/') && parsed.pathname !== '/'
+        ? parsed.pathname.slice(0, -1)
+        : parsed.pathname;
+      return `${parsed.origin}${pathname}`;
+    } catch (_error2) {
+      return '';
+    }
+  }
+}
+
+function getRequestOrigin(req) {
+  const forwardedHostRaw = req.get('x-forwarded-host') || '';
+  const directHostRaw = req.get('host') || '';
+  const host = String(forwardedHostRaw || directHostRaw).split(',')[0].trim();
+  if (!host) return '';
+  const forwardedProtoRaw = req.get('x-forwarded-proto') || '';
+  const proto = String(forwardedProtoRaw || req.protocol || 'https').split(',')[0].trim() || 'https';
+  return `${proto}://${host}`;
+}
+
+function getConfiguredOAuthRedirectUris() {
+  const configured = [
+    process.env.DISCORD_REDIRECT_URI,
+    ...parseCommaSeparated(process.env.DISCORD_REDIRECT_URIS)
+  ];
+  const normalized = configured.map(normalizeCallbackUrl).filter(Boolean);
+  return Array.from(new Set(normalized));
+}
+
+function resolveOAuthRedirectUri(req) {
+  const configured = getConfiguredOAuthRedirectUris();
+  if (configured.length === 0) {
+    return 'http://localhost:3000/auth/discord/callback';
+  }
+
+  const requestOrigin = normalizeOrigin(getRequestOrigin(req));
+  if (requestOrigin) {
+    const preferred = normalizeCallbackUrl(`${requestOrigin}/auth/discord/callback`);
+    if (preferred && configured.includes(preferred)) {
+      return preferred;
+    }
+  }
+
+  return configured[0];
+}
+
 class WebServer {
   constructor() {
     this.app = express();
@@ -118,14 +199,17 @@ class WebServer {
     // Set to 1 assuming exactly one reverse proxy (nginx). Adjust if architecture changes.
     this.app.set('trust proxy', 1);
 
-    // CORS for public API - explicitly configured for the-solpranos.com integration
-    // Allows cross-origin requests for public endpoints
-    const allowedOrigins = [
-      process.env.WEB_URL,
-      'https://the-solpranos.com',
-      'https://www.the-solpranos.com',
+    // CORS allowlist includes current + legacy portal domains to keep existing installs/links working.
+    const allowedOrigins = Array.from(new Set([
+      normalizeOrigin(process.env.WEB_URL),
+      ...parseCommaSeparated(process.env.WEB_URL_ALIASES).map(normalizeOrigin),
+      'https://guildpilot.app',
+      'https://www.guildpilot.app',
+      'https://discordbot.solpranos.com',
       'https://discordbot.the-solpranos.com',
-    ].filter(Boolean);
+      'https://the-solpranos.com',
+      'https://www.the-solpranos.com'
+    ].filter(Boolean)));
     if (process.env.NODE_ENV !== 'production') {
       allowedOrigins.push('http://localhost:3000', 'http://localhost:5173');
     }
@@ -259,9 +343,18 @@ class WebServer {
       return Array.isArray(guilds) ? guilds : [];
     };
 
-    const getBotGuildIds = () => {
+    const getBotGuildIds = async () => {
       if (!this.client) {
         return new Set();
+      }
+
+      try {
+        const liveGuilds = await this.client.guilds.fetch();
+        if (liveGuilds && typeof liveGuilds.map === 'function') {
+          return new Set(liveGuilds.map(guild => guild.id));
+        }
+      } catch (error) {
+        logger.warn('Could not fetch live bot guild list, falling back to cache:', error?.message || error);
       }
 
       return new Set(this.client.guilds.cache.map(guild => guild.id));
@@ -341,7 +434,7 @@ class WebServer {
         // Fallback: fetch user as guild member directly (covers guilds where OAuth scope is limited)
         const member = guild ? await guild.members.fetch(userId).catch(() => null) : null;
         if (member?.permissions && (member.permissions.has('Administrator') || member.permissions.has('ManageGuild'))) {
-          const botGuildIds = getBotGuildIds();
+          const botGuildIds = await getBotGuildIds();
           if (!botGuildIds.has(requestedGuildId)) {
             return { ok: false, status: 403, message: 'Bot is not installed in the selected server' };
           }
@@ -363,7 +456,7 @@ class WebServer {
         return { ok: false, status: 403, message: 'Admin permission required' };
       }
 
-      const botGuildIds = getBotGuildIds();
+      const botGuildIds = await getBotGuildIds();
       if (!botGuildIds.has(requestedGuildId)) {
         return { ok: false, status: 403, message: 'Bot is not installed in the selected server' };
       }
@@ -466,7 +559,9 @@ class WebServer {
       }
 
       const clientId = process.env.CLIENT_ID;
-      const redirectUri = encodeURIComponent(process.env.DISCORD_REDIRECT_URI || 'http://localhost:3000/auth/discord/callback');
+      const oauthRedirectUri = resolveOAuthRedirectUri(req);
+      req.session.oauthRedirectUri = oauthRedirectUri;
+      const redirectUri = encodeURIComponent(oauthRedirectUri);
       const scope = encodeURIComponent('identify guilds');
       const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}`;
       res.redirect(authUrl);
@@ -480,6 +575,11 @@ class WebServer {
       }
 
       try {
+        const oauthRedirectUri = req.session?.oauthRedirectUri || resolveOAuthRedirectUri(req);
+        if (req.session?.oauthRedirectUri) {
+          delete req.session.oauthRedirectUri;
+        }
+
         // Exchange code for access token
         const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
           method: 'POST',
@@ -491,7 +591,7 @@ class WebServer {
             client_secret: process.env.DISCORD_CLIENT_SECRET,
             grant_type: 'authorization_code',
             code: code,
-            redirect_uri: process.env.DISCORD_REDIRECT_URI || 'http://localhost:3000/auth/discord/callback'
+            redirect_uri: oauthRedirectUri
           })
         });
 
@@ -680,7 +780,7 @@ class WebServer {
         const userId = req.session.discordUser.id;
         const isSuperadmin = superadminService.isSuperadmin(userId);
         const discordGuilds = await getDiscordUserGuilds(req);
-        const botGuildIds = getBotGuildIds();
+        const botGuildIds = await getBotGuildIds();
         const managedServers = [];
         const unmanagedServers = [];
 
@@ -694,13 +794,14 @@ class WebServer {
           for (const tenant of tenants) {
             const guildId = tenant.guildId;
             if (!guildId || managedSeen.has(guildId)) continue;
-            managedSeen.add(guildId);
 
             const guild = await fetchGuildById(guildId);
+            if (!guild) continue;
+            managedSeen.add(guildId);
             managedServers.push({
               guildId,
-              name: guild?.name || tenant.guildName || `Server ${guildId}`,
-              icon: guild?.icon || null,
+              name: guild.name || tenant.guildName || `Server ${guildId}`,
+              icon: guild.icon || null,
               permissions: '8',
               source: 'tenant'
             });
@@ -799,21 +900,32 @@ class WebServer {
         return res.status(401).json({ success: false, message: 'Not authenticated' });
       }
 
-      const guildId = normalizeGuildId(req.query.guildId);
-      if (!guildId) {
-        return res.status(400).json({ success: false, message: 'guildId is required' });
-      }
-
       try {
-        const discordGuilds = await getDiscordUserGuilds(req);
-        const guild = discordGuilds.find(entry => entry.id === guildId);
-        if (!guild || !hasDiscordAdminPermission(guild)) {
-          return res.status(403).json({ success: false, message: 'Admin permission required' });
+        const guildId = normalizeGuildId(req.query.guildId || '');
+        const userId = req.session.discordUser.id;
+        const isSuperadmin = superadminService.isSuperadmin(userId);
+        const runtimeClientId = this.client?.application?.id || this.client?.user?.id || null;
+        if (runtimeClientId && process.env.CLIENT_ID && process.env.CLIENT_ID !== runtimeClientId) {
+          logger.warn(`[invite-link] CLIENT_ID mismatch detected. env=${process.env.CLIENT_ID} runtime=${runtimeClientId}. Using runtime id.`);
+        }
+        const clientId = runtimeClientId || process.env.CLIENT_ID;
+        if (!clientId) {
+          return res.status(500).json({ success: false, message: 'CLIENT_ID is not configured' });
         }
 
-        const clientId = process.env.CLIENT_ID;
+        if (guildId && !isSuperadmin) {
+          const discordGuilds = await getDiscordUserGuilds(req);
+          const guild = discordGuilds.find(entry => entry.id === guildId);
+          if (!guild || !hasDiscordAdminPermission(guild)) {
+            return res.status(403).json({ success: false, message: 'Admin permission required' });
+          }
+        }
+
         const permissions = process.env.BOT_INVITE_PERMISSIONS || '8';
-        const redirectUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&scope=bot%20applications.commands&permissions=${encodeURIComponent(permissions)}&guild_id=${encodeURIComponent(guildId)}&disable_guild_select=true`;
+        const baseUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&scope=bot%20applications.commands&permissions=${encodeURIComponent(permissions)}`;
+        const redirectUrl = guildId
+          ? `${baseUrl}&guild_id=${encodeURIComponent(guildId)}&disable_guild_select=true`
+          : baseUrl;
 
         res.redirect(redirectUrl);
       } catch (error) {
@@ -1042,6 +1154,16 @@ class WebServer {
         userId,
         isRootSuperadmin: superadminService.isRootSuperadmin(userId),
         isSuperadmin: superadminService.isSuperadmin(userId)
+      });
+    });
+
+    this.app.get('/api/superadmin/env-status', superadminGuard, (_req, res) => {
+      res.json({
+        mockMode: process.env.MOCK_MODE === 'true',
+        heliusConfigured: !!process.env.HELIUS_API_KEY,
+        solanaRpc: process.env.SOLANA_RPC_URL || 'default',
+        nodeEnv: process.env.NODE_ENV || 'development',
+        webhookSecretConfigured: !!process.env.NFT_ACTIVITY_WEBHOOK_SECRET
       });
     });
 
@@ -4165,10 +4287,11 @@ class WebServer {
 
   start() {
     this.server = this.app.listen(this.port, () => {
-      logger.log(`🌐 Web server running on port ${this.port}`);
-      logger.log(`🔗 Verification URL: http://localhost:${this.port}/verify`);
-      logger.log(`📊 Dashboard URL: http://localhost:${this.port}/dashboard`);
-      logger.log(`⚙️ Admin Portal URL: http://localhost:${this.port}/admin`);
+      const baseUrl = normalizeOrigin(process.env.WEB_URL) || `http://localhost:${this.port}`;
+      logger.log(`Web server running on port ${this.port}`);
+      logger.log(`Verification URL: ${baseUrl}/verify`);
+      logger.log(`Dashboard URL: ${baseUrl}/dashboard`);
+      logger.log(`Admin Portal URL: ${baseUrl}/admin`);
     });
   }
 

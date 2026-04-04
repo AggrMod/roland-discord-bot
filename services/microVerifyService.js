@@ -9,6 +9,36 @@ class MicroVerifyService {
     this.pollingInterval = null;
     this.lastSignature = null;
     this._configOverrides = {};
+    this._lastRpcOutageLogAt = 0;
+    this._lastRpcOutageMessage = '';
+    this._rpcOutageCooldownMs = 120000;
+  }
+
+  _isTransientRpcUnavailable(message) {
+    const msg = String(message || '').toLowerCase();
+    return (
+      msg.includes('503') ||
+      msg.includes('-32603') ||
+      msg.includes('service unavailable') ||
+      msg.includes('temporarily unavailable') ||
+      msg.includes('ecconnreset') ||
+      msg.includes('etimedout') ||
+      msg.includes('fetch failed')
+    );
+  }
+
+  _logRpcOutage(context, message) {
+    const now = Date.now();
+    const normalizedMessage = String(message || '').slice(0, 220);
+    const shouldLog =
+      normalizedMessage !== this._lastRpcOutageMessage ||
+      (now - this._lastRpcOutageLogAt) > this._rpcOutageCooldownMs;
+
+    if (shouldLog) {
+      logger.warn(`[MicroVerify] RPC temporarily unavailable (${context}): ${normalizedMessage}`);
+      this._lastRpcOutageLogAt = now;
+      this._lastRpcOutageMessage = normalizedMessage;
+    }
   }
 
   /**
@@ -310,12 +340,15 @@ class MicroVerifyService {
       // Link wallet to user
       const walletService = require('./walletService');
       const linkResult = walletService.linkWallet(request.discord_id, request.username, senderWallet, request.guild_id || '');
+      const shouldNotify = linkResult.success && linkResult.isFirstWallet === true;
 
       logger.log(`Micro-verify completed: ${request.discord_id} -> ${senderWallet} (${txSignature})`);
 
       return {
         success: true,
         walletLinked: linkResult.success,
+        firstWalletLinked: linkResult.isFirstWallet === true,
+        shouldNotify,
         message: 'Wallet verified successfully'
       };
     } catch (error) {
@@ -395,6 +428,9 @@ class MicroVerifyService {
             logger.warn('Micro-verify RPC rate-limited during first scan; retrying on next interval');
             break;
           }
+          if (result && result.transientUnavailable) {
+            break;
+          }
           await new Promise(r => setTimeout(r, 250));
         }
         return;
@@ -422,9 +458,17 @@ class MicroVerifyService {
           logger.warn('Micro-verify RPC rate-limited; pausing tx checks until next poll');
           break;
         }
+        if (result && result.transientUnavailable) {
+          break;
+        }
         await new Promise(r => setTimeout(r, 250));
       }
     } catch (error) {
+      const msg = String(error?.message || error || '');
+      if (this._isTransientRpcUnavailable(msg)) {
+        this._logRpcOutage('pollTransactions', msg);
+        return;
+      }
       logger.error('Error polling transactions:', error);
     }
   }
@@ -487,7 +531,7 @@ class MicroVerifyService {
 
       const result = this.verifyRequest(request.id, senderWallet, signature);
 
-      if (result.success) {
+      if (result.success && result.shouldNotify) {
         // Notify user if possible (requires Discord client reference)
         this.notifyUserVerified(request.discord_id, senderWallet);
       }
@@ -498,6 +542,10 @@ class MicroVerifyService {
       if (msg.includes('429') || msg.includes('Too many requests')) {
         logger.warn(`Rate-limited while checking tx ${signature}: ${msg}`);
         return { rateLimited: true };
+      }
+      if (this._isTransientRpcUnavailable(msg)) {
+        this._logRpcOutage(`checkTransaction:${signature.slice(0, 10)}`, msg);
+        return { transientUnavailable: true };
       }
       logger.error(`Error checking transaction ${signature}:`, error);
     }

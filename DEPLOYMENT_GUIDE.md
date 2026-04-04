@@ -9,7 +9,8 @@ Go to [Discord Developer Portal](https://discord.com/developers/applications):
    - Copy `CLIENT_ID` → add to `.env` as `CLIENT_ID=...`
    - Copy `CLIENT_SECRET` → add to `.env` as `DISCORD_CLIENT_SECRET=...`
 3. **OAuth2 > Redirects**:
-   - Add your redirect URI (e.g., `https://discordbot.the-solpranos.com/auth/discord/callback`)
+   - Add your primary redirect URI (e.g., `https://guildpilot.app/auth/discord/callback`)
+   - Keep legacy redirect URI during migration (e.g., `https://discordbot.solpranos.com/auth/discord/callback`)
    - Add to `.env` as `DISCORD_REDIRECT_URI=...` (must match EXACTLY)
 
 ### 2. Environment Variables
@@ -26,6 +27,7 @@ nano .env  # or use your editor
 - `GUILD_ID` - Your Discord server ID
 - `DISCORD_CLIENT_SECRET` - From OAuth2 > General
 - `DISCORD_REDIRECT_URI` - From OAuth2 > Redirects (must match EXACTLY)
+- `DISCORD_REDIRECT_URIS` - Optional comma-separated additional callback URLs for migration
 - `SESSION_SECRET` - Generate random string (e.g., `openssl rand -base64 32`)
 
 **Optional (but recommended)**:
@@ -90,7 +92,7 @@ pm2 logs guildpilot
 ## Verification
 
 ### 1. Portal Login Test
-1. Visit `https://discordbot.the-solpranos.com` (or your bot URL)
+1. Visit `https://guildpilot.app` (and test legacy URL too during migration)
 2. Click "Verify" button
 3. Should redirect to Discord OAuth login
 4. After login, should show dashboard

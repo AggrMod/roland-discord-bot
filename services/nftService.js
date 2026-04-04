@@ -21,12 +21,29 @@ function heliusRateLimited(fn) {
   return _heliusQueue;
 }
 
+function isValidSolanaAddress(address) {
+  try {
+    const normalized = String(address || '').trim();
+    if (!normalized) return false;
+    new PublicKey(normalized);
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
 class NFTService {
   constructor() {
     this.connection = new Connection(process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com');
+    this.invalidWalletWarned = new Set();
   }
 
   async getNFTsForWallet(walletAddress, options = {}) {
+    const normalizedWallet = String(walletAddress || '').trim();
+    if (!normalizedWallet) {
+      return [];
+    }
+
     const guildId = options.guildId;
     const tenantMockEnabled = guildId && tenantService.isMultitenantEnabled()
       ? tenantService.getTenantContext(guildId)?.limits?.mockDataEnabled === true
@@ -34,21 +51,31 @@ class NFTService {
 
     if (MOCK_MODE || tenantMockEnabled) {
       if (tenantMockEnabled && !MOCK_MODE) {
-        logger.warn(`Tenant mock_data_enabled active for guild ${guildId}; serving mock NFTs for ${walletAddress}`);
+        logger.warn(`Tenant mock_data_enabled active for guild ${guildId}; serving mock NFTs for ${normalizedWallet}`);
       }
-      return this.getMockNFTs(walletAddress, {
+      return this.getMockNFTs(normalizedWallet, {
         guildId,
         mockReason: tenantMockEnabled && !MOCK_MODE ? 'tenant-mock-data-enabled' : 'global-mock-mode'
       });
     }
 
+    // Legacy mock wallet IDs can remain in DB; skip invalid addresses before hitting Helius.
+    if (!isValidSolanaAddress(normalizedWallet)) {
+      const warnKey = `${guildId || 'global'}:${normalizedWallet}`;
+      if (!this.invalidWalletWarned.has(warnKey)) {
+        logger.warn(`Skipping invalid wallet address for NFT fetch: ${normalizedWallet}${guildId ? ` (guild ${guildId})` : ''}`);
+        this.invalidWalletWarned.add(warnKey);
+      }
+      return [];
+    }
+
     try {
-      logger.log(`Fetching NFTs for wallet: ${walletAddress}`);
-      return await this.fetchNFTsFromHelius(walletAddress);
+      logger.log(`Fetching NFTs for wallet: ${normalizedWallet}`);
+      return await this.fetchNFTsFromHelius(normalizedWallet);
     } catch (error) {
       logger.error('Error fetching NFTs:', error);
       // Fallback to mock on error
-      return this.getMockNFTs(walletAddress, {
+      return this.getMockNFTs(normalizedWallet, {
         guildId,
         mockReason: 'helius-fallback'
       });

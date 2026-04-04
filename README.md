@@ -120,6 +120,7 @@ At the end a champion is crowned with total points across all games.
 - `GUILD_ID` - Guild ID for slash command deployment
 - `DISCORD_CLIENT_SECRET` - From Discord Developer Portal (CRITICAL for login)
 - `DISCORD_REDIRECT_URI` - Must match Discord OAuth2 redirect URL exactly
+- `DISCORD_REDIRECT_URIS` - Optional comma-separated additional callback URLs (for zero-downtime domain migration)
 - `SESSION_SECRET` - Random string for session encryption (min 32 chars)
 
 ### Optional but Recommended
@@ -128,6 +129,7 @@ At the end a champion is crowned with total points across all games.
 - `MOCK_MODE` - Set to `false` to disable mock NFT data (use real Solana NFTs)
 - `SOLANA_RPC_URL` - Solana RPC endpoint (default: mainnet-beta)
 - `WEB_URL` - Your bot's web URL for redirects (default: http://localhost:3000)
+- `WEB_URL_ALIASES` - Optional comma-separated extra web origins to keep old URLs working during migration
 
 ## Commands
 

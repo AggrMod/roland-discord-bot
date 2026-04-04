@@ -8,6 +8,29 @@ class RoleService {
     this.traitRolesConfig = null;
     this.tiersConfig = null;
     this.collectionsConfig = null;
+    this._roleSyncWarnCache = new Map();
+    this._roleSyncWarnCooldownMs = parseInt(process.env.ROLE_SYNC_WARN_COOLDOWN_MS || '600000', 10);
+  }
+
+  logRoleSyncWarnOnce(cacheKey, message) {
+    const now = Date.now();
+    const lastAt = this._roleSyncWarnCache.get(cacheKey) || 0;
+    if ((now - lastAt) < this._roleSyncWarnCooldownMs) {
+      return;
+    }
+    this._roleSyncWarnCache.set(cacheKey, now);
+
+    // Keep the cache bounded over long uptimes.
+    if (this._roleSyncWarnCache.size > 5000) {
+      const cutoff = now - this._roleSyncWarnCooldownMs;
+      for (const [k, t] of this._roleSyncWarnCache.entries()) {
+        if (t < cutoff) {
+          this._roleSyncWarnCache.delete(k);
+        }
+      }
+    }
+
+    logger.warn(message);
   }
 
   isProtectedRole(role) {
@@ -381,7 +404,8 @@ class RoleService {
           const role = member.guild.roles.cache.get(tier.roleId);
           if (role) {
             if (!this.canBotManageRole(member, role)) {
-              logger.warn(`Skipped adding unmanaged tier role ${role.name} (${role.id}) for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+              const key = `tier:add:unmanaged:${guildId || member.guild.id}:${member.id}:${role.id}`;
+              this.logRoleSyncWarnOnce(key, `Skipped adding unmanaged tier role ${role.name} (${role.id}) for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
             } else {
               await member.roles.add(role);
               changes.added.push(tier.name);
@@ -392,9 +416,11 @@ class RoleService {
           const role = member.guild.roles.cache.get(tier.roleId);
           if (role) {
             if (this.isProtectedRole(role)) {
-              logger.warn(`Skipped removing protected role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+              const key = `tier:remove:protected:${guildId || member.guild.id}:${member.id}:${role.id}`;
+              this.logRoleSyncWarnOnce(key, `Skipped removing protected role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
             } else if (!this.canBotManageRole(member, role)) {
-              logger.warn(`Skipped removing unmanaged tier role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+              const key = `tier:remove:unmanaged:${guildId || member.guild.id}:${member.id}:${role.id}`;
+              this.logRoleSyncWarnOnce(key, `Skipped removing unmanaged tier role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
             } else {
               await member.roles.remove(role);
               changes.removed.push(tier.name);
@@ -447,9 +473,11 @@ class RoleService {
           const role = member.guild.roles.cache.get(traitRole.roleId);
           if (role) {
             if (this.isProtectedRole(role)) {
-              logger.warn(`Skipped adding protected role ${role.name} (${role.id}) via trait sync for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+              const key = `trait:add:protected:${guildId || member.guild.id}:${member.id}:${role.id}`;
+              this.logRoleSyncWarnOnce(key, `Skipped adding protected role ${role.name} (${role.id}) via trait sync for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
             } else if (!this.canBotManageRole(member, role)) {
-              logger.warn(`Skipped adding unmanaged trait role ${role.name} (${role.id}) for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+              const key = `trait:add:unmanaged:${guildId || member.guild.id}:${member.id}:${role.id}`;
+              this.logRoleSyncWarnOnce(key, `Skipped adding unmanaged trait role ${role.name} (${role.id}) for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
             } else {
               await member.roles.add(role);
               changes.added.push(`${traitRole.trait_value}`);
@@ -463,9 +491,11 @@ class RoleService {
           const role = member.guild.roles.cache.get(traitRole.roleId);
           if (role) {
             if (this.isProtectedRole(role)) {
-              logger.warn(`Skipped removing protected role ${role.name} (${role.id}) via trait sync for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+              const key = `trait:remove:protected:${guildId || member.guild.id}:${member.id}:${role.id}`;
+              this.logRoleSyncWarnOnce(key, `Skipped removing protected role ${role.name} (${role.id}) via trait sync for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
             } else if (!this.canBotManageRole(member, role)) {
-              logger.warn(`Skipped removing unmanaged trait role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+              const key = `trait:remove:unmanaged:${guildId || member.guild.id}:${member.id}:${role.id}`;
+              this.logRoleSyncWarnOnce(key, `Skipped removing unmanaged trait role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
             } else {
               await member.roles.remove(role);
               changes.removed.push(`${traitRole.trait_value}`);

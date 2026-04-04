@@ -515,12 +515,21 @@ body {
 /* ==================== MARKETING / LANDING PAGE ==================== */
 .marketing-hero {
   text-align: center;
-  padding: 80px 24px 48px;
+  padding: 56px 28px 44px;
   max-width: 900px;
   margin: 0 auto;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 22px;
+  background:
+    radial-gradient(80% 120% at 15% 0%, rgba(99, 102, 241, 0.24) 0%, rgba(99, 102, 241, 0) 55%),
+    radial-gradient(90% 130% at 85% 10%, rgba(16, 185, 129, 0.14) 0%, rgba(16, 185, 129, 0) 50%),
+    rgba(14, 23, 44, 0.52);
+  box-shadow: 0 22px 46px rgba(3, 8, 22, 0.55);
+  position: relative;
+  overflow: hidden;
 }
 .marketing-hero h1 {
-  font-size: 3rem;
+  font-size: 3.1rem;
   font-weight: 800;
   letter-spacing: -0.03em;
   background: linear-gradient(135deg, var(--gold), #fff 60%, var(--gold-light));
@@ -532,9 +541,74 @@ body {
 .marketing-hero .hero-sub {
   font-size: 1.2rem;
   color: var(--text-secondary);
-  max-width: 600px;
-  margin: 0 auto 32px;
+  max-width: 690px;
+  margin: 0 auto 20px;
   line-height: 1.7;
+}
+.hero-kicker {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  margin-bottom: 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(129, 140, 248, 0.45);
+  background: rgba(99, 102, 241, 0.14);
+  color: #c7d2fe;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+.hero-proof-strip {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 auto 18px;
+  max-width: 760px;
+}
+.hero-proof-strip span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.13);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  color: #dbeafe;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.hero-proof-strip span::before {
+  content: "•";
+  color: #4ade80;
+  font-size: 0.9rem;
+}
+.hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 auto 22px;
+  max-width: 640px;
+}
+.hero-metric {
+  border-radius: 12px;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  background: rgba(30, 41, 59, 0.55);
+  padding: 10px 8px;
+}
+.hero-metric-value {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #e0e7ff;
+  line-height: 1.1;
+}
+.hero-metric-label {
+  font-size: 0.78rem;
+  color: #93c5fd;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 2px;
 }
 .marketing-cta {
   display: flex;
@@ -558,11 +632,13 @@ body {
   padding: 28px 24px;
   text-align: center;
   transition: var(--transition-base);
+  backdrop-filter: blur(6px);
 }
 .marketing-feature-card:hover {
   border-color: rgba(255, 215, 0, 0.3);
   background: rgba(255, 215, 0, 0.04);
-  transform: translateY(-2px);
+  transform: translateY(-4px);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.42);
 }
 .marketing-feature-card .feature-icon {
   font-size: 2rem;
@@ -1909,6 +1985,7 @@ body {
 @media (max-width: 768px) {
   .marketing-hero {
     padding: 40px 20px 32px;
+    border-radius: 16px;
   }
 
   .marketing-hero h1 {
@@ -1931,6 +2008,23 @@ body {
   .marketing-cta button {
     width: 100% !important;
     justify-content: center;
+  }
+
+  .hero-proof-strip {
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+
+  .hero-proof-strip span {
+    font-size: 0.72rem;
+    padding: 4px 8px;
+  }
+
+  .hero-metrics {
+    grid-template-columns: 1fr;
+    max-width: 100%;
+    gap: 8px;
+    margin-bottom: 16px;
   }
 
   .marketing-features {

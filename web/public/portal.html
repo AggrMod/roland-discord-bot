@@ -183,9 +183,30 @@
           <!-- Pre-selection: Marketing / Landing page -->
           <div id="generalPreSelection">
             <div class="marketing-hero">
-              <img src="/assets/branding/guildpilot-logo.png" alt="GuildPilot" style="width:80px;height:80px;border-radius:18px;object-fit:cover;margin-bottom:20px;box-shadow:0 4px 24px rgba(255,215,0,0.2);">
-              <h1>Pilot Your Community</h1>
-              <p class="hero-sub">GuildPilot gives Discord server owners a powerful, all-in-one command center — governance, treasury, NFT tracking, verification, and more.</p>
+              <div class="hero-kicker">Community OS for Discord + Web3</div>
+              <img src="/assets/branding/guildpilot-logo.png" alt="GuildPilot" style="width:80px;height:80px;border-radius:18px;object-fit:cover;margin-bottom:20px;box-shadow:0 6px 26px rgba(99,102,241,0.42);">
+              <h1>Turn Discord Into a Revenue-Ready Community Hub</h1>
+              <p class="hero-sub">GuildPilot combines verification, governance, ticketing, engagement and wallet intelligence into one clean operator console for your team.</p>
+              <div class="hero-proof-strip">
+                <span>Wallet verification</span>
+                <span>Role automation</span>
+                <span>Tenant-safe settings</span>
+                <span>Support workflows</span>
+              </div>
+              <div class="hero-metrics">
+                <div class="hero-metric">
+                  <div class="hero-metric-value">10+</div>
+                  <div class="hero-metric-label">core modules</div>
+                </div>
+                <div class="hero-metric">
+                  <div class="hero-metric-value">1</div>
+                  <div class="hero-metric-label">control panel</div>
+                </div>
+                <div class="hero-metric">
+                  <div class="hero-metric-value">0</div>
+                  <div class="hero-metric-label">tool sprawl</div>
+                </div>
+              </div>
               <div class="marketing-cta">
                 <button class="btn-primary" onclick="switchSection('servers')" style="padding:12px 32px;font-size:1rem;">Get Started</button>
                 <button class="btn-secondary" onclick="switchSection('help')" style="padding:12px 32px;font-size:1rem;">View Docs</button>
@@ -322,7 +343,10 @@
           <div class="card">
             <div class="card-header">
               <h3>Unmanaged Servers</h3>
-              <span style="color:var(--text-secondary); font-size:0.85em;">Admin access, bot not installed yet</span>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span style="color:var(--text-secondary); font-size:0.85em;">Admin access, bot not installed yet</span>
+                <button class="btn-secondary btn-sm" onclick="openGuildInvite()">Invite Bot</button>
+              </div>
             </div>
             <div id="unmanagedServersList" class="server-grid" style="margin-top: var(--space-4);"></div>
           </div>
@@ -1448,3 +1472,4 @@
   </div>
 </body>
 </html>
+

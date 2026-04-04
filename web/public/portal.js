@@ -1024,7 +1024,9 @@ function renderServerCard(server, { managed = true } = {}) {
 }
 
 async function openGuildInvite(guildId) {
-  window.location.href = `/api/servers/invite-link?guildId=${encodeURIComponent(guildId)}`;
+  const normalized = normalizeGuildId(guildId || '');
+  const qs = normalized ? `?guildId=${encodeURIComponent(normalized)}` : '';
+  window.location.href = `/api/servers/invite-link${qs}`;
 }
 
 async function refreshServerAccess() {
@@ -2574,11 +2576,25 @@ let _envStatusCache = null;
 async function loadEnvStatusBar() {
   const bar = document.getElementById('adminEnvStatusBar');
   if (!bar) return;
-  if (_envStatusCache && _envStatusCache.nodeEnv) { renderEnvStatusBar(bar, _envStatusCache); return; }
+  const useSuperadminEndpoint = !!isSuperadmin && !activeGuildId;
+  const endpoint = useSuperadminEndpoint ? '/api/superadmin/env-status' : '/api/admin/env-status';
+  const cacheKey = `${endpoint}:${activeGuildId || 'none'}`;
+  if (_envStatusCache && _envStatusCache[cacheKey]?.nodeEnv) {
+    renderEnvStatusBar(bar, _envStatusCache[cacheKey]);
+    return;
+  }
   try {
-    const res = await fetch('/api/admin/env-status', { credentials: 'include' });
+    const opts = { credentials: 'include' };
+    if (!useSuperadminEndpoint) {
+      opts.headers = buildTenantRequestHeaders();
+    }
+    const res = await fetch(endpoint, opts);
     const data = await res.json();
-    _envStatusCache = data;
+    if (!res.ok || data?.success === false) {
+      throw new Error(data?.message || 'Failed to load environment status');
+    }
+    _envStatusCache = _envStatusCache || {};
+    _envStatusCache[cacheKey] = data;
     renderEnvStatusBar(bar, data);
   } catch (e) {
     bar.innerHTML = '';

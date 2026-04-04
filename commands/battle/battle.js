@@ -374,9 +374,13 @@ module.exports = {
 
     const winner = sim.winner;
     const outro = sim.finaleOutro || sim.winnerLine;
+    const victoryEraKey = sim.eraKey || lobby.era || 'mafia';
+    const victoryTitle = battleService.getVictoryEmbedTitle(victoryEraKey);
+    const victoryFooter = battleService.getVictoryEmbedFooter(victoryEraKey);
+    const victoryAnnouncement = battleService.getVictoryAnnouncement(victoryEraKey, winner.user_id);
     const winnerEmbed = new EmbedBuilder()
       .setColor('#FFD700')
-      .setTitle('👑 The Family Crown Goes To...')
+      .setTitle(victoryTitle)
       .setDescription(`🎉 **<@${winner.user_id}>**\n\n${outro}`)
       .addFields(
         { name: 'Rounds Survived', value: `${sim.roundCount || sim.rounds.length}`, inline: true },
@@ -384,10 +388,10 @@ module.exports = {
         { name: 'Total Damage', value: `${winner.total_damage_dealt ?? 0}`, inline: true },
         { name: 'Total Fighters', value: `${sim.totalPlayers || startResult.participants.length}`, inline: true }
       )
-      .setFooter({ text: 'Business is settled.' })
+      .setFooter({ text: victoryFooter })
       .setTimestamp();
 
-    await interaction.channel.send({ content: `🏆 Congratulations <@${winner.user_id}>!`, embeds: [winnerEmbed] });
+    await interaction.channel.send({ content: victoryAnnouncement, embeds: [winnerEmbed] });
 
     logger.log(`Battle ${lobby.lobby_id} completed. Winner: ${winner.username}`);
   },

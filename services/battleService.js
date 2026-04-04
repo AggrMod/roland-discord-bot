@@ -249,6 +249,104 @@ const ROUND_TRANSITION_LINES = [
   "😤 Both soldiers nod at each other. There's still fuel in the tank. Round {round}!",
 ];
 
+const GENERIC_COMBAT_LINES = [
+  "{attacker} lands a precise strike on {defender} for {damage} damage!",
+  "{attacker} breaks through {defender}'s guard! {damage} HP lost!",
+  "{attacker} catches {defender} off-balance for {damage} damage!",
+  "{attacker} unleashes a fast combo on {defender}! {damage} HP!",
+  "{attacker} drives {defender} backward with {damage} damage!",
+  "{attacker} hits hard and clean. {defender} takes {damage}!",
+  "{attacker} times the counter perfectly on {defender}! {damage} damage!",
+  "{attacker} closes distance and punishes {defender} for {damage} HP!",
+  "{attacker} strikes from an unexpected angle! {defender} loses {damage} HP!",
+  "{attacker} overwhelms {defender} with pressure. {damage} damage dealt!",
+];
+
+const GENERIC_CRIT_LINES = [
+  "{attacker} finds a huge opening on {defender}! CRITICAL {damage} damage!",
+  "{attacker} lands a devastating critical hit on {defender}! {damage}!",
+  "{attacker} executes the perfect finisher on {defender}! CRIT for {damage}!",
+  "{attacker} goes all-in and cracks {defender}'s defense! {damage} critical!",
+  "{attacker} delivers a brutal critical strike to {defender}! {damage}!",
+  "{attacker} reads {defender} perfectly and explodes with damage! CRIT {damage}!",
+];
+
+const GENERIC_ITEM_LINES = [
+  "⚡ {player} finds an adrenaline charge! (+12 HP)",
+  "🧪 {player} uses a combat stim! (+14 HP)",
+  "🛡️ {player} equips reinforced plating! (+16 HP)",
+  "💊 {player} patches up quickly! (+10 HP)",
+  "🔋 {player} reroutes power and recovers! (+11 HP)",
+  "🧰 {player} finds a field repair kit! (+13 HP)",
+  "🎯 {player} calibrates targeting optics! (Damage +20% next round)",
+  "🔧 {player} upgrades their weapon system! (Damage +20% next round)",
+  "💥 {player} primes an overcharge attack! (Damage +20% next round)",
+  "🛰️ {player} receives tactical telemetry! (Damage +20% next round)",
+];
+
+const GENERIC_TAUNT_LINES = [
+  "💬 {attacker} to {defender}: \"You're out of position and out of luck.\"",
+  "💬 {attacker} mocks {defender}: \"That was your best move?\"",
+  "💬 {attacker} grins at {defender}: \"You're reacting, I'm dictating.\"",
+  "💬 {attacker} taunts {defender}: \"Keep swinging. I'm still untouched.\"",
+  "💬 {attacker} says: \"You stepped in the wrong arena, {defender}.\"",
+];
+
+const GENERIC_TRASH_TALK_LINES = [
+  "🗣️ {attacker} after the hit: \"Control the pace or get controlled.\"",
+  "🗣️ {attacker}: \"That gap in your defense? I live there now.\"",
+  "🗣️ {attacker} to {defender}: \"You can't win trading like that.\"",
+  "🗣️ {attacker} smirks: \"I'm two steps ahead and pulling away.\"",
+  "🗣️ {attacker}: \"Every mistake adds up. Yours are adding fast.\"",
+];
+
+const GENERIC_DODGE_LINES = [
+  "⚡ {player} slips past {opponent}'s attack at the last instant!",
+  "🎯 {opponent} commits, but {player} dodges cleanly!",
+  "💨 {player} vanishes from the angle and avoids the hit!",
+  "🌀 {player} reads {opponent} and sidesteps perfectly!",
+  "🛡️ {player} avoids the damage and resets the spacing!",
+];
+
+const GENERIC_COMEBACK_LINES = [
+  "🔥 {player} steadies up and claws back momentum!",
+  "💥 {player} absorbs the pressure and answers back!",
+  "⚔️ {player} refuses to fold. The comeback starts now!",
+  "🎯 {player} regains focus and re-enters the fight!",
+  "🧠 {player} adapts on the fly and flips the script!",
+];
+
+const GENERIC_ROUND_TRANSITION_LINES = [
+  "📢 Both fighters reset. Round {round} begins.",
+  "⏱️ Brief pause, then Round {round} starts now.",
+  "🔔 Round {round}: pressure rising, margins shrinking.",
+  "⚡ Round {round} loads in. Stay sharp.",
+  "🎬 Round {round} kicks off with both sides locked in.",
+];
+
+const GENERIC_LUCKY_ESCAPE_LINES = [
+  "🍀 {player} survives by a hair and stays in the match!",
+  "✨ {player} escapes elimination with 1 HP!",
+  "🎲 {player} gets a miracle break and hangs on!",
+  "🙏 {player} somehow lives to fight the next exchange!",
+  "🫀 {player} refuses to go down and clings to 1 HP!",
+];
+
+const GENERIC_FINALE_OUTROS = [
+  "{winner} outlasted {totalPlayers} contenders across {rounds} rounds and owns the arena.",
+  "{rounds} rounds later, {winner} stands alone. Dominance confirmed.",
+  "From {totalPlayers} fighters to one: {winner}. Clean finish.",
+  "{winner} survived the chaos and closed the match in {rounds} rounds.",
+  "The final circle collapses and {winner} takes the crown.",
+];
+
+const GENERIC_VICTORY_LINES = [
+  "{winner} is the final fighter standing.",
+  "{winner} claims the win with a decisive finish.",
+  "{winner} outlasts everyone and secures the title.",
+  "{winner} closes the match and takes the crown.",
+];
+
 const ERA_ALIASES = Object.freeze({
   vaultrunners: 'vault_runners',
   vault_runner: 'vault_runners',
@@ -291,6 +389,43 @@ class BattleService {
     if (era.lobbyFooter) return era.lobbyFooter;
     const eraName = era.name || 'Battle';
     return `Creator can /battle start when ready | Era: ${eraName}`;
+  }
+
+  formatVictoryTemplate(template, { winnerNameBold, winnerMention, rounds, totalPlayers, eraName }) {
+    if (!template) return '';
+    return String(template)
+      .replace(/\{winnerMention\}/g, winnerMention)
+      .replace(/\{winner\}/g, winnerNameBold)
+      .replace(/\{rounds\}/g, rounds)
+      .replace(/\{totalPlayers\}/g, totalPlayers)
+      .replace(/\{era\}/g, eraName);
+  }
+
+  getVictoryEmbedTitle(eraKey) {
+    const era = this.getEraConfig(eraKey);
+    if (era.victoryTitle) return era.victoryTitle;
+    return `${era.lobbyIcon || '🏆'} ${era.name || 'Battle'} Champion`;
+  }
+
+  getVictoryEmbedFooter(eraKey) {
+    const era = this.getEraConfig(eraKey);
+    if (era.victoryFooter) return era.victoryFooter;
+    return `Era: ${era.name || 'Battle'}`;
+  }
+
+  getVictoryAnnouncement(eraKey, winnerId) {
+    const era = this.getEraConfig(eraKey);
+    const winnerMention = `<@${winnerId}>`;
+    if (era.victoryAnnouncement) {
+      return this.formatVictoryTemplate(era.victoryAnnouncement, {
+        winnerNameBold: `**${winnerMention}**`,
+        winnerMention,
+        rounds: '',
+        totalPlayers: '',
+        eraName: era.name || 'Battle',
+      });
+    }
+    return `🏆 ${era.name || 'Battle'} champion: ${winnerMention}`;
   }
 
   normalizeEraKey(eraKey) {
@@ -588,10 +723,25 @@ class BattleService {
   simulateBattle(lobbyId, options = {}) {
     const eraKey = options.era || 'mafia';
     const era = this.getEraConfig(eraKey);
-    const eraFlavorLines = era.flavorLines || BATTLE_ERAS.mafia.flavorLines;
-    const eraEliminationLines = era.eliminationLines || DEATH_LINES;
-    const eraArrestLines = era.arrestLines || null;
-    const eraCombatLines = era.combatLines || ATTACK_LINES;
+    const normalizedEraKey = this.normalizeEraKey(eraKey);
+    const isMafiaEra = normalizedEraKey === 'mafia';
+    const pool = (customLines, mafiaLines, genericLines) => (
+      Array.isArray(customLines) && customLines.length
+        ? customLines
+        : (isMafiaEra ? mafiaLines : genericLines)
+    );
+
+    const eraFlavorLines = pool(era.flavorLines, BATTLE_ERAS.mafia.flavorLines, BATTLE_ERAS.mafia.flavorLines);
+    const eraEliminationLines = pool(era.eliminationLines, DEATH_LINES, DEATH_LINES);
+    const eraArrestLines = (Array.isArray(era.arrestLines) && era.arrestLines.length) ? era.arrestLines : null;
+    const eraCombatLines = pool(era.combatLines, ATTACK_LINES, GENERIC_COMBAT_LINES);
+    const eraCritLines = pool(era.critLines, CRIT_LINES, GENERIC_CRIT_LINES);
+    const eraItemLines = pool(era.itemLines, ITEM_FIND_LINES, GENERIC_ITEM_LINES);
+    const eraTauntLines = pool(era.tauntLines, TAUNT_LINES, GENERIC_TAUNT_LINES);
+    const eraTrashTalkLines = pool(era.trashTalkLines, TRASH_TALK_LINES, GENERIC_TRASH_TALK_LINES);
+    const eraDodgeLines = pool(era.dodgeLines, DODGE_LINES, GENERIC_DODGE_LINES);
+    const eraComebackLines = pool(era.comebackLines, COMEBACK_LINES, GENERIC_COMEBACK_LINES);
+    const eraLuckyEscapeLines = pool(era.luckyEscapeLines, LUCKY_ESCAPE_LINES, GENERIC_LUCKY_ESCAPE_LINES);
 
     const participants = this.getParticipants(lobbyId);
     const totalPlayers = participants.length;
@@ -636,7 +786,7 @@ class BattleService {
       }
 
       if (eliteFourMode) {
-        events.push(this.getRandomRoundTransition(roundNum));
+        events.push(this.getRandomRoundTransition(roundNum, eraKey));
         // Light narrative spice in Elite mode
         if (this.roll() < 0.40 && alivePlayers.length > 1) {
           const attacker = alivePlayers[Math.floor(this.roll() * alivePlayers.length)];
@@ -647,7 +797,7 @@ class BattleService {
             attempts++;
           }
           if (defender.user_id !== attacker.user_id) {
-            const taunt = TAUNT_LINES[Math.floor(this.roll() * TAUNT_LINES.length)]
+            const taunt = eraTauntLines[Math.floor(this.roll() * eraTauntLines.length)]
               .replace('{attacker}', `**${attacker.username}**`)
               .replace('{defender}', `**${defender.username}**`);
             events.push(taunt);
@@ -703,7 +853,7 @@ class BattleService {
           const dodgeChance = this.roll() < 0.15;
           
           if (dodgeChance) {
-            const dodgeLine = DODGE_LINES[Math.floor(this.roll() * DODGE_LINES.length)]
+            const dodgeLine = eraDodgeLines[Math.floor(this.roll() * eraDodgeLines.length)]
               .replace('{player}', `**${defender.username}**`)
               .replace('{opponent}', `**${attacker.username}**`);
             events.push(dodgeLine);
@@ -713,9 +863,9 @@ class BattleService {
             attacker.total_damage_dealt += damage;
 
             // Pick flavor text
-            const line = isCrit 
-              ? CRIT_LINES[Math.floor(this.roll() * CRIT_LINES.length)]
-              : ATTACK_LINES[Math.floor(this.roll() * ATTACK_LINES.length)];
+            const line = isCrit
+              ? eraCritLines[Math.floor(this.roll() * eraCritLines.length)]
+              : eraCombatLines[Math.floor(this.roll() * eraCombatLines.length)];
 
             let eventText = line
               .replace('{attacker}', `**${attacker.username}**`)
@@ -727,7 +877,7 @@ class BattleService {
             // Trash talk chance increases in Elite Four
             const trashTalkChance = eliteFourMode ? 0.50 : 0.30;
             if (this.roll() < trashTalkChance) {
-              const trashTalk = TRASH_TALK_LINES[Math.floor(this.roll() * TRASH_TALK_LINES.length)]
+              const trashTalk = eraTrashTalkLines[Math.floor(this.roll() * eraTrashTalkLines.length)]
                 .replace('{attacker}', `**${attacker.username}**`)
                 .replace('{defender}', `**${defender.username}**`);
               events.push(trashTalk);
@@ -735,7 +885,7 @@ class BattleService {
 
             // Comeback narrative when someone is badly hurt
             if (defender.hp > 0 && defender.hp <= 30 && this.roll() < 0.35) {
-              const comeback = COMEBACK_LINES[Math.floor(this.roll() * COMEBACK_LINES.length)]
+              const comeback = eraComebackLines[Math.floor(this.roll() * eraComebackLines.length)]
                 .replace('{player}', `**${defender.username}**`)
                 .replace('{opponent}', `**${attacker.username}**`);
               events.push(comeback);
@@ -747,7 +897,7 @@ class BattleService {
             // 5% chance to survive with 1 HP (lucky escape) - disabled in Elite Four
             if (!eliteFourMode && this.roll() < 0.05 && alivePlayers.length > 2) {
               defender.hp = 1;
-              const luckyLine = LUCKY_ESCAPE_LINES[Math.floor(this.roll() * LUCKY_ESCAPE_LINES.length)]
+              const luckyLine = eraLuckyEscapeLines[Math.floor(this.roll() * eraLuckyEscapeLines.length)]
                 .replace('{player}', `**${defender.username}**`);
               events.push(luckyLine);
               
@@ -779,7 +929,7 @@ class BattleService {
         } else if (rand < itemThreshold && alivePlayers.length > 0) {
           // ITEM FIND EVENT
           const player = alivePlayers[Math.floor(this.roll() * alivePlayers.length)];
-          const itemLine = ITEM_FIND_LINES[Math.floor(this.roll() * ITEM_FIND_LINES.length)];
+          const itemLine = eraItemLines[Math.floor(this.roll() * eraItemLines.length)];
           
           if (itemLine.includes('Damage +20%')) {
             playerBuffs[player.user_id] = true;
@@ -822,14 +972,31 @@ class BattleService {
 
     // Winner!
     const winner = alivePlayers[0];
-    const winnerLine = WINNER_LINES[Math.floor(this.roll() * WINNER_LINES.length)]
-      .replace('{winner}', `**${winner.username}**`);
+    const winnerNameBold = `**${winner.username}**`;
+    const winnerMention = `<@${winner.user_id}>`;
+    const winnerLineTemplate = era.victoryLine
+      || (isMafiaEra
+        ? WINNER_LINES[Math.floor(this.roll() * WINNER_LINES.length)]
+        : GENERIC_VICTORY_LINES[Math.floor(this.roll() * GENERIC_VICTORY_LINES.length)]);
+    const winnerLine = this.formatVictoryTemplate(winnerLineTemplate, {
+      winnerNameBold,
+      winnerMention,
+      rounds: roundNum,
+      totalPlayers,
+      eraName: era.name || 'Battle',
+    });
 
-    // Pick a random finale outro
-    const finaleOutro = FINALE_OUTROS[Math.floor(this.roll() * FINALE_OUTROS.length)]
-      .replace('{winner}', `**${winner.username}**`)
-      .replace('{rounds}', roundNum)
-      .replace('{totalPlayers}', totalPlayers);
+    const eraFinaleOutros = Array.isArray(era.finaleOutros) && era.finaleOutros.length
+      ? era.finaleOutros
+      : (this.normalizeEraKey(eraKey) === 'mafia' ? FINALE_OUTROS : GENERIC_FINALE_OUTROS);
+    const finaleTemplate = eraFinaleOutros[Math.floor(this.roll() * eraFinaleOutros.length)];
+    const finaleOutro = this.formatVictoryTemplate(finaleTemplate, {
+      winnerNameBold,
+      winnerMention,
+      rounds: roundNum,
+      totalPlayers,
+      eraName: era.name || 'Battle',
+    });
 
     // Update battle status
     db.prepare('UPDATE battle_lobbies SET status = ?, completed_at = CURRENT_TIMESTAMP WHERE lobby_id = ?')
@@ -848,7 +1015,8 @@ class BattleService {
       finaleOutro,
       totalPlayers,
       roundCount: roundNum,
-      eliteFourModeUsed: eliteFourMode
+      eliteFourModeUsed: eliteFourMode,
+      eraKey: this.normalizeEraKey(eraKey)
     };
   }
 
@@ -914,8 +1082,13 @@ class BattleService {
     return COMEBACK_LINES[Math.floor(this.roll() * COMEBACK_LINES.length)];
   }
 
-  getRandomRoundTransition(round) {
-    const line = ROUND_TRANSITION_LINES[Math.floor(this.roll() * ROUND_TRANSITION_LINES.length)];
+  getRandomRoundTransition(round, eraKey = 'mafia') {
+    const era = this.getEraConfig(eraKey);
+    const normalizedEraKey = this.normalizeEraKey(eraKey);
+    const linePool = Array.isArray(era.roundTransitionLines) && era.roundTransitionLines.length
+      ? era.roundTransitionLines
+      : (normalizedEraKey === 'mafia' ? ROUND_TRANSITION_LINES : GENERIC_ROUND_TRANSITION_LINES);
+    const line = linePool[Math.floor(this.roll() * linePool.length)];
     return line.replace('{round}', round);
   }
 

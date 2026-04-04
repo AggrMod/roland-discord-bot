@@ -3819,111 +3819,120 @@ async function loadAdminHelpView() {
 
   content.innerHTML = `
     <div style="margin-bottom:16px;padding:12px 14px;border:1px solid rgba(99,102,241,0.18);border-radius:10px;background:rgba(99,102,241,0.08);color:var(--text-secondary);font-size:0.88em;line-height:1.6;">
-      Current command surface includes canonical grouped commands, legacy governance aliases (/propose, /support, /vote), and one deprecated OG alias (/og-config).
+      Full command inventory by category. This reflects currently shipped slash commands in the bot.
     </div>
-    ${cmdSection('Verification', '🔐', [
-      { name: '/verification status', desc: 'Check your wallet verification status and holdings', options: '—', example: '/verification status' },
-      { name: '/verification wallets', desc: 'List all your linked wallets', options: '—', example: '/verification wallets' },
-      { name: '/verification refresh', desc: 'Refresh your roles based on current holdings', options: '—', example: '/verification refresh' },
-      { name: '/verification quick', desc: 'Quick micro-verification for instant role assignment', options: '—', example: '/verification quick' },
-      { name: '/verification admin panel', desc: 'Post a verification panel to the channel', options: 'title, description, color (all optional)', example: '/verification admin panel title:"Verify Here"' },
-      { name: '/verification admin export-user', desc: "Export a member's verification data", options: 'user (required)', example: '/verification admin export-user user:@member' },
-      { name: '/verification admin remove-user', desc: 'Remove a member from the Family (irreversible)', options: 'user, confirm (required)', example: '/verification admin remove-user user:@member confirm:true' },
-      { name: '/verification admin export-wallets', desc: 'Export all verified wallets as CSV', options: '—', example: '/verification admin export-wallets' },
-      { name: '/verification admin role-config', desc: 'Configure role assignment rules (view/set trait/remove trait; tier roles are managed in the portal)', options: 'action (required), trait-type, trait-value, collection-id, role, description', example: '/verification admin role-config action:View' },
-      { name: '/verification admin actions', desc: 'View all verification actions and role assignments', options: '—', example: '/verification admin actions' },
-      { name: '/verification admin og-view', desc: 'View OG role configuration and eligible members', options: '—', example: '/verification admin og-view' },
-      { name: '/verification admin og-enable', desc: 'Enable or disable the OG role system', options: 'enabled (required)', example: '/verification admin og-enable enabled:true' },
-      { name: '/verification admin og-role', desc: 'Set the OG role to assign', options: 'role (required)', example: '/verification admin og-role role:@OG' },
-      { name: '/verification admin og-limit', desc: 'Set number of OG slots (first X verified users)', options: 'count (required)', example: '/verification admin og-limit count:50' },
-      { name: '/verification admin og-sync', desc: 'Sync OG role to eligible users', options: 'full (optional - also removes from ineligible)', example: '/verification admin og-sync full:true' },
-      { name: '/verification admin activity-watch-add', desc: 'Add NFT collection to activity watchlist', options: 'collection (required)', example: '/verification admin activity-watch-add collection:abc123' },
-      { name: '/verification admin activity-watch-remove', desc: 'Remove NFT collection from watchlist', options: 'collection (required)', example: '/verification admin activity-watch-remove collection:abc123' },
-      { name: '/verification admin activity-watch-list', desc: 'List all watched NFT collections', options: '—', example: '/verification admin activity-watch-list' },
-      { name: '/verification admin activity-feed', desc: 'Show recent NFT activity feed', options: 'limit (optional, 1-30)', example: '/verification admin activity-feed limit:10' },
-      { name: '/verification admin activity-alerts', desc: 'Configure NFT activity auto-post alerts', options: 'enabled (required), channel, types, min_sol', example: '/verification admin activity-alerts enabled:true channel:#alerts' }
+    ${cmdSection('Verification', 'VER', [
+      { name: '/verification status', desc: 'Check wallet verification status and holdings', options: '-', example: '/verification status' },
+      { name: '/verification wallets', desc: 'List linked wallets', options: '-', example: '/verification wallets' },
+      { name: '/verification refresh', desc: 'Refresh roles from holdings', options: '-', example: '/verification refresh' },
+      { name: '/verification quick', desc: 'Quick micro verification flow', options: '-', example: '/verification quick' },
+      { name: '/verification admin panel', desc: 'Post verification panel', options: 'title, description, color', example: '/verification admin panel title:"Verify"' },
+      { name: '/verification admin export-user', desc: 'Export member verification data', options: 'user (required)', example: '/verification admin export-user user:@member' },
+      { name: '/verification admin remove-user', desc: 'Remove member verification record', options: 'user, confirm (required)', example: '/verification admin remove-user user:@member confirm:true' },
+      { name: '/verification admin export-wallets', desc: 'Export all verified wallets CSV', options: '-', example: '/verification admin export-wallets' },
+      { name: '/verification admin role-config', desc: 'Manage tier/trait role mapping actions', options: 'action + optional trait/role fields', example: '/verification admin role-config action:view' },
+      { name: '/verification admin actions', desc: 'View role assignment actions', options: '-', example: '/verification admin actions' },
+      { name: '/verification admin og-view', desc: 'View OG role config', options: '-', example: '/verification admin og-view' },
+      { name: '/verification admin og-enable', desc: 'Enable/disable OG role system', options: 'enabled (required)', example: '/verification admin og-enable enabled:true' },
+      { name: '/verification admin og-role', desc: 'Set OG role', options: 'role (required)', example: '/verification admin og-role role:@OG' },
+      { name: '/verification admin og-limit', desc: 'Set OG slot count', options: 'count (required)', example: '/verification admin og-limit count:50' },
+      { name: '/verification admin og-sync', desc: 'Sync OG role assignment', options: 'full (optional)', example: '/verification admin og-sync full:true' },
+      { name: '/verification admin activity-watch-add', desc: 'Add watched NFT collection', options: 'collection (required)', example: '/verification admin activity-watch-add collection:abc123' },
+      { name: '/verification admin activity-watch-remove', desc: 'Remove watched NFT collection', options: 'collection (required)', example: '/verification admin activity-watch-remove collection:abc123' },
+      { name: '/verification admin activity-watch-list', desc: 'List watched NFT collections', options: '-', example: '/verification admin activity-watch-list' },
+      { name: '/verification admin activity-feed', desc: 'Show NFT activity feed', options: 'limit (optional)', example: '/verification admin activity-feed limit:10' },
+      { name: '/verification admin activity-alerts', desc: 'Configure NFT activity alerts', options: 'enabled, channel, types, min_sol', example: '/verification admin activity-alerts enabled:true channel:#alerts' }
     ])}
-    ${cmdSection('Governance', '🏛️', [
-      { name: '/governance propose', desc: 'Create a new governance proposal', options: 'title, description (required), category (optional), cost (optional)', example: '/governance propose title:"Fund project" description:"Allocate 100 SOL" category:"Treasury Allocation"' },
-      { name: '/governance support', desc: 'Support a draft proposal to promote it to voting', options: 'proposal_id (required)', example: '/governance support proposal_id:P-001' },
-      { name: '/governance vote', desc: 'Cast your vote on an active proposal', options: 'proposal_id, choice (required: yes/no/abstain)', example: '/governance vote proposal_id:P-001 choice:yes' },
-      { name: '/propose', desc: 'Standalone alias for /governance propose', options: 'title, description (required)', example: '/propose title:"Fund project" description:"Allocate 100 SOL"' },
-      { name: '/support', desc: 'Standalone alias for /governance support', options: 'proposal_id (required)', example: '/support proposal_id:P-001' },
-      { name: '/vote', desc: 'Standalone alias for /governance vote', options: 'proposal_id, choice (required: yes/no/abstain)', example: '/vote proposal_id:P-001 choice:yes' },
-      { name: '/governance admin list', desc: 'View all proposals (any status)', options: 'status (optional: draft/voting/passed/failed)', example: '/governance admin list status:voting' },
-      { name: '/governance admin cancel', desc: 'Cancel a proposal (emergency)', options: 'proposal_id, confirm (required)', example: '/governance admin cancel proposal_id:P-001 confirm:true' },
-      { name: '/governance admin settings', desc: 'View or update governance settings', options: '—', example: '/governance admin settings' }
+    ${cmdSection('Governance', 'GOV', [
+      { name: '/governance propose', desc: 'Create proposal', options: 'title, description (required), category, cost', example: '/governance propose title:"Fund X" description:"..."' },
+      { name: '/governance support', desc: 'Support draft proposal', options: 'proposal_id (required)', example: '/governance support proposal_id:P-001' },
+      { name: '/governance vote', desc: 'Vote on active proposal', options: 'proposal_id, choice (required)', example: '/governance vote proposal_id:P-001 choice:yes' },
+      { name: '/governance admin list', desc: 'List proposals', options: 'status (optional)', example: '/governance admin list status:voting' },
+      { name: '/governance admin cancel', desc: 'Cancel proposal', options: 'proposal_id, confirm (required)', example: '/governance admin cancel proposal_id:P-001 confirm:true' },
+      { name: '/governance admin settings', desc: 'View governance settings', options: '-', example: '/governance admin settings' }
     ])}
-    ${cmdSection('Battle', '⚔️', [
-      { name: '/battle create', desc: 'Create a new battle lobby', options: 'max_players (optional), required_role_1-3, excluded_role_1-3 (optional)', example: '/battle create max_players:10' },
-      { name: '/battle start', desc: 'Start the battle (creator only)', options: '—', example: '/battle start' },
-      { name: '/battle cancel', desc: 'Cancel the battle lobby (creator only)', options: '—', example: '/battle cancel' },
-      { name: '/battle stats', desc: 'View battle statistics', options: 'user (optional)', example: '/battle stats user:@member' },
-      { name: '/battle admin list', desc: 'List all active battles', options: '—', example: '/battle admin list' },
-      { name: '/battle admin force-end', desc: 'Force end a battle (emergency)', options: 'battle_id, confirm (required)', example: '/battle admin force-end battle_id:abc123 confirm:true' },
-      { name: '/battle admin settings', desc: 'View current battle settings', options: '—', example: '/battle admin settings' }
+    ${cmdSection('Treasury', 'TRY', [
+      { name: '/treasury view', desc: 'Public treasury snapshot', options: '-', example: '/treasury view' },
+      { name: '/treasury admin status', desc: 'Admin treasury status', options: '-', example: '/treasury admin status' },
+      { name: '/treasury admin refresh', desc: 'Refresh treasury balances', options: '-', example: '/treasury admin refresh' },
+      { name: '/treasury admin enable', desc: 'Enable treasury monitoring', options: '-', example: '/treasury admin enable' },
+      { name: '/treasury admin disable', desc: 'Disable treasury monitoring', options: '-', example: '/treasury admin disable' },
+      { name: '/treasury admin set-wallet', desc: 'Set treasury wallet', options: 'address (required)', example: '/treasury admin set-wallet address:So1...' },
+      { name: '/treasury admin set-interval', desc: 'Set refresh interval', options: 'hours (required)', example: '/treasury admin set-interval hours:6' },
+      { name: '/treasury admin tx-history', desc: 'Show transaction history', options: 'limit (optional)', example: '/treasury admin tx-history limit:10' },
+      { name: '/treasury admin tx-alerts', desc: 'Configure tx alerts', options: 'enabled, channel, incoming_only, min_sol', example: '/treasury admin tx-alerts enabled:true channel:#treasury' }
     ])}
-    ${cmdSection('Mini-Games', '🎮', [
-      { name: '/battle create', desc: 'Start a Battle Royale lobby (mod/admin only)', options: 'max_players, required_role_1-3, excluded_role_1-3 (all optional)', example: '/battle create max_players:10' },
-      { name: '/battle start', desc: 'Launch the battle (creator only)', options: '—', example: '/battle start' },
-      { name: '/battle cancel', desc: 'Cancel the lobby (creator only)', options: '—', example: '/battle cancel' },
-      { name: '/battle stats', desc: 'View battle leaderboard', options: 'user (optional)', example: '/battle stats user:@member' },
-      { name: '/higherlower start', desc: '🃏 Higher or Lower card game (mod/admin only)', options: 'join_time (10–120s, default 60)', example: '/higherlower start join_time:45' },
-      { name: '/higherlower cancel', desc: 'Cancel Higher or Lower lobby', options: '—', example: '/higherlower cancel' },
-      { name: '/diceduel start', desc: '🎲 Dice Duel — lowest roll eliminated each round (mod/admin only)', options: 'join_time (10–120s, default 60)', example: '/diceduel start join_time:60' },
-      { name: '/diceduel cancel', desc: 'Cancel Dice Duel lobby', options: '—', example: '/diceduel cancel' },
-      { name: '/reactionrace start', desc: '⚡ Reaction Race — slowest to react is out (mod/admin only)', options: 'join_time (10–120s, default 60)', example: '/reactionrace start' },
-      { name: '/reactionrace cancel', desc: 'Cancel Reaction Race lobby', options: '—', example: '/reactionrace cancel' },
-      { name: '/numberguess start', desc: '🔢 Number Guess — closest to secret number wins (mod/admin only)', options: 'join_time (10–120s, default 60)', example: '/numberguess start' },
-      { name: '/numberguess cancel', desc: 'Cancel Number Guess lobby', options: '—', example: '/numberguess cancel' },
-      { name: '/slots start', desc: '🎰 Slots — highest spin combo wins (mod/admin only)', options: 'join_time (10–120s, default 45)', example: '/slots start' },
-      { name: '/slots cancel', desc: 'Cancel Slots lobby', options: '—', example: '/slots cancel' },
-      { name: '/trivia start', desc: '❓ Trivia — 5 questions, react A/B/C/D (mod/admin only)', options: 'join_time (10–120s, default 60)', example: '/trivia start' },
-      { name: '/trivia cancel', desc: 'Cancel Trivia lobby', options: '—', example: '/trivia cancel' },
-      { name: '/wordscramble start', desc: '🧩 Word Scramble — type the unscrambled word first (mod/admin only)', options: 'join_time (10–120s, default 60)', example: '/wordscramble start' },
-      { name: '/wordscramble cancel', desc: 'Cancel Word Scramble lobby', options: '—', example: '/wordscramble cancel' },
-      { name: '/rps start', desc: '🪨 RPS Tournament — rock/paper/scissors bracket (mod/admin only)', options: 'join_time (10–120s, default 60)', example: '/rps start' },
-      { name: '/rps cancel', desc: 'Cancel RPS Tournament', options: '—', example: '/rps cancel' },
-      { name: '/blackjack start', desc: '🎴 Blackjack — beat the dealer, react 👆 hit / ✋ stand (mod/admin only)', options: 'join_time (10–120s, default 60)', example: '/blackjack start' },
-      { name: '/blackjack cancel', desc: 'Cancel Blackjack table', options: '—', example: '/blackjack cancel' },
-      { name: '/gamenight start', desc: '🎉 Game Night — run all 9 mini-games in sequence with cross-game scoring (Growth plan)', options: 'join_time (30–180s, default 90), games (optional comma list)', example: '/gamenight start join_time:90 games:trivia,slots,rps' },
-      { name: '/gamenight skip', desc: 'Skip the current game (host only)', options: '—', example: '/gamenight skip' },
-      { name: '/gamenight cancel', desc: 'Cancel the Game Night session (host only)', options: '—', example: '/gamenight cancel' },
-      { name: '/gamenight leaderboard', desc: 'Show current Game Night standings', options: '—', example: '/gamenight leaderboard' }
-    ], '🔒 Admin/Mod only to start · Games: free on all plans · Game Night: Growth plan+')}
-    ${cmdSection('Game Night', '🎮', [
-      { name: '/gamenight start', desc: '🎮 Start a multi-game Game Night session (Growth plan required)', options: 'games (optional, comma-separated keys), join_time (30–180s, default 90)', example: '/gamenight start games:trivia,slots,diceduel join_time:90' },
-      { name: '/gamenight skip', desc: 'Skip the current game in the rotation (host only)', options: '—', example: '/gamenight skip' },
-      { name: '/gamenight cancel', desc: 'Cancel the current Game Night session (host only)', options: '—', example: '/gamenight cancel' },
-      { name: '/gamenight games', desc: 'List all available game keys and descriptions', options: '—', example: '/gamenight games' }
-    ], '🔒 Admin/Mod only · Requires Growth plan · Players join by reacting 🎉 · Scoring: 1st=10pts, 2nd=7pts, 3rd=5pts, 4th=3pts, 5th+=1pt')}
-    ${cmdSection('Heist', '🎯', [
-      { name: '/heist view', desc: 'View available heist missions', options: '—', example: '/heist view' },
-      { name: '/heist signup', desc: 'Sign up for a heist mission', options: 'mission_id (required), role (required: driver/hacker/muscle/lookout)', example: '/heist signup mission_id:H-001 role:hacker' },
-      { name: '/heist status', desc: 'View your current mission status', options: '—', example: '/heist status' },
-      { name: '/heist admin create', desc: 'Create a new heist mission', options: 'title, description, slots (2-20), reward (required)', example: '/heist admin create title:"Bank Job" description:"Hit the vault" slots:4 reward:100' },
-      { name: '/heist admin list', desc: 'List all missions (any status)', options: '—', example: '/heist admin list' },
-      { name: '/heist admin cancel', desc: 'Cancel a heist mission', options: 'mission_id, confirm (required)', example: '/heist admin cancel mission_id:H-001 confirm:true' }
+    ${cmdSection('NFT Tracker', 'NFT', [
+      { name: '/nft-tracker wallet add', desc: 'Track wallet', options: 'address (required), label, alert_channel, panel_channel', example: '/nft-tracker wallet add address:So1... label:"Whale"' },
+      { name: '/nft-tracker wallet remove', desc: 'Remove tracked wallet', options: 'id (required)', example: '/nft-tracker wallet remove id:2' },
+      { name: '/nft-tracker wallet list', desc: 'List tracked wallets', options: '-', example: '/nft-tracker wallet list' },
+      { name: '/nft-tracker wallet edit', desc: 'Edit tracked wallet', options: 'id + optional label/channels/enabled', example: '/nft-tracker wallet edit id:2 enabled:false' },
+      { name: '/nft-tracker wallet holdings', desc: 'Post/refresh holdings panel', options: 'id (required), channel', example: '/nft-tracker wallet holdings id:2' },
+      { name: '/nft-tracker wallet refresh-all', desc: 'Refresh all holdings panels', options: '-', example: '/nft-tracker wallet refresh-all' },
+      { name: '/nft-tracker collection add', desc: 'Track collection events', options: 'address, name, channel (required), me_symbol', example: '/nft-tracker collection add address:... name:"Collection" channel:#alerts' },
+      { name: '/nft-tracker collection remove', desc: 'Remove tracked collection', options: 'id (required)', example: '/nft-tracker collection remove id:3' },
+      { name: '/nft-tracker collection list', desc: 'List tracked collections', options: '-', example: '/nft-tracker collection list' },
+      { name: '/nft-tracker collection feed', desc: 'Show collection feed', options: 'limit (optional)', example: '/nft-tracker collection feed limit:15' }
     ])}
-    ${cmdSection('Treasury', '💰', [
-      { name: '/treasury view', desc: 'View current treasury balances (public read-only)', options: '—', example: '/treasury view' },
-      { name: '/treasury admin status', desc: 'View full treasury status (admin)', options: '—', example: '/treasury admin status' },
-      { name: '/treasury admin refresh', desc: 'Manually refresh treasury balances', options: '—', example: '/treasury admin refresh' },
-      { name: '/treasury admin enable', desc: 'Enable treasury monitoring', options: '—', example: '/treasury admin enable' },
-      { name: '/treasury admin disable', desc: 'Disable treasury monitoring', options: '—', example: '/treasury admin disable' },
-      { name: '/treasury admin set-wallet', desc: 'Set the treasury wallet address', options: 'address (required)', example: '/treasury admin set-wallet address:So1...' },
-      { name: '/treasury admin set-interval', desc: 'Set refresh interval in hours', options: 'hours (required, 1-168)', example: '/treasury admin set-interval hours:6' },
-      { name: '/treasury admin tx-history', desc: 'Show recent treasury transactions', options: 'limit (optional, 1-20)', example: '/treasury admin tx-history limit:10' },
-      { name: '/treasury admin tx-alerts', desc: 'Configure automatic treasury transaction alerts', options: 'enabled (required), channel, incoming_only, min_sol', example: '/treasury admin tx-alerts enabled:true channel:#treasury' }
+    ${cmdSection('Points', 'PTS', [
+      { name: '/points balance', desc: 'Show points balance', options: 'user (optional admin)', example: '/points balance' },
+      { name: '/points leaderboard', desc: 'Show leaderboard', options: 'limit (optional)', example: '/points leaderboard limit:10' },
+      { name: '/points history', desc: 'Show points history', options: 'user (optional admin)', example: '/points history' },
+      { name: '/points shop', desc: 'Browse rewards shop', options: '-', example: '/points shop' },
+      { name: '/points redeem', desc: 'Redeem item', options: 'item_id (required)', example: '/points redeem item_id:4' },
+      { name: '/points admin', desc: 'Manage points and shop', options: 'action(required: grant/deduct/add-item/remove-item/config) + optional user/amount/reason/value/item_id', example: '/points admin action:grant user:@member amount:50 reason:"Event"' }
     ])}
-    ${cmdSection('Config', '⚙️', [
-      { name: '/config modules', desc: 'View all module toggle states', options: '—', example: '/config modules' },
-      { name: '/config toggle', desc: 'Toggle a module on or off', options: 'module (required: verification/governance/treasury/battle/heist), enabled (required)', example: '/config toggle module:battle enabled:true' },
-      { name: '/config status', desc: 'System status overview (uptime, memory, guilds)', options: '—', example: '/config status' }
+    ${cmdSection('Heist', 'HEIST', [
+      { name: '/heist view', desc: 'View available missions', options: '-', example: '/heist view' },
+      { name: '/heist signup', desc: 'Sign up for mission', options: 'mission_id, role (required)', example: '/heist signup mission_id:H-001 role:hacker' },
+      { name: '/heist status', desc: 'View mission status', options: '-', example: '/heist status' },
+      { name: '/heist admin create', desc: 'Create mission', options: 'title, description, slots, reward (required)', example: '/heist admin create title:"Bank Job" description:"..." slots:4 reward:100' },
+      { name: '/heist admin list', desc: 'List missions', options: '-', example: '/heist admin list' },
+      { name: '/heist admin cancel', desc: 'Cancel mission', options: 'mission_id, confirm (required)', example: '/heist admin cancel mission_id:H-001 confirm:true' }
     ])}
-    ${cmdSection('Deprecated', '⚠️', [
-      { name: '/og-config', desc: 'Deprecated legacy OG command; use /verification admin og-* instead', options: 'view/enable/role/limit/sync', example: '/og-config view' }
+    ${cmdSection('Battle and Games', 'GAMES', [
+      { name: '/battle create', desc: 'Create battle lobby', options: 'max_players, required/excluded roles, era', example: '/battle create max_players:20 era:mafia' },
+      { name: '/battle start', desc: 'Start battle', options: '-', example: '/battle start' },
+      { name: '/battle cancel', desc: 'Cancel battle', options: '-', example: '/battle cancel' },
+      { name: '/battle stats', desc: 'Battle stats', options: 'user (optional)', example: '/battle stats user:@member' },
+      { name: '/battle admin list', desc: 'List active battles', options: '-', example: '/battle admin list' },
+      { name: '/battle admin force-end', desc: 'Force end battle', options: 'battle_id, confirm (required)', example: '/battle admin force-end battle_id:b1 confirm:true' },
+      { name: '/battle admin settings', desc: 'View battle settings', options: '-', example: '/battle admin settings' },
+      { name: '/higherlower start', desc: 'Start Higher or Lower', options: 'join_time (optional)', example: '/higherlower start join_time:45' },
+      { name: '/higherlower cancel', desc: 'Cancel Higher or Lower', options: '-', example: '/higherlower cancel' },
+      { name: '/diceduel start', desc: 'Start Dice Duel', options: 'join_time (optional)', example: '/diceduel start join_time:60' },
+      { name: '/diceduel cancel', desc: 'Cancel Dice Duel', options: '-', example: '/diceduel cancel' },
+      { name: '/reactionrace start', desc: 'Start Reaction Race', options: 'join_time (optional)', example: '/reactionrace start' },
+      { name: '/reactionrace cancel', desc: 'Cancel Reaction Race', options: '-', example: '/reactionrace cancel' },
+      { name: '/numberguess start', desc: 'Start Number Guess', options: 'join_time (optional)', example: '/numberguess start' },
+      { name: '/numberguess cancel', desc: 'Cancel Number Guess', options: '-', example: '/numberguess cancel' },
+      { name: '/slots start', desc: 'Start Slots', options: 'join_time (optional)', example: '/slots start' },
+      { name: '/slots cancel', desc: 'Cancel Slots', options: '-', example: '/slots cancel' },
+      { name: '/trivia start', desc: 'Start Trivia', options: 'join_time (optional)', example: '/trivia start' },
+      { name: '/trivia cancel', desc: 'Cancel Trivia', options: '-', example: '/trivia cancel' },
+      { name: '/wordscramble start', desc: 'Start Word Scramble', options: 'join_time (optional)', example: '/wordscramble start' },
+      { name: '/wordscramble cancel', desc: 'Cancel Word Scramble', options: '-', example: '/wordscramble cancel' },
+      { name: '/rps start', desc: 'Start RPS Tournament', options: 'join_time (optional)', example: '/rps start' },
+      { name: '/rps cancel', desc: 'Cancel RPS Tournament', options: '-', example: '/rps cancel' },
+      { name: '/blackjack start', desc: 'Start Blackjack', options: 'join_time (optional)', example: '/blackjack start' },
+      { name: '/blackjack cancel', desc: 'Cancel Blackjack', options: '-', example: '/blackjack cancel' },
+      { name: '/gamenight start', desc: 'Start Game Night', options: 'join_time, games (optional)', example: '/gamenight start join_time:90 games:trivia,slots,rps' },
+      { name: '/gamenight skip', desc: 'Skip Game Night round', options: '-', example: '/gamenight skip' },
+      { name: '/gamenight cancel', desc: 'Cancel Game Night', options: '-', example: '/gamenight cancel' },
+      { name: '/gamenight leaderboard', desc: 'Game Night standings', options: '-', example: '/gamenight leaderboard' }
+    ], 'Most game start/cancel flows require admin or moderator permissions. Game Night requires Growth+ plan in tenant mode.')}
+    ${cmdSection('Config', 'CFG', [
+      { name: '/config modules', desc: 'View module toggles', options: '-', example: '/config modules' },
+      { name: '/config toggle', desc: 'Toggle core module', options: 'module, enabled (required)', example: '/config toggle module:battle enabled:true' },
+      { name: '/config status', desc: 'System status overview', options: '-', example: '/config status' }
     ])}
+    ${cmdSection('Deprecated', 'OLD', [
+      { name: '/og-config view', desc: 'Legacy OG config view', options: '-', example: '/og-config view' },
+      { name: '/og-config enable', desc: 'Legacy OG enable/disable', options: 'enabled (required)', example: '/og-config enable enabled:true' },
+      { name: '/og-config role', desc: 'Legacy OG role set', options: 'role (required)', example: '/og-config role role:@OG' },
+      { name: '/og-config limit', desc: 'Legacy OG limit set', options: 'count (required)', example: '/og-config limit count:25' },
+      { name: '/og-config sync', desc: 'Legacy OG sync', options: 'full (optional)', example: '/og-config sync full:true' }
+    ], 'Use /verification admin og-* for the canonical OG workflow.')}
   `;
 }
 
@@ -8595,3 +8604,4 @@ async function saveEngagementConfigFromSettings() {
     else showError(data.message || 'Failed to save.');
   } catch (e) { showError('Error saving engagement settings.'); }
 }
+

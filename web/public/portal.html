@@ -728,6 +728,14 @@
               <h3>⚔️ Battle Lobbies</h3>
               <p>Create and join battle lobbies with configurable role gating</p>
             </div>
+            <div class="card help-card" onclick="toggleHelp('inventory')">
+              <h3>📦 Bot Inventory</h3>
+              <p>Complete feature and module map of everything currently built</p>
+            </div>
+            <div class="card help-card" onclick="toggleHelp('commands')">
+              <h3>📚 Commands by Category</h3>
+              <p>Full slash command reference grouped by system area</p>
+            </div>
             <div class="card help-card" onclick="toggleHelp('troubleshooting')">
               <h3>🔧 Troubleshooting</h3>
               <p>Solutions to common issues and technical problems</p>
@@ -933,6 +941,210 @@
                   <li>All remaining fighters reset to 100 HP</li>
                   <li>No lucky escapes / revivals</li>
                   <li>Higher combat intensity and dramatic narration</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-inventory" class="help-content" style="display:none;">
+            <div class="card">
+              <h3>📦 Full Bot Inventory</h3>
+              <p style="color:var(--text-secondary); margin-bottom:12px;">
+                This inventory reflects the currently shipped GuildPilot build (Discord commands + web portal + admin systems).
+              </p>
+
+              <div class="help-section">
+                <h4>Core Product Areas</h4>
+                <ul>
+                  <li><strong>Verification & Identity:</strong> multi-wallet linking, signature verification, micro-transfer verification, tier/trait role sync, OG role flow, action export tools.</li>
+                  <li><strong>Governance:</strong> proposal creation, support phase, voting lifecycle, admin moderation/controls, quorum + VP configuration.</li>
+                  <li><strong>Treasury:</strong> SOL/USDC visibility, refresh controls, wallet assignment, tx history, tx alert automation.</li>
+                  <li><strong>NFT Activity & Tracking:</strong> collection watchlists, feed, wallet tracking, holdings panels, webhook/polling integrations.</li>
+                  <li><strong>Ticketing:</strong> category-based ticketing, handler/ping role assignment, templates, claim/reopen/close flows, auto-close automation.</li>
+                  <li><strong>Engagement:</strong> points economy, leaderboard/history, reward shop, redemption and admin grant/deduct flows.</li>
+                  <li><strong>Games:</strong> battle royale + standalone mini-games + cross-game Game Night sessions.</li>
+                  <li><strong>Missions:</strong> Heist mission lifecycle and participant role assignment.</li>
+                </ul>
+              </div>
+
+              <div class="help-section">
+                <h4>Web Portal Areas</h4>
+                <ul>
+                  <li><strong>Public/User:</strong> landing, servers, wallets, dashboard, governance, battle, treasury, help.</li>
+                  <li><strong>Admin:</strong> users, proposals, roles, voting power mappings, self-serve roles, NFT tracker, ticketing, settings, API reference, analytics/monitoring, command guide.</li>
+                  <li><strong>Superadmin:</strong> tenant management, plan templates, module baselines, branding defaults, entitlement webhook support, environment visibility.</li>
+                </ul>
+              </div>
+
+              <div class="help-section">
+                <h4>Feature Gates and Scope</h4>
+                <ul>
+                  <li><strong>Module toggles:</strong> verification, governance, treasury, battle, heist (plus tenant-level module controls in settings).</li>
+                  <li><strong>Plan gating:</strong> Game Night requires Growth+ in tenant mode.</li>
+                  <li><strong>Permissions:</strong> admin/mod checks are applied per command and per section for operational controls.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-commands" class="help-content" style="display:none;">
+            <div class="card">
+              <h3>📚 Commands by Category</h3>
+              <p style="color:var(--text-secondary); margin-bottom:12px;">
+                Complete slash command surface grouped by operational category.
+              </p>
+
+              <div class="help-section">
+                <h4>Verification and Roles</h4>
+                <ul>
+                  <li><code>/verification status</code></li>
+                  <li><code>/verification wallets</code></li>
+                  <li><code>/verification refresh</code></li>
+                  <li><code>/verification quick</code></li>
+                  <li><code>/verification admin panel</code></li>
+                  <li><code>/verification admin export-user</code></li>
+                  <li><code>/verification admin remove-user</code></li>
+                  <li><code>/verification admin export-wallets</code></li>
+                  <li><code>/verification admin role-config</code></li>
+                  <li><code>/verification admin actions</code></li>
+                  <li><code>/verification admin og-view</code></li>
+                  <li><code>/verification admin og-enable</code></li>
+                  <li><code>/verification admin og-role</code></li>
+                  <li><code>/verification admin og-limit</code></li>
+                  <li><code>/verification admin og-sync</code></li>
+                  <li><code>/verification admin activity-watch-add</code></li>
+                  <li><code>/verification admin activity-watch-remove</code></li>
+                  <li><code>/verification admin activity-watch-list</code></li>
+                  <li><code>/verification admin activity-feed</code></li>
+                  <li><code>/verification admin activity-alerts</code></li>
+                </ul>
+              </div>
+
+              <div class="help-section">
+                <h4>Governance</h4>
+                <ul>
+                  <li><code>/governance propose</code></li>
+                  <li><code>/governance support</code></li>
+                  <li><code>/governance vote</code></li>
+                  <li><code>/governance admin list</code></li>
+                  <li><code>/governance admin cancel</code></li>
+                  <li><code>/governance admin settings</code></li>
+                </ul>
+              </div>
+
+              <div class="help-section">
+                <h4>Treasury</h4>
+                <ul>
+                  <li><code>/treasury view</code></li>
+                  <li><code>/treasury admin status</code></li>
+                  <li><code>/treasury admin refresh</code></li>
+                  <li><code>/treasury admin enable</code></li>
+                  <li><code>/treasury admin disable</code></li>
+                  <li><code>/treasury admin set-wallet</code></li>
+                  <li><code>/treasury admin set-interval</code></li>
+                  <li><code>/treasury admin tx-history</code></li>
+                  <li><code>/treasury admin tx-alerts</code></li>
+                </ul>
+              </div>
+
+              <div class="help-section">
+                <h4>NFT Tracker</h4>
+                <ul>
+                  <li><code>/nft-tracker wallet add</code></li>
+                  <li><code>/nft-tracker wallet remove</code></li>
+                  <li><code>/nft-tracker wallet list</code></li>
+                  <li><code>/nft-tracker wallet edit</code></li>
+                  <li><code>/nft-tracker wallet holdings</code></li>
+                  <li><code>/nft-tracker wallet refresh-all</code></li>
+                  <li><code>/nft-tracker collection add</code></li>
+                  <li><code>/nft-tracker collection remove</code></li>
+                  <li><code>/nft-tracker collection list</code></li>
+                  <li><code>/nft-tracker collection feed</code></li>
+                </ul>
+              </div>
+
+              <div class="help-section">
+                <h4>Points and Engagement</h4>
+                <ul>
+                  <li><code>/points balance</code></li>
+                  <li><code>/points leaderboard</code></li>
+                  <li><code>/points history</code></li>
+                  <li><code>/points shop</code></li>
+                  <li><code>/points redeem</code></li>
+                  <li><code>/points admin</code></li>
+                </ul>
+              </div>
+
+              <div class="help-section">
+                <h4>Heist Missions</h4>
+                <ul>
+                  <li><code>/heist view</code></li>
+                  <li><code>/heist signup</code></li>
+                  <li><code>/heist status</code></li>
+                  <li><code>/heist admin create</code></li>
+                  <li><code>/heist admin list</code></li>
+                  <li><code>/heist admin cancel</code></li>
+                </ul>
+              </div>
+
+              <div class="help-section">
+                <h4>Battle and Mini-Games</h4>
+                <ul>
+                  <li><code>/battle create</code></li>
+                  <li><code>/battle start</code></li>
+                  <li><code>/battle cancel</code></li>
+                  <li><code>/battle stats</code></li>
+                  <li><code>/battle admin list</code></li>
+                  <li><code>/battle admin force-end</code></li>
+                  <li><code>/battle admin settings</code></li>
+                  <li><code>/higherlower start</code></li>
+                  <li><code>/higherlower cancel</code></li>
+                  <li><code>/diceduel start</code></li>
+                  <li><code>/diceduel cancel</code></li>
+                  <li><code>/reactionrace start</code></li>
+                  <li><code>/reactionrace cancel</code></li>
+                  <li><code>/numberguess start</code></li>
+                  <li><code>/numberguess cancel</code></li>
+                  <li><code>/slots start</code></li>
+                  <li><code>/slots cancel</code></li>
+                  <li><code>/trivia start</code></li>
+                  <li><code>/trivia cancel</code></li>
+                  <li><code>/wordscramble start</code></li>
+                  <li><code>/wordscramble cancel</code></li>
+                  <li><code>/rps start</code></li>
+                  <li><code>/rps cancel</code></li>
+                  <li><code>/blackjack start</code></li>
+                  <li><code>/blackjack cancel</code></li>
+                </ul>
+              </div>
+
+              <div class="help-section">
+                <h4>Game Night</h4>
+                <ul>
+                  <li><code>/gamenight start</code></li>
+                  <li><code>/gamenight skip</code></li>
+                  <li><code>/gamenight cancel</code></li>
+                  <li><code>/gamenight leaderboard</code></li>
+                </ul>
+              </div>
+
+              <div class="help-section">
+                <h4>System Configuration</h4>
+                <ul>
+                  <li><code>/config modules</code></li>
+                  <li><code>/config toggle</code></li>
+                  <li><code>/config status</code></li>
+                </ul>
+              </div>
+
+              <div class="help-section">
+                <h4>Legacy (Deprecated)</h4>
+                <ul>
+                  <li><code>/og-config view</code></li>
+                  <li><code>/og-config enable</code></li>
+                  <li><code>/og-config role</code></li>
+                  <li><code>/og-config limit</code></li>
+                  <li><code>/og-config sync</code></li>
                 </ul>
               </div>
             </div>

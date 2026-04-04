@@ -18,9 +18,8 @@
         <h1 id="navBrandTitle"><img src="/assets/branding/guildpilot-logo.png" alt="" style="width:22px;height:22px;border-radius:50%;vertical-align:middle;margin-right:8px;object-fit:cover;">GuildPilot</h1>
       </div>
       <div class="top-links" aria-label="Top links">
-        <button class="top-link" onclick="switchSection('landing')">Home</button>
-        <button class="top-link" onclick="switchSection('dashboard')">Dashboard</button>
-        <button class="top-link" onclick="switchSection('servers')" style="display:none;">Servers</button>
+        <button class="top-link" onclick="goHomePage()">Home</button>
+        <button class="top-link" onclick="switchSection('servers')">Servers</button>
         <button class="top-link" onclick="switchSection('help')">Docs</button>
         <button class="top-link" id="topNavAdmin" onclick="switchSection('admin'); showAdminView('superadmin');" style="display:none;">⚙ Admin</button>
       </div>
@@ -37,7 +36,7 @@
       <div class="mobile-menu-content">
         <button class="mobile-menu-close" onclick="toggleMobileMenu()" aria-label="Close menu">✕</button>
         <div class="mobile-menu-items">
-          <button class="nav-item active" data-section="landing" onclick="switchSection('landing'); toggleMobileMenu()">
+          <button class="nav-item active" data-section="landing" onclick="goHomePage(); toggleMobileMenu()">
             <span class="nav-icon" aria-hidden="true">🏠</span>
             <span class="nav-label">Home</span>
           </button>
@@ -98,7 +97,7 @@
       <!-- Sidebar Navigation -->
       <aside class="sidebar" role="navigation" aria-label="Section navigation">
         <div class="sidebar-nav-items">
-          <button class="nav-item active" data-section="landing" onclick="switchSection('landing')">
+          <button class="nav-item active" data-section="landing" onclick="goHomePage()">
             <span class="nav-icon" aria-hidden="true">🏠</span>
             <span class="nav-label">Home</span>
           </button>
@@ -208,7 +207,7 @@
                 </div>
               </div>
               <div class="marketing-cta">
-                <button class="btn-primary" onclick="switchSection('servers')" style="padding:12px 32px;font-size:1rem;">Get Started</button>
+                <button class="btn-primary" id="homePrimaryCta" onclick="switchSection('servers')" style="padding:12px 32px;font-size:1rem;">Get Started</button>
                 <button class="btn-secondary" onclick="switchSection('help')" style="padding:12px 32px;font-size:1rem;">View Docs</button>
                 <button id="landingSuperadminBtn" class="btn-secondary" onclick="switchSection('admin'); showAdminView('superadmin')" style="display:none;padding:12px 32px;font-size:1rem;">Superadmin</button>
               </div>

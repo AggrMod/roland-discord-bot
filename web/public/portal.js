@@ -267,9 +267,13 @@ function showWalletAddForm() {
         <p style="color:var(--text-muted); font-size:0.8em; margin-top:10px;">Any wallet · No extension required · NFT ownership proof only</p>
       </div>
     </div>
+    <div id="mobileWalletLaunchPanel" style="margin-top:16px;"></div>
     <div id="verifyStatus" style="margin-top:16px;"></div>
   `;
   walletsList.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  // Mobile helper for opening this page directly inside wallet apps
+  renderMobileWalletLaunchPanel();
 
   // Auto-show any pending micro-verify request so user doesn't need to click again
   autoShowPendingMicroVerify();
@@ -355,12 +359,113 @@ function extractWalletAddress(provider, connectResp) {
   return null;
 }
 
+function isMobileWalletContext() {
+  const ua = navigator.userAgent || '';
+  const coarsePointer = window.matchMedia?.('(pointer: coarse)')?.matches;
+  const touchMac = /Macintosh/i.test(ua) && navigator.maxTouchPoints > 1;
+  return /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(ua) || !!coarsePointer || touchMac;
+}
+
+function getDetectedWalletProviderName(provider = getSolanaProvider()) {
+  if (!provider) return '';
+  if (provider.isPhantom || window.phantom?.solana === provider) return 'Phantom';
+  if (provider.isSolflare || window.solflare === provider || window.solflare?.solana === provider) return 'Solflare';
+  if (provider.isBackpack || window.backpack === provider) return 'Backpack';
+  return 'Wallet';
+}
+
+function getWalletSectionUrl() {
+  const url = new URL('/?section=wallets', window.location.origin);
+  if (activeGuildId) url.searchParams.set('guild', activeGuildId);
+  return url.toString();
+}
+
+function getWalletBrowseDeepLink(walletKey, targetUrl) {
+  const encodedUrl = encodeURIComponent(targetUrl);
+  const encodedRef = encodeURIComponent(window.location.origin);
+  const routes = {
+    phantom: `https://phantom.app/ul/browse/${encodedUrl}?ref=${encodedRef}`,
+    solflare: `https://solflare.com/ul/v1/browse/${encodedUrl}?ref=${encodedRef}`,
+    backpack: `https://backpack.app/ul/v1/browse/${encodedUrl}?ref=${encodedRef}`
+  };
+  return routes[walletKey] || '';
+}
+
+function launchWalletBrowser(walletKey) {
+  const deepLink = getWalletBrowseDeepLink(walletKey, getWalletSectionUrl());
+  if (!deepLink) {
+    showError('Wallet launch link unavailable.');
+    return;
+  }
+  window.location.href = deepLink;
+}
+
+function copyWalletVerifyLink() {
+  const link = getWalletSectionUrl();
+  if (!navigator.clipboard?.writeText) {
+    showInfo(`Open this URL in your wallet app browser: ${link}`);
+    return;
+  }
+  navigator.clipboard.writeText(link)
+    .then(() => showSuccess('Verification link copied. Open it inside your wallet app browser.'))
+    .catch(() => showInfo(`Open this URL in your wallet app browser: ${link}`));
+}
+
+function renderMobileWalletLaunchPanel() {
+  const panel = document.getElementById('mobileWalletLaunchPanel');
+  if (!panel) return;
+
+  const isMobile = isMobileWalletContext();
+  const provider = getSolanaProvider();
+  const providerName = getDetectedWalletProviderName(provider);
+
+  if (!isMobile) {
+    panel.innerHTML = '';
+    return;
+  }
+
+  if (provider) {
+    panel.innerHTML = `
+      <div style="padding:14px 16px; border-radius:12px; border:1px solid rgba(16,185,129,0.28); background:rgba(16,185,129,0.1); color:#bbf7d0;">
+        Wallet detected in this browser: <strong>${escapeHtml(providerName)}</strong>. You can continue with Connect & Sign.
+      </div>
+    `;
+    return;
+  }
+
+  panel.innerHTML = `
+    <div style="padding:18px; border-radius:14px; border:1px solid rgba(245,158,11,0.38); background:rgba(245,158,11,0.1);">
+      <h4 style="margin:0 0 8px 0; color:#fde68a;">Use your mobile wallet app</h4>
+      <p style="margin:0 0 14px 0; color:#fef3c7; font-size:0.9em; line-height:1.55;">
+        No wallet provider was detected in this browser. Tap your wallet below to open this exact verification page in its in-app browser.
+      </p>
+      <div style="display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(180px,1fr));">
+        <button class="btn-primary" onclick="launchWalletBrowser('phantom')">Open in Phantom</button>
+        <button class="btn-primary" onclick="launchWalletBrowser('solflare')">Open in Solflare</button>
+        <button class="btn-primary" onclick="launchWalletBrowser('backpack')">Open in Backpack</button>
+      </div>
+      <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn-secondary" onclick="copyWalletVerifyLink()">Copy Verification Link</button>
+        <button class="btn-secondary" onclick="renderMobileWalletLaunchPanel()">Retry Detection</button>
+      </div>
+      <p style="margin:10px 0 0 0; color:var(--text-secondary); font-size:0.82em;">
+        If signing still does not open, use On-Chain Proof below. It works without app/browser injection.
+      </p>
+    </div>
+  `;
+}
+
 async function verifyBySignature() {
   const btn = document.getElementById('signVerifyBtn');
 
   const provider = getSolanaProvider();
   if (!provider) {
-    showError('No Solana wallet detected. Please install Phantom, Solflare, or Backpack.');
+    if (isMobileWalletContext()) {
+      renderMobileWalletLaunchPanel();
+      showInfo('Open this page in your wallet app browser, then tap Connect & Sign again.');
+    } else {
+      showError('No Solana wallet detected. Please install Phantom, Solflare, or Backpack.');
+    }
     return;
   }
 
@@ -417,6 +522,7 @@ async function verifyBySignature() {
   } finally {
     btn.disabled = false;
     btn.innerHTML = '✓ Connect & Sign';
+    renderMobileWalletLaunchPanel();
   }
 }
 
@@ -817,14 +923,19 @@ function renderGeneralSection() {
   const postEl = document.getElementById('generalPostSelection');
   if (!preEl || !postEl) return;
 
-  if (!activeGuildId) {
-    preEl.style.display = '';
-    postEl.style.display = 'none';
-    return;
-  }
+  // Home should always show the main landing/marketing page.
+  preEl.style.display = '';
+  postEl.style.display = 'none';
 
-  preEl.style.display = 'none';
-  postEl.style.display = '';
+  const primaryCta = document.getElementById('homePrimaryCta');
+  if (primaryCta) {
+    if (activeGuildId) {
+      const record = getServerRecord(activeGuildId);
+      primaryCta.textContent = record?.name ? `Manage ${record.name}` : 'Manage Server';
+    } else {
+      primaryCta.textContent = 'Get Started';
+    }
+  }
 
   const record = getServerRecord(activeGuildId);
   const name = record?.name || activeGuildId;
@@ -1041,7 +1152,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     'section-heist': !moduleState.heist
   };
   if (activeSection && disabledActive[activeSection]) {
-    switchSection('dashboard');
+    switchSection('landing');
   }
 }
 
@@ -1302,7 +1413,7 @@ async function loadPortal() {
     } else if (userData && requiresServerSelectionGate()) {
       switchSection('landing');
     } else if (userData) {
-      switchSection('dashboard');
+      switchSection('landing', { updateUrl: false });
     }
   } catch (error) {
     console.error('Error loading portal:', error);
@@ -1881,7 +1992,11 @@ async function loadAvailableMissions() {
 }
 
 // ==================== NAVIGATION ====================
-function switchSection(sectionName) {
+function goHomePage() {
+  switchSection('landing', { updateUrl: false });
+}
+
+function switchSection(sectionName, options = {}) {
   sectionName = normalizePortalSectionName(sectionName);
 
   if (requiresServerSelectionGate()) {
@@ -1914,7 +2029,7 @@ function switchSection(sectionName) {
   const required = sectionRequiresModule[sectionName];
   if (required && moduleState && moduleState[required] === false) {
     showInfo('This module is disabled for the selected server.');
-    sectionName = 'dashboard';
+    sectionName = 'landing';
   }
 
   // Update nav items (both sidebar and mobile)
@@ -1981,7 +2096,12 @@ function switchSection(sectionName) {
 
   // Update URL without reload
   const url = new URL(window.location);
-  url.searchParams.set('section', sectionName);
+  if (options.updateUrl === false) {
+    url.searchParams.delete('section');
+    url.searchParams.delete('adminView');
+  } else {
+    url.searchParams.set('section', sectionName);
+  }
   window.history.pushState({}, '', url);
 }
 

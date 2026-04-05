@@ -4036,7 +4036,7 @@ class WebServer {
 
     this.app.get('/api/admin/tickets/categories', adminAuthMiddleware, (req, res) => {
       try {
-        const categories = ticketService.getAllCategories();
+        const categories = ticketService.getAllCategories(req.guildId);
         res.json({ success: true, categories });
       } catch (error) {
         logger.error('Error fetching ticket categories:', error);
@@ -4048,7 +4048,7 @@ class WebServer {
       try {
         const { name, emoji, description, parentChannelId, closedParentChannelId, allowedRoleIds, handlerRoleIds, pingRoleIds, templateFields } = req.body;
         if (!name) return res.status(400).json({ success: false, message: 'Name is required' });
-        const result = ticketService.addCategory({ name, emoji, description, parentChannelId, closedParentChannelId, allowedRoleIds, handlerRoleIds, pingRoleIds, templateFields });
+        const result = ticketService.addCategory({ name, emoji, description, parentChannelId, closedParentChannelId, allowedRoleIds, handlerRoleIds, pingRoleIds, templateFields }, req.guildId);
         if (!result.success) return res.status(400).json(result);
         res.json(result);
       } catch (error) {
@@ -4059,7 +4059,7 @@ class WebServer {
 
     this.app.put('/api/admin/tickets/categories/:id', adminAuthMiddleware, (req, res) => {
       try {
-        const result = ticketService.updateCategory(parseInt(req.params.id), req.body);
+        const result = ticketService.updateCategory(parseInt(req.params.id), req.body, req.guildId);
         if (!result.success) return res.status(400).json(result);
         res.json(result);
       } catch (error) {
@@ -4070,7 +4070,7 @@ class WebServer {
 
     this.app.delete('/api/admin/tickets/categories/:id', adminAuthMiddleware, (req, res) => {
       try {
-        const result = ticketService.deleteCategory(parseInt(req.params.id));
+        const result = ticketService.deleteCategory(parseInt(req.params.id), req.guildId);
         if (!result.success) return res.status(400).json(result);
         res.json(result);
       } catch (error) {
@@ -4108,7 +4108,7 @@ class WebServer {
 
     this.app.get('/api/admin/tickets/:id/transcript', adminAuthMiddleware, async (req, res) => {
       try {
-        const ticket = ticketService.getTicketById(parseInt(req.params.id));
+        const ticket = ticketService.getTicketById(parseInt(req.params.id), req.guildId);
         if (!ticket) return res.status(404).json({ success: false, message: 'Ticket not found' });
         const result = await ticketService.getTranscript(ticket.channel_id);
         if (!result.success) return res.status(404).json(result);

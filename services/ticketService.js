@@ -60,6 +60,59 @@ class TicketService {
     return [];
   }
 
+  _normalizeGuildId(guildId) {
+    return String(guildId || '').trim();
+  }
+
+  _bootstrapGuildCategories(guildId) {
+    const normalizedGuildId = this._normalizeGuildId(guildId);
+    if (!normalizedGuildId) return;
+
+    const scopedCountRow = db.prepare(`
+      SELECT COUNT(1) AS count
+      FROM ticket_categories
+      WHERE guild_id = ?
+    `).get(normalizedGuildId);
+    if ((scopedCountRow?.count || 0) > 0) return;
+
+    const legacyCategories = db.prepare(`
+      SELECT *
+      FROM ticket_categories
+      WHERE COALESCE(guild_id, '') = ''
+      ORDER BY sort_order ASC, id ASC
+    `).all();
+    if (legacyCategories.length === 0) return;
+
+    const cloneLegacyCategories = db.transaction(() => {
+      const insertStmt = db.prepare(`
+        INSERT INTO ticket_categories (
+          guild_id, name, emoji, description, parent_channel_id, closed_parent_channel_id,
+          handler_role_ids, allowed_role_ids, ping_role_ids, template_fields, enabled, sort_order
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      for (const category of legacyCategories) {
+        insertStmt.run(
+          normalizedGuildId,
+          category.name,
+          category.emoji || '🎫',
+          category.description || '',
+          category.parent_channel_id || null,
+          category.closed_parent_channel_id || null,
+          category.handler_role_ids || '[]',
+          category.allowed_role_ids || '[]',
+          category.ping_role_ids || '[]',
+          category.template_fields || '[]',
+          category.enabled === 0 ? 0 : 1,
+          Number.isFinite(category.sort_order) ? category.sort_order : 0
+        );
+      }
+    });
+
+    cloneLegacyCategories();
+  }
+
   _getCategoryHandlerRoleIds(category) {
     if (!category) return [];
     const handlerRoles = this._normalizeIdArray(category.handler_role_ids);
@@ -77,7 +130,7 @@ class TicketService {
     if (legacyAllowedRoles.length > 0) return legacyAllowedRoles;
 
     if (ticket.category_id) {
-      const category = this.getCategory(ticket.category_id);
+      const category = this.getCategory(ticket.category_id, ticket.guild_id, { allowLegacyFallback: true });
       return this._getCategoryHandlerRoleIds(category);
     }
 
@@ -144,28 +197,48 @@ class TicketService {
 
   // ==================== Category CRUD ====================
 
-  getCategories() {
-    return db.prepare('SELECT * FROM ticket_categories WHERE enabled = 1 ORDER BY sort_order ASC, id ASC').all();
+  getCategories(guildId = process.env.GUILD_ID) {
+    const normalizedGuildId = this._normalizeGuildId(guildId);
+    if (!normalizedGuildId) {
+      return db.prepare('SELECT * FROM ticket_categories WHERE enabled = 1 ORDER BY sort_order ASC, id ASC').all();
+    }
+    this._bootstrapGuildCategories(normalizedGuildId);
+    return db.prepare('SELECT * FROM ticket_categories WHERE guild_id = ? AND enabled = 1 ORDER BY sort_order ASC, id ASC').all(normalizedGuildId);
   }
 
-  getAllCategories() {
-    return db.prepare('SELECT * FROM ticket_categories ORDER BY sort_order ASC, id ASC').all();
+  getAllCategories(guildId = process.env.GUILD_ID) {
+    const normalizedGuildId = this._normalizeGuildId(guildId);
+    if (!normalizedGuildId) {
+      return db.prepare('SELECT * FROM ticket_categories ORDER BY sort_order ASC, id ASC').all();
+    }
+    this._bootstrapGuildCategories(normalizedGuildId);
+    return db.prepare('SELECT * FROM ticket_categories WHERE guild_id = ? ORDER BY sort_order ASC, id ASC').all(normalizedGuildId);
   }
 
-  getCategory(id) {
-    return db.prepare('SELECT * FROM ticket_categories WHERE id = ?').get(id);
+  getCategory(id, guildId = process.env.GUILD_ID, { allowLegacyFallback = true } = {}) {
+    const normalizedGuildId = this._normalizeGuildId(guildId);
+    if (!normalizedGuildId) {
+      return db.prepare('SELECT * FROM ticket_categories WHERE id = ?').get(id);
+    }
+
+    const scopedCategory = db.prepare('SELECT * FROM ticket_categories WHERE id = ? AND guild_id = ?').get(id, normalizedGuildId);
+    if (scopedCategory) return scopedCategory;
+    if (!allowLegacyFallback) return null;
+    return db.prepare("SELECT * FROM ticket_categories WHERE id = ? AND COALESCE(guild_id, '') = ''").get(id);
   }
 
-  addCategory({ name, emoji, description, parentChannelId, closedParentChannelId, allowedRoleIds, handlerRoleIds, pingRoleIds, templateFields }) {
+  addCategory({ name, emoji, description, parentChannelId, closedParentChannelId, allowedRoleIds, handlerRoleIds, pingRoleIds, templateFields }, guildId = process.env.GUILD_ID) {
     try {
+      const normalizedGuildId = this._normalizeGuildId(guildId);
       const normalizedHandlerRoleIds = this._normalizeIdArray(handlerRoleIds !== undefined ? handlerRoleIds : allowedRoleIds);
       const normalizedPingRoleIds = this._normalizeIdArray(pingRoleIds);
       const normalizedTemplateFields = this._normalizeTemplateFields(templateFields);
       const stmt = db.prepare(`
-        INSERT INTO ticket_categories (name, emoji, description, parent_channel_id, closed_parent_channel_id, handler_role_ids, allowed_role_ids, ping_role_ids, template_fields)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO ticket_categories (guild_id, name, emoji, description, parent_channel_id, closed_parent_channel_id, handler_role_ids, allowed_role_ids, ping_role_ids, template_fields)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const result = stmt.run(
+        normalizedGuildId,
         String(name || '').trim(),
         emoji || '🎫',
         String(description || ''),
@@ -183,9 +256,10 @@ class TicketService {
     }
   }
 
-  updateCategory(id, updates) {
+  updateCategory(id, updates, guildId = process.env.GUILD_ID) {
     try {
-      const category = this.getCategory(id);
+      const normalizedGuildId = this._normalizeGuildId(guildId);
+      const category = this.getCategory(id, normalizedGuildId, { allowLegacyFallback: false });
       if (!category) return { success: false, message: 'Category not found' };
 
       const fields = [];
@@ -213,8 +287,13 @@ class TicketService {
 
       if (fields.length === 0) return { success: false, message: 'No updates provided' };
 
-      values.push(id);
-      db.prepare(`UPDATE ticket_categories SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+      if (normalizedGuildId) {
+        values.push(id, normalizedGuildId);
+        db.prepare(`UPDATE ticket_categories SET ${fields.join(', ')} WHERE id = ? AND guild_id = ?`).run(...values);
+      } else {
+        values.push(id);
+        db.prepare(`UPDATE ticket_categories SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+      }
       return { success: true };
     } catch (error) {
       logger.error('Error updating ticket category:', error);
@@ -222,9 +301,14 @@ class TicketService {
     }
   }
 
-  deleteCategory(id) {
+  deleteCategory(id, guildId = process.env.GUILD_ID) {
     try {
-      db.prepare('DELETE FROM ticket_categories WHERE id = ?').run(id);
+      const normalizedGuildId = this._normalizeGuildId(guildId);
+      if (normalizedGuildId) {
+        db.prepare('DELETE FROM ticket_categories WHERE id = ? AND guild_id = ?').run(id, normalizedGuildId);
+      } else {
+        db.prepare('DELETE FROM ticket_categories WHERE id = ?').run(id);
+      }
       return { success: true };
     } catch (error) {
       logger.error('Error deleting ticket category:', error);
@@ -238,7 +322,10 @@ class TicketService {
     if (!this.client) return { success: false, message: 'Client not initialized' };
 
     try {
-      const normalizedGuildId = String(guildId || '').trim();
+      const normalizedGuildId = this._normalizeGuildId(guildId);
+      if (!normalizedGuildId) {
+        return { success: false, message: 'Guild is required' };
+      }
       const guild = await this.client.guilds.fetch(normalizedGuildId);
       const channel = await guild.channels.fetch(channelId);
 
@@ -246,7 +333,7 @@ class TicketService {
         return { success: false, message: 'Invalid text channel' };
       }
 
-      const categories = this.getCategories();
+      const categories = this.getCategories(normalizedGuildId);
       if (categories.length === 0) {
         return { success: false, message: 'No enabled categories. Add at least one category first.' };
       }
@@ -282,14 +369,21 @@ class TicketService {
       }
 
       // Check if panel already exists for this channel
-      const existing = db.prepare('SELECT * FROM ticket_panels WHERE channel_id = ?').get(channelId);
+      const existing = db.prepare(`
+        SELECT *
+        FROM ticket_panels
+        WHERE channel_id = ?
+          AND (guild_id = ? OR COALESCE(guild_id, '') = '')
+        ORDER BY CASE WHEN guild_id = ? THEN 0 ELSE 1 END
+        LIMIT 1
+      `).get(channelId, normalizedGuildId, normalizedGuildId);
 
       if (existing && existing.message_id) {
         try {
           const oldMsg = await channel.messages.fetch(existing.message_id);
           await oldMsg.edit({ embeds: [embed], components: rows });
-          db.prepare('UPDATE ticket_panels SET title = ?, description = ? WHERE id = ?')
-            .run(normalizedTitle, normalizedDescription, existing.id);
+          db.prepare('UPDATE ticket_panels SET guild_id = ?, title = ?, description = ? WHERE id = ?')
+            .run(normalizedGuildId, normalizedTitle, normalizedDescription, existing.id);
           return { success: true, messageId: existing.message_id, updated: true };
         } catch {
           // Message was deleted, post new one
@@ -299,11 +393,11 @@ class TicketService {
       const msg = await channel.send({ embeds: [embed], components: rows });
 
       if (existing) {
-        db.prepare('UPDATE ticket_panels SET message_id = ?, title = ?, description = ? WHERE id = ?')
-          .run(msg.id, normalizedTitle, normalizedDescription, existing.id);
+        db.prepare('UPDATE ticket_panels SET guild_id = ?, message_id = ?, title = ?, description = ? WHERE id = ?')
+          .run(normalizedGuildId, msg.id, normalizedTitle, normalizedDescription, existing.id);
       } else {
-        db.prepare('INSERT INTO ticket_panels (channel_id, message_id, title, description) VALUES (?, ?, ?, ?)')
-          .run(channelId, msg.id, normalizedTitle, normalizedDescription);
+        db.prepare('INSERT INTO ticket_panels (guild_id, channel_id, message_id, title, description) VALUES (?, ?, ?, ?, ?)')
+          .run(normalizedGuildId, channelId, msg.id, normalizedTitle, normalizedDescription);
       }
 
       return { success: true, messageId: msg.id };
@@ -335,7 +429,9 @@ class TicketService {
     if (!this.isEnabled()) return { success: false, message: 'Ticketing is currently disabled' };
 
     try {
-      const category = this.getCategory(categoryId);
+      const normalizedGuildId = this._normalizeGuildId(guildId || interaction?.guildId);
+      if (!normalizedGuildId) return { success: false, message: 'Guild is required' };
+      const category = this.getCategory(categoryId, normalizedGuildId, { allowLegacyFallback: false });
       if (!category) return { success: false, message: 'Category not found' };
 
       if (!category.enabled) {
@@ -348,7 +444,6 @@ class TicketService {
       const ticketDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
       const channelName = `${categorySlug}-${username}-${ticketDate}`.slice(0, 100);
 
-      const normalizedGuildId = String(guildId || '').trim();
       const guild = await this.client.guilds.fetch(normalizedGuildId);
 
       // Build permission overwrites
@@ -519,7 +614,7 @@ class TicketService {
 
       // Move closed ticket channel into closed category bucket (if configured)
       try {
-        const category = ticket.category_id ? this.getCategory(ticket.category_id) : null;
+        const category = ticket.category_id ? this.getCategory(ticket.category_id, ticket.guild_id, { allowLegacyFallback: true }) : null;
         if (category && category.closed_parent_channel_id) {
           await channel.setParent(category.closed_parent_channel_id, { lockPermissions: false });
         }
@@ -774,7 +869,11 @@ class TicketService {
     return db.prepare('SELECT * FROM tickets WHERE channel_id = ?').get(channelId);
   }
 
-  getTicketById(id) {
+  getTicketById(id, guildId = '') {
+    const normalizedGuildId = this._normalizeGuildId(guildId);
+    if (normalizedGuildId) {
+      return db.prepare('SELECT * FROM tickets WHERE id = ? AND guild_id = ?').get(id, normalizedGuildId);
+    }
     return db.prepare('SELECT * FROM tickets WHERE id = ?').get(id);
   }
 

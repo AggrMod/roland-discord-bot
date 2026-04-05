@@ -1087,7 +1087,7 @@ async function handleTicketOpenButton(interaction) {
     }
 
     const categoryId = parseInt(interaction.customId.replace('ticket_open_', ''));
-    const category = ticketService.getCategory(categoryId);
+    const category = ticketService.getCategory(categoryId, interaction.guildId, { allowLegacyFallback: false });
 
     if (!category) {
       return interaction.reply({ content: '❌ This ticket category no longer exists.', ephemeral: true });
@@ -1113,14 +1113,14 @@ async function handleTicketModalSubmit(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
     const categoryId = parseInt(interaction.customId.replace('ticket_modal_', ''));
-    const category = ticketService.getCategory(categoryId);
+    const category = ticketService.getCategory(categoryId, interaction.guildId, { allowLegacyFallback: false });
     if (!category) {
       return interaction.editReply({ content: '❌ This ticket category no longer exists.' });
     }
 
     const templateResponses = ticketService.extractTemplateResponses(category, interaction);
 
-    const result = await ticketService.createTicket(interaction, categoryId, templateResponses);
+    const result = await ticketService.createTicket(interaction, categoryId, templateResponses, interaction.guildId);
 
     if (!result.success) {
       return interaction.editReply({ content: `❌ Could not create ticket: ${result.message}` });

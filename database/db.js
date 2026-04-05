@@ -262,6 +262,7 @@ function initDatabase() {
 
     CREATE TABLE IF NOT EXISTS ticket_categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL DEFAULT '',
       name TEXT NOT NULL,
       emoji TEXT DEFAULT '🎫',
       description TEXT,
@@ -299,6 +300,7 @@ function initDatabase() {
 
     CREATE TABLE IF NOT EXISTS ticket_panels (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL DEFAULT '',
       channel_id TEXT NOT NULL UNIQUE,
       message_id TEXT,
       title TEXT DEFAULT 'Support',
@@ -475,9 +477,81 @@ function initDatabase() {
   try { db.exec("ALTER TABLE ticket_categories ADD COLUMN closed_parent_channel_id TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE ticket_categories ADD COLUMN handler_role_ids TEXT DEFAULT '[]'"); } catch (e) {}
   try { db.exec("ALTER TABLE ticket_categories ADD COLUMN ping_role_ids TEXT DEFAULT '[]'"); } catch (e) {}
+  try { db.exec("ALTER TABLE ticket_categories ADD COLUMN guild_id TEXT NOT NULL DEFAULT ''"); } catch (e) {}
+  try { db.exec("ALTER TABLE ticket_panels ADD COLUMN guild_id TEXT NOT NULL DEFAULT ''"); } catch (e) {}
+  try { db.exec("CREATE INDEX IF NOT EXISTS idx_ticket_categories_guild ON ticket_categories(guild_id)"); } catch (e) {}
+  try { db.exec("CREATE INDEX IF NOT EXISTS idx_ticket_panels_guild ON ticket_panels(guild_id)"); } catch (e) {}
   try { db.exec("ALTER TABLE tickets ADD COLUMN handler_role_ids TEXT DEFAULT '[]'"); } catch (e) {}
   try { db.exec("ALTER TABLE tickets ADD COLUMN last_activity_at DATETIME"); } catch (e) {}
   try { db.exec("ALTER TABLE tickets ADD COLUMN inactive_warning_sent_at DATETIME"); } catch (e) {}
+  try {
+    const splitSharedTicketCategories = db.transaction(() => {
+      const legacyCategories = db.prepare(`
+        SELECT *
+        FROM ticket_categories
+        WHERE COALESCE(guild_id, '') = ''
+      `).all();
+      if (legacyCategories.length === 0) return;
+
+      const guildRowsByCategoryStmt = db.prepare(`
+        SELECT DISTINCT guild_id
+        FROM tickets
+        WHERE category_id = ?
+          AND COALESCE(guild_id, '') <> ''
+      `);
+      const assignCategoryGuildStmt = db.prepare(`
+        UPDATE ticket_categories
+        SET guild_id = ?
+        WHERE id = ?
+      `);
+      const cloneCategoryStmt = db.prepare(`
+        INSERT INTO ticket_categories (
+          guild_id, name, emoji, description, parent_channel_id, closed_parent_channel_id,
+          handler_role_ids, allowed_role_ids, ping_role_ids, template_fields, enabled, sort_order, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      const retargetTicketsStmt = db.prepare(`
+        UPDATE tickets
+        SET category_id = ?, category_name = ?
+        WHERE category_id = ?
+          AND guild_id = ?
+      `);
+
+      for (const category of legacyCategories) {
+        const guildIds = guildRowsByCategoryStmt
+          .all(category.id)
+          .map(row => String(row.guild_id || '').trim())
+          .filter(Boolean);
+        const uniqueGuildIds = [...new Set(guildIds)];
+        if (uniqueGuildIds.length === 0) continue;
+
+        const [primaryGuildId, ...secondaryGuildIds] = uniqueGuildIds;
+        assignCategoryGuildStmt.run(primaryGuildId, category.id);
+
+        for (const guildId of secondaryGuildIds) {
+          const cloneResult = cloneCategoryStmt.run(
+            guildId,
+            category.name,
+            category.emoji || '🎫',
+            category.description || '',
+            category.parent_channel_id || null,
+            category.closed_parent_channel_id || null,
+            category.handler_role_ids || '[]',
+            category.allowed_role_ids || '[]',
+            category.ping_role_ids || '[]',
+            category.template_fields || '[]',
+            category.enabled === 0 ? 0 : 1,
+            Number.isFinite(category.sort_order) ? category.sort_order : 0,
+            category.created_at || null
+          );
+          retargetTicketsStmt.run(Number(cloneResult.lastInsertRowid), category.name || '', category.id, guildId);
+        }
+      }
+    });
+
+    splitSharedTicketCategories();
+  } catch (e) {}
   try { db.exec(`
     UPDATE ticket_categories
     SET handler_role_ids = COALESCE(NULLIF(allowed_role_ids, ''), '[]')

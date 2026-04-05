@@ -1,4 +1,48 @@
 const tenantService = require('./tenantService');
+const { Colors } = require('discord.js');
+
+const NAMED_COLOR_LOOKUP = (() => {
+  const map = Object.create(null);
+  for (const [name, value] of Object.entries(Colors || {})) {
+    const lower = String(name || '').toLowerCase();
+    if (!lower) continue;
+    map[lower] = value;
+    map[lower.replace(/[\s_-]+/g, '')] = value;
+  }
+  return map;
+})();
+
+function resolveEmbedColor(rawColor, fallbackColor = '#6366f1') {
+  const fallback = rawColor === fallbackColor ? '#6366f1' : fallbackColor;
+  const value = String(rawColor || '').trim();
+  if (!value) return fallback;
+
+  // #RRGGBB / RRGGBB
+  if (/^#?[0-9a-f]{6}$/i.test(value)) {
+    return value.startsWith('#') ? value : `#${value}`;
+  }
+
+  // #RGB / RGB
+  if (/^#?[0-9a-f]{3}$/i.test(value)) {
+    return value.startsWith('#') ? value : `#${value}`;
+  }
+
+  // Decimal number string
+  if (/^\d+$/.test(value)) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n >= 0 && n <= 0xFFFFFF) {
+      return n;
+    }
+  }
+
+  // Discord named colors, case-insensitive and tolerant of spaces/_/-
+  const key = value.toLowerCase();
+  const compact = key.replace(/[\s_-]+/g, '');
+  if (NAMED_COLOR_LOOKUP[key] !== undefined) return NAMED_COLOR_LOOKUP[key];
+  if (NAMED_COLOR_LOOKUP[compact] !== undefined) return NAMED_COLOR_LOOKUP[compact];
+
+  return fallback;
+}
 
 function moduleColorKey(moduleKey) {
   if (moduleKey === 'ticketing') return 'ticketing_color';
@@ -33,8 +77,13 @@ function applyEmbedBranding(embed, {
   useThumbnail = true,
 } = {}) {
   const br = getBranding(guildId, moduleKey);
-  const color = br.color || defaultColor;
-  embed.setColor(color);
+  const requestedColor = br.color || defaultColor;
+  const safeColor = resolveEmbedColor(requestedColor, defaultColor);
+  try {
+    embed.setColor(safeColor);
+  } catch {
+    embed.setColor(resolveEmbedColor(defaultColor, '#6366f1'));
+  }
 
   const logo = br.logo || fallbackLogoUrl || null;
   if (typeof embed.setThumbnail === 'function') {

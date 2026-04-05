@@ -1,4 +1,4 @@
-const { REST, Routes } = require('discord.js');
+const { REST, Routes, Colors } = require('discord.js');
 const db = require('../database/db');
 const logger = require('../utils/logger');
 const moduleGuard = require('../utils/moduleGuard');
@@ -14,6 +14,24 @@ const {
 const MULTITENANT_ENABLED = process.env.MULTITENANT_ENABLED === 'true';
 const TENANT_STATUSES = new Set(['active', 'suspended']);
 const ALL_MODULE_KEYS = getModuleKeys();
+const BRANDING_COLOR_KEYS = new Set([
+  'brand_color',
+  'primary_color',
+  'secondary_color',
+  'ticketing_color',
+  'selfserve_color',
+  'nfttracker_color'
+]);
+const DISCORD_COLOR_NAME_LOOKUP = (() => {
+  const map = Object.create(null);
+  for (const [name, value] of Object.entries(Colors || {})) {
+    const lower = String(name || '').toLowerCase();
+    if (!lower) continue;
+    map[lower] = value;
+    map[lower.replace(/[\s_-]+/g, '')] = value;
+  }
+  return map;
+})();
 
 function normalizeGuildId(guildId) {
   if (typeof guildId !== 'string') return '';
@@ -56,6 +74,43 @@ function normalizeBrandingUrl(value, { allowRelative = false } = {}) {
   }
 
   return parsed.toString();
+}
+
+function toHexColor(value) {
+  if (!Number.isFinite(value)) return null;
+  if (value < 0 || value > 0xFFFFFF) return null;
+  return `#${Number(value).toString(16).padStart(6, '0').toUpperCase()}`;
+}
+
+function normalizeBrandingColor(value) {
+  const normalized = normalizeString(value);
+  if (!normalized) return null;
+
+  const withoutHash = normalized.startsWith('#') ? normalized.slice(1) : normalized;
+  if (/^[0-9a-f]{3}$/i.test(withoutHash) || /^[0-9a-f]{6}$/i.test(withoutHash)) {
+    return `#${withoutHash.toUpperCase()}`;
+  }
+
+  if (/^\d+$/.test(normalized)) {
+    const numericHex = toHexColor(Number(normalized));
+    if (numericHex) return numericHex;
+  }
+
+  if (/^0x[0-9a-f]+$/i.test(normalized)) {
+    const numericHex = toHexColor(Number.parseInt(normalized, 16));
+    if (numericHex) return numericHex;
+  }
+
+  const colorKey = normalized.toLowerCase();
+  const compactKey = colorKey.replace(/[\s_-]+/g, '');
+  const namedValue = DISCORD_COLOR_NAME_LOOKUP[colorKey] ?? DISCORD_COLOR_NAME_LOOKUP[compactKey];
+  if (namedValue !== undefined) {
+    const namedHex = toHexColor(Number(namedValue));
+    if (namedHex) return namedHex;
+  }
+
+  // Unknown color text -> clear to force safe default rendering path.
+  return null;
 }
 
 function normalizeBoolean(value) {
@@ -720,6 +775,12 @@ class TenantService {
     for (const key of allowedKeys) {
       if (brandingPatch && Object.prototype.hasOwnProperty.call(brandingPatch, key)) {
         patch[key] = normalizeString(brandingPatch[key]);
+      }
+    }
+
+    for (const key of BRANDING_COLOR_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(patch, key)) {
+        patch[key] = normalizeBrandingColor(patch[key]);
       }
     }
 

@@ -504,6 +504,15 @@ class TicketService {
         .setFooter({ text: `Ticket #${ticketNumber}` })
         .setTimestamp();
 
+      applyEmbedBranding(embed, {
+        guildId: normalizedGuildId,
+        moduleKey: 'ticketing',
+        defaultColor: '#5865F2',
+        defaultFooter: 'Powered by Guild Pilot',
+        footerPrefix: `Ticket #${ticketNumber}`,
+        fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
+      });
+
       if (templateText) {
         embed.addFields({ name: 'Details', value: templateText.slice(0, 1024) });
       }

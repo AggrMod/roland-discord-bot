@@ -697,6 +697,7 @@ function setActiveGuild(guildId, { persist = true, announce = true, goToSettings
 
   // Refresh tenant-sensitive screens when switching active server context
   if (previous !== activeGuildId) {
+    clearTicketingViewCache();
     refreshTenantScopedViews();
   }
 
@@ -7737,6 +7738,15 @@ async function toggleWebClaimRole(panelId, roleId, btn) {
 let _ticketCategories = [];
 let _ticketChannelsList = [];
 let _ticketRolesList = [];
+let _ticketCacheGuildId = '';
+
+function clearTicketingViewCache() {
+  _ticketCategories = [];
+  _ticketChannelsList = [];
+  _ticketRolesList = [];
+  _ticketCacheGuildId = '';
+  window._ticketArchiveRows = [];
+}
 
 async function loadUserTicketOverview() {
   const section = document.querySelector('#section-ticketing .card');
@@ -7794,22 +7804,30 @@ async function loadTicketingView() {
     <div id="ticketTabContent">Loading...</div>
   `;
 
-  // Fetch channels if not cached
-  if (_ticketChannelsList.length === 0) {
-    try {
-      const res = await fetch('/api/admin/discord/channels', { credentials: 'include' });
-      const json = await res.json();
-      if (json.success) _ticketChannelsList = json.channels || [];
-    } catch (e) { /* ignore */ }
-  }
+  const currentGuildId = normalizeGuildId(activeGuildId);
+  const cacheValid = (
+    _ticketCacheGuildId === currentGuildId
+    && _ticketChannelsList.length > 0
+    && _ticketRolesList.length > 0
+  );
 
-  // Fetch roles if not cached
-  if (_ticketRolesList.length === 0) {
+  if (!cacheValid) {
+    _ticketCategories = [];
+    _ticketChannelsList = [];
+    _ticketRolesList = [];
+
     try {
-      const res = await fetch('/api/admin/discord/roles', { credentials: 'include' });
-      const json = await res.json();
-      if (json.success) _ticketRolesList = json.roles || [];
-    } catch (e) { /* ignore */ }
+      const [channelsRes, rolesRes] = await Promise.all([
+        fetch('/api/admin/discord/channels', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+        fetch('/api/admin/discord/roles', { credentials: 'include', headers: buildTenantRequestHeaders() })
+      ]);
+      const [channelsJson, rolesJson] = await Promise.all([channelsRes.json(), rolesRes.json()]);
+      if (channelsJson?.success) _ticketChannelsList = channelsJson.channels || [];
+      if (rolesJson?.success) _ticketRolesList = rolesJson.roles || [];
+      _ticketCacheGuildId = currentGuildId;
+    } catch (e) {
+      _ticketCacheGuildId = currentGuildId;
+    }
   }
 
   showTicketTab('categories');
@@ -7834,7 +7852,7 @@ async function loadTicketSettingsTab() {
   container.innerHTML = 'Loading ticket settings...';
 
   try {
-    const res = await fetch('/api/admin/settings', { credentials: 'include' });
+    const res = await fetch('/api/admin/settings', { credentials: 'include', headers: buildTenantRequestHeaders() });
     const json = await res.json();
     if (!json.success) {
       container.innerHTML = 'Failed to load ticket settings.';
@@ -7910,7 +7928,7 @@ async function saveTicketSettingsTab() {
     };
     const res = await fetch('/api/admin/settings', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...Object.fromEntries(buildTenantRequestHeaders().entries()) },
       credentials: 'include',
       body: JSON.stringify(payload),
     });
@@ -7936,7 +7954,7 @@ async function loadTicketCategoriesTab() {
   container.innerHTML = 'Loading categories...';
 
   try {
-    const res = await fetch('/api/admin/tickets/categories', { credentials: 'include' });
+    const res = await fetch('/api/admin/tickets/categories', { credentials: 'include', headers: buildTenantRequestHeaders() });
     const json = await res.json();
     if (!json.success) { container.innerHTML = 'Failed to load categories.'; return; }
 
@@ -8170,7 +8188,7 @@ async function saveCategoryFromModal() {
   try {
     const res = await fetch(url, {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...Object.fromEntries(buildTenantRequestHeaders().entries()) },
       credentials: 'include',
       body: JSON.stringify(payload)
     });
@@ -8186,7 +8204,7 @@ async function toggleTicketCategory(id, enabled) {
   try {
     await fetch(`/api/admin/tickets/categories/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...Object.fromEntries(buildTenantRequestHeaders().entries()) },
       credentials: 'include',
       body: JSON.stringify({ enabled })
     });
@@ -8198,7 +8216,8 @@ async function deleteTicketCategory(id) {
   try {
     const res = await fetch(`/api/admin/tickets/categories/${id}`, {
       method: 'DELETE',
-      credentials: 'include'
+      credentials: 'include',
+      headers: buildTenantRequestHeaders()
     });
     const json = await res.json();
     if (!json.success) return showError(json.message || 'Failed to delete');
@@ -8247,7 +8266,7 @@ async function postTicketPanel() {
   try {
     const res = await fetch('/api/admin/tickets/panel', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...Object.fromEntries(buildTenantRequestHeaders().entries()) },
       credentials: 'include',
       body: JSON.stringify({ channelId, title, description })
     });
@@ -8267,7 +8286,7 @@ async function loadTicketOpenTab() {
   container.innerHTML = 'Loading tickets...';
 
   try {
-    const res = await fetch('/api/admin/tickets?status=open', { credentials: 'include' });
+    const res = await fetch('/api/admin/tickets?status=open', { credentials: 'include', headers: buildTenantRequestHeaders() });
     const json = await res.json();
     if (!json.success) { container.innerHTML = 'Failed to load tickets.'; return; }
 
@@ -8324,7 +8343,7 @@ async function loadTicketArchiveTab() {
   }
 
   try {
-    const res = await fetch(`/api/admin/tickets?${params.toString()}`, { credentials: 'include' });
+    const res = await fetch(`/api/admin/tickets?${params.toString()}`, { credentials: 'include', headers: buildTenantRequestHeaders() });
     const json = await res.json();
     if (!json.success) { container.innerHTML = 'Failed to load archive.'; return; }
 
@@ -8417,7 +8436,7 @@ window.exportTicketArchiveCsv = function() {
 
 async function viewTicketTranscript(id) {
   try {
-    const res = await fetch(`/api/admin/tickets/${id}/transcript`, { credentials: 'include' });
+    const res = await fetch(`/api/admin/tickets/${id}/transcript`, { credentials: 'include', headers: buildTenantRequestHeaders() });
     const json = await res.json();
     if (!json.success) return showError(json.message || 'Failed to load transcript');
 

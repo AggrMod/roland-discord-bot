@@ -49,6 +49,7 @@ class SettingsManager {
       ticketAutoCloseEnabled: true,
       ticketAutoCloseInactiveHours: 168,
       ticketAutoCloseWarningHours: 24,
+      ticketChannelNameTemplate: '{category}-{user}-{date}',
 
       // Micro-Transfer Verification
       verificationReceiveWallet: '',
@@ -218,6 +219,16 @@ class SettingsManager {
           : parseInt(this.settings.ticketAutoCloseWarningHours ?? 24);
         if (!isNaN(mergedInactive) && !isNaN(mergedWarning) && mergedWarning > mergedInactive) {
           return { success: false, message: 'Auto-close warning cannot exceed auto-close inactivity hours' };
+        }
+      }
+
+      if (newSettings.ticketChannelNameTemplate !== undefined) {
+        const template = String(newSettings.ticketChannelNameTemplate || '').trim();
+        if (!template) {
+          return { success: false, message: 'ticketChannelNameTemplate cannot be empty' };
+        }
+        if (template.length > 120) {
+          return { success: false, message: 'ticketChannelNameTemplate cannot exceed 120 characters' };
         }
       }
 

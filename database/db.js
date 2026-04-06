@@ -279,7 +279,7 @@ function initDatabase() {
 
     CREATE TABLE IF NOT EXISTS tickets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      ticket_number INTEGER UNIQUE,
+      ticket_number INTEGER,
       guild_id TEXT DEFAULT '',
       category_id INTEGER,
       category_name TEXT,
@@ -295,7 +295,8 @@ function initDatabase() {
       inactive_warning_sent_at DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       closed_at DATETIME,
-      FOREIGN KEY (category_id) REFERENCES ticket_categories(id)
+      FOREIGN KEY (category_id) REFERENCES ticket_categories(id),
+      UNIQUE(guild_id, ticket_number)
     );
 
     CREATE TABLE IF NOT EXISTS ticket_panels (
@@ -313,10 +314,18 @@ function initDatabase() {
       value INTEGER DEFAULT 0
     );
 
+    CREATE TABLE IF NOT EXISTS ticket_guild_settings (
+      guild_id TEXT PRIMARY KEY,
+      channel_name_template TEXT DEFAULT '{category}-{user}-{date}',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
     CREATE INDEX IF NOT EXISTS idx_tickets_opener ON tickets(opener_id);
     CREATE INDEX IF NOT EXISTS idx_tickets_category ON tickets(category_id);
     CREATE INDEX IF NOT EXISTS idx_tickets_channel ON tickets(channel_id);
+    CREATE INDEX IF NOT EXISTS idx_ticket_guild_settings_guild ON ticket_guild_settings(guild_id);
     CREATE INDEX IF NOT EXISTS idx_ticket_panels_channel ON ticket_panels(channel_id);
 
     CREATE TABLE IF NOT EXISTS tenants (
@@ -484,6 +493,85 @@ function initDatabase() {
   try { db.exec("ALTER TABLE tickets ADD COLUMN handler_role_ids TEXT DEFAULT '[]'"); } catch (e) {}
   try { db.exec("ALTER TABLE tickets ADD COLUMN last_activity_at DATETIME"); } catch (e) {}
   try { db.exec("ALTER TABLE tickets ADD COLUMN inactive_warning_sent_at DATETIME"); } catch (e) {}
+  try {
+    const idxList = db.prepare("PRAGMA index_list('tickets')").all();
+    let hasCompositeGuildTicketUnique = false;
+    let hasLegacyTicketNumberUnique = false;
+
+    for (const idx of idxList) {
+      if (!idx?.unique) continue;
+      const cols = db.prepare(`PRAGMA index_info(${JSON.stringify(idx.name)})`).all().map(c => c.name);
+      if (cols.length === 2 && cols.includes('guild_id') && cols.includes('ticket_number')) {
+        hasCompositeGuildTicketUnique = true;
+      }
+      if (cols.length === 1 && cols[0] === 'ticket_number') {
+        hasLegacyTicketNumberUnique = true;
+      }
+    }
+
+    if (hasLegacyTicketNumberUnique && !hasCompositeGuildTicketUnique) {
+      db.exec(`
+        ALTER TABLE tickets RENAME TO tickets_legacy;
+
+        CREATE TABLE tickets (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          ticket_number INTEGER,
+          guild_id TEXT DEFAULT '',
+          category_id INTEGER,
+          category_name TEXT,
+          channel_id TEXT UNIQUE,
+          opener_id TEXT NOT NULL,
+          opener_name TEXT,
+          claimed_by TEXT,
+          handler_role_ids TEXT DEFAULT '[]',
+          status TEXT DEFAULT 'open',
+          template_responses TEXT DEFAULT '{}',
+          transcript TEXT,
+          last_activity_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          inactive_warning_sent_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          closed_at DATETIME,
+          FOREIGN KEY (category_id) REFERENCES ticket_categories(id),
+          UNIQUE(guild_id, ticket_number)
+        );
+
+        INSERT INTO tickets (
+          id, ticket_number, guild_id, category_id, category_name, channel_id,
+          opener_id, opener_name, claimed_by, handler_role_ids, status,
+          template_responses, transcript, last_activity_at, inactive_warning_sent_at,
+          created_at, closed_at
+        )
+        SELECT
+          id, ticket_number, COALESCE(guild_id, ''), category_id, category_name, channel_id,
+          opener_id, opener_name, claimed_by, COALESCE(handler_role_ids, '[]'), status,
+          COALESCE(template_responses, '{}'), transcript,
+          COALESCE(last_activity_at, created_at, CURRENT_TIMESTAMP),
+          inactive_warning_sent_at,
+          COALESCE(created_at, CURRENT_TIMESTAMP),
+          closed_at
+        FROM tickets_legacy;
+
+        DROP TABLE tickets_legacy;
+      `);
+
+      db.exec("CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_tickets_opener ON tickets(opener_id)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_tickets_category ON tickets(category_id)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_tickets_channel ON tickets(channel_id)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_tickets_guild ON tickets(guild_id)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_tickets_last_activity ON tickets(last_activity_at)");
+    }
+  } catch (e) {}
+  try { db.exec(`
+    CREATE TABLE IF NOT EXISTS ticket_guild_settings (
+      guild_id TEXT PRIMARY KEY,
+      channel_name_template TEXT DEFAULT '{category}-{user}-{date}',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `); } catch (e) {}
+  try { db.exec("CREATE INDEX IF NOT EXISTS idx_ticket_guild_settings_guild ON ticket_guild_settings(guild_id)"); } catch (e) {}
+  try { db.exec("ALTER TABLE ticket_guild_settings ADD COLUMN channel_name_template TEXT DEFAULT '{category}-{user}-{date}'"); } catch (e) {}
   try {
     const splitSharedTicketCategories = db.transaction(() => {
       const legacyCategories = db.prepare(`

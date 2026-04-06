@@ -1806,6 +1806,11 @@ class WebServer {
             : (tenantLogoFallback ? { logo_url: tenantLogoFallback } : null)
         };
 
+        const ticketGuildSettings = ticketService.getGuildTicketSettings(req.guildId);
+        if (ticketGuildSettings?.channelNameTemplate) {
+          effectiveSettings.ticketChannelNameTemplate = ticketGuildSettings.channelNameTemplate;
+        }
+
         // In multitenant mode, module enabled states come from tenant module entitlements
         if (multiTenantEnabled && tenantContext?.tenant && tenantContext.modules) {
           effectiveSettings.moduleBattleEnabled = !!tenantContext.modules.battle;
@@ -1877,7 +1882,7 @@ class WebServer {
           'txAlertEnabled', 'txAlertIncomingOnly', 'txAlertMinSol',
           'displayName', 'displayEmoji', 'displayColor',
           'verificationReceiveWallet', 'nftActivityWebhookSecret',
-          'ticketAutoCloseEnabled', 'ticketAutoCloseInactiveHours', 'ticketAutoCloseWarningHours',
+          'ticketAutoCloseEnabled', 'ticketAutoCloseInactiveHours', 'ticketAutoCloseWarningHours', 'ticketChannelNameTemplate',
           'chainEmojiMap',
         ];
         const sanitized = {};
@@ -1952,6 +1957,16 @@ class WebServer {
               }
             }
           }
+        }
+
+        if (sanitized.ticketChannelNameTemplate !== undefined && req.guildId) {
+          const ticketSettingsResult = ticketService.updateGuildTicketSettings(req.guildId, {
+            channelNameTemplate: sanitized.ticketChannelNameTemplate
+          });
+          if (!ticketSettingsResult.success) {
+            return res.status(400).json(ticketSettingsResult);
+          }
+          delete sanitized.ticketChannelNameTemplate;
         }
 
         const result = settingsManager.updateSettings(sanitized);

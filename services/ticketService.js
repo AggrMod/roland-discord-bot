@@ -64,6 +64,92 @@ class TicketService {
     return String(guildId || '').trim();
   }
 
+  _defaultChannelNameTemplate() {
+    const raw = String(settingsManager.getSettings().ticketChannelNameTemplate || '').trim();
+    return raw || '{category}-{user}-{date}';
+  }
+
+  _slugifyChannelNamePart(value, fallback = '') {
+    const normalized = String(value || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    return normalized || fallback;
+  }
+
+  getGuildTicketSettings(guildId = process.env.GUILD_ID) {
+    const normalizedGuildId = this._normalizeGuildId(guildId);
+    const defaultTemplate = this._defaultChannelNameTemplate();
+    if (!normalizedGuildId) {
+      return { channelNameTemplate: defaultTemplate };
+    }
+
+    const row = db.prepare(`
+      SELECT channel_name_template
+      FROM ticket_guild_settings
+      WHERE guild_id = ?
+    `).get(normalizedGuildId);
+
+    const template = String(row?.channel_name_template || defaultTemplate).trim() || defaultTemplate;
+    return { channelNameTemplate: template };
+  }
+
+  updateGuildTicketSettings(guildId, updates = {}) {
+    try {
+      const normalizedGuildId = this._normalizeGuildId(guildId);
+      if (!normalizedGuildId) {
+        return { success: false, message: 'Guild is required' };
+      }
+
+      const current = this.getGuildTicketSettings(normalizedGuildId);
+      const nextTemplate = updates.channelNameTemplate !== undefined
+        ? String(updates.channelNameTemplate || '').trim()
+        : current.channelNameTemplate;
+
+      if (!nextTemplate) {
+        return { success: false, message: 'Ticket channel name template cannot be empty' };
+      }
+      if (nextTemplate.length > 120) {
+        return { success: false, message: 'Ticket channel name template cannot exceed 120 characters' };
+      }
+      if (!/\{(category|user|date|number)\}/i.test(nextTemplate)) {
+        return { success: false, message: 'Template must include at least one token: {category}, {user}, {date}, or {number}' };
+      }
+
+      db.prepare(`
+        INSERT INTO ticket_guild_settings (guild_id, channel_name_template, created_at, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(guild_id) DO UPDATE SET
+          channel_name_template = excluded.channel_name_template,
+          updated_at = CURRENT_TIMESTAMP
+      `).run(normalizedGuildId, nextTemplate);
+
+      return { success: true, settings: { channelNameTemplate: nextTemplate } };
+    } catch (error) {
+      logger.error('Error updating ticket guild settings:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
+  _buildTicketChannelName({ guildId, categoryName, username, ticketDate, ticketNumber }) {
+    const template = this.getGuildTicketSettings(guildId).channelNameTemplate || this._defaultChannelNameTemplate();
+    const replacements = {
+      category: this._slugifyChannelNamePart(categoryName, 'ticket'),
+      user: this._slugifyChannelNamePart(username, 'user'),
+      date: this._slugifyChannelNamePart(ticketDate, ''),
+      number: String(ticketNumber || '').trim() || '0',
+    };
+
+    const rendered = String(template).replace(/\{(category|user|date|number)\}/gi, (match, token) => {
+      const key = String(token || '').toLowerCase();
+      return replacements[key] ?? '';
+    });
+
+    const channelName = this._slugifyChannelNamePart(rendered, `ticket-${replacements.number}`).slice(0, 100);
+    return channelName || `ticket-${replacements.number}`;
+  }
+
   _bootstrapGuildCategories(guildId) {
     const normalizedGuildId = this._normalizeGuildId(guildId);
     if (!normalizedGuildId) return;
@@ -190,6 +276,14 @@ class TicketService {
     if (!interaction || !ticket) return false;
     if (interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return true;
     if (interaction.user?.id === ticket.opener_id) return true;
+    const allowedRoles = this._getTicketHandlerRoleIds(ticket);
+    if (!interaction.member?.roles?.cache) return false;
+    return allowedRoles.some(roleId => interaction.member.roles.cache.has(roleId));
+  }
+
+  _canClaimTicket(interaction, ticket) {
+    if (!interaction || !ticket) return false;
+    if (interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return true;
     const allowedRoles = this._getTicketHandlerRoleIds(ticket);
     if (!interaction.member?.roles?.cache) return false;
     return allowedRoles.some(roleId => interaction.member.roles.cache.has(roleId));
@@ -409,16 +503,29 @@ class TicketService {
 
   // ==================== Ticket Lifecycle ====================
 
-  _nextTicketNumber() {
+  _nextTicketNumber(guildId = process.env.GUILD_ID) {
+    const normalizedGuildId = this._normalizeGuildId(guildId);
+    const sequenceName = normalizedGuildId ? `ticket:${normalizedGuildId}` : 'ticket';
+
     // Wrap in transaction to prevent ticket number collisions
     const getNext = db.transaction(() => {
-      const row = db.prepare('SELECT value FROM ticket_sequences WHERE name = ?').get('ticket');
+      const row = db.prepare('SELECT value FROM ticket_sequences WHERE name = ?').get(sequenceName);
       if (!row) {
-        db.prepare('INSERT INTO ticket_sequences (name, value) VALUES (?, ?)').run('ticket', 1);
-        return 1;
+        let seed = 0;
+        if (normalizedGuildId) {
+          const maxRow = db.prepare(`
+            SELECT COALESCE(MAX(ticket_number), 0) AS max_ticket_number
+            FROM tickets
+            WHERE guild_id = ?
+          `).get(normalizedGuildId);
+          seed = Number(maxRow?.max_ticket_number || 0);
+        }
+        const nextValue = seed + 1;
+        db.prepare('INSERT INTO ticket_sequences (name, value) VALUES (?, ?)').run(sequenceName, nextValue);
+        return nextValue;
       }
-      const next = row.value + 1;
-      db.prepare('UPDATE ticket_sequences SET value = ? WHERE name = ?').run(next, 'ticket');
+      const next = Number(row.value || 0) + 1;
+      db.prepare('UPDATE ticket_sequences SET value = ? WHERE name = ?').run(next, sequenceName);
       return next;
     });
     return getNext();
@@ -438,11 +545,16 @@ class TicketService {
         return { success: false, message: 'This ticket category is disabled' };
       }
 
-      const ticketNumber = this._nextTicketNumber();
-      const username = interaction.user.username.toLowerCase().replace(/[^a-z0-9]/g, '') || 'user';
-      const categorySlug = String(category.name || 'ticket').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'ticket';
+      const ticketNumber = this._nextTicketNumber(normalizedGuildId);
+      const username = interaction.user.username || 'user';
       const ticketDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-      const channelName = `${categorySlug}-${username}-${ticketDate}`.slice(0, 100);
+      const channelName = this._buildTicketChannelName({
+        guildId: normalizedGuildId,
+        categoryName: category.name || 'ticket',
+        username,
+        ticketDate,
+        ticketNumber,
+      });
 
       const guild = await this.client.guilds.fetch(normalizedGuildId);
 
@@ -567,8 +679,8 @@ class TicketService {
       if (ticket.claimed_by && ticket.claimed_by !== interaction.user.id) {
         return { success: false, message: 'This ticket has already been claimed' };
       }
-      if (!this._canManageTicket(interaction, ticket)) {
-        return { success: false, message: 'Only the ticket opener or assigned handlers can claim this ticket' };
+      if (!this._canClaimTicket(interaction, ticket)) {
+        return { success: false, message: 'Only assigned handlers can claim this ticket' };
       }
 
       db.prepare('UPDATE tickets SET claimed_by = ?, last_activity_at = CURRENT_TIMESTAMP, inactive_warning_sent_at = NULL WHERE channel_id = ?')

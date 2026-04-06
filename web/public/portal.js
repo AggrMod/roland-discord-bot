@@ -7863,6 +7863,7 @@ async function loadTicketSettingsTab() {
     const autoCloseEnabled = s.ticketAutoCloseEnabled !== false;
     const inactiveHours = Number.isFinite(Number(s.ticketAutoCloseInactiveHours)) ? Number(s.ticketAutoCloseInactiveHours) : 168;
     const warningHours = Number.isFinite(Number(s.ticketAutoCloseWarningHours)) ? Number(s.ticketAutoCloseWarningHours) : 24;
+    const channelNameTemplate = String(s.ticketChannelNameTemplate || '{category}-{user}-{date}');
 
     container.innerHTML = `
       <div style="max-width:680px;display:flex;flex-direction:column;gap:12px;">
@@ -7887,6 +7888,14 @@ async function loadTicketSettingsTab() {
           </div>
         </div>
 
+        <div style="padding:10px 12px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-secondary);">
+          <label style="font-size:0.85em;font-weight:600;">Ticket Channel Name Template</label>
+          <input type="text" id="ticketChannelNameTemplate" value="${escapeHtml(channelNameTemplate)}" style="width:100%;padding:8px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:6px;" />
+          <div style="font-size:0.78em;color:var(--text-secondary);margin-top:6px;">
+            Tokens: <code>{category}</code>, <code>{user}</code>, <code>{date}</code>, <code>{number}</code>. Example: <code>{number}-{category}-{user}</code>
+          </div>
+        </div>
+
         <div style="font-size:0.8em;color:var(--text-secondary);">The inactivity timer resets when anyone sends a new message in the ticket channel.</div>
         <div style="display:flex;gap:8px;align-items:center;">
           <button class="btn-primary" onclick="saveTicketSettingsTab()">Save Ticket Settings</button>
@@ -7906,6 +7915,7 @@ async function saveTicketSettingsTab() {
   const autoCloseEnabled = !!document.getElementById('ticketAutoCloseEnabled')?.checked;
   const inactiveHours = parseInt(document.getElementById('ticketAutoCloseInactiveHours')?.value || '0', 10);
   const warningHours = parseInt(document.getElementById('ticketAutoCloseWarningHours')?.value || '0', 10);
+  const channelNameTemplate = (document.getElementById('ticketChannelNameTemplate')?.value || '').trim();
 
   if (!Number.isFinite(inactiveHours) || inactiveHours < 1 || inactiveHours > 8760) {
     if (statusEl) statusEl.textContent = '';
@@ -7919,12 +7929,21 @@ async function saveTicketSettingsTab() {
     if (statusEl) statusEl.textContent = '';
     return showError('Warning window cannot be greater than auto-close inactivity.');
   }
+  if (!channelNameTemplate) {
+    if (statusEl) statusEl.textContent = '';
+    return showError('Ticket channel name template cannot be empty.');
+  }
+  if (!/\{(category|user|date|number)\}/i.test(channelNameTemplate)) {
+    if (statusEl) statusEl.textContent = '';
+    return showError('Template must include at least one token: {category}, {user}, {date}, or {number}.');
+  }
 
   try {
     const payload = {
       ticketAutoCloseEnabled: autoCloseEnabled,
       ticketAutoCloseInactiveHours: inactiveHours,
       ticketAutoCloseWarningHours: warningHours,
+      ticketChannelNameTemplate: channelNameTemplate,
     };
     const res = await fetch('/api/admin/settings', {
       method: 'PUT',

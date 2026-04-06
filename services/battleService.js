@@ -522,16 +522,67 @@ class BattleService {
     return arr[this.rand(arr.length)];
   }
 
-  createLobby(channelId, messageId, creatorId, minPlayers = 2, maxPlayers = 999, requiredRoleIds = null, excludedRoleIds = null, era = 'mafia') {
+  normalizeBountyTargets(targetIds) {
+    if (!Array.isArray(targetIds)) return [];
+    const seen = new Set();
+    const out = [];
+    for (const rawId of targetIds) {
+      const id = String(rawId || '').trim();
+      if (!/^\d{17,20}$/.test(id)) continue;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(id);
+      if (out.length >= 3) break;
+    }
+    return out;
+  }
+
+  parseBountyTargets(rawValue) {
+    if (!rawValue) return [];
+    if (Array.isArray(rawValue)) return this.normalizeBountyTargets(rawValue);
+
+    const rawText = String(rawValue).trim();
+    if (!rawText) return [];
+
+    try {
+      const parsed = JSON.parse(rawText);
+      if (Array.isArray(parsed)) return this.normalizeBountyTargets(parsed);
+    } catch (_) {
+      // Legacy fallback: comma-separated IDs
+    }
+
+    return this.normalizeBountyTargets(rawText.split(','));
+  }
+
+  getLobbyBountyTargets(lobby) {
+    return this.parseBountyTargets(lobby?.bounties_json);
+  }
+
+  setLobbyBounties(lobbyId, targetIds = []) {
+    try {
+      const normalized = this.normalizeBountyTargets(targetIds);
+      const serialized = normalized.length ? JSON.stringify(normalized) : null;
+      db.prepare('UPDATE battle_lobbies SET bounties_json = ? WHERE lobby_id = ?')
+        .run(serialized, lobbyId);
+      return { success: true, bounties: normalized };
+    } catch (error) {
+      logger.error('Error setting lobby bounties:', error);
+      return { success: false, message: 'Failed to save bounty targets' };
+    }
+  }
+
+  createLobby(channelId, messageId, creatorId, minPlayers = 2, maxPlayers = 999, requiredRoleIds = null, excludedRoleIds = null, era = 'mafia', bounties = null) {
     const lobbyId = `battle_${Date.now()}_${creatorId}`;
 
     try {
       const requiredIdsStr = requiredRoleIds && requiredRoleIds.length ? requiredRoleIds.join(',') : null;
       const excludedIdsStr = excludedRoleIds && excludedRoleIds.length ? excludedRoleIds.join(',') : null;
+      const bountyTargets = this.normalizeBountyTargets(bounties || []);
+      const bountyJson = bountyTargets.length ? JSON.stringify(bountyTargets) : null;
       db.prepare(`
-        INSERT INTO battle_lobbies (lobby_id, channel_id, message_id, creator_id, min_players, max_players, required_role_ids, excluded_role_ids, era)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(lobbyId, channelId, messageId, creatorId, minPlayers, maxPlayers, requiredIdsStr, excludedIdsStr, era);
+        INSERT INTO battle_lobbies (lobby_id, channel_id, message_id, creator_id, min_players, max_players, required_role_ids, excluded_role_ids, era, bounties_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(lobbyId, channelId, messageId, creatorId, minPlayers, maxPlayers, requiredIdsStr, excludedIdsStr, era, bountyJson);
 
       logger.log(`Battle lobby created: ${lobbyId} by ${creatorId}`);
       return { success: true, lobbyId };
@@ -721,10 +772,20 @@ class BattleService {
   }
 
   simulateBattle(lobbyId, options = {}) {
+    const lobby = this.getLobby(lobbyId);
+    if (!lobby) {
+      logger.error(`Cannot simulate battle; lobby not found: ${lobbyId}`);
+      return null;
+    }
+
     const eraKey = options.era || 'mafia';
     const era = this.getEraConfig(eraKey);
     const normalizedEraKey = this.normalizeEraKey(eraKey);
     const isMafiaEra = normalizedEraKey === 'mafia';
+    const forcedEliminationInterval = Math.max(
+      1,
+      parseInt(options.forcedEliminationInterval ?? 3, 10) || 3
+    );
     const pool = (customLines, mafiaLines, genericLines) => (
       Array.isArray(customLines) && customLines.length
         ? customLines
@@ -744,13 +805,103 @@ class BattleService {
     const eraLuckyEscapeLines = pool(era.luckyEscapeLines, LUCKY_ESCAPE_LINES, GENERIC_LUCKY_ESCAPE_LINES);
 
     const participants = this.getParticipants(lobbyId);
+    if (!participants.length) {
+      logger.warn(`Battle simulation aborted; no participants in lobby ${lobbyId}`);
+      return null;
+    }
+
+    const participantById = new Map(participants.map(p => [p.user_id, p]));
+    const bountyTargets = this.getLobbyBountyTargets(lobby)
+      .filter(userId => participantById.has(userId))
+      .slice(0, 3);
+
     const totalPlayers = participants.length;
     const rounds = [];
     let alivePlayers = participants.filter(p => p.is_alive);
     const playerBuffs = {}; // Track temporary buffs
+    const damageLedger = new Map(); // targetUserId -> Map(attackerUserId -> damage)
+    const killLog = new Map(); // targetUserId -> { killerId, cause, round }
 
     let roundNum = 0;
     let eliteFourMode = false;
+    let roundsWithoutElimination = 0;
+
+    const recordDamage = (attackerId, defenderId, amount) => {
+      if (!attackerId || !defenderId) return;
+      if (attackerId === defenderId) return;
+      if (!Number.isFinite(amount) || amount <= 0) return;
+
+      let defenderLedger = damageLedger.get(defenderId);
+      if (!defenderLedger) {
+        defenderLedger = new Map();
+        damageLedger.set(defenderId, defenderLedger);
+      }
+      defenderLedger.set(attackerId, (defenderLedger.get(attackerId) || 0) + amount);
+    };
+
+    const selectTopDamageDealer = (targetUserId) => {
+      const defenderLedger = damageLedger.get(targetUserId);
+      if (!defenderLedger) return null;
+      let top = null;
+      for (const [userId, damage] of defenderLedger.entries()) {
+        if (!Number.isFinite(damage) || damage <= 0) continue;
+        if (userId === targetUserId) continue;
+        if (!top || damage > top.damage || (damage === top.damage && userId < top.userId)) {
+          top = { userId, damage };
+        }
+      }
+      return top;
+    };
+
+    const buildHpSnapshot = () => {
+      const living = alivePlayers.filter(p => p.is_alive);
+      if (!living.length) return null;
+
+      const byMostHp = [...living]
+        .sort((a, b) => (b.hp - a.hp) || (b.total_damage_dealt - a.total_damage_dealt) || a.username.localeCompare(b.username))
+        .slice(0, 5)
+        .map(p => ({ userId: p.user_id, username: p.username, hp: p.hp }));
+
+      const byLeastHp = [...living]
+        .sort((a, b) => (a.hp - b.hp) || (a.total_damage_dealt - b.total_damage_dealt) || a.username.localeCompare(b.username))
+        .slice(0, 5)
+        .map(p => ({ userId: p.user_id, username: p.username, hp: p.hp }));
+
+      return { mostHp: byMostHp, leastHp: byLeastHp };
+    };
+
+    const forceEliminatePlayer = (events) => {
+      if (alivePlayers.length <= 1) return false;
+
+      const minHp = Math.min(...alivePlayers.map(p => p.hp));
+      const candidates = alivePlayers.filter(p => p.hp === minHp);
+      const victim = candidates[this.rand(candidates.length)];
+      if (!victim) return false;
+
+      victim.hp = 0;
+      victim.is_alive = false;
+
+      const template = eraEliminationLines[Math.floor(this.roll() * eraEliminationLines.length)];
+      const forcedLine = template
+        .replace('{attacker}', '**The chaos**')
+        .replace('{defender}', `**${victim.username}**`);
+
+      events.push(`⏱️ **Sudden death:** no one was eliminated for ${forcedEliminationInterval} rounds, so the arena claims a fighter.`);
+      events.push(forcedLine);
+
+      killLog.set(victim.user_id, {
+        killerId: null,
+        cause: 'forced_timeout',
+        round: roundNum,
+      });
+
+      db.prepare('UPDATE battle_participants SET is_alive = 0, hp = 0 WHERE lobby_id = ? AND user_id = ?')
+        .run(lobbyId, victim.user_id);
+
+      alivePlayers = alivePlayers.filter(p => p.user_id !== victim.user_id);
+      return true;
+    };
+
     while (alivePlayers.length > 1) {
       roundNum++;
       // Shuffle alive players each round to reduce any order bias
@@ -758,6 +909,8 @@ class BattleService {
         .map(v => ({ v, k: this.roll() }))
         .sort((a, b) => a.k - b.k)
         .map(o => o.v);
+
+      const aliveAtRoundStart = alivePlayers.length;
       const events = [];
       let eliteFourActivatedThisRound = false;
       let eliteFourUserIds = [];
@@ -861,6 +1014,7 @@ class BattleService {
             // Apply damage
             defender.hp -= damage;
             attacker.total_damage_dealt += damage;
+            recordDamage(attacker.user_id, defender.user_id, damage);
 
             // Pick flavor text
             const line = isCrit
@@ -872,6 +1026,7 @@ class BattleService {
               .replace('{defender}', `**${defender.username}**`)
               .replace('{damage}', damage);
 
+            eventText += ` (${Math.max(defender.hp, 0)} HP left)`;
             events.push(eventText);
 
             // Trash talk chance increases in Elite Four
@@ -912,6 +1067,12 @@ class BattleService {
                 .replace('{attacker}', `**${attacker.username}**`)
                 .replace('{defender}', `**${defender.username}**`);
               events.push(deathLine);
+
+              killLog.set(defender.user_id, {
+                killerId: attacker.user_id,
+                cause: attacker.user_id === defender.user_id ? 'self' : 'final_blow',
+                round: roundNum,
+              });
               
               db.prepare('UPDATE battle_participants SET is_alive = 0, hp = 0 WHERE lobby_id = ? AND user_id = ?')
                 .run(lobbyId, defender.user_id);
@@ -940,7 +1101,7 @@ class BattleService {
             player.hp = Math.min(100, player.hp + hpBoost);
             
             const text = itemLine.replace('{player}', `**${player.username}**`);
-            events.push(text);
+            events.push(`${text} (+${hpBoost} HP, ${player.hp} HP now)`);
             
             db.prepare('UPDATE battle_participants SET hp = ? WHERE lobby_id = ? AND user_id = ?')
               .run(player.hp, lobbyId, player.user_id);
@@ -957,17 +1118,36 @@ class BattleService {
         if (alivePlayers.length <= 1) break;
       }
 
+      const eliminationsThisRound = Math.max(0, aliveAtRoundStart - alivePlayers.length);
+      if (eliminationsThisRound > 0) {
+        roundsWithoutElimination = 0;
+      } else {
+        roundsWithoutElimination += 1;
+      }
+
+      if (alivePlayers.length > 1 && roundsWithoutElimination >= forcedEliminationInterval) {
+        const forcedEliminated = forceEliminatePlayer(events);
+        if (forcedEliminated) {
+          roundsWithoutElimination = 0;
+        }
+      }
+
+      const hpSnapshot = (roundNum % 10 === 0) ? buildHpSnapshot() : null;
+
       rounds.push({ 
         round: roundNum, 
         events,
         playersLeft: alivePlayers.length,
         eliteFourActivated: eliteFourActivatedThisRound,
         eliteFourMode,
-        eliteFourUserIds
+        eliteFourUserIds,
+        hpSnapshot
       });
-      
-      // Safety break
-      if (roundNum > 100) break;
+    }
+
+    if (!alivePlayers.length) {
+      logger.error(`Battle ${lobbyId} finished with no surviving player`);
+      return null;
     }
 
     // Winner!
@@ -1008,6 +1188,73 @@ class BattleService {
       this.updateStats(p.user_id, p.username, p.user_id === winner.user_id, p.total_damage_dealt);
     }
 
+    const finalParticipantsById = new Map(allParticipants.map(p => [p.user_id, p]));
+    const topDamageDealers = [...allParticipants]
+      .sort((a, b) => (b.total_damage_dealt - a.total_damage_dealt) || a.username.localeCompare(b.username))
+      .slice(0, 5)
+      .map((p, index) => ({
+        rank: index + 1,
+        userId: p.user_id,
+        username: p.username,
+        damage: p.total_damage_dealt || 0,
+      }));
+
+    const bountyResults = bountyTargets.map(targetId => {
+      const target = finalParticipantsById.get(targetId);
+      if (!target) {
+        return {
+          targetId,
+          targetName: targetId,
+          winnerId: null,
+          winnerName: null,
+          reason: 'invalid_target',
+          round: null,
+        };
+      }
+
+      const killInfo = killLog.get(targetId);
+      if (!killInfo) {
+        return {
+          targetId,
+          targetName: target.username,
+          winnerId: null,
+          winnerName: null,
+          reason: 'not_eliminated',
+          round: null,
+        };
+      }
+
+      let winnerId = null;
+      let reason = '';
+
+      if (killInfo.cause === 'final_blow' && killInfo.killerId && killInfo.killerId !== targetId) {
+        winnerId = killInfo.killerId;
+        reason = 'final_blow';
+      } else {
+        const topDealer = selectTopDamageDealer(targetId);
+        if (topDealer) {
+          winnerId = topDealer.userId;
+          reason = 'most_damage';
+        } else if (killInfo.killerId && killInfo.killerId !== targetId) {
+          winnerId = killInfo.killerId;
+          reason = 'final_blow';
+        } else {
+          reason = 'no_eligible_claimant';
+        }
+      }
+
+      const winnerRecord = winnerId ? finalParticipantsById.get(winnerId) : null;
+
+      return {
+        targetId,
+        targetName: target.username,
+        winnerId,
+        winnerName: winnerRecord?.username || null,
+        reason,
+        round: killInfo.round || null,
+      };
+    });
+
     return { 
       rounds, 
       winner, 
@@ -1016,7 +1263,10 @@ class BattleService {
       totalPlayers,
       roundCount: roundNum,
       eliteFourModeUsed: eliteFourMode,
-      eraKey: this.normalizeEraKey(eraKey)
+      eraKey: this.normalizeEraKey(eraKey),
+      topDamageDealers,
+      bountyTargets,
+      bountyResults
     };
   }
 

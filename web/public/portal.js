@@ -4380,9 +4380,11 @@ async function loadBattleTimingSettings() {
     const minEl = document.getElementById('battlePauseMinInput');
     const maxEl = document.getElementById('battlePauseMaxInput');
     const eliteEl = document.getElementById('battleElitePrepInput');
+    const forcedEl = document.getElementById('battleForcedEliminationIntervalInput');
     if (minEl) minEl.value = s.battleRoundPauseMinSec ?? 5;
     if (maxEl) maxEl.value = s.battleRoundPauseMaxSec ?? 10;
     if (eliteEl) eliteEl.value = s.battleElitePrepSec ?? 12;
+    if (forcedEl) forcedEl.value = s.battleForcedEliminationIntervalRounds ?? 3;
 
     // Inject era selector if not already present
     const battlePane = document.getElementById('settingsTab-battle');
@@ -4424,15 +4426,23 @@ async function saveBattleTimingSettings() {
   const minVal = parseFloat(document.getElementById('battlePauseMinInput')?.value);
   const maxVal = parseFloat(document.getElementById('battlePauseMaxInput')?.value);
   const eliteVal = parseFloat(document.getElementById('battleElitePrepInput')?.value);
-  if (isNaN(minVal) || isNaN(maxVal) || isNaN(eliteVal)) return showError('Please enter valid numbers for all timing fields.');
+  const forcedIntervalVal = parseInt(document.getElementById('battleForcedEliminationIntervalInput')?.value, 10);
+  if (isNaN(minVal) || isNaN(maxVal) || isNaN(eliteVal) || isNaN(forcedIntervalVal)) return showError('Please enter valid numbers for all timing fields.');
   if (minVal > maxVal) return showError('Minimum pause cannot be greater than maximum pause.');
+  if (forcedIntervalVal < 1 || forcedIntervalVal > 20) return showError('Forced elimination interval must be between 1 and 20 rounds.');
   const eraVal = document.getElementById('battleDefaultEraSelect')?.value || 'mafia';
   try {
     const res = await fetch('/api/admin/settings', {
       method: 'PUT',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
-      body: JSON.stringify({ battleRoundPauseMinSec: minVal, battleRoundPauseMaxSec: maxVal, battleElitePrepSec: eliteVal, battleDefaultEra: eraVal })
+      body: JSON.stringify({
+        battleRoundPauseMinSec: minVal,
+        battleRoundPauseMaxSec: maxVal,
+        battleElitePrepSec: eliteVal,
+        battleForcedEliminationIntervalRounds: forcedIntervalVal,
+        battleDefaultEra: eraVal
+      })
     });
     const data = await res.json();
     if (data.success) showSuccess('Battle settings saved!');

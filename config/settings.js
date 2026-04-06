@@ -30,6 +30,7 @@ class SettingsManager {
       battleRoundPauseMinSec: 5,
       battleRoundPauseMaxSec: 10,
       battleElitePrepSec: 12,
+      battleForcedEliminationIntervalRounds: 3,
 
       // Module Toggles (per-module control)
       moduleBattleEnabled: true,
@@ -160,6 +161,13 @@ class SettingsManager {
         const sec = parseFloat(newSettings.battleElitePrepSec);
         if (isNaN(sec) || sec < 0 || sec > 300) {
           return { success: false, message: 'Elite prep delay must be between 0 and 300 seconds' };
+        }
+      }
+
+      if (newSettings.battleForcedEliminationIntervalRounds !== undefined) {
+        const rounds = parseInt(newSettings.battleForcedEliminationIntervalRounds, 10);
+        if (isNaN(rounds) || rounds < 1 || rounds > 20) {
+          return { success: false, message: 'Forced elimination interval must be between 1 and 20 rounds' };
         }
       }
 
@@ -349,6 +357,13 @@ class SettingsManager {
     return Number.isFinite(this.settings.battleElitePrepSec)
       ? this.settings.battleElitePrepSec
       : 12;
+  }
+
+  getBattleForcedEliminationIntervalRounds() {
+    const rounds = parseInt(this.settings.battleForcedEliminationIntervalRounds, 10);
+    return Number.isFinite(rounds)
+      ? rounds
+      : 3;
   }
 }
 

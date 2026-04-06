@@ -88,7 +88,22 @@ module.exports = {
     .addSubcommand(subcommand =>
       subcommand
         .setName('start')
-        .setDescription('Start the battle (creator only)'))
+        .setDescription('Start the battle (creator only)')
+        .addUserOption(option =>
+          option
+            .setName('bounty_1')
+            .setDescription('Optional bounty target #1 (must be in this battle)')
+            .setRequired(false))
+        .addUserOption(option =>
+          option
+            .setName('bounty_2')
+            .setDescription('Optional bounty target #2 (must be in this battle)')
+            .setRequired(false))
+        .addUserOption(option =>
+          option
+            .setName('bounty_3')
+            .setDescription('Optional bounty target #3 (must be in this battle)')
+            .setRequired(false)))
     
     .addSubcommand(subcommand =>
       subcommand
@@ -326,44 +341,96 @@ module.exports = {
     ).get(channelId, userId, 'open');
 
     if (!lobby) {
-      return interaction.editReply({ content: '❌ No open lobby found for you in this channel.', ephemeral: true });
+      return interaction.editReply({ content: 'No open lobby found for you in this channel.', ephemeral: true });
+    }
+
+    const joinedParticipants = battleService.getParticipants(lobby.lobby_id);
+    const joinedParticipantIds = new Set(joinedParticipants.map(p => p.user_id));
+    const selectedBountyUsers = [
+      interaction.options.getUser('bounty_1'),
+      interaction.options.getUser('bounty_2'),
+      interaction.options.getUser('bounty_3'),
+    ].filter(Boolean);
+    const bountyTargetIds = [...new Set(selectedBountyUsers.map(user => user.id))];
+
+    if (selectedBountyUsers.length !== bountyTargetIds.length) {
+      return interaction.editReply({ content: 'Duplicate bounty targets detected. Select up to 3 unique fighters.', ephemeral: true });
+    }
+
+    const invalidBountyTargets = bountyTargetIds.filter(id => !joinedParticipantIds.has(id));
+    if (invalidBountyTargets.length) {
+      return interaction.editReply({
+        content: `Bounty targets must be fighters already joined in this lobby. Invalid: ${invalidBountyTargets.map(id => `<@${id}>`).join(', ')}`,
+        ephemeral: true
+      });
+    }
+
+    const bountySave = battleService.setLobbyBounties(lobby.lobby_id, bountyTargetIds);
+    if (!bountySave.success) {
+      return interaction.editReply({ content: bountySave.message || 'Failed to save bounty targets.', ephemeral: true });
     }
 
     const startResult = battleService.startBattle(lobby.lobby_id, userId);
     if (!startResult.success) {
-      return interaction.editReply({ content: `❌ ${startResult.message}`, ephemeral: true });
+      return interaction.editReply({ content: startResult.message, ephemeral: true });
     }
 
-    await interaction.editReply({ content: `⚔️ Battle started with ${startResult.participants.length} fighters. Let the chaos begin...` });
+    const bountyIntro = bountyTargetIds.length
+      ? `\nBounties active: ${bountyTargetIds.map(id => `<@${id}>`).join(', ')}`
+      : '';
+    await interaction.editReply({ content: `Battle started with ${startResult.participants.length} fighters. Let the chaos begin...${bountyIntro}` });
 
     // Simulate and post rounds
-    const sim = battleService.simulateBattle(lobby.lobby_id, { era: lobby.era || 'mafia' });
+    const forcedEliminationInterval = settingsManager.getBattleForcedEliminationIntervalRounds
+      ? settingsManager.getBattleForcedEliminationIntervalRounds()
+      : 3;
+    const sim = battleService.simulateBattle(lobby.lobby_id, {
+      era: lobby.era || 'mafia',
+      forcedEliminationInterval
+    });
     if (!sim || !sim.winner) {
-      return interaction.followUp({ content: '❌ Battle simulation failed unexpectedly.' });
+      return interaction.followUp({ content: 'Battle simulation failed unexpectedly.' });
     }
 
     const timing = getBattleTimingMs();
 
     for (let i = 0; i < sim.rounds.length; i++) {
       const r = sim.rounds[i];
-      const lines = (r.events || []).slice(0, 8).map(e => `• ${e}`).join('\n');
+      const lines = (r.events || []).slice(0, 8).map(e => `- ${e}`).join('\n');
       const isEliteIntro = !!r.eliteFourActivated;
 
       if (isEliteIntro && Array.isArray(r.eliteFourUserIds) && r.eliteFourUserIds.length) {
         const mentions = r.eliteFourUserIds.map(id => `<@${id}>`).join(' ');
         await interaction.channel.send({
-          content: `🏆 **Elite Four incoming. Prepare yourselves...**\n${mentions}`
+          content: `Elite Four incoming. Prepare yourselves...\n${mentions}`
         });
         await sleep(timing.elitePrepMs);
       }
 
       const roundEmbed = new EmbedBuilder()
         .setColor(isEliteIntro ? '#ED4245' : '#57F287')
-        .setTitle(isEliteIntro ? `🏆 ELITE FOUR • Round ${r.round}` : `Round ${r.round}`)
+        .setTitle(isEliteIntro ? `ELITE FOUR - Round ${r.round}` : `Round ${r.round}`)
         .setDescription(`${lines}\n\n**Players Left:** ${r.playersLeft}`)
         .setFooter({ text: isEliteIntro ? 'No revivals. No mercy. Final circle.' : `Era: ${battleService.getEraConfig(lobby.era || 'mafia').name}` });
 
       await interaction.channel.send({ embeds: [roundEmbed] });
+
+      if (r.hpSnapshot && (r.hpSnapshot.mostHp?.length || r.hpSnapshot.leastHp?.length)) {
+        const formatHpRows = (rows) => (rows || [])
+          .map((entry, idx) => `${idx + 1}. <@${entry.userId}> - **${entry.hp} HP**`)
+          .join('\n') || 'No fighters remaining.';
+
+        const hpEmbed = new EmbedBuilder()
+          .setColor('#5865F2')
+          .setTitle(`HP Leaderboard - Round ${r.round}`)
+          .addFields(
+            { name: 'Top 5 Most HP', value: formatHpRows(r.hpSnapshot.mostHp), inline: true },
+            { name: 'Top 5 Least HP', value: formatHpRows(r.hpSnapshot.leastHp), inline: true }
+          )
+          .setFooter({ text: 'HP checkpoint every 10 rounds' });
+
+        await interaction.channel.send({ embeds: [hpEmbed] });
+      }
 
       // Add pacing pause between rounds (5-10 seconds), except after the final round
       if (i < sim.rounds.length - 1) {
@@ -378,6 +445,25 @@ module.exports = {
     const victoryTitle = battleService.getVictoryEmbedTitle(victoryEraKey);
     const victoryFooter = battleService.getVictoryEmbedFooter(victoryEraKey);
     const victoryAnnouncement = battleService.getVictoryAnnouncement(victoryEraKey, winner.user_id);
+    const topDamageSummary = (sim.topDamageDealers || [])
+      .map(row => `${row.rank}. <@${row.userId}> - **${row.damage}** dmg`)
+      .join('\n') || 'No damage data available.';
+    const bountySummary = (sim.bountyResults || [])
+      .map(result => {
+        if (result.winnerId) {
+          const reason = result.reason === 'final_blow' ? 'final blow' : 'most damage fallback';
+          return `<@${result.targetId}> -> <@${result.winnerId}> (${reason})`;
+        }
+        if (result.reason === 'not_eliminated') {
+          return `<@${result.targetId}> survived - bounty unclaimed`;
+        }
+        return `<@${result.targetId}> - no eligible claimant`;
+      })
+      .join('\n');
+    const bountyWinners = [...new Set((sim.bountyResults || [])
+      .filter(result => !!result.winnerId)
+      .map(result => `<@${result.winnerId}>`))];
+
     const winnerEmbed = new EmbedBuilder()
       .setColor('#FFD700')
       .setTitle(victoryTitle)
@@ -386,12 +472,18 @@ module.exports = {
         { name: 'Rounds Survived', value: `${sim.roundCount || sim.rounds.length}`, inline: true },
         { name: 'Final HP', value: `${winner.hp ?? 0}`, inline: true },
         { name: 'Total Damage', value: `${winner.total_damage_dealt ?? 0}`, inline: true },
-        { name: 'Total Fighters', value: `${sim.totalPlayers || startResult.participants.length}`, inline: true }
+        { name: 'Total Fighters', value: `${sim.totalPlayers || startResult.participants.length}`, inline: true },
+        { name: 'Top 5 Damage Dealers', value: topDamageSummary, inline: false },
+        ...(bountySummary ? [{ name: 'Bounty Claims', value: bountySummary, inline: false }] : [])
       )
       .setFooter({ text: victoryFooter })
       .setTimestamp();
 
-    await interaction.channel.send({ content: victoryAnnouncement, embeds: [winnerEmbed] });
+    const bountyWinnerText = bountyWinners.length
+      ? `\nBounties claimed by: ${bountyWinners.join(', ')}`
+      : '';
+
+    await interaction.channel.send({ content: `${victoryAnnouncement}${bountyWinnerText}`, embeds: [winnerEmbed] });
 
     logger.log(`Battle ${lobby.lobby_id} completed. Winner: ${winner.username}`);
   },

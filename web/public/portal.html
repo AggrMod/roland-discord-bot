@@ -1515,6 +1515,11 @@
                     <input type="number" id="battleElitePrepInput" min="1" max="120" step="1" class="form-input" placeholder="12" style="width:160px;">
                     <p style="color:var(--text-secondary); font-size:0.82em; margin-top:4px;">Extra suspense delay when only 4 players remain. Default: 12s</p>
                   </div>
+                  <div>
+                    <label class="form-label">Forced Elimination Interval (rounds)</label>
+                    <input type="number" id="battleForcedEliminationIntervalInput" min="1" max="20" step="1" class="form-input" placeholder="3" style="width:160px;">
+                    <p style="color:var(--text-secondary); font-size:0.82em; margin-top:4px;">Guarantees at least one elimination every X rounds. Default: 3</p>
+                  </div>
                   <div style="position:relative;z-index:0;">
                     <button class="btn-primary" onclick="saveBattleTimingSettings()" style="width:fit-content;">Save Battle Settings</button>
                   </div>

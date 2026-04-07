@@ -108,17 +108,17 @@ module.exports = {
                 .setName('role')
                 .setDescription('Discord role to assign')
                 .setRequired(true))
-            .addStringOption(option =>
-              option
-                .setName('symbol')
-                .setDescription('Token symbol (optional)')
-                .setRequired(false))
             .addNumberOption(option =>
               option
                 .setName('min_amount')
                 .setDescription('Minimum token balance required')
                 .setRequired(true)
                 .setMinValue(0))
+            .addStringOption(option =>
+              option
+                .setName('symbol')
+                .setDescription('Token symbol (optional)')
+                .setRequired(false))
             .addNumberOption(option =>
               option
                 .setName('max_amount')

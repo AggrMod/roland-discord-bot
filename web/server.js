@@ -4522,10 +4522,14 @@ class WebServer {
         setImmediate(() => {
           trackedWalletsService.ingestWebhookBatch(events, { source: 'webhook' })
             .then(tokenSummary => {
+              const ignoredReasonText = tokenSummary.ignored && tokenSummary.ignoredReasons
+                ? ` reasons=${JSON.stringify(tokenSummary.ignoredReasons)}`
+                : '';
               logger.log(
                 `[activity-webhook] nft received=${events.length} processed=${nftProcessed} ignored=${nftIgnored};`
                 + ` token processed=${tokenSummary.processed} ignored=${tokenSummary.ignored} failed=${tokenSummary.failed}`
                 + ` inserted=${tokenSummary.insertedEvents} dup=${tokenSummary.duplicateEvents} alerts=${tokenSummary.sentAlerts}`
+                + ignoredReasonText
               );
             })
             .catch(error => logger.error('Error in async token ingestion (nft-activity webhook):', error));
@@ -4553,9 +4557,13 @@ class WebServer {
         setImmediate(() => {
           trackedWalletsService.ingestWebhookBatch(events, { source: 'webhook-token-only' })
             .then(summary => {
+              const ignoredReasonText = summary.ignored && summary.ignoredReasons
+                ? ` reasons=${JSON.stringify(summary.ignoredReasons)}`
+                : '';
               logger.log(
                 `[token-webhook] received=${summary.received} processed=${summary.processed} ignored=${summary.ignored}`
                 + ` failed=${summary.failed} inserted=${summary.insertedEvents} dup=${summary.duplicateEvents} alerts=${summary.sentAlerts}`
+                + ignoredReasonText
               );
             })
             .catch(error => logger.error('Error in async token ingestion (token-activity webhook):', error));

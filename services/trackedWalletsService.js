@@ -17,6 +17,8 @@ const TOKEN_ACTIVITY_POLL_LIMIT = Math.max(10, Math.min(50, Number(process.env.T
 const TOKEN_ACTIVITY_ALERT_CAP_PER_WALLET = Math.max(1, Math.min(25, Number(process.env.TRACKED_TOKEN_ALERT_CAP || 8)));
 const SOL_DELTA_EPSILON = Number(process.env.TRACKED_TOKEN_SOL_EPSILON || 0.00001);
 const STABLE_DELTA_EPSILON = Number(process.env.TRACKED_TOKEN_STABLE_EPSILON || 0.01);
+const TOKEN_WEBHOOK_RETRY_MAX = Math.max(0, Math.min(6, Number(process.env.TRACKED_TOKEN_WEBHOOK_RETRY_MAX || 3)));
+const TOKEN_WEBHOOK_RETRY_BASE_MS = Math.max(250, Number(process.env.TRACKED_TOKEN_WEBHOOK_RETRY_BASE_MS || 1500));
 
 function safeToNumber(value) {
   const n = Number(value);
@@ -80,6 +82,7 @@ class TrackedWalletsService {
   constructor() {
     this.connection = tokenService.connection || new Connection(process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com');
     this.invalidWalletWarned = new Set();
+    this.webhookRetryKeys = new Set();
   }
 
   isTokenTrackerEnabled(guildId) {
@@ -1265,6 +1268,7 @@ class TrackedWalletsService {
 
   async ingestWebhookEvent(event, options = {}) {
     const source = String(options.source || 'webhook');
+    const attempt = Math.max(0, Number(options.attempt || 0));
     const signature = this.extractWebhookSignature(event);
     if (!signature) {
       return { success: true, ignored: true, reason: 'missing_signature' };
@@ -1287,10 +1291,18 @@ class TrackedWalletsService {
       tx = await this.connection.getParsedTransaction(signature, { maxSupportedTransactionVersion: 0 });
     } catch (e) {
       logger.error(`[tracked-token-webhook] parsed transaction fetch failed for ${signature}:`, e?.message || e);
+      if (attempt < TOKEN_WEBHOOK_RETRY_MAX) {
+        this.scheduleWebhookRetry(event, { source, attempt, signature, reason: 'parsed_tx_fetch_failed' });
+      }
       return { success: false, ignored: true, reason: 'parsed_tx_fetch_failed' };
     }
 
     if (!tx) {
+      if (attempt < TOKEN_WEBHOOK_RETRY_MAX) {
+        this.scheduleWebhookRetry(event, { source, attempt, signature, reason: 'tx_not_available' });
+      } else {
+        logger.warn(`[tracked-token-webhook] tx not available after ${attempt + 1} attempts for ${signature}`);
+      }
       return { success: true, ignored: true, reason: 'tx_not_available' };
     }
 
@@ -1375,6 +1387,7 @@ class TrackedWalletsService {
     let insertedEvents = 0;
     let duplicateEvents = 0;
     let sentAlerts = 0;
+    const ignoredReasons = {};
 
     for (const event of batch) {
       const signature = this.extractWebhookSignature(event);
@@ -1385,13 +1398,18 @@ class TrackedWalletsService {
       if (signature) seenSignatures.add(signature);
 
       try {
-        const result = await this.ingestWebhookEvent(event, { source, tokenConfigCache, mintConfigCache });
+        const result = await this.ingestWebhookEvent(event, { source, tokenConfigCache, mintConfigCache, attempt: 0 });
         if (!result?.success) {
           failed += 1;
           continue;
         }
-        if (result.ignored) ignored += 1;
-        else processed += 1;
+        if (result.ignored) {
+          ignored += 1;
+          const reason = String(result.reason || 'unknown').trim() || 'unknown';
+          ignoredReasons[reason] = Number(ignoredReasons[reason] || 0) + 1;
+        } else {
+          processed += 1;
+        }
         insertedEvents += Number(result.insertedEvents || 0);
         duplicateEvents += Number(result.duplicateEvents || 0);
         sentAlerts += Number(result.sentAlerts || 0);
@@ -1409,6 +1427,7 @@ class TrackedWalletsService {
       insertedEvents,
       duplicateEvents,
       sentAlerts,
+      ignoredReasons,
     };
   }
 
@@ -1724,10 +1743,20 @@ class TrackedWalletsService {
     const client = clientProvider.getClient();
     if (!client) return;
 
-    const channelId = String(evt?.alertChannelId || walletRow?.alert_channel_id || '').trim();
-    if (!channelId) return;
+    const channelId = String(await this.resolveTokenAlertChannelId({
+      guildId,
+      eventChannelId: evt?.alertChannelId,
+      walletChannelId: walletRow?.alert_channel_id,
+    }) || '').trim();
+    if (!channelId) {
+      logger.warn(`[tracked-token-alert] skipped no channel wallet=${walletRow?.wallet_address || 'unknown'} guild=${guildId || ''}`);
+      return;
+    }
     const channel = await client.channels.fetch(channelId).catch(() => null);
-    if (!channel || !channel.send) return;
+    if (!channel || !channel.send) {
+      logger.warn(`[tracked-token-alert] skipped invalid channel=${channelId} guild=${guildId || ''}`);
+      return;
+    }
 
     const eventType = String(evt?.eventType || evt?.event_type || 'activity').toLowerCase();
     const amountDelta = safeToNumber(evt?.amountDelta ?? evt?.amount_delta);
@@ -1882,6 +1911,72 @@ class TrackedWalletsService {
     } catch (e) {
       logger.error(`[wallet-alert] failed for wallet=${walletRow.wallet_address}:`, e.message);
     }
+  }
+
+  scheduleWebhookRetry(event, { source, attempt, signature, reason }) {
+    const nextAttempt = Math.max(0, Number(attempt || 0)) + 1;
+    if (nextAttempt > TOKEN_WEBHOOK_RETRY_MAX) return;
+
+    const retryKey = `${String(signature || this.extractWebhookSignature(event) || 'unknown')}|${String(source || 'webhook')}|${nextAttempt}`;
+    if (this.webhookRetryKeys.has(retryKey)) return;
+    this.webhookRetryKeys.add(retryKey);
+
+    const delayMs = TOKEN_WEBHOOK_RETRY_BASE_MS * Math.pow(2, Math.max(0, nextAttempt - 1));
+    logger.log(`[tracked-token-webhook] scheduling retry attempt=${nextAttempt} in ${delayMs}ms for ${signature || 'unknown'} (${reason || 'unknown'})`);
+    setTimeout(async () => {
+      try {
+        await this.ingestWebhookEvent(event, {
+          source: source || 'webhook-retry',
+          tokenConfigCache: new Map(),
+          mintConfigCache: new Map(),
+          attempt: nextAttempt,
+        });
+      } catch (e) {
+        logger.error(`[tracked-token-webhook] retry attempt=${nextAttempt} failed for ${signature || 'unknown'}:`, e?.message || e);
+      } finally {
+        this.webhookRetryKeys.delete(retryKey);
+      }
+    }, delayMs);
+  }
+
+  async resolveTokenAlertChannelId({ guildId, eventChannelId, walletChannelId }) {
+    const direct = String(eventChannelId || walletChannelId || '').trim();
+    if (direct) return direct;
+
+    const guild = String(guildId || '').trim();
+    if (!guild) return '';
+
+    try {
+      const walletDefault = db.prepare(`
+        SELECT alert_channel_id
+        FROM tracked_wallets
+        WHERE guild_id = ?
+          AND enabled = 1
+          AND alert_channel_id IS NOT NULL
+          AND TRIM(alert_channel_id) <> ''
+        ORDER BY id ASC
+        LIMIT 1
+      `).get(guild);
+      const fromWallet = String(walletDefault?.alert_channel_id || '').trim();
+      if (fromWallet) return fromWallet;
+    } catch (_error) {}
+
+    try {
+      const nftChannel = db.prepare(`
+        SELECT channel_id
+        FROM nft_tracked_collections
+        WHERE guild_id = ?
+          AND enabled = 1
+          AND channel_id IS NOT NULL
+          AND TRIM(channel_id) <> ''
+        ORDER BY id ASC
+        LIMIT 1
+      `).get(guild);
+      const fromNftCollection = String(nftChannel?.channel_id || '').trim();
+      if (fromNftCollection) return fromNftCollection;
+    } catch (_error) {}
+
+    return '';
   }
 }
 

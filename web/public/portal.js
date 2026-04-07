@@ -4816,6 +4816,7 @@ async function loadAdminAnalyticsView() {
 
 let adminTiersCache = [];
 let adminTraitsCache = [];
+let adminTokenRulesCache = [];
 let discordRolesCache = null;
 
 async function fetchDiscordRoles() {
@@ -5485,7 +5486,7 @@ async function loadVerificationSettings() {
 
     container.innerHTML = `
       <div style="${cardStyle}">
-        <h3 style="${cardHeader}">✅ Verification Settings</h3>
+        <h3 style="${cardHeader}">Verification Settings</h3>
         <div>
           <label style="${fieldLabel}">Base Verified Role</label>
           <p style="color:var(--text-secondary);font-size:0.8em;margin:0 0 8px 0;">Assigned to all verified members regardless of NFT holdings</p>
@@ -5509,58 +5510,12 @@ async function loadVerificationSettings() {
         </div>
 
         <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);margin-top:var(--space-4);">
-          <button class="btn-secondary" id="verOgSyncBtn" onclick="runOgSync()" style="font-size:0.85em;padding:8px 16px;">✨ Run OG Sync</button>
-          <button class="btn-primary" onclick="saveVerificationSettings()" style="font-size:0.85em;padding:8px 16px;">💾 Save Verification Settings</button>
+          <button class="btn-secondary" id="verOgSyncBtn" onclick="runOgSync()" style="font-size:0.85em;padding:8px 16px;">Run OG Sync</button>
+          <button class="btn-primary" onclick="saveVerificationSettings()" style="font-size:0.85em;padding:8px 16px;">Save Verification Settings</button>
         </div>
       </div>
     `;
 
-    container.insertAdjacentHTML('beforeend', `
-      <div style="${cardStyle}">
-        <h3 style="${cardHeader}">🪙 Token Role Rules</h3>
-        <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:12px;">Map token balance ranges to Discord roles.</p>
-        <input type="hidden" id="ver_tokenRuleEditId" value="">
-        <div style="${gridRow}">
-          <div>
-            <label style="${fieldLabel}">Token Mint</label>
-            <input id="ver_tokenRoleMint" type="text" placeholder="SPL mint address" style="${fieldInput}">
-          </div>
-          <div>
-            <label style="${fieldLabel}">Token Symbol (optional)</label>
-            <input id="ver_tokenRoleSymbol" type="text" placeholder="e.g. CATZ" style="${fieldInput}">
-          </div>
-        </div>
-        <div style="${gridRow}margin-top:var(--space-3);">
-          <div>
-            <label style="${fieldLabel}">Minimum Balance</label>
-            <input id="ver_tokenRoleMinAmount" type="number" min="0" step="0.000001" value="0" style="${fieldInput}">
-          </div>
-          <div>
-            <label style="${fieldLabel}">Maximum Balance (optional)</label>
-            <input id="ver_tokenRoleMaxAmount" type="number" min="0" step="0.000001" placeholder="No upper limit" style="${fieldInput}">
-          </div>
-        </div>
-        <div style="${gridRow}margin-top:var(--space-3);">
-          <div>
-            <label style="${fieldLabel}">Role</label>
-            ${roleSelectHTML('ver_tokenRoleRoleId', '')}
-          </div>
-          <div style="display:flex;align-items:flex-end;">
-            <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
-              <input type="checkbox" id="ver_tokenRoleEnabled" checked>
-              Rule Enabled
-            </label>
-          </div>
-        </div>
-        <div style="display:flex;gap:var(--space-3);justify-content:flex-end;margin-top:var(--space-4);">
-          <button class="btn-secondary" onclick="resetVerificationTokenRoleForm()" style="font-size:0.85em;padding:8px 16px;">Reset</button>
-          <button class="btn-primary" onclick="submitVerificationTokenRoleRule()" style="font-size:0.85em;padding:8px 16px;">Save Token Rule</button>
-        </div>
-        <div id="ver_tokenRuleListWrap" style="margin-top:var(--space-4);"></div>
-      </div>
-    `);
-
-    // Populate role selects
     populateRoleSelect('ver_baseVerifiedRoleId', vs.baseVerifiedRoleId || '').then(() => {
       const sel = document.getElementById('ver_baseVerifiedRoleId');
       if (sel && sel.options.length > 0) sel.options[0].textContent = '-- None (disabled) --';
@@ -5569,179 +5524,9 @@ async function loadVerificationSettings() {
       const sel = document.getElementById('ver_ogRoleId');
       if (sel && sel.options.length > 0) sel.options[0].textContent = '-- None --';
     });
-    populateRoleSelect('ver_tokenRoleRoleId', '').then(() => {
-      const sel = document.getElementById('ver_tokenRoleRoleId');
-      if (sel && sel.options.length > 0) sel.options[0].textContent = '-- Select Role --';
-    });
-    await renderVerificationTokenRoleRules();
   } catch (e) {
     console.error('[Verification] Settings load error:', e);
     container.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;">Failed to load verification settings.</p>';
-  }
-}
-
-let verificationTokenRoleRulesCache = [];
-
-function resetVerificationTokenRoleForm() {
-  const editEl = document.getElementById('ver_tokenRuleEditId');
-  const mintEl = document.getElementById('ver_tokenRoleMint');
-  const symbolEl = document.getElementById('ver_tokenRoleSymbol');
-  const minEl = document.getElementById('ver_tokenRoleMinAmount');
-  const maxEl = document.getElementById('ver_tokenRoleMaxAmount');
-  const roleEl = document.getElementById('ver_tokenRoleRoleId');
-  const enabledEl = document.getElementById('ver_tokenRoleEnabled');
-
-  if (editEl) editEl.value = '';
-  if (mintEl) mintEl.value = '';
-  if (symbolEl) symbolEl.value = '';
-  if (minEl) minEl.value = '0';
-  if (maxEl) maxEl.value = '';
-  if (roleEl) roleEl.value = '';
-  if (enabledEl) enabledEl.checked = true;
-}
-
-function editVerificationTokenRoleRule(id) {
-  const rule = verificationTokenRoleRulesCache.find(r => String(r.id) === String(id));
-  if (!rule) return;
-
-  const editEl = document.getElementById('ver_tokenRuleEditId');
-  const mintEl = document.getElementById('ver_tokenRoleMint');
-  const symbolEl = document.getElementById('ver_tokenRoleSymbol');
-  const minEl = document.getElementById('ver_tokenRoleMinAmount');
-  const maxEl = document.getElementById('ver_tokenRoleMaxAmount');
-  const roleEl = document.getElementById('ver_tokenRoleRoleId');
-  const enabledEl = document.getElementById('ver_tokenRoleEnabled');
-
-  if (editEl) editEl.value = rule.id;
-  if (mintEl) mintEl.value = rule.tokenMint || '';
-  if (symbolEl) symbolEl.value = rule.tokenSymbol || '';
-  if (minEl) minEl.value = Number(rule.minAmount || 0);
-  if (maxEl) maxEl.value = rule.maxAmount === null || rule.maxAmount === undefined ? '' : Number(rule.maxAmount);
-  if (roleEl) roleEl.value = rule.roleId || '';
-  if (enabledEl) enabledEl.checked = rule.enabled !== false;
-}
-
-async function submitVerificationTokenRoleRule() {
-  const editId = document.getElementById('ver_tokenRuleEditId')?.value || '';
-  const tokenMint = document.getElementById('ver_tokenRoleMint')?.value?.trim() || '';
-  const tokenSymbol = document.getElementById('ver_tokenRoleSymbol')?.value?.trim() || '';
-  const minAmount = Number(document.getElementById('ver_tokenRoleMinAmount')?.value || '0');
-  const maxAmountRaw = document.getElementById('ver_tokenRoleMaxAmount')?.value;
-  const roleId = document.getElementById('ver_tokenRoleRoleId')?.value || '';
-  const enabled = !!document.getElementById('ver_tokenRoleEnabled')?.checked;
-
-  if (!tokenMint) return showError('Token mint is required.');
-  if (!roleId) return showError('Role is required for token rule.');
-  if (!Number.isFinite(minAmount) || minAmount < 0) return showError('Minimum amount must be a valid non-negative number.');
-
-  const body = {
-    tokenMint,
-    tokenSymbol: tokenSymbol || null,
-    minAmount,
-    maxAmount: maxAmountRaw === '' || maxAmountRaw === null || maxAmountRaw === undefined ? null : Number(maxAmountRaw),
-    roleId,
-    enabled,
-  };
-  if (body.maxAmount !== null && (!Number.isFinite(body.maxAmount) || body.maxAmount < 0)) {
-    return showError('Maximum amount must be empty or a valid non-negative number.');
-  }
-
-  try {
-    const method = editId ? 'PUT' : 'POST';
-    const endpoint = editId ? `/api/admin/roles/tokens/${encodeURIComponent(editId)}` : '/api/admin/roles/tokens';
-    const response = await fetch(endpoint, {
-      method,
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
-      body: JSON.stringify(body)
-    });
-    const data = await response.json();
-    if (!response.ok || data.success === false) return showError(data.message || 'Failed to save token role rule.');
-    showSuccess(editId ? 'Token role rule updated.' : 'Token role rule added.');
-    resetVerificationTokenRoleForm();
-    await renderVerificationTokenRoleRules();
-  } catch (_error) {
-    showError('Failed to save token role rule.');
-  }
-}
-
-async function removeVerificationTokenRoleRule(id) {
-  if (!confirm('Remove this token role rule?')) return;
-  try {
-    const response = await fetch(`/api/admin/roles/tokens/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-      credentials: 'include',
-      headers: buildTenantRequestHeaders()
-    });
-    const data = await response.json();
-    if (!response.ok || data.success === false) return showError(data.message || 'Failed to remove token role rule.');
-    showSuccess('Token role rule removed.');
-    await renderVerificationTokenRoleRules();
-  } catch (_error) {
-    showError('Failed to remove token role rule.');
-  }
-}
-
-async function renderVerificationTokenRoleRules() {
-  const wrap = document.getElementById('ver_tokenRuleListWrap');
-  if (!wrap) return;
-
-  try {
-    const response = await fetch('/api/admin/roles/tokens', { credentials: 'include', headers: buildTenantRequestHeaders() });
-    const data = await response.json();
-    if (!response.ok || data.success === false) throw new Error(data.message || 'Failed to load token role rules');
-
-    const rules = Array.isArray(data.rules) ? data.rules : [];
-    verificationTokenRoleRulesCache = rules;
-
-    if (!rules.length) {
-      wrap.innerHTML = '<p style="color:var(--text-secondary);font-size:0.85em;padding:12px 0;">No token role rules configured yet.</p>';
-      return;
-    }
-
-    const rows = rules.map(rule => {
-      const mint = String(rule.tokenMint || '').trim();
-      const mintShort = mint ? `${mint.slice(0, 6)}...${mint.slice(-4)}` : '—';
-      const symbol = rule.tokenSymbol || '—';
-      const min = Number(rule.minAmount || 0).toLocaleString(undefined, { maximumFractionDigits: 6 });
-      const max = rule.maxAmount === null || rule.maxAmount === undefined
-        ? '∞'
-        : Number(rule.maxAmount).toLocaleString(undefined, { maximumFractionDigits: 6 });
-      return `
-        <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
-          <td style="padding:8px 10px;color:#cbd5e1;font-family:monospace;font-size:0.82em;" title="${escapeHtml(mint)}">${escapeHtml(mintShort)}</td>
-          <td style="padding:8px 10px;color:#e2e8f0;">${escapeHtml(symbol)}</td>
-          <td style="padding:8px 10px;color:#cbd5e1;">${min}</td>
-          <td style="padding:8px 10px;color:#cbd5e1;">${max}</td>
-          <td style="padding:8px 10px;color:#93c5fd;">${escapeHtml(rule.roleId || '—')}</td>
-          <td style="padding:8px 10px;color:${rule.enabled !== false ? '#86efac' : '#fca5a5'};">${rule.enabled !== false ? 'On' : 'Off'}</td>
-          <td style="padding:8px 10px;text-align:right;white-space:nowrap;">
-            <button onclick="editVerificationTokenRoleRule('${rule.id}')" style="width:30px;height:30px;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.35);border-radius:6px;cursor:pointer;color:#818cf8;font-size:0.85em;">✏️</button>
-            <button onclick="removeVerificationTokenRoleRule('${rule.id}')" style="width:30px;height:30px;background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.35);border-radius:6px;cursor:pointer;color:#fca5a5;font-size:0.85em;margin-left:4px;">🗑️</button>
-          </td>
-        </tr>
-      `;
-    }).join('');
-
-    wrap.innerHTML = `
-      <div style="overflow-x:auto;border:1px solid rgba(99,102,241,0.18);border-radius:10px;background:rgba(14,23,44,0.35);">
-        <table style="width:100%;border-collapse:collapse;">
-          <thead><tr style="background:rgba(30,41,59,0.7);">
-            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Mint</th>
-            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Symbol</th>
-            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Min</th>
-            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Max</th>
-            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Role ID</th>
-            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Enabled</th>
-            <th style="padding:8px 10px;"></th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    `;
-  } catch (e) {
-    console.error('[Verification] Token role rules load error:', e);
-    wrap.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;padding:10px;">Failed to load token role rules.</p>';
   }
 }
 
@@ -5789,7 +5574,7 @@ async function runOgSync(fullSync = false) {
   } catch (e) {
     showError('Error running OG sync: ' + e.message);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '✨ Run OG Sync'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Run OG Sync'; }
   }
 }
 
@@ -6337,30 +6122,33 @@ async function loadAdminRoles() {
   fetchDiscordRoles();
 
   try {
-    const response = await fetch('/api/admin/roles/config', { credentials: 'include' });
+    const response = await fetch('/api/admin/roles/config', { credentials: 'include', headers: buildTenantRequestHeaders() });
     const data = await response.json();
     if (!data.success) throw new Error(data.message || 'Failed to load roles');
 
     const config = data.config || {};
     const tiers = config.tiers || [];
     const traitRoles = config.traitRoles || [];
+    const tokenRules = config.tokenRules || [];
     adminTiersCache = tiers;
     adminTraitsCache = traitRoles;
+    adminTokenRulesCache = tokenRules;
 
     const allRules = [
       ...tiers.map((t, idx) => ({ ...t, _type: 'collection', _idx: idx })),
-      ...traitRoles.map((t, idx) => ({ ...t, _type: 'trait', _idx: idx }))
+      ...traitRoles.map((t, idx) => ({ ...t, _type: 'trait', _idx: idx })),
+      ...tokenRules.map((t, idx) => ({ ...t, _type: 'token', _idx: idx }))
     ];
 
     let html = '';
     html += `<div style="margin-bottom:12px;">
-      <p style="color:var(--text-secondary); font-size:0.85em; margin:0;">Define collection-based tiers and trait-based roles for automatic Discord role assignment.</p>
+      <p style="color:var(--text-secondary); font-size:0.85em; margin:0;">Define NFT collection, NFT trait, and token-based rules for automatic Discord role assignment.</p>
     </div>`;
 
     if (allRules.length === 0) {
       html += `<div style="padding:24px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.15); border-radius:10px; color:var(--text-secondary); text-align:center;">No verification rules yet. Click <strong>+ Add Rule</strong> to create one.</div>`;
     } else {
-      const truncId = (id) => id && id.length > 16 ? id.slice(0, 8) + '...' + id.slice(-4) : (id || '—');
+      const truncId = (id) => id && id.length > 16 ? id.slice(0, 8) + '...' + id.slice(-4) : (id || '-');
       const resolveRole = (roleId) => {
         if (!roleId) return '<span style="color:var(--text-muted);">Not set</span>';
         const role = (discordRolesCache || []).find(r => r.id === roleId);
@@ -6373,27 +6161,41 @@ async function loadAdminRoles() {
 
       const rows = allRules.map(rule => {
         const isCollection = rule._type === 'collection';
+        const isTrait = rule._type === 'trait';
+        const isToken = rule._type === 'token';
         const badge = isCollection
-          ? '<span class="badge-collection">Collection</span>'
-          : '<span class="badge-trait">Trait</span>';
+          ? '<span class="badge-collection">NFT Collection</span>'
+          : isTrait
+            ? '<span class="badge-trait">NFT Trait</span>'
+            : '<span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:0.75em;font-weight:600;color:#fef3c7;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.35);">Token</span>';
         const ruleName = isCollection
           ? escapeHtml(rule.name || 'Unnamed')
-          : escapeHtml(rule.traitType || rule.trait_type || '');
+          : isTrait
+            ? escapeHtml(rule.traitType || rule.trait_type || '')
+            : escapeHtml(rule.tokenSymbol || 'Token Rule');
         const colId = isCollection
           ? (rule.collectionId || rule.collection_id || '')
-          : (rule.collectionId || rule.trait_collection_id || '');
+          : isTrait
+            ? (rule.collectionId || rule.trait_collection_id || '')
+            : (rule.tokenMint || '');
         const roleId = rule.roleId || '';
         let details = '';
         if (isCollection) {
-          const max = (rule.maxNFTs === Infinity || rule.maxNFTs >= 999999) ? '∞' : rule.maxNFTs;
+          const max = (rule.maxNFTs === Infinity || rule.maxNFTs >= 999999) ? 'INF' : rule.maxNFTs;
           details = `Min: ${rule.minNFTs}, Max: ${max} NFTs`;
-        } else {
+        } else if (isTrait) {
           const vals = rule.traitValues || rule.trait_values || (rule.traitValue || rule.trait_value ? [rule.traitValue || rule.trait_value] : []);
           const valArr = Array.isArray(vals) ? vals : String(vals).split(',').map(v => v.trim()).filter(Boolean);
-          details = valArr.length ? 'Values: ' + valArr.map(v => escapeHtml(v)).join(', ') : '—';
+          details = valArr.length ? 'Values: ' + valArr.map(v => escapeHtml(v)).join(', ') : '-';
+        } else {
+          const min = Number(rule.minAmount || 0).toLocaleString(undefined, { maximumFractionDigits: 6 });
+          const max = rule.maxAmount === null || rule.maxAmount === undefined
+            ? 'INF'
+            : Number(rule.maxAmount).toLocaleString(undefined, { maximumFractionDigits: 6 });
+          details = `Balance: ${min} -> ${max}${rule.enabled === false ? ' (disabled)' : ''}`;
         }
-        const editFn = isCollection ? `editTier(${rule._idx})` : `editTraitRule(${rule._idx})`;
-        const deleteFn = isCollection ? `deleteTier(${rule._idx})` : `deleteTraitRule(${rule._idx})`;
+        const editFn = isCollection ? `editTier(${rule._idx})` : isTrait ? `editTraitRule(${rule._idx})` : `editTokenRule(${rule._idx})`;
+        const deleteFn = isCollection ? `deleteTier(${rule._idx})` : isTrait ? `deleteTraitRule(${rule._idx})` : `deleteTokenRule(${rule._idx})`;
 
         return `<tr>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15);">${badge}</td>
@@ -6404,8 +6206,8 @@ async function loadAdminRoles() {
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#93c5fd; font-size:0.85em;">${resolveRole(roleId)}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:var(--text-secondary); font-size:0.85em;">${details}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); text-align:right; white-space:nowrap;">
-            <button onclick="${editFn}" style="width:32px; height:32px; background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.35); border-radius:6px; cursor:pointer; color:#818cf8; font-size:0.9em;">✏️</button>
-            <button onclick="${deleteFn}" style="width:32px; height:32px; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.35); border-radius:6px; cursor:pointer; color:#fca5a5; font-size:0.9em; margin-left:4px;">🗑️</button>
+            <button onclick="${editFn}" style="padding:6px 10px; background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.35); border-radius:6px; cursor:pointer; color:#818cf8; font-size:0.8em;">Edit</button>
+            <button onclick="${deleteFn}" style="padding:6px 10px; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.35); border-radius:6px; cursor:pointer; color:#fca5a5; font-size:0.8em; margin-left:4px;">Delete</button>
           </td>
         </tr>`;
       }).join('');
@@ -6416,7 +6218,7 @@ async function loadAdminRoles() {
             <thead><tr style="background:rgba(99,102,241,0.12); text-align:left;">
               <th style="padding:10px; color:#c9d6ff;">Type</th>
               <th style="padding:10px; color:#c9d6ff;">Rule Name</th>
-              <th style="padding:10px; color:#c9d6ff;">Collection ID</th>
+              <th style="padding:10px; color:#c9d6ff;">Scope</th>
               <th style="padding:10px; color:#c9d6ff;">Discord Role</th>
               <th style="padding:10px; color:#c9d6ff;">Details</th>
               <th style="padding:10px; color:#c9d6ff; text-align:right;">Actions</th>
@@ -6426,7 +6228,7 @@ async function loadAdminRoles() {
         </div>`;
     }
 
-    html += `<div style="margin-top:8px; color:var(--text-secondary); font-size:0.9em;">Showing ${tiers.length} collection rule(s) and ${traitRoles.length} trait rule(s)</div>`;
+    html += `<div style="margin-top:8px; color:var(--text-secondary); font-size:0.9em;">Showing ${tiers.length} collection rule(s), ${traitRoles.length} trait rule(s), and ${tokenRules.length} token rule(s)</div>`;
 
     content.innerHTML = html;
   } catch (e) {
@@ -6435,7 +6237,7 @@ async function loadAdminRoles() {
 }
 
 // ==================== UNIFIED VERIFICATION RULE MODAL ====================
-let _editingRuleType = null; // "tier" or "trait"
+let _editingRuleType = null; // "tier" | "trait" | "token"
 let _editingRuleIdx = null;
 let _traitValues = [];
 
@@ -6458,17 +6260,22 @@ function _ensureAddRuleModal() {
           <div style="display:flex;gap:12px;">
             <label class="rule-type-option" id="ruleTypeCollectionLabel">
               <input type="radio" name="ruleType" value="collection" id="ruleTypeCollection" onchange="onRuleTypeChange()" checked>
-              <span>\uD83C\uDFC6 Collection</span>
+              <span>NFT Collection</span>
               <small>Min/max NFT count</small>
             </label>
             <label class="rule-type-option" id="ruleTypeTraitLabel">
               <input type="radio" name="ruleType" value="trait" id="ruleTypeTrait" onchange="onRuleTypeChange()">
-              <span>\uD83C\uDFAD Trait</span>
+              <span>NFT Trait</span>
               <small>Specific NFT traits</small>
+            </label>
+            <label class="rule-type-option" id="ruleTypeTokenLabel">
+              <input type="radio" name="ruleType" value="token" id="ruleTypeToken" onchange="onRuleTypeChange()">
+              <span>Token</span>
+              <small>Balance range</small>
             </label>
           </div>
         </div>
-        <div class="form-group" style="margin-bottom:14px;">
+        <div class="form-group" id="collectionIdField" style="margin-bottom:14px;">
           <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Collection ID <span style="color:#f87171;">*</span></label>
           <input type="text" id="ruleCollectionId" placeholder="Solana collection address" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
         </div>
@@ -6487,8 +6294,8 @@ function _ensureAddRuleModal() {
               <input type="number" id="ruleMinNFTs" value="1" min="0" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
             </div>
             <div class="form-group">
-              <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Max NFTs <small style="color:var(--text-secondary);">(blank = \u221E)</small></label>
-              <input type="number" id="ruleMaxNFTs" placeholder="\u221E" min="0" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
+              <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Max NFTs <small style="color:var(--text-secondary);">(blank = INF)</small></label>
+              <input type="number" id="ruleMaxNFTs" placeholder="INF" min="0" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
             </div>
           </div>
         </div>
@@ -6513,6 +6320,32 @@ function _ensureAddRuleModal() {
             <input type="text" id="ruleDescription" placeholder="e.g. Gold background holders" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
           </div>
         </div>
+        <div id="tokenFields" style="display:none;">
+          <div class="form-group" style="margin-bottom:14px;">
+            <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Token Mint <span style="color:#f87171;">*</span></label>
+            <input type="text" id="ruleTokenMint" placeholder="SPL token mint address" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;font-family:monospace;">
+          </div>
+          <div class="form-group" style="margin-bottom:14px;">
+            <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Token Symbol (optional)</label>
+            <input type="text" id="ruleTokenSymbol" placeholder="e.g. CATZ" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+            <div class="form-group">
+              <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Minimum Balance</label>
+              <input type="number" id="ruleTokenMinAmount" value="0" min="0" step="0.000001" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
+            </div>
+            <div class="form-group">
+              <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Maximum Balance <small style="color:var(--text-secondary);">(blank = INF)</small></label>
+              <input type="number" id="ruleTokenMaxAmount" min="0" step="0.000001" placeholder="INF" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:14px;">
+            <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
+              <input type="checkbox" id="ruleTokenEnabled" checked>
+              Rule Enabled
+            </label>
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" onclick="closeAddRuleModal()">Cancel</button>
@@ -6523,9 +6356,17 @@ function _ensureAddRuleModal() {
 }
 
 function onRuleTypeChange() {
-  const isTrait = document.getElementById('ruleTypeTrait').checked;
-  document.getElementById('collectionFields').style.display = isTrait ? 'none' : '';
-  document.getElementById('traitFields').style.display = isTrait ? '' : 'none';
+  const selected = document.querySelector('input[name="ruleType"]:checked')?.value || 'collection';
+  const isTrait = selected === 'trait';
+  const isToken = selected === 'token';
+  const collectionIdField = document.getElementById('collectionIdField');
+  const collectionFields = document.getElementById('collectionFields');
+  const traitFields = document.getElementById('traitFields');
+  const tokenFields = document.getElementById('tokenFields');
+  if (collectionIdField) collectionIdField.style.display = isToken ? 'none' : '';
+  if (collectionFields) collectionFields.style.display = (!isTrait && !isToken) ? '' : 'none';
+  if (traitFields) traitFields.style.display = isTrait ? '' : 'none';
+  if (tokenFields) tokenFields.style.display = isToken ? '' : 'none';
 }
 
 function onTraitValueKeydown(e) {
@@ -6574,30 +6415,48 @@ function openAddRuleModal(editData = null) {
   document.getElementById('ruleMaxNFTs').value = '';
   document.getElementById('ruleTraitType').value = '';
   document.getElementById('ruleDescription').value = '';
+  document.getElementById('ruleTokenMint').value = '';
+  document.getElementById('ruleTokenSymbol').value = '';
+  document.getElementById('ruleTokenMinAmount').value = '0';
+  document.getElementById('ruleTokenMaxAmount').value = '';
+  document.getElementById('ruleTokenEnabled').checked = true;
   document.getElementById('traitValueTags').innerHTML = '';
   document.getElementById('traitValueInput').value = '';
   document.getElementById('ruleTraitValues').value = '';
 
   // Set type radio
-  const isTrait = editData?._type === 'trait';
-  document.getElementById(isTrait ? 'ruleTypeTrait' : 'ruleTypeCollection').checked = true;
+  let ruleType = 'collection';
+  if (editData?._type === 'trait') ruleType = 'trait';
+  if (editData?._type === 'token') ruleType = 'token';
+  if (ruleType === 'token') document.getElementById('ruleTypeToken').checked = true;
+  else if (ruleType === 'trait') document.getElementById('ruleTypeTrait').checked = true;
+  else document.getElementById('ruleTypeCollection').checked = true;
   onRuleTypeChange();
 
   // Populate edit data
   if (editData) {
-    document.getElementById('ruleCollectionId').value = editData.collectionId || editData.collection_id || editData.trait_collection_id || '';
     document.getElementById('ruleRoleId').value = editData.roleId || '';
     document.getElementById('addRuleModalTitle').textContent = 'Edit Verification Rule';
-    if (isTrait) {
-      document.getElementById('ruleTraitType').value = editData.traitType || editData.trait_type || '';
-      document.getElementById('ruleDescription').value = editData.description || '';
-      const vals = editData.traitValues || editData.trait_values || (editData.traitValue || editData.trait_value ? [editData.traitValue || editData.trait_value] : []);
-      _traitValues = Array.isArray(vals) ? [...vals] : String(vals).split(',').map(v => v.trim()).filter(Boolean);
-      renderTraitValueTags();
+
+    if (ruleType === 'token') {
+      document.getElementById('ruleTokenMint').value = editData.tokenMint || '';
+      document.getElementById('ruleTokenSymbol').value = editData.tokenSymbol || '';
+      document.getElementById('ruleTokenMinAmount').value = Number(editData.minAmount || 0);
+      document.getElementById('ruleTokenMaxAmount').value = editData.maxAmount === null || editData.maxAmount === undefined ? '' : Number(editData.maxAmount);
+      document.getElementById('ruleTokenEnabled').checked = editData.enabled !== false;
     } else {
-      document.getElementById('ruleTierName').value = editData.name || '';
-      document.getElementById('ruleMinNFTs').value = editData.minNFTs ?? 1;
-      document.getElementById('ruleMaxNFTs').value = (editData.maxNFTs >= 999999 || editData.maxNFTs === Infinity) ? '' : (editData.maxNFTs ?? '');
+      document.getElementById('ruleCollectionId').value = editData.collectionId || editData.collection_id || editData.trait_collection_id || '';
+      if (ruleType === 'trait') {
+        document.getElementById('ruleTraitType').value = editData.traitType || editData.trait_type || '';
+        document.getElementById('ruleDescription').value = editData.description || '';
+        const vals = editData.traitValues || editData.trait_values || (editData.traitValue || editData.trait_value ? [editData.traitValue || editData.trait_value] : []);
+        _traitValues = Array.isArray(vals) ? [...vals] : String(vals).split(',').map(v => v.trim()).filter(Boolean);
+        renderTraitValueTags();
+      } else {
+        document.getElementById('ruleTierName').value = editData.name || '';
+        document.getElementById('ruleMinNFTs').value = editData.minNFTs ?? 1;
+        document.getElementById('ruleMaxNFTs').value = (editData.maxNFTs >= 999999 || editData.maxNFTs === Infinity) ? '' : (editData.maxNFTs ?? '');
+      }
     }
   } else {
     document.getElementById('addRuleModalTitle').textContent = 'Add Verification Rule';
@@ -6614,21 +6473,50 @@ function closeAddRuleModal() {
 }
 
 async function saveRule() {
-  const isTrait = document.getElementById('ruleTypeTrait').checked;
-  const collectionId = document.getElementById('ruleCollectionId').value.trim();
+  const selectedType = document.querySelector('input[name="ruleType"]:checked')?.value || 'collection';
   const roleId = document.getElementById('ruleRoleId').value;
-  if (!collectionId || !roleId) { showError('Collection ID and Discord Role are required.'); return; }
+  if (!roleId) { showError('Discord Role is required.'); return; }
 
   const btn = document.getElementById('saveRuleBtn');
   btn.disabled = true; btn.textContent = 'Saving...';
 
   try {
-    if (isTrait) {
+    if (selectedType === 'token') {
+      const tokenMint = document.getElementById('ruleTokenMint').value.trim();
+      const tokenSymbol = document.getElementById('ruleTokenSymbol').value.trim();
+      const minAmount = Number(document.getElementById('ruleTokenMinAmount').value || '0');
+      const maxRaw = document.getElementById('ruleTokenMaxAmount').value;
+      const maxAmount = maxRaw === '' ? null : Number(maxRaw);
+      const enabled = !!document.getElementById('ruleTokenEnabled').checked;
+      if (!tokenMint) { showError('Token mint is required.'); btn.disabled = false; btn.textContent = 'Save Rule'; return; }
+      if (!Number.isFinite(minAmount) || minAmount < 0) { showError('Minimum balance must be a valid non-negative number.'); btn.disabled = false; btn.textContent = 'Save Rule'; return; }
+      if (maxAmount !== null && (!Number.isFinite(maxAmount) || maxAmount < minAmount)) { showError('Maximum balance must be empty or greater than/equal to minimum balance.'); btn.disabled = false; btn.textContent = 'Save Rule'; return; }
+
+      if (_editingRuleIdx !== null && _editingRuleType === 'token') {
+        const existing = adminTokenRulesCache[_editingRuleIdx];
+        const response = await fetch(`/api/admin/roles/tokens/${encodeURIComponent(existing.id)}`, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+          body: JSON.stringify({ tokenMint, tokenSymbol: tokenSymbol || null, minAmount, maxAmount, roleId, enabled })
+        });
+        const data = await response.json();
+        if (!data.success) throw new Error(data.message || 'Failed to update token rule');
+      } else {
+        const response = await fetch('/api/admin/roles/tokens', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+          body: JSON.stringify({ tokenMint, tokenSymbol: tokenSymbol || null, minAmount, maxAmount, roleId, enabled })
+        });
+        const data = await response.json();
+        if (!data.success) throw new Error(data.message || 'Failed to create token rule');
+      }
+    } else if (selectedType === 'trait') {
+      const collectionId = document.getElementById('ruleCollectionId').value.trim();
+      if (!collectionId) { showError('Collection ID is required for NFT trait rules.'); btn.disabled = false; btn.textContent = 'Save Rule'; return; }
       const traitType = document.getElementById('ruleTraitType').value.trim();
       const traitValues = [..._traitValues];
       if (!traitType || !traitValues.length) { showError('Trait type and at least one trait value are required.'); btn.disabled = false; btn.textContent = 'Save Rule'; return; }
       const description = document.getElementById('ruleDescription').value.trim();
-      // For backward compat, send both traitValue (first) and traitValues (array)
       const traitValue = traitValues[0];
 
       if (_editingRuleIdx !== null && _editingRuleType === 'trait') {
@@ -6637,7 +6525,7 @@ async function saveRule() {
         const origValue = existing.traitValue || existing.trait_value;
         const response = await fetch(`/api/admin/roles/traits/${encodeURIComponent(origType)}/${encodeURIComponent(origValue)}`, {
           method: 'PUT', credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
           body: JSON.stringify({ traitType, traitValue, traitValues, collectionId, roleId, description })
         });
         const data = await response.json();
@@ -6645,13 +6533,15 @@ async function saveRule() {
       } else {
         const response = await fetch('/api/admin/roles/traits', {
           method: 'POST', credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
           body: JSON.stringify({ traitType, traitValue, traitValues, collectionId, roleId, description })
         });
         const data = await response.json();
         if (!data.success) throw new Error(data.message || 'Failed to create trait rule');
       }
     } else {
+      const collectionId = document.getElementById('ruleCollectionId').value.trim();
+      if (!collectionId) { showError('Collection ID is required for NFT collection rules.'); btn.disabled = false; btn.textContent = 'Save Rule'; return; }
       const name = document.getElementById('ruleTierName').value.trim() || 'Tier';
       const minNFTs = parseInt(document.getElementById('ruleMinNFTs').value) || 1;
       const maxNFTsRaw = document.getElementById('ruleMaxNFTs').value;
@@ -6661,7 +6551,7 @@ async function saveRule() {
         const existing = adminTiersCache[_editingRuleIdx];
         const response = await fetch(`/api/admin/roles/tiers/${encodeURIComponent(existing.name)}`, {
           method: 'PUT', credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
           body: JSON.stringify({ name, minNFTs, maxNFTs, votingPower: 1, collectionId, roleId })
         });
         const data = await response.json();
@@ -6669,7 +6559,7 @@ async function saveRule() {
       } else {
         const response = await fetch('/api/admin/roles/tiers', {
           method: 'POST', credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
           body: JSON.stringify({ name, minNFTs, maxNFTs, votingPower: 1, collectionId, roleId })
         });
         const data = await response.json();
@@ -6696,12 +6586,21 @@ function editTraitRule(idx) {
   openAddRuleModal({ ...adminTraitsCache[idx], _type: 'trait', _idx: idx });
 }
 
+function editTokenRule(idx) {
+  if (!isAdmin || !adminTokenRulesCache[idx]) return;
+  openAddRuleModal({ ...adminTokenRulesCache[idx], _type: 'token', _idx: idx });
+}
+
 function deleteTier(idx) {
   if (!isAdmin || !adminTiersCache[idx]) return;
   const tier = adminTiersCache[idx];
   showConfirmModal('Delete Tier', `Are you sure you want to delete tier "${tier.name}"? This cannot be undone.`, async () => {
     try {
-      const response = await fetch(`/api/admin/roles/tiers/${encodeURIComponent(tier.name)}`, { method: 'DELETE', credentials: 'include' });
+      const response = await fetch(`/api/admin/roles/tiers/${encodeURIComponent(tier.name)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: buildTenantRequestHeaders()
+      });
       const data = await response.json();
       if (data.success) {
         showSuccess(`Tier "${tier.name}" deleted`);
@@ -6722,7 +6621,11 @@ function deleteTraitRule(idx) {
   const traitValue = tr.traitValue || tr.trait_value;
   showConfirmModal('Delete Trait Rule', `Delete trait rule "${traitType}: ${traitValue}"? This cannot be undone.`, async () => {
     try {
-      const response = await fetch(`/api/admin/roles/traits/${encodeURIComponent(traitType)}/${encodeURIComponent(traitValue)}`, { method: 'DELETE', credentials: 'include' });
+      const response = await fetch(`/api/admin/roles/traits/${encodeURIComponent(traitType)}/${encodeURIComponent(traitValue)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: buildTenantRequestHeaders()
+      });
       const data = await response.json();
       if (data.success) {
         showSuccess('Trait rule deleted');
@@ -6732,6 +6635,29 @@ function deleteTraitRule(idx) {
       }
     } catch (e) {
       showError('Error deleting trait rule: ' + e.message);
+    }
+  }, 'Delete');
+}
+
+function deleteTokenRule(idx) {
+  if (!isAdmin || !adminTokenRulesCache[idx]) return;
+  const rule = adminTokenRulesCache[idx];
+  showConfirmModal('Delete Token Rule', `Delete token rule for mint "${rule.tokenMint}"? This cannot be undone.`, async () => {
+    try {
+      const response = await fetch(`/api/admin/roles/tokens/${encodeURIComponent(rule.id)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: buildTenantRequestHeaders()
+      });
+      const data = await response.json();
+      if (data.success) {
+        showSuccess('Token rule deleted');
+        await loadAdminRoles();
+      } else {
+        showError(data.message || 'Failed to delete token rule');
+      }
+    } catch (e) {
+      showError('Error deleting token rule: ' + e.message);
     }
   }, 'Delete');
 }

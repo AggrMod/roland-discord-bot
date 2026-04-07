@@ -427,6 +427,10 @@ class TrackedWalletsService {
         Math.max(0, safeToNumber(minAlertAmount))
       );
 
+      // Keep Helius webhook account addresses in sync for live push coverage.
+      this.syncWalletAddressToHeliusWebhook(mint, 'add')
+        .catch(err => logger.error('[tracked-token-webhook] failed to sync added tracked token mint to helius webhook:', err?.message || err));
+
       return { success: true, id: Number(result.lastInsertRowid) };
     } catch (e) {
       if (e.message?.includes('UNIQUE constraint')) {
@@ -471,6 +475,7 @@ class TrackedWalletsService {
 
   updateTrackedToken(id, updates = {}, guildId) {
     try {
+      const before = this.getTrackedTokenById(id, guildId);
       const fieldMap = {
         tokenMint: 'token_mint',
         tokenSymbol: 'token_symbol',
@@ -522,6 +527,20 @@ class TrackedWalletsService {
       }
 
       if (!info.changes) return { success: false, message: 'Tracked token not found or access denied' };
+
+      // If token is (or remains) enabled after update, ensure its mint exists on webhook address list.
+      // Fire-and-forget to avoid delaying admin UX.
+      const enabledAfter = Object.prototype.hasOwnProperty.call(updates, 'enabled')
+        ? !!updates.enabled
+        : Number(before?.enabled ?? 1) === 1;
+      const mintAfter = String(
+        (Object.prototype.hasOwnProperty.call(updates, 'tokenMint') ? updates.tokenMint : before?.token_mint) || ''
+      ).trim();
+      if (enabledAfter && mintAfter) {
+        this.syncWalletAddressToHeliusWebhook(mintAfter, 'add')
+          .catch(err => logger.error('[tracked-token-webhook] failed to sync updated tracked token mint to helius webhook:', err?.message || err));
+      }
+
       return { success: true };
     } catch (e) {
       logger.error('Error updating tracked token:', e);

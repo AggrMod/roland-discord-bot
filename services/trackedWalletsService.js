@@ -648,17 +648,19 @@ class TrackedWalletsService {
       parsedTxs = await this.connection.getParsedTransactions(chronologicalSignatures, { maxSupportedTransactionVersion: 0 });
     } catch (e) {
       logger.error(`[tracked-token] parsed transaction fetch failed for ${walletAddress}:`, e?.message || e);
-      this.saveWalletTokenCursor(walletRow.id, latestSignature);
+      // Do not advance cursor on fetch failure; retry these signatures on next poll.
       return;
     }
 
     const sigMetaBySignature = new Map(signatureRows.map(row => [row.signature, row]));
     const alerts = [];
+    let newestParsedSignature = null;
 
     for (let i = 0; i < parsedTxs.length; i++) {
       const tx = parsedTxs[i];
       const signature = chronologicalSignatures[i];
       if (!tx || !signature) continue;
+      newestParsedSignature = signature;
 
       const tokenEvents = this.detectTrackedTokenEventsFromParsedTx(tx, walletAddress, trackedTokenByMintLower);
       if (!tokenEvents.length) continue;
@@ -706,7 +708,13 @@ class TrackedWalletsService {
       }
     }
 
-    this.saveWalletTokenCursor(walletRow.id, latestSignature);
+    // Advance cursor only to newest successfully parsed signature.
+    // This avoids skipping signatures that were returned but not yet parseable.
+    if (newestParsedSignature) {
+      this.saveWalletTokenCursor(walletRow.id, newestParsedSignature);
+    } else {
+      this.touchWalletTokenCursor(walletRow.id);
+    }
 
     if (!alerts.length) return;
     const toSend = alerts.length > TOKEN_ACTIVITY_ALERT_CAP_PER_WALLET

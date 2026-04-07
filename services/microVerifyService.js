@@ -12,6 +12,7 @@ class MicroVerifyService {
     this._lastRpcOutageLogAt = 0;
     this._lastRpcOutageMessage = '';
     this._rpcOutageCooldownMs = 120000;
+    this._txCacheRetentionDays = Math.max(1, parseInt(process.env.MICRO_VERIFY_TX_CACHE_DAYS || '7', 10));
   }
 
   _isTransientRpcUnavailable(message) {
@@ -73,6 +74,50 @@ class MicroVerifyService {
       rateLimitMinutes: parseInt(this._getConfigValue('VERIFY_RATE_LIMIT_MINUTES') || '1'),
       maxPendingPerUser: parseInt(this._getConfigValue('MAX_PENDING_PER_USER') || '1')
     };
+  }
+
+  hasPendingRequests() {
+    try {
+      const row = db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM micro_verify_requests
+        WHERE status = 'pending'
+          AND expires_at > datetime('now')
+      `).get();
+      return Number(row?.count || 0) > 0;
+    } catch (error) {
+      logger.error('Error checking pending micro-verify requests:', error);
+      return true;
+    }
+  }
+
+  isTxAlreadyChecked(signature) {
+    try {
+      if (!signature) return false;
+      const row = db.prepare('SELECT signature FROM micro_verify_tx_checks WHERE signature = ?').get(signature);
+      return !!row;
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  markTxChecked(signature, { status, solAmount = null, matchedRequestId = null, senderWallet = null } = {}) {
+    try {
+      if (!signature) return;
+      db.prepare(`
+        INSERT OR REPLACE INTO micro_verify_tx_checks
+          (signature, status, sol_amount, matched_request_id, sender_wallet, checked_at)
+        VALUES (?, ?, ?, ?, ?, datetime('now'))
+      `).run(
+        signature,
+        String(status || 'checked'),
+        solAmount === null || solAmount === undefined ? null : Number(solAmount),
+        matchedRequestId === null || matchedRequestId === undefined ? null : Number(matchedRequestId),
+        senderWallet ? String(senderWallet) : null
+      );
+    } catch (error) {
+      logger.error('Error marking micro-verify tx as checked:', error);
+    }
   }
 
   /**
@@ -406,7 +451,16 @@ class MicroVerifyService {
       }
 
       const publicKey = new PublicKey(config.receiveWallet);
-      
+
+      // Skip unnecessary checks when there are no open requests.
+      if (!this.hasPendingRequests()) {
+        const baseline = await this.connection.getSignaturesForAddress(publicKey, { limit: 1 });
+        if (baseline.length > 0) {
+          this.lastSignature = baseline[0].signature;
+        }
+        return;
+      }
+
       // Get recent transactions
       const scanLimit = Math.max(5, Math.min(20, parseInt(process.env.MICRO_VERIFY_SCAN_LIMIT || '8', 10)));
       const signatures = await this.connection.getSignaturesForAddress(publicKey, {
@@ -478,6 +532,10 @@ class MicroVerifyService {
    */
   async checkTransaction(signature, destinationPublicKey) {
     try {
+      if (this.isTxAlreadyChecked(signature)) {
+        return { skippedProcessed: true };
+      }
+
       const tx = await this.connection.getTransaction(signature, {
         maxSupportedTransactionVersion: 0
       });
@@ -493,7 +551,8 @@ class MicroVerifyService {
       );
 
       if (destinationIndex === -1) {
-        return;
+        this.markTxChecked(signature, { status: 'not_destination' });
+        return { notDestination: true };
       }
 
       // Check balance change
@@ -502,11 +561,13 @@ class MicroVerifyService {
       const lamportsReceived = postBalance - preBalance;
 
       if (lamportsReceived <= 0) {
-        return;
+        this.markTxChecked(signature, { status: 'no_incoming' });
+        return { noIncoming: true };
       }
 
       const solReceived = lamportsReceived / LAMPORTS_PER_SOL;
       const solRounded = parseFloat(solReceived.toFixed(8));
+      const txTimeIso = tx?.blockTime ? new Date(tx.blockTime * 1000).toISOString() : null;
 
       // Find matching pending request
       const pendingRequests = db.prepare(`
@@ -514,11 +575,14 @@ class MicroVerifyService {
         WHERE status = ? 
         AND expires_at > datetime('now')
         AND ABS(expected_amount - ?) < 0.00000001
-      `).all('pending', solRounded);
+        AND (? IS NULL OR julianday(created_at) <= julianday(?))
+      `).all('pending', solRounded, txTimeIso, txTimeIso);
 
       if (pendingRequests.length === 0) {
-        logger.log(`No matching request for ${solRounded} SOL`);
-        return;
+        // Keep this as debug to avoid noisy startup logs.
+        logger.debug(`No matching request for ${solRounded} SOL`);
+        this.markTxChecked(signature, { status: 'no_match', solAmount: solRounded });
+        return { noMatch: true };
       }
 
       // Get sender wallet
@@ -534,6 +598,15 @@ class MicroVerifyService {
       if (result.success && result.shouldNotify) {
         // Notify user if possible (requires Discord client reference)
         this.notifyUserVerified(request.discord_id, senderWallet);
+      }
+
+      if (result.success) {
+        this.markTxChecked(signature, {
+          status: 'matched',
+          solAmount: solRounded,
+          matchedRequestId: request.id,
+          senderWallet,
+        });
       }
 
       return result;
@@ -630,6 +703,12 @@ class MicroVerifyService {
       if (result.changes > 0) {
         logger.log(`Expired ${result.changes} stale micro-verify request(s)`);
       }
+
+      // Keep tx-check cache bounded.
+      db.prepare(`
+        DELETE FROM micro_verify_tx_checks
+        WHERE checked_at < datetime('now', '-' || ? || ' days')
+      `).run(this._txCacheRetentionDays);
     } catch (error) {
       logger.error('Error expiring stale requests:', error);
     }

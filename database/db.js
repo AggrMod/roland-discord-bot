@@ -95,6 +95,15 @@ function initDatabase() {
       FOREIGN KEY (discord_id) REFERENCES users(discord_id)
     );
 
+    CREATE TABLE IF NOT EXISTS micro_verify_tx_checks (
+      signature TEXT PRIMARY KEY,
+      status TEXT NOT NULL,
+      sol_amount REAL,
+      matched_request_id INTEGER,
+      sender_wallet TEXT,
+      checked_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS proposals (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       proposal_id TEXT UNIQUE NOT NULL,
@@ -254,6 +263,7 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_micro_verify_discord_id ON micro_verify_requests(discord_id);
     CREATE INDEX IF NOT EXISTS idx_micro_verify_status ON micro_verify_requests(status);
     CREATE INDEX IF NOT EXISTS idx_micro_verify_amount ON micro_verify_requests(expected_amount);
+    CREATE INDEX IF NOT EXISTS idx_micro_verify_tx_checks_checked_at ON micro_verify_tx_checks(checked_at);
     CREATE INDEX IF NOT EXISTS idx_nft_activity_events_time ON nft_activity_events(event_time);
     CREATE INDEX IF NOT EXISTS idx_nft_activity_events_collection ON nft_activity_events(collection_key);
     CREATE INDEX IF NOT EXISTS idx_nft_activity_events_type ON nft_activity_events(event_type);

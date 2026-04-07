@@ -1282,8 +1282,13 @@ class TrackedWalletsService {
       (Array.isArray(event?.accountData) && event.accountData.length > 0)
       || (Array.isArray(event?.nativeTransfers) && event.nativeTransfers.length > 0)
       || (Array.isArray(event?.tokenTransfers) && event.tokenTransfers.length > 0);
+    const hasTrackedTokensEnabled = (this.getAllEnabledTrackedTokensByMint(mintConfigCache)?.size || 0) > 0;
     if (hasRichAddressHints && hintedAddresses.length > 0 && candidateWallets.length === 0) {
-      return { success: true, ignored: true, reason: 'no_tracked_wallets' };
+      // If there are tracked tokens configured, continue into parsed tx path so mint-scoped
+      // fallback can still classify and alert without tracked wallets.
+      if (!hasTrackedTokensEnabled) {
+        return { success: true, ignored: true, reason: 'no_tracked_wallets' };
+      }
     }
 
     let tx = null;

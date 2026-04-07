@@ -611,6 +611,24 @@ class TrackedWalletsService {
     rawJson = null,
   }) {
     try {
+      const existing = db.prepare(`
+        SELECT id
+        FROM tracked_token_events
+        WHERE guild_id = ?
+          AND wallet_address = ?
+          AND tx_signature = ?
+          AND LOWER(token_mint) = LOWER(?)
+        LIMIT 1
+      `).get(
+        String(guildId || ''),
+        String(walletAddress || ''),
+        String(txSignature || '').trim(),
+        String(tokenMint || '')
+      );
+      if (existing?.id) {
+        return { success: true, inserted: false, duplicate: true };
+      }
+
       const result = db.prepare(`
         INSERT INTO tracked_token_events (
           guild_id, wallet_id, wallet_address, token_mint, token_symbol, token_name, event_type, amount_delta, balance_after,
@@ -824,6 +842,246 @@ class TrackedWalletsService {
     return tokenMap;
   }
 
+  getAllEnabledTrackedTokensByMint(mintConfigCache = null) {
+    const cache = mintConfigCache instanceof Map ? mintConfigCache : null;
+    if (cache && cache.has('__all_by_mint__')) {
+      return cache.get('__all_by_mint__');
+    }
+
+    const rows = this.getTrackedTokens()
+      .filter(token => token.enabled !== false && Number(token.enabled ?? 1) === 1);
+    const byMint = new Map();
+    for (const row of rows) {
+      const mintLower = String(row.token_mint || '').trim().toLowerCase();
+      if (!mintLower) continue;
+      const arr = byMint.get(mintLower) || [];
+      arr.push(row);
+      byMint.set(mintLower, arr);
+    }
+
+    if (cache) cache.set('__all_by_mint__', byMint);
+    return byMint;
+  }
+
+  extractOwnerTokenBalanceMaps(tx, trackedMintSetLower = null) {
+    const owners = new Map();
+
+    const getOwnerEntry = (ownerRaw) => {
+      const ownerAddress = String(ownerRaw || '').trim();
+      if (!ownerAddress) return null;
+      const key = ownerAddress.toLowerCase();
+      if (!owners.has(key)) {
+        owners.set(key, {
+          ownerKey: key,
+          ownerAddress,
+          pre: new Map(),
+          post: new Map(),
+        });
+      }
+      return owners.get(key);
+    };
+
+    const collect = (rows, targetKey) => {
+      for (const row of rows || []) {
+        const ownerEntry = getOwnerEntry(row?.owner);
+        if (!ownerEntry) continue;
+        const mint = String(row?.mint || '').trim().toLowerCase();
+        if (!mint) continue;
+        if (trackedMintSetLower instanceof Set && trackedMintSetLower.size > 0 && !trackedMintSetLower.has(mint) && !STABLECOIN_MINTS.has(mint)) {
+          continue;
+        }
+        const amount = parseUiAmount(row);
+        if (!Number.isFinite(amount)) continue;
+        const current = targetKey === 'pre' ? ownerEntry.pre : ownerEntry.post;
+        current.set(mint, safeToNumber(current.get(mint)) + amount);
+      }
+    };
+
+    collect(tx?.meta?.preTokenBalances, 'pre');
+    collect(tx?.meta?.postTokenBalances, 'post');
+
+    const stableByOwner = new Map();
+    for (const [ownerKey, entry] of owners.entries()) {
+      let preStable = 0;
+      let postStable = 0;
+      for (const [mint, amount] of entry.pre.entries()) {
+        if (STABLECOIN_MINTS.has(mint)) preStable += safeToNumber(amount);
+      }
+      for (const [mint, amount] of entry.post.entries()) {
+        if (STABLECOIN_MINTS.has(mint)) postStable += safeToNumber(amount);
+      }
+      stableByOwner.set(ownerKey, postStable - preStable);
+    }
+
+    return { owners, stableByOwner };
+  }
+
+  detectTrackedTokenEventsFromParsedTxByOwner(tx, trackedTokenConfigByMintLower) {
+    const byMint = trackedTokenConfigByMintLower instanceof Map ? trackedTokenConfigByMintLower : new Map();
+    if (!byMint.size) return [];
+
+    const trackedMintSet = new Set(byMint.keys());
+    const { owners, stableByOwner } = this.extractOwnerTokenBalanceMaps(tx, trackedMintSet);
+    const events = [];
+
+    for (const ownerEntry of owners.values()) {
+      const ownerAddress = ownerEntry.ownerAddress;
+      const stableDelta = safeToNumber(stableByOwner.get(ownerEntry.ownerKey));
+      const solDelta = this.getWalletSolDeltaFromParsedTx(tx, ownerAddress);
+
+      const ownerDeltaByMint = new Map();
+      const allMints = new Set([...ownerEntry.pre.keys(), ...ownerEntry.post.keys()]);
+      for (const mint of allMints) {
+        const pre = safeToNumber(ownerEntry.pre.get(mint));
+        const post = safeToNumber(ownerEntry.post.get(mint));
+        const delta = post - pre;
+        if (Math.abs(delta) < 1e-9) continue;
+        ownerDeltaByMint.set(mint, delta);
+      }
+      if (!ownerDeltaByMint.size) continue;
+
+      for (const [mintLower, amountDelta] of ownerDeltaByMint.entries()) {
+        if (!trackedMintSet.has(mintLower)) continue;
+
+        let hasOtherPositiveTokenDelta = false;
+        let hasOtherNegativeTokenDelta = false;
+        for (const [otherMint, otherDelta] of ownerDeltaByMint.entries()) {
+          if (otherMint === mintLower) continue;
+          if (otherDelta > 1e-9) hasOtherPositiveTokenDelta = true;
+          else if (otherDelta < -1e-9) hasOtherNegativeTokenDelta = true;
+          if (hasOtherPositiveTokenDelta && hasOtherNegativeTokenDelta) break;
+        }
+
+        const eventType = this.classifyTokenEventType(amountDelta, solDelta, stableDelta, {
+          hasOtherPositiveTokenDelta,
+          hasOtherNegativeTokenDelta,
+        });
+        if (eventType === 'neutral') continue;
+
+        const tokenConfigs = byMint.get(mintLower) || [];
+        if (!tokenConfigs.length) continue;
+        const representative = tokenConfigs[0];
+        const postAmount = safeToNumber(ownerEntry.post.get(mintLower));
+
+        events.push({
+          ownerAddress,
+          tokenMint: representative.token_mint || representative.tokenMint,
+          tokenSymbol: representative.token_symbol || representative.tokenSymbol || null,
+          tokenName: representative.token_name || representative.tokenName || null,
+          eventType,
+          amountDelta,
+          balanceAfter: postAmount,
+          solDelta,
+          stableDelta,
+          tokenConfigs,
+        });
+      }
+    }
+
+    return events;
+  }
+
+  async processParsedTokenActivityByMint({
+    tx,
+    signature,
+    eventTime,
+    source = 'webhook',
+    mintConfigCache = null,
+    rawMeta = null,
+  }) {
+    if (!tx || !signature) {
+      return { success: false, insertedEvents: 0, duplicateEvents: 0, sentAlerts: 0, matchedOwners: 0 };
+    }
+
+    const byMint = this.getAllEnabledTrackedTokensByMint(mintConfigCache);
+    if (!byMint || byMint.size === 0) {
+      return { success: true, insertedEvents: 0, duplicateEvents: 0, sentAlerts: 0, matchedOwners: 0 };
+    }
+
+    const events = this.detectTrackedTokenEventsFromParsedTxByOwner(tx, byMint);
+    if (!events.length) {
+      return { success: true, insertedEvents: 0, duplicateEvents: 0, sentAlerts: 0, matchedOwners: 0 };
+    }
+
+    let insertedEvents = 0;
+    let duplicateEvents = 0;
+    let sentAlerts = 0;
+    let matchedOwners = 0;
+
+    for (const evt of events) {
+      matchedOwners += 1;
+      const ownerAddress = String(evt.ownerAddress || '').trim();
+      if (!ownerAddress) continue;
+
+      for (const tokenCfg of evt.tokenConfigs || []) {
+        const guildId = String(tokenCfg.guild_id || '').trim();
+        if (!guildId) continue;
+        if (!this.isTokenTrackerEnabled(guildId)) continue;
+
+        const persist = this.saveTrackedTokenEvent({
+          guildId,
+          walletId: null,
+          walletAddress: ownerAddress,
+          tokenMint: evt.tokenMint,
+          tokenSymbol: tokenCfg.token_symbol || evt.tokenSymbol,
+          tokenName: tokenCfg.token_name || evt.tokenName,
+          eventType: evt.eventType,
+          amountDelta: evt.amountDelta,
+          balanceAfter: evt.balanceAfter,
+          solDelta: evt.solDelta,
+          stableDelta: evt.stableDelta,
+          txSignature: signature,
+          eventTime,
+          source,
+          rawJson: {
+            signature,
+            eventType: evt.eventType,
+            tokenMint: evt.tokenMint,
+            amountDelta: evt.amountDelta,
+            balanceAfter: evt.balanceAfter,
+            walletAddress: ownerAddress,
+            mintScoped: true,
+            ...(rawMeta && typeof rawMeta === 'object' ? rawMeta : {}),
+          },
+        });
+
+        if (!persist.success) continue;
+        if (!persist.inserted) {
+          duplicateEvents += 1;
+          continue;
+        }
+        insertedEvents += 1;
+
+        const shouldAlert = this.shouldAlertTokenEvent(tokenCfg, evt.eventType, Math.abs(safeToNumber(evt.amountDelta)));
+        if (!shouldAlert) continue;
+        await this.sendTrackedTokenAlert({
+          walletRow: {
+            wallet_address: ownerAddress,
+            label: null,
+            alert_channel_id: tokenCfg.alert_channel_id || null,
+          },
+          guildId,
+          evt: {
+            ...evt,
+            txSignature: signature,
+            eventTime,
+            alertChannelId: tokenCfg.alert_channel_id || null,
+          },
+        });
+        sentAlerts += 1;
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
+    }
+
+    return {
+      success: true,
+      insertedEvents,
+      duplicateEvents,
+      sentAlerts,
+      matchedOwners,
+    };
+  }
+
   async processParsedTokenActivityForWallet({
     walletRow,
     trackedTokenByMintLower,
@@ -1013,6 +1271,7 @@ class TrackedWalletsService {
     }
 
     const tokenConfigCache = options.tokenConfigCache instanceof Map ? options.tokenConfigCache : new Map();
+    const mintConfigCache = options.mintConfigCache instanceof Map ? options.mintConfigCache : new Map();
     const hintedAddresses = this.extractWebhookAddresses(event);
     let candidateWallets = hintedAddresses.length ? this.getTrackedWalletsByAddresses(hintedAddresses) : [];
     const hasRichAddressHints =
@@ -1073,6 +1332,24 @@ class TrackedWalletsService {
       sentAlerts += Number(processed?.sentAlerts || 0);
     }
 
+    // Fallback: mint-scoped processing for servers that track tokens
+    // without configuring tracked wallets.
+    if (matchedWallets === 0) {
+      const mintScoped = await this.processParsedTokenActivityByMint({
+        tx,
+        signature,
+        eventTime,
+        source,
+        mintConfigCache,
+        rawMeta: {
+          webhookSourceType: String(event?.type || event?.eventType || '').trim() || null,
+        },
+      });
+      insertedEvents += Number(mintScoped?.insertedEvents || 0);
+      duplicateEvents += Number(mintScoped?.duplicateEvents || 0);
+      sentAlerts += Number(mintScoped?.sentAlerts || 0);
+    }
+
     return {
       success: true,
       ignored: matchedWallets === 0 && insertedEvents === 0,
@@ -1089,6 +1366,7 @@ class TrackedWalletsService {
     const batch = Array.isArray(events) ? events : [events];
     const source = String(options.source || 'webhook');
     const tokenConfigCache = new Map();
+    const mintConfigCache = new Map();
     const seenSignatures = new Set();
 
     let processed = 0;
@@ -1107,7 +1385,7 @@ class TrackedWalletsService {
       if (signature) seenSignatures.add(signature);
 
       try {
-        const result = await this.ingestWebhookEvent(event, { source, tokenConfigCache });
+        const result = await this.ingestWebhookEvent(event, { source, tokenConfigCache, mintConfigCache });
         if (!result?.success) {
           failed += 1;
           continue;

@@ -23,6 +23,7 @@ const missionService = require('../services/missionService');
 const treasuryService = require('../services/treasuryService');
 const microVerifyService = require('../services/microVerifyService');
 const nftActivityService = require('../services/nftActivityService');
+const trackedWalletsService = require('../services/trackedWalletsService');
 const ticketService = require('../services/ticketService');
 const superadminService = require('../services/superadminService');
 const superadminGuard = require('../middleware/superadminGuard');
@@ -96,6 +97,16 @@ function timingSafeEquals(a, b) {
   }
 
   return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
+
+function normalizeWebhookSecretHeader(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  return raw.replace(/^Bearer\s+/i, '').trim();
+}
+
+function getActivityWebhookSecret() {
+  return String(process.env.TRACKED_TOKEN_WEBHOOK_SECRET || process.env.NFT_ACTIVITY_WEBHOOK_SECRET || '').trim();
 }
 
 function parseCommaSeparated(value) {
@@ -218,7 +229,7 @@ class WebServer {
       origin: allowedOrigins,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', REQUEST_GUILD_HEADER, 'x-entitlement-secret'],
+      allowedHeaders: ['Content-Type', 'Authorization', REQUEST_GUILD_HEADER, 'x-entitlement-secret', 'x-webhook-secret'],
       exposedHeaders: ['X-Total-Count'], // For pagination
       maxAge: 86400 // 24 hours preflight cache
     }));
@@ -1212,7 +1223,7 @@ class WebServer {
         heliusConfigured: !!process.env.HELIUS_API_KEY,
         solanaRpc: process.env.SOLANA_RPC_URL || 'default',
         nodeEnv: process.env.NODE_ENV || 'development',
-        webhookSecretConfigured: !!process.env.NFT_ACTIVITY_WEBHOOK_SECRET
+        webhookSecretConfigured: !!getActivityWebhookSecret()
       });
     });
 
@@ -1737,7 +1748,7 @@ class WebServer {
         heliusConfigured: !!process.env.HELIUS_API_KEY,
         solanaRpc: process.env.SOLANA_RPC_URL || 'default',
         nodeEnv: process.env.NODE_ENV || 'development',
-        webhookSecretConfigured: !!process.env.NFT_ACTIVITY_WEBHOOK_SECRET
+        webhookSecretConfigured: !!getActivityWebhookSecret()
       });
     });
 
@@ -4474,31 +4485,73 @@ class WebServer {
       }
     });
 
-    // ==================== NFT ACTIVITY WEBHOOK (optional external source) ====================
+    // ==================== NFT / TOKEN ACTIVITY WEBHOOKS (optional external source) ====================
 
-    this.app.post('/api/webhooks/nft-activity', (req, res) => {
+    const verifyActivityWebhookAuth = (req) => {
+      const configuredSecret = getActivityWebhookSecret();
+      if (!configuredSecret) {
+        return { ok: false, status: 503, payload: { error: 'Webhook not configured' } };
+      }
+
+      const providedRaw = req.headers['authorization'] || req.headers['x-webhook-secret'];
+      const provided = normalizeWebhookSecretHeader(providedRaw);
+      if (!provided || !timingSafeEquals(provided, configuredSecret)) {
+        return { ok: false, status: 401, payload: { success: false, message: 'Unauthorized' } };
+      }
+
+      return { ok: true };
+    };
+
+    this.app.post('/api/webhooks/nft-activity', async (req, res) => {
       try {
-        const configuredSecret = process.env.NFT_ACTIVITY_WEBHOOK_SECRET;
-        if (!configuredSecret) {
-          return res.status(503).json({ error: 'Webhook not configured' });
-        }
-        const provided = req.headers['authorization'] || req.headers['x-webhook-secret'];
-        if (!provided || !timingSafeEquals(provided, configuredSecret)) {
-          return res.status(401).json({ success: false, message: 'Unauthorized' });
+        const auth = verifyActivityWebhookAuth(req);
+        if (!auth.ok) {
+          return res.status(auth.status).json(auth.payload);
         }
 
-        // Helius sends an array of events
         const events = Array.isArray(req.body) ? req.body : [req.body];
-        let processed = 0, ignored = 0;
+        let nftProcessed = 0;
+        let nftIgnored = 0;
         for (const event of events) {
           const result = nftActivityService.ingestEvent(event, 'webhook');
-          if (result.ignored) ignored++;
-          else if (result.success) processed++;
+          if (result.ignored) nftIgnored += 1;
+          else if (result.success) nftProcessed += 1;
         }
-        logger.log(`[nft-webhook] received ${events.length} events: ${processed} processed, ${ignored} ignored`);
-        return res.json({ success: true, processed, ignored });
+
+        const tokenSummary = await trackedWalletsService.ingestWebhookBatch(events, { source: 'webhook' });
+        logger.log(
+          `[activity-webhook] nft received=${events.length} processed=${nftProcessed} ignored=${nftIgnored};`
+          + ` token processed=${tokenSummary.processed} ignored=${tokenSummary.ignored} failed=${tokenSummary.failed}`
+          + ` inserted=${tokenSummary.insertedEvents} dup=${tokenSummary.duplicateEvents} alerts=${tokenSummary.sentAlerts}`
+        );
+
+        return res.json({
+          success: true,
+          nft: { received: events.length, processed: nftProcessed, ignored: nftIgnored },
+          token: tokenSummary,
+        });
       } catch (error) {
         logger.error('Error in nft activity webhook:', error);
+        return res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/webhooks/token-activity', async (req, res) => {
+      try {
+        const auth = verifyActivityWebhookAuth(req);
+        if (!auth.ok) {
+          return res.status(auth.status).json(auth.payload);
+        }
+
+        const events = Array.isArray(req.body) ? req.body : [req.body];
+        const summary = await trackedWalletsService.ingestWebhookBatch(events, { source: 'webhook-token-only' });
+        logger.log(
+          `[token-webhook] received=${summary.received} processed=${summary.processed} ignored=${summary.ignored}`
+          + ` failed=${summary.failed} inserted=${summary.insertedEvents} dup=${summary.duplicateEvents} alerts=${summary.sentAlerts}`
+        );
+        return res.json({ success: true, ...summary });
+      } catch (error) {
+        logger.error('Error in token activity webhook:', error);
         return res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });

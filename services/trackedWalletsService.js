@@ -115,6 +115,9 @@ class TrackedWalletsService {
         (panelChannelId || '').trim() || null,
       );
 
+      this.syncWalletAddressToHeliusWebhook(addr, 'add')
+        .catch(err => logger.error('[tracked-token-webhook] failed to sync added wallet to helius webhook:', err?.message || err));
+
       return { success: true, id: result.lastInsertRowid };
     } catch (e) {
       if (e.message?.includes('UNIQUE constraint')) {
@@ -127,11 +130,23 @@ class TrackedWalletsService {
 
   removeTrackedWallet(id, guildId) {
     try {
+      const existing = guildId
+        ? db.prepare('SELECT id, guild_id, wallet_address, enabled FROM tracked_wallets WHERE id = ? AND guild_id = ?').get(id, guildId)
+        : db.prepare('SELECT id, guild_id, wallet_address, enabled FROM tracked_wallets WHERE id = ?').get(id);
       const query = guildId
         ? 'DELETE FROM tracked_wallets WHERE id = ? AND guild_id = ?'
         : 'DELETE FROM tracked_wallets WHERE id = ?';
       const params = guildId ? [id, guildId] : [id];
       const result = db.prepare(query).run(...params);
+
+      if (result.changes > 0 && existing?.wallet_address) {
+        const remaining = this.countEnabledTrackedWalletsByAddress(existing.wallet_address);
+        if (remaining === 0) {
+          this.syncWalletAddressToHeliusWebhook(existing.wallet_address, 'remove')
+            .catch(err => logger.error('[tracked-token-webhook] failed to sync removed wallet from helius webhook:', err?.message || err));
+        }
+      }
+
       return { success: true, removed: result.changes };
     } catch (e) {
       logger.error('Error removing tracked wallet:', e);
@@ -173,8 +188,30 @@ class TrackedWalletsService {
     }
   }
 
+  getTrackedWalletsByAddresses(addresses = []) {
+    try {
+      const normalized = Array.from(new Set(
+        (Array.isArray(addresses) ? addresses : [])
+          .map(addr => String(addr || '').trim().toLowerCase())
+          .filter(Boolean)
+      ));
+      if (!normalized.length) return [];
+
+      const placeholders = normalized.map(() => '?').join(', ');
+      return db.prepare(`
+        SELECT * FROM tracked_wallets
+        WHERE enabled = 1
+          AND LOWER(wallet_address) IN (${placeholders})
+      `).all(...normalized);
+    } catch (e) {
+      logger.error('Error getting tracked wallets by addresses:', e);
+      return [];
+    }
+  }
+
   updateTrackedWallet(id, updates, guildId) {
     try {
+      const before = this.getTrackedWalletById(id, guildId);
       const allowed = { label: 'label', alertChannelId: 'alert_channel_id', panelChannelId: 'panel_channel_id', enabled: 'enabled' };
       const setClauses = [];
       const params = [];
@@ -191,11 +228,166 @@ class TrackedWalletsService {
       const sql = `UPDATE tracked_wallets SET ${setClauses.join(', ')} WHERE id = ?${guildId ? ' AND guild_id = ?' : ''}`;
       const info = db.prepare(sql).run(...params);
       if (!info.changes) return { success: false, message: 'Wallet not found or access denied' };
+
+      if (before && Object.prototype.hasOwnProperty.call(updates, 'enabled')) {
+        const enabledNow = updates.enabled ? 1 : 0;
+        const enabledBefore = Number(before.enabled || 0);
+        const walletAddress = String(before.wallet_address || '').trim();
+
+        if (walletAddress && enabledBefore !== enabledNow) {
+          if (enabledNow === 1) {
+            this.syncWalletAddressToHeliusWebhook(walletAddress, 'add')
+              .catch(err => logger.error('[tracked-token-webhook] failed to sync enabled wallet to helius webhook:', err?.message || err));
+          } else {
+            const remaining = this.countEnabledTrackedWalletsByAddress(walletAddress);
+            if (remaining === 0) {
+              this.syncWalletAddressToHeliusWebhook(walletAddress, 'remove')
+                .catch(err => logger.error('[tracked-token-webhook] failed to sync disabled wallet from helius webhook:', err?.message || err));
+            }
+          }
+        }
+      }
+
       return { success: true };
     } catch (e) {
       logger.error('Error updating tracked wallet:', e);
       return { success: false, message: 'Failed to update tracked wallet' };
     }
+  }
+
+  countEnabledTrackedWalletsByAddress(walletAddress) {
+    try {
+      const row = db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM tracked_wallets
+        WHERE enabled = 1
+          AND LOWER(wallet_address) = LOWER(?)
+      `).get(walletAddress);
+      return Number(row?.count || 0);
+    } catch (_error) {
+      return 0;
+    }
+  }
+
+  getHeliusTokenWebhookConfig() {
+    return {
+      apiKey: String(process.env.HELIUS_API_KEY || '').trim(),
+      webhookId: String(process.env.HELIUS_TOKEN_WEBHOOK_ID || process.env.HELIUS_WEBHOOK_ID || '').trim(),
+    };
+  }
+
+  async fetchHeliusWebhookPayload() {
+    const { apiKey, webhookId } = this.getHeliusTokenWebhookConfig();
+    if (!apiKey || !webhookId) return null;
+
+    const url = `https://api.helius.xyz/v0/webhooks/${webhookId}?api-key=${apiKey}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      logger.error(`[tracked-token-webhook] Helius GET webhook failed: ${res.status} ${await res.text()}`);
+      return null;
+    }
+
+    return {
+      url,
+      payload: await res.json(),
+    };
+  }
+
+  async persistHeliusWebhookAddresses(url, payload, addresses) {
+    if (!url || !payload) return false;
+    const transactionTypes = Array.isArray(payload.transactionTypes) ? payload.transactionTypes : [];
+    const existingTypes = transactionTypes
+      .map(type => String(type || '').trim())
+      .filter(Boolean);
+    const normalizedTypes = existingTypes.map(type => type.toUpperCase());
+    const hasAny = normalizedTypes.includes('ANY');
+    const mergedTypes = hasAny
+      ? existingTypes
+      : [
+          ...existingTypes,
+          ...(normalizedTypes.includes('TRANSFER') ? [] : ['TRANSFER']),
+          ...(normalizedTypes.includes('SWAP') ? [] : ['SWAP']),
+        ];
+
+    const putRes = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        webhookURL: payload.webhookURL,
+        transactionTypes: mergedTypes,
+        accountAddresses: addresses,
+        webhookType: payload.webhookType || 'enhanced',
+        authHeader: payload.authHeader,
+      }),
+    });
+
+    if (!putRes.ok) {
+      logger.error(`[tracked-token-webhook] Helius PUT webhook failed: ${putRes.status} ${await putRes.text()}`);
+      return false;
+    }
+    return true;
+  }
+
+  async syncWalletAddressToHeliusWebhook(walletAddress, action = 'add') {
+    const normalized = String(walletAddress || '').trim();
+    if (!normalized || !isValidSolanaAddress(normalized)) return;
+
+    const { apiKey, webhookId } = this.getHeliusTokenWebhookConfig();
+    if (!apiKey || !webhookId) {
+      logger.warn('[tracked-token-webhook] HELIUS_API_KEY or HELIUS_(TOKEN_)WEBHOOK_ID missing; skipping wallet webhook sync');
+      return;
+    }
+
+    const current = await this.fetchHeliusWebhookPayload();
+    if (!current?.payload) return;
+
+    const existingAddresses = Array.isArray(current.payload.accountAddresses) ? [...current.payload.accountAddresses] : [];
+    const existingLower = new Set(existingAddresses.map(addr => String(addr || '').trim().toLowerCase()));
+
+    let nextAddresses = existingAddresses;
+    if (action === 'add') {
+      if (existingLower.has(normalized.toLowerCase())) return;
+      nextAddresses = [...existingAddresses, normalized];
+    } else if (action === 'remove') {
+      nextAddresses = existingAddresses.filter(addr => String(addr || '').trim().toLowerCase() !== normalized.toLowerCase());
+      if (nextAddresses.length === existingAddresses.length) return;
+    } else {
+      return;
+    }
+
+    const saved = await this.persistHeliusWebhookAddresses(current.url, current.payload, nextAddresses);
+    if (saved) {
+      logger.log(`[tracked-token-webhook] helius webhook synced: ${action} ${normalized} (${nextAddresses.length} addresses total)`);
+    }
+  }
+
+  async syncAllEnabledWalletAddressesToHeliusWebhook() {
+    const { apiKey, webhookId } = this.getHeliusTokenWebhookConfig();
+    if (!apiKey || !webhookId) return { success: false, skipped: true, reason: 'missing_helius_webhook_config' };
+
+    const enabledWallets = db.prepare('SELECT DISTINCT wallet_address FROM tracked_wallets WHERE enabled = 1').all()
+      .map(row => String(row?.wallet_address || '').trim())
+      .filter(addr => addr && isValidSolanaAddress(addr));
+    if (!enabledWallets.length) return { success: true, skipped: true, reason: 'no_enabled_wallets' };
+
+    const current = await this.fetchHeliusWebhookPayload();
+    if (!current?.payload) return { success: false, skipped: true, reason: 'fetch_failed' };
+
+    const existingAddresses = Array.isArray(current.payload.accountAddresses) ? [...current.payload.accountAddresses] : [];
+    const existingLower = new Set(existingAddresses.map(addr => String(addr || '').trim().toLowerCase()));
+    const additions = enabledWallets.filter(addr => !existingLower.has(addr.toLowerCase()));
+    if (!additions.length) return { success: true, skipped: true, reason: 'already_synced' };
+
+    const nextAddresses = [...existingAddresses, ...additions];
+    const saved = await this.persistHeliusWebhookAddresses(current.url, current.payload, nextAddresses);
+    if (!saved) return { success: false, skipped: true, reason: 'persist_failed' };
+
+    logger.log(`[tracked-token-webhook] added ${additions.length} tracked wallet addresses to helius webhook (${nextAddresses.length} total)`);
+    return {
+      success: true,
+      added: additions.length,
+      total: nextAddresses.length,
+    };
   }
 
   addTrackedToken({
@@ -596,6 +788,333 @@ class TrackedWalletsService {
     return events;
   }
 
+  getTrackedTokenMapForGuild(guildId, tokenConfigCache = null) {
+    const guildKey = String(guildId || '');
+    const cache = tokenConfigCache instanceof Map ? tokenConfigCache : null;
+    if (cache && cache.has(guildKey)) {
+      return cache.get(guildKey);
+    }
+
+    const tokenRows = this.getTrackedTokens(guildKey).filter(token => token.enabled !== false && Number(token.enabled ?? 1) === 1);
+    const tokenMap = new Map(
+      tokenRows
+        .map(token => [String(token.token_mint || '').trim().toLowerCase(), token])
+        .filter(([mint]) => !!mint)
+    );
+    if (cache) cache.set(guildKey, tokenMap);
+    return tokenMap;
+  }
+
+  async processParsedTokenActivityForWallet({
+    walletRow,
+    trackedTokenByMintLower,
+    tx,
+    signature,
+    eventTime,
+    source = 'poll',
+    rawMeta = null,
+  }) {
+    const walletAddress = String(walletRow?.wallet_address || '').trim();
+    if (!walletAddress || !trackedTokenByMintLower || trackedTokenByMintLower.size === 0 || !tx || !signature) {
+      return {
+        success: false,
+        insertedEvents: 0,
+        duplicateEvents: 0,
+        sentAlerts: 0,
+      };
+    }
+
+    const tokenEvents = this.detectTrackedTokenEventsFromParsedTx(tx, walletAddress, trackedTokenByMintLower);
+    if (!tokenEvents.length) {
+      return {
+        success: true,
+        insertedEvents: 0,
+        duplicateEvents: 0,
+        sentAlerts: 0,
+      };
+    }
+
+    const alerts = [];
+    let insertedEvents = 0;
+    let duplicateEvents = 0;
+
+    for (const evt of tokenEvents) {
+      const persist = this.saveTrackedTokenEvent({
+        guildId: walletRow.guild_id || '',
+        walletId: walletRow.id,
+        walletAddress,
+        tokenMint: evt.tokenMint,
+        tokenSymbol: evt.tokenSymbol,
+        tokenName: evt.tokenName,
+        eventType: evt.eventType,
+        amountDelta: evt.amountDelta,
+        balanceAfter: evt.balanceAfter,
+        solDelta: evt.solDelta,
+        stableDelta: evt.stableDelta,
+        txSignature: signature,
+        eventTime,
+        source,
+        rawJson: {
+          signature,
+          eventType: evt.eventType,
+          tokenMint: evt.tokenMint,
+          amountDelta: evt.amountDelta,
+          balanceAfter: evt.balanceAfter,
+          walletAddress,
+          ...(rawMeta && typeof rawMeta === 'object' ? rawMeta : {}),
+        },
+      });
+
+      if (!persist.success) continue;
+      if (!persist.inserted) {
+        duplicateEvents += 1;
+        continue;
+      }
+      insertedEvents += 1;
+
+      const tokenCfg = trackedTokenByMintLower.get(String(evt.tokenMint || '').toLowerCase());
+      const shouldAlert = this.shouldAlertTokenEvent(tokenCfg, evt.eventType, Math.abs(safeToNumber(evt.amountDelta)));
+      if (!shouldAlert) continue;
+      alerts.push({
+        ...evt,
+        txSignature: signature,
+        eventTime,
+        alertChannelId: tokenCfg?.alert_channel_id || tokenCfg?.alertChannelId || null,
+      });
+    }
+
+    if (!alerts.length) {
+      return {
+        success: true,
+        insertedEvents,
+        duplicateEvents,
+        sentAlerts: 0,
+      };
+    }
+
+    const toSend = alerts.length > TOKEN_ACTIVITY_ALERT_CAP_PER_WALLET
+      ? alerts.slice(alerts.length - TOKEN_ACTIVITY_ALERT_CAP_PER_WALLET)
+      : alerts;
+
+    if (alerts.length > TOKEN_ACTIVITY_ALERT_CAP_PER_WALLET) {
+      logger.warn(`[tracked-token] capped ${alerts.length - toSend.length} token alerts for wallet ${walletAddress}`);
+    }
+
+    let sentAlerts = 0;
+    for (const evt of toSend) {
+      await this.sendTrackedTokenAlert({ walletRow, guildId: walletRow.guild_id, evt });
+      sentAlerts += 1;
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+
+    return {
+      success: true,
+      insertedEvents,
+      duplicateEvents,
+      sentAlerts,
+    };
+  }
+
+  extractWebhookSignature(event) {
+    return String(
+      event?.signature
+      || event?.txSignature
+      || event?.tx_signature
+      || event?.transaction?.signature
+      || event?.transaction?.signatures?.[0]
+      || ''
+    ).trim();
+  }
+
+  extractWebhookEventTime(event, tx = null) {
+    const tsRaw = event?.timestamp ?? event?.blockTime ?? event?.block_time ?? event?.eventTime ?? event?.event_time ?? tx?.blockTime ?? null;
+    const asNumber = Number(tsRaw);
+    if (Number.isFinite(asNumber) && asNumber > 0) {
+      const ms = asNumber > 1e12 ? asNumber : asNumber * 1000;
+      return new Date(ms).toISOString();
+    }
+    if (typeof tsRaw === 'string' && tsRaw.trim()) {
+      const parsed = new Date(tsRaw);
+      if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+    }
+    return new Date().toISOString();
+  }
+
+  extractWebhookAddresses(event) {
+    const addresses = new Set();
+    const add = (value) => {
+      const addr = String(value || '').trim();
+      if (!addr) return;
+      addresses.add(addr.toLowerCase());
+    };
+
+    add(event?.feePayer);
+    add(event?.fee_payer);
+    add(event?.signer);
+    add(event?.fromWallet);
+    add(event?.toWallet);
+
+    if (Array.isArray(event?.accountData)) {
+      for (const row of event.accountData) {
+        add(row?.account);
+        add(row?.owner);
+      }
+    }
+
+    if (Array.isArray(event?.nativeTransfers)) {
+      for (const transfer of event.nativeTransfers) {
+        add(transfer?.fromUserAccount);
+        add(transfer?.toUserAccount);
+        add(transfer?.from_user_account);
+        add(transfer?.to_user_account);
+      }
+    }
+
+    if (Array.isArray(event?.tokenTransfers)) {
+      for (const transfer of event.tokenTransfers) {
+        add(transfer?.fromUserAccount);
+        add(transfer?.toUserAccount);
+        add(transfer?.from_user_account);
+        add(transfer?.to_user_account);
+        add(transfer?.fromTokenAccount);
+        add(transfer?.toTokenAccount);
+        add(transfer?.from_token_account);
+        add(transfer?.to_token_account);
+      }
+    }
+
+    return Array.from(addresses);
+  }
+
+  async ingestWebhookEvent(event, options = {}) {
+    const source = String(options.source || 'webhook');
+    const signature = this.extractWebhookSignature(event);
+    if (!signature) {
+      return { success: true, ignored: true, reason: 'missing_signature' };
+    }
+
+    const tokenConfigCache = options.tokenConfigCache instanceof Map ? options.tokenConfigCache : new Map();
+    const hintedAddresses = this.extractWebhookAddresses(event);
+    let candidateWallets = hintedAddresses.length ? this.getTrackedWalletsByAddresses(hintedAddresses) : [];
+    const hasRichAddressHints =
+      (Array.isArray(event?.accountData) && event.accountData.length > 0)
+      || (Array.isArray(event?.nativeTransfers) && event.nativeTransfers.length > 0)
+      || (Array.isArray(event?.tokenTransfers) && event.tokenTransfers.length > 0);
+    if (hasRichAddressHints && hintedAddresses.length > 0 && candidateWallets.length === 0) {
+      return { success: true, ignored: true, reason: 'no_tracked_wallets' };
+    }
+
+    let tx = null;
+    try {
+      tx = await this.connection.getParsedTransaction(signature, { maxSupportedTransactionVersion: 0 });
+    } catch (e) {
+      logger.error(`[tracked-token-webhook] parsed transaction fetch failed for ${signature}:`, e?.message || e);
+      return { success: false, ignored: true, reason: 'parsed_tx_fetch_failed' };
+    }
+
+    if (!tx) {
+      return { success: true, ignored: true, reason: 'tx_not_available' };
+    }
+
+    if (!candidateWallets.length) {
+      const accountKeys = this.getAccountKeysFromParsedTx(tx).map(normalizeAddress).filter(Boolean);
+      candidateWallets = accountKeys.length ? this.getTrackedWalletsByAddresses(accountKeys) : [];
+    }
+    if (!candidateWallets.length) {
+      return { success: true, ignored: true, reason: 'no_tracked_wallets' };
+    }
+
+    const eventTime = this.extractWebhookEventTime(event, tx);
+    let matchedWallets = 0;
+    let insertedEvents = 0;
+    let duplicateEvents = 0;
+    let sentAlerts = 0;
+
+    for (const walletRow of candidateWallets) {
+      const walletGuild = String(walletRow.guild_id || '');
+      if (!this.isTokenTrackerEnabled(walletGuild)) continue;
+
+      const tokenMap = this.getTrackedTokenMapForGuild(walletGuild, tokenConfigCache);
+      if (!tokenMap || tokenMap.size === 0) continue;
+
+      matchedWallets += 1;
+      const processed = await this.processParsedTokenActivityForWallet({
+        walletRow,
+        trackedTokenByMintLower: tokenMap,
+        tx,
+        signature,
+        eventTime,
+        source,
+        rawMeta: {
+          webhookSourceType: String(event?.type || event?.eventType || '').trim() || null,
+        },
+      });
+      insertedEvents += Number(processed?.insertedEvents || 0);
+      duplicateEvents += Number(processed?.duplicateEvents || 0);
+      sentAlerts += Number(processed?.sentAlerts || 0);
+    }
+
+    return {
+      success: true,
+      ignored: matchedWallets === 0 && insertedEvents === 0,
+      reason: matchedWallets === 0 ? 'no_matching_wallets_or_tokens' : undefined,
+      signature,
+      matchedWallets,
+      insertedEvents,
+      duplicateEvents,
+      sentAlerts,
+    };
+  }
+
+  async ingestWebhookBatch(events = [], options = {}) {
+    const batch = Array.isArray(events) ? events : [events];
+    const source = String(options.source || 'webhook');
+    const tokenConfigCache = new Map();
+    const seenSignatures = new Set();
+
+    let processed = 0;
+    let ignored = 0;
+    let failed = 0;
+    let insertedEvents = 0;
+    let duplicateEvents = 0;
+    let sentAlerts = 0;
+
+    for (const event of batch) {
+      const signature = this.extractWebhookSignature(event);
+      if (signature && seenSignatures.has(signature)) {
+        ignored += 1;
+        continue;
+      }
+      if (signature) seenSignatures.add(signature);
+
+      try {
+        const result = await this.ingestWebhookEvent(event, { source, tokenConfigCache });
+        if (!result?.success) {
+          failed += 1;
+          continue;
+        }
+        if (result.ignored) ignored += 1;
+        else processed += 1;
+        insertedEvents += Number(result.insertedEvents || 0);
+        duplicateEvents += Number(result.duplicateEvents || 0);
+        sentAlerts += Number(result.sentAlerts || 0);
+      } catch (e) {
+        failed += 1;
+        logger.error('[tracked-token-webhook] ingest event failed:', e?.message || e);
+      }
+    }
+
+    return {
+      received: batch.length,
+      processed,
+      ignored,
+      failed,
+      insertedEvents,
+      duplicateEvents,
+      sentAlerts,
+    };
+  }
+
   async processTrackedWalletTokenActivity(walletRow, trackedTokenByMintLower) {
     const walletAddress = String(walletRow?.wallet_address || '').trim();
     if (!walletAddress) return;
@@ -653,7 +1172,6 @@ class TrackedWalletsService {
     }
 
     const sigMetaBySignature = new Map(signatureRows.map(row => [row.signature, row]));
-    const alerts = [];
     let newestParsedSignature = null;
 
     for (let i = 0; i < parsedTxs.length; i++) {
@@ -662,50 +1180,16 @@ class TrackedWalletsService {
       if (!tx || !signature) continue;
       newestParsedSignature = signature;
 
-      const tokenEvents = this.detectTrackedTokenEventsFromParsedTx(tx, walletAddress, trackedTokenByMintLower);
-      if (!tokenEvents.length) continue;
-
       const sigMeta = sigMetaBySignature.get(signature);
       const eventTime = sigMeta?.blockTime ? new Date(sigMeta.blockTime * 1000).toISOString() : new Date().toISOString();
-
-      for (const evt of tokenEvents) {
-        const persist = this.saveTrackedTokenEvent({
-          guildId: walletRow.guild_id || '',
-          walletId: walletRow.id,
-          walletAddress,
-          tokenMint: evt.tokenMint,
-          tokenSymbol: evt.tokenSymbol,
-          tokenName: evt.tokenName,
-          eventType: evt.eventType,
-          amountDelta: evt.amountDelta,
-          balanceAfter: evt.balanceAfter,
-          solDelta: evt.solDelta,
-          stableDelta: evt.stableDelta,
-          txSignature: signature,
-          eventTime,
-          source: 'poll',
-          rawJson: {
-            signature,
-            eventType: evt.eventType,
-            tokenMint: evt.tokenMint,
-            amountDelta: evt.amountDelta,
-            balanceAfter: evt.balanceAfter,
-            walletAddress,
-          },
-        });
-
-        if (!persist.success || !persist.inserted) continue;
-
-        const tokenCfg = trackedTokenByMintLower.get(String(evt.tokenMint || '').toLowerCase());
-        const shouldAlert = this.shouldAlertTokenEvent(tokenCfg, evt.eventType, Math.abs(safeToNumber(evt.amountDelta)));
-        if (!shouldAlert) continue;
-        alerts.push({
-          ...evt,
-          txSignature: signature,
-          eventTime,
-          alertChannelId: tokenCfg?.alert_channel_id || tokenCfg?.alertChannelId || null,
-        });
-      }
+      await this.processParsedTokenActivityForWallet({
+        walletRow,
+        trackedTokenByMintLower,
+        tx,
+        signature,
+        eventTime,
+        source: 'poll',
+      });
     }
 
     // Advance cursor only to newest successfully parsed signature.
@@ -716,19 +1200,7 @@ class TrackedWalletsService {
       this.touchWalletTokenCursor(walletRow.id);
     }
 
-    if (!alerts.length) return;
-    const toSend = alerts.length > TOKEN_ACTIVITY_ALERT_CAP_PER_WALLET
-      ? alerts.slice(alerts.length - TOKEN_ACTIVITY_ALERT_CAP_PER_WALLET)
-      : alerts;
-
-    if (alerts.length > TOKEN_ACTIVITY_ALERT_CAP_PER_WALLET) {
-      logger.warn(`[tracked-token] capped ${alerts.length - toSend.length} token alerts for wallet ${walletAddress}`);
-    }
-
-    for (const evt of toSend) {
-      await this.sendTrackedTokenAlert({ walletRow, guildId: walletRow.guild_id, evt });
-      await new Promise(resolve => setTimeout(resolve, 250));
-    }
+    return;
   }
 
   async pollTrackedTokenActivity(guildId = null) {
@@ -739,17 +1211,7 @@ class TrackedWalletsService {
     for (const walletRow of wallets) {
       const walletGuild = String(walletRow.guild_id || '');
       if (!this.isTokenTrackerEnabled(walletGuild)) continue;
-      if (!tokenConfigCache.has(walletGuild)) {
-        const tokenRows = this.getTrackedTokens(walletGuild).filter(token => token.enabled !== false && Number(token.enabled ?? 1) === 1);
-        const tokenMap = new Map(
-          tokenRows
-            .map(token => [String(token.token_mint || '').trim().toLowerCase(), token])
-            .filter(([mint]) => !!mint)
-        );
-        tokenConfigCache.set(walletGuild, tokenMap);
-      }
-
-      const tokenMap = tokenConfigCache.get(walletGuild);
+      const tokenMap = this.getTrackedTokenMapForGuild(walletGuild, tokenConfigCache);
       if (!tokenMap || tokenMap.size === 0) continue;
 
       try {

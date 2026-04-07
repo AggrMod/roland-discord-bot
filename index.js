@@ -211,6 +211,15 @@ client.once(Events.ClientReady, () => {
 
   // Holdings panel refresh cron — keep wallet holding panels up to date
   const trackedWalletsService = require('./services/trackedWalletsService');
+  setTimeout(() => {
+    trackedWalletsService.syncAllEnabledWalletAddressesToHeliusWebhook()
+      .then(result => {
+        if (result?.success && !result?.skipped) {
+          logger.log(`[tracked-token-webhook] startup wallet webhook sync complete (+${result.added || 0}, total ${result.total || 0})`);
+        }
+      })
+      .catch(err => logger.error('[tracked-token-webhook] startup wallet webhook sync failed:', err));
+  }, 20 * 1000);
   const refreshAllHoldingsPanels = () => {
     trackedWalletsService.refreshAllPanels().catch(err => {
       logger.error('[wallet-panel] Error in scheduled refresh:', err);

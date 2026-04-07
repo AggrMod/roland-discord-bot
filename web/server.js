@@ -235,7 +235,7 @@ class WebServer {
     }));
 
     this.app.use(require('cookie-parser')());
-    this.app.use(express.json());
+    this.app.use(express.json({ limit: process.env.WEBHOOK_BODY_LIMIT || '2mb' }));
     this.app.use(express.static(path.join(__dirname, 'public')));
 
     this.app.get('/health', (_req, res) => {
@@ -4518,17 +4518,23 @@ class WebServer {
           else if (result.success) nftProcessed += 1;
         }
 
-        const tokenSummary = await trackedWalletsService.ingestWebhookBatch(events, { source: 'webhook' });
-        logger.log(
-          `[activity-webhook] nft received=${events.length} processed=${nftProcessed} ignored=${nftIgnored};`
-          + ` token processed=${tokenSummary.processed} ignored=${tokenSummary.ignored} failed=${tokenSummary.failed}`
-          + ` inserted=${tokenSummary.insertedEvents} dup=${tokenSummary.duplicateEvents} alerts=${tokenSummary.sentAlerts}`
-        );
+        // Process token ingestion async so webhook ACK stays fast (prevents provider timeouts/retries).
+        setImmediate(() => {
+          trackedWalletsService.ingestWebhookBatch(events, { source: 'webhook' })
+            .then(tokenSummary => {
+              logger.log(
+                `[activity-webhook] nft received=${events.length} processed=${nftProcessed} ignored=${nftIgnored};`
+                + ` token processed=${tokenSummary.processed} ignored=${tokenSummary.ignored} failed=${tokenSummary.failed}`
+                + ` inserted=${tokenSummary.insertedEvents} dup=${tokenSummary.duplicateEvents} alerts=${tokenSummary.sentAlerts}`
+              );
+            })
+            .catch(error => logger.error('Error in async token ingestion (nft-activity webhook):', error));
+        });
 
         return res.json({
           success: true,
           nft: { received: events.length, processed: nftProcessed, ignored: nftIgnored },
-          token: tokenSummary,
+          token: { queued: events.length },
         });
       } catch (error) {
         logger.error('Error in nft activity webhook:', error);
@@ -4544,12 +4550,17 @@ class WebServer {
         }
 
         const events = Array.isArray(req.body) ? req.body : [req.body];
-        const summary = await trackedWalletsService.ingestWebhookBatch(events, { source: 'webhook-token-only' });
-        logger.log(
-          `[token-webhook] received=${summary.received} processed=${summary.processed} ignored=${summary.ignored}`
-          + ` failed=${summary.failed} inserted=${summary.insertedEvents} dup=${summary.duplicateEvents} alerts=${summary.sentAlerts}`
-        );
-        return res.json({ success: true, ...summary });
+        setImmediate(() => {
+          trackedWalletsService.ingestWebhookBatch(events, { source: 'webhook-token-only' })
+            .then(summary => {
+              logger.log(
+                `[token-webhook] received=${summary.received} processed=${summary.processed} ignored=${summary.ignored}`
+                + ` failed=${summary.failed} inserted=${summary.insertedEvents} dup=${summary.duplicateEvents} alerts=${summary.sentAlerts}`
+              );
+            })
+            .catch(error => logger.error('Error in async token ingestion (token-activity webhook):', error));
+        });
+        return res.json({ success: true, queued: events.length });
       } catch (error) {
         logger.error('Error in token activity webhook:', error);
         return res.status(500).json({ success: false, message: 'Internal server error' });

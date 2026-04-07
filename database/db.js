@@ -24,6 +24,7 @@ function initDatabase() {
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN message_id TEXT'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN channel_id TEXT'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE wallets ADD COLUMN is_favorite BOOLEAN DEFAULT 0'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE users ADD COLUMN wallet_alert_identity_opt_out INTEGER DEFAULT 0'));
   ignoreDuplicateMigration(() => db.exec('CREATE TABLE user_verify_amounts (id INTEGER PRIMARY KEY AUTOINCREMENT, discord_id TEXT UNIQUE NOT NULL, username TEXT, assigned_amount REAL NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'));
 
   // Governance overhaul migrations
@@ -63,6 +64,7 @@ function initDatabase() {
       total_tokens REAL DEFAULT 0,
       tier TEXT,
       voting_power INTEGER DEFAULT 0,
+      wallet_alert_identity_opt_out INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );

@@ -704,6 +704,7 @@ class WebServer {
         const discordId = req.session.discordUser.id;
         const userInfo = await roleService.getUserInfo(discordId);
         const wallets = db.prepare('SELECT wallet_address, is_favorite, primary_wallet, created_at FROM wallets WHERE discord_id = ? ORDER BY is_favorite DESC, created_at ASC').all(discordId);
+        const userPrefs = db.prepare('SELECT wallet_alert_identity_opt_out FROM users WHERE discord_id = ?').get(discordId) || {};
         
         // Get user's proposals
         const proposals = db.prepare("SELECT * FROM proposals WHERE creator_id = ? AND status NOT IN ('expired') ORDER BY created_at DESC").all(discordId);
@@ -729,7 +730,8 @@ class WebServer {
             tier: userInfo ? userInfo.tier : 'None',
             votingPower: userInfo ? userInfo.voting_power : 0,
             totalNFTs: userInfo ? userInfo.total_nfts : 0,
-            totalPoints: pointsResult.total
+            totalPoints: pointsResult.total,
+            walletAlertIdentityOptOut: Number(userPrefs.wallet_alert_identity_opt_out || 0) === 1
           },
           wallets,
           proposals,
@@ -2547,6 +2549,34 @@ class WebServer {
         res.json(result);
       } catch (error) {
         logger.error('Error deleting trait:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/user/privacy/wallet-identity-opt-out', (req, res) => {
+      if (!req.session.discordUser) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
+
+      try {
+        const discordId = req.session.discordUser.id;
+        const optOut = req.body?.optOut === true;
+
+        // Ensure a users row exists for preference persistence.
+        db.prepare(`
+          INSERT OR IGNORE INTO users (discord_id, username, wallet_alert_identity_opt_out)
+          VALUES (?, ?, ?)
+        `).run(discordId, req.session.discordUser.username || 'Web User', optOut ? 1 : 0);
+
+        db.prepare(`
+          UPDATE users
+          SET wallet_alert_identity_opt_out = ?, updated_at = datetime('now')
+          WHERE discord_id = ?
+        `).run(optOut ? 1 : 0, discordId);
+
+        res.json({ success: true, optOut });
+      } catch (error) {
+        logger.error('Error updating wallet identity privacy preference:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });

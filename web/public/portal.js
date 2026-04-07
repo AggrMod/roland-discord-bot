@@ -1870,16 +1870,34 @@ async function loadActiveVotes() {
 // ==================== WALLETS ====================
 function renderWallets() {
   const container = document.getElementById('walletsList');
-  
+  const identityOptOut = Number(userData?.user?.walletAlertIdentityOptOut || 0) === 1;
+  const privacyCard = `
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+        <div>
+          <div style="font-weight:700;color:#e0e7ff;">Privacy: Tracker Identity Display</div>
+          <div style="color:var(--text-secondary);font-size:0.86em;margin-top:4px;">
+            When enabled, NFT and token tracker alerts show your wallet short address instead of your Discord username.
+          </div>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;color:#cbd5e1;font-size:0.86em;cursor:pointer;">
+          <input id="walletIdentityOptOutToggle" type="checkbox" ${identityOptOut ? 'checked' : ''} onchange="setWalletIdentityOptOut(this.checked)">
+          Hide Username In Alerts
+        </label>
+      </div>
+    </div>
+  `;
+
   if (!userData.wallets || userData.wallets.length === 0) {
     container.innerHTML = `
+      ${privacyCard}
       <div class="empty-state">
-        <div class="empty-state-icon">💼</div>
+        <div class="empty-state-icon">&#128188;</div>
         <h4 class="empty-state-title">No Wallets Connected</h4>
         <p class="empty-state-message">Link your Solana wallet to verify NFT ownership and unlock voting power.</p>
         <div class="empty-state-action">
           <button class="btn-primary" onclick="showWalletAddForm()">
-            <span>➕</span>
+            <span>&#10133;</span>
             <span>Add Your First Wallet</span>
           </button>
         </div>
@@ -1888,31 +1906,61 @@ function renderWallets() {
     return;
   }
 
-  container.innerHTML = '<div class="wallet-list">' + userData.wallets.map(wallet => `
+  container.innerHTML = privacyCard + '<div class="wallet-list">' + userData.wallets.map(wallet => `
     <div class="wallet-item ${wallet.is_favorite ? 'favorite' : ''}">
       <div class="wallet-info">
         <div class="wallet-address">
-          ${wallet.is_favorite ? '⭐ ' : ''}${escapeHtml(wallet.wallet_address)}
+          ${wallet.is_favorite ? '&#9733; ' : ''}${escapeHtml(wallet.wallet_address)}
         </div>
         <div class="wallet-meta">
-          ${wallet.is_favorite ? '<span style="color: var(--gold);">⭐ Primary Wallet</span>' : '<span>Secondary Wallet</span>'}
+          ${wallet.is_favorite ? '<span style="color: var(--gold);">Primary Wallet</span>' : '<span>Secondary Wallet</span>'}
           <span>Verified ${formatDate(new Date(wallet.created_at || Date.now()))}</span>
         </div>
       </div>
       <div class="wallet-actions">
         ${!wallet.is_favorite ? `
           <button class="btn-secondary" onclick="setFavorite('${wallet.wallet_address}')">
-            <span>⭐</span>
+            <span>&#9733;</span>
             <span>Set Primary</span>
           </button>
         ` : ''}
         <button class="btn-danger" onclick="confirmRemoveWallet('${wallet.wallet_address}')">
-          <span>🗑️</span>
+          <span>&#128465;</span>
           <span>Remove</span>
         </button>
       </div>
     </div>
   `).join('') + '</div>';
+}
+
+async function setWalletIdentityOptOut(optOut) {
+  const checkbox = document.getElementById('walletIdentityOptOutToggle');
+  if (checkbox) checkbox.disabled = true;
+
+  try {
+    const response = await fetch('/api/user/privacy/wallet-identity-opt-out', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ optOut: !!optOut })
+    });
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      if (checkbox) checkbox.checked = !optOut;
+      showError(data.message || 'Failed to update privacy setting');
+      return;
+    }
+
+    if (!userData.user) userData.user = {};
+    userData.user.walletAlertIdentityOptOut = !!data.optOut;
+    showSuccess(data.optOut ? 'Username hidden in tracker alerts' : 'Username visible in tracker alerts');
+  } catch (error) {
+    console.error('Error updating wallet identity privacy preference:', error);
+    if (checkbox) checkbox.checked = !optOut;
+    showError('Failed to update privacy setting');
+  } finally {
+    if (checkbox) checkbox.disabled = false;
+  }
 }
 
 async function setFavorite(address) {
@@ -9485,6 +9533,3 @@ async function saveEngagementConfigFromSettings() {
     else showError(data.message || 'Failed to save.');
   } catch (e) { showError('Error saving engagement settings.'); }
 }
-
-
-

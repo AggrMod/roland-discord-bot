@@ -1012,11 +1012,13 @@ class TrackedWalletsService {
     let duplicateEvents = 0;
     let sentAlerts = 0;
     let matchedOwners = 0;
+    const knownUserWalletCache = new Map();
 
     for (const evt of events) {
-      matchedOwners += 1;
       const ownerAddress = String(evt.ownerAddress || '').trim();
       if (!ownerAddress) continue;
+      if (!this.isKnownUserWallet(ownerAddress, knownUserWalletCache)) continue;
+      matchedOwners += 1;
 
       for (const tokenCfg of evt.tokenConfigs || []) {
         const guildId = String(tokenCfg.guild_id || '').trim();
@@ -1355,11 +1357,13 @@ class TrackedWalletsService {
     let duplicateEvents = 0;
     let sentAlerts = 0;
     let matchedOwners = 0;
+    const knownUserWalletCache = new Map();
 
     for (const [ownerLower, deltaByMint] of ownerTokenDeltas.entries()) {
       if (!deltaByMint || deltaByMint.size === 0) continue;
       const ownerAddress = String(ownerLower || '').trim();
       if (!ownerAddress) continue;
+      if (!this.isKnownUserWallet(ownerAddress, knownUserWalletCache)) continue;
 
       const trackedMints = [...deltaByMint.keys()].filter(mint => byMint.has(mint));
       if (!trackedMints.length) continue;
@@ -1995,6 +1999,56 @@ class TrackedWalletsService {
 
   // ─── TX alert helpers (called from nftActivityService) ───────────────────
 
+  resolveWalletIdentity(walletAddress) {
+    const wallet = String(walletAddress || '').trim();
+    if (!wallet) return { text: 'unknown', isAddress: true };
+
+    const shortWallet = `${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
+
+    try {
+      const row = db.prepare(`
+        SELECT u.username, COALESCE(u.wallet_alert_identity_opt_out, 0) AS wallet_alert_identity_opt_out
+        FROM wallets w
+        JOIN users u ON u.discord_id = w.discord_id
+        WHERE lower(w.wallet_address) = lower(?)
+        LIMIT 1
+      `).get(wallet);
+
+      if (row?.username && Number(row.wallet_alert_identity_opt_out || 0) !== 1) {
+        return { text: `@${row.username}`, isAddress: false };
+      }
+    } catch (_error) {}
+
+    return { text: shortWallet, isAddress: true };
+  }
+
+  isKnownUserWallet(walletAddress, cache = null) {
+    const wallet = String(walletAddress || '').trim().toLowerCase();
+    if (!wallet) return false;
+
+    if (cache instanceof Map && cache.has(wallet)) {
+      return cache.get(wallet) === true;
+    }
+
+    let known = false;
+    try {
+      const row = db.prepare(`
+        SELECT 1
+        FROM wallets
+        WHERE lower(wallet_address) = ?
+        LIMIT 1
+      `).get(wallet);
+      known = !!row;
+    } catch (_error) {
+      known = false;
+    }
+
+    if (cache instanceof Map) {
+      cache.set(wallet, known);
+    }
+    return known;
+  }
+
   async sendTrackedTokenAlert({ walletRow, guildId, evt }) {
     const client = clientProvider.getClient();
     if (!client) return;
@@ -2024,7 +2078,8 @@ class TrackedWalletsService {
     const solDelta = evt?.solDelta ?? evt?.sol_delta;
     const stableDelta = evt?.stableDelta ?? evt?.stable_delta;
     const signature = String(evt?.txSignature || evt?.tx_signature || '').trim();
-    const label = walletRow.label || `${walletRow.wallet_address.slice(0, 6)}...${walletRow.wallet_address.slice(-4)}`;
+    const walletIdentity = this.resolveWalletIdentity(walletRow.wallet_address);
+    const walletDisplay = walletIdentity.isAddress ? `\`${walletIdentity.text}\`` : walletIdentity.text;
 
     const style = {
       buy: { icon: '🟢', title: 'BUY', color: '#57F287' },
@@ -2040,9 +2095,9 @@ class TrackedWalletsService {
 
     const embed = new EmbedBuilder()
       .setTitle(`${style.icon} ${style.title}: ${tokenSymbol}`)
-      .setDescription(`Wallet **${label}** ${style.title.toLowerCase()} event detected.`)
+      .setDescription(`Wallet **${walletIdentity.text}** ${style.title.toLowerCase()} event detected.`)
       .addFields(
-        { name: 'Wallet', value: `\`${walletRow.wallet_address.slice(0, 6)}...${walletRow.wallet_address.slice(-4)}\``, inline: true },
+        { name: 'Wallet', value: walletDisplay, inline: true },
         { name: 'Amount', value: `${amountDelta >= 0 ? '+' : '-'}${amountFormatted}`, inline: true },
         { name: 'Token', value: tokenSymbol, inline: true },
       )
@@ -2079,7 +2134,7 @@ class TrackedWalletsService {
       guildId: guildId || '',
       moduleKey: 'nfttracker',
       defaultColor: style.color,
-      defaultFooter: 'Wallet Tracker',
+      defaultFooter: 'Powered by Guild Pilot',
       fallbackLogoUrl: branding.logo || botAvatar,
     });
 

@@ -471,19 +471,31 @@ class NFTActivityService {
 
     const displayType = typeUpper === 'SELL' ? 'BUY' : typeUpper;
 
+    const walletIdentityCache = new Map();
     const walletToDisplay = (wallet) => {
-      if (!wallet) return '—';
+      if (!wallet) return 'N/A';
+
+      const cacheKey = String(wallet).toLowerCase();
+      if (walletIdentityCache.has(cacheKey)) {
+        return walletIdentityCache.get(cacheKey);
+      }
+
+      let display = `\`${wallet.slice(0, 6)}...${wallet.slice(-4)}\``;
       try {
         const row = db.prepare(`
-          SELECT u.username
+          SELECT u.username, COALESCE(u.wallet_alert_identity_opt_out, 0) AS wallet_alert_identity_opt_out
           FROM wallets w
           JOIN users u ON u.discord_id = w.discord_id
           WHERE lower(w.wallet_address) = lower(?)
           LIMIT 1
         `).get(wallet);
-        if (row?.username) return `@${row.username}`;
+        if (row?.username && Number(row.wallet_alert_identity_opt_out || 0) !== 1) {
+          display = `@${row.username}`;
+        }
       } catch {}
-      return `\`${wallet.slice(0, 6)}...${wallet.slice(-4)}\``;
+
+      walletIdentityCache.set(cacheKey, display);
+      return display;
     };
 
     const explorer = evt.txSignature ? `https://solscan.io/tx/${evt.txSignature}` : null;

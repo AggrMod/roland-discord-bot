@@ -219,6 +219,17 @@ client.once(Events.ClientReady, () => {
   intervals.push(setInterval(refreshAllHoldingsPanels, 30 * 60 * 1000)); // every 30 min
   setTimeout(refreshAllHoldingsPanels, 2 * 60 * 1000); // first refresh 2 min after startup
   logger.log('📋 Wallet holdings panel refresh scheduled (2 min startup delay, then every 30 min)');
+
+  // Tracked token activity polling (buy/sell/transfer classification for tracked wallets)
+  const pollTrackedTokenActivity = () => {
+    trackedWalletsService.pollTrackedTokenActivity().catch(err => {
+      logger.error('[tracked-token] Error in scheduled poll:', err);
+    });
+  };
+  const tokenPollIntervalMs = Math.max(30, Number(process.env.TRACKED_TOKEN_POLL_INTERVAL_SEC || 120)) * 1000;
+  intervals.push(setInterval(pollTrackedTokenActivity, tokenPollIntervalMs));
+  setTimeout(pollTrackedTokenActivity, 45 * 1000); // warm-up after startup
+  logger.log(`[tracked-token] Token activity poll scheduled (45s startup delay, then every ${Math.round(tokenPollIntervalMs / 1000)}s)`);
 });
 
 client.on(Events.GuildCreate, async guild => {

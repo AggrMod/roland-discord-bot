@@ -536,6 +536,7 @@ class WebServer {
       '/wallets': 'wallets',
       '/heist': 'heist',
       '/nft-activity': 'nft-activity',
+      '/token-activity': 'token-activity',
       '/battle': 'battle',
       '/engagement': 'engagement',
       '/self-serve-roles': 'self-serve-roles',
@@ -1819,6 +1820,7 @@ class WebServer {
           effectiveSettings.moduleMissionsEnabled = !!tenantContext.modules.heist;
           effectiveSettings.moduleTreasuryEnabled = !!tenantContext.modules.treasury;
           effectiveSettings.moduleNftTrackerEnabled = !!tenantContext.modules.nfttracker;
+          effectiveSettings.moduleTokenTrackerEnabled = !!tenantContext.modules.tokentracker;
           effectiveSettings.moduleBrandingEnabled = !!tenantContext.modules.branding;
           effectiveSettings.moduleRoleClaimEnabled = !!tenantContext.modules.selfserveroles;
           effectiveSettings.moduleTicketingEnabled = !!tenantContext.modules.ticketing;
@@ -1874,7 +1876,7 @@ class WebServer {
           'proposalsChannelId', 'votingChannelId', 'resultsChannelId', 'governanceLogChannelId',
           'quorumPercentage', 'supportThreshold', 'voteDurationHours',
           'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleTreasuryEnabled',
-          'moduleNftTrackerEnabled', 'moduleBrandingEnabled', 'moduleMissionsEnabled', 'moduleBattleEnabled',
+          'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleBrandingEnabled', 'moduleMissionsEnabled', 'moduleBattleEnabled',
           'moduleTicketingEnabled', 'moduleRoleClaimEnabled',
           'battleRoundPauseMinSec', 'battleRoundPauseMaxSec', 'battleElitePrepSec', 'battleForcedEliminationIntervalRounds', 'battleDefaultEra',
           'baseVerifiedRoleId', 'autoResyncEnabled', 'ogRoleId', 'ogRoleLimit',
@@ -1915,6 +1917,7 @@ class WebServer {
               moduleMissionsEnabled: 'heist',
               moduleTreasuryEnabled: 'treasury',
               moduleNftTrackerEnabled: 'nfttracker',
+              moduleTokenTrackerEnabled: 'tokentracker',
               moduleBrandingEnabled: 'branding',
               moduleRoleClaimEnabled: 'selfserveroles',
               moduleTicketingEnabled: 'ticketing',
@@ -2321,12 +2324,22 @@ class WebServer {
     // Role configuration endpoints
     const getTenantRoleConfig = (guildId) => {
       const row = db.prepare('SELECT tiers_json, traits_json FROM tenant_role_configs WHERE guild_id = ?').get(guildId);
-      if (!row) return { tiers: [], traitRoles: [] };
+      if (!row) {
+        return {
+          tiers: [],
+          traitRoles: [],
+          tokenRules: roleService.getTokenRoleRules(guildId)
+        };
+      }
       let tiers = [];
       let traitRoles = [];
       try { tiers = JSON.parse(row.tiers_json || '[]'); } catch {}
       try { traitRoles = JSON.parse(row.traits_json || '[]'); } catch {}
-      return { tiers: Array.isArray(tiers) ? tiers : [], traitRoles: Array.isArray(traitRoles) ? traitRoles : [] };
+      return {
+        tiers: Array.isArray(tiers) ? tiers : [],
+        traitRoles: Array.isArray(traitRoles) ? traitRoles : [],
+        tokenRules: roleService.getTokenRoleRules(guildId)
+      };
     };
 
     const saveTenantRoleConfig = (guildId, cfg) => {
@@ -2345,7 +2358,10 @@ class WebServer {
         const useTenantScoped = tenantService.isMultitenantEnabled() && !!req.guildId;
         const config = useTenantScoped
           ? getTenantRoleConfig(req.guildId)
-          : roleService.getRoleConfigSummary();
+          : {
+            ...roleService.getRoleConfigSummary(),
+            tokenRules: roleService.getTokenRoleRules(req.guildId || null)
+          };
         res.json({ success: true, config });
       } catch (error) {
         logger.error('Error fetching role config:', error);
@@ -2520,6 +2536,63 @@ class WebServer {
         res.json(result);
       } catch (error) {
         logger.error('Error deleting trait:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // Token role rule CRUD
+    this.app.get('/api/admin/roles/tokens', adminAuthMiddleware, (req, res) => {
+      try {
+        const rules = roleService.getTokenRoleRules(req.guildId || null);
+        res.json({ success: true, rules });
+      } catch (error) {
+        logger.error('Error fetching token role rules:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/roles/tokens', adminAuthMiddleware, (req, res) => {
+      try {
+        const { tokenMint, tokenSymbol, minAmount, maxAmount, roleId, enabled } = req.body || {};
+        if (!tokenMint || !roleId || minAmount === undefined || minAmount === null) {
+          return res.status(400).json({ success: false, message: 'tokenMint, roleId, and minAmount are required' });
+        }
+
+        const result = roleService.addTokenRoleRule({
+          guildId: req.guildId || '',
+          tokenMint,
+          tokenSymbol: tokenSymbol || null,
+          minAmount,
+          maxAmount: maxAmount === undefined ? null : maxAmount,
+          roleId,
+          enabled: enabled !== false
+        });
+        if (!result.success) return res.status(400).json(result);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error adding token role rule:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.put('/api/admin/roles/tokens/:id', adminAuthMiddleware, (req, res) => {
+      try {
+        const result = roleService.updateTokenRoleRule(req.params.id, req.body || {}, req.guildId || null);
+        if (!result.success) return res.status(400).json(result);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error updating token role rule:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.delete('/api/admin/roles/tokens/:id', adminAuthMiddleware, (req, res) => {
+      try {
+        const result = roleService.removeTokenRoleRule(req.params.id, req.guildId || null);
+        if (!result.success) return res.status(404).json(result);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error deleting token role rule:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });
@@ -4046,6 +4119,122 @@ class WebServer {
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });
+
+    const ensureTokenTrackerModule = (req, res) => {
+      if (!tenantService.isMultitenantEnabled()) return true;
+      if (!req.guildId) return true;
+      if (tenantService.isModuleEnabled(req.guildId, 'tokentracker')) return true;
+      res.status(403).json({ success: false, message: 'Token Tracker module is disabled for this server.' });
+      return false;
+    };
+
+    const registerTokenTrackerRoutes = (basePath) => {
+      this.app.get(`${basePath}/tokens`, adminAuthMiddleware, (req, res) => {
+        if (!ensureTokenTrackerModule(req, res)) return;
+        try {
+          const trackedWalletsService = require('../services/trackedWalletsService');
+          const tokens = trackedWalletsService.getTrackedTokens(req.guildId || null);
+          res.json({ success: true, tokens });
+        } catch (error) {
+          logger.error(`Error getting tracked tokens (${basePath}):`, error);
+          res.status(500).json({ success: false, message: 'Internal server error' });
+        }
+      });
+
+      this.app.post(`${basePath}/tokens`, adminAuthMiddleware, (req, res) => {
+        if (!ensureTokenTrackerModule(req, res)) return;
+        try {
+          const trackedWalletsService = require('../services/trackedWalletsService');
+          const {
+            tokenMint,
+            tokenSymbol,
+            tokenName,
+            decimals,
+            enabled,
+            alertChannelId,
+            alertBuys,
+            alertSells,
+            alertTransfers,
+            minAlertAmount,
+          } = req.body || {};
+          const result = trackedWalletsService.addTrackedToken({
+            guildId: req.guildId || '',
+            tokenMint,
+            tokenSymbol: tokenSymbol || null,
+            tokenName: tokenName || null,
+            decimals: decimals === undefined ? null : decimals,
+            enabled: enabled !== false,
+            alertChannelId: alertChannelId || null,
+            alertBuys: alertBuys !== false,
+            alertSells: alertSells !== false,
+            alertTransfers: alertTransfers === true,
+            minAlertAmount: minAlertAmount === undefined ? 0 : minAlertAmount,
+          });
+          if (!result.success) return res.status(400).json(result);
+          res.json(result);
+        } catch (error) {
+          logger.error(`Error adding tracked token (${basePath}):`, error);
+          res.status(500).json({ success: false, message: 'Internal server error' });
+        }
+      });
+
+      this.app.put(`${basePath}/tokens/:id`, adminAuthMiddleware, (req, res) => {
+        if (!ensureTokenTrackerModule(req, res)) return;
+        try {
+          const trackedWalletsService = require('../services/trackedWalletsService');
+          const updates = {};
+          const body = req.body || {};
+          if (body.tokenMint !== undefined) updates.tokenMint = body.tokenMint;
+          if (body.tokenSymbol !== undefined) updates.tokenSymbol = body.tokenSymbol;
+          if (body.tokenName !== undefined) updates.tokenName = body.tokenName;
+          if (body.decimals !== undefined) updates.decimals = body.decimals;
+          if (body.enabled !== undefined) updates.enabled = !!body.enabled;
+          if (body.alertChannelId !== undefined) updates.alertChannelId = body.alertChannelId || null;
+          if (body.alertBuys !== undefined) updates.alertBuys = !!body.alertBuys;
+          if (body.alertSells !== undefined) updates.alertSells = !!body.alertSells;
+          if (body.alertTransfers !== undefined) updates.alertTransfers = !!body.alertTransfers;
+          if (body.minAlertAmount !== undefined) updates.minAlertAmount = body.minAlertAmount;
+
+          const result = trackedWalletsService.updateTrackedToken(req.params.id, updates, req.guildId || null);
+          if (!result.success) return res.status(400).json(result);
+          res.json(result);
+        } catch (error) {
+          logger.error(`Error updating tracked token (${basePath}):`, error);
+          res.status(500).json({ success: false, message: 'Internal server error' });
+        }
+      });
+
+      this.app.delete(`${basePath}/tokens/:id`, adminAuthMiddleware, (req, res) => {
+        if (!ensureTokenTrackerModule(req, res)) return;
+        try {
+          const trackedWalletsService = require('../services/trackedWalletsService');
+          const result = trackedWalletsService.removeTrackedToken(req.params.id, req.guildId || null);
+          if (!result.success) return res.status(400).json(result);
+          res.json(result);
+        } catch (error) {
+          logger.error(`Error removing tracked token (${basePath}):`, error);
+          res.status(500).json({ success: false, message: 'Internal server error' });
+        }
+      });
+
+      this.app.get(`${basePath}/token-events`, adminAuthMiddleware, (req, res) => {
+        if (!ensureTokenTrackerModule(req, res)) return;
+        try {
+          const trackedWalletsService = require('../services/trackedWalletsService');
+          const limit = Number(req.query.limit || 30);
+          const events = trackedWalletsService.listTrackedTokenEvents(req.guildId || null, limit);
+          res.json({ success: true, events });
+        } catch (error) {
+          logger.error(`Error listing tracked token events (${basePath}):`, error);
+          res.status(500).json({ success: false, message: 'Internal server error' });
+        }
+      });
+    };
+
+    // Dedicated token tracker API paths
+    registerTokenTrackerRoutes('/api/admin/token-tracker');
+    // Legacy alias kept for backward compatibility with older portal builds
+    registerTokenTrackerRoutes('/api/admin/nft-tracker');
 
     // ==================== TICKET MANAGEMENT (admin) ====================
 

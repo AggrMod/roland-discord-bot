@@ -266,6 +266,16 @@ class TenantService {
       return null;
     }
 
+    const planKey = normalizePlanKey(tenantRecord.plan_key || getDefaultPlanKey()) || getDefaultPlanKey();
+    const plan = getPlanPreset(planKey);
+    for (const moduleKey of ALL_MODULE_KEYS) {
+      const defaultEnabled = plan.modules[moduleKey] === true ? 1 : 0;
+      db.prepare(`
+        INSERT OR IGNORE INTO tenant_modules (tenant_id, module_key, enabled)
+        VALUES (?, ?, ?)
+      `).run(tenantRecord.id, moduleKey, defaultEnabled);
+    }
+
     const brandingRow = db.prepare('SELECT * FROM tenant_branding WHERE tenant_id = ?').get(tenantRecord.id) || null;
     const limitsRow = db.prepare('SELECT * FROM tenant_limits WHERE tenant_id = ?').get(tenantRecord.id) || null;
     const moduleRows = db.prepare(`
@@ -289,8 +299,6 @@ class TenantService {
       }
     }
 
-    const planKey = normalizePlanKey(tenantRecord.plan_key || getDefaultPlanKey()) || getDefaultPlanKey();
-    const plan = getPlanPreset(planKey);
     const branding = brandingRow ? {
       bot_display_name: brandingRow.bot_display_name || brandingRow.display_name || null,
       brand_emoji: brandingRow.brand_emoji || null,

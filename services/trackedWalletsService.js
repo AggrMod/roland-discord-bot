@@ -1,12 +1,55 @@
 const db = require('../database/db');
 const logger = require('../utils/logger');
 const nftService = require('./nftService');
+const tokenService = require('./tokenService');
 const clientProvider = require('../utils/clientProvider');
 const { applyEmbedBranding, getBranding } = require('./embedBranding');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { Connection, PublicKey, LAMPORTS_PER_SOL } = require('@solana/web3.js');
 
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+const USDT_MINT = 'Es9vMFrzaCERmJfrF4H2sW9gK5bN8wK5Y7vJgqS5M8X';
+const STABLECOIN_MINTS = new Set([
+  USDC_MINT.toLowerCase(),
+  USDT_MINT.toLowerCase(),
+]);
+const TOKEN_ACTIVITY_POLL_LIMIT = Math.max(10, Math.min(50, Number(process.env.TRACKED_TOKEN_POLL_LIMIT || 25)));
+const TOKEN_ACTIVITY_ALERT_CAP_PER_WALLET = Math.max(1, Math.min(25, Number(process.env.TRACKED_TOKEN_ALERT_CAP || 8)));
+const SOL_DELTA_EPSILON = Number(process.env.TRACKED_TOKEN_SOL_EPSILON || 0.00001);
+const STABLE_DELTA_EPSILON = Number(process.env.TRACKED_TOKEN_STABLE_EPSILON || 0.01);
+
+function safeToNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseUiAmount(entry) {
+  const tokenAmount = entry?.uiTokenAmount || {};
+  if (tokenAmount.uiAmountString !== undefined && tokenAmount.uiAmountString !== null) {
+    const parsed = Number(tokenAmount.uiAmountString);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  if (tokenAmount.uiAmount !== undefined && tokenAmount.uiAmount !== null) {
+    const parsed = Number(tokenAmount.uiAmount);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+}
+
+function normalizeAddress(address) {
+  return String(address || '').trim().toLowerCase();
+}
+
+function isValidSolanaAddress(address) {
+  try {
+    const normalized = String(address || '').trim();
+    if (!normalized) return false;
+    new PublicKey(normalized);
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
 
 async function _getSolanaBalances(walletAddress) {
   try {
@@ -34,6 +77,26 @@ async function _getSolanaBalances(walletAddress) {
 }
 
 class TrackedWalletsService {
+  constructor() {
+    this.connection = tokenService.connection || new Connection(process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com');
+    this.invalidWalletWarned = new Set();
+  }
+
+  isTokenTrackerEnabled(guildId) {
+    try {
+      const tenantService = require('./tenantService');
+      if (tenantService?.isMultitenantEnabled?.()) {
+        return tenantService.isModuleEnabled(guildId, 'tokentracker');
+      }
+    } catch (_error) {}
+
+    try {
+      const settingsManager = require('../config/settings');
+      return settingsManager.getSettings().moduleTokenTrackerEnabled !== false;
+    } catch (_error) {
+      return true;
+    }
+  }
   // ─── CRUD ────────────────────────────────────────────────────────────────
 
   addTrackedWallet({ guildId, walletAddress, label, alertChannelId, panelChannelId }) {
@@ -135,6 +198,539 @@ class TrackedWalletsService {
     }
   }
 
+  addTrackedToken({
+    guildId,
+    tokenMint,
+    tokenSymbol = null,
+    tokenName = null,
+    decimals = null,
+    enabled = true,
+    alertChannelId = null,
+    alertBuys = true,
+    alertSells = true,
+    alertTransfers = false,
+    minAlertAmount = 0
+  }) {
+    try {
+      const guild = String(guildId || '').trim();
+      const mint = String(tokenMint || '').trim();
+      if (!guild || !mint) return { success: false, message: 'guildId and tokenMint are required' };
+
+      const result = db.prepare(`
+        INSERT INTO tracked_tokens (
+          guild_id, token_mint, token_symbol, token_name, decimals, enabled, alert_channel_id, alert_buys, alert_sells, alert_transfers, min_alert_amount
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        guild,
+        mint,
+        String(tokenSymbol || '').trim() || null,
+        String(tokenName || '').trim() || null,
+        decimals === null || decimals === undefined || decimals === '' ? null : Number(decimals),
+        enabled === false ? 0 : 1,
+        String(alertChannelId || '').trim() || null,
+        alertBuys === false ? 0 : 1,
+        alertSells === false ? 0 : 1,
+        alertTransfers === true ? 1 : 0,
+        Math.max(0, safeToNumber(minAlertAmount))
+      );
+
+      return { success: true, id: Number(result.lastInsertRowid) };
+    } catch (e) {
+      if (e.message?.includes('UNIQUE constraint')) {
+        return { success: false, message: 'Token already tracked for this server' };
+      }
+      logger.error('Error adding tracked token:', e);
+      return { success: false, message: 'Failed to add tracked token' };
+    }
+  }
+
+  getTrackedTokens(guildId) {
+    try {
+      const rows = guildId
+        ? db.prepare('SELECT * FROM tracked_tokens WHERE guild_id = ? ORDER BY created_at DESC').all(guildId)
+        : db.prepare('SELECT * FROM tracked_tokens ORDER BY created_at DESC').all();
+
+      return rows.map(row => ({
+        ...row,
+        enabled: Number(row.enabled || 0) === 1,
+        alert_buys: Number(row.alert_buys ?? 1) === 1,
+        alert_sells: Number(row.alert_sells ?? 1) === 1,
+        alert_transfers: Number(row.alert_transfers || 0) === 1,
+        min_alert_amount: safeToNumber(row.min_alert_amount || 0),
+      }));
+    } catch (e) {
+      logger.error('Error getting tracked tokens:', e);
+      return [];
+    }
+  }
+
+  getTrackedTokenById(id, guildId) {
+    try {
+      if (guildId) {
+        return db.prepare('SELECT * FROM tracked_tokens WHERE id = ? AND guild_id = ?').get(id, guildId);
+      }
+      return db.prepare('SELECT * FROM tracked_tokens WHERE id = ?').get(id);
+    } catch (e) {
+      logger.error('Error getting tracked token by id:', e);
+      return null;
+    }
+  }
+
+  updateTrackedToken(id, updates = {}, guildId) {
+    try {
+      const fieldMap = {
+        tokenMint: 'token_mint',
+        tokenSymbol: 'token_symbol',
+        tokenName: 'token_name',
+        decimals: 'decimals',
+        enabled: 'enabled',
+        alertChannelId: 'alert_channel_id',
+        alertBuys: 'alert_buys',
+        alertSells: 'alert_sells',
+        alertTransfers: 'alert_transfers',
+        minAlertAmount: 'min_alert_amount',
+      };
+
+      const sets = [];
+      const params = [];
+      for (const [key, val] of Object.entries(updates || {})) {
+        const column = fieldMap[key];
+        if (!column) continue;
+
+        if (column === 'enabled' || column === 'alert_buys' || column === 'alert_sells' || column === 'alert_transfers') {
+          sets.push(`${column} = ?`);
+          params.push(val ? 1 : 0);
+          continue;
+        }
+        if (column === 'min_alert_amount') {
+          sets.push(`${column} = ?`);
+          params.push(Math.max(0, safeToNumber(val)));
+          continue;
+        }
+        if (column === 'decimals') {
+          sets.push(`${column} = ?`);
+          params.push(val === null || val === undefined || val === '' ? null : Number(val));
+          continue;
+        }
+        sets.push(`${column} = ?`);
+        params.push(String(val || '').trim() || null);
+      }
+
+      if (!sets.length) return { success: false, message: 'No valid updates provided' };
+      sets.push('updated_at = CURRENT_TIMESTAMP');
+
+      let info;
+      if (guildId) {
+        params.push(id, String(guildId));
+        info = db.prepare(`UPDATE tracked_tokens SET ${sets.join(', ')} WHERE id = ? AND guild_id = ?`).run(...params);
+      } else {
+        params.push(id);
+        info = db.prepare(`UPDATE tracked_tokens SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+      }
+
+      if (!info.changes) return { success: false, message: 'Tracked token not found or access denied' };
+      return { success: true };
+    } catch (e) {
+      logger.error('Error updating tracked token:', e);
+      return { success: false, message: 'Failed to update tracked token' };
+    }
+  }
+
+  removeTrackedToken(id, guildId) {
+    try {
+      const query = guildId
+        ? 'DELETE FROM tracked_tokens WHERE id = ? AND guild_id = ?'
+        : 'DELETE FROM tracked_tokens WHERE id = ?';
+      const params = guildId ? [id, guildId] : [id];
+      const result = db.prepare(query).run(...params);
+      return { success: true, removed: result.changes };
+    } catch (e) {
+      logger.error('Error removing tracked token:', e);
+      return { success: false, message: 'Failed to remove tracked token' };
+    }
+  }
+
+  listTrackedTokenEvents(guildId, limit = 30) {
+    try {
+      const safeLimit = Math.min(Math.max(Number(limit) || 30, 1), 100);
+      const rows = guildId
+        ? db.prepare(`
+          SELECT id, guild_id, wallet_id, wallet_address, token_mint, token_symbol, token_name, event_type, amount_delta, balance_after, sol_delta, stable_delta, tx_signature, event_time, source, created_at
+          FROM tracked_token_events
+          WHERE guild_id = ?
+          ORDER BY datetime(COALESCE(event_time, created_at)) DESC
+          LIMIT ?
+        `).all(String(guildId), safeLimit)
+        : db.prepare(`
+          SELECT id, guild_id, wallet_id, wallet_address, token_mint, token_symbol, token_name, event_type, amount_delta, balance_after, sol_delta, stable_delta, tx_signature, event_time, source, created_at
+          FROM tracked_token_events
+          ORDER BY datetime(COALESCE(event_time, created_at)) DESC
+          LIMIT ?
+        `).all(safeLimit);
+
+      return rows.map(row => ({
+        ...row,
+        amount_delta: safeToNumber(row.amount_delta),
+        balance_after: row.balance_after === null || row.balance_after === undefined ? null : safeToNumber(row.balance_after),
+        sol_delta: row.sol_delta === null || row.sol_delta === undefined ? null : safeToNumber(row.sol_delta),
+        stable_delta: row.stable_delta === null || row.stable_delta === undefined ? null : safeToNumber(row.stable_delta),
+      }));
+    } catch (e) {
+      logger.error('Error listing tracked token events:', e);
+      return [];
+    }
+  }
+
+  saveTrackedTokenEvent({
+    guildId,
+    walletId,
+    walletAddress,
+    tokenMint,
+    tokenSymbol,
+    tokenName,
+    eventType,
+    amountDelta,
+    balanceAfter = null,
+    solDelta = null,
+    stableDelta = null,
+    txSignature,
+    eventTime = null,
+    source = 'poll',
+    rawJson = null,
+  }) {
+    try {
+      const result = db.prepare(`
+        INSERT INTO tracked_token_events (
+          guild_id, wallet_id, wallet_address, token_mint, token_symbol, token_name, event_type, amount_delta, balance_after,
+          sol_delta, stable_delta, tx_signature, event_time, source, raw_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        String(guildId || ''),
+        walletId ? Number(walletId) : null,
+        String(walletAddress || ''),
+        String(tokenMint || ''),
+        String(tokenSymbol || '').trim() || null,
+        String(tokenName || '').trim() || null,
+        String(eventType || '').trim().toLowerCase(),
+        safeToNumber(amountDelta),
+        balanceAfter === null || balanceAfter === undefined ? null : safeToNumber(balanceAfter),
+        solDelta === null || solDelta === undefined ? null : safeToNumber(solDelta),
+        stableDelta === null || stableDelta === undefined ? null : safeToNumber(stableDelta),
+        String(txSignature || '').trim(),
+        eventTime || null,
+        String(source || 'poll'),
+        rawJson ? JSON.stringify(rawJson) : null
+      );
+      return { success: true, id: Number(result.lastInsertRowid), inserted: true };
+    } catch (e) {
+      if (e.message?.includes('UNIQUE constraint')) {
+        return { success: true, inserted: false, duplicate: true };
+      }
+      logger.error('Error saving tracked token event:', e);
+      return { success: false, message: 'Failed to save tracked token event' };
+    }
+  }
+
+  saveWalletTokenCursor(id, signature) {
+    try {
+      db.prepare(`
+        UPDATE tracked_wallets
+        SET token_last_signature = ?, token_last_checked_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(signature || null, id);
+    } catch (e) {
+      logger.error('Error saving wallet token cursor:', e);
+    }
+  }
+
+  touchWalletTokenCursor(id) {
+    try {
+      db.prepare('UPDATE tracked_wallets SET token_last_checked_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+    } catch (e) {
+      logger.error('Error updating wallet token check timestamp:', e);
+    }
+  }
+
+  classifyTokenEventType(amountDelta, solDelta, stableDelta) {
+    const delta = safeToNumber(amountDelta);
+    if (delta > 0) {
+      if (safeToNumber(solDelta) < -SOL_DELTA_EPSILON || safeToNumber(stableDelta) < -STABLE_DELTA_EPSILON) return 'buy';
+      if (safeToNumber(solDelta) > SOL_DELTA_EPSILON || safeToNumber(stableDelta) > STABLE_DELTA_EPSILON) return 'swap_in';
+      return 'transfer_in';
+    }
+    if (delta < 0) {
+      if (safeToNumber(solDelta) > SOL_DELTA_EPSILON || safeToNumber(stableDelta) > STABLE_DELTA_EPSILON) return 'sell';
+      if (safeToNumber(solDelta) < -SOL_DELTA_EPSILON || safeToNumber(stableDelta) < -STABLE_DELTA_EPSILON) return 'swap_out';
+      return 'transfer_out';
+    }
+    return 'neutral';
+  }
+
+  shouldAlertTokenEvent(tokenConfig, eventType, absoluteAmount) {
+    const cfg = tokenConfig || {};
+    if (cfg.enabled === false || Number(cfg.enabled) === 0) return false;
+    if (safeToNumber(absoluteAmount) < Math.max(0, safeToNumber(cfg.min_alert_amount || cfg.minAlertAmount || 0))) return false;
+
+    const buysEnabled = cfg.alert_buys !== false && Number(cfg.alert_buys ?? 1) === 1;
+    const sellsEnabled = cfg.alert_sells !== false && Number(cfg.alert_sells ?? 1) === 1;
+    const transfersEnabled = cfg.alert_transfers === true || Number(cfg.alert_transfers || 0) === 1;
+
+    if (eventType === 'buy' || eventType === 'swap_in') return buysEnabled;
+    if (eventType === 'sell' || eventType === 'swap_out') return sellsEnabled;
+    if (eventType === 'transfer_in' || eventType === 'transfer_out') return transfersEnabled;
+    return false;
+  }
+
+  getAccountKeysFromParsedTx(tx) {
+    const entries = tx?.transaction?.message?.accountKeys || [];
+    return entries.map(entry => {
+      try {
+        if (typeof entry === 'string') return entry;
+        if (entry?.pubkey?.toBase58) return entry.pubkey.toBase58();
+        if (entry?.pubkey) return String(entry.pubkey);
+        if (entry?.toBase58) return entry.toBase58();
+        return String(entry || '');
+      } catch (_error) {
+        return '';
+      }
+    });
+  }
+
+  getWalletSolDeltaFromParsedTx(tx, walletAddress) {
+    try {
+      const walletLower = normalizeAddress(walletAddress);
+      const accountKeys = this.getAccountKeysFromParsedTx(tx);
+      const idx = accountKeys.findIndex(key => normalizeAddress(key) === walletLower);
+      if (idx < 0) return 0;
+      const pre = safeToNumber(tx?.meta?.preBalances?.[idx] || 0);
+      const post = safeToNumber(tx?.meta?.postBalances?.[idx] || 0);
+      return (post - pre) / LAMPORTS_PER_SOL;
+    } catch (_error) {
+      return 0;
+    }
+  }
+
+  extractWalletTokenBalanceMaps(tx, walletAddress) {
+    const walletLower = normalizeAddress(walletAddress);
+    const pre = new Map();
+    const post = new Map();
+
+    const collect = (rows, targetMap) => {
+      for (const row of rows || []) {
+        const owner = normalizeAddress(row?.owner);
+        if (!owner || owner !== walletLower) continue;
+        const mint = String(row?.mint || '').trim().toLowerCase();
+        if (!mint) continue;
+        const amount = parseUiAmount(row);
+        if (!Number.isFinite(amount)) continue;
+        targetMap.set(mint, safeToNumber(targetMap.get(mint)) + amount);
+      }
+    };
+
+    collect(tx?.meta?.preTokenBalances, pre);
+    collect(tx?.meta?.postTokenBalances, post);
+
+    let preStable = 0;
+    let postStable = 0;
+    for (const [mint, amount] of pre.entries()) {
+      if (STABLECOIN_MINTS.has(mint)) preStable += safeToNumber(amount);
+    }
+    for (const [mint, amount] of post.entries()) {
+      if (STABLECOIN_MINTS.has(mint)) postStable += safeToNumber(amount);
+    }
+
+    return { pre, post, stableDelta: postStable - preStable };
+  }
+
+  detectTrackedTokenEventsFromParsedTx(tx, walletAddress, trackedTokenByMintLower) {
+    const events = [];
+    const { pre, post, stableDelta } = this.extractWalletTokenBalanceMaps(tx, walletAddress);
+    const solDelta = this.getWalletSolDeltaFromParsedTx(tx, walletAddress);
+    const txSignature = tx?.transaction?.signatures?.[0] || null;
+
+    for (const [mintLower, tokenConfig] of trackedTokenByMintLower.entries()) {
+      const preAmount = safeToNumber(pre.get(mintLower));
+      const postAmount = safeToNumber(post.get(mintLower));
+      const amountDelta = postAmount - preAmount;
+      if (Math.abs(amountDelta) < 1e-9) continue;
+
+      const eventType = this.classifyTokenEventType(amountDelta, solDelta, stableDelta);
+      if (eventType === 'neutral') continue;
+
+      events.push({
+        txSignature,
+        tokenMint: tokenConfig.token_mint || tokenConfig.tokenMint,
+        tokenSymbol: tokenConfig.token_symbol || tokenConfig.tokenSymbol || null,
+        tokenName: tokenConfig.token_name || tokenConfig.tokenName || null,
+        eventType,
+        amountDelta,
+        balanceAfter: postAmount,
+        solDelta,
+        stableDelta,
+      });
+    }
+
+    return events;
+  }
+
+  async processTrackedWalletTokenActivity(walletRow, trackedTokenByMintLower) {
+    const walletAddress = String(walletRow?.wallet_address || '').trim();
+    if (!walletAddress) return;
+
+    if (!isValidSolanaAddress(walletAddress)) {
+      const warnKey = `${walletRow.guild_id || 'global'}:${walletAddress}`;
+      if (!this.invalidWalletWarned.has(warnKey)) {
+        logger.warn(`[tracked-token] skipping invalid tracked wallet ${walletAddress}${walletRow.guild_id ? ` (guild ${walletRow.guild_id})` : ''}`);
+        this.invalidWalletWarned.add(warnKey);
+      }
+      return;
+    }
+
+    let signatureRows = [];
+    try {
+      signatureRows = await this.connection.getSignaturesForAddress(new PublicKey(walletAddress), { limit: TOKEN_ACTIVITY_POLL_LIMIT });
+    } catch (e) {
+      logger.error(`[tracked-token] signature poll failed for ${walletAddress}:`, e?.message || e);
+      return;
+    }
+
+    if (!signatureRows.length) {
+      this.touchWalletTokenCursor(walletRow.id);
+      return;
+    }
+
+    const latestSignature = signatureRows[0]?.signature || null;
+    const previousCursor = String(walletRow.token_last_signature || '').trim();
+    if (!previousCursor) {
+      this.saveWalletTokenCursor(walletRow.id, latestSignature);
+      logger.log(`[tracked-token] baseline cursor set for wallet ${walletAddress}${walletRow.guild_id ? ` [guild ${walletRow.guild_id}]` : ''}`);
+      return;
+    }
+
+    const newSignatures = [];
+    for (const row of signatureRows) {
+      if (!row?.signature) continue;
+      if (row.signature === previousCursor) break;
+      newSignatures.push(row.signature);
+    }
+
+    if (!newSignatures.length) {
+      this.touchWalletTokenCursor(walletRow.id);
+      return;
+    }
+
+    const chronologicalSignatures = newSignatures.slice().reverse();
+    let parsedTxs = [];
+    try {
+      parsedTxs = await this.connection.getParsedTransactions(chronologicalSignatures, { maxSupportedTransactionVersion: 0 });
+    } catch (e) {
+      logger.error(`[tracked-token] parsed transaction fetch failed for ${walletAddress}:`, e?.message || e);
+      this.saveWalletTokenCursor(walletRow.id, latestSignature);
+      return;
+    }
+
+    const sigMetaBySignature = new Map(signatureRows.map(row => [row.signature, row]));
+    const alerts = [];
+
+    for (let i = 0; i < parsedTxs.length; i++) {
+      const tx = parsedTxs[i];
+      const signature = chronologicalSignatures[i];
+      if (!tx || !signature) continue;
+
+      const tokenEvents = this.detectTrackedTokenEventsFromParsedTx(tx, walletAddress, trackedTokenByMintLower);
+      if (!tokenEvents.length) continue;
+
+      const sigMeta = sigMetaBySignature.get(signature);
+      const eventTime = sigMeta?.blockTime ? new Date(sigMeta.blockTime * 1000).toISOString() : new Date().toISOString();
+
+      for (const evt of tokenEvents) {
+        const persist = this.saveTrackedTokenEvent({
+          guildId: walletRow.guild_id || '',
+          walletId: walletRow.id,
+          walletAddress,
+          tokenMint: evt.tokenMint,
+          tokenSymbol: evt.tokenSymbol,
+          tokenName: evt.tokenName,
+          eventType: evt.eventType,
+          amountDelta: evt.amountDelta,
+          balanceAfter: evt.balanceAfter,
+          solDelta: evt.solDelta,
+          stableDelta: evt.stableDelta,
+          txSignature: signature,
+          eventTime,
+          source: 'poll',
+          rawJson: {
+            signature,
+            eventType: evt.eventType,
+            tokenMint: evt.tokenMint,
+            amountDelta: evt.amountDelta,
+            balanceAfter: evt.balanceAfter,
+            walletAddress,
+          },
+        });
+
+        if (!persist.success || !persist.inserted) continue;
+
+        const tokenCfg = trackedTokenByMintLower.get(String(evt.tokenMint || '').toLowerCase());
+        const shouldAlert = this.shouldAlertTokenEvent(tokenCfg, evt.eventType, Math.abs(safeToNumber(evt.amountDelta)));
+        if (!shouldAlert) continue;
+        alerts.push({
+          ...evt,
+          txSignature: signature,
+          eventTime,
+          alertChannelId: tokenCfg?.alert_channel_id || tokenCfg?.alertChannelId || null,
+        });
+      }
+    }
+
+    this.saveWalletTokenCursor(walletRow.id, latestSignature);
+
+    if (!alerts.length) return;
+    const toSend = alerts.length > TOKEN_ACTIVITY_ALERT_CAP_PER_WALLET
+      ? alerts.slice(alerts.length - TOKEN_ACTIVITY_ALERT_CAP_PER_WALLET)
+      : alerts;
+
+    if (alerts.length > TOKEN_ACTIVITY_ALERT_CAP_PER_WALLET) {
+      logger.warn(`[tracked-token] capped ${alerts.length - toSend.length} token alerts for wallet ${walletAddress}`);
+    }
+
+    for (const evt of toSend) {
+      await this.sendTrackedTokenAlert({ walletRow, guildId: walletRow.guild_id, evt });
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+  }
+
+  async pollTrackedTokenActivity(guildId = null) {
+    const wallets = this.getTrackedWallets(guildId).filter(wallet => Number(wallet.enabled || 0) === 1);
+    if (!wallets.length) return;
+
+    const tokenConfigCache = new Map();
+    for (const walletRow of wallets) {
+      const walletGuild = String(walletRow.guild_id || '');
+      if (!this.isTokenTrackerEnabled(walletGuild)) continue;
+      if (!tokenConfigCache.has(walletGuild)) {
+        const tokenRows = this.getTrackedTokens(walletGuild).filter(token => token.enabled !== false && Number(token.enabled ?? 1) === 1);
+        const tokenMap = new Map(
+          tokenRows
+            .map(token => [String(token.token_mint || '').trim().toLowerCase(), token])
+            .filter(([mint]) => !!mint)
+        );
+        tokenConfigCache.set(walletGuild, tokenMap);
+      }
+
+      const tokenMap = tokenConfigCache.get(walletGuild);
+      if (!tokenMap || tokenMap.size === 0) continue;
+
+      try {
+        await this.processTrackedWalletTokenActivity(walletRow, tokenMap);
+      } catch (e) {
+        logger.error(`[tracked-token] wallet poll failed for ${walletRow.wallet_address}:`, e?.message || e);
+      }
+      await new Promise(resolve => setTimeout(resolve, 350));
+    }
+  }
+
   savePanelMessageId(id, messageId) {
     try {
       db.prepare('UPDATE tracked_wallets SET panel_message_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(messageId, id);
@@ -148,14 +744,22 @@ class TrackedWalletsService {
   async buildHoldingsEmbed(walletRow, guildId) {
     const addr = walletRow.wallet_address;
     const label = walletRow.label || `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+    const trackedTokens = this.isTokenTrackerEnabled(guildId)
+      ? this.getTrackedTokens(guildId).filter(t => Number(t.enabled || 0) === 1)
+      : [];
+    const trackedMints = [...new Set(trackedTokens.map(t => String(t.token_mint || '').trim()).filter(Boolean))];
 
-    // Fetch NFTs and SOL/USDC balances in parallel
+    // Fetch NFTs and balances in parallel
     let nfts = [];
     let balances = { sol: null, usdc: null };
+    let tokenBalances = [];
     try {
-      [nfts, balances] = await Promise.all([
+      [nfts, balances, tokenBalances] = await Promise.all([
         nftService.getNFTsForWallet(addr, { guildId }).catch(e => { logger.error('Error fetching NFTs:', e); return []; }),
-        _getSolanaBalances(addr)
+        _getSolanaBalances(addr),
+        trackedMints.length
+          ? tokenService.getWalletTokenBalances(addr, { guildId, mintFilter: trackedMints }).catch(e => { logger.error('Error fetching tracked token balances:', e); return []; })
+          : Promise.resolve([])
       ]);
     } catch (e) {
       logger.error('Error fetching holdings data:', e);
@@ -226,6 +830,30 @@ class TrackedWalletsService {
 
     if (traitSection) {
       embed.addFields({ name: '🎨 Traits', value: traitSection, inline: false });
+    }
+
+    if (trackedTokens.length > 0) {
+      const trackedByMint = new Map(
+        trackedTokens.map(t => [String(t.token_mint || '').trim().toLowerCase(), t])
+      );
+
+      const tokenLines = (tokenBalances || [])
+        .filter(t => String(t.mint || '').toLowerCase() !== USDC_MINT.toLowerCase())
+        .sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0))
+        .map(t => {
+          const conf = trackedByMint.get(String(t.mint || '').toLowerCase());
+          const symbol = conf?.token_symbol || conf?.token_name || `${t.mint.slice(0, 4)}...${t.mint.slice(-4)}`;
+          const amount = Number(t.amount || 0);
+          return `• **${symbol}**: ${amount.toLocaleString(undefined, { maximumFractionDigits: 6 })}`;
+        });
+
+      if (tokenLines.length > 0) {
+        const preview = tokenLines.slice(0, 8);
+        if (tokenLines.length > 8) preview.push(`_...and ${tokenLines.length - 8} more tracked tokens_`);
+        embed.addFields({ name: '🪙 Tracked Tokens', value: preview.join('\n'), inline: false });
+      } else {
+        embed.addFields({ name: '🪙 Tracked Tokens', value: '_No tracked token balances found in this wallet_', inline: false });
+      }
     }
 
     applyEmbedBranding(embed, {
@@ -302,6 +930,113 @@ class TrackedWalletsService {
   }
 
   // ─── TX alert helpers (called from nftActivityService) ───────────────────
+
+  async sendTrackedTokenAlert({ walletRow, guildId, evt }) {
+    const client = clientProvider.getClient();
+    if (!client) return;
+
+    const channelId = String(evt?.alertChannelId || walletRow?.alert_channel_id || '').trim();
+    if (!channelId) return;
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (!channel || !channel.send) return;
+
+    const eventType = String(evt?.eventType || evt?.event_type || 'activity').toLowerCase();
+    const amountDelta = safeToNumber(evt?.amountDelta ?? evt?.amount_delta);
+    const absAmount = Math.abs(amountDelta);
+    const tokenMint = String(evt?.tokenMint || evt?.token_mint || '').trim();
+    const tokenSymbol = String(evt?.tokenSymbol || evt?.token_symbol || evt?.tokenName || evt?.token_name || '').trim()
+      || (tokenMint ? `${tokenMint.slice(0, 4)}...${tokenMint.slice(-4)}` : 'Token');
+    const balanceAfter = evt?.balanceAfter ?? evt?.balance_after;
+    const solDelta = evt?.solDelta ?? evt?.sol_delta;
+    const stableDelta = evt?.stableDelta ?? evt?.stable_delta;
+    const signature = String(evt?.txSignature || evt?.tx_signature || '').trim();
+    const label = walletRow.label || `${walletRow.wallet_address.slice(0, 6)}...${walletRow.wallet_address.slice(-4)}`;
+
+    const style = {
+      buy: { icon: '🟢', title: 'BUY', color: '#57F287' },
+      sell: { icon: '🔴', title: 'SELL', color: '#ED4245' },
+      transfer_in: { icon: '📥', title: 'TRANSFER IN', color: '#3B82F6' },
+      transfer_out: { icon: '📤', title: 'TRANSFER OUT', color: '#60A5FA' },
+      swap_in: { icon: '🟣', title: 'SWAP IN', color: '#A78BFA' },
+      swap_out: { icon: '🟠', title: 'SWAP OUT', color: '#F59E0B' },
+    }[eventType] || { icon: '🧩', title: eventType.toUpperCase(), color: '#5865F2' };
+
+    const whenTs = evt?.eventTime ? Math.floor(new Date(evt.eventTime).getTime() / 1000) : null;
+    const amountFormatted = absAmount.toLocaleString(undefined, { maximumFractionDigits: 6 });
+
+    const embed = new EmbedBuilder()
+      .setTitle(`${style.icon} ${style.title}: ${tokenSymbol}`)
+      .setDescription(`Wallet **${label}** ${style.title.toLowerCase()} event detected.`)
+      .addFields(
+        { name: 'Wallet', value: `\`${walletRow.wallet_address.slice(0, 6)}...${walletRow.wallet_address.slice(-4)}\``, inline: true },
+        { name: 'Amount', value: `${amountDelta >= 0 ? '+' : '-'}${amountFormatted}`, inline: true },
+        { name: 'Token', value: tokenSymbol, inline: true },
+      )
+      .setTimestamp();
+
+    if (balanceAfter !== null && balanceAfter !== undefined) {
+      embed.addFields({
+        name: 'Balance After',
+        value: safeToNumber(balanceAfter).toLocaleString(undefined, { maximumFractionDigits: 6 }),
+        inline: true
+      });
+    }
+    if (solDelta !== null && solDelta !== undefined) {
+      embed.addFields({
+        name: 'SOL Delta',
+        value: `${safeToNumber(solDelta) >= 0 ? '+' : ''}${safeToNumber(solDelta).toFixed(4)} SOL`,
+        inline: true
+      });
+    }
+    if (stableDelta !== null && stableDelta !== undefined) {
+      embed.addFields({
+        name: 'Stable Delta',
+        value: `${safeToNumber(stableDelta) >= 0 ? '+' : ''}${safeToNumber(stableDelta).toFixed(2)}`,
+        inline: true
+      });
+    }
+    if (whenTs) {
+      embed.addFields({ name: 'When', value: `<t:${whenTs}:R>`, inline: true });
+    }
+
+    const branding = getBranding(guildId || '', 'nfttracker');
+    const botAvatar = client?.user?.displayAvatarURL?.() || null;
+    applyEmbedBranding(embed, {
+      guildId: guildId || '',
+      moduleKey: 'nfttracker',
+      defaultColor: style.color,
+      defaultFooter: 'Wallet Tracker',
+      fallbackLogoUrl: branding.logo || botAvatar,
+    });
+
+    const buttons = [];
+    if (signature) {
+      buttons.push(
+        new ButtonBuilder()
+          .setLabel('View Tx')
+          .setURL(`https://solscan.io/tx/${signature}`)
+          .setStyle(ButtonStyle.Link)
+          .setEmoji('🔍')
+      );
+    }
+    if (tokenMint) {
+      buttons.push(
+        new ButtonBuilder()
+          .setLabel('Token')
+          .setURL(`https://solscan.io/token/${tokenMint}`)
+          .setStyle(ButtonStyle.Link)
+          .setEmoji('🪙')
+      );
+    }
+    const components = buttons.length ? [new ActionRowBuilder().addComponents(...buttons)] : [];
+
+    try {
+      await channel.send({ embeds: [embed], components });
+      logger.log(`[tracked-token-alert] sent wallet=${walletRow.wallet_address} guild=${guildId || ''} channel=${channelId} type=${eventType} token=${tokenMint || 'unknown'}`);
+    } catch (e) {
+      logger.error(`[tracked-token-alert] failed for wallet=${walletRow.wallet_address}:`, e?.message || e);
+    }
+  }
 
   /**
    * Send a wallet-level TX alert when a tracked wallet is involved in a transaction.

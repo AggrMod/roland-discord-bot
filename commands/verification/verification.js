@@ -2,6 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, Butt
 const walletService = require('../../services/walletService');
 const roleService = require('../../services/roleService');
 const nftService = require('../../services/nftService');
+const tokenService = require('../../services/tokenService');
 const vpService = require('../../services/vpService');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
@@ -92,6 +93,53 @@ module.exports = {
                 .setName('primary-only')
                 .setDescription('Only include primary wallets')
                 .setRequired(false)))
+
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('token-role-add')
+            .setDescription('Add token balance role rule')
+            .addStringOption(option =>
+              option
+                .setName('mint')
+                .setDescription('SPL token mint address')
+                .setRequired(true))
+            .addRoleOption(option =>
+              option
+                .setName('role')
+                .setDescription('Discord role to assign')
+                .setRequired(true))
+            .addStringOption(option =>
+              option
+                .setName('symbol')
+                .setDescription('Token symbol (optional)')
+                .setRequired(false))
+            .addNumberOption(option =>
+              option
+                .setName('min_amount')
+                .setDescription('Minimum token balance required')
+                .setRequired(true)
+                .setMinValue(0))
+            .addNumberOption(option =>
+              option
+                .setName('max_amount')
+                .setDescription('Maximum token balance allowed (optional)')
+                .setRequired(false)
+                .setMinValue(0)))
+
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('token-role-remove')
+            .setDescription('Remove token balance role rule')
+            .addIntegerOption(option =>
+              option
+                .setName('id')
+                .setDescription('Token role rule ID')
+                .setRequired(true)))
+
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('token-role-list')
+            .setDescription('List token balance role rules'))
         
         .addSubcommand(subcommand =>
           subcommand
@@ -272,6 +320,15 @@ module.exports = {
           case 'export-wallets':
             await this.handleAdminExportWallets(interaction);
             break;
+          case 'token-role-add':
+            await this.handleAdminTokenRoleAdd(interaction);
+            break;
+          case 'token-role-remove':
+            await this.handleAdminTokenRoleRemove(interaction);
+            break;
+          case 'token-role-list':
+            await this.handleAdminTokenRoleList(interaction);
+            break;
           case 'role-config':
             await this.handleAdminRoleConfig(interaction);
             break;
@@ -392,6 +449,20 @@ module.exports = {
     const walletAddresses = wallets.map(w => w.wallet_address);
     const allNFTs = await nftService.getAllNFTsForWallets(walletAddresses, { guildId: interaction.guildId || null });
     const totalNFTs = allNFTs.length;
+    const tokenRules = roleService.getTokenRoleRules(interaction.guildId || null).filter(rule => rule.enabled !== false);
+    const trackedTokenMints = [...new Set(tokenRules.map(rule => String(rule.tokenMint || '').trim()).filter(Boolean))];
+    const tokenTotals = trackedTokenMints.length
+      ? await tokenService.getAggregateBalancesForWallets(walletAddresses, trackedTokenMints, { guildId: interaction.guildId || null })
+      : {};
+    const tokenSummary = tokenRules
+      .map(rule => {
+        const mint = String(rule.tokenMint || '').trim();
+        const amount = Number(tokenTotals[mint] || 0);
+        const symbol = rule.tokenSymbol || `${mint.slice(0, 4)}...${mint.slice(-4)}`;
+        return { symbol, amount };
+      })
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5);
     const userTier = vpService.getTierForNFTCount(totalNFTs);
     
     let rolesList = '';
@@ -406,7 +477,8 @@ module.exports = {
       .setTitle('✅ Wallet Verification Status')
       .setDescription(
         `You have **${wallets.length}** verified wallet${wallets.length > 1 ? 's' : ''}\n` +
-        `You have **${totalNFTs}** NFTs in your wallet${wallets.length > 1 ? 's' : ''}\n\n` +
+        `You have **${totalNFTs}** NFTs in your wallet${wallets.length > 1 ? 's' : ''}\n` +
+        `${trackedTokenMints.length ? `Tracking **${trackedTokenMints.length}** token mint(s) for role rules\n\n` : '\n'}` +
         rolesList
       )
       .addFields(
@@ -415,6 +487,16 @@ module.exports = {
       )
       .setFooter({ text: 'Keep collecting to unlock higher tiers!' })
       .setTimestamp();
+
+    if (tokenSummary.length > 0) {
+      embed.addFields({
+        name: '🪙 Tracked Token Balances',
+        value: tokenSummary
+          .map(row => `• **${row.symbol}**: ${row.amount.toLocaleString(undefined, { maximumFractionDigits: 6 })}`)
+          .join('\n'),
+        inline: false
+      });
+    }
 
     const row = new ActionRowBuilder()
       .addComponents(
@@ -480,7 +562,8 @@ module.exports = {
         .addFields(
           { name: '💪 Voting Power', value: userInfo?.voting_power?.toString() || '0', inline: true },
           { name: '🎭 Tier', value: userInfo?.tier || 'Associate', inline: true },
-          { name: '📦 NFTs', value: userInfo?.total_nfts?.toString() || '0', inline: true }
+          { name: '📦 NFTs', value: userInfo?.total_nfts?.toString() || '0', inline: true },
+          { name: '🪙 Tracked Tokens', value: Number(userInfo?.total_tokens || 0).toLocaleString(undefined, { maximumFractionDigits: 6 }), inline: true }
         )
         .setTimestamp();
 
@@ -765,6 +848,89 @@ module.exports = {
     logger.log(`Admin ${interaction.user.tag} exported ${primaryOnly ? 'primary ' : ''}wallets${selectedRole ? ` for role ${selectedRole.id}` : ''}`);
   },
 
+  async handleAdminTokenRoleAdd(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const mint = interaction.options.getString('mint');
+    const role = interaction.options.getRole('role');
+    const symbol = interaction.options.getString('symbol');
+    const minAmount = interaction.options.getNumber('min_amount');
+    const maxAmount = interaction.options.getNumber('max_amount');
+
+    if (maxAmount !== null && maxAmount < minAmount) {
+      return interaction.editReply({ content: '❌ `max_amount` must be greater than or equal to `min_amount`.', ephemeral: true });
+    }
+
+    const result = roleService.addTokenRoleRule({
+      guildId: interaction.guildId || null,
+      tokenMint: mint,
+      tokenSymbol: symbol || null,
+      minAmount,
+      maxAmount,
+      roleId: role.id,
+      enabled: true
+    });
+
+    if (!result.success) {
+      return interaction.editReply({ content: `❌ ${result.message}`, ephemeral: true });
+    }
+
+    const maxDisplay = maxAmount === null ? '∞' : maxAmount.toLocaleString(undefined, { maximumFractionDigits: 6 });
+    const embed = new EmbedBuilder()
+      .setColor('#57F287')
+      .setTitle('✅ Token Role Rule Added')
+      .addFields(
+        { name: 'Rule ID', value: `#${result.id}`, inline: true },
+        { name: 'Role', value: `<@&${role.id}>`, inline: true },
+        { name: 'Symbol', value: symbol || '—', inline: true },
+        { name: 'Token Mint', value: `\`${mint}\``, inline: false },
+        { name: 'Range', value: `${minAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} to ${maxDisplay}`, inline: false }
+      )
+      .setFooter({ text: 'Rule applies on /verification refresh and automatic sync' })
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [embed], ephemeral: true });
+  },
+
+  async handleAdminTokenRoleRemove(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const id = interaction.options.getInteger('id');
+    const result = roleService.removeTokenRoleRule(id, interaction.guildId || null);
+    if (!result.success) {
+      return interaction.editReply({ content: `❌ ${result.message}`, ephemeral: true });
+    }
+
+    await interaction.editReply({ content: `✅ Token role rule #${id} removed.`, ephemeral: true });
+  },
+
+  async handleAdminTokenRoleList(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const rules = roleService.getTokenRoleRules(interaction.guildId || null).filter(rule => rule.enabled !== false);
+    if (!rules.length) {
+      return interaction.editReply({ content: '📭 No token role rules configured yet. Use `/verification admin token-role-add`.', ephemeral: true });
+    }
+
+    const lines = rules.map(rule => {
+      const maxDisplay = rule.maxAmount === null || rule.maxAmount === undefined
+        ? '∞'
+        : Number(rule.maxAmount).toLocaleString(undefined, { maximumFractionDigits: 6 });
+      const minDisplay = Number(rule.minAmount || 0).toLocaleString(undefined, { maximumFractionDigits: 6 });
+      const symbol = rule.tokenSymbol || `${rule.tokenMint.slice(0, 4)}...${rule.tokenMint.slice(-4)}`;
+      return `**#${rule.id}** ${symbol} (${minDisplay} - ${maxDisplay}) → <@&${rule.roleId}>`;
+    });
+
+    const embed = new EmbedBuilder()
+      .setColor('#FFD700')
+      .setTitle('🪙 Token Role Rules')
+      .setDescription(lines.join('\n'))
+      .setFooter({ text: `${rules.length} active rule(s)` })
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [embed], ephemeral: true });
+  },
+
   async handleAdminRoleConfig(interaction) {
     await interaction.deferReply({ ephemeral: true });
     
@@ -876,6 +1042,16 @@ module.exports = {
       return `${status} **${t.trait}** → ${roleInfo}`;
     }).join('\n') || '_No trait roles configured_';
 
+    const tokenRules = roleService.getTokenRoleRules(interaction.guildId || null).filter(rule => rule.enabled !== false);
+    const tokenRulesText = tokenRules.map(rule => {
+      const symbol = rule.tokenSymbol || `${rule.tokenMint.slice(0, 4)}...${rule.tokenMint.slice(-4)}`;
+      const maxDisplay = rule.maxAmount === null || rule.maxAmount === undefined
+        ? '∞'
+        : Number(rule.maxAmount).toLocaleString(undefined, { maximumFractionDigits: 6 });
+      const minDisplay = Number(rule.minAmount || 0).toLocaleString(undefined, { maximumFractionDigits: 6 });
+      return `✅ **${symbol}** (${minDisplay}-${maxDisplay}) → <@&${rule.roleId}>`;
+    }).join('\n') || '_No token role rules configured_';
+
     const embed = new EmbedBuilder()
       .setColor('#FFD700')
       .setTitle('🔐 Family Verification Actions')
@@ -883,7 +1059,8 @@ module.exports = {
       .addFields(
         { name: `📦 Collections (${collectionsConfigured}/${collectionsTotal})`, value: collectionsText, inline: false },
         { name: `📊 Tier Roles (${tiersConfigured}/${tiersTotal})`, value: tiersText, inline: false },
-        { name: `🎨 Trait Roles (${traitsConfigured}/${traitsTotal})`, value: traitsText, inline: false }
+        { name: `🎨 Trait Roles (${traitsConfigured}/${traitsTotal})`, value: traitsText, inline: false },
+        { name: `🪙 Token Roles (${tokenRules.length})`, value: tokenRulesText, inline: false }
       )
       .setTimestamp();
 

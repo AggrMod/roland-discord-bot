@@ -60,6 +60,10 @@
             <span class="nav-icon" aria-hidden="true">🎨</span>
             <span class="nav-label">NFT Tracker</span>
           </button>
+          <button class="nav-item" data-section="token-activity" data-module="tokentracker" onclick="switchSection('token-activity'); toggleMobileMenu()" id="mobileNavTokenActivity">
+            <span class="nav-icon" aria-hidden="true">&#x1FA99;</span>
+            <span class="nav-label">Token Tracker</span>
+          </button>
           <button class="nav-item" data-section="self-serve-roles" data-module="selfseveroles" onclick="switchSection('self-serve-roles'); toggleMobileMenu()" id="mobileNavSelfServe" style="display:none;">
             <span class="nav-icon" aria-hidden="true">🎭</span>
             <span class="nav-label">Self-Serve Roles</span>
@@ -121,6 +125,10 @@
           <button class="nav-item" data-section="nft-activity" data-module="nfttracker" onclick="switchSection('nft-activity')" id="sidebarNavNftActivity">
             <span class="nav-icon" aria-hidden="true">🎨</span>
             <span class="nav-label">NFT Tracker</span>
+          </button>
+          <button class="nav-item" data-section="token-activity" data-module="tokentracker" onclick="switchSection('token-activity')" id="sidebarNavTokenActivity">
+            <span class="nav-icon" aria-hidden="true">&#x1FA99;</span>
+            <span class="nav-label">Token Tracker</span>
           </button>
           <button class="nav-item" data-section="self-serve-roles" data-module="selfseveroles" onclick="switchSection('self-serve-roles')" id="sidebarNavSelfServe" style="display:none;">
             <span class="nav-icon" aria-hidden="true">🎭</span>
@@ -568,6 +576,24 @@
               <div class="loading-state">
                 <div class="loading-spinner"></div>
                 <p class="loading-text">Loading activity...</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Token Tracker Section -->
+        <section id="section-token-activity" class="content-section">
+          <header class="section-header">
+            <h2>Token Tracker</h2>
+            <p class="section-subtitle">Manage tracked tokens and monitor token activity</p>
+          </header>
+          <div id="tokenActivityTrackerSettingsPanel"></div>
+          <div class="card" style="margin-top:var(--space-4);">
+            <h3>Recent Token Activity</h3>
+            <div id="tokenActivityPublicView">
+              <div class="loading-state">
+                <div class="loading-spinner"></div>
+                <p class="loading-text">Loading token activity...</p>
               </div>
             </div>
           </div>
@@ -1047,6 +1073,9 @@
                   <li><code>/verification admin export-user</code></li>
                   <li><code>/verification admin remove-user</code></li>
                   <li><code>/verification admin export-wallets</code></li>
+                  <li><code>/verification admin token-role-add</code></li>
+                  <li><code>/verification admin token-role-remove</code></li>
+                  <li><code>/verification admin token-role-list</code></li>
                   <li><code>/verification admin role-config</code></li>
                   <li><code>/verification admin actions</code></li>
                   <li><code>/verification admin og-view</code></li>
@@ -1102,6 +1131,17 @@
                   <li><code>/nft-tracker collection remove</code></li>
                   <li><code>/nft-tracker collection list</code></li>
                   <li><code>/nft-tracker collection feed</code></li>
+                </ul>
+              </div>
+
+              <div class="help-section">
+                <h4>Token Tracker</h4>
+                <ul>
+                  <li><code>/token-tracker add</code></li>
+                  <li><code>/token-tracker edit</code></li>
+                  <li><code>/token-tracker remove</code></li>
+                  <li><code>/token-tracker list</code></li>
+                  <li><code>/token-tracker feed</code></li>
                 </ul>
               </div>
 
@@ -1470,6 +1510,7 @@
             <button class="settings-tab" data-tab="branding" onclick="switchSettingsTab('branding')">Branding</button>
             <button class="settings-tab" data-tab="treasury" onclick="switchSettingsTab('treasury')">Wallet Tracker</button>
             <button class="settings-tab" data-tab="nfttracker" onclick="switchSettingsTab('nfttracker')">NFT Tracker</button>
+            <button class="settings-tab" data-tab="tokentracker" onclick="switchSettingsTab('tokentracker')">Token Tracker</button>
             <button class="settings-tab" data-tab="battle" onclick="switchSettingsTab('battle')">Battle</button>
             <button class="settings-tab" data-tab="heist" onclick="switchSettingsTab('heist')">Heist</button>
             <button class="settings-tab" data-tab="selfserve" onclick="switchSettingsTab('selfserve')">Self-Serve Roles</button>
@@ -1494,6 +1535,9 @@
             </div>
             <div id="settingsTab-nfttracker" class="settings-tab-pane" style="display:none;">
               <!-- adminNftTrackerCard content loaded here dynamically -->
+            </div>
+            <div id="settingsTab-tokentracker" class="settings-tab-pane" style="display:none;">
+              <!-- token tracker settings loaded dynamically -->
             </div>
             <div id="settingsTab-battle" class="settings-tab-pane" style="display:none;">
               <div class="card" style="overflow:visible;">
@@ -1696,6 +1740,58 @@
     </div>
   </div>
 
+  <!-- Add / Edit Token Modal -->
+  <div id="addTokenModal" class="modal-overlay" style="display:none;">
+    <div class="modal" style="max-width:540px;width:100%;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="addTokenModalTitle">Add Tracked Token</h3>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <input type="hidden" id="tokenEditId" value="">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div>
+              <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Token Symbol</label>
+              <input id="tokenSymbol" type="text" placeholder="e.g. CATZ" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;box-sizing:border-box;">
+            </div>
+            <div>
+              <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Token Name</label>
+              <input id="tokenName" type="text" placeholder="Display name" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;box-sizing:border-box;">
+            </div>
+          </div>
+          <div>
+            <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Token Mint <span style="color:#ef4444;">*</span></label>
+            <input id="tokenMint" type="text" placeholder="SPL token mint address" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;font-family:monospace;box-sizing:border-box;">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div>
+              <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Alert Channel</label>
+              <select id="tokenAlertChannel" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;box-sizing:border-box;"><option value="">-- Wallet default channel --</option></select>
+            </div>
+            <div>
+              <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Min Alert Amount</label>
+              <input id="tokenMinAlertAmount" type="number" min="0" step="0.000001" value="0" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;box-sizing:border-box;">
+            </div>
+          </div>
+          <div>
+            <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:8px;">Track Events</label>
+            <div style="display:flex;flex-wrap:wrap;gap:14px;">
+              <label style="display:flex;align-items:center;gap:6px;color:#e0e7ff;font-size:0.88em;cursor:pointer;"><input type="checkbox" id="tokenAlertBuys" checked> 🟢 Buy / Swap In</label>
+              <label style="display:flex;align-items:center;gap:6px;color:#e0e7ff;font-size:0.88em;cursor:pointer;"><input type="checkbox" id="tokenAlertSells" checked> 🔴 Sell / Swap Out</label>
+              <label style="display:flex;align-items:center;gap:6px;color:#e0e7ff;font-size:0.88em;cursor:pointer;"><input type="checkbox" id="tokenAlertTransfers"> 🔄 Transfer</label>
+              <label style="display:flex;align-items:center;gap:6px;color:#e0e7ff;font-size:0.88em;cursor:pointer;"><input type="checkbox" id="tokenEnabled" checked> ✅ Enabled</label>
+            </div>
+          </div>
+          <p id="tokenError" style="color:#ef4444;font-size:0.85em;display:none;margin:0;"></p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeAddTokenModal()">Cancel</button>
+        <button class="btn-primary" id="tokenSaveBtn" onclick="saveToken()">Save Token</button>
+      </div>
+    </div>
+  </div>
+
   <footer style="text-align:center; padding:16px; color:var(--text-muted); font-size:0.78em; border-top:1px solid var(--border-subtle); margin-top:auto;">
     <a href="/privacy-policy" target="_blank" style="color:var(--gold-dark); text-decoration:none; margin:0 8px;">Privacy Policy</a>
     <a href="/terms-of-service" target="_blank" style="color:var(--gold-dark); text-decoration:none; margin:0 8px;">Terms of Service</a>
@@ -1731,3 +1827,4 @@
   </div>
 </body>
 </html>
+

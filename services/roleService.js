@@ -1,6 +1,7 @@
 const db = require('../database/db');
 const walletService = require('./walletService');
 const nftService = require('./nftService');
+const tokenService = require('./tokenService');
 const logger = require('../utils/logger');
 
 class RoleService {
@@ -92,18 +93,28 @@ class RoleService {
       const scopedNFTCount = tierInfo.count;
       const tier = tierInfo.tier;
       const votingPower = tier ? (tier.votingPower || 0) : 0;
+      const tokenRules = guildId
+        ? this.getTokenRoleRules(guildId).filter(r => r.enabled !== false)
+        : [];
+      const trackedMints = [...new Set(tokenRules.map(r => String(r.tokenMint || '').trim()).filter(Boolean))];
+      let totalTrackedTokens = 0;
+      if (trackedMints.length > 0) {
+        const tokenTotals = await tokenService.getAggregateBalancesForWallets(wallets, trackedMints, { guildId });
+        totalTrackedTokens = Object.values(tokenTotals).reduce((sum, amount) => sum + Number(amount || 0), 0);
+      }
 
       db.prepare(`
         UPDATE users 
-        SET total_nfts = ?, tier = ?, voting_power = ?, username = ?, updated_at = CURRENT_TIMESTAMP
+        SET total_nfts = ?, total_tokens = ?, tier = ?, voting_power = ?, username = ?, updated_at = CURRENT_TIMESTAMP
         WHERE discord_id = ?
-      `).run(scopedNFTCount, tier ? tier.name : null, votingPower, username, discordId);
+      `).run(scopedNFTCount, totalTrackedTokens, tier ? tier.name : null, votingPower, username, discordId);
 
-      logger.log(`Updated user ${discordId}: scopedNFTs=${scopedNFTCount} (raw=${allNFTs.length}), Tier: ${tier ? tier.name : 'None'}, VP: ${votingPower}${guildId ? ` [guild ${guildId}]` : ''}`);
+      logger.log(`Updated user ${discordId}: scopedNFTs=${scopedNFTCount} (raw=${allNFTs.length}), trackedTokens=${totalTrackedTokens.toFixed(4)}, Tier: ${tier ? tier.name : 'None'}, VP: ${votingPower}${guildId ? ` [guild ${guildId}]` : ''}`);
 
       return {
         success: true,
         totalNFTs: scopedNFTCount,
+        totalTokens: totalTrackedTokens,
         rawNFTs: allNFTs.length,
         tier: tier ? tier.name : 'None',
         votingPower
@@ -239,7 +250,12 @@ class RoleService {
       changes.added.push(...traitChanges.added);
       changes.removed.push(...traitChanges.removed);
 
-      // 3. Assign base verified role (unconditional for all verified users)
+      // 3. Sync token balance roles
+      const tokenChanges = await this.syncTokenRoles(member, wallets, guildId);
+      changes.added.push(...tokenChanges.added);
+      changes.removed.push(...tokenChanges.removed);
+
+      // 4. Assign base verified role (unconditional for all verified users)
       const settingsManager = require('../config/settings');
       const baseVerifiedRoleId = settingsManager.getSettings().baseVerifiedRoleId;
       if (baseVerifiedRoleId) {
@@ -324,6 +340,174 @@ class RoleService {
     }
 
     return (this.traitRolesConfig?.traitRoles || []);
+  }
+
+  getTokenRoleRules(guildId = null) {
+    try {
+      if (guildId) {
+        return db.prepare(`
+          SELECT id, guild_id, token_mint, token_symbol, min_amount, max_amount, role_id, enabled, created_at, updated_at
+          FROM token_role_rules
+          WHERE guild_id = ?
+          ORDER BY min_amount ASC, id ASC
+        `).all(guildId).map(row => ({
+          id: row.id,
+          guildId: row.guild_id,
+          tokenMint: row.token_mint,
+          tokenSymbol: row.token_symbol || null,
+          minAmount: Number(row.min_amount || 0),
+          maxAmount: row.max_amount === null || row.max_amount === undefined ? null : Number(row.max_amount),
+          roleId: row.role_id,
+          enabled: Number(row.enabled || 0) === 1,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at
+        }));
+      }
+
+      return db.prepare(`
+        SELECT id, guild_id, token_mint, token_symbol, min_amount, max_amount, role_id, enabled, created_at, updated_at
+        FROM token_role_rules
+        ORDER BY guild_id ASC, min_amount ASC, id ASC
+      `).all().map(row => ({
+        id: row.id,
+        guildId: row.guild_id,
+        tokenMint: row.token_mint,
+        tokenSymbol: row.token_symbol || null,
+        minAmount: Number(row.min_amount || 0),
+        maxAmount: row.max_amount === null || row.max_amount === undefined ? null : Number(row.max_amount),
+        roleId: row.role_id,
+        enabled: Number(row.enabled || 0) === 1,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      }));
+    } catch (error) {
+      logger.error('Error fetching token role rules:', error);
+      return [];
+    }
+  }
+
+  addTokenRoleRule({ guildId, tokenMint, tokenSymbol = null, minAmount = 0, maxAmount = null, roleId, enabled = true }) {
+    try {
+      const normalizedGuild = String(guildId || '').trim();
+      const normalizedMint = String(tokenMint || '').trim();
+      const normalizedRole = String(roleId || '').trim();
+      const normalizedSymbol = String(tokenSymbol || '').trim() || null;
+
+      if (!normalizedGuild || !normalizedMint || !normalizedRole) {
+        return { success: false, message: 'guildId, tokenMint, and roleId are required' };
+      }
+
+      const min = Number(minAmount || 0);
+      const max = maxAmount === null || maxAmount === undefined || maxAmount === ''
+        ? null
+        : Number(maxAmount);
+      if (!Number.isFinite(min) || min < 0) return { success: false, message: 'minAmount must be a non-negative number' };
+      if (max !== null && (!Number.isFinite(max) || max < min)) return { success: false, message: 'maxAmount must be >= minAmount' };
+
+      const result = db.prepare(`
+        INSERT INTO token_role_rules (guild_id, token_mint, token_symbol, min_amount, max_amount, role_id, enabled)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(normalizedGuild, normalizedMint, normalizedSymbol, min, max, normalizedRole, enabled ? 1 : 0);
+
+      return { success: true, id: Number(result.lastInsertRowid) };
+    } catch (error) {
+      if (error?.message?.includes('UNIQUE constraint')) {
+        return { success: false, message: 'Token rule already exists for this role in this server' };
+      }
+      logger.error('Error adding token role rule:', error);
+      return { success: false, message: 'Failed to add token role rule' };
+    }
+  }
+
+  updateTokenRoleRule(ruleId, updates = {}, guildId = null) {
+    try {
+      const id = Number(ruleId);
+      if (!Number.isFinite(id)) return { success: false, message: 'Invalid rule id' };
+
+      const fieldMap = {
+        tokenMint: 'token_mint',
+        tokenSymbol: 'token_symbol',
+        minAmount: 'min_amount',
+        maxAmount: 'max_amount',
+        roleId: 'role_id',
+        enabled: 'enabled'
+      };
+
+      const setClauses = [];
+      const params = [];
+      for (const [key, value] of Object.entries(updates || {})) {
+        const col = fieldMap[key];
+        if (!col) continue;
+
+        if (key === 'minAmount') {
+          const min = Number(value);
+          if (!Number.isFinite(min) || min < 0) return { success: false, message: 'minAmount must be a non-negative number' };
+          setClauses.push(`${col} = ?`);
+          params.push(min);
+          continue;
+        }
+        if (key === 'maxAmount') {
+          const max = value === null || value === undefined || value === '' ? null : Number(value);
+          if (max !== null && !Number.isFinite(max)) return { success: false, message: 'maxAmount must be a number or null' };
+          setClauses.push(`${col} = ?`);
+          params.push(max);
+          continue;
+        }
+        if (key === 'enabled') {
+          setClauses.push(`${col} = ?`);
+          params.push(value ? 1 : 0);
+          continue;
+        }
+        setClauses.push(`${col} = ?`);
+        params.push(value === null ? null : String(value).trim());
+      }
+
+      if (!setClauses.length) return { success: false, message: 'No valid updates provided' };
+      setClauses.push('updated_at = CURRENT_TIMESTAMP');
+
+      if (guildId) {
+        params.push(id, String(guildId));
+        const info = db.prepare(`
+          UPDATE token_role_rules
+          SET ${setClauses.join(', ')}
+          WHERE id = ? AND guild_id = ?
+        `).run(...params);
+        if (!info.changes) return { success: false, message: 'Token rule not found' };
+        return { success: true };
+      }
+
+      params.push(id);
+      const info = db.prepare(`
+        UPDATE token_role_rules
+        SET ${setClauses.join(', ')}
+        WHERE id = ?
+      `).run(...params);
+      if (!info.changes) return { success: false, message: 'Token rule not found' };
+      return { success: true };
+    } catch (error) {
+      logger.error('Error updating token role rule:', error);
+      return { success: false, message: 'Failed to update token role rule' };
+    }
+  }
+
+  removeTokenRoleRule(ruleId, guildId = null) {
+    try {
+      const id = Number(ruleId);
+      if (!Number.isFinite(id)) return { success: false, message: 'Invalid rule id' };
+
+      let result;
+      if (guildId) {
+        result = db.prepare('DELETE FROM token_role_rules WHERE id = ? AND guild_id = ?').run(id, String(guildId));
+      } else {
+        result = db.prepare('DELETE FROM token_role_rules WHERE id = ?').run(id);
+      }
+
+      if (!result.changes) return { success: false, message: 'Token rule not found' };
+      return { success: true };
+    } catch (error) {
+      logger.error('Error removing token role rule:', error);
+      return { success: false, message: 'Failed to remove token role rule' };
+    }
   }
 
   getTierForNFTs(nfts, guildId = null) {
@@ -512,6 +696,72 @@ class RoleService {
   }
 
   /**
+   * Sync token roles for a member based on configured SPL token balance rules
+   */
+  async syncTokenRoles(member, wallets, guildId = null) {
+    const changes = { added: [], removed: [] };
+
+    try {
+      const tokenRules = this.getTokenRoleRules(guildId)
+        .filter(rule => rule && rule.roleId && rule.tokenMint && rule.enabled !== false);
+      if (tokenRules.length === 0) return changes;
+
+      const currentMemberRoleIds = new Set(member.roles.cache.keys());
+      const trackedMints = [...new Set(tokenRules.map(rule => String(rule.tokenMint || '').trim()).filter(Boolean))];
+      const balancesByMint = await tokenService.getAggregateBalancesForWallets(wallets || [], trackedMints, { guildId });
+
+      for (const rule of tokenRules) {
+        const mint = String(rule.tokenMint || '').trim();
+        const balance = Number(balancesByMint[mint] || 0);
+        const min = Number(rule.minAmount || 0);
+        const max = rule.maxAmount === null || rule.maxAmount === undefined ? Number.POSITIVE_INFINITY : Number(rule.maxAmount);
+        const shouldHave = Number.isFinite(balance) && balance >= min && balance <= max;
+        const has = currentMemberRoleIds.has(rule.roleId);
+
+        const label = rule.tokenSymbol
+          ? `${rule.tokenSymbol} (${mint.slice(0, 6)}...${mint.slice(-4)})`
+          : `Token ${mint.slice(0, 6)}...${mint.slice(-4)}`;
+
+        if (shouldHave && !has) {
+          const role = member.guild.roles.cache.get(rule.roleId);
+          if (role) {
+            if (this.isProtectedRole(role)) {
+              const key = `token:add:protected:${guildId || member.guild.id}:${member.id}:${role.id}`;
+              this.logRoleSyncWarnOnce(key, `Skipped adding protected token role ${role.name} (${role.id}) for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            } else if (!this.canBotManageRole(member, role)) {
+              const key = `token:add:unmanaged:${guildId || member.guild.id}:${member.id}:${role.id}`;
+              this.logRoleSyncWarnOnce(key, `Skipped adding unmanaged token role ${role.name} (${role.id}) for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            } else {
+              await member.roles.add(role);
+              changes.added.push(label);
+              logger.log(`Added token role ${label} to ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            }
+          }
+        } else if (!shouldHave && has) {
+          const role = member.guild.roles.cache.get(rule.roleId);
+          if (role) {
+            if (this.isProtectedRole(role)) {
+              const key = `token:remove:protected:${guildId || member.guild.id}:${member.id}:${role.id}`;
+              this.logRoleSyncWarnOnce(key, `Skipped removing protected token role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            } else if (!this.canBotManageRole(member, role)) {
+              const key = `token:remove:unmanaged:${guildId || member.guild.id}:${member.id}:${role.id}`;
+              this.logRoleSyncWarnOnce(key, `Skipped removing unmanaged token role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            } else {
+              await member.roles.remove(role);
+              changes.removed.push(label);
+              logger.log(`Removed token role ${label} from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      logger.error('Error syncing token roles:', error);
+    }
+
+    return changes;
+  }
+
+  /**
    * Extract unique traits from NFT array
    */
   extractTraitsFromNFTs(nfts) {
@@ -628,7 +878,8 @@ class RoleService {
 
     const summary = {
       tiers: [],
-      traitRoles: []
+      traitRoles: [],
+      tokenRules: []
     };
 
     // Tier roles summary
@@ -654,6 +905,21 @@ class RoleService {
         configured: !!traitRole.roleId,
         collectionId: traitRole.trait_collection_id || null,
         description: traitRole.description
+      });
+    }
+
+    const tokenRules = this.getTokenRoleRules();
+    for (const rule of tokenRules) {
+      summary.tokenRules.push({
+        id: rule.id,
+        guildId: rule.guildId,
+        tokenMint: rule.tokenMint,
+        tokenSymbol: rule.tokenSymbol,
+        minAmount: rule.minAmount,
+        maxAmount: rule.maxAmount,
+        roleId: rule.roleId,
+        configured: !!rule.roleId,
+        enabled: rule.enabled !== false
       });
     }
 

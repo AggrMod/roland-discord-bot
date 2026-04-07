@@ -60,6 +60,7 @@ function initDatabase() {
       discord_id TEXT PRIMARY KEY,
       username TEXT NOT NULL,
       total_nfts INTEGER DEFAULT 0,
+      total_tokens REAL DEFAULT 0,
       tier TEXT,
       voting_power INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -910,6 +911,85 @@ function initDatabase() {
   `);
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_wallets_guild ON tracked_wallets(guild_id)'); } catch (e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_wallets_address ON tracked_wallets(wallet_address)'); } catch (e) {}
+  try { db.exec('ALTER TABLE users ADD COLUMN total_tokens REAL DEFAULT 0'); } catch (e) {}
+
+  // Token verification rules (tenant-scoped)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS token_role_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL DEFAULT '',
+      token_mint TEXT NOT NULL,
+      token_symbol TEXT,
+      min_amount REAL NOT NULL DEFAULT 0,
+      max_amount REAL,
+      role_id TEXT NOT NULL,
+      enabled INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(guild_id, token_mint, role_id)
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_token_role_rules_guild ON token_role_rules(guild_id)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_token_role_rules_mint ON token_role_rules(token_mint)'); } catch (e) {}
+
+  // Token tracker config (tenant-scoped)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tracked_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL DEFAULT '',
+      token_mint TEXT NOT NULL,
+      token_symbol TEXT,
+      token_name TEXT,
+      decimals INTEGER,
+      enabled INTEGER DEFAULT 1,
+      alert_channel_id TEXT,
+      alert_buys INTEGER DEFAULT 1,
+      alert_sells INTEGER DEFAULT 1,
+      alert_transfers INTEGER DEFAULT 0,
+      min_alert_amount REAL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(guild_id, token_mint)
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_tokens_guild ON tracked_tokens(guild_id)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_tokens_mint ON tracked_tokens(token_mint)'); } catch (e) {}
+  try { db.exec('ALTER TABLE tracked_tokens ADD COLUMN alert_buys INTEGER DEFAULT 1'); } catch (e) {}
+  try { db.exec('ALTER TABLE tracked_tokens ADD COLUMN alert_sells INTEGER DEFAULT 1'); } catch (e) {}
+  try { db.exec('ALTER TABLE tracked_tokens ADD COLUMN alert_transfers INTEGER DEFAULT 0'); } catch (e) {}
+  try { db.exec('ALTER TABLE tracked_tokens ADD COLUMN min_alert_amount REAL DEFAULT 0'); } catch (e) {}
+  try { db.exec('ALTER TABLE tracked_tokens ADD COLUMN alert_channel_id TEXT'); } catch (e) {}
+
+  // Cursor for per-wallet tracked token activity polling
+  try { db.exec('ALTER TABLE tracked_wallets ADD COLUMN token_last_signature TEXT'); } catch (e) {}
+  try { db.exec('ALTER TABLE tracked_wallets ADD COLUMN token_last_checked_at DATETIME'); } catch (e) {}
+
+  // Token activity events captured for tracked wallets
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tracked_token_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL DEFAULT '',
+      wallet_id INTEGER,
+      wallet_address TEXT NOT NULL,
+      token_mint TEXT NOT NULL,
+      token_symbol TEXT,
+      token_name TEXT,
+      event_type TEXT NOT NULL,
+      amount_delta REAL NOT NULL,
+      balance_after REAL,
+      sol_delta REAL,
+      stable_delta REAL,
+      tx_signature TEXT NOT NULL,
+      event_time DATETIME,
+      source TEXT DEFAULT 'poll',
+      raw_json TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(wallet_id, tx_signature, token_mint)
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_token_events_guild_time ON tracked_token_events(guild_id, event_time)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_token_events_wallet_time ON tracked_token_events(wallet_id, event_time)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_token_events_mint_time ON tracked_token_events(token_mint, event_time)'); } catch (e) {}
 
   logger.log('Database initialized successfully');
 }

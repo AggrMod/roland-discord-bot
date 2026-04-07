@@ -3,6 +3,18 @@ const path = require('path');
 const logger = require('./logger');
 
 const TOGGLES_PATH = path.join(__dirname, '../config/module-toggles.json');
+const DEFAULT_TOGGLES = Object.freeze({
+  verificationEnabled: true,
+  governanceEnabled: true,
+  treasuryEnabled: true,
+  nfttrackerEnabled: true,
+  tokentrackerEnabled: true,
+  ticketingEnabled: true,
+  engagementEnabled: true,
+  selfserverolesEnabled: true,
+  battleEnabled: true,
+  heistEnabled: false
+});
 
 class ModuleGuard {
   constructor() {
@@ -12,27 +24,15 @@ class ModuleGuard {
   loadToggles() {
     try {
       if (!fs.existsSync(TOGGLES_PATH)) {
-        const defaults = {
-          verificationEnabled: true,
-          governanceEnabled: true,
-          treasuryEnabled: true,
-          battleEnabled: true,
-          heistEnabled: false
-        };
-        fs.writeFileSync(TOGGLES_PATH, JSON.stringify(defaults, null, 2));
-        return defaults;
+        fs.writeFileSync(TOGGLES_PATH, JSON.stringify(DEFAULT_TOGGLES, null, 2));
+        return { ...DEFAULT_TOGGLES };
       }
       const data = fs.readFileSync(TOGGLES_PATH, 'utf8');
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      return { ...DEFAULT_TOGGLES, ...(parsed || {}) };
     } catch (error) {
       logger.error('Error loading module toggles:', error);
-      return {
-        verificationEnabled: true,
-        governanceEnabled: true,
-        treasuryEnabled: true,
-        battleEnabled: true,
-        heistEnabled: false
-      };
+      return { ...DEFAULT_TOGGLES };
     }
   }
 
@@ -93,6 +93,8 @@ class ModuleGuard {
       verification: 'Verification',
       governance: 'Governance',
       treasury: 'Treasury',
+      nfttracker: 'NFT Tracker',
+      tokentracker: 'Token Activity Tracker',
       battle: 'Battle',
       heist: 'Heist'
     };

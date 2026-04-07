@@ -17,6 +17,7 @@ const PORTAL_PAGE_EXPECTATIONS = Object.freeze({
     'wallets',
     'heist',
     'nft-activity',
+    'token-activity',
     'battle',
     'engagement',
     'self-serve-roles',
@@ -52,6 +53,7 @@ const PORTAL_PAGE_EXPECTATIONS = Object.freeze({
     'branding',
     'treasury',
     'nfttracker',
+    'tokentracker',
     'battle',
     'heist',
     'selfserve',
@@ -722,10 +724,26 @@ function refreshTenantScopedViews() {
       renderNftCollectionsCard(id);
     }
   });
+  ['nts_tokensWrap', 'tts_tokensWrap'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.innerHTML.trim()) {
+      el.innerHTML = '<div style="text-align:center;padding:var(--space-4);color:var(--text-secondary);"><div class="spinner"></div><p>Refreshing...</p></div>';
+      renderNftTrackedTokensCard(id);
+    }
+  });
+  ['nts_tokenEventsWrap', 'tts_tokenEventsWrap'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.innerHTML.trim()) {
+      el.innerHTML = '<div style="text-align:center;padding:var(--space-4);color:var(--text-secondary);"><div class="spinner"></div><p>Refreshing...</p></div>';
+      renderNftTokenEventsCard(id);
+    }
+  });
   const addColModal = document.getElementById('addCollectionModal');
   if (addColModal && addColModal.style.display !== 'none') closeAddCollectionModal();
   const addWalModal = document.getElementById('addWalletModal');
   if (addWalModal && addWalModal.style.display !== 'none') closeAddWalletModal();
+  const addTokenModal = document.getElementById('addTokenModal');
+  if (addTokenModal && addTokenModal.style.display !== 'none' && typeof closeAddTokenModal === 'function') closeAddTokenModal();
 
   // Re-render wallet lists if already loaded
   const twContainer = document.getElementById('treasuryWalletTableContainer');
@@ -749,6 +767,8 @@ function refreshTenantScopedViews() {
   } else if (activeSection === 'section-nft-activity') {
     loadNFTActivityView();
     if (isAdmin) loadNFTActivityAdminView();
+  } else if (activeSection === 'section-token-activity') {
+    loadTokenActivityView();
   }
 }
 
@@ -876,7 +896,7 @@ function setNavSectionVisibility(section, visible) {
 
 function applyPreSelectionVisibility() {
   const locked = requiresServerSelectionGate();
-  const tenantSections = ['governance', 'treasury', 'nft-activity', 'heist'];
+  const tenantSections = ['governance', 'treasury', 'nft-activity', 'token-activity', 'heist'];
 
   tenantSections.forEach(section => {
     setNavSectionVisibility(section, !locked);
@@ -899,11 +919,13 @@ function updateModuleVisibility() {
   const state = window._tenantModuleState || {};
   const moduleNav = [
     { id: 'sidebarNavTreasury', key: 'treasury' },
+    { id: 'sidebarNavTokenActivity', key: 'tokentracker' },
     { id: 'sidebarNavSelfServe', key: 'selfseveroles' },
     { id: 'sidebarNavTicketing', key: 'ticketing' },
     { id: 'sidebarNavEngagement', key: 'engagement' },
     { id: 'sidebarNavHeist', key: 'heist' },
     { id: 'mobileNavTreasury', key: 'treasury' },
+    { id: 'mobileNavTokenActivity', key: 'tokentracker' },
     { id: 'mobileNavSelfServe', key: 'selfseveroles' },
     { id: 'mobileNavTicketing', key: 'ticketing' },
     { id: 'mobileNavEngagement', key: 'engagement' },
@@ -989,6 +1011,7 @@ function renderGeneralSection() {
       { key: 'verification', icon: '\ud83d\udcbc', label: 'Verification', section: 'wallets' },
       { key: 'treasury', icon: '\ud83d\udcb0', label: 'Wallet Tracker', section: 'treasury' },
       { key: 'nfttracker', icon: '\ud83c\udfa8', label: 'NFT Tracker', section: 'nft-activity' },
+      { key: 'tokentracker', icon: '\ud83e\ude99', label: 'Token Tracker', section: 'token-activity' },
       { key: 'heist', icon: '\ud83c\udfaf', label: 'Heist', section: 'heist' },
     ];
     const adminTile = (isAdmin || isSuperadmin) ? `
@@ -1058,6 +1081,7 @@ function switchSettingsTab(tab) {
     },
     branding:     () => { if (typeof loadBrandingSettingsView === 'function') loadBrandingSettingsView(); },
     nfttracker:   () => { if (typeof loadNftTrackerSettingsView === 'function') loadNftTrackerSettingsView(); },
+    tokentracker: () => { if (typeof loadTokenTrackerSettingsView === 'function') loadTokenTrackerSettingsView(); },
     selfserve:    () => { if (typeof loadSelfServeRolesView === 'function') loadSelfServeRolesView(); },
     ticketing:    () => { if (typeof loadTicketingView === 'function') loadTicketingView(); },
     engagement:   () => { loadEngagementSettingsTab(); },
@@ -1078,6 +1102,8 @@ function updateSidebarModuleNav() {
     { id: 'mobileNavWallets', module: 'verification' },
     { id: 'sidebarNavTreasury', module: 'treasury' },
     { id: 'sidebarNavNftActivity', module: 'nfttracker' },
+    { id: 'sidebarNavTokenActivity', module: 'tokentracker' },
+    { id: 'mobileNavTokenActivity', module: 'tokentracker' },
     { id: 'sidebarNavHeist', module: 'heist' },
     { id: 'sidebarNavEngagement', module: 'engagement' },
     // Plans nav handled separately (superadmin-only)
@@ -1135,6 +1161,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     branding: !!settings.moduleBrandingEnabled,
     treasury: !!settings.moduleTreasuryEnabled,
     nfttracker: !!settings.moduleNftTrackerEnabled,
+    tokentracker: !!settings.moduleTokenTrackerEnabled,
     heist: !!settings.moduleMissionsEnabled,
     ticketing: !!settings.moduleTicketingEnabled,
     engagement: !!settings.moduleEngagementEnabled,
@@ -1149,6 +1176,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     wallets: moduleState.verification,
     treasury: moduleState.treasury,
     'nft-activity': moduleState.nfttracker,
+    'token-activity': moduleState.tokentracker,
     heist: moduleState.heist
   };
 
@@ -1171,6 +1199,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     'section-wallets': !moduleState.verification,
     'section-treasury': !moduleState.treasury,
     'section-nft-activity': !moduleState.nfttracker,
+    'section-token-activity': !moduleState.tokentracker,
     'section-heist': !moduleState.heist
   };
   if (activeSection && disabledActive[activeSection]) {
@@ -1185,6 +1214,7 @@ const SETTINGS_TAB_MODULE_MAP = {
   branding:     'branding',
   treasury:     'treasury',
   nfttracker:   'nfttracker',
+  tokentracker: 'tokentracker',
   battle:       'battle',
   heist:        'heist',
   selfserve:    'selfserveroles',
@@ -1203,6 +1233,7 @@ function applySettingsTabVisibility(settings = {}) {
     branding: settings.moduleBrandingEnabled !== false,
     treasury: !!settings.moduleTreasuryEnabled,
     nfttracker: !!settings.moduleNftTrackerEnabled,
+    tokentracker: !!settings.moduleTokenTrackerEnabled,
     battle: !!settings.moduleBattleEnabled,
     heist: !!settings.moduleMissionsEnabled,
     selfserveroles: !!settings.moduleRoleClaimEnabled,
@@ -2042,6 +2073,7 @@ function switchSection(sectionName, options = {}) {
     wallets: 'verification',
     treasury: 'treasury',
     'nft-activity': 'nfttracker',
+    'token-activity': 'tokentracker',
     heist: 'heist',
     battle: 'battle',
     'self-serve-roles': 'selfseveroles',
@@ -2088,6 +2120,8 @@ function switchSection(sectionName, options = {}) {
   } else if (sectionName === 'nft-activity') {
     loadNFTActivityView();
     if (isAdmin) loadNFTActivityAdminView();
+  } else if (sectionName === 'token-activity') {
+    loadTokenActivityView();
   } else if (sectionName === 'settings') {
     applySettingsTabVisibility(portalSettingsData || {});
     switchSettingsTab('general');
@@ -2988,6 +3022,7 @@ const TENANT_MODULE_LABELS = {
   heist: 'Heist',
   ticketing: 'Ticketing',
   nfttracker: 'NFT Tracker',
+  tokentracker: 'Token Tracker',
   selfserveroles: 'Self-Serve Roles',
   branding: 'Branding',
   analytics: 'Analytics',
@@ -4130,7 +4165,12 @@ async function loadAdminHelpView() {
       { name: '/nft-tracker collection add', desc: 'Track collection events', options: 'address, name, channel (required), me_symbol', example: '/nft-tracker collection add address:... name:"Collection" channel:#alerts' },
       { name: '/nft-tracker collection remove', desc: 'Remove tracked collection', options: 'id (required)', example: '/nft-tracker collection remove id:3' },
       { name: '/nft-tracker collection list', desc: 'List tracked collections', options: '-', example: '/nft-tracker collection list' },
-      { name: '/nft-tracker collection feed', desc: 'Show collection feed', options: 'limit (optional)', example: '/nft-tracker collection feed limit:15' }
+      { name: '/nft-tracker collection feed', desc: 'Show collection feed', options: 'limit (optional)', example: '/nft-tracker collection feed limit:15' },
+      { name: '/token-tracker add', desc: 'Track SPL token mint for balances + alerts', options: 'mint(required), symbol/name(optional), alert_channel, min_alert_amount, alert flags', example: '/token-tracker add mint:... symbol:CAT alert_channel:#token-alerts alert_buys:true' },
+      { name: '/token-tracker edit', desc: 'Edit tracked token options', options: 'id(required) + optional mint/symbol/name/alert_channel/min_alert_amount/alert flags/enabled', example: '/token-tracker edit id:2 alert_transfers:true' },
+      { name: '/token-tracker remove', desc: 'Remove tracked token mint', options: 'id(required)', example: '/token-tracker remove id:2' },
+      { name: '/token-tracker list', desc: 'List tracked token mints', options: '-', example: '/token-tracker list' },
+      { name: '/token-tracker feed', desc: 'Show recent tracked token events', options: 'limit(optional)', example: '/token-tracker feed limit:15' }
     ])}
     ${cmdSection('Points', 'PTS', [
       { name: '/points balance', desc: 'Show points balance', options: 'user (optional admin)', example: '/points balance' },
@@ -4465,7 +4505,7 @@ async function loadAdminSettingsView() {
 
   try {
     // Step 1: Fetch settings first
-    const settingsRes = await fetch('/api/admin/settings', { credentials: 'include' });
+    const settingsRes = await fetch('/api/admin/settings', { credentials: 'include', headers: buildTenantRequestHeaders() });
     const settingsJson = await settingsRes.json();
     if (!settingsJson.success) throw new Error(settingsJson.message || 'Failed to load settings');
     portalSettingsData = settingsJson.settings;
@@ -4479,16 +4519,17 @@ async function loadAdminSettingsView() {
 
     // Module toggle mapping: settingsKey -> { label, icon, moduleKey (for assigned check) }
     const MODULE_TOGGLE_DEFS = [
-      { id: 'moduleBattleEnabled',       label: 'Battle',          icon: '⚔️',  moduleKey: 'battle'        },
-      { id: 'moduleGovernanceEnabled',   label: 'Governance',      icon: '🗳️',  moduleKey: 'governance'    },
-      { id: 'moduleVerificationEnabled', label: 'Verification',    icon: '✅',  moduleKey: 'verification'  },
-      { id: 'moduleBrandingEnabled',     label: 'Branding',        icon: '🎨',  moduleKey: 'branding'      },
-      { id: 'moduleMissionsEnabled',     label: 'Heist',           icon: '🎯',  moduleKey: 'heist'         },
-      { id: 'moduleTreasuryEnabled',     label: 'Wallet Tracker',  icon: '💰',  moduleKey: 'treasury'      },
-      { id: 'moduleNftTrackerEnabled',   label: 'NFT Tracker',     icon: '📡',  moduleKey: 'nfttracker'    },
-      { id: 'moduleRoleClaimEnabled',    label: 'Self-Serve Roles',icon: '🎖️',  moduleKey: 'selfserveroles'},
-      { id: 'moduleTicketingEnabled',    label: 'Ticketing',       icon: '🎫',  moduleKey: 'ticketing'     },
-      { id: 'moduleEngagementEnabled',   label: 'Engagement',      icon: '🏅',  moduleKey: 'engagement'    },
+      { id: 'moduleBattleEnabled',       label: 'Battle',          icon: 'B',  moduleKey: 'battle'        },
+      { id: 'moduleGovernanceEnabled',   label: 'Governance',      icon: 'G',  moduleKey: 'governance'    },
+      { id: 'moduleVerificationEnabled', label: 'Verification',    icon: 'V',  moduleKey: 'verification'  },
+      { id: 'moduleBrandingEnabled',     label: 'Branding',        icon: 'BR', moduleKey: 'branding'      },
+      { id: 'moduleMissionsEnabled',     label: 'Heist',           icon: 'H',  moduleKey: 'heist'         },
+      { id: 'moduleTreasuryEnabled',     label: 'Wallet Tracker',  icon: 'W',  moduleKey: 'treasury'      },
+      { id: 'moduleNftTrackerEnabled',   label: 'NFT Tracker',     icon: 'N',  moduleKey: 'nfttracker'    },
+      { id: 'moduleTokenTrackerEnabled', label: 'Token Tracker',   icon: '\ud83e\ude99',  moduleKey: 'tokentracker'  },
+      { id: 'moduleRoleClaimEnabled',    label: 'Self-Serve Roles',icon: 'R',  moduleKey: 'selfserveroles'},
+      { id: 'moduleTicketingEnabled',    label: 'Ticketing',       icon: 'TK', moduleKey: 'ticketing'     },
+      { id: 'moduleEngagementEnabled',   label: 'Engagement',      icon: 'E',  moduleKey: 'engagement'    },
     ];
 
     // Build module toggle helper (styled toggle switch)
@@ -4595,7 +4636,7 @@ async function savePortalSettings() {
   // Only save module toggles that are actually rendered (handles assigned-module filtering)
   const moduleIds = [
     'moduleBattleEnabled', 'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleBrandingEnabled',
-    'moduleMissionsEnabled', 'moduleTreasuryEnabled', 'moduleNftTrackerEnabled',
+    'moduleMissionsEnabled', 'moduleTreasuryEnabled', 'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled',
     'moduleRoleClaimEnabled', 'moduleTicketingEnabled', 'moduleEngagementEnabled',
   ];
   const newSettings = {};
@@ -5059,6 +5100,315 @@ async function removeNftCollection(id) {
   } catch (e) { showError('Error removing collection'); }
 }
 
+let nftTrackedTokensCache = [];
+
+async function openAddTokenModal(existingId, existingData) {
+  const isEdit = !!existingId;
+  const modal = document.getElementById('addTokenModal');
+  if (!modal) return;
+
+  document.getElementById('addTokenModalTitle').textContent = isEdit ? 'Edit Tracked Token' : 'Add Tracked Token';
+  document.getElementById('tokenEditId').value = existingId || '';
+  document.getElementById('tokenMint').value = (existingData && existingData.tokenMint) || '';
+  document.getElementById('tokenSymbol').value = (existingData && existingData.tokenSymbol) || '';
+  document.getElementById('tokenName').value = (existingData && existingData.tokenName) || '';
+  document.getElementById('tokenMinAlertAmount').value = existingData ? String(Number(existingData.minAlertAmount || 0)) : '0';
+  document.getElementById('tokenAlertBuys').checked = existingData ? !!existingData.alertBuys : true;
+  document.getElementById('tokenAlertSells').checked = existingData ? !!existingData.alertSells : true;
+  document.getElementById('tokenAlertTransfers').checked = existingData ? !!existingData.alertTransfers : false;
+  document.getElementById('tokenEnabled').checked = existingData ? !!existingData.enabled : true;
+
+  const errEl = document.getElementById('tokenError');
+  errEl.style.display = 'none';
+
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+
+  const channelSel = document.getElementById('tokenAlertChannel');
+  channelSel.innerHTML = '<option value="">-- Wallet default channel --</option>';
+  try {
+    const chRes = await fetch('/api/admin/discord/channels', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    if (chRes.ok) {
+      const chData = await chRes.json();
+      const channels = chData.channels || [];
+      const grouped = {};
+      channels.forEach(ch => {
+        const parent = ch.parentName || 'Other';
+        if (!grouped[parent]) grouped[parent] = [];
+        grouped[parent].push(ch);
+      });
+      Object.keys(grouped).sort().forEach(parent => {
+        const og = document.createElement('optgroup');
+        og.label = parent;
+        grouped[parent].forEach(ch => {
+          const opt = document.createElement('option');
+          opt.value = ch.id;
+          opt.textContent = '# ' + ch.name;
+          og.appendChild(opt);
+        });
+        channelSel.appendChild(og);
+      });
+      if (existingData && existingData.alertChannelId) channelSel.value = existingData.alertChannelId;
+    }
+  } catch (e) {
+    console.error('[TokenModal] Channel load error:', e);
+  }
+}
+
+function closeAddTokenModal() {
+  const modal = document.getElementById('addTokenModal');
+  if (!modal) return;
+  modal.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+async function saveToken() {
+  const editId = document.getElementById('tokenEditId').value;
+  const tokenMint = document.getElementById('tokenMint').value.trim();
+  const tokenSymbol = document.getElementById('tokenSymbol').value.trim();
+  const tokenName = document.getElementById('tokenName').value.trim();
+  const alertChannelId = document.getElementById('tokenAlertChannel').value.trim();
+  const minAlertAmount = Number(document.getElementById('tokenMinAlertAmount').value || '0');
+  const alertBuys = document.getElementById('tokenAlertBuys').checked;
+  const alertSells = document.getElementById('tokenAlertSells').checked;
+  const alertTransfers = document.getElementById('tokenAlertTransfers').checked;
+  const enabled = document.getElementById('tokenEnabled').checked;
+  const errEl = document.getElementById('tokenError');
+
+  if (!tokenMint) {
+    errEl.textContent = 'Token mint is required.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (!Number.isFinite(minAlertAmount) || minAlertAmount < 0) {
+    errEl.textContent = 'Min alert amount must be a valid non-negative number.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const payload = {
+    tokenMint,
+    tokenSymbol: tokenSymbol || null,
+    tokenName: tokenName || null,
+    alertChannelId: alertChannelId || null,
+    minAlertAmount,
+    alertBuys,
+    alertSells,
+    alertTransfers,
+    enabled,
+  };
+
+  const saveBtn = document.getElementById('tokenSaveBtn');
+  saveBtn.textContent = 'Saving...';
+  saveBtn.disabled = true;
+
+  try {
+    const endpoint = editId ? `/api/admin/token-tracker/tokens/${encodeURIComponent(editId)}` : '/api/admin/token-tracker/tokens';
+    const method = editId ? 'PUT' : 'POST';
+    const response = await fetch(endpoint, {
+      method,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (!response.ok || data.success === false) {
+      errEl.textContent = data.message || 'Failed to save tracked token.';
+      errEl.style.display = 'block';
+      return;
+    }
+    closeAddTokenModal();
+    showSuccess(editId ? 'Tracked token updated.' : 'Tracked token added.');
+    await renderNftTrackedTokensCard('tts_tokensWrap');
+    await renderNftTrackedTokensCard('nts_tokensWrap');
+    await renderNftTokenEventsCard('tts_tokenEventsWrap');
+    await renderNftTokenEventsCard('nts_tokenEventsWrap');
+  } catch (_error) {
+    errEl.textContent = 'Network error saving tracked token.';
+    errEl.style.display = 'block';
+  } finally {
+    saveBtn.textContent = 'Save Token';
+    saveBtn.disabled = false;
+  }
+}
+
+async function removeNftTrackedToken(id) {
+  if (!confirm('Remove this tracked token?')) return;
+  try {
+    const response = await fetch(`/api/admin/token-tracker/tokens/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: buildTenantRequestHeaders()
+    });
+    const data = await response.json();
+    if (!response.ok || data.success === false) return showError(data.message || 'Failed to remove tracked token.');
+    showSuccess('Tracked token removed.');
+    await renderNftTrackedTokensCard('tts_tokensWrap');
+    await renderNftTrackedTokensCard('nts_tokensWrap');
+    await renderNftTokenEventsCard('tts_tokenEventsWrap');
+    await renderNftTokenEventsCard('nts_tokenEventsWrap');
+  } catch (_error) {
+    showError('Failed to remove tracked token.');
+  }
+}
+
+async function renderNftTrackedTokensCard(wrapId = 'nts_tokensWrap') {
+  const wrap = document.getElementById(wrapId);
+  if (!wrap) return;
+
+  try {
+    const response = await fetch('/api/admin/token-tracker/tokens', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await response.json();
+    if (!response.ok || data.success === false) throw new Error(data.message || 'Failed to load tracked tokens');
+
+    const tokens = Array.isArray(data.tokens) ? data.tokens : [];
+    nftTrackedTokensCache = tokens;
+
+    if (!tokens.length) {
+      wrap.innerHTML = `<div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);">
+        <p style="margin-bottom:16px;">No tracked tokens yet.</p>
+        <button class="btn-primary" onclick="openAddTokenModal()">+ Add Token</button>
+      </div>`;
+      return;
+    }
+
+    const rows = tokens.map(token => {
+      const mint = String(token.token_mint || '');
+      const mintShort = mint ? `${mint.slice(0, 6)}...${mint.slice(-4)}` : '—';
+      const statusColor = token.enabled !== false ? '#86efac' : '#fca5a5';
+      const statusText = token.enabled !== false ? 'On' : 'Off';
+      const channelDisplay = token.alert_channel_id ? `<code>#${escapeHtml(token.alert_channel_id)}</code>` : '<span style="color:var(--text-secondary);">Wallet default</span>';
+      return `
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
+          <td style="padding:8px 10px;color:#cbd5e1;font-family:monospace;font-size:0.82em;" title="${escapeHtml(mint)}">${escapeHtml(mintShort)}</td>
+          <td style="padding:8px 10px;color:#e2e8f0;">${escapeHtml(token.token_symbol || '—')}</td>
+          <td style="padding:8px 10px;color:#cbd5e1;">${escapeHtml(token.token_name || '—')}</td>
+          <td style="padding:8px 10px;color:#cbd5e1;">${channelDisplay}</td>
+          <td style="padding:8px 10px;color:#cbd5e1;">B:${token.alert_buys ? 'on' : 'off'} S:${token.alert_sells ? 'on' : 'off'} T:${token.alert_transfers ? 'on' : 'off'} Min:${Number(token.min_alert_amount || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}</td>
+          <td style="padding:8px 10px;color:${statusColor};">${statusText}</td>
+          <td style="padding:8px 10px;text-align:right;white-space:nowrap;">
+            <button class="nt-edit-btn"
+              data-id="${token.id}"
+              data-mint="${escapeHtml(token.token_mint || '')}"
+              data-symbol="${escapeHtml(token.token_symbol || '')}"
+              data-name="${escapeHtml(token.token_name || '')}"
+              data-alert-channel="${escapeHtml(token.alert_channel_id || '')}"
+              data-alert-buys="${token.alert_buys ? 'true' : 'false'}"
+              data-alert-sells="${token.alert_sells ? 'true' : 'false'}"
+              data-alert-transfers="${token.alert_transfers ? 'true' : 'false'}"
+              data-min-alert="${Number(token.min_alert_amount || 0)}"
+              data-enabled="${token.enabled !== false ? 'true' : 'false'}"
+              style="width:30px;height:30px;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.35);border-radius:6px;cursor:pointer;color:#818cf8;font-size:0.85em;">✏️</button>
+            <button class="nt-remove-btn" data-id="${token.id}" style="width:30px;height:30px;background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.35);border-radius:6px;cursor:pointer;color:#fca5a5;font-size:0.85em;margin-left:4px;">🗑️</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    wrap.innerHTML = `
+      <div style="overflow-x:auto;border:1px solid rgba(99,102,241,0.18);border-radius:10px;background:rgba(14,23,44,0.35);">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr style="background:rgba(30,41,59,0.7);">
+            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Mint</th>
+            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Symbol</th>
+            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Name</th>
+            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Alert Channel</th>
+            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Alert Rules</th>
+            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Enabled</th>
+            <th style="padding:8px 10px;"></th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+    wrap.querySelectorAll('.nt-edit-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        openAddTokenModal(btn.dataset.id, {
+          tokenMint: btn.dataset.mint || '',
+          tokenSymbol: btn.dataset.symbol || '',
+          tokenName: btn.dataset.name || '',
+          alertChannelId: btn.dataset.alertChannel || '',
+          alertBuys: btn.dataset.alertBuys === 'true',
+          alertSells: btn.dataset.alertSells === 'true',
+          alertTransfers: btn.dataset.alertTransfers === 'true',
+          minAlertAmount: Number(btn.dataset.minAlert || 0),
+          enabled: btn.dataset.enabled === 'true',
+        });
+      });
+    });
+    wrap.querySelectorAll('.nt-remove-btn').forEach(btn => {
+      btn.addEventListener('click', () => removeNftTrackedToken(btn.dataset.id));
+    });
+  } catch (e) {
+    wrap.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;padding:10px;">Failed to load tracked tokens.</p>';
+  }
+}
+
+async function renderNftTokenEventsCard(wrapId = 'nts_tokenEventsWrap') {
+  const wrap = document.getElementById(wrapId);
+  if (!wrap) return;
+  try {
+    const response = await fetch('/api/admin/token-tracker/token-events?limit=20', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await response.json();
+    if (!response.ok || data.success === false) throw new Error(data.message || 'Failed to load token events');
+    const events = Array.isArray(data.events) ? data.events : [];
+    if (!events.length) {
+      wrap.innerHTML = '<p style="color:var(--text-secondary);font-size:0.85em;padding:8px 0;">No token activity events yet.</p>';
+      return;
+    }
+
+    const iconByType = {
+      buy: '🟢',
+      sell: '🔴',
+      transfer_in: '📥',
+      transfer_out: '📤',
+      swap_in: '🟣',
+      swap_out: '🟠',
+    };
+
+    const rows = events.map(evt => {
+      const type = String(evt.event_type || 'activity').toLowerCase();
+      const icon = iconByType[type] || '🧩';
+      const tokenName = evt.token_symbol || evt.token_name || (evt.token_mint ? `${String(evt.token_mint).slice(0, 4)}...${String(evt.token_mint).slice(-4)}` : 'Token');
+      const amount = Number(evt.amount_delta || 0).toLocaleString(undefined, { maximumFractionDigits: 6 });
+      const wallet = String(evt.wallet_address || '');
+      const walletShort = wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : '—';
+      const when = evt.event_time ? new Date(evt.event_time).toLocaleString() : 'Unknown';
+      const tx = String(evt.tx_signature || '');
+      return `
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
+          <td style="padding:8px 10px;color:#cbd5e1;">${icon} ${escapeHtml(type.toUpperCase())}</td>
+          <td style="padding:8px 10px;color:#e2e8f0;">${escapeHtml(tokenName)}</td>
+          <td style="padding:8px 10px;color:#cbd5e1;">${amount}</td>
+          <td style="padding:8px 10px;color:#cbd5e1;font-family:monospace;">${escapeHtml(walletShort)}</td>
+          <td style="padding:8px 10px;color:#94a3b8;">${escapeHtml(when)}</td>
+          <td style="padding:8px 10px;text-align:right;">
+            ${tx ? `<a href="https://solscan.io/tx/${encodeURIComponent(tx)}" target="_blank" rel="noopener" style="color:#93c5fd;font-size:0.82em;">View Tx</a>` : '—'}
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    wrap.innerHTML = `
+      <div style="overflow-x:auto;border:1px solid rgba(99,102,241,0.18);border-radius:10px;background:rgba(14,23,44,0.35);">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr style="background:rgba(30,41,59,0.7);">
+            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Type</th>
+            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Token</th>
+            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Delta</th>
+            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Wallet</th>
+            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">When</th>
+            <th style="padding:8px 10px;"></th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+  } catch (e) {
+    wrap.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;padding:10px;">Failed to load token activity feed.</p>';
+  }
+}
+
 // ==================== SHARED CHANNEL SELECT HELPER ====================
 
 function populateChannelSelects(selectIds, channels, settings, settingKeys) {
@@ -5103,7 +5453,7 @@ async function saveGovernanceSettings() {
   try {
     const res = await fetch('/api/admin/settings', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
       credentials: 'include',
       body: JSON.stringify(payload)
     });
@@ -5129,7 +5479,7 @@ async function loadVerificationSettings() {
   const fieldInput = 'width:100%;padding:10px 12px;border:1px solid rgba(99,102,241,0.22);border-radius:8px;background:rgba(30,41,59,0.8);color:#e0e7ff;font-size:0.9em;';
 
   try {
-    const settingsRes = await fetch('/api/admin/settings', { credentials: 'include' });
+    const settingsRes = await fetch('/api/admin/settings', { credentials: 'include', headers: buildTenantRequestHeaders() });
     const settingsJson = await settingsRes.json();
     const vs = settingsJson.success ? settingsJson.settings : {};
 
@@ -5165,6 +5515,51 @@ async function loadVerificationSettings() {
       </div>
     `;
 
+    container.insertAdjacentHTML('beforeend', `
+      <div style="${cardStyle}">
+        <h3 style="${cardHeader}">🪙 Token Role Rules</h3>
+        <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:12px;">Map token balance ranges to Discord roles.</p>
+        <input type="hidden" id="ver_tokenRuleEditId" value="">
+        <div style="${gridRow}">
+          <div>
+            <label style="${fieldLabel}">Token Mint</label>
+            <input id="ver_tokenRoleMint" type="text" placeholder="SPL mint address" style="${fieldInput}">
+          </div>
+          <div>
+            <label style="${fieldLabel}">Token Symbol (optional)</label>
+            <input id="ver_tokenRoleSymbol" type="text" placeholder="e.g. CATZ" style="${fieldInput}">
+          </div>
+        </div>
+        <div style="${gridRow}margin-top:var(--space-3);">
+          <div>
+            <label style="${fieldLabel}">Minimum Balance</label>
+            <input id="ver_tokenRoleMinAmount" type="number" min="0" step="0.000001" value="0" style="${fieldInput}">
+          </div>
+          <div>
+            <label style="${fieldLabel}">Maximum Balance (optional)</label>
+            <input id="ver_tokenRoleMaxAmount" type="number" min="0" step="0.000001" placeholder="No upper limit" style="${fieldInput}">
+          </div>
+        </div>
+        <div style="${gridRow}margin-top:var(--space-3);">
+          <div>
+            <label style="${fieldLabel}">Role</label>
+            ${roleSelectHTML('ver_tokenRoleRoleId', '')}
+          </div>
+          <div style="display:flex;align-items:flex-end;">
+            <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
+              <input type="checkbox" id="ver_tokenRoleEnabled" checked>
+              Rule Enabled
+            </label>
+          </div>
+        </div>
+        <div style="display:flex;gap:var(--space-3);justify-content:flex-end;margin-top:var(--space-4);">
+          <button class="btn-secondary" onclick="resetVerificationTokenRoleForm()" style="font-size:0.85em;padding:8px 16px;">Reset</button>
+          <button class="btn-primary" onclick="submitVerificationTokenRoleRule()" style="font-size:0.85em;padding:8px 16px;">Save Token Rule</button>
+        </div>
+        <div id="ver_tokenRuleListWrap" style="margin-top:var(--space-4);"></div>
+      </div>
+    `);
+
     // Populate role selects
     populateRoleSelect('ver_baseVerifiedRoleId', vs.baseVerifiedRoleId || '').then(() => {
       const sel = document.getElementById('ver_baseVerifiedRoleId');
@@ -5174,9 +5569,179 @@ async function loadVerificationSettings() {
       const sel = document.getElementById('ver_ogRoleId');
       if (sel && sel.options.length > 0) sel.options[0].textContent = '-- None --';
     });
+    populateRoleSelect('ver_tokenRoleRoleId', '').then(() => {
+      const sel = document.getElementById('ver_tokenRoleRoleId');
+      if (sel && sel.options.length > 0) sel.options[0].textContent = '-- Select Role --';
+    });
+    await renderVerificationTokenRoleRules();
   } catch (e) {
     console.error('[Verification] Settings load error:', e);
     container.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;">Failed to load verification settings.</p>';
+  }
+}
+
+let verificationTokenRoleRulesCache = [];
+
+function resetVerificationTokenRoleForm() {
+  const editEl = document.getElementById('ver_tokenRuleEditId');
+  const mintEl = document.getElementById('ver_tokenRoleMint');
+  const symbolEl = document.getElementById('ver_tokenRoleSymbol');
+  const minEl = document.getElementById('ver_tokenRoleMinAmount');
+  const maxEl = document.getElementById('ver_tokenRoleMaxAmount');
+  const roleEl = document.getElementById('ver_tokenRoleRoleId');
+  const enabledEl = document.getElementById('ver_tokenRoleEnabled');
+
+  if (editEl) editEl.value = '';
+  if (mintEl) mintEl.value = '';
+  if (symbolEl) symbolEl.value = '';
+  if (minEl) minEl.value = '0';
+  if (maxEl) maxEl.value = '';
+  if (roleEl) roleEl.value = '';
+  if (enabledEl) enabledEl.checked = true;
+}
+
+function editVerificationTokenRoleRule(id) {
+  const rule = verificationTokenRoleRulesCache.find(r => String(r.id) === String(id));
+  if (!rule) return;
+
+  const editEl = document.getElementById('ver_tokenRuleEditId');
+  const mintEl = document.getElementById('ver_tokenRoleMint');
+  const symbolEl = document.getElementById('ver_tokenRoleSymbol');
+  const minEl = document.getElementById('ver_tokenRoleMinAmount');
+  const maxEl = document.getElementById('ver_tokenRoleMaxAmount');
+  const roleEl = document.getElementById('ver_tokenRoleRoleId');
+  const enabledEl = document.getElementById('ver_tokenRoleEnabled');
+
+  if (editEl) editEl.value = rule.id;
+  if (mintEl) mintEl.value = rule.tokenMint || '';
+  if (symbolEl) symbolEl.value = rule.tokenSymbol || '';
+  if (minEl) minEl.value = Number(rule.minAmount || 0);
+  if (maxEl) maxEl.value = rule.maxAmount === null || rule.maxAmount === undefined ? '' : Number(rule.maxAmount);
+  if (roleEl) roleEl.value = rule.roleId || '';
+  if (enabledEl) enabledEl.checked = rule.enabled !== false;
+}
+
+async function submitVerificationTokenRoleRule() {
+  const editId = document.getElementById('ver_tokenRuleEditId')?.value || '';
+  const tokenMint = document.getElementById('ver_tokenRoleMint')?.value?.trim() || '';
+  const tokenSymbol = document.getElementById('ver_tokenRoleSymbol')?.value?.trim() || '';
+  const minAmount = Number(document.getElementById('ver_tokenRoleMinAmount')?.value || '0');
+  const maxAmountRaw = document.getElementById('ver_tokenRoleMaxAmount')?.value;
+  const roleId = document.getElementById('ver_tokenRoleRoleId')?.value || '';
+  const enabled = !!document.getElementById('ver_tokenRoleEnabled')?.checked;
+
+  if (!tokenMint) return showError('Token mint is required.');
+  if (!roleId) return showError('Role is required for token rule.');
+  if (!Number.isFinite(minAmount) || minAmount < 0) return showError('Minimum amount must be a valid non-negative number.');
+
+  const body = {
+    tokenMint,
+    tokenSymbol: tokenSymbol || null,
+    minAmount,
+    maxAmount: maxAmountRaw === '' || maxAmountRaw === null || maxAmountRaw === undefined ? null : Number(maxAmountRaw),
+    roleId,
+    enabled,
+  };
+  if (body.maxAmount !== null && (!Number.isFinite(body.maxAmount) || body.maxAmount < 0)) {
+    return showError('Maximum amount must be empty or a valid non-negative number.');
+  }
+
+  try {
+    const method = editId ? 'PUT' : 'POST';
+    const endpoint = editId ? `/api/admin/roles/tokens/${encodeURIComponent(editId)}` : '/api/admin/roles/tokens';
+    const response = await fetch(endpoint, {
+      method,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify(body)
+    });
+    const data = await response.json();
+    if (!response.ok || data.success === false) return showError(data.message || 'Failed to save token role rule.');
+    showSuccess(editId ? 'Token role rule updated.' : 'Token role rule added.');
+    resetVerificationTokenRoleForm();
+    await renderVerificationTokenRoleRules();
+  } catch (_error) {
+    showError('Failed to save token role rule.');
+  }
+}
+
+async function removeVerificationTokenRoleRule(id) {
+  if (!confirm('Remove this token role rule?')) return;
+  try {
+    const response = await fetch(`/api/admin/roles/tokens/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: buildTenantRequestHeaders()
+    });
+    const data = await response.json();
+    if (!response.ok || data.success === false) return showError(data.message || 'Failed to remove token role rule.');
+    showSuccess('Token role rule removed.');
+    await renderVerificationTokenRoleRules();
+  } catch (_error) {
+    showError('Failed to remove token role rule.');
+  }
+}
+
+async function renderVerificationTokenRoleRules() {
+  const wrap = document.getElementById('ver_tokenRuleListWrap');
+  if (!wrap) return;
+
+  try {
+    const response = await fetch('/api/admin/roles/tokens', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await response.json();
+    if (!response.ok || data.success === false) throw new Error(data.message || 'Failed to load token role rules');
+
+    const rules = Array.isArray(data.rules) ? data.rules : [];
+    verificationTokenRoleRulesCache = rules;
+
+    if (!rules.length) {
+      wrap.innerHTML = '<p style="color:var(--text-secondary);font-size:0.85em;padding:12px 0;">No token role rules configured yet.</p>';
+      return;
+    }
+
+    const rows = rules.map(rule => {
+      const mint = String(rule.tokenMint || '').trim();
+      const mintShort = mint ? `${mint.slice(0, 6)}...${mint.slice(-4)}` : '—';
+      const symbol = rule.tokenSymbol || '—';
+      const min = Number(rule.minAmount || 0).toLocaleString(undefined, { maximumFractionDigits: 6 });
+      const max = rule.maxAmount === null || rule.maxAmount === undefined
+        ? '∞'
+        : Number(rule.maxAmount).toLocaleString(undefined, { maximumFractionDigits: 6 });
+      return `
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
+          <td style="padding:8px 10px;color:#cbd5e1;font-family:monospace;font-size:0.82em;" title="${escapeHtml(mint)}">${escapeHtml(mintShort)}</td>
+          <td style="padding:8px 10px;color:#e2e8f0;">${escapeHtml(symbol)}</td>
+          <td style="padding:8px 10px;color:#cbd5e1;">${min}</td>
+          <td style="padding:8px 10px;color:#cbd5e1;">${max}</td>
+          <td style="padding:8px 10px;color:#93c5fd;">${escapeHtml(rule.roleId || '—')}</td>
+          <td style="padding:8px 10px;color:${rule.enabled !== false ? '#86efac' : '#fca5a5'};">${rule.enabled !== false ? 'On' : 'Off'}</td>
+          <td style="padding:8px 10px;text-align:right;white-space:nowrap;">
+            <button onclick="editVerificationTokenRoleRule('${rule.id}')" style="width:30px;height:30px;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.35);border-radius:6px;cursor:pointer;color:#818cf8;font-size:0.85em;">✏️</button>
+            <button onclick="removeVerificationTokenRoleRule('${rule.id}')" style="width:30px;height:30px;background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.35);border-radius:6px;cursor:pointer;color:#fca5a5;font-size:0.85em;margin-left:4px;">🗑️</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    wrap.innerHTML = `
+      <div style="overflow-x:auto;border:1px solid rgba(99,102,241,0.18);border-radius:10px;background:rgba(14,23,44,0.35);">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr style="background:rgba(30,41,59,0.7);">
+            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Mint</th>
+            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Symbol</th>
+            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Min</th>
+            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Max</th>
+            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Role ID</th>
+            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Enabled</th>
+            <th style="padding:8px 10px;"></th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+  } catch (e) {
+    console.error('[Verification] Token role rules load error:', e);
+    wrap.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;padding:10px;">Failed to load token role rules.</p>';
   }
 }
 
@@ -5192,7 +5757,7 @@ async function saveVerificationSettings() {
   try {
     const res = await fetch('/api/admin/settings', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
       credentials: 'include',
       body: JSON.stringify(payload)
     });
@@ -5212,7 +5777,7 @@ async function runOgSync(fullSync = false) {
     const res = await fetch('/api/admin/og-role/sync', {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
       body: JSON.stringify({ fullSync })
     });
     const data = await res.json();
@@ -5512,9 +6077,11 @@ async function saveTreasuryModuleSettings() {
 
 // ==================== NFT TRACKER SETTINGS ====================
 
-async function loadNftTrackerSettingsView() {
+async function loadNftTrackerSettingsView(targetPaneId = null) {
   if (!isAdmin) return;
-  const pane = document.getElementById('settingsTab-nfttracker') || document.getElementById('nftActivityTrackerSettingsPanel');
+  const pane = (targetPaneId && document.getElementById(targetPaneId))
+    || document.getElementById('settingsTab-nfttracker')
+    || document.getElementById('nftActivityTrackerSettingsPanel');
   if (!pane) return;
 
   const cardStyle = 'background:rgba(14,23,44,0.5);border:1px solid rgba(99,102,241,0.22);border-radius:10px;padding:var(--space-5);margin-bottom:var(--space-5);';
@@ -5523,7 +6090,7 @@ async function loadNftTrackerSettingsView() {
   pane.innerHTML = `
     <div style="${cardStyle}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4);padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);">
-        <h3 style="${cardHeader}margin:0;padding:0;border:none;">📡 Tracked Collections</h3>
+        <h3 style="${cardHeader}margin:0;padding:0;border:none;">Tracked Collections</h3>
         <button class="btn-primary" onclick="openAddCollectionModal()" style="font-size:0.85em;padding:8px 16px;">+ Add Collection</button>
       </div>
       <div id="nts_collectionsWrap"><div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);"><div class="spinner"></div><p>Loading collections...</p></div></div>
@@ -5531,6 +6098,37 @@ async function loadNftTrackerSettingsView() {
   `;
 
   await renderNftCollectionsCard('nts_collectionsWrap');
+}
+
+async function loadTokenTrackerSettingsView(targetPaneId = null) {
+  if (!isAdmin) return;
+  const pane = (targetPaneId && document.getElementById(targetPaneId))
+    || document.getElementById('settingsTab-tokentracker')
+    || document.getElementById('tokenActivityTrackerSettingsPanel');
+  if (!pane) return;
+
+  const cardStyle = 'background:rgba(14,23,44,0.5);border:1px solid rgba(99,102,241,0.22);border-radius:10px;padding:var(--space-5);margin-bottom:var(--space-5);';
+  const cardHeader = 'color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0 0 var(--space-4) 0;padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);';
+
+  pane.innerHTML = `
+    <div style="${cardStyle}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4);padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);">
+        <h3 style="${cardHeader}margin:0;padding:0;border:none;">Tracked Tokens</h3>
+        <button class="btn-primary" onclick="openAddTokenModal()" style="font-size:0.85em;padding:8px 16px;">+ Add Token</button>
+      </div>
+      <div id="tts_tokensWrap"><div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);"><div class="spinner"></div><p>Loading tracked tokens...</p></div></div>
+    </div>
+    <div style="${cardStyle}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4);padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);">
+        <h3 style="${cardHeader}margin:0;padding:0;border:none;">Token Activity Feed</h3>
+        <button class="btn-secondary" onclick="renderNftTokenEventsCard('tts_tokenEventsWrap')" style="font-size:0.82em;padding:8px 14px;">Refresh</button>
+      </div>
+      <div id="tts_tokenEventsWrap"><div style="color:var(--text-secondary);font-size:0.85em;">Loading token activity...</div></div>
+    </div>
+  `;
+
+  await renderNftTrackedTokensCard('tts_tokensWrap');
+  await renderNftTokenEventsCard('tts_tokenEventsWrap');
 }
 
 // ==================== VP MAPPINGS ====================
@@ -6547,13 +7145,9 @@ async function loadNFTActivityView() {
   // Inject shared settings panel into tracker tab (same as Settings → NFT Tracker)
   if (isAdmin) {
     const settingsPanel = document.getElementById('nftActivityTrackerSettingsPanel');
-    if (settingsPanel && !settingsPanel.hasAttribute('data-loaded')) {
-      settingsPanel.setAttribute('id', 'settingsTab-nfttracker');
-      settingsPanel.setAttribute('data-loaded', '1');
+    if (settingsPanel) {
       settingsPanel.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-secondary);"><div class="spinner"></div><p>Loading tracker settings...</p></div>`;
-      await loadNftTrackerSettingsView();
-      // Restore panel id so activity refresh doesn't collide
-      settingsPanel.setAttribute('id', 'nftActivityTrackerSettingsPanel');
+      await loadNftTrackerSettingsView('nftActivityTrackerSettingsPanel');
     }
   }
 
@@ -6590,6 +7184,62 @@ async function loadNFTActivityView() {
   } catch (error) {
     console.error('Error loading NFT activity:', error);
     container.innerHTML = '<p style="color:#ef4444;">Failed to load NFT activity</p>';
+  }
+}
+
+async function loadTokenActivityView() {
+  const container = document.getElementById('tokenActivityPublicView');
+  if (!container) return;
+
+  if (isAdmin) {
+    const settingsPanel = document.getElementById('tokenActivityTrackerSettingsPanel');
+    if (settingsPanel) {
+      settingsPanel.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-secondary);"><div class="spinner"></div><p>Loading token tracker settings...</p></div>`;
+      await loadTokenTrackerSettingsView('tokenActivityTrackerSettingsPanel');
+    }
+  }
+
+  if (!isAdmin) {
+    container.innerHTML = '<p style="text-align:center; padding:20px; color:var(--text-secondary);">Token activity is available to server admins.</p>';
+    return;
+  }
+
+  container.innerHTML = `<div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading token activity...</p></div>`;
+
+  try {
+    const response = await fetch('/api/admin/token-tracker/token-events?limit=20', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await response.json();
+    const events = (response.ok && data.success !== false && Array.isArray(data.events)) ? data.events : [];
+
+    if (!events.length) {
+      container.innerHTML = '<p style="text-align:center; padding:20px; color:var(--text-secondary);">No recent token activity yet.</p>';
+      return;
+    }
+
+    const rows = events.slice(0, 20).map(evt => {
+      const type = String(evt.event_type || 'activity').toUpperCase();
+      const tokenName = evt.token_symbol || evt.token_name || (evt.token_mint ? `${String(evt.token_mint).slice(0, 4)}...${String(evt.token_mint).slice(-4)}` : 'Token');
+      const amount = Number(evt.amount_delta || 0).toLocaleString(undefined, { maximumFractionDigits: 6 });
+      const when = evt.event_time ? new Date(evt.event_time).toLocaleString() : 'Unknown';
+      const wallet = String(evt.wallet_address || '');
+      const walletShort = wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : '—';
+      return `
+        <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
+          <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
+            <div>
+              <div style="color:#e0e7ff; font-weight:600; margin-bottom:4px;">${escapeHtml(type)} ${escapeHtml(tokenName)}</div>
+              <div style="color:var(--text-secondary); font-size:0.85em;">Amount: ${escapeHtml(amount)} · Wallet: <span style="font-family:monospace;">${escapeHtml(walletShort)}</span></div>
+            </div>
+            <div style="color:var(--text-secondary); font-size:0.82em; white-space:nowrap;">${escapeHtml(when)}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    container.innerHTML = `<div style="display:grid; gap:12px; margin-bottom:16px;">${rows}</div>`;
+  } catch (error) {
+    console.error('Error loading token activity:', error);
+    container.innerHTML = '<p style="color:#ef4444;">Failed to load token activity</p>';
   }
 }
 
@@ -8909,4 +9559,6 @@ async function saveEngagementConfigFromSettings() {
     else showError(data.message || 'Failed to save.');
   } catch (e) { showError('Error saving engagement settings.'); }
 }
+
+
 

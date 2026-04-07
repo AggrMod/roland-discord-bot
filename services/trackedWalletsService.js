@@ -452,15 +452,19 @@ class TrackedWalletsService {
     }
   }
 
-  classifyTokenEventType(amountDelta, solDelta, stableDelta) {
+  classifyTokenEventType(amountDelta, solDelta, stableDelta, options = {}) {
+    const hasOtherPositiveTokenDelta = !!options.hasOtherPositiveTokenDelta;
+    const hasOtherNegativeTokenDelta = !!options.hasOtherNegativeTokenDelta;
     const delta = safeToNumber(amountDelta);
     if (delta > 0) {
       if (safeToNumber(solDelta) < -SOL_DELTA_EPSILON || safeToNumber(stableDelta) < -STABLE_DELTA_EPSILON) return 'buy';
+      if (hasOtherNegativeTokenDelta) return 'swap_in';
       if (safeToNumber(solDelta) > SOL_DELTA_EPSILON || safeToNumber(stableDelta) > STABLE_DELTA_EPSILON) return 'swap_in';
       return 'transfer_in';
     }
     if (delta < 0) {
       if (safeToNumber(solDelta) > SOL_DELTA_EPSILON || safeToNumber(stableDelta) > STABLE_DELTA_EPSILON) return 'sell';
+      if (hasOtherPositiveTokenDelta) return 'swap_out';
       if (safeToNumber(solDelta) < -SOL_DELTA_EPSILON || safeToNumber(stableDelta) < -STABLE_DELTA_EPSILON) return 'swap_out';
       return 'transfer_out';
     }
@@ -555,7 +559,25 @@ class TrackedWalletsService {
       const amountDelta = postAmount - preAmount;
       if (Math.abs(amountDelta) < 1e-9) continue;
 
-      const eventType = this.classifyTokenEventType(amountDelta, solDelta, stableDelta);
+      // Additional swap signal:
+      // if another token changed in the opposite direction in the same tx, classify as swap.
+      let hasOtherPositiveTokenDelta = false;
+      let hasOtherNegativeTokenDelta = false;
+      const allMints = new Set([...pre.keys(), ...post.keys()]);
+      for (const otherMint of allMints) {
+        if (otherMint === mintLower) continue;
+        const otherPre = safeToNumber(pre.get(otherMint));
+        const otherPost = safeToNumber(post.get(otherMint));
+        const otherDelta = otherPost - otherPre;
+        if (otherDelta > 1e-9) hasOtherPositiveTokenDelta = true;
+        else if (otherDelta < -1e-9) hasOtherNegativeTokenDelta = true;
+        if (hasOtherPositiveTokenDelta && hasOtherNegativeTokenDelta) break;
+      }
+
+      const eventType = this.classifyTokenEventType(amountDelta, solDelta, stableDelta, {
+        hasOtherPositiveTokenDelta,
+        hasOtherNegativeTokenDelta,
+      });
       if (eventType === 'neutral') continue;
 
       events.push({
@@ -957,8 +979,8 @@ class TrackedWalletsService {
       sell: { icon: '🔴', title: 'SELL', color: '#ED4245' },
       transfer_in: { icon: '📥', title: 'TRANSFER IN', color: '#3B82F6' },
       transfer_out: { icon: '📤', title: 'TRANSFER OUT', color: '#60A5FA' },
-      swap_in: { icon: '🟣', title: 'SWAP IN', color: '#A78BFA' },
-      swap_out: { icon: '🟠', title: 'SWAP OUT', color: '#F59E0B' },
+      swap_in: { icon: '🟣', title: 'BUY / SWAP IN', color: '#A78BFA' },
+      swap_out: { icon: '🟠', title: 'SELL / SWAP OUT', color: '#F59E0B' },
     }[eventType] || { icon: '🧩', title: eventType.toUpperCase(), color: '#5865F2' };
 
     const whenTs = evt?.eventTime ? Math.floor(new Date(evt.eventTime).getTime() / 1000) : null;

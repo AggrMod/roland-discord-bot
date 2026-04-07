@@ -1266,6 +1266,207 @@ class TrackedWalletsService {
     return Array.from(addresses);
   }
 
+  parseWebhookTokenAmount(transfer) {
+    const direct = Number(transfer?.tokenAmount);
+    if (Number.isFinite(direct) && direct > 0) return direct;
+
+    const directAlt = Number(transfer?.amount);
+    if (Number.isFinite(directAlt) && directAlt > 0) return directAlt;
+
+    const raw = transfer?.rawTokenAmount || transfer?.raw_token_amount || null;
+    const rawAmount = Number(raw?.tokenAmount ?? raw?.token_amount);
+    const decimals = Number(raw?.decimals ?? transfer?.decimals);
+    if (Number.isFinite(rawAmount) && Number.isFinite(decimals) && decimals >= 0) {
+      const scaled = rawAmount / Math.pow(10, decimals);
+      if (Number.isFinite(scaled) && scaled > 0) return scaled;
+    }
+
+    return 0;
+  }
+
+  parseWebhookLamports(transfer) {
+    const amount = Number(transfer?.amount ?? transfer?.lamports);
+    if (Number.isFinite(amount) && amount > 0) return amount;
+    return 0;
+  }
+
+  async processWebhookTokenActivityFromPayload({
+    event,
+    signature,
+    eventTime,
+    source = 'webhook',
+    mintConfigCache = null,
+    rawMeta = null,
+  }) {
+    const byMint = this.getAllEnabledTrackedTokensByMint(mintConfigCache);
+    if (!byMint || byMint.size === 0) {
+      return { success: true, insertedEvents: 0, duplicateEvents: 0, sentAlerts: 0, matchedOwners: 0 };
+    }
+
+    const tokenTransfers = Array.isArray(event?.tokenTransfers) ? event.tokenTransfers : [];
+    const nativeTransfers = Array.isArray(event?.nativeTransfers) ? event.nativeTransfers : [];
+    if (!tokenTransfers.length && !nativeTransfers.length) {
+      return { success: true, insertedEvents: 0, duplicateEvents: 0, sentAlerts: 0, matchedOwners: 0 };
+    }
+
+    const ownerTokenDeltas = new Map();
+    const ownerSolDeltas = new Map();
+    const addTokenDelta = (ownerRaw, mintRaw, deltaRaw) => {
+      const owner = normalizeAddress(ownerRaw);
+      const mint = String(mintRaw || '').trim().toLowerCase();
+      const delta = safeToNumber(deltaRaw);
+      if (!owner || !mint || Math.abs(delta) < 1e-12) return;
+      if (!ownerTokenDeltas.has(owner)) ownerTokenDeltas.set(owner, new Map());
+      const mintMap = ownerTokenDeltas.get(owner);
+      mintMap.set(mint, safeToNumber(mintMap.get(mint)) + delta);
+    };
+    const addSolDelta = (ownerRaw, deltaRaw) => {
+      const owner = normalizeAddress(ownerRaw);
+      const delta = safeToNumber(deltaRaw);
+      if (!owner || Math.abs(delta) < 1e-12) return;
+      ownerSolDeltas.set(owner, safeToNumber(ownerSolDeltas.get(owner)) + delta);
+    };
+
+    for (const transfer of tokenTransfers) {
+      const mint = transfer?.mint;
+      if (!mint) continue;
+      const amount = this.parseWebhookTokenAmount(transfer);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+
+      const fromOwner = transfer?.fromUserAccount || transfer?.from_user_account;
+      const toOwner = transfer?.toUserAccount || transfer?.to_user_account;
+      if (fromOwner) addTokenDelta(fromOwner, mint, -amount);
+      if (toOwner) addTokenDelta(toOwner, mint, amount);
+    }
+
+    for (const transfer of nativeTransfers) {
+      const lamports = this.parseWebhookLamports(transfer);
+      if (lamports <= 0) continue;
+      const solAmount = lamports / LAMPORTS_PER_SOL;
+      const fromOwner = transfer?.fromUserAccount || transfer?.from_user_account;
+      const toOwner = transfer?.toUserAccount || transfer?.to_user_account;
+      if (fromOwner) addSolDelta(fromOwner, -solAmount);
+      if (toOwner) addSolDelta(toOwner, solAmount);
+    }
+
+    let insertedEvents = 0;
+    let duplicateEvents = 0;
+    let sentAlerts = 0;
+    let matchedOwners = 0;
+
+    for (const [ownerLower, deltaByMint] of ownerTokenDeltas.entries()) {
+      if (!deltaByMint || deltaByMint.size === 0) continue;
+      const ownerAddress = String(ownerLower || '').trim();
+      if (!ownerAddress) continue;
+
+      const trackedMints = [...deltaByMint.keys()].filter(mint => byMint.has(mint));
+      if (!trackedMints.length) continue;
+      matchedOwners += 1;
+
+      let stableDelta = 0;
+      for (const [mint, delta] of deltaByMint.entries()) {
+        if (STABLECOIN_MINTS.has(mint)) stableDelta += safeToNumber(delta);
+      }
+      const solDelta = safeToNumber(ownerSolDeltas.get(ownerLower));
+
+      for (const mintLower of trackedMints) {
+        const amountDelta = safeToNumber(deltaByMint.get(mintLower));
+        if (Math.abs(amountDelta) < 1e-9) continue;
+
+        let hasOtherPositiveTokenDelta = false;
+        let hasOtherNegativeTokenDelta = false;
+        for (const [otherMint, otherDelta] of deltaByMint.entries()) {
+          if (otherMint === mintLower) continue;
+          if (safeToNumber(otherDelta) > 1e-9) hasOtherPositiveTokenDelta = true;
+          else if (safeToNumber(otherDelta) < -1e-9) hasOtherNegativeTokenDelta = true;
+          if (hasOtherPositiveTokenDelta && hasOtherNegativeTokenDelta) break;
+        }
+
+        const eventType = this.classifyTokenEventType(amountDelta, solDelta, stableDelta, {
+          hasOtherPositiveTokenDelta,
+          hasOtherNegativeTokenDelta,
+        });
+        if (eventType === 'neutral') continue;
+
+        const tokenConfigs = byMint.get(mintLower) || [];
+        const representative = tokenConfigs[0] || {};
+        for (const tokenCfg of tokenConfigs) {
+          const guildId = String(tokenCfg.guild_id || '').trim();
+          if (!guildId) continue;
+          if (!this.isTokenTrackerEnabled(guildId)) continue;
+
+          const persist = this.saveTrackedTokenEvent({
+            guildId,
+            walletId: null,
+            walletAddress: ownerAddress,
+            tokenMint: representative.token_mint || representative.tokenMint || mintLower,
+            tokenSymbol: tokenCfg.token_symbol || representative.token_symbol || null,
+            tokenName: tokenCfg.token_name || representative.token_name || null,
+            eventType,
+            amountDelta,
+            balanceAfter: null,
+            solDelta,
+            stableDelta,
+            txSignature: signature,
+            eventTime,
+            source,
+            rawJson: {
+              signature,
+              eventType,
+              tokenMint: representative.token_mint || representative.tokenMint || mintLower,
+              amountDelta,
+              balanceAfter: null,
+              walletAddress: ownerAddress,
+              payloadFallback: true,
+              ...(rawMeta && typeof rawMeta === 'object' ? rawMeta : {}),
+            },
+          });
+
+          if (!persist.success) continue;
+          if (!persist.inserted) {
+            duplicateEvents += 1;
+            continue;
+          }
+          insertedEvents += 1;
+
+          const shouldAlert = this.shouldAlertTokenEvent(tokenCfg, eventType, Math.abs(safeToNumber(amountDelta)));
+          if (!shouldAlert) continue;
+          await this.sendTrackedTokenAlert({
+            walletRow: {
+              wallet_address: ownerAddress,
+              label: null,
+              alert_channel_id: tokenCfg.alert_channel_id || null,
+            },
+            guildId,
+            evt: {
+              txSignature: signature,
+              tokenMint: representative.token_mint || representative.tokenMint || mintLower,
+              tokenSymbol: tokenCfg.token_symbol || representative.token_symbol || null,
+              tokenName: tokenCfg.token_name || representative.token_name || null,
+              eventType,
+              amountDelta,
+              balanceAfter: null,
+              solDelta,
+              stableDelta,
+              eventTime,
+              alertChannelId: tokenCfg.alert_channel_id || null,
+            },
+          });
+          sentAlerts += 1;
+          await new Promise(resolve => setTimeout(resolve, 120));
+        }
+      }
+    }
+
+    return {
+      success: true,
+      insertedEvents,
+      duplicateEvents,
+      sentAlerts,
+      matchedOwners,
+    };
+  }
+
   async ingestWebhookEvent(event, options = {}) {
     const source = String(options.source || 'webhook');
     const attempt = Math.max(0, Number(options.attempt || 0));
@@ -1278,6 +1479,7 @@ class TrackedWalletsService {
     const mintConfigCache = options.mintConfigCache instanceof Map ? options.mintConfigCache : new Map();
     const hintedAddresses = this.extractWebhookAddresses(event);
     let candidateWallets = hintedAddresses.length ? this.getTrackedWalletsByAddresses(hintedAddresses) : [];
+    const eventTime = this.extractWebhookEventTime(event, null);
     const hasRichAddressHints =
       (Array.isArray(event?.accountData) && event.accountData.length > 0)
       || (Array.isArray(event?.nativeTransfers) && event.nativeTransfers.length > 0)
@@ -1296,6 +1498,29 @@ class TrackedWalletsService {
       tx = await this.connection.getParsedTransaction(signature, { maxSupportedTransactionVersion: 0 });
     } catch (e) {
       logger.error(`[tracked-token-webhook] parsed transaction fetch failed for ${signature}:`, e?.message || e);
+      const payloadProcessed = await this.processWebhookTokenActivityFromPayload({
+        event,
+        signature,
+        eventTime,
+        source: `${source}-payload`,
+        mintConfigCache,
+        rawMeta: {
+          webhookSourceType: String(event?.type || event?.eventType || '').trim() || null,
+          payloadReason: 'parsed_tx_fetch_failed',
+        },
+      });
+      if ((payloadProcessed?.insertedEvents || 0) > 0 || (payloadProcessed?.duplicateEvents || 0) > 0 || (payloadProcessed?.sentAlerts || 0) > 0) {
+        return {
+          success: true,
+          ignored: false,
+          reason: undefined,
+          signature,
+          matchedWallets: 0,
+          insertedEvents: Number(payloadProcessed?.insertedEvents || 0),
+          duplicateEvents: Number(payloadProcessed?.duplicateEvents || 0),
+          sentAlerts: Number(payloadProcessed?.sentAlerts || 0),
+        };
+      }
       if (attempt < TOKEN_WEBHOOK_RETRY_MAX) {
         this.scheduleWebhookRetry(event, { source, attempt, signature, reason: 'parsed_tx_fetch_failed' });
       }
@@ -1303,6 +1528,29 @@ class TrackedWalletsService {
     }
 
     if (!tx) {
+      const payloadProcessed = await this.processWebhookTokenActivityFromPayload({
+        event,
+        signature,
+        eventTime,
+        source: `${source}-payload`,
+        mintConfigCache,
+        rawMeta: {
+          webhookSourceType: String(event?.type || event?.eventType || '').trim() || null,
+          payloadReason: 'tx_not_available',
+        },
+      });
+      if ((payloadProcessed?.insertedEvents || 0) > 0 || (payloadProcessed?.duplicateEvents || 0) > 0 || (payloadProcessed?.sentAlerts || 0) > 0) {
+        return {
+          success: true,
+          ignored: false,
+          reason: undefined,
+          signature,
+          matchedWallets: 0,
+          insertedEvents: Number(payloadProcessed?.insertedEvents || 0),
+          duplicateEvents: Number(payloadProcessed?.duplicateEvents || 0),
+          sentAlerts: Number(payloadProcessed?.sentAlerts || 0),
+        };
+      }
       if (attempt < TOKEN_WEBHOOK_RETRY_MAX) {
         this.scheduleWebhookRetry(event, { source, attempt, signature, reason: 'tx_not_available' });
       } else {
@@ -1316,10 +1564,11 @@ class TrackedWalletsService {
       candidateWallets = accountKeys.length ? this.getTrackedWalletsByAddresses(accountKeys) : [];
     }
     if (!candidateWallets.length) {
-      return { success: true, ignored: true, reason: 'no_tracked_wallets' };
+      if (!hasTrackedTokensEnabled) {
+        return { success: true, ignored: true, reason: 'no_tracked_wallets' };
+      }
     }
-
-    const eventTime = this.extractWebhookEventTime(event, tx);
+    const eventTimeResolved = this.extractWebhookEventTime(event, tx);
     let matchedWallets = 0;
     let insertedEvents = 0;
     let duplicateEvents = 0;
@@ -1338,7 +1587,7 @@ class TrackedWalletsService {
         trackedTokenByMintLower: tokenMap,
         tx,
         signature,
-        eventTime,
+        eventTime: eventTimeResolved,
         source,
         rawMeta: {
           webhookSourceType: String(event?.type || event?.eventType || '').trim() || null,
@@ -1355,7 +1604,7 @@ class TrackedWalletsService {
       const mintScoped = await this.processParsedTokenActivityByMint({
         tx,
         signature,
-        eventTime,
+        eventTime: eventTimeResolved,
         source,
         mintConfigCache,
         rawMeta: {

@@ -83,6 +83,8 @@ class TrackedWalletsService {
     this.connection = tokenService.connection || new Connection(process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com');
     this.invalidWalletWarned = new Set();
     this.webhookRetryKeys = new Set();
+    this.tokenImageCache = new Map();
+    this.tokenImageCacheTtlMs = Math.max(60 * 1000, Number(process.env.TOKEN_IMAGE_CACHE_TTL_MS || 6 * 60 * 60 * 1000));
   }
 
   isTokenTrackerEnabled(guildId) {
@@ -2081,6 +2083,11 @@ class TrackedWalletsService {
       fallbackLogoUrl: branding.logo || botAvatar,
     });
 
+    const tokenImage = await this.resolveTokenImage(tokenMint);
+    if (tokenImage) {
+      try { embed.setThumbnail(tokenImage); } catch (_error) {}
+    }
+
     const buttons = [];
     if (signature) {
       buttons.push(
@@ -2231,6 +2238,118 @@ class TrackedWalletsService {
     } catch (_error) {}
 
     return '';
+  }
+
+  _normalizeHttpImageUrl(value) {
+    const url = String(value || '').trim();
+    if (!url) return null;
+    if (!/^https?:\/\//i.test(url)) return null;
+    return url;
+  }
+
+  _getCachedTokenImage(tokenMint) {
+    const key = String(tokenMint || '').trim().toLowerCase();
+    if (!key) return { hit: false, value: null };
+    const entry = this.tokenImageCache.get(key);
+    if (!entry) return { hit: false, value: null };
+    if (entry.expiresAt <= Date.now()) {
+      this.tokenImageCache.delete(key);
+      return { hit: false, value: null };
+    }
+    return { hit: true, value: entry.value || null };
+  }
+
+  _setCachedTokenImage(tokenMint, value) {
+    const key = String(tokenMint || '').trim().toLowerCase();
+    if (!key) return;
+    this.tokenImageCache.set(key, {
+      value: value || null,
+      expiresAt: Date.now() + this.tokenImageCacheTtlMs,
+    });
+  }
+
+  async _fetchJsonWithTimeout(url, options = {}, timeoutMs = 3500) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...options, signal: controller.signal });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (_error) {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async _resolveTokenImageFromHelius(tokenMint) {
+    const apiKey = String(process.env.HELIUS_API_KEY || '').trim();
+    if (!apiKey || !tokenMint) return null;
+
+    const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${apiKey}`;
+    const data = await this._fetchJsonWithTimeout(
+      rpcUrl,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'gp-token-image',
+          method: 'getAsset',
+          params: { id: tokenMint },
+        }),
+      },
+      4500
+    );
+    if (!data?.result) return null;
+
+    const candidates = [
+      data.result?.content?.links?.image,
+      data.result?.content?.files?.[0]?.uri,
+      data.result?.content?.metadata?.image,
+      data.result?.token_info?.image,
+      data.result?.token_info?.logoURI,
+    ];
+    for (const candidate of candidates) {
+      const normalized = this._normalizeHttpImageUrl(candidate);
+      if (normalized) return normalized;
+    }
+    return null;
+  }
+
+  async _resolveTokenImageFromJupiter(tokenMint) {
+    if (!tokenMint) return null;
+    const data = await this._fetchJsonWithTimeout(
+      `https://lite-api.jup.ag/tokens/v1/token/${encodeURIComponent(tokenMint)}`,
+      { method: 'GET' },
+      3500
+    );
+    if (!data) return null;
+
+    const row = Array.isArray(data) ? (data[0] || null) : data;
+    if (!row) return null;
+    const candidates = [row.logoURI, row.logoUri, row.logo_uri, row.image];
+    for (const candidate of candidates) {
+      const normalized = this._normalizeHttpImageUrl(candidate);
+      if (normalized) return normalized;
+    }
+    return null;
+  }
+
+  async resolveTokenImage(tokenMint) {
+    const mint = String(tokenMint || '').trim();
+    if (!mint) return null;
+
+    const cached = this._getCachedTokenImage(mint);
+    if (cached.hit) return cached.value;
+
+    let image = await this._resolveTokenImageFromHelius(mint);
+    if (!image) {
+      image = await this._resolveTokenImageFromJupiter(mint);
+    }
+
+    this._setCachedTokenImage(mint, image || null);
+    return image || null;
   }
 }
 

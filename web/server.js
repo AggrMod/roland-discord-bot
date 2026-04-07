@@ -312,7 +312,12 @@ class WebServer {
       windowMs: 60 * 1000,
       max: 5,
       validate: { xForwardedForHeader: false, ip: false },
-      keyGenerator: (req) => req.session?.discordUser?.id || (req.ip || '').replace(/^::ffff:/, ''),
+      keyGenerator: (req) => {
+        const userId = req.session?.discordUser?.id;
+        if (userId) return userId;
+        const rawIp = req.ip || req.socket?.remoteAddress || '';
+        return rateLimit.ipKeyGenerator(rawIp);
+      },
       message: rateLimitMessage
     });
 

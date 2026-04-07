@@ -1877,7 +1877,7 @@ function renderWallets() {
         <div>
           <div style="font-weight:700;color:#e0e7ff;">Privacy: Tracker Identity Display</div>
           <div style="color:var(--text-secondary);font-size:0.86em;margin-top:4px;">
-            When enabled, NFT and token tracker alerts show your wallet short address instead of your Discord username.
+            Enable this option to hide your Discord username in NFT and token tracker alerts. Leave it off to show your username.
           </div>
         </div>
         <label style="display:flex;align-items:center;gap:8px;color:#cbd5e1;font-size:0.86em;cursor:pointer;">

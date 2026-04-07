@@ -81,7 +81,17 @@ module.exports = {
         .addSubcommand(subcommand =>
           subcommand
             .setName('export-wallets')
-            .setDescription('Export all verified wallets (CSV)'))
+            .setDescription('Export verified wallets (optionally filtered by role)')
+            .addRoleOption(option =>
+              option
+                .setName('role')
+                .setDescription('Only export wallets for members with this role')
+                .setRequired(false))
+            .addBooleanOption(option =>
+              option
+                .setName('primary-only')
+                .setDescription('Only include primary wallets')
+                .setRequired(false)))
         
         .addSubcommand(subcommand =>
           subcommand
@@ -669,7 +679,40 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
 
     const db = require('../../database/db');
-    const wallets = db.prepare(`
+    const selectedRole = interaction.options.getRole('role');
+    const primaryOnly = interaction.options.getBoolean('primary-only') || false;
+    let wallets = [];
+
+    if (selectedRole) {
+      // Ensure role.members reflects the full guild membership, not only cache.
+      await interaction.guild.members.fetch();
+      const memberIds = Array.from(selectedRole.members.keys());
+
+      if (memberIds.length === 0) {
+        return interaction.editReply({
+          content: `❌ Role **${selectedRole.name}** has no members in this server.`,
+          ephemeral: true
+        });
+      }
+
+      const placeholders = memberIds.map(() => '?').join(',');
+      wallets = db.prepare(`
+        SELECT 
+          w.discord_id,
+          u.username,
+          w.wallet_address,
+          w.primary_wallet,
+          w.verified,
+          w.created_at
+        FROM wallets w
+        LEFT JOIN users u ON w.discord_id = u.discord_id
+        WHERE w.verified = 1
+          ${primaryOnly ? 'AND w.primary_wallet = 1' : ''}
+          AND w.discord_id IN (${placeholders})
+        ORDER BY w.discord_id, w.created_at
+      `).all(...memberIds);
+    } else {
+      wallets = db.prepare(`
       SELECT 
         w.discord_id,
         u.username,
@@ -679,28 +722,47 @@ module.exports = {
         w.created_at
       FROM wallets w
       LEFT JOIN users u ON w.discord_id = u.discord_id
+      WHERE w.verified = 1
+      ${primaryOnly ? 'AND w.primary_wallet = 1' : ''}
       ORDER BY w.discord_id, w.created_at
     `).all();
+    }
 
     if (wallets.length === 0) {
       return interaction.editReply({ 
-        content: '❌ No wallets in database.', 
+        content: selectedRole
+          ? `❌ No verified ${primaryOnly ? 'primary ' : ''}wallets found for role **${selectedRole.name}**.`
+          : `❌ No verified ${primaryOnly ? 'primary ' : ''}wallets in database.`,
         ephemeral: true 
       });
     }
 
+    const csvEscape = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
     const csv = 'discord_id,username,wallet_address,primary_wallet,verified,created_at\n' +
-      wallets.map(w => `${w.discord_id},"${w.username || ''}",${w.wallet_address},${w.primary_wallet ? 'true' : 'false'},${w.verified ? 'true' : 'false'},"${w.created_at}"`).join('\n');
+      wallets.map(w => [
+        csvEscape(w.discord_id),
+        csvEscape(w.username || ''),
+        csvEscape(w.wallet_address),
+        csvEscape(w.primary_wallet ? 'true' : 'false'),
+        csvEscape(w.verified ? 'true' : 'false'),
+        csvEscape(w.created_at || '')
+      ].join(',')).join('\n');
 
     const buffer = Buffer.from(csv, 'utf-8');
-    const attachment = { name: 'wallets.csv', attachment: buffer };
+    const roleSuffix = selectedRole
+      ? `-${selectedRole.name.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').slice(0, 40)}`
+      : '';
+    const primarySuffix = primaryOnly ? '-primary' : '';
+    const attachment = { name: `wallets${roleSuffix}${primarySuffix}.csv`, attachment: buffer };
 
     await interaction.editReply({ 
-      content: '✅ Wallet export complete',
+      content: selectedRole
+        ? `✅ ${primaryOnly ? 'Primary wallet' : 'Wallet'} export complete for role **${selectedRole.name}** (${wallets.length} wallet(s)).`
+        : `✅ ${primaryOnly ? 'Primary wallet' : 'Wallet'} export complete (${wallets.length} wallet(s)).`,
       files: [attachment],
       ephemeral: true 
     });
-    logger.log(`Admin ${interaction.user.tag} exported all wallets`);
+    logger.log(`Admin ${interaction.user.tag} exported ${primaryOnly ? 'primary ' : ''}wallets${selectedRole ? ` for role ${selectedRole.id}` : ''}`);
   },
 
   async handleAdminRoleConfig(interaction) {

@@ -1698,6 +1698,24 @@ class WebServer {
       }
     });
 
+    this.app.post('/api/superadmin/tenants/:guildId/rollback-template', superadminGuard, logSuperadminTenantAction, (req, res) => {
+      try {
+        const result = monetizationTemplateService.rollbackLastTemplate(
+          req.params.guildId,
+          req.session?.discordUser?.id || 'unknown'
+        );
+
+        if (!result.success) {
+          return res.status(400).json(result);
+        }
+
+        res.json(result);
+      } catch (error) {
+        logger.error('Error rolling back monetization template:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
     this.app.get('/api/superadmin/tenants/:guildId/limits', superadminGuard, logSuperadminTenantAction, (req, res) => {
       try {
         const snapshot = entitlementService.getTenantLimitSnapshot(req.params.guildId);

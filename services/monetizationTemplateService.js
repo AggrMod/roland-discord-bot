@@ -185,6 +185,15 @@ function getLimitChanges(beforeLimits, afterLimits) {
   });
 }
 
+function safeParseJson(value, fallback = null) {
+  if (value === null || value === undefined || value === '') return fallback;
+  try {
+    return JSON.parse(value);
+  } catch (_error) {
+    return fallback;
+  }
+}
+
 class MonetizationTemplateService {
   listTemplates() {
     return TEMPLATE_CATALOG.map(template => ({
@@ -200,6 +209,33 @@ class MonetizationTemplateService {
   getTemplate(templateKey) {
     const normalized = String(templateKey || '').trim().toLowerCase();
     return TEMPLATE_CATALOG.find(template => template.key === normalized) || null;
+  }
+
+  syncTenantOverrides(guildId, desiredOverridesRaw) {
+    const desiredOverrides = normalizeLimitOverrides(desiredOverridesRaw || {});
+    const currentOverrides = entitlementService.getTenantModuleOverrides(guildId);
+
+    for (const [moduleKey, entries] of Object.entries(currentOverrides || {})) {
+      for (const limitKey of Object.keys(entries || {})) {
+        const keep = Object.prototype.hasOwnProperty.call(desiredOverrides?.[moduleKey] || {}, limitKey);
+        if (keep) continue;
+        const clearResult = entitlementService.setTenantModuleOverride(guildId, moduleKey, limitKey, null);
+        if (!clearResult.success) {
+          return { success: false, message: clearResult.message || `Failed to clear limit ${moduleKey}.${limitKey}` };
+        }
+      }
+    }
+
+    for (const [moduleKey, entries] of Object.entries(desiredOverrides || {})) {
+      for (const [limitKey, limitValue] of Object.entries(entries || {})) {
+        const limitResult = entitlementService.setTenantModuleOverride(guildId, moduleKey, limitKey, limitValue);
+        if (!limitResult.success) {
+          return { success: false, message: limitResult.message || `Failed to set limit ${moduleKey}.${limitKey}` };
+        }
+      }
+    }
+
+    return { success: true };
   }
 
   previewTemplate(guildId, templateKey) {
@@ -273,6 +309,7 @@ class MonetizationTemplateService {
     if (!before?.tenant) {
       return { success: false, message: 'Tenant not found' };
     }
+    const beforeLimitSnapshot = entitlementService.getTenantLimitSnapshot(guildId);
 
     const planResult = tenantService.setTenantPlan(guildId, template.planKey, actorId);
     if (!planResult.success) {
@@ -286,33 +323,21 @@ class MonetizationTemplateService {
       }
     }
 
-    const desiredOverrides = normalizeLimitOverrides(template.limitOverrides || {});
-    const currentOverrides = entitlementService.getTenantModuleOverrides(guildId);
-    for (const [moduleKey, entries] of Object.entries(currentOverrides || {})) {
-      for (const limitKey of Object.keys(entries || {})) {
-        const keep = Object.prototype.hasOwnProperty.call(desiredOverrides?.[moduleKey] || {}, limitKey);
-        if (keep) continue;
-        const clearResult = entitlementService.setTenantModuleOverride(guildId, moduleKey, limitKey, null);
-        if (!clearResult.success) {
-          return { success: false, message: clearResult.message || `Failed to clear limit ${moduleKey}.${limitKey}` };
-        }
-      }
-    }
-
-    for (const [moduleKey, entries] of Object.entries(desiredOverrides)) {
-      for (const [limitKey, limitValue] of Object.entries(entries || {})) {
-        const limitResult = entitlementService.setTenantModuleOverride(guildId, moduleKey, limitKey, limitValue);
-        if (!limitResult.success) {
-          return { success: false, message: limitResult.message || `Failed to set limit ${moduleKey}.${limitKey}` };
-        }
-      }
+    const overrideSyncResult = this.syncTenantOverrides(guildId, template.limitOverrides || {});
+    if (!overrideSyncResult.success) {
+      return overrideSyncResult;
     }
 
     const after = tenantService.getTenantContext(guildId);
-    tenantService.logAudit(guildId, actorId, 'apply_template', before, {
+    const afterLimitSnapshot = entitlementService.getTenantLimitSnapshot(guildId);
+    tenantService.logAudit(guildId, actorId, 'apply_template', {
+      tenant: before,
+      limitSnapshot: beforeLimitSnapshot,
+    }, {
       templateKey: template.key,
       templateLabel: template.label,
-      tenant: after
+      tenant: after,
+      limitSnapshot: afterLimitSnapshot,
     });
 
     return {
@@ -323,6 +348,59 @@ class MonetizationTemplateService {
         description: template.description
       },
       tenant: after
+    };
+  }
+
+  rollbackLastTemplate(guildId, actorId = 'system') {
+    const logs = tenantService.getTenantAuditLogs(guildId, 100);
+    const templateLog = logs.find(log => String(log.action || '').trim().toLowerCase() === 'apply_template');
+    if (!templateLog) {
+      return { success: false, message: 'No template apply audit entry found for rollback' };
+    }
+
+    const beforePayload = safeParseJson(templateLog.before_json, {});
+    const beforeTenant = beforePayload?.tenant && typeof beforePayload.tenant === 'object'
+      ? beforePayload.tenant
+      : (beforePayload && typeof beforePayload === 'object' ? beforePayload : null);
+    if (!beforeTenant?.tenant || !beforeTenant?.planKey) {
+      return { success: false, message: 'Rollback snapshot is incomplete for this tenant' };
+    }
+
+    const beforeOverrides = beforePayload?.limitSnapshot?.overrides || {};
+    const currentBefore = tenantService.getTenantContext(guildId);
+
+    const planResult = tenantService.setTenantPlan(guildId, beforeTenant.planKey, actorId);
+    if (!planResult.success) {
+      return { success: false, message: planResult.message || 'Failed restoring previous plan' };
+    }
+
+    for (const [moduleKey, enabled] of Object.entries(beforeTenant.modules || {})) {
+      const moduleResult = tenantService.setTenantModule(guildId, moduleKey, !!enabled, actorId);
+      if (!moduleResult.success) {
+        return { success: false, message: moduleResult.message || `Failed restoring module ${moduleKey}` };
+      }
+    }
+
+    const overrideSyncResult = this.syncTenantOverrides(guildId, beforeOverrides);
+    if (!overrideSyncResult.success) {
+      return overrideSyncResult;
+    }
+
+    const after = tenantService.getTenantContext(guildId);
+    const afterLimitSnapshot = entitlementService.getTenantLimitSnapshot(guildId);
+    tenantService.logAudit(guildId, actorId, 'rollback_template', {
+      sourceAuditId: templateLog.id,
+      tenant: currentBefore,
+    }, {
+      sourceAuditId: templateLog.id,
+      tenant: after,
+      limitSnapshot: afterLimitSnapshot,
+    });
+
+    return {
+      success: true,
+      rolledBackFromAuditId: templateLog.id,
+      tenant: after,
     };
   }
 }

@@ -3622,6 +3622,7 @@ function renderTenantDetailPanel(tenant, tenantLimits = null) {
             <h4 style="margin:0; color:#c9d6ff;">Monetization Template</h4>
             <div style="display:flex; gap:8px; align-items:center;">
               <button class="btn-secondary" id="tenantTemplatePreviewBtn" onclick="previewTenantTemplate()" style="padding:8px 14px;">Preview</button>
+              <button class="btn-secondary" id="tenantTemplateRollbackBtn" onclick="rollbackTenantTemplate()" style="padding:8px 14px;">Rollback Last</button>
               <button class="btn-primary" id="tenantTemplateApplyBtn" onclick="applyTenantTemplate()" style="padding:8px 14px;">Apply Template</button>
             </div>
           </div>
@@ -4688,6 +4689,44 @@ async function applyTenantTemplate() {
     btn.disabled = false;
     btn.textContent = 'Apply Template';
   }
+}
+
+async function rollbackTenantTemplate() {
+  if (!selectedTenantGuildId) return;
+
+  const btn = document.getElementById('tenantTemplateRollbackBtn');
+  if (!btn) return;
+
+  showConfirmModal(
+    'Rollback Template?',
+    'This restores the tenant to the state before the last applied template (plan, module toggles, and module limit overrides).',
+    async () => {
+      btn.disabled = true;
+      btn.textContent = 'Rolling Back...';
+      try {
+        const response = await fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/rollback-template`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await response.json();
+        if (!data.success) {
+          showError(data.message || 'Failed to rollback template');
+          return;
+        }
+
+        showSuccess(`Template rollback completed (audit #${data.rolledBackFromAuditId || 'n/a'})`);
+        selectedTenantTemplatePreview = null;
+        await loadSuperadminView();
+      } catch (error) {
+        showError(`Failed to rollback template: ${error.message}`);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Rollback Last';
+      }
+    },
+    'Rollback'
+  );
 }
 
 async function applyTenantPlan() {

@@ -5528,9 +5528,14 @@ async function loadVerificationSettings() {
   const fieldInput = 'width:100%;padding:10px 12px;border:1px solid rgba(99,102,241,0.22);border-radius:8px;background:rgba(30,41,59,0.8);color:#e0e7ff;font-size:0.9em;';
 
   try {
-    const settingsRes = await fetch('/api/admin/settings', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const [settingsRes, panelRes] = await Promise.all([
+      fetch('/api/admin/settings', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      fetch('/api/admin/verification/panel', { credentials: 'include', headers: buildTenantRequestHeaders() })
+    ]);
     const settingsJson = await settingsRes.json();
+    const panelJson = await panelRes.json();
     const vs = settingsJson.success ? settingsJson.settings : {};
+    const panel = panelJson.success ? (panelJson.panel || {}) : {};
 
     container.innerHTML = `
       <div style="${cardStyle}">
@@ -5562,6 +5567,42 @@ async function loadVerificationSettings() {
           <button class="btn-primary" onclick="saveVerificationSettings()" style="font-size:0.85em;padding:8px 16px;">Save Verification Settings</button>
         </div>
       </div>
+
+      <div style="${cardStyle}">
+        <h3 style="${cardHeader}">Verification Panel</h3>
+        <p style="color:var(--text-secondary);font-size:0.85em;margin:0 0 12px 0;">Post and update the Verify panel directly from the portal.</p>
+        <div style="${gridRow}">
+          <div>
+            <label style="${fieldLabel}">Channel</label>
+            <select id="ver_panelChannelId" style="${fieldInput}">
+              <option value="">-- Select channel --</option>
+            </select>
+          </div>
+          <div>
+            <label style="${fieldLabel}">Embed Color</label>
+            <input type="text" id="ver_panelColor" value="${escapeHtml(panel.color || '#FFD700')}" style="${fieldInput}" placeholder="#FFD700">
+          </div>
+        </div>
+        <div style="margin-top:var(--space-4);">
+          <label style="${fieldLabel}">Panel Title</label>
+          <input type="text" id="ver_panelTitle" value="${escapeHtml(panel.title || '🔗 Verify your wallet!')}" style="${fieldInput}" placeholder="🔗 Verify your wallet!">
+        </div>
+        <div style="margin-top:var(--space-4);">
+          <label style="${fieldLabel}">Panel Description</label>
+          <textarea id="ver_panelDescription" style="${fieldInput};min-height:86px;resize:vertical;" placeholder="Panel description">${escapeHtml(panel.description || 'To get access to community roles, verify your wallet by clicking the button below.')}</textarea>
+        </div>
+        <div style="margin-top:12px;color:var(--text-secondary);font-size:0.82em;">
+          Footer uses branding: <strong style="color:#c9d6ff;">Powered by Guild Pilot</strong> (or your custom branding footer text).
+        </div>
+        <div id="ver_panelStatus" style="margin-top:8px;color:#94a3b8;font-size:0.82em;">
+          ${panel.messageId
+            ? `Current panel message: <code>${escapeHtml(panel.messageId)}</code> in <code>${escapeHtml(panel.channelId || '')}</code>`
+            : 'No verification panel posted yet.'}
+        </div>
+        <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);margin-top:var(--space-4);">
+          <button class="btn-primary" id="verPanelPostBtn" onclick="postVerificationPanelFromSettings()" style="font-size:0.85em;padding:8px 16px;">Post / Update Panel</button>
+        </div>
+      </div>
     `;
 
     populateRoleSelect('ver_baseVerifiedRoleId', vs.baseVerifiedRoleId || '').then(() => {
@@ -5572,6 +5613,7 @@ async function loadVerificationSettings() {
       const sel = document.getElementById('ver_ogRoleId');
       if (sel && sel.options.length > 0) sel.options[0].textContent = '-- None --';
     });
+    populateChannelSelect('ver_panelChannelId', panel.channelId || '');
   } catch (e) {
     console.error('[Verification] Settings load error:', e);
     container.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;">Failed to load verification settings.</p>';
@@ -5600,6 +5642,45 @@ async function saveVerificationSettings() {
   } catch (e) {
     console.error('[Verification] Save error:', e);
     showError('Failed to save verification settings');
+  }
+}
+
+async function postVerificationPanelFromSettings() {
+  const btn = document.getElementById('verPanelPostBtn');
+  const channelId = document.getElementById('ver_panelChannelId')?.value || '';
+  const title = document.getElementById('ver_panelTitle')?.value?.trim() || '';
+  const description = document.getElementById('ver_panelDescription')?.value?.trim() || '';
+  const color = document.getElementById('ver_panelColor')?.value?.trim() || '#FFD700';
+
+  if (!channelId) {
+    showError('Select a channel first.');
+    return;
+  }
+
+  try {
+    if (btn) { btn.disabled = true; btn.textContent = 'Posting...'; }
+    const res = await fetch('/api/admin/verification/panel/post', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({ channelId, title, description, color })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      showError(data.message || 'Failed to post verification panel');
+      return;
+    }
+
+    const status = document.getElementById('ver_panelStatus');
+    if (status) {
+      status.innerHTML = `Current panel message: <code>${escapeHtml(data.messageId || '')}</code> in <code>${escapeHtml(data.channelId || '')}</code>`;
+    }
+    showSuccess(data.action === 'updated' ? 'Verification panel updated.' : 'Verification panel posted.');
+  } catch (error) {
+    console.error('[Verification] post panel error:', error);
+    showError('Failed to post verification panel');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Post / Update Panel'; }
   }
 }
 

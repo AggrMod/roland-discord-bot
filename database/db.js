@@ -25,6 +25,8 @@ function initDatabase() {
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN channel_id TEXT'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE wallets ADD COLUMN is_favorite BOOLEAN DEFAULT 0'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE users ADD COLUMN wallet_alert_identity_opt_out INTEGER DEFAULT 0'));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE verification_panels ADD COLUMN color TEXT DEFAULT '#FFD700'"));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE verification_panels ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'));
   ignoreDuplicateMigration(() => db.exec('CREATE TABLE user_verify_amounts (id INTEGER PRIMARY KEY AUTOINCREMENT, discord_id TEXT UNIQUE NOT NULL, username TEXT, assigned_amount REAL NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'));
 
   // Governance overhaul migrations
@@ -322,6 +324,18 @@ function initDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS verification_panels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL UNIQUE,
+      channel_id TEXT NOT NULL,
+      message_id TEXT,
+      title TEXT DEFAULT '🔗 Verify your wallet!',
+      description TEXT DEFAULT 'To get access to community roles, verify your wallet by clicking the button below.',
+      color TEXT DEFAULT '#FFD700',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS ticket_sequences (
       name TEXT PRIMARY KEY,
       value INTEGER DEFAULT 0
@@ -340,6 +354,7 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_tickets_channel ON tickets(channel_id);
     CREATE INDEX IF NOT EXISTS idx_ticket_guild_settings_guild ON ticket_guild_settings(guild_id);
     CREATE INDEX IF NOT EXISTS idx_ticket_panels_channel ON ticket_panels(channel_id);
+    CREATE INDEX IF NOT EXISTS idx_verification_panels_guild ON verification_panels(guild_id);
 
     CREATE TABLE IF NOT EXISTS tenants (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

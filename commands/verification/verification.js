@@ -6,6 +6,8 @@ const tokenService = require('../../services/tokenService');
 const vpService = require('../../services/vpService');
 const tenantService = require('../../services/tenantService');
 const settingsManager = require('../../config/settings');
+const { applyEmbedBranding } = require('../../services/embedBranding');
+const db = require('../../database/db');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
 const nftActivityService = require('../../services/nftActivityService');
@@ -671,7 +673,7 @@ module.exports = {
     const webUrl = process.env.WEB_URL || 'http://localhost:3000';
 
     const title = interaction.options.getString('title') || '🔗 Verify your wallet!';
-    const description = interaction.options.getString('description') || 'To get access to Family roles, verify your wallet with Solpranos by clicking the button below.';
+    const description = interaction.options.getString('description') || 'To get access to community roles, verify your wallet by clicking the button below.';
     const colorHex = interaction.options.getString('color') || '#FFD700';
 
     const colorValue = colorHex.startsWith('#') ? colorHex : `#${colorHex}`;
@@ -685,7 +687,16 @@ module.exports = {
       .setColor(colorValue)
       .setTitle(title)
       .setDescription(description)
-      .setFooter({ text: 'Solpranos', iconURL: interaction.client.user.displayAvatarURL({ size: 32 }) });
+      .setTimestamp();
+
+    applyEmbedBranding(embed, {
+      guildId: interaction.guildId || '',
+      moduleKey: 'verification',
+      defaultColor: colorValue,
+      defaultFooter: 'Powered by Guild Pilot',
+      fallbackLogoUrl: interaction.client.user.displayAvatarURL({ size: 64 }) || null,
+      useThumbnail: false,
+    });
 
     const row = new ActionRowBuilder()
       .addComponents(
@@ -703,7 +714,29 @@ module.exports = {
           .setURL('https://the-solpranos.com/help')
       );
 
-    await interaction.channel.send({ embeds: [embed], components: [row] });
+    const panelMessage = await interaction.channel.send({ embeds: [embed], components: [row] });
+    try {
+      db.prepare(`
+        INSERT INTO verification_panels (guild_id, channel_id, message_id, title, description, color, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(guild_id) DO UPDATE SET
+          channel_id = excluded.channel_id,
+          message_id = excluded.message_id,
+          title = excluded.title,
+          description = excluded.description,
+          color = excluded.color,
+          updated_at = CURRENT_TIMESTAMP
+      `).run(
+        interaction.guildId || '',
+        interaction.channelId || '',
+        panelMessage.id,
+        title,
+        description,
+        colorValue
+      );
+    } catch (e) {
+      logger.warn(`Failed to persist verification panel metadata: ${e.message}`);
+    }
     await interaction.editReply({ content: '✅ Verification panel posted!' });
     logger.log(`Admin ${interaction.user.username} posted verification panel`);
   },

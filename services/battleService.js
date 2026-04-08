@@ -1395,7 +1395,7 @@ class BattleService {
 
     applyEmbedBranding(embed, {
       guildId: lobby.guild_id || '',
-      moduleKey: 'battle',
+      moduleKey: 'minigames',
       defaultColor: eraColor,
       defaultFooter: 'Powered by Guild Pilot',
       fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,

@@ -34,6 +34,7 @@ class SettingsManager {
 
       // Module Toggles (per-module control)
       moduleBattleEnabled: true,
+      moduleMinigamesEnabled: true,
       moduleGovernanceEnabled: true,
       moduleVerificationEnabled: true,
       moduleMissionsEnabled: true,
@@ -250,6 +251,7 @@ class SettingsManager {
       // Module toggles are booleans - validate type
       const moduleKeys = [
         'moduleBattleEnabled',
+        'moduleMinigamesEnabled',
         'moduleGovernanceEnabled',
         'moduleVerificationEnabled',
         'moduleMissionsEnabled',

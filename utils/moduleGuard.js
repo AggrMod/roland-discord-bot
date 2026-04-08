@@ -13,6 +13,7 @@ const DEFAULT_TOGGLES = Object.freeze({
   ticketingEnabled: true,
   engagementEnabled: true,
   selfserverolesEnabled: true,
+  minigamesEnabled: true,
   battleEnabled: true,
   heistEnabled: false
 });
@@ -48,15 +49,35 @@ class ModuleGuard {
     }
   }
 
+  getModuleCompatibilityKeys(moduleName) {
+    const normalized = String(moduleName || '').trim().toLowerCase();
+    if (!normalized) return [];
+    if (normalized === 'wallettracker') return ['wallettracker', 'treasury'];
+    if (normalized === 'battle' || normalized === 'minigames') return ['minigames', 'battle'];
+    return [normalized];
+  }
+
   isModuleEnabled(moduleName) {
-    const key = `${moduleName}Enabled`;
-    return this.toggles[key] === true;
+    const keys = this.getModuleCompatibilityKeys(moduleName);
+    for (const moduleKey of keys) {
+      if (this.toggles[`${moduleKey}Enabled`] === true) {
+        return true;
+      }
+    }
+    return false;
   }
 
   setModuleEnabled(moduleName, enabled) {
-    const key = `${moduleName}Enabled`;
-    if (this.toggles.hasOwnProperty(key)) {
-      this.toggles[key] = enabled;
+    const keys = this.getModuleCompatibilityKeys(moduleName);
+    let updated = false;
+    for (const moduleKey of keys) {
+      const key = `${moduleKey}Enabled`;
+      if (Object.prototype.hasOwnProperty.call(this.toggles, key)) {
+        this.toggles[key] = enabled;
+        updated = true;
+      }
+    }
+    if (updated) {
       this.saveToggles();
       return true;
     }
@@ -74,33 +95,16 @@ class ModuleGuard {
   async checkModuleEnabled(interaction, moduleName) {
     const guildId = interaction?.guildId || null;
     let enabled = this.isModuleEnabled(moduleName);
+    const compatibleModuleKeys = this.getModuleCompatibilityKeys(moduleName);
 
     if (guildId) {
       try {
         const tenantService = require('../services/tenantService');
         if (tenantService.isMultitenantEnabled()) {
-          enabled = tenantService.isModuleEnabled(guildId, moduleName);
+          enabled = compatibleModuleKeys.some(moduleKey => tenantService.isModuleEnabled(guildId, moduleKey));
         }
       } catch (error) {
         logger.warn(`Falling back to global module toggle for ${moduleName}: ${error.message}`);
-      }
-    }
-
-    // Compatibility alias while wallet tracker transitions out of "treasury".
-    if (!enabled && moduleName === 'wallettracker') {
-      if (guildId) {
-        try {
-          const tenantService = require('../services/tenantService');
-          if (tenantService.isMultitenantEnabled()) {
-            enabled = tenantService.isModuleEnabled(guildId, 'treasury');
-          } else {
-            enabled = this.isModuleEnabled('treasury');
-          }
-        } catch (_error) {
-          enabled = this.isModuleEnabled('treasury');
-        }
-      } else {
-        enabled = this.isModuleEnabled('treasury');
       }
     }
 
@@ -115,6 +119,7 @@ class ModuleGuard {
       wallettracker: 'Wallet Tracker',
       nfttracker: 'NFT Tracker',
       tokentracker: 'Token Activity Tracker',
+      minigames: 'Minigames',
       battle: 'Battle',
       heist: 'Heist'
     };

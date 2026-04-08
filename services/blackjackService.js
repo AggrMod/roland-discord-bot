@@ -109,7 +109,7 @@ class BlackjackService {
   }
 
   _applyAuthor(embed, guildId) {
-    try { const br = getBranding(guildId,'battle'); if (br.logo) embed.setAuthor({ name: br.brandName||'Guild Pilot', iconURL: br.logo }); else embed.setAuthor({ name: br.brandName||'Guild Pilot' }); } catch {}
+    try { const br = getBranding(guildId, 'minigames'); if (br.logo) embed.setAuthor({ name: br.brandName||'Guild Pilot', iconURL: br.logo }); else embed.setAuthor({ name: br.brandName||'Guild Pilot' }); } catch {}
   }
 
   buildLobbyEmbed(game, guildId) {
@@ -118,7 +118,7 @@ class BlackjackService {
       .addFields({ name: '👥 Players', value: game.players.size > 0 ? `${game.players.size} waiting` : '*Be the first!*', inline: true })
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#f59e0b', defaultFooter: `Starts in ${game.gatherSecs}s · Need at least 2 players` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: `Starts in ${game.gatherSecs}s · Need at least 2 players` });
     return e;
   }
 
@@ -136,7 +136,7 @@ class BlackjackService {
       .setDescription(`**Dealer:** ${dealerShow}\n\n**Players:**\n${playerLines}`)
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#6366f1', defaultFooter: 'GuildPilot · Blackjack' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: 'GuildPilot · Blackjack' });
     return e;
   }
 
@@ -147,7 +147,7 @@ class BlackjackService {
       .setDescription(`Your hand: ${handStr(hand)} — **${val}**${bust ? '\n\n💀 **BUST!**' : ''}\n\nReact 👆 to **Hit** or ✋ to **Stand**. You have **${TURN_SECS}s**.`)
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: bust ? '#ef4444' : val >= 17 ? '#fbbf24' : '#4ade80', defaultFooter: 'React to take your turn' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: bust ? '#ef4444' : val >= 17 ? '#fbbf24' : '#4ade80', defaultFooter: 'React to take your turn' });
     return e;
   }
 
@@ -161,7 +161,7 @@ class BlackjackService {
       .setDescription(`**Dealer:** ${dealerStr}\n\n${lines}`)
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot · Blackjack' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot · Blackjack' });
     return e;
   }
 
@@ -171,14 +171,14 @@ class BlackjackService {
       .setDescription(`🎉 ${mention} beat${winners.length===1?'s':''} the dealer!\n\n**🎴 Blackjack Champion${winners.length>1?'s':''}!**`)
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot · Blackjack' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot · Blackjack' });
     return e;
   }
 
   buildCancelledEmbed(reason, guildId) {
     const e = new EmbedBuilder().setTitle('🎴 Blackjack').setDescription(reason).setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#64748b', defaultFooter: 'GuildPilot · Blackjack' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#64748b', defaultFooter: 'GuildPilot · Blackjack' });
     return e;
   }
 }

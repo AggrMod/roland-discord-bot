@@ -481,8 +481,15 @@ class TenantService {
       return true;
     }
 
+    const normalizedModuleKey = String(moduleKey || '').trim().toLowerCase();
+    const compatibleKeys = normalizedModuleKey === 'wallettracker'
+      ? ['wallettracker', 'treasury']
+      : (normalizedModuleKey === 'battle' || normalizedModuleKey === 'minigames')
+        ? ['minigames', 'battle']
+        : [normalizedModuleKey];
+
     if (!MULTITENANT_ENABLED) {
-      return moduleGuard.isModuleEnabled(moduleKey);
+      return compatibleKeys.some(key => moduleGuard.isModuleEnabled(key));
     }
 
     const context = this.getTenantContext(guildId);
@@ -490,17 +497,20 @@ class TenantService {
       return true;
     }
 
-    const row = db.prepare(`
+    const stmt = db.prepare(`
       SELECT enabled
       FROM tenant_modules
       WHERE tenant_id = ? AND module_key = ?
-    `).get(context.tenant.id, moduleKey);
+    `);
 
-    if (!row) {
-      return true;
+    for (const key of compatibleKeys) {
+      const row = stmt.get(context.tenant.id, key);
+      if (row) {
+        return row.enabled === 1;
+      }
     }
 
-    return row.enabled === 1;
+    return true;
   }
 
   logAudit(guildId, actorId, action, beforeValue, afterValue) {
@@ -617,7 +627,7 @@ class TenantService {
 
   setTenantModule(guildId, moduleKey, enabled, actorId) {
     const normalizedGuildId = normalizeGuildId(guildId);
-    const normalizedModuleKey = normalizeString(moduleKey);
+    const normalizedModuleKey = normalizeString(moduleKey)?.toLowerCase();
 
     if (!normalizedGuildId) {
       return { success: false, message: 'guildId is required' };
@@ -634,13 +644,33 @@ class TenantService {
       return { success: false, message: 'Tenant not found' };
     }
 
-    db.prepare(`
+    const requestedEnabled = normalizeBoolean(enabled) ? 1 : 0;
+    const moduleKeysToWrite = [normalizedModuleKey];
+    if (normalizedModuleKey === 'battle' || normalizedModuleKey === 'minigames') {
+      moduleKeysToWrite.length = 0;
+      moduleKeysToWrite.push('minigames');
+      const hasLegacyBattleRow = db.prepare(`
+        SELECT 1
+        FROM tenant_modules
+        WHERE tenant_id = ? AND module_key = 'battle'
+        LIMIT 1
+      `).get(tenantId);
+      if (hasLegacyBattleRow) {
+        moduleKeysToWrite.push('battle');
+      }
+    }
+
+    const upsertModuleStmt = db.prepare(`
       INSERT INTO tenant_modules (tenant_id, module_key, enabled)
       VALUES (?, ?, ?)
       ON CONFLICT(tenant_id, module_key) DO UPDATE SET
         enabled = excluded.enabled,
         updated_at = CURRENT_TIMESTAMP
-    `).run(tenantId, normalizedModuleKey, normalizeBoolean(enabled) ? 1 : 0);
+    `);
+
+    for (const moduleKeyToWrite of moduleKeysToWrite) {
+      upsertModuleStmt.run(tenantId, moduleKeyToWrite, requestedEnabled);
+    }
 
     const after = this.getTenantContext(normalizedGuildId);
     this.logAudit(guildId, actorId, 'set_module', before, after);

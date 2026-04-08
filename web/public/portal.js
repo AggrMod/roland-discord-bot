@@ -1394,6 +1394,9 @@ function updateSidebarModuleNav() {
 }
 
 function applyTenantModuleNavVisibility(settings = {}) {
+  const minigamesEnabled = settings.moduleMinigamesEnabled !== undefined
+    ? !!settings.moduleMinigamesEnabled
+    : !!settings.moduleBattleEnabled;
   const moduleState = {
     governance: !!settings.moduleGovernanceEnabled,
     verification: !!settings.moduleVerificationEnabled,
@@ -1407,7 +1410,8 @@ function applyTenantModuleNavVisibility(settings = {}) {
     ticketing: !!settings.moduleTicketingEnabled,
     engagement: !!settings.moduleEngagementEnabled,
     roleclaim: !!settings.moduleRoleClaimEnabled,
-    battle: !!settings.moduleBattleEnabled,
+    minigames: minigamesEnabled,
+    battle: minigamesEnabled,
     selfseveroles: !!settings.moduleRoleClaimEnabled
   };
   window._tenantModuleState = moduleState;
@@ -1418,7 +1422,8 @@ function applyTenantModuleNavVisibility(settings = {}) {
     treasury: moduleState.wallettracker,
     'nft-activity': moduleState.nfttracker,
     'token-activity': moduleState.tokentracker,
-    heist: moduleState.heist
+    heist: moduleState.heist,
+    battle: moduleState.minigames
   };
 
   Object.entries(sectionMap).forEach(([section, enabled]) => {
@@ -1441,7 +1446,8 @@ function applyTenantModuleNavVisibility(settings = {}) {
     'section-treasury': !moduleState.wallettracker,
     'section-nft-activity': !moduleState.nfttracker,
     'section-token-activity': !moduleState.tokentracker,
-    'section-heist': !moduleState.heist
+    'section-heist': !moduleState.heist,
+    'section-battle': !moduleState.minigames
   };
   if (activeSection && disabledActive[activeSection]) {
     switchSection('landing');
@@ -1456,7 +1462,7 @@ const SETTINGS_TAB_MODULE_MAP = {
   treasury:     'wallettracker',
   nfttracker:   'nfttracker',
   tokentracker: 'tokentracker',
-  battle:       'battle',
+  battle:       'minigames',
   heist:        'heist',
   selfserve:    'selfserveroles',
   ticketing:    'ticketing',
@@ -1467,6 +1473,9 @@ function applySettingsTabVisibility(settings = {}) {
   // assignedModuleKeys is only present when multiTenant is on and a tenant exists.
   // null means all modules are available (single-tenant mode).
   const assigned = settings.assignedModuleKeys || null;
+  const minigamesEnabled = settings.moduleMinigamesEnabled !== undefined
+    ? !!settings.moduleMinigamesEnabled
+    : !!settings.moduleBattleEnabled;
   const enabledByModule = {
     governance: !!settings.moduleGovernanceEnabled,
     verification: !!settings.moduleVerificationEnabled,
@@ -1477,7 +1486,7 @@ function applySettingsTabVisibility(settings = {}) {
       : !!settings.moduleTreasuryEnabled,
     nfttracker: !!settings.moduleNftTrackerEnabled,
     tokentracker: !!settings.moduleTokenTrackerEnabled,
-    battle: !!settings.moduleBattleEnabled,
+    minigames: minigamesEnabled,
     heist: !!settings.moduleMissionsEnabled,
     selfserveroles: !!settings.moduleRoleClaimEnabled,
     ticketing: !!settings.moduleTicketingEnabled,
@@ -2366,7 +2375,7 @@ function switchSection(sectionName, options = {}) {
     'nft-activity': 'nfttracker',
     'token-activity': 'tokentracker',
     heist: 'heist',
-    battle: 'battle',
+    battle: 'minigames',
     'self-serve-roles': 'selfseveroles',
     ticketing: 'ticketing',
     engagement: 'engagement'
@@ -3326,7 +3335,7 @@ const TENANT_MODULE_LABELS = {
   governance: 'Governance',
   treasury: 'Treasury',
   wallettracker: 'Wallet Tracker',
-  battle: 'Battle',
+  minigames: 'Minigames',
   heist: 'Heist',
   ticketing: 'Ticketing',
   nfttracker: 'NFT Tracker',
@@ -5140,7 +5149,7 @@ async function loadAdminHelpView() {
     ], 'Most game start/cancel flows require admin or moderator permissions. Game Night requires Growth+ plan in tenant mode.')}
     ${cmdSection('Config', 'CFG', [
       { name: '/config modules', desc: 'View module toggles', options: '-', example: '/config modules' },
-      { name: '/config toggle', desc: 'Toggle core module', options: 'module, enabled (required)', example: '/config toggle module:battle enabled:true' },
+      { name: '/config toggle', desc: 'Toggle core module', options: 'module, enabled (required)', example: '/config toggle module:minigames enabled:true' },
       { name: '/config status', desc: 'System status overview', options: '-', example: '/config status' }
     ])}
     ${cmdSection('Deprecated', 'OLD', [
@@ -5438,7 +5447,7 @@ async function loadAdminSettingsView() {
 
     // Module toggle mapping: settingsKey -> { label, icon, moduleKey (for assigned check) }
     const MODULE_TOGGLE_DEFS = [
-      { id: 'moduleBattleEnabled',       label: 'Battle',          icon: 'B',  moduleKey: 'battle'        },
+      { id: 'moduleMinigamesEnabled',    label: 'Minigames',       icon: '🎮', moduleKey: 'minigames'     },
       { id: 'moduleGovernanceEnabled',   label: 'Governance',      icon: 'G',  moduleKey: 'governance'    },
       { id: 'moduleVerificationEnabled', label: 'Verification',    icon: 'V',  moduleKey: 'verification'  },
       { id: 'moduleBrandingEnabled',     label: 'Branding',        icon: 'BR', moduleKey: 'branding'      },
@@ -5555,7 +5564,7 @@ async function savePortalSettings() {
 
   // Only save module toggles that are actually rendered (handles assigned-module filtering)
   const moduleIds = [
-    'moduleBattleEnabled', 'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleBrandingEnabled',
+    'moduleMinigamesEnabled', 'moduleBattleEnabled', 'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleBrandingEnabled',
     'moduleMissionsEnabled', 'moduleWalletTrackerEnabled', 'moduleTreasuryEnabled', 'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled',
     'moduleRoleClaimEnabled', 'moduleTicketingEnabled', 'moduleEngagementEnabled',
   ];

@@ -81,7 +81,7 @@ class RpsService {
   }
 
   _applyAuthor(embed, guildId) {
-    try { const br = getBranding(guildId,'battle'); if (br.logo) embed.setAuthor({ name: br.brandName||'Guild Pilot', iconURL: br.logo }); else embed.setAuthor({ name: br.brandName||'Guild Pilot' }); } catch {}
+    try { const br = getBranding(guildId, 'minigames'); if (br.logo) embed.setAuthor({ name: br.brandName||'Guild Pilot', iconURL: br.logo }); else embed.setAuthor({ name: br.brandName||'Guild Pilot' }); } catch {}
   }
 
   buildLobbyEmbed(game, guildId) {
@@ -90,7 +90,7 @@ class RpsService {
       .addFields({ name: '👥 Players', value: game.players.size > 0 ? `${game.players.size} waiting` : '*Be the first!*', inline: true })
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#6366f1', defaultFooter: `Starts in ${game.gatherSecs}s · Need at least 2 players` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Starts in ${game.gatherSecs}s · Need at least 2 players` });
     return e;
   }
 
@@ -99,7 +99,7 @@ class RpsService {
       .setDescription(`<@${playerA}> **vs** <@${playerB}>\n\nBoth react within **${MATCH_SECS}s**!\n🪨 Rock · ✂️ Scissors · 📄 Paper\n\n*First reaction counts!*`)
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#e74c3c', defaultFooter: `Round ${round} · React to vote` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#e74c3c', defaultFooter: `Round ${round} · React to vote` });
     return e;
   }
 
@@ -111,7 +111,7 @@ class RpsService {
       .setDescription(`<@${playerA}> played **${choiceLabel(choiceA)}**\n<@${playerB}> played **${choiceLabel(choiceB)}**\n\n${outcome}`)
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: result.draw ? '#6366f1' : '#4ade80', defaultFooter: `Round ${round}` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: result.draw ? '#6366f1' : '#4ade80', defaultFooter: `Round ${round}` });
     return e;
   }
 
@@ -120,7 +120,7 @@ class RpsService {
       .setDescription(`<@${playerId}> has a **bye** this round and automatically advances! 🍀`)
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#4ade80', defaultFooter: `Round ${round} bye` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#4ade80', defaultFooter: `Round ${round} bye` });
     return e;
   }
 
@@ -129,14 +129,14 @@ class RpsService {
       .setDescription(`🎉 <@${winnerId}> defeats all challengers after **${rounds} round${rounds===1?'':'s'}**!\n\n**🪨 RPS Champion!**`)
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot · RPS Tournament' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot · RPS Tournament' });
     return e;
   }
 
   buildCancelledEmbed(reason, guildId) {
     const e = new EmbedBuilder().setTitle('🪨 RPS Tournament').setDescription(reason).setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#64748b', defaultFooter: 'GuildPilot · RPS Tournament' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#64748b', defaultFooter: 'GuildPilot · RPS Tournament' });
     return e;
   }
 }

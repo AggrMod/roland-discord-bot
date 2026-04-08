@@ -112,7 +112,7 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      const allowed = await moduleGuard.checkModuleEnabled(interaction, 'battle');
+      const allowed = await moduleGuard.checkModuleEnabled(interaction, 'minigames');
       if (!allowed) return;
       if (!await moduleGuard.checkAdminOrModerator(interaction)) return;
 

@@ -115,7 +115,7 @@ class DiceDuelService {
   // ── Embeds ──────────────────────────────────────────────────────────────────
   _applyAuthor(embed, guildId) {
     try {
-      const br = getBranding(guildId, 'battle');
+      const br = getBranding(guildId, 'minigames');
       const name = br.brandName || 'Guild Pilot';
       if (br.logo) embed.setAuthor({ name, iconURL: br.logo });
       else embed.setAuthor({ name });
@@ -139,7 +139,7 @@ class DiceDuelService {
 
     this._applyAuthor(embed, guildId);
     applyEmbedBranding(embed, {
-      guildId, moduleKey: 'battle',
+      guildId, moduleKey: 'minigames',
       defaultColor: '#f59e0b',
       defaultFooter: `Starts in ${game.gatherSecs}s · Need at least 2 players`,
     });
@@ -169,7 +169,7 @@ class DiceDuelService {
 
     this._applyAuthor(embed, guildId);
     applyEmbedBranding(embed, {
-      guildId, moduleKey: 'battle',
+      guildId, moduleKey: 'minigames',
       defaultColor: '#e74c3c',
       defaultFooter: `Round ${game.roundNumber}`,
     });
@@ -185,7 +185,7 @@ class DiceDuelService {
 
     this._applyAuthor(embed, guildId);
     applyEmbedBranding(embed, {
-      guildId, moduleKey: 'battle',
+      guildId, moduleKey: 'minigames',
       defaultColor: '#ef4444',
       defaultFooter: remaining <= 1 ? 'Game ending...' : 'Next round starting soon...',
     });
@@ -200,7 +200,7 @@ class DiceDuelService {
 
     this._applyAuthor(embed, guildId);
     applyEmbedBranding(embed, {
-      guildId, moduleKey: 'battle',
+      guildId, moduleKey: 'minigames',
       defaultColor: '#f59e0b',
       defaultFooter: 'GuildPilot · Dice Duel',
     });
@@ -215,7 +215,7 @@ class DiceDuelService {
 
     this._applyAuthor(embed, guildId);
     applyEmbedBranding(embed, {
-      guildId, moduleKey: 'battle',
+      guildId, moduleKey: 'minigames',
       defaultColor: '#64748b',
       defaultFooter: 'GuildPilot · Dice Duel',
     });

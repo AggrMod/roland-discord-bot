@@ -42,7 +42,7 @@ const LIMIT_DEFINITIONS = Object.freeze({
   selfserveroles: {
     max_panels: { label: 'Max Role Panels' },
   },
-  battle: {
+  minigames: {
     max_bounties_per_battle: { label: 'Max Bounties Per Battle' },
   },
   engagement: {
@@ -58,7 +58,8 @@ function normalizeGuildId(guildId) {
 
 function normalizeModuleKey(moduleKey) {
   const normalized = String(moduleKey || '').trim().toLowerCase();
-  return MODULE_KEYS.has(normalized) ? normalized : '';
+  const resolved = normalized === 'battle' ? 'minigames' : normalized;
+  return MODULE_KEYS.has(resolved) ? resolved : '';
 }
 
 function normalizeLimitKey(limitKey) {

@@ -3,7 +3,7 @@ const MODULE_KEYS = Object.freeze([
   'governance',
   'treasury',
   'wallettracker',
-  'battle',
+  'minigames',
   'heist',
   'ticketing',
   'nfttracker',
@@ -46,7 +46,7 @@ const PLAN_PRESETS = Object.freeze({
       wallettracker: {
         max_tracked_wallets: 1
       },
-      battle: {
+      minigames: {
         max_bounties_per_battle: 0
       },
       heist: {
@@ -77,7 +77,7 @@ const PLAN_PRESETS = Object.freeze({
       governance: true,
       treasury: true,
       wallettracker: true,
-      battle: false,
+      minigames: false,
       heist: false,
       ticketing: true,
       nfttracker: true,
@@ -119,7 +119,7 @@ const PLAN_PRESETS = Object.freeze({
       wallettracker: {
         max_tracked_wallets: 25
       },
-      battle: {
+      minigames: {
         max_bounties_per_battle: 3
       },
       heist: {
@@ -150,7 +150,7 @@ const PLAN_PRESETS = Object.freeze({
       governance: true,
       treasury: true,
       wallettracker: true,
-      battle: true,
+      minigames: true,
       heist: false,
       ticketing: true,
       nfttracker: true,
@@ -192,7 +192,7 @@ const PLAN_PRESETS = Object.freeze({
       wallettracker: {
         max_tracked_wallets: 200
       },
-      battle: {
+      minigames: {
         max_bounties_per_battle: 3
       },
       heist: {
@@ -223,7 +223,7 @@ const PLAN_PRESETS = Object.freeze({
       governance: true,
       treasury: true,
       wallettracker: true,
-      battle: true,
+      minigames: true,
       heist: true,
       ticketing: true,
       nfttracker: true,
@@ -265,7 +265,7 @@ const PLAN_PRESETS = Object.freeze({
       wallettracker: {
         max_tracked_wallets: null
       },
-      battle: {
+      minigames: {
         max_bounties_per_battle: null
       },
       heist: {
@@ -296,7 +296,7 @@ const PLAN_PRESETS = Object.freeze({
       governance: true,
       treasury: true,
       wallettracker: true,
-      battle: true,
+      minigames: true,
       heist: true,
       ticketing: true,
       nfttracker: true,

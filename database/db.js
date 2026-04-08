@@ -813,6 +813,46 @@ function initDatabase() {
           AND existing.limit_key = tmo.limit_key
       )
   `); } catch (e) {}
+  try { db.exec(`
+    INSERT INTO tenant_modules (tenant_id, module_key, enabled, updated_at)
+    SELECT tm.tenant_id, 'minigames', tm.enabled, CURRENT_TIMESTAMP
+    FROM tenant_modules tm
+    WHERE tm.module_key = 'battle'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM tenant_modules existing
+        WHERE existing.tenant_id = tm.tenant_id
+          AND existing.module_key = 'minigames'
+      )
+  `); } catch (e) {}
+  try { db.exec(`
+    INSERT INTO plan_module_limits (plan_key, module_key, limit_key, limit_value, updated_at)
+    SELECT pml.plan_key, 'minigames', pml.limit_key, pml.limit_value, CURRENT_TIMESTAMP
+    FROM plan_module_limits pml
+    WHERE pml.module_key = 'battle'
+      AND pml.limit_key = 'max_bounties_per_battle'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM plan_module_limits existing
+        WHERE existing.plan_key = pml.plan_key
+          AND existing.module_key = 'minigames'
+          AND existing.limit_key = pml.limit_key
+      )
+  `); } catch (e) {}
+  try { db.exec(`
+    INSERT INTO tenant_module_limit_overrides (tenant_id, module_key, limit_key, limit_value, updated_at)
+    SELECT tmo.tenant_id, 'minigames', tmo.limit_key, tmo.limit_value, CURRENT_TIMESTAMP
+    FROM tenant_module_limit_overrides tmo
+    WHERE tmo.module_key = 'battle'
+      AND tmo.limit_key = 'max_bounties_per_battle'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM tenant_module_limit_overrides existing
+        WHERE existing.tenant_id = tmo.tenant_id
+          AND existing.module_key = 'minigames'
+          AND existing.limit_key = tmo.limit_key
+      )
+  `); } catch (e) {}
   try { db.exec("ALTER TABLE proposals ADD COLUMN guild_id TEXT DEFAULT ''"); } catch (e) {}
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_proposals_guild ON proposals(guild_id)"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_billing ADD COLUMN customer_id TEXT"); } catch (e) {}

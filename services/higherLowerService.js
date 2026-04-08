@@ -170,7 +170,7 @@ class HigherLowerService {
   // ── Embed helpers ──────────────────────────────────────────────────────────
   _applyAuthor(embed, guildId) {
     try {
-      const br = getBranding(guildId, 'battle');
+      const br = getBranding(guildId, 'minigames');
       const name = br.brandName || 'Guild Pilot';
       if (br.logo) embed.setAuthor({ name, iconURL: br.logo });
       else embed.setAuthor({ name });
@@ -197,7 +197,7 @@ class HigherLowerService {
     this._applyAuthor(embed, guildId);
     applyEmbedBranding(embed, {
       guildId,
-      moduleKey: 'battle',
+      moduleKey: 'minigames',
       defaultColor: '#f59e0b',
       defaultFooter: `Starts in ${game.gatherSecs}s · Need at least 2 players`,
     });
@@ -222,7 +222,7 @@ class HigherLowerService {
     this._applyAuthor(embed, guildId);
     applyEmbedBranding(embed, {
       guildId,
-      moduleKey: 'battle',
+      moduleKey: 'minigames',
       defaultColor: isRed ? '#e74c3c' : '#2c3e50',
       defaultFooter: `Round ${game.roundNumber} · ⬆️ Higher or ⬇️ Lower`,
     });
@@ -257,7 +257,7 @@ class HigherLowerService {
     this._applyAuthor(embed, guildId);
     applyEmbedBranding(embed, {
       guildId,
-      moduleKey: 'battle',
+      moduleKey: 'minigames',
       defaultColor: losers.length > 0 ? '#ef4444' : '#4ade80',
       defaultFooter: alive.length <= 1 ? 'Game ending...' : 'Next round starting shortly...',
     });
@@ -273,7 +273,7 @@ class HigherLowerService {
     this._applyAuthor(embed, guildId);
     applyEmbedBranding(embed, {
       guildId,
-      moduleKey: 'battle',
+      moduleKey: 'minigames',
       defaultColor: '#f59e0b',
       defaultFooter: 'GuildPilot · Higher or Lower',
     });
@@ -289,7 +289,7 @@ class HigherLowerService {
     this._applyAuthor(embed, guildId);
     applyEmbedBranding(embed, {
       guildId,
-      moduleKey: 'battle',
+      moduleKey: 'minigames',
       defaultColor: '#6366f1',
       defaultFooter: 'GuildPilot · Higher or Lower',
     });
@@ -305,7 +305,7 @@ class HigherLowerService {
     this._applyAuthor(embed, guildId);
     applyEmbedBranding(embed, {
       guildId,
-      moduleKey: 'battle',
+      moduleKey: 'minigames',
       defaultColor: '#64748b',
       defaultFooter: 'GuildPilot · Higher or Lower',
     });

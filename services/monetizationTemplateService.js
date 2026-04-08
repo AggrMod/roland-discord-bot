@@ -17,7 +17,7 @@ const TEMPLATE_CATALOG = Object.freeze([
       tokentracker: true,
       selfserveroles: true,
       branding: true,
-      battle: false,
+      minigames: false,
       heist: false,
       engagement: false
     },
@@ -38,7 +38,7 @@ const TEMPLATE_CATALOG = Object.freeze([
       tokentracker: true,
       selfserveroles: true,
       branding: true,
-      battle: true,
+      minigames: true,
       heist: false,
       engagement: true
     },
@@ -57,7 +57,7 @@ const TEMPLATE_CATALOG = Object.freeze([
       governance: true,
       treasury: true,
       wallettracker: true,
-      battle: true,
+      minigames: true,
       heist: true,
       ticketing: true,
       nfttracker: true,
@@ -79,7 +79,7 @@ const TEMPLATE_CATALOG = Object.freeze([
       governance: false,
       treasury: true,
       wallettracker: true,
-      battle: true,
+      minigames: true,
       heist: true,
       ticketing: true,
       nfttracker: true,
@@ -90,7 +90,7 @@ const TEMPLATE_CATALOG = Object.freeze([
       engagement: true
     },
     limitOverrides: {
-      battle: { max_bounties_per_battle: 3 },
+      minigames: { max_bounties_per_battle: 3 },
       heist: { max_active_missions: 75 },
       engagement: { max_shop_items: 150 }
     }

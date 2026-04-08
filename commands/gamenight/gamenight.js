@@ -25,7 +25,7 @@ module.exports = {
   async execute(interaction) {
     try {
       // Module + permission check
-      if (!await moduleGuard.checkModuleEnabled(interaction, 'battle')) return;
+      if (!await moduleGuard.checkModuleEnabled(interaction, 'minigames')) return;
       if (!await moduleGuard.checkAdminOrModerator(interaction)) return;
       // Plan check — Growth minimum
       if (!await moduleGuard.checkMinimumPlan(interaction, 'growth')) return;

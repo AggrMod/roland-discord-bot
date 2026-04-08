@@ -26,6 +26,7 @@ module.exports = {
               { name: 'Verification', value: 'verification' },
               { name: 'Governance', value: 'governance' },
               { name: 'Treasury', value: 'treasury' },
+              { name: 'Minigames', value: 'minigames' },
               { name: 'Battle', value: 'battle' },
               { name: 'Heist', value: 'heist' }
             ))
@@ -170,6 +171,7 @@ function getModuleIcon(module) {
     verification: '🔐',
     governance: '🏛️',
     treasury: '💰',
+    minigames: '🎮',
     battle: '⚔️',
     heist: '🎯'
   };

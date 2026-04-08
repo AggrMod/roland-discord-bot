@@ -43,7 +43,7 @@ class ReactionRaceService {
   }
 
   _applyAuthor(embed, guildId) {
-    try { const br = getBranding(guildId, 'battle'); if (br.logo) embed.setAuthor({ name: br.brandName || 'Guild Pilot', iconURL: br.logo }); else embed.setAuthor({ name: br.brandName || 'Guild Pilot' }); } catch {}
+    try { const br = getBranding(guildId, 'minigames'); if (br.logo) embed.setAuthor({ name: br.brandName || 'Guild Pilot', iconURL: br.logo }); else embed.setAuthor({ name: br.brandName || 'Guild Pilot' }); } catch {}
   }
 
   buildLobbyEmbed(game, guildId) {
@@ -52,14 +52,14 @@ class ReactionRaceService {
       .addFields({ name: '👥 Players Joined', value: game.players.size > 0 ? `${game.players.size} waiting` : '*Be the first!*', inline: true })
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#f59e0b', defaultFooter: `Starts in ${game.gatherSecs}s · Need at least 2 players` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: `Starts in ${game.gatherSecs}s · Need at least 2 players` });
     return e;
   }
 
   buildReadyEmbed(round, guildId) {
     const e = new EmbedBuilder().setTitle(`⚡ Round ${round} — Get Ready!`).setDescription('A random delay is coming...\n\n🔴 **Wait for it...**').setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#f59e0b', defaultFooter: `Round ${round}` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: `Round ${round}` });
     return e;
   }
 
@@ -69,7 +69,7 @@ class ReactionRaceService {
       .addFields({ name: '👥 Still In', value: `${alive}`, inline: true })
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#4ade80', defaultFooter: `Round ${round} · Slowest is out!` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#4ade80', defaultFooter: `Round ${round} · Slowest is out!` });
     return e;
   }
 
@@ -82,21 +82,21 @@ class ReactionRaceService {
         { name: '👥 Remaining', value: `${remaining}`, inline: true }
       ).setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: eliminated.length ? '#ef4444' : '#4ade80', defaultFooter: remaining <= 1 ? 'Game ending...' : 'Next round soon...' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: eliminated.length ? '#ef4444' : '#4ade80', defaultFooter: remaining <= 1 ? 'Game ending...' : 'Next round soon...' });
     return e;
   }
 
   buildWinnerEmbed({ winnerId, rounds, guildId }) {
     const e = new EmbedBuilder().setTitle('🏆 Reaction Race — Champion!').setDescription(`🎉 <@${winnerId}> has the fastest fingers after **${rounds} round${rounds===1?'':'s'}**!\n\n**⚡ Reaction Race Champion!**`).setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot · Reaction Race' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot · Reaction Race' });
     return e;
   }
 
   buildCancelledEmbed(reason, guildId) {
     const e = new EmbedBuilder().setTitle('⚡ Reaction Race').setDescription(reason).setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#64748b', defaultFooter: 'GuildPilot · Reaction Race' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#64748b', defaultFooter: 'GuildPilot · Reaction Race' });
     return e;
   }
 }

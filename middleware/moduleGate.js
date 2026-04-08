@@ -12,12 +12,22 @@ const DISPLAY_NAMES = {
   selfserveroles: 'Self-Serve Roles',
   branding: 'Branding',
   engagement: 'Engagement',
+  minigames: 'Minigames',
   battle: 'Battle',
   heist: 'Heist'
 };
 
+function getCompatibleModuleKeys(moduleKey) {
+  const normalized = String(moduleKey || '').trim().toLowerCase();
+  if (!normalized) return [];
+  if (normalized === 'wallettracker') return ['wallettracker', 'treasury'];
+  if (normalized === 'battle' || normalized === 'minigames') return ['minigames', 'battle'];
+  return [normalized];
+}
+
 async function moduleGate(interaction, moduleKey, options = {}) {
   const resolvedModuleKey = moduleKey || getCommandModuleKey(interaction?.commandName);
+  const compatibleModuleKeys = getCompatibleModuleKeys(resolvedModuleKey);
 
   if (!resolvedModuleKey) {
     return true;
@@ -28,10 +38,7 @@ async function moduleGate(interaction, moduleKey, options = {}) {
   if (!tenantService.isMultitenantEnabled()) {
     try {
       const moduleGuard = require('../utils/moduleGuard');
-      let enabled = moduleGuard.isModuleEnabled(resolvedModuleKey);
-      if (!enabled && resolvedModuleKey === 'wallettracker') {
-        enabled = moduleGuard.isModuleEnabled('treasury');
-      }
+      const enabled = compatibleModuleKeys.some(moduleKey => moduleGuard.isModuleEnabled(moduleKey));
       if (!enabled) {
         const displayName = options.displayName || DISPLAY_NAMES[resolvedModuleKey] || resolvedModuleKey;
         const reply = { content: `The **${displayName}** module is currently disabled.`, ephemeral: true };
@@ -50,10 +57,7 @@ async function moduleGate(interaction, moduleKey, options = {}) {
     return true;
   }
 
-  if (tenantService.isModuleEnabled(interaction.guildId, resolvedModuleKey)) {
-    return true;
-  }
-  if (resolvedModuleKey === 'wallettracker' && tenantService.isModuleEnabled(interaction.guildId, 'treasury')) {
+  if (compatibleModuleKeys.some(moduleKey => tenantService.isModuleEnabled(interaction.guildId, moduleKey))) {
     return true;
   }
 

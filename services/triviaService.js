@@ -106,7 +106,7 @@ class TriviaService {
   }
 
   _applyAuthor(embed, guildId) {
-    try { const br = getBranding(guildId,'battle'); if (br.logo) embed.setAuthor({ name: br.brandName||'Guild Pilot', iconURL: br.logo }); else embed.setAuthor({ name: br.brandName||'Guild Pilot' }); } catch {}
+    try { const br = getBranding(guildId, 'minigames'); if (br.logo) embed.setAuthor({ name: br.brandName||'Guild Pilot', iconURL: br.logo }); else embed.setAuthor({ name: br.brandName||'Guild Pilot' }); } catch {}
   }
 
   buildLobbyEmbed(game, guildId) {
@@ -115,7 +115,7 @@ class TriviaService {
       .addFields({ name: '👥 Players', value: game.players.size > 0 ? `${game.players.size} waiting` : '*Be the first!*', inline: true })
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#6366f1', defaultFooter: `Starts in ${game.gatherSecs}s · Need at least 2 players` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Starts in ${game.gatherSecs}s · Need at least 2 players` });
     return e;
   }
 
@@ -125,7 +125,7 @@ class TriviaService {
       .setDescription(`**${q.q}**\n\n${choices}\n\n*React with your answer — ${Q_SECS}s!*`)
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#6366f1', defaultFooter: `Question ${qNum} of ${total}` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Question ${qNum} of ${total}` });
     return e;
   }
 
@@ -137,7 +137,7 @@ class TriviaService {
       ].filter(Boolean).join('\n'))
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#4ade80', defaultFooter: `Q${qNum}/${total} resolved` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#4ade80', defaultFooter: `Q${qNum}/${total} resolved` });
     return e;
   }
 
@@ -146,7 +146,7 @@ class TriviaService {
     const lines = sorted.map(([id,s],i) => `${i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}.`} <@${id}> — **${s}/${qNum}**`).join('\n');
     const e = new EmbedBuilder().setTitle(`📊 Standings after Q${qNum}/${total}`).setDescription(lines||'*No scores yet*').setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#6366f1', defaultFooter: qNum < total ? 'Next question coming up...' : 'Final standings!' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: qNum < total ? 'Next question coming up...' : 'Final standings!' });
     return e;
   }
 
@@ -156,14 +156,14 @@ class TriviaService {
       .setDescription(`🎉 ${mention} wins with **${score}/${total}** correct!\n\n**❓ Trivia Champion${winners.length>1?'s':''}!**`)
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot · Trivia' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot · Trivia' });
     return e;
   }
 
   buildCancelledEmbed(reason, guildId) {
     const e = new EmbedBuilder().setTitle('❓ Trivia').setDescription(reason).setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'battle', defaultColor: '#64748b', defaultFooter: 'GuildPilot · Trivia' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#64748b', defaultFooter: 'GuildPilot · Trivia' });
     return e;
   }
 }

@@ -183,8 +183,8 @@ module.exports = {
   },
 
   async execute(interaction) {
-    // Check if battle module is enabled
-    if (!await moduleGuard.checkModuleEnabled(interaction, 'battle')) {
+    // Check if minigames module is enabled
+    if (!await moduleGuard.checkModuleEnabled(interaction, 'minigames')) {
       return;
     }
 
@@ -355,7 +355,7 @@ module.exports = {
     const bountyTargetIds = [...new Set(selectedBountyUsers.map(user => user.id))];
     const bountyLimitCheck = entitlementService.enforceLimit({
       guildId: interaction.guildId || '',
-      moduleKey: 'battle',
+      moduleKey: 'minigames',
       limitKey: 'max_bounties_per_battle',
       currentCount: 0,
       incrementBy: bountyTargetIds.length,

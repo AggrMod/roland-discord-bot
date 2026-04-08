@@ -2,6 +2,7 @@
   "verificationEnabled": true,
   "governanceEnabled": true,
   "treasuryEnabled": true,
+  "minigamesEnabled": true,
   "battleEnabled": true,
   "heistEnabled": false
 }

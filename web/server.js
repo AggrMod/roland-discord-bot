@@ -2148,7 +2148,11 @@ class WebServer {
 
         // In multitenant mode, module enabled states come from tenant module entitlements
         if (multiTenantEnabled && tenantContext?.tenant && tenantContext.modules) {
-          effectiveSettings.moduleBattleEnabled = !!tenantContext.modules.battle;
+          const minigamesEnabled = tenantContext.modules.minigames === undefined
+            ? !!tenantContext.modules.battle
+            : !!tenantContext.modules.minigames;
+          effectiveSettings.moduleMinigamesEnabled = minigamesEnabled;
+          effectiveSettings.moduleBattleEnabled = minigamesEnabled;
           effectiveSettings.moduleGovernanceEnabled = !!tenantContext.modules.governance;
           effectiveSettings.moduleVerificationEnabled = !!tenantContext.modules.verification;
           effectiveSettings.moduleMissionsEnabled = !!tenantContext.modules.heist;
@@ -2167,11 +2171,23 @@ class WebServer {
           if (tenantVerification.ogRoleId !== undefined) effectiveSettings.ogRoleId = tenantVerification.ogRoleId || '';
           if (tenantVerification.ogRoleLimit !== undefined) effectiveSettings.ogRoleLimit = tenantVerification.ogRoleLimit || 0;
           // Tell the frontend which module keys are actually assigned (exist in tenant_modules)
-          effectiveSettings.assignedModuleKeys = Object.keys(tenantContext.modules);
+          const assignedModuleKeys = Object.keys(tenantContext.modules);
+          if (assignedModuleKeys.includes('battle') && !assignedModuleKeys.includes('minigames')) {
+            assignedModuleKeys.push('minigames');
+          }
+          effectiveSettings.assignedModuleKeys = assignedModuleKeys;
         }
 
         if (effectiveSettings.moduleWalletTrackerEnabled === undefined) {
           effectiveSettings.moduleWalletTrackerEnabled = effectiveSettings.moduleTreasuryEnabled;
+        }
+        if (effectiveSettings.moduleMinigamesEnabled === undefined) {
+          effectiveSettings.moduleMinigamesEnabled = effectiveSettings.moduleBattleEnabled !== undefined
+            ? !!effectiveSettings.moduleBattleEnabled
+            : true;
+        }
+        if (effectiveSettings.moduleBattleEnabled === undefined) {
+          effectiveSettings.moduleBattleEnabled = !!effectiveSettings.moduleMinigamesEnabled;
         }
 
         // ogRoleId lives in og-role.json (ogRoleService).
@@ -2251,7 +2267,7 @@ class WebServer {
           'proposalsChannelId', 'votingChannelId', 'resultsChannelId', 'governanceLogChannelId',
           'quorumPercentage', 'supportThreshold', 'voteDurationHours',
           'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleTreasuryEnabled', 'moduleWalletTrackerEnabled',
-          'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleBrandingEnabled', 'moduleMissionsEnabled', 'moduleBattleEnabled',
+          'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleBrandingEnabled', 'moduleMissionsEnabled', 'moduleBattleEnabled', 'moduleMinigamesEnabled',
           'moduleTicketingEnabled', 'moduleRoleClaimEnabled', 'moduleEngagementEnabled',
           'battleRoundPauseMinSec', 'battleRoundPauseMaxSec', 'battleElitePrepSec', 'battleForcedEliminationIntervalRounds', 'battleDefaultEra',
           'baseVerifiedRoleId', 'autoResyncEnabled', 'ogRoleId', 'ogRoleLimit',
@@ -2286,7 +2302,8 @@ class WebServer {
           const tenantContext = tenantService.getTenantContext(req.guildId);
           if (tenantContext?.tenant) {
             const moduleFieldMap = {
-              moduleBattleEnabled: 'battle',
+              moduleBattleEnabled: 'minigames',
+              moduleMinigamesEnabled: 'minigames',
               moduleGovernanceEnabled: 'governance',
               moduleVerificationEnabled: 'verification',
               moduleMissionsEnabled: 'heist',
@@ -2302,8 +2319,18 @@ class WebServer {
             for (const [field, moduleKey] of Object.entries(moduleFieldMap)) {
               if (sanitized[field] !== undefined) {
                 // Only allow toggling modules that are actually assigned to this tenant
-                if (tenantContext.modules && moduleKey in tenantContext.modules) {
-                  tenantService.setTenantModule(req.guildId, moduleKey, !!sanitized[field], req.session?.discordUser?.id);
+                if (tenantContext.modules) {
+                  const requestedEnabled = !!sanitized[field];
+                  if (moduleKey === 'minigames') {
+                    if ('minigames' in tenantContext.modules) {
+                      tenantService.setTenantModule(req.guildId, 'minigames', requestedEnabled, req.session?.discordUser?.id);
+                    }
+                    if ('battle' in tenantContext.modules) {
+                      tenantService.setTenantModule(req.guildId, 'battle', requestedEnabled, req.session?.discordUser?.id);
+                    }
+                  } else if (moduleKey in tenantContext.modules) {
+                    tenantService.setTenantModule(req.guildId, moduleKey, requestedEnabled, req.session?.discordUser?.id);
+                  }
                 }
                 delete sanitized[field]; // Remove from settings.json payload regardless
               }

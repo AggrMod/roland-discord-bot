@@ -5487,6 +5487,34 @@ function populateChannelSelects(selectIds, channels, settings, settingKeys) {
   });
 }
 
+async function populateChannelSelect(selectId, selectedValue) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+
+  sel.innerHTML = '<option value="">Loading channels...</option>';
+
+  try {
+    const chRes = await fetch('/api/admin/discord/channels', {
+      credentials: 'include',
+      headers: buildTenantRequestHeaders()
+    });
+    if (!chRes.ok) {
+      throw new Error('Failed to fetch channels');
+    }
+
+    const chJson = await chRes.json();
+    const channels = chJson.success ? (chJson.channels || []) : [];
+    populateChannelSelects([selectId], channels, { selectedValue: selectedValue || '' }, ['selectedValue']);
+
+    if (!channels.length) {
+      sel.innerHTML = '<option value="">-- No channels available --</option>';
+    }
+  } catch (error) {
+    console.error('[Channels] Failed to load channel select:', error);
+    sel.innerHTML = '<option value="">-- Failed to load channels --</option>';
+  }
+}
+
 // ==================== GOVERNANCE SETTINGS ====================
 
 async function saveGovernanceSettings() {

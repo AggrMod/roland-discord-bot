@@ -3,6 +3,7 @@ const logger = require('../utils/logger');
 const tenantService = require('./tenantService');
 
 const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+const TOKEN_2022_PROGRAM_ID = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
 const MOCK_MODE = process.env.MOCK_MODE === 'true';
 
 function isValidSolanaAddress(address) {
@@ -60,10 +61,22 @@ class TokenService {
 
     try {
       const owner = new PublicKey(normalizedWallet);
-      const response = await this.connection.getParsedTokenAccountsByOwner(owner, { programId: TOKEN_PROGRAM_ID });
+      const responses = await Promise.allSettled([
+        this.connection.getParsedTokenAccountsByOwner(owner, { programId: TOKEN_PROGRAM_ID }),
+        this.connection.getParsedTokenAccountsByOwner(owner, { programId: TOKEN_2022_PROGRAM_ID })
+      ]);
+
+      const tokenAccounts = [];
+      for (const result of responses) {
+        if (result.status === 'fulfilled') {
+          tokenAccounts.push(...(result.value?.value || []));
+        } else {
+          logger.warn(`Token account fetch failed for wallet ${normalizedWallet}: ${result.reason?.message || result.reason}`);
+        }
+      }
 
       const byMint = new Map();
-      for (const entry of response.value || []) {
+      for (const entry of tokenAccounts) {
         const info = entry?.account?.data?.parsed?.info;
         const mint = String(info?.mint || '').trim();
         if (!mint) continue;

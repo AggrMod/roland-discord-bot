@@ -4,9 +4,25 @@ const roleService = require('../../services/roleService');
 const nftService = require('../../services/nftService');
 const tokenService = require('../../services/tokenService');
 const vpService = require('../../services/vpService');
+const tenantService = require('../../services/tenantService');
+const settingsManager = require('../../config/settings');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
 const nftActivityService = require('../../services/nftActivityService');
+
+function isGovernanceEnabled(guildId = null) {
+  try {
+    if (guildId && tenantService.isMultitenantEnabled()) {
+      return tenantService.isModuleEnabled(guildId, 'governance');
+    }
+  } catch (_error) {}
+
+  try {
+    return settingsManager.getSettings().moduleGovernanceEnabled !== false;
+  } catch (_error) {
+    return true;
+  }
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -417,6 +433,7 @@ module.exports = {
 
     await roleService.updateUserRoles(discordId, interaction.user.username, interaction.guildId);
     const userInfo = await roleService.getUserInfo(discordId);
+    const governanceEnabled = isGovernanceEnabled(interaction.guildId || null);
 
     if (!wallets || wallets.length === 0) {
       const embed = new EmbedBuilder()
@@ -472,6 +489,13 @@ module.exports = {
       rolesList = 'No tier roles qualified yet. Get more NFTs to unlock roles!';
     }
 
+    const fields = [
+      { name: '🎭 Tier', value: userTier?.name || 'None', inline: true }
+    ];
+    if (governanceEnabled) {
+      fields.unshift({ name: '💪 Voting Power', value: userInfo?.voting_power?.toString() || '0', inline: true });
+    }
+
     const embed = new EmbedBuilder()
       .setColor('#FFD700')
       .setTitle('✅ Wallet Verification Status')
@@ -481,10 +505,7 @@ module.exports = {
         `${trackedTokenMints.length ? `Tracking **${trackedTokenMints.length}** token mint(s) for role rules\n\n` : '\n'}` +
         rolesList
       )
-      .addFields(
-        { name: '💪 Voting Power', value: userInfo?.voting_power?.toString() || '0', inline: true },
-        { name: '🎭 Tier', value: userTier?.name || 'None', inline: true }
-      )
+      .addFields(fields)
       .setFooter({ text: 'Keep collecting to unlock higher tiers!' })
       .setTimestamp();
 
@@ -554,17 +575,21 @@ module.exports = {
         await roleService.syncUserDiscordRoles(interaction.guild, discordId, interaction.guildId || null);
       }
       const userInfo = await roleService.getUserInfo(discordId);
+      const governanceEnabled = isGovernanceEnabled(interaction.guildId || null);
+      const fields = [
+        { name: '🎭 Tier', value: userInfo?.tier || 'Associate', inline: true },
+        { name: '📦 NFTs', value: userInfo?.total_nfts?.toString() || '0', inline: true },
+        { name: '🪙 Tracked Tokens', value: Number(userInfo?.total_tokens || 0).toLocaleString(undefined, { maximumFractionDigits: 6 }), inline: true }
+      ];
+      if (governanceEnabled) {
+        fields.unshift({ name: '💪 Voting Power', value: userInfo?.voting_power?.toString() || '0', inline: true });
+      }
 
       const embed = new EmbedBuilder()
         .setColor('#00FF00')
         .setTitle('✅ Roles Refreshed')
         .setDescription('Your roles have been updated based on your current holdings.')
-        .addFields(
-          { name: '💪 Voting Power', value: userInfo?.voting_power?.toString() || '0', inline: true },
-          { name: '🎭 Tier', value: userInfo?.tier || 'Associate', inline: true },
-          { name: '📦 NFTs', value: userInfo?.total_nfts?.toString() || '0', inline: true },
-          { name: '🪙 Tracked Tokens', value: Number(userInfo?.total_tokens || 0).toLocaleString(undefined, { maximumFractionDigits: 6 }), inline: true }
-        )
+        .addFields(fields)
         .setTimestamp();
 
       await interaction.editReply({ embeds: [embed] });
@@ -697,23 +722,27 @@ module.exports = {
     }
 
     const wallets = walletService.getAllUserWallets(targetUser.id);
+    const governanceEnabled = isGovernanceEnabled(interaction.guildId || null);
+    const exportFields = [
+      { name: 'NFT Holdings', value: `${userInfo.total_nfts}`, inline: true },
+      { name: 'Rank', value: `${userInfo.tier || 'Associate'}`, inline: true }
+    ];
+    if (governanceEnabled) {
+      exportFields.push({ name: 'Voting Power', value: `${userInfo.voting_power}`, inline: true });
+    }
+    exportFields.push({
+      name: 'Linked Wallets',
+      value: wallets.length > 0
+        ? wallets.map(w => `\`${w.wallet_address.slice(0, 8)}...${w.wallet_address.slice(-8)}\`${w.primary_wallet ? ' ⭐' : ''}`).join('\n')
+        : '_No wallets linked_',
+      inline: false
+    });
 
     const embed = new EmbedBuilder()
       .setColor('#FFD700')
       .setTitle(`📋 Family Member Export: ${targetUser.username}`)
       .setDescription(`Discord: <@${targetUser.id}>`)
-      .addFields(
-        { name: 'NFT Holdings', value: `${userInfo.total_nfts}`, inline: true },
-        { name: 'Rank', value: `${userInfo.tier || 'Associate'}`, inline: true },
-        { name: 'Voting Power', value: `${userInfo.voting_power}`, inline: true },
-        { 
-          name: 'Linked Wallets', 
-          value: wallets.length > 0 
-            ? wallets.map(w => `\`${w.wallet_address.slice(0, 8)}...${w.wallet_address.slice(-8)}\`${w.primary_wallet ? ' ⭐' : ''}`).join('\n')
-            : '_No wallets linked_', 
-          inline: false 
-        }
-      )
+      .addFields(exportFields)
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });

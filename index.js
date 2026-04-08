@@ -442,19 +442,33 @@ async function handlePanelVerifyButton(interaction) {
         ? `+${syncResult.totalAdded || 0} / -${syncResult.totalRemoved || 0}`
         : 'Role sync partial';
     }
+    let governanceEnabled = true;
+    try {
+      if (interaction.guildId && tenantService.isMultitenantEnabled()) {
+        governanceEnabled = tenantService.isModuleEnabled(interaction.guildId, 'governance');
+      } else {
+        const settingsManager = require('./config/settings');
+        governanceEnabled = settingsManager.getSettings().moduleGovernanceEnabled !== false;
+      }
+    } catch (_error) {}
 
     const tierText = updateResult.tier || 'Associate';
+    const fields = [
+      { name: 'Linked Wallets', value: `${wallets.length}`, inline: true },
+      { name: 'NFTs', value: `${updateResult.totalNFTs || 0}`, inline: true },
+      { name: 'Tracked Tokens', value: Number(updateResult.totalTokens || 0).toLocaleString(undefined, { maximumFractionDigits: 6 }), inline: true },
+      { name: 'Tier', value: `${tierText}`, inline: true },
+      { name: 'Discord Role Sync', value: roleSyncText, inline: true }
+    ];
+    if (governanceEnabled) {
+      fields.splice(4, 0, { name: 'Voting Power', value: `${updateResult.votingPower || 0}`, inline: true });
+    }
+
     const embed = new EmbedBuilder()
       .setColor('#57F287')
       .setTitle('✅ Holdings Verified')
       .setDescription('Your linked wallet(s) were detected and your holdings were refreshed.')
-      .addFields(
-        { name: 'Linked Wallets', value: `${wallets.length}`, inline: true },
-        { name: 'NFTs', value: `${updateResult.totalNFTs || 0}`, inline: true },
-        { name: 'Tier', value: `${tierText}`, inline: true },
-        { name: 'Voting Power', value: `${updateResult.votingPower || 0}`, inline: true },
-        { name: 'Discord Role Sync', value: roleSyncText, inline: true }
-      )
+      .addFields(fields)
       .setTimestamp();
 
     const row = new ActionRowBuilder().addComponents(

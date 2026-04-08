@@ -19,6 +19,11 @@ const SOL_DELTA_EPSILON = Number(process.env.TRACKED_TOKEN_SOL_EPSILON || 0.0000
 const STABLE_DELTA_EPSILON = Number(process.env.TRACKED_TOKEN_STABLE_EPSILON || 0.01);
 const TOKEN_WEBHOOK_RETRY_MAX = Math.max(0, Math.min(6, Number(process.env.TRACKED_TOKEN_WEBHOOK_RETRY_MAX || 3)));
 const TOKEN_WEBHOOK_RETRY_BASE_MS = Math.max(250, Number(process.env.TRACKED_TOKEN_WEBHOOK_RETRY_BASE_MS || 1500));
+const TOKEN_WEBHOOK_DURABLE_RETRY_MAX = Math.max(1, Math.min(72, Number(process.env.TRACKED_TOKEN_DURABLE_RETRY_MAX || 24)));
+const TOKEN_WEBHOOK_DURABLE_RETRY_BASE_MS = Math.max(5 * 1000, Number(process.env.TRACKED_TOKEN_DURABLE_RETRY_BASE_MS || 30 * 1000));
+const TOKEN_WEBHOOK_DURABLE_RETRY_MAX_DELAY_MS = Math.max(TOKEN_WEBHOOK_DURABLE_RETRY_BASE_MS, Number(process.env.TRACKED_TOKEN_DURABLE_RETRY_MAX_DELAY_MS || 30 * 60 * 1000));
+const TOKEN_WEBHOOK_DURABLE_RETRY_BATCH_SIZE = Math.max(1, Math.min(100, Number(process.env.TRACKED_TOKEN_DURABLE_RETRY_BATCH_SIZE || 20)));
+const TRANSIENT_WEBHOOK_RETRY_REASONS = new Set(['tx_not_available', 'parsed_tx_fetch_failed']);
 
 function safeToNumber(value) {
   const n = Number(value);
@@ -123,6 +128,7 @@ class TrackedWalletsService {
     this.connection = tokenService.connection || new Connection(process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com');
     this.invalidWalletWarned = new Set();
     this.webhookRetryKeys = new Set();
+    this.webhookQueueSweepRunning = false;
     this.tokenImageCache = new Map();
     this.tokenImageCacheTtlMs = Math.max(60 * 1000, Number(process.env.TOKEN_IMAGE_CACHE_TTL_MS || 6 * 60 * 60 * 1000));
   }
@@ -1546,6 +1552,8 @@ class TrackedWalletsService {
   async ingestWebhookEvent(event, options = {}) {
     const source = String(options.source || 'webhook');
     const attempt = Math.max(0, Number(options.attempt || 0));
+    const allowImmediateRetry = options.allowImmediateRetry !== false;
+    const allowDurableRetry = options.allowDurableRetry !== false;
     const signature = this.extractWebhookSignature(event);
     if (!signature) {
       return { success: true, ignored: true, reason: 'missing_signature' };
@@ -1565,6 +1573,7 @@ class TrackedWalletsService {
       // If there are tracked tokens configured, continue into parsed tx path so mint-scoped
       // fallback can still classify and alert without tracked wallets.
       if (!hasTrackedTokensEnabled) {
+        this.removeDurableWebhookRetry(signature);
         return { success: true, ignored: true, reason: 'no_tracked_wallets' };
       }
     }
@@ -1586,6 +1595,7 @@ class TrackedWalletsService {
         },
       });
       if ((payloadProcessed?.insertedEvents || 0) > 0 || (payloadProcessed?.duplicateEvents || 0) > 0 || (payloadProcessed?.sentAlerts || 0) > 0) {
+        this.removeDurableWebhookRetry(signature);
         return {
           success: true,
           ignored: false,
@@ -1597,10 +1607,19 @@ class TrackedWalletsService {
           sentAlerts: Number(payloadProcessed?.sentAlerts || 0),
         };
       }
-      if (attempt < TOKEN_WEBHOOK_RETRY_MAX) {
+      if (allowImmediateRetry && attempt < TOKEN_WEBHOOK_RETRY_MAX) {
         this.scheduleWebhookRetry(event, { source, attempt, signature, reason: 'parsed_tx_fetch_failed' });
       }
-      return { success: false, ignored: true, reason: 'parsed_tx_fetch_failed' };
+      if (allowDurableRetry) {
+        this.enqueueDurableWebhookRetry(event, {
+          source,
+          attempt,
+          signature,
+          reason: 'parsed_tx_fetch_failed',
+          errorMessage: e?.message || '',
+        });
+      }
+      return { success: false, ignored: true, reason: 'parsed_tx_fetch_failed', errorMessage: e?.message || '' };
     }
 
     if (!tx) {
@@ -1616,6 +1635,7 @@ class TrackedWalletsService {
         },
       });
       if ((payloadProcessed?.insertedEvents || 0) > 0 || (payloadProcessed?.duplicateEvents || 0) > 0 || (payloadProcessed?.sentAlerts || 0) > 0) {
+        this.removeDurableWebhookRetry(signature);
         return {
           success: true,
           ignored: false,
@@ -1627,10 +1647,18 @@ class TrackedWalletsService {
           sentAlerts: Number(payloadProcessed?.sentAlerts || 0),
         };
       }
-      if (attempt < TOKEN_WEBHOOK_RETRY_MAX) {
+      if (allowImmediateRetry && attempt < TOKEN_WEBHOOK_RETRY_MAX) {
         this.scheduleWebhookRetry(event, { source, attempt, signature, reason: 'tx_not_available' });
       } else {
         logger.warn(`[tracked-token-webhook] tx not available after ${attempt + 1} attempts for ${signature}`);
+      }
+      if (allowDurableRetry) {
+        this.enqueueDurableWebhookRetry(event, {
+          source,
+          attempt,
+          signature,
+          reason: 'tx_not_available',
+        });
       }
       return { success: true, ignored: true, reason: 'tx_not_available' };
     }
@@ -1641,6 +1669,7 @@ class TrackedWalletsService {
     }
     if (!candidateWallets.length) {
       if (!hasTrackedTokensEnabled) {
+        this.removeDurableWebhookRetry(signature);
         return { success: true, ignored: true, reason: 'no_tracked_wallets' };
       }
     }
@@ -1692,7 +1721,7 @@ class TrackedWalletsService {
       sentAlerts += Number(mintScoped?.sentAlerts || 0);
     }
 
-    return {
+    const result = {
       success: true,
       ignored: matchedWallets === 0 && insertedEvents === 0,
       reason: matchedWallets === 0 ? 'no_matching_wallets_or_tokens' : undefined,
@@ -1702,6 +1731,8 @@ class TrackedWalletsService {
       duplicateEvents,
       sentAlerts,
     };
+    this.removeDurableWebhookRetry(signature);
+    return result;
   }
 
   async ingestWebhookBatch(events = [], options = {}) {
@@ -2309,6 +2340,186 @@ class TrackedWalletsService {
     }
   }
 
+  isTransientWebhookRetryReason(reason) {
+    return TRANSIENT_WEBHOOK_RETRY_REASONS.has(String(reason || '').trim());
+  }
+
+  getDurableWebhookRetryDelayMs(nextAttempt) {
+    const base = TOKEN_WEBHOOK_DURABLE_RETRY_BASE_MS * Math.pow(2, Math.max(0, Number(nextAttempt || 1) - 1));
+    return Math.min(TOKEN_WEBHOOK_DURABLE_RETRY_MAX_DELAY_MS, Math.max(TOKEN_WEBHOOK_DURABLE_RETRY_BASE_MS, Math.round(base)));
+  }
+
+  toSqliteDelayModifier(delayMs) {
+    const sec = Math.max(1, Math.ceil(Number(delayMs || 0) / 1000));
+    return `+${sec} seconds`;
+  }
+
+  enqueueDurableWebhookRetry(event, { source, attempt, signature, reason, errorMessage } = {}) {
+    try {
+      const sig = String(signature || this.extractWebhookSignature(event) || '').trim();
+      if (!sig) return false;
+
+      const transientReason = String(reason || '').trim();
+      if (!this.isTransientWebhookRetryReason(transientReason)) return false;
+
+      const nextAttempt = Math.max(1, Number(attempt || 0) + 1);
+      if (nextAttempt > TOKEN_WEBHOOK_DURABLE_RETRY_MAX) return false;
+
+      const delayMs = this.getDurableWebhookRetryDelayMs(nextAttempt);
+      const delayModifier = this.toSqliteDelayModifier(delayMs);
+      const payloadJson = JSON.stringify(event || {});
+      const sourceTag = String(source || 'webhook').trim() || 'webhook';
+
+      db.prepare(`
+        INSERT INTO tracked_token_webhook_retry_queue (
+          signature, source, payload_json, attempt_count, next_attempt_at, last_reason, last_error, created_at, updated_at
+        )
+        VALUES (?, ?, ?, ?, datetime('now', ?), ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(signature) DO UPDATE SET
+          source = excluded.source,
+          payload_json = excluded.payload_json,
+          attempt_count = CASE
+            WHEN tracked_token_webhook_retry_queue.attempt_count > excluded.attempt_count
+              THEN tracked_token_webhook_retry_queue.attempt_count
+            ELSE excluded.attempt_count
+          END,
+          next_attempt_at = excluded.next_attempt_at,
+          last_reason = excluded.last_reason,
+          last_error = excluded.last_error,
+          updated_at = CURRENT_TIMESTAMP
+      `).run(
+        sig,
+        sourceTag,
+        payloadJson,
+        nextAttempt,
+        delayModifier,
+        transientReason || null,
+        String(errorMessage || '').trim() || null,
+      );
+
+      logger.log(`[tracked-token-webhook] queued durable retry attempt=${nextAttempt}/${TOKEN_WEBHOOK_DURABLE_RETRY_MAX} in ${delayMs}ms for ${sig} (${transientReason || 'transient'})`);
+      return true;
+    } catch (error) {
+      logger.error('[tracked-token-webhook] failed to queue durable retry:', error?.message || error);
+      return false;
+    }
+  }
+
+  removeDurableWebhookRetry(signature) {
+    try {
+      const sig = String(signature || '').trim();
+      if (!sig) return;
+      db.prepare('DELETE FROM tracked_token_webhook_retry_queue WHERE signature = ?').run(sig);
+    } catch (_error) {}
+  }
+
+  async processWebhookRetryQueue(limit = TOKEN_WEBHOOK_DURABLE_RETRY_BATCH_SIZE) {
+    if (this.webhookQueueSweepRunning) {
+      return { success: true, skipped: true, reason: 'already_running' };
+    }
+
+    this.webhookQueueSweepRunning = true;
+    try {
+      const safeLimit = Math.max(1, Math.min(100, Number(limit) || TOKEN_WEBHOOK_DURABLE_RETRY_BATCH_SIZE));
+      const dueRows = db.prepare(`
+        SELECT signature, source, payload_json, attempt_count, last_reason
+        FROM tracked_token_webhook_retry_queue
+        WHERE datetime(next_attempt_at) <= datetime('now')
+        ORDER BY datetime(next_attempt_at) ASC
+        LIMIT ?
+      `).all(safeLimit);
+
+      if (!dueRows.length) {
+        return { success: true, processed: 0, requeued: 0, removed: 0 };
+      }
+
+      let processed = 0;
+      let requeued = 0;
+      let removed = 0;
+
+      for (const row of dueRows) {
+        const signature = String(row?.signature || '').trim();
+        if (!signature) {
+          removed += db.prepare('DELETE FROM tracked_token_webhook_retry_queue WHERE signature = ?').run(row.signature).changes;
+          continue;
+        }
+
+        let payload = null;
+        try {
+          payload = JSON.parse(String(row?.payload_json || '{}'));
+        } catch (_error) {
+          db.prepare('DELETE FROM tracked_token_webhook_retry_queue WHERE signature = ?').run(signature);
+          removed += 1;
+          continue;
+        }
+
+        const currentAttempt = Math.max(1, Number(row?.attempt_count || 1));
+        let result = null;
+        try {
+          result = await this.ingestWebhookEvent(payload, {
+            source: `${String(row?.source || 'webhook')}-durable`,
+            tokenConfigCache: new Map(),
+            mintConfigCache: new Map(),
+            attempt: currentAttempt,
+            allowImmediateRetry: false,
+            allowDurableRetry: false,
+          });
+        } catch (error) {
+          result = { success: false, ignored: true, reason: String(row?.last_reason || 'retry_error'), errorMessage: error?.message || String(error) };
+        }
+
+        processed += 1;
+        const reason = String(result?.reason || '').trim();
+        const transient = this.isTransientWebhookRetryReason(reason);
+        const shouldRequeue = (!result?.success || (result?.ignored && transient));
+
+        if (!shouldRequeue) {
+          db.prepare('DELETE FROM tracked_token_webhook_retry_queue WHERE signature = ?').run(signature);
+          removed += 1;
+          continue;
+        }
+
+        const nextAttempt = currentAttempt + 1;
+        if (nextAttempt > TOKEN_WEBHOOK_DURABLE_RETRY_MAX) {
+          db.prepare('DELETE FROM tracked_token_webhook_retry_queue WHERE signature = ?').run(signature);
+          removed += 1;
+          logger.warn(`[tracked-token-webhook] durable retry exhausted for ${signature} after ${currentAttempt} attempts (${reason || 'unknown'})`);
+          continue;
+        }
+
+        const delayMs = this.getDurableWebhookRetryDelayMs(nextAttempt);
+        const delayModifier = this.toSqliteDelayModifier(delayMs);
+        db.prepare(`
+          UPDATE tracked_token_webhook_retry_queue
+          SET attempt_count = ?,
+              next_attempt_at = datetime('now', ?),
+              last_reason = ?,
+              last_error = ?,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE signature = ?
+        `).run(
+          nextAttempt,
+          delayModifier,
+          reason || String(row?.last_reason || '').trim() || 'transient',
+          String(result?.errorMessage || '').trim() || null,
+          signature
+        );
+        requeued += 1;
+      }
+
+      if (processed > 0) {
+        logger.log(`[tracked-token-webhook] durable queue sweep processed=${processed} requeued=${requeued} removed=${removed}`);
+      }
+
+      return { success: true, processed, requeued, removed };
+    } catch (error) {
+      logger.error('[tracked-token-webhook] durable queue sweep failed:', error?.message || error);
+      return { success: false, message: error?.message || 'queue_sweep_failed' };
+    } finally {
+      this.webhookQueueSweepRunning = false;
+    }
+  }
+
   scheduleWebhookRetry(event, { source, attempt, signature, reason }) {
     const nextAttempt = Math.max(0, Number(attempt || 0)) + 1;
     if (nextAttempt > TOKEN_WEBHOOK_RETRY_MAX) return;
@@ -2326,6 +2537,8 @@ class TrackedWalletsService {
           tokenConfigCache: new Map(),
           mintConfigCache: new Map(),
           attempt: nextAttempt,
+          allowImmediateRetry: true,
+          allowDurableRetry: false,
         });
       } catch (e) {
         logger.error(`[tracked-token-webhook] retry attempt=${nextAttempt} failed for ${signature || 'unknown'}:`, e?.message || e);

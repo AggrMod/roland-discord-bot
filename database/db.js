@@ -1016,9 +1016,26 @@ function initDatabase() {
       UNIQUE(wallet_id, tx_signature, token_mint)
     )
   `);
+
+  // Durable retry queue for webhook transactions that are temporarily unavailable on RPC.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tracked_token_webhook_retry_queue (
+      signature TEXT PRIMARY KEY,
+      source TEXT DEFAULT 'webhook',
+      payload_json TEXT NOT NULL,
+      attempt_count INTEGER DEFAULT 0,
+      next_attempt_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_reason TEXT,
+      last_error TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_token_events_guild_time ON tracked_token_events(guild_id, event_time)'); } catch (e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_token_events_wallet_time ON tracked_token_events(wallet_id, event_time)'); } catch (e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_token_events_mint_time ON tracked_token_events(token_mint, event_time)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_token_retry_due ON tracked_token_webhook_retry_queue(next_attempt_at)'); } catch (e) {}
 
   logger.log('Database initialized successfully');
 }

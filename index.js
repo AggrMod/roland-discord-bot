@@ -239,6 +239,16 @@ client.once(Events.ClientReady, () => {
   intervals.push(setInterval(pollTrackedTokenActivity, tokenPollIntervalMs));
   setTimeout(pollTrackedTokenActivity, 45 * 1000); // warm-up after startup
   logger.log(`[tracked-token] Token activity poll scheduled (45s startup delay, then every ${Math.round(tokenPollIntervalMs / 1000)}s)`);
+
+  // Durable webhook retry queue sweep (covers tx_not_available windows + restarts)
+  const sweepWebhookRetryQueue = () => {
+    trackedWalletsService.processWebhookRetryQueue()
+      .catch(err => logger.error('[tracked-token-webhook] Error in durable retry sweep:', err));
+  };
+  const retrySweepIntervalMs = Math.max(10, Number(process.env.TRACKED_TOKEN_DURABLE_RETRY_SWEEP_SEC || 30)) * 1000;
+  intervals.push(setInterval(sweepWebhookRetryQueue, retrySweepIntervalMs));
+  setTimeout(sweepWebhookRetryQueue, 20 * 1000);
+  logger.log(`[tracked-token-webhook] Durable retry sweep scheduled (20s startup delay, then every ${Math.round(retrySweepIntervalMs / 1000)}s)`);
 });
 
 client.on(Events.GuildCreate, async guild => {

@@ -184,6 +184,7 @@ function initDatabase() {
     CREATE TABLE IF NOT EXISTS missions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       mission_id TEXT UNIQUE NOT NULL,
+      guild_id TEXT DEFAULT '',
       title TEXT NOT NULL,
       description TEXT NOT NULL,
       required_roles TEXT,
@@ -438,10 +439,37 @@ function initDatabase() {
       FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS plan_module_limits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_key TEXT NOT NULL,
+      module_key TEXT NOT NULL,
+      limit_key TEXT NOT NULL,
+      limit_value INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(plan_key, module_key, limit_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS tenant_module_limit_overrides (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id INTEGER NOT NULL,
+      module_key TEXT NOT NULL,
+      limit_key TEXT NOT NULL,
+      limit_value INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+      UNIQUE(tenant_id, module_key, limit_key)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_tenants_guild_id ON tenants(guild_id);
     CREATE INDEX IF NOT EXISTS idx_tenant_modules_tenant ON tenant_modules(tenant_id);
     CREATE INDEX IF NOT EXISTS idx_tenant_modules_key ON tenant_modules(module_key);
     CREATE INDEX IF NOT EXISTS idx_tenant_audit_logs_guild_created ON tenant_audit_logs(guild_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_plan_module_limits_plan ON plan_module_limits(plan_key);
+    CREATE INDEX IF NOT EXISTS idx_plan_module_limits_module ON plan_module_limits(module_key);
+    CREATE INDEX IF NOT EXISTS idx_tenant_module_limit_overrides_tenant ON tenant_module_limit_overrides(tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_tenant_module_limit_overrides_module ON tenant_module_limit_overrides(module_key);
 
     CREATE TABLE IF NOT EXISTS billing_entitlement_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -500,6 +528,8 @@ function initDatabase() {
     `CREATE TRIGGER IF NOT EXISTS update_tenant_modules_timestamp AFTER UPDATE ON tenant_modules BEGIN UPDATE tenant_modules SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
     `CREATE TRIGGER IF NOT EXISTS update_tenant_branding_timestamp AFTER UPDATE ON tenant_branding BEGIN UPDATE tenant_branding SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
     `CREATE TRIGGER IF NOT EXISTS update_tenant_limits_timestamp AFTER UPDATE ON tenant_limits BEGIN UPDATE tenant_limits SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
+    `CREATE TRIGGER IF NOT EXISTS update_plan_module_limits_timestamp AFTER UPDATE ON plan_module_limits BEGIN UPDATE plan_module_limits SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
+    `CREATE TRIGGER IF NOT EXISTS update_tenant_module_limit_overrides_timestamp AFTER UPDATE ON tenant_module_limit_overrides BEGIN UPDATE tenant_module_limit_overrides SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
     `CREATE TRIGGER IF NOT EXISTS update_nft_alert_config_timestamp AFTER UPDATE ON nft_activity_alert_config BEGIN UPDATE nft_activity_alert_config SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
     `CREATE TRIGGER IF NOT EXISTS update_tenant_role_configs_timestamp AFTER UPDATE ON tenant_role_configs BEGIN UPDATE tenant_role_configs SET updated_at = CURRENT_TIMESTAMP WHERE rowid = NEW.rowid; END`,
   ];
@@ -775,6 +805,8 @@ function initDatabase() {
   try { db.exec("ALTER TABLE tenant_branding ADD COLUMN logo_url TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_branding ADD COLUMN primary_color TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_branding ADD COLUMN display_name TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE missions ADD COLUMN guild_id TEXT DEFAULT ''"); } catch (e) {}
+  try { db.exec("CREATE INDEX IF NOT EXISTS idx_missions_guild_status ON missions(guild_id, status)"); } catch (e) {}
 
   try {
     db.exec(`

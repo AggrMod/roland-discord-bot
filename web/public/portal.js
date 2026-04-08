@@ -3281,6 +3281,7 @@ let tenantListCache = [];
 let selectedTenantGuildId = null;
 let selectedTenantDetailCache = null;
 let selectedTenantAuditCache = [];
+let selectedTenantLimitsCache = null;
 let superadminTenantSearch = '';
 let superadminActiveTab = 'tenants';
 let tenantDetailActiveTab = 'overview';
@@ -3369,7 +3370,7 @@ function renderTenantAuditLog(logs) {
   `).join('');
 }
 
-function renderTenantDetailPanel(tenant) {
+function renderTenantDetailPanel(tenant, tenantLimits = null) {
   if (!tenant) {
     return `<div style="padding:18px; text-align:center; color:var(--text-secondary);">Select a tenant to manage plan, modules, branding, and status.</div>`;
   }
@@ -3393,6 +3394,60 @@ function renderTenantDetailPanel(tenant) {
   }).join('');
 
   const branding = tenant.branding || {};
+  const limitDefinitions = tenantLimits?.definitions || {};
+  const planModuleLimits = tenantLimits?.planLimits || {};
+  const overrideModuleLimits = tenantLimits?.overrides || {};
+  const effectiveModuleLimits = tenantLimits?.effective || {};
+  const moduleLimitRows = (() => {
+    const moduleKeys = [...new Set([
+      ...Object.keys(limitDefinitions || {}),
+      ...Object.keys(planModuleLimits || {}),
+      ...Object.keys(effectiveModuleLimits || {}),
+      ...Object.keys(overrideModuleLimits || {}),
+    ])].sort();
+
+    const rows = [];
+    moduleKeys.forEach(moduleKey => {
+      const perModuleDefs = limitDefinitions[moduleKey] || {};
+      const perModulePlan = planModuleLimits[moduleKey] || {};
+      const perModuleOverride = overrideModuleLimits[moduleKey] || {};
+      const perModuleEffective = effectiveModuleLimits[moduleKey] || {};
+      const limitKeys = [...new Set([
+        ...Object.keys(perModuleDefs),
+        ...Object.keys(perModulePlan),
+        ...Object.keys(perModuleOverride),
+        ...Object.keys(perModuleEffective),
+      ])].sort();
+
+      limitKeys.forEach(limitKey => {
+        const hasOverride = Object.prototype.hasOwnProperty.call(perModuleOverride, limitKey);
+        const overrideValue = hasOverride ? perModuleOverride[limitKey] : '';
+        const defaultValue = perModulePlan[limitKey];
+        const effectiveValue = perModuleEffective[limitKey];
+        const placeholder = (defaultValue === null || defaultValue === undefined) ? 'Unlimited' : String(defaultValue);
+        const effectiveText = (effectiveValue === null || effectiveValue === undefined) ? 'Unlimited' : String(effectiveValue);
+        const valueText = (overrideValue === null || overrideValue === undefined || overrideValue === '') ? '' : String(overrideValue);
+        const label = perModuleDefs?.[limitKey]?.label || limitKey;
+
+        rows.push(`
+          <div style="display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,0.8fr) minmax(140px,0.6fr) minmax(0,0.8fr); gap:10px; align-items:center; padding:10px 12px; border:1px solid rgba(99,102,241,0.15); border-radius:10px; background:rgba(14,23,44,0.45);">
+            <div style="min-width:0;">
+              <div style="color:#e0e7ff; font-weight:600;">${escapeHtml(label)}</div>
+              <div style="color:var(--text-secondary); font-size:0.8em; margin-top:3px;">${escapeHtml(getTenantModuleLabel(moduleKey))} <span style="font-family:monospace;">(${escapeHtml(limitKey)})</span></div>
+            </div>
+            <div style="color:var(--text-secondary); font-size:0.82em;">Plan: <span style="color:#c9d6ff; font-weight:600;">${escapeHtml(placeholder)}</span></div>
+            <input data-tenant-limit-input="1" data-module-key="${escapeHtml(moduleKey)}" data-limit-key="${escapeHtml(limitKey)}" type="number" min="0" step="1" value="${escapeHtml(valueText)}" placeholder="${escapeHtml(placeholder)}" style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
+            <div style="color:var(--text-secondary); font-size:0.82em;">Effective: <span style="color:#e2e8f0; font-weight:700;">${escapeHtml(effectiveText)}</span></div>
+          </div>
+        `);
+      });
+    });
+
+    if (rows.length === 0) {
+      return `<div style="padding:14px; border:1px dashed rgba(99,102,241,0.18); border-radius:10px; color:var(--text-secondary); text-align:center;">No module limits available for this tenant yet.</div>`;
+    }
+    return rows.join('');
+  })();
 
   return `
     <div style="display:grid; gap:16px;">
@@ -3469,6 +3524,17 @@ function renderTenantDetailPanel(tenant) {
           </div>
           <div style="margin-top:8px; text-align:right;">
             <button class="btn-secondary" id="tenantMockDataSaveBtn" onclick="saveTenantMockData()" style="padding:8px 14px;">Save Mock Data</button>
+          </div>
+        </div>
+
+        <div style="grid-column:1 / -1; padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap;">
+            <h4 style="margin:0; color:#c9d6ff;">Module Limits</h4>
+            <button class="btn-primary" id="tenantModuleLimitsSaveBtn" onclick="saveTenantModuleLimits()" style="padding:8px 14px;">Save Limits</button>
+          </div>
+          <div style="margin-bottom:10px; color:var(--text-secondary); font-size:0.82em;">Set tenant-specific overrides per module. Leave a value empty to use the plan default.</div>
+          <div style="display:grid; gap:8px;">
+            ${moduleLimitRows}
           </div>
         </div>
       </div>
@@ -3806,6 +3872,7 @@ async function loadSelectedTenantDetail() {
   if (!content) return;
 
   if (!selectedTenantGuildId) {
+    selectedTenantLimitsCache = null;
     content.innerHTML = renderTenantDetailPanel(null);
     return;
   }
@@ -3813,14 +3880,16 @@ async function loadSelectedTenantDetail() {
   content.innerHTML = `<div style="text-align:center; padding:20px;"><div class="spinner"></div><p style="margin-top:10px;">Loading tenant details...</p></div>`;
 
   try {
-    const [tenantResponse, auditResponse] = await Promise.all([
+    const [tenantResponse, auditResponse, limitsResponse] = await Promise.all([
       fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}`, { credentials: 'include' }),
-      fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/audit?limit=10`, { credentials: 'include' })
+      fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/audit?limit=10`, { credentials: 'include' }),
+      fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/limits`, { credentials: 'include' })
     ]);
 
-    const [tenantData, auditData] = await Promise.all([
+    const [tenantData, auditData, limitsData] = await Promise.all([
       tenantResponse.json(),
-      auditResponse.json()
+      auditResponse.json(),
+      limitsResponse.json()
     ]);
 
     if (!tenantData.success) {
@@ -3835,7 +3904,8 @@ async function loadSelectedTenantDetail() {
 
     selectedTenantDetailCache = tenantData.tenant || null;
     selectedTenantAuditCache = auditData.auditLogs || [];
-    content.innerHTML = renderTenantDetailPanel(selectedTenantDetailCache);
+    selectedTenantLimitsCache = limitsData?.success ? limitsData.limits : null;
+    content.innerHTML = renderTenantDetailPanel(selectedTenantDetailCache, selectedTenantLimitsCache);
     showTenantDetailTab(tenantDetailActiveTab || 'overview');
   } catch (error) {
     content.innerHTML = `<div style="color:#fca5a5; text-align:center; padding:20px;">Error loading tenant details: ${escapeHtml(error.message || 'Unknown error')}</div>`;
@@ -4122,6 +4192,62 @@ async function saveTenantMockData() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Save Mock Data';
+  }
+}
+
+async function saveTenantModuleLimits() {
+  if (!selectedTenantGuildId) return;
+
+  const btn = document.getElementById('tenantModuleLimitsSaveBtn');
+  const inputs = Array.from(document.querySelectorAll('[data-tenant-limit-input="1"]'));
+  if (!btn || inputs.length === 0) return;
+
+  const overrides = {};
+  for (const input of inputs) {
+    const moduleKey = String(input.dataset.moduleKey || '').trim();
+    const limitKey = String(input.dataset.limitKey || '').trim();
+    if (!moduleKey || !limitKey) continue;
+
+    const raw = String(input.value || '').trim();
+    if (!overrides[moduleKey]) overrides[moduleKey] = {};
+
+    if (raw === '') {
+      overrides[moduleKey][limitKey] = null;
+      continue;
+    }
+
+    const numeric = Number(raw);
+    if (!Number.isFinite(numeric) || numeric < 0) {
+      showError(`Invalid value for ${getTenantModuleLabel(moduleKey)} -> ${limitKey}. Use a non-negative number or leave empty.`);
+      return;
+    }
+
+    overrides[moduleKey][limitKey] = Math.floor(numeric);
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  try {
+    const response = await fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/limits`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ overrides }),
+    });
+    const data = await response.json();
+    if (data.success) {
+      selectedTenantLimitsCache = data.limits || null;
+      showSuccess('Tenant module limits saved');
+      await loadSelectedTenantDetail();
+      showTenantDetailTab('controls');
+    } else {
+      showError(data.message || 'Failed to save module limits');
+    }
+  } catch (error) {
+    showError(`Failed to save module limits: ${error.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Limits';
   }
 }
 
@@ -9515,7 +9641,7 @@ function safeJsonArray(value) {
 // feature: { label, included: true/false/'partial', note? }
 const PLAN_CATALOG = [
   {
-    id: "free",
+    id: "starter",
     name: "Starter",
     tagline: "Perfect for small communities getting started",
     monthlyPrice: 0,
@@ -9541,7 +9667,7 @@ const PLAN_CATALOG = [
     id: "growth",
     name: "Growth",
     tagline: "Everything you need to run a thriving community",
-    monthlyPrice: 14,
+    monthlyPrice: 19.99,
     popular: true,
     color: "#6366f1",
     features: [
@@ -9566,7 +9692,7 @@ const PLAN_CATALOG = [
     id: "pro",
     name: "Pro",
     tagline: "For serious projects that need the full stack",
-    monthlyPrice: 34,
+    monthlyPrice: 49.99,
     color: "#f59e0b",
     features: [
       { label: "Up to 5 Discord servers", included: true },
@@ -9586,6 +9712,22 @@ const PLAN_CATALOG = [
     cta: "Upgrade to Pro",
     ctaAction: "upgrade_pro",
   },
+  {
+    id: "enterprise",
+    name: "Enterprise",
+    tagline: "Custom rollout, multi-server support, and white-glove setup",
+    monthlyPrice: null,
+    color: "#10b981",
+    features: [
+      { label: "Multi-server bundle", included: true },
+      { label: "Custom per-module limits", included: true },
+      { label: "Custom era/module assignments", included: true },
+      { label: "Priority support & onboarding", included: true },
+      { label: "Dedicated monetization templates", included: true },
+    ],
+    cta: "Contact Team",
+    ctaAction: "contact_enterprise",
+  },
 ];
 
 function updatePlanPrices() {
@@ -9594,9 +9736,17 @@ function updatePlanPrices() {
   if (!grid) return;
 
   grid.innerHTML = PLAN_CATALOG.map(plan => {
-    const price = annual ? (plan.monthlyPrice === 0 ? 0 : (plan.monthlyPrice * 0.85).toFixed(0)) : plan.monthlyPrice;
-    const annualTotal = annual && plan.monthlyPrice > 0 ? `$${(plan.monthlyPrice * 0.85 * 12).toFixed(0)}/yr` : '';
-    const period = plan.monthlyPrice === 0 ? '' : annual ? '/mo' : '/month';
+    const isContactPlan = plan.monthlyPrice === null || plan.monthlyPrice === undefined;
+    const discountedMonthly = (!isContactPlan && Number(plan.monthlyPrice) > 0 && annual)
+      ? Number(plan.monthlyPrice) * 0.85
+      : Number(plan.monthlyPrice || 0);
+    const priceText = isContactPlan
+      ? 'Contact'
+      : (Number(plan.monthlyPrice || 0) === 0 ? '0' : discountedMonthly.toFixed(2));
+    const annualTotal = (!isContactPlan && annual && Number(plan.monthlyPrice) > 0)
+      ? `$${(Number(plan.monthlyPrice) * 0.85 * 12).toFixed(2)}/yr`
+      : '';
+    const period = isContactPlan || Number(plan.monthlyPrice || 0) === 0 ? '' : annual ? '/mo' : '/month';
     const accentColor = plan.color || '#6366f1';
 
     const featureRows = plan.features.map(f => {
@@ -9613,7 +9763,7 @@ function updatePlanPrices() {
           <div class="plan-name" style="color:${accentColor};">${escapeHtml(plan.name)}</div>
           <div class="plan-tagline">${escapeHtml(plan.tagline)}</div>
           <div class="plan-price">
-            <span class="plan-price-amount">$${price}</span>
+            <span class="plan-price-amount">${isContactPlan ? '' : '$'}${priceText}</span>
             <span class="plan-price-period">${period}</span>
           </div>
           ${annualTotal ? `<div class="plan-annual-note">Billed as ${annualTotal} · Save 15%</div>` : ''}
@@ -9641,7 +9791,7 @@ async function loadCurrentPlan() {
     const res = await fetch('/api/admin/plan', { credentials: 'include', headers: buildTenantRequestHeaders() });
     if (!res.ok) return;
     const data = await res.json();
-    if (data.plan && data.plan !== 'free') {
+    if (data.plan && data.plan !== 'starter') {
       const card = document.getElementById('currentPlanCard');
       const content = document.getElementById('currentPlanContent');
       if (card && content) {

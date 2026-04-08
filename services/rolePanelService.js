@@ -1,5 +1,6 @@
 const db = require('../database/db');
 const logger = require('../utils/logger');
+const entitlementService = require('./entitlementService');
 
 class RolePanelService {
   listPanels(guildId) {
@@ -33,12 +34,38 @@ class RolePanelService {
 
   createPanel({ guildId = '', title, description, channelId, singleSelect = false } = {}) {
     try {
+      const normalizedGuildId = String(guildId || '').trim();
+      if (normalizedGuildId) {
+        const countRow = db.prepare(`
+          SELECT COUNT(1) AS count
+          FROM role_panels
+          WHERE guild_id = ?
+        `).get(normalizedGuildId);
+        const limitCheck = entitlementService.enforceLimit({
+          guildId: normalizedGuildId,
+          moduleKey: 'selfserveroles',
+          limitKey: 'max_panels',
+          currentCount: Number(countRow?.count || 0),
+          incrementBy: 1,
+          itemLabel: 'role panels',
+        });
+        if (!limitCheck.success) {
+          return {
+            success: false,
+            code: 'limit_exceeded',
+            message: limitCheck.message,
+            limit: limitCheck.limit,
+            used: limitCheck.used,
+          };
+        }
+      }
+
       const info = db.prepare(`
         INSERT INTO role_panels (guild_id, title, description, channel_id, single_select)
         VALUES (?, ?, ?, ?, ?)
       `).run(
-        guildId,
-        title || '🎖️ Get Your Roles',
+        normalizedGuildId,
+        title || 'Get Your Roles',
         description || 'Click a button below to claim or unclaim a community role.',
         channelId || null,
         singleSelect ? 1 : 0
@@ -179,7 +206,7 @@ class RolePanelService {
           `).get(roleId, guildId)
         : db.prepare('SELECT role_id FROM role_panel_roles WHERE role_id = ? AND enabled = 1').get(roleId);
       return !!row;
-    } catch (e) {
+    } catch (_error) {
       return false;
     }
   }

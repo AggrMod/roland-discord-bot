@@ -2,6 +2,7 @@ const db = require('../database/db');
 const walletService = require('./walletService');
 const nftService = require('./nftService');
 const tokenService = require('./tokenService');
+const entitlementService = require('./entitlementService');
 const logger = require('../utils/logger');
 
 class RoleService {
@@ -403,6 +404,29 @@ class RoleService {
         : Number(maxAmount);
       if (!Number.isFinite(min) || min < 0) return { success: false, message: 'minAmount must be a non-negative number' };
       if (max !== null && (!Number.isFinite(max) || max < min)) return { success: false, message: 'maxAmount must be >= minAmount' };
+
+      const countRow = db.prepare(`
+        SELECT COUNT(1) AS count
+        FROM token_role_rules
+        WHERE guild_id = ?
+      `).get(normalizedGuild);
+      const limitCheck = entitlementService.enforceLimit({
+        guildId: normalizedGuild,
+        moduleKey: 'verification',
+        limitKey: 'max_token_rules',
+        currentCount: Number(countRow?.count || 0),
+        incrementBy: 1,
+        itemLabel: 'token role rules',
+      });
+      if (!limitCheck.success) {
+        return {
+          success: false,
+          code: 'limit_exceeded',
+          message: limitCheck.message,
+          limit: limitCheck.limit,
+          used: limitCheck.used,
+        };
+      }
 
       const result = db.prepare(`
         INSERT INTO token_role_rules (guild_id, token_mint, token_symbol, min_amount, max_amount, role_id, enabled)

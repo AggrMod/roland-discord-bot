@@ -1,5 +1,6 @@
 const db = require('../database/db');
 const logger = require('../utils/logger');
+const entitlementService = require('./entitlementService');
 const { applyEmbedBranding, createBrandedPanelEmbed } = require('./embedBranding');
 const settingsManager = require('../config/settings');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
@@ -324,6 +325,31 @@ class TicketService {
   addCategory({ name, emoji, description, parentChannelId, closedParentChannelId, allowedRoleIds, handlerRoleIds, pingRoleIds, templateFields }, guildId = process.env.GUILD_ID) {
     try {
       const normalizedGuildId = this._normalizeGuildId(guildId);
+      if (normalizedGuildId) {
+        const countRow = db.prepare(`
+          SELECT COUNT(1) AS count
+          FROM ticket_categories
+          WHERE guild_id = ?
+        `).get(normalizedGuildId);
+        const limitCheck = entitlementService.enforceLimit({
+          guildId: normalizedGuildId,
+          moduleKey: 'ticketing',
+          limitKey: 'max_categories',
+          currentCount: Number(countRow?.count || 0),
+          incrementBy: 1,
+          itemLabel: 'ticket categories',
+        });
+        if (!limitCheck.success) {
+          return {
+            success: false,
+            code: 'limit_exceeded',
+            message: limitCheck.message,
+            limit: limitCheck.limit,
+            used: limitCheck.used,
+          };
+        }
+      }
+
       const normalizedHandlerRoleIds = this._normalizeIdArray(handlerRoleIds !== undefined ? handlerRoleIds : allowedRoleIds);
       const normalizedPingRoleIds = this._normalizeIdArray(pingRoleIds);
       const normalizedTemplateFields = this._normalizeTemplateFields(templateFields);

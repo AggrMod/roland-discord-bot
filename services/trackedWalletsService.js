@@ -1,5 +1,6 @@
 const db = require('../database/db');
 const logger = require('../utils/logger');
+const entitlementService = require('./entitlementService');
 const nftService = require('./nftService');
 const tokenService = require('./tokenService');
 const clientProvider = require('../utils/clientProvider');
@@ -152,6 +153,32 @@ class TrackedWalletsService {
 
   addTrackedWallet({ guildId, walletAddress, label, alertChannelId, panelChannelId }) {
     try {
+      const normalizedGuildId = String(guildId || '').trim();
+      if (normalizedGuildId) {
+        const countRow = db.prepare(`
+          SELECT COUNT(1) AS count
+          FROM tracked_wallets
+          WHERE guild_id = ?
+        `).get(normalizedGuildId);
+        const limitCheck = entitlementService.enforceLimit({
+          guildId: normalizedGuildId,
+          moduleKey: 'treasury',
+          limitKey: 'max_tracked_wallets',
+          currentCount: Number(countRow?.count || 0),
+          incrementBy: 1,
+          itemLabel: 'tracked wallets',
+        });
+        if (!limitCheck.success) {
+          return {
+            success: false,
+            code: 'limit_exceeded',
+            message: limitCheck.message,
+            limit: limitCheck.limit,
+            used: limitCheck.used,
+          };
+        }
+      }
+
       const addr = String(walletAddress || '').trim();
       if (!addr) return { success: false, message: 'walletAddress is required' };
 
@@ -159,7 +186,7 @@ class TrackedWalletsService {
         INSERT INTO tracked_wallets (guild_id, wallet_address, label, alert_channel_id, panel_channel_id)
         VALUES (?, ?, ?, ?, ?)
       `).run(
-        guildId || '',
+        normalizedGuildId,
         addr,
         (label || '').trim() || null,
         (alertChannelId || '').trim() || null,
@@ -459,6 +486,30 @@ class TrackedWalletsService {
       const guild = String(guildId || '').trim();
       const mint = String(tokenMint || '').trim();
       if (!guild || !mint) return { success: false, message: 'guildId and tokenMint are required' };
+
+      const countRow = db.prepare(`
+        SELECT COUNT(1) AS count
+        FROM tracked_tokens
+        WHERE guild_id = ?
+      `).get(guild);
+      const limitCheck = entitlementService.enforceLimit({
+        guildId: guild,
+        moduleKey: 'tokentracker',
+        limitKey: 'max_tokens',
+        currentCount: Number(countRow?.count || 0),
+        incrementBy: 1,
+        itemLabel: 'tracked tokens',
+      });
+      if (!limitCheck.success) {
+        return {
+          success: false,
+          code: 'limit_exceeded',
+          message: limitCheck.message,
+          limit: limitCheck.limit,
+          used: limitCheck.used,
+        };
+      }
+
       const normalizedAlertChannelIds = normalizeDiscordChannelIds(
         Array.isArray(alertChannelIds) ? alertChannelIds : [alertChannelId]
       );

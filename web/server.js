@@ -25,10 +25,12 @@ const microVerifyService = require('../services/microVerifyService');
 const nftActivityService = require('../services/nftActivityService');
 const trackedWalletsService = require('../services/trackedWalletsService');
 const ticketService = require('../services/ticketService');
+const entitlementService = require('../services/entitlementService');
 const superadminService = require('../services/superadminService');
 const superadminGuard = require('../middleware/superadminGuard');
 const { BATTLE_ERAS } = require('../config/battleEras');
 const battleService = require('../services/battleService');
+const { getPlanKeys, getPlanPreset } = require('../config/plans');
 
 const DISCORD_ADMIN_PERMISSION = 0x8n;
 const DISCORD_MANAGE_GUILD_PERMISSION = 0x20n;
@@ -1457,6 +1459,93 @@ class WebServer {
       }
     });
 
+    this.app.get('/api/superadmin/limits/catalog', superadminGuard, (_req, res) => {
+      try {
+        const plans = getPlanKeys().map(planKey => {
+          const preset = getPlanPreset(planKey);
+          return {
+            key: planKey,
+            label: preset?.label || planKey,
+            description: preset?.description || '',
+            billing: preset?.billing || null,
+            moduleLimits: entitlementService.getPlanModuleLimits(planKey),
+          };
+        });
+
+        res.json({
+          success: true,
+          plans,
+          definitions: entitlementService.getLimitDefinitions(),
+        });
+      } catch (error) {
+        logger.error('Error fetching limits catalog:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.get('/api/superadmin/tenants/:guildId/limits', superadminGuard, logSuperadminTenantAction, (req, res) => {
+      try {
+        const snapshot = entitlementService.getTenantLimitSnapshot(req.params.guildId);
+        if (!snapshot) {
+          return res.status(404).json({ success: false, message: 'Tenant not found' });
+        }
+
+        res.json({ success: true, limits: snapshot });
+      } catch (error) {
+        logger.error('Error fetching tenant limits:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.put('/api/superadmin/tenants/:guildId/limits', superadminGuard, logSuperadminTenantAction, (req, res) => {
+      try {
+        const guildId = req.params.guildId;
+        const before = entitlementService.getTenantLimitSnapshot(guildId);
+        if (!before) {
+          return res.status(404).json({ success: false, message: 'Tenant not found' });
+        }
+
+        const updates = [];
+        if (req.body && typeof req.body === 'object' && req.body.moduleKey && req.body.limitKey) {
+          updates.push({
+            moduleKey: req.body.moduleKey,
+            limitKey: req.body.limitKey,
+            limitValue: req.body.limitValue,
+          });
+        } else if (req.body && typeof req.body === 'object' && req.body.overrides && typeof req.body.overrides === 'object') {
+          for (const [moduleKey, limitMap] of Object.entries(req.body.overrides)) {
+            if (!limitMap || typeof limitMap !== 'object') continue;
+            for (const [limitKey, limitValue] of Object.entries(limitMap)) {
+              updates.push({ moduleKey, limitKey, limitValue });
+            }
+          }
+        }
+
+        if (updates.length === 0) {
+          return res.status(400).json({ success: false, message: 'No valid limit updates provided' });
+        }
+
+        for (const update of updates) {
+          const result = entitlementService.setTenantModuleOverride(
+            guildId,
+            update.moduleKey,
+            update.limitKey,
+            update.limitValue
+          );
+          if (!result.success) {
+            return res.status(400).json(result);
+          }
+        }
+
+        const after = entitlementService.getTenantLimitSnapshot(guildId);
+        tenantService.logAudit(guildId, req.session?.discordUser?.id || 'unknown', 'set_module_limits', before, after);
+        res.json({ success: true, limits: after });
+      } catch (error) {
+        logger.error('Error updating tenant limits:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
     this.app.put('/api/superadmin/tenants/:guildId/plan', superadminGuard, logSuperadminTenantAction, (req, res) => {
       try {
         const result = tenantService.setTenantPlan(
@@ -2299,8 +2388,13 @@ class WebServer {
       try {
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
         const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
-        const totalCount = db.prepare('SELECT COUNT(*) as cnt FROM missions').get().cnt;
-        const missions = db.prepare('SELECT * FROM missions ORDER BY created_at DESC LIMIT ? OFFSET ?').all(limit, offset);
+        const hasGuildColumn = missionService.hasMissionsGuildColumn?.() === true;
+        const totalCount = hasGuildColumn
+          ? db.prepare('SELECT COUNT(*) as cnt FROM missions WHERE guild_id = ?').get(req.guildId).cnt
+          : db.prepare('SELECT COUNT(*) as cnt FROM missions').get().cnt;
+        const missions = hasGuildColumn
+          ? db.prepare('SELECT * FROM missions WHERE guild_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?').all(req.guildId, limit, offset)
+          : db.prepare('SELECT * FROM missions ORDER BY created_at DESC LIMIT ? OFFSET ?').all(limit, offset);
         const missionsWithParticipants = missions.map(m => {
           const participants = db.prepare('SELECT * FROM mission_participants WHERE mission_id = ?').all(m.mission_id);
           return { ...m, participants };
@@ -2327,9 +2421,10 @@ class WebServer {
           requiredRoles || [], 
           minTier || 'Associate', 
           totalSlots, 
-          rewardPoints || 0
+          rewardPoints || 0,
+          req.guildId || ''
         );
-
+        if (!result.success) return res.status(400).json(result);
         res.json(result);
       } catch (error) {
         logger.error('Error creating mission:', error);
@@ -2340,8 +2435,13 @@ class WebServer {
     this.app.post('/api/admin/missions/:id/start', adminAuthMiddleware, (req, res) => {
       try {
         const { id } = req.params;
-        
-        db.prepare('UPDATE missions SET status = ?, start_time = CURRENT_TIMESTAMP WHERE mission_id = ?').run('active', id);
+        const hasGuildColumn = missionService.hasMissionsGuildColumn?.() === true;
+        const updateResult = hasGuildColumn
+          ? db.prepare('UPDATE missions SET status = ?, start_time = CURRENT_TIMESTAMP WHERE mission_id = ? AND guild_id = ?').run('active', id, req.guildId)
+          : db.prepare('UPDATE missions SET status = ?, start_time = CURRENT_TIMESTAMP WHERE mission_id = ?').run('active', id);
+        if (!updateResult.changes) {
+          return res.status(404).json({ success: false, message: 'Mission not found' });
+        }
         
         logger.log(`Mission ${id} started by admin`);
         res.json({ success: true, message: 'Mission started' });
@@ -2354,7 +2454,10 @@ class WebServer {
     this.app.post('/api/admin/missions/:id/complete', adminAuthMiddleware, (req, res) => {
       try {
         const { id } = req.params;
-        const mission = db.prepare('SELECT * FROM missions WHERE mission_id = ?').get(id);
+        const hasGuildColumn = missionService.hasMissionsGuildColumn?.() === true;
+        const mission = hasGuildColumn
+          ? db.prepare('SELECT * FROM missions WHERE mission_id = ? AND guild_id = ?').get(id, req.guildId)
+          : db.prepare('SELECT * FROM missions WHERE mission_id = ?').get(id);
         
         if (!mission) {
           return res.status(404).json({ success: false, message: 'Mission not found' });
@@ -2364,7 +2467,11 @@ class WebServer {
         db.prepare('UPDATE mission_participants SET points_awarded = ? WHERE mission_id = ?').run(mission.reward_points, id);
         
         // Update mission status
-        db.prepare('UPDATE missions SET status = ? WHERE mission_id = ?').run('completed', id);
+        if (hasGuildColumn) {
+          db.prepare('UPDATE missions SET status = ? WHERE mission_id = ? AND guild_id = ?').run('completed', id, req.guildId);
+        } else {
+          db.prepare('UPDATE missions SET status = ? WHERE mission_id = ?').run('completed', id);
+        }
         
         logger.log(`Mission ${id} completed, ${mission.reward_points} points awarded to participants`);
         res.json({ success: true, message: 'Mission completed and points awarded' });
@@ -2406,6 +2513,34 @@ class WebServer {
       `).run(guildId, JSON.stringify(cfg.tiers || []), JSON.stringify(cfg.traitRoles || []));
     };
 
+    const getVerificationRuleCounts = (guildId, { tenantScoped = true } = {}) => {
+      const source = tenantScoped
+        ? getTenantRoleConfig(guildId)
+        : roleService.getRoleConfigSummary();
+      const tierCount = Array.isArray(source.tiers) ? source.tiers.length : 0;
+      const traitCount = Array.isArray(source.traitRoles) ? source.traitRoles.length : 0;
+      const tokenCount = Array.isArray(source.tokenRules)
+        ? source.tokenRules.filter(rule => !guildId || String(rule.guildId || '') === String(guildId)).length
+        : 0;
+      return {
+        tiers: tierCount,
+        traits: traitCount,
+        tokens: tokenCount,
+        total: tierCount + traitCount + tokenCount,
+      };
+    };
+
+    const checkVerificationLimit = (guildId, limitKey, currentCount, itemLabel) => {
+      return entitlementService.enforceLimit({
+        guildId,
+        moduleKey: 'verification',
+        limitKey,
+        currentCount,
+        incrementBy: 1,
+        itemLabel,
+      });
+    };
+
     this.app.get('/api/admin/roles/config', adminAuthMiddleware, (req, res) => {
       try {
         const useTenantScoped = tenantService.isMultitenantEnabled() && !!req.guildId;
@@ -2432,6 +2567,31 @@ class WebServer {
         }
 
         const useTenantScoped = tenantService.isMultitenantEnabled() && !!req.guildId;
+        const ruleCounts = getVerificationRuleCounts(req.guildId, {
+          tenantScoped: useTenantScoped
+        });
+        const tierLimit = checkVerificationLimit(req.guildId, 'max_tiers', ruleCounts.tiers, 'verification collection rules');
+        if (!tierLimit.success) {
+          return res.status(400).json({
+            success: false,
+            code: 'limit_exceeded',
+            message: tierLimit.message,
+            limit: tierLimit.limit,
+            used: tierLimit.used,
+          });
+        }
+
+        const totalLimit = checkVerificationLimit(req.guildId, 'max_rules_total', ruleCounts.total, 'verification rules');
+        if (!totalLimit.success) {
+          return res.status(400).json({
+            success: false,
+            code: 'limit_exceeded',
+            message: totalLimit.message,
+            limit: totalLimit.limit,
+            used: totalLimit.used,
+          });
+        }
+
         if (useTenantScoped) {
           const cfg = getTenantRoleConfig(req.guildId);
           if ((cfg.tiers || []).some(t => String(t.name).toLowerCase() === String(name).toLowerCase())) {
@@ -2511,6 +2671,29 @@ class WebServer {
         }
 
         const useTenantScoped = tenantService.isMultitenantEnabled() && !!req.guildId;
+        const ruleCounts = getVerificationRuleCounts(req.guildId, { tenantScoped: useTenantScoped });
+        const traitLimit = checkVerificationLimit(req.guildId, 'max_trait_rules', ruleCounts.traits, 'verification trait rules');
+        if (!traitLimit.success) {
+          return res.status(400).json({
+            success: false,
+            code: 'limit_exceeded',
+            message: traitLimit.message,
+            limit: traitLimit.limit,
+            used: traitLimit.used,
+          });
+        }
+
+        const totalLimit = checkVerificationLimit(req.guildId, 'max_rules_total', ruleCounts.total, 'verification rules');
+        if (!totalLimit.success) {
+          return res.status(400).json({
+            success: false,
+            code: 'limit_exceeded',
+            message: totalLimit.message,
+            limit: totalLimit.limit,
+            used: totalLimit.used,
+          });
+        }
+
         if (useTenantScoped) {
           const cfg = getTenantRoleConfig(req.guildId);
           const exists = (cfg.traitRoles || []).some(t =>
@@ -2637,6 +2820,19 @@ class WebServer {
         const { tokenMint, tokenSymbol, minAmount, maxAmount, roleId, enabled } = req.body || {};
         if (!tokenMint || !roleId || minAmount === undefined || minAmount === null) {
           return res.status(400).json({ success: false, message: 'tokenMint, roleId, and minAmount are required' });
+        }
+
+        const useTenantScoped = tenantService.isMultitenantEnabled() && !!req.guildId;
+        const ruleCounts = getVerificationRuleCounts(req.guildId, { tenantScoped: useTenantScoped });
+        const totalLimit = checkVerificationLimit(req.guildId, 'max_rules_total', ruleCounts.total, 'verification rules');
+        if (!totalLimit.success) {
+          return res.status(400).json({
+            success: false,
+            code: 'limit_exceeded',
+            message: totalLimit.message,
+            limit: totalLimit.limit,
+            used: totalLimit.used,
+          });
         }
 
         const result = roleService.addTokenRoleRule({
@@ -3085,6 +3281,7 @@ class WebServer {
         const rolePanelService = require('../services/rolePanelService');
         const { title, description, channelId, singleSelect } = req.body;
         const result = rolePanelService.createPanel({ guildId: req.guildId || '', title, description, channelId, singleSelect });
+        if (!result.success) return res.status(400).json(result);
         res.json(result);
       } catch (e) {
         logger.error('Error creating role panel:', e);
@@ -3349,7 +3546,7 @@ class WebServer {
           alertChannelId: alertChannelId || null,
           panelChannelId: panelChannelId || null,
         });
-        if (!result.success) return res.json({ success: false, message: result.message });
+        if (!result.success) return res.status(400).json(result);
 
         // Auto-post holdings panel to watch channel if one is configured
         if (panelChannelId) {
@@ -4166,6 +4363,7 @@ class WebServer {
         if (!name || cost == null) return res.status(400).json({ success: false, message: 'name and cost are required' });
         const eng = require('../services/engagementService');
         const result = eng.addShopItem(guildId, { name, description, type: type || 'role', cost: parseInt(cost, 10), roleId, codes, quantity_remaining: quantity != null ? parseInt(quantity, 10) : -1 });
+        if (!result?.success) return res.status(400).json(result || { success: false, message: 'Failed to create shop item' });
         res.json(result);
       } catch (e) { res.status(500).json({ success: false, message: e.message }); }
     });

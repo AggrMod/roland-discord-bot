@@ -1,5 +1,6 @@
 const db = require('../database/db');
 const logger = require('../utils/logger');
+const entitlementService = require('./entitlementService');
 const { applyEmbedBranding, getBranding } = require('./embedBranding');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const clientProvider = require('../utils/clientProvider');
@@ -128,6 +129,32 @@ class NFTActivityService {
 
   addTrackedCollection({ guildId, collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer, trackBid, meSymbol }) {
     try {
+      const normalizedGuildId = String(guildId || '').trim();
+      if (normalizedGuildId) {
+        const countRow = db.prepare(`
+          SELECT COUNT(1) AS count
+          FROM nft_tracked_collections
+          WHERE guild_id = ?
+        `).get(normalizedGuildId);
+        const limitCheck = entitlementService.enforceLimit({
+          guildId: normalizedGuildId,
+          moduleKey: 'nfttracker',
+          limitKey: 'max_collections',
+          currentCount: Number(countRow?.count || 0),
+          incrementBy: 1,
+          itemLabel: 'tracked NFT collections',
+        });
+        if (!limitCheck.success) {
+          return {
+            success: false,
+            code: 'limit_exceeded',
+            message: limitCheck.message,
+            limit: limitCheck.limit,
+            used: limitCheck.used,
+          };
+        }
+      }
+
       const normalizedAddress = String(collectionAddress || '').trim();
       const normalizedName = String(collectionName || '').trim();
       const normalizedChannelId = String(channelId || '').trim();
@@ -138,7 +165,7 @@ class NFTActivityService {
         INSERT INTO nft_tracked_collections (guild_id, collection_address, collection_name, channel_id, track_mint, track_sale, track_list, track_delist, track_transfer, track_bid, me_symbol)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        guildId || '',
+        normalizedGuildId,
         normalizedAddress,
         normalizedName,
         normalizedChannelId,

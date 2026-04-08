@@ -2,6 +2,7 @@ const { Connection, PublicKey } = require('@solana/web3.js');
 const { EmbedBuilder } = require('discord.js');
 const db = require('../database/db');
 const logger = require('../utils/logger');
+const entitlementService = require('./entitlementService');
 const { applyEmbedBranding } = require('./embedBranding');
 const clientProvider = require('../utils/clientProvider');
 
@@ -621,17 +622,43 @@ class TreasuryService {
 
   addWallet(address, label = '', guildId = null) {
     try {
+      const normalizedGuildId = String(guildId || '').trim();
+      if (normalizedGuildId) {
+        const countRow = db.prepare(`
+          SELECT COUNT(1) AS count
+          FROM treasury_wallets
+          WHERE guild_id = ?
+        `).get(normalizedGuildId);
+        const limitCheck = entitlementService.enforceLimit({
+          guildId: normalizedGuildId,
+          moduleKey: 'treasury',
+          limitKey: 'max_wallets',
+          currentCount: Number(countRow?.count || 0),
+          incrementBy: 1,
+          itemLabel: 'treasury wallets',
+        });
+        if (!limitCheck.success) {
+          return {
+            success: false,
+            code: 'limit_exceeded',
+            message: limitCheck.message,
+            limit: limitCheck.limit,
+            used: limitCheck.used,
+          };
+        }
+      }
+
       if (!this.isValidSolanaAddress(address)) {
         return { success: false, message: 'Invalid Solana wallet address' };
       }
       // Check for duplicate within same guild
-      const existing = guildId
-        ? db.prepare('SELECT id FROM treasury_wallets WHERE address = ? AND guild_id = ?').get(address, guildId)
+      const existing = normalizedGuildId
+        ? db.prepare('SELECT id FROM treasury_wallets WHERE address = ? AND guild_id = ?').get(address, normalizedGuildId)
         : db.prepare('SELECT id FROM treasury_wallets WHERE address = ? AND guild_id IS NULL').get(address);
       if (existing) return { success: false, message: 'This wallet is already in the list' };
       const info = db.prepare(
         'INSERT INTO treasury_wallets (address, label, guild_id) VALUES (?, ?, ?)'
-      ).run(address, label || '', guildId || null);
+      ).run(address, label || '', normalizedGuildId || null);
       return { success: true, id: info.lastInsertRowid };
     } catch (e) {
       logger.error('Error adding treasury wallet:', e);

@@ -7,6 +7,7 @@
 
 const db     = require('../database/db');
 const logger = require('../utils/logger');
+const entitlementService = require('./entitlementService');
 
 // ── Default config ──────────────────────────────────────────────────────────
 const DEFAULTS = {
@@ -175,13 +176,39 @@ function getShopItems(guildId) {
 }
 
 function addShopItem(guildId, { name, description, type, cost, roleId, codes }) {
+  const normalizedGuildId = String(guildId || '').trim();
+  if (normalizedGuildId) {
+    const countRow = db.prepare(`
+      SELECT COUNT(1) AS count
+      FROM shop_items
+      WHERE guild_id = ? AND enabled = 1
+    `).get(normalizedGuildId);
+    const limitCheck = entitlementService.enforceLimit({
+      guildId: normalizedGuildId,
+      moduleKey: 'engagement',
+      limitKey: 'max_shop_items',
+      currentCount: Number(countRow?.count || 0),
+      incrementBy: 1,
+      itemLabel: 'shop items',
+    });
+    if (!limitCheck.success) {
+      return {
+        success: false,
+        code: 'limit_exceeded',
+        message: limitCheck.message,
+        limit: limitCheck.limit,
+        used: limitCheck.used,
+      };
+    }
+  }
+
   const codePool = JSON.stringify(codes || []);
   const qty = type === 'code' ? (codes?.length || 0) : -1;
   const result = db.prepare(`
     INSERT INTO shop_items (guild_id, name, description, type, cost, role_id, code_pool, quantity_remaining)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(guildId, name, description || '', type, cost, roleId || null, codePool, qty);
-  return result.lastInsertRowid;
+  `).run(normalizedGuildId, name, description || '', type, cost, roleId || null, codePool, qty);
+  return { success: true, id: result.lastInsertRowid };
 }
 
 function removeShopItem(guildId, itemId) {

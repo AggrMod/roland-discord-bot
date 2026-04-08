@@ -56,6 +56,28 @@ function initDatabase() {
       added_by TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS superadmin_user_identity_flags (
+      discord_id TEXT PRIMARY KEY,
+      trusted_identity INTEGER DEFAULT 0,
+      manual_verified INTEGER DEFAULT 0,
+      notes TEXT,
+      updated_by TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS superadmin_identity_audit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      discord_id TEXT,
+      wallet_address TEXT,
+      action TEXT NOT NULL,
+      actor_id TEXT,
+      before_json TEXT,
+      after_json TEXT,
+      metadata_json TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   db.exec(`
@@ -214,6 +236,9 @@ function initDatabase() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_wallets_discord_id ON wallets(discord_id);
+    CREATE INDEX IF NOT EXISTS idx_superadmin_identity_flags_updated ON superadmin_user_identity_flags(updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_superadmin_identity_audit_discord_created ON superadmin_identity_audit_logs(discord_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_superadmin_identity_audit_wallet_created ON superadmin_identity_audit_logs(wallet_address, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_proposals_status ON proposals(status);
     CREATE INDEX IF NOT EXISTS idx_votes_proposal ON votes(proposal_id);
     CREATE INDEX IF NOT EXISTS idx_missions_status ON missions(status);
@@ -557,6 +582,7 @@ function initDatabase() {
     `CREATE TRIGGER IF NOT EXISTS update_plan_module_limits_timestamp AFTER UPDATE ON plan_module_limits BEGIN UPDATE plan_module_limits SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
     `CREATE TRIGGER IF NOT EXISTS update_tenant_module_limit_overrides_timestamp AFTER UPDATE ON tenant_module_limit_overrides BEGIN UPDATE tenant_module_limit_overrides SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
     `CREATE TRIGGER IF NOT EXISTS update_tenant_billing_timestamp AFTER UPDATE ON tenant_billing BEGIN UPDATE tenant_billing SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
+    `CREATE TRIGGER IF NOT EXISTS update_superadmin_identity_flags_timestamp AFTER UPDATE ON superadmin_user_identity_flags BEGIN UPDATE superadmin_user_identity_flags SET updated_at = CURRENT_TIMESTAMP WHERE discord_id = NEW.discord_id; END`,
     `CREATE TRIGGER IF NOT EXISTS update_nft_alert_config_timestamp AFTER UPDATE ON nft_activity_alert_config BEGIN UPDATE nft_activity_alert_config SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
     `CREATE TRIGGER IF NOT EXISTS update_tenant_role_configs_timestamp AFTER UPDATE ON tenant_role_configs BEGIN UPDATE tenant_role_configs SET updated_at = CURRENT_TIMESTAMP WHERE rowid = NEW.rowid; END`,
   ];

@@ -5532,8 +5532,25 @@ async function loadVerificationSettings() {
       fetch('/api/admin/settings', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/verification/panel', { credentials: 'include', headers: buildTenantRequestHeaders() })
     ]);
-    const settingsJson = await settingsRes.json();
-    const panelJson = await panelRes.json();
+
+    let settingsJson = {};
+    try {
+      settingsJson = await settingsRes.json();
+    } catch (_error) {
+      settingsJson = {};
+    }
+
+    let panelJson = {};
+    try {
+      panelJson = await panelRes.json();
+    } catch (_error) {
+      panelJson = {};
+    }
+
+    if (!settingsRes.ok || !settingsJson.success) {
+      throw new Error(settingsJson.message || 'Failed to load server settings');
+    }
+
     const vs = settingsJson.success ? settingsJson.settings : {};
     const panel = panelJson.success ? (panelJson.panel || {}) : {};
 

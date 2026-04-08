@@ -190,6 +190,41 @@ function resolveOAuthRedirectUri(req) {
   return configured[0];
 }
 
+function ensureVerificationPanelsSchema() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS verification_panels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL UNIQUE,
+      channel_id TEXT NOT NULL,
+      message_id TEXT,
+      title TEXT DEFAULT 'Verify your wallet!',
+      description TEXT DEFAULT 'To get access to community roles, verify your wallet by clicking the button below.',
+      color TEXT DEFAULT '#FFD700',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  const ignoreDuplicateColumn = (error) => {
+    const message = String(error?.message || '').toLowerCase();
+    return message.includes('duplicate column name') || message.includes('already exists');
+  };
+
+  try {
+    db.exec("ALTER TABLE verification_panels ADD COLUMN color TEXT DEFAULT '#FFD700'");
+  } catch (error) {
+    if (!ignoreDuplicateColumn(error)) throw error;
+  }
+
+  try {
+    db.exec('ALTER TABLE verification_panels ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP');
+  } catch (error) {
+    if (!ignoreDuplicateColumn(error)) throw error;
+  }
+
+  db.exec('CREATE INDEX IF NOT EXISTS idx_verification_panels_guild ON verification_panels(guild_id)');
+}
+
 class WebServer {
   constructor() {
     this.app = express();
@@ -2897,6 +2932,7 @@ class WebServer {
 
     this.app.get('/api/admin/verification/panel', adminAuthMiddleware, (req, res) => {
       try {
+        ensureVerificationPanelsSchema();
         const row = db.prepare(`
           SELECT guild_id, channel_id, message_id, title, description, color, created_at, updated_at
           FROM verification_panels
@@ -2929,6 +2965,7 @@ class WebServer {
 
     this.app.post('/api/admin/verification/panel/post', adminAuthMiddleware, async (req, res) => {
       try {
+        ensureVerificationPanelsSchema();
         if (!this.client) {
           return res.status(500).json({ success: false, message: 'Bot not initialized' });
         }

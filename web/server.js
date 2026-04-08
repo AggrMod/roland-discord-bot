@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const session = require('express-session');
 const BetterSqlite3Store = require('better-sqlite3-session-store')(session);
 const Database = require('better-sqlite3');
@@ -26,6 +26,7 @@ const nftActivityService = require('../services/nftActivityService');
 const trackedWalletsService = require('../services/trackedWalletsService');
 const ticketService = require('../services/ticketService');
 const entitlementService = require('../services/entitlementService');
+const billingService = require('../services/billingService');
 const superadminService = require('../services/superadminService');
 const superadminGuard = require('../middleware/superadminGuard');
 const { BATTLE_ERAS } = require('../config/battleEras');
@@ -232,6 +233,7 @@ class WebServer {
     this.app = express();
     this.port = process.env.WEB_PORT || 3000;
     this.client = null; // Discord client reference
+    this.billingSweepTimer = null;
     this.setupMiddleware();
     this.setupRoutes();
   }
@@ -361,7 +363,7 @@ class WebServer {
     this.app.use('/api/public/', publicApiLimiter);
     this.app.use('/auth/', authLimiter);
     this.app.use('/api/verify/', verifyLimiter);
-    // Only rate-limit new request creation — not status/config/check-now
+    // Only rate-limit new request creation â€” not status/config/check-now
     this.app.use('/api/micro-verify/request', verifyLimiter);
     this.app.use('/api/admin/', adminLimiter);
 
@@ -712,7 +714,7 @@ class WebServer {
 
         const userData = await userResponse.json();
 
-        // Store in session (do NOT persist access token — use transiently only)
+        // Store in session (do NOT persist access token â€” use transiently only)
         req.session.discordUser = {
           id: userData.id,
           username: userData.username,
@@ -1148,7 +1150,7 @@ class WebServer {
 
     // ==================== GOVERNANCE LIFECYCLE ENDPOINTS ====================
 
-    // POST /api/governance/proposals — alias for user proposal creation (session auth)
+    // POST /api/governance/proposals â€” alias for user proposal creation (session auth)
     this.app.post('/api/governance/proposals', async (req, res) => {
       if (!req.session.discordUser) {
         return res.status(401).json({ success: false, message: 'Not authenticated' });
@@ -1170,7 +1172,7 @@ class WebServer {
       }
     });
 
-    // POST /api/governance/proposals/:id/submit — author submits for review
+    // POST /api/governance/proposals/:id/submit â€” author submits for review
     this.app.post('/api/governance/proposals/:id/submit', (req, res) => {
       if (!req.session.discordUser) return res.status(401).json({ success: false, message: 'Not authenticated' });
       try {
@@ -1182,7 +1184,7 @@ class WebServer {
       }
     });
 
-    // POST /api/governance/proposals/:id/support — add support (session auth)
+    // POST /api/governance/proposals/:id/support â€” add support (session auth)
     this.app.post('/api/governance/proposals/:id/support', async (req, res) => {
       if (!req.session.discordUser) return res.status(401).json({ success: false, message: 'Not authenticated' });
       try {
@@ -1194,7 +1196,7 @@ class WebServer {
       }
     });
 
-    // GET /api/governance/proposals/:id/comments — public
+    // GET /api/governance/proposals/:id/comments â€” public
     this.app.get('/api/governance/proposals/:id/comments', (req, res) => {
       try {
         const comments = proposalService.getComments(req.params.id);
@@ -1204,7 +1206,7 @@ class WebServer {
       }
     });
 
-    // POST /api/governance/proposals/:id/comments — session auth
+    // POST /api/governance/proposals/:id/comments â€” session auth
     this.app.post('/api/governance/proposals/:id/comments', commentLimiter, (req, res) => {
       if (!req.session.discordUser) return res.status(401).json({ success: false, message: 'Not authenticated' });
       try {
@@ -1218,7 +1220,7 @@ class WebServer {
       }
     });
 
-    // POST /api/governance/proposals/:id/veto — council member veto vote
+    // POST /api/governance/proposals/:id/veto â€” council member veto vote
     this.app.post('/api/governance/proposals/:id/veto', async (req, res) => {
       if (!req.session.discordUser) return res.status(401).json({ success: false, message: 'Not authenticated' });
       try {
@@ -1271,7 +1273,7 @@ class WebServer {
       });
     });
 
-    // Global settings — no guild context required, superadmin only
+    // Global settings â€” no guild context required, superadmin only
     this.app.get('/api/superadmin/global-settings', superadminGuard, (req, res) => {
       try {
         const settings = settingsManager.getSettings();
@@ -1922,7 +1924,7 @@ class WebServer {
         const tenantContext = tenantService.getTenantContext(req.guildId);
         const multiTenantEnabled = tenantService.isMultitenantEnabled();
         
-        // Smart load: DB override → .env fallback
+        // Smart load: DB override â†’ .env fallback
         const guild = req.guild || await fetchGuildById(req.guildId);
         const tenantLogoFallback = guildIconUrl(guild);
 
@@ -2004,10 +2006,44 @@ class WebServer {
     this.app.get('/api/admin/plan', adminAuthMiddleware, (req, res) => {
       try {
         const tenantContext = tenantService.getTenantContext(req.guildId);
-        const plan = tenantContext?.planKey || 'starter';
-        res.json({ success: true, plan });
+        const snapshot = billingService.getSubscriptionSnapshot(req.guildId);
+        const plan = tenantContext?.planKey || snapshot?.plan || 'starter';
+
+        res.json({
+          success: true,
+          plan,
+          planLabel: snapshot?.planLabel || tenantContext?.planLabel || plan,
+          status: snapshot?.status || tenantContext?.status || 'active',
+          expiresAt: snapshot?.expiresAt || null,
+          billing: snapshot?.billing || null,
+          renewal: snapshot?.renewal || { options: [] }
+        });
       } catch (error) {
         logger.error('Error fetching admin plan:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.get('/api/admin/billing/options', adminAuthMiddleware, (req, res) => {
+      try {
+        const tenantContext = tenantService.getTenantContext(req.guildId);
+        const requestedPlan = normalizeWebhookValue(req.query.plan) || tenantContext?.planKey || 'starter';
+        const requestedInterval = normalizeWebhookValue(req.query.interval) || tenantContext?.billing?.billingInterval || 'monthly';
+        const options = billingService.getRenewalOptions({
+          guildId: req.guildId,
+          planKey: requestedPlan,
+          interval: requestedInterval
+        });
+
+        res.json({
+          success: true,
+          plan: requestedPlan,
+          interval: requestedInterval,
+          options,
+          supportUrl: billingService.getSupportUrl(req.guildId)
+        });
+      } catch (error) {
+        logger.error('Error fetching billing options:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });
@@ -2046,7 +2082,7 @@ class WebServer {
           delete sanitized.chainEmojiMap;
         }
 
-        // In multi-tenant mode, module toggle states live in tenant_modules — NOT settings.json.
+        // In multi-tenant mode, module toggle states live in tenant_modules â€” NOT settings.json.
         // Route them through setTenantModule so reads from GET /api/admin/settings reflect the change.
         const multiTenantEnabled = tenantService.isMultitenantEnabled();
         if (multiTenantEnabled && req.guildId) {
@@ -2137,7 +2173,7 @@ class WebServer {
                 ogRoleService.setLimit(sanitized.ogRoleLimit || 1);
               }
             } else {
-              logger.log(`[OG-DEBUG] ogRoleId was empty/falsy — skipping ogRoleService update. Current config: ${JSON.stringify(ogRoleService.getConfig())}`);
+              logger.log(`[OG-DEBUG] ogRoleId was empty/falsy â€” skipping ogRoleService update. Current config: ${JSON.stringify(ogRoleService.getConfig())}`);
             }
           } catch (e) {
             logger.warn('OG role config sync warning:', e?.message || e);
@@ -2328,7 +2364,7 @@ class WebServer {
       }
     });
 
-    // Admin: approve proposal (pending_review → supporting)
+    // Admin: approve proposal (pending_review â†’ supporting)
     this.app.post('/api/admin/governance/proposals/:id/approve', adminAuthMiddleware, (req, res) => {
       try {
         const result = proposalService.approveProposal(req.params.id, req.session.discordUser.id);
@@ -2339,7 +2375,7 @@ class WebServer {
       }
     });
 
-    // Admin: hold proposal (pending_review → on_hold)
+    // Admin: hold proposal (pending_review â†’ on_hold)
     this.app.post('/api/admin/governance/proposals/:id/hold', adminAuthMiddleware, (req, res) => {
       try {
         const { reason } = req.body;
@@ -2351,7 +2387,7 @@ class WebServer {
       }
     });
 
-    // Admin: promote to voting (supporting → voting, takes VP snapshot)
+    // Admin: promote to voting (supporting â†’ voting, takes VP snapshot)
     this.app.post('/api/admin/governance/proposals/:id/promote', adminAuthMiddleware, async (req, res) => {
       try {
         const result = await proposalService.promoteToVoting(req.params.id, req.session.discordUser.id);
@@ -2373,7 +2409,7 @@ class WebServer {
       }
     });
 
-    // Admin: emergency pause (Don + Consigliere only — caller must verify roles)
+    // Admin: emergency pause (Don + Consigliere only â€” caller must verify roles)
     this.app.post('/api/admin/governance/proposals/:id/pause', adminAuthMiddleware, (req, res) => {
       try {
         const result = proposalService.emergencyPause(req.params.id, req.session.discordUser.id);
@@ -3073,7 +3109,7 @@ class WebServer {
         const embed = createBrandedPanelEmbed({
           guildId: req.guildId || channel.guild?.id || '',
           moduleKey: 'selfserve',
-          panelTitle: title || '🎖️ Get Your Roles',
+          panelTitle: title || 'ðŸŽ–ï¸ Get Your Roles',
           description: description || 'Click a button below to claim or unclaim a community role.',
           defaultColor: '#6366f1',
           defaultFooter: 'Powered by Guild Pilot',
@@ -3181,7 +3217,7 @@ class WebServer {
           return res.status(400).json({ success: false, message: 'channelId is required' });
         }
 
-        const title = String(req.body?.title || existing?.title || '🔗 Verify your wallet!').trim();
+        const title = String(req.body?.title || existing?.title || 'ðŸ”— Verify your wallet!').trim();
         const description = String(
           req.body?.description
           || existing?.description
@@ -3374,7 +3410,7 @@ class WebServer {
         const embed = createBrandedPanelEmbed({
           guildId: req.guildId,
           moduleKey: 'selfserve',
-          panelTitle: panel.title || '🎖️ Get Your Roles',
+          panelTitle: panel.title || 'ðŸŽ–ï¸ Get Your Roles',
           description: panel.description || 'Click a button below to claim or unclaim a community role.',
           defaultColor: '#6366f1',
           defaultFooter: 'Powered by Guild Pilot',
@@ -4099,7 +4135,7 @@ class WebServer {
       }
     });
 
-    // Legacy verify endpoint (kept for API consumers — requires session auth)
+    // Legacy verify endpoint (kept for API consumers â€” requires session auth)
     this.app.post('/api/verify', async (req, res) => {
       if (!req.session?.discordUser?.id) {
         return res.status(401).json({ success: false, message: 'Not authenticated' });
@@ -4778,6 +4814,15 @@ class WebServer {
           guildId: normalizeWebhookValue(payload.guildId),
           plan: normalizeWebhookValue(payload.plan),
           status: normalizeWebhookValue(payload.status),
+          provider: normalizeWebhookValue(payload.provider),
+          subscriptionId: normalizeWebhookValue(payload.subscriptionId || payload.subscription_id),
+          billingInterval: normalizeWebhookValue(payload.billingInterval || payload.billing_interval || payload.interval),
+          currentPeriodStart: payload.currentPeriodStart ?? payload.current_period_start ?? payload.periodStart ?? null,
+          currentPeriodEnd: payload.currentPeriodEnd ?? payload.current_period_end ?? payload.periodEnd ?? payload.expiresAt ?? null,
+          cancelAtPeriodEnd: payload.cancelAtPeriodEnd ?? payload.cancel_at_period_end,
+          canceledAt: payload.canceledAt ?? payload.canceled_at ?? payload.cancelledAt ?? payload.cancelled_at ?? null,
+          lastPaymentAt: payload.lastPaymentAt ?? payload.last_payment_at ?? payload.paidAt ?? payload.paymentAt ?? null,
+          paymentStatus: normalizeWebhookValue(payload.paymentStatus || payload.payment_status),
           metadata: payload.metadata === undefined ? undefined : payload.metadata
         };
         const payloadHash = hashWebhookPayload(normalizedPayload);
@@ -4799,15 +4844,16 @@ class WebServer {
 
         const normalizedEventType = normalizedPayload.eventType.toLowerCase();
         const normalizedStatus = normalizedPayload.status.toLowerCase();
-        const successMarkers = new Set(['approved', 'success']);
-        const suspendedMarkers = new Set(['cancelled', 'canceled', 'past_due', 'suspended']);
+        const normalizedPlan = normalizeWebhookValue(normalizedPayload.plan).toLowerCase();
+        const successMarkers = new Set(['approved', 'success', 'paid', 'active', 'trialing']);
+        const suspendedMarkers = new Set(['cancelled', 'canceled', 'past_due', 'suspended', 'unpaid', 'payment_failed', 'expired']);
         const actionMarkers = new Set([normalizedEventType, normalizedStatus].filter(Boolean));
         const shouldApplyPlan = Array.from(actionMarkers).some(marker => successMarkers.has(marker));
         const shouldSuspend = Array.from(actionMarkers).some(marker => suspendedMarkers.has(marker));
 
         let result = 'ignored';
 
-        if (!normalizedPayload.guildId || !normalizedPayload.customerId || !normalizedPayload.eventType || !normalizedPayload.status) {
+        if (!normalizedPayload.guildId || !normalizedPayload.eventType || !normalizedPayload.status) {
           result = 'invalid:missing_required_fields';
         } else if (shouldApplyPlan) {
           if (!normalizedPayload.plan) {
@@ -4822,21 +4868,41 @@ class WebServer {
             if (!planResult.success) {
               result = `error:${planResult.message || 'plan_update_failed'}`;
             } else {
-              result = `applied_plan:${normalizedPayload.plan}`;
+              result = `applied_plan:${normalizedPlan}`;
+              // Subscription became valid -> mark tenant active as part of billing recovery.
+              tenantService.setTenantStatus(
+                normalizedPayload.guildId,
+                'active',
+                'billing-entitlement-webhook'
+              );
             }
           }
         } else if (shouldSuspend) {
+          // Remove paid entitlements on failed/cancelled payments by downgrading to Starter.
+          const downgradeResult = tenantService.setTenantPlan(
+            normalizedPayload.guildId,
+            'starter',
+            'billing-entitlement-webhook'
+          );
           const statusResult = tenantService.setTenantStatus(
             normalizedPayload.guildId,
             'suspended',
             'billing-entitlement-webhook'
           );
 
-          if (!statusResult.success) {
+          if (!downgradeResult.success) {
+            result = `error:${downgradeResult.message || 'downgrade_failed'}`;
+          } else if (!statusResult.success) {
             result = `error:${statusResult.message || 'status_update_failed'}`;
           } else {
-            result = 'suspended';
+            result = 'suspended:downgraded_to_starter';
           }
+        }
+
+        try {
+          billingService.upsertFromEntitlement(normalizedPayload, result);
+        } catch (billingError) {
+          logger.warn('Billing metadata upsert failed:', billingError?.message || billingError);
         }
 
         const insertResult = db.prepare(`
@@ -4873,6 +4939,15 @@ class WebServer {
             guildId: normalizeWebhookValue(payload.guildId),
             plan: normalizeWebhookValue(payload.plan),
             status: normalizeWebhookValue(payload.status),
+            provider: normalizeWebhookValue(payload.provider),
+            subscriptionId: normalizeWebhookValue(payload.subscriptionId || payload.subscription_id),
+            billingInterval: normalizeWebhookValue(payload.billingInterval || payload.billing_interval || payload.interval),
+            currentPeriodStart: payload.currentPeriodStart ?? payload.current_period_start ?? payload.periodStart ?? null,
+            currentPeriodEnd: payload.currentPeriodEnd ?? payload.current_period_end ?? payload.periodEnd ?? payload.expiresAt ?? null,
+            cancelAtPeriodEnd: payload.cancelAtPeriodEnd ?? payload.cancel_at_period_end,
+            canceledAt: payload.canceledAt ?? payload.canceled_at ?? payload.cancelledAt ?? payload.cancelled_at ?? null,
+            lastPaymentAt: payload.lastPaymentAt ?? payload.last_payment_at ?? payload.paidAt ?? payload.paymentAt ?? null,
+            paymentStatus: normalizeWebhookValue(payload.paymentStatus || payload.payment_status),
             metadata: payload.metadata === undefined ? undefined : payload.metadata
           };
           const duplicateHash = hashWebhookPayload(normalizedPayload);
@@ -5015,15 +5090,43 @@ class WebServer {
       logger.log(`Dashboard URL: ${baseUrl}/dashboard`);
       logger.log(`Admin Portal URL: ${baseUrl}/admin`);
     });
+
+    const sweepEnabled = String(process.env.BILLING_EXPIRY_SWEEP_ENABLED || 'true').toLowerCase() !== 'false';
+    if (sweepEnabled) {
+      const intervalMs = Math.max(5 * 60 * 1000, Number(process.env.BILLING_EXPIRY_SWEEP_MS) || (60 * 60 * 1000));
+      const graceMinutes = Math.max(0, Number(process.env.BILLING_EXPIRY_GRACE_MINUTES) || (24 * 60));
+
+      const runBillingSweep = () => {
+        try {
+          const summary = billingService.enforceSubscriptionExpiry({ graceMinutes, batchSize: 100 });
+          if (summary.scanned > 0 || summary.downgraded > 0 || summary.errors > 0) {
+            logger.log(`[billing-expiry-sweep] scanned=${summary.scanned} downgraded=${summary.downgraded} errors=${summary.errors}`);
+          }
+        } catch (error) {
+          logger.error('Billing expiry sweep failed:', error);
+        }
+      };
+
+      setTimeout(runBillingSweep, 12 * 1000);
+      this.billingSweepTimer = setInterval(runBillingSweep, intervalMs);
+      this.billingSweepTimer.unref?.();
+      logger.log(`[billing-expiry-sweep] enabled intervalMs=${intervalMs} graceMinutes=${graceMinutes}`);
+    }
   }
 
   stop() {
+    if (this.billingSweepTimer) {
+      clearInterval(this.billingSweepTimer);
+      this.billingSweepTimer = null;
+    }
+
     if (this.server) {
       this.server.close();
-      logger.log('🛑 Web server stopped');
+      logger.log('ðŸ›‘ Web server stopped');
     }
   }
 }
 
 module.exports = WebServer;
+
 

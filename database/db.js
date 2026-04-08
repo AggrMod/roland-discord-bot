@@ -471,6 +471,31 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_tenant_module_limit_overrides_tenant ON tenant_module_limit_overrides(tenant_id);
     CREATE INDEX IF NOT EXISTS idx_tenant_module_limit_overrides_module ON tenant_module_limit_overrides(module_key);
 
+    CREATE TABLE IF NOT EXISTS tenant_billing (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id INTEGER NOT NULL UNIQUE,
+      customer_id TEXT,
+      subscription_id TEXT,
+      provider TEXT,
+      subscription_status TEXT,
+      billing_interval TEXT,
+      current_period_start DATETIME,
+      current_period_end DATETIME,
+      cancel_at_period_end INTEGER DEFAULT 0,
+      canceled_at DATETIME,
+      last_payment_at DATETIME,
+      last_payment_status TEXT,
+      metadata_json TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tenant_billing_tenant ON tenant_billing(tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_tenant_billing_customer ON tenant_billing(customer_id);
+    CREATE INDEX IF NOT EXISTS idx_tenant_billing_status ON tenant_billing(subscription_status);
+    CREATE INDEX IF NOT EXISTS idx_tenant_billing_period_end ON tenant_billing(current_period_end);
+
     CREATE TABLE IF NOT EXISTS billing_entitlement_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       guild_id TEXT,
@@ -530,6 +555,7 @@ function initDatabase() {
     `CREATE TRIGGER IF NOT EXISTS update_tenant_limits_timestamp AFTER UPDATE ON tenant_limits BEGIN UPDATE tenant_limits SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
     `CREATE TRIGGER IF NOT EXISTS update_plan_module_limits_timestamp AFTER UPDATE ON plan_module_limits BEGIN UPDATE plan_module_limits SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
     `CREATE TRIGGER IF NOT EXISTS update_tenant_module_limit_overrides_timestamp AFTER UPDATE ON tenant_module_limit_overrides BEGIN UPDATE tenant_module_limit_overrides SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
+    `CREATE TRIGGER IF NOT EXISTS update_tenant_billing_timestamp AFTER UPDATE ON tenant_billing BEGIN UPDATE tenant_billing SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
     `CREATE TRIGGER IF NOT EXISTS update_nft_alert_config_timestamp AFTER UPDATE ON nft_activity_alert_config BEGIN UPDATE nft_activity_alert_config SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
     `CREATE TRIGGER IF NOT EXISTS update_tenant_role_configs_timestamp AFTER UPDATE ON tenant_role_configs BEGIN UPDATE tenant_role_configs SET updated_at = CURRENT_TIMESTAMP WHERE rowid = NEW.rowid; END`,
   ];
@@ -720,6 +746,24 @@ function initDatabase() {
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_tickets_last_activity ON tickets(last_activity_at)"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_limits ADD COLUMN mock_data_enabled INTEGER DEFAULT 0"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_modules ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN customer_id TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN subscription_id TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN provider TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN subscription_status TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN billing_interval TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN current_period_start DATETIME"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN current_period_end DATETIME"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN cancel_at_period_end INTEGER DEFAULT 0"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN canceled_at DATETIME"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN last_payment_at DATETIME"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN last_payment_status TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN metadata_json TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
+  try { db.exec("CREATE INDEX IF NOT EXISTS idx_tenant_billing_tenant ON tenant_billing(tenant_id)"); } catch (e) {}
+  try { db.exec("CREATE INDEX IF NOT EXISTS idx_tenant_billing_customer ON tenant_billing(customer_id)"); } catch (e) {}
+  try { db.exec("CREATE INDEX IF NOT EXISTS idx_tenant_billing_status ON tenant_billing(subscription_status)"); } catch (e) {}
+  try { db.exec("CREATE INDEX IF NOT EXISTS idx_tenant_billing_period_end ON tenant_billing(current_period_end)"); } catch (e) {}
   try { db.exec("ALTER TABLE nft_tracked_collections ADD COLUMN guild_id TEXT NOT NULL DEFAULT ''"); } catch (e) {}
   try { db.exec("ALTER TABLE nft_tracked_collections ADD COLUMN me_symbol TEXT DEFAULT ''"); } catch (e) {}
   try { db.exec('ALTER TABLE nft_tracked_collections ADD COLUMN track_bid INTEGER DEFAULT 0'); } catch (e) {}

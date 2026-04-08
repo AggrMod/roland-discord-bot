@@ -20,6 +20,10 @@ Auth:
   "guildId": "123456789012345678",
   "plan": "growth",
   "status": "approved",
+  "provider": "stripe",
+  "billingInterval": "monthly",
+  "currentPeriodEnd": "2026-05-01T00:00:00Z",
+  "subscriptionId": "sub_123",
   "metadata": {
     "source": "stripe",
     "invoiceId": "in_123"
@@ -29,9 +33,11 @@ Auth:
 
 ## Event handling
 
-- `approved` and `success` values apply the requested plan.
-- `cancelled`, `canceled`, `past_due`, and `suspended` values set the tenant status to `suspended`.
+- `approved`, `success`, `paid`, `active`, and `trialing` values apply the requested plan and set tenant status to `active`.
+- `cancelled`, `canceled`, `past_due`, `suspended`, `unpaid`, `payment_failed`, and `expired` values downgrade the tenant to `starter` and set status to `suspended`.
 - Duplicate payloads are idempotent through a payload hash stored in `billing_entitlement_events`.
+- Subscription fields (`provider`, `billingInterval`, `currentPeriodStart`, `currentPeriodEnd`, `subscriptionId`, payment fields) are persisted to `tenant_billing` for portal display.
+- Safety net: periodic expiry sweep (`BILLING_EXPIRY_SWEEP_*` env vars) downgrades stale paid tenants if a cancellation/failure webhook was missed.
 
 Valid plan keys:
 

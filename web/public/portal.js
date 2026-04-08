@@ -8,6 +8,7 @@ let activeGuildId = localStorage.getItem('activeGuildId') || '';
 let serverAccessData = { managedServers: [], unmanagedServers: [], isSuperadmin: false };
 let originalFetch = window.fetch.bind(window);
 let _csrfToken = '';
+let currentPlanSnapshot = null;
 const _portalMultiSelectRegistry = new Map();
 let _portalMultiSelectAutoId = 0;
 let _portalMultiSelectPickerState = null;
@@ -3375,6 +3376,12 @@ function renderTenantDetailPanel(tenant, tenantLimits = null) {
     return `<div style="padding:18px; text-align:center; color:var(--text-secondary);">Select a tenant to manage plan, modules, branding, and status.</div>`;
   }
 
+  const billing = tenant.billing || null;
+  const billingStatus = String(billing?.subscriptionStatus || 'unknown').toLowerCase();
+  const billingInterval = billing?.billingInterval === 'yearly' ? 'Yearly' : (billing?.billingInterval === 'monthly' ? 'Monthly' : 'Unknown');
+  const billingProvider = billing?.provider ? String(billing.provider).toUpperCase() : 'N/A';
+  const billingEnd = billing?.currentPeriodEnd ? new Date(billing.currentPeriodEnd).toLocaleString() : 'Not set';
+
   const planOptions = Object.entries(TENANT_PLAN_LABELS).map(([key, label]) => `
     <option value="${escapeHtml(key)}"${tenant.planKey === key ? ' selected' : ''}>${escapeHtml(label)}</option>
   `).join('');
@@ -3524,6 +3531,15 @@ function renderTenantDetailPanel(tenant, tenantLimits = null) {
           </div>
           <div style="margin-top:8px; text-align:right;">
             <button class="btn-secondary" id="tenantMockDataSaveBtn" onclick="saveTenantMockData()" style="padding:8px 14px;">Save Mock Data</button>
+          </div>
+          <div style="margin-top:12px; padding:10px 12px; border:1px solid rgba(99,102,241,0.16); border-radius:10px; background:rgba(14,23,44,0.45); color:#c9d6ff; font-size:0.85em;">
+            <div style="font-weight:600; margin-bottom:8px;">Billing Snapshot</div>
+            <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px;">
+              <div><span style="color:var(--text-secondary);">Provider:</span> ${escapeHtml(billingProvider)}</div>
+              <div><span style="color:var(--text-secondary);">Interval:</span> ${escapeHtml(billingInterval)}</div>
+              <div><span style="color:var(--text-secondary);">Status:</span> ${escapeHtml(billingStatus)}</div>
+              <div><span style="color:var(--text-secondary);">Until:</span> ${escapeHtml(billingEnd)}</div>
+            </div>
           </div>
         </div>
 
@@ -9783,7 +9799,70 @@ function updatePlanPrices() {
 
 function handlePlanCta(action) {
   if (!action) return;
-  showInfo('Billing integration coming soon. Contact support to upgrade.');
+  const annual = !!document.getElementById('billingAnnualToggle')?.checked;
+  const interval = annual ? 'yearly' : 'monthly';
+
+  if (action === 'signup_free') {
+    showInfo('Starter is already active by default when a server installs GuildPilot.');
+    return;
+  }
+
+  if (!activeGuildId) {
+    showInfo('Select a server first to continue with billing actions.');
+    return;
+  }
+
+  let targetPlan = '';
+  if (action === 'upgrade_growth') targetPlan = 'growth';
+  if (action === 'upgrade_pro') targetPlan = 'pro';
+
+  if (action === 'contact_enterprise') {
+    const support = currentPlanSnapshot?.renewal?.supportUrl;
+    if (support) {
+      window.open(support, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    showInfo('Contact support to discuss Enterprise setup.');
+    return;
+  }
+
+  if (!targetPlan) {
+    showInfo('Billing action is not configured yet.');
+    return;
+  }
+
+  (async () => {
+    try {
+      const response = await fetch(
+        `/api/admin/billing/options?plan=${encodeURIComponent(targetPlan)}&interval=${encodeURIComponent(interval)}`,
+        { credentials: 'include', headers: buildTenantRequestHeaders() }
+      );
+      const data = await response.json();
+      if (!data?.success) throw new Error(data?.message || 'Failed to load billing options');
+      const firstOption = Array.isArray(data.options) ? data.options[0] : null;
+      if (firstOption?.url) {
+        window.open(firstOption.url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      if (data?.supportUrl) {
+        window.open(data.supportUrl, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      showInfo('No checkout URL configured yet. Contact support to complete the upgrade.');
+    } catch (error) {
+      showError(`Could not start upgrade: ${error.message}`);
+    }
+  })();
+}
+
+function openExternalPlanUrl(encodedUrl) {
+  try {
+    const url = decodeURIComponent(String(encodedUrl || ''));
+    if (!url) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  } catch (error) {
+    showError('Invalid billing URL');
+  }
 }
 
 async function loadCurrentPlan() {
@@ -9791,28 +9870,53 @@ async function loadCurrentPlan() {
     const res = await fetch('/api/admin/plan', { credentials: 'include', headers: buildTenantRequestHeaders() });
     if (!res.ok) return;
     const data = await res.json();
-    if (data.plan && data.plan !== 'starter') {
-      const card = document.getElementById('currentPlanCard');
-      const content = document.getElementById('currentPlanContent');
-      if (card && content) {
-        const record = getServerRecord(activeGuildId);
-        content.innerHTML = `
-          <div style="display:flex;align-items:center;gap:16px;">
-            ${record?.iconUrl ? `<img src="${record.iconUrl}" style="width:48px;height:48px;border-radius:10px;object-fit:cover;">` : ''}
-            <div>
-              <div style="font-size:1.1em;font-weight:700;color:#e0e7ff;">${escapeHtml(record?.name || activeGuildId)}</div>
-              <div style="margin-top:4px;"><span class="badge badge-active">${escapeHtml(data.plan)}</span></div>
-              ${data.expiresAt ? `<div style="color:var(--text-secondary);font-size:0.82em;margin-top:4px;">Until ${new Date(data.expiresAt).toLocaleDateString()}</div>` : ''}
-            </div>
-            <div style="margin-left:auto;display:flex;gap:8px;">
-              <button class="btn-primary" onclick="handlePlanCta('manage')">Manage Plan</button>
-              <button class="btn-secondary" onclick="handlePlanCta('cancel')">Cancel Plan</button>
-            </div>
-          </div>
-        `;
-        card.style.display = 'block';
-      }
+    currentPlanSnapshot = data;
+
+    const card = document.getElementById('currentPlanCard');
+    const content = document.getElementById('currentPlanContent');
+    if (!card || !content) return;
+
+    const record = getServerRecord(activeGuildId);
+    const planName = getTenantPlanLabel(data.plan || 'starter');
+    const tenantStatus = String(data.status || 'active').toLowerCase();
+    const subscriptionStatus = String(data?.billing?.subscriptionStatus || data.status || 'active').toLowerCase();
+    const statusColor = (tenantStatus === 'active' && !['past_due', 'canceled', 'cancelled', 'suspended', 'unpaid', 'payment_failed', 'expired'].includes(subscriptionStatus))
+      ? 'badge-active'
+      : 'badge-paused';
+    const intervalLabel = data?.billing?.billingInterval === 'yearly' ? 'Yearly billing' : 'Monthly billing';
+    const renewalOptions = Array.isArray(data?.renewal?.options) ? data.renewal.options : [];
+
+    const actionButtons = [];
+    if (data?.billing?.manageUrl) {
+      actionButtons.push(`<button class="btn-secondary" onclick="openExternalPlanUrl('${encodeURIComponent(data.billing.manageUrl)}')">Manage Subscription</button>`);
     }
+    renewalOptions.slice(0, 2).forEach(option => {
+      if (!option?.url) return;
+      actionButtons.push(`<button class="btn-primary" onclick="openExternalPlanUrl('${encodeURIComponent(option.url)}')">${escapeHtml(option.label || 'Renew')}</button>`);
+    });
+    if (data?.renewal?.supportUrl) {
+      actionButtons.push(`<button class="btn-secondary" onclick="openExternalPlanUrl('${encodeURIComponent(data.renewal.supportUrl)}')">Contact Support</button>`);
+    }
+
+    content.innerHTML = `
+      <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+        ${record?.iconUrl ? `<img src="${record.iconUrl}" style="width:48px;height:48px;border-radius:10px;object-fit:cover;">` : ''}
+        <div style="min-width:220px;">
+          <div style="font-size:1.1em;font-weight:700;color:#e0e7ff;">${escapeHtml(record?.name || activeGuildId || 'Current Server')}</div>
+          <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <span class="badge badge-active">${escapeHtml(planName)}</span>
+            <span class="badge ${statusColor}">${escapeHtml(subscriptionStatus)}</span>
+          </div>
+          <div style="color:var(--text-secondary);font-size:0.82em;margin-top:6px;">${escapeHtml(intervalLabel)}</div>
+          ${data.expiresAt ? `<div style="color:var(--text-secondary);font-size:0.82em;margin-top:4px;">Active until ${new Date(data.expiresAt).toLocaleString()}</div>` : ''}
+          ${data.plan === 'starter' ? '<div style="color:var(--text-secondary);font-size:0.82em;margin-top:4px;">Starter is free by default. Upgrade anytime for higher module limits.</div>' : ''}
+        </div>
+        <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;">
+          ${actionButtons.join('')}
+        </div>
+      </div>
+    `;
+    card.style.display = 'block';
   } catch(e) { /* no plan API yet, silent fail */ }
 }
 

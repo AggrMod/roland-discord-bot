@@ -278,6 +278,7 @@ class TenantService {
 
     const brandingRow = db.prepare('SELECT * FROM tenant_branding WHERE tenant_id = ?').get(tenantRecord.id) || null;
     const limitsRow = db.prepare('SELECT * FROM tenant_limits WHERE tenant_id = ?').get(tenantRecord.id) || null;
+    const billingRow = db.prepare('SELECT * FROM tenant_billing WHERE tenant_id = ?').get(tenantRecord.id) || null;
     const moduleRows = db.prepare(`
       SELECT module_key, enabled
       FROM tenant_modules
@@ -327,6 +328,22 @@ class TenantService {
       plan_key: planKey
     } : null;
 
+    const billing = billingRow ? {
+      customerId: billingRow.customer_id || null,
+      subscriptionId: billingRow.subscription_id || null,
+      provider: billingRow.provider || null,
+      subscriptionStatus: billingRow.subscription_status || null,
+      billingInterval: billingRow.billing_interval || null,
+      currentPeriodStart: billingRow.current_period_start || null,
+      currentPeriodEnd: billingRow.current_period_end || null,
+      cancelAtPeriodEnd: billingRow.cancel_at_period_end === 1,
+      canceledAt: billingRow.canceled_at || null,
+      lastPaymentAt: billingRow.last_payment_at || null,
+      lastPaymentStatus: billingRow.last_payment_status || null,
+      updatedAt: billingRow.updated_at || null,
+      createdAt: billingRow.created_at || null
+    } : null;
+
     return {
       guildId: tenantRecord.guild_id,
       guildName: tenantRecord.guild_name,
@@ -338,6 +355,7 @@ class TenantService {
       tenant: tenantRecord,
       modules,
       branding,
+      billing,
       limits,
       enabledModules,
       disabledModules,
@@ -438,6 +456,7 @@ class TenantService {
         status: 'active',
         modules: {},
         branding: null,
+        billing: null,
         limits: null,
         enabledModules: [],
         disabledModules: [],

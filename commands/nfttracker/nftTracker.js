@@ -198,36 +198,53 @@ module.exports = {
     try {
       if (group === 'wallet') {
         switch (sub) {
-          case 'add':      return this.handleWalletAdd(interaction);
-          case 'remove':   return this.handleWalletRemove(interaction);
-          case 'list':     return this.handleWalletList(interaction);
-          case 'edit':     return this.handleWalletEdit(interaction);
-          case 'holdings': return this.handleWalletHoldings(interaction);
-          case 'refresh-all': return this.handleWalletRefreshAll(interaction);
+          case 'add':      await this.handleWalletAdd(interaction); break;
+          case 'remove':   await this.handleWalletRemove(interaction); break;
+          case 'list':     await this.handleWalletList(interaction); break;
+          case 'edit':     await this.handleWalletEdit(interaction); break;
+          case 'holdings': await this.handleWalletHoldings(interaction); break;
+          case 'refresh-all': await this.handleWalletRefreshAll(interaction); break;
         }
+        await this.sendLegacyAliasNotice(interaction, '/wallet-tracker');
+        return;
       }
       if (group === 'collection') {
         switch (sub) {
-          case 'add':    return this.handleCollectionAdd(interaction);
-          case 'remove': return this.handleCollectionRemove(interaction);
-          case 'list':   return this.handleCollectionList(interaction);
-          case 'feed':   return this.handleCollectionFeed(interaction);
+          case 'add':    await this.handleCollectionAdd(interaction); break;
+          case 'remove': await this.handleCollectionRemove(interaction); break;
+          case 'list':   await this.handleCollectionList(interaction); break;
+          case 'feed':   await this.handleCollectionFeed(interaction); break;
         }
+        return;
       }
       if (group === 'token') {
         switch (sub) {
-          case 'add':    return this.handleTokenAdd(interaction);
-          case 'edit':   return this.handleTokenEdit(interaction);
-          case 'remove': return this.handleTokenRemove(interaction);
-          case 'list':   return this.handleTokenList(interaction);
-          case 'feed':   return this.handleTokenFeed(interaction);
+          case 'add':    await this.handleTokenAdd(interaction); break;
+          case 'edit':   await this.handleTokenEdit(interaction); break;
+          case 'remove': await this.handleTokenRemove(interaction); break;
+          case 'list':   await this.handleTokenList(interaction); break;
+          case 'feed':   await this.handleTokenFeed(interaction); break;
         }
+        await this.sendLegacyAliasNotice(interaction, '/token-tracker');
+        return;
       }
     } catch (err) {
       logger.error('[nft-tracker]', err);
       const msg = 'An error occurred. Please try again.';
       if (interaction.deferred || interaction.replied) await interaction.editReply({ content: msg });
       else await interaction.reply({ content: msg, ephemeral: true });
+    }
+  },
+
+  async sendLegacyAliasNotice(interaction, targetCommand) {
+    try {
+      if (!interaction.deferred && !interaction.replied) return;
+      await interaction.followUp({
+        content: `⚠️ Legacy alias used. Please switch to **${targetCommand}** commands (this alias will be removed in a future release).`,
+        ephemeral: true,
+      });
+    } catch (_) {
+      // best-effort notice only
     }
   },
 

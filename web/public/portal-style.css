@@ -1695,6 +1695,246 @@ body {
   background: rgba(99, 102, 241, 0.04);
 }
 
+/* Multi Select Picker */
+.gp-ms-native {
+  display: none !important;
+}
+
+.gp-ms-control {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gp-ms-trigger {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  background: rgba(30, 41, 59, 0.8);
+  color: #e0e7ff;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+.gp-ms-trigger:hover {
+  border-color: rgba(129, 140, 248, 0.55);
+}
+
+.gp-ms-trigger.is-empty {
+  color: #94a3b8;
+}
+
+.gp-ms-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.gp-ms-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.18);
+  border: 1px solid rgba(129, 140, 248, 0.3);
+  color: #c7d2fe;
+  font-size: 0.76em;
+  max-width: 100%;
+}
+
+.gp-ms-chip.muted {
+  background: rgba(148, 163, 184, 0.14);
+  border-color: rgba(148, 163, 184, 0.25);
+  color: #cbd5e1;
+}
+
+.gp-ms-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4100;
+  background: rgba(2, 6, 23, 0.74);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.gp-ms-modal {
+  width: min(620px, 100%);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  background: linear-gradient(180deg, rgba(18, 28, 52, 0.98) 0%, rgba(14, 22, 42, 0.98) 100%);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.gp-ms-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.gp-ms-title {
+  margin: 0;
+  font-size: 1.02rem;
+  color: #e0e7ff;
+  font-weight: 700;
+}
+
+.gp-ms-close {
+  background: transparent;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  color: #cbd5e1;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.gp-ms-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.15);
+}
+
+.gp-ms-search {
+  flex: 1;
+  min-width: 150px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  background: rgba(15, 23, 42, 0.8);
+  color: #e2e8f0;
+}
+
+.gp-ms-ghost {
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  background: rgba(30, 41, 59, 0.6);
+  color: #c7d2fe;
+  font-size: 0.82em;
+  cursor: pointer;
+}
+
+.gp-ms-list {
+  overflow-y: auto;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 120px;
+}
+
+.gp-ms-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(99, 102, 241, 0.16);
+  background: rgba(15, 23, 42, 0.42);
+  cursor: pointer;
+}
+
+.gp-ms-item:hover {
+  border-color: rgba(129, 140, 248, 0.45);
+  background: rgba(30, 41, 59, 0.58);
+}
+
+.gp-ms-item input[type="checkbox"] {
+  margin-top: 2px;
+}
+
+.gp-ms-item-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gp-ms-item-label {
+  color: #e2e8f0;
+  font-size: 0.9em;
+  word-break: break-word;
+}
+
+.gp-ms-item-group {
+  color: #94a3b8;
+  font-size: 0.78em;
+}
+
+.gp-ms-empty {
+  color: #94a3b8;
+  font-size: 0.86em;
+  padding: 16px 10px;
+}
+
+.gp-ms-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(99, 102, 241, 0.2);
+}
+
+.gp-ms-count {
+  color: #cbd5e1;
+  font-size: 0.84em;
+}
+
+.gp-ms-actions {
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 768px) {
+  .gp-ms-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .gp-ms-modal {
+    width: 100%;
+    max-height: 88vh;
+    border-radius: 16px 16px 0 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+  }
+
+  .gp-ms-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .gp-ms-search {
+    min-width: 100%;
+  }
+
+  .gp-ms-ghost {
+    flex: 1;
+  }
+
+  .gp-ms-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
 /* ==================== HELP CENTER ==================== */
 .help-categories {
   display: grid;

@@ -8,6 +8,9 @@ let activeGuildId = localStorage.getItem('activeGuildId') || '';
 let serverAccessData = { managedServers: [], unmanagedServers: [], isSuperadmin: false };
 let originalFetch = window.fetch.bind(window);
 let _csrfToken = '';
+const _portalMultiSelectRegistry = new Map();
+let _portalMultiSelectAutoId = 0;
+let _portalMultiSelectPickerState = null;
 const PORTAL_PAGE_EXPECTATIONS = Object.freeze({
   sections: [
     'landing',
@@ -123,6 +126,232 @@ function buildTenantRequestHeaders(initHeaders) {
   return headers;
 }
 
+function ensurePortalMultiSelectId(select) {
+  if (select.id) return select.id;
+  _portalMultiSelectAutoId += 1;
+  select.id = `gpMultiSelect_${_portalMultiSelectAutoId}`;
+  return select.id;
+}
+
+function getPortalMultiSelectOptions(select) {
+  return Array.from(select.options || [])
+    .filter(opt => !!String(opt.value || '').trim())
+    .map(opt => ({
+      value: String(opt.value || '').trim(),
+      label: String(opt.textContent || '').trim(),
+      group: opt.parentElement && opt.parentElement.tagName === 'OPTGROUP'
+        ? String(opt.parentElement.label || '').trim()
+        : '',
+      disabled: !!opt.disabled,
+    }));
+}
+
+function getPortalMultiSelectValues(select) {
+  return Array.from(select.selectedOptions || [])
+    .map(opt => String(opt.value || '').trim())
+    .filter(Boolean);
+}
+
+function setPortalMultiSelectValues(select, values) {
+  const allowed = new Set((Array.isArray(values) ? values : []).map(v => String(v || '').trim()).filter(Boolean));
+  Array.from(select.options || []).forEach(opt => {
+    const value = String(opt.value || '').trim();
+    opt.selected = !!value && allowed.has(value);
+  });
+}
+
+function getPortalMultiSelectPlaceholder(select) {
+  return String(select.dataset.msPlaceholder || '').trim() || 'Select one or more';
+}
+
+function getPortalMultiSelectTitle(select) {
+  const explicit = String(select.dataset.msTitle || '').trim();
+  if (explicit) return explicit;
+  const labelEl = select.closest('div')?.querySelector('label');
+  const labelText = String(labelEl?.textContent || '').trim();
+  return labelText || 'Select options';
+}
+
+function refreshPortalMultiSelectControl(selectOrId) {
+  const select = typeof selectOrId === 'string' ? document.getElementById(selectOrId) : selectOrId;
+  if (!select) return;
+  const id = ensurePortalMultiSelectId(select);
+  const state = _portalMultiSelectRegistry.get(id);
+  if (!state || !state.control || !state.trigger || !state.chips) return;
+
+  const selected = getPortalMultiSelectValues(select);
+  const optionMap = new Map(getPortalMultiSelectOptions(select).map(item => [item.value, item]));
+  const labels = selected.map(value => optionMap.get(value)?.label || value);
+
+  state.trigger.textContent = labels.length
+    ? `${labels.length} selected`
+    : getPortalMultiSelectPlaceholder(select);
+  state.trigger.classList.toggle('is-empty', labels.length === 0);
+  state.trigger.disabled = !!select.disabled;
+
+  if (!labels.length) {
+    state.chips.innerHTML = '';
+    return;
+  }
+
+  const maxChips = 4;
+  const visible = labels.slice(0, maxChips);
+  const extra = labels.length - visible.length;
+  const chipsHtml = visible.map(label => `<span class="gp-ms-chip">${escapeHtml(label)}</span>`).join('');
+  state.chips.innerHTML = chipsHtml + (extra > 0 ? `<span class="gp-ms-chip muted">+${extra} more</span>` : '');
+}
+
+function closePortalMultiSelectPicker(applyChanges = false) {
+  const state = _portalMultiSelectPickerState;
+  if (!state) return;
+
+  if (applyChanges && state.select) {
+    setPortalMultiSelectValues(state.select, Array.from(state.selected || []));
+    state.select.dispatchEvent(new Event('change', { bubbles: true }));
+    refreshPortalMultiSelectControl(state.select);
+  }
+
+  state.overlay?.remove();
+  _portalMultiSelectPickerState = null;
+}
+
+function openPortalMultiSelectPicker(selectId) {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+
+  const options = getPortalMultiSelectOptions(select).filter(item => !item.disabled);
+  const selected = new Set(getPortalMultiSelectValues(select));
+
+  closePortalMultiSelectPicker(false);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'gp-ms-overlay';
+  overlay.innerHTML = `
+    <div class="gp-ms-modal" role="dialog" aria-modal="true">
+      <div class="gp-ms-header">
+        <h3 class="gp-ms-title">${escapeHtml(getPortalMultiSelectTitle(select))}</h3>
+        <button type="button" class="gp-ms-close" aria-label="Close">×</button>
+      </div>
+      <div class="gp-ms-toolbar">
+        <input type="text" class="gp-ms-search" placeholder="Search..." />
+        <button type="button" class="gp-ms-ghost" data-action="select-all">Select All</button>
+        <button type="button" class="gp-ms-ghost" data-action="clear">Clear</button>
+      </div>
+      <div class="gp-ms-list"></div>
+      <div class="gp-ms-footer">
+        <span class="gp-ms-count">0 selected</span>
+        <div class="gp-ms-actions">
+          <button type="button" class="btn-secondary gp-ms-cancel">Cancel</button>
+          <button type="button" class="btn-primary gp-ms-apply">Done</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const modal = overlay.querySelector('.gp-ms-modal');
+  const searchEl = overlay.querySelector('.gp-ms-search');
+  const listEl = overlay.querySelector('.gp-ms-list');
+  const countEl = overlay.querySelector('.gp-ms-count');
+
+  const updateCount = () => {
+    const amount = selected.size;
+    countEl.textContent = `${amount} selected`;
+  };
+
+  const renderList = (query = '') => {
+    const q = String(query || '').trim().toLowerCase();
+    const filtered = options.filter(item => {
+      if (!q) return true;
+      const hay = `${item.label} ${item.group}`.toLowerCase();
+      return hay.includes(q);
+    });
+
+    if (!filtered.length) {
+      listEl.innerHTML = '<div class="gp-ms-empty">No matches found.</div>';
+      return;
+    }
+
+    listEl.innerHTML = filtered.map(item => `
+      <label class="gp-ms-item">
+        <input type="checkbox" value="${escapeHtml(item.value)}" ${selected.has(item.value) ? 'checked' : ''}>
+        <div class="gp-ms-item-copy">
+          <span class="gp-ms-item-label">${escapeHtml(item.label)}</span>
+          ${item.group ? `<span class="gp-ms-item-group">${escapeHtml(item.group)}</span>` : ''}
+        </div>
+      </label>
+    `).join('');
+
+    listEl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        if (cb.checked) selected.add(cb.value);
+        else selected.delete(cb.value);
+        updateCount();
+      });
+    });
+  };
+
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) closePortalMultiSelectPicker(false);
+  });
+  overlay.querySelector('.gp-ms-close')?.addEventListener('click', () => closePortalMultiSelectPicker(false));
+  overlay.querySelector('.gp-ms-cancel')?.addEventListener('click', () => closePortalMultiSelectPicker(false));
+  overlay.querySelector('.gp-ms-apply')?.addEventListener('click', () => closePortalMultiSelectPicker(true));
+  overlay.querySelector('[data-action="clear"]')?.addEventListener('click', () => {
+    selected.clear();
+    renderList(searchEl.value);
+    updateCount();
+  });
+  overlay.querySelector('[data-action="select-all"]')?.addEventListener('click', () => {
+    const q = String(searchEl.value || '').trim().toLowerCase();
+    options.forEach(item => {
+      const hay = `${item.label} ${item.group}`.toLowerCase();
+      if (!q || hay.includes(q)) selected.add(item.value);
+    });
+    renderList(searchEl.value);
+    updateCount();
+  });
+  searchEl?.addEventListener('input', () => renderList(searchEl.value));
+
+  document.body.appendChild(overlay);
+  _portalMultiSelectPickerState = { select, selected, overlay };
+  renderList('');
+  updateCount();
+  setTimeout(() => searchEl?.focus(), 0);
+}
+
+function initializePortalMultiSelects(scope = document) {
+  const root = (scope && typeof scope.querySelectorAll === 'function') ? scope : document;
+  root.querySelectorAll('select[multiple]').forEach(select => {
+    const id = ensurePortalMultiSelectId(select);
+    const existing = _portalMultiSelectRegistry.get(id);
+
+    if (existing && existing.select !== select) {
+      existing.control?.remove();
+      _portalMultiSelectRegistry.delete(id);
+    }
+
+    if (!_portalMultiSelectRegistry.has(id)) {
+      const control = document.createElement('div');
+      control.className = 'gp-ms-control';
+      control.innerHTML = `
+        <button type="button" class="gp-ms-trigger is-empty"></button>
+        <div class="gp-ms-chips"></div>
+      `;
+      const trigger = control.querySelector('.gp-ms-trigger');
+      const chips = control.querySelector('.gp-ms-chips');
+      trigger?.addEventListener('click', () => openPortalMultiSelectPicker(id));
+
+      select.insertAdjacentElement('afterend', control);
+      _portalMultiSelectRegistry.set(id, { select, control, trigger, chips });
+
+      select.addEventListener('change', () => refreshPortalMultiSelectControl(select));
+      select.classList.add('gp-ms-native');
+    }
+
+    refreshPortalMultiSelectControl(select);
+  });
+}
+
 window.fetch = async function(input, init = {}) {
   const headers = buildTenantRequestHeaders(init.headers || (input instanceof Request ? input.headers : undefined));
 
@@ -199,6 +428,7 @@ function normalizePortalSectionName(sectionName) {
 // ==================== INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', () => {
   initializePortalPages();
+  initializePortalMultiSelects();
   fetchCsrfToken();
   loadPortal();
 
@@ -219,6 +449,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // Keyboard navigation
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      if (_portalMultiSelectPickerState) {
+        closePortalMultiSelectPicker(false);
+        return;
+      }
+
       const mobileMenu = document.getElementById('mobileMenu');
       const confirmModal = document.getElementById('confirmModal');
       
@@ -2678,6 +2913,7 @@ function showConfirmModal(title, message, callback, buttonText = 'Confirm') {
 }
 
 function closeConfirmModal() {
+  closePortalMultiSelectPicker(false);
   const modal = document.getElementById('confirmModal');
   modal.style.display = 'none';
   document.body.style.overflow = '';
@@ -5190,34 +5426,37 @@ async function openAddTokenModal(existingId, existingData) {
         emptyOpt.textContent = '-- No channels available --';
         emptyOpt.disabled = true;
         channelSel.appendChild(emptyOpt);
-        return;
-      }
-      const grouped = {};
-      channels.forEach(ch => {
-        const parent = ch.parentName || 'Other';
-        if (!grouped[parent]) grouped[parent] = [];
-        grouped[parent].push(ch);
-      });
-      Object.keys(grouped).sort().forEach(parent => {
-        const og = document.createElement('optgroup');
-        og.label = parent;
-        grouped[parent].forEach(ch => {
-          const opt = document.createElement('option');
-          opt.value = ch.id;
-          opt.textContent = '# ' + ch.name;
-          if (selectedAlertChannelIds.includes(String(ch.id))) opt.selected = true;
-          og.appendChild(opt);
+      } else {
+        const grouped = {};
+        channels.forEach(ch => {
+          const parent = ch.parentName || 'Other';
+          if (!grouped[parent]) grouped[parent] = [];
+          grouped[parent].push(ch);
         });
-        channelSel.appendChild(og);
-      });
+        Object.keys(grouped).sort().forEach(parent => {
+          const og = document.createElement('optgroup');
+          og.label = parent;
+          grouped[parent].forEach(ch => {
+            const opt = document.createElement('option');
+            opt.value = ch.id;
+            opt.textContent = '# ' + ch.name;
+            if (selectedAlertChannelIds.includes(String(ch.id))) opt.selected = true;
+            og.appendChild(opt);
+          });
+          channelSel.appendChild(og);
+        });
+      }
     }
   } catch (e) {
     console.error('[TokenModal] Channel load error:', e);
     channelSel.innerHTML = '<option value="" disabled>-- Failed to load channels --</option>';
+  } finally {
+    initializePortalMultiSelects(modal);
   }
 }
 
 function closeAddTokenModal() {
+  closePortalMultiSelectPicker(false);
   const modal = document.getElementById('addTokenModal');
   if (!modal) return;
   modal.style.display = 'none';
@@ -8890,14 +9129,14 @@ function _showCategoryForm(cat) {
       </div>
       <div>
         <label style="font-size:0.85em;font-weight:600;">Handler Roles (Support Team)</label>
-        <select id="catHandlerRoles" multiple style="width:100%;min-height:120px;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
+        <select id="catHandlerRoles" multiple data-ms-title="Handler Roles" data-ms-placeholder="No handler roles selected" style="width:100%;min-height:120px;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
           ${_ticketRolesList.map(r => `<option value="${r.id}" ${handlerRoles.includes(r.id) ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('')}
         </select>
         <div style="font-size:0.78em;color:var(--text-secondary);margin-top:4px;">These roles can claim, close, and reopen tickets in this category.</div>
       </div>
       <div>
         <label style="font-size:0.85em;font-weight:600;">Roles to Ping on New Ticket</label>
-        <select id="catPingRoles" multiple style="width:100%;min-height:120px;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
+        <select id="catPingRoles" multiple data-ms-title="Roles To Ping" data-ms-placeholder="No ping roles selected" style="width:100%;min-height:120px;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
           ${_ticketRolesList.map(r => `<option value="${r.id}" ${pingRoles.includes(r.id) ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('')}
         </select>
       </div>
@@ -8917,6 +9156,7 @@ function _showCategoryForm(cat) {
   };
 
   modal.style.display = 'flex';
+  initializePortalMultiSelects(modal);
 }
 
 window.addTemplateField = function() {

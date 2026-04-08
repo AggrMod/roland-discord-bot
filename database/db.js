@@ -111,6 +111,7 @@ function initDatabase() {
     CREATE TABLE IF NOT EXISTS proposals (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       proposal_id TEXT UNIQUE NOT NULL,
+      guild_id TEXT DEFAULT '',
       creator_id TEXT NOT NULL,
       creator_wallet TEXT,
       title TEXT NOT NULL,
@@ -746,6 +747,48 @@ function initDatabase() {
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_tickets_last_activity ON tickets(last_activity_at)"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_limits ADD COLUMN mock_data_enabled INTEGER DEFAULT 0"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_modules ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
+  try { db.exec(`
+    INSERT INTO tenant_modules (tenant_id, module_key, enabled, updated_at)
+    SELECT tm.tenant_id, 'wallettracker', tm.enabled, CURRENT_TIMESTAMP
+    FROM tenant_modules tm
+    WHERE tm.module_key = 'treasury'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM tenant_modules existing
+        WHERE existing.tenant_id = tm.tenant_id
+          AND existing.module_key = 'wallettracker'
+      )
+  `); } catch (e) {}
+  try { db.exec(`
+    INSERT INTO plan_module_limits (plan_key, module_key, limit_key, limit_value, updated_at)
+    SELECT pml.plan_key, 'wallettracker', pml.limit_key, pml.limit_value, CURRENT_TIMESTAMP
+    FROM plan_module_limits pml
+    WHERE pml.module_key = 'treasury'
+      AND pml.limit_key = 'max_tracked_wallets'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM plan_module_limits existing
+        WHERE existing.plan_key = pml.plan_key
+          AND existing.module_key = 'wallettracker'
+          AND existing.limit_key = pml.limit_key
+      )
+  `); } catch (e) {}
+  try { db.exec(`
+    INSERT INTO tenant_module_limit_overrides (tenant_id, module_key, limit_key, limit_value, updated_at)
+    SELECT tmo.tenant_id, 'wallettracker', tmo.limit_key, tmo.limit_value, CURRENT_TIMESTAMP
+    FROM tenant_module_limit_overrides tmo
+    WHERE tmo.module_key = 'treasury'
+      AND tmo.limit_key = 'max_tracked_wallets'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM tenant_module_limit_overrides existing
+        WHERE existing.tenant_id = tmo.tenant_id
+          AND existing.module_key = 'wallettracker'
+          AND existing.limit_key = tmo.limit_key
+      )
+  `); } catch (e) {}
+  try { db.exec("ALTER TABLE proposals ADD COLUMN guild_id TEXT DEFAULT ''"); } catch (e) {}
+  try { db.exec("CREATE INDEX IF NOT EXISTS idx_proposals_guild ON proposals(guild_id)"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_billing ADD COLUMN customer_id TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_billing ADD COLUMN subscription_id TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_billing ADD COLUMN provider TEXT"); } catch (e) {}

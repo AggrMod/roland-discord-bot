@@ -4,6 +4,7 @@ const battleDb = require('../../database/battleDb');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
 const settingsManager = require('../../config/settings');
+const entitlementService = require('../../services/entitlementService');
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -352,9 +353,21 @@ module.exports = {
       interaction.options.getUser('bounty_3'),
     ].filter(Boolean);
     const bountyTargetIds = [...new Set(selectedBountyUsers.map(user => user.id))];
+    const bountyLimitCheck = entitlementService.enforceLimit({
+      guildId: interaction.guildId || '',
+      moduleKey: 'battle',
+      limitKey: 'max_bounties_per_battle',
+      currentCount: 0,
+      incrementBy: bountyTargetIds.length,
+      itemLabel: 'bounties per battle'
+    });
 
     if (selectedBountyUsers.length !== bountyTargetIds.length) {
       return interaction.editReply({ content: 'Duplicate bounty targets detected. Select up to 3 unique fighters.', ephemeral: true });
+    }
+
+    if (!bountyLimitCheck.success) {
+      return interaction.editReply({ content: bountyLimitCheck.message });
     }
 
     const invalidBountyTargets = bountyTargetIds.filter(id => !joinedParticipantIds.has(id));

@@ -7,6 +7,7 @@ const DEFAULT_TOGGLES = Object.freeze({
   verificationEnabled: true,
   governanceEnabled: true,
   treasuryEnabled: true,
+  wallettrackerEnabled: true,
   nfttrackerEnabled: true,
   tokentrackerEnabled: true,
   ticketingEnabled: true,
@@ -85,6 +86,24 @@ class ModuleGuard {
       }
     }
 
+    // Compatibility alias while wallet tracker transitions out of "treasury".
+    if (!enabled && moduleName === 'wallettracker') {
+      if (guildId) {
+        try {
+          const tenantService = require('../services/tenantService');
+          if (tenantService.isMultitenantEnabled()) {
+            enabled = tenantService.isModuleEnabled(guildId, 'treasury');
+          } else {
+            enabled = this.isModuleEnabled('treasury');
+          }
+        } catch (_error) {
+          enabled = this.isModuleEnabled('treasury');
+        }
+      } else {
+        enabled = this.isModuleEnabled('treasury');
+      }
+    }
+
     if (enabled) {
       return true;
     }
@@ -93,6 +112,7 @@ class ModuleGuard {
       verification: 'Verification',
       governance: 'Governance',
       treasury: 'Treasury',
+      wallettracker: 'Wallet Tracker',
       nfttracker: 'NFT Tracker',
       tokentracker: 'Token Activity Tracker',
       battle: 'Battle',

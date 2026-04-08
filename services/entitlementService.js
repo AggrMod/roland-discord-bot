@@ -23,6 +23,8 @@ const LIMIT_DEFINITIONS = Object.freeze({
   },
   treasury: {
     max_wallets: { label: 'Max Treasury Wallets' },
+  },
+  wallettracker: {
     max_tracked_wallets: { label: 'Max Wallet Tracker Wallets' },
   },
   heist: {

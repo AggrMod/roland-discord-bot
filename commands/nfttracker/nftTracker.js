@@ -11,14 +11,14 @@ const moduleGuard = require('../../utils/moduleGuard');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('nft-tracker')
-    .setDescription('🔎 NFT Wallet Tracker — monitor wallets, TX alerts, and holdings panels')
+    .setDescription('Track NFT collections and collection activity feeds')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
 
     // ── wallet subcommands ──────────────────────────────────────────────────
     .addSubcommandGroup(group =>
       group
         .setName('wallet')
-        .setDescription('Manage tracked wallets')
+        .setDescription('Legacy alias (use /wallet-tracker)')
 
         .addSubcommand(sub =>
           sub
@@ -116,7 +116,7 @@ module.exports = {
     .addSubcommandGroup(group =>
       group
         .setName('token')
-        .setDescription('Track SPL token mints in wallet holdings')
+        .setDescription('Legacy alias (use /token-tracker)')
 
         .addSubcommand(sub =>
           sub
@@ -189,7 +189,9 @@ module.exports = {
     const group = interaction.options.getSubcommandGroup(false);
     const sub = interaction.options.getSubcommand();
 
-    const requiredModule = group === 'token' ? 'tokentracker' : 'nfttracker';
+    const requiredModule = group === 'token'
+      ? 'tokentracker'
+      : (group === 'wallet' ? 'wallettracker' : 'nfttracker');
     if (!await moduleGuard.checkModuleEnabled(interaction, requiredModule)) return;
     if (!await moduleGuard.checkAdmin(interaction)) return;
 
@@ -618,3 +620,4 @@ module.exports = {
     await interaction.editReply({ embeds: [embed] });
   },
 };
+

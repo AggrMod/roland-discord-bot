@@ -37,6 +37,18 @@ function getConfiguredVPForUser(discordId, nftCount, roleMappings) {
   return DEFAULT_TIER_VP[DEFAULT_TIER_VP.length - 1].vp;
 }
 
+let _hasProposalsGuildColumnCache = null;
+function hasProposalsGuildColumn() {
+  if (_hasProposalsGuildColumnCache !== null) return _hasProposalsGuildColumnCache;
+  try {
+    const columns = db.prepare("PRAGMA table_info(proposals)").all();
+    _hasProposalsGuildColumnCache = columns.some(c => String(c?.name || '').toLowerCase() === 'guild_id');
+  } catch (_error) {
+    _hasProposalsGuildColumnCache = false;
+  }
+  return _hasProposalsGuildColumnCache;
+}
+
 class ProposalService {
   constructor() {
     this.client = null;
@@ -53,19 +65,27 @@ class ProposalService {
 
   // ==================== PROPOSAL LIFECYCLE ====================
 
-  createProposal(creatorId, { title, description, category, costIndication }) {
+  createProposal(creatorId, { title, description, category, costIndication, guildId = '' }) {
     try {
       const proposalId = this.generateProposalId();
       const validCategories = settingsManager.getSettings().proposalCategories || ['Partnership', 'Treasury Allocation', 'Rule Change', 'Community Event', 'Other'];
       const safeCategory = validCategories.includes(category) ? category : 'Other';
+      const normalizedGuildId = String(guildId || '').trim();
 
-      db.prepare(`
-        INSERT INTO proposals (proposal_id, creator_id, title, description, status, category, cost_indication)
-        VALUES (?, ?, ?, ?, 'draft', ?, ?)
-      `).run(proposalId, creatorId, title, description, safeCategory, costIndication || null);
+      if (hasProposalsGuildColumn()) {
+        db.prepare(`
+          INSERT INTO proposals (proposal_id, guild_id, creator_id, title, description, status, category, cost_indication)
+          VALUES (?, ?, ?, ?, ?, 'draft', ?, ?)
+        `).run(proposalId, normalizedGuildId, creatorId, title, description, safeCategory, costIndication || null);
+      } else {
+        db.prepare(`
+          INSERT INTO proposals (proposal_id, creator_id, title, description, status, category, cost_indication)
+          VALUES (?, ?, ?, ?, 'draft', ?, ?)
+        `).run(proposalId, creatorId, title, description, safeCategory, costIndication || null);
+      }
 
       logger.log(`Proposal ${proposalId} created by ${creatorId}`);
-      governanceLogger.log('proposal_created', { proposalId, creatorId, title, category: safeCategory });
+      governanceLogger.log('proposal_created', { proposalId, guildId: normalizedGuildId || null, creatorId, title, category: safeCategory });
 
       return { success: true, proposalId };
     } catch (error) {

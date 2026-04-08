@@ -5,6 +5,13 @@ const DISPLAY_NAMES = {
   verification: 'Verification',
   governance: 'Governance',
   treasury: 'Treasury',
+  wallettracker: 'Wallet Tracker',
+  nfttracker: 'NFT Tracker',
+  tokentracker: 'Token Tracker',
+  ticketing: 'Ticketing',
+  selfserveroles: 'Self-Serve Roles',
+  branding: 'Branding',
+  engagement: 'Engagement',
   battle: 'Battle',
   heist: 'Heist'
 };
@@ -21,7 +28,11 @@ async function moduleGate(interaction, moduleKey, options = {}) {
   if (!tenantService.isMultitenantEnabled()) {
     try {
       const moduleGuard = require('../utils/moduleGuard');
-      if (!moduleGuard.isModuleEnabled(resolvedModuleKey)) {
+      let enabled = moduleGuard.isModuleEnabled(resolvedModuleKey);
+      if (!enabled && resolvedModuleKey === 'wallettracker') {
+        enabled = moduleGuard.isModuleEnabled('treasury');
+      }
+      if (!enabled) {
         const displayName = options.displayName || DISPLAY_NAMES[resolvedModuleKey] || resolvedModuleKey;
         const reply = { content: `The **${displayName}** module is currently disabled.`, ephemeral: true };
         if (interaction.deferred || interaction.replied) {
@@ -40,6 +51,9 @@ async function moduleGate(interaction, moduleKey, options = {}) {
   }
 
   if (tenantService.isModuleEnabled(interaction.guildId, resolvedModuleKey)) {
+    return true;
+  }
+  if (resolvedModuleKey === 'wallettracker' && tenantService.isModuleEnabled(interaction.guildId, 'treasury')) {
     return true;
   }
 

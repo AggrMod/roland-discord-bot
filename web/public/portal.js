@@ -109,6 +109,9 @@ function isTenantSensitiveRequest(input) {
     const url = new URL(rawUrl, window.location.origin);
     return (
       url.pathname.startsWith('/api/admin/') ||
+      url.pathname === '/api/user/proposals' ||
+      url.pathname === '/api/governance/proposals' ||
+      /^\/api\/governance\/proposals\/[^/]+\/(submit|support|comments|veto)$/.test(url.pathname) ||
       url.pathname.startsWith('/api/verify/') ||
       url.pathname.startsWith('/api/micro-verify/') ||
       url.pathname.startsWith('/api/verification/admin/') ||
@@ -1154,13 +1157,13 @@ function applyPreSelectionVisibility() {
 function updateModuleVisibility() {
   const state = window._tenantModuleState || {};
   const moduleNav = [
-    { id: 'sidebarNavTreasury', key: 'treasury' },
+    { id: 'sidebarNavTreasury', key: 'wallettracker' },
     { id: 'sidebarNavTokenActivity', key: 'tokentracker' },
     { id: 'sidebarNavSelfServe', key: 'selfseveroles' },
     { id: 'sidebarNavTicketing', key: 'ticketing' },
     { id: 'sidebarNavEngagement', key: 'engagement' },
     { id: 'sidebarNavHeist', key: 'heist' },
-    { id: 'mobileNavTreasury', key: 'treasury' },
+    { id: 'mobileNavTreasury', key: 'wallettracker' },
     { id: 'mobileNavTokenActivity', key: 'tokentracker' },
     { id: 'mobileNavSelfServe', key: 'selfseveroles' },
     { id: 'mobileNavTicketing', key: 'ticketing' },
@@ -1245,7 +1248,7 @@ function renderGeneralSection() {
     const modules = [
       { key: 'governance', icon: '\ud83d\udcdc', label: 'Governance', section: 'governance' },
       { key: 'verification', icon: '\ud83d\udcbc', label: 'Verification', section: 'wallets' },
-      { key: 'treasury', icon: '\ud83d\udcb0', label: 'Wallet Tracker', section: 'treasury' },
+      { key: 'wallettracker', icon: '\ud83d\udcb0', label: 'Wallet Tracker', section: 'treasury' },
       { key: 'nfttracker', icon: '\ud83c\udfa8', label: 'NFT Tracker', section: 'nft-activity' },
       { key: 'tokentracker', icon: '\ud83e\ude99', label: 'Token Tracker', section: 'token-activity' },
       { key: 'heist', icon: '\ud83c\udfaf', label: 'Heist', section: 'heist' },
@@ -1336,7 +1339,7 @@ function updateSidebarModuleNav() {
     { id: 'sidebarNavGovernance', module: 'governance' },
     { id: 'sidebarNavWallets', module: 'verification' },
     { id: 'mobileNavWallets', module: 'verification' },
-    { id: 'sidebarNavTreasury', module: 'treasury' },
+    { id: 'sidebarNavTreasury', module: 'wallettracker' },
     { id: 'sidebarNavNftActivity', module: 'nfttracker' },
     { id: 'sidebarNavTokenActivity', module: 'tokentracker' },
     { id: 'mobileNavTokenActivity', module: 'tokentracker' },
@@ -1395,7 +1398,9 @@ function applyTenantModuleNavVisibility(settings = {}) {
     governance: !!settings.moduleGovernanceEnabled,
     verification: !!settings.moduleVerificationEnabled,
     branding: !!settings.moduleBrandingEnabled,
-    treasury: !!settings.moduleTreasuryEnabled,
+    wallettracker: settings.moduleWalletTrackerEnabled !== undefined
+      ? !!settings.moduleWalletTrackerEnabled
+      : !!settings.moduleTreasuryEnabled,
     nfttracker: !!settings.moduleNftTrackerEnabled,
     tokentracker: !!settings.moduleTokenTrackerEnabled,
     heist: !!settings.moduleMissionsEnabled,
@@ -1410,7 +1415,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
   const sectionMap = {
     governance: moduleState.governance,
     wallets: moduleState.verification,
-    treasury: moduleState.treasury,
+    treasury: moduleState.wallettracker,
     'nft-activity': moduleState.nfttracker,
     'token-activity': moduleState.tokentracker,
     heist: moduleState.heist
@@ -1433,7 +1438,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
   const disabledActive = {
     'section-governance': !moduleState.governance,
     'section-wallets': !moduleState.verification,
-    'section-treasury': !moduleState.treasury,
+    'section-treasury': !moduleState.wallettracker,
     'section-nft-activity': !moduleState.nfttracker,
     'section-token-activity': !moduleState.tokentracker,
     'section-heist': !moduleState.heist
@@ -1448,7 +1453,7 @@ const SETTINGS_TAB_MODULE_MAP = {
   governance:   'governance',
   verification: 'verification',
   branding:     'branding',
-  treasury:     'treasury',
+  treasury:     'wallettracker',
   nfttracker:   'nfttracker',
   tokentracker: 'tokentracker',
   battle:       'battle',
@@ -1467,7 +1472,9 @@ function applySettingsTabVisibility(settings = {}) {
     verification: !!settings.moduleVerificationEnabled,
     // default visible unless explicitly disabled
     branding: settings.moduleBrandingEnabled !== false,
-    treasury: !!settings.moduleTreasuryEnabled,
+    wallettracker: settings.moduleWalletTrackerEnabled !== undefined
+      ? !!settings.moduleWalletTrackerEnabled
+      : !!settings.moduleTreasuryEnabled,
     nfttracker: !!settings.moduleNftTrackerEnabled,
     tokentracker: !!settings.moduleTokenTrackerEnabled,
     battle: !!settings.moduleBattleEnabled,
@@ -2355,7 +2362,7 @@ function switchSection(sectionName, options = {}) {
   const sectionRequiresModule = {
     governance: 'governance',
     wallets: 'verification',
-    treasury: 'treasury',
+    treasury: 'wallettracker',
     'nft-activity': 'nfttracker',
     'token-activity': 'tokentracker',
     heist: 'heist',
@@ -2568,7 +2575,7 @@ async function loadTrackedWalletList() {
   if (!container) return;
 
   try {
-    const res = await fetch('/api/admin/tracked-wallets', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const res = await fetch('/api/admin/wallet-tracker/wallets', { credentials: 'include', headers: buildTenantRequestHeaders() });
     if (!res.ok) {
       container.innerHTML = '<div style="color:var(--text-secondary); text-align:center; padding:20px;">Admin access required to manage tracked wallets.</div>';
       return;
@@ -2637,7 +2644,11 @@ async function loadTrackedWalletList() {
 
 async function refreshTrackedWalletPanel(id) {
   try {
-    const res = await fetch(`/api/admin/tracked-wallets/${id}/panel`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } });
+    const res = await fetch(`/api/admin/wallet-tracker/wallets/${id}/panel`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() }
+    });
     const d = await res.json();
     if (d.success) showSuccess('Holdings panel ' + (d.action === 'updated' ? 'updated!' : 'posted!'));
     else showError(d.message || 'Failed to post panel');
@@ -2647,7 +2658,11 @@ async function refreshTrackedWalletPanel(id) {
 async function removeTrackedWallet(id) {
   if (!confirm('Remove this tracked wallet?')) return;
   try {
-    const res = await fetch('/api/admin/tracked-wallets/' + id, { method: 'DELETE', credentials: 'include' });
+    const res = await fetch('/api/admin/wallet-tracker/wallets/' + id, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: buildTenantRequestHeaders()
+    });
     const d = await res.json();
     if (d.success) {
       showSuccess('Wallet removed');
@@ -2765,17 +2780,17 @@ async function saveNewWallet() {
     let res, result;
     if (editId) {
       // Edit existing
-      res = await fetch('/api/admin/tracked-wallets/' + editId, {
+      res = await fetch('/api/admin/wallet-tracker/wallets/' + editId, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
         credentials: 'include',
         body: JSON.stringify({ label: label || null, alertChannelId: alertChannelId || null, panelChannelId: panelChannelId || null })
       });
     } else {
       // Add new
-      res = await fetch('/api/admin/tracked-wallets', {
+      res = await fetch('/api/admin/wallet-tracker/wallets', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
         credentials: 'include',
         body: JSON.stringify({ walletAddress: addr, label: label || null, alertChannelId: alertChannelId || null, panelChannelId: panelChannelId || null })
       });
@@ -3283,6 +3298,7 @@ let selectedTenantGuildId = null;
 let selectedTenantDetailCache = null;
 let selectedTenantAuditCache = [];
 let selectedTenantLimitsCache = null;
+let superadminTemplateCatalog = [];
 let superadminTenantSearch = '';
 let superadminActiveTab = 'tenants';
 let tenantDetailActiveTab = 'overview';
@@ -3303,7 +3319,8 @@ const TENANT_PLAN_LABELS = {
 const TENANT_MODULE_LABELS = {
   verification: 'Verification',
   governance: 'Governance',
-  treasury: 'Wallet Tracker',
+  treasury: 'Treasury',
+  wallettracker: 'Wallet Tracker',
   battle: 'Battle',
   heist: 'Heist',
   ticketing: 'Ticketing',
@@ -3384,6 +3401,10 @@ function renderTenantDetailPanel(tenant, tenantLimits = null) {
 
   const planOptions = Object.entries(TENANT_PLAN_LABELS).map(([key, label]) => `
     <option value="${escapeHtml(key)}"${tenant.planKey === key ? ' selected' : ''}>${escapeHtml(label)}</option>
+  `).join('');
+
+  const templateOptions = (Array.isArray(superadminTemplateCatalog) ? superadminTemplateCatalog : []).map(template => `
+    <option value="${escapeHtml(template.key)}">${escapeHtml(template.label || template.key)}${template.planKey ? ` (${escapeHtml(getTenantPlanLabel(template.planKey))})` : ''}</option>
   `).join('');
 
   const moduleToggles = Object.entries(TENANT_MODULE_LABELS).map(([moduleKey, label]) => {
@@ -3493,6 +3514,22 @@ function renderTenantDetailPanel(tenant, tenantLimits = null) {
       </div>
 
       <div id="tenantDetail-controls" style="display:none;gap:16px; grid-template-columns:minmax(0,0.8fr) minmax(0,1.2fr);">
+        <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
+            <h4 style="margin:0; color:#c9d6ff;">Monetization Template</h4>
+            <button class="btn-primary" id="tenantTemplateApplyBtn" onclick="applyTenantTemplate()" style="padding:8px 14px;">Apply Template</button>
+          </div>
+          <label style="display:grid; gap:8px; color:#e0e7ff; font-size:0.9em;">
+            <span>Template</span>
+            <select id="tenantTemplateSelect" onchange="updateTenantTemplateDescription()" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
+              ${templateOptions || '<option value="">No templates available</option>'}
+            </select>
+          </label>
+          <div id="tenantTemplateDescription" style="margin-top:12px; color:var(--text-secondary); font-size:0.82em; line-height:1.5;">
+            ${escapeHtml(superadminTemplateCatalog?.[0]?.description || 'Apply a template to set plan, module toggles, and module limits in one action.')}
+          </div>
+        </div>
+
         <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
             <h4 style="margin:0; color:#c9d6ff;">Plan Assignment</h4>
@@ -3889,6 +3926,7 @@ async function loadSelectedTenantDetail() {
 
   if (!selectedTenantGuildId) {
     selectedTenantLimitsCache = null;
+    superadminTemplateCatalog = [];
     content.innerHTML = renderTenantDetailPanel(null);
     return;
   }
@@ -3896,16 +3934,18 @@ async function loadSelectedTenantDetail() {
   content.innerHTML = `<div style="text-align:center; padding:20px;"><div class="spinner"></div><p style="margin-top:10px;">Loading tenant details...</p></div>`;
 
   try {
-    const [tenantResponse, auditResponse, limitsResponse] = await Promise.all([
+    const [tenantResponse, auditResponse, limitsResponse, templateResponse] = await Promise.all([
       fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}`, { credentials: 'include' }),
       fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/audit?limit=10`, { credentials: 'include' }),
-      fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/limits`, { credentials: 'include' })
+      fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/limits`, { credentials: 'include' }),
+      fetch('/api/superadmin/monetization/templates', { credentials: 'include' })
     ]);
 
-    const [tenantData, auditData, limitsData] = await Promise.all([
+    const [tenantData, auditData, limitsData, templateData] = await Promise.all([
       tenantResponse.json(),
       auditResponse.json(),
-      limitsResponse.json()
+      limitsResponse.json(),
+      templateResponse.json()
     ]);
 
     if (!tenantData.success) {
@@ -3921,8 +3961,10 @@ async function loadSelectedTenantDetail() {
     selectedTenantDetailCache = tenantData.tenant || null;
     selectedTenantAuditCache = auditData.auditLogs || [];
     selectedTenantLimitsCache = limitsData?.success ? limitsData.limits : null;
+    superadminTemplateCatalog = templateData?.success && Array.isArray(templateData.templates) ? templateData.templates : [];
     content.innerHTML = renderTenantDetailPanel(selectedTenantDetailCache, selectedTenantLimitsCache);
     showTenantDetailTab(tenantDetailActiveTab || 'overview');
+    updateTenantTemplateDescription();
   } catch (error) {
     content.innerHTML = `<div style="color:#fca5a5; text-align:center; padding:20px;">Error loading tenant details: ${escapeHtml(error.message || 'Unknown error')}</div>`;
   }
@@ -4085,6 +4127,55 @@ function showTenantDetailTab(tab) {
   document.querySelectorAll('[data-tenant-detail-tab]').forEach(btn => {
     btn.className = (btn.dataset.tenantDetailTab === tab) ? 'btn-primary' : 'btn-secondary';
   });
+}
+
+function updateTenantTemplateDescription() {
+  const select = document.getElementById('tenantTemplateSelect');
+  const desc = document.getElementById('tenantTemplateDescription');
+  if (!select || !desc) return;
+
+  const templateKey = String(select.value || '').trim();
+  const template = (superadminTemplateCatalog || []).find(item => item.key === templateKey);
+  desc.textContent = template?.description || 'Apply a template to set plan, module toggles, and module limits in one action.';
+}
+
+async function applyTenantTemplate() {
+  if (!selectedTenantGuildId) return;
+
+  const select = document.getElementById('tenantTemplateSelect');
+  const btn = document.getElementById('tenantTemplateApplyBtn');
+  if (!select || !btn) return;
+
+  const templateKey = String(select.value || '').trim();
+  if (!templateKey) {
+    showError('Select a template first.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Applying...';
+
+  try {
+    const response = await fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/apply-template`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ templateKey })
+    });
+    const data = await response.json();
+
+    if (data.success) {
+      showSuccess(`Template applied: ${data.template?.label || templateKey}`);
+      await loadSuperadminView();
+    } else {
+      showError(data.message || 'Failed to apply template');
+    }
+  } catch (error) {
+    showError(`Failed to apply template: ${error.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Apply Template';
+  }
 }
 
 async function applyTenantPlan() {
@@ -4582,22 +4673,27 @@ async function loadAdminHelpView() {
       { name: '/treasury admin tx-alerts', desc: 'Configure tx alerts', options: 'enabled, channel, incoming_only, min_sol', example: '/treasury admin tx-alerts enabled:true channel:#treasury' }
     ])}
     ${cmdSection('NFT Tracker', 'NFT', [
-      { name: '/nft-tracker wallet add', desc: 'Track wallet', options: 'address (required), label, alert_channel, panel_channel', example: '/nft-tracker wallet add address:So1... label:"Whale"' },
-      { name: '/nft-tracker wallet remove', desc: 'Remove tracked wallet', options: 'id (required)', example: '/nft-tracker wallet remove id:2' },
-      { name: '/nft-tracker wallet list', desc: 'List tracked wallets', options: '-', example: '/nft-tracker wallet list' },
-      { name: '/nft-tracker wallet edit', desc: 'Edit tracked wallet', options: 'id + optional label/channels/enabled', example: '/nft-tracker wallet edit id:2 enabled:false' },
-      { name: '/nft-tracker wallet holdings', desc: 'Post/refresh holdings panel', options: 'id (required), channel', example: '/nft-tracker wallet holdings id:2' },
-      { name: '/nft-tracker wallet refresh-all', desc: 'Refresh all holdings panels', options: '-', example: '/nft-tracker wallet refresh-all' },
       { name: '/nft-tracker collection add', desc: 'Track collection events', options: 'address, name, channel (required), me_symbol', example: '/nft-tracker collection add address:... name:"Collection" channel:#alerts' },
       { name: '/nft-tracker collection remove', desc: 'Remove tracked collection', options: 'id (required)', example: '/nft-tracker collection remove id:3' },
       { name: '/nft-tracker collection list', desc: 'List tracked collections', options: '-', example: '/nft-tracker collection list' },
-      { name: '/nft-tracker collection feed', desc: 'Show collection feed', options: 'limit (optional)', example: '/nft-tracker collection feed limit:15' },
+      { name: '/nft-tracker collection feed', desc: 'Show collection feed', options: 'limit (optional)', example: '/nft-tracker collection feed limit:15' }
+    ])}
+    ${cmdSection('Wallet Tracker', 'WLT', [
+      { name: '/wallet-tracker add', desc: 'Track wallet', options: 'address (required), label, alert_channel, panel_channel', example: '/wallet-tracker add address:So1... label:"Whale"' },
+      { name: '/wallet-tracker remove', desc: 'Remove tracked wallet', options: 'id (required)', example: '/wallet-tracker remove id:2' },
+      { name: '/wallet-tracker list', desc: 'List tracked wallets', options: '-', example: '/wallet-tracker list' },
+      { name: '/wallet-tracker edit', desc: 'Edit tracked wallet', options: 'id + optional label/channels/enabled', example: '/wallet-tracker edit id:2 enabled:false' },
+      { name: '/wallet-tracker holdings', desc: 'Post/refresh holdings panel', options: 'id (required), channel', example: '/wallet-tracker holdings id:2' },
+      { name: '/wallet-tracker refresh-all', desc: 'Refresh all holdings panels', options: '-', example: '/wallet-tracker refresh-all' }
+    ])}
+    ${cmdSection('Token Tracker', 'TOK', [
       { name: '/token-tracker add', desc: 'Track SPL token mint for balances + alerts', options: 'mint(required), symbol/name(optional), alert_channel, min_alert_amount, alert flags', example: '/token-tracker add mint:... symbol:CAT alert_channel:#token-alerts alert_buys:true' },
       { name: '/token-tracker edit', desc: 'Edit tracked token options', options: 'id(required) + optional mint/symbol/name/alert_channel/min_alert_amount/alert flags/enabled', example: '/token-tracker edit id:2 alert_transfers:true' },
       { name: '/token-tracker remove', desc: 'Remove tracked token mint', options: 'id(required)', example: '/token-tracker remove id:2' },
       { name: '/token-tracker list', desc: 'List tracked token mints', options: '-', example: '/token-tracker list' },
       { name: '/token-tracker feed', desc: 'Show recent tracked token events', options: 'limit(optional)', example: '/token-tracker feed limit:15' }
     ])}
+
     ${cmdSection('Points', 'PTS', [
       { name: '/points balance', desc: 'Show points balance', options: 'user (optional admin)', example: '/points balance' },
       { name: '/points leaderboard', desc: 'Show leaderboard', options: 'limit (optional)', example: '/points leaderboard limit:10' },
@@ -4950,7 +5046,8 @@ async function loadAdminSettingsView() {
       { id: 'moduleVerificationEnabled', label: 'Verification',    icon: 'V',  moduleKey: 'verification'  },
       { id: 'moduleBrandingEnabled',     label: 'Branding',        icon: 'BR', moduleKey: 'branding'      },
       { id: 'moduleMissionsEnabled',     label: 'Heist',           icon: 'H',  moduleKey: 'heist'         },
-      { id: 'moduleTreasuryEnabled',     label: 'Wallet Tracker',  icon: 'W',  moduleKey: 'treasury'      },
+      { id: 'moduleWalletTrackerEnabled',label: 'Wallet Tracker',  icon: 'W',  moduleKey: 'wallettracker' },
+      { id: 'moduleTreasuryEnabled',     label: 'Treasury',        icon: '$',  moduleKey: 'treasury'      },
       { id: 'moduleNftTrackerEnabled',   label: 'NFT Tracker',     icon: 'N',  moduleKey: 'nfttracker'    },
       { id: 'moduleTokenTrackerEnabled', label: 'Token Tracker',   icon: '\ud83e\ude99',  moduleKey: 'tokentracker'  },
       { id: 'moduleRoleClaimEnabled',    label: 'Self-Serve Roles',icon: 'R',  moduleKey: 'selfserveroles'},
@@ -5062,7 +5159,7 @@ async function savePortalSettings() {
   // Only save module toggles that are actually rendered (handles assigned-module filtering)
   const moduleIds = [
     'moduleBattleEnabled', 'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleBrandingEnabled',
-    'moduleMissionsEnabled', 'moduleTreasuryEnabled', 'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled',
+    'moduleMissionsEnabled', 'moduleWalletTrackerEnabled', 'moduleTreasuryEnabled', 'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled',
     'moduleRoleClaimEnabled', 'moduleTicketingEnabled', 'moduleEngagementEnabled',
   ];
   const newSettings = {};
@@ -6361,7 +6458,7 @@ async function renderSettingsWalletList() {
   try {
     const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out')), 10000));
     const res = await Promise.race([
-      fetch('/api/admin/tracked-wallets', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      fetch('/api/admin/wallet-tracker/wallets', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       timeout
     ]);
     if (!res.ok) { wrap.innerHTML = '<p style="color:#fca5a5;font-size:0.85em;">Failed to load wallets.</p>'; return; }

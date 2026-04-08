@@ -27,6 +27,7 @@ const trackedWalletsService = require('../services/trackedWalletsService');
 const ticketService = require('../services/ticketService');
 const entitlementService = require('../services/entitlementService');
 const billingService = require('../services/billingService');
+const monetizationTemplateService = require('../services/monetizationTemplateService');
 const superadminService = require('../services/superadminService');
 const superadminGuard = require('../middleware/superadminGuard');
 const { BATTLE_ERAS } = require('../config/battleEras');
@@ -749,9 +750,12 @@ class WebServer {
         const userInfo = await roleService.getUserInfo(discordId);
         const wallets = db.prepare('SELECT wallet_address, is_favorite, primary_wallet, created_at FROM wallets WHERE discord_id = ? ORDER BY is_favorite DESC, created_at ASC').all(discordId);
         const userPrefs = db.prepare('SELECT wallet_alert_identity_opt_out FROM users WHERE discord_id = ?').get(discordId) || {};
+        const requestedGuildId = getRequestedGuildId(req, { allowFallback: true });
         
         // Get user's proposals
-        const proposals = db.prepare("SELECT * FROM proposals WHERE creator_id = ? AND status NOT IN ('expired') ORDER BY created_at DESC").all(discordId);
+        const proposals = (hasProposalsGuildColumn() && requestedGuildId)
+          ? db.prepare("SELECT * FROM proposals WHERE creator_id = ? AND guild_id = ? AND status NOT IN ('expired') ORDER BY created_at DESC").all(discordId, requestedGuildId)
+          : db.prepare("SELECT * FROM proposals WHERE creator_id = ? AND status NOT IN ('expired') ORDER BY created_at DESC").all(discordId);
         
         // Get user's missions
         const missions = db.prepare(`
@@ -1130,7 +1134,12 @@ class WebServer {
 
       try {
         const discordId = req.session.discordUser.id;
+        const allowFallback = !tenantService.isMultitenantEnabled();
+        const requestedGuildId = getRequestedGuildId(req, { allowFallback });
         const { title, description, category, costIndication } = req.body;
+        if (!requestedGuildId) {
+          return res.status(409).json({ success: false, message: 'Select a server to continue' });
+        }
 
         const validationErr = validateProposalInput(req.body);
         if (validationErr) return res.status(400).json({ success: false, message: validationErr });
@@ -1140,7 +1149,13 @@ class WebServer {
           return res.status(403).json({ success: false, message: 'You need at least 1 verified NFT to create proposals' });
         }
 
-        const result = proposalService.createProposal(discordId, { title, description, category: category || 'Other', costIndication: costIndication || null });
+        const result = proposalService.createProposal(discordId, {
+          title,
+          description,
+          category: category || 'Other',
+          costIndication: costIndication || null,
+          guildId: requestedGuildId || ''
+        });
         res.json(result);
       } catch (error) {
         logger.error('Error creating proposal via web:', error);
@@ -1157,14 +1172,25 @@ class WebServer {
       }
       try {
         const discordId = req.session.discordUser.id;
+        const allowFallback = !tenantService.isMultitenantEnabled();
+        const requestedGuildId = getRequestedGuildId(req, { allowFallback });
         const { title, description, category, costIndication } = req.body;
+        if (!requestedGuildId) {
+          return res.status(409).json({ success: false, message: 'Select a server to continue' });
+        }
         const validationErr = validateProposalInput(req.body);
         if (validationErr) return res.status(400).json({ success: false, message: validationErr });
         const userInfo = await roleService.getUserInfo(discordId);
         if (!userInfo || !userInfo.voting_power || userInfo.voting_power < 1) {
           return res.status(403).json({ success: false, message: 'You need at least 1 verified NFT to create proposals' });
         }
-        const result = proposalService.createProposal(discordId, { title, description, category: category || 'Other', costIndication: costIndication || null });
+        const result = proposalService.createProposal(discordId, {
+          title,
+          description,
+          category: category || 'Other',
+          costIndication: costIndication || null,
+          guildId: requestedGuildId || ''
+        });
         res.json(result);
       } catch (error) {
         logger.error('Error creating proposal (governance):', error);
@@ -1176,6 +1202,11 @@ class WebServer {
     this.app.post('/api/governance/proposals/:id/submit', (req, res) => {
       if (!req.session.discordUser) return res.status(401).json({ success: false, message: 'Not authenticated' });
       try {
+        const requestedGuildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
+        if (!requestedGuildId) return res.status(409).json({ success: false, message: 'Select a server to continue' });
+        if (!isProposalInGuildScope(req.params.id, requestedGuildId)) {
+          return res.status(404).json({ success: false, message: 'Proposal not found' });
+        }
         const result = proposalService.submitForReview(req.params.id, req.session.discordUser.id);
         res.json(result);
       } catch (error) {
@@ -1188,6 +1219,11 @@ class WebServer {
     this.app.post('/api/governance/proposals/:id/support', async (req, res) => {
       if (!req.session.discordUser) return res.status(401).json({ success: false, message: 'Not authenticated' });
       try {
+        const requestedGuildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
+        if (!requestedGuildId) return res.status(409).json({ success: false, message: 'Select a server to continue' });
+        if (!isProposalInGuildScope(req.params.id, requestedGuildId)) {
+          return res.status(404).json({ success: false, message: 'Proposal not found' });
+        }
         const result = proposalService.addSupporter(req.params.id, req.session.discordUser.id);
         res.json(result);
       } catch (error) {
@@ -1199,6 +1235,11 @@ class WebServer {
     // GET /api/governance/proposals/:id/comments â€” public
     this.app.get('/api/governance/proposals/:id/comments', (req, res) => {
       try {
+        const scopedGuildId = ensurePublicGovernanceScope(req, res);
+        if (scopedGuildId === null) return;
+        if (!isProposalInGuildScope(req.params.id, scopedGuildId)) {
+          return res.status(404).json({ success: false, message: 'Proposal not found' });
+        }
         const comments = proposalService.getComments(req.params.id);
         res.json({ success: true, comments });
       } catch (error) {
@@ -1210,6 +1251,11 @@ class WebServer {
     this.app.post('/api/governance/proposals/:id/comments', commentLimiter, (req, res) => {
       if (!req.session.discordUser) return res.status(401).json({ success: false, message: 'Not authenticated' });
       try {
+        const requestedGuildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
+        if (!requestedGuildId) return res.status(409).json({ success: false, message: 'Select a server to continue' });
+        if (!isProposalInGuildScope(req.params.id, requestedGuildId)) {
+          return res.status(404).json({ success: false, message: 'Proposal not found' });
+        }
         const { content } = req.body;
         if (!content || !content.trim()) return res.status(400).json({ success: false, message: 'Content is required' });
         if (content.length > 1000) return res.status(400).json({ success: false, message: 'Comment must be 1000 characters or less' });
@@ -1224,6 +1270,11 @@ class WebServer {
     this.app.post('/api/governance/proposals/:id/veto', async (req, res) => {
       if (!req.session.discordUser) return res.status(401).json({ success: false, message: 'Not authenticated' });
       try {
+        const requestedGuildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
+        if (!requestedGuildId) return res.status(409).json({ success: false, message: 'Select a server to continue' });
+        if (!isProposalInGuildScope(req.params.id, requestedGuildId)) {
+          return res.status(404).json({ success: false, message: 'Proposal not found' });
+        }
         const { reason } = req.body;
         const result = proposalService.vetoProposal(req.params.id, req.session.discordUser.id, reason);
         res.json(result);
@@ -1481,6 +1532,40 @@ class WebServer {
         });
       } catch (error) {
         logger.error('Error fetching limits catalog:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.get('/api/superadmin/monetization/templates', superadminGuard, (_req, res) => {
+      try {
+        const templates = monetizationTemplateService.listTemplates();
+        res.json({ success: true, templates });
+      } catch (error) {
+        logger.error('Error fetching monetization templates:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/superadmin/tenants/:guildId/apply-template', superadminGuard, logSuperadminTenantAction, (req, res) => {
+      try {
+        const templateKey = String(req.body?.templateKey || '').trim();
+        if (!templateKey) {
+          return res.status(400).json({ success: false, message: 'templateKey is required' });
+        }
+
+        const result = monetizationTemplateService.applyTemplate(
+          req.params.guildId,
+          templateKey,
+          req.session?.discordUser?.id || 'unknown'
+        );
+
+        if (!result.success) {
+          return res.status(400).json(result);
+        }
+
+        res.json(result);
+      } catch (error) {
+        logger.error('Error applying monetization template:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });
@@ -1963,6 +2048,9 @@ class WebServer {
           effectiveSettings.moduleVerificationEnabled = !!tenantContext.modules.verification;
           effectiveSettings.moduleMissionsEnabled = !!tenantContext.modules.heist;
           effectiveSettings.moduleTreasuryEnabled = !!tenantContext.modules.treasury;
+          effectiveSettings.moduleWalletTrackerEnabled = tenantContext.modules.wallettracker === undefined
+            ? !!tenantContext.modules.treasury
+            : !!tenantContext.modules.wallettracker;
           effectiveSettings.moduleNftTrackerEnabled = !!tenantContext.modules.nfttracker;
           effectiveSettings.moduleTokenTrackerEnabled = !!tenantContext.modules.tokentracker;
           effectiveSettings.moduleBrandingEnabled = !!tenantContext.modules.branding;
@@ -1975,6 +2063,10 @@ class WebServer {
           if (tenantVerification.ogRoleLimit !== undefined) effectiveSettings.ogRoleLimit = tenantVerification.ogRoleLimit || 0;
           // Tell the frontend which module keys are actually assigned (exist in tenant_modules)
           effectiveSettings.assignedModuleKeys = Object.keys(tenantContext.modules);
+        }
+
+        if (effectiveSettings.moduleWalletTrackerEnabled === undefined) {
+          effectiveSettings.moduleWalletTrackerEnabled = effectiveSettings.moduleTreasuryEnabled;
         }
 
         // ogRoleId lives in og-role.json (ogRoleService).
@@ -2053,9 +2145,9 @@ class WebServer {
         const ALLOWED_SETTINGS_FIELDS = [
           'proposalsChannelId', 'votingChannelId', 'resultsChannelId', 'governanceLogChannelId',
           'quorumPercentage', 'supportThreshold', 'voteDurationHours',
-          'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleTreasuryEnabled',
+          'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleTreasuryEnabled', 'moduleWalletTrackerEnabled',
           'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleBrandingEnabled', 'moduleMissionsEnabled', 'moduleBattleEnabled',
-          'moduleTicketingEnabled', 'moduleRoleClaimEnabled',
+          'moduleTicketingEnabled', 'moduleRoleClaimEnabled', 'moduleEngagementEnabled',
           'battleRoundPauseMinSec', 'battleRoundPauseMaxSec', 'battleElitePrepSec', 'battleForcedEliminationIntervalRounds', 'battleDefaultEra',
           'baseVerifiedRoleId', 'autoResyncEnabled', 'ogRoleId', 'ogRoleLimit',
           'treasuryWalletAddress', 'treasuryRefreshInterval', 'txAlertChannelId',
@@ -2094,6 +2186,7 @@ class WebServer {
               moduleVerificationEnabled: 'verification',
               moduleMissionsEnabled: 'heist',
               moduleTreasuryEnabled: 'treasury',
+              moduleWalletTrackerEnabled: 'wallettracker',
               moduleNftTrackerEnabled: 'nfttracker',
               moduleTokenTrackerEnabled: 'tokentracker',
               moduleBrandingEnabled: 'branding',
@@ -2299,7 +2392,9 @@ class WebServer {
         const { discordId } = req.params;
         const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(discordId);
         const wallets = db.prepare('SELECT * FROM wallets WHERE discord_id = ?').all(discordId);
-        const proposals = db.prepare('SELECT * FROM proposals WHERE creator_id = ?').all(discordId);
+        const proposals = (hasProposalsGuildColumn() && req.guildId)
+          ? db.prepare('SELECT * FROM proposals WHERE creator_id = ? AND guild_id = ?').all(discordId, req.guildId)
+          : db.prepare('SELECT * FROM proposals WHERE creator_id = ?').all(discordId);
         const votes = db.prepare('SELECT * FROM votes WHERE voter_id = ?').all(discordId);
         const missions = db.prepare(`
           SELECT m.*, mp.assigned_nft_name, mp.points_awarded
@@ -2344,8 +2439,13 @@ class WebServer {
       try {
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
         const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
-        const totalCount = db.prepare('SELECT COUNT(*) as cnt FROM proposals').get().cnt;
-        const proposals = db.prepare('SELECT * FROM proposals ORDER BY created_at DESC LIMIT ? OFFSET ?').all(limit, offset);
+        const hasGuildScope = hasProposalsGuildColumn() && !!req.guildId;
+        const totalCount = hasGuildScope
+          ? db.prepare('SELECT COUNT(*) as cnt FROM proposals WHERE guild_id = ?').get(req.guildId).cnt
+          : db.prepare('SELECT COUNT(*) as cnt FROM proposals').get().cnt;
+        const proposals = hasGuildScope
+          ? db.prepare('SELECT * FROM proposals WHERE guild_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?').all(req.guildId, limit, offset)
+          : db.prepare('SELECT * FROM proposals ORDER BY created_at DESC LIMIT ? OFFSET ?').all(limit, offset);
         res.json({ success: true, proposals, total: totalCount, limit, offset });
       } catch (error) {
         logger.error('Error fetching proposals:', error);
@@ -2356,6 +2456,9 @@ class WebServer {
     this.app.post('/api/admin/proposals/:id/close', adminAuthMiddleware, async (req, res) => {
       try {
         const { id } = req.params;
+        if (!isProposalInGuildScope(id, req.guildId)) {
+          return res.status(404).json({ success: false, message: 'Proposal not found' });
+        }
         const result = await proposalService.closeVote(id);
         res.json(result);
       } catch (error) {
@@ -2367,7 +2470,35 @@ class WebServer {
     // Admin: approve proposal (pending_review â†’ supporting)
     this.app.post('/api/admin/governance/proposals/:id/approve', adminAuthMiddleware, (req, res) => {
       try {
+        if (!isProposalInGuildScope(req.params.id, req.guildId)) {
+          return res.status(404).json({ success: false, message: 'Proposal not found' });
+        }
+        const proposal = getProposalRow(req.params.id);
+        const effectiveGuildId = String(proposal?.guild_id || req.guildId || '').trim();
+        const activeCount = countActiveGovernanceProposals(effectiveGuildId);
+        const governanceLimit = entitlementService.enforceLimit({
+          guildId: effectiveGuildId,
+          moduleKey: 'governance',
+          limitKey: 'max_active_proposals',
+          currentCount: activeCount,
+          incrementBy: 1,
+          itemLabel: 'active proposals',
+        });
+
+        if (!governanceLimit.success) {
+          return res.status(400).json({
+            success: false,
+            code: 'limit_exceeded',
+            message: governanceLimit.message,
+            limit: governanceLimit.limit,
+            used: governanceLimit.used,
+          });
+        }
+
         const result = proposalService.approveProposal(req.params.id, req.session.discordUser.id);
+        if (!result.success) {
+          return res.status(400).json(result);
+        }
         res.json(result);
       } catch (error) {
         logger.error('Error approving proposal:', error);
@@ -2378,6 +2509,9 @@ class WebServer {
     // Admin: hold proposal (pending_review â†’ on_hold)
     this.app.post('/api/admin/governance/proposals/:id/hold', adminAuthMiddleware, (req, res) => {
       try {
+        if (!isProposalInGuildScope(req.params.id, req.guildId)) {
+          return res.status(404).json({ success: false, message: 'Proposal not found' });
+        }
         const { reason } = req.body;
         const result = proposalService.holdProposal(req.params.id, req.session.discordUser.id, reason);
         res.json(result);
@@ -2390,6 +2524,9 @@ class WebServer {
     // Admin: promote to voting (supporting â†’ voting, takes VP snapshot)
     this.app.post('/api/admin/governance/proposals/:id/promote', adminAuthMiddleware, async (req, res) => {
       try {
+        if (!isProposalInGuildScope(req.params.id, req.guildId)) {
+          return res.status(404).json({ success: false, message: 'Proposal not found' });
+        }
         const result = await proposalService.promoteToVoting(req.params.id, req.session.discordUser.id);
         res.json(result);
       } catch (error) {
@@ -2401,6 +2538,9 @@ class WebServer {
     // Admin: conclude voting
     this.app.post('/api/admin/governance/proposals/:id/conclude', adminAuthMiddleware, async (req, res) => {
       try {
+        if (!isProposalInGuildScope(req.params.id, req.guildId)) {
+          return res.status(404).json({ success: false, message: 'Proposal not found' });
+        }
         const result = await proposalService.concludeProposal(req.params.id);
         res.json(result);
       } catch (error) {
@@ -2412,6 +2552,9 @@ class WebServer {
     // Admin: emergency pause (Don + Consigliere only â€” caller must verify roles)
     this.app.post('/api/admin/governance/proposals/:id/pause', adminAuthMiddleware, (req, res) => {
       try {
+        if (!isProposalInGuildScope(req.params.id, req.guildId)) {
+          return res.status(404).json({ success: false, message: 'Proposal not found' });
+        }
         const result = proposalService.emergencyPause(req.params.id, req.session.discordUser.id);
         res.json(result);
       } catch (error) {
@@ -2575,6 +2718,77 @@ class WebServer {
         incrementBy: 1,
         itemLabel,
       });
+    };
+
+    const hasProposalsGuildColumn = (() => {
+      let cached = null;
+      return () => {
+        if (cached !== null) return cached;
+        try {
+          const columns = db.prepare('PRAGMA table_info(proposals)').all();
+          cached = columns.some(column => String(column?.name || '').toLowerCase() === 'guild_id');
+        } catch (_error) {
+          cached = false;
+        }
+        return cached;
+      };
+    })();
+
+    const getProposalRow = (proposalId) => {
+      if (!proposalId) return null;
+      try {
+        return db.prepare('SELECT proposal_id, guild_id, status FROM proposals WHERE proposal_id = ?').get(String(proposalId).trim());
+      } catch (_error) {
+        return null;
+      }
+    };
+
+    const countActiveGovernanceProposals = (guildId) => {
+      const normalizedGuildId = String(guildId || '').trim();
+      if (hasProposalsGuildColumn() && normalizedGuildId) {
+        return Number(db.prepare(`
+          SELECT COUNT(*) AS cnt
+          FROM proposals
+          WHERE guild_id = ?
+            AND status IN ('supporting', 'voting')
+        `).get(normalizedGuildId)?.cnt || 0);
+      }
+
+      return Number(db.prepare(`
+        SELECT COUNT(*) AS cnt
+        FROM proposals
+        WHERE status IN ('supporting', 'voting')
+      `).get()?.cnt || 0);
+    };
+
+    const isProposalInGuildScope = (proposalId, guildId) => {
+      const proposal = getProposalRow(proposalId);
+      if (!proposal) return false;
+      if (!hasProposalsGuildColumn()) return true;
+      const proposalGuildId = String(proposal.guild_id || '').trim();
+      const requestedGuildId = String(guildId || '').trim();
+      if (!proposalGuildId) return !tenantService.isMultitenantEnabled();
+      return requestedGuildId && proposalGuildId === requestedGuildId;
+    };
+
+    const getPublicRequestedGuildId = (req) => {
+      const queryGuildId = normalizeGuildId(String(req.query?.guildId || req.query?.guild || '').trim());
+      if (queryGuildId) return queryGuildId;
+      const headerGuildId = normalizeGuildId(req.get(REQUEST_GUILD_HEADER));
+      if (headerGuildId) return headerGuildId;
+      return '';
+    };
+
+    const ensurePublicGovernanceScope = (req, res) => {
+      const guildId = getPublicRequestedGuildId(req);
+      if (tenantService.isMultitenantEnabled() && hasProposalsGuildColumn() && !guildId) {
+        res.status(400).json({
+          success: false,
+          message: 'guildId query parameter (or x-guild-id header) is required in multi-tenant mode'
+        });
+        return null;
+      }
+      return guildId;
     };
 
     this.app.get('/api/admin/roles/config', adminAuthMiddleware, (req, res) => {
@@ -3560,7 +3774,17 @@ class WebServer {
 
     // ==================== ADMIN API - TRACKED WALLETS (NFT Tracker) ====================
 
+    const ensureWalletTrackerModule = (req, res) => {
+      if (!tenantService.isMultitenantEnabled()) return true;
+      if (!req.guildId) return true;
+      if (tenantService.isModuleEnabled(req.guildId, 'wallettracker')) return true;
+      if (tenantService.isModuleEnabled(req.guildId, 'treasury')) return true; // compatibility fallback
+      res.status(403).json({ success: false, message: 'Wallet Tracker module is disabled for this server.' });
+      return false;
+    };
+
     this.app.get('/api/admin/tracked-wallets', adminAuthMiddleware, (req, res) => {
+      if (!ensureWalletTrackerModule(req, res)) return;
       try {
         const trackedWalletsService = require('../services/trackedWalletsService');
         const wallets = trackedWalletsService.getTrackedWallets(req.guildId);
@@ -3572,6 +3796,7 @@ class WebServer {
     });
 
     this.app.post('/api/admin/tracked-wallets', adminAuthMiddleware, async (req, res) => {
+      if (!ensureWalletTrackerModule(req, res)) return;
       try {
         const trackedWalletsService = require('../services/trackedWalletsService');
         const { walletAddress, label, alertChannelId, panelChannelId } = req.body;
@@ -3601,6 +3826,7 @@ class WebServer {
     });
 
     this.app.put('/api/admin/tracked-wallets/:id', adminAuthMiddleware, (req, res) => {
+      if (!ensureWalletTrackerModule(req, res)) return;
       try {
         const trackedWalletsService = require('../services/trackedWalletsService');
         const { label, alertChannelId, panelChannelId, enabled } = req.body;
@@ -3618,6 +3844,7 @@ class WebServer {
     });
 
     this.app.delete('/api/admin/tracked-wallets/:id', adminAuthMiddleware, (req, res) => {
+      if (!ensureWalletTrackerModule(req, res)) return;
       try {
         const trackedWalletsService = require('../services/trackedWalletsService');
         const result = trackedWalletsService.removeTrackedWallet(parseInt(req.params.id), req.guildId);
@@ -3629,6 +3856,7 @@ class WebServer {
     });
 
     this.app.post('/api/admin/tracked-wallets/:id/panel', adminAuthMiddleware, async (req, res) => {
+      if (!ensureWalletTrackerModule(req, res)) return;
       try {
         const trackedWalletsService = require('../services/trackedWalletsService');
         const wallet = trackedWalletsService.getTrackedWalletById(parseInt(req.params.id), req.guildId);
@@ -3637,6 +3865,92 @@ class WebServer {
         res.json(result);
       } catch (error) {
         logger.error('Error posting holdings panel:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    // Preferred wallet tracker API namespace
+    this.app.get('/api/admin/wallet-tracker/wallets', adminAuthMiddleware, (req, res) => {
+      if (!ensureWalletTrackerModule(req, res)) return;
+      try {
+        const trackedWalletsService = require('../services/trackedWalletsService');
+        const wallets = trackedWalletsService.getTrackedWallets(req.guildId);
+        res.json({ success: true, wallets });
+      } catch (error) {
+        logger.error('Error listing wallet tracker wallets:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/wallet-tracker/wallets', adminAuthMiddleware, async (req, res) => {
+      if (!ensureWalletTrackerModule(req, res)) return;
+      try {
+        const trackedWalletsService = require('../services/trackedWalletsService');
+        const { walletAddress, label, alertChannelId, panelChannelId } = req.body;
+        const result = trackedWalletsService.addTrackedWallet({
+          guildId: req.guildId,
+          walletAddress,
+          label,
+          alertChannelId: alertChannelId || null,
+          panelChannelId: panelChannelId || null,
+        });
+        if (!result.success) return res.status(400).json(result);
+
+        if (panelChannelId) {
+          const wallet = trackedWalletsService.getTrackedWalletById(result.id, req.guildId);
+          if (wallet) {
+            trackedWalletsService.postHoldingsPanel(wallet, panelChannelId, req.guildId)
+              .catch(err => logger.error('[wallet-tracker] Auto panel post error:', err));
+          }
+        }
+
+        res.json({ success: true, id: result.id });
+      } catch (error) {
+        logger.error('Error adding wallet tracker wallet:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.put('/api/admin/wallet-tracker/wallets/:id', adminAuthMiddleware, (req, res) => {
+      if (!ensureWalletTrackerModule(req, res)) return;
+      try {
+        const trackedWalletsService = require('../services/trackedWalletsService');
+        const { label, alertChannelId, panelChannelId, enabled } = req.body;
+        const updates = {};
+        if (label !== undefined) updates.label = label;
+        if (alertChannelId !== undefined) updates.alertChannelId = alertChannelId;
+        if (panelChannelId !== undefined) updates.panelChannelId = panelChannelId;
+        if (enabled !== undefined) updates.enabled = enabled;
+        const result = trackedWalletsService.updateTrackedWallet(parseInt(req.params.id), updates, req.guildId);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error updating wallet tracker wallet:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.delete('/api/admin/wallet-tracker/wallets/:id', adminAuthMiddleware, (req, res) => {
+      if (!ensureWalletTrackerModule(req, res)) return;
+      try {
+        const trackedWalletsService = require('../services/trackedWalletsService');
+        const result = trackedWalletsService.removeTrackedWallet(parseInt(req.params.id), req.guildId);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error removing wallet tracker wallet:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/wallet-tracker/wallets/:id/panel', adminAuthMiddleware, async (req, res) => {
+      if (!ensureWalletTrackerModule(req, res)) return;
+      try {
+        const trackedWalletsService = require('../services/trackedWalletsService');
+        const wallet = trackedWalletsService.getTrackedWalletById(parseInt(req.params.id), req.guildId);
+        if (!wallet) return res.json({ success: false, message: 'Wallet not found' });
+        const result = await trackedWalletsService.postHoldingsPanel(wallet, req.body.channelId || null, req.guildId);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error posting wallet tracker panel:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });
@@ -3692,12 +4006,19 @@ class WebServer {
 
     // ==================== PUBLIC API - GOVERNANCE ====================
 
-        this.app.get('/api/public/proposals/active', deprecationHeaders, (req, res) => {
+    this.app.get('/api/public/proposals/active', deprecationHeaders, (req, res) => {
       try {
+        const scopedGuildId = ensurePublicGovernanceScope(req, res);
+        if (scopedGuildId === null) return;
+        const hasGuildScope = hasProposalsGuildColumn() && !!scopedGuildId;
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
         const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
-        const totalCount = db.prepare("SELECT COUNT(*) as cnt FROM proposals WHERE status IN ('supporting', 'voting')").get().cnt;
-        const proposals = db.prepare("SELECT * FROM proposals WHERE status IN ('supporting', 'voting') ORDER BY created_at DESC LIMIT ? OFFSET ?").all(limit, offset);
+        const totalCount = hasGuildScope
+          ? db.prepare("SELECT COUNT(*) as cnt FROM proposals WHERE guild_id = ? AND status IN ('supporting', 'voting')").get(scopedGuildId).cnt
+          : db.prepare("SELECT COUNT(*) as cnt FROM proposals WHERE status IN ('supporting', 'voting')").get().cnt;
+        const proposals = hasGuildScope
+          ? db.prepare("SELECT * FROM proposals WHERE guild_id = ? AND status IN ('supporting', 'voting') ORDER BY created_at DESC LIMIT ? OFFSET ?").all(scopedGuildId, limit, offset)
+          : db.prepare("SELECT * FROM proposals WHERE status IN ('supporting', 'voting') ORDER BY created_at DESC LIMIT ? OFFSET ?").all(limit, offset);
         
         const enrichedProposals = proposals.map(p => {
           const votes = {
@@ -3727,7 +4048,7 @@ class WebServer {
           };
         });
 
-        res.json({ success: true, proposals: enrichedProposals, total: totalCount, limit, offset });
+        res.json({ success: true, proposals: enrichedProposals, total: totalCount, limit, offset, guildId: scopedGuildId || null });
       } catch (error) {
         logger.error('Error fetching active proposals:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
@@ -3736,10 +4057,17 @@ class WebServer {
 
     this.app.get('/api/public/proposals/concluded', deprecationHeaders, (req, res) => {
       try {
+        const scopedGuildId = ensurePublicGovernanceScope(req, res);
+        if (scopedGuildId === null) return;
+        const hasGuildScope = hasProposalsGuildColumn() && !!scopedGuildId;
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
         const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
-        const totalCount = db.prepare("SELECT COUNT(*) as cnt FROM proposals WHERE status IN ('passed', 'rejected', 'quorum_not_met', 'concluded', 'vetoed')").get().cnt;
-        const proposals = db.prepare("SELECT * FROM proposals WHERE status IN ('passed', 'rejected', 'quorum_not_met', 'concluded', 'vetoed') ORDER BY created_at DESC LIMIT ? OFFSET ?").all(limit, offset);
+        const totalCount = hasGuildScope
+          ? db.prepare("SELECT COUNT(*) as cnt FROM proposals WHERE guild_id = ? AND status IN ('passed', 'rejected', 'quorum_not_met', 'concluded', 'vetoed')").get(scopedGuildId).cnt
+          : db.prepare("SELECT COUNT(*) as cnt FROM proposals WHERE status IN ('passed', 'rejected', 'quorum_not_met', 'concluded', 'vetoed')").get().cnt;
+        const proposals = hasGuildScope
+          ? db.prepare("SELECT * FROM proposals WHERE guild_id = ? AND status IN ('passed', 'rejected', 'quorum_not_met', 'concluded', 'vetoed') ORDER BY created_at DESC LIMIT ? OFFSET ?").all(scopedGuildId, limit, offset)
+          : db.prepare("SELECT * FROM proposals WHERE status IN ('passed', 'rejected', 'quorum_not_met', 'concluded', 'vetoed') ORDER BY created_at DESC LIMIT ? OFFSET ?").all(limit, offset);
         
         const enrichedProposals = proposals.map(p => {
           const votes = {
@@ -3767,7 +4095,7 @@ class WebServer {
           };
         });
 
-        res.json({ success: true, proposals: enrichedProposals, total: totalCount, limit, offset });
+        res.json({ success: true, proposals: enrichedProposals, total: totalCount, limit, offset, guildId: scopedGuildId || null });
       } catch (error) {
         logger.error('Error fetching concluded proposals:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
@@ -3776,8 +4104,13 @@ class WebServer {
 
     this.app.get('/api/public/proposals/:id', deprecationHeaders, (req, res) => {
       try {
+        const scopedGuildId = ensurePublicGovernanceScope(req, res);
+        if (scopedGuildId === null) return;
+        const hasGuildScope = hasProposalsGuildColumn() && !!scopedGuildId;
         const { id } = req.params;
-        const proposal = db.prepare('SELECT * FROM proposals WHERE proposal_id = ?').get(id);
+        const proposal = hasGuildScope
+          ? db.prepare('SELECT * FROM proposals WHERE proposal_id = ? AND guild_id = ?').get(id, scopedGuildId)
+          : db.prepare('SELECT * FROM proposals WHERE proposal_id = ?').get(id);
         
         if (!proposal) {
           return res.status(404).json({ success: false, message: 'Proposal not found' });
@@ -3818,11 +4151,40 @@ class WebServer {
 
     this.app.get('/api/public/stats', deprecationHeaders, (req, res) => {
       try {
-        const totalProposals = db.prepare('SELECT COUNT(*) as count FROM proposals').get().count;
-        const passedProposals = db.prepare('SELECT COUNT(*) as count FROM proposals WHERE status = ?').get('passed').count;
-        const totalVotes = db.prepare('SELECT COUNT(*) as count FROM votes').get().count;
-        const totalVP = db.prepare('SELECT COALESCE(SUM(voting_power), 0) as total FROM votes').get().total;
-        const activeVoters = db.prepare('SELECT COUNT(DISTINCT voter_id) as count FROM votes').get().count;
+        const scopedGuildId = ensurePublicGovernanceScope(req, res);
+        if (scopedGuildId === null) return;
+        const hasGuildScope = hasProposalsGuildColumn() && !!scopedGuildId;
+
+        const totalProposals = hasGuildScope
+          ? db.prepare('SELECT COUNT(*) as count FROM proposals WHERE guild_id = ?').get(scopedGuildId).count
+          : db.prepare('SELECT COUNT(*) as count FROM proposals').get().count;
+        const passedProposals = hasGuildScope
+          ? db.prepare('SELECT COUNT(*) as count FROM proposals WHERE guild_id = ? AND status = ?').get(scopedGuildId, 'passed').count
+          : db.prepare('SELECT COUNT(*) as count FROM proposals WHERE status = ?').get('passed').count;
+        const totalVotes = hasGuildScope
+          ? db.prepare(`
+            SELECT COUNT(*) as count
+            FROM votes v
+            INNER JOIN proposals p ON p.proposal_id = v.proposal_id
+            WHERE p.guild_id = ?
+          `).get(scopedGuildId).count
+          : db.prepare('SELECT COUNT(*) as count FROM votes').get().count;
+        const totalVP = hasGuildScope
+          ? db.prepare(`
+            SELECT COALESCE(SUM(v.voting_power), 0) as total
+            FROM votes v
+            INNER JOIN proposals p ON p.proposal_id = v.proposal_id
+            WHERE p.guild_id = ?
+          `).get(scopedGuildId).total
+          : db.prepare('SELECT COALESCE(SUM(voting_power), 0) as total FROM votes').get().total;
+        const activeVoters = hasGuildScope
+          ? db.prepare(`
+            SELECT COUNT(DISTINCT v.voter_id) as count
+            FROM votes v
+            INNER JOIN proposals p ON p.proposal_id = v.proposal_id
+            WHERE p.guild_id = ?
+          `).get(scopedGuildId).count
+          : db.prepare('SELECT COUNT(DISTINCT voter_id) as count FROM votes').get().count;
 
         const passRate = totalProposals > 0 ? Math.round((passedProposals / totalProposals) * 100) : 0;
 
@@ -3834,7 +4196,8 @@ class WebServer {
             passRate,
             totalVotes,
             totalVPUsed: totalVP,
-            activeVoters
+            activeVoters,
+            guildId: scopedGuildId || null
           }
         });
       } catch (error) {

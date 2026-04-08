@@ -160,14 +160,25 @@ class TrackedWalletsService {
           FROM tracked_wallets
           WHERE guild_id = ?
         `).get(normalizedGuildId);
-        const limitCheck = entitlementService.enforceLimit({
+        let limitCheck = entitlementService.enforceLimit({
           guildId: normalizedGuildId,
-          moduleKey: 'treasury',
+          moduleKey: 'wallettracker',
           limitKey: 'max_tracked_wallets',
           currentCount: Number(countRow?.count || 0),
           incrementBy: 1,
           itemLabel: 'tracked wallets',
         });
+        // Backward compatibility: older deployments stored this cap under treasury.
+        if (limitCheck.success && limitCheck.limit === null) {
+          limitCheck = entitlementService.enforceLimit({
+            guildId: normalizedGuildId,
+            moduleKey: 'treasury',
+            limitKey: 'max_tracked_wallets',
+            currentCount: Number(countRow?.count || 0),
+            incrementBy: 1,
+            itemLabel: 'tracked wallets',
+          });
+        }
         if (!limitCheck.success) {
           return {
             success: false,
@@ -2078,7 +2089,7 @@ class TrackedWalletsService {
 
     applyEmbedBranding(embed, {
       guildId: guildId || '',
-      moduleKey: 'nfttracker',
+      moduleKey: 'wallettracker',
       defaultColor: '#FFD700',
       defaultFooter: 'Wallet Holdings',
       fallbackLogoUrl: logoUrl,
@@ -2277,11 +2288,11 @@ class TrackedWalletsService {
       embed.addFields({ name: 'When', value: `<t:${whenTs}:R>`, inline: true });
     }
 
-    const branding = getBranding(guildId || '', 'nfttracker');
+    const branding = getBranding(guildId || '', 'tokentracker');
     const botAvatar = client?.user?.displayAvatarURL?.() || null;
     applyEmbedBranding(embed, {
       guildId: guildId || '',
-      moduleKey: 'nfttracker',
+      moduleKey: 'tokentracker',
       defaultColor: style.color,
       defaultFooter: 'Powered by Guild Pilot',
       fallbackLogoUrl: branding.logo || botAvatar,
@@ -2348,7 +2359,7 @@ class TrackedWalletsService {
     const role = evt.from_wallet?.toLowerCase() === walletRow.wallet_address.toLowerCase() ? 'Sent' : 'Received';
     const eventType = (evt.eventType || evt.event_type || 'activity').toUpperCase();
 
-    const branding = getBranding(guildId || '', 'nfttracker');
+    const branding = getBranding(guildId || '', 'wallettracker');
     const botAvatar = client?.user?.displayAvatarURL?.() || null;
 
     const embed = new EmbedBuilder()
@@ -2370,7 +2381,7 @@ class TrackedWalletsService {
     const colorMap = { MINT: '#57F287', SELL: '#57F287', LIST: '#FEE75C', DELIST: '#5865F2', TRANSFER: '#EB459E' };
     applyEmbedBranding(embed, {
       guildId: guildId || '',
-      moduleKey: 'nfttracker',
+      moduleKey: 'wallettracker',
       defaultColor: colorMap[eventType] || '#5865F2',
       defaultFooter: 'Wallet Tracker',
       fallbackLogoUrl: branding.logo || botAvatar,

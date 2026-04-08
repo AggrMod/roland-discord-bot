@@ -10,8 +10,48 @@ const router = express.Router();
 const db = require('../../database/db');
 const treasuryService = require('../../services/treasuryService');
 const nftActivityService = require('../../services/nftActivityService');
+const tenantService = require('../../services/tenantService');
 const { success, error, sanitize, redactWallet } = require('../../utils/apiResponse');
 const { asyncHandler, notFoundError, validationError } = require('../../utils/apiErrorHandler');
+
+function normalizeGuildId(guildId) {
+  if (typeof guildId !== 'string') return '';
+  const trimmed = guildId.trim();
+  return /^\d{17,20}$/.test(trimmed) ? trimmed : '';
+}
+
+function getRequestedGuildId(req) {
+  const queryGuildId = normalizeGuildId(String(req.query?.guildId || req.query?.guild || '').trim());
+  if (queryGuildId) return queryGuildId;
+
+  const headerGuildId = normalizeGuildId(String(req.get('x-guild-id') || '').trim());
+  if (headerGuildId) return headerGuildId;
+
+  return '';
+}
+
+let _hasProposalsGuildColumnCache = null;
+function hasProposalsGuildColumn() {
+  if (_hasProposalsGuildColumnCache !== null) return _hasProposalsGuildColumnCache;
+  try {
+    const columns = db.prepare('PRAGMA table_info(proposals)').all();
+    _hasProposalsGuildColumnCache = columns.some(column => String(column?.name || '').toLowerCase() === 'guild_id');
+  } catch (_error) {
+    _hasProposalsGuildColumnCache = false;
+  }
+  return _hasProposalsGuildColumnCache;
+}
+
+function resolvePublicGovernanceScope(req) {
+  const guildId = getRequestedGuildId(req);
+  const multiTenantEnabled = tenantService.isMultitenantEnabled();
+
+  if (multiTenantEnabled && hasProposalsGuildColumn() && !guildId) {
+    validationError('guildId query parameter (or x-guild-id header) is required in multi-tenant mode');
+  }
+
+  return guildId;
+}
 
 // ==================== GOVERNANCE ENDPOINTS ====================
 
@@ -20,7 +60,10 @@ const { asyncHandler, notFoundError, validationError } = require('../../utils/ap
  * Returns all active proposals
  */
 router.get('/proposals/active', asyncHandler(async (req, res) => {
-  const proposals = db.prepare('SELECT * FROM proposals WHERE status = ? ORDER BY created_at DESC').all('voting');
+  const guildId = resolvePublicGovernanceScope(req);
+  const proposals = (hasProposalsGuildColumn() && guildId)
+    ? db.prepare('SELECT * FROM proposals WHERE guild_id = ? AND status = ? ORDER BY created_at DESC').all(guildId, 'voting')
+    : db.prepare('SELECT * FROM proposals WHERE status = ? ORDER BY created_at DESC').all('voting');
   
   const enrichedProposals = proposals.map(p => {
     const votes = {
@@ -58,7 +101,10 @@ router.get('/proposals/active', asyncHandler(async (req, res) => {
     };
   });
 
-  res.json(success({ proposals: enrichedProposals }, { count: enrichedProposals.length }));
+  res.json(success(
+    { proposals: enrichedProposals },
+    { count: enrichedProposals.length, guildId: guildId || null }
+  ));
 }));
 
 /**
@@ -66,16 +112,25 @@ router.get('/proposals/active', asyncHandler(async (req, res) => {
  * Returns concluded proposals (passed, rejected, quorum_not_met)
  */
 router.get('/proposals/concluded', asyncHandler(async (req, res) => {
+  const guildId = resolvePublicGovernanceScope(req);
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
   const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
 
-  const proposals = db.prepare(
-    'SELECT * FROM proposals WHERE status IN (?, ?, ?) ORDER BY created_at DESC LIMIT ? OFFSET ?'
-  ).all('passed', 'rejected', 'quorum_not_met', limit, offset);
-  
-  const totalCount = db.prepare(
-    'SELECT COUNT(*) as count FROM proposals WHERE status IN (?, ?, ?)'
-  ).get('passed', 'rejected', 'quorum_not_met').count;
+  const proposals = (hasProposalsGuildColumn() && guildId)
+    ? db.prepare(
+      'SELECT * FROM proposals WHERE guild_id = ? AND status IN (?, ?, ?) ORDER BY created_at DESC LIMIT ? OFFSET ?'
+    ).all(guildId, 'passed', 'rejected', 'quorum_not_met', limit, offset)
+    : db.prepare(
+      'SELECT * FROM proposals WHERE status IN (?, ?, ?) ORDER BY created_at DESC LIMIT ? OFFSET ?'
+    ).all('passed', 'rejected', 'quorum_not_met', limit, offset);
+
+  const totalCount = (hasProposalsGuildColumn() && guildId)
+    ? db.prepare(
+      'SELECT COUNT(*) as count FROM proposals WHERE guild_id = ? AND status IN (?, ?, ?)'
+    ).get(guildId, 'passed', 'rejected', 'quorum_not_met').count
+    : db.prepare(
+      'SELECT COUNT(*) as count FROM proposals WHERE status IN (?, ?, ?)'
+    ).get('passed', 'rejected', 'quorum_not_met').count;
 
   const enrichedProposals = proposals.map(p => {
     const votes = {
@@ -119,7 +174,8 @@ router.get('/proposals/concluded', asyncHandler(async (req, res) => {
       count: enrichedProposals.length,
       total: totalCount,
       limit,
-      offset
+      offset,
+      guildId: guildId || null
     }
   ));
 }));
@@ -129,8 +185,11 @@ router.get('/proposals/concluded', asyncHandler(async (req, res) => {
  * Returns detailed proposal information
  */
 router.get('/proposals/:id', asyncHandler(async (req, res) => {
+  const guildId = resolvePublicGovernanceScope(req);
   const { id } = req.params;
-  const proposal = db.prepare('SELECT * FROM proposals WHERE proposal_id = ?').get(id);
+  const proposal = (hasProposalsGuildColumn() && guildId)
+    ? db.prepare('SELECT * FROM proposals WHERE proposal_id = ? AND guild_id = ?').get(id, guildId)
+    : db.prepare('SELECT * FROM proposals WHERE proposal_id = ?').get(id);
   
   if (!proposal) {
     notFoundError('Proposal');
@@ -178,11 +237,42 @@ router.get('/proposals/:id', asyncHandler(async (req, res) => {
  * Returns governance statistics
  */
 router.get('/stats', asyncHandler(async (req, res) => {
-  const totalProposals = db.prepare('SELECT COUNT(*) as count FROM proposals').get().count;
-  const passedProposals = db.prepare('SELECT COUNT(*) as count FROM proposals WHERE status = ?').get('passed').count;
-  const totalVotes = db.prepare('SELECT COUNT(*) as count FROM votes').get().count;
-  const totalVP = db.prepare('SELECT COALESCE(SUM(voting_power), 0) as total FROM votes').get().total;
-  const activeVoters = db.prepare('SELECT COUNT(DISTINCT voter_id) as count FROM votes').get().count;
+  const guildId = resolvePublicGovernanceScope(req);
+
+  const totalProposals = (hasProposalsGuildColumn() && guildId)
+    ? db.prepare('SELECT COUNT(*) as count FROM proposals WHERE guild_id = ?').get(guildId).count
+    : db.prepare('SELECT COUNT(*) as count FROM proposals').get().count;
+
+  const passedProposals = (hasProposalsGuildColumn() && guildId)
+    ? db.prepare('SELECT COUNT(*) as count FROM proposals WHERE guild_id = ? AND status = ?').get(guildId, 'passed').count
+    : db.prepare('SELECT COUNT(*) as count FROM proposals WHERE status = ?').get('passed').count;
+
+  const totalVotes = (hasProposalsGuildColumn() && guildId)
+    ? db.prepare(`
+      SELECT COUNT(*) as count
+      FROM votes v
+      INNER JOIN proposals p ON p.proposal_id = v.proposal_id
+      WHERE p.guild_id = ?
+    `).get(guildId).count
+    : db.prepare('SELECT COUNT(*) as count FROM votes').get().count;
+
+  const totalVP = (hasProposalsGuildColumn() && guildId)
+    ? db.prepare(`
+      SELECT COALESCE(SUM(v.voting_power), 0) as total
+      FROM votes v
+      INNER JOIN proposals p ON p.proposal_id = v.proposal_id
+      WHERE p.guild_id = ?
+    `).get(guildId).total
+    : db.prepare('SELECT COALESCE(SUM(voting_power), 0) as total FROM votes').get().total;
+
+  const activeVoters = (hasProposalsGuildColumn() && guildId)
+    ? db.prepare(`
+      SELECT COUNT(DISTINCT v.voter_id) as count
+      FROM votes v
+      INNER JOIN proposals p ON p.proposal_id = v.proposal_id
+      WHERE p.guild_id = ?
+    `).get(guildId).count
+    : db.prepare('SELECT COUNT(DISTINCT voter_id) as count FROM votes').get().count;
 
   const passRate = totalProposals > 0 ? Math.round((passedProposals / totalProposals) * 100) : 0;
 
@@ -193,7 +283,8 @@ router.get('/stats', asyncHandler(async (req, res) => {
       passRate,
       totalVotes,
       totalVPUsed: totalVP,
-      activeVoters
+      activeVoters,
+      guildId: guildId || null
     }
   }));
 }));

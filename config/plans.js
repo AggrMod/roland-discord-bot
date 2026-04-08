@@ -2,6 +2,7 @@ const MODULE_KEYS = Object.freeze([
   'verification',
   'governance',
   'treasury',
+  'wallettracker',
   'battle',
   'heist',
   'ticketing',
@@ -40,7 +41,9 @@ const PLAN_PRESETS = Object.freeze({
         max_active_proposals: 3
       },
       treasury: {
-        max_wallets: 1,
+        max_wallets: 1
+      },
+      wallettracker: {
         max_tracked_wallets: 1
       },
       battle: {
@@ -73,6 +76,7 @@ const PLAN_PRESETS = Object.freeze({
       verification: true,
       governance: true,
       treasury: true,
+      wallettracker: true,
       battle: false,
       heist: false,
       ticketing: true,
@@ -110,7 +114,9 @@ const PLAN_PRESETS = Object.freeze({
         max_active_proposals: 25
       },
       treasury: {
-        max_wallets: 10,
+        max_wallets: 10
+      },
+      wallettracker: {
         max_tracked_wallets: 25
       },
       battle: {
@@ -143,6 +149,7 @@ const PLAN_PRESETS = Object.freeze({
       verification: true,
       governance: true,
       treasury: true,
+      wallettracker: true,
       battle: true,
       heist: false,
       ticketing: true,
@@ -180,7 +187,9 @@ const PLAN_PRESETS = Object.freeze({
         max_active_proposals: 100
       },
       treasury: {
-        max_wallets: 50,
+        max_wallets: 50
+      },
+      wallettracker: {
         max_tracked_wallets: 200
       },
       battle: {
@@ -213,6 +222,7 @@ const PLAN_PRESETS = Object.freeze({
       verification: true,
       governance: true,
       treasury: true,
+      wallettracker: true,
       battle: true,
       heist: true,
       ticketing: true,
@@ -250,7 +260,9 @@ const PLAN_PRESETS = Object.freeze({
         max_active_proposals: null
       },
       treasury: {
-        max_wallets: null,
+        max_wallets: null
+      },
+      wallettracker: {
         max_tracked_wallets: null
       },
       battle: {
@@ -283,6 +295,7 @@ const PLAN_PRESETS = Object.freeze({
       verification: true,
       governance: true,
       treasury: true,
+      wallettracker: true,
       battle: true,
       heist: true,
       ticketing: true,

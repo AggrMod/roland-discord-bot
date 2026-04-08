@@ -62,6 +62,14 @@ All API responses follow this standard envelope:
 
 Public API endpoints do not require authentication. Admin endpoints (not documented here) require Discord OAuth session authentication.
 
+## Multi-tenant Scoping
+
+When multi-tenant mode is enabled, governance endpoints require a guild context:
+- query param: `?guildId=<discord_guild_id>`
+- or header: `x-guild-id: <discord_guild_id>`
+
+If guild scope is missing in multi-tenant mode, governance endpoints return `400 VALIDATION_ERROR`.
+
 ## CORS
 
 The API supports CORS for the following origins:
@@ -87,6 +95,9 @@ Currently no rate limiting is enforced. Please use the API responsibly.
 Returns all proposals currently in voting status.
 
 **Endpoint:** `GET /proposals/active`
+
+**Query Parameters:**
+- `guildId` (required in multi-tenant mode)
 
 **Response Schema:**
 
@@ -126,7 +137,7 @@ Returns all proposals currently in voting status.
 **Example Request:**
 
 ```bash
-curl https://your-domain.com/api/public/v1/proposals/active
+curl "https://your-domain.com/api/public/v1/proposals/active?guildId=123456789012345678"
 ```
 
 ---
@@ -138,6 +149,7 @@ Returns concluded proposals (passed, rejected, or quorum not met).
 **Endpoint:** `GET /proposals/concluded`
 
 **Query Parameters:**
+- `guildId` (required in multi-tenant mode)
 - `limit` (optional, default: 50, max: 100) - Number of proposals to return
 - `offset` (optional, default: 0) - Pagination offset
 
@@ -183,7 +195,7 @@ Returns concluded proposals (passed, rejected, or quorum not met).
 **Example Request:**
 
 ```bash
-curl "https://your-domain.com/api/public/v1/proposals/concluded?limit=20&offset=0"
+curl "https://your-domain.com/api/public/v1/proposals/concluded?guildId=123456789012345678&limit=20&offset=0"
 ```
 
 ---
@@ -196,6 +208,9 @@ Returns detailed information about a specific proposal.
 
 **Path Parameters:**
 - `id` - Proposal UUID
+
+**Query Parameters:**
+- `guildId` (required in multi-tenant mode)
 
 **Response Schema:**
 
@@ -251,7 +266,7 @@ Returns detailed information about a specific proposal.
 **Example Request:**
 
 ```bash
-curl https://your-domain.com/api/public/v1/proposals/550e8400-e29b-41d4-a716-446655440000
+curl "https://your-domain.com/api/public/v1/proposals/550e8400-e29b-41d4-a716-446655440000?guildId=123456789012345678"
 ```
 
 ---
@@ -287,7 +302,7 @@ Returns overall governance statistics.
 **Example Request:**
 
 ```bash
-curl https://your-domain.com/api/public/v1/stats
+curl "https://your-domain.com/api/public/v1/stats?guildId=123456789012345678"
 ```
 
 ---

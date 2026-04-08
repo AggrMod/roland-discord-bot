@@ -185,7 +185,8 @@ module.exports = {
       title,
       description,
       category,
-      costIndication
+      costIndication,
+      guildId: interaction.guildId || ''
     });
 
     if (!result.success) {

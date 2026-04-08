@@ -42,6 +42,46 @@ function normalizeAddress(address) {
   return String(address || '').trim().toLowerCase();
 }
 
+function normalizeDiscordChannelId(channelId) {
+  const normalized = String(channelId || '').trim();
+  return /^\d{17,20}$/.test(normalized) ? normalized : '';
+}
+
+function normalizeDiscordChannelIds(values) {
+  const input = Array.isArray(values)
+    ? values
+    : (typeof values === 'string' ? values.split(',') : []);
+  const out = [];
+  const seen = new Set();
+  for (const entry of input) {
+    const id = normalizeDiscordChannelId(entry);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function parseTrackedTokenAlertChannelIds(rawIds, fallbackId = null) {
+  let parsed = [];
+  if (Array.isArray(rawIds)) {
+    parsed = normalizeDiscordChannelIds(rawIds);
+  } else if (typeof rawIds === 'string' && rawIds.trim()) {
+    try {
+      const json = JSON.parse(rawIds);
+      parsed = normalizeDiscordChannelIds(Array.isArray(json) ? json : []);
+    } catch (_error) {
+      parsed = normalizeDiscordChannelIds(rawIds);
+    }
+  }
+
+  if (!parsed.length) {
+    const fallback = normalizeDiscordChannelId(fallbackId);
+    if (fallback) parsed = [fallback];
+  }
+  return parsed;
+}
+
 function isValidSolanaAddress(address) {
   try {
     const normalized = String(address || '').trim();
@@ -403,6 +443,7 @@ class TrackedWalletsService {
     decimals = null,
     enabled = true,
     alertChannelId = null,
+    alertChannelIds = null,
     alertBuys = true,
     alertSells = true,
     alertTransfers = false,
@@ -412,12 +453,16 @@ class TrackedWalletsService {
       const guild = String(guildId || '').trim();
       const mint = String(tokenMint || '').trim();
       if (!guild || !mint) return { success: false, message: 'guildId and tokenMint are required' };
+      const normalizedAlertChannelIds = normalizeDiscordChannelIds(
+        Array.isArray(alertChannelIds) ? alertChannelIds : [alertChannelId]
+      );
+      const primaryAlertChannelId = normalizedAlertChannelIds[0] || null;
 
       const result = db.prepare(`
         INSERT INTO tracked_tokens (
-          guild_id, token_mint, token_symbol, token_name, decimals, enabled, alert_channel_id, alert_buys, alert_sells, alert_transfers, min_alert_amount
+          guild_id, token_mint, token_symbol, token_name, decimals, enabled, alert_channel_id, alert_channel_ids, alert_buys, alert_sells, alert_transfers, min_alert_amount
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         guild,
         mint,
@@ -425,7 +470,8 @@ class TrackedWalletsService {
         String(tokenName || '').trim() || null,
         decimals === null || decimals === undefined || decimals === '' ? null : Number(decimals),
         enabled === false ? 0 : 1,
-        String(alertChannelId || '').trim() || null,
+        primaryAlertChannelId,
+        JSON.stringify(normalizedAlertChannelIds),
         alertBuys === false ? 0 : 1,
         alertSells === false ? 0 : 1,
         alertTransfers === true ? 1 : 0,
@@ -452,14 +498,22 @@ class TrackedWalletsService {
         ? db.prepare('SELECT * FROM tracked_tokens WHERE guild_id = ? ORDER BY created_at DESC').all(guildId)
         : db.prepare('SELECT * FROM tracked_tokens ORDER BY created_at DESC').all();
 
-      return rows.map(row => ({
-        ...row,
-        enabled: Number(row.enabled || 0) === 1,
-        alert_buys: Number(row.alert_buys ?? 1) === 1,
-        alert_sells: Number(row.alert_sells ?? 1) === 1,
-        alert_transfers: Number(row.alert_transfers || 0) === 1,
-        min_alert_amount: safeToNumber(row.min_alert_amount || 0),
-      }));
+      return rows.map(row => {
+        const channelIds = parseTrackedTokenAlertChannelIds(row.alert_channel_ids, row.alert_channel_id);
+        const primaryChannelId = channelIds[0] || null;
+        return {
+          ...row,
+          alert_channel_ids: channelIds,
+          alert_channel_id: primaryChannelId,
+          alertChannelIds: channelIds,
+          alertChannelId: primaryChannelId,
+          enabled: Number(row.enabled || 0) === 1,
+          alert_buys: Number(row.alert_buys ?? 1) === 1,
+          alert_sells: Number(row.alert_sells ?? 1) === 1,
+          alert_transfers: Number(row.alert_transfers || 0) === 1,
+          min_alert_amount: safeToNumber(row.min_alert_amount || 0),
+        };
+      });
     } catch (e) {
       logger.error('Error getting tracked tokens:', e);
       return [];
@@ -487,7 +541,6 @@ class TrackedWalletsService {
         tokenName: 'token_name',
         decimals: 'decimals',
         enabled: 'enabled',
-        alertChannelId: 'alert_channel_id',
         alertBuys: 'alert_buys',
         alertSells: 'alert_sells',
         alertTransfers: 'alert_transfers',
@@ -517,6 +570,18 @@ class TrackedWalletsService {
         }
         sets.push(`${column} = ?`);
         params.push(String(val || '').trim() || null);
+      }
+
+      const hasAlertChannels = Object.prototype.hasOwnProperty.call(updates, 'alertChannelIds');
+      const hasAlertChannel = Object.prototype.hasOwnProperty.call(updates, 'alertChannelId');
+      if (hasAlertChannels || hasAlertChannel) {
+        const nextAlertChannelIds = normalizeDiscordChannelIds(
+          hasAlertChannels ? updates.alertChannelIds : [updates.alertChannelId]
+        );
+        sets.push('alert_channel_ids = ?');
+        params.push(JSON.stringify(nextAlertChannelIds));
+        sets.push('alert_channel_id = ?');
+        params.push(nextAlertChannelIds[0] || null);
       }
 
       if (!sets.length) return { success: false, message: 'No valid updates provided' };
@@ -1066,6 +1131,7 @@ class TrackedWalletsService {
             wallet_address: ownerAddress,
             label: null,
             alert_channel_id: tokenCfg.alert_channel_id || null,
+            alert_channel_ids: tokenCfg.alert_channel_ids || null,
           },
           guildId,
           evt: {
@@ -1073,6 +1139,7 @@ class TrackedWalletsService {
             txSignature: signature,
             eventTime,
             alertChannelId: tokenCfg.alert_channel_id || null,
+            alertChannelIds: tokenCfg.alert_channel_ids || null,
           },
         });
         sentAlerts += 1;
@@ -1164,6 +1231,7 @@ class TrackedWalletsService {
         txSignature: signature,
         eventTime,
         alertChannelId: tokenCfg?.alert_channel_id || tokenCfg?.alertChannelId || null,
+        alertChannelIds: tokenCfg?.alert_channel_ids || tokenCfg?.alertChannelIds || null,
       });
     }
 
@@ -1442,6 +1510,7 @@ class TrackedWalletsService {
               wallet_address: ownerAddress,
               label: null,
               alert_channel_id: tokenCfg.alert_channel_id || null,
+              alert_channel_ids: tokenCfg.alert_channel_ids || null,
             },
             guildId,
             evt: {
@@ -1456,6 +1525,7 @@ class TrackedWalletsService {
               stableDelta,
               eventTime,
               alertChannelId: tokenCfg.alert_channel_id || null,
+              alertChannelIds: tokenCfg.alert_channel_ids || null,
             },
           });
           sentAlerts += 1;
@@ -2053,18 +2123,15 @@ class TrackedWalletsService {
     const client = clientProvider.getClient();
     if (!client) return;
 
-    const channelId = String(await this.resolveTokenAlertChannelId({
+    const channelIds = await this.resolveTokenAlertChannelIds({
       guildId,
+      eventChannelIds: evt?.alertChannelIds,
       eventChannelId: evt?.alertChannelId,
+      walletChannelIds: walletRow?.alert_channel_ids,
       walletChannelId: walletRow?.alert_channel_id,
-    }) || '').trim();
-    if (!channelId) {
+    });
+    if (!channelIds.length) {
       logger.warn(`[tracked-token-alert] skipped no channel wallet=${walletRow?.wallet_address || 'unknown'} guild=${guildId || ''}`);
-      return;
-    }
-    const channel = await client.channels.fetch(channelId).catch(() => null);
-    if (!channel || !channel.send) {
-      logger.warn(`[tracked-token-alert] skipped invalid channel=${channelId} guild=${guildId || ''}`);
       return;
     }
 
@@ -2164,11 +2231,24 @@ class TrackedWalletsService {
     }
     const components = buttons.length ? [new ActionRowBuilder().addComponents(...buttons)] : [];
 
-    try {
-      await channel.send({ embeds: [embed], components });
-      logger.log(`[tracked-token-alert] sent wallet=${walletRow.wallet_address} guild=${guildId || ''} channel=${channelId} type=${eventType} token=${tokenMint || 'unknown'}`);
-    } catch (e) {
-      logger.error(`[tracked-token-alert] failed for wallet=${walletRow.wallet_address}:`, e?.message || e);
+    let sent = 0;
+    for (const channelId of channelIds) {
+      const channel = await client.channels.fetch(channelId).catch(() => null);
+      if (!channel || !channel.send) {
+        logger.warn(`[tracked-token-alert] skipped invalid channel=${channelId} guild=${guildId || ''}`);
+        continue;
+      }
+      try {
+        await channel.send({ embeds: [embed], components });
+        sent += 1;
+        logger.log(`[tracked-token-alert] sent wallet=${walletRow.wallet_address} guild=${guildId || ''} channel=${channelId} type=${eventType} token=${tokenMint || 'unknown'}`);
+      } catch (e) {
+        logger.error(`[tracked-token-alert] failed for wallet=${walletRow.wallet_address} channel=${channelId}:`, e?.message || e);
+      }
+    }
+
+    if (!sent) {
+      logger.warn(`[tracked-token-alert] no deliveries wallet=${walletRow?.wallet_address || 'unknown'} guild=${guildId || ''}`);
     }
   }
 
@@ -2255,12 +2335,15 @@ class TrackedWalletsService {
     }, delayMs);
   }
 
-  async resolveTokenAlertChannelId({ guildId, eventChannelId, walletChannelId }) {
-    const direct = String(eventChannelId || walletChannelId || '').trim();
-    if (direct) return direct;
+  async resolveTokenAlertChannelIds({ guildId, eventChannelIds, eventChannelId, walletChannelIds, walletChannelId }) {
+    const fromEvent = parseTrackedTokenAlertChannelIds(eventChannelIds, eventChannelId);
+    if (fromEvent.length) return fromEvent;
+
+    const fromWallet = parseTrackedTokenAlertChannelIds(walletChannelIds, walletChannelId);
+    if (fromWallet.length) return fromWallet;
 
     const guild = String(guildId || '').trim();
-    if (!guild) return '';
+    if (!guild) return [];
 
     try {
       const walletDefault = db.prepare(`
@@ -2273,8 +2356,8 @@ class TrackedWalletsService {
         ORDER BY id ASC
         LIMIT 1
       `).get(guild);
-      const fromWallet = String(walletDefault?.alert_channel_id || '').trim();
-      if (fromWallet) return fromWallet;
+      const fallbackWalletChannelId = normalizeDiscordChannelId(walletDefault?.alert_channel_id);
+      if (fallbackWalletChannelId) return [fallbackWalletChannelId];
     } catch (_error) {}
 
     try {
@@ -2288,11 +2371,16 @@ class TrackedWalletsService {
         ORDER BY id ASC
         LIMIT 1
       `).get(guild);
-      const fromNftCollection = String(nftChannel?.channel_id || '').trim();
-      if (fromNftCollection) return fromNftCollection;
+      const fallbackNftChannelId = normalizeDiscordChannelId(nftChannel?.channel_id);
+      if (fallbackNftChannelId) return [fallbackNftChannelId];
     } catch (_error) {}
 
-    return '';
+    return [];
+  }
+
+  async resolveTokenAlertChannelId(args = {}) {
+    const ids = await this.resolveTokenAlertChannelIds(args);
+    return ids[0] || '';
   }
 
   _normalizeHttpImageUrl(value) {

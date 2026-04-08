@@ -970,6 +970,7 @@ function initDatabase() {
       decimals INTEGER,
       enabled INTEGER DEFAULT 1,
       alert_channel_id TEXT,
+      alert_channel_ids TEXT DEFAULT '[]',
       alert_buys INTEGER DEFAULT 1,
       alert_sells INTEGER DEFAULT 1,
       alert_transfers INTEGER DEFAULT 0,
@@ -986,6 +987,7 @@ function initDatabase() {
   try { db.exec('ALTER TABLE tracked_tokens ADD COLUMN alert_transfers INTEGER DEFAULT 0'); } catch (e) {}
   try { db.exec('ALTER TABLE tracked_tokens ADD COLUMN min_alert_amount REAL DEFAULT 0'); } catch (e) {}
   try { db.exec('ALTER TABLE tracked_tokens ADD COLUMN alert_channel_id TEXT'); } catch (e) {}
+  try { db.exec("ALTER TABLE tracked_tokens ADD COLUMN alert_channel_ids TEXT DEFAULT '[]'"); } catch (e) {}
 
   // Cursor for per-wallet tracked token activity polling
   try { db.exec('ALTER TABLE tracked_wallets ADD COLUMN token_last_signature TEXT'); } catch (e) {}

@@ -5155,6 +5155,9 @@ async function openAddTokenModal(existingId, existingData) {
   const isEdit = !!existingId;
   const modal = document.getElementById('addTokenModal');
   if (!modal) return;
+  const selectedAlertChannelIds = Array.isArray(existingData?.alertChannelIds)
+    ? existingData.alertChannelIds.map(id => String(id || '').trim()).filter(Boolean)
+    : (existingData?.alertChannelId ? [String(existingData.alertChannelId).trim()] : []);
 
   document.getElementById('addTokenModalTitle').textContent = isEdit ? 'Edit Tracked Token' : 'Add Tracked Token';
   document.getElementById('tokenEditId').value = existingId || '';
@@ -5173,13 +5176,22 @@ async function openAddTokenModal(existingId, existingData) {
   modal.style.display = 'flex';
   document.body.style.overflow = 'hidden';
 
-  const channelSel = document.getElementById('tokenAlertChannel');
-  channelSel.innerHTML = '<option value="">-- Wallet default channel --</option>';
+  const channelSel = document.getElementById('tokenAlertChannels');
+  if (!channelSel) return;
+  channelSel.innerHTML = '';
   try {
     const chRes = await fetch('/api/admin/discord/channels', { credentials: 'include', headers: buildTenantRequestHeaders() });
     if (chRes.ok) {
       const chData = await chRes.json();
       const channels = chData.channels || [];
+      if (!channels.length) {
+        const emptyOpt = document.createElement('option');
+        emptyOpt.value = '';
+        emptyOpt.textContent = '-- No channels available --';
+        emptyOpt.disabled = true;
+        channelSel.appendChild(emptyOpt);
+        return;
+      }
       const grouped = {};
       channels.forEach(ch => {
         const parent = ch.parentName || 'Other';
@@ -5193,14 +5205,15 @@ async function openAddTokenModal(existingId, existingData) {
           const opt = document.createElement('option');
           opt.value = ch.id;
           opt.textContent = '# ' + ch.name;
+          if (selectedAlertChannelIds.includes(String(ch.id))) opt.selected = true;
           og.appendChild(opt);
         });
         channelSel.appendChild(og);
       });
-      if (existingData && existingData.alertChannelId) channelSel.value = existingData.alertChannelId;
     }
   } catch (e) {
     console.error('[TokenModal] Channel load error:', e);
+    channelSel.innerHTML = '<option value="" disabled>-- Failed to load channels --</option>';
   }
 }
 
@@ -5216,7 +5229,9 @@ async function saveToken() {
   const tokenMint = document.getElementById('tokenMint').value.trim();
   const tokenSymbol = document.getElementById('tokenSymbol').value.trim();
   const tokenName = document.getElementById('tokenName').value.trim();
-  const alertChannelId = document.getElementById('tokenAlertChannel').value.trim();
+  const alertChannelIds = Array.from(document.getElementById('tokenAlertChannels')?.selectedOptions || [])
+    .map(opt => String(opt.value || '').trim())
+    .filter(Boolean);
   const minAlertAmount = Number(document.getElementById('tokenMinAlertAmount').value || '0');
   const alertBuys = document.getElementById('tokenAlertBuys').checked;
   const alertSells = document.getElementById('tokenAlertSells').checked;
@@ -5239,7 +5254,8 @@ async function saveToken() {
     tokenMint,
     tokenSymbol: tokenSymbol || null,
     tokenName: tokenName || null,
-    alertChannelId: alertChannelId || null,
+    alertChannelIds,
+    alertChannelId: alertChannelIds[0] || null,
     minAlertAmount,
     alertBuys,
     alertSells,
@@ -5326,7 +5342,12 @@ async function renderNftTrackedTokensCard(wrapId = 'nts_tokensWrap') {
       const mintShort = mint ? `${mint.slice(0, 6)}...${mint.slice(-4)}` : '—';
       const statusColor = token.enabled !== false ? '#86efac' : '#fca5a5';
       const statusText = token.enabled !== false ? 'On' : 'Off';
-      const channelDisplay = token.alert_channel_id ? `<code>#${escapeHtml(token.alert_channel_id)}</code>` : '<span style="color:var(--text-secondary);">Wallet default</span>';
+      const tokenAlertChannelIds = Array.isArray(token.alert_channel_ids)
+        ? token.alert_channel_ids
+        : (token.alert_channel_id ? [token.alert_channel_id] : []);
+      const channelDisplay = tokenAlertChannelIds.length
+        ? tokenAlertChannelIds.map(id => `<code>#${escapeHtml(id)}</code>`).join(' ')
+        : '<span style="color:var(--text-secondary);">Wallet default</span>';
       return `
         <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
           <td style="padding:8px 10px;color:#cbd5e1;font-family:monospace;font-size:0.82em;" title="${escapeHtml(mint)}">${escapeHtml(mintShort)}</td>
@@ -5342,6 +5363,7 @@ async function renderNftTrackedTokensCard(wrapId = 'nts_tokensWrap') {
               data-symbol="${escapeHtml(token.token_symbol || '')}"
               data-name="${escapeHtml(token.token_name || '')}"
               data-alert-channel="${escapeHtml(token.alert_channel_id || '')}"
+              data-alert-channels='${escapeHtml(JSON.stringify(tokenAlertChannelIds))}'
               data-alert-buys="${token.alert_buys ? 'true' : 'false'}"
               data-alert-sells="${token.alert_sells ? 'true' : 'false'}"
               data-alert-transfers="${token.alert_transfers ? 'true' : 'false'}"
@@ -5361,7 +5383,7 @@ async function renderNftTrackedTokensCard(wrapId = 'nts_tokensWrap') {
             <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Mint</th>
             <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Symbol</th>
             <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Name</th>
-            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Alert Channel</th>
+            <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Alert Channels</th>
             <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Alert Rules</th>
             <th style="text-align:left;padding:8px 10px;font-size:0.78em;color:var(--text-secondary);text-transform:uppercase;">Enabled</th>
             <th style="padding:8px 10px;"></th>
@@ -5372,11 +5394,19 @@ async function renderNftTrackedTokensCard(wrapId = 'nts_tokensWrap') {
     `;
     wrap.querySelectorAll('.nt-edit-btn').forEach(btn => {
       btn.addEventListener('click', () => {
+        let alertChannelIds = [];
+        try {
+          const parsed = JSON.parse(btn.dataset.alertChannels || '[]');
+          alertChannelIds = Array.isArray(parsed) ? parsed : [];
+        } catch (_error) {
+          alertChannelIds = btn.dataset.alertChannel ? [btn.dataset.alertChannel] : [];
+        }
         openAddTokenModal(btn.dataset.id, {
           tokenMint: btn.dataset.mint || '',
           tokenSymbol: btn.dataset.symbol || '',
           tokenName: btn.dataset.name || '',
           alertChannelId: btn.dataset.alertChannel || '',
+          alertChannelIds,
           alertBuys: btn.dataset.alertBuys === 'true',
           alertSells: btn.dataset.alertSells === 'true',
           alertTransfers: btn.dataset.alertTransfers === 'true',

@@ -117,6 +117,7 @@ module.exports = {
       tokenSymbol: symbol,
       tokenName: name,
       alertChannelId: alertChannel?.id || null,
+      alertChannelIds: alertChannel?.id ? [alertChannel.id] : [],
       minAlertAmount: minAlertAmount ?? 0,
       alertBuys: alertBuys !== false,
       alertSells: alertSells !== false,
@@ -164,6 +165,7 @@ module.exports = {
     if (symbol !== null) updates.tokenSymbol = symbol;
     if (name !== null) updates.tokenName = name;
     if (alertChannel !== null) updates.alertChannelId = alertChannel?.id || null;
+    if (alertChannel !== null) updates.alertChannelIds = alertChannel?.id ? [alertChannel.id] : [];
     if (minAlertAmount !== null) updates.minAlertAmount = minAlertAmount;
     if (alertBuys !== null) updates.alertBuys = alertBuys;
     if (alertSells !== null) updates.alertSells = alertSells;
@@ -202,7 +204,10 @@ module.exports = {
       const name = t.token_name ? ` (${t.token_name})` : '';
       const status = Number(t.enabled || 0) === 1 ? '' : ' *(disabled)*';
       const alerts = `B:${t.alert_buys ? 'on' : 'off'} S:${t.alert_sells ? 'on' : 'off'} T:${t.alert_transfers ? 'on' : 'off'} Min:${Number(t.min_alert_amount || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}`;
-      const channel = t.alert_channel_id ? `Alert channel: <#${t.alert_channel_id}>` : 'Alert channel: Wallet default';
+      const channels = Array.isArray(t.alert_channel_ids) ? t.alert_channel_ids : [];
+      const channel = channels.length
+        ? `Alert channels: ${channels.map(id => `<#${id}>`).join(', ')}`
+        : (t.alert_channel_id ? `Alert channel: <#${t.alert_channel_id}>` : 'Alert channel: Wallet default');
       return `**#${t.id}** ${mintShort}${symbol}${name}${status}\n${alerts}\n${channel}`;
     });
 

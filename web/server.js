@@ -4372,6 +4372,7 @@ class WebServer {
             decimals,
             enabled,
             alertChannelId,
+            alertChannelIds,
             alertBuys,
             alertSells,
             alertTransfers,
@@ -4385,6 +4386,7 @@ class WebServer {
             decimals: decimals === undefined ? null : decimals,
             enabled: enabled !== false,
             alertChannelId: alertChannelId || null,
+            alertChannelIds: Array.isArray(alertChannelIds) ? alertChannelIds : null,
             alertBuys: alertBuys !== false,
             alertSells: alertSells !== false,
             alertTransfers: alertTransfers === true,
@@ -4410,6 +4412,7 @@ class WebServer {
           if (body.decimals !== undefined) updates.decimals = body.decimals;
           if (body.enabled !== undefined) updates.enabled = !!body.enabled;
           if (body.alertChannelId !== undefined) updates.alertChannelId = body.alertChannelId || null;
+          if (body.alertChannelIds !== undefined) updates.alertChannelIds = Array.isArray(body.alertChannelIds) ? body.alertChannelIds : [];
           if (body.alertBuys !== undefined) updates.alertBuys = !!body.alertBuys;
           if (body.alertSells !== undefined) updates.alertSells = !!body.alertSells;
           if (body.alertTransfers !== undefined) updates.alertTransfers = !!body.alertTransfers;

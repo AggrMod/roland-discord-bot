@@ -44,6 +44,7 @@ const LIMIT_DEFINITIONS = Object.freeze({
   },
   minigames: {
     max_bounties_per_battle: { label: 'Max Bounties Per Battle' },
+    max_enabled_games: { label: 'Max Enabled Minigames' },
   },
   engagement: {
     max_shop_items: { label: 'Max Shop Items' },

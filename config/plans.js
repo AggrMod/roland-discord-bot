@@ -47,7 +47,8 @@ const PLAN_PRESETS = Object.freeze({
         max_tracked_wallets: 1
       },
       minigames: {
-        max_bounties_per_battle: 0
+        max_bounties_per_battle: 0,
+        max_enabled_games: 3
       },
       heist: {
         max_active_missions: 2
@@ -120,7 +121,8 @@ const PLAN_PRESETS = Object.freeze({
         max_tracked_wallets: 25
       },
       minigames: {
-        max_bounties_per_battle: 3
+        max_bounties_per_battle: 3,
+        max_enabled_games: 8
       },
       heist: {
         max_active_missions: 10
@@ -193,7 +195,8 @@ const PLAN_PRESETS = Object.freeze({
         max_tracked_wallets: 200
       },
       minigames: {
-        max_bounties_per_battle: 3
+        max_bounties_per_battle: 3,
+        max_enabled_games: null
       },
       heist: {
         max_active_missions: 50
@@ -266,7 +269,8 @@ const PLAN_PRESETS = Object.freeze({
         max_tracked_wallets: null
       },
       minigames: {
-        max_bounties_per_battle: null
+        max_bounties_per_battle: null,
+        max_enabled_games: null
       },
       heist: {
         max_active_missions: null

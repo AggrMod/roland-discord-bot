@@ -1651,6 +1651,29 @@ class WebServer {
       }
     });
 
+    this.app.get('/api/superadmin/tenants/:guildId/template-preview', superadminGuard, logSuperadminTenantAction, (req, res) => {
+      try {
+        const templateKey = String(req.query?.templateKey || '').trim();
+        if (!templateKey) {
+          return res.status(400).json({ success: false, message: 'templateKey is required' });
+        }
+
+        const result = monetizationTemplateService.previewTemplate(
+          req.params.guildId,
+          templateKey
+        );
+
+        if (!result.success) {
+          return res.status(400).json(result);
+        }
+
+        res.json(result);
+      } catch (error) {
+        logger.error('Error previewing monetization template:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
     this.app.post('/api/superadmin/tenants/:guildId/apply-template', superadminGuard, logSuperadminTenantAction, (req, res) => {
       try {
         const templateKey = String(req.body?.templateKey || '').trim();
@@ -2323,13 +2346,22 @@ class WebServer {
                   const requestedEnabled = !!sanitized[field];
                   if (moduleKey === 'minigames') {
                     if ('minigames' in tenantContext.modules) {
-                      tenantService.setTenantModule(req.guildId, 'minigames', requestedEnabled, req.session?.discordUser?.id);
+                      const updateResult = tenantService.setTenantModule(req.guildId, 'minigames', requestedEnabled, req.session?.discordUser?.id);
+                      if (!updateResult.success) {
+                        return res.status(400).json(updateResult);
+                      }
                     }
                     if ('battle' in tenantContext.modules) {
-                      tenantService.setTenantModule(req.guildId, 'battle', requestedEnabled, req.session?.discordUser?.id);
+                      const updateResult = tenantService.setTenantModule(req.guildId, 'battle', requestedEnabled, req.session?.discordUser?.id);
+                      if (!updateResult.success) {
+                        return res.status(400).json(updateResult);
+                      }
                     }
                   } else if (moduleKey in tenantContext.modules) {
-                    tenantService.setTenantModule(req.guildId, moduleKey, requestedEnabled, req.session?.discordUser?.id);
+                    const updateResult = tenantService.setTenantModule(req.guildId, moduleKey, requestedEnabled, req.session?.discordUser?.id);
+                    if (!updateResult.success) {
+                      return res.status(400).json(updateResult);
+                    }
                   }
                 }
                 delete sanitized[field]; // Remove from settings.json payload regardless

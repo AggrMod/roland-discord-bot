@@ -3307,6 +3307,7 @@ let selectedTenantGuildId = null;
 let selectedTenantDetailCache = null;
 let selectedTenantAuditCache = [];
 let selectedTenantLimitsCache = null;
+let selectedTenantTemplatePreview = null;
 let superadminTemplateCatalog = [];
 let superadminTenantSearch = '';
 let superadminActiveTab = 'tenants';
@@ -3451,6 +3452,45 @@ function renderTenantAuditLog(logs) {
   `).join('');
 }
 
+function renderTenantTemplatePreview(previewPayload) {
+  if (!previewPayload?.diff) {
+    return `<div style="color:var(--text-secondary);">Select a template and click Preview to see the plan/module/limit diff before applying.</div>`;
+  }
+
+  const diff = previewPayload.diff;
+  const moduleChanges = Array.isArray(diff.modules) ? diff.modules : [];
+  const effectiveChanges = Array.isArray(diff.effective) ? diff.effective : [];
+  const planText = diff.planChanged
+    ? `${escapeHtml(getTenantPlanLabel(diff.plan?.before))} → ${escapeHtml(getTenantPlanLabel(diff.plan?.after))}`
+    : escapeHtml(getTenantPlanLabel(diff.plan?.after));
+
+  const moduleRows = moduleChanges.length
+    ? moduleChanges.slice(0, 8).map(change => {
+        const state = change.after ? 'enabled' : 'disabled';
+        return `<div><code>${escapeHtml(change.moduleKey)}</code> → <strong>${state}</strong></div>`;
+      }).join('')
+    : '<div style="color:var(--text-secondary);">No module toggle changes.</div>';
+
+  const limitRows = effectiveChanges.length
+    ? effectiveChanges.slice(0, 8).map(change => {
+        const beforeText = change.before === null || change.before === undefined ? 'Unlimited' : String(change.before);
+        const afterText = change.after === null || change.after === undefined ? 'Unlimited' : String(change.after);
+        return `<div><code>${escapeHtml(change.moduleKey)}.${escapeHtml(change.limitKey)}</code>: ${escapeHtml(beforeText)} → <strong>${escapeHtml(afterText)}</strong></div>`;
+      }).join('')
+    : '<div style="color:var(--text-secondary);">No effective limit changes.</div>';
+
+  const hiddenModuleCount = Math.max(0, moduleChanges.length - 8);
+  const hiddenLimitCount = Math.max(0, effectiveChanges.length - 8);
+
+  return `
+    <div style="display:grid; gap:10px;">
+      <div><strong>Plan:</strong> ${planText}</div>
+      <div><strong>Module Changes (${moduleChanges.length}):</strong><div style="margin-top:6px; display:grid; gap:4px;">${moduleRows}</div>${hiddenModuleCount ? `<div style="margin-top:6px; color:var(--text-secondary);">+${hiddenModuleCount} more module changes</div>` : ''}</div>
+      <div><strong>Effective Limit Changes (${effectiveChanges.length}):</strong><div style="margin-top:6px; display:grid; gap:4px;">${limitRows}</div>${hiddenLimitCount ? `<div style="margin-top:6px; color:var(--text-secondary);">+${hiddenLimitCount} more limit changes</div>` : ''}</div>
+    </div>
+  `;
+}
+
 function renderTenantDetailPanel(tenant, tenantLimits = null) {
   if (!tenant) {
     return `<div style="padding:18px; text-align:center; color:var(--text-secondary);">Select a tenant to manage plan, modules, branding, and status.</div>`;
@@ -3580,7 +3620,10 @@ function renderTenantDetailPanel(tenant, tenantLimits = null) {
         <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
             <h4 style="margin:0; color:#c9d6ff;">Monetization Template</h4>
-            <button class="btn-primary" id="tenantTemplateApplyBtn" onclick="applyTenantTemplate()" style="padding:8px 14px;">Apply Template</button>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <button class="btn-secondary" id="tenantTemplatePreviewBtn" onclick="previewTenantTemplate()" style="padding:8px 14px;">Preview</button>
+              <button class="btn-primary" id="tenantTemplateApplyBtn" onclick="applyTenantTemplate()" style="padding:8px 14px;">Apply Template</button>
+            </div>
           </div>
           <label style="display:grid; gap:8px; color:#e0e7ff; font-size:0.9em;">
             <span>Template</span>
@@ -3590,6 +3633,9 @@ function renderTenantDetailPanel(tenant, tenantLimits = null) {
           </label>
           <div id="tenantTemplateDescription" style="margin-top:12px; color:var(--text-secondary); font-size:0.82em; line-height:1.5;">
             ${escapeHtml(superadminTemplateCatalog?.[0]?.description || 'Apply a template to set plan, module toggles, and module limits in one action.')}
+          </div>
+          <div id="tenantTemplatePreview" style="margin-top:12px; padding:10px 12px; border:1px solid rgba(99,102,241,0.16); border-radius:10px; background:rgba(14,23,44,0.45); color:#cbd5ff; font-size:0.82em; line-height:1.5;">
+            ${renderTenantTemplatePreview(selectedTenantTemplatePreview)}
           </div>
         </div>
 
@@ -4013,6 +4059,7 @@ async function loadSelectedTenantDetail() {
 
   if (!selectedTenantGuildId) {
     selectedTenantLimitsCache = null;
+    selectedTenantTemplatePreview = null;
     superadminTemplateCatalog = [];
     content.innerHTML = renderTenantDetailPanel(null);
     return;
@@ -4048,6 +4095,7 @@ async function loadSelectedTenantDetail() {
     selectedTenantDetailCache = tenantData.tenant || null;
     selectedTenantAuditCache = auditData.auditLogs || [];
     selectedTenantLimitsCache = limitsData?.success ? limitsData.limits : null;
+    selectedTenantTemplatePreview = null;
     superadminTemplateCatalog = templateData?.success && Array.isArray(templateData.templates) ? templateData.templates : [];
     content.innerHTML = renderTenantDetailPanel(selectedTenantDetailCache, selectedTenantLimitsCache);
     showTenantDetailTab(tenantDetailActiveTab || 'overview');
@@ -4547,6 +4595,59 @@ function updateTenantTemplateDescription() {
   const templateKey = String(select.value || '').trim();
   const template = (superadminTemplateCatalog || []).find(item => item.key === templateKey);
   desc.textContent = template?.description || 'Apply a template to set plan, module toggles, and module limits in one action.';
+
+  selectedTenantTemplatePreview = null;
+  const previewEl = document.getElementById('tenantTemplatePreview');
+  if (previewEl) {
+    previewEl.innerHTML = renderTenantTemplatePreview(null);
+  }
+  previewTenantTemplate({ silent: true });
+}
+
+async function previewTenantTemplate(options = {}) {
+  if (!selectedTenantGuildId) return;
+  const { silent = false } = options;
+
+  const select = document.getElementById('tenantTemplateSelect');
+  const btn = document.getElementById('tenantTemplatePreviewBtn');
+  const previewEl = document.getElementById('tenantTemplatePreview');
+  if (!select || !btn || !previewEl) return;
+
+  const templateKey = String(select.value || '').trim();
+  if (!templateKey) {
+    selectedTenantTemplatePreview = null;
+    previewEl.innerHTML = renderTenantTemplatePreview(null);
+    if (!silent) showError('Select a template first.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Previewing...';
+  previewEl.innerHTML = '<div style="color:var(--text-secondary);">Loading template preview...</div>';
+
+  try {
+    const query = new URLSearchParams({ templateKey });
+    const response = await fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/template-preview?${query.toString()}`, {
+      credentials: 'include'
+    });
+    const data = await response.json();
+    if (!data.success) {
+      selectedTenantTemplatePreview = null;
+      previewEl.innerHTML = renderTenantTemplatePreview(null);
+      if (!silent) showError(data.message || 'Failed to preview template');
+      return;
+    }
+
+    selectedTenantTemplatePreview = data.preview || null;
+    previewEl.innerHTML = renderTenantTemplatePreview(selectedTenantTemplatePreview);
+  } catch (error) {
+    selectedTenantTemplatePreview = null;
+    previewEl.innerHTML = renderTenantTemplatePreview(null);
+    if (!silent) showError(`Failed to preview template: ${error.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Preview';
+  }
 }
 
 async function applyTenantTemplate() {
@@ -4576,6 +4677,7 @@ async function applyTenantTemplate() {
 
     if (data.success) {
       showSuccess(`Template applied: ${data.template?.label || templateKey}`);
+      selectedTenantTemplatePreview = null;
       await loadSuperadminView();
     } else {
       showError(data.message || 'Failed to apply template');

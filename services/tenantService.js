@@ -660,6 +660,46 @@ class TenantService {
       }
     }
 
+    if (requestedEnabled === 1) {
+      const normalizeModuleCountKey = (value) => {
+        const key = String(value || '').trim().toLowerCase();
+        return key === 'battle' ? 'minigames' : key;
+      };
+
+      const currentlyEnabledRows = db.prepare(`
+        SELECT module_key
+        FROM tenant_modules
+        WHERE tenant_id = ? AND enabled = 1
+      `).all(tenantId);
+
+      const enabledModuleSet = new Set(
+        currentlyEnabledRows.map(row => normalizeModuleCountKey(row.module_key)).filter(Boolean)
+      );
+      const requestedCountKey = normalizeModuleCountKey(normalizedModuleKey);
+      const alreadyEnabled = requestedCountKey && enabledModuleSet.has(requestedCountKey);
+
+      if (!alreadyEnabled) {
+        const tenantLimitRow = db.prepare(`
+          SELECT max_enabled_modules
+          FROM tenant_limits
+          WHERE tenant_id = ?
+        `).get(tenantId);
+        const maxEnabledModules = tenantLimitRow?.max_enabled_modules;
+        if (maxEnabledModules !== null && maxEnabledModules !== undefined && maxEnabledModules !== '') {
+          const limit = Number(maxEnabledModules);
+          if (Number.isFinite(limit) && limit >= 0 && enabledModuleSet.size + 1 > limit) {
+            return {
+              success: false,
+              code: 'limit_exceeded',
+              message: `Limit reached: ${limit} enabled modules allowed for this server plan.`,
+              limit,
+              used: enabledModuleSet.size,
+            };
+          }
+        }
+      }
+    }
+
     const upsertModuleStmt = db.prepare(`
       INSERT INTO tenant_modules (tenant_id, module_key, enabled)
       VALUES (?, ?, ?)

@@ -5048,11 +5048,7 @@ async function loadAdminHelpView() {
       { name: '/verification admin og-role', desc: 'Set OG role', options: 'role (required)', example: '/verification admin og-role role:@OG' },
       { name: '/verification admin og-limit', desc: 'Set OG slot count', options: 'count (required)', example: '/verification admin og-limit count:50' },
       { name: '/verification admin og-sync', desc: 'Sync OG role assignment', options: 'full (optional)', example: '/verification admin og-sync full:true' },
-      { name: '/verification admin activity-watch-add', desc: 'Add watched NFT collection', options: 'collection (required)', example: '/verification admin activity-watch-add collection:abc123' },
-      { name: '/verification admin activity-watch-remove', desc: 'Remove watched NFT collection', options: 'collection (required)', example: '/verification admin activity-watch-remove collection:abc123' },
-      { name: '/verification admin activity-watch-list', desc: 'List watched NFT collections', options: '-', example: '/verification admin activity-watch-list' },
-      { name: '/verification admin activity-feed', desc: 'Show NFT activity feed', options: 'limit (optional)', example: '/verification admin activity-feed limit:10' },
-      { name: '/verification admin activity-alerts', desc: 'Configure NFT activity alerts', options: 'enabled, channel, types, min_sol', example: '/verification admin activity-alerts enabled:true channel:#alerts' }
+      { name: '/verification admin activity-*', desc: 'Legacy alias (redirects)', options: '-', example: '/verification admin activity-feed' }
     ])}
     ${cmdSection('Governance', 'GOV', [
       { name: '/governance propose', desc: 'Create proposal', options: 'title, description (required), category, cost', example: '/governance propose title:"Fund X" description:"..."' },

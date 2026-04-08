@@ -10,7 +10,6 @@ const { applyEmbedBranding } = require('../../services/embedBranding');
 const db = require('../../database/db');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
-const nftActivityService = require('../../services/nftActivityService');
 
 function isGovernanceEnabled(guildId = null) {
   try {
@@ -369,19 +368,19 @@ module.exports = {
             await this.handleAdminOGSync(interaction);
             break;
           case 'activity-watch-add':
-            await this.handleAdminActivityWatchAdd(interaction);
+            await this.handleAdminActivityLegacyRedirect(interaction, 'activity-watch-add');
             break;
           case 'activity-watch-remove':
-            await this.handleAdminActivityWatchRemove(interaction);
+            await this.handleAdminActivityLegacyRedirect(interaction, 'activity-watch-remove');
             break;
           case 'activity-watch-list':
-            await this.handleAdminActivityWatchList(interaction);
+            await this.handleAdminActivityLegacyRedirect(interaction, 'activity-watch-list');
             break;
           case 'activity-feed':
-            await this.handleAdminActivityFeed(interaction);
+            await this.handleAdminActivityLegacyRedirect(interaction, 'activity-feed');
             break;
           case 'activity-alerts':
-            await this.handleAdminActivityAlerts(interaction);
+            await this.handleAdminActivityLegacyRedirect(interaction, 'activity-alerts');
             break;
         }
       } else {
@@ -1262,85 +1261,21 @@ module.exports = {
     logger.log(`Admin ${interaction.user.tag} ran OG sync: +${result.added} -${result.removed} errors:${result.errors}`);
   },
 
-  async handleAdminActivityWatchAdd(interaction) {
-    await interaction.deferReply({ ephemeral: true });
-    const collection = interaction.options.getString('collection');
-    const result = nftActivityService.addWatchedCollection(collection);
-    await interaction.editReply({ content: result.success ? `✅ Added watch: \`${collection}\`` : `❌ ${result.message}`, ephemeral: true });
-  },
-
-  async handleAdminActivityWatchRemove(interaction) {
-    await interaction.deferReply({ ephemeral: true });
-    const collection = interaction.options.getString('collection');
-    const result = nftActivityService.removeWatchedCollection(collection);
-    await interaction.editReply({ content: result.success ? `✅ Removed watch: \`${collection}\` (${result.removed || 0})` : `❌ ${result.message}`, ephemeral: true });
-  },
-
-  async handleAdminActivityWatchList(interaction) {
-    await interaction.deferReply({ ephemeral: true });
-    const watches = nftActivityService.listWatchedCollections();
-    if (!watches.length) return interaction.editReply({ content: 'No watched collections configured yet.', ephemeral: true });
-
-    const embed = new EmbedBuilder()
-      .setColor('#FFD700')
-      .setTitle('👁️ NFT Activity Watchlist')
-      .setDescription(watches.map((w, i) => `${i + 1}. \`${w.collection_key}\``).join('\n'))
-      .setTimestamp();
-
-    await interaction.editReply({ embeds: [embed], ephemeral: true });
-  },
-
-  async handleAdminActivityFeed(interaction) {
-    await interaction.deferReply({ ephemeral: true });
-    const limit = interaction.options.getInteger('limit') || 10;
-    const events = nftActivityService.listEvents(limit);
-    if (!events.length) return interaction.editReply({ content: 'No NFT activity events yet.', ephemeral: true });
-
-    const lines = events.slice(0, limit).map((e, i) => {
-      const t = e.event_time ? Math.floor(new Date(e.event_time).getTime() / 1000) : null;
-      const when = t ? `<t:${t}:R>` : 'unknown';
-      const price = e.price_sol !== null && e.price_sol !== undefined ? ` | ${e.price_sol} SOL` : '';
-      return `${i + 1}. **${e.event_type}** ${e.collection_key ? `(${e.collection_key})` : ''} ${e.token_name || ''}${price} • ${when}`;
-    }).join('\n');
-
-    const embed = new EmbedBuilder()
-      .setColor('#5865F2')
-      .setTitle('📡 NFT Activity Feed')
-      .setDescription(lines)
-      .setTimestamp();
-
-    await interaction.editReply({ embeds: [embed], ephemeral: true });
-  },
-
-  async handleAdminActivityAlerts(interaction) {
+  async handleAdminActivityLegacyRedirect(interaction, legacySubcommand) {
     await interaction.deferReply({ ephemeral: true });
 
-    const enabled = interaction.options.getBoolean('enabled');
-    const channel = interaction.options.getChannel('channel');
-    const types = interaction.options.getString('types');
-    const minSol = interaction.options.getNumber('min_sol');
+    const map = {
+      'activity-watch-add': '/nft-tracker collection add',
+      'activity-watch-remove': '/nft-tracker collection remove',
+      'activity-watch-list': '/nft-tracker collection list',
+      'activity-feed': '/nft-tracker collection feed',
+      'activity-alerts': 'Settings -> NFT Tracker in the web portal',
+    };
+    const target = map[String(legacySubcommand || '').trim()] || '/nft-tracker';
 
-    if (enabled && !channel) {
-      return interaction.editReply({ content: '❌ Channel is required when enabling alerts.', ephemeral: true });
-    }
-
-    const result = nftActivityService.updateAlertConfig({
-      enabled,
-      channelId: channel ? channel.id : undefined,
-      eventTypes: types !== null ? types : undefined,
-      minSol: minSol !== null ? minSol : undefined
-    });
-
-    if (!result.success) {
-      return interaction.editReply({ content: `❌ ${result.message}`, ephemeral: true });
-    }
-
-    const cfg = nftActivityService.getAlertConfig();
     await interaction.editReply({
-      content: enabled
-        ? `✅ NFT activity alerts enabled in <#${cfg.channel_id}> | types=${cfg.event_types} | min_sol=${cfg.min_sol}`
-        : '✅ NFT activity alerts disabled.',
-      ephemeral: true
+      content: `⚠️ This legacy verification command is deprecated.\nUse **${target}** instead.\n\nThis alias will be removed in a future release.`,
+      ephemeral: true,
     });
   }
 };

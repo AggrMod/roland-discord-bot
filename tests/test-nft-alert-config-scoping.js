@@ -1,5 +1,5 @@
 const assert = require('assert');
-const nftActivityService = require('./services/nftActivityService');
+const nftActivityService = require('../services/nftActivityService');
 
 function randomGuildId(prefix) {
   const seed = Date.now().toString().slice(-10);
@@ -51,3 +51,4 @@ try {
   console.error('NFT alert config tenant scoping test failed:', error.message);
   process.exit(1);
 }
+

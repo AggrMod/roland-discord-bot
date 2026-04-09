@@ -1,4 +1,5 @@
 const express = require('express');
+const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
 
 function createSuperadminTenantOpsRouter({
   superadminGuard,
@@ -38,14 +39,13 @@ function createSuperadminTenantOpsRouter({
         pageSize: req.query.pageSize,
       });
 
-      res.json({
-        success: true,
+      res.json(toSuccessResponse({
         tenants: result.tenants,
         pagination: result.pagination,
-      });
+      }));
     } catch (error) {
       logger.error('Error fetching tenants:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 
@@ -54,13 +54,12 @@ function createSuperadminTenantOpsRouter({
       const limit = Math.min(Math.max(parseInt(req.query.limit || '10', 10), 1), 100);
       const logs = tenantService.getTenantAuditLogs(req.params.guildId, limit);
 
-      res.json({
-        success: true,
+      res.json(toSuccessResponse({
         auditLogs: logs,
-      });
+      }));
     } catch (error) {
       logger.error('Error fetching tenant audit logs:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 
@@ -68,7 +67,7 @@ function createSuperadminTenantOpsRouter({
     try {
       const tenant = tenantService.getTenant(req.params.guildId);
       if (!tenant) {
-        return res.status(404).json({ success: false, message: 'Tenant not found' });
+        return res.status(404).json(toErrorResponse('Tenant not found', 'NOT_FOUND'));
       }
 
       const guild = await fetchGuildById(req.params.guildId);
@@ -79,8 +78,7 @@ function createSuperadminTenantOpsRouter({
         logo_url: tenant?.branding?.logo_url || fallbackLogo || null,
       };
 
-      res.json({
-        success: true,
+      res.json(toSuccessResponse({
         tenant: {
           ...tenant,
           branding,
@@ -92,10 +90,10 @@ function createSuperadminTenantOpsRouter({
             bio: true,
           },
         },
-      });
+      }));
     } catch (error) {
       logger.error('Error fetching tenant:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 
@@ -112,24 +110,23 @@ function createSuperadminTenantOpsRouter({
         };
       });
 
-      res.json({
-        success: true,
+      res.json(toSuccessResponse({
         plans,
         definitions: entitlementService.getLimitDefinitions(),
-      });
+      }));
     } catch (error) {
       logger.error('Error fetching limits catalog:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 
   router.get('/monetization/templates', superadminGuard, (_req, res) => {
     try {
       const templates = monetizationTemplateService.listTemplates();
-      res.json({ success: true, templates });
+      res.json(toSuccessResponse({ templates }));
     } catch (error) {
       logger.error('Error fetching monetization templates:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 
@@ -137,19 +134,19 @@ function createSuperadminTenantOpsRouter({
     try {
       const templateKey = String(req.query?.templateKey || '').trim();
       if (!templateKey) {
-        return res.status(400).json({ success: false, message: 'templateKey is required' });
+        return res.status(400).json(toErrorResponse('templateKey is required', 'VALIDATION_ERROR'));
       }
 
       const result = monetizationTemplateService.previewTemplate(req.params.guildId, templateKey);
 
       if (!result.success) {
-        return res.status(400).json(result);
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to preview template', 'VALIDATION_ERROR', null, result));
       }
 
-      res.json(result);
+      res.json(toSuccessResponse(result));
     } catch (error) {
       logger.error('Error previewing monetization template:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 
@@ -157,7 +154,7 @@ function createSuperadminTenantOpsRouter({
     try {
       const templateKey = String(req.body?.templateKey || '').trim();
       if (!templateKey) {
-        return res.status(400).json({ success: false, message: 'templateKey is required' });
+        return res.status(400).json(toErrorResponse('templateKey is required', 'VALIDATION_ERROR'));
       }
 
       const result = monetizationTemplateService.applyTemplate(
@@ -167,13 +164,13 @@ function createSuperadminTenantOpsRouter({
       );
 
       if (!result.success) {
-        return res.status(400).json(result);
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to apply template', 'VALIDATION_ERROR', null, result));
       }
 
-      res.json(result);
+      res.json(toSuccessResponse(result));
     } catch (error) {
       logger.error('Error applying monetization template:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 
@@ -185,13 +182,13 @@ function createSuperadminTenantOpsRouter({
       );
 
       if (!result.success) {
-        return res.status(400).json(result);
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to rollback template', 'VALIDATION_ERROR', null, result));
       }
 
-      res.json(result);
+      res.json(toSuccessResponse(result));
     } catch (error) {
       logger.error('Error rolling back monetization template:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 
@@ -199,13 +196,13 @@ function createSuperadminTenantOpsRouter({
     try {
       const snapshot = entitlementService.getTenantLimitSnapshot(req.params.guildId);
       if (!snapshot) {
-        return res.status(404).json({ success: false, message: 'Tenant not found' });
+        return res.status(404).json(toErrorResponse('Tenant not found', 'NOT_FOUND'));
       }
 
-      res.json({ success: true, limits: snapshot });
+      res.json(toSuccessResponse({ limits: snapshot }));
     } catch (error) {
       logger.error('Error fetching tenant limits:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 
@@ -214,7 +211,7 @@ function createSuperadminTenantOpsRouter({
       const guildId = req.params.guildId;
       const before = entitlementService.getTenantLimitSnapshot(guildId);
       if (!before) {
-        return res.status(404).json({ success: false, message: 'Tenant not found' });
+        return res.status(404).json(toErrorResponse('Tenant not found', 'NOT_FOUND'));
       }
 
       const updates = [];
@@ -234,7 +231,7 @@ function createSuperadminTenantOpsRouter({
       }
 
       if (updates.length === 0) {
-        return res.status(400).json({ success: false, message: 'No valid limit updates provided' });
+        return res.status(400).json(toErrorResponse('No valid limit updates provided', 'VALIDATION_ERROR'));
       }
 
       for (const update of updates) {
@@ -245,16 +242,16 @@ function createSuperadminTenantOpsRouter({
           update.limitValue
         );
         if (!result.success) {
-          return res.status(400).json(result);
+          return res.status(400).json(toErrorResponse(result.message || 'Failed to update limit override', 'VALIDATION_ERROR', null, result));
         }
       }
 
       const after = entitlementService.getTenantLimitSnapshot(guildId);
       tenantService.logAudit(guildId, req.session?.discordUser?.id || 'unknown', 'set_module_limits', before, after);
-      res.json({ success: true, limits: after });
+      res.json(toSuccessResponse({ limits: after }));
     } catch (error) {
       logger.error('Error updating tenant limits:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 
@@ -267,13 +264,13 @@ function createSuperadminTenantOpsRouter({
       );
 
       if (!result.success) {
-        return res.status(400).json(result);
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to update tenant plan', 'VALIDATION_ERROR', null, result));
       }
 
-      res.json(result);
+      res.json(toSuccessResponse(result));
     } catch (error) {
       logger.error('Error updating tenant plan:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 
@@ -281,7 +278,7 @@ function createSuperadminTenantOpsRouter({
     try {
       const { moduleKey, enabled } = req.body || {};
       if (!moduleKey) {
-        return res.status(400).json({ success: false, message: 'moduleKey is required' });
+        return res.status(400).json(toErrorResponse('moduleKey is required', 'VALIDATION_ERROR'));
       }
 
       const result = tenantService.setTenantModule(
@@ -292,13 +289,13 @@ function createSuperadminTenantOpsRouter({
       );
 
       if (!result.success) {
-        return res.status(400).json(result);
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to update tenant module', 'VALIDATION_ERROR', null, result));
       }
 
-      res.json(result);
+      res.json(toSuccessResponse(result));
     } catch (error) {
       logger.error('Error updating tenant module:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 
@@ -311,13 +308,13 @@ function createSuperadminTenantOpsRouter({
       );
 
       if (!result.success) {
-        return res.status(400).json(result);
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to update tenant status', 'VALIDATION_ERROR', null, result));
       }
 
-      res.json(result);
+      res.json(toSuccessResponse(result));
     } catch (error) {
       logger.error('Error updating tenant status:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 
@@ -330,13 +327,13 @@ function createSuperadminTenantOpsRouter({
       );
 
       if (!result.success) {
-        return res.status(400).json(result);
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to update tenant mock-data flag', 'VALIDATION_ERROR', null, result));
       }
 
-      res.json(result);
+      res.json(toSuccessResponse(result));
     } catch (error) {
       logger.error('Error updating tenant mock-data flag:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 
@@ -345,12 +342,12 @@ function createSuperadminTenantOpsRouter({
       const guildId = req.params.guildId;
       const { dataUrl } = req.body || {};
       if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
-        return res.status(400).json({ success: false, message: 'dataUrl (image) is required' });
+        return res.status(400).json(toErrorResponse('dataUrl (image) is required', 'VALIDATION_ERROR'));
       }
 
       const match = dataUrl.match(/^data:(image\/(png|jpeg|jpg|webp));base64,(.+)$/i);
       if (!match) {
-        return res.status(400).json({ success: false, message: 'Unsupported image format' });
+        return res.status(400).json(toErrorResponse('Unsupported image format', 'VALIDATION_ERROR'));
       }
 
       const mime = match[1].toLowerCase();
@@ -359,7 +356,7 @@ function createSuperadminTenantOpsRouter({
       const buffer = Buffer.from(b64, 'base64');
       const maxBytes = 2 * 1024 * 1024;
       if (buffer.length > maxBytes) {
-        return res.status(400).json({ success: false, message: 'Logo too large (max 2MB)' });
+        return res.status(400).json(toErrorResponse('Logo too large (max 2MB)', 'VALIDATION_ERROR'));
       }
 
       const uploadDir = path.join(__dirname, '..', 'public', 'uploads', 'tenant-logos');
@@ -372,13 +369,13 @@ function createSuperadminTenantOpsRouter({
       const publicUrl = `/uploads/tenant-logos/${fileName}`;
       const result = tenantService.updateTenantBranding(guildId, { logo_url: publicUrl }, req.session.discordUser.id);
       if (!result.success) {
-        return res.status(400).json(result);
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to update tenant branding', 'VALIDATION_ERROR', null, result));
       }
 
-      return res.json({ success: true, logo_url: publicUrl });
+      return res.json(toSuccessResponse({ logo_url: publicUrl }));
     } catch (error) {
       logger.error('Error uploading tenant logo:', error);
-      return res.status(500).json({ success: false, message: 'Internal server error' });
+      return res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 
@@ -397,7 +394,7 @@ function createSuperadminTenantOpsRouter({
       );
 
       if (!result.success) {
-        return res.status(400).json(result);
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to update tenant branding', 'VALIDATION_ERROR', null, result));
       }
 
       const profileResult = await applyGuildBotProfileBranding({
@@ -408,16 +405,16 @@ function createSuperadminTenantOpsRouter({
         reason: `Superadmin branding update by ${req.session?.discordUser?.id || 'unknown'}`,
       });
 
-      res.json({
+      res.json(toSuccessResponse({
         ...result,
         serverProfileApplied: !!profileResult?.success,
         serverProfileWarning: profileResult && !profileResult.success && !profileResult.skipped
           ? (profileResult.message || 'Could not apply server profile changes on Discord')
           : null,
-      });
+      }));
     } catch (error) {
       logger.error('Error updating tenant branding:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 

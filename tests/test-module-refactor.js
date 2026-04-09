@@ -7,6 +7,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const repoRoot = path.resolve(__dirname, '..');
 
 console.log('🧪 Testing Module Architecture Refactor...\n');
 
@@ -14,7 +15,7 @@ let errors = 0;
 
 // Test 1: Module toggles config exists
 console.log('1. Checking module toggles config...');
-const togglesPath = path.join(__dirname, 'config/module-toggles.json');
+const togglesPath = path.join(repoRoot, 'config/module-toggles.json');
 if (!fs.existsSync(togglesPath)) {
   console.error('  ❌ config/module-toggles.json not found');
   errors++;
@@ -32,13 +33,13 @@ if (!fs.existsSync(togglesPath)) {
 
 // Test 2: Module guard utility exists
 console.log('\n2. Checking module guard utility...');
-const moduleGuardPath = path.join(__dirname, 'utils/moduleGuard.js');
+const moduleGuardPath = path.join(repoRoot, 'utils/moduleGuard.js');
 if (!fs.existsSync(moduleGuardPath)) {
   console.error('  ❌ utils/moduleGuard.js not found');
   errors++;
 } else {
   try {
-    const moduleGuard = require('./utils/moduleGuard');
+    const moduleGuard = require('../utils/moduleGuard');
     if (typeof moduleGuard.isModuleEnabled !== 'function') {
       console.error('  ❌ moduleGuard.isModuleEnabled not found');
       errors++;
@@ -64,7 +65,7 @@ const newCommands = [
 ];
 
 for (const cmd of newCommands) {
-  const cmdPath = path.join(__dirname, cmd);
+  const cmdPath = path.join(repoRoot, cmd);
   if (!fs.existsSync(cmdPath)) {
     console.error(`  ❌ ${cmd} not found`);
     errors++;
@@ -76,7 +77,7 @@ for (const cmd of newCommands) {
 // Test 3b: Command-module map includes canonical minigames command
 console.log('\n3b. Checking command module map...');
 try {
-  const { getCommandModuleMap } = require('./config/commandModules');
+  const { getCommandModuleMap } = require('../config/commandModules');
   const commandMap = getCommandModuleMap();
   if (commandMap.minigames !== 'minigames') {
     console.error('  ❌ /minigames is not mapped to minigames module');
@@ -94,7 +95,7 @@ try {
 
 // Test 4: Legacy commands removed
 console.log('\n4. Verifying legacy commands removed...');
-const legacyPath = path.join(__dirname, 'commands/legacy');
+const legacyPath = path.join(repoRoot, 'commands/legacy');
 if (fs.existsSync(legacyPath)) {
   console.error('  ❌ commands/legacy folder still exists (should be removed)');
   errors++;
@@ -111,7 +112,7 @@ const oldCommands = [
 ];
 
 for (const cmd of oldCommands) {
-  const cmdPath = path.join(__dirname, cmd);
+  const cmdPath = path.join(repoRoot, cmd);
   if (fs.existsSync(cmdPath)) {
     console.error(`  ❌ ${cmd} still exists (should be renamed to .OLD)`);
     errors++;
@@ -122,7 +123,7 @@ for (const cmd of oldCommands) {
 
 // Test 6: Documentation exists
 console.log('\n6. Checking documentation...');
-const docsPath = path.join(__dirname, 'docs/COMMAND_ARCHITECTURE.md');
+const docsPath = path.join(repoRoot, 'docs/COMMAND_ARCHITECTURE.md');
 if (!fs.existsSync(docsPath)) {
   console.error('  ❌ docs/COMMAND_ARCHITECTURE.md not found');
   errors++;
@@ -139,7 +140,7 @@ if (!fs.existsSync(docsPath)) {
 // Test 7: Try loading commands
 console.log('\n7. Testing command loading...');
 try {
-  const verificationCmd = require('./commands/verification/verification.js');
+  const verificationCmd = require('../commands/verification/verification.js');
   if (!verificationCmd.data || !verificationCmd.execute) {
     console.error('  ❌ Verification command missing data or execute');
     errors++;
@@ -152,7 +153,7 @@ try {
 }
 
 try {
-  const governanceCmd = require('./commands/governance/governance.js');
+  const governanceCmd = require('../commands/governance/governance.js');
   if (!governanceCmd.data || !governanceCmd.execute) {
     console.error('  ❌ Governance command missing data or execute');
     errors++;
@@ -179,3 +180,4 @@ if (errors === 0) {
   console.error('\nPlease fix the errors above before deploying.');
   process.exit(1);
 }
+

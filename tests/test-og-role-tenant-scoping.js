@@ -2,8 +2,8 @@ const assert = require('assert');
 
 process.env.MULTITENANT_ENABLED = 'true';
 
-const tenantService = require('./services/tenantService');
-const ogRoleService = require('./services/ogRoleService');
+const tenantService = require('../services/tenantService');
+const ogRoleService = require('../services/ogRoleService');
 
 function makeGuildId(prefix) {
   const seed = Date.now().toString().slice(-12);
@@ -61,3 +61,4 @@ try {
   console.error('OG role tenant scoping test failed:', error.message);
   process.exit(1);
 }
+

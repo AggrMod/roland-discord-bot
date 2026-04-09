@@ -1,4 +1,5 @@
 const express = require('express');
+const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
 
 function createSuperadminOpsRouter({
   superadminGuard,
@@ -63,7 +64,7 @@ function createSuperadminOpsRouter({
 
       const [disk, pm2Processes] = await Promise.all([getDisk(), getPm2()]);
 
-      res.json({
+      res.json(toSuccessResponse({
         cpu: { model: cpuModel, cores: cpuCount },
         memory: { total: totalMem, used: usedMem, free: freeMem, pct: memPct },
         node: { heapUsed: nodeMemory.heapUsed, heapTotal: nodeMemory.heapTotal, rss: nodeMemory.rss, version: process.version },
@@ -71,20 +72,20 @@ function createSuperadminOpsRouter({
         disk,
         pm2: pm2Processes,
         timestamp: new Date().toISOString(),
-      });
+      }));
     } catch (error) {
       logger.error('[SystemStatus]', error);
-      res.status(500).json({ error: 'Internal server error' });
+      res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 
   router.get('/eras', superadminGuard, (_req, res) => {
     try {
       const eras = battleService.getAssignableEras();
-      res.json({ success: true, eras });
+      res.json(toSuccessResponse({ eras }));
     } catch (error) {
       logger.error('Error fetching eras:', error);
-      res.status(500).json({ success: false, message: 'Failed to fetch eras' });
+      res.status(500).json(toErrorResponse('Failed to fetch eras', 'INTERNAL_ERROR'));
     }
   });
 
@@ -96,10 +97,10 @@ function createSuperadminOpsRouter({
         LEFT JOIN tenants t ON t.guild_id = bea.guild_id
         ORDER BY bea.assigned_at DESC
       `).all();
-      res.json({ success: true, assignments });
+      res.json(toSuccessResponse({ assignments }));
     } catch (error) {
       logger.error('Error fetching era assignments:', error);
-      res.status(500).json({ success: false, message: 'Failed to fetch era assignments' });
+      res.status(500).json(toErrorResponse('Failed to fetch era assignments', 'INTERNAL_ERROR'));
     }
   });
 
@@ -107,23 +108,23 @@ function createSuperadminOpsRouter({
     try {
       const { guildId, eraKey } = req.body;
       if (!guildId || !eraKey) {
-        return res.status(400).json({ success: false, message: 'guildId and eraKey are required' });
+        return res.status(400).json(toErrorResponse('guildId and eraKey are required', 'VALIDATION_ERROR'));
       }
       const normalizedEraKey = battleService.normalizeEraKey(eraKey);
       if (!BATTLE_ERAS[normalizedEraKey]) {
-        return res.status(400).json({ success: false, message: 'Unknown era key' });
+        return res.status(400).json(toErrorResponse('Unknown era key', 'VALIDATION_ERROR'));
       }
       if (!battleService.isEraAssignable(normalizedEraKey)) {
-        return res.status(400).json({ success: false, message: 'Era is not assignable via superadmin panel' });
+        return res.status(400).json(toErrorResponse('Era is not assignable via superadmin panel', 'VALIDATION_ERROR'));
       }
       db.prepare(`
         INSERT OR IGNORE INTO battle_era_assignments (guild_id, era_key, assigned_by)
         VALUES (?, ?, ?)
       `).run(guildId, normalizedEraKey, req.session.discordUser.id);
-      res.json({ success: true, message: `Era "${normalizedEraKey}" assigned to guild ${guildId}` });
+      res.json(toSuccessResponse({ message: `Era "${normalizedEraKey}" assigned to guild ${guildId}` }));
     } catch (error) {
       logger.error('Error assigning era:', error);
-      res.status(500).json({ success: false, message: 'Failed to assign era' });
+      res.status(500).json(toErrorResponse('Failed to assign era', 'INTERNAL_ERROR'));
     }
   });
 
@@ -133,12 +134,12 @@ function createSuperadminOpsRouter({
       const normalizedEraKey = battleService.normalizeEraKey(eraKey);
       const result = db.prepare('DELETE FROM battle_era_assignments WHERE guild_id = ? AND era_key = ?').run(guildId, normalizedEraKey);
       if (result.changes === 0) {
-        return res.status(404).json({ success: false, message: 'Assignment not found' });
+        return res.status(404).json(toErrorResponse('Assignment not found', 'NOT_FOUND'));
       }
-      res.json({ success: true, message: `Era "${normalizedEraKey}" revoked from guild ${guildId}` });
+      res.json(toSuccessResponse({ message: `Era "${normalizedEraKey}" revoked from guild ${guildId}` }));
     } catch (error) {
       logger.error('Error revoking era:', error);
-      res.status(500).json({ success: false, message: 'Failed to revoke era' });
+      res.status(500).json(toErrorResponse('Failed to revoke era', 'INTERNAL_ERROR'));
     }
   });
 
@@ -146,17 +147,17 @@ function createSuperadminOpsRouter({
     try {
       const txSignature = String(req.body?.txSignature || req.body?.tx || '').trim();
       if (!txSignature) {
-        return res.status(400).json({ success: false, message: 'txSignature is required' });
+        return res.status(400).json(toErrorResponse('txSignature is required', 'VALIDATION_ERROR'));
       }
 
       const result = await nftActivityService.replayEventByTx(txSignature);
       if (!result.success) {
-        return res.status(404).json(result);
+        return res.status(404).json(toErrorResponse(result.message || 'Event not found', 'NOT_FOUND', null, result));
       }
-      return res.json(result);
+      return res.json(toSuccessResponse(result));
     } catch (error) {
       logger.error('Error replaying nft activity event:', error);
-      return res.status(500).json({ success: false, message: 'Internal server error' });
+      return res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 

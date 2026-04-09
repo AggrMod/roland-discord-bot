@@ -2,11 +2,11 @@ const assert = require('assert');
 
 process.env.MOCK_MODE = 'false';
 
-const db = require('./database/db');
-const nftService = require('./services/nftService');
-const roleService = require('./services/roleService');
-const walletService = require('./services/walletService');
-const tenantService = require('./services/tenantService');
+const db = require('../database/db');
+const nftService = require('../services/nftService');
+const roleService = require('../services/roleService');
+const walletService = require('../services/walletService');
+const tenantService = require('../services/tenantService');
 
 async function run() {
   const originals = {
@@ -96,3 +96,4 @@ run().catch(error => {
   console.error(error);
   process.exit(1);
 });
+

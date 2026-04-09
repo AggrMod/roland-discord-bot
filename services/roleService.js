@@ -4,6 +4,7 @@ const nftService = require('./nftService');
 const tokenService = require('./tokenService');
 const entitlementService = require('./entitlementService');
 const tenantService = require('./tenantService');
+const settingsManager = require('../config/settings');
 const logger = require('../utils/logger');
 
 class RoleService {
@@ -61,7 +62,11 @@ class RoleService {
 
   loadConfigs() {
     try {
-      this.tiersConfig = require('../config/roles.json');
+      const settings = settingsManager.getSettings ? settingsManager.getSettings() : {};
+      this.tiersConfig = {
+        tiers: Array.isArray(settings?.tiers) ? settings.tiers : [],
+        characterRoles: Array.isArray(settings?.characterRoles) ? settings.characterRoles : []
+      };
       this.traitRolesConfig = require('../config/trait-roles.json');
       
       try {
@@ -932,9 +937,9 @@ class RoleService {
   async assignDiscordRole(guild, userId, tierName) {
     try {
       const member = await guild.members.fetch(userId);
-      const rolesConfig = require('../config/roles.json');
-      
-      const tier = rolesConfig.tiers.find(t => t.name === tierName);
+      const scopedTiers = this.getEffectiveTiers(guild?.id) || [];
+      const fallbackTiers = this.tiersConfig?.tiers || [];
+      const tier = [...scopedTiers, ...fallbackTiers].find(t => t.name === tierName);
       if (!tier || !tier.roleId) {
         logger.warn(`No Discord role configured for tier: ${tierName}`);
         return { success: false, message: 'Role not configured' };
@@ -1375,11 +1380,19 @@ class RoleService {
    */
   
   saveRolesConfig() {
-    const fs = require('fs');
-    const path = require('path');
-    const configPath = path.join(__dirname, '../config/roles.json');
-    fs.writeFileSync(configPath, JSON.stringify(this.tiersConfig, null, 2), 'utf8');
-    logger.log('Saved roles.json');
+    const settingsPayload = {};
+    if (Array.isArray(this.tiersConfig?.tiers)) {
+      settingsPayload.tiers = this.tiersConfig.tiers;
+    }
+    if (Array.isArray(this.tiersConfig?.characterRoles)) {
+      settingsPayload.characterRoles = this.tiersConfig.characterRoles;
+    }
+
+    const result = settingsManager.updateSettings(settingsPayload);
+    if (!result?.success) {
+      throw new Error(result?.message || 'Failed to persist tier settings');
+    }
+    logger.log('Saved tier settings to settings.json');
   }
 
   saveTraitRolesConfig() {

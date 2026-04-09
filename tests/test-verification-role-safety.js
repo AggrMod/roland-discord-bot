@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const assert = require('assert');
-const roleService = require('./services/roleService');
+const roleService = require('../services/roleService');
 
 const originalGetEffectiveTiers = roleService.getEffectiveTiers.bind(roleService);
 const originalGetEffectiveTraitRoles = roleService.getEffectiveTraitRoles.bind(roleService);
@@ -99,3 +99,4 @@ run()
     roleService.isProtectedRole = originalIsProtectedRole;
     roleService.canBotManageRole = originalCanBotManageRole;
   });
+

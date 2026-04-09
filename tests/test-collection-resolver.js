@@ -2,7 +2,7 @@
  * Simple sanity check for collection resolver
  */
 
-const { resolveCollectionInput, isValidSolanaAddress, formatCollectionForDisplay } = require('./utils/collectionResolver');
+const { resolveCollectionInput, isValidSolanaAddress, formatCollectionForDisplay } = require('../utils/collectionResolver');
 
 console.log('🧪 Testing Collection Resolver\n');
 
@@ -78,3 +78,4 @@ console.assert(formatted.includes('🔑'), 'Should include address icon');
 console.log();
 
 console.log('🎉 All tests passed!');
+

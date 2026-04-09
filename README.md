@@ -270,7 +270,7 @@ See [docs/architecture.md](./docs/architecture.md) for detailed system design an
 
 1. Set `MOCK_MODE=false` in production
 2. Configure proper Solana RPC endpoint
-3. Set up Discord role IDs in `config/roles.json`
+3. Set up Discord role IDs in tenant Verification settings (stored in `config/settings.json` defaults + tenant DB config)
 4. Deploy commands globally (omit `GUILD_ID`)
 5. Run with process manager (PM2, systemd, etc.)
 

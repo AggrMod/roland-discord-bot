@@ -17,14 +17,14 @@ const DEFAULT_TIER_VP = [
 
 function getConfiguredVPForUser(discordId, nftCount, roleMappings) {
   // If role_vp_mappings has entries, use getUserVotingPower via roleService
-  // (called at vote time with live member). For snapshot we use tier-based from
-  // the tiers config (roles.json) if available, else DEFAULT_TIER_VP.
+  // (called at vote time with live member). For snapshot we use tier-based
+  // settings config when available, else DEFAULT_TIER_VP.
   if (!nftCount || nftCount < 1) return 0;
   try {
     const roleService = require('./roleService');
     const tiers = roleService.tiersConfig && roleService.tiersConfig.tiers;
     if (tiers && tiers.length > 0) {
-      // Use configured tiers from roles.json (which may have custom VP values)
+      // Use configured tiers from settings (which may have custom VP values)
       for (const t of [...tiers].sort((a, b) => b.minNFTs - a.minNFTs)) {
         if (nftCount >= t.minNFTs) return t.votingPower || 0;
       }
@@ -220,7 +220,7 @@ class ProposalService {
         }
       }
 
-      // For snapshot: use configurable tier VP (roles.json → defaults)
+      // For snapshot: use configurable tier VP (settings defaults as fallback)
       const vp = getConfiguredVPForUser(user.discord_id, user.total_nfts, roleMappings);
       if (vp > 0) {
         voterVPs[user.discord_id] = vp;
@@ -764,3 +764,4 @@ class ProposalService {
 }
 
 module.exports = new ProposalService();
+

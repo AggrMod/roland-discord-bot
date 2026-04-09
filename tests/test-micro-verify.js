@@ -1,6 +1,6 @@
 require('dotenv').config();
-const microVerifyService = require('./services/microVerifyService');
-const logger = require('./utils/logger');
+const microVerifyService = require('../services/microVerifyService');
+const logger = require('../utils/logger');
 
 async function runTests() {
   console.log('=== Micro-Verify Service Test ===\n');
@@ -29,7 +29,7 @@ async function runTests() {
   const testDiscordId = 'test_user_' + Date.now();
   
   // Create user first (to satisfy foreign key constraint)
-  const db = require('./database/db');
+  const db = require('../database/db');
   db.prepare('INSERT OR IGNORE INTO users (discord_id, username) VALUES (?, ?)').run(testDiscordId, 'TestUser');
   
   const result = microVerifyService.createRequest(testDiscordId, 'TestUser');
@@ -99,3 +99,4 @@ runTests().catch(err => {
   console.error('Test error:', err);
   process.exit(1);
 });
+

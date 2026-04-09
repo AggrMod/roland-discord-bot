@@ -5,8 +5,8 @@
  * Tests the treasury watch functionality
  */
 
-const treasuryService = require('./services/treasuryService');
-const logger = require('./utils/logger');
+const treasuryService = require('../services/treasuryService');
+const logger = require('../utils/logger');
 
 async function runTests() {
   console.log('\n=== Treasury Service Tests ===\n');
@@ -98,3 +98,4 @@ runTests().catch(error => {
   logger.error('Test script error:', error);
   process.exit(1);
 });
+

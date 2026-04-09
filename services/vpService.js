@@ -1,17 +1,25 @@
-const rolesConfig = require('../config/roles.json');
-const logger = require('../utils/logger');
+const settingsManager = require('../config/settings');
 
 class VPService {
+  getTiers() {
+    if (typeof settingsManager.getAllTiers === 'function') {
+      return settingsManager.getAllTiers();
+    }
+    const settings = settingsManager.getSettings ? settingsManager.getSettings() : {};
+    return Array.isArray(settings?.tiers) ? settings.tiers : [];
+  }
+
   getTierForNFTCount(nftCount) {
     if (nftCount === 0) return null;
-    
-    for (const tier of rolesConfig.tiers) {
+
+    const tiers = this.getTiers();
+    for (const tier of tiers) {
       if (nftCount >= tier.minNFTs && nftCount <= tier.maxNFTs) {
         return tier;
       }
     }
-    
-    return rolesConfig.tiers[rolesConfig.tiers.length - 1];
+
+    return tiers[tiers.length - 1] || null;
   }
 
   calculateVotingPower(nftCount) {
@@ -25,7 +33,7 @@ class VPService {
   }
 
   getAllTiers() {
-    return rolesConfig.tiers;
+    return this.getTiers();
   }
 
   getTotalVPInSystem(users) {

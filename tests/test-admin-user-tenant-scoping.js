@@ -1,4 +1,4 @@
-const db = require('./database/db');
+const db = require('../database/db');
 
 const suffix = Date.now();
 const guildA = `guildA_${suffix}`;
@@ -68,3 +68,4 @@ try {
 } finally {
   cleanup();
 }
+

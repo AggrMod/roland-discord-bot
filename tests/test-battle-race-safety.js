@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 const assert = require('assert');
-const battleService = require('./services/battleService');
-const battleDb = require('./database/battleDb');
+const battleService = require('../services/battleService');
+const battleDb = require('../database/battleDb');
 
 function cleanup(channelId, lobbyId) {
   try {
@@ -58,3 +58,4 @@ try {
   console.error(error);
   process.exit(1);
 }
+

@@ -3,7 +3,24 @@ const path = require('path');
 const logger = require('../utils/logger');
 
 const SETTINGS_FILE = path.join(__dirname, 'settings.json');
-const ROLES_FILE = path.join(__dirname, 'roles.json');
+
+const DEFAULT_TIERS = [
+  { name: 'Associate', minNFTs: 1, maxNFTs: 2, votingPower: 1, roleId: null },
+  { name: 'Soldato', minNFTs: 3, maxNFTs: 6, votingPower: 3, roleId: null },
+  { name: 'Capo', minNFTs: 7, maxNFTs: 14, votingPower: 6, roleId: null },
+  { name: 'Elite', minNFTs: 15, maxNFTs: 49, votingPower: 10, roleId: null },
+  { name: 'Underboss', minNFTs: 50, maxNFTs: 149, votingPower: 14, roleId: null },
+  { name: 'Don', minNFTs: 150, maxNFTs: 999999, votingPower: 18, roleId: null }
+];
+
+const DEFAULT_CHARACTER_ROLES = [
+  'The Hitman',
+  'The Accountant',
+  'The Driver',
+  'The Enforcer',
+  'The Don',
+  'The Consigliere'
+];
 
 class SettingsManager {
   constructor() {
@@ -12,12 +29,10 @@ class SettingsManager {
   }
 
   getDefaultSettings() {
-    const rolesData = JSON.parse(fs.readFileSync(ROLES_FILE, 'utf8'));
-
     return {
       // Governance
-      tiers: rolesData.tiers,
-      characterRoles: rolesData.characterRoles || [],
+      tiers: DEFAULT_TIERS,
+      characterRoles: DEFAULT_CHARACTER_ROLES,
       quorumPercentage: 25,
       supportThreshold: 4,
       voteDurationDays: 7,

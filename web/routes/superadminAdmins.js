@@ -1,4 +1,5 @@
 const express = require('express');
+const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
 
 function createSuperadminAdminsRouter({
   superadminGuard,
@@ -9,13 +10,12 @@ function createSuperadminAdminsRouter({
 
   router.get('/admins', superadminGuard, (req, res) => {
     try {
-      res.json({
-        success: true,
+      res.json(toSuccessResponse({
         superadmins: superadminService.listSuperadmins(),
-      });
+      }));
     } catch (error) {
       logger.error('Error fetching superadmins:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 
@@ -23,18 +23,18 @@ function createSuperadminAdminsRouter({
     try {
       const { userId } = req.body || {};
       if (!userId || !String(userId).trim()) {
-        return res.status(400).json({ success: false, message: 'userId is required' });
+        return res.status(400).json(toErrorResponse('userId is required', 'VALIDATION_ERROR'));
       }
 
       const result = superadminService.addSuperadmin(userId, req.session.discordUser.id);
       if (!result.success) {
-        return res.status(400).json(result);
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to add superadmin', 'VALIDATION_ERROR', null, result));
       }
 
-      res.json(result);
+      res.json(toSuccessResponse(result));
     } catch (error) {
       logger.error('Error adding superadmin:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 
@@ -43,13 +43,14 @@ function createSuperadminAdminsRouter({
       const result = superadminService.removeSuperadmin(req.params.userId, req.session.discordUser.id);
       if (!result.success) {
         const status = result.message === 'Cannot remove root superadmins' ? 403 : 400;
-        return res.status(status).json(result);
+        const code = status === 403 ? 'FORBIDDEN' : 'VALIDATION_ERROR';
+        return res.status(status).json(toErrorResponse(result.message || 'Failed to remove superadmin', code, null, result));
       }
 
-      res.json(result);
+      res.json(toSuccessResponse(result));
     } catch (error) {
       logger.error('Error removing superadmin:', error);
-      res.status(500).json({ success: false, message: 'Internal server error' });
+      res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 const assert = require('assert');
-const db = require('./database/db');
-const tenantService = require('./services/tenantService');
-const ticketService = require('./services/ticketService');
+const db = require('../database/db');
+const tenantService = require('../services/tenantService');
+const ticketService = require('../services/ticketService');
 
 const originalIsMultitenantEnabled = tenantService.isMultitenantEnabled.bind(tenantService);
 
@@ -76,3 +76,4 @@ try {
   console.error(error);
   process.exit(1);
 }
+

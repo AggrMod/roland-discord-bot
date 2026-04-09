@@ -558,6 +558,14 @@ class WebServer {
       return ensureTenantModuleEnabled(req, res, 'engagement', 'Engagement');
     }
 
+    function ensureGovernanceModule(req, res) {
+      return ensureTenantModuleEnabled(req, res, 'governance', 'Governance');
+    }
+
+    function ensureHeistModule(req, res) {
+      return ensureTenantModuleEnabled(req, res, 'heist', 'Missions');
+    }
+
     function ensureNftTrackerModule(req, res) {
       return ensureTenantModuleEnabled(req, res, 'nfttracker', 'NFT Tracker');
     }
@@ -2652,6 +2660,7 @@ class WebServer {
     });
 
     this.app.get('/api/admin/proposals', adminAuthMiddleware, (req, res) => {
+      if (!ensureGovernanceModule(req, res)) return;
       try {
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
         const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
@@ -2670,6 +2679,7 @@ class WebServer {
     });
 
     this.app.post('/api/admin/proposals/:id/close', adminAuthMiddleware, async (req, res) => {
+      if (!ensureGovernanceModule(req, res)) return;
       try {
         const { id } = req.params;
         if (!isProposalInGuildScope(id, req.guildId)) {
@@ -2685,6 +2695,7 @@ class WebServer {
 
     // Admin: approve proposal (pending_review â†’ supporting)
     this.app.post('/api/admin/governance/proposals/:id/approve', adminAuthMiddleware, (req, res) => {
+      if (!ensureGovernanceModule(req, res)) return;
       try {
         if (!isProposalInGuildScope(req.params.id, req.guildId)) {
           return res.status(404).json({ success: false, message: 'Proposal not found' });
@@ -2724,6 +2735,7 @@ class WebServer {
 
     // Admin: hold proposal (pending_review â†’ on_hold)
     this.app.post('/api/admin/governance/proposals/:id/hold', adminAuthMiddleware, (req, res) => {
+      if (!ensureGovernanceModule(req, res)) return;
       try {
         if (!isProposalInGuildScope(req.params.id, req.guildId)) {
           return res.status(404).json({ success: false, message: 'Proposal not found' });
@@ -2739,6 +2751,7 @@ class WebServer {
 
     // Admin: promote to voting (supporting â†’ voting, takes VP snapshot)
     this.app.post('/api/admin/governance/proposals/:id/promote', adminAuthMiddleware, async (req, res) => {
+      if (!ensureGovernanceModule(req, res)) return;
       try {
         if (!isProposalInGuildScope(req.params.id, req.guildId)) {
           return res.status(404).json({ success: false, message: 'Proposal not found' });
@@ -2753,6 +2766,7 @@ class WebServer {
 
     // Admin: conclude voting
     this.app.post('/api/admin/governance/proposals/:id/conclude', adminAuthMiddleware, async (req, res) => {
+      if (!ensureGovernanceModule(req, res)) return;
       try {
         if (!isProposalInGuildScope(req.params.id, req.guildId)) {
           return res.status(404).json({ success: false, message: 'Proposal not found' });
@@ -2767,6 +2781,7 @@ class WebServer {
 
     // Admin: emergency pause (Don + Consigliere only â€” caller must verify roles)
     this.app.post('/api/admin/governance/proposals/:id/pause', adminAuthMiddleware, (req, res) => {
+      if (!ensureGovernanceModule(req, res)) return;
       try {
         if (!isProposalInGuildScope(req.params.id, req.guildId)) {
           return res.status(404).json({ success: false, message: 'Proposal not found' });
@@ -2780,6 +2795,7 @@ class WebServer {
     });
 
     this.app.get('/api/admin/missions', adminAuthMiddleware, (req, res) => {
+      if (!ensureHeistModule(req, res)) return;
       try {
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
         const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
@@ -2803,6 +2819,7 @@ class WebServer {
     });
 
     this.app.post('/api/admin/missions/create', adminAuthMiddleware, (req, res) => {
+      if (!ensureHeistModule(req, res)) return;
       try {
         const { title, description, requiredRoles, minTier, totalSlots, rewardPoints } = req.body;
         
@@ -2828,6 +2845,7 @@ class WebServer {
     });
 
     this.app.post('/api/admin/missions/:id/start', adminAuthMiddleware, (req, res) => {
+      if (!ensureHeistModule(req, res)) return;
       try {
         const { id } = req.params;
         const hasGuildColumn = missionService.hasMissionsGuildColumn?.() === true;
@@ -2847,6 +2865,7 @@ class WebServer {
     });
 
     this.app.post('/api/admin/missions/:id/complete', adminAuthMiddleware, (req, res) => {
+      if (!ensureHeistModule(req, res)) return;
       try {
         const { id } = req.params;
         const hasGuildColumn = missionService.hasMissionsGuildColumn?.() === true;

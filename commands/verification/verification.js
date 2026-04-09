@@ -378,7 +378,7 @@ module.exports = {
           new ButtonBuilder()
             .setLabel('Get Help')
             .setStyle(ButtonStyle.Link)
-            .setURL('https://the-solpranos.com/help')
+            .setURL(`${webUrl}/help`)
         );
 
       await interaction.editReply({ embeds: [embed], components: [row] });
@@ -451,7 +451,7 @@ module.exports = {
         new ButtonBuilder()
           .setLabel('Get Help')
           .setStyle(ButtonStyle.Link)
-          .setURL('https://the-solpranos.com/help')
+          .setURL(`${webUrl}/help`)
       );
 
     await interaction.editReply({ embeds: [embed], components: [row] });
@@ -632,7 +632,7 @@ module.exports = {
         new ButtonBuilder()
           .setLabel('Get Help')
           .setStyle(ButtonStyle.Link)
-          .setURL('https://the-solpranos.com/help')
+          .setURL(`${webUrl}/help`)
       );
 
     const panelMessage = await interaction.channel.send({ embeds: [embed], components: [row] });

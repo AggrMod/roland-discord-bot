@@ -80,3 +80,4 @@ These are intentionally managed in the portal (`/admin`, `/?section=settings`, `
 - Pro: $49.99 per server
 - Enterprise: contact team (multi-server/custom)
 - Yearly billing: 15% discount
+- Plan model: features stay available across plans; plan upgrades raise module limits/capacity.

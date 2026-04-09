@@ -3738,7 +3738,7 @@ class WebServer {
             new ButtonBuilder()
               .setLabel('Get Help')
               .setStyle(ButtonStyle.Link)
-              .setURL('https://the-solpranos.com/help')
+              .setURL(`${webUrl}/help`)
           );
 
         let action = 'posted';

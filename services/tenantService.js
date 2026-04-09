@@ -302,6 +302,9 @@ class TenantService {
 
     const branding = brandingRow ? {
       bot_display_name: brandingRow.bot_display_name || brandingRow.display_name || null,
+      bot_server_avatar_url: brandingRow.bot_server_avatar_url || null,
+      bot_server_banner_url: brandingRow.bot_server_banner_url || null,
+      bot_server_bio: brandingRow.bot_server_bio || null,
       brand_emoji: brandingRow.brand_emoji || null,
       brand_color: brandingRow.brand_color || brandingRow.primary_color || null,
       logo_url: brandingRow.logo_url || brandingRow.icon_url || null,
@@ -791,18 +794,21 @@ class TenantService {
   getTenantVerificationSettings(guildId) {
     try {
       const guild = String(guildId || '').trim();
-      if (!guild) return { ogRoleId: null, ogRoleLimit: 0 };
+      if (!guild) return { ogRoleId: null, ogRoleLimit: 0, baseVerifiedRoleId: null };
       const tenantRow = this.getTenant(guild);
-      if (!tenantRow) return { ogRoleId: null, ogRoleLimit: 0 };
+      if (!tenantRow) return { ogRoleId: null, ogRoleLimit: 0, baseVerifiedRoleId: null };
+      const tenantId = Number(tenantRow?.tenant?.id || tenantRow?.id || 0);
+      if (!tenantId) return { ogRoleId: null, ogRoleLimit: 0, baseVerifiedRoleId: null };
 
-      const row = db.prepare('SELECT og_role_id, og_role_limit FROM tenant_verification_settings WHERE tenant_id = ?').get(tenantRow.id);
+      const row = db.prepare('SELECT og_role_id, og_role_limit, base_verified_role_id FROM tenant_verification_settings WHERE tenant_id = ?').get(tenantId);
       return {
         ogRoleId: row?.og_role_id || null,
-        ogRoleLimit: Number(row?.og_role_limit || 0)
+        ogRoleLimit: Number(row?.og_role_limit || 0),
+        baseVerifiedRoleId: row?.base_verified_role_id || null
       };
     } catch (error) {
       logger.warn('[TenantService] getTenantVerificationSettings fallback:', error?.message || error);
-      return { ogRoleId: null, ogRoleLimit: 0 };
+      return { ogRoleId: null, ogRoleLimit: 0, baseVerifiedRoleId: null };
     }
   }
 
@@ -812,23 +818,27 @@ class TenantService {
       if (!guild) return { success: false, message: 'guildId is required' };
       const tenantRow = this.getTenant(guild);
       if (!tenantRow) return { success: false, message: 'Tenant not found' };
+      const tenantId = Number(tenantRow?.tenant?.id || tenantRow?.id || 0);
+      if (!tenantId) return { success: false, message: 'Tenant not found' };
 
       const current = this.getTenantVerificationSettings(guild);
       const next = {
         ogRoleId: patch.ogRoleId !== undefined ? (patch.ogRoleId || null) : current.ogRoleId,
         ogRoleLimit: patch.ogRoleLimit !== undefined ? Number(patch.ogRoleLimit || 0) : current.ogRoleLimit,
+        baseVerifiedRoleId: patch.baseVerifiedRoleId !== undefined ? (patch.baseVerifiedRoleId || null) : current.baseVerifiedRoleId,
       };
 
       db.prepare(`
-        INSERT INTO tenant_verification_settings (tenant_id, og_role_id, og_role_limit)
-        VALUES (?, ?, ?)
+        INSERT INTO tenant_verification_settings (tenant_id, og_role_id, og_role_limit, base_verified_role_id)
+        VALUES (?, ?, ?, ?)
         ON CONFLICT(tenant_id) DO UPDATE SET
           og_role_id = excluded.og_role_id,
           og_role_limit = excluded.og_role_limit,
+          base_verified_role_id = excluded.base_verified_role_id,
           updated_at = CURRENT_TIMESTAMP
-      `).run(tenantRow.id, next.ogRoleId, next.ogRoleLimit);
+      `).run(tenantId, next.ogRoleId, next.ogRoleLimit, next.baseVerifiedRoleId);
 
-      this.logTenantAudit(tenantRow.id, actorId, 'verification_settings_update', {
+      this.logAudit(guild, actorId, 'verification_settings_update', {
         changed: Object.keys(patch),
         next
       });
@@ -848,6 +858,9 @@ class TenantService {
 
     const allowedKeys = [
       'bot_display_name',
+      'bot_server_avatar_url',
+      'bot_server_banner_url',
+      'bot_server_bio',
       'brand_emoji',
       'brand_color',
       'logo_url',
@@ -896,6 +909,20 @@ class TenantService {
       patch[key] = normalizedUrl;
     }
 
+    for (const key of ['bot_server_avatar_url', 'bot_server_banner_url']) {
+      if (!Object.prototype.hasOwnProperty.call(patch, key)) {
+        continue;
+      }
+      if (patch[key] === null) {
+        continue;
+      }
+      const normalizedUrl = normalizeBrandingUrl(patch[key], { allowRelative: false });
+      if (!normalizedUrl) {
+        return { success: false, message: `Invalid ${key}` };
+      }
+      patch[key] = normalizedUrl;
+    }
+
     const before = this.getTenantContext(normalizedGuildId);
     const context = this.ensureTenant(normalizedGuildId);
     const tenantId = context?.tenant?.id;
@@ -907,6 +934,9 @@ class TenantService {
 
     const nextBranding = {
       bot_display_name: patch.bot_display_name !== undefined ? patch.bot_display_name : (brandingRow.bot_display_name || brandingRow.display_name || null),
+      bot_server_avatar_url: patch.bot_server_avatar_url !== undefined ? patch.bot_server_avatar_url : (brandingRow.bot_server_avatar_url || null),
+      bot_server_banner_url: patch.bot_server_banner_url !== undefined ? patch.bot_server_banner_url : (brandingRow.bot_server_banner_url || null),
+      bot_server_bio: patch.bot_server_bio !== undefined ? patch.bot_server_bio : (brandingRow.bot_server_bio || null),
       brand_emoji: patch.brand_emoji !== undefined ? patch.brand_emoji : (brandingRow.brand_emoji || null),
       brand_color: patch.brand_color !== undefined ? patch.brand_color : (brandingRow.brand_color || brandingRow.primary_color || null),
       logo_url: patch.logo_url !== undefined ? patch.logo_url : (brandingRow.logo_url || brandingRow.icon_url || null),
@@ -931,6 +961,9 @@ class TenantService {
       INSERT INTO tenant_branding (
         tenant_id,
         bot_display_name,
+        bot_server_avatar_url,
+        bot_server_banner_url,
+        bot_server_bio,
         brand_emoji,
         brand_color,
         display_name,
@@ -950,9 +983,12 @@ class TenantService {
         nfttracker_panel_title,
         nfttracker_panel_description
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(tenant_id) DO UPDATE SET
         bot_display_name = excluded.bot_display_name,
+        bot_server_avatar_url = excluded.bot_server_avatar_url,
+        bot_server_banner_url = excluded.bot_server_banner_url,
+        bot_server_bio = excluded.bot_server_bio,
         brand_emoji = excluded.brand_emoji,
         brand_color = excluded.brand_color,
         display_name = excluded.display_name,
@@ -975,6 +1011,9 @@ class TenantService {
     `).run(
       tenantId,
       nextBranding.bot_display_name,
+      nextBranding.bot_server_avatar_url,
+      nextBranding.bot_server_banner_url,
+      nextBranding.bot_server_bio,
       nextBranding.brand_emoji,
       nextBranding.brand_color,
       nextBranding.display_name,

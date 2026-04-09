@@ -1,4 +1,4 @@
-// ==================== PORTAL STATE MANAGEMENT ====================
+﻿// ==================== PORTAL STATE MANAGEMENT ====================
 let userData = null;
 let isAdmin = false;
 let isSuperadmin = false;
@@ -109,10 +109,11 @@ function isTenantSensitiveRequest(input) {
     const url = new URL(rawUrl, window.location.origin);
     return (
       url.pathname.startsWith('/api/admin/') ||
+      url.pathname.startsWith('/api/user/') ||
       url.pathname === '/api/user/proposals' ||
       url.pathname === '/api/governance/proposals' ||
       /^\/api\/governance\/proposals\/[^/]+\/(submit|support|comments|veto)$/.test(url.pathname) ||
-      url.pathname.startsWith('/api/public/v1/proposals/') ||
+      url.pathname.startsWith('/api/public/v1/') ||
       url.pathname.startsWith('/api/verify/') ||
       url.pathname.startsWith('/api/micro-verify/') ||
       url.pathname.startsWith('/api/verification/admin/') ||
@@ -129,6 +130,23 @@ function buildTenantRequestHeaders(initHeaders) {
     headers.set('x-guild-id', activeGuildId);
   }
   return headers;
+}
+
+function buildPublicV1Url(pathname, { requireGuild = false } = {}) {
+  const cleanPath = String(pathname || '').trim();
+  if (!cleanPath.startsWith('/api/public/v1/')) {
+    return cleanPath;
+  }
+
+  if (requireGuild && !activeGuildId) {
+    return null;
+  }
+
+  const url = new URL(cleanPath, window.location.origin);
+  if (activeGuildId && !url.searchParams.has('guildId')) {
+    url.searchParams.set('guildId', activeGuildId);
+  }
+  return `${url.pathname}${url.search}`;
 }
 
 function ensurePortalMultiSelectId(select) {
@@ -360,10 +378,13 @@ function initializePortalMultiSelects(scope = document) {
 window.fetch = async function(input, init = {}) {
   const headers = buildTenantRequestHeaders(init.headers || (input instanceof Request ? input.headers : undefined));
 
-  // Attach CSRF token to all state-changing requests
-  const method = (init.method || 'GET').toUpperCase();
-  if (_csrfToken && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
-    headers.set('x-csrf-token', _csrfToken);
+  // Attach CSRF headers to all state-changing requests
+  const method = (init.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    headers.set('X-Requested-With', 'XMLHttpRequest');
+    if (_csrfToken) {
+      headers.set('x-csrf-token', _csrfToken);
+    }
   }
 
   const shouldAttachGuild = isTenantSensitiveRequest(input);
@@ -542,7 +563,7 @@ async function autoShowPendingMicroVerify() {
           <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:0.05em;">Amount (exact)</p>
           <div style="display:flex; align-items:center; gap:10px; background:rgba(0,0,0,0.3); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:12px 14px;">
             <span style="color:#fbbf24; font-size:1.2em; font-weight:700; font-family:monospace; flex:1;">${r.amount} SOL</span>
-            <button onclick="navigator.clipboard.writeText('${r.amount}'); showSuccess('Amount copied!');" style="background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 12px; cursor:pointer; font-size:0.8em;">Copy</button>
+            <button onclick="navigator.clipboard.writeText('${escapeJsString(r.amount)}'); showSuccess('Amount copied!');" style="background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 12px; cursor:pointer; font-size:0.8em;">Copy</button>
           </div>
         </div>
 
@@ -550,7 +571,7 @@ async function autoShowPendingMicroVerify() {
           <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:0.05em;">Community Proof Address</p>
           <div style="display:flex; align-items:center; gap:10px; background:rgba(0,0,0,0.3); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:12px 14px;">
             <span style="color:#c7d2fe; font-size:0.88em; font-family:monospace; flex:1; word-break:break-all;">${r.destinationWallet}</span>
-            <button onclick="navigator.clipboard.writeText('${r.destinationWallet}'); showSuccess('Address copied!');" style="background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 12px; cursor:pointer; font-size:0.8em;">Copy</button>
+            <button onclick="navigator.clipboard.writeText('${escapeJsString(r.destinationWallet)}'); showSuccess('Address copied!');" style="background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 12px; cursor:pointer; font-size:0.8em;">Copy</button>
           </div>
         </div>
 
@@ -795,7 +816,7 @@ async function verifyByMicroTx() {
             <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:0.05em;">Unique Proof Amount</p>
             <div style="display:flex; align-items:center; gap:10px; background:rgba(0,0,0,0.3); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:12px 14px;">
               <span id="microAmountDisplay" style="color:#fbbf24; font-size:1.2em; font-weight:700; font-family:monospace; flex:1;">${amount} SOL</span>
-              <button onclick="navigator.clipboard.writeText('${amount}'); showSuccess('Amount copied!');" style="background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 12px; cursor:pointer; font-size:0.8em; white-space:nowrap;">Copy</button>
+              <button onclick="navigator.clipboard.writeText('${escapeJsString(amount)}'); showSuccess('Amount copied!');" style="background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 12px; cursor:pointer; font-size:0.8em; white-space:nowrap;">Copy</button>
             </div>
           </div>
 
@@ -803,7 +824,7 @@ async function verifyByMicroTx() {
             <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:0.05em;">Community Proof Address</p>
             <div style="display:flex; align-items:center; gap:10px; background:rgba(0,0,0,0.3); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:12px 14px;">
               <span style="color:#c7d2fe; font-size:0.88em; font-family:monospace; flex:1; word-break:break-all;">${destinationWallet}</span>
-              <button onclick="navigator.clipboard.writeText('${destinationWallet}'); showSuccess('Address copied!');" style="background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 12px; cursor:pointer; font-size:0.8em; white-space:nowrap;">Copy</button>
+              <button onclick="navigator.clipboard.writeText('${escapeJsString(destinationWallet)}'); showSuccess('Address copied!');" style="background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 12px; cursor:pointer; font-size:0.8em; white-space:nowrap;">Copy</button>
             </div>
           </div>
 
@@ -1160,13 +1181,13 @@ function updateModuleVisibility() {
   const moduleNav = [
     { id: 'sidebarNavTreasury', key: 'wallettracker' },
     { id: 'sidebarNavTokenActivity', key: 'tokentracker' },
-    { id: 'sidebarNavSelfServe', key: 'selfseveroles' },
+    { id: 'sidebarNavSelfServe', key: 'selfserveroles' },
     { id: 'sidebarNavTicketing', key: 'ticketing' },
     { id: 'sidebarNavEngagement', key: 'engagement' },
     { id: 'sidebarNavHeist', key: 'heist' },
     { id: 'mobileNavTreasury', key: 'wallettracker' },
     { id: 'mobileNavTokenActivity', key: 'tokentracker' },
-    { id: 'mobileNavSelfServe', key: 'selfseveroles' },
+    { id: 'mobileNavSelfServe', key: 'selfserveroles' },
     { id: 'mobileNavTicketing', key: 'ticketing' },
     { id: 'mobileNavEngagement', key: 'engagement' },
     { id: 'mobileNavHeist', key: 'heist' },
@@ -1236,7 +1257,7 @@ function renderGeneralSection() {
           <div style="font-size:1.4em;font-weight:700;color:#e0e7ff;">${escapeHtml(name)}</div>
           <div style="color:var(--text-secondary);font-size:0.85em;display:flex;align-items:center;gap:6px;">
             ID: ${escapeHtml(activeGuildId)}
-            <button onclick="navigator.clipboard.writeText('${escapeHtml(activeGuildId)}');showSuccess('Server ID copied!')" style="background:none;border:1px solid rgba(99,102,241,0.2);border-radius:4px;color:var(--text-secondary);padding:2px 6px;cursor:pointer;font-size:0.8em;">Copy</button>
+            <button onclick="navigator.clipboard.writeText('${escapeJsString(activeGuildId)}');showSuccess('Server ID copied!')" style="background:none;border:1px solid rgba(99,102,241,0.2);border-radius:4px;color:var(--text-secondary);padding:2px 6px;cursor:pointer;font-size:0.8em;">Copy</button>
           </div>
         </div>
       </div>
@@ -1263,7 +1284,7 @@ function renderGeneralSection() {
     qaEl.innerHTML = modules
       .filter(m => state[m.key] !== false)
       .map(m => `
-        <button class="quick-action-tile" onclick="switchSection('${m.section}')">
+        <button class="quick-action-tile" onclick="switchSection('${escapeJsString(m.section)}')">
           <span class="qa-icon">${m.icon}</span>
           <span class="qa-label">${m.label}</span>
         </button>
@@ -1413,7 +1434,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     roleclaim: !!settings.moduleRoleClaimEnabled,
     minigames: minigamesEnabled,
     battle: minigamesEnabled,
-    selfseveroles: !!settings.moduleRoleClaimEnabled
+    selfserveroles: !!settings.moduleRoleClaimEnabled
   };
   window._tenantModuleState = moduleState;
 
@@ -1532,8 +1553,8 @@ function renderServerCard(server, { managed = true } = {}) {
     : `<div class="server-card__initials">${escapeHtml(initials)}</div>`;
 
   const onclick = managed
-    ? `onclick="setActiveGuild('${server.guildId}', { goToSettings: true })"`
-    : `onclick="openGuildInvite('${server.guildId}')"`;
+    ? `onclick="setActiveGuild('${escapeJsString(server.guildId)}', { goToSettings: true })"`
+    : `onclick="openGuildInvite('${escapeJsString(server.guildId)}')"`;
 
   const borderStyle = isActive ? 'border-color:rgba(16,185,129,0.4);background:rgba(16,185,129,0.08);' : '';
 
@@ -2003,7 +2024,7 @@ function renderProposals() {
         ${proposal.cost_indication ? ` • Cost: ${escapeHtml(proposal.cost_indication)}` : ''}
       </div>
       ${proposal.description ? `<p style="color: var(--text-secondary); margin-top: var(--space-3); line-height: 1.6;">${escapeHtml(proposal.description)}</p>` : ''}
-      ${proposal.status === 'draft' ? `<button onclick="submitProposalForReview('${escapeHtml(proposal.proposal_id)}')" style="margin-top:8px; padding:6px 14px; background:#6366f1; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Submit for Review</button>` : ''}
+      ${proposal.status === 'draft' ? `<button onclick="submitProposalForReview('${escapeJsString(proposal.proposal_id)}')" style="margin-top:8px; padding:6px 14px; background:#6366f1; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Submit for Review</button>` : ''}
     </div>
   `).join('') + '</div>';
 
@@ -2043,7 +2064,18 @@ async function loadActiveVotes() {
   }
   
   try {
-    const response = await fetch(`/api/public/v1/proposals/active?guildId=${encodeURIComponent(activeGuildId)}`, { credentials: 'include' });
+    const endpoint = buildPublicV1Url('/api/public/v1/proposals/active', { requireGuild: true });
+    if (!endpoint) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">🗳️</div>
+          <h4 class="empty-state-title">Select a Server</h4>
+          <p class="empty-state-message">Choose a server first to load active proposals for that community.</p>
+        </div>
+      `;
+      return;
+    }
+    const response = await fetch(endpoint, { credentials: 'include' });
     const data = await response.json();
     const proposals = data?.data?.proposals || data?.proposals || [];
     
@@ -2111,9 +2143,9 @@ async function loadActiveVotes() {
           </div>
           ${userData ? `
           <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
-            <button class="btn-success" onclick="castVote('${proposalId}','yes')" style="flex:1; min-width:80px;">👍 Yes</button>
-            <button class="btn-danger" onclick="castVote('${proposalId}','no')" style="flex:1; min-width:80px;">👎 No</button>
-            <button class="btn-secondary" onclick="castVote('${proposalId}','abstain')" style="flex:1; min-width:80px;">⏭️ Abstain</button>
+            <button class="btn-success" onclick="castVote('${escapeJsString(proposalId)}','yes')" style="flex:1; min-width:80px;">👍 Yes</button>
+            <button class="btn-danger" onclick="castVote('${escapeJsString(proposalId)}','no')" style="flex:1; min-width:80px;">👎 No</button>
+            <button class="btn-secondary" onclick="castVote('${escapeJsString(proposalId)}','abstain')" style="flex:1; min-width:80px;">⏭️ Abstain</button>
           </div>
           ` : ''}
         </div>
@@ -2185,12 +2217,12 @@ function renderWallets() {
       </div>
       <div class="wallet-actions">
         ${!wallet.is_favorite ? `
-          <button class="btn-secondary" onclick="setFavorite('${wallet.wallet_address}')">
+          <button class="btn-secondary" onclick="setFavorite('${escapeJsString(wallet.wallet_address)}')">
             <span>&#9733;</span>
             <span>Set Primary</span>
           </button>
         ` : ''}
-        <button class="btn-danger" onclick="confirmRemoveWallet('${wallet.wallet_address}')">
+        <button class="btn-danger" onclick="confirmRemoveWallet('${escapeJsString(wallet.wallet_address)}')">
           <span>&#128465;</span>
           <span>Remove</span>
         </button>
@@ -2315,7 +2347,19 @@ async function loadAvailableMissions() {
   const container = document.getElementById('availableMissions');
   
   try {
-    const response = await fetch('/api/public/v1/missions/active', { credentials: 'include' });
+    const endpoint = buildPublicV1Url('/api/public/v1/missions/active', { requireGuild: true });
+    if (!endpoint) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">🧭</div>
+          <h4 class="empty-state-title">Select a Server</h4>
+          <p class="empty-state-message">Pick your server first to view active missions.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const response = await fetch(endpoint, { credentials: 'include' });
     const data = await response.json();
     const missions = data?.data?.missions || data?.missions || [];
     
@@ -2391,7 +2435,7 @@ function switchSection(sectionName, options = {}) {
     'token-activity': 'tokentracker',
     heist: 'heist',
     battle: 'minigames',
-    'self-serve-roles': 'selfseveroles',
+    'self-serve-roles': 'selfserveroles',
     ticketing: 'ticketing',
     engagement: 'engagement'
   };
@@ -3145,6 +3189,17 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+function escapeJsString(value) {
+  return String(value ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '\\"')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/</g, '\\x3C')
+    .replace(/>/g, '\\x3E');
+}
+
 function formatDate(date) {
   if (!date || !(date instanceof Date) || isNaN(date)) {
     return 'Unknown date';
@@ -3391,7 +3446,7 @@ function renderSuperadminIdentityRows(users = []) {
     ].filter(Boolean).join(' ');
 
     return `
-      <button type="button" onclick="selectSuperadminIdentityUser('${escapeHtml(String(user.discordId || ''))}')" style="width:100%; text-align:left; padding:10px 12px; border:1px solid rgba(99,102,241,0.15); border-radius:10px; background:${selected ? 'rgba(99,102,241,0.16)' : 'rgba(14,23,44,0.45)'}; color:inherit; cursor:pointer;">
+      <button type="button" onclick="selectSuperadminIdentityUser('${escapeJsString(String(user.discordId || ''))}')" style="width:100%; text-align:left; padding:10px 12px; border:1px solid rgba(99,102,241,0.15); border-radius:10px; background:${selected ? 'rgba(99,102,241,0.16)' : 'rgba(14,23,44,0.45)'}; color:inherit; cursor:pointer;">
         <div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;">
           <div style="min-width:0;">
             <div style="color:#e0e7ff; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(user.username || user.discordId || 'Unknown')}</div>
@@ -3434,7 +3489,7 @@ function renderTenantRow(tenant) {
     : 'rgba(34,197,94,0.18)';
 
   return `
-    <button type="button" onclick="selectTenantGuild('${escapeHtml(tenant.guildId)}')" style="width:100%; text-align:left; display:grid; grid-template-columns:minmax(0,1.6fr) repeat(3,minmax(0,1fr)); gap:12px; align-items:center; padding:12px 14px; border:none; border-bottom:1px solid rgba(99,102,241,0.15); background:${selected ? 'rgba(99,102,241,0.16)' : 'transparent'}; color:inherit; cursor:pointer;">
+    <button type="button" onclick="selectTenantGuild('${escapeJsString(tenant.guildId)}')" style="width:100%; text-align:left; display:grid; grid-template-columns:minmax(0,1.6fr) repeat(3,minmax(0,1fr)); gap:12px; align-items:center; padding:12px 14px; border:none; border-bottom:1px solid rgba(99,102,241,0.15); background:${selected ? 'rgba(99,102,241,0.16)' : 'transparent'}; color:inherit; cursor:pointer;">
       <div style="min-width:0;">
         <div style="color:#e0e7ff; font-weight:600; word-break:break-word;">${escapeHtml(tenant.guildName || tenant.guildId)}</div>
         <div style="color:var(--text-secondary); font-size:0.8em; font-family:monospace; word-break:break-all;">${escapeHtml(tenant.guildId)}</div>
@@ -3748,6 +3803,18 @@ function renderTenantDetailPanel(tenant, tenantLimits = null) {
               <span>Support URL</span>
               <input id="tenantBrandSupportUrl" type="text" value="${escapeHtml(branding.support_url || '')}" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
             </label>
+            <label style="display:grid; gap:6px; color:#e0e7ff; font-size:0.9em;">
+              <span>Server avatar URL</span>
+              <input id="tenantBrandServerAvatarUrl" type="text" value="${escapeHtml(branding.bot_server_avatar_url || '')}" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
+            </label>
+            <label style="display:grid; gap:6px; color:#e0e7ff; font-size:0.9em;">
+              <span>Server banner URL</span>
+              <input id="tenantBrandServerBannerUrl" type="text" value="${escapeHtml(branding.bot_server_banner_url || '')}" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
+            </label>
+            <label style="display:grid; gap:6px; color:#e0e7ff; font-size:0.9em;">
+              <span>Server bio</span>
+              <textarea id="tenantBrandServerBio" rows="3" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; resize:vertical;">${escapeHtml(branding.bot_server_bio || '')}</textarea>
+            </label>
           </div>
         </div>
       </div>
@@ -3830,7 +3897,7 @@ async function loadSuperadminView() {
                   ${entry.addedBy ? `Added by ${escapeHtml(entry.addedBy)}` : 'Managed by environment'}
                 </div>
               </div>
-              <button class="btn-secondary" style="font-size:0.85em; padding:6px 12px; opacity:${removable ? 1 : 0.45};" ${removable ? `onclick="removeSuperadmin('${entry.userId}')"` : 'disabled'}>
+              <button class="btn-secondary" style="font-size:0.85em; padding:6px 12px; opacity:${removable ? 1 : 0.45};" ${removable ? `onclick="removeSuperadmin('${escapeJsString(entry.userId)}')"` : 'disabled'}>
                 ${removable ? 'Remove' : 'Protected'}
               </button>
             </div>
@@ -4156,7 +4223,7 @@ async function loadEraAssignments() {
             <div style="color:#e0e7ff; font-family:monospace; font-size:0.88em; word-break:break-all;">${escapeHtml(a.guild_name || a.guild_id)}<br><span style="color:var(--text-secondary); font-size:0.82em;">${escapeHtml(a.guild_id)}</span></div>
             <div style="color:#c9d6ff;">${escapeHtml(a.era_key)}</div>
             <div style="color:var(--text-secondary); font-size:0.88em;">${escapeHtml(a.assigned_by || '—')}</div>
-            <button class="btn-secondary" style="font-size:0.85em; padding:6px 12px;" onclick="revokeEra('${escapeHtml(a.guild_id)}', '${escapeHtml(a.era_key)}')">Revoke</button>
+            <button class="btn-secondary" style="font-size:0.85em; padding:6px 12px;" onclick="revokeEra('${escapeJsString(a.guild_id)}', '${escapeJsString(a.era_key)}')">Revoke</button>
           </div>
         `).join('');
       }
@@ -4221,7 +4288,7 @@ function renderSuperadminIdentityDetail(profile) {
             ${wallet.favoriteWallet ? '<span style="padding:2px 7px;border-radius:999px;background:rgba(251,191,36,0.18);color:#fde68a;font-size:0.72em;">Favorite</span>' : ''}
           </div>
         </div>
-        <button class="btn-secondary" onclick="removeSuperadminIdentityWallet('${escapeHtml(user.discordId)}', '${escapeHtml(wallet.walletAddress || '')}')" style="padding:6px 10px; font-size:0.82em;">Unlink</button>
+        <button class="btn-secondary" onclick="removeSuperadminIdentityWallet('${escapeJsString(user.discordId)}', '${escapeJsString(wallet.walletAddress || '')}')" style="padding:6px 10px; font-size:0.82em;">Unlink</button>
       </div>
     `).join('')
     : `<div style="padding:10px; text-align:center; color:var(--text-secondary); border:1px dashed rgba(99,102,241,0.18); border-radius:10px;">No wallets linked yet.</div>`;
@@ -4984,7 +5051,10 @@ async function saveTenantBranding() {
     brand_emoji: document.getElementById('tenantBrandEmoji')?.value || '',
     brand_color: document.getElementById('tenantBrandColor')?.value || '',
     logo_url: document.getElementById('tenantBrandLogoUrl')?.value || '',
-    support_url: document.getElementById('tenantBrandSupportUrl')?.value || ''
+    support_url: document.getElementById('tenantBrandSupportUrl')?.value || '',
+    bot_server_avatar_url: document.getElementById('tenantBrandServerAvatarUrl')?.value || '',
+    bot_server_banner_url: document.getElementById('tenantBrandServerBannerUrl')?.value || '',
+    bot_server_bio: document.getElementById('tenantBrandServerBio')?.value || ''
   };
 
   btn.disabled = true;
@@ -5369,17 +5439,17 @@ async function loadAdminProposals() {
         let actions = '';
         if (status === 'pending_review') {
           actions = `<div style="display:flex; gap:8px; margin-top:8px;">
-            <button onclick="adminProposalAction('${p.proposal_id}', 'approve')" style="padding:6px 14px; background:#10b981; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Approve</button>
-            <button onclick="adminProposalHold('${p.proposal_id}')" style="padding:6px 14px; background:#f59e0b; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Hold</button>
+            <button onclick="adminProposalAction('${escapeJsString(p.proposal_id)}', 'approve')" style="padding:6px 14px; background:#10b981; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Approve</button>
+            <button onclick="adminProposalHold('${escapeJsString(p.proposal_id)}')" style="padding:6px 14px; background:#f59e0b; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Hold</button>
           </div>`;
         } else if (status === 'on_hold') {
           actions = `<div style="display:flex; gap:8px; margin-top:8px;">
-            <button onclick="adminProposalAction('${p.proposal_id}', 'approve')" style="padding:6px 14px; background:#10b981; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Approve</button>
+            <button onclick="adminProposalAction('${escapeJsString(p.proposal_id)}', 'approve')" style="padding:6px 14px; background:#10b981; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Approve</button>
             ${p.on_hold_reason ? `<span style="color:var(--text-secondary); font-size:0.85em; align-self:center;">Reason: ${escapeHtml(p.on_hold_reason)}</span>` : ''}
           </div>`;
         } else if (status === 'supporting') {
           actions = `<div style="display:flex; gap:8px; margin-top:8px;">
-            <button onclick="adminProposalAction('${p.proposal_id}', 'promote')" style="padding:6px 14px; background:#6366f1; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Promote to Voting</button>
+            <button onclick="adminProposalAction('${escapeJsString(p.proposal_id)}', 'promote')" style="padding:6px 14px; background:#6366f1; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Promote to Voting</button>
           </div>`;
         } else if (status === 'voting') {
           const totalVoted = (p.yes_vp || 0) + (p.no_vp || 0) + (p.abstain_vp || 0);
@@ -5391,8 +5461,8 @@ async function loadAdminProposals() {
               ${p.paused ? ' | <span style="color:#ef4444;">PAUSED</span>' : ''}
             </div>
             <div style="display:flex; gap:8px;">
-              <button onclick="adminProposalAction('${p.proposal_id}', 'conclude')" style="padding:6px 14px; background:#ef4444; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Conclude</button>
-              <button onclick="adminProposalAction('${p.proposal_id}', 'pause')" style="padding:6px 14px; background:#f59e0b; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">${p.paused ? 'Unpause' : 'Pause'}</button>
+              <button onclick="adminProposalAction('${escapeJsString(p.proposal_id)}', 'conclude')" style="padding:6px 14px; background:#ef4444; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Conclude</button>
+              <button onclick="adminProposalAction('${escapeJsString(p.proposal_id)}', 'pause')" style="padding:6px 14px; background:#f59e0b; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">${p.paused ? 'Unpause' : 'Pause'}</button>
             </div>
           </div>`;
         } else if (status === 'vetoed') {
@@ -5780,9 +5850,15 @@ async function loadAdminAnalyticsView() {
       fetch('/api/admin/users', { credentials: 'include' }),
       fetch('/api/admin/proposals', { credentials: 'include' }),
       fetch('/api/admin/missions', { credentials: 'include' }),
-      fetch('/api/public/v1/treasury').catch(() => null),
-      fetch('/api/public/v1/leaderboard').catch(() => null),
-      fetch('/api/public/v1/stats').catch(() => null)
+      fetch(buildPublicV1Url('/api/public/v1/treasury') || '/api/public/v1/treasury').catch(() => null),
+      (buildPublicV1Url('/api/public/v1/leaderboard', { requireGuild: true })
+        ? fetch(buildPublicV1Url('/api/public/v1/leaderboard', { requireGuild: true }))
+        : Promise.resolve(null)
+      ).catch(() => null),
+      (buildPublicV1Url('/api/public/v1/stats', { requireGuild: true })
+        ? fetch(buildPublicV1Url('/api/public/v1/stats', { requireGuild: true }))
+        : Promise.resolve(null)
+      ).catch(() => null)
     ]);
 
     const usersData = await usersRes.json();
@@ -6842,7 +6918,8 @@ function showBrandingHelp(anchorEl, text) {
 
 function brandHelp(label, helpText) {
   const safe = escapeHtml(helpText);
-  return `<label style="display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;">${label} <button type="button" onclick="showBrandingHelp(this,'${safe.replace(/'/g, "\\'")}')" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:999px;background:rgba(99,102,241,0.28);color:#e0e7ff;font-size:0.72em;cursor:pointer;vertical-align:middle;border:none;padding:0;">?</button></label>`;
+  const safeLabel = escapeHtml(label);
+  return `<label style="display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;">${safeLabel} <button type="button" onclick="showBrandingHelp(this,'${escapeJsString(safe)}')" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:999px;background:rgba(99,102,241,0.28);color:#e0e7ff;font-size:0.72em;cursor:pointer;vertical-align:middle;border:none;padding:0;">?</button></label>`;
 }
 
 async function loadBrandingSettingsView() {
@@ -6858,6 +6935,7 @@ async function loadBrandingSettingsView() {
     const res = await fetch('/api/admin/branding', { credentials: 'include', headers: buildTenantRequestHeaders() });
     const data = await res.json();
     const b = data.branding || {};
+    const profile = data.serverProfile || {};
 
     pane.innerHTML = `
       <div style="${cardStyle}">
@@ -6884,6 +6962,30 @@ async function loadBrandingSettingsView() {
           <div style="grid-column:1 / span 2;">
             ${brandHelp('Logo URL', 'Logo image used in branded embeds where applicable. Defaults to tenant server icon when empty.')}
             <input id="br_logo_url" type="text" value="${escapeHtml(b.logo_url || b.icon_url || '')}" style="${fieldInput}" placeholder="Defaults to server icon if empty">
+          </div>
+          <div style="grid-column:1 / span 2; margin-top:4px; padding:10px; border-radius:8px; border:1px solid rgba(99,102,241,0.15); background:rgba(10,16,30,0.35);">
+            <div style="color:#c9d6ff; font-weight:600; margin-bottom:8px;">Discord Server Profile (Bot)</div>
+            <div style="color:#94a3b8; font-size:0.8em; margin-bottom:10px;">These fields control the bot profile shown in this server only. Applied with Discord guild profile settings.</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div>
+                ${brandHelp('Server Avatar URL', 'Guild-specific bot avatar (optional). Leave empty to keep current/default avatar.')}
+                <input id="br_bot_server_avatar_url" type="text" value="${escapeHtml(b.bot_server_avatar_url || '')}" style="${fieldInput}" placeholder="https://...">
+              </div>
+              <div>
+                ${brandHelp('Server Banner URL', 'Guild-specific bot banner (optional). Leave empty to keep current/default banner.')}
+                <input id="br_bot_server_banner_url" type="text" value="${escapeHtml(b.bot_server_banner_url || '')}" style="${fieldInput}" placeholder="https://...">
+              </div>
+              <div style="grid-column:1 / span 2;">
+                ${brandHelp('Server Bio', 'Guild-specific bot profile bio (optional).')}
+                <textarea id="br_bot_server_bio" rows="3" style="${fieldInput};min-height:82px;resize:vertical;" placeholder="About this bot in your server...">${escapeHtml(b.bot_server_bio || '')}</textarea>
+              </div>
+            </div>
+            <div style="margin-top:8px;color:#94a3b8;font-size:0.78em;">
+              Current profile:
+              Nickname <strong style="color:#cbd5e1;">${escapeHtml(profile.nickname || 'default')}</strong> ·
+              Avatar <strong style="color:#cbd5e1;">${profile.avatar_url ? 'custom' : 'default'}</strong> ·
+              Banner <strong style="color:#cbd5e1;">${profile.banner_url ? 'custom' : 'default'}</strong>
+            </div>
           </div>
         </div>
 
@@ -6969,6 +7071,9 @@ async function saveBrandingSettingsView() {
       display_name: (document.getElementById('br_bot_display_name')?.value || '').trim(),
       primary_color: (document.getElementById('br_brand_color')?.value || '').trim(),
       icon_url: (document.getElementById('br_logo_url')?.value || '').trim(),
+      bot_server_avatar_url: (document.getElementById('br_bot_server_avatar_url')?.value || '').trim(),
+      bot_server_banner_url: (document.getElementById('br_bot_server_banner_url')?.value || '').trim(),
+      bot_server_bio: (document.getElementById('br_bot_server_bio')?.value || '').trim(),
       footer_text: (document.getElementById('br_footer_text')?.value || '').trim(),
       ticketing_color: (document.getElementById('br_ticketing_color')?.value || '').trim(),
       selfserve_color: (document.getElementById('br_selfserve_color')?.value || '').trim(),
@@ -7180,7 +7285,7 @@ async function loadVotingPowerView() {
       const rows = mappings.map(m => `<tr style="border-bottom:1px solid rgba(99,102,241,0.08);">
         <td style="padding:10px 12px;color:#e0e7ff;">${m.role_name || m.role_id}</td>
         <td style="padding:10px 12px;color:#a5b4fc;font-weight:600;">${m.voting_power}</td>
-        <td style="padding:10px 12px;"><button onclick="removeVPMapping('${m.role_id}')" style="padding:4px 12px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:6px;color:#fca5a5;font-size:0.82em;cursor:pointer;">Remove</button></td>
+        <td style="padding:10px 12px;"><button onclick="removeVPMapping('${escapeJsString(m.role_id)}')" style="padding:4px 12px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:6px;color:#fca5a5;font-size:0.82em;cursor:pointer;">Remove</button></td>
       </tr>`).join('');
       tableHTML = `<div style="overflow-x:auto;border-radius:10px;border:1px solid rgba(99,102,241,0.12);">
         <table style="width:100%;border-collapse:collapse;">
@@ -7389,6 +7494,14 @@ async function loadAdminRoles() {
       html += `<div style="padding:24px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.15); border-radius:10px; color:var(--text-secondary); text-align:center;">No verification rules yet. Click <strong>+ Add Rule</strong> to create one.</div>`;
     } else {
       const truncId = (id) => id && id.length > 16 ? id.slice(0, 8) + '...' + id.slice(-4) : (id || '-');
+      const ruleNeverRemove = (rule) => {
+        const raw = rule?.neverRemove ?? rule?.never_remove ?? rule?.keepOnLoss ?? rule?.keep_on_loss;
+        if (raw === null || raw === undefined) return false;
+        if (typeof raw === 'boolean') return raw;
+        if (typeof raw === 'number') return raw === 1;
+        if (typeof raw === 'string') return ['1', 'true', 'yes', 'on'].includes(raw.trim().toLowerCase());
+        return false;
+      };
       const resolveRole = (roleId) => {
         if (!roleId) return '<span style="color:var(--text-muted);">Not set</span>';
         const role = (discordRolesCache || []).find(r => r.id === roleId);
@@ -7434,6 +7547,9 @@ async function loadAdminRoles() {
             : Number(rule.maxAmount).toLocaleString(undefined, { maximumFractionDigits: 6 });
           details = `Balance: ${min} -> ${max}${rule.enabled === false ? ' (disabled)' : ''}`;
         }
+        if (ruleNeverRemove(rule)) {
+          details += ' | Keep role on loss';
+        }
         const editFn = isCollection ? `editTier(${rule._idx})` : isTrait ? `editTraitRule(${rule._idx})` : `editTokenRule(${rule._idx})`;
         const deleteFn = isCollection ? `deleteTier(${rule._idx})` : isTrait ? `deleteTraitRule(${rule._idx})` : `deleteTokenRule(${rule._idx})`;
 
@@ -7441,7 +7557,7 @@ async function loadAdminRoles() {
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15);">${badge}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#e0e7ff; font-weight:600;">${ruleName}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); font-family:monospace; font-size:0.82em; color:#a5b4fc;" title="${escapeHtml(colId)}">
-            <span style="cursor:pointer;" onclick="navigator.clipboard.writeText('${escapeHtml(colId)}');showSuccess('Copied!')">${escapeHtml(truncId(colId))}</span>
+            <span style="cursor:pointer;" onclick="navigator.clipboard.writeText('${escapeJsString(colId)}');showSuccess('Copied!')">${escapeHtml(truncId(colId))}</span>
           </td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#93c5fd; font-size:0.85em;">${resolveRole(roleId)}</td>
           <td style="padding:10px; border-bottom:1px solid rgba(99,102,241,0.15); color:var(--text-secondary); font-size:0.85em;">${details}</td>
@@ -7522,6 +7638,15 @@ function _ensureAddRuleModal() {
         <div class="form-group" style="margin-bottom:14px;">
           <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Discord Role <span style="color:#f87171;">*</span></label>
           ${roleSelectHTML('ruleRoleId', '')}
+        </div>
+        <div class="form-group" style="margin-bottom:14px;">
+          <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;font-weight:600;cursor:pointer;">
+            <input type="checkbox" id="ruleNeverRemove">
+            Never remove this role automatically
+          </label>
+          <div style="margin-top:6px;color:var(--text-secondary);font-size:0.8em;">
+            Keep this role even when the member no longer matches this rule.
+          </div>
         </div>
         <div id="collectionFields">
           <div class="form-group" style="margin-bottom:14px;">
@@ -7660,6 +7785,7 @@ function openAddRuleModal(editData = null) {
   document.getElementById('ruleTokenMinAmount').value = '0';
   document.getElementById('ruleTokenMaxAmount').value = '';
   document.getElementById('ruleTokenEnabled').checked = true;
+  document.getElementById('ruleNeverRemove').checked = false;
   document.getElementById('traitValueTags').innerHTML = '';
   document.getElementById('traitValueInput').value = '';
   document.getElementById('ruleTraitValues').value = '';
@@ -7675,6 +7801,10 @@ function openAddRuleModal(editData = null) {
 
   // Populate edit data
   if (editData) {
+    const neverRemoveRaw = editData.neverRemove ?? editData.never_remove ?? editData.keepOnLoss ?? editData.keep_on_loss;
+    const normalizedNeverRemove = String(neverRemoveRaw ?? '').trim().toLowerCase();
+    const neverRemove = neverRemoveRaw === true || neverRemoveRaw === 1 || ['true', '1', 'yes', 'on'].includes(normalizedNeverRemove);
+    document.getElementById('ruleNeverRemove').checked = !!neverRemove;
     document.getElementById('ruleRoleId').value = editData.roleId || '';
     document.getElementById('addRuleModalTitle').textContent = 'Edit Verification Rule';
 
@@ -7715,6 +7845,7 @@ function closeAddRuleModal() {
 async function saveRule() {
   const selectedType = document.querySelector('input[name="ruleType"]:checked')?.value || 'collection';
   const roleId = document.getElementById('ruleRoleId').value;
+  const neverRemove = !!document.getElementById('ruleNeverRemove')?.checked;
   if (!roleId) { showError('Discord Role is required.'); return; }
 
   const btn = document.getElementById('saveRuleBtn');
@@ -7737,7 +7868,7 @@ async function saveRule() {
         const response = await fetch(`/api/admin/roles/tokens/${encodeURIComponent(existing.id)}`, {
           method: 'PUT', credentials: 'include',
           headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
-          body: JSON.stringify({ tokenMint, tokenSymbol: tokenSymbol || null, minAmount, maxAmount, roleId, enabled })
+          body: JSON.stringify({ tokenMint, tokenSymbol: tokenSymbol || null, minAmount, maxAmount, roleId, enabled, neverRemove })
         });
         const data = await response.json();
         if (!data.success) throw new Error(data.message || 'Failed to update token rule');
@@ -7745,7 +7876,7 @@ async function saveRule() {
         const response = await fetch('/api/admin/roles/tokens', {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
-          body: JSON.stringify({ tokenMint, tokenSymbol: tokenSymbol || null, minAmount, maxAmount, roleId, enabled })
+          body: JSON.stringify({ tokenMint, tokenSymbol: tokenSymbol || null, minAmount, maxAmount, roleId, enabled, neverRemove })
         });
         const data = await response.json();
         if (!data.success) throw new Error(data.message || 'Failed to create token rule');
@@ -7766,7 +7897,7 @@ async function saveRule() {
         const response = await fetch(`/api/admin/roles/traits/${encodeURIComponent(origType)}/${encodeURIComponent(origValue)}`, {
           method: 'PUT', credentials: 'include',
           headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
-          body: JSON.stringify({ traitType, traitValue, traitValues, collectionId, roleId, description })
+          body: JSON.stringify({ traitType, traitValue, traitValues, collectionId, roleId, description, neverRemove })
         });
         const data = await response.json();
         if (!data.success) throw new Error(data.message || 'Failed to update trait rule');
@@ -7774,7 +7905,7 @@ async function saveRule() {
         const response = await fetch('/api/admin/roles/traits', {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
-          body: JSON.stringify({ traitType, traitValue, traitValues, collectionId, roleId, description })
+          body: JSON.stringify({ traitType, traitValue, traitValues, collectionId, roleId, description, neverRemove })
         });
         const data = await response.json();
         if (!data.success) throw new Error(data.message || 'Failed to create trait rule');
@@ -7792,7 +7923,7 @@ async function saveRule() {
         const response = await fetch(`/api/admin/roles/tiers/${encodeURIComponent(existing.name)}`, {
           method: 'PUT', credentials: 'include',
           headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
-          body: JSON.stringify({ name, minNFTs, maxNFTs, votingPower: 1, collectionId, roleId })
+          body: JSON.stringify({ name, minNFTs, maxNFTs, votingPower: 1, collectionId, roleId, neverRemove })
         });
         const data = await response.json();
         if (!data.success) throw new Error(data.message || 'Failed to update tier');
@@ -7800,7 +7931,7 @@ async function saveRule() {
         const response = await fetch('/api/admin/roles/tiers', {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
-          body: JSON.stringify({ name, minNFTs, maxNFTs, votingPower: 1, collectionId, roleId })
+          body: JSON.stringify({ name, minNFTs, maxNFTs, votingPower: 1, collectionId, roleId, neverRemove })
         });
         const data = await response.json();
         if (!data.success) throw new Error(data.message || 'Failed to create tier');
@@ -8091,6 +8222,9 @@ function renderAdminUsersTable(users) {
     const nfts = u.total_nfts ?? u.totalNFTs ?? 0;
     const name = u.username || u.discord_username || 'Unknown';
     const did = u.discord_id || u.discordId || '—';
+    const safeDid = String(did || '');
+    const safeNameEncoded = encodeURIComponent(String(name || 'Unknown'));
+
     return `
       <tr>
         <td style="padding:8px; border-bottom:1px solid var(--border-default);">${escapeHtml(name)}</td>
@@ -8099,8 +8233,8 @@ function renderAdminUsersTable(users) {
         <td style="padding:8px; border-bottom:1px solid var(--border-default);">${nfts}</td>
         <td style="padding:8px; border-bottom:1px solid var(--border-default);">${vp}</td>
         <td style="padding:8px; border-bottom:1px solid var(--border-default); text-align:right; white-space:nowrap;">
-          <button onclick="viewUserDetails('${escapeHtml(String(did))}')" style="width:28px; height:28px; background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.35); border-radius:6px; cursor:pointer; color:#818cf8; font-size:0.85em;" title="View Details">👁️</button>
-          <button onclick="confirmRemoveUser('${escapeHtml(String(did))}', '${escapeHtml(name)}')" style="width:28px; height:28px; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.35); border-radius:6px; cursor:pointer; color:#fca5a5; font-size:0.85em; margin-left:4px;" title="Remove User">🗑️</button>
+          <button class="admin-user-detail-btn" data-discord-id="${escapeHtml(safeDid)}" style="width:32px; height:28px; background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.35); border-radius:6px; cursor:pointer; color:#818cf8; font-size:0.75em;" title="View Details">View</button>
+          <button class="admin-user-remove-btn" data-discord-id="${escapeHtml(safeDid)}" data-username-enc="${escapeHtml(safeNameEncoded)}" style="width:32px; height:28px; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.35); border-radius:6px; cursor:pointer; color:#fca5a5; font-size:0.75em; margin-left:4px;" title="Remove User">Del</button>
         </td>
       </tr>
     `;
@@ -8124,6 +8258,24 @@ function renderAdminUsersTable(users) {
       </table>
     </div>
   `;
+
+  content.querySelectorAll('.admin-user-detail-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const discordId = String(btn.getAttribute('data-discord-id') || '').trim();
+      if (!discordId) return;
+      viewUserDetails(discordId);
+    });
+  });
+
+  content.querySelectorAll('.admin-user-remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const discordId = String(btn.getAttribute('data-discord-id') || '').trim();
+      if (!discordId) return;
+      const encodedName = String(btn.getAttribute('data-username-enc') || '').trim();
+      const username = encodedName ? decodeURIComponent(encodedName) : 'User';
+      confirmRemoveUser(discordId, username);
+    });
+  });
 }
 
 async function viewUserDetails(discordId) {
@@ -8322,7 +8474,11 @@ async function loadNFTActivityView() {
   try {
     const activityRes = await (isAdmin
       ? fetch('/api/admin/nft-activity/events?limit=20', { credentials: 'include', headers: buildTenantRequestHeaders() })
-      : fetch('/api/public/v1/nft/activity?limit=20', { credentials: 'include' })
+      : (() => {
+          const endpoint = buildPublicV1Url('/api/public/v1/nft/activity?limit=20', { requireGuild: true });
+          if (!endpoint) return Promise.resolve(null);
+          return fetch(endpoint, { credentials: 'include' });
+        })()
     ).catch(() => null);
 
     const activityData = activityRes ? await activityRes.json() : {};
@@ -9205,7 +9361,7 @@ async function loadSelfServeRolesPublic() {
     }
     container.innerHTML = panels.map(p => {
       const roles = (p.roles || []).filter(r => r.enabled !== 0);
-      const buttons = roles.map(r => `<button class="btn-secondary" onclick="toggleWebClaimRole(${p.id}, '${escapeHtml(r.role_id)}', this)" style="font-size:0.85em;padding:8px 12px;">${escapeHtml(r.label || r.role_id)}</button>`).join(' ');
+      const buttons = roles.map(r => `<button class="btn-secondary" onclick="toggleWebClaimRole(${p.id}, '${escapeJsString(r.role_id)}', this)" style="font-size:0.85em;padding:8px 12px;">${escapeHtml(r.label || r.role_id)}</button>`).join(' ');
       return `
         <div style="padding:14px;border:1px solid rgba(99,102,241,0.2);border-radius:10px;background:rgba(14,23,44,0.5);margin-bottom:12px;">
           <div style="font-weight:700;color:#e0e7ff;margin-bottom:4px;">${escapeHtml(p.title || 'Role Panel')}</div>
@@ -9706,7 +9862,7 @@ async function saveCategoryFromModal() {
     pingRoleIds,
     templateFields
   };
-  const isEdit = window._catEditId != null;
+  const isEdit = window._catEditId !== null && window._catEditId !== undefined;
   const url = isEdit ? `/api/admin/tickets/categories/${window._catEditId}` : '/api/admin/tickets/categories';
   const method = isEdit ? 'PUT' : 'POST';
 
@@ -10122,7 +10278,7 @@ function updatePlanPrices() {
         <div class="plan-cta">
           <button class="${plan.popular ? 'btn-primary' : 'btn-secondary'}" style="width:100%;${plan.popular ? '' : `border-color:${accentColor}33;color:${accentColor};`}"
             ${plan.ctaDisabled ? 'disabled' : ''}
-            onclick="handlePlanCta('${plan.ctaAction || ''}')">
+            onclick="handlePlanCta('${escapeJsString(plan.ctaAction || '')}')">
             ${escapeHtml(plan.cta)}
           </button>
         </div>
@@ -10222,14 +10378,14 @@ async function loadCurrentPlan() {
 
     const actionButtons = [];
     if (data?.billing?.manageUrl) {
-      actionButtons.push(`<button class="btn-secondary" onclick="openExternalPlanUrl('${encodeURIComponent(data.billing.manageUrl)}')">Manage Subscription</button>`);
+      actionButtons.push(`<button class="btn-secondary" onclick="openExternalPlanUrl('${escapeJsString(encodeURIComponent(data.billing.manageUrl))}')">Manage Subscription</button>`);
     }
     renewalOptions.slice(0, 2).forEach(option => {
       if (!option?.url) return;
-      actionButtons.push(`<button class="btn-primary" onclick="openExternalPlanUrl('${encodeURIComponent(option.url)}')">${escapeHtml(option.label || 'Renew')}</button>`);
+      actionButtons.push(`<button class="btn-primary" onclick="openExternalPlanUrl('${escapeJsString(encodeURIComponent(option.url))}')">${escapeHtml(option.label || 'Renew')}</button>`);
     });
     if (data?.renewal?.supportUrl) {
-      actionButtons.push(`<button class="btn-secondary" onclick="openExternalPlanUrl('${encodeURIComponent(data.renewal.supportUrl)}')">Contact Support</button>`);
+      actionButtons.push(`<button class="btn-secondary" onclick="openExternalPlanUrl('${escapeJsString(encodeURIComponent(data.renewal.supportUrl))}')">Contact Support</button>`);
     }
 
     content.innerHTML = `
@@ -10517,3 +10673,6 @@ async function saveEngagementConfigFromSettings() {
     else showError(data.message || 'Failed to save.');
   } catch (e) { showError('Error saving engagement settings.'); }
 }
+
+
+

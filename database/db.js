@@ -1,4 +1,5 @@
 const Database = require('better-sqlite3');
+const fs = require('fs');
 const path = require('path');
 const logger = require('../utils/logger');
 
@@ -9,6 +10,7 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
 const LEGACY_BASELINE_MIGRATION_VERSION = 1;
+const FILE_MIGRATIONS_DIR = path.join(__dirname, 'migrations');
 const STRUCTURED_MIGRATIONS = Object.freeze([
   {
     version: 2,
@@ -45,6 +47,30 @@ const STRUCTURED_MIGRATIONS = Object.freeze([
   }
 ]);
 
+const REQUIRED_SCHEMA = Object.freeze({
+  users: ['discord_id', 'total_tokens', 'wallet_alert_identity_opt_out'],
+  wallets: ['discord_id', 'wallet_address', 'primary_wallet', 'is_favorite'],
+  user_tenant_memberships: ['discord_id', 'guild_id', 'source', 'last_verified_at', 'updated_at'],
+  micro_verify_requests: ['discord_id', 'guild_id', 'expected_amount', 'destination_wallet', 'status', 'expires_at'],
+  tickets: ['guild_id', 'ticket_number', 'last_activity_at', 'inactive_warning_sent_at'],
+  ticket_categories: ['guild_id', 'handler_role_ids', 'ping_role_ids'],
+  ticket_panels: ['guild_id'],
+  ticket_guild_settings: ['guild_id', 'channel_name_template'],
+  proposals: ['proposal_id', 'status', 'guild_id', 'paused'],
+  tenant_verification_settings: ['tenant_id', 'base_verified_role_id'],
+  tenant_branding: ['tenant_id', 'bot_display_name', 'bot_server_avatar_url', 'bot_server_banner_url', 'bot_server_bio'],
+  tenant_limits: ['tenant_id', 'mock_data_enabled'],
+  tenant_modules: ['tenant_id', 'module_key', 'created_at', 'updated_at'],
+  tenant_billing: ['tenant_id', 'subscription_status', 'current_period_end', 'updated_at'],
+  token_role_rules: ['guild_id', 'token_mint', 'role_id', 'enabled', 'never_remove'],
+  tenant_role_configs: ['guild_id', 'tiers_json', 'traits_json'],
+  nft_tracked_collections: ['guild_id', 'collection_address', 'track_bid'],
+  tracked_tokens: ['guild_id', 'alert_channel_ids'],
+  tracked_wallets: ['guild_id', 'wallet_address', 'token_last_signature'],
+  tracked_token_webhook_retry_queue: ['signature', 'attempt_count', 'next_attempt_at', 'last_reason', 'last_error'],
+  nft_activity_alert_configs: ['guild_id', 'enabled', 'event_types', 'min_sol'],
+});
+
 function ensureSchemaMigrationsTable() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -68,10 +94,52 @@ function recordSchemaMigration(version, name) {
   `).run(Number(version), String(name || '').trim() || `migration_${version}`);
 }
 
+function loadFileMigrations() {
+  if (!fs.existsSync(FILE_MIGRATIONS_DIR)) return [];
+
+  const files = fs.readdirSync(FILE_MIGRATIONS_DIR)
+    .filter(file => /\.js$/i.test(file))
+    .sort((a, b) => a.localeCompare(b, 'en'));
+
+  const migrations = [];
+  for (const fileName of files) {
+    const fullPath = path.join(FILE_MIGRATIONS_DIR, fileName);
+    try {
+      const migrationModule = require(fullPath);
+      const migration = migrationModule && migrationModule.default ? migrationModule.default : migrationModule;
+      const version = Number(migration?.version);
+      const up = migration?.up;
+      if (!Number.isFinite(version) || version <= 0 || typeof up !== 'function') {
+        continue;
+      }
+      migrations.push({
+        version,
+        name: String(migration.name || fileName).trim() || fileName,
+        up: () => up({ db, logger }),
+      });
+    } catch (error) {
+      logger.error(`[DB] Failed to load migration file ${fileName}:`, error);
+      throw error;
+    }
+  }
+
+  return migrations;
+}
+
 function applyStructuredMigrations() {
   ensureSchemaMigrationsTable();
   const applied = getAppliedMigrationVersions();
-  const ordered = [...STRUCTURED_MIGRATIONS].sort((a, b) => a.version - b.version);
+  const ordered = [...STRUCTURED_MIGRATIONS, ...loadFileMigrations()]
+    .sort((a, b) => a.version - b.version);
+  const seenVersions = new Set();
+  for (const migration of ordered) {
+    const version = Number(migration?.version);
+    if (!Number.isFinite(version) || version <= 0) continue;
+    if (seenVersions.has(version)) {
+      throw new Error(`[DB] Duplicate migration version detected: ${version}`);
+    }
+    seenVersions.add(version);
+  }
 
   for (const migration of ordered) {
     const version = Number(migration.version);
@@ -89,6 +157,40 @@ function applyStructuredMigrations() {
 
     logger.log(`[DB] Applied schema migration v${version}: ${migrationName}`);
   }
+}
+
+function getTableColumns(tableName) {
+  try {
+    const rows = db.prepare(`PRAGMA table_info(${tableName})`).all();
+    return new Set(rows.map(row => String(row?.name || '').toLowerCase()).filter(Boolean));
+  } catch (_error) {
+    return new Set();
+  }
+}
+
+function validateRequiredSchema({ strict = true } = {}) {
+  const missingByTable = [];
+  for (const [tableName, requiredColumns] of Object.entries(REQUIRED_SCHEMA)) {
+    const actualColumns = getTableColumns(tableName);
+    const missing = (requiredColumns || [])
+      .map(column => String(column || '').toLowerCase())
+      .filter(column => column && !actualColumns.has(column));
+    if (missing.length > 0) {
+      missingByTable.push({ tableName, missing });
+    }
+  }
+
+  if (missingByTable.length === 0) return { valid: true, missing: [] };
+
+  const summary = missingByTable
+    .map(entry => `${entry.tableName}: ${entry.missing.join(', ')}`)
+    .join(' | ');
+  const message = `[DB] Required schema columns missing: ${summary}`;
+  if (strict) {
+    throw new Error(message);
+  }
+  logger.warn(message);
+  return { valid: false, missing: missingByTable };
 }
 
 function initDatabase() {
@@ -494,6 +596,7 @@ function initDatabase() {
       tenant_id INTEGER NOT NULL UNIQUE,
       og_role_id TEXT,
       og_role_limit INTEGER DEFAULT 0,
+      base_verified_role_id TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
@@ -503,6 +606,9 @@ function initDatabase() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tenant_id INTEGER NOT NULL UNIQUE,
       bot_display_name TEXT,
+      bot_server_avatar_url TEXT,
+      bot_server_banner_url TEXT,
+      bot_server_bio TEXT,
       brand_emoji TEXT,
       brand_color TEXT,
       display_name TEXT,
@@ -649,6 +755,7 @@ function initDatabase() {
     'ALTER TABLE tickets ADD COLUMN guild_id TEXT DEFAULT ""',
     'ALTER TABLE tenant_verification_settings ADD COLUMN og_role_id TEXT',
     'ALTER TABLE tenant_verification_settings ADD COLUMN og_role_limit INTEGER DEFAULT 0',
+    'ALTER TABLE tenant_verification_settings ADD COLUMN base_verified_role_id TEXT',
     'ALTER TABLE tenant_branding ADD COLUMN footer_text TEXT',
     'ALTER TABLE tenant_branding ADD COLUMN ticketing_color TEXT',
     'ALTER TABLE tenant_branding ADD COLUMN selfserve_color TEXT',
@@ -1220,6 +1327,7 @@ function initDatabase() {
       max_amount REAL,
       role_id TEXT NOT NULL,
       enabled INTEGER DEFAULT 1,
+      never_remove INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(guild_id, token_mint, role_id)
@@ -1227,6 +1335,7 @@ function initDatabase() {
   `);
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_token_role_rules_guild ON token_role_rules(guild_id)'); } catch (e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_token_role_rules_mint ON token_role_rules(token_mint)'); } catch (e) {}
+  try { db.exec('ALTER TABLE token_role_rules ADD COLUMN never_remove INTEGER DEFAULT 0'); } catch (e) {}
 
   // Token tracker config (tenant-scoped)
   db.exec(`
@@ -1312,6 +1421,7 @@ function initDatabase() {
     logger.log(`[DB] Recorded baseline schema migration v${LEGACY_BASELINE_MIGRATION_VERSION}`);
   }
   applyStructuredMigrations();
+  validateRequiredSchema({ strict: true });
 
   logger.log('Database initialized successfully');
 }
@@ -1335,3 +1445,4 @@ function runMaintenance() {
 
 module.exports = db;
 module.exports.runMaintenance = runMaintenance;
+module.exports.validateRequiredSchema = validateRequiredSchema;

@@ -27,6 +27,9 @@ function getRequestedGuildId(req) {
   const headerGuildId = normalizeGuildId(String(req.get('x-guild-id') || '').trim());
   if (headerGuildId) return headerGuildId;
 
+  const scopedGuildId = normalizeGuildId(String(req.guildId || '').trim());
+  if (scopedGuildId) return scopedGuildId;
+
   return '';
 }
 
@@ -42,14 +45,42 @@ function hasProposalsGuildColumn() {
   return _hasProposalsGuildColumnCache;
 }
 
+let _hasMissionsGuildColumnCache = null;
+function hasMissionsGuildColumn() {
+  if (_hasMissionsGuildColumnCache !== null) return _hasMissionsGuildColumnCache;
+  try {
+    const columns = db.prepare('PRAGMA table_info(missions)').all();
+    _hasMissionsGuildColumnCache = columns.some(column => String(column?.name || '').toLowerCase() === 'guild_id');
+  } catch (_error) {
+    _hasMissionsGuildColumnCache = false;
+  }
+  return _hasMissionsGuildColumnCache;
+}
+
 function resolvePublicGovernanceScope(req) {
   const guildId = getRequestedGuildId(req);
   const multiTenantEnabled = tenantService.isMultitenantEnabled();
 
-  if (multiTenantEnabled && hasProposalsGuildColumn() && !guildId) {
+  if (multiTenantEnabled && !hasProposalsGuildColumn()) {
+    validationError('governance schema is not tenant-scoped; run database migrations');
+  }
+
+  if (multiTenantEnabled && !guildId) {
     validationError('guildId query parameter (or x-guild-id header) is required in multi-tenant mode');
   }
 
+  return guildId;
+}
+
+function resolvePublicScope(req, { requireInMultitenant = true, tableHasGuildColumn = false } = {}) {
+  const guildId = getRequestedGuildId(req);
+  const multiTenantEnabled = tenantService.isMultitenantEnabled();
+  if (requireInMultitenant && multiTenantEnabled && !tableHasGuildColumn) {
+    validationError('tenant-scoped schema is required in multi-tenant mode; run database migrations');
+  }
+  if (requireInMultitenant && multiTenantEnabled && !guildId) {
+    validationError('guildId query parameter (or x-guild-id header) is required in multi-tenant mode');
+  }
   return guildId;
 }
 
@@ -336,8 +367,9 @@ router.get('/treasury/transactions', asyncHandler(async (req, res) => {
  * Returns recent NFT activity events for watched collections
  */
 router.get('/nft/activity', asyncHandler(async (req, res) => {
+  const guildId = resolvePublicScope(req, { tableHasGuildColumn: true });
   const limit = Math.min(Math.max(parseInt(req.query.limit || '20', 10), 1), 100);
-  const events = nftActivityService.listEvents(limit);
+  const events = nftActivityService.listEventsForGuild(guildId, limit);
 
   const sanitized = events.map(e => ({
     eventType: e.event_type,
@@ -352,7 +384,7 @@ router.get('/nft/activity', asyncHandler(async (req, res) => {
     eventTime: e.event_time || e.created_at
   }));
 
-  res.json(success({ events: sanitized }, { count: sanitized.length }));
+  res.json(success({ events: sanitized }, { count: sanitized.length, guildId: guildId || null }));
 }));
 
 // ==================== MISSIONS ENDPOINTS ====================
@@ -362,9 +394,14 @@ router.get('/nft/activity', asyncHandler(async (req, res) => {
  * Returns active and recruiting missions
  */
 router.get('/missions/active', asyncHandler(async (req, res) => {
-  const missions = db.prepare(
-    'SELECT * FROM missions WHERE status IN (?, ?) ORDER BY created_at DESC'
-  ).all('recruiting', 'active');
+  const guildId = resolvePublicScope(req, { tableHasGuildColumn: hasMissionsGuildColumn() });
+  const missions = (hasMissionsGuildColumn() && guildId)
+    ? db.prepare(
+      'SELECT * FROM missions WHERE guild_id = ? AND status IN (?, ?) ORDER BY created_at DESC'
+    ).all(guildId, 'recruiting', 'active')
+    : db.prepare(
+      'SELECT * FROM missions WHERE status IN (?, ?) ORDER BY created_at DESC'
+    ).all('recruiting', 'active');
   
   const enrichedMissions = missions.map(m => {
     const participants = db.prepare(
@@ -389,7 +426,7 @@ router.get('/missions/active', asyncHandler(async (req, res) => {
     };
   });
 
-  res.json(success({ missions: enrichedMissions }, { count: enrichedMissions.length }));
+  res.json(success({ missions: enrichedMissions }, { count: enrichedMissions.length, guildId: guildId || null }));
 }));
 
 /**
@@ -397,16 +434,25 @@ router.get('/missions/active', asyncHandler(async (req, res) => {
  * Returns completed missions
  */
 router.get('/missions/completed', asyncHandler(async (req, res) => {
+  const guildId = resolvePublicScope(req, { tableHasGuildColumn: hasMissionsGuildColumn() });
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
   const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
 
-  const missions = db.prepare(
-    'SELECT * FROM missions WHERE status = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
-  ).all('completed', limit, offset);
+  const missions = (hasMissionsGuildColumn() && guildId)
+    ? db.prepare(
+      'SELECT * FROM missions WHERE guild_id = ? AND status = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
+    ).all(guildId, 'completed', limit, offset)
+    : db.prepare(
+      'SELECT * FROM missions WHERE status = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
+    ).all('completed', limit, offset);
   
-  const totalCount = db.prepare(
-    'SELECT COUNT(*) as count FROM missions WHERE status = ?'
-  ).get('completed').count;
+  const totalCount = (hasMissionsGuildColumn() && guildId)
+    ? db.prepare(
+      'SELECT COUNT(*) as count FROM missions WHERE guild_id = ? AND status = ?'
+    ).get(guildId, 'completed').count
+    : db.prepare(
+      'SELECT COUNT(*) as count FROM missions WHERE status = ?'
+    ).get('completed').count;
 
   const enrichedMissions = missions.map(m => {
     const participants = db.prepare(
@@ -437,7 +483,8 @@ router.get('/missions/completed', asyncHandler(async (req, res) => {
       count: enrichedMissions.length,
       total: totalCount,
       limit,
-      offset
+      offset,
+      guildId: guildId || null
     }
   ));
 }));
@@ -447,8 +494,11 @@ router.get('/missions/completed', asyncHandler(async (req, res) => {
  * Returns detailed mission information
  */
 router.get('/missions/:id', asyncHandler(async (req, res) => {
+  const guildId = resolvePublicScope(req, { tableHasGuildColumn: hasMissionsGuildColumn() });
   const { id } = req.params;
-  const mission = db.prepare('SELECT * FROM missions WHERE mission_id = ?').get(id);
+  const mission = (hasMissionsGuildColumn() && guildId)
+    ? db.prepare('SELECT * FROM missions WHERE mission_id = ? AND guild_id = ?').get(id, guildId)
+    : db.prepare('SELECT * FROM missions WHERE mission_id = ?').get(id);
   
   if (!mission) {
     notFoundError('Mission');
@@ -488,22 +538,39 @@ router.get('/missions/:id', asyncHandler(async (req, res) => {
  * Returns top 100 leaderboard
  */
 router.get('/leaderboard', asyncHandler(async (req, res) => {
+  const guildId = resolvePublicScope(req, { tableHasGuildColumn: hasMissionsGuildColumn() });
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 100);
 
-  const leaderboard = db.prepare(`
-    SELECT 
-      u.discord_id,
-      u.username,
-      u.tier,
-      COALESCE(SUM(mp.points_awarded), 0) as total_points,
-      COUNT(DISTINCT mp.mission_id) as missions_completed
-    FROM users u
-    LEFT JOIN mission_participants mp ON u.discord_id = mp.participant_id
-    GROUP BY u.discord_id
-    HAVING total_points > 0
-    ORDER BY total_points DESC
-    LIMIT ?
-  `).all(limit);
+  const leaderboard = (hasMissionsGuildColumn() && guildId)
+    ? db.prepare(`
+      SELECT
+        u.discord_id,
+        u.username,
+        u.tier,
+        COALESCE(SUM(CASE WHEN m.mission_id IS NOT NULL THEN mp.points_awarded ELSE 0 END), 0) as total_points,
+        COUNT(DISTINCT CASE WHEN m.mission_id IS NOT NULL THEN mp.mission_id END) as missions_completed
+      FROM users u
+      LEFT JOIN mission_participants mp ON u.discord_id = mp.participant_id
+      LEFT JOIN missions m ON m.mission_id = mp.mission_id AND m.guild_id = ?
+      GROUP BY u.discord_id
+      HAVING total_points > 0
+      ORDER BY total_points DESC
+      LIMIT ?
+    `).all(guildId, limit)
+    : db.prepare(`
+      SELECT
+        u.discord_id,
+        u.username,
+        u.tier,
+        COALESCE(SUM(mp.points_awarded), 0) as total_points,
+        COUNT(DISTINCT mp.mission_id) as missions_completed
+      FROM users u
+      LEFT JOIN mission_participants mp ON u.discord_id = mp.participant_id
+      GROUP BY u.discord_id
+      HAVING total_points > 0
+      ORDER BY total_points DESC
+      LIMIT ?
+    `).all(limit);
 
   const enrichedLeaderboard = leaderboard.map((entry, index) => ({
     rank: index + 1,
@@ -515,7 +582,7 @@ router.get('/leaderboard', asyncHandler(async (req, res) => {
     missionsCompleted: entry.missions_completed
   }));
 
-  res.json(success({ leaderboard: enrichedLeaderboard }, { count: enrichedLeaderboard.length }));
+  res.json(success({ leaderboard: enrichedLeaderboard }, { count: enrichedLeaderboard.length, guildId: guildId || null }));
 }));
 
 /**
@@ -523,20 +590,35 @@ router.get('/leaderboard', asyncHandler(async (req, res) => {
  * Returns specific user's leaderboard position
  */
 router.get('/leaderboard/:userId', asyncHandler(async (req, res) => {
+  const guildId = resolvePublicScope(req, { tableHasGuildColumn: hasMissionsGuildColumn() });
   const { userId } = req.params;
   
-  const userPoints = db.prepare(`
-    SELECT 
-      u.discord_id,
-      u.username,
-      u.tier,
-      COALESCE(SUM(mp.points_awarded), 0) as total_points,
-      COUNT(DISTINCT mp.mission_id) as missions_completed
-    FROM users u
-    LEFT JOIN mission_participants mp ON u.discord_id = mp.participant_id
-    WHERE u.discord_id = ?
-    GROUP BY u.discord_id
-  `).get(userId);
+  const userPoints = (hasMissionsGuildColumn() && guildId)
+    ? db.prepare(`
+      SELECT
+        u.discord_id,
+        u.username,
+        u.tier,
+        COALESCE(SUM(CASE WHEN m.mission_id IS NOT NULL THEN mp.points_awarded ELSE 0 END), 0) as total_points,
+        COUNT(DISTINCT CASE WHEN m.mission_id IS NOT NULL THEN mp.mission_id END) as missions_completed
+      FROM users u
+      LEFT JOIN mission_participants mp ON u.discord_id = mp.participant_id
+      LEFT JOIN missions m ON m.mission_id = mp.mission_id AND m.guild_id = ?
+      WHERE u.discord_id = ?
+      GROUP BY u.discord_id
+    `).get(guildId, userId)
+    : db.prepare(`
+      SELECT
+        u.discord_id,
+        u.username,
+        u.tier,
+        COALESCE(SUM(mp.points_awarded), 0) as total_points,
+        COUNT(DISTINCT mp.mission_id) as missions_completed
+      FROM users u
+      LEFT JOIN mission_participants mp ON u.discord_id = mp.participant_id
+      WHERE u.discord_id = ?
+      GROUP BY u.discord_id
+    `).get(userId);
 
   if (!userPoints) {
     // User exists but has no points
@@ -551,13 +633,32 @@ router.get('/leaderboard/:userId', asyncHandler(async (req, res) => {
   }
 
   // Calculate rank
-  const higherRanked = db.prepare(`
-    SELECT COUNT(DISTINCT u.discord_id) as count
-    FROM users u
-    LEFT JOIN mission_participants mp ON u.discord_id = mp.participant_id
-    GROUP BY u.discord_id
-    HAVING COALESCE(SUM(mp.points_awarded), 0) > ?
-  `).get(userPoints.total_points).count;
+  const higherRanked = (hasMissionsGuildColumn() && guildId)
+    ? db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM (
+        SELECT
+          u.discord_id,
+          COALESCE(SUM(CASE WHEN m.mission_id IS NOT NULL THEN mp.points_awarded ELSE 0 END), 0) AS total_points
+        FROM users u
+        LEFT JOIN mission_participants mp ON u.discord_id = mp.participant_id
+        LEFT JOIN missions m ON m.mission_id = mp.mission_id AND m.guild_id = ?
+        GROUP BY u.discord_id
+        HAVING total_points > ?
+      ) ranked
+    `).get(guildId, userPoints.total_points).count
+    : db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM (
+        SELECT
+          u.discord_id,
+          COALESCE(SUM(mp.points_awarded), 0) AS total_points
+        FROM users u
+        LEFT JOIN mission_participants mp ON u.discord_id = mp.participant_id
+        GROUP BY u.discord_id
+        HAVING total_points > ?
+      ) ranked
+    `).get(userPoints.total_points).count;
 
   res.json(success({
     user: {
@@ -566,7 +667,8 @@ router.get('/leaderboard/:userId', asyncHandler(async (req, res) => {
       tier: userPoints.tier,
       totalPoints: userPoints.total_points,
       missionsCompleted: userPoints.missions_completed,
-      rank: higherRanked + 1
+      rank: higherRanked + 1,
+      guildId: guildId || null
     }
   }));
 }));

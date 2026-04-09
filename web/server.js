@@ -4,6 +4,7 @@ const BetterSqlite3Store = require('better-sqlite3-session-store')(session);
 const Database = require('better-sqlite3');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
+const ipKeyGenerator = rateLimit.ipKeyGenerator;
 const crypto = require('crypto');
 const os = require('os');
 const { exec } = require('child_process');
@@ -33,7 +34,12 @@ const superadminIdentityService = require('../services/superadminIdentityService
 const superadminGuard = require('../middleware/superadminGuard');
 const { BATTLE_ERAS } = require('../config/battleEras');
 const battleService = require('../services/battleService');
+const { getBranding } = require('../services/embedBranding');
 const { getPlanKeys, getPlanPreset } = require('../config/plans');
+const {
+  getGuildBotProfileSnapshot,
+  applyGuildBotProfileBranding,
+} = require('./utils/discordProfileBranding');
 
 const DISCORD_ADMIN_PERMISSION = 0x8n;
 const DISCORD_MANAGE_GUILD_PERMISSION = 0x20n;
@@ -270,7 +276,7 @@ class WebServer {
       origin: allowedOrigins,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', REQUEST_GUILD_HEADER, 'x-entitlement-secret', 'x-webhook-secret'],
+      allowedHeaders: ['Content-Type', 'Authorization', REQUEST_GUILD_HEADER, 'x-entitlement-secret', 'x-webhook-secret', 'X-Requested-With', 'x-csrf-token'],
       exposedHeaders: ['X-Total-Count'], // For pagination
       maxAge: 86400 // 24 hours preflight cache
     }));
@@ -287,14 +293,11 @@ class WebServer {
       });
     });
 
-    // Session secret enforcement
-    const sessionSecret = process.env.SESSION_SECRET || 'solpranos-secret-key-change-this-in-production';
-    if (!process.env.SESSION_SECRET || sessionSecret === 'solpranos-secret-key-change-this-in-production') {
-      if (process.env.NODE_ENV === 'production') {
-        console.error('FATAL: SESSION_SECRET is not set or uses the default value in production. Refusing to start.');
-        process.exit(1);
-      }
-      logger.warn('WARNING: Using default session secret. Set SESSION_SECRET in production.');
+    // Session secret — validated at startup in index.js (min 32 chars required)
+    const sessionSecret = process.env.SESSION_SECRET;
+    if (!sessionSecret) {
+      logger.error('FATAL: SESSION_SECRET is not set. Cannot start web server.');
+      process.exit(1);
     }
 
     // Persistent SQLite session store (sessions survive restarts)
@@ -320,9 +323,27 @@ class WebServer {
       }
     }));
 
-    // CSRF: all admin/superadmin routes are session-protected with sameSite:lax cookies
-    // which provides CSRF resistance. Dedicated csrf-csrf middleware removed due to
-    // cookie-parser ordering issues; can be re-added as a standalone module in a future PR.
+    // CSRF defense-in-depth: require XMLHttpRequest marker on internal mutating
+    // API calls. Secret-authenticated webhook/entitlement routes are exempt.
+    const mutatingMethods = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
+    this.app.use('/api', (req, res, next) => {
+      if (!mutatingMethods.has(req.method)) {
+        return next();
+      }
+
+      const pathName = String(req.path || '');
+      const hasSecretAuth = !!req.headers['x-webhook-secret'] || !!req.headers['x-entitlement-secret'];
+      if (pathName.startsWith('/webhooks/') || hasSecretAuth) {
+        return next();
+      }
+
+      const requestedWith = String(req.headers['x-requested-with'] || '').trim().toLowerCase();
+      if (requestedWith !== 'xmlhttprequest') {
+        return res.status(403).json({ success: false, message: 'Missing or invalid X-Requested-With header' });
+      }
+
+      next();
+    });
     // Stub endpoint so portal.js fetchCsrfToken() doesn't 404.
     this.app.get('/api/csrf-token', (req, res) => res.json({ token: '' }));
   }
@@ -355,9 +376,8 @@ class WebServer {
       validate: { xForwardedForHeader: false, ip: false },
       keyGenerator: (req) => {
         const userId = req.session?.discordUser?.id;
-        if (userId) return userId;
-        const rawIp = req.ip || req.socket?.remoteAddress || '';
-        return rateLimit.ipKeyGenerator(rawIp);
+        if (userId) return `u:${userId}`;
+        return ipKeyGenerator(req.ip || '');
       },
       message: rateLimitMessage
     });
@@ -380,24 +400,93 @@ class WebServer {
       return allowFallback ? fallbackGuildId() : '';
     };
 
-    const getDiscordUserGuilds = async (req) => {
-      const accessToken = req.session?.discordUser?.accessToken;
-      if (!accessToken) {
-        return [];
+    const refreshDiscordAccessToken = async (req) => {
+      const refreshToken = String(req.session?.discordUser?.refreshToken || '').trim();
+      if (!refreshToken) {
+        return null;
       }
 
-      const response = await fetch('https://discord.com/api/users/@me/guilds', {
+      const oauthRedirectUri = req.session?.oauthRedirectUri || resolveOAuthRedirectUri(req);
+      const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
+        method: 'POST',
         headers: {
-          Authorization: `Bearer ${accessToken}`
-        }
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({
+          client_id: process.env.CLIENT_ID,
+          client_secret: process.env.DISCORD_CLIENT_SECRET,
+          grant_type: 'refresh_token',
+          refresh_token: refreshToken,
+          redirect_uri: oauthRedirectUri
+        })
       });
 
-      if (!response.ok) {
-        return [];
+      if (!tokenResponse.ok) {
+        return null;
       }
 
-      const guilds = await response.json();
-      return Array.isArray(guilds) ? guilds : [];
+      const tokenData = await tokenResponse.json();
+      if (!tokenData?.access_token) {
+        return null;
+      }
+
+      req.session.discordUser = {
+        ...(req.session.discordUser || {}),
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token || refreshToken,
+        tokenExpiresAt: Date.now() + (Math.max(60, Number(tokenData.expires_in || 3600)) - 30) * 1000
+      };
+      return req.session.discordUser.accessToken;
+    };
+
+    const getValidDiscordAccessToken = async (req) => {
+      const sessionUser = req.session?.discordUser || null;
+      if (!sessionUser) return null;
+
+      const accessToken = String(sessionUser.accessToken || '').trim();
+      const tokenExpiresAt = Number(sessionUser.tokenExpiresAt || 0);
+      if (accessToken && tokenExpiresAt > Date.now()) {
+        return accessToken;
+      }
+      if (accessToken && !tokenExpiresAt) {
+        return accessToken;
+      }
+      return refreshDiscordAccessToken(req);
+    };
+
+    const getDiscordUserGuilds = async (req) => {
+      try {
+        const accessToken = await getValidDiscordAccessToken(req);
+        if (!accessToken) {
+          return [];
+        }
+
+        let response = await fetch('https://discord.com/api/users/@me/guilds', {
+          headers: {
+            Authorization: `Bearer ${accessToken}`
+          }
+        });
+
+        if (response.status === 401) {
+          const refreshedToken = await refreshDiscordAccessToken(req);
+          if (refreshedToken) {
+            response = await fetch('https://discord.com/api/users/@me/guilds', {
+              headers: {
+                Authorization: `Bearer ${refreshedToken}`
+              }
+            });
+          }
+        }
+
+        if (!response.ok) {
+          return [];
+        }
+
+        const guilds = await response.json();
+        return Array.isArray(guilds) ? guilds : [];
+      } catch (_error) {
+        return [];
+      }
     };
 
     const getBotGuildIds = async () => {
@@ -427,7 +516,9 @@ class WebServer {
     };
 
     this.app.use(['/api/verify', '/api/micro-verify'], (req, _res, next) => {
-      const requestedGuildId = getRequestedGuildId(req);
+      const requestedGuildId = getRequestedGuildId(req, {
+        allowFallback: !tenantService.isMultitenantEnabled()
+      });
       if (requestedGuildId) {
         req.guildId = requestedGuildId;
       }
@@ -586,6 +677,16 @@ class WebServer {
 
     const v1Router = require('./routes/v1');
     const { errorHandler, notFoundHandler } = require('../utils/apiErrorHandler');
+
+    this.app.use('/api/public/v1', (req, _res, next) => {
+      const scopedGuildId = normalizeGuildId(
+        String(req.query?.guildId || req.query?.guild || req.get(REQUEST_GUILD_HEADER) || '')
+      );
+      if (scopedGuildId) {
+        req.guildId = scopedGuildId;
+      }
+      next();
+    });
 
     // Mount v1 API routes (standardized, versioned)
     this.app.use('/api/public/v1', v1Router);
@@ -767,7 +868,10 @@ class WebServer {
           id: userData.id,
           username: userData.username,
           discriminator: userData.discriminator,
-          avatar: userData.avatar
+          avatar: userData.avatar,
+          accessToken: tokenData.access_token,
+          refreshToken: tokenData.refresh_token || null,
+          tokenExpiresAt: Date.now() + (Math.max(60, Number(tokenData.expires_in || 3600)) - 30) * 1000
         };
 
         const returnTo = req.session.returnTo;
@@ -797,7 +901,10 @@ class WebServer {
         const userInfo = await roleService.getUserInfo(discordId);
         const wallets = db.prepare('SELECT wallet_address, is_favorite, primary_wallet, created_at FROM wallets WHERE discord_id = ? ORDER BY is_favorite DESC, created_at ASC').all(discordId);
         const userPrefs = db.prepare('SELECT wallet_alert_identity_opt_out FROM users WHERE discord_id = ?').get(discordId) || {};
-        const requestedGuildId = getRequestedGuildId(req, { allowFallback: true });
+        const requestedGuildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
+        if (tenantService.isMultitenantEnabled() && !requestedGuildId) {
+          return res.status(409).json({ success: false, message: 'Select a server to continue' });
+        }
         
         // Get user's proposals
         const proposals = (hasProposalsGuildColumn() && requestedGuildId)
@@ -805,16 +912,32 @@ class WebServer {
           : db.prepare("SELECT * FROM proposals WHERE creator_id = ? AND status NOT IN ('expired') ORDER BY created_at DESC").all(discordId);
         
         // Get user's missions
-        const missions = db.prepare(`
-          SELECT m.*, mp.assigned_nft_name, mp.assigned_role, mp.points_awarded 
-          FROM missions m
-          JOIN mission_participants mp ON m.mission_id = mp.mission_id
-          WHERE mp.participant_id = ? AND m.status IN (?, ?)
-          ORDER BY mp.joined_at DESC
-        `).all(discordId, 'recruiting', 'active');
+        const hasMissionsGuildColumn = missionService.hasMissionsGuildColumn?.() === true;
+        const missions = (hasMissionsGuildColumn && requestedGuildId)
+          ? db.prepare(`
+            SELECT m.*, mp.assigned_nft_name, mp.assigned_role, mp.points_awarded
+            FROM missions m
+            JOIN mission_participants mp ON m.mission_id = mp.mission_id
+            WHERE mp.participant_id = ? AND m.guild_id = ? AND m.status IN (?, ?)
+            ORDER BY mp.joined_at DESC
+          `).all(discordId, requestedGuildId, 'recruiting', 'active')
+          : db.prepare(`
+            SELECT m.*, mp.assigned_nft_name, mp.assigned_role, mp.points_awarded
+            FROM missions m
+            JOIN mission_participants mp ON m.mission_id = mp.mission_id
+            WHERE mp.participant_id = ? AND m.status IN (?, ?)
+            ORDER BY mp.joined_at DESC
+          `).all(discordId, 'recruiting', 'active');
 
         // Calculate total points
-        const pointsResult = db.prepare('SELECT COALESCE(SUM(points_awarded), 0) as total FROM mission_participants WHERE participant_id = ?').get(discordId);
+        const pointsResult = (hasMissionsGuildColumn && requestedGuildId)
+          ? db.prepare(`
+            SELECT COALESCE(SUM(mp.points_awarded), 0) AS total
+            FROM mission_participants mp
+            JOIN missions m ON m.mission_id = mp.mission_id
+            WHERE mp.participant_id = ? AND m.guild_id = ?
+          `).get(discordId, requestedGuildId)
+          : db.prepare('SELECT COALESCE(SUM(points_awarded), 0) as total FROM mission_participants WHERE participant_id = ?').get(discordId);
 
         res.json({
           success: true,
@@ -844,7 +967,7 @@ class WebServer {
       }
       try {
         const discordId = req.session.discordUser.id;
-        const guildId = getRequestedGuildId(req, { allowFallback: true });
+        const guildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
         if (!guildId) return res.status(400).json({ success: false, message: 'Select a server first' });
         const tickets = ticketService.getAllTickets({ guildId, opener: discordId });
         res.json({ success: true, tickets });
@@ -859,7 +982,7 @@ class WebServer {
         return res.status(401).json({ success: false, message: 'Not authenticated' });
       }
       try {
-        const guildId = getRequestedGuildId(req, { allowFallback: true });
+        const guildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
         if (!guildId) return res.status(400).json({ success: false, message: 'Select a server first' });
         const rolePanelService = require('../services/rolePanelService');
         const panels = rolePanelService.listPanels(guildId)
@@ -877,7 +1000,7 @@ class WebServer {
         return res.status(401).json({ success: false, message: 'Not authenticated' });
       }
       try {
-        const guildId = getRequestedGuildId(req, { allowFallback: true });
+        const guildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
         const { roleId, panelId } = req.body || {};
         if (!guildId || !roleId) return res.status(400).json({ success: false, message: 'guild and role are required' });
         const guild = await fetchGuildById(guildId);
@@ -1350,788 +1473,61 @@ class WebServer {
       }
     });
 
-    this.app.get('/api/superadmin/me', (req, res) => {
-      const userId = req.session?.discordUser?.id || null;
-
-      res.json({
-        success: true,
-        userId,
-        isRootSuperadmin: superadminService.isRootSuperadmin(userId),
-        isSuperadmin: superadminService.isSuperadmin(userId)
-      });
-    });
-
-    this.app.get('/api/superadmin/env-status', superadminGuard, (_req, res) => {
-      res.json({
-        mockMode: process.env.MOCK_MODE === 'true',
-        heliusConfigured: !!process.env.HELIUS_API_KEY,
-        solanaRpc: process.env.SOLANA_RPC_URL || 'default',
-        nodeEnv: process.env.NODE_ENV || 'development',
-        webhookSecretConfigured: !!getActivityWebhookSecret()
-      });
-    });
-
-    // Global settings â€” no guild context required, superadmin only
-    this.app.get('/api/superadmin/global-settings', superadminGuard, (req, res) => {
-      try {
-        const settings = settingsManager.getSettings();
-        const ogRoleService = require('../services/ogRoleService');
-        const ogCfg = ogRoleService.getConfig();
-        res.json({
-          success: true,
-          settings: {
-            moduleMicroVerifyEnabled: !!settings.moduleMicroVerifyEnabled,
-            verificationReceiveWallet: settings.verificationReceiveWallet || process.env.VERIFICATION_RECEIVE_WALLET || '',
-            verifyRequestTtlMinutes: settings.verifyRequestTtlMinutes || 15,
-            pollIntervalSeconds: settings.pollIntervalSeconds || 30,
-            verifyRateLimitMinutes: settings.verifyRateLimitMinutes || 5,
-            maxPendingPerUser: settings.maxPendingPerUser || 1,
-            chainEmojiMap: settings.chainEmojiMap || {},
-            ogRoleId: ogCfg.roleId || '',
-            ogRoleLimit: ogCfg.limit || 0,
-          }
-        });
-      } catch (error) {
-        logger.error('Error fetching global settings:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.put('/api/superadmin/global-settings', superadminGuard, (req, res) => {
-      try {
-        const ALLOWED = [
-          'moduleMicroVerifyEnabled', 'verificationReceiveWallet',
-          'verifyRequestTtlMinutes', 'pollIntervalSeconds',
-          'verifyRateLimitMinutes', 'maxPendingPerUser', 'chainEmojiMap'
-        ];
-        const patch = {};
-        for (const key of ALLOWED) {
-          if (req.body[key] !== undefined) patch[key] = req.body[key];
-        }
-        const result = settingsManager.updateSettings(patch);
-        if (!result.success) return res.status(400).json(result);
-        const afterSave = settingsManager.getSettings();
-
-        // Sync microVerifyService config overrides in memory
-        try {
-          const microVerifyService = require('../services/microVerifyService');
-          const syncMap = {
-            moduleMicroVerifyEnabled: 'MICRO_VERIFY_ENABLED',
-            verificationReceiveWallet: 'VERIFICATION_RECEIVE_WALLET',
-            verifyRequestTtlMinutes: 'VERIFY_REQUEST_TTL_MINUTES',
-            pollIntervalSeconds: 'POLL_INTERVAL_SECONDS',
-          };
-          const overrides = {};
-          for (const [jsKey, envKey] of Object.entries(syncMap)) {
-            if (patch[jsKey] !== undefined) overrides[envKey] = String(patch[jsKey]);
-          }
-          if (Object.keys(overrides).length) {
-            microVerifyService.updateConfig(overrides);
-            microVerifyService.stopPolling();
-            microVerifyService.startPolling();
-          }
-        } catch (e) {
-          logger.warn('microVerifyService sync warning:', e?.message || e);
-        }
-
-        logger.log(`[superadmin] global-settings updated by ${req.session?.discordUser?.id}: ${Object.keys(patch).join(', ')}`);
-        res.json({ success: true, message: 'Global settings updated' });
-      } catch (error) {
-        logger.error('Error updating global settings:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.get('/api/superadmin/admins', superadminGuard, (req, res) => {
-      try {
-        res.json({
-          success: true,
-          superadmins: superadminService.listSuperadmins()
-        });
-      } catch (error) {
-        logger.error('Error fetching superadmins:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.post('/api/superadmin/admins', superadminGuard, (req, res) => {
-      try {
-        const { userId } = req.body || {};
-        if (!userId || !String(userId).trim()) {
-          return res.status(400).json({ success: false, message: 'userId is required' });
-        }
-
-        const result = superadminService.addSuperadmin(userId, req.session.discordUser.id);
-        if (!result.success) {
-          return res.status(400).json(result);
-        }
-
-        res.json(result);
-      } catch (error) {
-        logger.error('Error adding superadmin:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.delete('/api/superadmin/admins/:userId', superadminGuard, (req, res) => {
-      try {
-        const result = superadminService.removeSuperadmin(req.params.userId, req.session.discordUser.id);
-        if (!result.success) {
-          const status = result.message === 'Cannot remove root superadmins' ? 403 : 400;
-          return res.status(status).json(result);
-        }
-
-        res.json(result);
-      } catch (error) {
-        logger.error('Error removing superadmin:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.get('/api/superadmin/identity/users', superadminGuard, (req, res) => {
-      try {
-        const q = req.query.q || '';
-        const limit = req.query.limit;
-        const offset = req.query.offset;
-        const result = superadminIdentityService.listProfiles({ q, limit, offset });
-        res.json({ success: true, ...result });
-      } catch (error) {
-        logger.error('Error listing superadmin identity users:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.get('/api/superadmin/identity/users/:discordId', superadminGuard, (req, res) => {
-      try {
-        const profile = superadminIdentityService.getProfile(req.params.discordId);
-        if (!profile) {
-          return res.status(404).json({ success: false, message: 'User not found' });
-        }
-        res.json({ success: true, profile });
-      } catch (error) {
-        logger.error('Error getting superadmin identity profile:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.put('/api/superadmin/identity/users/:discordId/flags', superadminGuard, (req, res) => {
-      try {
-        const result = superadminIdentityService.setFlags({
-          discordId: req.params.discordId,
-          trustedIdentity: req.body?.trustedIdentity,
-          manualVerified: req.body?.manualVerified,
-          notes: req.body?.notes,
-          username: req.body?.username,
-          actorId: req.session?.discordUser?.id || null,
-        });
-        if (!result.success) {
-          return res.status(400).json(result);
-        }
-        res.json(result);
-      } catch (error) {
-        logger.error('Error updating superadmin identity flags:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.post('/api/superadmin/identity/users/:discordId/wallets', superadminGuard, (req, res) => {
-      try {
-        const result = superadminIdentityService.linkWallet({
-          discordId: req.params.discordId,
-          walletAddress: req.body?.walletAddress,
-          username: req.body?.username,
-          primaryWallet: req.body?.primaryWallet,
-          favoriteWallet: req.body?.favoriteWallet,
-          actorId: req.session?.discordUser?.id || null,
-          metadata: {
-            source: 'superadmin_portal',
-            reason: req.body?.reason || null,
-          },
-        });
-        if (!result.success) {
-          return res.status(400).json(result);
-        }
-        res.json(result);
-      } catch (error) {
-        logger.error('Error linking wallet via superadmin identity:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.delete('/api/superadmin/identity/users/:discordId/wallets/:walletAddress', superadminGuard, (req, res) => {
-      try {
-        const walletAddress = decodeURIComponent(req.params.walletAddress || '');
-        const result = superadminIdentityService.unlinkWallet({
-          discordId: req.params.discordId,
-          walletAddress,
-          actorId: req.session?.discordUser?.id || null,
-          metadata: { source: 'superadmin_portal' },
-        });
-        if (!result.success) {
-          const status = result.message === 'User not found' ? 404 : 400;
-          return res.status(status).json(result);
-        }
-        res.json(result);
-      } catch (error) {
-        logger.error('Error unlinking wallet via superadmin identity:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.get('/api/superadmin/identity/audit', superadminGuard, (req, res) => {
-      try {
-        const auditLogs = superadminIdentityService.listAudit({
-          discordId: req.query.discordId || '',
-          limit: req.query.limit,
-          offset: req.query.offset,
-        });
-        res.json({ success: true, auditLogs });
-      } catch (error) {
-        logger.error('Error reading superadmin identity audit logs:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.get('/api/superadmin/tenants', superadminGuard, (req, res) => {
-      try {
-        const result = tenantService.listTenants({
-          q: req.query.q,
-          status: req.query.status,
-          page: req.query.page,
-          pageSize: req.query.pageSize
-        });
-
-        res.json({
-          success: true,
-          tenants: result.tenants,
-          pagination: result.pagination
-        });
-      } catch (error) {
-        logger.error('Error fetching tenants:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    const logSuperadminTenantAction = (req, _res, next) => {
-      const activeGuildId = normalizeGuildId(req.get(REQUEST_GUILD_HEADER));
-      const targetGuildId = normalizeGuildId(req.params.guildId);
-      if (activeGuildId && targetGuildId && activeGuildId !== targetGuildId) {
-        logger.log(`[tenant-cross] superadmin=${req.session.discordUser.id} route=${req.method} ${req.originalUrl} active=${activeGuildId} target=${targetGuildId}`);
-      }
-      next();
-    };
-
-    this.app.get('/api/superadmin/tenants/:guildId/audit', superadminGuard, logSuperadminTenantAction, (req, res) => {
-      try {
-        const limit = Math.min(Math.max(parseInt(req.query.limit || '10', 10), 1), 100);
-        const logs = tenantService.getTenantAuditLogs(req.params.guildId, limit);
-
-        res.json({
-          success: true,
-          auditLogs: logs
-        });
-      } catch (error) {
-        logger.error('Error fetching tenant audit logs:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.get('/api/superadmin/tenants/:guildId', superadminGuard, logSuperadminTenantAction, async (req, res) => {
-      try {
-        const tenant = tenantService.getTenant(req.params.guildId);
-        if (!tenant) {
-          return res.status(404).json({ success: false, message: 'Tenant not found' });
-        }
-
-        const guild = await fetchGuildById(req.params.guildId);
-        const fallbackLogo = guildIconUrl(guild);
-        const branding = {
-          ...(tenant.branding || {}),
-          logo_url: tenant?.branding?.logo_url || fallbackLogo || null
-        };
-
-        res.json({
-          success: true,
-          tenant: {
-            ...tenant,
-            branding
-          }
-        });
-      } catch (error) {
-        logger.error('Error fetching tenant:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.get('/api/superadmin/limits/catalog', superadminGuard, (_req, res) => {
-      try {
-        const plans = getPlanKeys().map(planKey => {
-          const preset = getPlanPreset(planKey);
-          return {
-            key: planKey,
-            label: preset?.label || planKey,
-            description: preset?.description || '',
-            billing: preset?.billing || null,
-            moduleLimits: entitlementService.getPlanModuleLimits(planKey),
-          };
-        });
-
-        res.json({
-          success: true,
-          plans,
-          definitions: entitlementService.getLimitDefinitions(),
-        });
-      } catch (error) {
-        logger.error('Error fetching limits catalog:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.get('/api/superadmin/monetization/templates', superadminGuard, (_req, res) => {
-      try {
-        const templates = monetizationTemplateService.listTemplates();
-        res.json({ success: true, templates });
-      } catch (error) {
-        logger.error('Error fetching monetization templates:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.get('/api/superadmin/tenants/:guildId/template-preview', superadminGuard, logSuperadminTenantAction, (req, res) => {
-      try {
-        const templateKey = String(req.query?.templateKey || '').trim();
-        if (!templateKey) {
-          return res.status(400).json({ success: false, message: 'templateKey is required' });
-        }
-
-        const result = monetizationTemplateService.previewTemplate(
-          req.params.guildId,
-          templateKey
-        );
-
-        if (!result.success) {
-          return res.status(400).json(result);
-        }
-
-        res.json(result);
-      } catch (error) {
-        logger.error('Error previewing monetization template:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.post('/api/superadmin/tenants/:guildId/apply-template', superadminGuard, logSuperadminTenantAction, (req, res) => {
-      try {
-        const templateKey = String(req.body?.templateKey || '').trim();
-        if (!templateKey) {
-          return res.status(400).json({ success: false, message: 'templateKey is required' });
-        }
-
-        const result = monetizationTemplateService.applyTemplate(
-          req.params.guildId,
-          templateKey,
-          req.session?.discordUser?.id || 'unknown'
-        );
-
-        if (!result.success) {
-          return res.status(400).json(result);
-        }
-
-        res.json(result);
-      } catch (error) {
-        logger.error('Error applying monetization template:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.post('/api/superadmin/tenants/:guildId/rollback-template', superadminGuard, logSuperadminTenantAction, (req, res) => {
-      try {
-        const result = monetizationTemplateService.rollbackLastTemplate(
-          req.params.guildId,
-          req.session?.discordUser?.id || 'unknown'
-        );
-
-        if (!result.success) {
-          return res.status(400).json(result);
-        }
-
-        res.json(result);
-      } catch (error) {
-        logger.error('Error rolling back monetization template:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.get('/api/superadmin/tenants/:guildId/limits', superadminGuard, logSuperadminTenantAction, (req, res) => {
-      try {
-        const snapshot = entitlementService.getTenantLimitSnapshot(req.params.guildId);
-        if (!snapshot) {
-          return res.status(404).json({ success: false, message: 'Tenant not found' });
-        }
-
-        res.json({ success: true, limits: snapshot });
-      } catch (error) {
-        logger.error('Error fetching tenant limits:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.put('/api/superadmin/tenants/:guildId/limits', superadminGuard, logSuperadminTenantAction, (req, res) => {
-      try {
-        const guildId = req.params.guildId;
-        const before = entitlementService.getTenantLimitSnapshot(guildId);
-        if (!before) {
-          return res.status(404).json({ success: false, message: 'Tenant not found' });
-        }
-
-        const updates = [];
-        if (req.body && typeof req.body === 'object' && req.body.moduleKey && req.body.limitKey) {
-          updates.push({
-            moduleKey: req.body.moduleKey,
-            limitKey: req.body.limitKey,
-            limitValue: req.body.limitValue,
-          });
-        } else if (req.body && typeof req.body === 'object' && req.body.overrides && typeof req.body.overrides === 'object') {
-          for (const [moduleKey, limitMap] of Object.entries(req.body.overrides)) {
-            if (!limitMap || typeof limitMap !== 'object') continue;
-            for (const [limitKey, limitValue] of Object.entries(limitMap)) {
-              updates.push({ moduleKey, limitKey, limitValue });
-            }
-          }
-        }
-
-        if (updates.length === 0) {
-          return res.status(400).json({ success: false, message: 'No valid limit updates provided' });
-        }
-
-        for (const update of updates) {
-          const result = entitlementService.setTenantModuleOverride(
-            guildId,
-            update.moduleKey,
-            update.limitKey,
-            update.limitValue
-          );
-          if (!result.success) {
-            return res.status(400).json(result);
-          }
-        }
-
-        const after = entitlementService.getTenantLimitSnapshot(guildId);
-        tenantService.logAudit(guildId, req.session?.discordUser?.id || 'unknown', 'set_module_limits', before, after);
-        res.json({ success: true, limits: after });
-      } catch (error) {
-        logger.error('Error updating tenant limits:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.put('/api/superadmin/tenants/:guildId/plan', superadminGuard, logSuperadminTenantAction, (req, res) => {
-      try {
-        const result = tenantService.setTenantPlan(
-          req.params.guildId,
-          req.body?.plan,
-          req.session.discordUser.id
-        );
-
-        if (!result.success) {
-          return res.status(400).json(result);
-        }
-
-        res.json(result);
-      } catch (error) {
-        logger.error('Error updating tenant plan:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.put('/api/superadmin/tenants/:guildId/modules', superadminGuard, logSuperadminTenantAction, (req, res) => {
-      try {
-        const { moduleKey, enabled } = req.body || {};
-        if (!moduleKey) {
-          return res.status(400).json({ success: false, message: 'moduleKey is required' });
-        }
-
-        const result = tenantService.setTenantModule(
-          req.params.guildId,
-          moduleKey,
-          enabled,
-          req.session.discordUser.id
-        );
-
-        if (!result.success) {
-          return res.status(400).json(result);
-        }
-
-        res.json(result);
-      } catch (error) {
-        logger.error('Error updating tenant module:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.put('/api/superadmin/tenants/:guildId/status', superadminGuard, logSuperadminTenantAction, (req, res) => {
-      try {
-        const result = tenantService.setTenantStatus(
-          req.params.guildId,
-          req.body?.status,
-          req.session.discordUser.id
-        );
-
-        if (!result.success) {
-          return res.status(400).json(result);
-        }
-
-        res.json(result);
-      } catch (error) {
-        logger.error('Error updating tenant status:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.put('/api/superadmin/tenants/:guildId/mock-data', superadminGuard, logSuperadminTenantAction, (req, res) => {
-      try {
-        const result = tenantService.setTenantMockData(
-          req.params.guildId,
-          !!req.body?.enabled,
-          req.session.discordUser.id
-        );
-
-        if (!result.success) {
-          return res.status(400).json(result);
-        }
-
-        res.json(result);
-      } catch (error) {
-        logger.error('Error updating tenant mock-data flag:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.post('/api/superadmin/tenants/:guildId/logo-upload', superadminGuard, logSuperadminTenantAction, async (req, res) => {
-      try {
-        const guildId = req.params.guildId;
-        const { dataUrl } = req.body || {};
-        if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
-          return res.status(400).json({ success: false, message: 'dataUrl (image) is required' });
-        }
-
-        const match = dataUrl.match(/^data:(image\/(png|jpeg|jpg|webp));base64,(.+)$/i);
-        if (!match) {
-          return res.status(400).json({ success: false, message: 'Unsupported image format' });
-        }
-
-        const mime = match[1].toLowerCase();
-        const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
-        const b64 = match[3];
-        const buffer = Buffer.from(b64, 'base64');
-        const maxBytes = 2 * 1024 * 1024;
-        if (buffer.length > maxBytes) {
-          return res.status(400).json({ success: false, message: 'Logo too large (max 2MB)' });
-        }
-
-        const uploadDir = path.join(__dirname, 'public', 'uploads', 'tenant-logos');
-        fs.mkdirSync(uploadDir, { recursive: true });
-        const safeGuildId = normalizeGuildId(guildId);
-        const fileName = `${safeGuildId}-${Date.now()}.${ext}`;
-        const filePath = path.join(uploadDir, fileName);
-        fs.writeFileSync(filePath, buffer);
-
-        const publicUrl = `/uploads/tenant-logos/${fileName}`;
-        const result = tenantService.updateTenantBranding(guildId, { logo_url: publicUrl }, req.session.discordUser.id);
-        if (!result.success) {
-          return res.status(400).json(result);
-        }
-
-        return res.json({ success: true, logo_url: publicUrl });
-      } catch (error) {
-        logger.error('Error uploading tenant logo:', error);
-        return res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.put('/api/superadmin/tenants/:guildId/branding', superadminGuard, logSuperadminTenantAction, async (req, res) => {
-      try {
-        const guildId = req.params.guildId;
-        const ALLOWED_BRANDING_FIELDS = ['displayName', 'description', 'logoUrl', 'primaryColor', 'supportUrl', 'bot_display_name', 'brand_emoji', 'brand_color', 'display_name', 'primary_color', 'secondary_color', 'logo_url', 'icon_url', 'support_url'];
-        const patch = {};
-        for (const key of ALLOWED_BRANDING_FIELDS) {
-          if ((req.body || {})[key] !== undefined) patch[key] = req.body[key];
-        }
-        const result = tenantService.updateTenantBranding(
-          guildId,
-          patch,
-          req.session.discordUser.id
-        );
-
-        if (!result.success) {
-          return res.status(400).json(result);
-        }
-
-        // Best-effort: apply tenant bot display name as guild-specific bot nickname
-        // (Discord global username cannot be changed per server.)
-        if (patch.bot_display_name && this.client) {
-          try {
-            const guild = await this.client.guilds.fetch(guildId).catch(() => null);
-            const me = guild ? await guild.members.fetchMe().catch(() => null) : null;
-            if (me) {
-              await me.setNickname(String(patch.bot_display_name).slice(0, 32));
-            }
-          } catch (e) {
-            logger.warn(`Could not set bot nickname for guild ${guildId}: ${e.message}`);
-          }
-        }
-
-        res.json(result);
-      } catch (error) {
-        logger.error('Error updating tenant branding:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    // ==================== SUPERADMIN SYSTEM STATUS ====================
-
-    this.app.get('/api/superadmin/system-status', superadminGuard, async (req, res) => {
-      try {
-        const cpus = os.cpus();
-        const cpuModel = cpus[0]?.model || 'Unknown';
-        const cpuCount = cpus.length;
-
-        const totalMem = os.totalmem();
-        const freeMem = os.freemem();
-        const usedMem = totalMem - freeMem;
-        const memPct = Math.round((usedMem / totalMem) * 100);
-
-        const uptimeSecs = os.uptime();
-        const uptimeHours = Math.floor(uptimeSecs / 3600);
-        const uptimeMins = Math.floor((uptimeSecs % 3600) / 60);
-
-        const nodeMemory = process.memoryUsage();
-
-        const getDisk = () => new Promise((resolve) => {
-          exec('df -BM / | tail -1', (err, stdout) => {
-            if (err) { resolve(null); return; }
-            const parts = stdout.trim().split(/\s+/);
-            resolve({ total: parts[1], used: parts[2], available: parts[3], pct: parts[4] });
-          });
-        });
-        const getPm2 = () => new Promise((resolve) => {
-          exec('pm2 jlist 2>/dev/null || echo []', (err, stdout) => {
-            if (err) { resolve([]); return; }
-            try {
-              const pm2List = JSON.parse(stdout.trim());
-              resolve(pm2List.map(p => ({
-                name: p.name,
-                status: p.pm2_env?.status || 'unknown',
-                uptime: p.pm2_env?.pm_uptime ? Date.now() - p.pm2_env.pm_uptime : null,
-                restarts: p.pm2_env?.restart_time || 0,
-                memory: p.monit?.memory || 0,
-                cpu: p.monit?.cpu || 0,
-              })));
-            } catch (_) { resolve([]); }
-          });
-        });
-
-        const [disk, pm2Processes] = await Promise.all([getDisk(), getPm2()]);
-
-        res.json({
-          cpu: { model: cpuModel, cores: cpuCount },
-          memory: { total: totalMem, used: usedMem, free: freeMem, pct: memPct },
-          node: { heapUsed: nodeMemory.heapUsed, heapTotal: nodeMemory.heapTotal, rss: nodeMemory.rss, version: process.version },
-          uptime: { seconds: uptimeSecs, display: `${uptimeHours}h ${uptimeMins}m` },
-          disk,
-          pm2: pm2Processes,
-          timestamp: new Date().toISOString(),
-        });
-      } catch (err) {
-        logger.error('[SystemStatus]', err);
-        res.status(500).json({ error: 'Internal server error' });
-      }
-    });
-
-    // ==================== SUPERADMIN ERA ASSIGNMENTS ====================
-
-    this.app.get('/api/superadmin/eras', superadminGuard, (req, res) => {
-      try {
-        const eras = battleService.getAssignableEras();
-        res.json({ success: true, eras });
-      } catch (error) {
-        logger.error('Error fetching eras:', error);
-        res.status(500).json({ success: false, message: 'Failed to fetch eras' });
-      }
-    });
-
-    this.app.get('/api/superadmin/era-assignments', superadminGuard, (req, res) => {
-      try {
-        const assignments = db.prepare(`
-          SELECT bea.*, t.guild_name
-          FROM battle_era_assignments bea
-          LEFT JOIN tenants t ON t.guild_id = bea.guild_id
-          ORDER BY bea.assigned_at DESC
-        `).all();
-        res.json({ success: true, assignments });
-      } catch (error) {
-        logger.error('Error fetching era assignments:', error);
-        res.status(500).json({ success: false, message: 'Failed to fetch era assignments' });
-      }
-    });
-
-    this.app.post('/api/superadmin/era-assignments', superadminGuard, (req, res) => {
-      try {
-        const { guildId, eraKey } = req.body;
-        if (!guildId || !eraKey) {
-          return res.status(400).json({ success: false, message: 'guildId and eraKey are required' });
-        }
-        const normalizedEraKey = battleService.normalizeEraKey(eraKey);
-        if (!BATTLE_ERAS[normalizedEraKey]) {
-          return res.status(400).json({ success: false, message: 'Unknown era key' });
-        }
-        if (!battleService.isEraAssignable(normalizedEraKey)) {
-          return res.status(400).json({ success: false, message: 'Era is not assignable via superadmin panel' });
-        }
-        db.prepare(`
-          INSERT OR IGNORE INTO battle_era_assignments (guild_id, era_key, assigned_by)
-          VALUES (?, ?, ?)
-        `).run(guildId, normalizedEraKey, req.session.discordUser.id);
-        res.json({ success: true, message: `Era "${normalizedEraKey}" assigned to guild ${guildId}` });
-      } catch (error) {
-        logger.error('Error assigning era:', error);
-        res.status(500).json({ success: false, message: 'Failed to assign era' });
-      }
-    });
-
-    this.app.delete('/api/superadmin/era-assignments/:guildId/:eraKey', superadminGuard, (req, res) => {
-      try {
-        const { guildId, eraKey } = req.params;
-        const normalizedEraKey = battleService.normalizeEraKey(eraKey);
-        const result = db.prepare('DELETE FROM battle_era_assignments WHERE guild_id = ? AND era_key = ?').run(guildId, normalizedEraKey);
-        if (result.changes === 0) {
-          return res.status(404).json({ success: false, message: 'Assignment not found' });
-        }
-        res.json({ success: true, message: `Era "${normalizedEraKey}" revoked from guild ${guildId}` });
-      } catch (error) {
-        logger.error('Error revoking era:', error);
-        res.status(500).json({ success: false, message: 'Failed to revoke era' });
-      }
-    });
-
-    this.app.post('/api/superadmin/nft-activity/replay', superadminGuard, async (req, res) => {
-      try {
-        const txSignature = String(req.body?.txSignature || req.body?.tx || '').trim();
-        if (!txSignature) {
-          return res.status(400).json({ success: false, message: 'txSignature is required' });
-        }
-
-        const result = await nftActivityService.replayEventByTx(txSignature);
-        if (!result.success) {
-          return res.status(404).json(result);
-        }
-        return res.json(result);
-      } catch (error) {
-        logger.error('Error replaying nft activity event:', error);
-        return res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
+    const createSuperadminCoreRouter = require('./routes/superadminCore');
+    this.app.use('/api/superadmin', createSuperadminCoreRouter({
+      superadminGuard,
+      superadminService,
+      tenantService,
+      settingsManager,
+      logger,
+      getActivityWebhookSecret,
+    }));
+
+    const createSuperadminAdminsRouter = require('./routes/superadminAdmins');
+    this.app.use('/api/superadmin', createSuperadminAdminsRouter({
+      superadminGuard,
+      superadminService,
+      logger,
+    }));
+
+    const createSuperadminIdentityRouter = require('./routes/superadminIdentity');
+    this.app.use('/api/superadmin/identity', createSuperadminIdentityRouter({
+      superadminGuard,
+      superadminIdentityService,
+      logger,
+    }));
+
+    const createSuperadminTenantOpsRouter = require('./routes/superadminTenantOps');
+    this.app.use('/api/superadmin', createSuperadminTenantOpsRouter({
+      superadminGuard,
+      tenantService,
+      entitlementService,
+      monetizationTemplateService,
+      getPlanKeys,
+      getPlanPreset,
+      fetchGuildById,
+      guildIconUrl,
+      normalizeGuildId,
+      requestGuildHeader: REQUEST_GUILD_HEADER,
+      fs,
+      path,
+      logger,
+      client: this.client,
+      getGuildBotProfileSnapshot,
+      applyGuildBotProfileBranding,
+    }));
+
+    const createSuperadminOpsRouter = require('./routes/superadminOps');
+    this.app.use('/api/superadmin', createSuperadminOpsRouter({
+      superadminGuard,
+      battleService,
+      nftActivityService,
+      BATTLE_ERAS,
+      db,
+      os,
+      exec,
+      logger,
+    }));
     // ==================== ADMIN API ====================
 
     const adminAuthMiddleware = async (req, res, next) => {
@@ -2152,50 +1548,21 @@ class WebServer {
       }
     };
 
-    this.app.get('/api/admin/env-status', adminAuthMiddleware, (req, res) => {
-      res.json({
-        mockMode: process.env.MOCK_MODE === 'true',
-        heliusConfigured: !!process.env.HELIUS_API_KEY,
-        solanaRpc: process.env.SOLANA_RPC_URL || 'default',
-        nodeEnv: process.env.NODE_ENV || 'development',
-        webhookSecretConfigured: !!getActivityWebhookSecret()
-      });
-    });
-
-    this.app.get('/api/admin/branding', adminAuthMiddleware, async (req, res) => {
-      if (!ensureBrandingModule(req, res)) return;
-      try {
-        const tenant = tenantService.getTenantContext(req.guildId);
-        const guild = req.guild || await fetchGuildById(req.guildId);
-        const fallbackLogo = guildIconUrl(guild);
-        const branding = {
-          ...(tenant?.branding || {}),
-          logo_url: (tenant?.branding?.logo_url || tenant?.branding?.icon_url || fallbackLogo || null),
-          icon_url: (tenant?.branding?.icon_url || tenant?.branding?.logo_url || fallbackLogo || null)
-        };
-        res.json({ success: true, branding });
-      } catch (error) {
-        logger.error('Error fetching admin branding:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.put('/api/admin/branding', adminAuthMiddleware, (req, res) => {
-      if (!ensureBrandingModule(req, res)) return;
-      try {
-        const ALLOWED_BRANDING_FIELDS = ['bot_display_name', 'brand_emoji', 'brand_color', 'logo_url', 'support_url', 'footer_text', 'display_name', 'primary_color', 'secondary_color', 'icon_url', 'ticketing_color', 'selfserve_color', 'nfttracker_color', 'ticket_panel_title', 'ticket_panel_description', 'selfserve_panel_title', 'selfserve_panel_description', 'nfttracker_panel_title', 'nfttracker_panel_description'];
-        const patch = {};
-        for (const key of ALLOWED_BRANDING_FIELDS) {
-          if (req.body[key] !== undefined) patch[key] = req.body[key];
-        }
-        const result = tenantService.updateTenantBranding(req.guildId, patch, req.session?.discordUser?.id || 'unknown');
-        if (!result.success) return res.status(400).json(result);
-        res.json({ success: true, branding: result.tenant?.branding || null });
-      } catch (error) {
-        logger.error('Error updating admin branding:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
+    const createAdminCoreRouter = require('./routes/adminCore');
+    this.app.use('/api/admin', createAdminCoreRouter({
+      adminAuthMiddleware,
+      ensureBrandingModule,
+      tenantService,
+      fetchGuildById,
+      guildIconUrl,
+      billingService,
+      logger,
+      normalizeWebhookValue,
+      getActivityWebhookSecret,
+      client: this.client,
+      getGuildBotProfileSnapshot,
+      applyGuildBotProfileBranding,
+    }));
 
     this.app.get('/api/admin/settings', adminAuthMiddleware, async (req, res) => {
       try {
@@ -2259,6 +1626,7 @@ class WebServer {
           const tenantVerification = tenantService.getTenantVerificationSettings(req.guildId);
           if (tenantVerification.ogRoleId !== undefined) effectiveSettings.ogRoleId = tenantVerification.ogRoleId || '';
           if (tenantVerification.ogRoleLimit !== undefined) effectiveSettings.ogRoleLimit = tenantVerification.ogRoleLimit || 0;
+          if (tenantVerification.baseVerifiedRoleId !== undefined) effectiveSettings.baseVerifiedRoleId = tenantVerification.baseVerifiedRoleId || '';
           // Tell the frontend which module keys are actually assigned (exist in tenant_modules)
           const assignedModuleKeys = Object.keys(tenantContext.modules);
           if (assignedModuleKeys.includes('battle') && !assignedModuleKeys.includes('minigames')) {
@@ -2279,15 +1647,13 @@ class WebServer {
           effectiveSettings.moduleBattleEnabled = !!effectiveSettings.moduleMinigamesEnabled;
         }
 
-        // ogRoleId lives in og-role.json (ogRoleService).
-        // In multi-tenant mode the DB lookup often fails (tenant not provisioned);
-        // in single-tenant mode settings.json never held it.
-        // Always overlay from ogRoleService as the authoritative source when the
-        // effective value is still empty after tenant/settings resolution.
+        // OG role settings are tenant-scoped in multi-tenant mode and legacy
+        // file-scoped in single-tenant mode. Overlay from OG role service only
+        // when the effective value is still empty after tenant/settings resolution.
         if (!effectiveSettings.ogRoleId) {
           try {
             const ogRoleService = require('../services/ogRoleService');
-            const ogCfg = ogRoleService.getConfig();
+            const ogCfg = ogRoleService.getConfig(req.guildId || null);
             logger.log(`[OG-DEBUG] GET /api/admin/settings ogRoleService config: ${JSON.stringify(ogCfg)}`);
             if (ogCfg.roleId) {
               effectiveSettings.ogRoleId = ogCfg.roleId;
@@ -2301,51 +1667,6 @@ class WebServer {
         res.json({ success: true, settings: effectiveSettings });
       } catch (error) {
         logger.error('Error fetching settings:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.get('/api/admin/plan', adminAuthMiddleware, (req, res) => {
-      try {
-        const tenantContext = tenantService.getTenantContext(req.guildId);
-        const snapshot = billingService.getSubscriptionSnapshot(req.guildId);
-        const plan = tenantContext?.planKey || snapshot?.plan || 'starter';
-
-        res.json({
-          success: true,
-          plan,
-          planLabel: snapshot?.planLabel || tenantContext?.planLabel || plan,
-          status: snapshot?.status || tenantContext?.status || 'active',
-          expiresAt: snapshot?.expiresAt || null,
-          billing: snapshot?.billing || null,
-          renewal: snapshot?.renewal || { options: [] }
-        });
-      } catch (error) {
-        logger.error('Error fetching admin plan:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.get('/api/admin/billing/options', adminAuthMiddleware, (req, res) => {
-      try {
-        const tenantContext = tenantService.getTenantContext(req.guildId);
-        const requestedPlan = normalizeWebhookValue(req.query.plan) || tenantContext?.planKey || 'starter';
-        const requestedInterval = normalizeWebhookValue(req.query.interval) || tenantContext?.billing?.billingInterval || 'monthly';
-        const options = billingService.getRenewalOptions({
-          guildId: req.guildId,
-          planKey: requestedPlan,
-          interval: requestedInterval
-        });
-
-        res.json({
-          success: true,
-          plan: requestedPlan,
-          interval: requestedInterval,
-          options,
-          supportUrl: billingService.getSupportUrl(req.guildId)
-        });
-      } catch (error) {
-        logger.error('Error fetching billing options:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });
@@ -2389,6 +1710,11 @@ class WebServer {
         const multiTenantEnabled = tenantService.isMultitenantEnabled();
         if (multiTenantEnabled && req.guildId) {
           const tenantContext = tenantService.getTenantContext(req.guildId);
+          if (!tenantContext?.tenant) {
+            delete sanitized.ogRoleId;
+            delete sanitized.ogRoleLimit;
+            delete sanitized.baseVerifiedRoleId;
+          }
           if (tenantContext?.tenant) {
             const moduleFieldMap = {
               moduleBattleEnabled: 'minigames',
@@ -2407,6 +1733,10 @@ class WebServer {
             };
             for (const [field, moduleKey] of Object.entries(moduleFieldMap)) {
               if (sanitized[field] !== undefined) {
+                if (!req.isSuperadmin) {
+                  delete sanitized[field];
+                  continue;
+                }
                 // Only allow toggling modules that are actually assigned to this tenant
                 if (tenantContext.modules) {
                   const requestedEnabled = !!sanitized[field];
@@ -2435,26 +1765,28 @@ class WebServer {
             }
 
             // Tenant-specific OG settings (do not write globally)
-            const ogPatch = {};
-            if (sanitized.ogRoleId !== undefined) ogPatch.ogRoleId = sanitized.ogRoleId;
-            if (sanitized.ogRoleLimit !== undefined) ogPatch.ogRoleLimit = sanitized.ogRoleLimit;
-            if (Object.keys(ogPatch).length > 0) {
-              tenantService.updateTenantVerificationSettings(req.guildId, ogPatch, req.session?.discordUser?.id || 'unknown');
+            const tenantVerificationPatch = {};
+            if (sanitized.ogRoleId !== undefined) tenantVerificationPatch.ogRoleId = sanitized.ogRoleId;
+            if (sanitized.ogRoleLimit !== undefined) tenantVerificationPatch.ogRoleLimit = sanitized.ogRoleLimit;
+            if (sanitized.baseVerifiedRoleId !== undefined) tenantVerificationPatch.baseVerifiedRoleId = sanitized.baseVerifiedRoleId;
+            if (Object.keys(tenantVerificationPatch).length > 0) {
+              tenantService.updateTenantVerificationSettings(req.guildId, tenantVerificationPatch, req.session?.discordUser?.id || 'unknown');
               delete sanitized.ogRoleId;
               delete sanitized.ogRoleLimit;
+              delete sanitized.baseVerifiedRoleId;
             }
 
             // Sync OG role service from tenant settings directly (not global settings.json).
             // Same rule: only update when a real roleId was submitted.
-            if (Object.keys(ogPatch).length > 0) {
+            if (Object.keys(tenantVerificationPatch).length > 0) {
               try {
                 const ogRoleService = require('../services/ogRoleService');
-                if (ogPatch.ogRoleId) {
-                  ogRoleService.setRole(ogPatch.ogRoleId);
-                  ogRoleService.setEnabled(true);
+                if (tenantVerificationPatch.ogRoleId) {
+                  ogRoleService.setRole(tenantVerificationPatch.ogRoleId, req.guildId);
+                  ogRoleService.setEnabled(true, req.guildId);
                 }
-                if (ogPatch.ogRoleLimit !== undefined && ogPatch.ogRoleId) {
-                  ogRoleService.setLimit(ogPatch.ogRoleLimit || 1);
+                if (tenantVerificationPatch.ogRoleLimit !== undefined && tenantVerificationPatch.ogRoleId) {
+                  ogRoleService.setLimit(tenantVerificationPatch.ogRoleLimit || 1, req.guildId);
                 }
               } catch (e) {
                 logger.warn('OG role config sync warning (tenant):', e?.message || e);
@@ -2478,7 +1810,7 @@ class WebServer {
         // Sync OG role service with portal verification settings.
         // Runs in single-tenant mode AND as a fallback in multi-tenant when the
         // tenant DB lookup fails (e.g. tenant not provisioned / getTenantByGuildId error).
-        if (!tenantService.isMultitenantEnabled() || !req.guildId || true) {
+        if (!tenantService.isMultitenantEnabled() || !req.guildId) {
           try {
             const ogRoleService = require('../services/ogRoleService');
             // Only update ogRoleService when a real (non-empty) roleId was submitted.
@@ -2587,15 +1919,26 @@ class WebServer {
       try {
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
         const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
-        const totalCount = db.prepare('SELECT COUNT(DISTINCT discord_id) as cnt FROM users').get().cnt;
+        const totalCount = db.prepare(`
+          SELECT COUNT(*) AS cnt
+          FROM user_tenant_memberships um
+          INNER JOIN users u ON u.discord_id = um.discord_id
+          WHERE um.guild_id = ?
+        `).get(req.guildId).cnt;
         const users = db.prepare(`
-          SELECT u.*, COUNT(w.id) as wallet_count
-          FROM users u
+          SELECT
+            u.*,
+            COUNT(w.id) as wallet_count,
+            um.last_verified_at as last_verified_at,
+            um.updated_at as tenant_updated_at
+          FROM user_tenant_memberships um
+          INNER JOIN users u ON u.discord_id = um.discord_id
           LEFT JOIN wallets w ON u.discord_id = w.discord_id
-          GROUP BY u.discord_id
-          ORDER BY u.total_nfts DESC
+          WHERE um.guild_id = ?
+          GROUP BY um.discord_id
+          ORDER BY COALESCE(u.total_nfts, 0) DESC, COALESCE(um.updated_at, um.created_at) DESC
           LIMIT ? OFFSET ?
-        `).all(limit, offset);
+        `).all(req.guildId, limit, offset);
 
         // Overlay voting power from role mappings (if any configured)
         const mappings = db.prepare('SELECT * FROM role_vp_mappings').all();
@@ -2622,18 +1965,41 @@ class WebServer {
       if (!ensureVerificationModule(req, res)) return;
       try {
         const { discordId } = req.params;
+        const membership = db.prepare(`
+          SELECT *
+          FROM user_tenant_memberships
+          WHERE discord_id = ? AND guild_id = ?
+        `).get(discordId, req.guildId);
+        if (!membership) {
+          return res.status(404).json({ success: false, message: 'User not found in this tenant' });
+        }
         const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(discordId);
         const wallets = db.prepare('SELECT * FROM wallets WHERE discord_id = ?').all(discordId);
-        const proposals = (hasProposalsGuildColumn() && req.guildId)
+        const proposalsGuildScoped = hasProposalsGuildColumn();
+        const proposals = (proposalsGuildScoped && req.guildId)
           ? db.prepare('SELECT * FROM proposals WHERE creator_id = ? AND guild_id = ?').all(discordId, req.guildId)
-          : db.prepare('SELECT * FROM proposals WHERE creator_id = ?').all(discordId);
-        const votes = db.prepare('SELECT * FROM votes WHERE voter_id = ?').all(discordId);
-        const missions = db.prepare(`
-          SELECT m.*, mp.assigned_nft_name, mp.points_awarded
-          FROM missions m
-          JOIN mission_participants mp ON m.mission_id = mp.mission_id
-          WHERE mp.participant_id = ?
-        `).all(discordId);
+          : (tenantService.isMultitenantEnabled() ? [] : db.prepare('SELECT * FROM proposals WHERE creator_id = ?').all(discordId));
+        const votes = (proposalsGuildScoped && req.guildId)
+          ? db.prepare(`
+            SELECT v.*
+            FROM votes v
+            INNER JOIN proposals p ON p.proposal_id = v.proposal_id
+            WHERE v.voter_id = ? AND p.guild_id = ?
+          `).all(discordId, req.guildId)
+          : (tenantService.isMultitenantEnabled() ? [] : db.prepare('SELECT * FROM votes WHERE voter_id = ?').all(discordId));
+        const missions = (missionService.hasMissionsGuildColumn?.() === true)
+          ? db.prepare(`
+            SELECT m.*, mp.assigned_nft_name, mp.points_awarded
+            FROM missions m
+            JOIN mission_participants mp ON m.mission_id = mp.mission_id
+            WHERE mp.participant_id = ? AND m.guild_id = ?
+          `).all(discordId, req.guildId)
+          : db.prepare(`
+            SELECT m.*, mp.assigned_nft_name, mp.points_awarded
+            FROM missions m
+            JOIN mission_participants mp ON m.mission_id = mp.mission_id
+            WHERE mp.participant_id = ?
+          `).all(discordId);
 
         res.json({
           success: true,
@@ -2641,7 +2007,8 @@ class WebServer {
           wallets,
           proposals,
           votes,
-          missions
+          missions,
+          membership,
         });
       } catch (error) {
         logger.error('Error fetching user details:', error);
@@ -2653,15 +2020,55 @@ class WebServer {
       if (!ensureVerificationModule(req, res)) return;
       try {
         const { discordId } = req.params;
-        const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(discordId);
-        if (!user) {
-          return res.status(404).json({ success: false, message: 'User not found' });
+        const membership = db.prepare(`
+          SELECT *
+          FROM user_tenant_memberships
+          WHERE discord_id = ? AND guild_id = ?
+        `).get(discordId, req.guildId);
+        if (!membership) {
+          return res.status(404).json({ success: false, message: 'User not found in this tenant' });
         }
-        db.prepare('DELETE FROM wallets WHERE discord_id = ?').run(discordId);
-        db.prepare('DELETE FROM votes WHERE voter_id = ?').run(discordId);
-        db.prepare('DELETE FROM users WHERE discord_id = ?').run(discordId);
-        logger.log(`Admin removed user ${discordId} (${user.username})`);
-        res.json({ success: true, message: 'User removed' });
+        const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(discordId);
+        const globalScopeRequested = req.isSuperadmin && String(req.query.scope || '').trim().toLowerCase() === 'global';
+
+        if (globalScopeRequested) {
+          if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+          }
+          db.prepare('DELETE FROM wallets WHERE discord_id = ?').run(discordId);
+          db.prepare('DELETE FROM votes WHERE voter_id = ?').run(discordId);
+          db.prepare('DELETE FROM user_tenant_memberships WHERE discord_id = ?').run(discordId);
+          db.prepare('DELETE FROM users WHERE discord_id = ?').run(discordId);
+          logger.log(`Superadmin removed user ${discordId} (${user.username}) globally`);
+          return res.json({ success: true, message: 'User removed globally' });
+        }
+
+        db.prepare('DELETE FROM user_tenant_memberships WHERE discord_id = ? AND guild_id = ?').run(discordId, req.guildId);
+        if (hasProposalsGuildColumn() && req.guildId) {
+          db.prepare(`
+            DELETE FROM votes
+            WHERE voter_id = ?
+              AND proposal_id IN (
+                SELECT proposal_id
+                FROM proposals
+                WHERE guild_id = ?
+              )
+          `).run(discordId, req.guildId);
+        }
+        if (missionService.hasMissionsGuildColumn?.() === true) {
+          db.prepare(`
+            DELETE FROM mission_participants
+            WHERE participant_id = ?
+              AND mission_id IN (
+                SELECT mission_id
+                FROM missions
+                WHERE guild_id = ?
+              )
+          `).run(discordId, req.guildId);
+        }
+
+        logger.log(`Admin removed user ${discordId} (${user?.username || 'unknown'}) from guild ${req.guildId} verification scope`);
+        res.json({ success: true, message: 'User removed from this server' });
       } catch (error) {
         logger.error('Error removing user:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
@@ -2671,6 +2078,12 @@ class WebServer {
     this.app.get('/api/admin/proposals', adminAuthMiddleware, (req, res) => {
       if (!ensureGovernanceModule(req, res)) return;
       try {
+        if (tenantService.isMultitenantEnabled() && !hasProposalsGuildColumn()) {
+          return res.status(500).json({
+            success: false,
+            message: 'Governance schema is not tenant-scoped. Run database migrations to continue.'
+          });
+        }
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
         const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
         const hasGuildScope = hasProposalsGuildColumn() && !!req.guildId;
@@ -2806,9 +2219,15 @@ class WebServer {
     this.app.get('/api/admin/missions', adminAuthMiddleware, (req, res) => {
       if (!ensureHeistModule(req, res)) return;
       try {
+        const hasGuildColumn = missionService.hasMissionsGuildColumn?.() === true;
+        if (tenantService.isMultitenantEnabled() && !hasGuildColumn) {
+          return res.status(500).json({
+            success: false,
+            message: 'Missions schema is not tenant-scoped. Run database migrations to continue.'
+          });
+        }
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
         const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
-        const hasGuildColumn = missionService.hasMissionsGuildColumn?.() === true;
         const totalCount = hasGuildColumn
           ? db.prepare('SELECT COUNT(*) as cnt FROM missions WHERE guild_id = ?').get(req.guildId).cnt
           : db.prepare('SELECT COUNT(*) as cnt FROM missions').get().cnt;
@@ -2830,6 +2249,12 @@ class WebServer {
     this.app.post('/api/admin/missions/create', adminAuthMiddleware, (req, res) => {
       if (!ensureHeistModule(req, res)) return;
       try {
+        if (tenantService.isMultitenantEnabled() && missionService.hasMissionsGuildColumn?.() !== true) {
+          return res.status(500).json({
+            success: false,
+            message: 'Missions schema is not tenant-scoped. Run database migrations to continue.'
+          });
+        }
         const { title, description, requiredRoles, minTier, totalSlots, rewardPoints } = req.body;
         
         if (!title || !description || !totalSlots) {
@@ -2858,6 +2283,12 @@ class WebServer {
       try {
         const { id } = req.params;
         const hasGuildColumn = missionService.hasMissionsGuildColumn?.() === true;
+        if (tenantService.isMultitenantEnabled() && !hasGuildColumn) {
+          return res.status(500).json({
+            success: false,
+            message: 'Missions schema is not tenant-scoped. Run database migrations to continue.'
+          });
+        }
         const updateResult = hasGuildColumn
           ? db.prepare('UPDATE missions SET status = ?, start_time = CURRENT_TIMESTAMP WHERE mission_id = ? AND guild_id = ?').run('active', id, req.guildId)
           : db.prepare('UPDATE missions SET status = ?, start_time = CURRENT_TIMESTAMP WHERE mission_id = ?').run('active', id);
@@ -2878,6 +2309,12 @@ class WebServer {
       try {
         const { id } = req.params;
         const hasGuildColumn = missionService.hasMissionsGuildColumn?.() === true;
+        if (tenantService.isMultitenantEnabled() && !hasGuildColumn) {
+          return res.status(500).json({
+            success: false,
+            message: 'Missions schema is not tenant-scoped. Run database migrations to continue.'
+          });
+        }
         const mission = hasGuildColumn
           ? db.prepare('SELECT * FROM missions WHERE mission_id = ? AND guild_id = ?').get(id, req.guildId)
           : db.prepare('SELECT * FROM missions WHERE mission_id = ?').get(id);
@@ -2905,6 +2342,34 @@ class WebServer {
     });
 
     // Role configuration endpoints
+    const parseRuleBoolean = (value, defaultValue = false) => {
+      if (value === null || value === undefined) return defaultValue;
+      if (typeof value === 'boolean') return value;
+      if (typeof value === 'number') return value === 1;
+      if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+        if (['0', 'false', 'no', 'off', ''].includes(normalized)) return false;
+      }
+      return defaultValue;
+    };
+
+    const normalizeTierRule = (rule = {}) => ({
+      ...rule,
+      neverRemove: parseRuleBoolean(
+        rule.neverRemove ?? rule.never_remove ?? rule.keepOnLoss ?? rule.keep_on_loss,
+        false
+      )
+    });
+
+    const normalizeTraitRule = (rule = {}) => ({
+      ...rule,
+      neverRemove: parseRuleBoolean(
+        rule.neverRemove ?? rule.never_remove ?? rule.keepOnLoss ?? rule.keep_on_loss,
+        false
+      )
+    });
+
     const getTenantRoleConfig = (guildId) => {
       const row = db.prepare('SELECT tiers_json, traits_json FROM tenant_role_configs WHERE guild_id = ?').get(guildId);
       if (!row) {
@@ -2918,14 +2383,18 @@ class WebServer {
       let traitRoles = [];
       try { tiers = JSON.parse(row.tiers_json || '[]'); } catch {}
       try { traitRoles = JSON.parse(row.traits_json || '[]'); } catch {}
+      const normalizedTiers = Array.isArray(tiers) ? tiers.map(normalizeTierRule) : [];
+      const normalizedTraits = Array.isArray(traitRoles) ? traitRoles.map(normalizeTraitRule) : [];
       return {
-        tiers: Array.isArray(tiers) ? tiers : [],
-        traitRoles: Array.isArray(traitRoles) ? traitRoles : [],
+        tiers: normalizedTiers,
+        traitRoles: normalizedTraits,
         tokenRules: roleService.getTokenRoleRules(guildId)
       };
     };
 
     const saveTenantRoleConfig = (guildId, cfg) => {
+      const normalizedTiers = Array.isArray(cfg.tiers) ? cfg.tiers.map(normalizeTierRule) : [];
+      const normalizedTraits = Array.isArray(cfg.traitRoles) ? cfg.traitRoles.map(normalizeTraitRule) : [];
       db.prepare(`
         INSERT INTO tenant_role_configs (guild_id, tiers_json, traits_json, updated_at)
         VALUES (?, ?, ?, CURRENT_TIMESTAMP)
@@ -2933,7 +2402,7 @@ class WebServer {
           tiers_json = excluded.tiers_json,
           traits_json = excluded.traits_json,
           updated_at = CURRENT_TIMESTAMP
-      `).run(guildId, JSON.stringify(cfg.tiers || []), JSON.stringify(cfg.traitRoles || []));
+      `).run(guildId, JSON.stringify(normalizedTiers), JSON.stringify(normalizedTraits));
     };
 
     const getVerificationRuleCounts = (guildId, { tenantScoped = true } = {}) => {
@@ -2989,6 +2458,9 @@ class WebServer {
 
     const countActiveGovernanceProposals = (guildId) => {
       const normalizedGuildId = String(guildId || '').trim();
+      if (tenantService.isMultitenantEnabled() && !hasProposalsGuildColumn()) {
+        return 0;
+      }
       if (hasProposalsGuildColumn() && normalizedGuildId) {
         return Number(db.prepare(`
           SELECT COUNT(*) AS cnt
@@ -3025,7 +2497,14 @@ class WebServer {
 
     const ensurePublicGovernanceScope = (req, res) => {
       const guildId = getPublicRequestedGuildId(req);
-      if (tenantService.isMultitenantEnabled() && hasProposalsGuildColumn() && !guildId) {
+      if (tenantService.isMultitenantEnabled() && !hasProposalsGuildColumn()) {
+        res.status(500).json({
+          success: false,
+          message: 'Governance schema is not tenant-scoped. Run database migrations to continue.'
+        });
+        return null;
+      }
+      if (tenantService.isMultitenantEnabled() && !guildId) {
         res.status(400).json({
           success: false,
           message: 'guildId query parameter (or x-guild-id header) is required in multi-tenant mode'
@@ -3056,7 +2535,7 @@ class WebServer {
     this.app.post('/api/admin/roles/tiers', adminAuthMiddleware, (req, res) => {
       if (!ensureVerificationModule(req, res)) return;
       try {
-        const { name, minNFTs, maxNFTs, votingPower, roleId, collectionId } = req.body;
+        const { name, minNFTs, maxNFTs, votingPower, roleId, collectionId, neverRemove } = req.body;
         
         if (!name || minNFTs === undefined || maxNFTs === undefined || votingPower === undefined) {
           return res.status(400).json({ success: false, message: 'Missing required fields' });
@@ -3093,12 +2572,28 @@ class WebServer {
           if ((cfg.tiers || []).some(t => String(t.name).toLowerCase() === String(name).toLowerCase())) {
             return res.status(400).json({ success: false, message: 'Tier already exists' });
           }
-          cfg.tiers.push({ name, minNFTs, maxNFTs, votingPower, roleId: roleId || null, collectionId: collectionId || null });
+          cfg.tiers.push({
+            name,
+            minNFTs,
+            maxNFTs,
+            votingPower,
+            roleId: roleId || null,
+            collectionId: collectionId || null,
+            neverRemove: parseRuleBoolean(neverRemove, false)
+          });
           saveTenantRoleConfig(req.guildId, cfg);
           return res.json({ success: true, message: 'Tier added' });
         }
 
-        const result = roleService.addTier(name, minNFTs, maxNFTs, votingPower, roleId || null, collectionId || null);
+        const result = roleService.addTier(
+          name,
+          minNFTs,
+          maxNFTs,
+          votingPower,
+          roleId || null,
+          collectionId || null,
+          parseRuleBoolean(neverRemove, false)
+        );
         res.json(result);
       } catch (error) {
         logger.error('Error adding tier:', error);
@@ -3117,7 +2612,14 @@ class WebServer {
           const cfg = getTenantRoleConfig(req.guildId);
           const idx = (cfg.tiers || []).findIndex(t => String(t.name).toLowerCase() === String(name).toLowerCase());
           if (idx < 0) return res.status(404).json({ success: false, message: 'Tier not found' });
-          cfg.tiers[idx] = { ...cfg.tiers[idx], ...updates };
+          cfg.tiers[idx] = {
+            ...cfg.tiers[idx],
+            ...updates,
+            neverRemove: parseRuleBoolean(
+              updates.neverRemove ?? updates.never_remove ?? cfg.tiers[idx].neverRemove,
+              false
+            )
+          };
           saveTenantRoleConfig(req.guildId, cfg);
           return res.json({ success: true, message: 'Tier updated' });
         }
@@ -3156,7 +2658,7 @@ class WebServer {
     this.app.post('/api/admin/roles/traits', adminAuthMiddleware, (req, res) => {
       if (!ensureVerificationModule(req, res)) return;
       try {
-        const { traitType, roleId, collectionId, description } = req.body;
+        const { traitType, roleId, collectionId, description, neverRemove } = req.body;
         // Support traitValues array; fall back to single traitValue for backward compat
         const traitValues = req.body.traitValues || (req.body.traitValue ? [req.body.traitValue] : []);
         const traitValue = traitValues[0] || req.body.traitValue;
@@ -3200,12 +2702,27 @@ class WebServer {
             String(t.traitValue || t.trait_value).toLowerCase() === String(traitValue).toLowerCase()
           );
           if (exists) return res.status(400).json({ success: false, message: 'Trait rule already exists' });
-          cfg.traitRoles.push({ traitType, traitValue, traitValues, roleId, collectionId, description: description || '' });
+          cfg.traitRoles.push({
+            traitType,
+            traitValue,
+            traitValues,
+            roleId,
+            collectionId,
+            description: description || '',
+            neverRemove: parseRuleBoolean(neverRemove, false)
+          });
           saveTenantRoleConfig(req.guildId, cfg);
           return res.json({ success: true, message: 'Trait rule added' });
         }
 
-        const result = roleService.addTrait(traitType, traitValue, roleId, description, collectionId);
+        const result = roleService.addTrait(
+          traitType,
+          traitValue,
+          roleId,
+          description,
+          collectionId,
+          parseRuleBoolean(neverRemove, false)
+        );
         res.json(result);
       } catch (error) {
         logger.error('Error adding trait:', error);
@@ -3239,12 +2756,31 @@ class WebServer {
             String(t.traitValue || t.trait_value).toLowerCase() === String(traitValue).toLowerCase()
           );
           if (idx < 0) return res.status(404).json({ success: false, message: 'Trait rule not found' });
-          cfg.traitRoles[idx] = { ...cfg.traitRoles[idx], traitType: newTraitType, traitValue: newTraitValue, traitValues, roleId, collectionId, description: description || '' };
+          cfg.traitRoles[idx] = {
+            ...cfg.traitRoles[idx],
+            traitType: newTraitType,
+            traitValue: newTraitValue,
+            traitValues,
+            roleId,
+            collectionId,
+            description: description || '',
+            neverRemove: parseRuleBoolean(
+              req.body.neverRemove ?? req.body.never_remove ?? cfg.traitRoles[idx].neverRemove,
+              false
+            )
+          };
           saveTenantRoleConfig(req.guildId, cfg);
           return res.json({ success: true, message: 'Trait rule updated' });
         }
 
-        const result = roleService.editTrait(traitType, traitValue, roleId, description, collectionId);
+        const result = roleService.editTrait(
+          traitType,
+          traitValue,
+          roleId,
+          description,
+          collectionId,
+          parseRuleBoolean(req.body.neverRemove ?? req.body.never_remove, undefined)
+        );
         res.json(result);
       } catch (error) {
         logger.error('Error editing trait:', error);
@@ -3320,7 +2856,7 @@ class WebServer {
     this.app.post('/api/admin/roles/tokens', adminAuthMiddleware, (req, res) => {
       if (!ensureVerificationModule(req, res)) return;
       try {
-        const { tokenMint, tokenSymbol, minAmount, maxAmount, roleId, enabled } = req.body || {};
+        const { tokenMint, tokenSymbol, minAmount, maxAmount, roleId, enabled, neverRemove } = req.body || {};
         if (!tokenMint || !roleId || minAmount === undefined || minAmount === null) {
           return res.status(400).json({ success: false, message: 'tokenMint, roleId, and minAmount are required' });
         }
@@ -3345,7 +2881,8 @@ class WebServer {
           minAmount,
           maxAmount: maxAmount === undefined ? null : maxAmount,
           roleId,
-          enabled: enabled !== false
+          enabled: enabled !== false,
+          neverRemove: parseRuleBoolean(neverRemove, false)
         });
         if (!result.success) return res.status(400).json(result);
         res.json(result);
@@ -3358,7 +2895,11 @@ class WebServer {
     this.app.put('/api/admin/roles/tokens/:id', adminAuthMiddleware, (req, res) => {
       if (!ensureVerificationModule(req, res)) return;
       try {
-        const result = roleService.updateTokenRoleRule(req.params.id, req.body || {}, req.guildId || null);
+        const updates = { ...(req.body || {}) };
+        if (updates.neverRemove !== undefined || updates.never_remove !== undefined) {
+          updates.neverRemove = parseRuleBoolean(updates.neverRemove ?? updates.never_remove, false);
+        }
+        const result = roleService.updateTokenRoleRule(req.params.id, updates, req.guildId || null);
         if (!result.success) return res.status(400).json(result);
         res.json(result);
       } catch (error) {
@@ -3458,17 +2999,17 @@ class WebServer {
         let result = { success: true };
         
         if (enabled !== undefined) {
-          result = ogRoleService.setEnabled(enabled);
+          result = ogRoleService.setEnabled(enabled, req.guildId);
           if (!result.success) return res.json(result);
         }
         
         if (roleId !== undefined) {
-          result = ogRoleService.setRole(roleId);
+          result = ogRoleService.setRole(roleId, req.guildId);
           if (!result.success) return res.json(result);
         }
         
         if (limit !== undefined) {
-          result = ogRoleService.setLimit(limit);
+          result = ogRoleService.setLimit(limit, req.guildId);
           if (!result.success) return res.json(result);
         }
         
@@ -3951,10 +3492,15 @@ class WebServer {
       if (!req.session.discordUser) {
         return res.status(401).json({ success: false, message: 'Not authenticated' });
       }
+      if (tenantService.isMultitenantEnabled() && !req.guildId) {
+        return res.status(409).json({ success: false, message: 'Select a server to continue' });
+      }
 
       try {
         const nonce = require('crypto').randomBytes(16).toString('hex');
-        const message = `Solpranos Wallet Verification\nUser: ${req.session.discordUser.username}\nNonce: ${nonce}`;
+        const branding = getBranding(req.guildId || '', 'verification');
+        const brandName = String(branding?.brandName || branding?.displayName || 'Guild Pilot').trim() || 'Guild Pilot';
+        const message = `${brandName} Wallet Verification\nUser: ${req.session.discordUser.username}\nNonce: ${nonce}`;
         req.session.verifyChallenge = { message, nonce, createdAt: Date.now() };
         res.json({ success: true, message });
       } catch (error) {
@@ -3967,6 +3513,9 @@ class WebServer {
     this.app.post('/api/verify/signature', async (req, res) => {
       if (!req.session.discordUser) {
         return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
+      if (tenantService.isMultitenantEnabled() && !req.guildId) {
+        return res.status(409).json({ success: false, message: 'Select a server to continue' });
       }
 
       try {
@@ -4044,6 +3593,9 @@ class WebServer {
     this.app.post('/api/verify', async (req, res) => {
       if (!req.session?.discordUser?.id) {
         return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
+      if (tenantService.isMultitenantEnabled() && !req.guildId) {
+        return res.status(409).json({ success: false, message: 'Select a server to continue' });
       }
 
       try {
@@ -4182,6 +3734,9 @@ class WebServer {
       if (!req.session.discordUser) {
         return res.status(401).json({ success: false, message: 'Not authenticated' });
       }
+      if (tenantService.isMultitenantEnabled() && !req.guildId) {
+        return res.status(409).json({ success: false, message: 'Select a server to continue' });
+      }
 
       try {
         const discordId = req.session.discordUser.id;
@@ -4306,9 +3861,9 @@ class WebServer {
       try {
         const guildId = req.guildId;
         const { name, description, type, cost, roleId, codes, quantity } = req.body;
-        if (!name || cost == null) return res.status(400).json({ success: false, message: 'name and cost are required' });
+        if (!name || cost === null || cost === undefined) return res.status(400).json({ success: false, message: 'name and cost are required' });
         const eng = require('../services/engagementService');
-        const result = eng.addShopItem(guildId, { name, description, type: type || 'role', cost: parseInt(cost, 10), roleId, codes, quantity_remaining: quantity != null ? parseInt(quantity, 10) : -1 });
+        const result = eng.addShopItem(guildId, { name, description, type: type || 'role', cost: parseInt(cost, 10), roleId, codes, quantity_remaining: quantity !== null && quantity !== undefined ? parseInt(quantity, 10) : -1 });
         if (!result?.success) return res.status(400).json(result || { success: false, message: 'Failed to create shop item' });
         res.json(result);
       } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -4341,7 +3896,7 @@ class WebServer {
     this.app.get('/api/admin/nft-activity/config', adminAuthMiddleware, (req, res) => {
       if (!ensureNftTrackerModule(req, res)) return;
       try {
-        const config = nftActivityService.getAlertConfig();
+        const config = nftActivityService.getAlertConfig(req.guildId);
         if (!config) return res.status(500).json({ success: false, message: 'Failed to load NFT activity config' });
         res.json({ success: true, config });
       } catch (error) {
@@ -4354,7 +3909,7 @@ class WebServer {
       if (!ensureNftTrackerModule(req, res)) return;
       try {
         const { enabled, channelId, eventTypes, minSol } = req.body;
-        const result = nftActivityService.updateAlertConfig({ enabled, channelId, eventTypes, minSol });
+        const result = nftActivityService.updateAlertConfig(req.guildId, { enabled, channelId, eventTypes, minSol });
         if (!result.success) return res.status(400).json(result);
         res.json({ success: true, message: 'NFT activity config updated' });
       } catch (error) {

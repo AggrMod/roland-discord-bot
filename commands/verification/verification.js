@@ -243,70 +243,7 @@ module.exports = {
               option
                 .setName('full')
                 .setDescription('Full sync (also removes from ineligible users)')
-                .setRequired(false)))
-
-        .addSubcommand(subcommand =>
-          subcommand
-            .setName('activity-watch-add')
-            .setDescription('Add NFT collection key to activity watchlist')
-            .addStringOption(option =>
-              option
-                .setName('collection')
-                .setDescription('Collection key/slug/address')
-                .setRequired(true)))
-
-        .addSubcommand(subcommand =>
-          subcommand
-            .setName('activity-watch-remove')
-            .setDescription('Remove NFT collection key from activity watchlist')
-            .addStringOption(option =>
-              option
-                .setName('collection')
-                .setDescription('Collection key/slug/address')
-                .setRequired(true)))
-
-        .addSubcommand(subcommand =>
-          subcommand
-            .setName('activity-watch-list')
-            .setDescription('List NFT activity watched collections'))
-
-        .addSubcommand(subcommand =>
-          subcommand
-            .setName('activity-feed')
-            .setDescription('Show recent NFT activity feed')
-            .addIntegerOption(option =>
-              option
-                .setName('limit')
-                .setDescription('Number of events (1-30)')
-                .setRequired(false)
-                .setMinValue(1)
-                .setMaxValue(30)))
-
-        .addSubcommand(subcommand =>
-          subcommand
-            .setName('activity-alerts')
-            .setDescription('Configure NFT activity auto-post alerts')
-            .addBooleanOption(option =>
-              option
-                .setName('enabled')
-                .setDescription('Enable or disable auto alerts')
-                .setRequired(true))
-            .addChannelOption(option =>
-              option
-                .setName('channel')
-                .setDescription('Alert channel (required when enabling)')
-                .setRequired(false))
-            .addStringOption(option =>
-              option
-                .setName('types')
-                .setDescription('Comma-separated types (mint,sell,list,delist,transfer)')
-                .setRequired(false))
-            .addNumberOption(option =>
-              option
-                .setName('min_sol')
-                .setDescription('Minimum SOL price to alert')
-                .setRequired(false)
-                .setMinValue(0)))),
+                .setRequired(false)))),
 
   async execute(interaction) {
     // Check if verification module is enabled
@@ -366,21 +303,6 @@ module.exports = {
             break;
           case 'og-sync':
             await this.handleAdminOGSync(interaction);
-            break;
-          case 'activity-watch-add':
-            await this.handleAdminActivityLegacyRedirect(interaction, 'activity-watch-add');
-            break;
-          case 'activity-watch-remove':
-            await this.handleAdminActivityLegacyRedirect(interaction, 'activity-watch-remove');
-            break;
-          case 'activity-watch-list':
-            await this.handleAdminActivityLegacyRedirect(interaction, 'activity-watch-list');
-            break;
-          case 'activity-feed':
-            await this.handleAdminActivityLegacyRedirect(interaction, 'activity-feed');
-            break;
-          case 'activity-alerts':
-            await this.handleAdminActivityLegacyRedirect(interaction, 'activity-alerts');
             break;
         }
       } else {
@@ -1259,23 +1181,5 @@ module.exports = {
 
     await interaction.editReply({ content: null, embeds: [embed] });
     logger.log(`Admin ${interaction.user.tag} ran OG sync: +${result.added} -${result.removed} errors:${result.errors}`);
-  },
-
-  async handleAdminActivityLegacyRedirect(interaction, legacySubcommand) {
-    await interaction.deferReply({ ephemeral: true });
-
-    const map = {
-      'activity-watch-add': '/nft-tracker collection add',
-      'activity-watch-remove': '/nft-tracker collection remove',
-      'activity-watch-list': '/nft-tracker collection list',
-      'activity-feed': '/nft-tracker collection feed',
-      'activity-alerts': 'Settings -> NFT Tracker in the web portal',
-    };
-    const target = map[String(legacySubcommand || '').trim()] || '/nft-tracker';
-
-    await interaction.editReply({
-      content: `⚠️ This legacy verification command is deprecated.\nUse **${target}** instead.\n\nThis alias will be removed in a future release.`,
-      ephemeral: true,
-    });
   }
 };

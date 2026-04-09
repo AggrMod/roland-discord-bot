@@ -1976,7 +1976,7 @@ function renderProposals() {
       <div class="empty-state">
         <div class="empty-state-icon">📜</div>
         <h4 class="empty-state-title">No Proposals Yet</h4>
-        <p class="empty-state-message">You haven't created any proposals. Use the /propose command in Discord to submit your first proposal.</p>
+        <p class="empty-state-message">You haven't created any proposals. Use the /governance propose command in Discord to submit your first proposal.</p>
         <div class="empty-state-action">
           <button class="btn-primary" onclick="showCreateProposalForm()">
             <span>➕</span>
@@ -5197,8 +5197,7 @@ async function loadAdminHelpView() {
       { name: '/verification admin og-enable', desc: 'Enable/disable OG role system', options: 'enabled (required)', example: '/verification admin og-enable enabled:true' },
       { name: '/verification admin og-role', desc: 'Set OG role', options: 'role (required)', example: '/verification admin og-role role:@OG' },
       { name: '/verification admin og-limit', desc: 'Set OG slot count', options: 'count (required)', example: '/verification admin og-limit count:50' },
-      { name: '/verification admin og-sync', desc: 'Sync OG role assignment', options: 'full (optional)', example: '/verification admin og-sync full:true' },
-      { name: '/verification admin activity-*', desc: 'Legacy alias (redirects)', options: '-', example: '/verification admin activity-feed' }
+      { name: '/verification admin og-sync', desc: 'Sync OG role assignment', options: 'full (optional)', example: '/verification admin og-sync full:true' }
     ])}
     ${cmdSection('Governance', 'GOV', [
       { name: '/governance propose', desc: 'Create proposal', options: 'title, description (required), category, cost', example: '/governance propose title:"Fund X" description:"..."' },
@@ -5293,13 +5292,6 @@ async function loadAdminHelpView() {
       { name: '/config toggle', desc: 'Toggle core module', options: 'module, enabled (required)', example: '/config toggle module:minigames enabled:true' },
       { name: '/config status', desc: 'System status overview', options: '-', example: '/config status' }
     ])}
-    ${cmdSection('Deprecated', 'OLD', [
-      { name: '/og-config view', desc: 'Legacy OG config view', options: '-', example: '/og-config view' },
-      { name: '/og-config enable', desc: 'Legacy OG enable/disable', options: 'enabled (required)', example: '/og-config enable enabled:true' },
-      { name: '/og-config role', desc: 'Legacy OG role set', options: 'role (required)', example: '/og-config role role:@OG' },
-      { name: '/og-config limit', desc: 'Legacy OG limit set', options: 'count (required)', example: '/og-config limit count:25' },
-      { name: '/og-config sync', desc: 'Legacy OG sync', options: 'full (optional)', example: '/og-config sync full:true' }
-    ], 'Use /verification admin og-* for the canonical OG workflow.')}
   `;
 }
 
@@ -8398,169 +8390,6 @@ async function loadTokenActivityView() {
   }
 }
 
-async function legacyLoadNFTActivityAdminView() {
-  if (!isAdmin) return;
-  
-  const card = document.getElementById('nftActivityAdminCard');
-  const content = document.getElementById('nftActivityAdminView');
-  if (!card || !content) return;
-  
-  card.style.display = 'block';
-
-  content.innerHTML = `
-    <div style="display:grid; gap:12px;">
-      <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
-        <button class="btn-primary" onclick="openAddWatchCollectionModal()" style="justify-content:center;">
-          <span>➕</span>
-          <span>Add Collection to Watch</span>
-        </button>
-        <button class="btn-secondary" onclick="openEditActivityAlertsModal()" style="justify-content:center;">
-          <span>⚙️</span>
-          <span>Edit Alert Settings</span>
-        </button>
-      </div>
-      <div id="nftActivityAdminList" style="margin-top:8px;"></div>
-    </div>
-  `;
-
-  // Load the list with remove buttons
-  try {
-    const response = await fetch('/api/admin/activity/watch-list', { credentials: 'include', headers: buildTenantRequestHeaders() });
-    const data = await response.json();
-    const listEl = document.getElementById('nftActivityAdminList');
-    
-    if (!data.success || !data.collections || data.collections.length === 0) {
-      listEl.innerHTML = `<div style="color:var(--text-secondary); text-align:center; padding:12px;">No watched collections. Add one above.</div>`;
-      return;
-    }
-
-    const rows = data.collections.map(col => {
-      const id = col.id != null ? String(col.id) : '';
-      const name = col.name || col.collection_name || col.address || 'Unknown';
-      const addr = col.address || col.collection_address || '';
-      return `
-        <div style="padding:10px 14px; border-bottom:1px solid rgba(99,102,241,0.12); display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <div style="color:#e0e7ff; font-weight:600;">${escapeHtml(name)}</div>
-            <div style="color:var(--text-secondary); font-size:0.8em; font-family:monospace;">${escapeHtml(addr)}</div>
-          </div>
-          <button class="btn-danger" onclick="removeWatchedCollection('${escapeHtml(id)}', '${escapeHtml(name)}')" style="font-size:0.8em; padding:6px 12px;">
-            <span>🗑️</span><span>Remove</span>
-          </button>
-        </div>
-      `;
-    }).join('');
-
-    listEl.innerHTML = `<div style="border:1px solid rgba(99,102,241,0.22); border-radius:10px; overflow:hidden;">${rows}</div>`;
-  } catch (e) {
-    document.getElementById('nftActivityAdminList').innerHTML = `<div style="color:#ef4444; padding:12px;">Error loading list: ${escapeHtml(e.message)}</div>`;
-  }
-}
-
-function openAddWatchCollectionModal() {
-  if (!isAdmin) return;
-  showConfirmModal('Add Watched Collection', '', null);
-  const title = document.getElementById('confirmTitle');
-  const body = document.getElementById('confirmMessage');
-  const btn = document.getElementById('confirmButton');
-  title.textContent = '➕ Watch New Collection';
-  btn.textContent = 'Add Collection';
-  btn.classList.remove('btn-danger');
-  btn.classList.add('btn-primary');
-  body.innerHTML = `
-    <div style="display:grid; gap:14px;">
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Collection Address *</label>
-        <input id="watchCollAddrInput" type="text" placeholder="Solana collection address" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; font-family:monospace;"></div>
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Collection Name (optional)</label>
-        <input id="watchCollNameInput" type="text" placeholder="e.g. Alpha Collection" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
-    </div>
-  `;
-  confirmCallback = async () => {
-    const address = document.getElementById('watchCollAddrInput')?.value.trim();
-    const name = document.getElementById('watchCollNameInput')?.value.trim();
-    if (!address) { showError('Collection address is required'); return; }
-    try {
-      const response = await fetch('/api/admin/activity/watch-add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ address, name })
-      });
-      const data = await response.json();
-      if (data.success) {
-        showSuccess('Collection added to watch list');
-        loadNFTActivityView();
-        loadNFTActivityAdminView();
-      } else {
-        showError(data.message || 'Failed to add collection');
-      }
-    } catch (e) {
-      showError('Error: ' + e.message);
-    }
-  };
-}
-
-
-function openEditActivityAlertsModal() {
-  if (!isAdmin) return;
-  showConfirmModal('Edit Activity Alerts', '', null);
-  const title = document.getElementById('confirmTitle');
-  const body = document.getElementById('confirmMessage');
-  const btn = document.getElementById('confirmButton');
-  title.textContent = '⚙️ Activity Alert Settings';
-  btn.textContent = 'Save Settings';
-  btn.classList.remove('btn-danger');
-  btn.classList.add('btn-primary');
-  body.innerHTML = `
-    <div style="display:grid; gap:14px;">
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Alert Channel ID</label>
-        <input id="activityAlertChannelInput" type="text" placeholder="Discord channel ID" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; font-family:monospace;"></div>
-      <div>
-        <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Event Types to Track</label>
-        <div style="display:flex; flex-wrap:wrap; gap:10px;">
-          ${['mints','sales','listings','delistings','transfers'].map(ev => `
-            <label style="display:flex; align-items:center; gap:6px; color:#c9d6ff; font-size:0.9em;">
-              <input type="checkbox" class="activityEventCheckbox" value="${ev}" checked style="width:16px; height:16px;">
-              <span>${ev.charAt(0).toUpperCase() + ev.slice(1)}</span>
-            </label>
-          `).join('')}
-        </div>
-      </div>
-      <div><label style="display:flex; align-items:center; gap:8px; color:#c9d6ff;">
-        <input id="activityAlertsEnabledInput" type="checkbox" checked style="width:18px; height:18px;">
-        <span>Enable activity alerts</span>
-      </label></div>
-    </div>
-  `;
-  confirmCallback = async () => {
-    const channel = document.getElementById('activityAlertChannelInput')?.value.trim();
-    const enabled = document.getElementById('activityAlertsEnabledInput')?.checked;
-    const events = [...document.querySelectorAll('.activityEventCheckbox:checked')].map(cb => cb.value);
-    try {
-      const response = await fetch('/api/admin/nft-activity/config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          enabled,
-          channelId: channel || undefined,
-          eventTypes: events,
-          minSol: 0
-        })
-      });
-      const data = await response.json();
-      if (data.success) {
-        showSuccess('Activity alert settings updated');
-        loadNFTActivityView();
-      } else {
-        showError(data.message || 'Failed to update alert settings');
-      }
-    } catch (e) {
-      showError('Error: ' + e.message);
-    }
-  };
-}
-
 async function loadAdminActivity() {
   if (!isAdmin) return;
   const content = document.getElementById('adminActivityContent');
@@ -8633,67 +8462,6 @@ async function loadAdminActivity() {
     content.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;
   }
 }
-// Add these functions to portal.js at the end, before the closing comment
-
-// ==================== NFT ACTIVITY TRACKER ====================
-async function legacyLoadNFTActivityView() {
-  const container = document.getElementById('nftActivityPublicView');
-  if (!container) return;
-
-  container.innerHTML = `<div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading...</p></div>`;
-
-  try {
-    const [activityRes, collectionsRes] = await Promise.all([
-      fetch('/api/public/v1/nft/activity?limit=20', { credentials: 'include' }).catch(() => null),
-      isAdmin ? fetch('/api/admin/nft-tracker/collections', { credentials: 'include', headers: buildTenantRequestHeaders() }).catch(() => null) : Promise.resolve(null)
-    ]);
-
-    const activityData = activityRes ? await activityRes.json() : {};
-    const collectionsData = collectionsRes ? await collectionsRes.json() : {};
-    const events = activityData?.events || activityData?.data?.events || [];
-    const collections = collectionsData?.collections || [];
-
-    let html = '';
-
-    if (events.length > 0) {
-      html += `<div style="display:grid; gap:12px; margin-bottom:16px;">${events.slice(0, 10).map((event) => `
-        <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
-          <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
-            <div>
-              <div style="color:#e0e7ff; font-weight:600; margin-bottom:4px;">${escapeHtml(event.event_type || event.type || 'activity')}</div>
-              <div style="color:var(--text-secondary); font-size:0.85em;">${escapeHtml(event.collection_key || event.collection || 'Unscoped')}</div>
-              <div style="color:var(--text-secondary); font-size:0.82em; margin-top:4px;">${escapeHtml(event.token_name || event.token_mint || '')}</div>
-            </div>
-            <div style="color:var(--text-secondary); font-size:0.82em; white-space:nowrap;">${event.event_time ? new Date(event.event_time).toLocaleString() : ''}</div>
-          </div>
-        </div>
-      `).join('')}</div>`;
-    } else {
-      html += '<p style="text-align:center; padding:20px; color:var(--text-secondary);">No recent NFT activity yet.</p>';
-    }
-
-    if (isAdmin) {
-      html += `<div style="margin-top:16px;">
-        <button class="btn-primary" onclick="loadNFTActivityAdminView()">
-          <span>⚙️</span>
-          <span>Manage Watchlist</span>
-        </button>
-      </div>`;
-    }
-
-    container.innerHTML = html;
-
-    if (isAdmin) {
-      const adminCard = document.getElementById('nftActivityAdminCard');
-      if (adminCard) adminCard.style.display = 'block';
-      loadNFTActivityAdminView(collections);
-    }
-  } catch (error) {
-    console.error('Error loading NFT activity:', error);
-    container.innerHTML = '<p style="color:#ef4444;">Failed to load NFT activity</p>';
-  }
-}
-
 async function loadNFTActivityAdminView(preloadedCollections = null) {
   if (!isAdmin) return;
 
@@ -9008,89 +8776,6 @@ async function loadTreasuryTrackerView() {
     container.innerHTML = `<p style="color:#ef4444;">Failed to load tracker config: ${escapeHtml(error.message)}</p>`;
   }
 }
-// Add these functions to portal.js at the end, before the closing comment
-
-// ==================== NFT ACTIVITY TRACKER ====================
-async function legacyLoadNFTActivityView() {
-  try {
-    // Load watched collections from backend
-    const response = await fetch('/api/verification/admin/activity-watch-list', { credentials: 'include' });
-    const data = await response.json();
-    
-    const container = document.getElementById('nftActivityPublicView');
-    if (!container) return;
-    
-    if (data.success && data.collections && data.collections.length > 0) {
-      container.innerHTML = `
-        <div style="display:grid; gap:12px;">
-          ${data.collections.map((col, idx) => `
-            <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
-              <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                  <div style="color:#e0e7ff; font-weight:600; margin-bottom:4px;">${col.collection || col.key || 'Unknown Collection'}</div>
-                  <div style="color:var(--text-secondary); font-size:0.85em;">Added: ${new Date(col.created_at).toLocaleDateString()}</div>
-                </div>
-                <div style="font-size:1.5em;">📊</div>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      `;
-    } else {
-      container.innerHTML = '<p style="text-align:center; padding:20px; color:var(--text-secondary);">No collections being watched yet.<br>Admin can add collections via the Admin panel.</p>';
-    }
-    
-    // Show admin section if user is admin
-    if (isAdmin) {
-      document.getElementById('nftActivityAdminCard').style.display = 'block';
-      loadNFTActivityAdminView();
-    }
-  } catch (error) {
-    console.error('Error loading NFT activity:', error);
-    document.getElementById('nftActivityPublicView').innerHTML = '<p style="color:#ef4444;">Failed to load collections</p>';
-  }
-}
-
-async function legacyLoadNFTActivityAdminView() {
-  if (!isAdmin) return;
-  
-  try {
-    const container = document.getElementById('nftActivityAdminView');
-    if (!container) return;
-    
-    const response = await fetch('/api/verification/admin/activity-watch-list', { credentials: 'include' });
-    const data = await response.json();
-    const collections = (data.success ? data.collections : []) || [];
-    
-    container.innerHTML = `
-      <div style="margin-bottom:16px;">
-        <button class="btn-primary" onclick="openNftActivityAddCollectionModal()">
-          <span>➕</span>
-          <span>Add Collection</span>
-        </button>
-      </div>
-      <div style="display:grid; gap:12px;">
-        ${collections.map((col, idx) => `
-          <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px; display:flex; justify-content:space-between; align-items:center;">
-            <div>
-              <div style="color:#e0e7ff; font-weight:600;">${col.collection || col.key || 'Unknown'}</div>
-              <div style="color:var(--text-secondary); font-size:0.85em;">Added: ${new Date(col.created_at).toLocaleDateString()}</div>
-            </div>
-            <button class="btn-secondary" onclick="removeWatchedCollection(${idx}, '${encodeURIComponent(col.collection || col.key)}')" style="padding:8px 16px;">
-              <span>🗑️</span>
-              <span>Remove</span>
-            </button>
-          </div>
-        `).join('')}
-        ${collections.length === 0 ? '<p style="color:var(--text-secondary); text-align:center;">No collections configured</p>' : ''}
-      </div>
-    `;
-  } catch (error) {
-    console.error('Error loading NFT activity admin:', error);
-  }
-}
-
-
 // ==================== SELF-SERVE ROLES ====================
 async function loadSelfServeRolesView() {
   if (!isAdmin) return;

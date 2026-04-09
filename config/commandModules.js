@@ -17,8 +17,7 @@ const COMMAND_MODULE_MAP = Object.freeze({
   rps: 'minigames',
   blackjack: 'minigames',
   gamenight: 'minigames',
-  points: 'verification',
-  'og-config': 'verification'
+  points: 'verification'
 });
 
 function getCommandModuleKey(commandName) {

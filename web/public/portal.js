@@ -2032,10 +2032,11 @@ async function loadActiveVotes() {
   const container = document.getElementById('activeVotes');
   
   try {
-    const response = await fetch('/api/public/proposals/active', { credentials: 'include' });
+    const response = await fetch('/api/public/v1/proposals/active', { credentials: 'include' });
     const data = await response.json();
+    const proposals = data?.data?.proposals || data?.proposals || [];
     
-    if (!data.success || !data.proposals || data.proposals.length === 0) {
+    if (!data.success || proposals.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
           <div class="empty-state-icon">🗳️</div>
@@ -2046,13 +2047,15 @@ async function loadActiveVotes() {
       return;
     }
 
-    container.innerHTML = '<div class="proposal-list">' + data.proposals.map(proposal => {
+    container.innerHTML = '<div class="proposal-list">' + proposals.map(proposal => {
       const totalVP = (proposal.votes?.yes?.vp || 0) + (proposal.votes?.no?.vp || 0) + (proposal.votes?.abstain?.vp || 0);
       const yesPercent = totalVP > 0 ? Math.round((proposal.votes?.yes?.vp || 0) / totalVP * 100) : 0;
       const noPercent = totalVP > 0 ? Math.round((proposal.votes?.no?.vp || 0) / totalVP * 100) : 0;
       const quorumPercent = proposal.quorum?.current || 0;
       const quorumRequired = proposal.quorum?.required || 50;
       const quorumMet = quorumPercent >= quorumRequired;
+      const proposalId = proposal.proposalId || proposal.proposal_id;
+      const creator = proposal.creator || proposal.creatorId || 'Unknown';
       
       return `
         <div class="proposal-item">
@@ -2061,7 +2064,7 @@ async function loadActiveVotes() {
             <span class="status-badge status-${proposal.status}">${proposal.status}</span>
           </div>
           <div class="proposal-meta" style="margin-bottom: var(--space-4);">
-            Proposal #${proposal.proposal_id} • Created by ${escapeHtml(proposal.creator || 'Unknown')}
+            Proposal #${proposalId} • Created by ${escapeHtml(creator)}
           </div>
           ${proposal.description ? `<p style="color: var(--text-secondary); margin-bottom: var(--space-4); line-height: 1.6;">${escapeHtml(proposal.description)}</p>` : ''}
           
@@ -2097,9 +2100,9 @@ async function loadActiveVotes() {
           </div>
           ${userData ? `
           <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
-            <button class="btn-success" onclick="castVote('${proposal.proposalId}','yes')" style="flex:1; min-width:80px;">👍 Yes</button>
-            <button class="btn-danger" onclick="castVote('${proposal.proposalId}','no')" style="flex:1; min-width:80px;">👎 No</button>
-            <button class="btn-secondary" onclick="castVote('${proposal.proposalId}','abstain')" style="flex:1; min-width:80px;">⏭️ Abstain</button>
+            <button class="btn-success" onclick="castVote('${proposalId}','yes')" style="flex:1; min-width:80px;">👍 Yes</button>
+            <button class="btn-danger" onclick="castVote('${proposalId}','no')" style="flex:1; min-width:80px;">👎 No</button>
+            <button class="btn-secondary" onclick="castVote('${proposalId}','abstain')" style="flex:1; min-width:80px;">⏭️ Abstain</button>
           </div>
           ` : ''}
         </div>
@@ -2301,10 +2304,11 @@ async function loadAvailableMissions() {
   const container = document.getElementById('availableMissions');
   
   try {
-    const response = await fetch('/api/public/missions/active', { credentials: 'include' });
+    const response = await fetch('/api/public/v1/missions/active', { credentials: 'include' });
     const data = await response.json();
+    const missions = data?.data?.missions || data?.missions || [];
     
-    if (!data.success || !data.missions || data.missions.length === 0) {
+    if (!data.success || missions.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
           <div class="empty-state-icon">🗺️</div>
@@ -2315,7 +2319,7 @@ async function loadAvailableMissions() {
       return;
     }
 
-    container.innerHTML = '<div class="mission-list">' + data.missions.map(mission => `
+    container.innerHTML = '<div class="mission-list">' + missions.map(mission => `
       <div class="mission-item">
         <div class="mission-header">
           <div class="mission-title">${escapeHtml(mission.title)}</div>
@@ -5762,9 +5766,9 @@ async function loadAdminAnalyticsView() {
       fetch('/api/admin/users', { credentials: 'include' }),
       fetch('/api/admin/proposals', { credentials: 'include' }),
       fetch('/api/admin/missions', { credentials: 'include' }),
-      fetch('/api/public/treasury').catch(() => null),
-      fetch('/api/public/leaderboard').catch(() => null),
-      fetch('/api/public/stats').catch(() => null)
+      fetch('/api/public/v1/treasury').catch(() => null),
+      fetch('/api/public/v1/leaderboard').catch(() => null),
+      fetch('/api/public/v1/stats').catch(() => null)
     ]);
 
     const usersData = await usersRes.json();
@@ -5801,7 +5805,8 @@ async function loadAdminAnalyticsView() {
     }
 
     // Leaderboard top 5
-    const leaders = (leaderboardData?.leaderboard || leaderboardData?.entries || leaderboardData || []).slice(0, 5);
+    const leaderboardSnapshot = leaderboardData?.data || leaderboardData || {};
+    const leaders = (leaderboardSnapshot?.leaderboard || leaderboardSnapshot?.entries || []).slice(0, 5);
     let leaderboardHTML = '';
     if (leaders.length > 0) {
       const rows = leaders.map((l, i) => {
@@ -9104,13 +9109,12 @@ function loadApiRefView() {
   content.innerHTML = `
     <div style="position:sticky;top:0;z-index:10;background:var(--bg-primary);padding:var(--space-2) 0 var(--space-3);margin-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.1);display:flex;gap:var(--space-3);flex-wrap:wrap;">
       <a href="#apiref-public-v1" style="color:var(--accent-primary);font-size:0.85em;text-decoration:none;">Public v1</a>
-      <a href="#apiref-legacy" style="color:var(--accent-primary);font-size:0.85em;text-decoration:none;">Legacy Aliases</a>
       <a href="#apiref-auth" style="color:var(--accent-primary);font-size:0.85em;text-decoration:none;">Session / Auth</a>
       <a href="#apiref-flow" style="color:var(--accent-primary);font-size:0.85em;text-decoration:none;">Auth Flow</a>
     </div>
 
     <div style="margin-bottom:16px;padding:12px 14px;border:1px solid rgba(99,102,241,0.18);border-radius:10px;background:rgba(99,102,241,0.08);color:var(--text-secondary);font-size:0.88em;line-height:1.6;">
-      Canonical public routes use <code>/api/public/v1/*</code> and return the standard <code>{ success, data, error, meta }</code> envelope. Legacy <code>/api/public/*</code> aliases remain mounted for compatibility.
+      Public routes use <code>/api/public/v1/*</code> and return the standard <code>{ success, data, error, meta }</code> envelope.
     </div>
 
     ${section('apiref-public-v1', 'Public v1 Endpoints', '(no auth required)', [
@@ -9126,19 +9130,6 @@ function loadApiRefView() {
       endpoint('GET', '/api/public/v1/missions/:id', 'Returns a single mission by ID.', true, null),
       endpoint('GET', '/api/public/v1/leaderboard?limit=100', 'Returns the mission leaderboard.', true, leaderboardExample),
       endpoint('GET', '/api/public/v1/leaderboard/:userId', 'Returns a single user leaderboard entry.', true, null)
-    ])}
-
-    ${section('apiref-legacy', 'Legacy Public Aliases', '(still mounted for compatibility)', [
-      endpoint('GET', '/api/public/stats', 'Legacy stats route used by older portal views.', true, null),
-      endpoint('GET', '/api/public/treasury', 'Legacy treasury route used by older views.', true, null),
-      endpoint('GET', '/api/public/proposals/active', 'Legacy active proposals route used by the voting panel.', true, null),
-      endpoint('GET', '/api/public/proposals/concluded', 'Legacy concluded proposals route.', true, null),
-      endpoint('GET', '/api/public/proposals/:id', 'Legacy single-proposal route.', true, null),
-      endpoint('GET', '/api/public/missions/active', 'Legacy active missions route.', true, null),
-      endpoint('GET', '/api/public/missions/completed', 'Legacy completed missions route.', true, null),
-      endpoint('GET', '/api/public/missions/:id', 'Legacy single-mission route.', true, null),
-      endpoint('GET', '/api/public/leaderboard', 'Legacy leaderboard route.', true, null),
-      endpoint('GET', '/api/public/leaderboard/:userId', 'Legacy single-user leaderboard route.', true, null)
     ])}
 
     ${section('apiref-auth', 'Session / Auth Endpoints', '(Discord OAuth session required)', [

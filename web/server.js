@@ -4177,6 +4177,7 @@ class WebServer {
     const ensureEngagementModule = (req, res) => ensureTenantModule(req, res, 'engagement', 'Engagement');
     const ensureNftTrackerModule = (req, res) => ensureTenantModule(req, res, 'nfttracker', 'NFT Tracker');
     const ensureTokenTrackerModule = (req, res) => ensureTenantModule(req, res, 'tokentracker', 'Token Tracker');
+    const ensureTicketingModule = (req, res) => ensureTenantModule(req, res, 'ticketing', 'Ticketing');
 
     // ==================== ENGAGEMENT & POINTS ====================
 
@@ -4259,6 +4260,7 @@ class WebServer {
     });
 
     this.app.get('/api/admin/nft-activity/config', adminAuthMiddleware, (req, res) => {
+      if (!ensureNftTrackerModule(req, res)) return;
       try {
         const config = nftActivityService.getAlertConfig();
         if (!config) return res.status(500).json({ success: false, message: 'Failed to load NFT activity config' });
@@ -4270,6 +4272,7 @@ class WebServer {
     });
 
     this.app.put('/api/admin/nft-activity/config', adminAuthMiddleware, (req, res) => {
+      if (!ensureNftTrackerModule(req, res)) return;
       try {
         const { enabled, channelId, eventTypes, minSol } = req.body;
         const result = nftActivityService.updateAlertConfig({ enabled, channelId, eventTypes, minSol });
@@ -4450,6 +4453,7 @@ class WebServer {
     // ==================== TICKET MANAGEMENT (admin) ====================
 
     this.app.get('/api/admin/tickets/categories', adminAuthMiddleware, (req, res) => {
+      if (!ensureTicketingModule(req, res)) return;
       try {
         const categories = ticketService.getAllCategories(req.guildId);
         res.json({ success: true, categories });
@@ -4460,6 +4464,7 @@ class WebServer {
     });
 
     this.app.post('/api/admin/tickets/categories', adminAuthMiddleware, (req, res) => {
+      if (!ensureTicketingModule(req, res)) return;
       try {
         const { name, emoji, description, parentChannelId, closedParentChannelId, allowedRoleIds, handlerRoleIds, pingRoleIds, templateFields } = req.body;
         if (!name) return res.status(400).json({ success: false, message: 'Name is required' });
@@ -4473,6 +4478,7 @@ class WebServer {
     });
 
     this.app.put('/api/admin/tickets/categories/:id', adminAuthMiddleware, (req, res) => {
+      if (!ensureTicketingModule(req, res)) return;
       try {
         const result = ticketService.updateCategory(parseInt(req.params.id), req.body, req.guildId);
         if (!result.success) return res.status(400).json(result);
@@ -4484,6 +4490,7 @@ class WebServer {
     });
 
     this.app.delete('/api/admin/tickets/categories/:id', adminAuthMiddleware, (req, res) => {
+      if (!ensureTicketingModule(req, res)) return;
       try {
         const result = ticketService.deleteCategory(parseInt(req.params.id), req.guildId);
         if (!result.success) return res.status(400).json(result);
@@ -4495,6 +4502,7 @@ class WebServer {
     });
 
     this.app.get('/api/admin/tickets', adminAuthMiddleware, (req, res) => {
+      if (!ensureTicketingModule(req, res)) return;
       try {
         const { status, statuses, category, opener, q, from, to } = req.query;
         const statusList = typeof statuses === 'string' && statuses.trim()
@@ -4522,6 +4530,7 @@ class WebServer {
     });
 
     this.app.get('/api/admin/tickets/:id/transcript', adminAuthMiddleware, async (req, res) => {
+      if (!ensureTicketingModule(req, res)) return;
       try {
         const ticket = ticketService.getTicketById(parseInt(req.params.id), req.guildId);
         if (!ticket) return res.status(404).json({ success: false, message: 'Ticket not found' });
@@ -4535,6 +4544,7 @@ class WebServer {
     });
 
     this.app.post('/api/admin/tickets/panel', adminAuthMiddleware, async (req, res) => {
+      if (!ensureTicketingModule(req, res)) return;
       try {
         const { channelId, title, description } = req.body;
         if (!channelId) return res.status(400).json({ success: false, message: 'channelId is required' });

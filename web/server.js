@@ -4166,9 +4166,22 @@ class WebServer {
       }
     });
 
+    const ensureTenantModule = (req, res, moduleKey, moduleLabel) => {
+      if (!tenantService.isMultitenantEnabled()) return true;
+      if (!req.guildId) return true;
+      if (tenantService.isModuleEnabled(req.guildId, moduleKey)) return true;
+      res.status(403).json({ success: false, message: `${moduleLabel} module is disabled for this server.` });
+      return false;
+    };
+
+    const ensureEngagementModule = (req, res) => ensureTenantModule(req, res, 'engagement', 'Engagement');
+    const ensureNftTrackerModule = (req, res) => ensureTenantModule(req, res, 'nfttracker', 'NFT Tracker');
+    const ensureTokenTrackerModule = (req, res) => ensureTenantModule(req, res, 'tokentracker', 'Token Tracker');
+
     // ==================== ENGAGEMENT & POINTS ====================
 
     this.app.get('/api/admin/engagement/config', adminAuthMiddleware, (req, res) => {
+      if (!ensureEngagementModule(req, res)) return;
       try {
         const guildId = req.guildId;
         const eng = require('../services/engagementService');
@@ -4177,6 +4190,7 @@ class WebServer {
     });
 
     this.app.put('/api/admin/engagement/config', adminAuthMiddleware, (req, res) => {
+      if (!ensureEngagementModule(req, res)) return;
       try {
         const guildId = req.guildId;
         const eng = require('../services/engagementService');
@@ -4189,6 +4203,7 @@ class WebServer {
     });
 
     this.app.get('/api/admin/engagement/leaderboard', adminAuthMiddleware, (req, res) => {
+      if (!ensureEngagementModule(req, res)) return;
       try {
         const guildId = req.guildId;
         const limit = Math.min(parseInt(req.query.limit || '25', 10), 100);
@@ -4198,6 +4213,7 @@ class WebServer {
     });
 
     this.app.get('/api/admin/engagement/shop', adminAuthMiddleware, (req, res) => {
+      if (!ensureEngagementModule(req, res)) return;
       try {
         const guildId = req.guildId;
         const eng = require('../services/engagementService');
@@ -4206,6 +4222,7 @@ class WebServer {
     });
 
     this.app.post('/api/admin/engagement/shop', adminAuthMiddleware, (req, res) => {
+      if (!ensureEngagementModule(req, res)) return;
       try {
         const guildId = req.guildId;
         const { name, description, type, cost, roleId, codes, quantity } = req.body;
@@ -4218,6 +4235,7 @@ class WebServer {
     });
 
     this.app.delete('/api/admin/engagement/shop/:id', adminAuthMiddleware, (req, res) => {
+      if (!ensureEngagementModule(req, res)) return;
       try {
         const guildId = req.guildId;
         const itemId = parseInt(req.params.id, 10);
@@ -4229,6 +4247,7 @@ class WebServer {
     // ==================== NFT ACTIVITY ADMIN CONFIG ====================
 
     this.app.get('/api/admin/nft-activity/events', adminAuthMiddleware, (req, res) => {
+      if (!ensureNftTrackerModule(req, res)) return;
       try {
         const limit = Math.min(Math.max(parseInt(req.query.limit || '20', 10), 1), 100);
         const events = nftActivityService.listEventsForGuild(req.guildId, limit);
@@ -4265,6 +4284,7 @@ class WebServer {
     // ==================== NFT TRACKER COLLECTIONS (per-collection config) ====================
 
     this.app.get('/api/admin/nft-tracker/collections', adminAuthMiddleware, (req, res) => {
+      if (!ensureNftTrackerModule(req, res)) return;
       try {
         const collections = nftActivityService.getTrackedCollections(req.guildId);
         res.json({ success: true, collections });
@@ -4275,6 +4295,7 @@ class WebServer {
     });
 
     this.app.post('/api/admin/nft-tracker/collections', adminAuthMiddleware, (req, res) => {
+      if (!ensureNftTrackerModule(req, res)) return;
       try {
         const { collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer, trackBid, meSymbol } = req.body;
         const result = nftActivityService.addTrackedCollection({ guildId: req.guildId, collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer, trackBid, meSymbol });
@@ -4288,6 +4309,7 @@ class WebServer {
     });
 
     this.app.delete('/api/admin/nft-tracker/collections/:id', adminAuthMiddleware, (req, res) => {
+      if (!ensureNftTrackerModule(req, res)) return;
       try {
         // Look up collection address before deleting so we can unsync from Helius
         const collections = nftActivityService.getTrackedCollections(req.guildId);
@@ -4305,6 +4327,7 @@ class WebServer {
     });
 
     this.app.put('/api/admin/nft-tracker/collections/:id', adminAuthMiddleware, (req, res) => {
+      if (!ensureNftTrackerModule(req, res)) return;
       try {
         const result = nftActivityService.updateTrackedCollection(req.params.id, req.body, req.guildId);
         if (!result.success) return res.status(400).json(result);
@@ -4314,14 +4337,6 @@ class WebServer {
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });
-
-    const ensureTokenTrackerModule = (req, res) => {
-      if (!tenantService.isMultitenantEnabled()) return true;
-      if (!req.guildId) return true;
-      if (tenantService.isModuleEnabled(req.guildId, 'tokentracker')) return true;
-      res.status(403).json({ success: false, message: 'Token Tracker module is disabled for this server.' });
-      return false;
-    };
 
     const registerTokenTrackerRoutes = (basePath) => {
       this.app.get(`${basePath}/tokens`, adminAuthMiddleware, (req, res) => {

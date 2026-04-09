@@ -34,7 +34,7 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      if (!await moduleGuard.checkModuleEnabled(interaction, 'verification')) return;
+      if (!await moduleGuard.checkModuleEnabled(interaction, 'engagement')) return;
       const sub = interaction.options.getSubcommand();
       const { guildId, user } = interaction;
 
@@ -57,7 +57,7 @@ module.exports = {
             { name: '📊 Total Earned', value: `${pts.total_points.toLocaleString()} pts`, inline: true },
           )
           .setTimestamp();
-        applyEmbedBranding(e, { guildId, moduleKey: 'verification', defaultColor: '#6366f1', defaultFooter: 'GuildPilot · Points' });
+        applyEmbedBranding(e, { guildId, moduleKey: 'engagement', defaultColor: '#6366f1', defaultFooter: 'GuildPilot · Points' });
         return interaction.reply({ embeds: [e], ephemeral: true });
       }
 
@@ -77,7 +77,7 @@ module.exports = {
           .setDescription(rows)
           .addFields({ name: 'Your position', value: myRank > 0 ? `#${myRank} · ${myPts.total_points.toLocaleString()} pts` : 'Not on board yet', inline: false })
           .setTimestamp();
-        applyEmbedBranding(e, { guildId, moduleKey: 'verification', defaultColor: '#f59e0b', defaultFooter: `Top ${limit} · GuildPilot · Points` });
+        applyEmbedBranding(e, { guildId, moduleKey: 'engagement', defaultColor: '#f59e0b', defaultFooter: `Top ${limit} · GuildPilot · Points` });
         return interaction.reply({ embeds: [e] });
       }
 
@@ -107,7 +107,7 @@ module.exports = {
           .setTitle(`📋 Points History${target ? ` — ${target.username}` : ''}`)
           .setDescription(rows)
           .setTimestamp();
-        applyEmbedBranding(e, { guildId, moduleKey: 'verification', defaultColor: '#6366f1', defaultFooter: 'Last 10 entries · GuildPilot · Points' });
+        applyEmbedBranding(e, { guildId, moduleKey: 'engagement', defaultColor: '#6366f1', defaultFooter: 'Last 10 entries · GuildPilot · Points' });
         return interaction.reply({ embeds: [e], ephemeral: true });
       }
 
@@ -127,7 +127,7 @@ module.exports = {
           .setTitle('🛍️ Points Shop')
           .setDescription(`Your balance: **${myPts.total_points.toLocaleString()} pts**\n\n${rows}\n\nUse \`/points redeem item_id:<id>\` to redeem an item.`)
           .setTimestamp();
-        applyEmbedBranding(e, { guildId, moduleKey: 'verification', defaultColor: '#4ade80', defaultFooter: 'GuildPilot · Points Shop' });
+        applyEmbedBranding(e, { guildId, moduleKey: 'engagement', defaultColor: '#4ade80', defaultFooter: 'GuildPilot · Points Shop' });
         return interaction.reply({ embeds: [e], ephemeral: true });
       }
 
@@ -156,7 +156,7 @@ module.exports = {
           .setDescription(`**${result.item.name}** redeemed for **${result.item.cost} pts**${result.code ? `\n\n🎁 Your code: \`${result.code}\`` : ''}`)
           .addFields({ name: 'Remaining balance', value: `${result.newTotal.toLocaleString()} pts`, inline: true })
           .setTimestamp();
-        applyEmbedBranding(e, { guildId, moduleKey: 'verification', defaultColor: '#4ade80', defaultFooter: 'GuildPilot · Points Shop' });
+        applyEmbedBranding(e, { guildId, moduleKey: 'engagement', defaultColor: '#4ade80', defaultFooter: 'GuildPilot · Points Shop' });
         return interaction.editReply({ embeds: [e] });
       }
 
@@ -215,7 +215,7 @@ module.exports = {
               { name: 'Reaction daily cap', value: `${cfg.cooldown_reaction_daily}/day`, inline: true },
             )
             .setTimestamp();
-          applyEmbedBranding(e, { guildId, moduleKey: 'verification', defaultColor: '#6366f1', defaultFooter: 'GuildPilot · Points Config' });
+          applyEmbedBranding(e, { guildId, moduleKey: 'engagement', defaultColor: '#6366f1', defaultFooter: 'GuildPilot · Points Config' });
           return interaction.editReply({ embeds: [e] });
         }
       }
@@ -226,3 +226,4 @@ module.exports = {
     }
   },
 };
+

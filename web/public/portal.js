@@ -112,6 +112,7 @@ function isTenantSensitiveRequest(input) {
       url.pathname === '/api/user/proposals' ||
       url.pathname === '/api/governance/proposals' ||
       /^\/api\/governance\/proposals\/[^/]+\/(submit|support|comments|veto)$/.test(url.pathname) ||
+      url.pathname.startsWith('/api/public/v1/proposals/') ||
       url.pathname.startsWith('/api/verify/') ||
       url.pathname.startsWith('/api/micro-verify/') ||
       url.pathname.startsWith('/api/verification/admin/') ||
@@ -2030,9 +2031,19 @@ async function submitProposalForReview(proposalId) {
 
 async function loadActiveVotes() {
   const container = document.getElementById('activeVotes');
+  if (!activeGuildId) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">🗳️</div>
+        <h4 class="empty-state-title">Select a Server</h4>
+        <p class="empty-state-message">Choose a server first to load active proposals for that community.</p>
+      </div>
+    `;
+    return;
+  }
   
   try {
-    const response = await fetch('/api/public/v1/proposals/active', { credentials: 'include' });
+    const response = await fetch(`/api/public/v1/proposals/active?guildId=${encodeURIComponent(activeGuildId)}`, { credentials: 'include' });
     const data = await response.json();
     const proposals = data?.data?.proposals || data?.proposals || [];
     

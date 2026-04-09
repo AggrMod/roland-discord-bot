@@ -222,6 +222,12 @@ class MicroVerifyService {
    */
   createRequest(discordId, username, guildId = '') {
     try {
+      const safeDiscordId = String(discordId || '').trim();
+      const safeUsername = String(username || '').trim() || 'Web User';
+      if (!safeDiscordId) {
+        return { success: false, message: 'Missing discord user id' };
+      }
+
       const config = this.getConfig();
 
       if (!config.enabled) {
@@ -238,7 +244,7 @@ class MicroVerifyService {
         WHERE discord_id = ? AND status = 'pending'
         ORDER BY created_at DESC
         LIMIT 1
-      `).get(discordId);
+      `).get(safeDiscordId);
 
       if (pending) {
         if (new Date(pending.expires_at) > new Date()) {
@@ -264,7 +270,7 @@ class MicroVerifyService {
         SELECT COUNT(*) as count FROM micro_verify_requests 
         WHERE discord_id = ? 
         AND created_at > datetime('now', '-' || ? || ' minutes')
-      `).get(discordId, config.rateLimitMinutes);
+      `).get(safeDiscordId, config.rateLimitMinutes);
 
       if (rateLimitCheck.count > 0) {
         return { 
@@ -274,7 +280,7 @@ class MicroVerifyService {
       }
 
       // Get or create user's fixed verification amount
-      const amountResult = this.getOrCreateUserAmount(discordId, username);
+      const amountResult = this.getOrCreateUserAmount(safeDiscordId, safeUsername);
       if (!amountResult.success) {
         return amountResult;
       }
@@ -284,7 +290,7 @@ class MicroVerifyService {
       // the FK on micro_verify_requests requires a users row, so upsert a stub if needed)
       db.prepare(`
         INSERT OR IGNORE INTO users (discord_id, username) VALUES (?, ?)
-      `).run(discordId, username);
+      `).run(safeDiscordId, safeUsername);
 
       // Calculate expiry
       const expiresAt = new Date(Date.now() + config.ttlMinutes * 60 * 1000).toISOString();
@@ -294,9 +300,9 @@ class MicroVerifyService {
         INSERT INTO micro_verify_requests 
         (discord_id, username, guild_id, expected_amount, destination_wallet, expires_at, status)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(discordId, username, guildId || '', amount, config.receiveWallet, expiresAt, 'pending');
+      `).run(safeDiscordId, safeUsername, guildId || '', amount, config.receiveWallet, expiresAt, 'pending');
 
-      logger.log(`Micro-verify request created: ${discordId} -> ${amount} SOL`);
+      logger.log(`Micro-verify request created: ${safeDiscordId} -> ${amount} SOL`);
 
       return {
         success: true,
@@ -694,7 +700,14 @@ class MicroVerifyService {
         `✅ **Wallet Verified!**\n\n` +
         `Your wallet \`${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}\` has been successfully verified via micro-transfer!\n\n` +
         `Your roles and voting power have been updated. Use \`/verification status\` to see your status.`
-      ).catch(err => logger.error('Failed to DM user:', err));
+      ).catch(err => {
+        const code = Number(err?.code || err?.rawError?.code || 0);
+        if (code === 50007 || code === 50278) {
+          logger.warn(`Skipped verification DM for ${discordId}: ${err?.rawError?.message || err?.message || 'cannot DM user'}`);
+          return;
+        }
+        logger.error('Failed to DM user:', err);
+      });
 
       logger.log(`Notified user ${discordId} of verification`);
     } catch (error) {

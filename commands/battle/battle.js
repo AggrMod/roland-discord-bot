@@ -539,7 +539,12 @@ module.exports = {
         }
       }
     } catch (e) {
-      logger.error('Failed to update cancelled battle message:', e);
+      const apiCode = Number(e?.code || e?.rawError?.code || 0);
+      if (apiCode === 10008) {
+        logger.warn(`Cancelled battle message already gone (battle ${lobby.lobby_id}, message ${lobby.message_id})`);
+      } else {
+        logger.error('Failed to update cancelled battle message:', e);
+      }
     }
 
     await interaction.editReply({ content: '✅ Battle cancelled and lobby closed.', ephemeral: true });

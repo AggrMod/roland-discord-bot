@@ -868,6 +868,54 @@ class TrackedWalletsService {
     });
   }
 
+  getSignerAddressesFromParsedTx(tx) {
+    const signers = new Set();
+    const entries = tx?.transaction?.message?.accountKeys || [];
+    for (let i = 0; i < entries.length; i += 1) {
+      const entry = entries[i];
+      let address = '';
+      try {
+        if (typeof entry === 'string') address = entry;
+        else if (entry?.pubkey?.toBase58) address = entry.pubkey.toBase58();
+        else if (entry?.pubkey) address = String(entry.pubkey);
+        else if (entry?.toBase58) address = entry.toBase58();
+        else address = String(entry || '');
+      } catch (_error) {
+        address = '';
+      }
+      const normalized = normalizeAddress(address);
+      if (!normalized) continue;
+      // accountKeys[0] is fee payer on Solana messages; include as likely user.
+      if (i === 0 || entry?.signer === true) {
+        signers.add(normalized);
+      }
+    }
+    return signers;
+  }
+
+  getLikelyUserAddressesFromWebhookEvent(event) {
+    const owners = new Set();
+    const add = (value) => {
+      const normalized = normalizeAddress(value);
+      if (!normalized) return;
+      owners.add(normalized);
+    };
+
+    add(event?.feePayer);
+    add(event?.fee_payer);
+    add(event?.signer);
+    add(event?.payer);
+
+    if (Array.isArray(event?.signers)) {
+      for (const signer of event.signers) add(signer);
+    }
+    if (Array.isArray(event?.transaction?.signers)) {
+      for (const signer of event.transaction.signers) add(signer);
+    }
+
+    return owners;
+  }
+
   getWalletSolDeltaFromParsedTx(tx, walletAddress) {
     try {
       const walletLower = normalizeAddress(walletAddress);
@@ -1146,11 +1194,16 @@ class TrackedWalletsService {
     let sentAlerts = 0;
     let matchedOwners = 0;
     const knownUserWalletCache = new Map();
+    const signerAddresses = this.getSignerAddressesFromParsedTx(tx);
 
     for (const evt of events) {
       const ownerAddress = String(evt.ownerAddress || '').trim();
       if (!ownerAddress) continue;
-      if (!this.isKnownUserWallet(ownerAddress, knownUserWalletCache)) continue;
+      const ownerKey = normalizeAddress(ownerAddress);
+      const knownWallet = this.isKnownUserWallet(ownerAddress, knownUserWalletCache);
+      const signerOwned = ownerKey && signerAddresses.has(ownerKey);
+      // Keep user-linked wallets plus signer/fee-payer owners; drop LP-only owners.
+      if (!knownWallet && !signerOwned) continue;
       matchedOwners += 1;
 
       for (const tokenCfg of evt.tokenConfigs || []) {
@@ -1494,12 +1547,16 @@ class TrackedWalletsService {
     let sentAlerts = 0;
     let matchedOwners = 0;
     const knownUserWalletCache = new Map();
+    const likelyUserAddresses = this.getLikelyUserAddressesFromWebhookEvent(event);
 
     for (const [ownerLower, deltaByMint] of ownerTokenDeltas.entries()) {
       if (!deltaByMint || deltaByMint.size === 0) continue;
       const ownerAddress = String(ownerLower || '').trim();
       if (!ownerAddress) continue;
-      if (!this.isKnownUserWallet(ownerAddress, knownUserWalletCache)) continue;
+      const knownWallet = this.isKnownUserWallet(ownerAddress, knownUserWalletCache);
+      const likelyUserOwner = likelyUserAddresses.has(ownerLower);
+      // Payload-only path: allow known linked wallets + webhook signer/payer owners.
+      if (!knownWallet && !likelyUserOwner) continue;
 
       const trackedMints = [...deltaByMint.keys()].filter(mint => byMint.has(mint));
       if (!trackedMints.length) continue;
@@ -1765,9 +1822,10 @@ class TrackedWalletsService {
       sentAlerts += Number(processed?.sentAlerts || 0);
     }
 
-    // Fallback: mint-scoped processing for servers that track tokens
-    // without configuring tracked wallets.
-    if (matchedWallets === 0) {
+    // Fallback: mint-scoped processing for servers that track tokens without tracked wallets.
+    // Also run when matched wallet parsing produced no alerts (common for sell-side transfers
+    // where signer-side buy/sell context is needed).
+    if (matchedWallets === 0 || sentAlerts === 0) {
       const mintScoped = await this.processParsedTokenActivityByMint({
         tx,
         signature,

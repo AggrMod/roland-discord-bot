@@ -198,7 +198,7 @@ function initDatabase() {
   ensureSchemaMigrationsTable();
 
   // Migration: add missing columns
-  const ignoreDuplicateMigration = (fn) => {
+  var ignoreDuplicateMigration = (fn) => {
     try { fn(); } catch(e) {
       if (!e.message.includes('duplicate column name') && !e.message.includes('already exists') && !e.message.includes('no such table')) {
         throw e;
@@ -1416,7 +1416,7 @@ function initDatabase() {
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_token_retry_due ON tracked_token_webhook_retry_queue(next_attempt_at)'); } catch (e) {}
 
   // Migration: add missing columns to base tables
-  const ignoreDuplicateMigration = (fn) => {
+  var ignoreDuplicateMigration = (fn) => {
     try { fn(); } catch(e) {
       if (!e.message.includes('duplicate column name') && !e.message.includes('already exists') && !e.message.includes('no such table')) {
         throw e;

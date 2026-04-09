@@ -81,3 +81,6 @@ These are intentionally managed in the portal (`/admin`, `/?section=settings`, `
 - Enterprise: contact team (multi-server/custom)
 - Yearly billing: 15% discount
 - Plan model: features stay available across plans; plan upgrades raise module limits/capacity.
+
+## Help Parity Check
+- Run `npm run check:help-parity` before release to validate that help files match live slash commands.

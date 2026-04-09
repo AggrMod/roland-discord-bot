@@ -386,6 +386,15 @@ class MicroVerifyService {
       const walletService = require('./walletService');
       const linkResult = walletService.linkWallet(request.discord_id, request.username, senderWallet, request.guild_id || '');
       const shouldNotify = linkResult.success && linkResult.isFirstWallet === true;
+      const shouldSyncRoles = linkResult.success === true;
+
+      if (shouldSyncRoles) {
+        this.triggerRoleSyncOnVerification({
+          discordId: request.discord_id,
+          username: request.username,
+          guildIdHint: request.guild_id || ''
+        });
+      }
 
       logger.log(`Micro-verify completed: ${request.discord_id} -> ${senderWallet} (${txSignature})`);
 
@@ -394,6 +403,7 @@ class MicroVerifyService {
         walletLinked: linkResult.success,
         firstWalletLinked: linkResult.isFirstWallet === true,
         shouldNotify,
+        roleSyncQueued: shouldSyncRoles,
         message: 'Wallet verified successfully'
       };
     } catch (error) {
@@ -525,6 +535,51 @@ class MicroVerifyService {
       }
       logger.error('Error polling transactions:', error);
     }
+  }
+
+  /**
+   * Keep micro-verify behavior aligned with signature verification:
+   * update user snapshot and sync Discord roles (including base verified role).
+   */
+  triggerRoleSyncOnVerification({ discordId, username, guildIdHint = '' }) {
+    if (!discordId) return;
+
+    setImmediate(async () => {
+      try {
+        const roleService = require('./roleService');
+        const resolvedGuildId = String(guildIdHint || process.env.GUILD_ID || process.env.DISCORD_GUILD_ID || '').trim();
+        const effectiveUsername = username || 'Web User';
+
+        await roleService.updateUserRoles(discordId, effectiveUsername, resolvedGuildId || null);
+
+        if (!resolvedGuildId) {
+          logger.warn(`Micro-verify role sync: no guild context for ${discordId}; skipped Discord role assignment`);
+          return;
+        }
+
+        const client = clientProvider.getClient();
+        if (!client) {
+          logger.warn(`Micro-verify role sync: Discord client unavailable for ${discordId}`);
+          return;
+        }
+
+        const guild =
+          client.guilds.cache.get(resolvedGuildId) ||
+          await client.guilds.fetch(resolvedGuildId).catch(() => null);
+
+        if (!guild) {
+          logger.warn(`Micro-verify role sync: guild ${resolvedGuildId} not found for ${discordId}`);
+          return;
+        }
+
+        const syncResult = await roleService.syncUserDiscordRoles(guild, discordId, resolvedGuildId);
+        if (!syncResult?.success) {
+          logger.warn(`Micro-verify role sync returned non-success for ${discordId}: ${syncResult?.message || 'unknown'}`);
+        }
+      } catch (error) {
+        logger.error(`Micro-verify role sync failed for ${discordId}:`, error);
+      }
+    });
   }
 
   /**

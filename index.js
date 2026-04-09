@@ -287,6 +287,7 @@ const walletService = require('./services/walletService');
 const roleService = require('./services/roleService');
 const treasuryService = require('./services/treasuryService');
 const microVerifyService = require('./services/microVerifyService');
+const databaseBackupService = require('./services/databaseBackupService');
 const governanceLogger = require('./utils/governanceLogger');
 const ticketService = require('./services/ticketService');
 const nftActivityService = require('./services/nftActivityService');
@@ -428,6 +429,9 @@ client.once(Events.ClientReady, () => {
   intervals.push(setInterval(sweepWebhookRetryQueue, retrySweepIntervalMs));
   setTimeout(sweepWebhookRetryQueue, 20 * 1000);
   logger.log(`[tracked-token-webhook] Durable retry sweep scheduled (20s startup delay, then every ${Math.round(retrySweepIntervalMs / 1000)}s)`);
+
+  // Database backup scheduler (hourly by default, configurable via env)
+  databaseBackupService.start();
 });
 
 client.on(Events.GuildCreate, async guild => {
@@ -1672,17 +1676,19 @@ process.on('uncaughtException', error => {
   process.exit(1);
 });
 
-process.on('SIGTERM', () => {
-  logger.log('[Bot] Graceful shutdown...');
+function gracefulShutdown(signal) {
+  logger.log(`[Bot] Graceful shutdown (${signal})...`);
   intervals.forEach(clearInterval);
+  databaseBackupService.stop();
   client.destroy();
   process.exit(0);
+}
+
+process.on('SIGTERM', () => {
+  gracefulShutdown('SIGTERM');
 });
 process.on('SIGINT', () => {
-  logger.log('[Bot] Graceful shutdown...');
-  intervals.forEach(clearInterval);
-  client.destroy();
-  process.exit(0);
+  gracefulShutdown('SIGINT');
 });
 
 // ── Engagement: award points for chat messages ───────────────────────────────

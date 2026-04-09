@@ -1415,6 +1415,35 @@ function initDatabase() {
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_token_events_mint_time ON tracked_token_events(token_mint, event_time)'); } catch (e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_token_retry_due ON tracked_token_webhook_retry_queue(next_attempt_at)'); } catch (e) {}
 
+  // Migration: add missing columns to base tables
+  const ignoreDuplicateMigration = (fn) => {
+    try { fn(); } catch(e) {
+      if (!e.message.includes('duplicate column name') && !e.message.includes('already exists') && !e.message.includes('no such table')) {
+        throw e;
+      }
+    }
+  };
+
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN voting_message_id TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN message_id TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN channel_id TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE wallets ADD COLUMN is_favorite BOOLEAN DEFAULT 0'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE users ADD COLUMN wallet_alert_identity_opt_out INTEGER DEFAULT 0'));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE verification_panels ADD COLUMN color TEXT DEFAULT '#FFD700'"));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE verification_panels ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'));
+  ignoreDuplicateMigration(() => db.exec('CREATE TABLE IF NOT EXISTS user_verify_amounts (id INTEGER PRIMARY KEY AUTOINCREMENT, discord_id TEXT UNIQUE NOT NULL, username TEXT, assigned_amount REAL NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'));
+
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE proposals ADD COLUMN category TEXT DEFAULT 'Other'"));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN cost_indication TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN veto_reason TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN veto_votes TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN vp_snapshot TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN quorum_required INTEGER'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN on_hold_reason TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN promoted_by TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN paused INTEGER DEFAULT 0'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE nft_tracked_collections ADD COLUMN me_symbol TEXT DEFAULT ""'));
+
   const applied = getAppliedMigrationVersions();
   if (!applied.has(LEGACY_BASELINE_MIGRATION_VERSION)) {
     recordSchemaMigration(LEGACY_BASELINE_MIGRATION_VERSION, 'legacy_bootstrap_schema');

@@ -850,6 +850,191 @@ class TenantService {
     }
   }
 
+  getTenantBattleSettings(guildId) {
+    try {
+      const guild = String(guildId || '').trim();
+      if (!guild) {
+        return {
+          battleRoundPauseMinSec: null,
+          battleRoundPauseMaxSec: null,
+          battleElitePrepSec: null,
+          battleForcedEliminationIntervalRounds: null,
+          battleDefaultEra: null,
+        };
+      }
+      const tenantRow = this.getTenant(guild);
+      if (!tenantRow) {
+        return {
+          battleRoundPauseMinSec: null,
+          battleRoundPauseMaxSec: null,
+          battleElitePrepSec: null,
+          battleForcedEliminationIntervalRounds: null,
+          battleDefaultEra: null,
+        };
+      }
+      const tenantId = Number(tenantRow?.tenant?.id || tenantRow?.id || 0);
+      if (!tenantId) {
+        return {
+          battleRoundPauseMinSec: null,
+          battleRoundPauseMaxSec: null,
+          battleElitePrepSec: null,
+          battleForcedEliminationIntervalRounds: null,
+          battleDefaultEra: null,
+        };
+      }
+
+      const row = db.prepare(`
+        SELECT
+          battle_round_pause_min_sec,
+          battle_round_pause_max_sec,
+          battle_elite_prep_sec,
+          battle_forced_elimination_interval_rounds,
+          battle_default_era
+        FROM tenant_battle_settings
+        WHERE tenant_id = ?
+      `).get(tenantId);
+
+      const toFiniteNumberOrNull = (value) => {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : null;
+      };
+
+      return {
+        battleRoundPauseMinSec: toFiniteNumberOrNull(row?.battle_round_pause_min_sec),
+        battleRoundPauseMaxSec: toFiniteNumberOrNull(row?.battle_round_pause_max_sec),
+        battleElitePrepSec: toFiniteNumberOrNull(row?.battle_elite_prep_sec),
+        battleForcedEliminationIntervalRounds: toFiniteNumberOrNull(row?.battle_forced_elimination_interval_rounds),
+        battleDefaultEra: row?.battle_default_era || null
+      };
+    } catch (error) {
+      logger.warn('[TenantService] getTenantBattleSettings fallback:', error?.message || error);
+      return {
+        battleRoundPauseMinSec: null,
+        battleRoundPauseMaxSec: null,
+        battleElitePrepSec: null,
+        battleForcedEliminationIntervalRounds: null,
+        battleDefaultEra: null,
+      };
+    }
+  }
+
+  updateTenantBattleSettings(guildId, patch = {}, actorId = 'system') {
+    try {
+      const guild = String(guildId || '').trim();
+      if (!guild) return { success: false, message: 'guildId is required' };
+      const tenantRow = this.getTenant(guild);
+      if (!tenantRow) return { success: false, message: 'Tenant not found' };
+      const tenantId = Number(tenantRow?.tenant?.id || tenantRow?.id || 0);
+      if (!tenantId) return { success: false, message: 'Tenant not found' };
+
+      const current = this.getTenantBattleSettings(guild);
+      const parseNumberField = (value, fieldName) => {
+        if (value === undefined) return { ok: true, value: undefined };
+        if (value === null || value === '') return { ok: true, value: null };
+        const n = Number(value);
+        if (!Number.isFinite(n)) return { ok: false, message: `${fieldName} must be a number` };
+        return { ok: true, value: n };
+      };
+
+      const minParsed = parseNumberField(patch.battleRoundPauseMinSec, 'battleRoundPauseMinSec');
+      if (!minParsed.ok) return { success: false, message: minParsed.message };
+      const maxParsed = parseNumberField(patch.battleRoundPauseMaxSec, 'battleRoundPauseMaxSec');
+      if (!maxParsed.ok) return { success: false, message: maxParsed.message };
+      const eliteParsed = parseNumberField(patch.battleElitePrepSec, 'battleElitePrepSec');
+      if (!eliteParsed.ok) return { success: false, message: eliteParsed.message };
+      const forcedParsed = parseNumberField(patch.battleForcedEliminationIntervalRounds, 'battleForcedEliminationIntervalRounds');
+      if (!forcedParsed.ok) return { success: false, message: forcedParsed.message };
+
+      const normalizeEra = (value) => {
+        if (value === undefined) return undefined;
+        if (value === null) return null;
+        const normalized = String(value).trim().toLowerCase().replace(/[\s-]+/g, '_');
+        if (!normalized) return null;
+        if (!/^[a-z0-9_]+$/.test(normalized)) return '__invalid__';
+        return normalized;
+      };
+
+      const next = {
+        battleRoundPauseMinSec: minParsed.value !== undefined ? minParsed.value : current.battleRoundPauseMinSec,
+        battleRoundPauseMaxSec: maxParsed.value !== undefined ? maxParsed.value : current.battleRoundPauseMaxSec,
+        battleElitePrepSec: eliteParsed.value !== undefined ? eliteParsed.value : current.battleElitePrepSec,
+        battleForcedEliminationIntervalRounds: forcedParsed.value !== undefined ? forcedParsed.value : current.battleForcedEliminationIntervalRounds,
+        battleDefaultEra: current.battleDefaultEra,
+      };
+
+      const eraNormalized = normalizeEra(patch.battleDefaultEra);
+      if (eraNormalized === '__invalid__') {
+        return { success: false, message: 'battleDefaultEra contains invalid characters' };
+      }
+      if (eraNormalized !== undefined) {
+        next.battleDefaultEra = eraNormalized;
+      }
+
+      if (next.battleRoundPauseMinSec !== null && (next.battleRoundPauseMinSec < 0 || next.battleRoundPauseMinSec > 120)) {
+        return { success: false, message: 'Battle round pause min must be between 0 and 120 seconds' };
+      }
+      if (next.battleRoundPauseMaxSec !== null && (next.battleRoundPauseMaxSec < 0 || next.battleRoundPauseMaxSec > 180)) {
+        return { success: false, message: 'Battle round pause max must be between 0 and 180 seconds' };
+      }
+      if (
+        next.battleRoundPauseMinSec !== null
+        && next.battleRoundPauseMaxSec !== null
+        && next.battleRoundPauseMinSec > next.battleRoundPauseMaxSec
+      ) {
+        return { success: false, message: 'Battle round pause min cannot exceed max' };
+      }
+      if (next.battleElitePrepSec !== null && (next.battleElitePrepSec < 0 || next.battleElitePrepSec > 300)) {
+        return { success: false, message: 'Elite prep delay must be between 0 and 300 seconds' };
+      }
+      if (
+        next.battleForcedEliminationIntervalRounds !== null
+        && (
+          next.battleForcedEliminationIntervalRounds < 1
+          || next.battleForcedEliminationIntervalRounds > 20
+          || !Number.isInteger(next.battleForcedEliminationIntervalRounds)
+        )
+      ) {
+        return { success: false, message: 'Forced elimination interval must be between 1 and 20 rounds' };
+      }
+
+      db.prepare(`
+        INSERT INTO tenant_battle_settings (
+          tenant_id,
+          battle_round_pause_min_sec,
+          battle_round_pause_max_sec,
+          battle_elite_prep_sec,
+          battle_forced_elimination_interval_rounds,
+          battle_default_era
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(tenant_id) DO UPDATE SET
+          battle_round_pause_min_sec = excluded.battle_round_pause_min_sec,
+          battle_round_pause_max_sec = excluded.battle_round_pause_max_sec,
+          battle_elite_prep_sec = excluded.battle_elite_prep_sec,
+          battle_forced_elimination_interval_rounds = excluded.battle_forced_elimination_interval_rounds,
+          battle_default_era = excluded.battle_default_era,
+          updated_at = CURRENT_TIMESTAMP
+      `).run(
+        tenantId,
+        next.battleRoundPauseMinSec,
+        next.battleRoundPauseMaxSec,
+        next.battleElitePrepSec,
+        next.battleForcedEliminationIntervalRounds,
+        next.battleDefaultEra
+      );
+
+      this.logAudit(guild, actorId, 'battle_settings_update', {
+        changed: Object.keys(patch),
+        next
+      });
+
+      return { success: true, settings: next };
+    } catch (error) {
+      logger.error('[TenantService] updateTenantBattleSettings failed:', error);
+      return { success: false, message: 'Failed to update tenant battle settings' };
+    }
+  }
+
   updateTenantBranding(guildId, brandingPatch, actorId) {
     const normalizedGuildId = normalizeGuildId(guildId);
     if (!normalizedGuildId) {

@@ -4,18 +4,44 @@ const battleDb = require('../../database/battleDb');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
 const settingsManager = require('../../config/settings');
+const tenantService = require('../../services/tenantService');
 const entitlementService = require('../../services/entitlementService');
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-function getBattleTimingMs() {
+function getBattleRuntimeSettings(guildId = null) {
+  const globalSettings = settingsManager.getSettings() || {};
+  const runtimeSettings = {
+    battleRoundPauseMinSec: parseFloat(settingsManager.getBattleRoundPauseMinSec()),
+    battleRoundPauseMaxSec: parseFloat(settingsManager.getBattleRoundPauseMaxSec()),
+    battleElitePrepSec: parseFloat(settingsManager.getBattleElitePrepSec()),
+    battleForcedEliminationIntervalRounds: settingsManager.getBattleForcedEliminationIntervalRounds
+      ? settingsManager.getBattleForcedEliminationIntervalRounds()
+      : 3,
+    battleDefaultEra: globalSettings.battleDefaultEra || 'mafia',
+  };
+
+  if (tenantService.isMultitenantEnabled() && guildId) {
+    const tenantBattleSettings = tenantService.getTenantBattleSettings(guildId);
+    if (tenantBattleSettings.battleRoundPauseMinSec !== null) runtimeSettings.battleRoundPauseMinSec = tenantBattleSettings.battleRoundPauseMinSec;
+    if (tenantBattleSettings.battleRoundPauseMaxSec !== null) runtimeSettings.battleRoundPauseMaxSec = tenantBattleSettings.battleRoundPauseMaxSec;
+    if (tenantBattleSettings.battleElitePrepSec !== null) runtimeSettings.battleElitePrepSec = tenantBattleSettings.battleElitePrepSec;
+    if (tenantBattleSettings.battleForcedEliminationIntervalRounds !== null) runtimeSettings.battleForcedEliminationIntervalRounds = tenantBattleSettings.battleForcedEliminationIntervalRounds;
+    if (tenantBattleSettings.battleDefaultEra) runtimeSettings.battleDefaultEra = tenantBattleSettings.battleDefaultEra;
+  }
+
+  return runtimeSettings;
+}
+
+function getBattleTimingMs(guildId = null) {
   const envMin = parseFloat(process.env.BATTLE_ROUND_PAUSE_MIN_MS);
   const envMax = parseFloat(process.env.BATTLE_ROUND_PAUSE_MAX_MS);
   const envElite = parseFloat(process.env.BATTLE_ELITE_FOUR_PREP_MS);
 
-  const dbMinSec = parseFloat(settingsManager.getBattleRoundPauseMinSec());
-  const dbMaxSec = parseFloat(settingsManager.getBattleRoundPauseMaxSec());
-  const dbEliteSec = parseFloat(settingsManager.getBattleElitePrepSec());
+  const runtime = getBattleRuntimeSettings(guildId);
+  const dbMinSec = parseFloat(runtime.battleRoundPauseMinSec);
+  const dbMaxSec = parseFloat(runtime.battleRoundPauseMaxSec);
+  const dbEliteSec = parseFloat(runtime.battleElitePrepSec);
 
   // DB settings (seconds) win if valid; otherwise env (ms); otherwise defaults
   const minMs = Number.isFinite(dbMinSec)
@@ -252,7 +278,7 @@ module.exports = {
     // Determine era: explicit option → guild's assigned exclusive era → mafia default
     const availableEras = battleService.getAvailableEras(guildId);
     const availableEraKeys = availableEras.map(era => era.key);
-    const configuredDefaultEra = settingsManager.getSettings()?.battleDefaultEra || 'mafia';
+    const configuredDefaultEra = getBattleRuntimeSettings(guildId).battleDefaultEra || 'mafia';
     const defaultEra = battleService.getDefaultAvailableEra(guildId, configuredDefaultEra);
     const requestedEraInput = interaction.options.getString('era');
     const requestedEra = requestedEraInput
@@ -394,9 +420,7 @@ module.exports = {
     await interaction.editReply({ content: `Battle started with ${startResult.participants.length} fighters. Let the chaos begin...${bountyIntro}` });
 
     // Simulate and post rounds
-    const forcedEliminationInterval = settingsManager.getBattleForcedEliminationIntervalRounds
-      ? settingsManager.getBattleForcedEliminationIntervalRounds()
-      : 3;
+    const forcedEliminationInterval = getBattleRuntimeSettings(interaction.guildId).battleForcedEliminationIntervalRounds || 3;
     const sim = battleService.simulateBattle(lobby.lobby_id, {
       era: lobby.era || 'mafia',
       forcedEliminationInterval
@@ -405,7 +429,7 @@ module.exports = {
       return interaction.followUp({ content: 'Battle simulation failed unexpectedly.' });
     }
 
-    const timing = getBattleTimingMs();
+    const timing = getBattleTimingMs(interaction.guildId);
 
     for (let i = 0; i < sim.rounds.length; i++) {
       const r = sim.rounds[i];

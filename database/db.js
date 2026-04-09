@@ -58,6 +58,7 @@ const REQUIRED_SCHEMA = Object.freeze({
   ticket_guild_settings: ['guild_id', 'channel_name_template'],
   proposals: ['proposal_id', 'status', 'guild_id', 'paused'],
   tenant_verification_settings: ['tenant_id', 'base_verified_role_id'],
+  tenant_battle_settings: ['tenant_id', 'battle_default_era'],
   tenant_branding: ['tenant_id', 'bot_display_name', 'bot_server_avatar_url', 'bot_server_banner_url', 'bot_server_bio'],
   tenant_limits: ['tenant_id', 'mock_data_enabled'],
   tenant_modules: ['tenant_id', 'module_key', 'created_at', 'updated_at'],
@@ -602,6 +603,19 @@ function initDatabase() {
       FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS tenant_battle_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tenant_id INTEGER NOT NULL UNIQUE,
+      battle_round_pause_min_sec REAL,
+      battle_round_pause_max_sec REAL,
+      battle_elite_prep_sec REAL,
+      battle_forced_elimination_interval_rounds INTEGER,
+      battle_default_era TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS tenant_branding (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       tenant_id INTEGER NOT NULL UNIQUE,
@@ -768,6 +782,7 @@ function initDatabase() {
     'ALTER TABLE tenant_branding ADD COLUMN nfttracker_panel_description TEXT',
     `CREATE TRIGGER IF NOT EXISTS update_tenants_timestamp AFTER UPDATE ON tenants BEGIN UPDATE tenants SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
     `CREATE TRIGGER IF NOT EXISTS update_tenant_modules_timestamp AFTER UPDATE ON tenant_modules BEGIN UPDATE tenant_modules SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
+    `CREATE TRIGGER IF NOT EXISTS update_tenant_battle_settings_timestamp AFTER UPDATE ON tenant_battle_settings BEGIN UPDATE tenant_battle_settings SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
     `CREATE TRIGGER IF NOT EXISTS update_tenant_branding_timestamp AFTER UPDATE ON tenant_branding BEGIN UPDATE tenant_branding SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
     `CREATE TRIGGER IF NOT EXISTS update_tenant_limits_timestamp AFTER UPDATE ON tenant_limits BEGIN UPDATE tenant_limits SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,
     `CREATE TRIGGER IF NOT EXISTS update_plan_module_limits_timestamp AFTER UPDATE ON plan_module_limits BEGIN UPDATE plan_module_limits SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END`,

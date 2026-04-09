@@ -1647,6 +1647,12 @@ class WebServer {
           if (tenantVerification.ogRoleId !== undefined) effectiveSettings.ogRoleId = tenantVerification.ogRoleId || '';
           if (tenantVerification.ogRoleLimit !== undefined) effectiveSettings.ogRoleLimit = tenantVerification.ogRoleLimit || 0;
           if (tenantVerification.baseVerifiedRoleId !== undefined) effectiveSettings.baseVerifiedRoleId = tenantVerification.baseVerifiedRoleId || '';
+          const tenantBattleSettings = tenantService.getTenantBattleSettings(req.guildId);
+          if (tenantBattleSettings.battleRoundPauseMinSec !== null) effectiveSettings.battleRoundPauseMinSec = tenantBattleSettings.battleRoundPauseMinSec;
+          if (tenantBattleSettings.battleRoundPauseMaxSec !== null) effectiveSettings.battleRoundPauseMaxSec = tenantBattleSettings.battleRoundPauseMaxSec;
+          if (tenantBattleSettings.battleElitePrepSec !== null) effectiveSettings.battleElitePrepSec = tenantBattleSettings.battleElitePrepSec;
+          if (tenantBattleSettings.battleForcedEliminationIntervalRounds !== null) effectiveSettings.battleForcedEliminationIntervalRounds = tenantBattleSettings.battleForcedEliminationIntervalRounds;
+          if (tenantBattleSettings.battleDefaultEra) effectiveSettings.battleDefaultEra = tenantBattleSettings.battleDefaultEra;
           // Tell the frontend which module keys are actually assigned (exist in tenant_modules)
           const assignedModuleKeys = Object.keys(tenantContext.modules);
           if (assignedModuleKeys.includes('battle') && !assignedModuleKeys.includes('minigames')) {
@@ -1734,6 +1740,11 @@ class WebServer {
             delete sanitized.ogRoleId;
             delete sanitized.ogRoleLimit;
             delete sanitized.baseVerifiedRoleId;
+            delete sanitized.battleRoundPauseMinSec;
+            delete sanitized.battleRoundPauseMaxSec;
+            delete sanitized.battleElitePrepSec;
+            delete sanitized.battleForcedEliminationIntervalRounds;
+            delete sanitized.battleDefaultEra;
           }
           if (tenantContext?.tenant) {
             const moduleFieldMap = {
@@ -1794,6 +1805,28 @@ class WebServer {
               delete sanitized.ogRoleId;
               delete sanitized.ogRoleLimit;
               delete sanitized.baseVerifiedRoleId;
+            }
+
+            const tenantBattlePatch = {};
+            if (sanitized.battleRoundPauseMinSec !== undefined) tenantBattlePatch.battleRoundPauseMinSec = sanitized.battleRoundPauseMinSec;
+            if (sanitized.battleRoundPauseMaxSec !== undefined) tenantBattlePatch.battleRoundPauseMaxSec = sanitized.battleRoundPauseMaxSec;
+            if (sanitized.battleElitePrepSec !== undefined) tenantBattlePatch.battleElitePrepSec = sanitized.battleElitePrepSec;
+            if (sanitized.battleForcedEliminationIntervalRounds !== undefined) tenantBattlePatch.battleForcedEliminationIntervalRounds = sanitized.battleForcedEliminationIntervalRounds;
+            if (sanitized.battleDefaultEra !== undefined) tenantBattlePatch.battleDefaultEra = sanitized.battleDefaultEra;
+            if (Object.keys(tenantBattlePatch).length > 0) {
+              const battleSettingsResult = tenantService.updateTenantBattleSettings(
+                req.guildId,
+                tenantBattlePatch,
+                req.session?.discordUser?.id || 'unknown'
+              );
+              if (!battleSettingsResult.success) {
+                return res.status(400).json(battleSettingsResult);
+              }
+              delete sanitized.battleRoundPauseMinSec;
+              delete sanitized.battleRoundPauseMaxSec;
+              delete sanitized.battleElitePrepSec;
+              delete sanitized.battleForcedEliminationIntervalRounds;
+              delete sanitized.battleDefaultEra;
             }
 
             // Sync OG role service from tenant settings directly (not global settings.json).

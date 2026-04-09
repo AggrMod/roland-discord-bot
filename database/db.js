@@ -8,8 +8,92 @@ const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+const LEGACY_BASELINE_MIGRATION_VERSION = 1;
+const STRUCTURED_MIGRATIONS = Object.freeze([
+  {
+    version: 2,
+    name: 'add_performance_indexes',
+    up: () => {
+      db.exec('CREATE INDEX IF NOT EXISTS idx_users_wallet_optout ON users(wallet_alert_identity_opt_out)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_wallets_discord_primary ON wallets(discord_id, primary_wallet)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_proposals_guild_status_created ON proposals(guild_id, status, created_at)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_micro_verify_requests_discord_status ON micro_verify_requests(discord_id, status)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_schema_migrations_applied_at ON schema_migrations(applied_at DESC)');
+    }
+  },
+  {
+    version: 3,
+    name: 'harden_ticket_schema_columns',
+    up: () => {
+      const tolerantExec = (sql) => {
+        try {
+          db.exec(sql);
+        } catch (error) {
+          const msg = String(error?.message || '');
+          const ignorable = msg.includes('duplicate column name')
+            || msg.includes('already exists')
+            || msg.includes('no such table');
+          if (!ignorable) throw error;
+        }
+      };
+
+      tolerantExec("ALTER TABLE tickets ADD COLUMN template_responses TEXT DEFAULT '{}'");
+      tolerantExec('ALTER TABLE tickets ADD COLUMN transcript TEXT');
+      tolerantExec('ALTER TABLE tickets ADD COLUMN last_activity_at DATETIME');
+      tolerantExec('ALTER TABLE tickets ADD COLUMN inactive_warning_sent_at DATETIME');
+    }
+  }
+]);
+
+function ensureSchemaMigrationsTable() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+}
+
+function getAppliedMigrationVersions() {
+  ensureSchemaMigrationsTable();
+  const rows = db.prepare('SELECT version FROM schema_migrations').all();
+  return new Set(rows.map(row => Number(row.version)));
+}
+
+function recordSchemaMigration(version, name) {
+  db.prepare(`
+    INSERT INTO schema_migrations (version, name)
+    VALUES (?, ?)
+  `).run(Number(version), String(name || '').trim() || `migration_${version}`);
+}
+
+function applyStructuredMigrations() {
+  ensureSchemaMigrationsTable();
+  const applied = getAppliedMigrationVersions();
+  const ordered = [...STRUCTURED_MIGRATIONS].sort((a, b) => a.version - b.version);
+
+  for (const migration of ordered) {
+    const version = Number(migration.version);
+    if (!Number.isFinite(version) || version <= 0) continue;
+    if (applied.has(version)) continue;
+
+    const migrationName = String(migration.name || '').trim() || `migration_${version}`;
+    logger.log(`[DB] Applying schema migration v${version}: ${migrationName}`);
+
+    const tx = db.transaction(() => {
+      migration.up();
+      recordSchemaMigration(version, migrationName);
+    });
+    tx();
+
+    logger.log(`[DB] Applied schema migration v${version}: ${migrationName}`);
+  }
+}
+
 function initDatabase() {
   logger.log('Initializing database...');
+  ensureSchemaMigrationsTable();
 
   // Migration: add missing columns
   const ignoreDuplicateMigration = (fn) => {
@@ -1221,6 +1305,13 @@ function initDatabase() {
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_token_events_wallet_time ON tracked_token_events(wallet_id, event_time)'); } catch (e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_token_events_mint_time ON tracked_token_events(token_mint, event_time)'); } catch (e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_token_retry_due ON tracked_token_webhook_retry_queue(next_attempt_at)'); } catch (e) {}
+
+  const applied = getAppliedMigrationVersions();
+  if (!applied.has(LEGACY_BASELINE_MIGRATION_VERSION)) {
+    recordSchemaMigration(LEGACY_BASELINE_MIGRATION_VERSION, 'legacy_bootstrap_schema');
+    logger.log(`[DB] Recorded baseline schema migration v${LEGACY_BASELINE_MIGRATION_VERSION}`);
+  }
+  applyStructuredMigrations();
 
   logger.log('Database initialized successfully');
 }

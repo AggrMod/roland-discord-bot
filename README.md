@@ -112,6 +112,11 @@ At the end a champion is crowned with total points across all games.
    npm start
    ```
 
+## Schema Migrations
+
+- Database schema changes are tracked in `schema_migrations`.
+- See [`docs/DATABASE_MIGRATIONS.md`](docs/DATABASE_MIGRATIONS.md) for migration/version workflow.
+
 ## Environment Variables
 
 ### Required

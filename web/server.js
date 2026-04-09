@@ -566,6 +566,10 @@ class WebServer {
       return ensureTenantModuleEnabled(req, res, 'heist', 'Missions');
     }
 
+    function ensureBrandingModule(req, res) {
+      return ensureTenantModuleEnabled(req, res, 'branding', 'Branding');
+    }
+
     function ensureNftTrackerModule(req, res) {
       return ensureTenantModuleEnabled(req, res, 'nfttracker', 'NFT Tracker');
     }
@@ -2159,6 +2163,7 @@ class WebServer {
     });
 
     this.app.get('/api/admin/branding', adminAuthMiddleware, async (req, res) => {
+      if (!ensureBrandingModule(req, res)) return;
       try {
         const tenant = tenantService.getTenantContext(req.guildId);
         const guild = req.guild || await fetchGuildById(req.guildId);
@@ -2176,6 +2181,7 @@ class WebServer {
     });
 
     this.app.put('/api/admin/branding', adminAuthMiddleware, (req, res) => {
+      if (!ensureBrandingModule(req, res)) return;
       try {
         const ALLOWED_BRANDING_FIELDS = ['bot_display_name', 'brand_emoji', 'brand_color', 'logo_url', 'support_url', 'footer_text', 'display_name', 'primary_color', 'secondary_color', 'icon_url', 'ticketing_color', 'selfserve_color', 'nfttracker_color', 'ticket_panel_title', 'ticket_panel_description', 'selfserve_panel_title', 'selfserve_panel_description', 'nfttracker_panel_title', 'nfttracker_panel_description'];
         const patch = {};
@@ -2577,6 +2583,7 @@ class WebServer {
     });
 
     this.app.get('/api/admin/users', adminAuthMiddleware, async (req, res) => {
+      if (!ensureVerificationModule(req, res)) return;
       try {
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
         const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
@@ -2612,6 +2619,7 @@ class WebServer {
     });
 
     this.app.get('/api/admin/users/:discordId', adminAuthMiddleware, (req, res) => {
+      if (!ensureVerificationModule(req, res)) return;
       try {
         const { discordId } = req.params;
         const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(discordId);
@@ -2642,6 +2650,7 @@ class WebServer {
     });
 
     this.app.delete('/api/admin/users/:discordId', adminAuthMiddleware, (req, res) => {
+      if (!ensureVerificationModule(req, res)) return;
       try {
         const { discordId } = req.params;
         const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(discordId);

@@ -5184,7 +5184,7 @@ async function loadAdminHelpView() {
 
   content.innerHTML = `
     <div style="margin-bottom:16px;padding:12px 14px;border:1px solid rgba(99,102,241,0.18);border-radius:10px;background:rgba(99,102,241,0.08);color:var(--text-secondary);font-size:0.88em;line-height:1.6;">
-      Full command inventory by category. This reflects currently shipped slash commands in the bot.
+      Full command inventory by category. This reflects currently shipped slash commands in the bot. Minigames are currently exposed as dedicated commands and all map to the <code>minigames</code> entitlement module.
     </div>
     ${cmdSection('Verification', 'VER', [
       { name: '/verification status', desc: 'Check wallet verification status and holdings', options: '-', example: '/verification status' },
@@ -5194,7 +5194,10 @@ async function loadAdminHelpView() {
       { name: '/verification admin panel', desc: 'Post verification panel', options: 'title, description, color', example: '/verification admin panel title:"Verify"' },
       { name: '/verification admin export-user', desc: 'Export member verification data', options: 'user (required)', example: '/verification admin export-user user:@member' },
       { name: '/verification admin remove-user', desc: 'Remove member verification record', options: 'user, confirm (required)', example: '/verification admin remove-user user:@member confirm:true' },
-      { name: '/verification admin export-wallets', desc: 'Export all verified wallets CSV', options: '-', example: '/verification admin export-wallets' },
+      { name: '/verification admin export-wallets', desc: 'Export verified wallets CSV', options: 'role, primary-only (optional)', example: '/verification admin export-wallets role:@Verified primary-only:true' },
+      { name: '/verification admin token-role-add', desc: 'Add token balance role rule', options: 'mint, role, min_amount (required), symbol/max_amount (optional)', example: '/verification admin token-role-add mint:So1... role:@Holder min_amount:1' },
+      { name: '/verification admin token-role-remove', desc: 'Remove token balance role rule', options: 'id (required)', example: '/verification admin token-role-remove id:3' },
+      { name: '/verification admin token-role-list', desc: 'List token balance role rules', options: '-', example: '/verification admin token-role-list' },
       { name: '/verification admin role-config', desc: 'Manage tier/trait role mapping actions', options: 'action + optional trait/role fields', example: '/verification admin role-config action:view' },
       { name: '/verification admin actions', desc: 'View role assignment actions', options: '-', example: '/verification admin actions' },
       { name: '/verification admin og-view', desc: 'View OG role config', options: '-', example: '/verification admin og-view' },

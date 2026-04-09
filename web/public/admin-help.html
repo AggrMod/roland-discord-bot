@@ -10,87 +10,94 @@
 <body style="background:#0b0f1a;color:#fff;">
   <main style="max-width:1100px;margin:0 auto;padding:24px;">
     <h1><img src="/assets/branding/guildpilot-logo.png" alt="" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:8px;object-fit:cover;">GuildPilot Admin Command Guide</h1>
-    <p style="color:#b7c0d8">Live command reference aligned with current module-first architecture.</p>
-    <div class="card" style="padding:12px 16px;margin:16px 0;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);">
-      <strong>Compatibility Notes</strong>
-      <ul style="margin-top:8px;">
-        <li>Canonical public API is <code>/api/public/v1/*</code>.</li>
-        <li><code>/governance propose</code> and the portal proposal form both support optional <code>category</code> and <code>cost</code>/<code>costIndication</code> fields.</li>
-      </ul>
-    </div>
+    <p style="color:#b7c0d8">Live command reference aligned with the current module-first architecture.</p>
 
     <section class="card" style="padding:16px;margin:16px 0;">
-      <h2>🔐 Verification</h2>
+      <h2>Command Taxonomy</h2>
       <ul>
-        <li><code>/verification status</code> — Show verification status, tier, VP, holdings.</li>
-        <li><code>/verification wallets</code> — List linked wallets.</li>
-        <li><code>/verification refresh</code> — Re-scan holdings and refresh user data.</li>
-        <li><code>/verification quick</code> — Start micro-transfer quick verification.</li>
-      </ul>
-      <p><strong>Admin:</strong> <code>/verification admin panel</code>, <code>export-user</code>, <code>remove-user</code>, <code>export-wallets</code>, <code>token-role-add</code>, <code>token-role-remove</code>, <code>token-role-list</code>, <code>role-config</code> (tier config is portal-managed), <code>actions</code>, <code>og-view</code>, <code>og-enable</code>, <code>og-role</code>, <code>og-limit</code>, <code>og-sync</code>.</p>
-    </section>
-
-    <section class="card" style="padding:16px;margin:16px 0;">
-      <h2>🏛️ Governance</h2>
-      <ul>
-      <li><code>/governance propose</code> — Create proposal. Optional <code>category</code> and <code>cost</code> fields are supported.</li>
-        <li><code>/governance support</code> — Support draft proposal.</li>
-        <li><code>/governance vote</code> — Vote yes/no/abstain.</li>
-      </ul>
-      <p><strong>Admin:</strong> <code>/governance admin list</code>, <code>cancel</code>, <code>settings</code>.</p>
-    </section>
-
-    <section class="card" style="padding:16px;margin:16px 0;">
-      <h2>💰 Treasury</h2>
-      <ul>
-        <li><code>/treasury view</code> — Public-safe treasury snapshot.</li>
-      </ul>
-      <p><strong>Admin:</strong> <code>/treasury admin status</code>, <code>refresh</code>, <code>enable</code>, <code>disable</code>, <code>set-wallet</code>, <code>set-interval</code>, <code>tx-history</code>, <code>tx-alerts</code>.</p>
-    </section>
-
-    <section class="card" style="padding:16px;margin:16px 0;">
-      <h2>⚔️ Battle</h2>
-      <ul>
-        <li><code>/battle create</code> — Create battle lobby with optional role gating and max players. <strong>(Admins/Mods only)</strong></li>
-        <li><code>/battle start</code> — Start your open lobby (min players required). <strong>(Admins/Mods only)</strong></li>
-        <li><code>/battle cancel</code> — Cancel your open lobby.</li>
-        <li><code>/battle stats</code> — Show battle stats and leaderboards.</li>
-      </ul>
-      <h4 style="color:#ffd700;margin-top:12px;">Role Gating (Optional)</h4>
-      <p style="font-size:14px;color:#b7c0d8;margin:8px 0;">When creating a lobby, you can control who can join:</p>
-      <ul style="font-size:14px;">
-        <li><strong>Required Roles (ANY):</strong> <code>required_role_1</code>, <code>required_role_2</code>, <code>required_role_3</code> — User must have <strong>at least one</strong> of these roles to join.</li>
-        <li><strong>Excluded Roles (NONE):</strong> <code>excluded_role_1</code>, <code>excluded_role_2</code>, <code>excluded_role_3</code> — User <strong>cannot have any</strong> of these roles; they will be auto-removed if they react to join.</li>
-      </ul>
-      <p style="font-size:13px;color:#a0aac4;margin:8px 0;"><em>Example: Require @Member or @Supporter, exclude @Bot and @Muted:</em><br><code>/battle create max_players:10 required_role_1:@Member required_role_2:@Supporter excluded_role_1:@Bot excluded_role_2:@Muted</code></p>
-      <p style="font-size:13px;color:#a0aac4;margin:8px 0;"><strong>Channel Rule:</strong> only <strong>one active battle per channel</strong> at a time (open or in-progress).</p>
-      <p style="font-size:13px;color:#a0aac4;margin:8px 0;"><strong>Closure Behavior:</strong> cancel/force-end updates the original lobby message and removes reactions so the battle is clearly closed.</p>
-      <p><strong>Admin:</strong> <code>/battle admin list</code>, <code>force-end</code>, <code>settings</code>.</p>
-    </section>
-
-    <section class="card" style="padding:16px;margin:16px 0;">
-      <h2>🎯 Heist</h2>
-      <p>Module is currently disabled by default. Commands exist for future re-enable:</p>
-      <p><code>/heist view</code>, <code>/heist signup</code>, <code>/heist status</code>, admin: <code>create</code>, <code>list</code>, <code>cancel</code>.</p>
-    </section>
-
-    <section class="card" style="padding:16px;margin:16px 0;">
-      <h2>⚙️ Config</h2>
-      <ul>
-        <li><code>/config modules</code> — View module toggles.</li>
-        <li><code>/config toggle</code> — Enable/disable module.</li>
-        <li><code>/config status</code> — Runtime status overview.</li>
+        <li>Canonical module commands: <code>/verification</code>, <code>/governance</code>, <code>/treasury</code>, <code>/wallet-tracker</code>, <code>/nft-tracker</code>, <code>/token-tracker</code>, <code>/points</code>, <code>/heist</code>, <code>/config</code>.</li>
+        <li>Minigames currently use dedicated commands and are all entitlement-gated under the <code>minigames</code> module.</li>
+        <li>Canonical public API: <code>/api/public/v1/*</code>.</li>
       </ul>
     </section>
 
     <section class="card" style="padding:16px;margin:16px 0;">
-      <h2>🖥️ Web-Only Admin Surfaces</h2>
-      <p>These are managed in <code>/admin</code> and intentionally do not have full slash-command parity:</p>
+      <h2>Verification</h2>
       <ul>
-        <li>Ticketing categories/panel/archive controls</li>
-        <li>Analytics dashboard</li>
-        <li>Self-Serve Roles UI</li>
-        <li>Voting Power mapping table</li>
+        <li><code>/verification status</code></li>
+        <li><code>/verification wallets</code></li>
+        <li><code>/verification refresh</code></li>
+        <li><code>/verification quick</code></li>
+      </ul>
+      <p><strong>Admin:</strong> <code>/verification admin panel|export-user|remove-user|export-wallets|token-role-add|token-role-remove|token-role-list|role-config|actions|og-view|og-enable|og-role|og-limit|og-sync</code></p>
+    </section>
+
+    <section class="card" style="padding:16px;margin:16px 0;">
+      <h2>Governance</h2>
+      <ul>
+        <li><code>/governance propose</code></li>
+        <li><code>/governance support</code></li>
+        <li><code>/governance vote</code></li>
+      </ul>
+      <p><strong>Admin:</strong> <code>/governance admin list|cancel|settings</code></p>
+    </section>
+
+    <section class="card" style="padding:16px;margin:16px 0;">
+      <h2>Treasury</h2>
+      <ul>
+        <li><code>/treasury view</code></li>
+      </ul>
+      <p><strong>Admin:</strong> <code>/treasury admin status|refresh|enable|disable|set-wallet|set-interval|tx-history|tx-alerts</code></p>
+    </section>
+
+    <section class="card" style="padding:16px;margin:16px 0;">
+      <h2>Trackers</h2>
+      <p><strong>Wallet Tracker:</strong> <code>/wallet-tracker add|remove|list|edit|holdings|refresh-all</code></p>
+      <p><strong>NFT Tracker:</strong> <code>/nft-tracker collection add|remove|list|feed</code></p>
+      <p><strong>Token Tracker:</strong> <code>/token-tracker add|edit|remove|list|feed</code></p>
+    </section>
+
+    <section class="card" style="padding:16px;margin:16px 0;">
+      <h2>Engagement</h2>
+      <p><code>/points balance|leaderboard|history|shop|redeem|admin</code></p>
+    </section>
+
+    <section class="card" style="padding:16px;margin:16px 0;">
+      <h2>Minigames</h2>
+      <p><strong>Battle:</strong> <code>/battle create|start|cancel|stats</code>, admin <code>list|force-end|settings</code></p>
+      <p><strong>Arcade:</strong> <code>/higherlower</code>, <code>/diceduel</code>, <code>/reactionrace</code>, <code>/numberguess</code>, <code>/slots</code>, <code>/trivia</code>, <code>/wordscramble</code>, <code>/rps</code>, <code>/blackjack</code> (<code>start|cancel</code>)</p>
+      <p><strong>Game Night:</strong> <code>/gamenight start|skip|cancel|leaderboard</code></p>
+    </section>
+
+    <section class="card" style="padding:16px;margin:16px 0;">
+      <h2>Missions</h2>
+      <p><code>/heist view|signup|status</code> and admin <code>/heist admin create|list|cancel</code></p>
+    </section>
+
+    <section class="card" style="padding:16px;margin:16px 0;">
+      <h2>Config</h2>
+      <p><code>/config modules|toggle|status</code></p>
+    </section>
+
+    <section class="card" style="padding:16px;margin:16px 0;">
+      <h2>Web-Only Surfaces</h2>
+      <ul>
+        <li>Ticketing categories and panel controls</li>
+        <li>Role panel builder UI</li>
+        <li>Branding editor</li>
+        <li>Billing plan/renewal controls</li>
+        <li>Superadmin tenant templates and overrides</li>
+      </ul>
+    </section>
+
+    <section class="card" style="padding:16px;margin:16px 0;">
+      <h2>Plans</h2>
+      <ul>
+        <li>Starter: free per server</li>
+        <li>Growth: $19.99 per server</li>
+        <li>Pro: $49.99 per server</li>
+        <li>Enterprise: contact team (multi-server/custom)</li>
+        <li>Yearly billing: 15% discount</li>
       </ul>
     </section>
   </main>

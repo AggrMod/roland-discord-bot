@@ -536,6 +536,40 @@ class WebServer {
       return res.status(status).json({ success: false, message: 'Select a server to continue' });
     };
 
+    function ensureTenantModuleEnabled(req, res, moduleKey, moduleLabel) {
+      if (!tenantService.isMultitenantEnabled()) return true;
+      if (!req.guildId) return true;
+      const actorId = String(req.session?.discordUser?.id || '').trim();
+      if (actorId && superadminService.isSuperadmin(actorId)) return true;
+      if (tenantService.isModuleEnabled(req.guildId, moduleKey)) return true;
+      res.status(403).json({ success: false, message: `${moduleLabel} module is disabled for this server.` });
+      return false;
+    }
+
+    function ensureVerificationModule(req, res) {
+      return ensureTenantModuleEnabled(req, res, 'verification', 'Verification');
+    }
+
+    function ensureSelfServeRolesModule(req, res) {
+      return ensureTenantModuleEnabled(req, res, 'selfserveroles', 'Self-Serve Roles');
+    }
+
+    function ensureEngagementModule(req, res) {
+      return ensureTenantModuleEnabled(req, res, 'engagement', 'Engagement');
+    }
+
+    function ensureNftTrackerModule(req, res) {
+      return ensureTenantModuleEnabled(req, res, 'nfttracker', 'NFT Tracker');
+    }
+
+    function ensureTokenTrackerModule(req, res) {
+      return ensureTenantModuleEnabled(req, res, 'tokentracker', 'Token Tracker');
+    }
+
+    function ensureTicketingModule(req, res) {
+      return ensureTenantModuleEnabled(req, res, 'ticketing', 'Ticketing');
+    }
+
     // ==================== API V1 (VERSIONED PUBLIC API) ====================
 
     const v1Router = require('./routes/v1');
@@ -2974,6 +3008,7 @@ class WebServer {
     };
 
     this.app.get('/api/admin/roles/config', adminAuthMiddleware, (req, res) => {
+      if (!ensureVerificationModule(req, res)) return;
       try {
         const useTenantScoped = tenantService.isMultitenantEnabled() && !!req.guildId;
         const config = useTenantScoped
@@ -2991,6 +3026,7 @@ class WebServer {
 
     // Tier CRUD
     this.app.post('/api/admin/roles/tiers', adminAuthMiddleware, (req, res) => {
+      if (!ensureVerificationModule(req, res)) return;
       try {
         const { name, minNFTs, maxNFTs, votingPower, roleId, collectionId } = req.body;
         
@@ -3043,6 +3079,7 @@ class WebServer {
     });
 
     this.app.put('/api/admin/roles/tiers/:name', adminAuthMiddleware, (req, res) => {
+      if (!ensureVerificationModule(req, res)) return;
       try {
         const { name } = req.params;
         const updates = req.body;
@@ -3066,6 +3103,7 @@ class WebServer {
     });
 
     this.app.delete('/api/admin/roles/tiers/:name', adminAuthMiddleware, (req, res) => {
+      if (!ensureVerificationModule(req, res)) return;
       try {
         const { name } = req.params;
         const useTenantScoped = tenantService.isMultitenantEnabled() && !!req.guildId;
@@ -3088,6 +3126,7 @@ class WebServer {
 
     // Trait CRUD
     this.app.post('/api/admin/roles/traits', adminAuthMiddleware, (req, res) => {
+      if (!ensureVerificationModule(req, res)) return;
       try {
         const { traitType, roleId, collectionId, description } = req.body;
         // Support traitValues array; fall back to single traitValue for backward compat
@@ -3147,6 +3186,7 @@ class WebServer {
     });
 
     this.app.put('/api/admin/roles/traits/:traitType/:traitValue', adminAuthMiddleware, (req, res) => {
+      if (!ensureVerificationModule(req, res)) return;
       try {
         const { traitType, traitValue } = req.params;
         const { roleId, collectionId, description } = req.body;
@@ -3185,6 +3225,7 @@ class WebServer {
     });
 
     this.app.delete('/api/admin/roles/traits/:traitType/:traitValue', adminAuthMiddleware, (req, res) => {
+      if (!ensureVerificationModule(req, res)) return;
       try {
         const { traitType, traitValue } = req.params;
         const useTenantScoped = tenantService.isMultitenantEnabled() && !!req.guildId;
@@ -3238,6 +3279,7 @@ class WebServer {
 
     // Token role rule CRUD
     this.app.get('/api/admin/roles/tokens', adminAuthMiddleware, (req, res) => {
+      if (!ensureVerificationModule(req, res)) return;
       try {
         const rules = roleService.getTokenRoleRules(req.guildId || null);
         res.json({ success: true, rules });
@@ -3248,6 +3290,7 @@ class WebServer {
     });
 
     this.app.post('/api/admin/roles/tokens', adminAuthMiddleware, (req, res) => {
+      if (!ensureVerificationModule(req, res)) return;
       try {
         const { tokenMint, tokenSymbol, minAmount, maxAmount, roleId, enabled } = req.body || {};
         if (!tokenMint || !roleId || minAmount === undefined || minAmount === null) {
@@ -3285,6 +3328,7 @@ class WebServer {
     });
 
     this.app.put('/api/admin/roles/tokens/:id', adminAuthMiddleware, (req, res) => {
+      if (!ensureVerificationModule(req, res)) return;
       try {
         const result = roleService.updateTokenRoleRule(req.params.id, req.body || {}, req.guildId || null);
         if (!result.success) return res.status(400).json(result);
@@ -3296,6 +3340,7 @@ class WebServer {
     });
 
     this.app.delete('/api/admin/roles/tokens/:id', adminAuthMiddleware, (req, res) => {
+      if (!ensureVerificationModule(req, res)) return;
       try {
         const result = roleService.removeTokenRoleRule(req.params.id, req.guildId || null);
         if (!result.success) return res.status(404).json(result);
@@ -3308,6 +3353,7 @@ class WebServer {
 
     // Role sync endpoint
     this.app.post('/api/admin/roles/sync', adminAuthMiddleware, async (req, res) => {
+      if (!ensureVerificationModule(req, res)) return;
       try {
         if (!this.client) {
           return res.status(500).json({ success: false, message: 'Bot not initialized' });
@@ -3362,6 +3408,7 @@ class WebServer {
     // ==================== OG ROLE API ====================
 
     this.app.get('/api/admin/og-role/config', adminAuthMiddleware, async (req, res) => {
+      if (!ensureVerificationModule(req, res)) return;
       try {
         const ogRoleService = require('../services/ogRoleService');
         const guild = req.guild || await fetchGuildById(req.guildId);
@@ -3375,6 +3422,7 @@ class WebServer {
     });
 
     this.app.put('/api/admin/og-role/config', adminAuthMiddleware, (req, res) => {
+      if (!ensureVerificationModule(req, res)) return;
       try {
         const ogRoleService = require('../services/ogRoleService');
         const { enabled, roleId, limit } = req.body;
@@ -3404,6 +3452,7 @@ class WebServer {
     });
 
     this.app.post('/api/admin/og-role/sync', adminAuthMiddleware, async (req, res) => {
+      if (!ensureVerificationModule(req, res)) return;
       try {
         const ogRoleService = require('../services/ogRoleService');
         const { fullSync } = req.body;
@@ -3420,6 +3469,7 @@ class WebServer {
     // ==================== ROLE CLAIM API ====================
 
     this.app.get('/api/admin/role-claim/config', adminAuthMiddleware, async (req, res) => {
+      if (!ensureSelfServeRolesModule(req, res)) return;
       try {
         const roleClaimService = require('../services/roleClaimService');
         const guild = req.guild || await fetchGuildById(req.guildId);
@@ -3433,6 +3483,7 @@ class WebServer {
     });
 
     this.app.post('/api/admin/role-claim/add', adminAuthMiddleware, async (req, res) => {
+      if (!ensureSelfServeRolesModule(req, res)) return;
       try {
         const roleClaimService = require('../services/roleClaimService');
         const { roleId, label } = req.body;
@@ -3458,6 +3509,7 @@ class WebServer {
     });
 
     this.app.delete('/api/admin/role-claim/:roleId', adminAuthMiddleware, (req, res) => {
+      if (!ensureSelfServeRolesModule(req, res)) return;
       try {
         const roleClaimService = require('../services/roleClaimService');
         const { roleId } = req.params;
@@ -3471,6 +3523,7 @@ class WebServer {
     });
 
     this.app.post('/api/admin/role-claim/:roleId/toggle', adminAuthMiddleware, (req, res) => {
+      if (!ensureSelfServeRolesModule(req, res)) return;
       try {
         const roleClaimService = require('../services/roleClaimService');
         const { roleId } = req.params;
@@ -3484,6 +3537,7 @@ class WebServer {
     });
 
     this.app.post('/api/admin/roles/post-panel', adminAuthMiddleware, async (req, res) => {
+      if (!ensureSelfServeRolesModule(req, res)) return;
       try {
         const roleClaimService = require('../services/roleClaimService');
         const { createBrandedPanelEmbed } = require('../services/embedBranding');
@@ -3559,6 +3613,7 @@ class WebServer {
     // ==================== VERIFICATION PANEL API ====================
 
     this.app.get('/api/admin/verification/panel', adminAuthMiddleware, (req, res) => {
+      if (!ensureVerificationModule(req, res)) return;
       try {
         ensureVerificationPanelsSchema();
         const row = db.prepare(`
@@ -3592,6 +3647,7 @@ class WebServer {
     });
 
     this.app.post('/api/admin/verification/panel/post', adminAuthMiddleware, async (req, res) => {
+      if (!ensureVerificationModule(req, res)) return;
       try {
         ensureVerificationPanelsSchema();
         if (!this.client) {
@@ -3698,6 +3754,7 @@ class WebServer {
     // ==================== ROLE PANELS API (multi-panel self-serve roles) ====================
 
     this.app.get('/api/admin/role-panels', adminAuthMiddleware, (req, res) => {
+      if (!ensureSelfServeRolesModule(req, res)) return;
       try {
         const rolePanelService = require('../services/rolePanelService');
         const panels = rolePanelService.listPanels(req.guildId);
@@ -3709,6 +3766,7 @@ class WebServer {
     });
 
     this.app.post('/api/admin/role-panels', adminAuthMiddleware, (req, res) => {
+      if (!ensureSelfServeRolesModule(req, res)) return;
       try {
         const rolePanelService = require('../services/rolePanelService');
         const { title, description, channelId, singleSelect } = req.body;
@@ -3722,6 +3780,7 @@ class WebServer {
     });
 
     this.app.put('/api/admin/role-panels/:id', adminAuthMiddleware, (req, res) => {
+      if (!ensureSelfServeRolesModule(req, res)) return;
       try {
         const rolePanelService = require('../services/rolePanelService');
         const { title, description, channelId, singleSelect } = req.body;
@@ -3734,6 +3793,7 @@ class WebServer {
     });
 
     this.app.delete('/api/admin/role-panels/:id', adminAuthMiddleware, (req, res) => {
+      if (!ensureSelfServeRolesModule(req, res)) return;
       try {
         const rolePanelService = require('../services/rolePanelService');
         const result = rolePanelService.deletePanel(parseInt(req.params.id), req.guildId);
@@ -3745,6 +3805,7 @@ class WebServer {
     });
 
     this.app.post('/api/admin/role-panels/:id/roles', adminAuthMiddleware, async (req, res) => {
+      if (!ensureSelfServeRolesModule(req, res)) return;
       try {
         const rolePanelService = require('../services/rolePanelService');
         const { roleId, label } = req.body;
@@ -3762,6 +3823,7 @@ class WebServer {
     });
 
     this.app.delete('/api/admin/role-panels/:id/roles/:roleId', adminAuthMiddleware, (req, res) => {
+      if (!ensureSelfServeRolesModule(req, res)) return;
       try {
         const rolePanelService = require('../services/rolePanelService');
         const result = rolePanelService.removeRole(parseInt(req.params.id), req.params.roleId, req.guildId);
@@ -3773,6 +3835,7 @@ class WebServer {
     });
 
     this.app.put('/api/admin/role-panels/:id/roles/:roleId', adminAuthMiddleware, (req, res) => {
+      if (!ensureSelfServeRolesModule(req, res)) return;
       try {
         const rolePanelService = require('../services/rolePanelService');
         const { label, enabled } = req.body;
@@ -3785,6 +3848,7 @@ class WebServer {
     });
 
     this.app.post('/api/admin/role-panels/:id/post', adminAuthMiddleware, async (req, res) => {
+      if (!ensureSelfServeRolesModule(req, res)) return;
       try {
         const rolePanelService = require('../services/rolePanelService');
         const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
@@ -4165,19 +4229,6 @@ class WebServer {
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });
-
-    const ensureTenantModule = (req, res, moduleKey, moduleLabel) => {
-      if (!tenantService.isMultitenantEnabled()) return true;
-      if (!req.guildId) return true;
-      if (tenantService.isModuleEnabled(req.guildId, moduleKey)) return true;
-      res.status(403).json({ success: false, message: `${moduleLabel} module is disabled for this server.` });
-      return false;
-    };
-
-    const ensureEngagementModule = (req, res) => ensureTenantModule(req, res, 'engagement', 'Engagement');
-    const ensureNftTrackerModule = (req, res) => ensureTenantModule(req, res, 'nfttracker', 'NFT Tracker');
-    const ensureTokenTrackerModule = (req, res) => ensureTenantModule(req, res, 'tokentracker', 'Token Tracker');
-    const ensureTicketingModule = (req, res) => ensureTenantModule(req, res, 'ticketing', 'Ticketing');
 
     // ==================== ENGAGEMENT & POINTS ====================
 

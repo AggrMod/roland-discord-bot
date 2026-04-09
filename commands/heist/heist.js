@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+﻿const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const missionService = require('../../services/missionService');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
@@ -136,7 +136,7 @@ module.exports = {
         }
       }
     } catch (error) {
-      console.error('[CommandError]', error);
+      logger.error('[CommandError]', error);
       const userMsg = 'An error occurred. Please try again or contact an admin.';
       if (interaction.deferred || interaction.replied) {
         await interaction.editReply({ content: userMsg });
@@ -343,3 +343,4 @@ module.exports = {
     logger.log(`Admin ${interaction.user.tag} cancelled heist mission ${missionId}`);
   }
 };
+

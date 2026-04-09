@@ -323,9 +323,9 @@ if (!isModuleEnabled('governance')) {
 
 ---
 
-## Solpranos Branding
+## Guild Pilot Branding
 
-All user-facing messages maintain Solpranos/mafia theming:
+All user-facing messages maintain Guild Pilot/mafia theming:
 - "The Family" for community
 - "Made member" for verified users
 - "Associate" for unverified
@@ -334,7 +334,7 @@ All user-facing messages maintain Solpranos/mafia theming:
 - "Battle" for competition
 - "Heist" for missions
 
-Module disabled message (with Solpranos flavor):
+Module disabled message (with Guild Pilot flavor):
 ```
 🚫 The [Module] business is closed right now. 
    Talk to the Don if you need access.

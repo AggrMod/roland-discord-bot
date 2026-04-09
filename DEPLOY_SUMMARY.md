@@ -36,7 +36,7 @@
    - Async route wrapper for cleaner error catching
 
 5. **CORS Configuration** (updated in `web/server.js`)
-   - Explicit whitelist for the-solpranos.com
+   - Explicit whitelist for guildpilot.app
    - Methods: GET, POST, PUT, DELETE, OPTIONS
    - 24-hour preflight cache
    - Credentials support enabled
@@ -104,7 +104,7 @@ Estimated downtime: **< 30 seconds** (pm2 restart)
    curl http://localhost:3000/api/public/v1/treasury | jq .
    # Should NOT contain "wallet" field
    ```
-3. Verify CORS from browser (the-solpranos.com)
+3. Verify CORS from browser (guildpilot.app)
 4. Test pagination:
    ```bash
    curl "http://localhost:3000/api/public/v1/proposals/concluded?limit=10"
@@ -115,7 +115,7 @@ Estimated downtime: **< 30 seconds** (pm2 restart)
 After deployment:
 - [ ] Sanity check passes (100% tests green)
 - [ ] No privacy leaks (no raw wallet addresses, unredacted IDs)
-- [ ] CORS working (no console errors from the-solpranos.com)
+- [ ] CORS working (no console errors from guildpilot.app)
 - [ ] Error responses properly formatted
 - [ ] Legacy endpoints still operational
 
@@ -133,4 +133,4 @@ Since legacy endpoints unchanged, rollback is safe.
 
 **Commit:** `22f5b58` - "API polish: public v1 contract, response standardization, docs"  
 **Risk:** 🟢 Low (backward compatible)  
-**Impact:** Public API consumers (the-solpranos.com)
+**Impact:** Public API consumers (guildpilot.app)

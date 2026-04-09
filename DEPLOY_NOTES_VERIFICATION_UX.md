@@ -1,7 +1,7 @@
 # Deploy Notes: Verification UX Pass
 
 **Date:** 2026-03-24  
-**Objective:** Make `/verification` commands intuitive like Solmate, but distinctly Solpranos
+**Objective:** Make `/verification` commands intuitive like Solmate, but distinctly Guild Pilot
 
 ---
 
@@ -18,9 +18,9 @@
 
 #### After (Friendly UX):
 ```
-/verification actions addcollection role:@Role collection:solpranos-main [amount:1] [traitname:Role] [traitvalue:The Hitman]
+/verification actions addcollection role:@Role collection:guildpilot-main [amount:1] [traitname:Role] [traitvalue:The Hitman]
 /verification actions addtoken role:@Role token:$BRUNO [amount:1000]
-/verification actions remove role:@Role type:collection [identifier:solpranos-main]
+/verification actions remove role:@Role type:collection [identifier:guildpilot-main]
 ```
 
 **Key Improvements:**
@@ -49,17 +49,17 @@ Added optional customization fields to `/verification create`:
 
 ---
 
-### 3. Solpranos Identity & Branding
+### 3. Guild Pilot Identity & Branding
 
 **Wording Changes:**
 - "User" → "Member" or "Family member"
 - "Remove user" → "Remove member from the Family"
 - "Export user" → "Export member's verification data"
-- Help text uses Solpranos terminology ("Family", "made member", "rank")
+- Help text uses Guild Pilot terminology ("Family", "made member", "rank")
 
 **Visual Identity:**
-- Default color: #FFD700 (gold) - Solpranos brand color
-- Footer: "Solpranos" by default
+- Default color: #FFD700 (gold) - Guild Pilot brand color
+- Footer: "Guild Pilot" by default
 - Role naming: Associate, Soldato, Capo, Elite, Underboss, Don
 
 **Error Messages:**
@@ -106,7 +106,7 @@ Added optional customization fields to `/verification create`:
 ### 6. Documentation Updates
 
 **Files Updated:**
-- `README.md` - Updated command examples with friendly syntax and Solpranos branding
+- `README.md` - Updated command examples with friendly syntax and Guild Pilot branding
 - `docs/VERIFICATION_COMMANDS.md` - **New comprehensive guide** with:
   - Quick start examples
   - Common workflows
@@ -140,7 +140,7 @@ Added optional customization fields to `/verification create`:
 
 | File | Changes |
 |------|---------|
-| `commands/admin/verification.js` | Complete rewrite with friendly UX and Solpranos branding |
+| `commands/admin/verification.js` | Complete rewrite with friendly UX and Guild Pilot branding |
 | `README.md` | Updated command examples and documentation structure |
 | `docs/VERIFICATION_COMMANDS.md` | **New** - Comprehensive verification commands guide |
 | `DEPLOY_NOTES_VERIFICATION_UX.md` | **New** - This file |
@@ -185,7 +185,7 @@ Added optional customization fields to `/verification create`:
 - [ ] `/role-config` commands still functional
 
 ### UX & Branding
-- [ ] Solpranos terminology used throughout
+- [ ] Guild Pilot terminology used throughout
 - [ ] Help text is clear and friendly
 - [ ] Error messages are admin-friendly
 - [ ] Examples in docs match actual command syntax
@@ -239,7 +239,7 @@ Verify:
 - Panel posts to channel
 - Buttons functional
 - Color applied correctly
-- Solpranos branding visible
+- Guild Pilot branding visible
 
 ---
 
@@ -289,7 +289,7 @@ Check out the new guide: `/docs/VERIFICATION_COMMANDS.md`
 
 ✅ All verification functionality works  
 ✅ Commands feel intuitive (no manual reading required)  
-✅ Solpranos branding consistent throughout  
+✅ Guild Pilot branding consistent throughout  
 ✅ Backward compatibility maintained  
 ✅ Clear error messages guide admins  
 ✅ Documentation comprehensive and accurate  
@@ -309,7 +309,7 @@ Check out the new guide: `/docs/VERIFICATION_COMMANDS.md`
 
 **Commit Message:**
 ```
-Verification UX pass: friendly Solpranos commands with advanced compatibility
+Verification UX pass: friendly Guild Pilot commands with advanced compatibility
 ```
 
 **Next Steps:**

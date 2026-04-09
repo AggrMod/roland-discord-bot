@@ -62,7 +62,7 @@ module.exports = {
           break;
       }
     } catch (error) {
-      console.error('[CommandError]', error);
+      logger.error('[config] Command error:', error);
       const userMsg = 'An error occurred. Please try again or contact an admin.';
       if (interaction.deferred || interaction.replied) {
         await interaction.editReply({ content: userMsg });
@@ -102,15 +102,15 @@ module.exports = {
   async handleToggle(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
-    const module = interaction.options.getString('module');
+    const moduleKey = interaction.options.getString('module');
     const enabled = interaction.options.getBoolean('enabled');
 
-    const success = moduleGuard.setModuleEnabled(module, enabled);
+    const success = moduleGuard.setModuleEnabled(moduleKey, enabled);
 
     if (success) {
-      const displayName = module.charAt(0).toUpperCase() + module.slice(1);
+      const displayName = moduleKey.charAt(0).toUpperCase() + moduleKey.slice(1);
       const status = enabled ? '✅ Enabled' : '❌ Disabled';
-      const icon = getModuleIcon(module);
+      const icon = getModuleIcon(moduleKey);
 
       const embed = new EmbedBuilder()
         .setColor(enabled ? '#00FF00' : '#FF0000')
@@ -124,10 +124,10 @@ module.exports = {
         .setTimestamp();
 
       await interaction.editReply({ embeds: [embed] });
-      logger.log(`Admin ${interaction.user.tag} toggled module ${module} to ${enabled}`);
+      logger.log(`Admin ${interaction.user.tag} toggled module ${moduleKey} to ${enabled}`);
     } else {
       await interaction.editReply({ 
-        content: `❌ Failed to toggle module: ${module}`, 
+        content: `❌ Failed to toggle module: ${moduleKey}`, 
         ephemeral: true 
       });
     }

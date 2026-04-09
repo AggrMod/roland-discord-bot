@@ -168,7 +168,7 @@ None of the command files implement cooldowns. Discord has built-in rate limits,
 
 ### 19. Backup Script Retention Uses find -mtime (scripts/backup_db.sh)
 
-- **backup_db.sh:31** - `find "$BACKUP_DIR" -maxdepth 1 -type f -name 'solpranos_*.db' -mtime +"$RETENTION_DAYS" -delete`
+- **backup_db.sh:31** - `find "$BACKUP_DIR" -maxdepth 1 -type f -name 'guildpilot_*.db' -mtime +"$RETENTION_DAYS" -delete`
 
 Correct usage, but no error handling if the find/delete fails. Also, `RETENTION_DAYS` from env is used directly in the find command without validation that it's a number.
 

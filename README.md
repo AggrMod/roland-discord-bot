@@ -1,6 +1,6 @@
-# SOLPRANOS Discord Bot - Phase 1 MVP
+# Guild Pilot Discord Bot - Phase 1 MVP
 
-Discord bot for the Solpranos NFT ecosystem featuring wallet verification, DAO governance, and heist missions.
+Discord bot for the Guild Pilot NFT ecosystem featuring wallet verification, DAO governance, and heist missions.
 
 ## Features
 

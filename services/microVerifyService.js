@@ -553,7 +553,7 @@ class MicroVerifyService {
     setImmediate(async () => {
       try {
         const roleService = require('./roleService');
-        const resolvedGuildId = String(guildIdHint || process.env.GUILD_ID || process.env.DISCORD_GUILD_ID || '').trim();
+        const resolvedGuildId = String(guildIdHint || '').trim();
         const effectiveUsername = username || 'Web User';
 
         await roleService.updateUserRoles(discordId, effectiveUsername, resolvedGuildId || null);
@@ -696,20 +696,23 @@ class MicroVerifyService {
       const user = await client.users.fetch(discordId).catch(() => null);
       if (!user) return;
 
-      await user.send(
-        `✅ **Wallet Verified!**\n\n` +
+      const sendResult = await user.send(
+        `**Wallet Verified!**\n\n` +
         `Your wallet \`${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}\` has been successfully verified via micro-transfer!\n\n` +
         `Your roles and voting power have been updated. Use \`/verification status\` to see your status.`
-      ).catch(err => {
+      ).then(() => true).catch(err => {
         const code = Number(err?.code || err?.rawError?.code || 0);
-        if (code === 50007 || code === 50278) {
+        if (code === 50007 || code === 50078 || code === 50278) {
           logger.warn(`Skipped verification DM for ${discordId}: ${err?.rawError?.message || err?.message || 'cannot DM user'}`);
-          return;
+          return false;
         }
         logger.error('Failed to DM user:', err);
+        return false;
       });
 
-      logger.log(`Notified user ${discordId} of verification`);
+      if (sendResult) {
+        logger.log(`Notified user ${discordId} of verification`);
+      }
     } catch (error) {
       logger.error('Error notifying user:', error);
     }

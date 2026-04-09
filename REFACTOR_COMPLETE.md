@@ -54,7 +54,7 @@ Persistent toggles for:
 Reusable guard helper:
 - `checkModuleEnabled()` - validates module state
 - `checkAdmin()` - validates admin permissions
-- Friendly Solpranos-themed error messages
+- Friendly Guild Pilot-themed error messages
 
 Integrated into:
 - All module commands
@@ -141,7 +141,7 @@ See: `DEPLOY_NOTES_MODULE_IA.md`
 - **Cleaner command tree**: `/verification status` instead of `/verify`
 - **Module-first commands only**: Old aliases removed, new structure enforced
 - **Consistent structure**: Every module has user + admin commands
-- **Solpranos branding**: "The Commission is closed" when module disabled
+- **Guild Pilot branding**: "The Commission is closed" when module disabled
 
 ### Technical
 

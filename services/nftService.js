@@ -3,6 +3,8 @@ const logger = require('../utils/logger');
 const tenantService = require('./tenantService');
 
 const MOCK_MODE = process.env.MOCK_MODE === 'true';
+const IS_PRODUCTION = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+const ALLOW_MOCK_IN_PROD = process.env.ALLOW_MOCK_IN_PROD === 'true';
 
 // Helius rate limiter — default 10 req/sec (free tier), set HELIUS_RPS in .env to override
 const HELIUS_RPS = parseInt(process.env.HELIUS_RPS || '10');
@@ -34,8 +36,12 @@ function isValidSolanaAddress(address) {
 
 class NFTService {
   constructor() {
+    if (IS_PRODUCTION && MOCK_MODE && !ALLOW_MOCK_IN_PROD) {
+      throw new Error('MOCK_MODE is not allowed in production. Disable MOCK_MODE or set ALLOW_MOCK_IN_PROD=true explicitly.');
+    }
     this.connection = new Connection(process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com');
     this.invalidWalletWarned = new Set();
+    this.mockInProdWarnedGuilds = new Set();
   }
 
   async getNFTsForWallet(walletAddress, options = {}) {
@@ -49,7 +55,18 @@ class NFTService {
       ? tenantService.getTenantContext(guildId)?.limits?.mockDataEnabled === true
       : false;
 
+    if (IS_PRODUCTION && !ALLOW_MOCK_IN_PROD && tenantMockEnabled) {
+      const warnKey = String(guildId || 'global');
+      if (!this.mockInProdWarnedGuilds.has(warnKey)) {
+        logger.error(`Tenant mock_data_enabled ignored in production for guild ${warnKey}`);
+        this.mockInProdWarnedGuilds.add(warnKey);
+      }
+    }
+
     if (MOCK_MODE || tenantMockEnabled) {
+      if (IS_PRODUCTION && !ALLOW_MOCK_IN_PROD) {
+        return [];
+      }
       if (tenantMockEnabled && !MOCK_MODE) {
         logger.warn(`Tenant mock_data_enabled active for guild ${guildId}; serving mock NFTs for ${normalizedWallet}`);
       }
@@ -74,19 +91,16 @@ class NFTService {
       return await this.fetchNFTsFromHelius(normalizedWallet);
     } catch (error) {
       logger.error('Error fetching NFTs:', error);
-      // Fallback to mock on error
-      return this.getMockNFTs(normalizedWallet, {
-        guildId,
-        mockReason: 'helius-fallback'
-      });
+      // Fail closed outside mock mode to prevent accidental role grants.
+      return [];
     }
   }
 
   async fetchNFTsFromHelius(walletAddress) {
     const heliusApiKey = process.env.HELIUS_API_KEY;
     if (!heliusApiKey) {
-      logger.warn('HELIUS_API_KEY not configured, using mock NFTs');
-      return this.getMockNFTs(walletAddress);
+      logger.warn('HELIUS_API_KEY not configured; returning empty NFT set');
+      return [];
     }
 
     try {
@@ -156,7 +170,7 @@ class NFTService {
       
       nfts.push({
         mint: `MOCK_${walletAddress.slice(0, 8)}_${i}`,
-        name: `SOLPRANOS #${1000 + i}`,
+        name: `GuildPilot Mock #${1000 + i}`,
         image: `https://example.com/nft/${i}.png`,
         attributes: [
           { trait_type: 'Role', value: randomRole },

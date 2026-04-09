@@ -275,8 +275,7 @@ class TreasuryService {
 
       return {
         success: false,
-        message: 'Failed to fetch balances',
-        error: error.message
+        message: 'Failed to fetch balances'
       };
     }
   }
@@ -400,7 +399,7 @@ class TreasuryService {
       return { success: true, transactions: txs };
     } catch (error) {
       logger.error('Error fetching treasury transactions:', error);
-      return { success: false, message: 'Failed to fetch transaction history', error: error.message };
+      return { success: false, message: 'Failed to fetch transaction history' };
     }
   }
 
@@ -515,7 +514,7 @@ class TreasuryService {
       return { success: true, messageId: msg.id };
     } catch (error) {
       logger.error('Error posting treasury watch panel:', error);
-      return { success: false, message: error.message };
+      return { success: false, message: 'Failed to post treasury watch panel' };
     }
   }
 

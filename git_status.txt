@@ -1,0 +1,80 @@
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   .eslintrc.json
+	modified:   .gitignore
+	modified:   HARDENING-CHECKLIST.md
+	modified:   commands/battle/battle.js
+	modified:   commands/config/config.js
+	modified:   commands/governance/governance.js
+	modified:   commands/heist/heist.js
+	modified:   commands/nfttracker/nftTracker.js
+	modified:   commands/treasury/treasury.js
+	modified:   commands/verification/verification.js
+	modified:   config/commandModules.js
+	modified:   database/db.js
+	modified:   docs/ADMIN_HELP.md
+	modified:   docs/DATABASE_MIGRATIONS.md
+	modified:   docs/VERIFICATION_COMMANDS.md
+	modified:   index.js
+	modified:   middleware/moduleGate.js
+	modified:   package-lock.json
+	modified:   package.json
+	modified:   services/battleService.js
+	modified:   services/gameNightService.js
+	modified:   services/microVerifyService.js
+	modified:   services/nftActivityService.js
+	modified:   services/nftService.js
+	modified:   services/ogRoleService.js
+	modified:   services/proposalService.js
+	modified:   services/roleService.js
+	modified:   services/tenantService.js
+	modified:   services/ticketService.js
+	modified:   services/treasuryService.js
+	modified:   services/walletService.js
+	modified:   test-module-refactor.js
+	modified:   test-tenant-mock-scoping.js
+	modified:   utils/apiErrorHandler.js
+	modified:   utils/logger.js
+	modified:   utils/moduleGuard.js
+	modified:   web/public/admin-help.html
+	modified:   web/public/portal.html
+	modified:   web/public/portal.js
+	modified:   web/routes/v1.js
+	modified:   web/server.js
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	Audit-09042026/
+	claude_codex_changes.diff
+	codex_diff.txt
+	codex_server.diff
+	commands/minigames/
+	config/moduleMetadata.js
+	database/migrations/004_verification_rule_override_support.js
+	database/migrations/005_nft_alert_config_tenant_scoping.js
+	database/migrations/006_user_tenant_memberships.js
+	diff.txt
+	eslint.config.cjs
+	git_log.txt
+	git_status.txt
+	scripts/check-db-adhoc-guard.js
+	scripts/check-portal-inline-js-safety.js
+	scripts/release-gate.js
+	test-admin-user-tenant-scoping.js
+	test-battle-race-safety.js
+	test-nft-alert-config-scoping.js
+	test-og-role-tenant-scoping.js
+	test-ticket-tenant-safety.js
+	test-verification-role-safety.js
+	web/routes/adminCore.js
+	web/routes/superadminAdmins.js
+	web/routes/superadminCore.js
+	web/routes/superadminIdentity.js
+	web/routes/superadminOps.js
+	web/routes/superadminTenantOps.js
+
+no changes added to commit (use "git add" and/or "git commit -a")

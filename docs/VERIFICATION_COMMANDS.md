@@ -51,3 +51,7 @@ This guide reflects the current live `/verification` command surface.
 - Verification identity is global per user profile; tenant role/output behavior is tenant-configured.
 - Module entitlements are enforced per tenant plan.
 - For panel/channel management in bulk, use the web portal (`/admin` -> Verification).
+- Role sync only manages roles that are explicitly configured in tenant verification rules.
+- Rule-level override is available in the portal: `Never remove this role automatically` (`neverRemove`).
+- In multi-tenant mode, legacy `/verification admin role-config` write actions are disabled; use portal Settings → Verification for tenant-scoped writes.
+- OG role configuration is tenant-scoped in multi-tenant mode (role/limit/enable state are isolated per guild).

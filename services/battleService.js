@@ -150,11 +150,11 @@ const WINNER_LINES = [
 // Hype finale outro templates (randomized for replayability)
 const FINALE_OUTROS = [
   "The streets remember this night. {winner} walks away with the family crown. Nobody saw this coming, but everybody will remember. Capisce?",
-  "{winner} climbed over the bodies and earned the respect of every made man watching. This is how legends are born in the Solpranos family.",
+  "{winner} climbed over the bodies and earned the respect of every made man watching. This is how legends are born in the syndicate.",
   "When the smoke cleared, only {winner} was left standing. The family crown sits heavy—but they wear it well. Salute.",
   "They came. They saw. They conquered. {winner} just wrote their name in blood across this city. The family will not forget.",
   "From {totalPlayers} fighters to one champion: {winner}. That's not luck—that's power. Welcome to the top of the family tree. 👑",
-  "{winner} survived {rounds} rounds of pure chaos and walked out breathing. That's the kind of soldier the Solpranos need. Respect earned.",
+  "{winner} survived {rounds} rounds of pure chaos and walked out breathing. That's the kind of soldier the syndicate needs. Respect earned.",
   "The boss is watching. The streets are talking. And {winner}? They're wearing the crown now. Business just got very personal.",
   "{winner} didn't just survive—they dominated. {rounds} rounds, {totalPlayers} contenders, one undisputed champion. The family is proud.",
   "History lesson: You don't mess with {winner}. Tonight they proved it in blood. The crown is theirs. End of discussion.",
@@ -162,11 +162,11 @@ const FINALE_OUTROS = [
   "Somewhere, the boss is smiling. {winner} earned their stripes tonight. The family crown fits perfectly. Wear it well, champion.",
   "{winner} walked through hell and came out the other side wearing gold. {rounds} rounds of warfare, and they didn't even break a sweat. Legend status: unlocked.",
   "Tonight, {winner} wrote the definition of survival. {totalPlayers} entered. One walked out. That's not just winning—that's sending a message.",
-  "The Solpranos family has a new champion. {winner} crushed {rounds} rounds of chaos and claimed the crown. Respect? Earned. Fear? Justified.",
+  "The syndicate has a new champion. {winner} crushed {rounds} rounds of chaos and claimed the crown. Respect? Earned. Fear? Justified.",
   "{winner} just went from soldier to legend in {rounds} rounds. The family crown is heavy, but they're built for it. Salute to the new king.",
   "When they tell stories about this battle, they'll start and end with {winner}. {totalPlayers} tried. One succeeded. Crown secured. 👑",
   "You know what's harder than fighting {rounds} rounds? Winning them all. {winner} just did both. The family sees you. The crown is yours.",
-  "{winner} survived everything the streets threw at them. {rounds} rounds, {totalPlayers} enemies, one victor. That's Solpranos royalty right there.",
+  "{winner} survived everything the streets threw at them. {rounds} rounds, {totalPlayers} enemies, one victor. That's syndicate royalty right there.",
 ];
 
 const TAUNT_LINES = [
@@ -199,7 +199,7 @@ const TRASH_TALK_LINES = [
   "🗣️ {attacker} grins: \"Your resistance is noted. Not respected, just noted.\"",
   "🗣️ {attacker} after hitting {defender}: \"Welcome to the big leagues, kid.\"",
   "🗣️ {attacker} taunts: \"You're writing checks your body can't cash!\"",
-  "🗣️ {attacker} sneers: \"They warned you about the Solpranos. You didn't listen.\"",
+  "🗣️ {attacker} sneers: \"They warned you about the syndicate. You didn't listen.\"",
   "🗣️ {attacker} to {defender}: \"Keep that energy up—it's funny.\"",
   "🗣️ {attacker} laughs coldly: \"This is what happens when you forget your place.\"",
   "🗣️ {attacker} after a hit: \"Stick around—there's plenty more where that came from!\"",
@@ -579,10 +579,27 @@ class BattleService {
       const excludedIdsStr = excludedRoleIds && excludedRoleIds.length ? excludedRoleIds.join(',') : null;
       const bountyTargets = this.normalizeBountyTargets(bounties || []);
       const bountyJson = bountyTargets.length ? JSON.stringify(bountyTargets) : null;
-      db.prepare(`
-        INSERT INTO battle_lobbies (lobby_id, channel_id, message_id, creator_id, min_players, max_players, required_role_ids, excluded_role_ids, era, bounties_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(lobbyId, channelId, messageId, creatorId, minPlayers, maxPlayers, requiredIdsStr, excludedIdsStr, era, bountyJson);
+      const createResult = db.transaction(() => {
+        const existing = db.prepare(
+          "SELECT lobby_id FROM battle_lobbies WHERE channel_id = ? AND status IN ('open','in_progress') ORDER BY created_at DESC LIMIT 1"
+        ).get(channelId);
+        if (existing?.lobby_id) {
+          return { success: false, reason: 'channel_has_active_battle' };
+        }
+
+        db.prepare(`
+          INSERT INTO battle_lobbies (lobby_id, channel_id, message_id, creator_id, min_players, max_players, required_role_ids, excluded_role_ids, era, bounties_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(lobbyId, channelId, messageId, creatorId, minPlayers, maxPlayers, requiredIdsStr, excludedIdsStr, era, bountyJson);
+        return { success: true };
+      })();
+
+      if (!createResult.success) {
+        if (createResult.reason === 'channel_has_active_battle') {
+          return { success: false, message: 'There is already an active battle in this channel.' };
+        }
+        return { success: false, message: 'Failed to create battle lobby' };
+      }
 
       logger.log(`Battle lobby created: ${lobbyId} by ${creatorId}`);
       return { success: true, lobbyId };
@@ -716,29 +733,39 @@ class BattleService {
 
   startBattle(lobbyId, starterId) {
     try {
-      const lobby = this.getLobby(lobbyId);
-      if (!lobby) {
-        return { success: false, message: 'Lobby not found' };
+      const txResult = db.transaction(() => {
+        const lobby = db.prepare('SELECT * FROM battle_lobbies WHERE lobby_id = ?').get(lobbyId);
+        if (!lobby) {
+          return { success: false, message: 'Lobby not found' };
+        }
+        if (lobby.creator_id !== starterId) {
+          return { success: false, message: 'Only the lobby creator can start the battle' };
+        }
+        if (lobby.status !== 'open') {
+          return { success: false, message: 'Battle already started or completed' };
+        }
+
+        const participants = db.prepare('SELECT * FROM battle_participants WHERE lobby_id = ? ORDER BY joined_at ASC').all(lobbyId);
+        if (participants.length < lobby.min_players) {
+          return { success: false, message: `Need at least ${lobby.min_players} players to start` };
+        }
+
+        const updateResult = db.prepare(
+          "UPDATE battle_lobbies SET status = 'in_progress', started_at = CURRENT_TIMESTAMP WHERE lobby_id = ? AND status = 'open'"
+        ).run(lobbyId);
+        if (updateResult.changes === 0) {
+          return { success: false, message: 'Battle already started or completed' };
+        }
+
+        return { success: true, participants };
+      })();
+
+      if (!txResult.success) {
+        return txResult;
       }
 
-      if (lobby.creator_id !== starterId) {
-        return { success: false, message: 'Only the lobby creator can start the battle' };
-      }
-
-      if (lobby.status !== 'open') {
-        return { success: false, message: 'Battle already started or completed' };
-      }
-
-      const participants = this.getParticipants(lobbyId);
-      if (participants.length < lobby.min_players) {
-        return { success: false, message: `Need at least ${lobby.min_players} players to start` };
-      }
-
-      db.prepare('UPDATE battle_lobbies SET status = ?, started_at = CURRENT_TIMESTAMP WHERE lobby_id = ?')
-        .run('in_progress', lobbyId);
-
-      logger.log(`Battle ${lobbyId} started by ${starterId} with ${participants.length} participants`);
-      return { success: true, participants };
+      logger.log(`Battle ${lobbyId} started by ${starterId} with ${txResult.participants.length} participants`);
+      return txResult;
     } catch (error) {
       logger.error('Error starting battle:', error);
       return { success: false, message: 'Failed to start battle' };

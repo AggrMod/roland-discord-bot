@@ -1,0 +1,296 @@
+# 🔍 Roland Discord Bot — Full Audit Report
+
+> Scope: Consistency, Security, User Experience, Admin Experience, Architecture
+> Date: 2026-04-09 | Repository: `roland-discord-bot`
+
+---
+
+## Executive Summary
+
+The codebase is a **mature, feature-rich Discord bot** with a multi-tenant SaaS architecture ("Guild Pilot"), a comprehensive admin dashboard, and deep Solana blockchain integration. It has strong foundational patterns (centralized logger, module gating, tenant isolation, API response envelopes) but suffers from **branding fragmentation**, **inconsistent API response patterns**, a **monolithic server.js file (5,000 lines)**, and several unresolved findings from the March 2026 security audit. The project is usable but needs a focused cleanup sprint before scaling.
+
+---
+
+## 1. 🔐 Security
+
+### 1.1 Unresolved Findings from Previous Audit (2026-03-28)
+
+A [previous security audit](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/SECURITY_AUDIT_2026-03-28.md) identified 20 findings. Based on the current codebase review, several **remain unresolved**:
+
+| # | Finding | Status | Priority |
+|---|---------|--------|----------|
+| 1 | DOM XSS via unescaped `innerHTML` in portal.js | ⚠️ **Still present** | 🔴 Critical |
+| 3 | CDN script loaded without SRI hash (`@solana/web3.js@latest`) | ⚠️ **Still present** | 🔴 High |
+| 5 | Battle lobby race condition (check-then-act) | ⚠️ **Still present** | 🟡 Medium |
+| 6 | `MOCK_MODE=true` in prod auto-verifies users | ⚠️ **Still present** | 🟡 Medium-High |
+| 8 | `governance.js` imports settings.json statically | ⚠️ **Still present** | 🟡 Medium |
+| 11 | No CSRF protection on admin API routes | ⚠️ **Still present** | 🟡 Medium |
+| 13 | Logger has no level gating | ⚠️ **Still present** | 🟢 Low |
+| 15 | Dead `ogConfig.js` command still registered | ⚠️ **Still present** | 🟢 Low |
+
+### 1.2 New Security Observations
+
+| Issue | Location | Severity |
+|-------|----------|----------|
+| **Hardcoded default session secret** — `'solpranos-secret-key-change-this-in-production'` used as fallback | [server.js:291](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/web/server.js#L291), [index.js:39](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/index.js#L39) | 🔴 Critical |
+| **`SOLPRANOS` in wallet verification message** — Hardcoded project name in a multi-tenant signature message | [server.js:3957](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/web/server.js#L3957) | 🟡 Medium |
+| **Error messages leak internals to Discord** — `error.message` sent directly in command catch blocks | Multiple command files | 🟡 Medium |
+| **`.gitignore` is too minimal** — Missing entries for `logs/`, `*.log`, `.env.*`, `config/settings.json`, `config/module-toggles.json`, OS files (`.DS_Store`, `Thumbs.db`) | [.gitignore](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/.gitignore) | 🟡 Medium |
+| **Raw `console.error` in service code** — Bypasses logger in `gameNightService.js:184` | [gameNightService.js:184](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/services/gameNightService.js#L184) | 🟢 Low |
+
+### 1.3 What's Working Well ✅
+- `moduleGate` enforces permission checks before every command and API route
+- `superadminGuard` isolates sensitive admin endpoints
+- Wallet linking uses SQLite transactions to prevent race conditions
+- Helius API has rate-limiting built into the NFT service
+- `apiResponse.sanitize()` strips sensitive fields from API responses
+- Session store is persistent (better-sqlite3) — not in-memory
+- ESLint config includes `eslint-plugin-security` rules
+
+---
+
+## 2. 🔄 Consistency
+
+### 2.1 Branding Fragmentation (Critical)
+
+The codebase has a **significant identity split** between two brands:
+
+| Brand | Where It Appears | Count |
+|-------|-----------------|-------|
+| **"Solpranos"** | `README.md`, `index.js` (NFT voting messages), `server.js` (CORS origins, session secret, verification message), `nftService.js` (mock NFTs), `battleService.js` (6+ flavor text references), docs, deploy notes | 40+ references |
+| **"Guild Pilot"** / **"GuildPilot"** | `ecosystem.config.cjs` (PM2 app name), `embedBranding.js` (default `brandName`), all minigame services, `moduleGuard.js`, `portal.js`, `server.js` (CORS, footers) | 50+ references |
+
+> [!WARNING]
+> The bot operates under two names simultaneously. The PM2 process is `guildpilot`, CORS whitelists both `guildpilot.app` and `the-solpranos.com`, and embed footers default to "Powered by Guild Pilot" while battle flavor text references "the Solpranos family."
+
+**Recommendation:** Decide on the canonical brand name and replace all instances. The branding service (`embedBranding.js`) should be the single source of truth — all hardcoded strings should be replaced with `getBranding()` calls.
+
+### 2.2 Module Naming Inconsistencies
+
+| Location | Key Naming | Issue |
+|----------|-----------|-------|
+| `commandModules.js` | `wallettracker`, `nfttracker`, `tokentracker` | Lowercase, no separator |
+| `settings.js` module toggles | `moduleNftTrackerEnabled`, `moduleTokenTrackerEnabled` | camelCase with "module" prefix |
+| `moduleGate.js` DISPLAY_NAMES | `'wallettracker': 'Wallet Tracker'` | Lowercase key → title-case display |
+| `moduleGuard.js` moduleNames | `'tokentracker': 'Token Activity Tracker'` | **Differs** from moduleGate's `'tokentracker': 'Token Tracker'` |
+| `plans.js` MODULE_KEYS | `'wallettracker'`, `'nfttracker'` | Consistent |
+
+> [!IMPORTANT]
+> `moduleGuard.js:121` defines `tokentracker` as **"Token Activity Tracker"** but `moduleGate.js:10` defines it as **"Token Tracker"**. The admin sees a different name depending on which gate fires.
+
+### 2.3 Duplicate Logic: `moduleGate.js` vs `moduleGuard.js`
+
+These two files serve overlapping purposes:
+
+| File | Purpose | Pattern |
+|------|---------|---------|
+| [moduleGate.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/middleware/moduleGate.js) | Middleware for interactions — checks if module is enabled | `getCompatibleModuleKeys()` |
+| [moduleGuard.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/utils/moduleGuard.js) | Utility class — also checks module enable + admin perms | `getModuleCompatibilityKeys()` |
+
+Both define their own display-name maps, both have compatibility-key logic (e.g., wallettracker↔treasury), and both format the same "module disabled" message. This should be consolidated into a single module.
+
+### 2.4 API Response Inconsistency
+
+The codebase has **two parallel response formats**:
+
+| Pattern | Where Used | Format |
+|---------|-----------|--------|
+| **Legacy inline** `{ success, message }` | `server.js` (95% of routes) | `{ success: true, message: '...' }` |
+| **Standardized envelope** `apiResponse.success()` | `routes/v1.js` only | `{ success: true, data: {...}, error: null, meta: {...} }` |
+
+`server.js` line 338 has a comment: *"existing endpoints will be migrated to use apiError/apiSuccess gradually"* — this migration has not happened. The vast majority of the 5,000-line `server.js` still uses the old format.
+
+### 2.5 Config Duplication
+
+| Config | Duplicated In |
+|--------|--------------|
+| Tier definitions | `config/roles.json` AND `config/settings.json` (identical content) |
+| Module toggle defaults | `moduleGuard.js DEFAULT_TOGGLES` AND `config/module-toggles.json` AND `config/settings.js` module flags |
+
+---
+
+## 3. 👤 User Experience (UX)
+
+### 3.1 Strengths ✅
+- Commands are well-structured with subcommands (e.g., `/verification status`, `/battle create`)
+- Module-disabled messages are user-friendly and themed ("🚫 The **X** business is closed right now. Talk to the Don if you need access.")
+- Embed branding is tenant-aware — each guild sees its own colors, logo, and footer
+- Web portal supports self-serve roles, wallet linking, proposal creation, and ticket management
+- Mock mode provides realistic test data during development
+
+### 3.2 Issues
+
+| Issue | Impact |
+|-------|--------|
+| **Hardcoded "SOLPRANOS NFT" requirement** in voting/support messages | Multi-tenant users see another project's name when denied |
+| **`error.message` exposed to users** in command catch blocks | Internal errors leak table names/paths via Discord DMs |
+| **No slash-command cooldowns** | Users can spam resource-intensive commands like `/verification refresh` |
+| **Portal help docs show wrong tier values** | Confusion: help says "Soldier 2VP (2-4 NFTs)" but config says "Soldato 3VP (3-6 NFTs)" |
+| **Debug console.log in portal.js** exposed to users | Browser console shows internal API paths and channel IDs |
+
+---
+
+## 4. 🛠️ Admin Experience
+
+### 4.1 Strengths ✅
+- Comprehensive admin portal with server switcher, module toggles, branding, and analytics
+- Superadmin panel for managing all tenants, plans, and billing
+- Settings validation is thorough — all numeric bounds are checked
+- Hardening checklist exists with cross-tenant isolation tests
+- Multiple deploy and migration docs in `docs/` folder
+
+### 4.2 Issues
+
+| Issue | Impact |
+|-------|--------|
+| **`server.js` is 5,000 lines** with all routes inline | Extremely hard to navigate, review, or debug. New routes are risky to add. |
+| **Only 1 structured migration** in `database/migrations/` | All schema changes are inline in `db.js:800-1317` wrapped in `try { } catch (e) {}` blocks. Impossible to track what's been applied. |
+| **500+ lines of try/catch migrations** in `db.js` | Zero error logging — all errors silently swallowed via empty catch blocks |
+| **13 markdown files at repo root** | `AUDIT-CROSSCHECK`, `PHASE_1.5_SUMMARY`, `DEPLOY_NOTES_*`, `REFACTOR_COMPLETE`, etc. — clutters the repo, should be in `docs/` |
+| **6 test files at repo root** (`test-*.js`) | No test runner, no npm test script, not organized in a `tests/` directory |
+| **PM2 config names app "guildpilot"** but docs reference "solpranos-bot" | Inconsistent deploy instructions across multiple deploy guides |
+
+---
+
+## 5. 🏗️ Architecture
+
+### 5.1 Strengths ✅
+- Clean separation: `commands/`, `services/`, `middleware/`, `utils/`, `config/`, `database/`, `web/`
+- Singleton pattern used consistently for services (exported as `new Service()`)
+- Multi-tenant system is well-designed with `tenantService`, plan presets, and per-module limits
+- `embedBranding.js` centralizes Discord embed styling
+- Database uses WAL mode for concurrent read performance
+- `clientProvider.js` pattern avoids circular dependencies
+
+### 5.2 Structural Issues
+
+```
+server.js (4,976 lines) ← **This is the #1 architectural debt**
+├── OAuth routes
+├── User API routes (wallets, voting, proposals, tickets, roles)
+├── Admin API routes (settings, users, roles, modules, collections)
+├── Superadmin API routes (tenants, plans, billing)
+├── Public API v1 routes (via separate routes/v1.js - good!)
+├── Webhook handlers (Helius, billing)
+└── Verification flow routes
+```
+
+**Recommendation:** Split `server.js` into route modules following the pattern already established by `routes/v1.js`.
+
+### 5.3 Database Schema Management
+
+The current approach in `db.js` uses **380+ lines of sequential `try { ALTER TABLE } catch {}`** blocks. This is:
+- ❌ Non-deterministic — impossible to tell which migrations have been applied
+- ❌ Silent — all errors swallowed, including real failures
+- ❌ Untraceable — no migration history for debugging
+
+The structured migration system (`database/migrations/`, `applyStructuredMigrations()`) exists but has **only 1 migration**. Everything else is in the monolithic try/catch block.
+
+---
+
+## 6. 📋 Prioritized Action Items
+
+### 🔴 P0 — Critical (Do First)
+
+| # | Action | Category |
+|---|--------|----------|
+| 1 | **Remove hardcoded session secret fallback** — crash if `SESSION_SECRET` is not set instead of falling back to `'solpranos-secret-key-change-this-in-production'` | Security |
+| 2 | **Fix innerHTML XSS in portal.js** — wrap all `${variable}` in `escapeHtml()` within `innerHTML` assignments | Security |
+| 3 | **Pin `@solana/web3.js` CDN version + add SRI hash** | Security |
+| 4 | **Block `MOCK_MODE=true` when `NODE_ENV=production`** | Security |
+
+### 🟡 P1 — High (Next Sprint)
+
+| # | Action | Category |
+|---|--------|----------|
+| 5 | **Resolve brand identity**: choose Solpranos vs Guild Pilot, replace all hardcoded strings with branding service calls | Consistency |
+| 6 | **Unify `moduleGate.js` and `moduleGuard.js`** into a single module with one display-name map and one compatibility-keys function | Consistency |
+| 7 | **Split `server.js`** into route modules: `routes/auth.js`, `routes/user.js`, `routes/admin.js`, `routes/superadmin.js`, `routes/webhooks.js` | Architecture |
+| 8 | **Migrate inline schema changes** from `db.js` try/catch blocks to numbered migration files in `database/migrations/` | Architecture |
+| 9 | **Replace `error.message` in Discord replies** with generic user-facing errors, log full error server-side | UX / Security |
+| 10 | **Add CSRF protection** to admin API routes (custom header check like `X-Requested-With` is the simplest option) | Security |
+
+### 🟢 P2 — Medium (Cleanup Sprint)
+
+| # | Action | Category |
+|---|--------|----------|
+| 11 | **Expand `.gitignore`** — add `logs/`, `*.log`, `.env.*`, `config/settings.json`, `config/module-toggles.json`, `.DS_Store`, `Thumbs.db` | Ops |
+| 12 | **Move root markdown files** to `docs/archive/` (keep only `README.md`, `HARDENING-CHECKLIST.md`) | Admin |
+| 13 | **Move test files** to `tests/` directory, add `npm test` script | Admin |
+| 14 | **Remove deprecated `ogConfig.js`** command | Consistency |
+| 15 | **Remove `roles.json` duplication** — let `settings.json` be the single source of truth for tier config | Consistency |
+| 16 | **Add log-level gating** to `logger.js` (respect `LOG_LEVEL` env var) | Ops |
+| 17 | **Migrate all routes to use `apiResponse` envelope** — replace inline `{ success, message }` with `apiSuccess`/`apiError` | Consistency |
+| 18 | **Fix portal help docs** — align VP table with `settings.json` tier config | UX |
+| 19 | **Remove `console.log` debug statements** from `portal.js` | Security |
+| 20 | **Standardize PM2 config name** and update deploy docs to match | Admin |
+| 21 | **Add slash-command cooldowns** for resource-intensive commands | UX |
+| 22 | **Fix battle lobby race condition** — wrap check+insert in transaction | Security |
+
+---
+
+## 7. Files Audited
+
+````carousel
+### Core
+- [index.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/index.js) (1,517 lines)
+- [package.json](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/package.json)
+- [deploy-commands.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/deploy-commands.js)
+- [ecosystem.config.cjs](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/ecosystem.config.cjs)
+- [.gitignore](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/.gitignore)
+- [.eslintrc.json](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/.eslintrc.json)
+<!-- slide -->
+### Config
+- [config/settings.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/config/settings.js) (375 lines)
+- [config/settings.json](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/config/settings.json)
+- [config/roles.json](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/config/roles.json)
+- [config/commandModules.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/config/commandModules.js)
+- [config/plans.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/config/plans.js)
+<!-- slide -->
+### Services
+- [services/tenantService.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/services/tenantService.js)
+- [services/roleService.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/services/roleService.js)
+- [services/walletService.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/services/walletService.js)
+- [services/nftService.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/services/nftService.js)
+- [services/embedBranding.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/services/embedBranding.js)
+<!-- slide -->
+### Web + Middleware + Utils
+- [web/server.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/web/server.js) (4,976 lines)
+- [web/routes/v1.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/web/routes/v1.js)
+- [middleware/moduleGate.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/middleware/moduleGate.js)
+- [middleware/superadminGuard.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/middleware/superadminGuard.js)
+- [utils/logger.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/utils/logger.js)
+- [utils/moduleGuard.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/utils/moduleGuard.js)
+- [utils/apiResponse.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/utils/apiResponse.js)
+- [utils/apiErrorHandler.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/utils/apiErrorHandler.js)
+<!-- slide -->
+### Database + Security Docs
+- [database/db.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/database/db.js) (1,338 lines)
+- [database/migrations/001_add_battle_role_gate.js](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/database/migrations/001_add_battle_role_gate.js)
+- [SECURITY_AUDIT_2026-03-28.md](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/SECURITY_AUDIT_2026-03-28.md)
+- [HARDENING-CHECKLIST.md](file:///c:/Users/Roland/OneDrive%20-%20Kleermaker/Cartoon%20Maffia%20DAO/roland-discord-bot/HARDENING-CHECKLIST.md)
+````
+
+---
+
+## 8. Summary Scorecard
+
+| Category | Score | Notes |
+|----------|-------|-------|
+| **Security** | 6/10 | Good foundations (moduleGate, superadmin, rate limiting) but critical XSS, CSRF, and secret management gaps remain open |
+| **Consistency** | 4/10 | Dual-brand identity, duplicate display-name maps, two competing module-gate systems, split API response patterns |
+| **User Experience** | 7/10 | Good UX polish (themed messages, branding, self-serve roles) but multi-tenant identity leaks and outdated help content |
+| **Admin Experience** | 6/10 | Powerful portal and settings management, but repo is cluttered and `server.js` is unmaintainable at 5K lines |
+| **Architecture** | 7/10 | Strong service/middleware patterns, proper tenant isolation, but the monolithic server.js and inline DB migrations are the primary debt |
+
+**Overall: The bot is feature-complete and well-designed at the pattern level. The main blockers are the branding split, the monolithic server.js, and the unresolved security findings from March.**
+
+## Plan Addendum (2026-04-09)
+
+- Verification role sync guardrails:
+  - Role sync must never remove roles that are not part of configured verification rules for the active tenant.
+  - Rule-level override added: `neverRemove` ("Never remove this role automatically").
+  - When `neverRemove` is true, verification may add the role when requirements match, but will not remove it when requirements no longer match.
+- Scope:
+  - Applies to NFT collection rules, NFT trait rules, and token balance rules.
+  - Enforced server-side in role sync logic (not UI-only).

@@ -1,6 +1,7 @@
 const db = require('../database/db');
 const logger = require('../utils/logger');
 const entitlementService = require('./entitlementService');
+const tenantService = require('./tenantService');
 const { applyEmbedBranding, createBrandedPanelEmbed } = require('./embedBranding');
 const settingsManager = require('../config/settings');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
@@ -65,6 +66,16 @@ class TicketService {
     return String(guildId || '').trim();
   }
 
+  _resolveGuildId(guildId, { allowSingleTenantFallback = true } = {}) {
+    const explicitGuildId = this._normalizeGuildId(guildId);
+    if (explicitGuildId) return explicitGuildId;
+
+    if (!allowSingleTenantFallback) return '';
+    if (tenantService.isMultitenantEnabled()) return '';
+
+    return this._normalizeGuildId(process.env.GUILD_ID || process.env.DISCORD_GUILD_ID || '');
+  }
+
   _defaultChannelNameTemplate() {
     const raw = String(settingsManager.getSettings().ticketChannelNameTemplate || '').trim();
     return raw || '{category}-{user}-{date}';
@@ -79,8 +90,8 @@ class TicketService {
     return normalized || fallback;
   }
 
-  getGuildTicketSettings(guildId = process.env.GUILD_ID) {
-    const normalizedGuildId = this._normalizeGuildId(guildId);
+  getGuildTicketSettings(guildId = null) {
+    const normalizedGuildId = this._resolveGuildId(guildId);
     const defaultTemplate = this._defaultChannelNameTemplate();
     if (!normalizedGuildId) {
       return { channelNameTemplate: defaultTemplate };
@@ -129,7 +140,7 @@ class TicketService {
       return { success: true, settings: { channelNameTemplate: nextTemplate } };
     } catch (error) {
       logger.error('Error updating ticket guild settings:', error);
-      return { success: false, message: error.message };
+      return { success: false, message: 'Ticketing operation failed' };
     }
   }
 
@@ -292,27 +303,30 @@ class TicketService {
 
   // ==================== Category CRUD ====================
 
-  getCategories(guildId = process.env.GUILD_ID) {
-    const normalizedGuildId = this._normalizeGuildId(guildId);
+  getCategories(guildId = null) {
+    const normalizedGuildId = this._resolveGuildId(guildId);
     if (!normalizedGuildId) {
+      if (tenantService.isMultitenantEnabled()) return [];
       return db.prepare('SELECT * FROM ticket_categories WHERE enabled = 1 ORDER BY sort_order ASC, id ASC').all();
     }
     this._bootstrapGuildCategories(normalizedGuildId);
     return db.prepare('SELECT * FROM ticket_categories WHERE guild_id = ? AND enabled = 1 ORDER BY sort_order ASC, id ASC').all(normalizedGuildId);
   }
 
-  getAllCategories(guildId = process.env.GUILD_ID) {
-    const normalizedGuildId = this._normalizeGuildId(guildId);
+  getAllCategories(guildId = null) {
+    const normalizedGuildId = this._resolveGuildId(guildId);
     if (!normalizedGuildId) {
+      if (tenantService.isMultitenantEnabled()) return [];
       return db.prepare('SELECT * FROM ticket_categories ORDER BY sort_order ASC, id ASC').all();
     }
     this._bootstrapGuildCategories(normalizedGuildId);
     return db.prepare('SELECT * FROM ticket_categories WHERE guild_id = ? ORDER BY sort_order ASC, id ASC').all(normalizedGuildId);
   }
 
-  getCategory(id, guildId = process.env.GUILD_ID, { allowLegacyFallback = true } = {}) {
-    const normalizedGuildId = this._normalizeGuildId(guildId);
+  getCategory(id, guildId = null, { allowLegacyFallback = true } = {}) {
+    const normalizedGuildId = this._resolveGuildId(guildId);
     if (!normalizedGuildId) {
+      if (tenantService.isMultitenantEnabled()) return null;
       return db.prepare('SELECT * FROM ticket_categories WHERE id = ?').get(id);
     }
 
@@ -322,9 +336,12 @@ class TicketService {
     return db.prepare("SELECT * FROM ticket_categories WHERE id = ? AND COALESCE(guild_id, '') = ''").get(id);
   }
 
-  addCategory({ name, emoji, description, parentChannelId, closedParentChannelId, allowedRoleIds, handlerRoleIds, pingRoleIds, templateFields }, guildId = process.env.GUILD_ID) {
+  addCategory({ name, emoji, description, parentChannelId, closedParentChannelId, allowedRoleIds, handlerRoleIds, pingRoleIds, templateFields }, guildId = null) {
     try {
-      const normalizedGuildId = this._normalizeGuildId(guildId);
+      const normalizedGuildId = this._resolveGuildId(guildId);
+      if (!normalizedGuildId) {
+        return { success: false, message: 'Guild is required' };
+      }
       if (normalizedGuildId) {
         const countRow = db.prepare(`
           SELECT COUNT(1) AS count
@@ -372,13 +389,16 @@ class TicketService {
       return { success: true, id: result.lastInsertRowid };
     } catch (error) {
       logger.error('Error adding ticket category:', error);
-      return { success: false, message: error.message };
+      return { success: false, message: 'Ticketing operation failed' };
     }
   }
 
-  updateCategory(id, updates, guildId = process.env.GUILD_ID) {
+  updateCategory(id, updates, guildId = null) {
     try {
-      const normalizedGuildId = this._normalizeGuildId(guildId);
+      const normalizedGuildId = this._resolveGuildId(guildId);
+      if (!normalizedGuildId) {
+        return { success: false, message: 'Guild is required' };
+      }
       const category = this.getCategory(id, normalizedGuildId, { allowLegacyFallback: false });
       if (!category) return { success: false, message: 'Category not found' };
 
@@ -407,42 +427,36 @@ class TicketService {
 
       if (fields.length === 0) return { success: false, message: 'No updates provided' };
 
-      if (normalizedGuildId) {
-        values.push(id, normalizedGuildId);
-        db.prepare(`UPDATE ticket_categories SET ${fields.join(', ')} WHERE id = ? AND guild_id = ?`).run(...values);
-      } else {
-        values.push(id);
-        db.prepare(`UPDATE ticket_categories SET ${fields.join(', ')} WHERE id = ?`).run(...values);
-      }
+      values.push(id, normalizedGuildId);
+      db.prepare(`UPDATE ticket_categories SET ${fields.join(', ')} WHERE id = ? AND guild_id = ?`).run(...values);
       return { success: true };
     } catch (error) {
       logger.error('Error updating ticket category:', error);
-      return { success: false, message: error.message };
+      return { success: false, message: 'Ticketing operation failed' };
     }
   }
 
-  deleteCategory(id, guildId = process.env.GUILD_ID) {
+  deleteCategory(id, guildId = null) {
     try {
-      const normalizedGuildId = this._normalizeGuildId(guildId);
-      if (normalizedGuildId) {
-        db.prepare('DELETE FROM ticket_categories WHERE id = ? AND guild_id = ?').run(id, normalizedGuildId);
-      } else {
-        db.prepare('DELETE FROM ticket_categories WHERE id = ?').run(id);
+      const normalizedGuildId = this._resolveGuildId(guildId);
+      if (!normalizedGuildId) {
+        return { success: false, message: 'Guild is required' };
       }
+      db.prepare('DELETE FROM ticket_categories WHERE id = ? AND guild_id = ?').run(id, normalizedGuildId);
       return { success: true };
     } catch (error) {
       logger.error('Error deleting ticket category:', error);
-      return { success: false, message: error.message };
+      return { success: false, message: 'Ticketing operation failed' };
     }
   }
 
   // ==================== Panel ====================
 
-  async postOrUpdatePanel(channelId, { title, description }, guildId = process.env.GUILD_ID) {
+  async postOrUpdatePanel(channelId, { title, description }, guildId = null) {
     if (!this.client) return { success: false, message: 'Client not initialized' };
 
     try {
-      const normalizedGuildId = this._normalizeGuildId(guildId);
+      const normalizedGuildId = this._resolveGuildId(guildId);
       if (!normalizedGuildId) {
         return { success: false, message: 'Guild is required' };
       }
@@ -523,14 +537,17 @@ class TicketService {
       return { success: true, messageId: msg.id };
     } catch (error) {
       logger.error('Error posting ticket panel:', error);
-      return { success: false, message: error.message };
+      return { success: false, message: 'Ticketing operation failed' };
     }
   }
 
   // ==================== Ticket Lifecycle ====================
 
-  _nextTicketNumber(guildId = process.env.GUILD_ID) {
-    const normalizedGuildId = this._normalizeGuildId(guildId);
+  _nextTicketNumber(guildId = null) {
+    const normalizedGuildId = this._resolveGuildId(guildId);
+    if (!normalizedGuildId && tenantService.isMultitenantEnabled()) {
+      throw new Error('Guild is required');
+    }
     const sequenceName = normalizedGuildId ? `ticket:${normalizedGuildId}` : 'ticket';
 
     // Wrap in transaction to prevent ticket number collisions
@@ -557,12 +574,12 @@ class TicketService {
     return getNext();
   }
 
-  async createTicket(interaction, categoryId, templateResponses, guildId = process.env.GUILD_ID) {
+  async createTicket(interaction, categoryId, templateResponses, guildId = null) {
     if (!this.client) return { success: false, message: 'Client not initialized' };
     if (!this.isEnabled()) return { success: false, message: 'Ticketing is currently disabled' };
 
     try {
-      const normalizedGuildId = this._normalizeGuildId(guildId || interaction?.guildId);
+      const normalizedGuildId = this._resolveGuildId(guildId || interaction?.guildId, { allowSingleTenantFallback: true });
       if (!normalizedGuildId) return { success: false, message: 'Guild is required' };
       const category = this.getCategory(categoryId, normalizedGuildId, { allowLegacyFallback: false });
       if (!category) return { success: false, message: 'Category not found' };
@@ -693,7 +710,7 @@ class TicketService {
       return { success: true, channelId: ticketChannel.id, ticketNumber };
     } catch (error) {
       logger.error('Error creating ticket:', error);
-      return { success: false, message: error.message };
+      return { success: false, message: 'Ticketing operation failed' };
     }
   }
 
@@ -729,7 +746,7 @@ class TicketService {
       return { success: true };
     } catch (error) {
       logger.error('Error claiming ticket:', error);
-      return { success: false, message: error.message };
+      return { success: false, message: 'Ticketing operation failed' };
     }
   }
 
@@ -825,7 +842,7 @@ class TicketService {
       return { success: true, transcript };
     } catch (error) {
       logger.error('Error closing ticket:', error);
-      return { success: false, message: error.message };
+      return { success: false, message: 'Ticketing operation failed' };
     }
   }
 
@@ -895,7 +912,7 @@ class TicketService {
       return { success: true };
     } catch (error) {
       logger.error('Error reopening ticket:', error);
-      return { success: false, message: error.message };
+      return { success: false, message: 'Ticketing operation failed' };
     }
   }
 
@@ -912,7 +929,7 @@ class TicketService {
       return { success: true };
     } catch (error) {
       logger.error('Error deleting ticket:', error);
-      return { success: false, message: error.message };
+      return { success: false, message: 'Ticketing operation failed' };
     }
   }
 

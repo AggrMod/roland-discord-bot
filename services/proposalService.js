@@ -576,8 +576,12 @@ class ProposalService {
         .setFooter({ text: 'Vote below! VP is locked at snapshot.' })
         .setTimestamp();
 
+      const brandingGuildId = String(
+        proposal?.guild_id || process.env.GUILD_ID || process.env.DISCORD_GUILD_ID || ''
+      ).trim();
+
       applyEmbedBranding(embed, {
-        guildId: process.env.GUILD_ID || process.env.DISCORD_GUILD_ID || '',
+        guildId: brandingGuildId,
         moduleKey: 'governance',
         defaultColor: '#FFD700',
         defaultFooter: 'Powered by Guild Pilot',
@@ -654,8 +658,12 @@ class ProposalService {
         .setTitle(`🗳️ ${proposal.title} - ${statusText}`)
         .setFooter({ text: 'Voting has closed. See results channel for full summary.' });
 
+      const brandingGuildId = String(
+        proposal?.guild_id || process.env.GUILD_ID || process.env.DISCORD_GUILD_ID || ''
+      ).trim();
+
       applyEmbedBranding(embed, {
-        guildId: process.env.GUILD_ID || process.env.DISCORD_GUILD_ID || '',
+        guildId: brandingGuildId,
         moduleKey: 'governance',
         defaultColor: color,
         defaultFooter: 'Powered by Guild Pilot',
@@ -713,8 +721,12 @@ class ProposalService {
         .setFooter({ text: `Proposal concluded: ${new Date().toLocaleString()}` })
         .setTimestamp();
 
+      const brandingGuildId = String(
+        proposal?.guild_id || process.env.GUILD_ID || process.env.DISCORD_GUILD_ID || ''
+      ).trim();
+
       applyEmbedBranding(embed, {
-        guildId: process.env.GUILD_ID || process.env.DISCORD_GUILD_ID || '',
+        guildId: brandingGuildId,
         moduleKey: 'governance',
         defaultColor: color,
         defaultFooter: 'Powered by Guild Pilot',

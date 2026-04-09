@@ -7,7 +7,7 @@ PM2_PROCESS_NAME="${PM2_PROCESS_NAME:-guildpilot}"
 PM2_RESTART_THRESHOLD="${PM2_RESTART_THRESHOLD:-10}"
 WEB_PORT="${WEB_PORT:-3000}"
 HEALTHCHECK_URL="${HEALTHCHECK_URL:-http://127.0.0.1:${WEB_PORT}/health}"
-DB_PATH="${DB_PATH:-$REPO_ROOT/database/solpranos.db}"
+DB_PATH="${DB_PATH:-$REPO_ROOT/database/guildpilot.db}"
 
 if ! command -v pm2 >/dev/null 2>&1; then
   echo "FAIL: pm2 is not installed or not on PATH"

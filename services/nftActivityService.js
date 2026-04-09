@@ -5,6 +5,7 @@ const { applyEmbedBranding, getBranding } = require('./embedBranding');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const clientProvider = require('../utils/clientProvider');
 const settings = require('../config/settings');
+const tenantService = require('./tenantService');
 
 const CHAIN_PRICE_META = {
   solana: { unit: 'SOL', icon: '<:1000042064:1488241763222290564>' },
@@ -82,13 +83,55 @@ class NFTActivityService {
     return { name: null, image: null };
   }
 
-  getAlertConfig() {
+  getAlertConfig(guildId = '') {
     try {
-      let cfg = db.prepare('SELECT * FROM nft_activity_alert_config WHERE id = 1').get();
-      if (!cfg) {
-        db.prepare('INSERT INTO nft_activity_alert_config (id, enabled, event_types, min_sol) VALUES (1, 0, ?, 0)').run('mint,sell,list,delist,transfer');
-        cfg = db.prepare('SELECT * FROM nft_activity_alert_config WHERE id = 1').get();
+      const normalizedGuildId = String(guildId || '').trim();
+
+      let cfg = db.prepare(`
+        SELECT *
+        FROM nft_activity_alert_configs
+        WHERE guild_id = ?
+      `).get(normalizedGuildId);
+
+      if (!cfg && !normalizedGuildId) {
+        const legacy = db.prepare('SELECT enabled, channel_id, event_types, min_sol FROM nft_activity_alert_config WHERE id = 1').get();
+        if (legacy) {
+          db.prepare(`
+            INSERT INTO nft_activity_alert_configs (guild_id, enabled, channel_id, event_types, min_sol)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(guild_id) DO UPDATE SET
+              enabled = excluded.enabled,
+              channel_id = excluded.channel_id,
+              event_types = excluded.event_types,
+              min_sol = excluded.min_sol,
+              updated_at = CURRENT_TIMESTAMP
+          `).run(
+            '',
+            Number(legacy.enabled || 0) === 1 ? 1 : 0,
+            legacy.channel_id || null,
+            legacy.event_types || 'mint,sell,list,delist,transfer',
+            Number(legacy.min_sol || 0)
+          );
+          cfg = db.prepare(`
+            SELECT *
+            FROM nft_activity_alert_configs
+            WHERE guild_id = ''
+          `).get();
+        }
       }
+
+      if (!cfg) {
+        db.prepare(`
+          INSERT INTO nft_activity_alert_configs (guild_id, enabled, channel_id, event_types, min_sol)
+          VALUES (?, 0, NULL, 'mint,sell,list,delist,transfer', 0)
+        `).run(normalizedGuildId);
+        cfg = db.prepare(`
+          SELECT *
+          FROM nft_activity_alert_configs
+          WHERE guild_id = ?
+        `).get(normalizedGuildId);
+      }
+
       return cfg;
     } catch (e) {
       logger.error('Error getting NFT activity alert config:', e);
@@ -96,8 +139,9 @@ class NFTActivityService {
     }
   }
 
-  updateAlertConfig({ enabled, channelId, eventTypes, minSol }) {
+  updateAlertConfig(guildId = '', { enabled, channelId, eventTypes, minSol }) {
     try {
+      const normalizedGuildId = String(guildId || '').trim();
       const updates = [];
       const params = [];
       if (enabled !== undefined) { updates.push('enabled = ?'); params.push(enabled ? 1 : 0); }
@@ -106,8 +150,17 @@ class NFTActivityService {
       if (minSol !== undefined) { updates.push('min_sol = ?'); params.push(Number(minSol) || 0); }
       if (!updates.length) return { success: false, message: 'No updates provided' };
       updates.push('updated_at = CURRENT_TIMESTAMP');
-      params.push(1);
-      db.prepare(`UPDATE nft_activity_alert_config SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+      params.push(normalizedGuildId);
+      db.prepare(`
+        INSERT INTO nft_activity_alert_configs (guild_id, enabled, channel_id, event_types, min_sol)
+        VALUES (?, 0, NULL, 'mint,sell,list,delist,transfer', 0)
+        ON CONFLICT(guild_id) DO NOTHING
+      `).run(normalizedGuildId);
+      db.prepare(`
+        UPDATE nft_activity_alert_configs
+        SET ${updates.join(', ')}
+        WHERE guild_id = ?
+      `).run(...params);
       return { success: true };
     } catch (e) {
       logger.error('Error updating NFT activity alert config:', e);
@@ -455,7 +508,10 @@ class NFTActivityService {
     if (!client) return;
 
     if (!targetRows.length) {
-      const cfg = this.getAlertConfig();
+      if (tenantService.isMultitenantEnabled()) {
+        return;
+      }
+      const cfg = this.getAlertConfig('');
       if (!cfg || cfg.enabled !== 1 || !cfg.channel_id) return;
       const typeSet = new Set((cfg.event_types || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
       if (typeSet.size && !typeSet.has(evt.eventType)) return;

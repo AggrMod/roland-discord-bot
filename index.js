@@ -10,6 +10,184 @@ const { getCommandModuleKey } = require('./config/commandModules');
 const clientProvider = require('./utils/clientProvider');
 const { applyEmbedBranding } = require('./services/embedBranding');
 
+const LEGACY_MINIGAME_ALIASES = new Set([
+  'battle',
+  'gamenight',
+  'higherlower',
+  'diceduel',
+  'reactionrace',
+  'numberguess',
+  'slots',
+  'trivia',
+  'wordscramble',
+  'rps',
+  'blackjack',
+]);
+const LEGACY_ALIAS_NOTICE_TTL_MS = 12 * 60 * 60 * 1000;
+const legacyAliasNoticeCache = new Map();
+const commandCooldownCache = new Map();
+
+const COMMAND_COOLDOWN_SECONDS = Object.freeze({
+  default: 2,
+  verification: Object.freeze({
+    refresh: 20,
+    quick: 30,
+    admin: Object.freeze({
+      'og-sync': 30,
+      reverify: 20,
+    }),
+  }),
+  battle: Object.freeze({
+    create: 15,
+    start: 10,
+  }),
+  minigames: Object.freeze({
+    run: 8,
+  }),
+  'wallet-tracker': Object.freeze({
+    feed: 15,
+  }),
+  'nft-tracker': Object.freeze({
+    feed: 15,
+  }),
+  'token-tracker': Object.freeze({
+    feed: 15,
+  }),
+});
+
+function getCommandCooldownSeconds(interaction) {
+  const commandName = String(interaction?.commandName || '').trim().toLowerCase();
+  let subcommand = '';
+  let subcommandGroup = '';
+  try {
+    subcommandGroup = String(interaction.options?.getSubcommandGroup?.(false) || '').trim().toLowerCase();
+  } catch (_error) {
+    subcommandGroup = '';
+  }
+  try {
+    subcommand = String(interaction.options?.getSubcommand?.(false) || '').trim().toLowerCase();
+  } catch (_error) {
+    subcommand = '';
+  }
+
+  const commandConfig = COMMAND_COOLDOWN_SECONDS[commandName];
+  if (!commandConfig) {
+    return COMMAND_COOLDOWN_SECONDS.default;
+  }
+  if (typeof commandConfig === 'number') {
+    return commandConfig;
+  }
+  if (subcommandGroup && typeof commandConfig[subcommandGroup] === 'object' && commandConfig[subcommandGroup] !== null) {
+    const groupConfig = commandConfig[subcommandGroup];
+    if (subcommand && typeof groupConfig[subcommand] === 'number') {
+      return groupConfig[subcommand];
+    }
+  }
+  if (subcommand && typeof commandConfig[subcommand] === 'number') {
+    return commandConfig[subcommand];
+  }
+  return COMMAND_COOLDOWN_SECONDS.default;
+}
+
+async function enforceCommandCooldown(interaction) {
+  const cooldownSeconds = Number(getCommandCooldownSeconds(interaction) || 0);
+  if (!Number.isFinite(cooldownSeconds) || cooldownSeconds <= 0) {
+    return true;
+  }
+
+  const userId = String(interaction?.user?.id || '').trim();
+  if (!userId) {
+    return true;
+  }
+
+  const commandName = String(interaction.commandName || '').trim().toLowerCase();
+  let subcommand = '';
+  let subcommandGroup = '';
+  try {
+    subcommandGroup = String(interaction.options?.getSubcommandGroup?.(false) || '').trim().toLowerCase();
+  } catch (_error) {
+    subcommandGroup = '';
+  }
+  try {
+    subcommand = String(interaction.options?.getSubcommand?.(false) || '').trim().toLowerCase();
+  } catch (_error) {
+    subcommand = '';
+  }
+
+  const scopeKey = `${interaction.guildId || 'dm'}:${commandName}:${subcommandGroup}:${subcommand}`;
+  const cacheKey = `${userId}:${scopeKey}`;
+  const now = Date.now();
+  const expiresAt = commandCooldownCache.get(cacheKey) || 0;
+  if (expiresAt > now) {
+    const remainingMs = Math.max(0, expiresAt - now);
+    const remainingSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
+    const cooldownMessage = {
+      content: `⏳ Slow down a bit. You can use this command again in ${remainingSeconds}s.`,
+      ephemeral: true
+    };
+
+    if (interaction.deferred || interaction.replied) {
+      await interaction.followUp(cooldownMessage);
+    } else {
+      await interaction.reply(cooldownMessage);
+    }
+    return false;
+  }
+
+  commandCooldownCache.set(cacheKey, now + (cooldownSeconds * 1000));
+  if (commandCooldownCache.size > 20000) {
+    for (const [key, expiry] of commandCooldownCache.entries()) {
+      if (expiry <= now) {
+        commandCooldownCache.delete(key);
+      }
+    }
+  }
+
+  return true;
+}
+
+function getLegacyMinigameAliasNotice(interaction) {
+  const commandName = String(interaction?.commandName || '').trim().toLowerCase();
+  if (!LEGACY_MINIGAME_ALIASES.has(commandName)) return null;
+
+  let subcommand = null;
+  try {
+    subcommand = interaction.options?.getSubcommand?.(false) || null;
+  } catch (_error) {
+    subcommand = null;
+  }
+
+  const parts = [`Use \`/minigames run game:${commandName}\``];
+  if (subcommand && subcommand !== 'admin') {
+    parts.push(`with \`action:${subcommand}\``);
+  }
+  parts.push('for the canonical module command path. Legacy aliases remain supported for now.');
+  return parts.join(' ');
+}
+
+async function maybeSendLegacyMinigameAliasNotice(interaction) {
+  const notice = getLegacyMinigameAliasNotice(interaction);
+  if (!notice) return;
+
+  const userId = String(interaction?.user?.id || '').trim();
+  if (!userId) return;
+  const commandName = String(interaction?.commandName || '').trim().toLowerCase();
+  const cacheKey = `${userId}:${commandName}`;
+  const now = Date.now();
+  const lastSentAt = legacyAliasNoticeCache.get(cacheKey) || 0;
+  if (now - lastSentAt < LEGACY_ALIAS_NOTICE_TTL_MS) return;
+
+  legacyAliasNoticeCache.set(cacheKey, now);
+
+  try {
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp({ content: `Heads up: ${notice}`, ephemeral: true });
+    }
+  } catch (_error) {
+    // Non-fatal: alias hints should never break command execution.
+  }
+}
+
 // Validate critical environment variables on startup
 function validateEnvVars() {
   const required = ['DISCORD_TOKEN', 'CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DISCORD_REDIRECT_URI', 'SESSION_SECRET'];
@@ -29,15 +207,16 @@ function validateEnvVars() {
 
   // Optional vars with specific warnings
   if (!process.env.HELIUS_API_KEY) {
-    logger.warn('HELIUS_API_KEY not set — NFT verification will use mock mode');
+    logger.warn('HELIUS_API_KEY not set - live NFT verification data will be unavailable');
   }
   if (!process.env.SOLANA_RPC_URL) {
     logger.warn('SOLANA_RPC_URL not set — Solana RPC calls may fail or use default endpoint');
   }
 
-  // Check for hardcoded session secret default
-  if (process.env.SESSION_SECRET === 'solpranos-secret-key-change-this-in-production') {
-    logger.warn('WARNING: Using default SESSION_SECRET. This should be changed in production!');
+  // Enforce strong session secret (minimum 32 characters)
+  if (process.env.SESSION_SECRET.length < 32) {
+    logger.error('CRITICAL: SESSION_SECRET must be at least 32 characters long.');
+    process.exit(1);
   }
 
   // Block mock mode in production
@@ -291,12 +470,17 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     try {
+      if (!(await enforceCommandCooldown(interaction))) {
+        return;
+      }
+
       const moduleKey = getCommandModuleKey(interaction.commandName);
       if (!(await moduleGate(interaction, moduleKey))) {
         return;
       }
 
       await command.execute(interaction);
+      await maybeSendLegacyMinigameAliasNotice(interaction);
       logger.log(`Command executed: ${interaction.commandName} by ${interaction.user.tag}`);
     } catch (error) {
       logger.error(`Error executing ${interaction.commandName}:`, error);
@@ -527,7 +711,7 @@ async function handleSupportButton(interaction) {
       const embed = new EmbedBuilder()
         .setColor('#FF0000')
         .setTitle('❌ Not Eligible')
-        .setDescription('You must own at least 1 SOLPRANOS NFT to support proposals.')
+        .setDescription('You do not have the required voting power to support proposals.')
         .setTimestamp();
 
       return interaction.editReply({ embeds: [embed] });
@@ -651,7 +835,7 @@ async function handleVoteButton(interaction) {
     if (!userInfo || !userInfo.voting_power || userInfo.voting_power === 0) {
       const embed = new EmbedBuilder()
         .setTitle('❌ Not Eligible')
-        .setDescription('You must own at least 1 SOLPRANOS NFT to vote.')
+        .setDescription('You do not have the required voting power to vote.')
         .setTimestamp();
       applyEmbedBranding(embed, {
         guildId: interaction.guildId || '',
@@ -1514,3 +1698,4 @@ client.on(Events.MessageCreate, async (message) => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
+

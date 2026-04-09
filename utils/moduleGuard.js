@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
+const { getCompatibleModuleKeys, getModuleDisplayName } = require('../config/moduleMetadata');
 
 const TOGGLES_PATH = path.join(__dirname, '../config/module-toggles.json');
 const DEFAULT_TOGGLES = Object.freeze({
@@ -50,11 +51,7 @@ class ModuleGuard {
   }
 
   getModuleCompatibilityKeys(moduleName) {
-    const normalized = String(moduleName || '').trim().toLowerCase();
-    if (!normalized) return [];
-    if (normalized === 'wallettracker') return ['wallettracker', 'treasury'];
-    if (normalized === 'battle' || normalized === 'minigames') return ['minigames', 'battle'];
-    return [normalized];
+    return getCompatibleModuleKeys(moduleName);
   }
 
   isModuleEnabled(moduleName) {
@@ -112,19 +109,7 @@ class ModuleGuard {
       return true;
     }
 
-    const moduleNames = {
-      verification: 'Verification',
-      governance: 'Governance',
-      treasury: 'Treasury',
-      wallettracker: 'Wallet Tracker',
-      nfttracker: 'NFT Tracker',
-      tokentracker: 'Token Activity Tracker',
-      minigames: 'Minigames',
-      battle: 'Battle',
-      heist: 'Heist'
-    };
-
-    const displayName = moduleNames[moduleName] || moduleName;
+    const displayName = getModuleDisplayName(moduleName);
 
     const reply = {
       content: `🚫 The **${displayName}** business is closed right now. Talk to the Don if you need access.`,
@@ -223,7 +208,12 @@ class ModuleGuard {
     const currentTier = TIER[planKey] ?? 0;
     if (currentTier >= minTier) return true;
 
-    const planNames = { starter: 'Starter (Free)', growth: 'Growth ($14/mo)', pro: 'Pro ($34/mo)' };
+    const planNames = {
+      starter: 'Starter (Free)',
+      growth: 'Growth ($19.99/server)',
+      pro: 'Pro ($49.99/server)',
+      enterprise: 'Enterprise (Contact Team)'
+    };
     const reply = {
       content: `🔒 **${planNames[minPlan] || minPlan} plan required.**
 This feature isn't available on your current plan. Upgrade at the Plans page in your GuildPilot portal.`,

@@ -9,7 +9,7 @@ const BATTLE_ERAS = {
   mafia: {
     key: 'mafia',
     name: 'Mafia',
-    description: 'Classic Solpranos mafia warfare — concrete shoes, cannoli, and family honor.',
+    description: 'Classic Syndicate mafia warfare — concrete shoes, cannoli, and family honor.',
     exclusive: false,
     lobbyIcon: '⚔️',
     lobbyColor: '#FFD700',
@@ -35,7 +35,7 @@ const BATTLE_ERAS = {
       "☠️ {defender} bet against the family. Bad investment.",
       "☠️ {defender} forgot to pay respects. The family remembered.",
       "☠️ {defender} accidentally sat in the boss's chair. Last mistake ever.",
-      "☠️ {defender} tried to rob the Solpranos piggy bank. Piggy fought back.",
+      "☠️ {defender} tried to rob the mafia piggy bank. Piggy fought back.",
       "☠️ {defender} talked to the feds. The family talked back.",
       "☠️ {defender} laughed at the wrong joke. The punchline was lethal.",
       "☠️ {defender} thought they could swim faster than the concrete. They couldn't.",

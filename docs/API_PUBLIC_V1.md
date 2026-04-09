@@ -6,7 +6,7 @@
 
 ## Overview
 
-This document describes the public API endpoints for The Solpranos governance and mission system. All endpoints follow a standardized response envelope format and are designed for external integration with the-solpranos.com.
+This document describes the public API endpoints for The Guild Pilot governance and mission system. All endpoints follow a standardized response envelope format and are designed for external integration with guildpilot.app.
 
 ## Response Format
 
@@ -73,8 +73,8 @@ If guild scope is missing in multi-tenant mode, governance endpoints return `400
 ## CORS
 
 The API supports CORS for the following origins:
-- `https://the-solpranos.com`
-- `https://www.the-solpranos.com`
+- `https://guildpilot.app`
+- `https://www.guildpilot.app`
 - `http://localhost:3000`
 - `http://localhost:5173`
 
@@ -709,7 +709,7 @@ These legacy endpoints will continue to work but may be deprecated in future ver
 - Privacy-first data redaction
 - Pagination support for list endpoints
 - Comprehensive error handling
-- CORS configuration for the-solpranos.com
+- CORS configuration for guildpilot.app
 
 ---
 

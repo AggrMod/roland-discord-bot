@@ -135,10 +135,10 @@ SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
 2. **Restart Bot:**
    ```bash
    # Stop existing process
-   pm2 stop solpranos-bot  # or however you run it
+   pm2 stop guildpilot-bot  # or however you run it
 
    # Start with new treasury scheduler
-   pm2 start index.js --name solpranos-bot
+   pm2 start index.js --name guildpilot-bot
    # or
    node index.js
    ```

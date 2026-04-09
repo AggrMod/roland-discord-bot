@@ -31,19 +31,20 @@ async function run() {
       { mint: 'live-mint', attributes: [{ trait_type: 'Role', value: 'The Don' }], assignedToMission: null }
     ]);
 
-    const mockNFTs = await nftService.getNFTsForWallet('wallet-1', { guildId: 'guild-mock' });
+    const testWallet = 'So11111111111111111111111111111111111111112';
+    const mockNFTs = await nftService.getNFTsForWallet(testWallet, { guildId: 'guild-mock' });
     assert.ok(mockNFTs.length > 0, 'tenant mock guild should return mock NFTs');
     assert.ok(mockNFTs.every(nft => nft.mint.startsWith('MOCK_')), 'tenant mock guild should only receive mock mints');
 
-    const liveNFTs = await nftService.getNFTsForWallet('wallet-1', { guildId: 'guild-live' });
+    const liveNFTs = await nftService.getNFTsForWallet(testWallet, { guildId: 'guild-live' });
     assert.strictEqual(liveNFTs[0].mint, 'live-mint', 'non-mock guild should use live fetch path');
 
     let forwardedGuildId = null;
-    nftService.countNFTsForWallets = async (_wallets, options = {}) => {
+    nftService.getAllNFTsForWallets = async (_wallets, options = {}) => {
       forwardedGuildId = options.guildId || null;
-      return 1;
+      return [{ mint: 'scope-test', attributes: [], assignedToMission: null }];
     };
-    walletService.getAllUserWallets = () => ['wallet-1'];
+    walletService.getAllUserWallets = () => [testWallet];
 
     const userId = `tenant-scope-${Date.now()}`;
     db.prepare(`

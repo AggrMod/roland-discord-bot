@@ -7,9 +7,10 @@
     "start": "node index.js",
     "deploy": "node deploy-commands.js",
     "dev": "node --watch index.js",
-    "lint": "eslint .",
+    "lint": "eslint --config eslint.config.cjs .",
     "audit": "npm audit --production",
-    "check:help-parity": "node scripts/check-help-parity.js"
+    "check:help-parity": "node scripts/check-help-parity.js",
+    "check:release-gate": "node scripts/release-gate.js"
   },
   "dependencies": {
     "@solana/web3.js": "^1.95.8",

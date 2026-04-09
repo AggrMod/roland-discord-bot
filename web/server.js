@@ -262,11 +262,7 @@ class WebServer {
       normalizeOrigin(process.env.WEB_URL),
       ...parseCommaSeparated(process.env.WEB_URL_ALIASES).map(normalizeOrigin),
       'https://guildpilot.app',
-      'https://www.guildpilot.app',
-      'https://discordbot.solpranos.com',
-      'https://discordbot.the-solpranos.com',
-      'https://the-solpranos.com',
-      'https://www.the-solpranos.com'
+      'https://www.guildpilot.app'
     ].filter(Boolean)));
     if (process.env.NODE_ENV !== 'production') {
       allowedOrigins.push('http://localhost:3000', 'http://localhost:5173');

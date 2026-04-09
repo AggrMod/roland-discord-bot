@@ -1,0 +1,10 @@
+commit 02ab60a0d2fa9e1a387879d5c84859af15cc5ca0
+Author: roland-cmyk <roland@kleermaker.online>
+Date:   Thu Apr 9 11:23:01 2026 +0200
+
+    fix: reduce runtime noise and enforce tenant scope for public proposals
+
+ commands/battle/battle.js      |  7 ++++++-
+ services/microVerifyService.js | 27 ++++++++++++++++++++-------
+ web/public/portal.js           | 13 ++++++++++++-
+ 3 files changed, 38 insertions(+), 9 deletions(-)

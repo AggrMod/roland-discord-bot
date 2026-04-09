@@ -166,7 +166,7 @@ module.exports = {
     const lines = events.slice(0, limit).map((e, i) => {
       const t = e.event_time ? Math.floor(new Date(e.event_time).getTime() / 1000) : null;
       const when = t ? `<t:${t}:R>` : 'unknown';
-      const price = e.price_sol != null ? ` | ${e.price_sol} SOL` : '';
+      const price = e.price_sol !== null && e.price_sol !== undefined ? ` | ${e.price_sol} SOL` : '';
       return `${i + 1}. **${e.event_type}** ${e.collection_key ? `(${e.collection_key.slice(0, 8)}...)` : ''} ${e.token_name || ''}${price} • ${when}`;
     }).join('\n');
 

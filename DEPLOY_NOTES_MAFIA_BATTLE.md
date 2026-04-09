@@ -103,7 +103,7 @@ Uses existing:
 - Posts results in batches (3 rounds at a time) to avoid spam
 
 ### Database
-- Uses existing `solpranos.db`
+- Uses existing `guildpilot.db`
 - Safe `CREATE TABLE IF NOT EXISTS` migrations
 - Indexed by `lobby_id`, `user_id`, `status`
 
@@ -147,8 +147,8 @@ After restart, verify:
 - Ensure intents are enabled in Discord Developer Portal
 
 **Database errors:**
-- Run `sqlite3 database/solpranos.db ".tables"` to verify tables exist
-- Check file permissions on `solpranos.db`
+- Run `sqlite3 database/guildpilot.db ".tables"` to verify tables exist
+- Check file permissions on `guildpilot.db`
 
 ## 📝 Future Enhancements (Not in v0.1)
 

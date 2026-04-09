@@ -9,11 +9,11 @@ console.log('🧪 Testing Collection Resolver\n');
 // Test 1: Slug input
 console.log('Test 1: Slug input');
 try {
-  const result = resolveCollectionInput('solpranos-main');
-  console.log('✅ Input: "solpranos-main"');
+  const result = resolveCollectionInput('guildpilot-main');
+  console.log('✅ Input: "guildpilot-main"');
   console.log('   Result:', JSON.stringify(result, null, 2));
   console.assert(result.type === 'slug', 'Should be type: slug');
-  console.assert(result.key === 'solpranos-main', 'Should normalize to slug');
+  console.assert(result.key === 'guildpilot-main', 'Should normalize to slug');
 } catch (error) {
   console.error('❌ Test 1 failed:', error.message);
 }

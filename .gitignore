@@ -1,5 +1,12 @@
 node_modules/
 .env
+.env.*
 *.db
 *.db-shm
 *.db-wal
+logs/
+*.log
+config/settings.json
+config/module-toggles.json
+.DS_Store
+Thumbs.db

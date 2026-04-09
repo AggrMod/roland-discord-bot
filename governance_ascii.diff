@@ -1,0 +1,24 @@
+diff --git a/commands/governance/governance.js b/commands/governance/governance.js
+index 15bdb67..4648682 100644
+--- a/commands/governance/governance.js
++++ b/commands/governance/governance.js
+@@ -1,4 +1,4 @@
+-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
++???const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+ const proposalService = require('../../services/proposalService');
+ const roleService = require('../../services/roleService');
+ const settingsManager = require('../../config/settings');
+@@ -147,7 +147,7 @@ module.exports = {
+         }
+       }
+     } catch (error) {
+-      console.error('[CommandError]', error);
++      logger.error('[CommandError]', error);
+       const userMsg = 'An error occurred. Please try again or contact an admin.';
+       if (interaction.deferred || interaction.replied) {
+         await interaction.editReply({ content: userMsg });
+@@ -497,3 +497,4 @@ module.exports = {
+     logger.log(`Admin ${interaction.user.tag} viewed governance settings`);
+   }
+ };
++

@@ -114,13 +114,13 @@ node deploy-commands.js
 ### 5. Restart Bot
 ```bash
 # Stop existing bot process
-pm2 stop solpranos-bot
+pm2 stop guildpilot-bot
 
 # Start with new code
-pm2 start index.js --name solpranos-bot
+pm2 start index.js --name guildpilot-bot
 
 # Check logs
-pm2 logs solpranos-bot
+pm2 logs guildpilot-bot
 ```
 
 ### 6. Verify Startup
@@ -203,10 +203,10 @@ Run in Discord as admin:
 ### Health Checks
 ```bash
 # Check if polling is running
-pm2 logs solpranos-bot | grep "polling"
+pm2 logs guildpilot-bot | grep "polling"
 
 # Check recent verifications
-pm2 logs solpranos-bot | grep "Micro-verify"
+pm2 logs guildpilot-bot | grep "Micro-verify"
 
 # View stats in Discord
 /micro-verify-config stats
@@ -237,7 +237,7 @@ pm2 logs solpranos-bot | grep "Micro-verify"
 
 **Database errors:**
 - Run test script: `node test-micro-verify.js`
-- Check database schema: `sqlite3 database/solpranos.db ".schema micro_verify_requests"`
+- Check database schema: `sqlite3 database/guildpilot.db ".schema micro_verify_requests"`
 - Restart bot to run migrations
 
 ## Performance Considerations
@@ -274,7 +274,7 @@ If issues arise:
 3. **Revert code** (if needed):
    ```bash
    git revert <commit-hash>
-   pm2 restart solpranos-bot
+   pm2 restart guildpilot-bot
    ```
 
 4. **Users can still use** wallet signature verification (unchanged)
@@ -301,7 +301,7 @@ If issues arise:
 
 If you encounter issues:
 
-1. Check bot logs: `pm2 logs solpranos-bot`
+1. Check bot logs: `pm2 logs guildpilot-bot`
 2. Run test script: `node test-micro-verify.js`
 3. Check stats: `/micro-verify-config stats`
 4. Verify configuration: `/micro-verify-config view`

@@ -1,24 +1,10 @@
 const tenantService = require('../services/tenantService');
 const { getCommandModuleKey } = require('../config/commandModules');
-
-const DISPLAY_NAMES = {
-  verification: 'Verification',
-  governance: 'Governance',
-  treasury: 'Treasury',
-  wallettracker: 'Wallet Tracker',
-  nfttracker: 'NFT Tracker',
-  tokentracker: 'Token Tracker',
-  ticketing: 'Ticketing',
-  selfserveroles: 'Self-Serve Roles',
-  branding: 'Branding',
-  engagement: 'Engagement',
-  minigames: 'Minigames',
-  battle: 'Battle',
-  heist: 'Heist'
-};
+const { getCompatibleModuleKeys, getModuleDisplayName } = require('../config/moduleMetadata');
 
 const MINIGAME_LIMIT_ORDER = Object.freeze([
   'battle',
+  'gamenight',
   'higherlower',
   'diceduel',
   'reactionrace',
@@ -32,6 +18,7 @@ const MINIGAME_LIMIT_ORDER = Object.freeze([
 
 const MINIGAME_COMMAND_KEYS = Object.freeze({
   battle: 'battle',
+  gamenight: 'gamenight',
   higherlower: 'higherlower',
   diceduel: 'diceduel',
   reactionrace: 'reactionrace',
@@ -45,6 +32,7 @@ const MINIGAME_COMMAND_KEYS = Object.freeze({
 
 const MINIGAME_LABELS = Object.freeze({
   battle: '/battle',
+  gamenight: '/gamenight',
   higherlower: '/higherlower',
   diceduel: '/diceduel',
   reactionrace: '/reactionrace',
@@ -70,17 +58,33 @@ const MINIGAME_LIMIT_SUBCOMMANDS = Object.freeze({
   gamenight: new Set(['start']),
 });
 
-function getCompatibleModuleKeys(moduleKey) {
-  const normalized = String(moduleKey || '').trim().toLowerCase();
-  if (!normalized) return [];
-  if (normalized === 'wallettracker') return ['wallettracker', 'treasury'];
-  if (normalized === 'battle' || normalized === 'minigames') return ['minigames', 'battle'];
-  return [normalized];
-}
-
 function getMinigameGateContext(interaction) {
   if (!interaction?.isChatInputCommand?.()) return null;
   const commandName = String(interaction.commandName || '').trim().toLowerCase();
+  if (commandName === 'minigames') {
+    let subcommand = null;
+    let gameKey = null;
+    let action = null;
+    try {
+      subcommand = interaction.options?.getSubcommand?.(false) || null;
+      gameKey = String(interaction.options?.getString?.('game') || '').trim().toLowerCase();
+      action = String(interaction.options?.getString?.('action') || '').trim().toLowerCase();
+    } catch (_error) {
+      return null;
+    }
+
+    if (subcommand !== 'run' || !gameKey || !MINIGAME_LIMIT_ORDER.includes(gameKey)) {
+      return null;
+    }
+
+    const restrictedActions = MINIGAME_LIMIT_SUBCOMMANDS[gameKey] || null;
+    if (restrictedActions && restrictedActions.size > 0 && action && !restrictedActions.has(action)) {
+      return null;
+    }
+
+    return { commandName, gameKey };
+  }
+
   const gameKey = MINIGAME_COMMAND_KEYS[commandName] || null;
   if (!gameKey) return null;
 
@@ -158,7 +162,7 @@ async function moduleGate(interaction, moduleKey, options = {}) {
       const moduleGuard = require('../utils/moduleGuard');
       const enabled = compatibleModuleKeys.some(moduleKey => moduleGuard.isModuleEnabled(moduleKey));
       if (!enabled) {
-        const displayName = options.displayName || DISPLAY_NAMES[resolvedModuleKey] || resolvedModuleKey;
+        const displayName = options.displayName || getModuleDisplayName(resolvedModuleKey);
         const reply = { content: `The **${displayName}** module is currently disabled.`, ephemeral: true };
         if (interaction.deferred || interaction.replied) {
           await interaction.editReply(reply);
@@ -182,7 +186,7 @@ async function moduleGate(interaction, moduleKey, options = {}) {
     return true;
   }
 
-  const displayName = options.displayName || DISPLAY_NAMES[resolvedModuleKey] || resolvedModuleKey;
+  const displayName = options.displayName || getModuleDisplayName(resolvedModuleKey);
   const reply = {
     content: `🚫 The **${displayName}** business is closed right now. Talk to the Don if you need access.`,
     ephemeral: true

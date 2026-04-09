@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+﻿const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const battleService = require('../../services/battleService');
 const battleDb = require('../../database/battleDb');
 const logger = require('../../utils/logger');
@@ -229,7 +229,7 @@ module.exports = {
         }
       }
     } catch (error) {
-      console.error('[CommandError]', error);
+      logger.error('[CommandError]', error);
       const userMsg = 'An error occurred. Please try again or contact an admin.';
       if (interaction.deferred || interaction.replied) {
         await interaction.editReply({ content: userMsg });
@@ -668,4 +668,5 @@ module.exports = {
     logger.log(`Admin ${interaction.user.tag} viewed battle settings`);
   }
 };
+
 

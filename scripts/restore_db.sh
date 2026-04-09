@@ -8,12 +8,12 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-DB_PATH="${DB_PATH:-$REPO_ROOT/database/solpranos.db}"
+DB_PATH="${DB_PATH:-$REPO_ROOT/database/guildpilot.db}"
 BACKUP_DIR="${BACKUP_DIR:-$REPO_ROOT/backups}"
 BACKUP_FILE="$1"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 PRE_RESTORE_DIR="$BACKUP_DIR/pre-restore"
-PRE_RESTORE_FILE="$PRE_RESTORE_DIR/solpranos_pre_restore_${TIMESTAMP}.db"
+PRE_RESTORE_FILE="$PRE_RESTORE_DIR/guildpilot_pre_restore_${TIMESTAMP}.db"
 
 if [ ! -f "$BACKUP_FILE" ]; then
   echo "Restore failed: backup file not found at $BACKUP_FILE" >&2

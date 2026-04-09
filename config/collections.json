@@ -1,13 +1,13 @@
 {
   "collections": [
     {
-      "id": "solpranos-main",
-      "name": "The Solpranos",
+      "id": "guildpilot-main",
+      "name": "The Guild Pilot",
       "updateAuthority": null,
       "firstVerifiedCreator": null,
       "roleId": null,
       "enabled": true,
-      "description": "Main Solpranos NFT collection"
+      "description": "Main Guild Pilot NFT collection"
     }
   ]
 }

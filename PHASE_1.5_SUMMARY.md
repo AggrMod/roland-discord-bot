@@ -7,7 +7,7 @@
 **Created Files:**
 - `web/server.js` — Express server with wallet verification API
 - `web/public/verify.html` — Frontend verification page with Phantom/Solflare integration
-- `web/public/style.css` — Dark theme styles with Solpranos gold (#FFD700)
+- `web/public/style.css` — Dark theme styles with Guild Pilot gold (#FFD700)
 
 **Routes:**
 - `GET /` — Landing page
@@ -160,7 +160,7 @@ Generates a `.txt` file with one wallet address per line.
 
 ### Signature Verification
 - Uses `tweetnacl` for Ed25519 signature verification
-- Message format: `"Verify wallet ownership for Solpranos: {discordId}:{timestamp}"`
+- Message format: `"Verify wallet ownership for Guild Pilot: {discordId}:{timestamp}"`
 - Wallet ownership verified cryptographically (not just address entry)
 
 ### Favorite Wallet Logic

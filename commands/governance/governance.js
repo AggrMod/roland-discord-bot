@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+﻿const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const proposalService = require('../../services/proposalService');
 const roleService = require('../../services/roleService');
 const settingsManager = require('../../config/settings');
@@ -147,7 +147,7 @@ module.exports = {
         }
       }
     } catch (error) {
-      console.error('[CommandError]', error);
+      logger.error('[CommandError]', error);
       const userMsg = 'An error occurred. Please try again or contact an admin.';
       if (interaction.deferred || interaction.replied) {
         await interaction.editReply({ content: userMsg });
@@ -172,7 +172,7 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setColor('#FF0000')
         .setTitle('❌ Not Eligible')
-        .setDescription('You must verify your wallet and own at least 1 SOLPRANOS NFT to create proposals.\n\nUse `/verification status` to get started.')
+        .setDescription('You must verify your wallet and own at least 1 NFT from a recognized collection to create proposals.\n\nUse `/verification status` to get started.')
         .setTimestamp();
 
       return interaction.editReply({ embeds: [embed] });
@@ -274,7 +274,7 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setColor('#FF0000')
         .setTitle('❌ Not Eligible')
-        .setDescription('You must verify your wallet and own at least 1 SOLPRANOS NFT to support proposals.')
+        .setDescription('You must verify your wallet and own at least 1 NFT from a recognized collection to support proposals.')
         .setTimestamp();
 
       return interaction.editReply({ embeds: [embed] });
@@ -342,7 +342,7 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setColor('#FF0000')
         .setTitle('❌ Not Eligible')
-        .setDescription('You must verify your wallet and own at least 1 SOLPRANOS NFT to vote.')
+        .setDescription('You must verify your wallet and own at least 1 NFT from a recognized collection to vote.')
         .setTimestamp();
 
       return interaction.editReply({ embeds: [embed] });
@@ -497,3 +497,4 @@ module.exports = {
     logger.log(`Admin ${interaction.user.tag} viewed governance settings`);
   }
 };
+

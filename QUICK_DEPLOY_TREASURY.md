@@ -11,7 +11,7 @@ node deploy-commands.js
 ### 2. Restart Bot
 ```bash
 # If using PM2:
-pm2 restart solpranos-bot
+pm2 restart guildpilot-bot
 
 # If running manually:
 # Stop current process (Ctrl+C)

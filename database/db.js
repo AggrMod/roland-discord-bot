@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('../utils/logger');
 
-const dbPath = process.env.DATABASE_PATH || path.join(__dirname, 'solpranos.db');
+const dbPath = process.env.DATABASE_PATH || path.join(__dirname, 'guildpilot.db');
 const db = new Database(dbPath);
 
 db.pragma('journal_mode = WAL');

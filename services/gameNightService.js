@@ -7,6 +7,7 @@
 
 const { EmbedBuilder } = require('discord.js');
 const { applyEmbedBranding, getBranding } = require('./embedBranding');
+const logger = require('../utils/logger');
 
 const JOIN_EMOJI = '🎉';
 const SKIP_EMOJI = '⏭️';
@@ -181,7 +182,7 @@ class GameNightService {
           const runner = RUNNERS[gameKey];
           ranked = runner ? await runner(channel, guildId, new Set(session.players), new Map(session.playerNames), session) : [...session.players];
         } catch (err) {
-          console.error(`[GameNight] ${gameKey} error:`, err);
+          logger.error(`[GameNight] ${gameKey} error:`, err);
           ranked = [...session.players];
         }
       } else {

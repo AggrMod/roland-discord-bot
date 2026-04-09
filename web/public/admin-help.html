@@ -15,7 +15,7 @@
     <section class="card" style="padding:16px;margin:16px 0;">
       <h2>Command Taxonomy</h2>
       <ul>
-        <li>Canonical module commands: <code>/verification</code>, <code>/governance</code>, <code>/treasury</code>, <code>/wallet-tracker</code>, <code>/nft-tracker</code>, <code>/token-tracker</code>, <code>/points</code>, <code>/heist</code>, <code>/config</code>.</li>
+        <li>Canonical module commands: <code>/verification</code>, <code>/governance</code>, <code>/treasury</code>, <code>/wallet-tracker</code>, <code>/nft-tracker</code>, <code>/token-tracker</code>, <code>/minigames</code>, <code>/points</code>, <code>/heist</code>, <code>/config</code>.</li>
         <li>Minigames currently use dedicated commands and are all entitlement-gated under the <code>minigames</code> module.</li>
         <li>Canonical public API: <code>/api/public/v1/*</code>.</li>
       </ul>
@@ -64,9 +64,11 @@
 
     <section class="card" style="padding:16px;margin:16px 0;">
       <h2>Minigames</h2>
+      <p><strong>Canonical:</strong> <code>/minigames run</code>, <code>/minigames help</code></p>
       <p><strong>Battle:</strong> <code>/battle create|start|cancel|stats</code>, admin <code>list|force-end|settings</code></p>
       <p><strong>Arcade:</strong> <code>/higherlower start|cancel</code>, <code>/diceduel start|cancel</code>, <code>/reactionrace start|cancel</code>, <code>/numberguess start|cancel</code>, <code>/slots start|cancel</code>, <code>/trivia start|cancel</code>, <code>/wordscramble start|cancel</code>, <code>/rps start|cancel</code>, <code>/blackjack start|cancel</code></p>
       <p><strong>Game Night:</strong> <code>/gamenight start|skip|cancel|leaderboard</code></p>
+      <p><strong>Legacy aliases:</strong> dedicated game commands stay available for one migration cycle and now show a hint to use <code>/minigames run</code>.</p>
     </section>
 
     <section class="card" style="padding:16px;margin:16px 0;">

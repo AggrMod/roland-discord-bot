@@ -57,6 +57,7 @@ const newCommands = [
   'commands/verification/verification.js',
   'commands/governance/governance.js',
   'commands/treasury/treasury.js',
+  'commands/minigames/minigames.js',
   'commands/battle/battle.js',
   'commands/heist/heist.js',
   'commands/config/config.js'
@@ -70,6 +71,25 @@ for (const cmd of newCommands) {
   } else {
     console.log(`  ✅ ${cmd.split('/')[1]} module command exists`);
   }
+}
+
+// Test 3b: Command-module map includes canonical minigames command
+console.log('\n3b. Checking command module map...');
+try {
+  const { getCommandModuleMap } = require('./config/commandModules');
+  const commandMap = getCommandModuleMap();
+  if (commandMap.minigames !== 'minigames') {
+    console.error('  ❌ /minigames is not mapped to minigames module');
+    errors++;
+  } else if (commandMap.battle !== 'minigames' || commandMap.gamenight !== 'minigames') {
+    console.error('  ❌ Legacy minigame aliases are not mapped to minigames module');
+    errors++;
+  } else {
+    console.log('  ✅ Canonical + legacy minigame command mappings are correct');
+  }
+} catch (error) {
+  console.error(`  ❌ Error loading command module map: ${error.message}`);
+  errors++;
 }
 
 // Test 4: Legacy commands removed

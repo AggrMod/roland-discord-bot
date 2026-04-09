@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
+﻿const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
 const walletService = require('../../services/walletService');
 const roleService = require('../../services/roleService');
 const nftService = require('../../services/nftService');
@@ -323,7 +323,7 @@ module.exports = {
         }
       }
     } catch (error) {
-      console.error('[CommandError]', error);
+      logger.error('[CommandError]', error);
       const userMsg = 'An error occurred. Please try again or contact an admin.';
       if (interaction.deferred || interaction.replied) {
         await interaction.editReply({ content: userMsg });
@@ -543,7 +543,7 @@ module.exports = {
       });
     }
 
-    const result = microVerifyService.createRequest(discordId, username);
+    const result = microVerifyService.createRequest(discordId, username, interaction.guildId || '');
 
     if (!result.success) {
       return interaction.editReply({ 
@@ -727,16 +727,28 @@ module.exports = {
 
     walletService.removeAllWallets(targetUser.id);
 
+    let roleRemovalSummary = null;
     if (interaction.guild) {
-      await roleService.removeAllTierRoles(interaction.guild, targetUser.id);
+      roleRemovalSummary = await roleService.removeAllManagedVerificationRoles(
+        interaction.guild,
+        targetUser.id,
+        interaction.guildId || interaction.guild.id,
+        { respectNeverRemove: true }
+      );
     }
 
     const db = require('../../database/db');
     db.prepare('DELETE FROM users WHERE discord_id = ?').run(targetUser.id);
 
-    await interaction.editReply({ 
-      content: `✅ <@${targetUser.id}> has been removed from the Family.\n\nAll wallets, roles, and verification data have been deleted.`,
-      ephemeral: true 
+    const removedCount = Number(roleRemovalSummary?.removedRoleIds?.length || 0);
+    const skippedCount = Number(roleRemovalSummary?.skippedRoleIds?.length || 0);
+    const roleLine = interaction.guild
+      ? `Configured verification roles removed: ${removedCount}${skippedCount > 0 ? ` (skipped ${skippedCount} protected/override role(s))` : ''}.`
+      : 'Configured verification roles removed: 0.';
+
+    await interaction.editReply({
+      content: `✅ <@${targetUser.id}> has been removed from the Family.\n\nAll wallets and verification data were deleted.\n${roleLine}`,
+      ephemeral: true
     });
     logger.log(`Admin ${interaction.user.tag} removed user ${targetUser.tag}`);
   },
@@ -918,6 +930,13 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
     
     const action = interaction.options.getString('action');
+    const isTenantWriteAction = action === 'set_tier' || action === 'set_trait' || action === 'remove_trait';
+    if (isTenantWriteAction && tenantService.isMultitenantEnabled() && interaction.guildId) {
+      return interaction.editReply({
+        content: '⚠️ This legacy slash flow is disabled in multi-tenant mode. Use Settings → Verification in the web portal for tenant-scoped rule changes.',
+        ephemeral: true
+      });
+    }
 
     if (action === 'view') {
       // Show current trait roles configuration
@@ -1094,7 +1113,7 @@ module.exports = {
 
     const ogRoleService = require('../../services/ogRoleService');
     const enabled = interaction.options.getBoolean('enabled');
-    const result = ogRoleService.setEnabled(enabled);
+    const result = ogRoleService.setEnabled(enabled, interaction.guildId || interaction.guild);
 
     const embed = new EmbedBuilder()
       .setColor(result.success ? '#57F287' : '#ED4245')
@@ -1115,7 +1134,7 @@ module.exports = {
 
     const ogRoleService = require('../../services/ogRoleService');
     const role = interaction.options.getRole('role');
-    const result = ogRoleService.setRole(role.id);
+    const result = ogRoleService.setRole(role.id, interaction.guildId || interaction.guild);
 
     const embed = new EmbedBuilder()
       .setColor(result.success ? '#57F287' : '#ED4245')
@@ -1136,7 +1155,7 @@ module.exports = {
 
     const ogRoleService = require('../../services/ogRoleService');
     const count = interaction.options.getInteger('count');
-    const result = ogRoleService.setLimit(count);
+    const result = ogRoleService.setLimit(count, interaction.guildId || interaction.guild);
 
     const embed = new EmbedBuilder()
       .setColor(result.success ? '#57F287' : '#ED4245')
@@ -1183,3 +1202,4 @@ module.exports = {
     logger.log(`Admin ${interaction.user.tag} ran OG sync: +${result.added} -${result.removed} errors:${result.errors}`);
   }
 };
+

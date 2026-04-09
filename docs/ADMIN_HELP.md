@@ -3,7 +3,7 @@
 This file is the source-of-truth command reference for the current production command surface.
 
 ## Command Taxonomy
-- Canonical module commands: `/verification`, `/governance`, `/treasury`, `/wallet-tracker`, `/nft-tracker`, `/token-tracker`, `/points`, `/heist`, `/config`.
+- Canonical module commands: `/verification`, `/governance`, `/treasury`, `/wallet-tracker`, `/nft-tracker`, `/token-tracker`, `/minigames`, `/points`, `/heist`, `/config`.
 - Minigames currently run through dedicated commands (`/battle`, `/higherlower`, `/diceduel`, `/reactionrace`, `/numberguess`, `/slots`, `/trivia`, `/wordscramble`, `/rps`, `/blackjack`, `/gamenight`) and are mapped to the `minigames` module entitlement.
 
 ## Verification
@@ -12,6 +12,8 @@ This file is the source-of-truth command reference for the current production co
 - `/verification refresh`
 - `/verification quick`
 - Admin: `/verification admin panel|export-user|remove-user|export-wallets|token-role-add|token-role-remove|token-role-list|role-config|actions|og-view|og-enable|og-role|og-limit|og-sync`
+- Multi-tenant note: legacy `role-config` write actions are blocked; use portal Settings → Verification for tenant-scoped rule edits.
+- OG roles are tenant-scoped in multi-tenant mode.
 
 ## Governance
 - `/governance propose`
@@ -36,6 +38,7 @@ This file is the source-of-truth command reference for the current production co
 - `/nft-tracker collection remove`
 - `/nft-tracker collection list`
 - `/nft-tracker collection feed`
+- NFT activity alert config is tenant-scoped (per guild) for `enabled/channel/eventTypes/minSol`.
 
 ## Token Tracker
 - `/token-tracker add`
@@ -53,9 +56,11 @@ This file is the source-of-truth command reference for the current production co
 - `/points admin`
 
 ## Minigames
+- Canonical: `/minigames run`, `/minigames help`
 - Battle: `/battle create|start|cancel|stats` and `/battle admin list|force-end|settings`
 - Arcade commands: `/higherlower start|cancel`, `/diceduel start|cancel`, `/reactionrace start|cancel`, `/numberguess start|cancel`, `/slots start|cancel`, `/trivia start|cancel`, `/wordscramble start|cancel`, `/rps start|cancel`, `/blackjack start|cancel`
 - Game Night: `/gamenight start|skip|cancel|leaderboard`
+- Legacy alias policy: dedicated game commands remain supported for one migration cycle and now show an in-app hint to use `/minigames run`.
 
 ## Missions (Heist)
 - `/heist view|signup|status`
@@ -84,3 +89,7 @@ These are intentionally managed in the portal (`/admin`, `/?section=settings`, `
 
 ## Help Parity Check
 - Run `npm run check:help-parity` before release to validate that help files match live slash commands.
+- Run `npm run check:release-gate` before release to run parity + critical regression checks.
+- Runtime guardrails:
+  - command cooldowns are enabled on high-cost command paths (`/verification quick|refresh`, `/battle create|start`, `/minigames run`, tracker feeds).
+  - battle lobby creation/start now uses transactional checks to prevent race-condition double-creates/double-starts.

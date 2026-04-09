@@ -48,11 +48,18 @@ function asyncHandler(fn) {
  * Should be registered last in the middleware chain
  */
 function errorHandler(err, req, res, next) {
-  // Log error details
-  logger.error(`API Error: ${req.method} ${req.path}`, err);
-
   // Determine status code
   const statusCode = err.statusCode || err.status || 500;
+  const isClientError = statusCode >= 400 && statusCode < 500;
+
+  // Log error details (avoid error-level noise for expected 4xx validation/auth flows)
+  if (isClientError) {
+    logger.warn(
+      `API ${statusCode}: ${req.method} ${req.path} ${err?.message ? `- ${err.message}` : ''}`.trim()
+    );
+  } else {
+    logger.error(`API Error: ${req.method} ${req.path}`, err);
+  }
   
   // Determine error code
   const code = err.code || statusToCode[statusCode] || ErrorCodes.INTERNAL_ERROR;

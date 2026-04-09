@@ -60,7 +60,7 @@ class WalletService {
             return;
           }
 
-          const guildId = guildIdHint || process.env.GUILD_ID || process.env.DISCORD_GUILD_ID;
+          const guildId = String(guildIdHint || '').trim();
           if (!guildId) {
             logger.warn('No guild context available for OG role assignment');
             return;

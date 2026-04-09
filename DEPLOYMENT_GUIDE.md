@@ -1,4 +1,4 @@
-# 🚀 Solpranos Bot Deployment Guide
+# 🚀 guildpilot Bot Deployment Guide
 
 ## Pre-Deployment Checklist
 
@@ -10,7 +10,7 @@ Go to [Discord Developer Portal](https://discord.com/developers/applications):
    - Copy `CLIENT_SECRET` → add to `.env` as `DISCORD_CLIENT_SECRET=...`
 3. **OAuth2 > Redirects**:
    - Add your primary redirect URI (e.g., `https://guildpilot.app/auth/discord/callback`)
-   - Keep legacy redirect URI during migration (e.g., `https://discordbot.solpranos.com/auth/discord/callback`)
+   - Keep legacy redirect URI during migration (e.g., `https://discordbot.guildpilot.com/auth/discord/callback`)
    - Add to `.env` as `DISCORD_REDIRECT_URI=...` (must match EXACTLY)
 
 ### 2. Environment Variables

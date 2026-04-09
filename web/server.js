@@ -665,6 +665,14 @@ class WebServer {
       return ensureTenantModuleEnabled(req, res, 'tokentracker', 'Token Tracker');
     }
 
+    function ensureWalletTrackerModule(req, res) {
+      return ensureTenantModuleEnabled(req, res, 'wallettracker', 'Wallet Tracker');
+    }
+
+    function ensureMinigamesModule(req, res) {
+      return ensureTenantModuleEnabled(req, res, 'minigames', 'Minigames');
+    }
+
     function ensureTicketingModule(req, res) {
       return ensureTenantModuleEnabled(req, res, 'ticketing', 'Ticketing');
     }
@@ -3967,6 +3975,119 @@ class WebServer {
         res.json(result);
       } catch (error) {
         logger.error('Error updating tracked collection:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.get('/api/admin/battle/eras', adminAuthMiddleware, (req, res) => {
+      if (!ensureMinigamesModule(req, res)) return;
+      try {
+        const eras = battleService.getAvailableEras(req.guildId);
+        res.json({ success: true, eras });
+      } catch (error) {
+        logger.error('Error fetching battle eras for tenant:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.get('/api/admin/wallet-tracker/wallets', adminAuthMiddleware, (req, res) => {
+      if (!ensureWalletTrackerModule(req, res)) return;
+      try {
+        const wallets = trackedWalletsService.getTrackedWallets(req.guildId || null);
+        res.json({ success: true, wallets });
+      } catch (error) {
+        logger.error('Error fetching tracked wallets:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/wallet-tracker/wallets', adminAuthMiddleware, (req, res) => {
+      if (!ensureWalletTrackerModule(req, res)) return;
+      try {
+        const {
+          walletAddress,
+          label,
+          alertChannelId,
+          panelChannelId
+        } = req.body || {};
+
+        const result = trackedWalletsService.addTrackedWallet({
+          guildId: req.guildId || '',
+          walletAddress,
+          label: label || null,
+          alertChannelId: alertChannelId || null,
+          panelChannelId: panelChannelId || null,
+        });
+
+        if (!result.success) {
+          const status = result.code === 'limit_exceeded' ? 403 : 400;
+          return res.status(status).json(result);
+        }
+
+        const createdWallet = trackedWalletsService.getTrackedWalletById(result.id, req.guildId || null);
+
+        if (createdWallet?.panel_channel_id) {
+          trackedWalletsService.postHoldingsPanel(createdWallet, createdWallet.panel_channel_id, req.guildId || null)
+            .catch((panelError) => logger.warn('[wallet-panel] auto-post failed after add:', panelError?.message || panelError));
+        }
+
+        res.json({
+          success: true,
+          id: result.id,
+          wallet: createdWallet || null,
+        });
+      } catch (error) {
+        logger.error('Error adding tracked wallet:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.put('/api/admin/wallet-tracker/wallets/:id', adminAuthMiddleware, (req, res) => {
+      if (!ensureWalletTrackerModule(req, res)) return;
+      try {
+        const updates = {};
+        const body = req.body || {};
+        if (body.label !== undefined) updates.label = body.label;
+        if (body.alertChannelId !== undefined) updates.alertChannelId = body.alertChannelId;
+        if (body.panelChannelId !== undefined) updates.panelChannelId = body.panelChannelId;
+        if (body.enabled !== undefined) updates.enabled = !!body.enabled;
+
+        const result = trackedWalletsService.updateTrackedWallet(req.params.id, updates, req.guildId || null);
+        if (!result.success) return res.status(400).json(result);
+
+        const wallet = trackedWalletsService.getTrackedWalletById(req.params.id, req.guildId || null);
+        res.json({ success: true, wallet });
+      } catch (error) {
+        logger.error('Error updating tracked wallet:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.delete('/api/admin/wallet-tracker/wallets/:id', adminAuthMiddleware, (req, res) => {
+      if (!ensureWalletTrackerModule(req, res)) return;
+      try {
+        const result = trackedWalletsService.removeTrackedWallet(req.params.id, req.guildId || null);
+        if (!result.success) return res.status(400).json(result);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error removing tracked wallet:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+      }
+    });
+
+    this.app.post('/api/admin/wallet-tracker/wallets/:id/panel', adminAuthMiddleware, async (req, res) => {
+      if (!ensureWalletTrackerModule(req, res)) return;
+      try {
+        const wallet = trackedWalletsService.getTrackedWalletById(req.params.id, req.guildId || null);
+        if (!wallet) return res.status(404).json({ success: false, message: 'Tracked wallet not found' });
+        const channelId = String(req.body?.channelId || wallet.panel_channel_id || '').trim();
+        if (!channelId) return res.status(400).json({ success: false, message: 'No panel channel configured for this wallet' });
+
+        const result = await trackedWalletsService.postHoldingsPanel(wallet, channelId, req.guildId || null);
+        if (!result.success) return res.status(400).json(result);
+        res.json(result);
+      } catch (error) {
+        logger.error('Error posting tracked wallet panel:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
       }
     });

@@ -906,45 +906,60 @@ class WebServer {
         const wallets = db.prepare('SELECT wallet_address, is_favorite, primary_wallet, created_at FROM wallets WHERE discord_id = ? ORDER BY is_favorite DESC, created_at ASC').all(discordId);
         const userPrefs = db.prepare('SELECT wallet_alert_identity_opt_out FROM users WHERE discord_id = ?').get(discordId) || {};
         const requestedGuildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
-        if (tenantService.isMultitenantEnabled() && !requestedGuildId) {
-          return res.status(409).json({ success: false, message: 'Select a server to continue' });
-        }
-        
-        // Get user's proposals
-        const proposals = (hasProposalsGuildColumn() && requestedGuildId)
-          ? db.prepare("SELECT * FROM proposals WHERE creator_id = ? AND guild_id = ? AND status NOT IN ('expired') ORDER BY created_at DESC").all(discordId, requestedGuildId)
-          : db.prepare("SELECT * FROM proposals WHERE creator_id = ? AND status NOT IN ('expired') ORDER BY created_at DESC").all(discordId);
-        
-        // Get user's missions
-        const hasMissionsGuildColumn = missionService.hasMissionsGuildColumn?.() === true;
-        const missions = (hasMissionsGuildColumn && requestedGuildId)
+        const missingTenantSelection = tenantService.isMultitenantEnabled() && !requestedGuildId;
+        const membership = requestedGuildId
           ? db.prepare(`
-            SELECT m.*, mp.assigned_nft_name, mp.assigned_role, mp.points_awarded
-            FROM missions m
-            JOIN mission_participants mp ON m.mission_id = mp.mission_id
-            WHERE mp.participant_id = ? AND m.guild_id = ? AND m.status IN (?, ?)
-            ORDER BY mp.joined_at DESC
-          `).all(discordId, requestedGuildId, 'recruiting', 'active')
-          : db.prepare(`
-            SELECT m.*, mp.assigned_nft_name, mp.assigned_role, mp.points_awarded
-            FROM missions m
-            JOIN mission_participants mp ON m.mission_id = mp.mission_id
-            WHERE mp.participant_id = ? AND m.status IN (?, ?)
-            ORDER BY mp.joined_at DESC
-          `).all(discordId, 'recruiting', 'active');
-
-        // Calculate total points
-        const pointsResult = (hasMissionsGuildColumn && requestedGuildId)
-          ? db.prepare(`
-            SELECT COALESCE(SUM(mp.points_awarded), 0) AS total
-            FROM mission_participants mp
-            JOIN missions m ON m.mission_id = mp.mission_id
-            WHERE mp.participant_id = ? AND m.guild_id = ?
+            SELECT last_verified_at, updated_at
+            FROM user_tenant_memberships
+            WHERE discord_id = ? AND guild_id = ?
           `).get(discordId, requestedGuildId)
-          : db.prepare('SELECT COALESCE(SUM(points_awarded), 0) as total FROM mission_participants WHERE participant_id = ?').get(discordId);
+          : null;
+        const effectiveLastVerifiedAt = membership?.last_verified_at || userInfo?.updated_at || null;
+        const walletsWithVerificationTime = wallets.map((wallet) => ({
+          ...wallet,
+          last_verified_at: effectiveLastVerifiedAt || wallet.created_at || null,
+        }));
+        
+        const hasMissionsGuildColumn = missionService.hasMissionsGuildColumn?.() === true;
+        let proposals = [];
+        let missions = [];
+        let pointsResult = { total: 0 };
+
+        if (!missingTenantSelection) {
+          proposals = (hasProposalsGuildColumn() && requestedGuildId)
+            ? db.prepare("SELECT * FROM proposals WHERE creator_id = ? AND guild_id = ? AND status NOT IN ('expired') ORDER BY created_at DESC").all(discordId, requestedGuildId)
+            : db.prepare("SELECT * FROM proposals WHERE creator_id = ? AND status NOT IN ('expired') ORDER BY created_at DESC").all(discordId);
+
+          missions = (hasMissionsGuildColumn && requestedGuildId)
+            ? db.prepare(`
+              SELECT m.*, mp.assigned_nft_name, mp.assigned_role, mp.points_awarded
+              FROM missions m
+              JOIN mission_participants mp ON m.mission_id = mp.mission_id
+              WHERE mp.participant_id = ? AND m.guild_id = ? AND m.status IN (?, ?)
+              ORDER BY mp.joined_at DESC
+            `).all(discordId, requestedGuildId, 'recruiting', 'active')
+            : db.prepare(`
+              SELECT m.*, mp.assigned_nft_name, mp.assigned_role, mp.points_awarded
+              FROM missions m
+              JOIN mission_participants mp ON m.mission_id = mp.mission_id
+              WHERE mp.participant_id = ? AND m.status IN (?, ?)
+              ORDER BY mp.joined_at DESC
+            `).all(discordId, 'recruiting', 'active');
+
+          pointsResult = (hasMissionsGuildColumn && requestedGuildId)
+            ? db.prepare(`
+              SELECT COALESCE(SUM(mp.points_awarded), 0) AS total
+              FROM mission_participants mp
+              JOIN missions m ON m.mission_id = mp.mission_id
+              WHERE mp.participant_id = ? AND m.guild_id = ?
+            `).get(discordId, requestedGuildId)
+            : db.prepare('SELECT COALESCE(SUM(points_awarded), 0) as total FROM mission_participants WHERE participant_id = ?').get(discordId);
+        }
 
         res.json({
           success: true,
+          requiresServerSelection: missingTenantSelection,
+          activeGuildId: requestedGuildId || null,
           user: {
             discordId,
             username: req.session.discordUser.username,
@@ -953,9 +968,10 @@ class WebServer {
             votingPower: userInfo ? userInfo.voting_power : 0,
             totalNFTs: userInfo ? userInfo.total_nfts : 0,
             totalPoints: pointsResult.total,
+            lastVerifiedAt: effectiveLastVerifiedAt,
             walletAlertIdentityOptOut: Number(userPrefs.wallet_alert_identity_opt_out || 0) === 1
           },
-          wallets,
+          wallets: walletsWithVerificationTime,
           proposals,
           missions
         });
@@ -3547,7 +3563,16 @@ class WebServer {
         const existingWallet = db.prepare('SELECT * FROM wallets WHERE wallet_address = ?').get(walletAddress);
         if (existingWallet) {
           if (existingWallet.discord_id === discordId) {
-            return res.json({ success: true, message: 'Wallet already linked to your account' });
+            try {
+              const guild = req.guild || await fetchGuildById(req.guildId);
+              await roleService.updateUserRoles(discordId, req.session.discordUser.username || 'Web User', req.guildId || null);
+              if (guild) {
+                await roleService.syncUserDiscordRoles(guild, discordId, req.guildId || null);
+              }
+            } catch (roleErr) {
+              logger.error('Role refresh after verify-existing failed (non-fatal):', roleErr);
+            }
+            return res.json({ success: true, message: 'Wallet already linked. Verification status refreshed.' });
           }
           return res.status(400).json({ success: false, message: 'This wallet is already linked to another account' });
         }
@@ -3629,7 +3654,16 @@ class WebServer {
         
         if (existingWallet) {
           if (existingWallet.discord_id === discordId) {
-            return res.json({ success: true, message: 'Wallet already linked to your account' });
+            try {
+              const guild = req.guild || await fetchGuildById(req.guildId);
+              await roleService.updateUserRoles(discordId, req.session.discordUser?.username || 'Web User', req.guildId || null);
+              if (guild) {
+                await roleService.syncUserDiscordRoles(guild, discordId, req.guildId || null);
+              }
+            } catch (roleErr) {
+              logger.error('Role refresh after legacy verify-existing failed (non-fatal):', roleErr);
+            }
+            return res.json({ success: true, message: 'Wallet already linked. Verification status refreshed.' });
           }
           return res.status(400).json({ success: false, message: 'This wallet is already linked to another account' });
         }

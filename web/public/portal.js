@@ -2204,7 +2204,9 @@ function renderWallets() {
     return;
   }
 
-  container.innerHTML = privacyCard + '<div class="wallet-list">' + userData.wallets.map(wallet => `
+  container.innerHTML = privacyCard + '<div class="wallet-list">' + userData.wallets.map(wallet => {
+    const verifiedAt = wallet.last_verified_at || userData?.user?.lastVerifiedAt || wallet.created_at || Date.now();
+    return `
     <div class="wallet-item ${wallet.is_favorite ? 'favorite' : ''}">
       <div class="wallet-info">
         <div class="wallet-address">
@@ -2212,7 +2214,7 @@ function renderWallets() {
         </div>
         <div class="wallet-meta">
           ${wallet.is_favorite ? '<span style="color: var(--gold);">Primary Wallet</span>' : '<span>Secondary Wallet</span>'}
-          <span>Verified ${formatDate(new Date(wallet.created_at || Date.now()))}</span>
+          <span>Verified ${formatDate(new Date(verifiedAt))}</span>
         </div>
       </div>
       <div class="wallet-actions">
@@ -2228,7 +2230,8 @@ function renderWallets() {
         </button>
       </div>
     </div>
-  `).join('') + '</div>';
+  `;
+  }).join('') + '</div>';
 }
 
 async function setWalletIdentityOptOut(optOut) {

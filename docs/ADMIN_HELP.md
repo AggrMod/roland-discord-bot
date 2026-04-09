@@ -10,7 +10,7 @@
 - `/verification wallets`
 - `/verification refresh`
 - `/verification quick`
-- Admin: `/verification admin panel|export-user|remove-user|export-wallets|role-config|actions|og-view|og-enable|og-role|og-limit|og-sync|activity-watch-add|activity-watch-remove|activity-watch-list|activity-feed|activity-alerts`
+- Admin: `/verification admin panel|export-user|remove-user|export-wallets|token-role-add|token-role-remove|token-role-list|role-config|actions|og-view|og-enable|og-role|og-limit|og-sync`
 
 ## Governance
 - `/governance propose`
@@ -190,14 +190,15 @@ When creating a lobby, you can gate participation:
 
 ## Plans Summary
 
-| Feature | Starter (Free) | Growth ($14/mo) | Pro ($34/mo) |
-|---|---|---|---|
-| Verification | ✅ | ✅ | ✅ |
-| Governance | ✅ | ✅ | ✅ |
-| Treasury | ✅ (3 wallets) | ✅ (25 wallets) | ✅ (unlimited) |
-| All 10 mini-games | ✅ | ✅ | ✅ |
-| Game Night orchestration | ✕ | ✅ | ✅ |
-| Trait-based roles | ✕ | ✅ | ✅ |
-| Custom branding | ✕ | ✅ | ✅ |
-| Multi-server | ✕ | ✕ | ✅ |
-| Engagement & points | ✕ | ✕ | ✅ |
+| Feature | Starter (Free) | Growth ($19.99/mo) | Pro ($49.99/mo) | Enterprise (Contact) |
+|---|---|---|---|---|
+| Verification | Yes | Yes | Yes | Custom |
+| Governance | Yes | Yes | Yes | Custom |
+| Treasury | Yes | Yes | Yes | Custom |
+| NFT/Token/Wallet Trackers | Limited | Expanded | High limits | Custom |
+| Minigames | Limited | Expanded | All | Custom |
+| Branding & White-label | Basic | Enhanced | Advanced | Custom |
+| Multi-server coverage | Single server | Single server | Single server | Multi-server |
+
+> Yearly billing applies a 15% discount.
+

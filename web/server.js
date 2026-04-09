@@ -4262,78 +4262,6 @@ class WebServer {
       }
     });
 
-    // Legacy compatibility routes retained for older portal code paths.
-    this.app.get('/api/admin/activity/watch-list', adminAuthMiddleware, (req, res) => {
-      try {
-        const collections = nftActivityService.getTrackedCollections(req.guildId).map(col => ({
-          id: col.id,
-          name: col.collection_name,
-          address: col.collection_address,
-          collection_name: col.collection_name,
-          collection_address: col.collection_address,
-          created_at: col.created_at
-        }));
-        res.json({ success: true, collections });
-      } catch (error) {
-        logger.error('Error loading legacy activity watch list:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.post('/api/admin/activity/watch-add', adminAuthMiddleware, (req, res) => {
-      try {
-        const collectionAddress = String(req.body?.address || req.body?.collectionAddress || '').trim();
-        const collectionName = String(req.body?.name || req.body?.collectionName || collectionAddress).trim();
-        if (!collectionAddress) {
-          return res.status(400).json({ success: false, message: 'Collection address is required' });
-        }
-
-        const config = nftActivityService.getAlertConfig();
-        const channelId = String(req.body?.channelId || config?.channel_id || '').trim();
-        if (!channelId) {
-          return res.status(400).json({ success: false, message: 'Configure an NFT alert channel first' });
-        }
-
-        const result = nftActivityService.addTrackedCollection({
-          guildId: req.guildId,
-          collectionAddress,
-          collectionName: collectionName || collectionAddress,
-          channelId,
-          trackMint: true,
-          trackSale: true,
-          trackList: true,
-          trackDelist: true,
-          trackTransfer: false,
-          trackBid: false,
-          meSymbol: String(req.body?.meSymbol || '').trim()
-        });
-
-        if (!result.success) {
-          return res.status(400).json(result);
-        }
-        nftActivityService.syncAddressToHelius(collectionAddress, 'add').catch(() => {});
-        return res.json(result);
-      } catch (error) {
-        logger.error('Error adding legacy activity watch collection:', error);
-        return res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
-    this.app.get('/api/verification/admin/activity-watch-list', adminAuthMiddleware, (req, res) => {
-      try {
-        const collections = nftActivityService.getTrackedCollections(req.guildId).map(col => ({
-          id: col.id,
-          collection: col.collection_name,
-          key: col.collection_address,
-          created_at: col.created_at
-        }));
-        res.json({ success: true, collections });
-      } catch (error) {
-        logger.error('Error loading legacy verification activity watch list:', error);
-        res.status(500).json({ success: false, message: 'Internal server error' });
-      }
-    });
-
     // ==================== NFT TRACKER COLLECTIONS (per-collection config) ====================
 
     this.app.get('/api/admin/nft-tracker/collections', adminAuthMiddleware, (req, res) => {
@@ -4503,8 +4431,6 @@ class WebServer {
 
     // Dedicated token tracker API paths
     registerTokenTrackerRoutes('/api/admin/token-tracker');
-    // Legacy alias kept for backward compatibility with older portal builds
-    registerTokenTrackerRoutes('/api/admin/nft-tracker');
 
     // ==================== TICKET MANAGEMENT (admin) ====================
 

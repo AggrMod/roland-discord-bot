@@ -5514,8 +5514,8 @@ async function loadAdminHelpView() {
     ])}
     ${cmdSection('Invite Tracker', 'INV', [
       { name: '/invites who', desc: 'Show who invited a member', options: 'user (required)', example: '/invites who user:@member' },
-      { name: '/invites leaderboard', desc: 'Show invite leaderboard', options: 'period (optional), limit (optional), required_join_role (optional)', example: '/invites leaderboard period:30 limit:20' },
-      { name: '/invites panel', desc: 'Post/update leaderboard panel', options: 'channel, period, limit, required_join_role, create_link_button', example: '/invites panel channel:#leaderboard period:30' },
+      { name: '/invites leaderboard', desc: 'Show invite leaderboard', options: 'period (optional), limit (optional), required_join_role (optional), verification_stats (optional)', example: '/invites leaderboard period:30 limit:20' },
+      { name: '/invites panel', desc: 'Post/update leaderboard panel', options: 'channel, period, limit, required_join_role, create_link_button, verification_stats', example: '/invites panel channel:#leaderboard period:30' },
       { name: '/invites export', desc: 'Export invite events CSV (paid plans)', options: 'period (optional)', example: '/invites export period:all' }
     ])}
     ${cmdSection('Token Tracker', 'TOK', [
@@ -7526,6 +7526,12 @@ async function loadInviteTrackerSettingsView(targetPaneId = null) {
           </label>
         </div>
       </div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+        <label style="display:flex;align-items:center;gap:8px;color:#cbd5e1;font-size:0.86em;cursor:pointer;">
+          <input id="inviteIncludeVerificationStatsToggle" type="checkbox">
+          Include verification NFT holdings in leaderboard stats
+        </label>
+      </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
         <button class="btn-secondary btn-sm" onclick="saveInviteTrackerSettings()">Save Invite Settings</button>
         <button class="btn-primary btn-sm" onclick="postInviteTrackerLeaderboardPanel()">Post/Update Leaderboard Panel</button>
@@ -7550,6 +7556,8 @@ async function loadInviteTrackerSettingsView(targetPaneId = null) {
     if (limitInput) limitInput.value = String(Number(settings.panelLimit || 10));
     const createLinkToggle = document.getElementById('invitePanelCreateLinkToggle');
     if (createLinkToggle) createLinkToggle.checked = settings.panelEnableCreateLink !== false;
+    const includeVerificationStatsToggle = document.getElementById('inviteIncludeVerificationStatsToggle');
+    if (includeVerificationStatsToggle) includeVerificationStatsToggle.checked = !!settings.includeVerificationStats;
   } catch (_error) {
     await populateRoleSelect('inviteRequiredRoleSelect', '');
     await populateChannelSelect('invitePanelChannelSelect', '');
@@ -7564,6 +7572,7 @@ function getInviteTrackerSettingsPayload() {
   const panelPeriodSelect = document.getElementById('invitePanelPeriodSelect');
   const panelLimitInput = document.getElementById('invitePanelLimitInput');
   const createLinkToggle = document.getElementById('invitePanelCreateLinkToggle');
+  const includeVerificationStatsToggle = document.getElementById('inviteIncludeVerificationStatsToggle');
 
   const panelPeriodDays = inviteTrackerPeriodToDays(panelPeriodSelect?.value || 'all');
   const panelLimit = Number(panelLimitInput?.value || 10);
@@ -7573,6 +7582,7 @@ function getInviteTrackerSettingsPayload() {
     panelPeriodDays,
     panelLimit: Number.isFinite(panelLimit) ? panelLimit : 10,
     panelEnableCreateLink: !!createLinkToggle?.checked,
+    includeVerificationStats: !!includeVerificationStatsToggle?.checked,
   };
 }
 
@@ -7622,6 +7632,7 @@ async function postInviteTrackerLeaderboardPanel() {
         limit: payload.panelLimit,
         requiredJoinRoleId: payload.requiredJoinRoleId,
         enableCreateLink: payload.panelEnableCreateLink,
+        includeVerificationStats: payload.includeVerificationStats,
       }),
     });
     const panelJson = await panelRes.json().catch(() => ({}));
@@ -7645,9 +7656,11 @@ async function refreshInviteTrackerDashboard() {
   const periodValue = document.getElementById('inviteTrackerPeriodSelect')?.value || 'all';
   const days = inviteTrackerPeriodToDays(periodValue);
   const requiredJoinRoleId = String(document.getElementById('inviteRequiredRoleSelect')?.value || '').trim();
+  const includeVerificationStats = !!document.getElementById('inviteIncludeVerificationStatsToggle')?.checked;
   const queryParts = [];
   if (days) queryParts.push(`days=${encodeURIComponent(String(days))}`);
   if (requiredJoinRoleId) queryParts.push(`requiredJoinRoleId=${encodeURIComponent(requiredJoinRoleId)}`);
+  if (includeVerificationStats) queryParts.push('includeVerificationStats=true');
   const qs = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
 
   summaryWrap.innerHTML = '<div class="spinner"></div><p>Loading summary...</p>';
@@ -7686,20 +7699,27 @@ async function refreshInviteTrackerDashboard() {
       const rows = boardJson.data?.rows || boardJson.rows || [];
       const limitedByPlan = !!(boardJson.data?.limitedByPlan ?? boardJson.limitedByPlan);
       const roleFiltered = !!(boardJson.data?.requiredJoinRoleId ?? boardJson.requiredJoinRoleId);
+      const verificationStatsEnabled = !!(boardJson.data?.includeVerificationStats ?? boardJson.includeVerificationStats);
       const list = rows.length
-        ? rows.map(row => `<tr><td style="padding:8px;">#${row.rank}</td><td style="padding:8px;">${row.inviterUserId ? `<@${row.inviterUserId}>` : escapeHtml(row.inviterUsername || 'Unknown')}</td><td style="padding:8px;text-align:right;font-weight:700;color:#86efac;">${Number(row.inviteCount || 0)}</td></tr>`).join('')
-        : '<tr><td colspan="3" style="padding:12px;color:var(--text-secondary);">No invite data yet.</td></tr>';
+        ? rows.map(row => {
+            const nftCell = verificationStatsEnabled
+              ? `<td style="padding:8px;text-align:right;color:#93c5fd;">${Number(row.inviteeNftsTotal || 0)}</td>`
+              : '';
+            return `<tr><td style="padding:8px;">#${row.rank}</td><td style="padding:8px;">${row.inviterUserId ? `<@${row.inviterUserId}>` : escapeHtml(row.inviterUsername || 'Unknown')}</td><td style="padding:8px;text-align:right;font-weight:700;color:#86efac;">${Number(row.inviteCount || 0)}</td>${nftCell}</tr>`;
+          }).join('')
+        : `<tr><td colspan="${verificationStatsEnabled ? 4 : 3}" style="padding:12px;color:var(--text-secondary);">No invite data yet.</td></tr>`;
       leaderboardWrap.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <h4 style="margin:0;color:#c9d6ff;">Leaderboard</h4>
           <div style="display:flex;gap:10px;align-items:center;">
             ${limitedByPlan ? '<span style="font-size:0.75em;color:#fcd34d;">Period filter limited by plan (showing all-time)</span>' : ''}
             ${roleFiltered ? '<span style="font-size:0.75em;color:#93c5fd;">Role-filtered</span>' : ''}
+            ${verificationStatsEnabled ? '<span style="font-size:0.75em;color:#86efac;">Verification stats</span>' : ''}
           </div>
         </div>
         <div style="overflow-x:auto;border:1px solid rgba(99,102,241,0.18);border-radius:10px;">
           <table style="width:100%;border-collapse:collapse;">
-            <thead><tr style="background:rgba(30,41,59,0.55);"><th style="padding:8px;text-align:left;">Rank</th><th style="padding:8px;text-align:left;">Inviter</th><th style="padding:8px;text-align:right;">Invites</th></tr></thead>
+            <thead><tr style="background:rgba(30,41,59,0.55);"><th style="padding:8px;text-align:left;">Rank</th><th style="padding:8px;text-align:left;">Inviter</th><th style="padding:8px;text-align:right;">Invites</th>${verificationStatsEnabled ? '<th style="padding:8px;text-align:right;">Invitee NFTs</th>' : ''}</tr></thead>
             <tbody>${list}</tbody>
           </table>
         </div>

@@ -47,7 +47,9 @@ module.exports = {
         .addIntegerOption(option =>
           option.setName('limit').setDescription('Rows to show').setRequired(false).setMinValue(1).setMaxValue(200))
         .addRoleOption(option =>
-          option.setName('required_join_role').setDescription('Only count invites where joined member has this role').setRequired(false)))
+          option.setName('required_join_role').setDescription('Only count invites where joined member has this role').setRequired(false))
+        .addBooleanOption(option =>
+          option.setName('verification_stats').setDescription('Include verification NFT holdings stats').setRequired(false)))
     .addSubcommand(sub =>
       sub
         .setName('panel')
@@ -73,7 +75,9 @@ module.exports = {
         .addRoleOption(option =>
           option.setName('required_join_role').setDescription('Only count invites where joined member has this role').setRequired(false))
         .addBooleanOption(option =>
-          option.setName('create_link_button').setDescription('Show "Create My Invite Link" button on panel').setRequired(false)))
+          option.setName('create_link_button').setDescription('Show "Create My Invite Link" button on panel').setRequired(false))
+        .addBooleanOption(option =>
+          option.setName('verification_stats').setDescription('Include verification NFT holdings stats').setRequired(false)))
     .addSubcommand(sub =>
       sub
         .setName('export')
@@ -147,11 +151,13 @@ module.exports = {
     const days = parsePeriod(periodRaw);
     const requestedLimit = interaction.options.getInteger('limit') || 25;
     const requiredRole = interaction.options.getRole('required_join_role');
+    const verificationStats = interaction.options.getBoolean('verification_stats');
 
     const result = await inviteTrackerService.getLeaderboard(interaction.guildId, {
       limit: requestedLimit,
       days,
       requiredJoinRoleId: requiredRole?.id,
+      includeVerificationStats: verificationStats === null ? undefined : verificationStats,
     });
     if (!result.success) {
       return interaction.editReply({ content: `X ${result.message || 'Could not load leaderboard.'}` });
@@ -164,12 +170,16 @@ module.exports = {
 
     const lines = result.rows.map(row => {
       const inviter = row.inviterUserId ? `<@${row.inviterUserId}>` : (row.inviterUsername || 'Unknown');
+      if (result.includeVerificationStats) {
+        return `**#${row.rank}** ${inviter} - **${row.inviteCount}** | NFT total: **${Number(row.inviteeNftsTotal || 0)}**`;
+      }
       return `**#${row.rank}** ${inviter} - **${row.inviteCount}**`;
     });
 
     const footerBits = [`Period: ${getPeriodLabel(result.periodDays)}`, `Rows: ${result.rows.length}`];
     if (result.limitedByPlan) footerBits.push('Time filter restricted by plan');
     if (result.requiredJoinRoleId) footerBits.push('Role filtered');
+    if (result.includeVerificationStats) footerBits.push('Verification stats');
 
     const embed = new EmbedBuilder()
       .setColor('#22C55E')
@@ -180,6 +190,10 @@ module.exports = {
 
     if (result.requiredJoinRoleId) {
       embed.addFields({ name: 'Required Join Role', value: `<@&${result.requiredJoinRoleId}>`, inline: true });
+    }
+    if (result.includeVerificationStats) {
+      const totalInviteeNfts = result.rows.reduce((sum, row) => sum + Number(row.inviteeNftsTotal || 0), 0);
+      embed.addFields({ name: 'Invitee NFT Total', value: String(totalInviteeNfts), inline: true });
     }
 
     return interaction.editReply({ embeds: [embed] });
@@ -193,6 +207,7 @@ module.exports = {
     const limit = interaction.options.getInteger('limit');
     const requiredRole = interaction.options.getRole('required_join_role');
     const createLinkButton = interaction.options.getBoolean('create_link_button');
+    const verificationStats = interaction.options.getBoolean('verification_stats');
 
     const settingsResult = inviteTrackerService.saveSettings(interaction.guildId, {
       requiredJoinRoleId: requiredRole ? requiredRole.id : undefined,
@@ -200,6 +215,7 @@ module.exports = {
       panelPeriodDays: periodRaw === null ? undefined : days,
       panelLimit: limit === null ? undefined : limit,
       panelEnableCreateLink: createLinkButton === null ? undefined : createLinkButton,
+      includeVerificationStats: verificationStats === null ? undefined : verificationStats,
     });
     if (!settingsResult.success) {
       return interaction.editReply({ content: `X ${settingsResult.message || 'Could not save invite panel settings.'}` });
@@ -213,6 +229,7 @@ module.exports = {
         limit: limit === null ? undefined : limit,
         requiredJoinRoleId: requiredRole?.id,
         enableCreateLink: createLinkButton === null ? undefined : createLinkButton,
+        includeVerificationStats: verificationStats === null ? undefined : verificationStats,
       }
     );
     if (!result.success) {

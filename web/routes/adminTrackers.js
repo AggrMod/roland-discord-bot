@@ -271,6 +271,7 @@ function createAdminTrackersRouter({
         panelPeriodDays: body.panelPeriodDays,
         panelLimit: body.panelLimit,
         panelEnableCreateLink: body.panelEnableCreateLink,
+        includeVerificationStats: body.includeVerificationStats,
       });
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to save invite tracker settings', 'VALIDATION_ERROR', null, result));
@@ -306,7 +307,10 @@ function createAdminTrackersRouter({
       const requiredJoinRoleId = req.query.requiredJoinRoleId === undefined
         ? undefined
         : String(req.query.requiredJoinRoleId || '');
-      const result = await inviteTrackerService.getLeaderboard(req.guildId || null, { limit, days, requiredJoinRoleId });
+      const includeVerificationStats = req.query.includeVerificationStats === undefined
+        ? undefined
+        : ['1', 'true', 'yes', 'on'].includes(String(req.query.includeVerificationStats).trim().toLowerCase());
+      const result = await inviteTrackerService.getLeaderboard(req.guildId || null, { limit, days, requiredJoinRoleId, includeVerificationStats });
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to load invite leaderboard', 'VALIDATION_ERROR', null, result));
       }
@@ -347,6 +351,7 @@ function createAdminTrackersRouter({
           limit: body.limit === undefined ? undefined : Number(body.limit),
           requiredJoinRoleId: body.requiredJoinRoleId === undefined ? undefined : String(body.requiredJoinRoleId || ''),
           enableCreateLink: body.enableCreateLink === undefined ? undefined : !!body.enableCreateLink,
+          includeVerificationStats: body.includeVerificationStats === undefined ? undefined : !!body.includeVerificationStats,
         }
       );
       if (!result.success) {

@@ -21,6 +21,61 @@ function createSuperadminTenantOpsRouter({
 }) {
   const router = express.Router();
 
+  async function syncTenantScaffoldFromClientGuilds() {
+    const client = typeof getClient === 'function' ? getClient() : null;
+    if (!client?.guilds?.cache) return;
+
+    const guilds = [...client.guilds.cache.values()];
+    for (const guild of guilds) {
+      const guildId = normalizeGuildId(guild?.id);
+      if (!guildId) continue;
+      try {
+        tenantService.ensureTenant(guildId, guild?.name || null);
+      } catch (_error) {
+        // Best-effort sync only.
+      }
+    }
+  }
+
+  async function hydrateTenantGuildNames(tenants = []) {
+    if (!Array.isArray(tenants) || !tenants.length) return tenants;
+
+    const targets = tenants.filter(tenant => {
+      const guildId = normalizeGuildId(tenant?.guildId);
+      if (!guildId) return false;
+      const guildName = String(tenant?.guildName || '').trim();
+      return !guildName || guildName === guildId;
+    });
+
+    if (!targets.length) return tenants;
+
+    const nameMap = new Map();
+    await Promise.all(targets.map(async (tenant) => {
+      const guildId = normalizeGuildId(tenant?.guildId);
+      if (!guildId) return;
+      try {
+        const guild = await fetchGuildById(guildId);
+        const guildName = String(guild?.name || '').trim();
+        if (!guildName) return;
+        nameMap.set(guildId, guildName);
+        tenantService.ensureTenant(guildId, guildName);
+      } catch (_error) {
+        // Keep original fallback value.
+      }
+    }));
+
+    if (!nameMap.size) return tenants;
+    return tenants.map(tenant => {
+      const guildId = normalizeGuildId(tenant?.guildId);
+      const mappedName = guildId ? nameMap.get(guildId) : null;
+      if (!mappedName) return tenant;
+      return {
+        ...tenant,
+        guildName: mappedName,
+      };
+    });
+  }
+
   async function resolveDiscordDisplayMap(ids = []) {
     const normalizedIds = [...new Set((ids || []).map(id => String(id || '').trim()).filter(Boolean))];
     if (!normalizedIds.length) return new Map();
@@ -52,17 +107,19 @@ function createSuperadminTenantOpsRouter({
     next();
   };
 
-  router.get('/tenants', superadminGuard, (req, res) => {
+  router.get('/tenants', superadminGuard, async (req, res) => {
     try {
+      await syncTenantScaffoldFromClientGuilds();
       const result = tenantService.listTenants({
         q: req.query.q,
         status: req.query.status,
         page: req.query.page,
         pageSize: req.query.pageSize,
       });
+      const hydratedTenants = await hydrateTenantGuildNames(result.tenants || []);
 
       res.json(toSuccessResponse({
-        tenants: result.tenants,
+        tenants: hydratedTenants,
         pagination: result.pagination,
       }));
     } catch (error) {
@@ -93,7 +150,17 @@ function createSuperadminTenantOpsRouter({
 
   router.get('/tenants/:guildId', superadminGuard, logSuperadminTenantAction, async (req, res) => {
     try {
-      const tenant = tenantService.getTenant(req.params.guildId);
+      let tenant = tenantService.getTenant(req.params.guildId);
+      if (!tenant) {
+        let guild = null;
+        try {
+          guild = await fetchGuildById(req.params.guildId);
+        } catch (_error) {
+          guild = null;
+        }
+        const ensured = tenantService.ensureTenant(req.params.guildId, guild?.name || null);
+        tenant = ensured || tenantService.getTenant(req.params.guildId);
+      }
       if (!tenant) {
         return res.status(404).json(toErrorResponse('Tenant not found', 'NOT_FOUND'));
       }

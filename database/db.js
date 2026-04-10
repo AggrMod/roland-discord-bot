@@ -68,6 +68,7 @@ const REQUIRED_SCHEMA = Object.freeze({
   nft_tracked_collections: ['guild_id', 'collection_address', 'track_bid'],
   tracked_tokens: ['guild_id', 'alert_channel_ids'],
   tracked_wallets: ['guild_id', 'wallet_address', 'token_last_signature'],
+  invite_tracker_settings: ['guild_id', 'required_join_role_id', 'panel_channel_id', 'panel_message_id', 'panel_period_days', 'panel_limit', 'panel_enable_create_link'],
   invite_events: ['guild_id', 'joined_user_id', 'inviter_user_id', 'invite_code', 'source', 'joined_at'],
   tracked_token_webhook_retry_queue: ['signature', 'attempt_count', 'next_attempt_at', 'last_reason', 'last_error'],
   nft_activity_alert_configs: ['guild_id', 'enabled', 'event_types', 'min_sol'],
@@ -1333,6 +1334,27 @@ function initDatabase() {
   try { db.exec('ALTER TABLE users ADD COLUMN total_tokens REAL DEFAULT 0'); } catch (e) {}
 
   // Invite Tracker (tenant-scoped)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS invite_tracker_settings (
+      guild_id TEXT PRIMARY KEY,
+      required_join_role_id TEXT,
+      panel_channel_id TEXT,
+      panel_message_id TEXT,
+      panel_period_days INTEGER,
+      panel_limit INTEGER DEFAULT 10,
+      panel_enable_create_link INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_invite_tracker_settings_guild ON invite_tracker_settings(guild_id)'); } catch (e) {}
+  try { db.exec('ALTER TABLE invite_tracker_settings ADD COLUMN required_join_role_id TEXT'); } catch (e) {}
+  try { db.exec('ALTER TABLE invite_tracker_settings ADD COLUMN panel_channel_id TEXT'); } catch (e) {}
+  try { db.exec('ALTER TABLE invite_tracker_settings ADD COLUMN panel_message_id TEXT'); } catch (e) {}
+  try { db.exec('ALTER TABLE invite_tracker_settings ADD COLUMN panel_period_days INTEGER'); } catch (e) {}
+  try { db.exec('ALTER TABLE invite_tracker_settings ADD COLUMN panel_limit INTEGER DEFAULT 10'); } catch (e) {}
+  try { db.exec('ALTER TABLE invite_tracker_settings ADD COLUMN panel_enable_create_link INTEGER DEFAULT 1'); } catch (e) {}
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS invite_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

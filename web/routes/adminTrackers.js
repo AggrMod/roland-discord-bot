@@ -246,6 +246,42 @@ function createAdminTrackersRouter({
     }
   });
 
+  router.get('/api/admin/invites/settings', adminAuthMiddleware, (req, res) => {
+    if (!ensureInviteTrackerModule(req, res)) return;
+    try {
+      const result = inviteTrackerService.getSettings(req.guildId || null);
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to load invite tracker settings', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error loading invite tracker settings:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.put('/api/admin/invites/settings', adminAuthMiddleware, (req, res) => {
+    if (!ensureInviteTrackerModule(req, res)) return;
+    try {
+      const body = req.body || {};
+      const result = inviteTrackerService.saveSettings(req.guildId || null, {
+        requiredJoinRoleId: body.requiredJoinRoleId,
+        panelChannelId: body.panelChannelId,
+        panelMessageId: body.panelMessageId,
+        panelPeriodDays: body.panelPeriodDays,
+        panelLimit: body.panelLimit,
+        panelEnableCreateLink: body.panelEnableCreateLink,
+      });
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to save invite tracker settings', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error saving invite tracker settings:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.get('/api/admin/invites/events', adminAuthMiddleware, (req, res) => {
     if (!ensureInviteTrackerModule(req, res)) return;
     try {
@@ -262,12 +298,15 @@ function createAdminTrackersRouter({
     }
   });
 
-  router.get('/api/admin/invites/leaderboard', adminAuthMiddleware, (req, res) => {
+  router.get('/api/admin/invites/leaderboard', adminAuthMiddleware, async (req, res) => {
     if (!ensureInviteTrackerModule(req, res)) return;
     try {
       const limit = Number(req.query.limit || 25);
       const days = req.query.days === undefined ? null : Number(req.query.days);
-      const result = inviteTrackerService.getLeaderboard(req.guildId || null, { limit, days });
+      const requiredJoinRoleId = req.query.requiredJoinRoleId === undefined
+        ? undefined
+        : String(req.query.requiredJoinRoleId || '');
+      const result = await inviteTrackerService.getLeaderboard(req.guildId || null, { limit, days, requiredJoinRoleId });
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to load invite leaderboard', 'VALIDATION_ERROR', null, result));
       }
@@ -278,11 +317,11 @@ function createAdminTrackersRouter({
     }
   });
 
-  router.get('/api/admin/invites/export', adminAuthMiddleware, (req, res) => {
+  router.get('/api/admin/invites/export', adminAuthMiddleware, async (req, res) => {
     if (!ensureInviteTrackerModule(req, res)) return;
     try {
       const days = req.query.days === undefined ? null : Number(req.query.days);
-      const result = inviteTrackerService.exportCsv(req.guildId || null, { days });
+      const result = await inviteTrackerService.exportCsv(req.guildId || null, { days });
       if (!result.success) {
         const status = result.code === 'plan_restricted' ? 403 : 400;
         return res.status(status).json(toErrorResponse(result.message || 'Failed to export invite events', 'VALIDATION_ERROR', null, result));
@@ -292,6 +331,30 @@ function createAdminTrackersRouter({
       return res.send(result.csv);
     } catch (routeError) {
       logger.error('Error exporting invite events:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/api/admin/invites/panel', adminAuthMiddleware, async (req, res) => {
+    if (!ensureInviteTrackerModule(req, res)) return;
+    try {
+      const body = req.body || {};
+      const result = await inviteTrackerService.postOrUpdateLeaderboardPanel(
+        req.guildId || null,
+        body.channelId || null,
+        {
+          days: body.days === undefined ? undefined : (body.days === null ? null : Number(body.days)),
+          limit: body.limit === undefined ? undefined : Number(body.limit),
+          requiredJoinRoleId: body.requiredJoinRoleId === undefined ? undefined : String(body.requiredJoinRoleId || ''),
+          enableCreateLink: body.enableCreateLink === undefined ? undefined : !!body.enableCreateLink,
+        }
+      );
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to post invite leaderboard panel', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error posting invite leaderboard panel:', routeError);
       return res.status(500).json(toErrorResponse('Internal server error'));
     }
   });

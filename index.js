@@ -517,6 +517,26 @@ client.on(Events.InteractionCreate, async interaction => {
   if (interaction.isButton()) {
     const customId = interaction.customId;
 
+    if (customId === inviteTrackerService.CREATE_LINK_BUTTON_ID) {
+      try {
+        await interaction.deferReply({ ephemeral: true });
+        const result = await inviteTrackerService.createUserInviteLink(interaction);
+        if (!result.success) {
+          await interaction.editReply({ content: `Could not create invite link: ${result.message || 'unknown error'}` });
+          return;
+        }
+        await interaction.editReply({ content: `Your invite link: ${result.inviteUrl}` });
+      } catch (error) {
+        logger.warn('[invite-tracker] create-link button error:', error?.message || error);
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply({ content: 'Could not create invite link right now.' }).catch(() => {});
+        } else {
+          await interaction.reply({ content: 'Could not create invite link right now.', ephemeral: true }).catch(() => {});
+        }
+      }
+      return;
+    }
+
     // Verify panel button handler
     if (customId === 'panel_verify') {
       await handlePanelVerifyButton(interaction);
@@ -616,6 +636,13 @@ client.on(Events.GuildMemberAdd, async (member) => {
     }
   } catch (error) {
     logger.warn('[invite-tracker] member join handler warning:', error?.message || error);
+  }
+});
+client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
+  try {
+    inviteTrackerService.handleMemberRoleUpdate(oldMember, newMember);
+  } catch (error) {
+    logger.warn('[invite-tracker] member role update handler warning:', error?.message || error);
   }
 });
 

@@ -2,6 +2,7 @@ const {
   SlashCommandBuilder,
   EmbedBuilder,
   PermissionFlagsBits,
+  ChannelType,
 } = require('discord.js');
 const moduleGuard = require('../../utils/moduleGuard');
 const inviteTrackerService = require('../../services/inviteTrackerService');
@@ -12,10 +13,16 @@ function getPeriodLabel(days) {
   return `${days}d`;
 }
 
+function parsePeriod(periodValue) {
+  if (!periodValue || periodValue === 'all') return null;
+  const n = Number(periodValue);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('invites')
-    .setDescription('Invite tracker tools: who-invited-who, leaderboard, and export')
+    .setDescription('Invite tracker tools: who-invited-who, leaderboard, panel, and export')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommand(sub =>
       sub
@@ -38,7 +45,35 @@ module.exports = {
               { name: 'Last 30 days', value: '30' },
             ))
         .addIntegerOption(option =>
-          option.setName('limit').setDescription('Rows to show').setRequired(false).setMinValue(1).setMaxValue(200)))
+          option.setName('limit').setDescription('Rows to show').setRequired(false).setMinValue(1).setMaxValue(200))
+        .addRoleOption(option =>
+          option.setName('required_join_role').setDescription('Only count invites where joined member has this role').setRequired(false)))
+    .addSubcommand(sub =>
+      sub
+        .setName('panel')
+        .setDescription('Post or update invite leaderboard panel')
+        .addChannelOption(option =>
+          option
+            .setName('channel')
+            .setDescription('Channel to post/update leaderboard panel in')
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+            .setRequired(false))
+        .addStringOption(option =>
+          option
+            .setName('period')
+            .setDescription('Leaderboard period for panel')
+            .setRequired(false)
+            .addChoices(
+              { name: 'All-time', value: 'all' },
+              { name: 'Last 7 days', value: '7' },
+              { name: 'Last 30 days', value: '30' },
+            ))
+        .addIntegerOption(option =>
+          option.setName('limit').setDescription('Rows to show in panel').setRequired(false).setMinValue(1).setMaxValue(50))
+        .addRoleOption(option =>
+          option.setName('required_join_role').setDescription('Only count invites where joined member has this role').setRequired(false))
+        .addBooleanOption(option =>
+          option.setName('create_link_button').setDescription('Show "Create My Invite Link" button on panel').setRequired(false)))
     .addSubcommand(sub =>
       sub
         .setName('export')
@@ -62,6 +97,7 @@ module.exports = {
     try {
       if (sub === 'who') return this.handleWho(interaction);
       if (sub === 'leaderboard') return this.handleLeaderboard(interaction);
+      if (sub === 'panel') return this.handlePanel(interaction);
       if (sub === 'export') return this.handleExport(interaction);
       return interaction.reply({ content: 'Unknown invites command.', ephemeral: true });
     } catch (error) {
@@ -78,7 +114,7 @@ module.exports = {
     const user = interaction.options.getUser('user', true);
     const result = inviteTrackerService.getInviterForUser(interaction.guildId, user.id);
     if (!result.success) {
-      return interaction.editReply({ content: `❌ ${result.message || 'Could not fetch invite data.'}` });
+      return interaction.editReply({ content: `X ${result.message || 'Could not fetch invite data.'}` });
     }
     if (!result.record) {
       return interaction.editReply({ content: `No invite record found for <@${user.id}> in this server.` });
@@ -108,12 +144,17 @@ module.exports = {
   async handleLeaderboard(interaction) {
     await interaction.deferReply({ ephemeral: true });
     const periodRaw = interaction.options.getString('period') || 'all';
-    const days = periodRaw === 'all' ? null : Number(periodRaw);
+    const days = parsePeriod(periodRaw);
     const requestedLimit = interaction.options.getInteger('limit') || 25;
+    const requiredRole = interaction.options.getRole('required_join_role');
 
-    const result = inviteTrackerService.getLeaderboard(interaction.guildId, { limit: requestedLimit, days });
+    const result = await inviteTrackerService.getLeaderboard(interaction.guildId, {
+      limit: requestedLimit,
+      days,
+      requiredJoinRoleId: requiredRole?.id,
+    });
     if (!result.success) {
-      return interaction.editReply({ content: `❌ ${result.message || 'Could not load leaderboard.'}` });
+      return interaction.editReply({ content: `X ${result.message || 'Could not load leaderboard.'}` });
     }
 
     if (!Array.isArray(result.rows) || result.rows.length === 0) {
@@ -123,11 +164,12 @@ module.exports = {
 
     const lines = result.rows.map(row => {
       const inviter = row.inviterUserId ? `<@${row.inviterUserId}>` : (row.inviterUsername || 'Unknown');
-      return `**#${row.rank}** ${inviter} — **${row.inviteCount}**`;
+      return `**#${row.rank}** ${inviter} - **${row.inviteCount}**`;
     });
 
     const footerBits = [`Period: ${getPeriodLabel(result.periodDays)}`, `Rows: ${result.rows.length}`];
     if (result.limitedByPlan) footerBits.push('Time filter restricted by plan');
+    if (result.requiredJoinRoleId) footerBits.push('Role filtered');
 
     const embed = new EmbedBuilder()
       .setColor('#22C55E')
@@ -136,22 +178,66 @@ module.exports = {
       .setFooter({ text: footerBits.join(' • ') })
       .setTimestamp();
 
+    if (result.requiredJoinRoleId) {
+      embed.addFields({ name: 'Required Join Role', value: `<@&${result.requiredJoinRoleId}>`, inline: true });
+    }
+
     return interaction.editReply({ embeds: [embed] });
+  },
+
+  async handlePanel(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    const targetChannel = interaction.options.getChannel('channel');
+    const periodRaw = interaction.options.getString('period');
+    const days = periodRaw ? parsePeriod(periodRaw) : undefined;
+    const limit = interaction.options.getInteger('limit');
+    const requiredRole = interaction.options.getRole('required_join_role');
+    const createLinkButton = interaction.options.getBoolean('create_link_button');
+
+    const settingsResult = inviteTrackerService.saveSettings(interaction.guildId, {
+      requiredJoinRoleId: requiredRole ? requiredRole.id : undefined,
+      panelChannelId: targetChannel ? targetChannel.id : undefined,
+      panelPeriodDays: periodRaw === null ? undefined : days,
+      panelLimit: limit === null ? undefined : limit,
+      panelEnableCreateLink: createLinkButton === null ? undefined : createLinkButton,
+    });
+    if (!settingsResult.success) {
+      return interaction.editReply({ content: `X ${settingsResult.message || 'Could not save invite panel settings.'}` });
+    }
+
+    const result = await inviteTrackerService.postOrUpdateLeaderboardPanel(
+      interaction.guildId,
+      targetChannel?.id || null,
+      {
+        days,
+        limit: limit === null ? undefined : limit,
+        requiredJoinRoleId: requiredRole?.id,
+        enableCreateLink: createLinkButton === null ? undefined : createLinkButton,
+      }
+    );
+    if (!result.success) {
+      return interaction.editReply({ content: `X ${result.message || 'Could not post invite panel.'}` });
+    }
+
+    const channelMention = result.channelId ? `<#${result.channelId}>` : 'configured channel';
+    return interaction.editReply({
+      content: `Done. Invite leaderboard panel ${result.action || 'updated'} in ${channelMention}.`,
+    });
   },
 
   async handleExport(interaction) {
     await interaction.deferReply({ ephemeral: true });
     const periodRaw = interaction.options.getString('period') || 'all';
-    const days = periodRaw === 'all' ? null : Number(periodRaw);
-    const result = inviteTrackerService.exportCsv(interaction.guildId, { days });
+    const days = parsePeriod(periodRaw);
+    const result = await inviteTrackerService.exportCsv(interaction.guildId, { days });
 
     if (!result.success) {
-      return interaction.editReply({ content: `❌ ${result.message || 'Could not export invite events.'}` });
+      return interaction.editReply({ content: `X ${result.message || 'Could not export invite events.'}` });
     }
 
     const fileBuffer = Buffer.from(result.csv || '', 'utf8');
     return interaction.editReply({
-      content: `✅ Export ready (${getPeriodLabel(result.periodDays)}).`,
+      content: `Export ready (${getPeriodLabel(result.periodDays)}).`,
       files: [{ attachment: fileBuffer, name: result.filename || 'invite-tracker.csv' }],
     });
   },

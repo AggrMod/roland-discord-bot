@@ -5514,7 +5514,8 @@ async function loadAdminHelpView() {
     ])}
     ${cmdSection('Invite Tracker', 'INV', [
       { name: '/invites who', desc: 'Show who invited a member', options: 'user (required)', example: '/invites who user:@member' },
-      { name: '/invites leaderboard', desc: 'Show invite leaderboard', options: 'period (optional), limit (optional)', example: '/invites leaderboard period:30 limit:20' },
+      { name: '/invites leaderboard', desc: 'Show invite leaderboard', options: 'period (optional), limit (optional), required_join_role (optional)', example: '/invites leaderboard period:30 limit:20' },
+      { name: '/invites panel', desc: 'Post/update leaderboard panel', options: 'channel, period, limit, required_join_role, create_link_button', example: '/invites panel channel:#leaderboard period:30' },
       { name: '/invites export', desc: 'Export invite events CSV (paid plans)', options: 'period (optional)', example: '/invites export period:all' }
     ])}
     ${cmdSection('Token Tracker', 'TOK', [
@@ -6177,7 +6178,7 @@ let discordRolesCache = null;
 async function fetchDiscordRoles() {
   if (discordRolesCache) return discordRolesCache;
   try {
-    const res = await fetch('/api/admin/discord/roles', { credentials: 'include' });
+    const res = await fetch('/api/admin/discord/roles', { credentials: 'include', headers: buildTenantRequestHeaders() });
     if (res.ok) {
       const data = await res.json();
       if (data.success) {
@@ -7491,13 +7492,148 @@ async function loadInviteTrackerSettingsView(targetPaneId = null) {
           <button class="btn-primary btn-sm" onclick="exportInviteTrackerCsv()">Export CSV</button>
         </div>
       </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+        <div>
+          <label style="display:block;color:#c9d6ff;font-size:0.86em;font-weight:600;margin-bottom:6px;">Required Join Role (Leaderboard)</label>
+          ${roleSelectHTML('inviteRequiredRoleSelect', '', false)}
+          <div style="color:var(--text-secondary);font-size:0.75em;margin-top:4px;">Only count invites where joined members have this role. Leave empty for no role filter.</div>
+        </div>
+        <div>
+          <label style="display:block;color:#c9d6ff;font-size:0.86em;font-weight:600;margin-bottom:6px;">Panel Channel</label>
+          <select id="invitePanelChannelSelect" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
+            <option value="">-- Select Channel --</option>
+          </select>
+          <div style="color:var(--text-secondary);font-size:0.75em;margin-top:4px;">Invite leaderboard panel target channel.</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;">
+        <div>
+          <label style="display:block;color:#c9d6ff;font-size:0.86em;font-weight:600;margin-bottom:6px;">Panel Period</label>
+          <select id="invitePanelPeriodSelect" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
+            <option value="all">All-time</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;color:#c9d6ff;font-size:0.86em;font-weight:600;margin-bottom:6px;">Panel Rows</label>
+          <input id="invitePanelLimitInput" type="number" min="1" max="50" value="10" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
+        </div>
+        <div style="display:flex;align-items:end;">
+          <label style="display:flex;align-items:center;gap:8px;color:#cbd5e1;font-size:0.86em;cursor:pointer;">
+            <input id="invitePanelCreateLinkToggle" type="checkbox" checked>
+            Show Create-Link Button
+          </label>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+        <button class="btn-secondary btn-sm" onclick="saveInviteTrackerSettings()">Save Invite Settings</button>
+        <button class="btn-primary btn-sm" onclick="postInviteTrackerLeaderboardPanel()">Post/Update Leaderboard Panel</button>
+      </div>
       <div id="inviteTrackerSummaryWrap" style="margin-top:8px;color:var(--text-secondary);">Loading summary...</div>
       <div id="inviteTrackerLeaderboardWrap" style="margin-top:16px;color:var(--text-secondary);">Loading leaderboard...</div>
       <div id="inviteTrackerEventsWrap" style="margin-top:16px;color:var(--text-secondary);">Loading events...</div>
     </div>
   `;
 
+  try {
+    discordRolesCache = null;
+    const settingsRes = await fetch('/api/admin/invites/settings', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const settingsJson = await settingsRes.json();
+    const settings = settingsJson?.data?.settings || settingsJson?.settings || {};
+    await populateRoleSelect('inviteRequiredRoleSelect', settings.requiredJoinRoleId || '');
+    await populateChannelSelect('invitePanelChannelSelect', settings.panelChannelId || '');
+    const panelPeriod = settings.panelPeriodDays ? String(settings.panelPeriodDays) : 'all';
+    const periodSel = document.getElementById('invitePanelPeriodSelect');
+    if (periodSel) periodSel.value = panelPeriod;
+    const limitInput = document.getElementById('invitePanelLimitInput');
+    if (limitInput) limitInput.value = String(Number(settings.panelLimit || 10));
+    const createLinkToggle = document.getElementById('invitePanelCreateLinkToggle');
+    if (createLinkToggle) createLinkToggle.checked = settings.panelEnableCreateLink !== false;
+  } catch (_error) {
+    await populateRoleSelect('inviteRequiredRoleSelect', '');
+    await populateChannelSelect('invitePanelChannelSelect', '');
+  }
+
   await refreshInviteTrackerDashboard();
+}
+
+function getInviteTrackerSettingsPayload() {
+  const roleSelect = document.getElementById('inviteRequiredRoleSelect');
+  const panelChannelSelect = document.getElementById('invitePanelChannelSelect');
+  const panelPeriodSelect = document.getElementById('invitePanelPeriodSelect');
+  const panelLimitInput = document.getElementById('invitePanelLimitInput');
+  const createLinkToggle = document.getElementById('invitePanelCreateLinkToggle');
+
+  const panelPeriodDays = inviteTrackerPeriodToDays(panelPeriodSelect?.value || 'all');
+  const panelLimit = Number(panelLimitInput?.value || 10);
+  return {
+    requiredJoinRoleId: roleSelect?.value || null,
+    panelChannelId: panelChannelSelect?.value || null,
+    panelPeriodDays,
+    panelLimit: Number.isFinite(panelLimit) ? panelLimit : 10,
+    panelEnableCreateLink: !!createLinkToggle?.checked,
+  };
+}
+
+async function saveInviteTrackerSettings() {
+  try {
+    const payload = getInviteTrackerSettingsPayload();
+    const res = await fetch('/api/admin/invites/settings', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.success === false) {
+      showError(data?.message || data?.error?.message || 'Failed to save invite settings.');
+      return;
+    }
+    showSuccess('Invite tracker settings saved.');
+    await refreshInviteTrackerDashboard();
+  } catch (error) {
+    showError(`Failed to save invite settings: ${error?.message || 'unknown error'}`);
+  }
+}
+
+async function postInviteTrackerLeaderboardPanel() {
+  try {
+    const payload = getInviteTrackerSettingsPayload();
+    const saveRes = await fetch('/api/admin/invites/settings', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify(payload),
+    });
+    const saveJson = await saveRes.json().catch(() => ({}));
+    if (!saveRes.ok || saveJson.success === false) {
+      showError(saveJson?.message || saveJson?.error?.message || 'Failed to save invite panel settings.');
+      return;
+    }
+
+    const panelRes = await fetch('/api/admin/invites/panel', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({
+        channelId: payload.panelChannelId,
+        days: payload.panelPeriodDays,
+        limit: payload.panelLimit,
+        requiredJoinRoleId: payload.requiredJoinRoleId,
+        enableCreateLink: payload.panelEnableCreateLink,
+      }),
+    });
+    const panelJson = await panelRes.json().catch(() => ({}));
+    if (!panelRes.ok || panelJson.success === false) {
+      showError(panelJson?.message || panelJson?.error?.message || 'Failed to post leaderboard panel.');
+      return;
+    }
+    showSuccess('Invite leaderboard panel posted/updated.');
+    await loadInviteTrackerSettingsView();
+  } catch (error) {
+    showError(`Failed to post invite panel: ${error?.message || 'unknown error'}`);
+  }
 }
 
 async function refreshInviteTrackerDashboard() {
@@ -7508,7 +7644,11 @@ async function refreshInviteTrackerDashboard() {
 
   const periodValue = document.getElementById('inviteTrackerPeriodSelect')?.value || 'all';
   const days = inviteTrackerPeriodToDays(periodValue);
-  const qs = days ? `?days=${encodeURIComponent(String(days))}` : '';
+  const requiredJoinRoleId = String(document.getElementById('inviteRequiredRoleSelect')?.value || '').trim();
+  const queryParts = [];
+  if (days) queryParts.push(`days=${encodeURIComponent(String(days))}`);
+  if (requiredJoinRoleId) queryParts.push(`requiredJoinRoleId=${encodeURIComponent(requiredJoinRoleId)}`);
+  const qs = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
 
   summaryWrap.innerHTML = '<div class="spinner"></div><p>Loading summary...</p>';
   leaderboardWrap.innerHTML = '<div class="spinner"></div><p>Loading leaderboard...</p>';
@@ -7545,13 +7685,17 @@ async function refreshInviteTrackerDashboard() {
     } else {
       const rows = boardJson.data?.rows || boardJson.rows || [];
       const limitedByPlan = !!(boardJson.data?.limitedByPlan ?? boardJson.limitedByPlan);
+      const roleFiltered = !!(boardJson.data?.requiredJoinRoleId ?? boardJson.requiredJoinRoleId);
       const list = rows.length
         ? rows.map(row => `<tr><td style="padding:8px;">#${row.rank}</td><td style="padding:8px;">${row.inviterUserId ? `<@${row.inviterUserId}>` : escapeHtml(row.inviterUsername || 'Unknown')}</td><td style="padding:8px;text-align:right;font-weight:700;color:#86efac;">${Number(row.inviteCount || 0)}</td></tr>`).join('')
         : '<tr><td colspan="3" style="padding:12px;color:var(--text-secondary);">No invite data yet.</td></tr>';
       leaderboardWrap.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <h4 style="margin:0;color:#c9d6ff;">Leaderboard</h4>
-          ${limitedByPlan ? '<span style="font-size:0.75em;color:#fcd34d;">Period filter limited by plan (showing all-time)</span>' : ''}
+          <div style="display:flex;gap:10px;align-items:center;">
+            ${limitedByPlan ? '<span style="font-size:0.75em;color:#fcd34d;">Period filter limited by plan (showing all-time)</span>' : ''}
+            ${roleFiltered ? '<span style="font-size:0.75em;color:#93c5fd;">Role-filtered</span>' : ''}
+          </div>
         </div>
         <div style="overflow-x:auto;border:1px solid rgba(99,102,241,0.18);border-radius:10px;">
           <table style="width:100%;border-collapse:collapse;">

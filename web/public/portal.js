@@ -472,6 +472,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  document.getElementById('walletVerifyModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'walletVerifyModal') {
+      closeWalletVerifyModal();
+    }
+  });
+
   // Keyboard navigation
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -482,11 +488,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const mobileMenu = document.getElementById('mobileMenu');
       const confirmModal = document.getElementById('confirmModal');
+      const walletVerifyModal = document.getElementById('walletVerifyModal');
       
       if (mobileMenu && mobileMenu.style.display === 'block') {
         toggleMobileMenu();
       } else if (confirmModal && confirmModal.style.display !== 'none') {
         closeConfirmModal();
+      } else if (walletVerifyModal && walletVerifyModal.style.display !== 'none') {
+        closeWalletVerifyModal();
       }
     }
   });
@@ -499,47 +508,40 @@ function showWalletAddForm() {
     return;
   }
 
-  const walletsList = document.getElementById('walletsList');
-  if (!walletsList) return;
+  const modal = document.getElementById('walletVerifyModal');
+  if (!modal) return;
 
-  walletsList.innerHTML = `
-    <div style="display:grid; gap:20px; grid-template-columns:repeat(auto-fit,minmax(280px,1fr));">
-      <!-- Wallet Signature Method -->
-      <div style="padding:28px; background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(99,102,241,0.05)); border:2px solid rgba(99,102,241,0.30); border-radius:14px; text-align:center;">
-        <div style="font-size:2.5em; margin-bottom:12px;">🔗</div>
-        <h4 style="color:#e0e7ff; margin-bottom:12px; font-size:1.15em;">Sign Message</h4>
-        <p style="color:var(--text-secondary); font-size:0.9em; line-height:1.6; margin-bottom:20px;">
-          Your wallet extension opens automatically.<br>Sign a message to prove ownership — <strong>free, no transaction</strong>.
-        </p>
-        <button id="signVerifyBtn" onclick="verifyBySignature()" class="btn-primary" style="padding:14px 24px; width:100%; font-size:1em;">
-          ✓ Connect & Sign
-        </button>
-        <p style="color:var(--text-muted); font-size:0.8em; margin-top:10px;">Phantom · Solflare · Backpack</p>
-      </div>
+  const signBtn = document.getElementById('signVerifyBtn');
+  if (signBtn) {
+    signBtn.disabled = false;
+    signBtn.innerHTML = '✓ Connect & Sign';
+  }
 
-      <!-- Micro Transaction Method -->
-      <div style="padding:28px; background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(99,102,241,0.05)); border:2px solid rgba(99,102,241,0.30); border-radius:14px; text-align:center;">
-        <div style="font-size:2.5em; margin-bottom:12px;">🔐</div>
-        <h4 style="color:#e0e7ff; margin-bottom:12px; font-size:1.15em;">On-Chain Proof</h4>
-        <p style="color:var(--text-secondary); font-size:0.9em; line-height:1.6; margin-bottom:20px;">
-          Confirm NFT ownership by initiating a tiny on-chain proof from <strong>any Solana wallet</strong>.<br>No browser extension required — works with Phantom, hardware wallets, and more.
-        </p>
-        <button id="microVerifyBtn" onclick="verifyByMicroTx()" class="btn-primary" style="padding:14px 24px; width:100%; font-size:1em;">
-          🔑 Generate Proof Address
-        </button>
-        <p style="color:var(--text-muted); font-size:0.8em; margin-top:10px;">Any wallet · No extension required · NFT ownership proof only</p>
-      </div>
-    </div>
-    <div id="mobileWalletLaunchPanel" style="margin-top:16px;"></div>
-    <div id="verifyStatus" style="margin-top:16px;"></div>
-  `;
-  walletsList.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const microBtn = document.getElementById('microVerifyBtn');
+  if (microBtn) {
+    microBtn.disabled = false;
+    microBtn.innerHTML = '🔑 Generate Proof Address';
+  }
+
+  const statusEl = document.getElementById('verifyStatus');
+  if (statusEl) statusEl.innerHTML = '';
+
+  const mobilePanel = document.getElementById('mobileWalletLaunchPanel');
+  if (mobilePanel) mobilePanel.innerHTML = '';
+
+  modal.style.display = 'flex';
 
   // Mobile helper for opening this page directly inside wallet apps
   renderMobileWalletLaunchPanel();
 
   // Auto-show any pending micro-verify request so user doesn't need to click again
   autoShowPendingMicroVerify();
+}
+
+function closeWalletVerifyModal() {
+  const modal = document.getElementById('walletVerifyModal');
+  if (!modal) return;
+  modal.style.display = 'none';
 }
 
 function startWalletVerification(method = 'signature') {
@@ -792,6 +794,7 @@ async function verifyBySignature() {
 
     if (verifyData.success) {
       showSuccess(verifyData.message || 'Wallet verified!');
+      closeWalletVerifyModal();
       await loadPortal(); // Refresh all data
     } else {
       showError(verifyData.message || 'Verification failed');
@@ -896,6 +899,7 @@ async function pollMicroVerifyStatus(statusEl, attempts = 0) {
     const data = await res.json();
     if (data.success && data.request?.status === 'verified') {
       showSuccess('Wallet verified via micro-transaction!');
+      closeWalletVerifyModal();
       await loadPortal();
       return;
     }
@@ -920,6 +924,7 @@ async function manualCheckMicroVerify(statusEl) {
     const data = await res.json();
     if (data.status === 'verified') {
       showSuccess('Wallet verified via micro-transaction!');
+      closeWalletVerifyModal();
       await loadPortal();
     } else if (statusEl) {
       statusEl.innerHTML += `<div style="padding:8px 12px;background:rgba(245,158,11,0.1);border-radius:8px;color:#fcd34d;font-size:0.85em;margin-top:8px;">Transaction not yet detected on-chain. Sent the exact amount? It may take 10–30s to confirm — try again shortly.</div>`;

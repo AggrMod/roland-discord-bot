@@ -263,8 +263,8 @@
                 </article>
                 <article class="gpf-feature-card">
                   <span class="gpf-feature-tag">Scale</span>
-                  <h3>Superadmin Control</h3>
-                  <p>Apply tenant-wide policies, module controls, and platform defaults across communities.</p>
+                  <h3>Reliable Operations</h3>
+                  <p>Keep community workflows stable with clear permissions, consistent settings, and predictable behavior.</p>
                 </article>
               </div>
             </section>
@@ -1585,6 +1585,51 @@
     </div>
   </div>
 
+  <!-- Wallet Verification Modal -->
+  <div id="walletVerifyModal" class="modal-overlay" style="display:none;">
+    <div class="modal" style="max-width:900px;width:min(92vw,900px);">
+      <div class="modal-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <h3 class="modal-title">Verify Wallet Ownership</h3>
+        <button type="button" class="btn-secondary" style="min-height:34px;padding:6px 12px;" onclick="closeWalletVerifyModal()">Close</button>
+      </div>
+      <div class="modal-body">
+        <p style="color:var(--text-secondary);margin-bottom:16px;line-height:1.6;">Choose a verification method. Your existing wallets stay visible in the background and are never replaced by this flow.</p>
+        <div style="display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));">
+          <div style="padding:24px;background:linear-gradient(135deg,rgba(99,102,241,0.16),rgba(99,102,241,0.05));border:2px solid rgba(99,102,241,0.28);border-radius:14px;text-align:center;">
+            <div style="font-size:2.1em;margin-bottom:10px;">🔗</div>
+            <h4 style="color:#e0e7ff;margin:0 0 10px 0;font-size:1.1em;">Connect and Sign</h4>
+            <p style="color:var(--text-secondary);font-size:0.9em;line-height:1.6;margin:0 0 16px 0;">
+              Open your wallet extension and sign a message.
+              <strong>Fast and no transaction fee.</strong>
+            </p>
+            <button id="signVerifyBtn" onclick="verifyBySignature()" class="btn-primary" style="padding:12px 18px;width:100%;font-size:0.95em;">
+              ✓ Connect &amp; Sign
+            </button>
+            <p style="color:var(--text-muted);font-size:0.8em;margin-top:10px;">Phantom · Solflare · Backpack</p>
+          </div>
+
+          <div style="padding:24px;background:linear-gradient(135deg,rgba(99,102,241,0.16),rgba(99,102,241,0.05));border:2px solid rgba(99,102,241,0.28);border-radius:14px;text-align:center;">
+            <div style="font-size:2.1em;margin-bottom:10px;">🔐</div>
+            <h4 style="color:#e0e7ff;margin:0 0 10px 0;font-size:1.1em;">On-Chain Proof</h4>
+            <p style="color:var(--text-secondary);font-size:0.9em;line-height:1.6;margin:0 0 16px 0;">
+              Generate a unique proof amount and confirm ownership from
+              <strong>any Solana wallet.</strong>
+            </p>
+            <button id="microVerifyBtn" onclick="verifyByMicroTx()" class="btn-secondary" style="padding:12px 18px;width:100%;font-size:0.95em;">
+              🔑 Generate Proof Address
+            </button>
+            <p style="color:var(--text-muted);font-size:0.8em;margin-top:10px;">Works without extension injection</p>
+          </div>
+        </div>
+        <div id="mobileWalletLaunchPanel" style="margin-top:16px;"></div>
+        <div id="verifyStatus" style="margin-top:16px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeWalletVerifyModal()">Done</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Confirmation Modal (hidden by default) -->
   <div id="confirmModal" class="modal-overlay" style="display:none;">
     <div class="modal">
@@ -1782,6 +1827,5 @@
   </div>
 </body>
 </html>
-
 
 

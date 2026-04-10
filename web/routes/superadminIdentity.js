@@ -34,6 +34,27 @@ function createSuperadminIdentityRouter({
     }
   });
 
+  router.post('/users/ensure', superadminGuard, (req, res) => {
+    try {
+      const result = superadminIdentityService.ensureProfile({
+        discordId: req.body?.discordId,
+        username: req.body?.username,
+        actorId: req.session?.discordUser?.id || null,
+        metadata: {
+          source: 'superadmin_portal',
+          reason: req.body?.reason || null,
+        },
+      });
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to ensure identity profile', 'VALIDATION_ERROR', null, result));
+      }
+      res.json(toSuccessResponse(result));
+    } catch (error) {
+      logger.error('Error ensuring superadmin identity profile:', error);
+      res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.put('/users/:discordId/flags', superadminGuard, (req, res) => {
     try {
       const result = superadminIdentityService.setFlags({

@@ -59,6 +59,15 @@ function getBattleTimingMs(guildId = null) {
   return { minMs, maxMs, elitePrepMs };
 }
 
+function formatBattleUserLabel(userId, username = null) {
+  const normalizedId = String(userId || '').trim();
+  const normalizedName = String(username || '').trim();
+  if (!normalizedId && !normalizedName) return 'Unknown';
+  if (!normalizedId) return normalizedName;
+  if (!normalizedName || normalizedName === normalizedId) return `<@${normalizedId}>`;
+  return `<@${normalizedId}> (${normalizedName})`;
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('battle')
@@ -398,8 +407,12 @@ module.exports = {
 
     const invalidBountyTargets = bountyTargetIds.filter(id => !joinedParticipantIds.has(id));
     if (invalidBountyTargets.length) {
+      const invalidBountyLabels = invalidBountyTargets.map((id) => {
+        const match = selectedBountyUsers.find(user => user.id === id);
+        return formatBattleUserLabel(id, match?.username || match?.displayName || null);
+      });
       return interaction.editReply({
-        content: `Bounty targets must be fighters already joined in this lobby. Invalid: ${invalidBountyTargets.map(id => `<@${id}>`).join(', ')}`,
+        content: `Bounty targets must be fighters already joined in this lobby. Invalid: ${invalidBountyLabels.join(', ')}`,
         ephemeral: true
       });
     }
@@ -415,7 +428,10 @@ module.exports = {
     }
 
     const bountyIntro = bountyTargetIds.length
-      ? `\nBounties active: ${bountyTargetIds.map(id => `<@${id}>`).join(', ')}`
+      ? `\nBounties active: ${bountyTargetIds.map(id => {
+        const match = selectedBountyUsers.find(user => user.id === id);
+        return formatBattleUserLabel(id, match?.username || match?.displayName || null);
+      }).join(', ')}`
       : '';
     await interaction.editReply({ content: `Battle started with ${startResult.participants.length} fighters. Let the chaos begin...${bountyIntro}` });
 
@@ -454,7 +470,7 @@ module.exports = {
 
       if (r.hpSnapshot && (r.hpSnapshot.mostHp?.length || r.hpSnapshot.leastHp?.length)) {
         const formatHpRows = (rows) => (rows || [])
-          .map((entry, idx) => `${idx + 1}. <@${entry.userId}> - **${entry.hp} HP**`)
+          .map((entry, idx) => `${idx + 1}. ${formatBattleUserLabel(entry.userId, entry.username)} - **${entry.hp} HP**`)
           .join('\n') || 'No fighters remaining.';
 
         const hpEmbed = new EmbedBuilder()
@@ -481,30 +497,30 @@ module.exports = {
     const victoryEraKey = sim.eraKey || lobby.era || 'mafia';
     const victoryTitle = battleService.getVictoryEmbedTitle(victoryEraKey);
     const victoryFooter = battleService.getVictoryEmbedFooter(victoryEraKey);
-    const victoryAnnouncement = battleService.getVictoryAnnouncement(victoryEraKey, winner.user_id);
+    const victoryAnnouncement = battleService.getVictoryAnnouncement(victoryEraKey, winner.user_id, winner.username);
     const topDamageSummary = (sim.topDamageDealers || [])
-      .map(row => `${row.rank}. <@${row.userId}> - **${row.damage}** dmg`)
+      .map(row => `${row.rank}. ${formatBattleUserLabel(row.userId, row.username)} - **${row.damage}** dmg`)
       .join('\n') || 'No damage data available.';
     const bountySummary = (sim.bountyResults || [])
       .map(result => {
         if (result.winnerId) {
           const reason = result.reason === 'final_blow' ? 'final blow' : 'most damage fallback';
-          return `<@${result.targetId}> -> <@${result.winnerId}> (${reason})`;
+          return `${formatBattleUserLabel(result.targetId, result.targetName)} -> ${formatBattleUserLabel(result.winnerId, result.winnerName)} (${reason})`;
         }
         if (result.reason === 'not_eliminated') {
-          return `<@${result.targetId}> survived - bounty unclaimed`;
+          return `${formatBattleUserLabel(result.targetId, result.targetName)} survived - bounty unclaimed`;
         }
-        return `<@${result.targetId}> - no eligible claimant`;
+        return `${formatBattleUserLabel(result.targetId, result.targetName)} - no eligible claimant`;
       })
       .join('\n');
     const bountyWinners = [...new Set((sim.bountyResults || [])
       .filter(result => !!result.winnerId)
-      .map(result => `<@${result.winnerId}>`))];
+      .map(result => formatBattleUserLabel(result.winnerId, result.winnerName)))];
 
     const winnerEmbed = new EmbedBuilder()
       .setColor('#FFD700')
       .setTitle(victoryTitle)
-      .setDescription(`🎉 **<@${winner.user_id}>**\n\n${outro}`)
+      .setDescription(`🎉 **${formatBattleUserLabel(winner.user_id, winner.username)}**\n\n${outro}`)
       .addFields(
         { name: 'Rounds Survived', value: `${sim.roundCount || sim.rounds.length}`, inline: true },
         { name: 'Final HP', value: `${winner.hp ?? 0}`, inline: true },

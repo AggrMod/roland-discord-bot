@@ -309,6 +309,37 @@ class SuperadminIdentityService {
     }
   }
 
+  ensureProfile({ discordId, username = null, actorId = null, metadata = {} } = {}) {
+    const normalizedDiscordId = normalizeDiscordId(discordId);
+    if (!normalizedDiscordId) {
+      return { success: false, message: 'discordId is required' };
+    }
+
+    try {
+      const operation = db.transaction(() => {
+        const before = this.getProfile(normalizedDiscordId);
+        this.ensureUserRecord(normalizedDiscordId, username || normalizedDiscordId);
+        const after = this.getProfile(normalizedDiscordId);
+
+        this.writeAudit({
+          discordId: normalizedDiscordId,
+          action: 'ensure_user_profile',
+          actorId,
+          before,
+          after,
+          metadata,
+        });
+
+        return { success: true, profile: after };
+      });
+
+      return operation();
+    } catch (error) {
+      logger.error('Error ensuring superadmin identity profile:', error);
+      return { success: false, message: 'Failed to ensure identity profile' };
+    }
+  }
+
   linkWallet({
     discordId,
     walletAddress,
@@ -513,12 +544,29 @@ class SuperadminIdentityService {
           LIMIT ? OFFSET ?
         `).all(normalizedLimit, normalizedOffset);
 
+    const actorIds = [...new Set(rows.map(row => normalizeDiscordId(row.actor_id)).filter(Boolean))];
+    const actorNameMap = new Map();
+    if (actorIds.length) {
+      const placeholders = actorIds.map(() => '?').join(',');
+      const actorRows = db.prepare(`
+        SELECT discord_id, username
+        FROM users
+        WHERE discord_id IN (${placeholders})
+      `).all(...actorIds);
+      for (const row of actorRows) {
+        const actorId = normalizeDiscordId(row.discord_id);
+        if (!actorId) continue;
+        actorNameMap.set(actorId, normalizeUsername(row.username, actorId));
+      }
+    }
+
     return rows.map(row => ({
       id: Number(row.id),
       discordId: row.discord_id || null,
       walletAddress: row.wallet_address || null,
       action: row.action || 'unknown',
       actorId: row.actor_id || null,
+      actorDisplayName: actorNameMap.get(normalizeDiscordId(row.actor_id)) || null,
       before: safeParseJson(row.before_json, null),
       after: safeParseJson(row.after_json, null),
       metadata: safeParseJson(row.metadata_json, null),

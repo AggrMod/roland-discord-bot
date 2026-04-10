@@ -3436,6 +3436,16 @@ function getTenantModuleLabel(moduleKey) {
   return TENANT_MODULE_LABELS[moduleKey] || moduleKey;
 }
 
+function formatDiscordIdentityLabel(discordId, displayName = null) {
+  const normalizedId = String(discordId || '').trim();
+  const normalizedDisplay = String(displayName || '').trim();
+  if (!normalizedId && !normalizedDisplay) return 'system';
+  if (!normalizedId) return normalizedDisplay;
+  if (!normalizedDisplay) return normalizedId;
+  if (normalizedDisplay === normalizedId) return normalizedId;
+  return `${normalizedDisplay} (${normalizedId})`;
+}
+
 function renderSuperadminIdentityRows(users = []) {
   if (!Array.isArray(users) || users.length === 0) {
     return `<div style="padding:14px; text-align:center; color:var(--text-secondary); border:1px dashed rgba(99,102,241,0.18); border-radius:10px;">No users match this search.</div>`;
@@ -3471,12 +3481,13 @@ function renderSuperadminIdentityAudit(logs = []) {
   return logs.map(log => {
     const walletText = log.walletAddress ? ` • ${escapeHtml(log.walletAddress.slice(0, 6))}...${escapeHtml(log.walletAddress.slice(-4))}` : '';
     const createdText = log?.createdAt ? new Date(log.createdAt).toLocaleString() : 'Unknown time';
+    const actorText = formatDiscordIdentityLabel(log.actorId || 'system', log.actorDisplayName || null);
     return `
       <div style="padding:10px 12px; border:1px solid rgba(99,102,241,0.14); border-radius:10px; background:rgba(14,23,44,0.45);">
         <div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;">
           <div style="min-width:0;">
             <div style="color:#e0e7ff; font-weight:600; font-size:0.88em;">${escapeHtml(log.action || 'unknown')}${walletText}</div>
-            <div style="color:var(--text-secondary); font-size:0.78em; margin-top:3px;">Actor: ${escapeHtml(log.actorId || 'system')}</div>
+            <div style="color:var(--text-secondary); font-size:0.78em; margin-top:3px;">Actor: ${escapeHtml(actorText)}</div>
           </div>
           <div style="color:var(--text-secondary); font-size:0.74em; white-space:nowrap;">${escapeHtml(createdText)}</div>
         </div>
@@ -3512,17 +3523,23 @@ function renderTenantAuditLog(logs) {
     return `<div style="padding:14px; text-align:center; color:var(--text-secondary); border:1px dashed rgba(99,102,241,0.18); border-radius:10px;">No audit activity yet.</div>`;
   }
 
-  return logs.map(log => `
+  return logs.map(log => {
+    const actorText = formatDiscordIdentityLabel(
+      log.actor_id || 'system',
+      log.actor_display_name || log.actorDisplayName || null
+    );
+    return `
     <div style="padding:12px 14px; border:1px solid rgba(99,102,241,0.15); border-radius:10px; background:rgba(14,23,44,0.45);">
       <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
         <div style="min-width:0;">
           <div style="color:#e0e7ff; font-weight:600;">${escapeHtml(log.action)}</div>
-          <div style="color:var(--text-secondary); font-size:0.8em; margin-top:4px; word-break:break-all;">Actor: ${escapeHtml(log.actor_id || 'system')}</div>
+          <div style="color:var(--text-secondary); font-size:0.8em; margin-top:4px; word-break:break-all;">Actor: ${escapeHtml(actorText)}</div>
         </div>
         <div style="color:var(--text-secondary); font-size:0.78em; white-space:nowrap;">${escapeHtml(new Date(log.created_at).toLocaleString())}</div>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function renderTenantTemplatePreview(previewPayload) {
@@ -4044,6 +4061,26 @@ async function loadSuperadminView() {
           <div style="color:var(--text-secondary); font-size:0.82em; margin-bottom:12px;">
             Link wallets to Discord users from superadmin, apply trusted/manual verification flags, and keep an immutable audit trail.
           </div>
+          <div style="padding:12px; border:1px solid rgba(99,102,241,0.18); border-radius:10px; background:rgba(10,16,30,0.45); margin-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap;">
+              <div style="color:#e0e7ff; font-weight:600;">Quick Add Identity</div>
+              <button class="btn-primary" id="superadminIdentityQuickAddBtn" onclick="quickAddSuperadminIdentity()" style="padding:7px 12px; font-size:0.82em;">Create / Link</button>
+            </div>
+            <div style="color:var(--text-secondary); font-size:0.78em; margin-bottom:10px;">
+              Create a user profile and optionally link a wallet even if the user has never verified before.
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:8px; align-items:center;">
+              <input id="superadminIdentityNewDiscordId" type="text" placeholder="Discord User ID" style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.84em;">
+              <input id="superadminIdentityNewUsername" type="text" placeholder="Username (optional)" style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.84em;">
+              <input id="superadminIdentityNewWallet" type="text" placeholder="Wallet address (optional)" style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.84em;">
+              <label style="display:flex; align-items:center; gap:6px; color:#c9d6ff; font-size:0.78em;">
+                <input id="superadminIdentityNewPrimary" type="checkbox"> Primary
+              </label>
+              <label style="display:flex; align-items:center; gap:6px; color:#c9d6ff; font-size:0.78em;">
+                <input id="superadminIdentityNewFavorite" type="checkbox"> Favorite
+              </label>
+            </div>
+          </div>
           <div style="display:grid; grid-template-columns:minmax(220px,0.7fr) auto; gap:8px; margin-bottom:12px;">
             <input id="superadminIdentitySearchInput" type="text" value="${escapeHtml(superadminIdentitySearch)}" placeholder="Search by Discord ID, username, or wallet..." oninput="applySuperadminIdentityFilter(this.value)" style="padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
             <button class="btn-secondary" onclick="loadSuperadminIdentityView()" style="padding:8px 12px;">Search</button>
@@ -4225,7 +4262,7 @@ async function loadEraAssignments() {
           <div style="display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) auto; gap:12px; padding:10px 14px; border-top:1px solid rgba(99,102,241,0.12); align-items:center;">
             <div style="color:#e0e7ff; font-family:monospace; font-size:0.88em; word-break:break-all;">${escapeHtml(a.guild_name || a.guild_id)}<br><span style="color:var(--text-secondary); font-size:0.82em;">${escapeHtml(a.guild_id)}</span></div>
             <div style="color:#c9d6ff;">${escapeHtml(a.era_key)}</div>
-            <div style="color:var(--text-secondary); font-size:0.88em;">${escapeHtml(a.assigned_by || '—')}</div>
+            <div style="color:var(--text-secondary); font-size:0.88em;">${escapeHtml(formatDiscordIdentityLabel(a.assigned_by || '—', a.assigned_by_display_name || null))}</div>
             <button class="btn-secondary" style="font-size:0.85em; padding:6px 12px;" onclick="revokeEra('${escapeJsString(a.guild_id)}', '${escapeJsString(a.era_key)}')">Revoke</button>
           </div>
         `).join('');
@@ -4561,6 +4598,82 @@ async function addSuperadminIdentityWallet() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Link Wallet';
+  }
+}
+
+async function quickAddSuperadminIdentity() {
+  const discordInput = document.getElementById('superadminIdentityNewDiscordId');
+  const usernameInput = document.getElementById('superadminIdentityNewUsername');
+  const walletInput = document.getElementById('superadminIdentityNewWallet');
+  const primaryInput = document.getElementById('superadminIdentityNewPrimary');
+  const favoriteInput = document.getElementById('superadminIdentityNewFavorite');
+  const btn = document.getElementById('superadminIdentityQuickAddBtn');
+
+  if (!discordInput || !usernameInput || !walletInput || !primaryInput || !favoriteInput || !btn) return;
+
+  const discordId = String(discordInput.value || '').trim();
+  const username = String(usernameInput.value || '').trim();
+  const walletAddress = String(walletInput.value || '').trim();
+
+  if (!discordId) {
+    showError('Discord User ID is required.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  try {
+    if (walletAddress) {
+      const response = await fetch(`/api/superadmin/identity/users/${encodeURIComponent(discordId)}/wallets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          walletAddress,
+          username: username || null,
+          primaryWallet: !!primaryInput.checked,
+          favoriteWallet: !!favoriteInput.checked,
+        }),
+      });
+      const data = await response.json();
+      if (!data.success) {
+        showError(data.message || 'Failed to link wallet');
+        return;
+      }
+      showSuccess('Identity created and wallet linked.');
+    } else {
+      const response = await fetch('/api/superadmin/identity/users/ensure', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          discordId,
+          username: username || null,
+          reason: 'quick_add',
+        }),
+      });
+      const data = await response.json();
+      if (!data.success) {
+        showError(data.message || 'Failed to create identity profile');
+        return;
+      }
+      showSuccess('Identity profile created.');
+    }
+
+    discordInput.value = '';
+    usernameInput.value = '';
+    walletInput.value = '';
+    primaryInput.checked = false;
+    favoriteInput.checked = false;
+
+    superadminIdentitySearch = discordId;
+    superadminIdentitySelectedUserId = discordId;
+    await loadSuperadminIdentityView();
+  } catch (error) {
+    showError(`Failed to save identity: ${error.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Create / Link';
   }
 }
 

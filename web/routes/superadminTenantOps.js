@@ -21,6 +21,28 @@ function createSuperadminTenantOpsRouter({
 }) {
   const router = express.Router();
 
+  async function resolveDiscordDisplayMap(ids = []) {
+    const normalizedIds = [...new Set((ids || []).map(id => String(id || '').trim()).filter(Boolean))];
+    if (!normalizedIds.length) return new Map();
+
+    const displayMap = new Map();
+    const client = typeof getClient === 'function' ? getClient() : null;
+    if (!client?.users?.fetch) return displayMap;
+
+    await Promise.all(normalizedIds.map(async (discordId) => {
+      try {
+        const user = await client.users.fetch(discordId, { force: false });
+        if (!user) return;
+        const display = user.globalName || user.displayName || user.username || null;
+        if (display) displayMap.set(discordId, display);
+      } catch (_error) {
+        // Best-effort only; keep raw id fallback.
+      }
+    }));
+
+    return displayMap;
+  }
+
   const logSuperadminTenantAction = (req, _res, next) => {
     const activeGuildId = normalizeGuildId(req.get(requestGuildHeader));
     const targetGuildId = normalizeGuildId(req.params.guildId);
@@ -49,13 +71,19 @@ function createSuperadminTenantOpsRouter({
     }
   });
 
-  router.get('/tenants/:guildId/audit', superadminGuard, logSuperadminTenantAction, (req, res) => {
+  router.get('/tenants/:guildId/audit', superadminGuard, logSuperadminTenantAction, async (req, res) => {
     try {
       const limit = Math.min(Math.max(parseInt(req.query.limit || '10', 10), 1), 100);
       const logs = tenantService.getTenantAuditLogs(req.params.guildId, limit);
+      const actorIds = logs.map(log => log.actor_id).filter(Boolean);
+      const actorDisplayMap = await resolveDiscordDisplayMap(actorIds);
+      const hydratedLogs = logs.map(log => ({
+        ...log,
+        actor_display_name: actorDisplayMap.get(String(log.actor_id || '').trim()) || null,
+      }));
 
       res.json(toSuccessResponse({
-        auditLogs: logs,
+        auditLogs: hydratedLogs,
       }));
     } catch (error) {
       logger.error('Error fetching tenant audit logs:', error);

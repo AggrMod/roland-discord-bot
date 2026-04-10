@@ -10,8 +10,31 @@ function createSuperadminOpsRouter({
   os,
   exec,
   logger,
+  getClient = null,
 }) {
   const router = express.Router();
+
+  async function resolveDiscordDisplayMap(ids = []) {
+    const normalizedIds = [...new Set((ids || []).map(id => String(id || '').trim()).filter(Boolean))];
+    if (!normalizedIds.length) return new Map();
+
+    const displayMap = new Map();
+    const client = typeof getClient === 'function' ? getClient() : null;
+    if (!client?.users?.fetch) return displayMap;
+
+    await Promise.all(normalizedIds.map(async (discordId) => {
+      try {
+        const user = await client.users.fetch(discordId, { force: false });
+        if (!user) return;
+        const display = user.globalName || user.displayName || user.username || null;
+        if (display) displayMap.set(discordId, display);
+      } catch (_error) {
+        // Best-effort only; caller falls back to raw id.
+      }
+    }));
+
+    return displayMap;
+  }
 
   router.get('/system-status', superadminGuard, async (_req, res) => {
     try {
@@ -89,7 +112,7 @@ function createSuperadminOpsRouter({
     }
   });
 
-  router.get('/era-assignments', superadminGuard, (_req, res) => {
+  router.get('/era-assignments', superadminGuard, async (_req, res) => {
     try {
       const assignments = db.prepare(`
         SELECT bea.*, t.guild_name
@@ -97,7 +120,13 @@ function createSuperadminOpsRouter({
         LEFT JOIN tenants t ON t.guild_id = bea.guild_id
         ORDER BY bea.assigned_at DESC
       `).all();
-      res.json(toSuccessResponse({ assignments }));
+      const assignedByIds = assignments.map(row => row.assigned_by).filter(Boolean);
+      const assignedByDisplayMap = await resolveDiscordDisplayMap(assignedByIds);
+      const hydratedAssignments = assignments.map(row => ({
+        ...row,
+        assigned_by_display_name: assignedByDisplayMap.get(String(row.assigned_by || '').trim()) || null,
+      }));
+      res.json(toSuccessResponse({ assignments: hydratedAssignments }));
     } catch (error) {
       logger.error('Error fetching era assignments:', error);
       res.status(500).json(toErrorResponse('Failed to fetch era assignments', 'INTERNAL_ERROR'));

@@ -882,6 +882,7 @@ class WebServer {
       os,
       exec,
       logger,
+      getClient: () => this.client,
     }));
 
     const adminAuthMiddleware = async (req, res, next) => {

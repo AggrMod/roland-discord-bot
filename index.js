@@ -1533,9 +1533,24 @@ async function fetchLobbyRolesAndBuildEmbed(battleService, lobby, reaction, part
     for (const requiredId of requiredIds) {
       try {
         const role = await reaction.message.guild.roles.fetch(requiredId);
-        requiredRoles.push(role);
+        if (role) {
+          requiredRoles.push(role);
+          continue;
+        }
+        const cachedRole = reaction.message.guild.roles.cache.get(requiredId);
+        if (cachedRole) {
+          requiredRoles.push(cachedRole);
+          continue;
+        }
+        requiredRoles.push({ id: requiredId, name: `Role ${requiredId}` });
       } catch (error) {
-        logger.error('Failed to fetch required role:', error);
+        const cachedRole = reaction.message.guild.roles.cache.get(requiredId);
+        if (cachedRole) {
+          requiredRoles.push(cachedRole);
+        } else {
+          requiredRoles.push({ id: requiredId, name: `Role ${requiredId}` });
+        }
+        logger.warn(`Failed to fetch required role ${requiredId}: ${error?.message || error}`);
       }
     }
   }
@@ -1544,9 +1559,24 @@ async function fetchLobbyRolesAndBuildEmbed(battleService, lobby, reaction, part
     for (const excludedId of excludedIds) {
       try {
         const role = await reaction.message.guild.roles.fetch(excludedId);
-        excludedRoles.push(role);
+        if (role) {
+          excludedRoles.push(role);
+          continue;
+        }
+        const cachedRole = reaction.message.guild.roles.cache.get(excludedId);
+        if (cachedRole) {
+          excludedRoles.push(cachedRole);
+          continue;
+        }
+        excludedRoles.push({ id: excludedId, name: `Role ${excludedId}` });
       } catch (error) {
-        logger.error('Failed to fetch excluded role:', error);
+        const cachedRole = reaction.message.guild.roles.cache.get(excludedId);
+        if (cachedRole) {
+          excludedRoles.push(cachedRole);
+        } else {
+          excludedRoles.push({ id: excludedId, name: `Role ${excludedId}` });
+        }
+        logger.warn(`Failed to fetch excluded role ${excludedId}: ${error?.message || error}`);
       }
     }
   }

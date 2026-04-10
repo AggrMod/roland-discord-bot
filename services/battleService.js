@@ -413,19 +413,22 @@ class BattleService {
     return `Era: ${era.name || 'Battle'}`;
   }
 
-  getVictoryAnnouncement(eraKey, winnerId) {
+  getVictoryAnnouncement(eraKey, winnerId, winnerName = null) {
     const era = this.getEraConfig(eraKey);
     const winnerMention = `<@${winnerId}>`;
+    const winnerLabel = winnerName
+      ? `**${winnerName}** (${winnerMention})`
+      : `**${winnerMention}**`;
     if (era.victoryAnnouncement) {
       return this.formatVictoryTemplate(era.victoryAnnouncement, {
-        winnerNameBold: `**${winnerMention}**`,
+        winnerNameBold: winnerLabel,
         winnerMention,
         rounds: '',
         totalPlayers: '',
         eraName: era.name || 'Battle',
       });
     }
-    return `🏆 ${era.name || 'Battle'} champion: ${winnerMention}`;
+    return `Winner - ${era.name || 'Battle'} champion: ${winnerName ? `${winnerName} (${winnerMention})` : winnerMention}`;
   }
 
   normalizeEraKey(eraKey) {

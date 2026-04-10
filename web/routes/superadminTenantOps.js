@@ -15,7 +15,7 @@ function createSuperadminTenantOpsRouter({
   fs,
   path,
   logger,
-  client,
+  getClient = null,
   getGuildBotProfileSnapshot = async () => null,
   applyGuildBotProfileBranding = async () => ({ success: false, skipped: true }),
 }) {
@@ -70,6 +70,7 @@ function createSuperadminTenantOpsRouter({
         return res.status(404).json(toErrorResponse('Tenant not found', 'NOT_FOUND'));
       }
 
+      const client = typeof getClient === 'function' ? getClient() : null;
       const guild = await fetchGuildById(req.params.guildId);
       const fallbackLogo = guildIconUrl(guild);
       const serverProfile = await getGuildBotProfileSnapshot({ client, guildId: req.params.guildId });
@@ -381,6 +382,7 @@ function createSuperadminTenantOpsRouter({
 
   router.put('/tenants/:guildId/branding', superadminGuard, logSuperadminTenantAction, async (req, res) => {
     try {
+      const client = typeof getClient === 'function' ? getClient() : null;
       const guildId = req.params.guildId;
       const ALLOWED_BRANDING_FIELDS = ['displayName', 'description', 'logoUrl', 'primaryColor', 'supportUrl', 'bot_display_name', 'bot_server_avatar_url', 'bot_server_banner_url', 'bot_server_bio', 'brand_emoji', 'brand_color', 'display_name', 'primary_color', 'secondary_color', 'logo_url', 'icon_url', 'support_url'];
       const patch = {};

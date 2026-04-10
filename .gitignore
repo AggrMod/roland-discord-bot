@@ -10,3 +10,15 @@ config/settings.json
 config/module-toggles.json
 .DS_Store
 Thumbs.db
+database/backups/
+database/safe_backup/
+Audit-09042026/
+*.diff
+diff.txt
+codex_diff.txt
+codex_server.diff
+all_changes.diff
+claude_codex_changes.diff
+git_log.txt
+git_status.txt
+fix_db.js

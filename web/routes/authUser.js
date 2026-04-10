@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
 
 function createAuthUserRouter({
@@ -59,20 +60,29 @@ function createAuthUserRouter({
 
     const clientId = process.env.CLIENT_ID;
     const oauthRedirectUri = resolveOAuthRedirectUri(req);
+    const oauthState = crypto.randomBytes(24).toString('hex');
     req.session.oauthRedirectUri = oauthRedirectUri;
+    req.session.oauthState = oauthState;
     const redirectUri = encodeURIComponent(oauthRedirectUri);
     const scope = encodeURIComponent('identify guilds');
-    const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}`;
+    const state = encodeURIComponent(oauthState);
+    const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&state=${state}`;
     return res.redirect(authUrl);
   });
 
   router.get('/auth/discord/callback', async (req, res) => {
-    const { code } = req.query;
+    const { code, state } = req.query;
     if (!code) return res.redirect('/dashboard?error=no_code');
+    const expectedState = String(req.session?.oauthState || '');
+    if (!state || String(state) !== expectedState) {
+      if (req.session?.oauthState) delete req.session.oauthState;
+      return res.redirect('/dashboard?error=invalid_state');
+    }
 
     try {
       const oauthRedirectUri = req.session?.oauthRedirectUri || resolveOAuthRedirectUri(req);
       if (req.session?.oauthRedirectUri) delete req.session.oauthRedirectUri;
+      if (req.session?.oauthState) delete req.session.oauthState;
 
       const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
         method: 'POST',

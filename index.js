@@ -230,6 +230,7 @@ validateEnvVars();
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMessageReactions,
@@ -1149,23 +1150,66 @@ function buildTreasuryPanelFromService() {
 
 function startVoteCheckInterval() {
   // Check every 5 minutes for votes that need to be closed and stale drafts
+  let proposalsGuildColumnCache = null;
+  const hasProposalsGuildColumn = () => {
+    if (typeof proposalsGuildColumnCache === 'boolean') return proposalsGuildColumnCache;
+    try {
+      const db = require('./database/db');
+      const columns = db.prepare('PRAGMA table_info(proposals)').all();
+      proposalsGuildColumnCache = columns.some(c => String(c?.name || '').toLowerCase() === 'guild_id');
+    } catch (_error) {
+      proposalsGuildColumnCache = false;
+    }
+    return proposalsGuildColumnCache;
+  };
+
   intervals.push(setInterval(async () => {
-    // Check if governance module is enabled
+    // Single-tenant legacy guard. In multi-tenant mode we check per guild below.
     const moduleGuard = require('./utils/moduleGuard');
-    if (!moduleGuard.isModuleEnabled('governance')) {
+    const multiTenant = tenantService.isMultitenantEnabled();
+    if (!multiTenant && !moduleGuard.isModuleEnabled('governance')) {
       return; // Skip if governance disabled
     }
 
     try {
       const db = require('./database/db');
+      const proposalsAreScoped = hasProposalsGuildColumn();
       const activeVotes = db.prepare('SELECT * FROM proposals WHERE status = ?').all('voting');
 
       for (const proposal of activeVotes) {
+        const proposalGuildId = String(proposal?.guild_id || '').trim();
+        if (multiTenant && proposalsAreScoped) {
+          if (!proposalGuildId) continue;
+          if (!tenantService.isModuleEnabled(proposalGuildId, 'governance')) continue;
+        }
         proposalService.checkAutoClose(proposal.proposal_id);
       }
 
-      // Check for stale draft proposals
-      await proposalService.expireStaleProposals();
+      if (multiTenant && proposalsAreScoped) {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        const staleDrafts = db.prepare(`
+          SELECT proposal_id, title, guild_id
+          FROM proposals
+          WHERE status = 'draft'
+            AND created_at < ?
+        `).all(sevenDaysAgo.toISOString());
+        for (const proposal of staleDrafts) {
+          const guildId = String(proposal.guild_id || '').trim();
+          if (!guildId) continue;
+          if (!tenantService.isModuleEnabled(guildId, 'governance')) continue;
+          db.prepare("UPDATE proposals SET status = 'expired' WHERE proposal_id = ?").run(proposal.proposal_id);
+          logger.log(`Proposal ${proposal.proposal_id} expired (stale draft) [guild ${guildId}]`);
+          governanceLogger.log('proposal_expired', {
+            proposalId: proposal.proposal_id,
+            title: proposal.title,
+            guildId
+          });
+        }
+      } else {
+        // Single-tenant legacy path
+        await proposalService.expireStaleProposals();
+      }
     } catch (error) {
       logger.error('Error in vote check interval:', error);
     }
@@ -1177,14 +1221,37 @@ function startVoteCheckInterval() {
 function startRoleResyncScheduler() {
   const RESYNC_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
   const STARTUP_DELAY_MS = 60 * 1000; // 1 minute delay on startup to avoid race conditions
-  
-  // Load guild ID from environment
-  const guildId = process.env.GUILD_ID || process.env.DISCORD_GUILD_ID;
+
+  const getVerificationResyncGuildIds = () => {
+    if (!tenantService.isMultitenantEnabled()) {
+      const guildId = process.env.GUILD_ID || process.env.DISCORD_GUILD_ID;
+      return guildId ? [guildId] : [];
+    }
+
+    const guildIds = [];
+    const seen = new Set();
+    let page = 1;
+    while (page <= 100) {
+      const result = tenantService.listTenants({ page, pageSize: 200 });
+      const tenants = Array.isArray(result?.tenants) ? result.tenants : [];
+      if (tenants.length === 0) break;
+      for (const tenant of tenants) {
+        const guildId = String(tenant?.guildId || '').trim();
+        if (!guildId || seen.has(guildId)) continue;
+        seen.add(guildId);
+        if (!tenantService.isModuleEnabled(guildId, 'verification')) continue;
+        guildIds.push(guildId);
+      }
+      if (!result?.pagination || page >= Number(result.pagination.totalPages || 0)) break;
+      page += 1;
+    }
+    return guildIds;
+  };
 
   async function performRoleResync() {
-    // Check if verification module is enabled
+    // Single-tenant legacy guard. Multi-tenant checks are per guild below.
     const moduleGuard = require('./utils/moduleGuard');
-    if (!moduleGuard.isModuleEnabled('verification')) {
+    if (!tenantService.isMultitenantEnabled() && !moduleGuard.isModuleEnabled('verification')) {
       return; // Skip if verification disabled
     }
 
@@ -1192,55 +1259,60 @@ function startRoleResyncScheduler() {
       const startTime = Date.now();
       logger.log('🔄 Starting role resync cycle...');
 
-      if (!guildId) {
-        logger.warn('⚠️ GUILD_ID not configured, skipping role resync');
+      const guildIds = getVerificationResyncGuildIds();
+      if (guildIds.length === 0) {
+        logger.warn('⚠️ No guilds available for role resync');
         return;
       }
-
-      const guild = client.guilds.cache.get(guildId);
-      if (!guild) {
-        logger.warn(`⚠️ Guild ${guildId} not found, skipping role resync`);
-        return;
-      }
-
-      // Resolve verified guild members for this tenant-scoped resync
-      const verifiedUsers = await roleService.getAllVerifiedUsers(guild);
-      logger.log(`📊 Found ${verifiedUsers.length} verified users to resync`);
 
       let syncedCount = 0;
       let errorCount = 0;
       let totalAdded = 0;
       let totalRemoved = 0;
+      let totalUsers = 0;
 
-      for (const user of verifiedUsers) {
-        try {
-          // Re-fetch holdings and update database
-          const updateResult = await roleService.updateUserRoles(user.discord_id, user.username, guild.id);
-          
-          if (updateResult.success) {
-            // Sync Discord roles (tier + trait)
-            const syncResult = await roleService.syncUserDiscordRoles(guild, user.discord_id, guild.id);
-            
-            if (syncResult.success) {
-              syncedCount++;
-              totalAdded += syncResult.totalAdded || 0;
-              totalRemoved += syncResult.totalRemoved || 0;
-            } else {
-              errorCount++;
-              logger.warn(`Failed to sync roles for user ${user.discord_id}: ${syncResult.message}`);
+      for (const guildId of guildIds) {
+        const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+        if (!guild) {
+          logger.warn(`⚠️ Guild ${guildId} not found, skipping role resync`);
+          continue;
+        }
+
+        // Resolve verified guild members for this tenant-scoped resync
+        const verifiedUsers = await roleService.getAllVerifiedUsers(guild);
+        totalUsers += verifiedUsers.length;
+        logger.log(`📊 [${guild.id}] Found ${verifiedUsers.length} verified users to resync`);
+
+        for (const user of verifiedUsers) {
+          try {
+            // Re-fetch holdings and update database
+            const updateResult = await roleService.updateUserRoles(user.discord_id, user.username, guild.id);
+
+            if (updateResult.success) {
+              // Sync Discord roles (tier + trait)
+              const syncResult = await roleService.syncUserDiscordRoles(guild, user.discord_id, guild.id);
+
+              if (syncResult.success) {
+                syncedCount++;
+                totalAdded += syncResult.totalAdded || 0;
+                totalRemoved += syncResult.totalRemoved || 0;
+              } else {
+                errorCount++;
+                logger.warn(`[${guild.id}] Failed to sync roles for user ${user.discord_id}: ${syncResult.message}`);
+              }
             }
-          }
 
-          // Small delay to avoid rate limits
-          await new Promise(resolve => setTimeout(resolve, 500));
-        } catch (error) {
-          errorCount++;
-          logger.error(`Error processing user ${user.discord_id}:`, error);
+            // Small delay to avoid rate limits
+            await new Promise(resolve => setTimeout(resolve, 500));
+          } catch (error) {
+            errorCount++;
+            logger.error(`[${guild.id}] Error processing user ${user.discord_id}:`, error);
+          }
         }
       }
 
       const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-      logger.log(`✅ Role resync complete: ${syncedCount} synced, ${errorCount} errors, ${totalAdded} roles added, ${totalRemoved} roles removed (${duration}s)`);
+      logger.log(`✅ Role resync complete: guilds=${guildIds.length}, users=${totalUsers}, synced=${syncedCount}, errors=${errorCount}, added=${totalAdded}, removed=${totalRemoved} (${duration}s)`);
     } catch (error) {
       logger.error('❌ Error in role resync cycle:', error);
     }
@@ -1680,6 +1752,7 @@ function gracefulShutdown(signal) {
   logger.log(`[Bot] Graceful shutdown (${signal})...`);
   intervals.forEach(clearInterval);
   databaseBackupService.stop();
+  webServer.stop();
   client.destroy();
   process.exit(0);
 }

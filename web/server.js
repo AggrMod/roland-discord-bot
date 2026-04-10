@@ -3,6 +3,7 @@ const session = require('express-session');
 const BetterSqlite3Store = require('better-sqlite3-session-store')(session);
 const Database = require('better-sqlite3');
 const cors = require('cors');
+const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const ipKeyGenerator = rateLimit.ipKeyGenerator;
 const crypto = require('crypto');
@@ -280,6 +281,11 @@ class WebServer {
 
     this.app.use(require('cookie-parser')());
     this.app.use(express.json({ limit: process.env.WEBHOOK_BODY_LIMIT || '2mb' }));
+    this.app.use(helmet({
+      // Portal currently relies on inline handlers/styles; keep CSP rollout separate.
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+    }));
     this.app.use(express.static(path.join(__dirname, 'public')));
 
     this.app.get('/health', (_req, res) => {
@@ -298,7 +304,9 @@ class WebServer {
     }
 
     // Persistent SQLite session store (sessions survive restarts)
-    const sessionsDb = new Database(path.join(__dirname, '..', 'sessions.db'));
+    const sessionsDbPath = path.join(__dirname, '..', 'database', 'sessions.db');
+    fs.mkdirSync(path.dirname(sessionsDbPath), { recursive: true });
+    const sessionsDb = new Database(sessionsDbPath);
     const sessionStore = new BetterSqlite3Store({
       client: sessionsDb,
       expired: {
@@ -356,6 +364,7 @@ class WebServer {
     const authLimiter = rateLimit({ ...rateLimitDefaults, windowMs: 15 * 60 * 1000, max: 10, message: rateLimitMessage });
     const verifyLimiter = rateLimit({ ...rateLimitDefaults, windowMs: 60 * 60 * 1000, max: 20, message: rateLimitMessage });
     const adminLimiter = rateLimit({ ...rateLimitDefaults, windowMs: 15 * 60 * 1000, max: 200, message: rateLimitMessage });
+    const superadminLimiter = rateLimit({ ...rateLimitDefaults, windowMs: 15 * 60 * 1000, max: 300, message: rateLimitMessage });
 
     const commentLimiter = rateLimit({
       ...rateLimitDefaults,
@@ -376,6 +385,7 @@ class WebServer {
     // Only rate-limit new request creation â€” not status/config/check-now
     this.app.use('/api/micro-verify/request', verifyLimiter);
     this.app.use('/api/admin/', adminLimiter);
+    this.app.use('/api/superadmin/', superadminLimiter);
 
     const fallbackGuildId = () => normalizeGuildId(process.env.GUILD_ID || process.env.DISCORD_GUILD_ID);
 
@@ -857,7 +867,7 @@ class WebServer {
       fs,
       path,
       logger,
-      client: this.client,
+      getClient: () => this.client,
       getGuildBotProfileSnapshot,
       applyGuildBotProfileBranding,
     }));
@@ -903,7 +913,7 @@ class WebServer {
       logger,
       normalizeWebhookValue,
       getActivityWebhookSecret,
-      client: this.client,
+      getClient: () => this.client,
       getGuildBotProfileSnapshot,
       applyGuildBotProfileBranding,
     }));

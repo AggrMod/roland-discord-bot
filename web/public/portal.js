@@ -542,6 +542,25 @@ function showWalletAddForm() {
   autoShowPendingMicroVerify();
 }
 
+function startWalletVerification(method = 'signature') {
+  if (!userData) {
+    showInfo('Login required. Redirecting to Discord...');
+    login();
+    return;
+  }
+
+  showWalletAddForm();
+
+  // Let the verification cards render before triggering the selected flow.
+  setTimeout(() => {
+    if (method === 'micro') {
+      verifyByMicroTx();
+      return;
+    }
+    verifyBySignature();
+  }, 40);
+}
+
 async function autoShowPendingMicroVerify() {
   try {
     const res = await fetch('/api/micro-verify/status', { credentials: 'include' });
@@ -732,8 +751,10 @@ async function verifyBySignature() {
     return;
   }
 
-  btn.disabled = true;
-  btn.innerHTML = '⏳ Connecting wallet...';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Connecting wallet...';
+  }
 
   try {
     // 1. Connect wallet
@@ -742,14 +763,14 @@ async function verifyBySignature() {
     if (!walletAddress) {
       throw new Error('Connected wallet but could not read public address. Please unlock wallet and try again.');
     }
-    btn.innerHTML = '⏳ Requesting challenge...';
+    if (btn) btn.innerHTML = '⏳ Requesting challenge...';
 
     // 2. Get challenge from server
     const challengeRes = await fetch('/api/verify/challenge', { method: 'POST', credentials: 'include' });
     const challengeData = await challengeRes.json();
     if (!challengeData.success) throw new Error(challengeData.message || 'Failed to get challenge');
 
-    btn.innerHTML = '⏳ Sign the message in your wallet...';
+    if (btn) btn.innerHTML = '⏳ Sign the message in your wallet...';
 
     // 3. Sign the challenge message
     const encodedMessage = new TextEncoder().encode(challengeData.message);
@@ -759,7 +780,7 @@ async function verifyBySignature() {
     const signatureBytes = signedMessage.signature || signedMessage;
     const sig58 = uint8ToBase58(new Uint8Array(signatureBytes));
 
-    btn.innerHTML = '⏳ Verifying on server...';
+    if (btn) btn.innerHTML = '⏳ Verifying on server...';
 
     // 4. Submit to server
     const verifyRes = await fetch('/api/verify/signature', {
@@ -783,8 +804,10 @@ async function verifyBySignature() {
       console.error('Signature verification error:', error);
     }
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = '✓ Connect & Sign';
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '✓ Connect & Sign';
+    }
     renderMobileWalletLaunchPanel();
   }
 }
@@ -793,8 +816,10 @@ async function verifyByMicroTx() {
   const btn = document.getElementById('microVerifyBtn');
   const statusEl = document.getElementById('verifyStatus');
 
-  btn.disabled = true;
-  btn.innerHTML = '⏳ Generating proof address...';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Generating proof address...';
+  }
 
   try {
     // 1. Create micro-verify request on server — no wallet connection needed
@@ -854,8 +879,10 @@ async function verifyByMicroTx() {
     showError(error.message || 'Failed to start verification');
     console.error('Micro-tx verification error:', error);
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = '🔑 Generate Proof Address';
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '🔑 Generate Proof Address';
+    }
   }
 }
 
@@ -1165,8 +1192,8 @@ function applyPreSelectionVisibility() {
     if (sectionEl) sectionEl.style.display = locked ? 'none' : '';
   });
 
-  // Profile/wallets remain available pre-selection
-  setNavSectionVisibility('wallets', true);
+  // Keep module navigation hidden until a tenant context is selected.
+  setNavSectionVisibility('wallets', !locked);
   setNavSectionVisibility('landing', true);
 
   const walletsSection = document.getElementById('section-wallets');
@@ -1359,19 +1386,23 @@ function updateSidebarModuleNav() {
 
   const moduleItems = [
     { id: 'sidebarNavGovernance', module: 'governance' },
+    { id: 'mobileNavGovernance', module: 'governance' },
     { id: 'sidebarNavWallets', module: 'verification' },
     { id: 'mobileNavWallets', module: 'verification' },
     { id: 'sidebarNavTreasury', module: 'wallettracker' },
+    { id: 'mobileNavTreasury', module: 'wallettracker' },
     { id: 'sidebarNavNftActivity', module: 'nfttracker' },
+    { id: 'mobileNavNftActivity', module: 'nfttracker' },
     { id: 'sidebarNavTokenActivity', module: 'tokentracker' },
     { id: 'mobileNavTokenActivity', module: 'tokentracker' },
     { id: 'sidebarNavHeist', module: 'heist' },
+    { id: 'mobileNavHeist', module: 'heist' },
     { id: 'sidebarNavEngagement', module: 'engagement' },
     // Plans nav handled separately (superadmin-only)
   ];
 
-  // Sections accessible without a server (user-facing, no tenant context needed)
-  const noServerRequired = new Set(['verification']);
+  // Module nav is only visible in active tenant context.
+  const noServerRequired = new Set();
 
   moduleItems.forEach(({ id, module }) => {
     const el = document.getElementById(id);
@@ -1690,12 +1721,11 @@ async function loadPortal() {
     if (flagsResponse.ok) {
       const flags = await flagsResponse.json();
       heistEnabled = flags.heistEnabled || false;
-      
-      // Show/hide heist nav items
-      if (heistEnabled) {
-        document.getElementById('navHeist').style.display = 'block';
-        document.getElementById('mobileNavHeist').style.display = 'block';
-        document.getElementById('heistPointsCard').style.display = 'block';
+
+      // Nav/module visibility is handled by tenant-aware gating helpers.
+      const heistPointsCard = document.getElementById('heistPointsCard');
+      if (heistPointsCard) {
+        heistPointsCard.style.display = heistEnabled ? 'block' : 'none';
       }
     }
 
@@ -1839,8 +1869,12 @@ async function checkSuperadminStatus() {
     isSuperadmin = !!data.isSuperadmin;
 
     const landingBtn = document.getElementById('landingSuperadminBtn');
+    const landingHint = document.getElementById('landingSuperadminHint');
     if (landingBtn) {
       landingBtn.style.display = isSuperadmin ? 'inline-block' : 'none';
+    }
+    if (landingHint) {
+      landingHint.style.display = isSuperadmin ? 'none' : 'inline';
     }
 
     if (!isSuperadmin) {
@@ -1852,7 +1886,9 @@ async function checkSuperadminStatus() {
   } catch (error) {
     isSuperadmin = false;
     const landingBtn = document.getElementById('landingSuperadminBtn');
+    const landingHint = document.getElementById('landingSuperadminHint');
     if (landingBtn) landingBtn.style.display = 'none';
+    if (landingHint) landingHint.style.display = 'inline';
     refreshAdminEntryVisibility();
   }
 }

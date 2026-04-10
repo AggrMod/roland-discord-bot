@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="GuildPilot — NFT community membership portal. Verify wallet ownership, participate in governance, and manage community roles. No passwords or personal data collected.">
+  <meta name="description" content="GuildPilot is a Discord community operations platform for wallet verification, governance, support, and tracking in one professional portal.">
   <meta name="robots" content="noindex, nofollow">
   <title>GuildPilot Portal</title>
   <link rel="icon" type="image/jpeg" href="/assets/branding/guildpilot-logo.png">
@@ -40,11 +40,11 @@
             <span class="nav-icon" aria-hidden="true">🏠</span>
             <span class="nav-label">Home</span>
           </button>
-          <button class="nav-item" data-section="governance" data-module="governance" onclick="switchSection('governance'); toggleMobileMenu()">
+          <button class="nav-item" data-section="governance" data-module="governance" onclick="switchSection('governance'); toggleMobileMenu()" id="mobileNavGovernance" style="display:none;">
             <span class="nav-icon" aria-hidden="true">📜</span>
             <span class="nav-label">Governance</span>
           </button>
-          <button class="nav-item" data-section="wallets" data-module="verification" onclick="switchSection('wallets'); toggleMobileMenu()" id="mobileNavWallets">
+          <button class="nav-item" data-section="wallets" data-module="verification" onclick="switchSection('wallets'); toggleMobileMenu()" id="mobileNavWallets" style="display:none;">
             <span class="nav-icon" aria-hidden="true">💼</span>
             <span class="nav-label">Verification</span>
           </button>
@@ -52,15 +52,15 @@
             <span class="nav-icon" aria-hidden="true">⚔️</span>
             <span class="nav-label">Battle</span>
           </button>
-          <button class="nav-item" data-section="treasury" data-module="treasury" onclick="switchSection('treasury'); toggleMobileMenu()">
+          <button class="nav-item" data-section="treasury" data-module="treasury" onclick="switchSection('treasury'); toggleMobileMenu()" id="mobileNavTreasury" style="display:none;">
             <span class="nav-icon" aria-hidden="true">💰</span>
             <span class="nav-label">Wallet Tracker</span>
           </button>
-          <button class="nav-item" data-section="nft-activity" data-module="nfttracker" onclick="switchSection('nft-activity'); toggleMobileMenu()">
+          <button class="nav-item" data-section="nft-activity" data-module="nfttracker" onclick="switchSection('nft-activity'); toggleMobileMenu()" id="mobileNavNftActivity" style="display:none;">
             <span class="nav-icon" aria-hidden="true">🎨</span>
             <span class="nav-label">NFT Tracker</span>
           </button>
-          <button class="nav-item" data-section="token-activity" data-module="tokentracker" onclick="switchSection('token-activity'); toggleMobileMenu()" id="mobileNavTokenActivity">
+          <button class="nav-item" data-section="token-activity" data-module="tokentracker" onclick="switchSection('token-activity'); toggleMobileMenu()" id="mobileNavTokenActivity" style="display:none;">
             <span class="nav-icon" aria-hidden="true">&#x1FA99;</span>
             <span class="nav-label">Token Tracker</span>
           </button>
@@ -72,7 +72,7 @@
             <span class="nav-icon" aria-hidden="true">🎫</span>
             <span class="nav-label">Ticketing</span>
           </button>
-          <button class="nav-item" data-section="heist" data-module="heist" onclick="switchSection('heist'); toggleMobileMenu()" id="mobileNavHeist">
+          <button class="nav-item" data-section="heist" data-module="heist" onclick="switchSection('heist'); toggleMobileMenu()" id="mobileNavHeist" style="display:none;">
             <span class="nav-icon" aria-hidden="true">🎯</span>
             <span class="nav-label">Heist</span>
           </button>
@@ -106,11 +106,11 @@
             <span class="nav-label">Home</span>
           </button>
           <div class="sidebar-section-divider"></div>
-          <button class="nav-item" data-section="governance" data-module="governance" onclick="switchSection('governance')" id="sidebarNavGovernance">
+          <button class="nav-item" data-section="governance" data-module="governance" onclick="switchSection('governance')" id="sidebarNavGovernance" style="display:none;">
             <span class="nav-icon" aria-hidden="true">📜</span>
             <span class="nav-label">Governance</span>
           </button>
-          <button class="nav-item" data-section="wallets" data-module="verification" onclick="switchSection('wallets')" id="sidebarNavWallets">
+          <button class="nav-item" data-section="wallets" data-module="verification" onclick="switchSection('wallets')" id="sidebarNavWallets" style="display:none;">
             <span class="nav-icon" aria-hidden="true">💼</span>
             <span class="nav-label">Verification</span>
           </button>
@@ -118,15 +118,15 @@
             <span class="nav-icon" aria-hidden="true">⚔️</span>
             <span class="nav-label">Battle</span>
           </button>
-          <button class="nav-item" data-section="treasury" data-module="treasury" onclick="switchSection('treasury')" id="sidebarNavTreasury">
+          <button class="nav-item" data-section="treasury" data-module="treasury" onclick="switchSection('treasury')" id="sidebarNavTreasury" style="display:none;">
             <span class="nav-icon" aria-hidden="true">💰</span>
             <span class="nav-label">Wallet Tracker</span>
           </button>
-          <button class="nav-item" data-section="nft-activity" data-module="nfttracker" onclick="switchSection('nft-activity')" id="sidebarNavNftActivity">
+          <button class="nav-item" data-section="nft-activity" data-module="nfttracker" onclick="switchSection('nft-activity')" id="sidebarNavNftActivity" style="display:none;">
             <span class="nav-icon" aria-hidden="true">🎨</span>
             <span class="nav-label">NFT Tracker</span>
           </button>
-          <button class="nav-item" data-section="token-activity" data-module="tokentracker" onclick="switchSection('token-activity')" id="sidebarNavTokenActivity">
+          <button class="nav-item" data-section="token-activity" data-module="tokentracker" onclick="switchSection('token-activity')" id="sidebarNavTokenActivity" style="display:none;">
             <span class="nav-icon" aria-hidden="true">&#x1FA99;</span>
             <span class="nav-label">Token Tracker</span>
           </button>
@@ -142,7 +142,7 @@
             <span class="nav-icon" aria-hidden="true">🏅</span>
             <span class="nav-label">Engagement</span>
           </button>
-          <button class="nav-item" data-section="heist" data-module="heist" onclick="switchSection('heist')" id="sidebarNavHeist">
+          <button class="nav-item" data-section="heist" data-module="heist" onclick="switchSection('heist')" id="sidebarNavHeist" style="display:none;">
             <span class="nav-icon" aria-hidden="true">🎯</span>
             <span class="nav-label">Heist</span>
           </button>
@@ -188,114 +188,110 @@
         <!-- Landing / General Section -->
         <section id="section-landing" class="content-section active">
           <!-- Pre-selection: Marketing / Landing page -->
-          <div id="generalPreSelection" class="home-page">
-            <div class="home-hero-grid">
-              <div class="marketing-hero">
-                <div class="hero-kicker">Community operations for Discord + Web3</div>
-                <img src="/assets/branding/guildpilot-logo.png" alt="GuildPilot" style="width:80px;height:80px;border-radius:18px;object-fit:cover;margin-bottom:20px;box-shadow:0 6px 26px rgba(99,102,241,0.42);">
-                <h1>Run your community from one control center</h1>
-                <p class="hero-sub">GuildPilot unifies wallet verification, governance, ticketing, engagement and wallet intelligence into one clean experience for operators and members.</p>
-                <div class="hero-proof-strip">
-                  <span>Wallet verification</span>
+                    <div id="generalPreSelection" class="home-page home-page--fresh">
+            <section class="gpf-hero">
+              <div class="gpf-hero-main">
+                <p class="gpf-kicker">GuildPilot Platform</p>
+                <h1>Manage members, admins, and tenants from one professional workspace.</h1>
+                <p class="gpf-subtitle">GuildPilot brings verification, support, governance, and activity tracking into one clean control center so your community team can operate faster with less friction.</p>
+                <div class="gpf-actions">
+                  <button class="btn-primary" id="homePrimaryCta" onclick="switchSection('servers')">Select Server</button>
+                  <button class="btn-secondary" onclick="switchSection('wallets')">Start Wallet Verification</button>
+                  <button class="btn-secondary" onclick="switchSection('help')">Documentation</button>
+                </div>
+                <div class="gpf-proof-row">
+                  <span>Tenant-safe configuration</span>
                   <span>Role automation</span>
-                  <span>Ticket routing</span>
-                  <span>Tenant-safe settings</span>
-                </div>
-                <div class="hero-metrics">
-                  <div class="hero-metric">
-                    <div class="hero-metric-value">10+</div>
-                    <div class="hero-metric-label">core modules</div>
-                  </div>
-                  <div class="hero-metric">
-                    <div class="hero-metric-value">1</div>
-                    <div class="hero-metric-label">portal shell</div>
-                  </div>
-                  <div class="hero-metric">
-                    <div class="hero-metric-value">0</div>
-                    <div class="hero-metric-label">tool sprawl</div>
-                  </div>
-                </div>
-                <div class="marketing-cta">
-                  <button class="btn-primary" id="homePrimaryCta" onclick="switchSection('servers')" style="padding:12px 32px;font-size:1rem;">Get Started</button>
-                  <button class="btn-secondary" onclick="switchSection('help')" style="padding:12px 32px;font-size:1rem;">View Docs</button>
-                  <button id="landingSuperadminBtn" class="btn-secondary" onclick="switchSection('admin'); showAdminView('superadmin')" style="display:none;padding:12px 32px;font-size:1rem;">Superadmin</button>
+                  <span>Real-time trackers</span>
+                  <span>Operational consistency</span>
                 </div>
                 <div id="homeActiveContext" class="home-active-context" style="display:none;"></div>
               </div>
-              <aside class="home-value-panel">
-                <h3>Launch Sequence</h3>
-                <p>Set up a community in minutes with clear next actions.</p>
-                <ol class="home-value-list">
-                  <li>Select your Discord server</li>
-                  <li>Enable the modules you need</li>
-                  <li>Configure verification and ticketing</li>
-                  <li>Go live with one invite link</li>
-                </ol>
-                <div class="home-value-actions">
-                  <button class="btn-primary" onclick="switchSection('servers')">Select Server</button>
-                  <button class="btn-secondary" onclick="switchSection('settings')">Open Settings</button>
+              <aside class="gpf-role-panel">
+                <h3>Choose your path</h3>
+                <div class="gpf-role-list">
+                  <article class="gpf-role-item">
+                    <h4>Member Flow</h4>
+                    <p>Connect and verify your wallet in one guided flow.</p>
+                    <button class="btn-primary" onclick="switchSection('wallets')">Verify Now</button>
+                  </article>
+                  <article class="gpf-role-item">
+                    <h4>Admin Flow</h4>
+                    <p>Select a server and configure all module settings quickly.</p>
+                    <button class="btn-secondary" onclick="switchSection('servers')">Open Server Selector</button>
+                  </article>
+                  <article class="gpf-role-item">
+                    <h4>Superadmin Flow</h4>
+                    <p>Manage tenant access and global platform controls.</p>
+                    <button id="landingSuperadminBtn" class="btn-secondary" onclick="switchSection('admin'); showAdminView('superadmin')" style="display:none;">Open Superadmin</button>
+                    <span id="landingSuperadminHint" class="gpf-role-hint">Available for superadmin accounts only</span>
+                  </article>
                 </div>
               </aside>
-            </div>
+            </section>
 
-            <div class="home-section-head">
-              <h2>Module Overview</h2>
-              <p>Every feature is available in one unified interface.</p>
-            </div>
-            <div class="marketing-features home-feature-grid">
-              <div class="marketing-feature-card">
-                <div class="feature-icon">Governance</div>
-                <h3>Governance</h3>
-                <p>On-chain and off-chain proposals with tiered voting power based on NFT holdings.</p>
+            <section class="gpf-section">
+              <div class="gpf-section-head">
+                <h2>What you can run in GuildPilot</h2>
+                <p>A unified operating layer for both member experience and server operations.</p>
               </div>
-              <div class="marketing-feature-card">
-                <div class="feature-icon">Treasury</div>
-                <h3>Wallet Tracker</h3>
-                <p>Multi-wallet oversight with real-time balances, transaction history, and alerts.</p>
+              <div class="gpf-feature-grid">
+                <article class="gpf-feature-card">
+                  <span class="gpf-feature-tag">Identity</span>
+                  <h3>Wallet Verification</h3>
+                  <p>One user profile reused across communities, with tenant-specific role outcomes.</p>
+                </article>
+                <article class="gpf-feature-card">
+                  <span class="gpf-feature-tag">Operations</span>
+                  <h3>Support + Ticketing</h3>
+                  <p>Category-driven support routing with configurable team assignments.</p>
+                </article>
+                <article class="gpf-feature-card">
+                  <span class="gpf-feature-tag">Visibility</span>
+                  <h3>Wallet / NFT / Token Tracking</h3>
+                  <p>Independent tracker modules with consistent UI and clear channel routing.</p>
+                </article>
+                <article class="gpf-feature-card">
+                  <span class="gpf-feature-tag">Governance</span>
+                  <h3>Proposals and Voting</h3>
+                  <p>Operate proposal flows with module-aware visibility and permissions.</p>
+                </article>
+                <article class="gpf-feature-card">
+                  <span class="gpf-feature-tag">Engagement</span>
+                  <h3>Minigames and Battle</h3>
+                  <p>Keep communities active with era-driven battles and optional minigames.</p>
+                </article>
+                <article class="gpf-feature-card">
+                  <span class="gpf-feature-tag">Scale</span>
+                  <h3>Superadmin Control</h3>
+                  <p>Apply tenant-wide policies, module controls, and platform defaults across communities.</p>
+                </article>
               </div>
-              <div class="marketing-feature-card">
-                <div class="feature-icon">NFT</div>
-                <h3>NFT Tracker</h3>
-                <p>Automatic sales and listing feeds powered by Helius webhooks with zero config required.</p>
-              </div>
-              <div class="marketing-feature-card">
-                <div class="feature-icon">Verify</div>
-                <h3>Verification</h3>
-                <p>Link wallets to Discord accounts with tiered role assignment and proof of ownership.</p>
-              </div>
-              <div class="marketing-feature-card">
-                <div class="feature-icon">Engage</div>
-                <h3>Battle and Heist</h3>
-                <p>Gamified engagement modules that keep your community active and rewarded.</p>
-              </div>
-              <div class="marketing-feature-card">
-                <div class="feature-icon">Tenant</div>
-                <h3>Multi-Tenant</h3>
-                <p>One bot, many servers, each with isolated config, branding, and module toggles.</p>
-              </div>
-            </div>
+            </section>
 
-            <div class="home-section-head">
-              <h2>How Teams Use It</h2>
-              <p>Simple flow from install to daily operations.</p>
-            </div>
-            <div class="home-flow-grid">
-              <article class="home-flow-card">
-                <span class="home-flow-step">Step 1</span>
-                <h3>Connect and assign</h3>
-                <p>Add the bot, choose your server, and assign module access by plan.</p>
-              </article>
-              <article class="home-flow-card">
-                <span class="home-flow-step">Step 2</span>
-                <h3>Configure once</h3>
-                <p>Set verification, ticket categories, role routing and channel targets.</p>
-              </article>
-              <article class="home-flow-card">
-                <span class="home-flow-step">Step 3</span>
-                <h3>Operate daily</h3>
-                <p>Manage support, engagement and governance from one place with clear tenant context.</p>
-              </article>
-            </div>
+            <section class="gpf-section">
+              <div class="gpf-section-head">
+                <h2>How teams get live</h2>
+                <p>A straightforward 3-step rollout.</p>
+              </div>
+              <div class="gpf-flow-grid">
+                <article class="gpf-flow-step">
+                  <span>1</span>
+                  <h3>Connect</h3>
+                  <p>Log in with Discord and pick the server context you want to manage.</p>
+                </article>
+                <article class="gpf-flow-step">
+                  <span>2</span>
+                  <h3>Configure</h3>
+                  <p>Enable modules, set verification rules, channels, and routing behavior.</p>
+                </article>
+                <article class="gpf-flow-step">
+                  <span>3</span>
+                  <h3>Operate</h3>
+                  <p>Run daily support, verification, governance, and tracking from one portal.</p>
+                </article>
+              </div>
+            </section>
           </div>
           <!-- Post-selection: General hub with server info + quick actions -->
           <div id="generalPostSelection" style="display:none;">
@@ -438,17 +434,37 @@
         </section>
 
         <!-- Wallets Section -->
-        <section id="section-wallets" class="content-section">
+                <section id="section-wallets" class="content-section">
           <header class="section-header">
-            <h2>Wallet Management</h2>
-            <p class="section-subtitle">Link and manage your Solana wallets for NFT verification</p>
+            <h2>Wallet Verification</h2>
+            <p class="section-subtitle">Start instantly, verify ownership, and keep one identity across servers</p>
           </header>
+
+          <div class="card gpf-verify-shell">
+            <div class="gpf-verify-main">
+              <h3>Start verification in one click</h3>
+              <p>Pick the method you prefer. Both paths are supported in the same flow and keep your verification experience simple.</p>
+              <div class="gpf-verify-actions">
+                <button class="btn-primary" onclick="startWalletVerification('signature')">Connect and Sign</button>
+                <button class="btn-secondary" onclick="startWalletVerification('micro')">Use On-chain Proof</button>
+              </div>
+              <div class="gpf-verify-note">On mobile, open this page in your wallet app browser for the smoothest signing experience.</div>
+            </div>
+            <aside class="gpf-verify-side">
+              <h4>Why this flow is easier</h4>
+              <ul>
+                <li>No extra setup screen before starting verification</li>
+                <li>Clear method choice for both extension and non-extension wallets</li>
+                <li>Same user identity works across multiple tenant servers</li>
+              </ul>
+            </aside>
+          </div>
 
           <div class="card">
             <div class="card-header">
               <h3>Connected Wallets</h3>
               <button class="btn-primary" onclick="showWalletAddForm()">
-                <span>➕</span>
+                <span>&#10133;</span>
                 <span>Add Wallet</span>
               </button>
             </div>
@@ -460,76 +476,21 @@
             </div>
           </div>
 
-          <div class="card">
-            <h3>How Verification Works</h3>
-            <p style="color: var(--text-secondary); margin-bottom: var(--space-4); line-height: 1.7;">
-              Click <strong>Add Wallet</strong> above, then choose a method. Your wallet extension opens automatically — no need to copy/paste addresses.
-            </p>
-            
-            <div style="display:grid; gap:24px; margin-bottom:24px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr));">
-              <div>
-                <h4 style="color:#c9d6ff; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
-                  <span>🔗</span>
-                  <span>Sign Message (Recommended)</span>
-                </h4>
-                <div class="help-steps">
-                  <div class="help-step">
-                    <div class="step-number">1</div>
-                    <div class="step-content">
-                      <h4>Click "Connect & Sign"</h4>
-                      <p>Your wallet extension opens automatically</p>
-                    </div>
-                  </div>
-                  <div class="help-step">
-                    <div class="step-number">2</div>
-                    <div class="step-content">
-                      <h4>Approve the Signature</h4>
-                      <p>Sign the verification message — free, no transaction</p>
-                    </div>
-                  </div>
-                  <div class="help-step">
-                    <div class="step-number">3</div>
-                    <div class="step-content">
-                      <h4>Done!</h4>
-                      <p>Wallet linked, NFTs scanned, tier assigned</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h4 style="color:#c9d6ff; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
-                  <span>💸</span>
-                  <span>Micro Transaction</span>
-                </h4>
-                <div class="help-steps">
-                  <div class="help-step">
-                    <div class="step-number">1</div>
-                    <div class="step-content">
-                      <h4>Click "Send & Verify"</h4>
-                      <p>Your wallet extension opens automatically</p>
-                    </div>
-                  </div>
-                  <div class="help-step">
-                    <div class="step-number">2</div>
-                    <div class="step-content">
-                      <h4>Approve the Transaction</h4>
-                      <p>Send a small SOL amount to prove ownership</p>
-                    </div>
-                  </div>
-                  <div class="help-step">
-                    <div class="step-number">3</div>
-                    <div class="step-content">
-                      <h4>Done!</h4>
-                      <p>Wallet verified, tier assigned</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div style="padding:12px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.22); border-radius:10px; color:var(--text-secondary); font-size:0.9em;">
-              <strong>💡 Tip:</strong> Sign Message is instant and free. Micro Transaction provides extra certainty for high-value wallets — no extension required.
+          <div class="card gpf-verify-guide">
+            <h3>How it works</h3>
+            <div class="gpf-verify-steps">
+              <article>
+                <span>1</span>
+                <p>Choose <strong>Connect and Sign</strong> or <strong>On-chain Proof</strong>.</p>
+              </article>
+              <article>
+                <span>2</span>
+                <p>Approve ownership verification in your wallet.</p>
+              </article>
+              <article>
+                <span>3</span>
+                <p>Your holdings refresh and tenant rules apply your roles automatically.</p>
+              </article>
             </div>
           </div>
         </section>
@@ -1821,4 +1782,6 @@
   </div>
 </body>
 </html>
+
+
 

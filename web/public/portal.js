@@ -41,6 +41,7 @@ const PORTAL_PAGE_EXPECTATIONS = Object.freeze({
     'adminSystemMonitorCard',
     'adminVotingPowerCard',
     'adminNftTrackerCard',
+    'adminInviteTrackerCard',
     'adminSelfServeRolesCard',
     'adminAnalyticsCard',
     'adminHelpCard',
@@ -56,6 +57,7 @@ const PORTAL_PAGE_EXPECTATIONS = Object.freeze({
     'verification',
     'branding',
     'treasury',
+    'invites',
     'nfttracker',
     'tokentracker',
     'battle',
@@ -1339,6 +1341,7 @@ function switchSettingsTab(tab) {
     general:      'adminSettingsCard',
     governance:   'adminVotingPowerCard',
     verification: 'adminRolesCard',
+    invites:      'adminInviteTrackerCard',
     selfserve:    'adminSelfServeRolesCard',
     ticketing:    'adminTicketingCard',
     engagement:   'adminEngagementCard',
@@ -1373,6 +1376,7 @@ function switchSettingsTab(tab) {
       if (typeof loadAdminRoles === 'function') loadAdminRoles();
     },
     branding:     () => { if (typeof loadBrandingSettingsView === 'function') loadBrandingSettingsView(); },
+    invites:      () => { if (typeof loadInviteTrackerSettingsView === 'function') loadInviteTrackerSettingsView(); },
     nfttracker:   () => { if (typeof loadNftTrackerSettingsView === 'function') loadNftTrackerSettingsView(); },
     tokentracker: () => { if (typeof loadTokenTrackerSettingsView === 'function') loadTokenTrackerSettingsView(); },
     selfserve:    () => { if (typeof loadSelfServeRolesView === 'function') loadSelfServeRolesView(); },
@@ -1462,6 +1466,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     wallettracker: settings.moduleWalletTrackerEnabled !== undefined
       ? !!settings.moduleWalletTrackerEnabled
       : !!settings.moduleTreasuryEnabled,
+    invites: settings.moduleInviteTrackerEnabled !== false,
     nfttracker: !!settings.moduleNftTrackerEnabled,
     tokentracker: !!settings.moduleTokenTrackerEnabled,
     heist: !!settings.moduleMissionsEnabled,
@@ -1518,6 +1523,7 @@ const SETTINGS_TAB_MODULE_MAP = {
   verification: 'verification',
   branding:     'branding',
   treasury:     'wallettracker',
+  invites:      'invites',
   nfttracker:   'nfttracker',
   tokentracker: 'tokentracker',
   battle:       'minigames',
@@ -1542,6 +1548,7 @@ function applySettingsTabVisibility(settings = {}) {
     wallettracker: settings.moduleWalletTrackerEnabled !== undefined
       ? !!settings.moduleWalletTrackerEnabled
       : !!settings.moduleTreasuryEnabled,
+    invites: settings.moduleInviteTrackerEnabled !== false,
     nfttracker: !!settings.moduleNftTrackerEnabled,
     tokentracker: !!settings.moduleTokenTrackerEnabled,
     minigames: minigamesEnabled,
@@ -3305,7 +3312,7 @@ window.addEventListener('unhandledrejection', (event) => {
 
 // ==================== INTEGRATED ADMIN WORKSPACE ====================
 function hideAllAdminCards() {
-  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminSuperadminCard', 'adminSystemMonitorCard', 'adminAnalyticsCard', 'adminHelpCard', 'adminRolesCard', 'adminActivityCard', 'adminStatsCard', 'adminNftTrackerCard', 'adminVotingPowerCard', 'adminSelfServeRolesCard', 'adminApiRefCard', 'adminTicketingCard']
+  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminSuperadminCard', 'adminSystemMonitorCard', 'adminAnalyticsCard', 'adminHelpCard', 'adminRolesCard', 'adminActivityCard', 'adminStatsCard', 'adminNftTrackerCard', 'adminInviteTrackerCard', 'adminVotingPowerCard', 'adminSelfServeRolesCard', 'adminApiRefCard', 'adminTicketingCard']
     .forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
@@ -3362,6 +3369,7 @@ function isTenantSensitiveAdminView(view) {
     'activity',
     'votingpower',
     'nfttracker',
+    'invites',
     'selfserveroles',
     'ticketing'
   ].includes(view);
@@ -3393,6 +3401,7 @@ function showAdminView(view) {
     activity: { card: 'adminActivityCard', load: loadAdminActivity },
     votingpower: { card: 'adminVotingPowerCard', load: loadVotingPowerView },
     nfttracker: { card: 'adminNftTrackerCard', load: loadNftTrackerView },
+    invites: { card: 'adminInviteTrackerCard', load: loadInviteTrackerSettingsView },
     selfserveroles: { card: 'adminSelfServeRolesCard', load: loadSelfServeRolesView },
     apiref: { card: 'adminApiRefCard', load: loadApiRefView },
     ticketing: { card: 'adminTicketingCard', load: loadTicketingView }
@@ -3475,6 +3484,7 @@ const TENANT_MODULE_LABELS = {
   governance: 'Governance',
   treasury: 'Treasury',
   wallettracker: 'Wallet Tracker',
+  invites: 'Invite Tracker',
   minigames: 'Minigames',
   heist: 'Heist',
   ticketing: 'Ticketing',
@@ -5502,6 +5512,11 @@ async function loadAdminHelpView() {
       { name: '/wallet-tracker holdings', desc: 'Post/refresh holdings panel', options: 'id (required), channel', example: '/wallet-tracker holdings id:2' },
       { name: '/wallet-tracker refresh-all', desc: 'Refresh all holdings panels', options: '-', example: '/wallet-tracker refresh-all' }
     ])}
+    ${cmdSection('Invite Tracker', 'INV', [
+      { name: '/invites who', desc: 'Show who invited a member', options: 'user (required)', example: '/invites who user:@member' },
+      { name: '/invites leaderboard', desc: 'Show invite leaderboard', options: 'period (optional), limit (optional)', example: '/invites leaderboard period:30 limit:20' },
+      { name: '/invites export', desc: 'Export invite events CSV (paid plans)', options: 'period (optional)', example: '/invites export period:all' }
+    ])}
     ${cmdSection('Token Tracker', 'TOK', [
       { name: '/token-tracker add', desc: 'Track SPL token mint for balances + alerts', options: 'mint(required), symbol/name(optional), alert_channel, min_alert_amount, alert flags', example: '/token-tracker add mint:... symbol:CAT alert_channel:#token-alerts alert_buys:true' },
       { name: '/token-tracker edit', desc: 'Edit tracked token options', options: 'id(required) + optional mint/symbol/name/alert_channel/min_alert_amount/alert flags/enabled', example: '/token-tracker edit id:2 alert_transfers:true' },
@@ -5856,6 +5871,7 @@ async function loadAdminSettingsView() {
       { id: 'moduleBrandingEnabled',     label: 'Branding',        icon: 'BR', moduleKey: 'branding'      },
       { id: 'moduleMissionsEnabled',     label: 'Heist',           icon: 'H',  moduleKey: 'heist'         },
       { id: 'moduleWalletTrackerEnabled',label: 'Wallet Tracker',  icon: 'W',  moduleKey: 'wallettracker' },
+      { id: 'moduleInviteTrackerEnabled',label: 'Invite Tracker',  icon: '📨', moduleKey: 'invites'       },
       { id: 'moduleTreasuryEnabled',     label: 'Treasury',        icon: '$',  moduleKey: 'treasury'      },
       { id: 'moduleNftTrackerEnabled',   label: 'NFT Tracker',     icon: 'N',  moduleKey: 'nfttracker'    },
       { id: 'moduleTokenTrackerEnabled', label: 'Token Tracker',   icon: '\ud83e\ude99',  moduleKey: 'tokentracker'  },
@@ -7441,6 +7457,174 @@ async function loadTokenTrackerSettingsView(targetPaneId = null) {
 
   await renderNftTrackedTokensCard('tts_tokensWrap');
   await renderNftTokenEventsCard('tts_tokenEventsWrap');
+}
+
+// ==================== INVITE TRACKER SETTINGS ====================
+
+function inviteTrackerPeriodToDays(raw) {
+  const value = String(raw || 'all').trim().toLowerCase();
+  if (value === 'all') return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+}
+
+async function loadInviteTrackerSettingsView(targetPaneId = null) {
+  if (!isAdmin) return;
+  const pane = (targetPaneId && document.getElementById(targetPaneId))
+    || document.getElementById('settingsTab-invites')
+    || document.getElementById('inviteTrackerSettingsPanel');
+  if (!pane) return;
+
+  const cardStyle = 'background:rgba(14,23,44,0.5);border:1px solid rgba(99,102,241,0.22);border-radius:10px;padding:var(--space-5);margin-bottom:var(--space-5);';
+
+  pane.innerHTML = `
+    <div style="${cardStyle}">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+        <h3 style="margin:0;color:#c9d6ff;">📨 Invite Tracker</h3>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <select id="inviteTrackerPeriodSelect" style="padding:8px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+            <option value="all">All-time</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+          </select>
+          <button class="btn-secondary btn-sm" onclick="refreshInviteTrackerDashboard()">Refresh</button>
+          <button class="btn-primary btn-sm" onclick="exportInviteTrackerCsv()">Export CSV</button>
+        </div>
+      </div>
+      <div id="inviteTrackerSummaryWrap" style="margin-top:8px;color:var(--text-secondary);">Loading summary...</div>
+      <div id="inviteTrackerLeaderboardWrap" style="margin-top:16px;color:var(--text-secondary);">Loading leaderboard...</div>
+      <div id="inviteTrackerEventsWrap" style="margin-top:16px;color:var(--text-secondary);">Loading events...</div>
+    </div>
+  `;
+
+  await refreshInviteTrackerDashboard();
+}
+
+async function refreshInviteTrackerDashboard() {
+  const summaryWrap = document.getElementById('inviteTrackerSummaryWrap');
+  const leaderboardWrap = document.getElementById('inviteTrackerLeaderboardWrap');
+  const eventsWrap = document.getElementById('inviteTrackerEventsWrap');
+  if (!summaryWrap || !leaderboardWrap || !eventsWrap) return;
+
+  const periodValue = document.getElementById('inviteTrackerPeriodSelect')?.value || 'all';
+  const days = inviteTrackerPeriodToDays(periodValue);
+  const qs = days ? `?days=${encodeURIComponent(String(days))}` : '';
+
+  summaryWrap.innerHTML = '<div class="spinner"></div><p>Loading summary...</p>';
+  leaderboardWrap.innerHTML = '<div class="spinner"></div><p>Loading leaderboard...</p>';
+  eventsWrap.innerHTML = '<div class="spinner"></div><p>Loading events...</p>';
+
+  try {
+    const headers = buildTenantRequestHeaders();
+    const [summaryRes, boardRes, eventsRes] = await Promise.all([
+      fetch('/api/admin/invites/summary', { credentials: 'include', headers }),
+      fetch(`/api/admin/invites/leaderboard${qs}${qs ? '&' : '?'}limit=50`, { credentials: 'include', headers }),
+      fetch(`/api/admin/invites/events${qs}${qs ? '&' : '?'}limit=30`, { credentials: 'include', headers }),
+    ]);
+
+    const summaryJson = await summaryRes.json();
+    const boardJson = await boardRes.json();
+    const eventsJson = await eventsRes.json();
+
+    if (!summaryRes.ok || summaryJson.success === false) {
+      summaryWrap.innerHTML = `<div style="color:#fca5a5;">${escapeHtml(summaryJson?.message || summaryJson?.error?.message || 'Failed to load summary')}</div>`;
+    } else {
+      const s = summaryJson.data?.summary || summaryJson.summary || {};
+      summaryWrap.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
+          <div style="padding:12px;border:1px solid rgba(99,102,241,0.2);border-radius:10px;background:rgba(30,41,59,0.45);"><div style="font-size:0.75em;color:var(--text-secondary);">Total Joins</div><div style="font-size:1.4em;font-weight:700;color:#e0e7ff;">${Number(s.totalJoins || 0)}</div></div>
+          <div style="padding:12px;border:1px solid rgba(34,197,94,0.24);border-radius:10px;background:rgba(22,101,52,0.22);"><div style="font-size:0.75em;color:var(--text-secondary);">Resolved Invites</div><div style="font-size:1.4em;font-weight:700;color:#bbf7d0;">${Number(s.resolvedJoins || 0)}</div></div>
+          <div style="padding:12px;border:1px solid rgba(245,158,11,0.24);border-radius:10px;background:rgba(146,64,14,0.22);"><div style="font-size:0.75em;color:var(--text-secondary);">Unknown Source</div><div style="font-size:1.4em;font-weight:700;color:#fde68a;">${Number(s.unknownJoins || 0)}</div></div>
+          <div style="padding:12px;border:1px solid rgba(99,102,241,0.2);border-radius:10px;background:rgba(30,41,59,0.45);"><div style="font-size:0.75em;color:var(--text-secondary);">Unique Inviters</div><div style="font-size:1.4em;font-weight:700;color:#c7d2fe;">${Number(s.uniqueInviters || 0)}</div></div>
+        </div>
+      `;
+    }
+
+    if (!boardRes.ok || boardJson.success === false) {
+      leaderboardWrap.innerHTML = `<div style="color:#fca5a5;">${escapeHtml(boardJson?.message || boardJson?.error?.message || 'Failed to load leaderboard')}</div>`;
+    } else {
+      const rows = boardJson.data?.rows || boardJson.rows || [];
+      const limitedByPlan = !!(boardJson.data?.limitedByPlan ?? boardJson.limitedByPlan);
+      const list = rows.length
+        ? rows.map(row => `<tr><td style="padding:8px;">#${row.rank}</td><td style="padding:8px;">${row.inviterUserId ? `<@${row.inviterUserId}>` : escapeHtml(row.inviterUsername || 'Unknown')}</td><td style="padding:8px;text-align:right;font-weight:700;color:#86efac;">${Number(row.inviteCount || 0)}</td></tr>`).join('')
+        : '<tr><td colspan="3" style="padding:12px;color:var(--text-secondary);">No invite data yet.</td></tr>';
+      leaderboardWrap.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <h4 style="margin:0;color:#c9d6ff;">Leaderboard</h4>
+          ${limitedByPlan ? '<span style="font-size:0.75em;color:#fcd34d;">Period filter limited by plan (showing all-time)</span>' : ''}
+        </div>
+        <div style="overflow-x:auto;border:1px solid rgba(99,102,241,0.18);border-radius:10px;">
+          <table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="background:rgba(30,41,59,0.55);"><th style="padding:8px;text-align:left;">Rank</th><th style="padding:8px;text-align:left;">Inviter</th><th style="padding:8px;text-align:right;">Invites</th></tr></thead>
+            <tbody>${list}</tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    if (!eventsRes.ok || eventsJson.success === false) {
+      eventsWrap.innerHTML = `<div style="color:#fca5a5;">${escapeHtml(eventsJson?.message || eventsJson?.error?.message || 'Failed to load events')}</div>`;
+    } else {
+      const rows = eventsJson.data?.events || eventsJson.events || [];
+      const limitedByPlan = !!(eventsJson.data?.limitedByPlan ?? eventsJson.limitedByPlan);
+      const list = rows.length
+        ? rows.map(row => {
+            const joined = row.joinedUserId ? `<@${row.joinedUserId}>` : escapeHtml(row.joinedUsername || 'Unknown');
+            const inviter = row.inviterUserId ? `<@${row.inviterUserId}>` : '<span style="color:var(--text-secondary);">Unknown</span>';
+            const code = row.inviteCode ? `<code>${escapeHtml(row.inviteCode)}</code>` : '—';
+            const when = row.joinedAt ? new Date(row.joinedAt).toLocaleString() : 'Unknown';
+            return `<tr><td style="padding:8px;">${joined}</td><td style="padding:8px;">${inviter}</td><td style="padding:8px;">${code}</td><td style="padding:8px;white-space:nowrap;">${escapeHtml(when)}</td></tr>`;
+          }).join('')
+        : '<tr><td colspan="4" style="padding:12px;color:var(--text-secondary);">No join events yet.</td></tr>';
+      eventsWrap.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <h4 style="margin:0;color:#c9d6ff;">Recent Invite Events</h4>
+          ${limitedByPlan ? '<span style="font-size:0.75em;color:#fcd34d;">Period filter limited by plan (showing all-time)</span>' : ''}
+        </div>
+        <div style="overflow-x:auto;border:1px solid rgba(99,102,241,0.18);border-radius:10px;">
+          <table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="background:rgba(30,41,59,0.55);"><th style="padding:8px;text-align:left;">Joined User</th><th style="padding:8px;text-align:left;">Inviter</th><th style="padding:8px;text-align:left;">Code</th><th style="padding:8px;text-align:left;">Joined At</th></tr></thead>
+            <tbody>${list}</tbody>
+          </table>
+        </div>
+      `;
+    }
+  } catch (error) {
+    const message = escapeHtml(error?.message || 'Unknown error');
+    summaryWrap.innerHTML = `<div style="color:#fca5a5;">${message}</div>`;
+    leaderboardWrap.innerHTML = '';
+    eventsWrap.innerHTML = '';
+  }
+}
+
+async function exportInviteTrackerCsv() {
+  const periodValue = document.getElementById('inviteTrackerPeriodSelect')?.value || 'all';
+  const days = inviteTrackerPeriodToDays(periodValue);
+  const qs = days ? `?days=${encodeURIComponent(String(days))}` : '';
+  try {
+    const res = await fetch(`/api/admin/invites/export${qs}`, {
+      credentials: 'include',
+      headers: buildTenantRequestHeaders(),
+    });
+    if (!res.ok) {
+      const errorJson = await res.json().catch(() => null);
+      showError(errorJson?.message || errorJson?.error?.message || 'Export unavailable on this plan.');
+      return;
+    }
+    const blob = await res.blob();
+    const filename = (res.headers.get('content-disposition') || '').match(/filename=\"?([^\";]+)\"?/i)?.[1] || 'invite-tracker.csv';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showSuccess('Invite CSV exported.');
+  } catch (error) {
+    showError(`Export failed: ${error?.message || 'unknown error'}`);
+  }
 }
 
 // ==================== VP MAPPINGS ====================

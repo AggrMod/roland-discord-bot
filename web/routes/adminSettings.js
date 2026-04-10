@@ -57,6 +57,7 @@ function createAdminSettingsRouter({
         effectiveSettings.moduleWalletTrackerEnabled = tenantContext.modules.wallettracker === undefined
           ? !!tenantContext.modules.treasury
           : !!tenantContext.modules.wallettracker;
+        effectiveSettings.moduleInviteTrackerEnabled = !!tenantContext.modules.invites;
         effectiveSettings.moduleNftTrackerEnabled = !!tenantContext.modules.nfttracker;
         effectiveSettings.moduleTokenTrackerEnabled = !!tenantContext.modules.tokentracker;
         effectiveSettings.moduleBrandingEnabled = !!tenantContext.modules.branding;
@@ -119,6 +120,7 @@ function createAdminSettingsRouter({
         'proposalsChannelId', 'votingChannelId', 'resultsChannelId', 'governanceLogChannelId',
         'quorumPercentage', 'supportThreshold', 'voteDurationHours',
         'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleTreasuryEnabled', 'moduleWalletTrackerEnabled',
+        'moduleInviteTrackerEnabled',
         'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleBrandingEnabled', 'moduleMissionsEnabled', 'moduleBattleEnabled', 'moduleMinigamesEnabled',
         'moduleTicketingEnabled', 'moduleRoleClaimEnabled', 'moduleEngagementEnabled',
         'battleRoundPauseMinSec', 'battleRoundPauseMaxSec', 'battleElitePrepSec', 'battleForcedEliminationIntervalRounds', 'battleDefaultEra',
@@ -168,6 +170,7 @@ function createAdminSettingsRouter({
             moduleMissionsEnabled: 'heist',
             moduleTreasuryEnabled: 'treasury',
             moduleWalletTrackerEnabled: 'wallettracker',
+            moduleInviteTrackerEnabled: 'invites',
             moduleNftTrackerEnabled: 'nfttracker',
             moduleTokenTrackerEnabled: 'tokentracker',
             moduleBrandingEnabled: 'branding',

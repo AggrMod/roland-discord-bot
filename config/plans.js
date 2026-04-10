@@ -3,6 +3,7 @@ const MODULE_KEYS = Object.freeze([
   'governance',
   'treasury',
   'wallettracker',
+  'invites',
   'minigames',
   'heist',
   'ticketing',
@@ -46,6 +47,12 @@ const PLAN_PRESETS = Object.freeze({
       wallettracker: {
         max_tracked_wallets: 1
       },
+      invites: {
+        max_history_days: 30,
+        max_leaderboard_rows: 10,
+        allow_export: 0,
+        allow_time_filters: 0
+      },
       minigames: {
         max_bounties_per_battle: 0,
         max_enabled_games: 3
@@ -78,6 +85,7 @@ const PLAN_PRESETS = Object.freeze({
       governance: true,
       treasury: true,
       wallettracker: true,
+      invites: true,
       minigames: false,
       heist: false,
       ticketing: true,
@@ -120,6 +128,12 @@ const PLAN_PRESETS = Object.freeze({
       wallettracker: {
         max_tracked_wallets: 25
       },
+      invites: {
+        max_history_days: 180,
+        max_leaderboard_rows: 50,
+        allow_export: 1,
+        allow_time_filters: 1
+      },
       minigames: {
         max_bounties_per_battle: 3,
         max_enabled_games: 8
@@ -152,6 +166,7 @@ const PLAN_PRESETS = Object.freeze({
       governance: true,
       treasury: true,
       wallettracker: true,
+      invites: true,
       minigames: true,
       heist: false,
       ticketing: true,
@@ -194,6 +209,12 @@ const PLAN_PRESETS = Object.freeze({
       wallettracker: {
         max_tracked_wallets: 200
       },
+      invites: {
+        max_history_days: null,
+        max_leaderboard_rows: 200,
+        allow_export: 1,
+        allow_time_filters: 1
+      },
       minigames: {
         max_bounties_per_battle: 3,
         max_enabled_games: null
@@ -226,6 +247,7 @@ const PLAN_PRESETS = Object.freeze({
       governance: true,
       treasury: true,
       wallettracker: true,
+      invites: true,
       minigames: true,
       heist: true,
       ticketing: true,
@@ -268,6 +290,12 @@ const PLAN_PRESETS = Object.freeze({
       wallettracker: {
         max_tracked_wallets: null
       },
+      invites: {
+        max_history_days: null,
+        max_leaderboard_rows: null,
+        allow_export: 1,
+        allow_time_filters: 1
+      },
       minigames: {
         max_bounties_per_battle: null,
         max_enabled_games: null
@@ -300,6 +328,7 @@ const PLAN_PRESETS = Object.freeze({
       governance: true,
       treasury: true,
       wallettracker: true,
+      invites: true,
       minigames: true,
       heist: true,
       ticketing: true,

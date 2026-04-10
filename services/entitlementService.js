@@ -27,6 +27,12 @@ const LIMIT_DEFINITIONS = Object.freeze({
   wallettracker: {
     max_tracked_wallets: { label: 'Max Wallet Tracker Wallets' },
   },
+  invites: {
+    max_history_days: { label: 'Invite Tracker Retention (Days)' },
+    max_leaderboard_rows: { label: 'Invite Tracker Leaderboard Rows' },
+    allow_export: { label: 'Invite Tracker CSV Export Enabled (0/1)' },
+    allow_time_filters: { label: 'Invite Tracker Time Filters Enabled (0/1)' },
+  },
   heist: {
     max_active_missions: { label: 'Max Active Missions' },
   },

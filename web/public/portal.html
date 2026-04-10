@@ -1000,7 +1000,7 @@
                 <h4>Web Portal Areas</h4>
                 <ul>
                   <li><strong>Public/User:</strong> landing, servers, wallets, dashboard, governance, battle, treasury, help.</li>
-                  <li><strong>Admin:</strong> users, proposals, roles, voting power mappings, self-serve roles, NFT tracker, ticketing, settings, API reference, analytics/monitoring, command guide.</li>
+                  <li><strong>Admin:</strong> users, proposals, roles, voting power mappings, self-serve roles, invite tracker, NFT tracker, ticketing, settings, API reference, analytics/monitoring, command guide.</li>
                   <li><strong>Superadmin:</strong> tenant management, plan templates, module baselines, branding defaults, entitlement webhook support, environment visibility.</li>
                 </ul>
               </div>
@@ -1008,7 +1008,7 @@
               <div class="help-section">
                 <h4>Feature Gates and Scope</h4>
                 <ul>
-                  <li><strong>Module toggles:</strong> verification, governance, treasury, ticketing, engagement, self-serve roles, wallet tracker, NFT tracker, token tracker, minigames, missions, and branding.</li>
+                  <li><strong>Module toggles:</strong> verification, governance, treasury, ticketing, engagement, self-serve roles, wallet tracker, invite tracker, NFT tracker, token tracker, minigames, missions, and branding.</li>
                   <li><strong>Plan limits:</strong> all plans keep core functionality; paid tiers increase module capacity limits (trackers, rules, categories, games, etc.).</li>
                   <li><strong>Permissions:</strong> admin/mod checks are applied per command and per section for operational controls.</li>
                 </ul>
@@ -1342,6 +1342,14 @@
             <div id="adminNftTrackerContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>NFT Tracker</strong> to load data.</div>
           </div>
 
+          <div class="card" id="adminInviteTrackerCard" style="display:none;">
+            <div class="card-header">
+              <h3>Invite Tracker</h3>
+              <button class="btn-secondary" onclick="loadInviteTrackerSettingsView()">Refresh</button>
+            </div>
+            <div id="adminInviteTrackerContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>Invite Tracker</strong> to load data.</div>
+          </div>
+
           <div class="card" id="adminSelfServeRolesCard" style="display:none;">
             <div class="card-header">
               <h3>🎖️ Self-Serve Roles</h3>
@@ -1463,6 +1471,7 @@
             <button class="settings-tab" data-tab="verification" onclick="switchSettingsTab('verification')">Verification</button>
             <button class="settings-tab" data-tab="branding" onclick="switchSettingsTab('branding')">Branding</button>
             <button class="settings-tab" data-tab="treasury" onclick="switchSettingsTab('treasury')">Wallet Tracker</button>
+            <button class="settings-tab" data-tab="invites" onclick="switchSettingsTab('invites')">Invite Tracker</button>
             <button class="settings-tab" data-tab="nfttracker" onclick="switchSettingsTab('nfttracker')">NFT Tracker</button>
             <button class="settings-tab" data-tab="tokentracker" onclick="switchSettingsTab('tokentracker')">Token Tracker</button>
             <button class="settings-tab" data-tab="battle" onclick="switchSettingsTab('battle')">Battle</button>
@@ -1486,6 +1495,9 @@
             </div>
             <div id="settingsTab-treasury" class="settings-tab-pane" style="display:none;">
               <!-- Wallet tracker settings loaded dynamically by loadTreasuryModuleSettings() -->
+            </div>
+            <div id="settingsTab-invites" class="settings-tab-pane" style="display:none;">
+              <!-- Invite tracker settings loaded here dynamically -->
             </div>
             <div id="settingsTab-nfttracker" class="settings-tab-pane" style="display:none;">
               <!-- adminNftTrackerCard content loaded here dynamically -->

@@ -10,6 +10,8 @@ function createAdminTrackersRouter({
   battleService,
   ensureWalletTrackerModule,
   trackedWalletsService,
+  ensureInviteTrackerModule,
+  inviteTrackerService,
   ensureTokenTrackerModule,
 }) {
   const router = express.Router();
@@ -226,6 +228,70 @@ function createAdminTrackersRouter({
       return res.json(toSuccessResponse(result));
     } catch (routeError) {
       logger.error('Error posting tracked wallet panel:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/admin/invites/summary', adminAuthMiddleware, (req, res) => {
+    if (!ensureInviteTrackerModule(req, res)) return;
+    try {
+      const result = inviteTrackerService.getSummary(req.guildId || null);
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to load invite summary', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error loading invite summary:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/admin/invites/events', adminAuthMiddleware, (req, res) => {
+    if (!ensureInviteTrackerModule(req, res)) return;
+    try {
+      const limit = Number(req.query.limit || 50);
+      const days = req.query.days === undefined ? null : Number(req.query.days);
+      const result = inviteTrackerService.listEvents(req.guildId || null, { limit, days });
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to load invite events', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error loading invite events:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/admin/invites/leaderboard', adminAuthMiddleware, (req, res) => {
+    if (!ensureInviteTrackerModule(req, res)) return;
+    try {
+      const limit = Number(req.query.limit || 25);
+      const days = req.query.days === undefined ? null : Number(req.query.days);
+      const result = inviteTrackerService.getLeaderboard(req.guildId || null, { limit, days });
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to load invite leaderboard', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error loading invite leaderboard:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/admin/invites/export', adminAuthMiddleware, (req, res) => {
+    if (!ensureInviteTrackerModule(req, res)) return;
+    try {
+      const days = req.query.days === undefined ? null : Number(req.query.days);
+      const result = inviteTrackerService.exportCsv(req.guildId || null, { days });
+      if (!result.success) {
+        const status = result.code === 'plan_restricted' ? 403 : 400;
+        return res.status(status).json(toErrorResponse(result.message || 'Failed to export invite events', 'VALIDATION_ERROR', null, result));
+      }
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+      return res.send(result.csv);
+    } catch (routeError) {
+      logger.error('Error exporting invite events:', routeError);
       return res.status(500).json(toErrorResponse('Internal server error'));
     }
   });

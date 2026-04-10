@@ -231,6 +231,7 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildInvites,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMessageReactions,
@@ -292,6 +293,7 @@ const databaseBackupService = require('./services/databaseBackupService');
 const governanceLogger = require('./utils/governanceLogger');
 const ticketService = require('./services/ticketService');
 const nftActivityService = require('./services/nftActivityService');
+const inviteTrackerService = require('./services/inviteTrackerService');
 const settings = require('./config/settings.json');
 
 const intervals = [];
@@ -314,6 +316,7 @@ client.once(Events.ClientReady, () => {
 
   // Set client reference via clientProvider
   clientProvider.setClient(client);
+  inviteTrackerService.setClient(client);
 
   // Pass client to proposalService, webServer, governanceLogger, ticketService
   proposalService.setClient(client);
@@ -408,6 +411,11 @@ client.once(Events.ClientReady, () => {
   };
   intervals.push(setInterval(refreshAllHoldingsPanels, 30 * 60 * 1000)); // every 30 min
   setTimeout(refreshAllHoldingsPanels, 2 * 60 * 1000); // first refresh 2 min after startup
+  setTimeout(() => {
+    inviteTrackerService.primeAllGuilds()
+      .then(() => logger.log('[invite-tracker] Invite cache primed for connected guilds'))
+      .catch(err => logger.error('[invite-tracker] Failed to prime invite cache:', err));
+  }, 15 * 1000);
   logger.log('📋 Wallet holdings panel refresh scheduled (2 min startup delay, then every 30 min)');
 
   // Tracked token activity polling (buy/sell/transfer classification for tracked wallets)
@@ -438,6 +446,7 @@ client.once(Events.ClientReady, () => {
 client.on(Events.GuildCreate, async guild => {
   try {
     tenantService.ensureTenant(guild.id, guild.name);
+    await inviteTrackerService.primeGuildInvites(guild);
     logger.log(`🏗️ Tenant scaffold ensured for joined guild ${guild.id} (${guild.name})`);
 
     if (tenantService.isMultitenantEnabled()) {
@@ -580,6 +589,33 @@ client.on(Events.InteractionCreate, async interaction => {
       await handleTicketModalSubmit(interaction);
       return;
     }
+  }
+});
+
+client.on(Events.InviteCreate, (invite) => {
+  try {
+    inviteTrackerService.handleInviteCreate(invite);
+  } catch (error) {
+    logger.warn('[invite-tracker] invite create handler warning:', error?.message || error);
+  }
+});
+client.on(Events.InviteDelete, (invite) => {
+  try {
+    inviteTrackerService.handleInviteDelete(invite);
+  } catch (error) {
+    logger.warn('[invite-tracker] invite delete handler warning:', error?.message || error);
+  }
+});
+client.on(Events.GuildMemberAdd, async (member) => {
+  try {
+    const result = await inviteTrackerService.trackMemberJoin(member);
+    if (result?.success && !result?.ignored) {
+      const inviter = result.inviterUserId ? ` inviter=${result.inviterUserId}` : ' inviter=unknown';
+      const code = result.inviteCode ? ` code=${result.inviteCode}` : '';
+      logger.log(`[invite-tracker] guild=${member.guild.id} joined=${member.id}${inviter}${code}`);
+    }
+  } catch (error) {
+    logger.warn('[invite-tracker] member join handler warning:', error?.message || error);
   }
 });
 
@@ -1807,4 +1843,5 @@ client.on(Events.MessageCreate, async (message) => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
+
 

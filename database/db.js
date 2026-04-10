@@ -68,6 +68,7 @@ const REQUIRED_SCHEMA = Object.freeze({
   nft_tracked_collections: ['guild_id', 'collection_address', 'track_bid'],
   tracked_tokens: ['guild_id', 'alert_channel_ids'],
   tracked_wallets: ['guild_id', 'wallet_address', 'token_last_signature'],
+  invite_events: ['guild_id', 'joined_user_id', 'inviter_user_id', 'invite_code', 'source', 'joined_at'],
   tracked_token_webhook_retry_queue: ['signature', 'attempt_count', 'next_attempt_at', 'last_reason', 'last_error'],
   nft_activity_alert_configs: ['guild_id', 'enabled', 'event_types', 'min_sol'],
 });
@@ -1330,6 +1331,24 @@ function initDatabase() {
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_wallets_guild ON tracked_wallets(guild_id)'); } catch (e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_wallets_address ON tracked_wallets(wallet_address)'); } catch (e) {}
   try { db.exec('ALTER TABLE users ADD COLUMN total_tokens REAL DEFAULT 0'); } catch (e) {}
+
+  // Invite Tracker (tenant-scoped)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS invite_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      joined_user_id TEXT NOT NULL,
+      joined_username TEXT,
+      inviter_user_id TEXT,
+      inviter_username TEXT,
+      invite_code TEXT,
+      source TEXT DEFAULT 'invite',
+      joined_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_invite_events_guild_joined_at ON invite_events(guild_id, joined_at DESC)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_invite_events_guild_inviter ON invite_events(guild_id, inviter_user_id)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_invite_events_guild_joined_user ON invite_events(guild_id, joined_user_id)'); } catch (e) {}
 
   // Token verification rules (tenant-scoped)
   db.exec(`

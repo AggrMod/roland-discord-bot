@@ -26,6 +26,7 @@ const treasuryService = require('../services/treasuryService');
 const microVerifyService = require('../services/microVerifyService');
 const nftActivityService = require('../services/nftActivityService');
 const trackedWalletsService = require('../services/trackedWalletsService');
+const inviteTrackerService = require('../services/inviteTrackerService');
 const ticketService = require('../services/ticketService');
 const entitlementService = require('../services/entitlementService');
 const billingService = require('../services/billingService');
@@ -671,6 +672,10 @@ class WebServer {
       return ensureTenantModuleEnabled(req, res, 'wallettracker', 'Wallet Tracker');
     }
 
+    function ensureInviteTrackerModule(req, res) {
+      return ensureTenantModuleEnabled(req, res, 'invites', 'Invite Tracker');
+    }
+
     function ensureMinigamesModule(req, res) {
       return ensureTenantModuleEnabled(req, res, 'minigames', 'Minigames');
     }
@@ -1214,6 +1219,8 @@ class WebServer {
       battleService,
       ensureWalletTrackerModule,
       trackedWalletsService,
+      ensureInviteTrackerModule,
+      inviteTrackerService,
       ensureTokenTrackerModule,
     }));
     const createAdminTicketsRouter = require('./routes/adminTickets');

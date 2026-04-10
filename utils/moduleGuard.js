@@ -9,6 +9,7 @@ const DEFAULT_TOGGLES = Object.freeze({
   governanceEnabled: true,
   treasuryEnabled: true,
   wallettrackerEnabled: true,
+  invitesEnabled: true,
   nfttrackerEnabled: true,
   tokentrackerEnabled: true,
   ticketingEnabled: true,

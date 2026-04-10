@@ -26,6 +26,7 @@ module.exports = {
               { name: 'Verification', value: 'verification' },
               { name: 'Governance', value: 'governance' },
               { name: 'Treasury', value: 'treasury' },
+              { name: 'Invite Tracker', value: 'invites' },
               { name: 'Minigames', value: 'minigames' },
               { name: 'Battle', value: 'battle' },
               { name: 'Heist', value: 'heist' }
@@ -168,16 +169,16 @@ module.exports = {
 
 function getModuleIcon(module) {
   const icons = {
-    verification: '🔐',
-    governance: '🏛️',
-    treasury: '💰',
-    minigames: '🎮',
-    battle: '⚔️',
-    heist: '🎯'
+    verification: '[V]',
+    governance: '[G]',
+    treasury: '[$]',
+    invites: '[INV]',
+    minigames: '[MG]',
+    battle: '[B]',
+    heist: '[H]'
   };
-  return icons[module] || '📦';
+  return icons[module] || '[M]';
 }
-
 function formatUptime(seconds) {
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);

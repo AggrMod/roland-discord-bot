@@ -3,6 +3,7 @@ const MODULE_DISPLAY_NAMES = Object.freeze({
   governance: 'Governance',
   treasury: 'Treasury',
   wallettracker: 'Wallet Tracker',
+  invites: 'Invite Tracker',
   nfttracker: 'NFT Tracker',
   tokentracker: 'Token Tracker',
   ticketing: 'Ticketing',

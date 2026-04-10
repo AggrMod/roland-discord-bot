@@ -5,7 +5,6 @@ const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
 function createUserWalletVerificationRouter({
   logger,
   db,
-  tenantService,
   getBranding,
   fetchGuildById,
   roleService,
@@ -20,12 +19,6 @@ function createUserWalletVerificationRouter({
     return false;
   };
 
-  const requireTenantWhenNeeded = (req, res) => {
-    if (!tenantService.isMultitenantEnabled() || req.guildId) return true;
-    res.status(409).json(toErrorResponse('Select a server to continue', 'TENANT_REQUIRED'));
-    return false;
-  };
-
   const refreshUserRoles = async (req, discordId, username) => {
     const guild = req.guild || await fetchGuildById(req.guildId);
     await roleService.updateUserRoles(discordId, username, req.guildId || null);
@@ -36,7 +29,6 @@ function createUserWalletVerificationRouter({
 
   router.post('/api/verify/challenge', (req, res) => {
     if (!requireUser(req, res)) return;
-    if (!requireTenantWhenNeeded(req, res)) return;
 
     try {
       const nonce = crypto.randomBytes(16).toString('hex');
@@ -53,7 +45,6 @@ function createUserWalletVerificationRouter({
 
   router.post('/api/verify/signature', async (req, res) => {
     if (!requireUser(req, res)) return;
-    if (!requireTenantWhenNeeded(req, res)) return;
 
     try {
       const { walletAddress, signature } = req.body || {};
@@ -127,7 +118,6 @@ function createUserWalletVerificationRouter({
     if (!req.session?.discordUser?.id) {
       return res.status(401).json(toErrorResponse('Not authenticated', 'UNAUTHORIZED'));
     }
-    if (!requireTenantWhenNeeded(req, res)) return;
 
     try {
       const discordId = req.session.discordUser.id;

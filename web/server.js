@@ -1168,7 +1168,6 @@ class WebServer {
     this.app.use('/', createUserWalletVerificationRouter({
       logger,
       db,
-      tenantService,
       getBranding,
       fetchGuildById,
       roleService,
@@ -1178,7 +1177,6 @@ class WebServer {
     const createMicroVerifyUserRouter = require('./routes/microVerifyUser');
     this.app.use('/', createMicroVerifyUserRouter({
       logger,
-      tenantService,
       microVerifyService,
     }));
 

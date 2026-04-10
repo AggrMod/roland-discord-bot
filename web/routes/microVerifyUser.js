@@ -3,7 +3,6 @@ const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
 
 function createMicroVerifyUserRouter({
   logger,
-  tenantService,
   microVerifyService,
 }) {
   const router = express.Router();
@@ -16,9 +15,6 @@ function createMicroVerifyUserRouter({
 
   router.post('/api/micro-verify/request', (req, res) => {
     if (!requireSession(req, res)) return;
-    if (tenantService.isMultitenantEnabled() && !req.guildId) {
-      return res.status(409).json(toErrorResponse('Select a server to continue', 'TENANT_REQUIRED'));
-    }
 
     try {
       const discordId = req.session.discordUser.id;

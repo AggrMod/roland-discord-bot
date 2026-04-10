@@ -2592,11 +2592,33 @@ async function loadTreasuryPublicView() {
   content.innerHTML = `<div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading...</p></div>`;
   
   try {
-    const response = await fetch('/api/public/v1/treasury', { credentials: 'include' });
-    const data = await response.json();
-    
-    if (data.success) {
-      const t = data.data || data.treasury || {};
+    let data = null;
+    let source = 'wallet-tracker';
+
+    const trackerResponse = await fetch('/api/admin/wallet-tracker/balances', {
+      credentials: 'include',
+      headers: buildTenantRequestHeaders(),
+    });
+
+    if (trackerResponse.ok) {
+      data = await trackerResponse.json();
+    } else {
+      source = 'treasury';
+      const response = await fetch('/api/public/v1/treasury', { credentials: 'include', headers: buildTenantRequestHeaders() });
+      data = await response.json();
+    }
+
+    if (data && data.success) {
+      const payload = data.data || {};
+      const t = source === 'wallet-tracker'
+        ? {
+            sol: Number(payload?.totals?.sol || 0).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 }),
+            usdc: Number(payload?.totals?.usdc || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+            lastUpdated: payload?.lastUpdated || null,
+            walletCount: Number(payload?.walletCount || 0),
+          }
+        : (payload || data.treasury || {});
+
       content.innerHTML = `
         <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
           <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
@@ -2612,6 +2634,9 @@ async function loadTreasuryPublicView() {
             <div style="font-size:1.1em; font-weight:600; color:#e0e7ff;">${t.lastUpdated || t.last_updated ? new Date(t.lastUpdated || t.last_updated).toLocaleString() : '—'}</div>
           </div>
         </div>
+        ${source === 'wallet-tracker'
+          ? `<div style="margin-top:10px; color:var(--text-secondary); font-size:0.85em;">Across ${Number(t.walletCount || 0)} tracked wallet${Number(t.walletCount || 0) === 1 ? '' : 's'}.</div>`
+          : ''}
       `;
     } else {
       content.innerHTML = `<div style="color:var(--text-secondary); text-align:center; padding:20px;">Treasury data unavailable</div>`;

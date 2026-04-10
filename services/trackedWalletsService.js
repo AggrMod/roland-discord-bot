@@ -255,6 +255,56 @@ class TrackedWalletsService {
     }
   }
 
+  async getTrackedWalletBalanceSummary(guildId, { includeDisabled = false } = {}) {
+    try {
+      const rows = this.getTrackedWallets(guildId);
+      const wallets = includeDisabled ? rows : rows.filter((w) => Number(w.enabled || 0) === 1);
+
+      if (!wallets.length) {
+        return {
+          success: true,
+          walletCount: 0,
+          totals: { sol: 0, usdc: 0 },
+          wallets: [],
+          lastUpdated: new Date().toISOString(),
+        };
+      }
+
+      const walletSnapshots = await Promise.all(
+        wallets.map(async (walletRow) => {
+          const balances = await _getSolanaBalances(walletRow.wallet_address);
+          return {
+            id: walletRow.id,
+            walletAddress: walletRow.wallet_address,
+            label: walletRow.label || null,
+            enabled: Number(walletRow.enabled || 0) === 1,
+            sol: Number.isFinite(Number(balances?.sol)) ? Number(balances.sol) : null,
+            usdc: Number.isFinite(Number(balances?.usdc)) ? Number(balances.usdc) : null,
+          };
+        })
+      );
+
+      const totals = walletSnapshots.reduce(
+        (acc, row) => ({
+          sol: acc.sol + (Number.isFinite(row.sol) ? row.sol : 0),
+          usdc: acc.usdc + (Number.isFinite(row.usdc) ? row.usdc : 0),
+        }),
+        { sol: 0, usdc: 0 }
+      );
+
+      return {
+        success: true,
+        walletCount: walletSnapshots.length,
+        totals,
+        wallets: walletSnapshots,
+        lastUpdated: new Date().toISOString(),
+      };
+    } catch (e) {
+      logger.error('Error building tracked wallet balance summary:', e);
+      return { success: false, message: 'Failed to load tracked wallet balances' };
+    }
+  }
+
   getTrackedWalletById(id, guildId) {
     try {
       if (guildId) {

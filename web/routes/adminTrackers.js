@@ -119,6 +119,22 @@ function createAdminTrackersRouter({
     }
   });
 
+  router.get('/api/admin/wallet-tracker/balances', adminAuthMiddleware, async (req, res) => {
+    if (!ensureWalletTrackerModule(req, res)) return;
+    try {
+      const summary = await trackedWalletsService.getTrackedWalletBalanceSummary(req.guildId || null, {
+        includeDisabled: false,
+      });
+      if (!summary.success) {
+        return res.status(400).json(toErrorResponse(summary.message || 'Failed to load wallet balances', 'VALIDATION_ERROR', null, summary));
+      }
+      return res.json(toSuccessResponse(summary));
+    } catch (routeError) {
+      logger.error('Error fetching tracked wallet balances:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.post('/api/admin/wallet-tracker/wallets', adminAuthMiddleware, (req, res) => {
     if (!ensureWalletTrackerModule(req, res)) return;
     try {

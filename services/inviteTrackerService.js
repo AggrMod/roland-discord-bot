@@ -55,6 +55,37 @@ function chunkArray(arr, size = 100) {
   return out;
 }
 
+function normalizeInviteCode(code) {
+  const normalized = String(code || '').trim().toLowerCase();
+  return normalized ? normalized.slice(0, 64) : '';
+}
+
+function parseExcludedCodesInput(value) {
+  let source = [];
+  if (Array.isArray(value)) {
+    source = value;
+  } else if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      source = [];
+    } else {
+      try {
+        const parsed = JSON.parse(trimmed);
+        source = Array.isArray(parsed) ? parsed : trimmed.split(/[\n,;]/g);
+      } catch (_error) {
+        source = trimmed.split(/[\n,;]/g);
+      }
+    }
+  }
+
+  const uniq = new Set();
+  for (const raw of source) {
+    const code = normalizeInviteCode(raw);
+    if (code) uniq.add(code);
+  }
+  return Array.from(uniq);
+}
+
 class InviteTrackerService {
   constructor() {
     this.client = null;
@@ -84,6 +115,7 @@ class InviteTrackerService {
       panelLimit: 10,
       panelEnableCreateLink: true,
       includeVerificationStats: false,
+      excludedCodes: [],
     };
   }
 
@@ -99,7 +131,8 @@ class InviteTrackerService {
         panel_period_days,
         panel_limit,
         panel_enable_create_link,
-        include_verification_stats
+        include_verification_stats,
+        excluded_codes
       FROM invite_tracker_settings
       WHERE guild_id = ?
       LIMIT 1
@@ -118,6 +151,7 @@ class InviteTrackerService {
         panelLimit: clampInt(row.panel_limit, 1, 100, defaults.panelLimit),
         panelEnableCreateLink: Number(row.panel_enable_create_link || 0) === 1,
         includeVerificationStats: Number(row.include_verification_stats || 0) === 1,
+        excludedCodes: parseExcludedCodesInput(row.excluded_codes || '[]'),
       },
     };
   }
@@ -152,15 +186,18 @@ class InviteTrackerService {
       includeVerificationStats: payload.includeVerificationStats !== undefined
         ? !!payload.includeVerificationStats
         : !!existing.includeVerificationStats,
+      excludedCodes: payload.excludedCodes !== undefined
+        ? parseExcludedCodesInput(payload.excludedCodes)
+        : parseExcludedCodesInput(existing.excludedCodes),
     };
 
     db.prepare(`
       INSERT INTO invite_tracker_settings (
         guild_id, required_join_role_id, panel_channel_id, panel_message_id,
-        panel_period_days, panel_limit, panel_enable_create_link, include_verification_stats,
+        panel_period_days, panel_limit, panel_enable_create_link, include_verification_stats, excluded_codes,
         created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON CONFLICT(guild_id) DO UPDATE SET
         required_join_role_id = excluded.required_join_role_id,
         panel_channel_id = excluded.panel_channel_id,
@@ -169,6 +206,7 @@ class InviteTrackerService {
         panel_limit = excluded.panel_limit,
         panel_enable_create_link = excluded.panel_enable_create_link,
         include_verification_stats = excluded.include_verification_stats,
+        excluded_codes = excluded.excluded_codes,
         updated_at = CURRENT_TIMESTAMP
     `).run(
       normalizedGuildId,
@@ -178,7 +216,8 @@ class InviteTrackerService {
       merged.panelPeriodDays,
       merged.panelLimit,
       merged.panelEnableCreateLink ? 1 : 0,
-      merged.includeVerificationStats ? 1 : 0
+      merged.includeVerificationStats ? 1 : 0,
+      JSON.stringify(merged.excludedCodes || [])
     );
 
     return { success: true, settings: merged };
@@ -425,6 +464,7 @@ class InviteTrackerService {
         maxLeaderboardRows: this._getLeaderboardLimit(normalizedGuildId, 9999),
         requiredJoinRoleId: settings.requiredJoinRoleId || null,
         includeVerificationStats: !!settings.includeVerificationStats,
+        excludedCodes: Array.isArray(settings.excludedCodes) ? settings.excludedCodes : [],
       },
     };
   }
@@ -457,15 +497,19 @@ class InviteTrackerService {
       ORDER BY joined_at DESC, id DESC
       LIMIT ?
     `).all(...params);
+    const knownNames = this._lookupKnownUsernames([
+      ...rows.map(row => row.joined_user_id),
+      ...rows.map(row => row.inviter_user_id),
+    ]);
 
     return {
       success: true,
       events: rows.map(row => ({
         id: row.id,
         joinedUserId: row.joined_user_id,
-        joinedUsername: row.joined_username || null,
+        joinedUsername: row.joined_username || knownNames.get(String(row.joined_user_id || '')) || null,
         inviterUserId: row.inviter_user_id || null,
-        inviterUsername: row.inviter_username || null,
+        inviterUsername: row.inviter_username || knownNames.get(String(row.inviter_user_id || '')) || null,
         inviteCode: row.invite_code || null,
         source: row.source || 'unknown',
         joinedAt: row.joined_at,
@@ -511,7 +555,7 @@ class InviteTrackerService {
     return eligible;
   }
 
-  _lookupUserNftTotals(userIds) {
+  _lookupUserVerificationSnapshots(userIds) {
     const normalized = Array.from(new Set((userIds || []).map(normalizeUserId).filter(Boolean)));
     if (normalized.length === 0) return new Map();
 
@@ -519,18 +563,54 @@ class InviteTrackerService {
     for (const chunk of chunkArray(normalized, 400)) {
       const placeholders = chunk.map(() => '?').join(',');
       const rows = db.prepare(`
-        SELECT discord_id, total_nfts
+        SELECT discord_id, total_nfts, total_tokens
         FROM users
         WHERE discord_id IN (${placeholders})
       `).all(...chunk);
       for (const row of rows) {
-        result.set(String(row.discord_id), Math.max(0, Number(row.total_nfts || 0)));
+        result.set(String(row.discord_id), {
+          totalNfts: Math.max(0, Number(row.total_nfts || 0)),
+          totalTokens: Math.max(0, Number(row.total_tokens || 0)),
+        });
       }
     }
     return result;
   }
 
-  _buildLeaderboardRowsFromCounter(counter, inviterJoinedSetMap, { includeVerificationStats = false, limit = 10 } = {}) {
+  _lookupKnownUsernames(userIds) {
+    const normalized = Array.from(new Set((userIds || []).map(normalizeUserId).filter(Boolean)));
+    if (normalized.length === 0) return new Map();
+
+    const result = new Map();
+    for (const chunk of chunkArray(normalized, 400)) {
+      const placeholders = chunk.map(() => '?').join(',');
+      const rows = db.prepare(`
+        SELECT discord_id, username
+        FROM users
+        WHERE discord_id IN (${placeholders})
+      `).all(...chunk);
+      for (const row of rows) {
+        const id = String(row.discord_id || '').trim();
+        const name = String(row.username || '').trim();
+        if (id && name) result.set(id, name);
+      }
+    }
+    return result;
+  }
+
+  _tenantHasEnabledTokenVerificationRules(guildId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return false;
+    const row = db.prepare(`
+      SELECT COUNT(1) AS count
+      FROM token_role_rules
+      WHERE guild_id = ?
+        AND enabled = 1
+    `).get(normalizedGuildId);
+    return Number(row?.count || 0) > 0;
+  }
+
+  _buildLeaderboardRowsFromCounter(counter, inviterJoinedSetMap, { includeVerificationStats = false, includeTokenStats = false, limit = 10 } = {}) {
     const inviters = Array.from(counter.entries())
       .map(([inviterUserId, value]) => ({
         inviterUserId,
@@ -552,19 +632,26 @@ class InviteTrackerService {
       const joinedSet = inviterJoinedSetMap.get(row.inviterUserId) || new Set();
       for (const userId of joinedSet) allJoinedUsers.push(userId);
     }
-    const nftTotals = this._lookupUserNftTotals(allJoinedUsers);
+    const userSnapshots = this._lookupUserVerificationSnapshots(allJoinedUsers);
 
     return inviters.map((row, idx) => {
       const joinedSet = inviterJoinedSetMap.get(row.inviterUserId) || new Set();
       let inviteeNftsTotal = 0;
       let inviteesWithNfts = 0;
+      let inviteeTokensTotal = 0;
+      let inviteesWithTokens = 0;
       for (const joinedUserId of joinedSet) {
-        const nfts = Math.max(0, Number(nftTotals.get(joinedUserId) || 0));
+        const snapshot = userSnapshots.get(joinedUserId) || { totalNfts: 0, totalTokens: 0 };
+        const nfts = Math.max(0, Number(snapshot.totalNfts || 0));
+        const tokens = Math.max(0, Number(snapshot.totalTokens || 0));
         inviteeNftsTotal += nfts;
+        inviteeTokensTotal += tokens;
         if (nfts > 0) inviteesWithNfts += 1;
+        if (tokens > 0) inviteesWithTokens += 1;
       }
       const inviteesCount = joinedSet.size;
       const inviteeNftsAverage = inviteesCount > 0 ? Number((inviteeNftsTotal / inviteesCount).toFixed(2)) : 0;
+      const inviteeTokensAverage = inviteesCount > 0 ? Number((inviteeTokensTotal / inviteesCount).toFixed(6)) : 0;
 
       return {
         ...row,
@@ -573,6 +660,9 @@ class InviteTrackerService {
         inviteesWithNfts,
         inviteeNftsTotal,
         inviteeNftsAverage,
+        inviteesWithTokens: includeTokenStats ? inviteesWithTokens : 0,
+        inviteeTokensTotal: includeTokenStats ? Number(inviteeTokensTotal.toFixed(6)) : 0,
+        inviteeTokensAverage: includeTokenStats ? inviteeTokensAverage : 0,
       };
     });
   }
@@ -589,6 +679,9 @@ class InviteTrackerService {
     const effectiveIncludeVerificationStats = includeVerificationStats === undefined
       ? !!settings.includeVerificationStats
       : !!includeVerificationStats;
+    const effectiveIncludeTokenStats = effectiveIncludeVerificationStats && this._tenantHasEnabledTokenVerificationRules(normalizedGuildId);
+    const excludedCodes = parseExcludedCodesInput(settings.excludedCodes || []);
+    const excludedCodeSet = new Set(excludedCodes);
 
     const safeLimit = this._getLeaderboardLimit(normalizedGuildId, limit);
     const periodPolicy = this._getInvitePeriodPolicy(normalizedGuildId, days);
@@ -597,7 +690,12 @@ class InviteTrackerService {
     if (periodPolicy.days) params.push(`-${periodPolicy.days} days`);
 
     if (!effectiveRoleId && !effectiveIncludeVerificationStats) {
-      params.push(safeLimit);
+      const excludeSql = excludedCodes.length
+        ? `AND (invite_code IS NULL OR lower(invite_code) NOT IN (${excludedCodes.map(() => '?').join(',')}))`
+        : '';
+      const queryParams = [...params];
+      if (excludedCodes.length) queryParams.push(...excludedCodes);
+      queryParams.push(safeLimit);
       const rows = db.prepare(`
         SELECT
           inviter_user_id,
@@ -607,17 +705,19 @@ class InviteTrackerService {
         WHERE guild_id = ?
           AND inviter_user_id IS NOT NULL
         ${wherePeriod}
+        ${excludeSql}
         GROUP BY inviter_user_id
         ORDER BY invite_count DESC, inviter_user_id ASC
         LIMIT ?
-      `).all(...params);
+      `).all(...queryParams);
+      const knownNames = this._lookupKnownUsernames(rows.map(row => row.inviter_user_id));
 
       return {
         success: true,
         rows: rows.map((row, idx) => ({
           rank: idx + 1,
           inviterUserId: row.inviter_user_id,
-          inviterUsername: row.inviter_username || null,
+          inviterUsername: row.inviter_username || knownNames.get(String(row.inviter_user_id || '')) || null,
           inviteCount: Number(row.invite_count || 0),
         })),
         limitedByPlan: periodPolicy.limitedByPlan,
@@ -625,6 +725,8 @@ class InviteTrackerService {
         effectiveLimit: safeLimit,
         requiredJoinRoleId: null,
         includeVerificationStats: false,
+        includeTokenStats: false,
+        excludedCodes,
       };
     }
 
@@ -632,7 +734,8 @@ class InviteTrackerService {
       SELECT
         joined_user_id,
         inviter_user_id,
-        inviter_username
+        inviter_username,
+        invite_code
       FROM invite_events
       WHERE guild_id = ?
         AND inviter_user_id IS NOT NULL
@@ -652,7 +755,9 @@ class InviteTrackerService {
     for (const row of eventRows) {
       const joinedUserId = normalizeUserId(row.joined_user_id);
       const inviterUserId = normalizeUserId(row.inviter_user_id);
+      const inviteCode = normalizeInviteCode(row.invite_code || '');
       if (!joinedUserId || !inviterUserId) continue;
+      if (inviteCode && excludedCodeSet.has(inviteCode)) continue;
       if (!eligibleJoined.has(joinedUserId)) continue;
 
       const key = inviterUserId;
@@ -668,17 +773,25 @@ class InviteTrackerService {
 
     const rows = this._buildLeaderboardRowsFromCounter(counter, inviterJoinedSetMap, {
       includeVerificationStats: effectiveIncludeVerificationStats,
+      includeTokenStats: effectiveIncludeTokenStats,
       limit: safeLimit,
     });
+    const knownNames = this._lookupKnownUsernames(rows.map(row => row.inviterUserId));
+    const hydratedRows = rows.map(row => ({
+      ...row,
+      inviterUsername: row.inviterUsername || knownNames.get(String(row.inviterUserId || '')) || null,
+    }));
 
     return {
       success: true,
-      rows,
+      rows: hydratedRows,
       limitedByPlan: periodPolicy.limitedByPlan,
       periodDays: periodPolicy.days,
       effectiveLimit: safeLimit,
       requiredJoinRoleId: effectiveRoleId,
       includeVerificationStats: effectiveIncludeVerificationStats,
+      includeTokenStats: effectiveIncludeTokenStats,
+      excludedCodes,
     };
   }
 
@@ -782,7 +895,10 @@ class InviteTrackerService {
       ? boardResult.rows.map(row => {
           const inviter = row.inviterUserId ? `<@${row.inviterUserId}>` : (row.inviterUsername || 'Unknown');
           if (boardResult.includeVerificationStats) {
-            return `**#${row.rank}** ${inviter} - **${row.inviteCount}** invites | NFT total: **${Number(row.inviteeNftsTotal || 0)}**`;
+            if (boardResult.includeTokenStats) {
+              return `**#${row.rank}** ${inviter} - **${row.inviteCount}** invites | NFTs: **${Number(row.inviteeNftsTotal || 0)}** | Tokens: **${Number(row.inviteeTokensTotal || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}**`;
+            }
+            return `**#${row.rank}** ${inviter} - **${row.inviteCount}** invites | NFTs: **${Number(row.inviteeNftsTotal || 0)}**`;
           }
           return `**#${row.rank}** ${inviter} - **${row.inviteCount}**`;
         }).join('\n')
@@ -796,6 +912,8 @@ class InviteTrackerService {
         { name: 'Counted Rows', value: String((boardResult.rows || []).length), inline: true },
         { name: 'Required Join Role', value: roleFilterText, inline: true },
         { name: 'Verification NFT Stats', value: boardResult.includeVerificationStats ? 'Enabled' : 'Disabled', inline: true },
+        { name: 'Verification Token Stats', value: boardResult.includeTokenStats ? 'Enabled' : 'Disabled', inline: true },
+        { name: 'Excluded Codes', value: String((boardResult.excludedCodes || []).length), inline: true },
       )
       .setTimestamp();
 
@@ -832,6 +950,8 @@ class InviteTrackerService {
         effectiveLimit: boardResult.effectiveLimit,
         requiredJoinRoleId: boardResult.requiredJoinRoleId || null,
         includeVerificationStats: !!boardResult.includeVerificationStats,
+        includeTokenStats: !!boardResult.includeTokenStats,
+        excludedCodes: Array.isArray(boardResult.excludedCodes) ? boardResult.excludedCodes : [],
       },
     };
   }

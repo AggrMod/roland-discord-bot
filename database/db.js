@@ -68,7 +68,7 @@ const REQUIRED_SCHEMA = Object.freeze({
   nft_tracked_collections: ['guild_id', 'collection_address', 'track_bid'],
   tracked_tokens: ['guild_id', 'alert_channel_ids'],
   tracked_wallets: ['guild_id', 'wallet_address', 'token_last_signature'],
-  invite_tracker_settings: ['guild_id', 'required_join_role_id', 'panel_channel_id', 'panel_message_id', 'panel_period_days', 'panel_limit', 'panel_enable_create_link', 'include_verification_stats'],
+  invite_tracker_settings: ['guild_id', 'required_join_role_id', 'panel_channel_id', 'panel_message_id', 'panel_period_days', 'panel_limit', 'panel_enable_create_link', 'include_verification_stats', 'excluded_codes'],
   invite_events: ['guild_id', 'joined_user_id', 'inviter_user_id', 'invite_code', 'source', 'joined_at'],
   tracked_token_webhook_retry_queue: ['signature', 'attempt_count', 'next_attempt_at', 'last_reason', 'last_error'],
   nft_activity_alert_configs: ['guild_id', 'enabled', 'event_types', 'min_sol'],
@@ -1344,6 +1344,7 @@ function initDatabase() {
       panel_limit INTEGER DEFAULT 10,
       panel_enable_create_link INTEGER DEFAULT 1,
       include_verification_stats INTEGER DEFAULT 0,
+      excluded_codes TEXT DEFAULT '[]',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -1356,6 +1357,7 @@ function initDatabase() {
   try { db.exec('ALTER TABLE invite_tracker_settings ADD COLUMN panel_limit INTEGER DEFAULT 10'); } catch (e) {}
   try { db.exec('ALTER TABLE invite_tracker_settings ADD COLUMN panel_enable_create_link INTEGER DEFAULT 1'); } catch (e) {}
   try { db.exec('ALTER TABLE invite_tracker_settings ADD COLUMN include_verification_stats INTEGER DEFAULT 0'); } catch (e) {}
+  try { db.exec("ALTER TABLE invite_tracker_settings ADD COLUMN excluded_codes TEXT DEFAULT '[]'"); } catch (e) {}
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS invite_events (

@@ -272,6 +272,7 @@ function createAdminTrackersRouter({
         panelLimit: body.panelLimit,
         panelEnableCreateLink: body.panelEnableCreateLink,
         includeVerificationStats: body.includeVerificationStats,
+        excludedCodes: body.excludedCodes,
       });
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to save invite tracker settings', 'VALIDATION_ERROR', null, result));

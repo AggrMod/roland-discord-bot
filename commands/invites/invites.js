@@ -171,7 +171,10 @@ module.exports = {
     const lines = result.rows.map(row => {
       const inviter = row.inviterUserId ? `<@${row.inviterUserId}>` : (row.inviterUsername || 'Unknown');
       if (result.includeVerificationStats) {
-        return `**#${row.rank}** ${inviter} - **${row.inviteCount}** | NFT total: **${Number(row.inviteeNftsTotal || 0)}**`;
+        if (result.includeTokenStats) {
+          return `**#${row.rank}** ${inviter} - **${row.inviteCount}** | NFTs: **${Number(row.inviteeNftsTotal || 0)}** | Tokens: **${Number(row.inviteeTokensTotal || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}**`;
+        }
+        return `**#${row.rank}** ${inviter} - **${row.inviteCount}** | NFTs: **${Number(row.inviteeNftsTotal || 0)}**`;
       }
       return `**#${row.rank}** ${inviter} - **${row.inviteCount}**`;
     });
@@ -180,6 +183,7 @@ module.exports = {
     if (result.limitedByPlan) footerBits.push('Time filter restricted by plan');
     if (result.requiredJoinRoleId) footerBits.push('Role filtered');
     if (result.includeVerificationStats) footerBits.push('Verification stats');
+    if (result.includeTokenStats) footerBits.push('Token stats');
 
     const embed = new EmbedBuilder()
       .setColor('#22C55E')
@@ -194,6 +198,14 @@ module.exports = {
     if (result.includeVerificationStats) {
       const totalInviteeNfts = result.rows.reduce((sum, row) => sum + Number(row.inviteeNftsTotal || 0), 0);
       embed.addFields({ name: 'Invitee NFT Total', value: String(totalInviteeNfts), inline: true });
+      if (result.includeTokenStats) {
+        const totalInviteeTokens = result.rows.reduce((sum, row) => sum + Number(row.inviteeTokensTotal || 0), 0);
+        embed.addFields({
+          name: 'Invitee Token Total',
+          value: totalInviteeTokens.toLocaleString(undefined, { maximumFractionDigits: 6 }),
+          inline: true,
+        });
+      }
     }
 
     return interaction.editReply({ embeds: [embed] });

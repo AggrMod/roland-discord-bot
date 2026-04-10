@@ -7469,6 +7469,29 @@ function inviteTrackerPeriodToDays(raw) {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
 }
 
+function formatInviteTimestampLocal(rawValue) {
+  if (!rawValue) return 'Unknown';
+  const raw = String(rawValue).trim();
+  if (!raw) return 'Unknown';
+
+  // Stored DB timestamps are UTC-like; normalize explicitly to local browser time.
+  const normalizedIso = /[zZ]|[+\-]\d{2}:?\d{2}$/.test(raw)
+    ? raw.replace(' ', 'T')
+    : `${raw.replace(' ', 'T')}Z`;
+  const date = new Date(normalizedIso);
+  if (Number.isNaN(date.getTime())) return escapeHtml(raw);
+  return date.toLocaleString();
+}
+
+function formatInviteUserLabel(username, userId) {
+  const cleanName = String(username || '').trim();
+  const cleanId = String(userId || '').trim();
+  if (cleanName && cleanId) return `${escapeHtml(cleanName)} (${escapeHtml(cleanId)})`;
+  if (cleanName) return escapeHtml(cleanName);
+  if (cleanId) return escapeHtml(cleanId);
+  return 'Unknown';
+}
+
 async function loadInviteTrackerSettingsView(targetPaneId = null) {
   if (!isAdmin) return;
   const pane = (targetPaneId && document.getElementById(targetPaneId))
@@ -7532,6 +7555,11 @@ async function loadInviteTrackerSettingsView(targetPaneId = null) {
           Include verification NFT holdings in leaderboard stats
         </label>
       </div>
+      <div style="margin-bottom:14px;">
+        <label style="display:block;color:#c9d6ff;font-size:0.86em;font-weight:600;margin-bottom:6px;">Excluded Invite Codes (Leaderboard)</label>
+        <textarea id="inviteExcludedCodesInput" rows="2" placeholder="code1, code2, code3" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.88em;resize:vertical;"></textarea>
+        <div style="color:var(--text-secondary);font-size:0.75em;margin-top:4px;">Comma separated. These invite codes will be ignored in leaderboard and panel stats.</div>
+      </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
         <button class="btn-secondary btn-sm" onclick="saveInviteTrackerSettings()">Save Invite Settings</button>
         <button class="btn-primary btn-sm" onclick="postInviteTrackerLeaderboardPanel()">Post/Update Leaderboard Panel</button>
@@ -7558,6 +7586,8 @@ async function loadInviteTrackerSettingsView(targetPaneId = null) {
     if (createLinkToggle) createLinkToggle.checked = settings.panelEnableCreateLink !== false;
     const includeVerificationStatsToggle = document.getElementById('inviteIncludeVerificationStatsToggle');
     if (includeVerificationStatsToggle) includeVerificationStatsToggle.checked = !!settings.includeVerificationStats;
+    const excludedCodesInput = document.getElementById('inviteExcludedCodesInput');
+    if (excludedCodesInput) excludedCodesInput.value = Array.isArray(settings.excludedCodes) ? settings.excludedCodes.join(', ') : '';
   } catch (_error) {
     await populateRoleSelect('inviteRequiredRoleSelect', '');
     await populateChannelSelect('invitePanelChannelSelect', '');
@@ -7573,6 +7603,7 @@ function getInviteTrackerSettingsPayload() {
   const panelLimitInput = document.getElementById('invitePanelLimitInput');
   const createLinkToggle = document.getElementById('invitePanelCreateLinkToggle');
   const includeVerificationStatsToggle = document.getElementById('inviteIncludeVerificationStatsToggle');
+  const excludedCodesInput = document.getElementById('inviteExcludedCodesInput');
 
   const panelPeriodDays = inviteTrackerPeriodToDays(panelPeriodSelect?.value || 'all');
   const panelLimit = Number(panelLimitInput?.value || 10);
@@ -7583,6 +7614,7 @@ function getInviteTrackerSettingsPayload() {
     panelLimit: Number.isFinite(panelLimit) ? panelLimit : 10,
     panelEnableCreateLink: !!createLinkToggle?.checked,
     includeVerificationStats: !!includeVerificationStatsToggle?.checked,
+    excludedCodes: String(excludedCodesInput?.value || ''),
   };
 }
 
@@ -7700,14 +7732,18 @@ async function refreshInviteTrackerDashboard() {
       const limitedByPlan = !!(boardJson.data?.limitedByPlan ?? boardJson.limitedByPlan);
       const roleFiltered = !!(boardJson.data?.requiredJoinRoleId ?? boardJson.requiredJoinRoleId);
       const verificationStatsEnabled = !!(boardJson.data?.includeVerificationStats ?? boardJson.includeVerificationStats);
+      const tokenStatsEnabled = !!(boardJson.data?.includeTokenStats ?? boardJson.includeTokenStats);
       const list = rows.length
         ? rows.map(row => {
             const nftCell = verificationStatsEnabled
               ? `<td style="padding:8px;text-align:right;color:#93c5fd;">${Number(row.inviteeNftsTotal || 0)}</td>`
               : '';
-            return `<tr><td style="padding:8px;">#${row.rank}</td><td style="padding:8px;">${row.inviterUserId ? `<@${row.inviterUserId}>` : escapeHtml(row.inviterUsername || 'Unknown')}</td><td style="padding:8px;text-align:right;font-weight:700;color:#86efac;">${Number(row.inviteCount || 0)}</td>${nftCell}</tr>`;
+            const tokenCell = tokenStatsEnabled
+              ? `<td style="padding:8px;text-align:right;color:#86efac;">${Number(row.inviteeTokensTotal || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}</td>`
+              : '';
+            return `<tr><td style="padding:8px;">#${row.rank}</td><td style="padding:8px;">${formatInviteUserLabel(row.inviterUsername, row.inviterUserId)}</td><td style="padding:8px;text-align:right;font-weight:700;color:#86efac;">${Number(row.inviteCount || 0)}</td>${nftCell}${tokenCell}</tr>`;
           }).join('')
-        : `<tr><td colspan="${verificationStatsEnabled ? 4 : 3}" style="padding:12px;color:var(--text-secondary);">No invite data yet.</td></tr>`;
+        : `<tr><td colspan="${3 + (verificationStatsEnabled ? 1 : 0) + (tokenStatsEnabled ? 1 : 0)}" style="padding:12px;color:var(--text-secondary);">No invite data yet.</td></tr>`;
       leaderboardWrap.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <h4 style="margin:0;color:#c9d6ff;">Leaderboard</h4>
@@ -7715,11 +7751,12 @@ async function refreshInviteTrackerDashboard() {
             ${limitedByPlan ? '<span style="font-size:0.75em;color:#fcd34d;">Period filter limited by plan (showing all-time)</span>' : ''}
             ${roleFiltered ? '<span style="font-size:0.75em;color:#93c5fd;">Role-filtered</span>' : ''}
             ${verificationStatsEnabled ? '<span style="font-size:0.75em;color:#86efac;">Verification stats</span>' : ''}
+            ${tokenStatsEnabled ? '<span style="font-size:0.75em;color:#bbf7d0;">Token stats</span>' : ''}
           </div>
         </div>
         <div style="overflow-x:auto;border:1px solid rgba(99,102,241,0.18);border-radius:10px;">
           <table style="width:100%;border-collapse:collapse;">
-            <thead><tr style="background:rgba(30,41,59,0.55);"><th style="padding:8px;text-align:left;">Rank</th><th style="padding:8px;text-align:left;">Inviter</th><th style="padding:8px;text-align:right;">Invites</th>${verificationStatsEnabled ? '<th style="padding:8px;text-align:right;">Invitee NFTs</th>' : ''}</tr></thead>
+            <thead><tr style="background:rgba(30,41,59,0.55);"><th style="padding:8px;text-align:left;">Rank</th><th style="padding:8px;text-align:left;">Inviter</th><th style="padding:8px;text-align:right;">Invites</th>${verificationStatsEnabled ? '<th style="padding:8px;text-align:right;">Invitee NFTs</th>' : ''}${tokenStatsEnabled ? '<th style="padding:8px;text-align:right;">Invitee Tokens</th>' : ''}</tr></thead>
             <tbody>${list}</tbody>
           </table>
         </div>
@@ -7733,10 +7770,12 @@ async function refreshInviteTrackerDashboard() {
       const limitedByPlan = !!(eventsJson.data?.limitedByPlan ?? eventsJson.limitedByPlan);
       const list = rows.length
         ? rows.map(row => {
-            const joined = row.joinedUserId ? `<@${row.joinedUserId}>` : escapeHtml(row.joinedUsername || 'Unknown');
-            const inviter = row.inviterUserId ? `<@${row.inviterUserId}>` : '<span style="color:var(--text-secondary);">Unknown</span>';
+            const joined = formatInviteUserLabel(row.joinedUsername, row.joinedUserId);
+            const inviter = row.inviterUserId || row.inviterUsername
+              ? formatInviteUserLabel(row.inviterUsername, row.inviterUserId)
+              : '<span style="color:var(--text-secondary);">Unknown</span>';
             const code = row.inviteCode ? `<code>${escapeHtml(row.inviteCode)}</code>` : '—';
-            const when = row.joinedAt ? new Date(row.joinedAt).toLocaleString() : 'Unknown';
+            const when = formatInviteTimestampLocal(row.joinedAt);
             return `<tr><td style="padding:8px;">${joined}</td><td style="padding:8px;">${inviter}</td><td style="padding:8px;">${code}</td><td style="padding:8px;white-space:nowrap;">${escapeHtml(when)}</td></tr>`;
           }).join('')
         : '<tr><td colspan="4" style="padding:12px;color:var(--text-secondary);">No join events yet.</td></tr>';

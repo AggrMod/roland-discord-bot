@@ -78,6 +78,9 @@ module.exports = {
       `Mention Trigger: ${result.settings.mentionEnabled ? 'On' : 'Off'}`,
       `Provider: ${result.settings.provider}`,
       `Slash Visibility: ${result.settings.responseVisibility}`,
+      `Per-User Daily Limit: ${result.settings.perUserDailyLimit > 0 ? result.settings.perUserDailyLimit : 'Unlimited'}`,
+      `Safety Filter: ${result.settings.safetyFilterEnabled ? 'On' : 'Off'}`,
+      `Moderation: ${result.settings.moderationEnabled ? 'On' : 'Off'}`,
       `OpenAI Key: ${result.global.hasOpenaiKey ? 'Configured' : 'Missing'}`,
       `Gemini Key: ${result.global.hasGeminiKey ? 'Configured' : 'Missing'}`,
       `Daily Limit: ${allowance.limit === null ? 'Unlimited' : `${allowance.used}/${allowance.limit}`}`,
@@ -100,6 +103,7 @@ module.exports = {
       prompt,
       providerOverride,
       requesterTag: interaction.user.tag,
+      triggerSource: 'slash',
     });
 
     if (!result.success) {

@@ -710,19 +710,29 @@ function parseAiMentionPrompt(message, botUserId) {
   return { shouldHandle: true, prompt: cleaned };
 }
 
-function isAiMentionOnCooldown(guildId, userId, cooldownSeconds) {
+function getAiMentionCooldownState(guildId, userId, cooldownSeconds) {
   const ttlMs = Math.max(3, Number(cooldownSeconds) || 12) * 1000;
   const key = `${guildId}:${userId}`;
   const now = Date.now();
   const expiresAt = aiAssistantMentionCooldownCache.get(key) || 0;
-  if (expiresAt > now) return true;
+  if (expiresAt > now) {
+    return {
+      allowed: false,
+      remainingSeconds: Math.max(1, Math.ceil((expiresAt - now) / 1000)),
+    };
+  }
   aiAssistantMentionCooldownCache.set(key, now + ttlMs);
   if (aiAssistantMentionCooldownCache.size > 20000) {
     for (const [cacheKey, expiry] of aiAssistantMentionCooldownCache.entries()) {
       if (expiry <= now) aiAssistantMentionCooldownCache.delete(cacheKey);
     }
   }
-  return false;
+  return { allowed: true, remainingSeconds: 0 };
+}
+
+function logAiMentionOutcome(guildId, userId, outcome, details = '') {
+  const extra = details ? ` details=${details}` : '';
+  logger.log(`[ai-assistant-mention] guild=${guildId} user=${userId} outcome=${outcome}${extra}`);
 }
 client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
   try {
@@ -1941,6 +1951,7 @@ async function handleAiAssistantMentionMessage(message) {
   const guildId = String(message?.guild?.id || message?.guildId || '').trim();
   const botUserId = String(client?.user?.id || '').trim();
   if (!guildId || !botUserId) return;
+  const userId = String(message?.author?.id || '').trim();
 
   const parsed = parseAiMentionPrompt(message, botUserId);
   if (!parsed.shouldHandle) return;
@@ -1949,29 +1960,66 @@ async function handleAiAssistantMentionMessage(message) {
       content: 'Ask your question after mentioning me, and I will handle it.',
       allowedMentions: { parse: [], repliedUser: false },
     }).catch(() => {});
+    logAiMentionOutcome(guildId, userId, 'empty_prompt');
     return;
   }
 
-  if (!tenantService.isModuleEnabled(guildId, 'aiassistant')) return;
-  if (!canUseAiAssistantPlan(guildId)) return;
+  if (!tenantService.isModuleEnabled(guildId, 'aiassistant')) {
+    logAiMentionOutcome(guildId, userId, 'module_disabled');
+    return;
+  }
+  if (!canUseAiAssistantPlan(guildId)) {
+    logAiMentionOutcome(guildId, userId, 'plan_blocked');
+    return;
+  }
 
   const settingsResult = aiAssistantService.getTenantSettings(guildId);
-  if (!settingsResult.success) return;
+  if (!settingsResult.success) {
+    logAiMentionOutcome(guildId, userId, 'settings_error');
+    return;
+  }
   const settings = settingsResult.settings || {};
-  if (!settings.enabled) return;
-  if (!settings.mentionEnabled) return;
-  if (!aiAssistantService.isChannelAllowed(settings, message.channelId)) return;
-  if (!aiAssistantService.isMemberRoleAllowed(settings, message.member)) return;
-  if (isAiMentionOnCooldown(guildId, message.author.id, settings.cooldownSeconds)) return;
+  if (!settings.enabled) {
+    logAiMentionOutcome(guildId, userId, 'tenant_disabled');
+    return;
+  }
+  if (!settings.mentionEnabled) {
+    logAiMentionOutcome(guildId, userId, 'mention_disabled');
+    return;
+  }
+  if (!aiAssistantService.isChannelAllowed(settings, message.channelId)) {
+    logAiMentionOutcome(guildId, userId, 'channel_blocked');
+    return;
+  }
+  if (!aiAssistantService.isMemberRoleAllowed(settings, message.member)) {
+    logAiMentionOutcome(guildId, userId, 'role_blocked');
+    return;
+  }
+
+  const cooldownState = getAiMentionCooldownState(guildId, userId, settings.cooldownSeconds);
+  if (!cooldownState.allowed) {
+    const notice = await message.reply({
+      content: `⏱️ Slow down a little. Try again in ${cooldownState.remainingSeconds}s.`,
+      allowedMentions: { parse: [], repliedUser: false },
+    }).catch(() => null);
+    if (notice) {
+      setTimeout(() => {
+        notice.delete().catch(() => {});
+      }, 7000);
+    }
+    logAiMentionOutcome(guildId, userId, 'cooldown', `remaining=${cooldownState.remainingSeconds}`);
+    return;
+  }
 
   await message.channel.sendTyping().catch(() => {});
 
   const result = await aiAssistantService.ask({
     guildId,
-    userId: message.author.id,
+    userId,
     channelId: message.channelId,
     prompt: parsed.prompt,
     requesterTag: message.author.tag,
+    triggerSource: 'mention',
   });
 
   if (!result.success) {
@@ -1980,6 +2028,7 @@ async function handleAiAssistantMentionMessage(message) {
       content: `I couldn't answer right now: ${reason}`,
       allowedMentions: { parse: [], repliedUser: false },
     }).catch(() => {});
+    logAiMentionOutcome(guildId, userId, 'failed', `code=${result.code || 'unknown'}`);
     return;
   }
 
@@ -1995,6 +2044,7 @@ async function handleAiAssistantMentionMessage(message) {
       allowedMentions: { parse: [] },
     }).catch(() => {});
   }
+  logAiMentionOutcome(guildId, userId, 'ok', `provider=${result.provider || 'unknown'}`);
 }
 
 process.on('unhandledRejection', error => {

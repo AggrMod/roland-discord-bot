@@ -7631,14 +7631,18 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
   pane.innerHTML = `<div style="${cardStyle}"><div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);"><div class="spinner"></div><p>Loading AI assistant settings...</p></div></div>`;
 
   try {
-    const [settingsRes, channelsRes, rolesRes] = await Promise.all([
+    const [settingsRes, channelsRes, rolesRes, usageRes, summaryRes] = await Promise.all([
       fetch('/api/admin/aiassistant/settings', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/discord/channels', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/discord/roles', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      fetch('/api/admin/aiassistant/usage', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      fetch('/api/admin/aiassistant/usage-summary', { credentials: 'include', headers: buildTenantRequestHeaders() }),
     ]);
     const settingsJson = await settingsRes.json();
     const channelsJson = await channelsRes.json();
     const rolesJson = await rolesRes.json();
+    const usageJson = await usageRes.json();
+    const summaryJson = await summaryRes.json();
     if (!settingsJson.success) throw new Error(settingsJson.message || 'Failed to load AI assistant settings');
 
     const s = settingsJson.settings || {};
@@ -7648,6 +7652,26 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
     const roleRows = roles.map(r => `<option value="${escapeHtml(String(r.id))}">${escapeHtml(r.name || r.id)}</option>`).join('');
     const allowed = Array.isArray(s.allowedChannelIds) ? s.allowedChannelIds : [];
     const allowedRoles = Array.isArray(s.allowedRoleIds) ? s.allowedRoleIds : [];
+    const usageEvents = Array.isArray(usageJson?.events) ? usageJson.events : [];
+    const usageSummary = summaryJson?.success ? (summaryJson || {}) : {};
+    const summaryToday = usageSummary.today || { total: 0, ok: 0, errors: 0, avgLatencyMs: 0 };
+    const providerRows = Array.isArray(usageSummary.byProvider) ? usageSummary.byProvider : [];
+    const sourceRows = Array.isArray(usageSummary.bySource) ? usageSummary.bySource : [];
+    const providerBadges = providerRows.length
+      ? providerRows.map(row => `<span style="padding:4px 8px;border-radius:999px;background:rgba(99,102,241,0.16);color:#c9d6ff;font-size:0.78em;">${escapeHtml(String(row.provider || 'unknown'))}: ${Number(row.total || 0)}</span>`).join(' ')
+      : '<span style="color:var(--text-secondary);font-size:0.82em;">No provider usage today</span>';
+    const sourceBadges = sourceRows.length
+      ? sourceRows.map(row => `<span style="padding:4px 8px;border-radius:999px;background:rgba(16,185,129,0.14);color:#a7f3d0;font-size:0.78em;">${escapeHtml(String(row.source || 'unknown'))}: ${Number(row.total || 0)}</span>`).join(' ')
+      : '<span style="color:var(--text-secondary);font-size:0.82em;">No trigger usage today</span>';
+    const usageRows = usageEvents.slice(0, 12).map(evt => `
+      <tr>
+        <td style="padding:8px;color:#c9d6ff;border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(evt.user_id || '-'))}</td>
+        <td style="padding:8px;color:var(--text-secondary);border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(evt.provider || '-'))}</td>
+        <td style="padding:8px;color:var(--text-secondary);border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(evt.trigger_source || 'slash'))}</td>
+        <td style="padding:8px;color:${evt.status === 'ok' ? '#34d399' : '#fda4af'};border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(evt.status || '-'))}</td>
+        <td style="padding:8px;color:var(--text-secondary);border-bottom:1px solid rgba(99,102,241,0.12);">${evt.latency_ms ? `${Number(evt.latency_ms)}ms` : '-'}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="5" style="padding:10px;color:var(--text-secondary);">No recent AI usage yet.</td></tr>';
 
     pane.innerHTML = `
       <div style="${cardStyle}">
@@ -7692,6 +7716,22 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <label style="display:grid;gap:6px;">
+              <span style="font-size:0.82em;color:var(--text-secondary);">Per-User Daily Limit (0 = unlimited)</span>
+              <input id="aiassistant_per_user_daily_limit" type="number" min="0" max="500" value="${escapeHtml(String(s.perUserDailyLimit ?? 20))}" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+            </label>
+            <div style="display:grid;gap:8px;align-content:center;">
+              <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.86em;">
+                <input id="aiassistant_safety_filter_enabled" type="checkbox" ${s.safetyFilterEnabled !== false ? 'checked' : ''}>
+                Enable deny-list safety filter
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.86em;">
+                <input id="aiassistant_moderation_enabled" type="checkbox" ${s.moderationEnabled ? 'checked' : ''}>
+                Enable OpenAI moderation pre-check
+              </label>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <label style="display:grid;gap:6px;">
               <span style="font-size:0.82em;color:var(--text-secondary);">OpenAI Model</span>
               <input id="aiassistant_model_openai" type="text" value="${escapeHtml(String(s.modelOpenai || 'gpt-5.4'))}" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-family:monospace;">
             </label>
@@ -7722,6 +7762,36 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
           <button class="btn-secondary" onclick="loadAiAssistantSettingsView()">Reset</button>
           <button class="btn-primary" onclick="saveAiAssistantSettings()">Save AI Assistant Settings</button>
+        </div>
+      </div>
+      <div style="${cardStyle}">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+          <h3 style="margin:0;color:#c9d6ff;">📈 AI Usage Overview (Today)</h3>
+          <button class="btn-secondary" onclick="loadAiAssistantSettingsView()">Refresh Metrics</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:10px;margin-bottom:12px;">
+          <div style="padding:10px;border:1px solid rgba(99,102,241,0.16);border-radius:8px;background:rgba(30,41,59,0.45);"><div style="font-size:0.78em;color:var(--text-secondary);">Total</div><div style="font-size:1.2em;color:#e0e7ff;font-weight:700;">${Number(summaryToday.total || 0)}</div></div>
+          <div style="padding:10px;border:1px solid rgba(16,185,129,0.2);border-radius:8px;background:rgba(16,185,129,0.08);"><div style="font-size:0.78em;color:#a7f3d0;">Success</div><div style="font-size:1.2em;color:#a7f3d0;font-weight:700;">${Number(summaryToday.ok || 0)}</div></div>
+          <div style="padding:10px;border:1px solid rgba(248,113,113,0.2);border-radius:8px;background:rgba(248,113,113,0.08);"><div style="font-size:0.78em;color:#fecaca;">Errors</div><div style="font-size:1.2em;color:#fecaca;font-weight:700;">${Number(summaryToday.errors || 0)}</div></div>
+          <div style="padding:10px;border:1px solid rgba(99,102,241,0.16);border-radius:8px;background:rgba(30,41,59,0.45);"><div style="font-size:0.78em;color:var(--text-secondary);">Avg Latency</div><div style="font-size:1.2em;color:#e0e7ff;font-weight:700;">${Number(summaryToday.avgLatencyMs || 0)}ms</div></div>
+        </div>
+        <div style="display:grid;gap:8px;margin-bottom:12px;">
+          <div><span style="font-size:0.8em;color:var(--text-secondary);">By Provider:</span> ${providerBadges}</div>
+          <div><span style="font-size:0.8em;color:var(--text-secondary);">By Trigger:</span> ${sourceBadges}</div>
+        </div>
+        <div style="border:1px solid rgba(99,102,241,0.18);border-radius:8px;overflow:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.84em;">
+            <thead>
+              <tr style="background:rgba(99,102,241,0.12);">
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">User</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Provider</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Trigger</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Status</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Latency</th>
+              </tr>
+            </thead>
+            <tbody>${usageRows}</tbody>
+          </table>
         </div>
       </div>
     `;
@@ -7768,6 +7838,9 @@ async function saveAiAssistantSettings() {
     responseVisibility: String(document.getElementById('aiassistant_visibility')?.value || 'public'),
     cooldownSeconds: parseInt(document.getElementById('aiassistant_cooldown_seconds')?.value, 10) || 12,
     maxResponseChars: parseInt(document.getElementById('aiassistant_max_response_chars')?.value, 10) || 1600,
+    perUserDailyLimit: parseInt(document.getElementById('aiassistant_per_user_daily_limit')?.value, 10) || 0,
+    safetyFilterEnabled: !!document.getElementById('aiassistant_safety_filter_enabled')?.checked,
+    moderationEnabled: !!document.getElementById('aiassistant_moderation_enabled')?.checked,
     modelOpenai: String(document.getElementById('aiassistant_model_openai')?.value || '').trim() || 'gpt-5.4',
     modelGemini: String(document.getElementById('aiassistant_model_gemini')?.value || '').trim() || 'gemini-2.0-flash',
     systemPrompt: String(document.getElementById('aiassistant_system_prompt')?.value || '').trim(),

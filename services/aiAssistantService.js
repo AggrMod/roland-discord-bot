@@ -17,7 +17,28 @@ const DEFAULTS = Object.freeze({
   allowedRoleIds: [],
   cooldownSeconds: 12,
   maxResponseChars: 1600,
+  perUserDailyLimit: 20,
+  safetyFilterEnabled: true,
+  moderationEnabled: false,
 });
+
+const PROMPT_DENYLIST_RULES = Object.freeze([
+  {
+    code: 'illegal_access',
+    message: 'I cannot help with hacking, account takeover, malware, or bypassing security.',
+    regex: /\b(hack|hacking|exploit|malware|keylogger|ddos|bypass(?:ing)?\s+(?:security|2fa|mfa)|phish(?:ing)?)\b/i,
+  },
+  {
+    code: 'wallet_secret_exfil',
+    message: 'I cannot assist with stealing or requesting wallet secrets.',
+    regex: /\b(seed phrase|mnemonic|private key|recovery phrase)\b.*\b(share|send|give|reveal|steal|extract|dump)\b|\b(share|send|give|reveal|steal|extract|dump)\b.*\b(seed phrase|mnemonic|private key|recovery phrase)\b/i,
+  },
+  {
+    code: 'fraud',
+    message: 'I cannot help with scams, fraud, or impersonation.',
+    regex: /\b(scam|fraud|impersonat(?:e|ion)|drain wallet|rug pull)\b/i,
+  },
+]);
 
 function normalizeGuildId(guildId) {
   if (typeof guildId !== 'string') return '';
@@ -122,6 +143,7 @@ class AiAssistantService {
     const row = db.prepare(`
       SELECT guild_id, enabled, provider, model_openai, model_gemini, response_visibility, system_prompt, allowed_channel_ids
              , mention_enabled, allowed_role_ids, cooldown_seconds, max_response_chars
+             , per_user_daily_limit, safety_filter_enabled, moderation_enabled
       FROM ai_assistant_tenant_settings
       WHERE guild_id = ?
     `).get(normalizedGuildId);
@@ -138,6 +160,9 @@ class AiAssistantService {
       allowedRoleIds: normalizeAllowedRoleIds(parseJsonArray(row?.allowed_role_ids)),
       cooldownSeconds: normalizeIntegerInRange(row?.cooldown_seconds, { min: 3, max: 600, fallback: DEFAULTS.cooldownSeconds }),
       maxResponseChars: normalizeIntegerInRange(row?.max_response_chars, { min: 300, max: 1900, fallback: DEFAULTS.maxResponseChars }),
+      perUserDailyLimit: normalizeIntegerInRange(row?.per_user_daily_limit, { min: 0, max: 500, fallback: DEFAULTS.perUserDailyLimit }),
+      safetyFilterEnabled: row ? row.safety_filter_enabled !== 0 : DEFAULTS.safetyFilterEnabled,
+      moderationEnabled: row ? row.moderation_enabled === 1 : DEFAULTS.moderationEnabled,
     };
 
     return {
@@ -175,12 +200,17 @@ class AiAssistantService {
     if (payload.maxResponseChars !== undefined) {
       next.maxResponseChars = normalizeIntegerInRange(payload.maxResponseChars, { min: 300, max: 1900, fallback: DEFAULTS.maxResponseChars });
     }
+    if (payload.perUserDailyLimit !== undefined) {
+      next.perUserDailyLimit = normalizeIntegerInRange(payload.perUserDailyLimit, { min: 0, max: 500, fallback: DEFAULTS.perUserDailyLimit });
+    }
+    if (payload.safetyFilterEnabled !== undefined) next.safetyFilterEnabled = !!payload.safetyFilterEnabled;
+    if (payload.moderationEnabled !== undefined) next.moderationEnabled = !!payload.moderationEnabled;
 
     db.prepare(`
       INSERT INTO ai_assistant_tenant_settings (
-        guild_id, enabled, provider, model_openai, model_gemini, mention_enabled, response_visibility, system_prompt, allowed_channel_ids, allowed_role_ids, cooldown_seconds, max_response_chars, updated_at
+        guild_id, enabled, provider, model_openai, model_gemini, mention_enabled, response_visibility, system_prompt, allowed_channel_ids, allowed_role_ids, cooldown_seconds, max_response_chars, per_user_daily_limit, safety_filter_enabled, moderation_enabled, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(guild_id) DO UPDATE SET
         enabled = excluded.enabled,
         provider = excluded.provider,
@@ -193,6 +223,9 @@ class AiAssistantService {
         allowed_role_ids = excluded.allowed_role_ids,
         cooldown_seconds = excluded.cooldown_seconds,
         max_response_chars = excluded.max_response_chars,
+        per_user_daily_limit = excluded.per_user_daily_limit,
+        safety_filter_enabled = excluded.safety_filter_enabled,
+        moderation_enabled = excluded.moderation_enabled,
         updated_at = CURRENT_TIMESTAMP
     `).run(
       normalizedGuildId,
@@ -206,7 +239,10 @@ class AiAssistantService {
       JSON.stringify(next.allowedChannelIds || []),
       JSON.stringify(next.allowedRoleIds || []),
       next.cooldownSeconds,
-      next.maxResponseChars
+      next.maxResponseChars,
+      next.perUserDailyLimit,
+      next.safetyFilterEnabled ? 1 : 0,
+      next.moderationEnabled ? 1 : 0
     );
 
     return { success: true, settings: next };
@@ -247,15 +283,75 @@ class AiAssistantService {
     return { allowed: remaining > 0, limit: Math.floor(limit), used, remaining };
   }
 
-  logUsage({ guildId, userId, provider, model, status = 'ok', errorCode = null, latencyMs = 0, promptChars = 0, responseChars = 0 }) {
+  getUserDailyRemaining(guildId, userId, perUserDailyLimit = DEFAULTS.perUserDailyLimit) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const normalizedUserId = String(userId || '').trim();
+    if (!normalizedGuildId || !normalizedUserId) {
+      return { allowed: false, limit: 0, used: 0, remaining: 0 };
+    }
+
+    const limit = normalizeIntegerInRange(perUserDailyLimit, { min: 0, max: 500, fallback: DEFAULTS.perUserDailyLimit });
+    if (limit <= 0) return { allowed: true, limit: null, used: 0, remaining: null };
+
+    const usedRow = db.prepare(`
+      SELECT COUNT(*) AS used
+      FROM ai_assistant_usage_events
+      WHERE guild_id = ?
+        AND user_id = ?
+        AND status = 'ok'
+        AND DATE(created_at) = DATE('now')
+    `).get(normalizedGuildId, normalizedUserId);
+    const used = Number(usedRow?.used || 0);
+    const remaining = Math.max(0, limit - used);
+    return { allowed: remaining > 0, limit, used, remaining };
+  }
+
+  matchPromptDenylist(prompt) {
+    const text = String(prompt || '').trim();
+    if (!text) return null;
+    for (const rule of PROMPT_DENYLIST_RULES) {
+      if (rule.regex.test(text)) {
+        return { code: rule.code, message: rule.message };
+      }
+    }
+    return null;
+  }
+
+  async callOpenAiModeration({ apiKey, input }) {
+    const response = await fetchWithTimeout('https://api.openai.com/v1/moderations', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'omni-moderation-latest',
+        input: String(input || '').slice(0, 8000),
+      }),
+    }, 30000);
+
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = json?.error?.message || `Moderation request failed (${response.status})`;
+      throw Object.assign(new Error(message), { code: `moderation_${response.status}` });
+    }
+
+    const result = json?.results?.[0] || {};
+    return {
+      flagged: !!result.flagged,
+      categories: result.categories || {},
+    };
+  }
+
+  logUsage({ guildId, userId, provider, model, status = 'ok', errorCode = null, latencyMs = 0, promptChars = 0, responseChars = 0, triggerSource = 'slash' }) {
     const normalizedGuildId = normalizeGuildId(guildId);
     const normalizedUserId = String(userId || '').trim();
     if (!normalizedGuildId || !normalizedUserId) return;
     try {
       db.prepare(`
         INSERT INTO ai_assistant_usage_events (
-          guild_id, user_id, provider, model, status, error_code, latency_ms, prompt_chars, response_chars
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          guild_id, user_id, provider, model, status, error_code, latency_ms, prompt_chars, response_chars, trigger_source
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         normalizedGuildId,
         normalizedUserId,
@@ -266,6 +362,7 @@ class AiAssistantService {
         Math.max(0, parseInt(latencyMs, 10) || 0),
         Math.max(0, parseInt(promptChars, 10) || 0),
         Math.max(0, parseInt(responseChars, 10) || 0),
+        String(triggerSource || 'slash').trim() || 'slash',
       );
     } catch (error) {
       logger.warn('[ai-assistant] failed to log usage:', error?.message || error);
@@ -342,7 +439,7 @@ class AiAssistantService {
     return out;
   }
 
-  async ask({ guildId, userId, channelId, prompt, providerOverride = '', requesterTag = '' }) {
+  async ask({ guildId, userId, channelId, prompt, providerOverride = '', requesterTag = '', triggerSource = 'slash' }) {
     const normalizedGuildId = normalizeGuildId(guildId);
     const cleanPrompt = String(prompt || '').trim();
     if (!normalizedGuildId) return { success: false, code: 'invalid_guild', message: 'Invalid guild context' };
@@ -367,8 +464,58 @@ class AiAssistantService {
     if (!allowance.allowed) {
       return { success: false, code: 'limit_reached', message: 'Daily AI request limit reached for this plan.', allowance };
     }
+    const userAllowance = this.getUserDailyRemaining(normalizedGuildId, userId, tenantSettings.perUserDailyLimit);
+    if (!userAllowance.allowed) {
+      return { success: false, code: 'user_limit_reached', message: 'You reached your daily AI request limit for this server.', allowance, userAllowance };
+    }
+
+    if (tenantSettings.safetyFilterEnabled) {
+      const blocked = this.matchPromptDenylist(cleanPrompt);
+      if (blocked) {
+        this.logUsage({
+          guildId: normalizedGuildId,
+          userId,
+          provider: 'safety',
+          model: 'denylist',
+          status: 'error',
+          errorCode: blocked.code,
+          latencyMs: 0,
+          promptChars: cleanPrompt.length,
+          responseChars: 0,
+          triggerSource,
+        });
+        return { success: false, code: 'content_blocked', message: blocked.message, allowance, userAllowance };
+      }
+    }
 
     const global = this.getGlobalProviderSettings();
+    if (tenantSettings.moderationEnabled) {
+      const moderationKey = global.openaiApiKey;
+      if (!moderationKey) {
+        return { success: false, code: 'moderation_unavailable', message: 'Moderation is enabled but no OpenAI API key is configured.' };
+      }
+      try {
+        const moderation = await this.callOpenAiModeration({ apiKey: moderationKey, input: cleanPrompt });
+        if (moderation.flagged) {
+          this.logUsage({
+            guildId: normalizedGuildId,
+            userId,
+            provider: 'moderation',
+            model: 'omni-moderation-latest',
+            status: 'error',
+            errorCode: 'moderation_flagged_prompt',
+            latencyMs: 0,
+            promptChars: cleanPrompt.length,
+            responseChars: 0,
+            triggerSource,
+          });
+          return { success: false, code: 'content_blocked', message: 'That request is blocked by safety policy.', allowance, userAllowance };
+        }
+      } catch (error) {
+        return { success: false, code: error?.code || 'moderation_error', message: error?.message || 'Moderation check failed.' };
+      }
+    }
+
     const selectedProvider = providerOverride ? normalizeProvider(providerOverride, tenantSettings.provider) : tenantSettings.provider;
     const providerOrder = this.resolveProviderOrder(selectedProvider, global.fallbackProvider, global.defaultProvider);
     const systemPrompt = tenantSettings.systemPrompt || '';
@@ -400,6 +547,7 @@ class AiAssistantService {
           latencyMs: Date.now() - startedAt,
           promptChars: cleanPrompt.length,
           responseChars: text.length,
+          triggerSource,
         });
         if (requesterTag) {
           logger.log(`[ai-assistant] guild=${normalizedGuildId} provider=${provider} model=${model} by=${requesterTag}`);
@@ -411,6 +559,7 @@ class AiAssistantService {
           text,
           responseVisibility: tenantSettings.responseVisibility,
           allowance: this.getDailyRemaining(normalizedGuildId),
+          userAllowance: this.getUserDailyRemaining(normalizedGuildId, userId, tenantSettings.perUserDailyLimit),
         };
       } catch (error) {
         lastError = error;
@@ -424,6 +573,7 @@ class AiAssistantService {
           latencyMs: Date.now() - startedAt,
           promptChars: cleanPrompt.length,
           responseChars: 0,
+          triggerSource,
         });
       }
     }

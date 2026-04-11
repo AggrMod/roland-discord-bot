@@ -831,6 +831,11 @@ class AiAssistantService {
 
     const knowledge = this.resolveKnowledgeContext(normalizedGuildId, cleanPrompt);
     if (!knowledge.success) return knowledge;
+    const confidenceThreshold = requiredConfidence === null || requiredConfidence === undefined
+      ? DEFAULTS.defaultMinConfidence
+      : normalizeIntegerInRange(requiredConfidence, { min: 0, max: 100, fallback: DEFAULTS.defaultMinConfidence });
+    const confidence = Number(knowledge.confidence || 0);
+
     if (!knowledge.hasDocs) {
       this.logUsage({
         guildId: normalizedGuildId,
@@ -860,11 +865,6 @@ class AiAssistantService {
         triggerSource,
       });
     } else {
-      const confidenceThreshold = requiredConfidence === null || requiredConfidence === undefined
-        ? DEFAULTS.defaultMinConfidence
-        : normalizeIntegerInRange(requiredConfidence, { min: 0, max: 100, fallback: DEFAULTS.defaultMinConfidence });
-      const confidence = Number(knowledge.confidence || 0);
-      
       // We log low confidence matches, but we no longer block the request.
       // This allows the bot to fall back to general AI knowledge.
       if (confidence < confidenceThreshold) {

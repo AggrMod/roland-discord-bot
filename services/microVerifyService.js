@@ -559,7 +559,7 @@ class MicroVerifyService {
         await roleService.updateUserRoles(discordId, effectiveUsername, resolvedGuildId || null);
 
         if (!resolvedGuildId) {
-          logger.warn(`Micro-verify role sync: no guild context for ${discordId}; skipped Discord role assignment`);
+          logger.debug(`Micro-verify role sync skipped: no guild context for ${discordId}`);
           return;
         }
 

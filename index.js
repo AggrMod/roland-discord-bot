@@ -9,6 +9,9 @@ const moduleGate = require('./middleware/moduleGate');
 const { getCommandModuleKey } = require('./config/commandModules');
 const clientProvider = require('./utils/clientProvider');
 const { applyEmbedBranding } = require('./services/embedBranding');
+const installInteractionEphemeralCompat = require('./utils/interactionEphemeralCompat');
+
+installInteractionEphemeralCompat();
 
 const LEGACY_MINIGAME_ALIASES = new Set([
   'battle',

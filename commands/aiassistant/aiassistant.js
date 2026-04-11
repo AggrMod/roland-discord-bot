@@ -75,18 +75,24 @@ module.exports = {
 
     await interaction.deferReply({ ephemeral: useEphemeral });
 
-    const reportText = await aiAssistantService.generateInstantBriefing(interaction.guildId, {
+    const briefingResult = await aiAssistantService.generateInstantBriefing(interaction.guildId, {
       userId: interaction.user.id,
       channelId: interaction.channelId,
       requesterTag: interaction.user.tag,
       memberRoleNames: interaction.member?.roles?.cache?.map(r => r.name) || [],
       memberRoleIds: interaction.member?.roles?.cache?.map(r => r.id) || [],
     });
-    if (!reportText) {
-      await interaction.editReply({ content: 'The Consigliere is currently unavailable. Try again later.' });
+    if (!briefingResult?.success || !String(briefingResult?.text || '').trim()) {
+      const reason = String(briefingResult?.message || '').trim();
+      await interaction.editReply({
+        content: reason
+          ? `The Consigliere is currently unavailable: ${reason}`
+          : 'The Consigliere is currently unavailable. Try again later.',
+      });
       return;
     }
 
+    const reportText = String(briefingResult.text || '').trim();
     const chunks = splitDiscordMessage(reportText, 1900);
     await interaction.editReply({
       content: chunks[0],

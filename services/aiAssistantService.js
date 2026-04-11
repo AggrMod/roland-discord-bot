@@ -1611,24 +1611,48 @@ class AiAssistantService {
    */
   async generateInstantBriefing(guildId, options = {}) {
     const normalizedGuildId = normalizeGuildId(guildId);
-    
-    // Gather current state
+
+    // Gather current state (bounded to keep prompt size safe).
     const currentProposals = db.prepare("SELECT title, status FROM proposals WHERE guild_id = ? AND status IN ('supporting', 'voting')").all(normalizedGuildId);
     const activeMissions = db.prepare("SELECT title FROM missions WHERE guild_id = ? AND status = 'active'").all(normalizedGuildId);
     const recentBattles = db.prepare("SELECT lobby_id, status FROM battle_lobbies WHERE guild_id = ? AND status IN ('open', 'in_progress')").all(normalizedGuildId);
 
-    const state = {
-      proposals: currentProposals,
-      missions: activeMissions,
-      arenas: recentBattles
-    };
+    const proposals = (currentProposals || []).slice(0, 12).map(item => ({
+      title: String(item?.title || '').slice(0, 100),
+      status: String(item?.status || '').slice(0, 32),
+    }));
+    const missions = (activeMissions || []).slice(0, 12).map(item => String(item?.title || '').slice(0, 100));
+    const arenas = (recentBattles || []).slice(0, 12).map(item => ({
+      lobby: String(item?.lobby_id || '').slice(0, 32),
+      status: String(item?.status || '').slice(0, 32),
+    }));
 
     const persona = "You are the Family Consigliere. A member is asking for an update on current affairs. " +
                     "Give them a sharp, concise briefing on current 'business' (proposals), 'heists' (missions), and 'the arena' (battles). " +
                     "Tone: Efficient, loyal, slightly dangerous. If things are quiet, encourage them to stir up some trouble.";
 
-    const prompt = `Current Family State:\n\n${JSON.stringify(state, null, 2)}\n\n` +
-                   `Provide a concise status briefing for the member (1-2 paragraphs).`;
+    const proposalLine = proposals.length
+      ? proposals.map(item => `${item.title} [${item.status}]`).join(' | ')
+      : 'No active proposals.';
+    const missionLine = missions.length
+      ? missions.join(' | ')
+      : 'No active missions.';
+    const arenaLine = arenas.length
+      ? arenas.map(item => `${item.lobby} [${item.status}]`).join(' | ')
+      : 'No active arena battles.';
+
+    let prompt = [
+      'Current Family State:',
+      `Business (proposals): ${proposalLine}`,
+      `Heists (missions): ${missionLine}`,
+      `Arena: ${arenaLine}`,
+      '',
+      'Provide a concise status briefing for the member (1-2 paragraphs).',
+    ].join('\n');
+
+    if (prompt.length > 2800) {
+      prompt = `${prompt.slice(0, 2750)}\n\n(Truncated state snapshot for brevity.)`;
+    }
 
     try {
       const callerUserId = String(options.userId || '').trim() || 'system-agent';
@@ -1647,10 +1671,24 @@ class AiAssistantService {
         skipChannelCheck: !callerChannelId,
         skipRoleCheck: !callerChannelId,
       });
-      return response.success ? response.text : null;
+      if (!response.success) {
+        return {
+          success: false,
+          code: response.code || 'briefing_failed',
+          message: response.message || 'Briefing request failed.',
+        };
+      }
+      return {
+        success: true,
+        text: response.text,
+      };
     } catch (e) {
       logger.error(`[ai-assistant-briefing] Error generating briefing for ${normalizedGuildId}:`, e);
-      return null;
+      return {
+        success: false,
+        code: 'briefing_exception',
+        message: e?.message || 'Briefing request failed unexpectedly.',
+      };
     }
   }
 

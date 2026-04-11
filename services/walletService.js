@@ -60,21 +60,34 @@ class WalletService {
             return;
           }
 
-          const guildId = String(guildIdHint || '').trim();
-          if (!guildId) {
-            logger.debug('OG role assignment skipped: no guild context (global verification flow)');
-            return;
+          const hintedGuildId = String(guildIdHint || '').trim();
+          const candidateGuildIds = hintedGuildId
+            ? [hintedGuildId]
+            : Array.from(client.guilds.cache.keys());
+
+          let attempted = 0;
+          let assigned = 0;
+
+          for (const guildId of candidateGuildIds) {
+            const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+            if (!guild) continue;
+
+            // Only attempt where the user is actually in this guild.
+            const member = guild.members.cache.get(discordId) || await guild.members.fetch(discordId).catch(() => null);
+            if (!member) continue;
+
+            attempted += 1;
+            const result = await ogRoleService.assignOnVerification(guild, discordId, username);
+            if (result?.assigned) {
+              assigned += 1;
+              logger.log(`✨ OG role auto-assigned to ${username} (${discordId}) in guild ${guild.id}`);
+            }
           }
 
-          const guild = await client.guilds.fetch(guildId).catch(() => null);
-          if (!guild) {
-            logger.warn('Could not fetch guild for OG role assignment');
-            return;
-          }
-
-          const result = await ogRoleService.assignOnVerification(guild, discordId, username);
-          if (result.assigned) {
-            logger.log(`✨ OG role auto-assigned to ${username} (${discordId})`);
+          if (attempted === 0) {
+            logger.debug(`OG role assignment skipped: member ${discordId} not found in candidate guilds`);
+          } else if (assigned === 0) {
+            logger.debug(`OG role assignment attempted for ${discordId} in ${attempted} guild(s), no assignment applied`);
           }
         } catch (error) {
           logger.error('Error in OG role auto-assignment:', error);

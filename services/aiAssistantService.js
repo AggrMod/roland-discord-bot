@@ -3,10 +3,19 @@ const logger = require('../utils/logger');
 const settingsManager = require('../config/settings');
 const tenantService = require('./tenantService');
 const entitlementService = require('./entitlementService');
+const clientProvider = require('../utils/clientProvider');
 const walletService = require('./walletService');
 const roleService = require('./roleService');
 const battleService = require('./battleService');
 const { decryptSecret } = require('../utils/secretVault');
+const crypto = require('crypto');
+let pdfParse = null;
+try {
+  // Optional dependency for PDF ingestion.
+  pdfParse = require('pdf-parse');
+} catch (_error) {
+  pdfParse = null;
+}
 
 const DEFAULTS = Object.freeze({
   enabled: false,
@@ -23,6 +32,13 @@ const DEFAULTS = Object.freeze({
   perUserDailyLimit: 20,
   safetyFilterEnabled: true,
   moderationEnabled: false,
+  memoryEnabled: true,
+  memoryWindowMessages: 6,
+  publicPersonaKey: 'default_public',
+  adminPersonaKey: 'default_admin',
+  dailyTokenBudget: 0,
+  burstPerMinute: 0,
+  allowActionSuggestions: true,
   defaultChannelMode: 'mention',
   defaultMinConfidence: 35,
   defaultPassiveCooldownSeconds: 120,
@@ -210,6 +226,35 @@ function parseJsonArray(raw) {
   }
 }
 
+function sha256Text(text) {
+  return crypto.createHash('sha256').update(String(text || ''), 'utf8').digest('hex');
+}
+
+function stripHtmlToText(html) {
+  return String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeScope(value, fallback = 'both') {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'public' || normalized === 'admin' || normalized === 'both') return normalized;
+  return fallback;
+}
+
+function normalizeAudience(value, fallback = 'public') {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'public' || normalized === 'admin') return normalized;
+  return fallback;
+}
+
 async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -253,6 +298,8 @@ class AiAssistantService {
              , mention_enabled, allowed_role_ids, cooldown_seconds, max_response_chars
              , per_user_daily_limit, safety_filter_enabled, moderation_enabled
              , summary_enabled, summary_channel_id, summary_activity_channels
+             , memory_enabled, memory_window_messages, public_persona_key, admin_persona_key
+             , daily_token_budget, burst_per_minute, allow_action_suggestions
       FROM ai_assistant_tenant_settings
       WHERE guild_id = ?
     `).get(normalizedGuildId);
@@ -275,6 +322,13 @@ class AiAssistantService {
       summaryEnabled: row ? row.summary_enabled === 1 : DEFAULTS.summaryEnabled,
       summaryChannelId: row?.summary_channel_id || null,
       summaryActivityChannels: normalizeAllowedChannelIds(parseJsonArray(row?.summary_activity_channels)),
+      memoryEnabled: row ? row.memory_enabled !== 0 : DEFAULTS.memoryEnabled,
+      memoryWindowMessages: normalizeIntegerInRange(row?.memory_window_messages, { min: 0, max: 30, fallback: DEFAULTS.memoryWindowMessages }),
+      publicPersonaKey: String(row?.public_persona_key || DEFAULTS.publicPersonaKey).trim() || DEFAULTS.publicPersonaKey,
+      adminPersonaKey: String(row?.admin_persona_key || DEFAULTS.adminPersonaKey).trim() || DEFAULTS.adminPersonaKey,
+      dailyTokenBudget: normalizeIntegerInRange(row?.daily_token_budget, { min: 0, max: 2000000, fallback: DEFAULTS.dailyTokenBudget }),
+      burstPerMinute: normalizeIntegerInRange(row?.burst_per_minute, { min: 0, max: 200, fallback: DEFAULTS.burstPerMinute }),
+      allowActionSuggestions: row ? row.allow_action_suggestions !== 0 : DEFAULTS.allowActionSuggestions,
     };
 
     return {
@@ -320,12 +374,25 @@ class AiAssistantService {
     if (payload.summaryEnabled !== undefined) next.summaryEnabled = !!payload.summaryEnabled;
     if (payload.summaryChannelId !== undefined) next.summaryChannelId = String(payload.summaryChannelId || '').trim() || null;
     if (payload.summaryActivityChannels !== undefined) next.summaryActivityChannels = normalizeAllowedChannelIds(payload.summaryActivityChannels);
+    if (payload.memoryEnabled !== undefined) next.memoryEnabled = !!payload.memoryEnabled;
+    if (payload.memoryWindowMessages !== undefined) {
+      next.memoryWindowMessages = normalizeIntegerInRange(payload.memoryWindowMessages, { min: 0, max: 30, fallback: DEFAULTS.memoryWindowMessages });
+    }
+    if (payload.publicPersonaKey !== undefined) next.publicPersonaKey = String(payload.publicPersonaKey || '').trim().slice(0, 64) || DEFAULTS.publicPersonaKey;
+    if (payload.adminPersonaKey !== undefined) next.adminPersonaKey = String(payload.adminPersonaKey || '').trim().slice(0, 64) || DEFAULTS.adminPersonaKey;
+    if (payload.dailyTokenBudget !== undefined) {
+      next.dailyTokenBudget = normalizeIntegerInRange(payload.dailyTokenBudget, { min: 0, max: 2000000, fallback: DEFAULTS.dailyTokenBudget });
+    }
+    if (payload.burstPerMinute !== undefined) {
+      next.burstPerMinute = normalizeIntegerInRange(payload.burstPerMinute, { min: 0, max: 200, fallback: DEFAULTS.burstPerMinute });
+    }
+    if (payload.allowActionSuggestions !== undefined) next.allowActionSuggestions = !!payload.allowActionSuggestions;
 
     db.prepare(`
       INSERT INTO ai_assistant_tenant_settings (
-        guild_id, enabled, provider, model_openai, model_gemini, mention_enabled, response_visibility, system_prompt, allowed_channel_ids, allowed_role_ids, cooldown_seconds, max_response_chars, per_user_daily_limit, safety_filter_enabled, moderation_enabled, summary_enabled, summary_channel_id, summary_activity_channels, updated_at
+        guild_id, enabled, provider, model_openai, model_gemini, mention_enabled, response_visibility, system_prompt, allowed_channel_ids, allowed_role_ids, cooldown_seconds, max_response_chars, per_user_daily_limit, safety_filter_enabled, moderation_enabled, summary_enabled, summary_channel_id, summary_activity_channels, memory_enabled, memory_window_messages, public_persona_key, admin_persona_key, daily_token_budget, burst_per_minute, allow_action_suggestions, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(guild_id) DO UPDATE SET
         enabled = excluded.enabled,
         provider = excluded.provider,
@@ -344,6 +411,13 @@ class AiAssistantService {
         summary_enabled = excluded.summary_enabled,
         summary_channel_id = excluded.summary_channel_id,
         summary_activity_channels = excluded.summary_activity_channels,
+        memory_enabled = excluded.memory_enabled,
+        memory_window_messages = excluded.memory_window_messages,
+        public_persona_key = excluded.public_persona_key,
+        admin_persona_key = excluded.admin_persona_key,
+        daily_token_budget = excluded.daily_token_budget,
+        burst_per_minute = excluded.burst_per_minute,
+        allow_action_suggestions = excluded.allow_action_suggestions,
         updated_at = CURRENT_TIMESTAMP
     `).run(
       normalizedGuildId,
@@ -364,6 +438,13 @@ class AiAssistantService {
       next.summaryEnabled ? 1 : 0,
       next.summaryChannelId,
       JSON.stringify(next.summaryActivityChannels || []),
+      next.memoryEnabled ? 1 : 0,
+      next.memoryWindowMessages,
+      next.publicPersonaKey,
+      next.adminPersonaKey,
+      next.dailyTokenBudget,
+      next.burstPerMinute,
+      next.allowActionSuggestions ? 1 : 0,
     );
 
     return { success: true, settings: next };
@@ -488,7 +569,7 @@ class AiAssistantService {
     const normalizedGuildId = normalizeGuildId(guildId);
     if (!normalizedGuildId) return { success: false, message: 'Invalid guildId' };
     const docs = db.prepare(`
-      SELECT id, guild_id, title, body, source_url, tags, enabled, is_lore, priority, created_at, updated_at
+      SELECT id, guild_id, title, body, source_url, tags, enabled, is_lore, priority, source_type, source_ref, body_hash, stale, source_checked_at, created_at, updated_at
       FROM ai_assistant_knowledge_docs
       WHERE guild_id = ?
       ORDER BY enabled DESC, priority DESC, updated_at DESC, id DESC
@@ -503,6 +584,11 @@ class AiAssistantService {
       enabled: row.enabled !== 0,
       isLore: row.is_lore !== 0,
       priority: Number(row.priority || 0),
+      sourceType: String(row.source_type || 'manual'),
+      sourceRef: String(row.source_ref || ''),
+      bodyHash: String(row.body_hash || ''),
+      stale: row.stale === 1,
+      sourceCheckedAt: row.source_checked_at || null,
       createdAt: row.created_at || null,
       updatedAt: row.updated_at || null,
     }));
@@ -546,6 +632,10 @@ class AiAssistantService {
     const enabled = payload.enabled === undefined ? true : !!payload.enabled;
     const isLore = !!(payload.isLore ?? payload.is_lore);
     const priority = Number.parseInt(payload.priority, 10) || 0;
+    const sourceType = String(payload.sourceType || payload.source_type || 'manual').trim().toLowerCase() || 'manual';
+    const sourceRef = String(payload.sourceRef || payload.source_ref || '').trim().slice(0, 500) || null;
+    const bodyHash = sha256Text(body);
+    const sourceCheckedAt = payload.sourceCheckedAt || payload.source_checked_at || new Date().toISOString();
 
     if (!title) return { success: false, message: 'Title is required' };
     if (!body || body.length < 20) return { success: false, message: 'Body content is required (min 20 chars)' };
@@ -559,9 +649,9 @@ class AiAssistantService {
 
     if (docId === null || docId === undefined) {
       const result = db.prepare(`
-        INSERT INTO ai_assistant_knowledge_docs (guild_id, title, body, source_url, tags, enabled, is_lore, priority, vector_embedding, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `).run(normalizedGuildId, title, body, sourceUrl || null, tags, enabled ? 1 : 0, isLore ? 1 : 0, priority, embeddingJson);
+        INSERT INTO ai_assistant_knowledge_docs (guild_id, title, body, source_url, tags, enabled, is_lore, priority, source_type, source_ref, body_hash, stale, source_checked_at, vector_embedding, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `).run(normalizedGuildId, title, body, sourceUrl || null, tags, enabled ? 1 : 0, isLore ? 1 : 0, priority, sourceType, sourceRef, bodyHash, 0, sourceCheckedAt, embeddingJson);
       return { success: true, id: Number(result.lastInsertRowid) };
     }
 
@@ -574,9 +664,9 @@ class AiAssistantService {
 
     db.prepare(`
       UPDATE ai_assistant_knowledge_docs
-      SET title = ?, body = ?, source_url = ?, tags = ?, enabled = ?, is_lore = ?, priority = ?, vector_embedding = ?, updated_at = CURRENT_TIMESTAMP
+      SET title = ?, body = ?, source_url = ?, tags = ?, enabled = ?, is_lore = ?, priority = ?, source_type = ?, source_ref = ?, body_hash = ?, stale = 0, source_checked_at = ?, vector_embedding = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND guild_id = ?
-    `).run(title, body, sourceUrl || null, tags, enabled ? 1 : 0, isLore ? 1 : 0, priority, embeddingJson, normalizedDocId, normalizedGuildId);
+    `).run(title, body, sourceUrl || null, tags, enabled ? 1 : 0, isLore ? 1 : 0, priority, sourceType, sourceRef, bodyHash, sourceCheckedAt, embeddingJson, normalizedDocId, normalizedGuildId);
     return { success: true, id: normalizedDocId };
   }
 
@@ -590,6 +680,814 @@ class AiAssistantService {
     const result = db.prepare('DELETE FROM ai_assistant_knowledge_docs WHERE id = ? AND guild_id = ?').run(normalizedDocId, normalizedGuildId);
     if (!result.changes) return { success: false, message: 'Knowledge document not found' };
     return { success: true };
+  }
+
+  ensureDefaultPersonas(guildId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return;
+    const defaults = [
+      {
+        personaKey: 'default_public',
+        displayName: 'Community Assistant',
+        scope: 'public',
+        promptText: 'You are GuildPilot assistant. Be concise, accurate, and helpful for community members.',
+      },
+      {
+        personaKey: 'default_admin',
+        displayName: 'Ops Analyst',
+        scope: 'admin',
+        promptText: 'You are GuildPilot operations analyst. Prioritize actionable recommendations, risks, and exact next steps.',
+      },
+    ];
+    const stmt = db.prepare(`
+      INSERT INTO ai_assistant_personas (guild_id, persona_key, display_name, scope, prompt_text, enabled, updated_at)
+      VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+      ON CONFLICT(guild_id, persona_key) DO NOTHING
+    `);
+    for (const item of defaults) {
+      stmt.run(normalizedGuildId, item.personaKey, item.displayName, item.scope, item.promptText);
+    }
+  }
+
+  listPersonas(guildId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'Invalid guildId' };
+    this.ensureDefaultPersonas(normalizedGuildId);
+    const rows = db.prepare(`
+      SELECT persona_key, display_name, scope, prompt_text, enabled, updated_at
+      FROM ai_assistant_personas
+      WHERE guild_id = ?
+      ORDER BY display_name ASC, persona_key ASC
+    `).all(normalizedGuildId);
+    return {
+      success: true,
+      personas: rows.map(row => ({
+        personaKey: String(row.persona_key || ''),
+        displayName: String(row.display_name || ''),
+        scope: normalizeScope(row.scope, 'both'),
+        promptText: String(row.prompt_text || ''),
+        enabled: row.enabled !== 0,
+        updatedAt: row.updated_at || null,
+      })),
+    };
+  }
+
+  savePersona(guildId, payload = {}) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'Invalid guildId' };
+    const personaKey = String(payload.personaKey || payload.persona_key || '').trim().toLowerCase().replace(/[^a-z0-9_\-]/g, '').slice(0, 64);
+    const displayName = String(payload.displayName || payload.display_name || '').trim().slice(0, 80);
+    const promptText = String(payload.promptText || payload.prompt_text || '').trim().slice(0, 4000);
+    const scope = normalizeScope(payload.scope, 'both');
+    const enabled = payload.enabled === undefined ? true : !!payload.enabled;
+    if (!personaKey) return { success: false, message: 'personaKey is required' };
+    if (!displayName) return { success: false, message: 'displayName is required' };
+    if (!promptText) return { success: false, message: 'promptText is required' };
+
+    db.prepare(`
+      INSERT INTO ai_assistant_personas (guild_id, persona_key, display_name, scope, prompt_text, enabled, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(guild_id, persona_key) DO UPDATE SET
+        display_name = excluded.display_name,
+        scope = excluded.scope,
+        prompt_text = excluded.prompt_text,
+        enabled = excluded.enabled,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(normalizedGuildId, personaKey, displayName, scope, promptText, enabled ? 1 : 0);
+    return { success: true, personaKey };
+  }
+
+  deletePersona(guildId, personaKey) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const normalizedPersonaKey = String(personaKey || '').trim().toLowerCase();
+    if (!normalizedGuildId || !normalizedPersonaKey) return { success: false, message: 'Invalid guild/persona' };
+    if (normalizedPersonaKey === 'default_public' || normalizedPersonaKey === 'default_admin') {
+      return { success: false, message: 'Default personas cannot be deleted' };
+    }
+    const result = db.prepare('DELETE FROM ai_assistant_personas WHERE guild_id = ? AND persona_key = ?').run(normalizedGuildId, normalizedPersonaKey);
+    if (!result.changes) return { success: false, message: 'Persona not found' };
+    return { success: true };
+  }
+
+  resolvePersonaPrompt(guildId, personaKey, audience = 'public') {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const normalizedPersonaKey = String(personaKey || '').trim().toLowerCase();
+    if (!normalizedGuildId) return '';
+    this.ensureDefaultPersonas(normalizedGuildId);
+    const row = db.prepare(`
+      SELECT prompt_text, scope, enabled
+      FROM ai_assistant_personas
+      WHERE guild_id = ? AND persona_key = ?
+      LIMIT 1
+    `).get(normalizedGuildId, normalizedPersonaKey);
+    if (!row || row.enabled === 0) return '';
+    const scope = normalizeScope(row.scope, 'both');
+    if (scope !== 'both' && scope !== audience) return '';
+    return String(row.prompt_text || '').trim();
+  }
+
+  listRoleLimits(guildId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'Invalid guildId' };
+    const rows = db.prepare(`
+      SELECT role_id, daily_requests_per_user, daily_tokens_per_user, updated_at
+      FROM ai_assistant_role_limits
+      WHERE guild_id = ?
+      ORDER BY role_id ASC
+    `).all(normalizedGuildId);
+    return {
+      success: true,
+      limits: rows.map(row => ({
+        roleId: String(row.role_id || ''),
+        dailyRequestsPerUser: Number(row.daily_requests_per_user || 0),
+        dailyTokensPerUser: Number(row.daily_tokens_per_user || 0),
+        updatedAt: row.updated_at || null,
+      })),
+    };
+  }
+
+  saveRoleLimits(guildId, limits = []) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'Invalid guildId' };
+    if (!Array.isArray(limits)) return { success: false, message: 'limits must be an array' };
+    const normalized = [];
+    const seen = new Set();
+    for (const row of limits) {
+      const roleId = String(row?.roleId || row?.role_id || '').trim();
+      if (!/^\d{17,20}$/.test(roleId) || seen.has(roleId)) continue;
+      seen.add(roleId);
+      normalized.push({
+        roleId,
+        dailyRequestsPerUser: normalizeIntegerInRange(row?.dailyRequestsPerUser, { min: 0, max: 1000, fallback: 0 }),
+        dailyTokensPerUser: normalizeIntegerInRange(row?.dailyTokensPerUser, { min: 0, max: 2000000, fallback: 0 }),
+      });
+      if (normalized.length >= 500) break;
+    }
+
+    const tx = db.transaction(() => {
+      db.prepare('DELETE FROM ai_assistant_role_limits WHERE guild_id = ?').run(normalizedGuildId);
+      const stmt = db.prepare(`
+        INSERT INTO ai_assistant_role_limits (guild_id, role_id, daily_requests_per_user, daily_tokens_per_user, updated_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `);
+      for (const row of normalized) {
+        stmt.run(normalizedGuildId, row.roleId, row.dailyRequestsPerUser, row.dailyTokensPerUser);
+      }
+    });
+    tx();
+    return { success: true, count: normalized.length };
+  }
+
+  getEstimatedTokens(textLength) {
+    const chars = Math.max(0, Number.parseInt(textLength, 10) || 0);
+    return Math.max(1, Math.ceil(chars / 4));
+  }
+
+  getDailyTokenUsage(guildId, userId = null) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return 0;
+    if (userId) {
+      const row = db.prepare(`
+        SELECT COALESCE(SUM(estimated_tokens), 0) AS total
+        FROM ai_assistant_usage_events
+        WHERE guild_id = ?
+          AND user_id = ?
+          AND status = 'ok'
+          AND DATE(created_at) = DATE('now')
+      `).get(normalizedGuildId, String(userId || '').trim());
+      return Number(row?.total || 0);
+    }
+    const row = db.prepare(`
+      SELECT COALESCE(SUM(estimated_tokens), 0) AS total
+      FROM ai_assistant_usage_events
+      WHERE guild_id = ?
+        AND status = 'ok'
+        AND DATE(created_at) = DATE('now')
+    `).get(normalizedGuildId);
+    return Number(row?.total || 0);
+  }
+
+  getBurstUsage(guildId, channelId = null) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return 0;
+    if (channelId && /^\d{17,20}$/.test(String(channelId || '').trim())) {
+      const row = db.prepare(`
+        SELECT COUNT(*) AS total
+        FROM ai_assistant_usage_events
+        WHERE guild_id = ?
+          AND channel_id = ?
+          AND status = 'ok'
+          AND created_at >= datetime('now', '-1 minute')
+      `).get(normalizedGuildId, String(channelId || '').trim());
+      return Number(row?.total || 0);
+    }
+    const row = db.prepare(`
+      SELECT COUNT(*) AS total
+      FROM ai_assistant_usage_events
+      WHERE guild_id = ?
+        AND status = 'ok'
+        AND created_at >= datetime('now', '-1 minute')
+    `).get(normalizedGuildId);
+    return Number(row?.total || 0);
+  }
+
+  getEffectiveRoleLimit(guildId, memberRoleIds = []) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const normalizedRoleIds = Array.isArray(memberRoleIds)
+      ? memberRoleIds.map(roleId => String(roleId || '').trim()).filter(roleId => /^\d{17,20}$/.test(roleId))
+      : [];
+    if (!normalizedGuildId || !normalizedRoleIds.length) {
+      return { dailyRequestsPerUser: 0, dailyTokensPerUser: 0 };
+    }
+    const rows = db.prepare(`
+      SELECT role_id, daily_requests_per_user, daily_tokens_per_user
+      FROM ai_assistant_role_limits
+      WHERE guild_id = ?
+    `).all(normalizedGuildId);
+    const matched = rows.filter(row => normalizedRoleIds.includes(String(row.role_id || '')));
+    if (!matched.length) return { dailyRequestsPerUser: 0, dailyTokensPerUser: 0 };
+    const strictestReq = matched
+      .map(row => Number(row.daily_requests_per_user || 0))
+      .filter(v => Number.isFinite(v) && v > 0)
+      .sort((a, b) => a - b)[0] || 0;
+    const strictestTokens = matched
+      .map(row => Number(row.daily_tokens_per_user || 0))
+      .filter(v => Number.isFinite(v) && v > 0)
+      .sort((a, b) => a - b)[0] || 0;
+    return { dailyRequestsPerUser: strictestReq, dailyTokensPerUser: strictestTokens };
+  }
+
+  getMemoryContext(guildId, userId, channelId, windowMessages = DEFAULTS.memoryWindowMessages) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const normalizedUserId = String(userId || '').trim();
+    const normalizedChannelId = String(channelId || '').trim() || null;
+    if (!normalizedGuildId || !normalizedUserId) {
+      return { summary: '', turns: [] };
+    }
+    const row = db.prepare(`
+      SELECT summary_text
+      FROM ai_assistant_memory_state
+      WHERE guild_id = ? AND user_id = ? AND channel_id IS ?
+      LIMIT 1
+    `).get(normalizedGuildId, normalizedUserId, normalizedChannelId);
+    const turnLimit = normalizeIntegerInRange(windowMessages, { min: 0, max: 30, fallback: DEFAULTS.memoryWindowMessages });
+    const turns = turnLimit > 0
+      ? db.prepare(`
+          SELECT prompt_text, response_text, created_at
+          FROM ai_assistant_memory_entries
+          WHERE guild_id = ? AND user_id = ? AND channel_id IS ?
+          ORDER BY id DESC
+          LIMIT ?
+        `).all(normalizedGuildId, normalizedUserId, normalizedChannelId, turnLimit).reverse()
+      : [];
+    return {
+      summary: String(row?.summary_text || '').trim(),
+      turns: turns.map(turn => ({
+        prompt: String(turn.prompt_text || ''),
+        response: String(turn.response_text || ''),
+        createdAt: turn.created_at || null,
+      })),
+    };
+  }
+
+  storeMemoryExchange(guildId, userId, channelId, promptText, responseText, triggerSource = 'slash', windowMessages = DEFAULTS.memoryWindowMessages) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const normalizedUserId = String(userId || '').trim();
+    const normalizedChannelId = String(channelId || '').trim() || null;
+    if (!normalizedGuildId || !normalizedUserId) return;
+    const cleanPrompt = String(promptText || '').trim().slice(0, 1200);
+    const cleanResponse = String(responseText || '').trim().slice(0, 1800);
+    if (!cleanPrompt || !cleanResponse) return;
+
+    db.prepare(`
+      INSERT INTO ai_assistant_memory_entries (guild_id, user_id, channel_id, prompt_text, response_text, trigger_source, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).run(normalizedGuildId, normalizedUserId, normalizedChannelId, cleanPrompt, cleanResponse, String(triggerSource || 'slash').trim() || 'slash');
+
+    this.compactMemoryContext(normalizedGuildId, normalizedUserId, normalizedChannelId, windowMessages);
+  }
+
+  compactMemoryContext(guildId, userId, channelId, windowMessages = DEFAULTS.memoryWindowMessages) {
+    const keep = normalizeIntegerInRange(windowMessages, { min: 0, max: 30, fallback: DEFAULTS.memoryWindowMessages });
+    const rows = db.prepare(`
+      SELECT id, prompt_text, response_text
+      FROM ai_assistant_memory_entries
+      WHERE guild_id = ? AND user_id = ? AND channel_id IS ?
+      ORDER BY id ASC
+    `).all(guildId, userId, channelId);
+    if (rows.length <= (keep * 2)) return;
+
+    const compactCount = Math.max(0, rows.length - keep);
+    const toCompact = rows.slice(0, compactCount);
+    if (!toCompact.length) return;
+    const compactIds = toCompact.map(row => Number(row.id));
+    const compactSummary = toCompact.map((row, index) => {
+      const q = String(row.prompt_text || '').slice(0, 140);
+      const a = String(row.response_text || '').slice(0, 180);
+      return `${index + 1}. Q: ${q} | A: ${a}`;
+    }).join('\n');
+
+    const existingState = db.prepare(`
+      SELECT summary_text FROM ai_assistant_memory_state
+      WHERE guild_id = ? AND user_id = ? AND channel_id IS ?
+      LIMIT 1
+    `).get(guildId, userId, channelId);
+    const mergedSummary = [String(existingState?.summary_text || '').trim(), compactSummary]
+      .filter(Boolean)
+      .join('\n')
+      .slice(-4000);
+
+    db.prepare(`
+      INSERT INTO ai_assistant_memory_state (guild_id, user_id, channel_id, summary_text, updated_at)
+      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(guild_id, user_id, channel_id) DO UPDATE SET
+        summary_text = excluded.summary_text,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(guildId, userId, channelId, mergedSummary);
+
+    const placeholders = compactIds.map(() => '?').join(', ');
+    db.prepare(`DELETE FROM ai_assistant_memory_entries WHERE id IN (${placeholders})`).run(...compactIds);
+  }
+
+  async importKnowledgeFromUrl(guildId, payload = {}, requestedByUserId = null) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'Invalid guildId' };
+    const sourceUrl = normalizeUrl(payload.sourceUrl || payload.source_url || '');
+    if (!sourceUrl) return { success: false, message: 'Valid source URL is required' };
+    const title = String(payload.title || '').trim().slice(0, 120) || `Imported: ${sourceUrl}`;
+    const tags = String(payload.tags || '').trim();
+
+    const jobId = db.prepare(`
+      INSERT INTO ai_assistant_ingestion_jobs (guild_id, status, source_type, source_ref, requested_by_user_id, payload_json, created_at, updated_at)
+      VALUES (?, 'running', 'url', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(normalizedGuildId, sourceUrl, requestedByUserId ? String(requestedByUserId).trim() : null, JSON.stringify(payload || {})).lastInsertRowid;
+
+    try {
+      const response = await fetchWithTimeout(sourceUrl, { method: 'GET', headers: { 'User-Agent': 'GuildPilot-KnowledgeBot/1.0' } }, 45000);
+      const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+      const rawBody = await response.text();
+      const body = contentType.includes('html') ? stripHtmlToText(rawBody) : String(rawBody || '').trim();
+      if (!response.ok || !body || body.length < 20) {
+        throw new Error(`Could not import from URL (${response.status})`);
+      }
+      const saveResult = await this.saveKnowledgeDoc(normalizedGuildId, {
+        title,
+        body: body.slice(0, 12000),
+        tags,
+        sourceUrl,
+        sourceType: 'url',
+        sourceRef: sourceUrl,
+        enabled: true,
+      });
+      if (!saveResult.success) throw new Error(saveResult.message || 'Failed to save imported document');
+      db.prepare(`
+        UPDATE ai_assistant_ingestion_jobs
+        SET status = 'completed', result_doc_id = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND guild_id = ?
+      `).run(Number(saveResult.id), Number(jobId), normalizedGuildId);
+      return { success: true, jobId: Number(jobId), docId: Number(saveResult.id) };
+    } catch (error) {
+      db.prepare(`
+        UPDATE ai_assistant_ingestion_jobs
+        SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND guild_id = ?
+      `).run(String(error?.message || 'Import failed').slice(0, 500), Number(jobId), normalizedGuildId);
+      return { success: false, message: error?.message || 'Import failed', jobId: Number(jobId) };
+    }
+  }
+
+  async importKnowledgeFromMarkdown(guildId, payload = {}, requestedByUserId = null) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'Invalid guildId' };
+    const title = String(payload.title || '').trim().slice(0, 120) || 'Imported Markdown';
+    const body = String(payload.body || '').trim().slice(0, 12000);
+    if (body.length < 20) return { success: false, message: 'Markdown body must be at least 20 characters' };
+    const tags = String(payload.tags || '').trim();
+
+    const jobId = db.prepare(`
+      INSERT INTO ai_assistant_ingestion_jobs (guild_id, status, source_type, source_ref, requested_by_user_id, payload_json, created_at, updated_at)
+      VALUES (?, 'running', 'markdown', 'inline_markdown', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(
+      normalizedGuildId,
+      requestedByUserId ? String(requestedByUserId).trim() : null,
+      JSON.stringify({ title, tags })
+    ).lastInsertRowid;
+
+    try {
+      const saveResult = await this.saveKnowledgeDoc(normalizedGuildId, {
+        title,
+        body,
+        tags,
+        sourceType: 'markdown',
+        sourceRef: 'inline_markdown',
+        enabled: payload.enabled !== false,
+      });
+      if (!saveResult.success) throw new Error(saveResult.message || 'Failed to save markdown document');
+      db.prepare(`
+        UPDATE ai_assistant_ingestion_jobs
+        SET status = 'completed', result_doc_id = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND guild_id = ?
+      `).run(Number(saveResult.id), Number(jobId), normalizedGuildId);
+      return { success: true, jobId: Number(jobId), docId: Number(saveResult.id) };
+    } catch (error) {
+      db.prepare(`
+        UPDATE ai_assistant_ingestion_jobs
+        SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND guild_id = ?
+      `).run(String(error?.message || 'Markdown import failed').slice(0, 500), Number(jobId), normalizedGuildId);
+      return { success: false, message: error?.message || 'Markdown import failed', jobId: Number(jobId) };
+    }
+  }
+
+  async importKnowledgeFromPdfUrl(guildId, payload = {}, requestedByUserId = null) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'Invalid guildId' };
+    if (!pdfParse) {
+      return { success: false, message: 'PDF parser is unavailable in this deployment.' };
+    }
+    const sourceUrl = normalizeUrl(payload.sourceUrl || payload.source_url || '');
+    if (!sourceUrl) return { success: false, message: 'Valid PDF source URL is required' };
+    const title = String(payload.title || '').trim().slice(0, 120) || `Imported PDF: ${sourceUrl}`;
+    const tags = String(payload.tags || '').trim();
+
+    const jobId = db.prepare(`
+      INSERT INTO ai_assistant_ingestion_jobs (guild_id, status, source_type, source_ref, requested_by_user_id, payload_json, created_at, updated_at)
+      VALUES (?, 'running', 'pdf_url', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(
+      normalizedGuildId,
+      sourceUrl,
+      requestedByUserId ? String(requestedByUserId).trim() : null,
+      JSON.stringify(payload || {})
+    ).lastInsertRowid;
+
+    try {
+      const response = await fetchWithTimeout(sourceUrl, { method: 'GET', headers: { 'User-Agent': 'GuildPilot-KnowledgeBot/1.0' } }, 45000);
+      if (!response.ok) {
+        throw new Error(`Could not download PDF (${response.status})`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      const parsed = await pdfParse(Buffer.from(arrayBuffer));
+      const body = String(parsed?.text || '').replace(/\s+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 12000);
+      if (body.length < 20) throw new Error('PDF text extraction returned too little content');
+
+      const saveResult = await this.saveKnowledgeDoc(normalizedGuildId, {
+        title,
+        body,
+        tags,
+        sourceUrl,
+        sourceType: 'pdf_url',
+        sourceRef: sourceUrl,
+        enabled: true,
+      });
+      if (!saveResult.success) throw new Error(saveResult.message || 'Failed to save imported PDF');
+      db.prepare(`
+        UPDATE ai_assistant_ingestion_jobs
+        SET status = 'completed', result_doc_id = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND guild_id = ?
+      `).run(Number(saveResult.id), Number(jobId), normalizedGuildId);
+      return { success: true, jobId: Number(jobId), docId: Number(saveResult.id) };
+    } catch (error) {
+      db.prepare(`
+        UPDATE ai_assistant_ingestion_jobs
+        SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND guild_id = ?
+      `).run(String(error?.message || 'PDF import failed').slice(0, 500), Number(jobId), normalizedGuildId);
+      return { success: false, message: error?.message || 'PDF import failed', jobId: Number(jobId) };
+    }
+  }
+
+  async importKnowledgeFromDiscordChannel(guildId, payload = {}, requestedByUserId = null) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'Invalid guildId' };
+    const channelId = String(payload.channelId || payload.channel_id || '').trim();
+    if (!/^\d{17,20}$/.test(channelId)) return { success: false, message: 'Valid channelId is required' };
+    const messageLimit = normalizeIntegerInRange(payload.messageLimit, { min: 20, max: 500, fallback: 120 });
+    const title = String(payload.title || '').trim().slice(0, 120) || `Imported channel ${channelId}`;
+    const tags = String(payload.tags || '').trim();
+
+    const jobId = db.prepare(`
+      INSERT INTO ai_assistant_ingestion_jobs (guild_id, status, source_type, source_ref, requested_by_user_id, payload_json, created_at, updated_at)
+      VALUES (?, 'running', 'discord_channel', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(normalizedGuildId, channelId, requestedByUserId ? String(requestedByUserId).trim() : null, JSON.stringify(payload || {})).lastInsertRowid;
+
+    try {
+      const client = clientProvider.getClient();
+      if (!client) throw new Error('Discord client is not ready');
+      const channel = await client.channels.fetch(channelId).catch(() => null);
+      if (!channel || !channel.isTextBased()) throw new Error('Channel not found or not text-based');
+
+      let before = undefined;
+      const collected = [];
+      while (collected.length < messageLimit) {
+        const batchSize = Math.min(100, messageLimit - collected.length);
+        const batch = await channel.messages.fetch({ limit: batchSize, before }).catch(() => null);
+        if (!batch || batch.size === 0) break;
+        const rows = Array.from(batch.values()).sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+        for (const message of rows) {
+          if (!message || !message.content) continue;
+          collected.push(`[${new Date(message.createdTimestamp).toISOString()}] ${message.author?.username || 'unknown'}: ${message.content}`);
+        }
+        before = rows[0]?.id;
+      }
+      if (!collected.length) throw new Error('No messages found to import');
+      const body = collected.join('\n').slice(0, 12000);
+      const saveResult = await this.saveKnowledgeDoc(normalizedGuildId, {
+        title,
+        body,
+        tags,
+        sourceType: 'discord_channel',
+        sourceRef: channelId,
+        enabled: true,
+      });
+      if (!saveResult.success) throw new Error(saveResult.message || 'Failed to save imported channel document');
+      db.prepare(`
+        UPDATE ai_assistant_ingestion_jobs
+        SET status = 'completed', result_doc_id = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND guild_id = ?
+      `).run(Number(saveResult.id), Number(jobId), normalizedGuildId);
+      return { success: true, jobId: Number(jobId), docId: Number(saveResult.id) };
+    } catch (error) {
+      db.prepare(`
+        UPDATE ai_assistant_ingestion_jobs
+        SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND guild_id = ?
+      `).run(String(error?.message || 'Import failed').slice(0, 500), Number(jobId), normalizedGuildId);
+      return { success: false, message: error?.message || 'Import failed', jobId: Number(jobId) };
+    }
+  }
+
+  listIngestionJobs(guildId, limit = 50) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'Invalid guildId' };
+    const normalizedLimit = normalizeIntegerInRange(limit, { min: 1, max: 200, fallback: 50 });
+    const rows = db.prepare(`
+      SELECT id, status, source_type, source_ref, requested_by_user_id, result_doc_id, error_message, created_at, updated_at
+      FROM ai_assistant_ingestion_jobs
+      WHERE guild_id = ?
+      ORDER BY id DESC
+      LIMIT ?
+    `).all(normalizedGuildId, normalizedLimit);
+    return {
+      success: true,
+      jobs: rows.map(row => ({
+        id: Number(row.id),
+        status: String(row.status || 'queued'),
+        sourceType: String(row.source_type || ''),
+        sourceRef: String(row.source_ref || ''),
+        requestedByUserId: String(row.requested_by_user_id || ''),
+        resultDocId: row.result_doc_id ? Number(row.result_doc_id) : null,
+        errorMessage: String(row.error_message || ''),
+        createdAt: row.created_at || null,
+        updatedAt: row.updated_at || null,
+      })),
+    };
+  }
+
+  suggestActions(guildId, userId, channelId, prompt) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const normalizedUserId = String(userId || '').trim();
+    const normalizedChannelId = String(channelId || '').trim() || null;
+    const cleanPrompt = String(prompt || '').trim();
+    if (!normalizedGuildId || !normalizedUserId) return { success: false, message: 'Invalid guild/user context' };
+    if (!cleanPrompt) return { success: false, message: 'Prompt is required' };
+
+    const suggestions = [];
+    const lower = cleanPrompt.toLowerCase();
+    if (lower.includes('faq') || lower.includes('document') || lower.includes('knowledge')) {
+      suggestions.push({
+        actionType: 'knowledge_doc_upsert',
+        title: 'Create Knowledge Document Draft',
+        reason: 'Prompt indicates missing or new documentation.',
+        payload: {
+          title: 'AI Draft Knowledge',
+          body: cleanPrompt,
+          tags: 'ai-draft,documentation',
+          enabled: false,
+        },
+      });
+    }
+    if (lower.includes('verification rule') || lower.includes('verification')) {
+      suggestions.push({
+        actionType: 'system_prompt_append',
+        title: 'Append Verification Policy Hint',
+        reason: 'Prompt asks for verification logic clarification.',
+        payload: {
+          appendText: `\nVerification policy note: ${cleanPrompt.slice(0, 300)}`,
+        },
+      });
+    }
+    if (lower.includes('proposal') || lower.includes('governance')) {
+      suggestions.push({
+        actionType: 'proposal_brief_draft',
+        title: 'Generate Governance Brief Draft',
+        reason: 'Prompt references governance/proposal workflow.',
+        payload: { briefPrompt: cleanPrompt },
+      });
+    }
+
+    if (!suggestions.length) {
+      suggestions.push({
+        actionType: 'knowledge_doc_upsert',
+        title: 'Create Generic Knowledge Draft',
+        reason: 'Fallback action to capture this request for admins.',
+        payload: {
+          title: 'AI Captured Request',
+          body: cleanPrompt,
+          tags: 'ai-captured',
+          enabled: false,
+        },
+      });
+    }
+
+    const insertStmt = db.prepare(`
+      INSERT INTO ai_assistant_action_suggestions (
+        guild_id, requested_by_user_id, context_channel_id, action_type, title, reason, payload_json, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+    const createdIds = [];
+    for (const suggestion of suggestions.slice(0, 5)) {
+      const result = insertStmt.run(
+        normalizedGuildId,
+        normalizedUserId,
+        normalizedChannelId,
+        suggestion.actionType,
+        suggestion.title,
+        suggestion.reason,
+        JSON.stringify(suggestion.payload || {}),
+      );
+      createdIds.push(Number(result.lastInsertRowid));
+    }
+    return { success: true, createdIds };
+  }
+
+  listActionSuggestions(guildId, status = '') {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'Invalid guildId' };
+    const normalizedStatus = String(status || '').trim().toLowerCase();
+    const rows = normalizedStatus
+      ? db.prepare(`
+          SELECT id, requested_by_user_id, context_channel_id, action_type, title, reason, payload_json, status, applied_by_user_id, created_at, updated_at
+          FROM ai_assistant_action_suggestions
+          WHERE guild_id = ? AND status = ?
+          ORDER BY id DESC
+          LIMIT 200
+        `).all(normalizedGuildId, normalizedStatus)
+      : db.prepare(`
+          SELECT id, requested_by_user_id, context_channel_id, action_type, title, reason, payload_json, status, applied_by_user_id, created_at, updated_at
+          FROM ai_assistant_action_suggestions
+          WHERE guild_id = ?
+          ORDER BY id DESC
+          LIMIT 200
+        `).all(normalizedGuildId);
+    return {
+      success: true,
+      suggestions: rows.map(row => ({
+        id: Number(row.id),
+        requestedByUserId: String(row.requested_by_user_id || ''),
+        contextChannelId: String(row.context_channel_id || ''),
+        actionType: String(row.action_type || ''),
+        title: String(row.title || ''),
+        reason: String(row.reason || ''),
+        payload: (() => {
+          try { return JSON.parse(row.payload_json || '{}'); } catch (_error) { return {}; }
+        })(),
+        status: String(row.status || 'pending'),
+        appliedByUserId: String(row.applied_by_user_id || ''),
+        createdAt: row.created_at || null,
+        updatedAt: row.updated_at || null,
+      })),
+    };
+  }
+
+  async applyActionSuggestion(guildId, suggestionId, adminUserId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const normalizedAdminUserId = String(adminUserId || '').trim();
+    const normalizedSuggestionId = Number.parseInt(suggestionId, 10);
+    if (!normalizedGuildId || !normalizedAdminUserId || !Number.isFinite(normalizedSuggestionId) || normalizedSuggestionId <= 0) {
+      return { success: false, message: 'Invalid input' };
+    }
+    const row = db.prepare(`
+      SELECT id, action_type, payload_json, status
+      FROM ai_assistant_action_suggestions
+      WHERE id = ? AND guild_id = ?
+      LIMIT 1
+    `).get(normalizedSuggestionId, normalizedGuildId);
+    if (!row) return { success: false, message: 'Suggestion not found' };
+    if (String(row.status || '').toLowerCase() !== 'pending') return { success: false, message: 'Suggestion is not pending' };
+    const payload = (() => {
+      try { return JSON.parse(row.payload_json || '{}'); } catch (_error) { return {}; }
+    })();
+
+    if (row.action_type === 'knowledge_doc_upsert') {
+      const saveResult = await this.saveKnowledgeDoc(normalizedGuildId, payload);
+      if (!saveResult.success) return saveResult;
+    } else if (row.action_type === 'system_prompt_append') {
+      const current = this.getTenantSettings(normalizedGuildId);
+      if (!current.success) return current;
+      const appendText = String(payload.appendText || '').trim().slice(0, 500);
+      const saveResult = this.saveTenantSettings(normalizedGuildId, {
+        systemPrompt: [current.settings.systemPrompt, appendText].filter(Boolean).join('\n'),
+      });
+      if (!saveResult.success) return saveResult;
+    } else if (row.action_type === 'proposal_brief_draft') {
+      const brief = await this.generateProposalBrief(normalizedGuildId, {
+        title: 'AI Draft',
+        category: 'general',
+        description: String(payload.briefPrompt || '').trim().slice(0, 2000),
+      });
+      if (!brief) return { success: false, message: 'Could not generate proposal draft' };
+      await this.saveKnowledgeDoc(normalizedGuildId, {
+        title: 'AI Draft Proposal Brief',
+        body: brief,
+        tags: 'proposal,ai-draft',
+        enabled: false,
+      });
+    } else {
+      return { success: false, message: `Unsupported action type: ${row.action_type}` };
+    }
+
+    db.prepare(`
+      UPDATE ai_assistant_action_suggestions
+      SET status = 'applied', applied_by_user_id = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND guild_id = ?
+    `).run(normalizedAdminUserId, normalizedSuggestionId, normalizedGuildId);
+    return { success: true };
+  }
+
+  rejectActionSuggestion(guildId, suggestionId, adminUserId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const normalizedAdminUserId = String(adminUserId || '').trim();
+    const normalizedSuggestionId = Number.parseInt(suggestionId, 10);
+    if (!normalizedGuildId || !normalizedAdminUserId || !Number.isFinite(normalizedSuggestionId) || normalizedSuggestionId <= 0) {
+      return { success: false, message: 'Invalid input' };
+    }
+    const result = db.prepare(`
+      UPDATE ai_assistant_action_suggestions
+      SET status = 'rejected', applied_by_user_id = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND guild_id = ? AND status = 'pending'
+    `).run(normalizedAdminUserId, normalizedSuggestionId, normalizedGuildId);
+    if (!result.changes) return { success: false, message: 'Pending suggestion not found' };
+    return { success: true };
+  }
+
+  getAnalytics(guildId, windowDays = 7) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'Invalid guildId' };
+    const days = normalizeIntegerInRange(windowDays, { min: 1, max: 30, fallback: 7 });
+    const rows = db.prepare(`
+      SELECT prompt_text, error_code, status, trigger_source, provider, model, estimated_tokens, created_at
+      FROM ai_assistant_usage_events
+      WHERE guild_id = ?
+        AND DATE(created_at) >= DATE('now', ?)
+      ORDER BY id DESC
+      LIMIT 2000
+    `).all(normalizedGuildId, `-${days} day`);
+
+    const missingRows = rows.filter(row => String(row.error_code || '').startsWith('knowledge_') || String(row.status || '').toLowerCase() !== 'ok');
+    const topicCounter = new Map();
+    for (const row of missingRows) {
+      const tokens = tokenizeForSearch(String(row.prompt_text || '')).slice(0, 8);
+      const key = tokens.slice(0, 3).join(' ');
+      if (!key) continue;
+      topicCounter.set(key, Number(topicCounter.get(key) || 0) + 1);
+    }
+    const topMissingTopics = Array.from(topicCounter.entries())
+      .map(([topic, count]) => ({ topic, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 12);
+
+    const estimatedTokenUsage = rows.reduce((sum, row) => sum + Number(row.estimated_tokens || 0), 0);
+    const providerCounter = new Map();
+    for (const row of rows) {
+      const key = String(row.provider || 'unknown');
+      providerCounter.set(key, Number(providerCounter.get(key) || 0) + 1);
+    }
+    const byProvider = Array.from(providerCounter.entries()).map(([provider, total]) => ({ provider, total }));
+
+    return {
+      success: true,
+      days,
+      totals: {
+        events: rows.length,
+        missingKnowledgeEvents: missingRows.length,
+        estimatedTokenUsage,
+      },
+      byProvider,
+      topMissingTopics,
+      recommendations: topMissingTopics.slice(0, 6).map(item => ({
+        title: `Add KB entry: ${item.topic}`,
+        reason: `Detected ${item.count} unresolved requests on this topic`,
+      })),
+    };
+  }
+
+  isAdminAudience(triggerSource, memberRoleNames = []) {
+    const source = String(triggerSource || '').trim().toLowerCase();
+    if (source.includes('admin') || source.includes('superadmin')) return true;
+    const adminHints = ['admin', 'owner', 'moderator', 'mod', 'staff', 'team', 'support'];
+    return (Array.isArray(memberRoleNames) ? memberRoleNames : [])
+      .map(name => String(name || '').toLowerCase())
+      .some(name => adminHints.some(hint => name.includes(hint)));
   }
 
   cosineSimilarity(vecA, vecB) {
@@ -953,15 +1851,29 @@ class AiAssistantService {
     };
   }
 
-  logUsage({ guildId, userId, provider, model, status = 'ok', errorCode = null, latencyMs = 0, promptChars = 0, responseChars = 0, triggerSource = 'slash', promptText = null }) {
+  logUsage({
+    guildId,
+    userId,
+    provider,
+    model,
+    status = 'ok',
+    errorCode = null,
+    latencyMs = 0,
+    promptChars = 0,
+    responseChars = 0,
+    triggerSource = 'slash',
+    promptText = null,
+    channelId = null,
+    estimatedTokens = 0,
+  }) {
     const normalizedGuildId = normalizeGuildId(guildId);
     const normalizedUserId = String(userId || '').trim();
     if (!normalizedGuildId || !normalizedUserId) return;
     try {
       db.prepare(`
         INSERT INTO ai_assistant_usage_events (
-          guild_id, user_id, provider, model, status, error_code, latency_ms, prompt_chars, response_chars, trigger_source, prompt_text
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          guild_id, user_id, provider, model, status, error_code, latency_ms, prompt_chars, response_chars, trigger_source, prompt_text, channel_id, estimated_tokens
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         normalizedGuildId,
         normalizedUserId,
@@ -974,6 +1886,8 @@ class AiAssistantService {
         Math.max(0, parseInt(responseChars, 10) || 0),
         String(triggerSource || 'slash').trim() || 'slash',
         promptText ? String(promptText).trim().slice(0, 3000) : null,
+        (channelId && /^\d{17,20}$/.test(String(channelId).trim())) ? String(channelId).trim() : null,
+        Math.max(0, parseInt(estimatedTokens, 10) || 0),
       );
     } catch (error) {
       logger.warn('[ai-assistant] failed to log usage:', error?.message || error);
@@ -1117,12 +2031,14 @@ class AiAssistantService {
     memberRoleNames = [],
     memberRoleIds = [],
     overrideSystemPrompt = '',
+    audienceOverride = '',
     skipKnowledge = false,
     skipChannelCheck = false,
     skipRoleCheck = false,
   }) {
     const normalizedGuildId = normalizeGuildId(guildId);
     const normalizedUserId = String(userId || '').trim() || 'system-agent';
+    const normalizedChannelId = /^\d{17,20}$/.test(String(channelId || '').trim()) ? String(channelId || '').trim() : null;
     const isSystemRequest = normalizedUserId === 'system-agent';
     const cleanPrompt = String(prompt || '').trim();
     if (!normalizedGuildId) return { success: false, code: 'invalid_guild', message: 'Invalid guild context' };
@@ -1139,7 +2055,7 @@ class AiAssistantService {
     if (!tenantSettings.enabled) {
       return { success: false, code: 'tenant_disabled', message: 'AI Assistant is disabled in this server settings.' };
     }
-    if (!skipChannelCheck && !this.isChannelAllowed(tenantSettings, channelId)) {
+    if (!skipChannelCheck && !this.isChannelAllowed(tenantSettings, normalizedChannelId)) {
       return { success: false, code: 'channel_blocked', message: 'AI Assistant is not enabled in this channel.' };
     }
     if (!skipRoleCheck && Array.isArray(tenantSettings.allowedRoleIds) && tenantSettings.allowedRoleIds.length > 0) {
@@ -1153,14 +2069,68 @@ class AiAssistantService {
     }
 
     const allowance = this.getDailyRemaining(normalizedGuildId);
-    if (!allowance.allowed) {
+    if (!isSystemRequest && !allowance.allowed) {
       return { success: false, code: 'limit_reached', message: 'Daily AI request limit reached for this plan.', allowance };
     }
+
+    const effectiveRoleLimit = this.getEffectiveRoleLimit(normalizedGuildId, memberRoleIds);
+    const userLimitCandidates = [];
+    const tenantUserLimit = Number(tenantSettings.perUserDailyLimit || 0);
+    if (tenantUserLimit > 0) userLimitCandidates.push(tenantUserLimit);
+    if (Number(effectiveRoleLimit.dailyRequestsPerUser || 0) > 0) userLimitCandidates.push(Number(effectiveRoleLimit.dailyRequestsPerUser));
+    const effectivePerUserLimit = userLimitCandidates.length ? Math.min(...userLimitCandidates) : 0;
+
     const userAllowance = isSystemRequest
       ? { allowed: true, limit: null, used: 0, remaining: null }
-      : this.getUserDailyRemaining(normalizedGuildId, normalizedUserId, tenantSettings.perUserDailyLimit);
+      : this.getUserDailyRemaining(normalizedGuildId, normalizedUserId, effectivePerUserLimit);
     if (!userAllowance.allowed) {
       return { success: false, code: 'user_limit_reached', message: 'You reached your daily AI request limit for this server.', allowance, userAllowance };
+    }
+
+    const maxChars = normalizeIntegerInRange(tenantSettings.maxResponseChars, { min: 300, max: 1900, fallback: DEFAULTS.maxResponseChars });
+    const estimatedRequestTokens = this.getEstimatedTokens(cleanPrompt.length + Math.min(maxChars, 1600));
+    const tenantDailyTokenBudget = Number(tenantSettings.dailyTokenBudget || 0);
+    const burstPerMinute = Number(tenantSettings.burstPerMinute || 0);
+    const roleTokenLimit = Number(effectiveRoleLimit.dailyTokensPerUser || 0);
+
+    if (!isSystemRequest && burstPerMinute > 0) {
+      const burstUsed = this.getBurstUsage(normalizedGuildId, normalizedChannelId);
+      if (burstUsed >= burstPerMinute) {
+        return {
+          success: false,
+          code: 'burst_limited',
+          message: 'AI Assistant is temporarily rate-limited in this server. Please retry in a minute.',
+          burst: { limit: burstPerMinute, used: burstUsed, remaining: Math.max(0, burstPerMinute - burstUsed) },
+        };
+      }
+    }
+
+    const guildTokensUsed = this.getDailyTokenUsage(normalizedGuildId);
+    if (!isSystemRequest && tenantDailyTokenBudget > 0 && (guildTokensUsed + estimatedRequestTokens) > tenantDailyTokenBudget) {
+      return {
+        success: false,
+        code: 'token_budget_reached',
+        message: 'Daily AI token budget has been reached for this server.',
+        tokenBudget: {
+          limit: tenantDailyTokenBudget,
+          used: guildTokensUsed,
+          remaining: Math.max(0, tenantDailyTokenBudget - guildTokensUsed),
+        },
+      };
+    }
+
+    const userTokensUsed = isSystemRequest ? 0 : this.getDailyTokenUsage(normalizedGuildId, normalizedUserId);
+    if (!isSystemRequest && roleTokenLimit > 0 && (userTokensUsed + estimatedRequestTokens) > roleTokenLimit) {
+      return {
+        success: false,
+        code: 'role_token_limit_reached',
+        message: 'Your AI usage token allowance has been reached for today.',
+        roleTokenBudget: {
+          limit: roleTokenLimit,
+          used: userTokensUsed,
+          remaining: Math.max(0, roleTokenLimit - userTokensUsed),
+        },
+      };
     }
 
     const knowledge = skipKnowledge
@@ -1171,6 +2141,18 @@ class AiAssistantService {
       ? DEFAULTS.defaultMinConfidence
       : normalizeIntegerInRange(requiredConfidence, { min: 0, max: 100, fallback: DEFAULTS.defaultMinConfidence });
     const confidence = Number(knowledge.confidence || 0);
+    const allowSuggestions = !isSystemRequest
+      && tenantSettings.allowActionSuggestions
+      && !skipKnowledge
+      && !!normalizedChannelId;
+    const createSuggestions = () => {
+      if (!allowSuggestions) return;
+      try {
+        this.suggestActions(normalizedGuildId, normalizedUserId, normalizedChannelId, cleanPrompt);
+      } catch (error) {
+        logger.warn('[ai-assistant] failed to create action suggestion:', error?.message || error);
+      }
+    };
 
     if (!skipKnowledge) {
       if (!knowledge.hasDocs) {
@@ -1186,7 +2168,10 @@ class AiAssistantService {
           responseChars: 0,
           triggerSource,
           promptText: cleanPrompt,
+          channelId: normalizedChannelId,
+          estimatedTokens: estimatedRequestTokens,
         });
+        createSuggestions();
         // We log the missing knowledge but DO NOT block the request.
         // This allows general conversational capability.
       } else if (!knowledge.matches.length) {
@@ -1202,7 +2187,10 @@ class AiAssistantService {
           responseChars: 0,
           triggerSource,
           promptText: cleanPrompt,
+          channelId: normalizedChannelId,
+          estimatedTokens: estimatedRequestTokens,
         });
+        createSuggestions();
       } else {
         // We log low confidence matches, but we no longer block the request.
         // This allows the bot to fall back to general AI knowledge.
@@ -1219,7 +2207,10 @@ class AiAssistantService {
             responseChars: 0,
             triggerSource,
             promptText: cleanPrompt,
+            channelId: normalizedChannelId,
+            estimatedTokens: estimatedRequestTokens,
           });
+          createSuggestions();
         }
       }
     }
@@ -1239,6 +2230,8 @@ class AiAssistantService {
           responseChars: 0,
           triggerSource,
           promptText: cleanPrompt,
+          channelId: normalizedChannelId,
+          estimatedTokens: estimatedRequestTokens,
         });
         return { success: false, code: 'content_blocked', message: blocked.message, allowance, userAllowance };
       }
@@ -1265,6 +2258,8 @@ class AiAssistantService {
             responseChars: 0,
             triggerSource,
             promptText: cleanPrompt,
+            channelId: normalizedChannelId,
+            estimatedTokens: estimatedRequestTokens,
           });
           return { success: false, code: 'content_blocked', message: 'That request is blocked by safety policy.', allowance, userAllowance };
         }
@@ -1295,9 +2290,28 @@ class AiAssistantService {
       rpg.recentMission ? `- Latest Mission: ${rpg.recentMission}` : null,
     ].filter(Boolean).join('\n');
 
-    const personaInstruction = rpg.era.toLowerCase().includes('mafia')
-      ? 'Adopt a slightly gritty, street-wise Mafia persona. Use terms like "Associate," "Consigliere," "The Syndicate," or "Family business" naturally.'
-      : 'Maintain a helpful, immersive persona consistent with the current guild era.';
+    const audience = normalizeAudience(
+      audienceOverride,
+      this.isAdminAudience(triggerSource, memberRoleNames) ? 'admin' : 'public'
+    );
+    const personaKey = audience === 'admin' ? tenantSettings.adminPersonaKey : tenantSettings.publicPersonaKey;
+    const personaPrompt = this.resolvePersonaPrompt(normalizedGuildId, personaKey, audience)
+      || this.resolvePersonaPrompt(normalizedGuildId, audience === 'admin' ? DEFAULTS.adminPersonaKey : DEFAULTS.publicPersonaKey, audience);
+    const personaInstruction = personaPrompt
+      || (rpg.era.toLowerCase().includes('mafia')
+        ? 'Adopt a slightly gritty, street-wise Mafia persona. Use terms like "Associate," "Consigliere," "The Syndicate," or "Family business" naturally.'
+        : 'Maintain a helpful, immersive persona consistent with the current guild era.');
+
+    const memoryContext = (!isSystemRequest && tenantSettings.memoryEnabled)
+      ? this.getMemoryContext(normalizedGuildId, normalizedUserId, normalizedChannelId, tenantSettings.memoryWindowMessages)
+      : { summary: '', turns: [] };
+    const memoryTurnsText = (memoryContext.turns || [])
+      .map((turn, index) => `Turn ${index + 1} user: ${String(turn.prompt || '').slice(0, 280)}\nTurn ${index + 1} assistant: ${String(turn.response || '').slice(0, 380)}`)
+      .join('\n');
+    const memoryBlock = [
+      memoryContext.summary ? `Conversation summary:\n${memoryContext.summary}` : '',
+      memoryTurnsText ? `Recent turns:\n${memoryTurnsText}` : '',
+    ].filter(Boolean).join('\n\n');
 
     const groundingInstruction = [
       personaInstruction,
@@ -1310,10 +2324,10 @@ class AiAssistantService {
       '- Prioritize Lore-related documents when answering world-building questions.',
       '',
       'Knowledge snippets:',
-      knowledgeBlock,
+      knowledgeBlock || 'No tenant knowledge snippet matched for this question.',
     ].join('\n');
     const finalSystemPrompt = String(overrideSystemPrompt || tenantSettings.systemPrompt || '').trim();
-    const systemPrompt = [finalSystemPrompt, contextBlock, groundingInstruction].filter(Boolean).join('\n\n');
+    const systemPrompt = [finalSystemPrompt, contextBlock, memoryBlock, groundingInstruction].filter(Boolean).join('\n\n');
     let lastError = null;
 
     for (const provider of providerOrder) {
@@ -1331,8 +2345,8 @@ class AiAssistantService {
         const output = provider === 'gemini'
           ? await this.callGemini({ apiKey, model, prompt: cleanPrompt, systemPrompt })
           : await this.callOpenAi({ apiKey, model, prompt: cleanPrompt, systemPrompt });
-        const maxChars = normalizeIntegerInRange(tenantSettings.maxResponseChars, { min: 300, max: 1900, fallback: DEFAULTS.maxResponseChars });
         const text = String(output || '').trim().slice(0, maxChars);
+        const estimatedTokens = this.getEstimatedTokens(cleanPrompt.length + text.length);
         this.logUsage({
           guildId: normalizedGuildId,
           userId: normalizedUserId,
@@ -1344,7 +2358,20 @@ class AiAssistantService {
           responseChars: text.length,
           triggerSource,
           promptText: cleanPrompt,
+          channelId: normalizedChannelId,
+          estimatedTokens,
         });
+        if (!isSystemRequest && tenantSettings.memoryEnabled) {
+          this.storeMemoryExchange(
+            normalizedGuildId,
+            normalizedUserId,
+            normalizedChannelId,
+            cleanPrompt,
+            text,
+            triggerSource,
+            tenantSettings.memoryWindowMessages
+          );
+        }
         if (requesterTag) {
           logger.log(`[ai-assistant] guild=${normalizedGuildId} provider=${provider} model=${model} by=${requesterTag}`);
         }
@@ -1361,10 +2388,18 @@ class AiAssistantService {
           confidence,
           confidenceThreshold,
           responseVisibility: tenantSettings.responseVisibility,
-          allowance: this.getDailyRemaining(normalizedGuildId),
+          allowance: isSystemRequest ? { allowed: true, limit: null, used: 0, remaining: null } : this.getDailyRemaining(normalizedGuildId),
           userAllowance: isSystemRequest
             ? { allowed: true, limit: null, used: 0, remaining: null }
-            : this.getUserDailyRemaining(normalizedGuildId, normalizedUserId, tenantSettings.perUserDailyLimit),
+            : this.getUserDailyRemaining(normalizedGuildId, normalizedUserId, effectivePerUserLimit),
+          tokenBudget: {
+            limit: tenantDailyTokenBudget > 0 ? tenantDailyTokenBudget : null,
+            used: this.getDailyTokenUsage(normalizedGuildId),
+          },
+          roleTokenBudget: {
+            limit: roleTokenLimit > 0 ? roleTokenLimit : null,
+            used: isSystemRequest ? 0 : this.getDailyTokenUsage(normalizedGuildId, normalizedUserId),
+          },
         };
       } catch (error) {
         lastError = error;
@@ -1380,6 +2415,8 @@ class AiAssistantService {
           responseChars: 0,
           triggerSource,
           promptText: cleanPrompt,
+          channelId: normalizedChannelId,
+          estimatedTokens: estimatedRequestTokens,
         });
       }
     }

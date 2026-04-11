@@ -69,11 +69,17 @@ const REQUIRED_SCHEMA = Object.freeze({
   nft_tracked_collections: ['guild_id', 'collection_address', 'track_bid'],
   tracked_tokens: ['guild_id', 'alert_channel_ids'],
   tracked_wallets: ['guild_id', 'wallet_address', 'token_last_signature'],
-  ai_assistant_tenant_settings: ['guild_id', 'enabled', 'provider', 'model_openai', 'model_gemini', 'mention_enabled', 'response_visibility', 'system_prompt', 'allowed_channel_ids', 'allowed_role_ids', 'cooldown_seconds', 'max_response_chars', 'per_user_daily_limit', 'safety_filter_enabled', 'moderation_enabled', 'summary_activity_channels', 'updated_at'],
+  ai_assistant_tenant_settings: ['guild_id', 'enabled', 'provider', 'model_openai', 'model_gemini', 'mention_enabled', 'response_visibility', 'system_prompt', 'allowed_channel_ids', 'allowed_role_ids', 'cooldown_seconds', 'max_response_chars', 'per_user_daily_limit', 'safety_filter_enabled', 'moderation_enabled', 'summary_activity_channels', 'memory_enabled', 'memory_window_messages', 'public_persona_key', 'admin_persona_key', 'daily_token_budget', 'burst_per_minute', 'allow_action_suggestions', 'updated_at'],
   points_ledger: ['guild_id', 'user_id', 'action_type', 'points', 'channel_id', 'created_at'],
-  ai_assistant_usage_events: ['guild_id', 'user_id', 'provider', 'model', 'status', 'trigger_source', 'created_at'],
-  ai_assistant_knowledge_docs: ['guild_id', 'title', 'body', 'source_url', 'tags', 'enabled', 'updated_at'],
+  ai_assistant_usage_events: ['guild_id', 'user_id', 'provider', 'model', 'status', 'trigger_source', 'channel_id', 'estimated_tokens', 'created_at'],
+  ai_assistant_knowledge_docs: ['guild_id', 'title', 'body', 'source_url', 'tags', 'enabled', 'source_type', 'source_ref', 'body_hash', 'stale', 'source_checked_at', 'updated_at'],
   ai_assistant_channel_policies: ['guild_id', 'channel_id', 'mode', 'min_confidence', 'passive_cooldown_seconds', 'passive_max_per_hour', 'updated_at'],
+  ai_assistant_personas: ['guild_id', 'persona_key', 'scope', 'enabled', 'updated_at'],
+  ai_assistant_memory_entries: ['guild_id', 'user_id', 'channel_id', 'prompt_text', 'response_text', 'created_at'],
+  ai_assistant_memory_state: ['guild_id', 'user_id', 'channel_id', 'summary_text', 'updated_at'],
+  ai_assistant_ingestion_jobs: ['guild_id', 'status', 'source_type', 'source_ref', 'result_doc_id', 'created_at'],
+  ai_assistant_action_suggestions: ['guild_id', 'requested_by_user_id', 'action_type', 'status', 'payload_json', 'created_at'],
+  ai_assistant_role_limits: ['guild_id', 'role_id', 'daily_requests_per_user', 'daily_tokens_per_user', 'updated_at'],
   invite_tracker_settings: ['guild_id', 'required_join_role_id', 'panel_channel_id', 'panel_message_id', 'panel_period_days', 'panel_limit', 'panel_enable_create_link', 'include_verification_stats', 'excluded_codes', 'panel_sort_by'],
   invite_tracker_user_codes: ['guild_id', 'invite_code', 'owner_user_id', 'owner_username', 'channel_id', 'active', 'created_at', 'updated_at'],
   invite_events: ['guild_id', 'joined_user_id', 'inviter_user_id', 'invite_code', 'source', 'joined_at'],
@@ -1554,6 +1560,13 @@ function initDatabase() {
       per_user_daily_limit INTEGER DEFAULT 20,
       safety_filter_enabled INTEGER DEFAULT 1,
       moderation_enabled INTEGER DEFAULT 0,
+      memory_enabled INTEGER DEFAULT 1,
+      memory_window_messages INTEGER DEFAULT 6,
+      public_persona_key TEXT DEFAULT 'default_public',
+      admin_persona_key TEXT DEFAULT 'default_admin',
+      daily_token_budget INTEGER DEFAULT 0,
+      burst_per_minute INTEGER DEFAULT 0,
+      allow_action_suggestions INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -1571,6 +1584,8 @@ function initDatabase() {
       prompt_chars INTEGER DEFAULT 0,
       response_chars INTEGER DEFAULT 0,
       trigger_source TEXT DEFAULT 'slash',
+      channel_id TEXT,
+      estimated_tokens INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -1583,6 +1598,11 @@ function initDatabase() {
       source_url TEXT,
       tags TEXT DEFAULT '',
       enabled INTEGER DEFAULT 1,
+      source_type TEXT DEFAULT 'manual',
+      source_ref TEXT,
+      body_hash TEXT,
+      stale INTEGER DEFAULT 0,
+      source_checked_at DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -1604,9 +1624,96 @@ function initDatabase() {
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_settings_guild ON ai_assistant_tenant_settings(guild_id)'); } catch (e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_usage_guild_time ON ai_assistant_usage_events(guild_id, created_at DESC)'); } catch (e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_usage_user_time ON ai_assistant_usage_events(user_id, created_at DESC)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_usage_guild_channel_time ON ai_assistant_usage_events(guild_id, channel_id, created_at DESC)'); } catch (e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_knowledge_guild_enabled ON ai_assistant_knowledge_docs(guild_id, enabled)'); } catch (e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_knowledge_guild_updated ON ai_assistant_knowledge_docs(guild_id, updated_at DESC)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_knowledge_guild_stale ON ai_assistant_knowledge_docs(guild_id, stale, updated_at DESC)'); } catch (e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_channel_policy_guild_mode ON ai_assistant_channel_policies(guild_id, mode)'); } catch (e) {}
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_assistant_personas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      persona_key TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      scope TEXT NOT NULL DEFAULT 'both',
+      prompt_text TEXT NOT NULL,
+      enabled INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(guild_id, persona_key)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_assistant_memory_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      channel_id TEXT,
+      prompt_text TEXT NOT NULL,
+      response_text TEXT NOT NULL,
+      trigger_source TEXT DEFAULT 'slash',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_assistant_memory_state (
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      channel_id TEXT,
+      summary_text TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(guild_id, user_id, channel_id)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_assistant_ingestion_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'queued',
+      source_type TEXT NOT NULL,
+      source_ref TEXT,
+      requested_by_user_id TEXT,
+      payload_json TEXT,
+      result_doc_id INTEGER,
+      error_message TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_assistant_action_suggestions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      requested_by_user_id TEXT,
+      context_channel_id TEXT,
+      action_type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      reason TEXT,
+      payload_json TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      applied_by_user_id TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_assistant_role_limits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      role_id TEXT NOT NULL,
+      daily_requests_per_user INTEGER DEFAULT 0,
+      daily_tokens_per_user INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(guild_id, role_id)
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_personas_guild_scope ON ai_assistant_personas(guild_id, scope, enabled)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_memory_entries_guild_user_time ON ai_assistant_memory_entries(guild_id, user_id, created_at DESC)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_ingestion_jobs_guild_status ON ai_assistant_ingestion_jobs(guild_id, status, created_at DESC)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_action_suggestions_guild_status ON ai_assistant_action_suggestions(guild_id, status, created_at DESC)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_role_limits_guild_role ON ai_assistant_role_limits(guild_id, role_id)'); } catch (e) {}
 
   // Migration: add missing columns to base tables
   var ignoreDuplicateMigration = (fn) => {
@@ -1628,6 +1735,13 @@ function initDatabase() {
   ignoreDuplicateMigration(() => db.exec("ALTER TABLE ai_assistant_tenant_settings ADD COLUMN allowed_role_ids TEXT DEFAULT '[]'"));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN summary_enabled INTEGER DEFAULT 0'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN summary_channel_id TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN memory_enabled INTEGER DEFAULT 1'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN memory_window_messages INTEGER DEFAULT 6'));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE ai_assistant_tenant_settings ADD COLUMN public_persona_key TEXT DEFAULT 'default_public'"));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE ai_assistant_tenant_settings ADD COLUMN admin_persona_key TEXT DEFAULT 'default_admin'"));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN daily_token_budget INTEGER DEFAULT 0'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN burst_per_minute INTEGER DEFAULT 0'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN allow_action_suggestions INTEGER DEFAULT 1'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN cooldown_seconds INTEGER DEFAULT 12'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN max_response_chars INTEGER DEFAULT 1600'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN per_user_daily_limit INTEGER DEFAULT 20'));
@@ -1635,10 +1749,17 @@ function initDatabase() {
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN moderation_enabled INTEGER DEFAULT 0'));
   ignoreDuplicateMigration(() => db.exec("ALTER TABLE ai_assistant_usage_events ADD COLUMN trigger_source TEXT DEFAULT 'slash'"));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_usage_events ADD COLUMN prompt_text TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_usage_events ADD COLUMN channel_id TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_usage_events ADD COLUMN estimated_tokens INTEGER DEFAULT 0'));
   ignoreDuplicateMigration(() => db.exec("ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN source_url TEXT"));
   ignoreDuplicateMigration(() => db.exec("ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN tags TEXT DEFAULT ''"));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN enabled INTEGER DEFAULT 1'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN source_type TEXT DEFAULT 'manual'"));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN source_ref TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN body_hash TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN stale INTEGER DEFAULT 0'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN source_checked_at DATETIME'));
   try {
     db.prepare("ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN vector_embedding BLOB").run();
   } catch (_) {}

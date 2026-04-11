@@ -66,6 +66,7 @@ This file is the source-of-truth command reference for the current production co
 - `/aiassistant status`
 - `/aiassistant briefing`
 - Portal controls include provider selection, role/channel allowlists, channel policy modes (`off|mention|passive`), confidence threshold, and daily recap options.
+- Advanced AI controls now include memory mode, multi-persona profiles (public/admin), per-role request/token limits, guarded action suggestions, ingestion jobs (URL/Markdown/PDF/Discord channel), and unresolved-topic analytics.
 
 ## Minigames
 - Canonical: `/minigames run`, `/minigames help`

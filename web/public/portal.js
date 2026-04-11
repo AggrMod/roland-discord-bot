@@ -7623,6 +7623,10 @@ async function loadTokenTrackerSettingsView(targetPaneId = null) {
 
 let aiAssistantKnowledgeEditId = null;
 let aiAssistantKnowledgeCache = [];
+let aiAssistantPersonasCache = [];
+let aiAssistantRoleLimitsCache = [];
+let aiAssistantSuggestionCache = [];
+let aiAssistantRoleLabelMap = new Map();
 
 async function loadAiAssistantSettingsView(targetPaneId = null) {
   if (!isAdmin) return;
@@ -7634,7 +7638,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
   pane.innerHTML = `<div style="${cardStyle}"><div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);"><div class="spinner"></div><p>Loading AI assistant settings...</p></div></div>`;
 
   try {
-    const [settingsRes, channelsRes, rolesRes, usageRes, summaryRes, knowledgeRes, channelPoliciesRes] = await Promise.all([
+    const [settingsRes, channelsRes, rolesRes, usageRes, summaryRes, knowledgeRes, channelPoliciesRes, personasRes, roleLimitsRes, ingestionJobsRes, suggestionsRes, analyticsRes] = await Promise.all([
       fetch('/api/admin/aiassistant/settings', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/discord/channels', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/discord/roles', { credentials: 'include', headers: buildTenantRequestHeaders() }),
@@ -7642,6 +7646,11 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
       fetch('/api/admin/aiassistant/usage-summary', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/aiassistant/knowledge', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/aiassistant/channel-policies', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      fetch('/api/admin/aiassistant/personas', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      fetch('/api/admin/aiassistant/role-limits', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      fetch('/api/admin/aiassistant/ingestion/jobs?limit=30', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      fetch('/api/admin/aiassistant/action-suggestions', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      fetch('/api/admin/aiassistant/analytics?days=7', { credentials: 'include', headers: buildTenantRequestHeaders() }),
     ]);
     const settingsJson = await settingsRes.json();
     const channelsJson = await channelsRes.json();
@@ -7650,6 +7659,11 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
     const summaryJson = await summaryRes.json();
     const knowledgeJson = await knowledgeRes.json();
     const channelPoliciesJson = await channelPoliciesRes.json();
+    const personasJson = await personasRes.json();
+    const roleLimitsJson = await roleLimitsRes.json();
+    const ingestionJobsJson = await ingestionJobsRes.json();
+    const suggestionsJson = await suggestionsRes.json();
+    const analyticsJson = await analyticsRes.json();
     if (!settingsJson.success) throw new Error(settingsJson.message || 'Failed to load AI assistant settings');
 
     const s = settingsJson.settings || {};
@@ -7664,7 +7678,14 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
     const channelPolicies = Array.isArray(channelPoliciesJson?.policies) ? channelPoliciesJson.policies : [];
     aiAssistantKnowledgeCache = knowledgeDocs;
     aiAssistantKnowledgeEditId = null;
+    aiAssistantPersonasCache = Array.isArray(personasJson?.personas) ? personasJson.personas : [];
+    aiAssistantRoleLimitsCache = Array.isArray(roleLimitsJson?.limits) ? roleLimitsJson.limits : [];
+    aiAssistantSuggestionCache = Array.isArray(suggestionsJson?.suggestions) ? suggestionsJson.suggestions : [];
+    aiAssistantRoleLabelMap = new Map(roles.map(role => [String(role.id), String(role.name || role.id)]));
     const channelPolicyMap = new Map(channelPolicies.map(policy => [String(policy.channelId || ''), policy]));
+    const roleLimitMap = new Map(aiAssistantRoleLimitsCache.map(row => [String(row.roleId || ''), row]));
+    const ingestionJobs = Array.isArray(ingestionJobsJson?.jobs) ? ingestionJobsJson.jobs : [];
+    const analytics = analyticsJson?.success ? analyticsJson : { totals: {}, topMissingTopics: [], recommendations: [], days: 7 };
     const usageSummary = summaryJson?.success ? (summaryJson || {}) : {};
     const summaryToday = usageSummary.today || { total: 0, ok: 0, errors: 0, avgLatencyMs: 0 };
     const providerRows = Array.isArray(usageSummary.byProvider) ? usageSummary.byProvider : [];
@@ -7675,6 +7696,62 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
     const sourceBadges = sourceRows.length
       ? sourceRows.map(row => `<span style="padding:4px 8px;border-radius:999px;background:rgba(16,185,129,0.14);color:#a7f3d0;font-size:0.78em;">${escapeHtml(String(row.source || 'unknown'))}: ${Number(row.total || 0)}</span>`).join(' ')
       : '<span style="color:var(--text-secondary);font-size:0.82em;">No trigger usage today</span>';
+    const personaRows = aiAssistantPersonasCache.map(persona => `
+      <tr>
+        <td style="padding:8px;color:#c9d6ff;border-bottom:1px solid rgba(99,102,241,0.12);font-family:monospace;">${escapeHtml(String(persona.personaKey || ''))}</td>
+        <td style="padding:8px;color:#cbd5e1;border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(persona.displayName || ''))}</td>
+        <td style="padding:8px;color:var(--text-secondary);border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(persona.scope || 'both'))}</td>
+        <td style="padding:8px;color:${persona.enabled ? '#34d399' : '#fca5a5'};border-bottom:1px solid rgba(99,102,241,0.12);">${persona.enabled ? 'Enabled' : 'Disabled'}</td>
+        <td style="padding:8px;border-bottom:1px solid rgba(99,102,241,0.12);">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn-secondary btn-sm" onclick="editAiAssistantPersona('${escapeHtml(String(persona.personaKey || ''))}')">Edit</button>
+            <button class="btn-danger btn-sm" onclick="deleteAiAssistantPersona('${escapeHtml(String(persona.personaKey || ''))}')">Delete</button>
+          </div>
+        </td>
+      </tr>
+    `).join('') || '<tr><td colspan="5" style="padding:10px;color:var(--text-secondary);">No personas configured yet.</td></tr>';
+    const personaOptionsAll = aiAssistantPersonasCache.map(persona => `<option value="${escapeHtml(String(persona.personaKey || ''))}">${escapeHtml(String(persona.displayName || persona.personaKey || ''))} (${escapeHtml(String(persona.scope || 'both'))})</option>`).join('');
+    const roleLimitRows = roles.map(role => {
+      const row = roleLimitMap.get(String(role.id)) || {};
+      const req = Number(row.dailyRequestsPerUser || 0);
+      const tok = Number(row.dailyTokensPerUser || 0);
+      return `
+        <tr>
+          <td style="padding:8px;color:#c9d6ff;border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(role.name || role.id))}</td>
+          <td style="padding:8px;border-bottom:1px solid rgba(99,102,241,0.12);"><input type="number" min="0" max="1000" data-ai-role-limit="requests" data-role-id="${escapeHtml(String(role.id))}" value="${req}" style="width:110px;padding:6px 8px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;"></td>
+          <td style="padding:8px;border-bottom:1px solid rgba(99,102,241,0.12);"><input type="number" min="0" max="2000000" data-ai-role-limit="tokens" data-role-id="${escapeHtml(String(role.id))}" value="${tok}" style="width:130px;padding:6px 8px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;"></td>
+        </tr>
+      `;
+    }).join('') || '<tr><td colspan="3" style="padding:10px;color:var(--text-secondary);">No roles available in this server.</td></tr>';
+    const ingestionJobRows = ingestionJobs.map(job => `
+      <tr>
+        <td style="padding:8px;color:#c9d6ff;border-bottom:1px solid rgba(99,102,241,0.12);">${Number(job.id || 0)}</td>
+        <td style="padding:8px;color:var(--text-secondary);border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(job.sourceType || '-'))}</td>
+        <td style="padding:8px;color:var(--text-secondary);border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(job.sourceRef || '-'))}</td>
+        <td style="padding:8px;color:${String(job.status || '') === 'completed' ? '#34d399' : (String(job.status || '') === 'failed' ? '#fca5a5' : '#fde68a')};border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(job.status || 'queued'))}</td>
+        <td style="padding:8px;color:var(--text-secondary);border-bottom:1px solid rgba(99,102,241,0.12);font-size:0.8em;">${escapeHtml(String(job.updatedAt || '-'))}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="5" style="padding:10px;color:var(--text-secondary);">No ingestion jobs yet.</td></tr>';
+    const suggestionRows = aiAssistantSuggestionCache.map(suggestion => `
+      <tr>
+        <td style="padding:8px;color:#c9d6ff;border-bottom:1px solid rgba(99,102,241,0.12);">${Number(suggestion.id || 0)}</td>
+        <td style="padding:8px;color:#cbd5e1;border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(suggestion.title || suggestion.actionType || '-'))}</td>
+        <td style="padding:8px;color:var(--text-secondary);border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(suggestion.status || 'pending'))}</td>
+        <td style="padding:8px;color:var(--text-secondary);border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(suggestion.reason || '-').slice(0, 120))}</td>
+        <td style="padding:8px;border-bottom:1px solid rgba(99,102,241,0.12);">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn-primary btn-sm" onclick="applyAiAssistantSuggestion(${Number(suggestion.id || 0)})" ${String(suggestion.status || '') !== 'pending' ? 'disabled' : ''}>Apply</button>
+            <button class="btn-secondary btn-sm" onclick="rejectAiAssistantSuggestion(${Number(suggestion.id || 0)})" ${String(suggestion.status || '') !== 'pending' ? 'disabled' : ''}>Reject</button>
+          </div>
+        </td>
+      </tr>
+    `).join('') || '<tr><td colspan="5" style="padding:10px;color:var(--text-secondary);">No suggestions yet.</td></tr>';
+    const analyticsTopicsRows = (analytics.topMissingTopics || []).map(topic => `
+      <tr>
+        <td style="padding:8px;color:#c9d6ff;border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(topic.topic || '-'))}</td>
+        <td style="padding:8px;color:#fde68a;border-bottom:1px solid rgba(99,102,241,0.12);">${Number(topic.count || 0)}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="2" style="padding:10px;color:var(--text-secondary);">No unresolved topic clusters for this period.</td></tr>';
     const usageRows = usageEvents.slice(0, 12).map(evt => `
       <tr>
         <td style="padding:8px;color:#c9d6ff;border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(evt.user_id || '-'))}</td>
@@ -7828,6 +7905,44 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
             </select>
             <span style="font-size:0.76em;color:var(--text-secondary);">Select the channels the AI should monitor for message activity to include in daily reports.</span>
           </label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.86em;padding-top:20px;">
+              <input id="aiassistant_memory_enabled" type="checkbox" ${s.memoryEnabled !== false ? 'checked' : ''}>
+              Enable Memory Mode (conversation continuity)
+            </label>
+            <label style="display:grid;gap:6px;">
+              <span style="font-size:0.82em;color:var(--text-secondary);">Memory Window (turns)</span>
+              <input id="aiassistant_memory_window_messages" type="number" min="0" max="30" value="${escapeHtml(String(s.memoryWindowMessages ?? 6))}" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+            </label>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <label style="display:grid;gap:6px;">
+              <span style="font-size:0.82em;color:var(--text-secondary);">Public Persona</span>
+              <select id="aiassistant_public_persona_key" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+                ${personaOptionsAll}
+              </select>
+            </label>
+            <label style="display:grid;gap:6px;">
+              <span style="font-size:0.82em;color:var(--text-secondary);">Admin Persona</span>
+              <select id="aiassistant_admin_persona_key" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+                ${personaOptionsAll}
+              </select>
+            </label>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <label style="display:grid;gap:6px;">
+              <span style="font-size:0.82em;color:var(--text-secondary);">Daily Token Budget (server, 0 = unlimited)</span>
+              <input id="aiassistant_daily_token_budget" type="number" min="0" max="2000000" value="${escapeHtml(String(s.dailyTokenBudget ?? 0))}" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+            </label>
+            <label style="display:grid;gap:6px;">
+              <span style="font-size:0.82em;color:var(--text-secondary);">Burst Limit / Minute (0 = unlimited)</span>
+              <input id="aiassistant_burst_per_minute" type="number" min="0" max="200" value="${escapeHtml(String(s.burstPerMinute ?? 0))}" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+            </label>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.86em;">
+            <input id="aiassistant_allow_action_suggestions" type="checkbox" ${s.allowActionSuggestions !== false ? 'checked' : ''}>
+            Allow AI action suggestions for admin review
+          </label>
           <label style="display:grid;gap:6px;">
             <span style="font-size:0.82em;color:var(--text-secondary);">System Prompt (tenant style/policy)</span>
             <textarea id="aiassistant_system_prompt" rows="6" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">${escapeHtml(String(s.systemPrompt || ''))}</textarea>
@@ -7969,8 +8084,199 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
       });
     }
 
+    const publicPersonaEl = document.getElementById('aiassistant_public_persona_key');
+    if (publicPersonaEl) {
+      const desired = String(s.publicPersonaKey || 'default_public');
+      publicPersonaEl.value = desired;
+      if (publicPersonaEl.value !== desired && publicPersonaEl.options.length > 0) {
+        publicPersonaEl.selectedIndex = 0;
+      }
+    }
+
+    const adminPersonaEl = document.getElementById('aiassistant_admin_persona_key');
+    if (adminPersonaEl) {
+      const desired = String(s.adminPersonaKey || 'default_admin');
+      adminPersonaEl.value = desired;
+      if (adminPersonaEl.value !== desired && adminPersonaEl.options.length > 0) {
+        adminPersonaEl.selectedIndex = 0;
+      }
+    }
+
     // Initialize/Refresh Multi-Select Controls
     initializePortalMultiSelects(pane);
+
+    pane.insertAdjacentHTML('beforeend', `
+      <div style="${cardStyle}">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+          <h3 style="margin:0;color:#c9d6ff;">🎭 Persona Profiles</h3>
+          <button class="btn-secondary btn-sm" onclick="loadAiAssistantSettingsView()">Refresh</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;margin-bottom:10px;align-items:end;">
+          <label style="display:grid;gap:6px;">
+            <span style="font-size:0.82em;color:var(--text-secondary);">Persona Key</span>
+            <input id="aiassistant_persona_key" type="text" maxlength="64" placeholder="support_public" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-family:monospace;">
+          </label>
+          <label style="display:grid;gap:6px;">
+            <span style="font-size:0.82em;color:var(--text-secondary);">Display Name</span>
+            <input id="aiassistant_persona_display_name" type="text" maxlength="80" placeholder="Support Assistant" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+          </label>
+          <label style="display:grid;gap:6px;">
+            <span style="font-size:0.82em;color:var(--text-secondary);">Scope</span>
+            <select id="aiassistant_persona_scope" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+              <option value="public">Public</option>
+              <option value="admin">Admin</option>
+              <option value="both">Both</option>
+            </select>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.86em;padding-bottom:10px;">
+            <input id="aiassistant_persona_enabled" type="checkbox" checked>
+            Enabled
+          </label>
+        </div>
+        <label style="display:grid;gap:6px;margin-bottom:10px;">
+          <span style="font-size:0.82em;color:var(--text-secondary);">Persona Prompt</span>
+          <textarea id="aiassistant_persona_prompt" rows="4" maxlength="4000" placeholder="You are a calm support concierge..." style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;"></textarea>
+        </label>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px;">
+          <button class="btn-secondary" onclick="resetAiAssistantPersonaForm()">Reset Persona Form</button>
+          <button class="btn-primary" onclick="saveAiAssistantPersona()">Save Persona</button>
+        </div>
+        <div style="border:1px solid rgba(99,102,241,0.18);border-radius:8px;overflow:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.84em;">
+            <thead>
+              <tr style="background:rgba(99,102,241,0.12);">
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Key</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Name</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Scope</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Status</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>${personaRows}</tbody>
+          </table>
+        </div>
+      </div>
+      <div style="${cardStyle}">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+          <h3 style="margin:0;color:#c9d6ff;">🛡️ Role Tier Limits</h3>
+          <button class="btn-primary btn-sm" onclick="saveAiAssistantRoleLimits()">Save Role Limits</button>
+        </div>
+        <div style="color:var(--text-secondary);font-size:0.8em;margin-bottom:10px;">Set per-role daily caps. 0 means unlimited. The strictest matching role limit is used per user.</div>
+        <div style="border:1px solid rgba(99,102,241,0.18);border-radius:8px;overflow:auto;max-height:420px;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.84em;">
+            <thead>
+              <tr style="background:rgba(99,102,241,0.12);">
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Role</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Daily Requests/User</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Daily Tokens/User</th>
+              </tr>
+            </thead>
+            <tbody>${roleLimitRows}</tbody>
+          </table>
+        </div>
+      </div>
+      <div style="${cardStyle}">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+          <h3 style="margin:0;color:#c9d6ff;">📥 Knowledge Ingestion</h3>
+          <button class="btn-secondary btn-sm" onclick="loadAiAssistantSettingsView()">Refresh Jobs</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
+          <label style="display:grid;gap:6px;">
+            <span style="font-size:0.82em;color:var(--text-secondary);">Import Type</span>
+            <select id="aiassistant_ingest_source_type" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+              <option value="url">URL (HTML/Markdown/Text)</option>
+              <option value="pdf_url">PDF URL</option>
+              <option value="discord_channel">Discord Channel</option>
+              <option value="markdown">Markdown/Text Paste</option>
+            </select>
+          </label>
+          <label style="display:grid;gap:6px;">
+            <span style="font-size:0.82em;color:var(--text-secondary);">Title</span>
+            <input id="aiassistant_ingest_title" type="text" maxlength="120" placeholder="Imported docs title" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+          </label>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
+          <label style="display:grid;gap:6px;">
+            <span style="font-size:0.82em;color:var(--text-secondary);">Source URL / Ref</span>
+            <input id="aiassistant_ingest_source_ref" type="text" maxlength="2048" placeholder="https://..., channel id, etc." style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+          </label>
+          <label style="display:grid;gap:6px;">
+            <span style="font-size:0.82em;color:var(--text-secondary);">Tags (comma-separated)</span>
+            <input id="aiassistant_ingest_tags" type="text" maxlength="300" placeholder="faq,verification" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+          </label>
+        </div>
+        <label style="display:grid;gap:6px;margin-bottom:10px;">
+          <span style="font-size:0.82em;color:var(--text-secondary);">Markdown/Text Body (used for markdown import)</span>
+          <textarea id="aiassistant_ingest_body" rows="4" maxlength="12000" placeholder="Paste markdown/text here for markdown import..." style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;"></textarea>
+        </label>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px;">
+          <button class="btn-primary" onclick="importAiAssistantKnowledge()">Run Import</button>
+        </div>
+        <div style="border:1px solid rgba(99,102,241,0.18);border-radius:8px;overflow:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.84em;">
+            <thead>
+              <tr style="background:rgba(99,102,241,0.12);">
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Job</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Type</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Source</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Status</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Updated</th>
+              </tr>
+            </thead>
+            <tbody>${ingestionJobRows}</tbody>
+          </table>
+        </div>
+      </div>
+      <div style="${cardStyle}">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+          <h3 style="margin:0;color:#c9d6ff;">🧠 Guarded AI Actions</h3>
+          <button class="btn-secondary btn-sm" onclick="loadAiAssistantSettingsView()">Refresh</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-bottom:10px;align-items:end;">
+          <label style="display:grid;gap:6px;">
+            <span style="font-size:0.82em;color:var(--text-secondary);">Generate Suggestions From Prompt</span>
+            <input id="aiassistant_suggestion_prompt" type="text" maxlength="3000" placeholder="Describe an admin task to convert into suggestions..." style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+          </label>
+          <button class="btn-primary" onclick="generateAiAssistantSuggestions()">Generate</button>
+        </div>
+        <div style="border:1px solid rgba(99,102,241,0.18);border-radius:8px;overflow:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.84em;">
+            <thead>
+              <tr style="background:rgba(99,102,241,0.12);">
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">ID</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Title</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Status</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Reason</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>${suggestionRows}</tbody>
+          </table>
+        </div>
+      </div>
+      <div style="${cardStyle}">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+          <h3 style="margin:0;color:#c9d6ff;">📊 AI Analytics</h3>
+          <button class="btn-secondary btn-sm" onclick="loadAiAssistantSettingsView()">Refresh Analytics</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(120px,1fr));gap:10px;margin-bottom:12px;">
+          <div style="padding:10px;border:1px solid rgba(99,102,241,0.16);border-radius:8px;background:rgba(30,41,59,0.45);"><div style="font-size:0.78em;color:var(--text-secondary);">Window</div><div style="font-size:1.1em;color:#e0e7ff;font-weight:700;">${Number(analytics.days || 7)} days</div></div>
+          <div style="padding:10px;border:1px solid rgba(248,113,113,0.2);border-radius:8px;background:rgba(248,113,113,0.08);"><div style="font-size:0.78em;color:#fecaca;">Unresolved</div><div style="font-size:1.1em;color:#fecaca;font-weight:700;">${Number(analytics.totals?.missingKnowledgeEvents || 0)}</div></div>
+          <div style="padding:10px;border:1px solid rgba(16,185,129,0.2);border-radius:8px;background:rgba(16,185,129,0.08);"><div style="font-size:0.78em;color:#a7f3d0;">Est. Tokens</div><div style="font-size:1.1em;color:#a7f3d0;font-weight:700;">${Number(analytics.totals?.estimatedTokenUsage || 0)}</div></div>
+        </div>
+        <div style="border:1px solid rgba(99,102,241,0.18);border-radius:8px;overflow:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.84em;">
+            <thead>
+              <tr style="background:rgba(99,102,241,0.12);">
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Top Missing Topic</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Count</th>
+              </tr>
+            </thead>
+            <tbody>${analyticsTopicsRows}</tbody>
+          </table>
+        </div>
+      </div>
+    `);
   } catch (error) {
     pane.innerHTML = `<div style="${cardStyle}"><div style="color:#fca5a5;">${escapeHtml(error.message || 'Failed to load AI assistant settings')}</div></div>`;
   }
@@ -8004,6 +8310,13 @@ async function saveAiAssistantSettings() {
     summaryEnabled: !!document.getElementById('aiassistant_summary_enabled')?.checked,
     summaryChannelId: String(document.getElementById('aiassistant_recap_channel')?.value || '').trim() || null,
     summaryActivityChannels: Array.from(document.getElementById('aiassistant_summary_activity_channels')?.selectedOptions || []).map(o => o.value).filter(Boolean),
+    memoryEnabled: !!document.getElementById('aiassistant_memory_enabled')?.checked,
+    memoryWindowMessages: parseInt(document.getElementById('aiassistant_memory_window_messages')?.value, 10) || 0,
+    publicPersonaKey: String(document.getElementById('aiassistant_public_persona_key')?.value || '').trim() || 'default_public',
+    adminPersonaKey: String(document.getElementById('aiassistant_admin_persona_key')?.value || '').trim() || 'default_admin',
+    dailyTokenBudget: parseInt(document.getElementById('aiassistant_daily_token_budget')?.value, 10) || 0,
+    burstPerMinute: parseInt(document.getElementById('aiassistant_burst_per_minute')?.value, 10) || 0,
+    allowActionSuggestions: !!document.getElementById('aiassistant_allow_action_suggestions')?.checked,
   };
 
   try {
@@ -8170,6 +8483,237 @@ function deleteAiAssistantKnowledgeDoc(docId) {
     },
     'Delete'
   );
+}
+
+function resetAiAssistantPersonaForm() {
+  const keyEl = document.getElementById('aiassistant_persona_key');
+  const displayEl = document.getElementById('aiassistant_persona_display_name');
+  const scopeEl = document.getElementById('aiassistant_persona_scope');
+  const promptEl = document.getElementById('aiassistant_persona_prompt');
+  const enabledEl = document.getElementById('aiassistant_persona_enabled');
+  if (keyEl) keyEl.value = '';
+  if (displayEl) displayEl.value = '';
+  if (scopeEl) scopeEl.value = 'public';
+  if (promptEl) promptEl.value = '';
+  if (enabledEl) enabledEl.checked = true;
+}
+
+function editAiAssistantPersona(personaKey) {
+  const key = String(personaKey || '').trim().toLowerCase();
+  if (!key) return;
+  const persona = (aiAssistantPersonasCache || []).find(item => String(item.personaKey || '').toLowerCase() === key);
+  if (!persona) {
+    showError('Persona not found in current view');
+    return;
+  }
+  const keyEl = document.getElementById('aiassistant_persona_key');
+  const displayEl = document.getElementById('aiassistant_persona_display_name');
+  const scopeEl = document.getElementById('aiassistant_persona_scope');
+  const promptEl = document.getElementById('aiassistant_persona_prompt');
+  const enabledEl = document.getElementById('aiassistant_persona_enabled');
+  if (keyEl) keyEl.value = String(persona.personaKey || '');
+  if (displayEl) displayEl.value = String(persona.displayName || '');
+  if (scopeEl) scopeEl.value = String(persona.scope || 'both');
+  if (promptEl) promptEl.value = String(persona.promptText || '');
+  if (enabledEl) enabledEl.checked = persona.enabled !== false;
+}
+
+async function saveAiAssistantPersona() {
+  const personaKey = String(document.getElementById('aiassistant_persona_key')?.value || '').trim();
+  const displayName = String(document.getElementById('aiassistant_persona_display_name')?.value || '').trim();
+  const scope = String(document.getElementById('aiassistant_persona_scope')?.value || 'public').trim();
+  const promptText = String(document.getElementById('aiassistant_persona_prompt')?.value || '').trim();
+  const enabled = !!document.getElementById('aiassistant_persona_enabled')?.checked;
+
+  if (!personaKey) {
+    showError('Persona key is required');
+    return;
+  }
+  if (!displayName) {
+    showError('Persona display name is required');
+    return;
+  }
+  if (!promptText) {
+    showError('Persona prompt is required');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/admin/aiassistant/personas', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({ personaKey, displayName, scope, promptText, enabled }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.success === false) {
+      showError(json.message || 'Failed to save persona');
+      return;
+    }
+    showSuccess('Persona saved');
+    await loadAiAssistantSettingsView();
+  } catch (error) {
+    showError(`Failed to save persona: ${error.message}`);
+  }
+}
+
+function deleteAiAssistantPersona(personaKey) {
+  const key = String(personaKey || '').trim();
+  if (!key) return;
+  showConfirmModal(
+    'Delete Persona?',
+    `Delete persona "${key}"?`,
+    async () => {
+      try {
+        const res = await fetch(`/api/admin/aiassistant/personas/${encodeURIComponent(key)}`, {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: buildTenantRequestHeaders(),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || json.success === false) {
+          showError(json.message || 'Failed to delete persona');
+          return;
+        }
+        showSuccess('Persona deleted');
+        await loadAiAssistantSettingsView();
+      } catch (error) {
+        showError(`Failed to delete persona: ${error.message}`);
+      }
+    },
+    'Delete'
+  );
+}
+
+async function saveAiAssistantRoleLimits() {
+  const requestInputs = Array.from(document.querySelectorAll('[data-ai-role-limit="requests"]'));
+  const limits = requestInputs.map(input => {
+    const roleId = String(input.getAttribute('data-role-id') || '').trim();
+    const tokenInput = document.querySelector(`[data-ai-role-limit="tokens"][data-role-id="${roleId}"]`);
+    const dailyRequestsPerUser = parseInt(input?.value, 10) || 0;
+    const dailyTokensPerUser = parseInt(tokenInput?.value, 10) || 0;
+    return { roleId, dailyRequestsPerUser, dailyTokensPerUser };
+  }).filter(item => /^\d{17,20}$/.test(item.roleId) && (item.dailyRequestsPerUser > 0 || item.dailyTokensPerUser > 0));
+
+  try {
+    const res = await fetch('/api/admin/aiassistant/role-limits', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({ limits }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.success === false) {
+      showError(json.message || 'Failed to save role limits');
+      return;
+    }
+    showSuccess('Role limits saved');
+    await loadAiAssistantSettingsView();
+  } catch (error) {
+    showError(`Failed to save role limits: ${error.message}`);
+  }
+}
+
+async function importAiAssistantKnowledge() {
+  const sourceType = String(document.getElementById('aiassistant_ingest_source_type')?.value || 'url').trim();
+  const title = String(document.getElementById('aiassistant_ingest_title')?.value || '').trim();
+  const sourceRef = String(document.getElementById('aiassistant_ingest_source_ref')?.value || '').trim();
+  const tags = String(document.getElementById('aiassistant_ingest_tags')?.value || '').trim();
+  const body = String(document.getElementById('aiassistant_ingest_body')?.value || '').trim();
+
+  const payload = { sourceType, title, tags };
+  if (sourceType === 'url' || sourceType === 'pdf_url') {
+    payload.sourceUrl = sourceRef;
+  } else if (sourceType === 'discord_channel') {
+    payload.channelId = sourceRef;
+  } else if (sourceType === 'markdown') {
+    payload.body = body;
+  }
+
+  try {
+    const res = await fetch('/api/admin/aiassistant/ingestion/import', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.success === false) {
+      showError(json.message || 'Failed to import source');
+      return;
+    }
+    showSuccess('Import started/completed');
+    await loadAiAssistantSettingsView();
+  } catch (error) {
+    showError(`Failed to import source: ${error.message}`);
+  }
+}
+
+async function generateAiAssistantSuggestions() {
+  const prompt = String(document.getElementById('aiassistant_suggestion_prompt')?.value || '').trim();
+  if (!prompt) {
+    showError('Suggestion prompt is required');
+    return;
+  }
+  try {
+    const res = await fetch('/api/admin/aiassistant/action-suggestions/generate', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({ prompt }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.success === false) {
+      showError(json.message || 'Failed to generate suggestions');
+      return;
+    }
+    showSuccess('Suggestions generated');
+    await loadAiAssistantSettingsView();
+  } catch (error) {
+    showError(`Failed to generate suggestions: ${error.message}`);
+  }
+}
+
+async function applyAiAssistantSuggestion(id) {
+  const suggestionId = Number(id);
+  if (!Number.isFinite(suggestionId) || suggestionId <= 0) return;
+  try {
+    const res = await fetch(`/api/admin/aiassistant/action-suggestions/${encodeURIComponent(String(suggestionId))}/apply`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: buildTenantRequestHeaders(),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.success === false) {
+      showError(json.message || 'Failed to apply suggestion');
+      return;
+    }
+    showSuccess('Suggestion applied');
+    await loadAiAssistantSettingsView();
+  } catch (error) {
+    showError(`Failed to apply suggestion: ${error.message}`);
+  }
+}
+
+async function rejectAiAssistantSuggestion(id) {
+  const suggestionId = Number(id);
+  if (!Number.isFinite(suggestionId) || suggestionId <= 0) return;
+  try {
+    const res = await fetch(`/api/admin/aiassistant/action-suggestions/${encodeURIComponent(String(suggestionId))}/reject`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: buildTenantRequestHeaders(),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.success === false) {
+      showError(json.message || 'Failed to reject suggestion');
+      return;
+    }
+    showSuccess('Suggestion rejected');
+    await loadAiAssistantSettingsView();
+  } catch (error) {
+    showError(`Failed to reject suggestion: ${error.message}`);
+  }
 }
 
 // ==================== INVITE TRACKER SETTINGS ====================

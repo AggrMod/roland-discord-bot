@@ -104,7 +104,8 @@ class SettingsManager {
       proposalsChannelId: '',
       votingChannelId: '',
       resultsChannelId: '',
-      governanceLogChannelId: ''
+      governanceLogChannelId: '',
+      missionLogChannelId: ''
     };
   }
 

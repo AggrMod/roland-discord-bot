@@ -85,7 +85,7 @@ function dailyCount(guildId, userId, actionType) {
 }
 
 // ── Core award ──────────────────────────────────────────────────────────────
-function awardPoints(guildId, userId, username, actionType, points, refId = null, note = null) {
+function awardPoints(guildId, userId, username, actionType, points, refId = null, note = null, channelId = null) {
   if (!points || points === 0) return { awarded: false, reason: 'zero' };
 
   // Dedup by reference_id
@@ -97,9 +97,9 @@ function awardPoints(guildId, userId, username, actionType, points, refId = null
   }
 
   db.prepare(`
-    INSERT INTO points_ledger (guild_id, user_id, username, action_type, points, reference_id, note)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(guildId, userId, username, actionType, points, refId, note);
+    INSERT INTO points_ledger (guild_id, user_id, username, action_type, points, reference_id, note, channel_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(guildId, userId, username, actionType, points, refId, note, channelId);
 
   db.prepare(`
     INSERT INTO points_totals (guild_id, user_id, username, total_points, updated_at)
@@ -114,22 +114,22 @@ function awardPoints(guildId, userId, username, actionType, points, refId = null
 }
 
 // ── Public award methods ────────────────────────────────────────────────────
-function tryAwardMessage(guildId, userId, username, messageId) {
+function tryAwardMessage(guildId, userId, username, messageId, channelId = null) {
   const cfg = getConfig(guildId);
   if (!cfg.enabled) return { awarded: false, reason: 'disabled' };
   if (isOnCooldown(guildId, userId, ACTION.MESSAGE, cfg.cooldown_message_mins))
     return { awarded: false, reason: 'cooldown' };
-  const result = awardPoints(guildId, userId, username, ACTION.MESSAGE, cfg.points_message, `msg:${messageId}`);
+  const result = awardPoints(guildId, userId, username, ACTION.MESSAGE, cfg.points_message, `msg:${messageId}`, null, channelId);
   if (result.awarded) stampCooldown(guildId, userId, ACTION.MESSAGE);
   return result;
 }
 
-function tryAwardReaction(guildId, userId, username, refId) {
+function tryAwardReaction(guildId, userId, username, refId, channelId = null) {
   const cfg = getConfig(guildId);
   if (!cfg.enabled) return { awarded: false, reason: 'disabled' };
   const dayCount = dailyCount(guildId, userId, ACTION.REACTION);
   if (dayCount >= cfg.cooldown_reaction_daily) return { awarded: false, reason: 'daily_cap' };
-  return awardPoints(guildId, userId, username, ACTION.REACTION, cfg.points_reaction, `rxn:${refId}`);
+  return awardPoints(guildId, userId, username, ACTION.REACTION, cfg.points_reaction, `rxn:${refId}`, null, channelId);
 }
 
 function awardGamePoints(guildId, userId, username, points, gameKey, place) {

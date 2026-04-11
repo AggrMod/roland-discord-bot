@@ -1137,6 +1137,8 @@ class WebServer {
       countActiveGovernanceProposals,
       entitlementService,
       missionService,
+      aiAssistantService,
+      getClient: () => this.client,
     }));
 
     const createVerificationRoleAdminRouter = require('./routes/verificationRoleAdmin');

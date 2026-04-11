@@ -43,6 +43,9 @@ function createAdminAiAssistantRouter({
         perUserDailyLimit: body.perUserDailyLimit,
         safetyFilterEnabled: body.safetyFilterEnabled,
         moderationEnabled: body.moderationEnabled,
+        summaryEnabled: body.summaryEnabled,
+        summaryChannelId: body.summaryChannelId,
+        summaryActivityChannels: body.summaryActivityChannels,
       });
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to save AI assistant settings', 'VALIDATION_ERROR', null, result));

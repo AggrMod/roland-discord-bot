@@ -15,6 +15,8 @@ function createAdminGovernanceMissionsRouter({
   countActiveGovernanceProposals,
   entitlementService,
   missionService,
+  aiAssistantService,
+  getClient,
 }) {
   const router = express.Router();
 
@@ -257,7 +259,7 @@ function createAdminGovernanceMissionsRouter({
     }
   });
 
-  router.post('/api/admin/missions/:id/complete', adminAuthMiddleware, (req, res) => {
+  router.post('/api/admin/missions/:id/complete', adminAuthMiddleware, async (req, res) => {
     if (!ensureHeistModule(req, res)) return;
     try {
       const { id } = req.params;
@@ -284,6 +286,38 @@ function createAdminGovernanceMissionsRouter({
       }
 
       logger.log(`Mission ${id} completed, ${mission.reward_points} points awarded to participants`);
+
+      // Generate AI Recap if possible
+      try {
+        if (aiAssistantService) {
+          const settingsManager = require('../../config/settings');
+          const settings = settingsManager.getSettings();
+          const recap = await aiAssistantService.generateMissionRecap(req.guildId || '', mission);
+          if (recap) {
+            db.prepare('UPDATE missions SET ai_recap = ? WHERE mission_id = ?').run(recap, id);
+
+            // Post to Discord if channel is configured
+            const logChannelId = settings.missionLogChannelId || settings.governanceLogChannelId;
+            const client = getClient?.();
+            if (client && logChannelId) {
+              const channel = await client.channels.fetch(logChannelId).catch(() => null);
+              if (channel) {
+                const { EmbedBuilder } = require('discord.js');
+                const embed = new EmbedBuilder()
+                  .setColor('#FFD700')
+                  .setTitle(`🎬 Mission Debrief: ${mission.title}`)
+                  .setDescription(recap)
+                  .setTimestamp();
+                
+                await channel.send({ embeds: [embed] }).catch(err => logger.error('[mission-debrief] failed to send to discord:', err));
+              }
+            }
+          }
+        }
+      } catch (e) {
+        logger.error(`[ai-assistant] failed to generate mission recap for ${id}:`, e);
+      }
+
       return res.json(toSuccessResponse({ message: 'Mission completed and points awarded' }));
     } catch (routeError) {
       logger.error('Error completing mission:', routeError);

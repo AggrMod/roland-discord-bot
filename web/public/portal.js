@@ -1,4 +1,4 @@
-﻿// ==================== PORTAL STATE MANAGEMENT ====================
+// ==================== PORTAL STATE MANAGEMENT ====================
 let userData = null;
 let isAdmin = false;
 let isSuperadmin = false;
@@ -7796,17 +7796,37 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
           </div>
           <label style="display:grid;gap:6px;">
             <span style="font-size:0.82em;color:var(--text-secondary);">Allowed Channels (blank = all channels)</span>
-            <select id="aiassistant_allowed_channels" multiple size="6" style="width:100%;padding:8px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+            <select id="aiassistant_allowed_channels" multiple size="6" data-ms-title="Allowed Channels" data-ms-placeholder="All channels" style="width:100%;padding:8px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
               ${channelRows}
             </select>
             <span style="font-size:0.76em;color:var(--text-secondary);">Tip: hold Ctrl/Cmd on desktop for multi-select. Mobile gets picker mode automatically.</span>
           </label>
           <label style="display:grid;gap:6px;">
             <span style="font-size:0.82em;color:var(--text-secondary);">Allowed Roles (blank = all members)</span>
-            <select id="aiassistant_allowed_roles" multiple size="6" style="width:100%;padding:8px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+            <select id="aiassistant_allowed_roles" multiple size="6" data-ms-title="Allowed Roles" data-ms-placeholder="All roles" style="width:100%;padding:8px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
               ${roleRows}
             </select>
             <span style="font-size:0.76em;color:var(--text-secondary);">If selected, only members with one of these roles can trigger mention AI replies.</span>
+          </label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <label style="display:grid;gap:6px;">
+              <span style="font-size:0.82em;color:var(--text-secondary);">Recap Channel (Family Report)</span>
+              <select id="aiassistant_recap_channel" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+                <option value="">— Disable Recaps —</option>
+                ${channelRows}
+              </select>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.86em;padding-top:20px;">
+              <input id="aiassistant_summary_enabled" type="checkbox" ${s.summaryEnabled ? 'checked' : ''}>
+              Enable Daily Family Recaps
+            </label>
+          </div>
+          <label style="display:grid;gap:6px;">
+            <span style="font-size:0.82em;color:var(--text-secondary);">Monitored Activity Channels</span>
+            <select id="aiassistant_summary_activity_channels" multiple size="6" data-ms-title="Monitored Channels" data-ms-placeholder="Select channels to monitor" style="width:100%;padding:8px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+              ${channelRows}
+            </select>
+            <span style="font-size:0.76em;color:var(--text-secondary);">Select the channels the AI should monitor for message activity to include in daily reports.</span>
           </label>
           <label style="display:grid;gap:6px;">
             <span style="font-size:0.82em;color:var(--text-secondary);">System Prompt (tenant style/policy)</span>
@@ -7926,20 +7946,31 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
       Array.from(selectEl.options || []).forEach(opt => {
         opt.selected = selected.has(String(opt.value));
       });
-      try {
-        portalEnhanceMultiSelect(selectEl, { placeholder: 'All channels', allowEmptySelection: true });
-      } catch (_error) {}
     }
+
+    const recapSelectEl = document.getElementById('aiassistant_recap_channel');
+    if (recapSelectEl) {
+      recapSelectEl.value = s.summaryChannelId || '';
+    }
+
+    const summaryChannelsSelectEl = document.getElementById('aiassistant_summary_activity_channels');
+    if (summaryChannelsSelectEl) {
+      const selected = new Set((s.summaryActivityChannels || []).map(v => String(v)));
+      Array.from(summaryChannelsSelectEl.options || []).forEach(opt => {
+        opt.selected = selected.has(String(opt.value));
+      });
+    }
+
     const roleSelectEl = document.getElementById('aiassistant_allowed_roles');
     if (roleSelectEl) {
       const selectedRoles = new Set(allowedRoles.map(v => String(v)));
       Array.from(roleSelectEl.options || []).forEach(opt => {
         opt.selected = selectedRoles.has(String(opt.value));
       });
-      try {
-        portalEnhanceMultiSelect(roleSelectEl, { placeholder: 'All roles', allowEmptySelection: true });
-      } catch (_error) {}
     }
+
+    // Initialize/Refresh Multi-Select Controls
+    initializePortalMultiSelects(pane);
   } catch (error) {
     pane.innerHTML = `<div style="${cardStyle}"><div style="color:#fca5a5;">${escapeHtml(error.message || 'Failed to load AI assistant settings')}</div></div>`;
   }
@@ -7970,6 +8001,9 @@ async function saveAiAssistantSettings() {
     systemPrompt: String(document.getElementById('aiassistant_system_prompt')?.value || '').trim(),
     allowedChannelIds,
     allowedRoleIds,
+    summaryEnabled: !!document.getElementById('aiassistant_summary_enabled')?.checked,
+    summaryChannelId: String(document.getElementById('aiassistant_recap_channel')?.value || '').trim() || null,
+    summaryActivityChannels: Array.from(document.getElementById('aiassistant_summary_activity_channels')?.selectedOptions || []).map(o => o.value).filter(Boolean),
   };
 
   try {

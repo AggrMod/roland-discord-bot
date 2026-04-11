@@ -46,7 +46,11 @@ module.exports = {
     .addSubcommand(sub =>
       sub
         .setName('status')
-        .setDescription('Show AI assistant module status for this server')),
+        .setDescription('Show AI assistant module status for this server'))
+    .addSubcommand(sub =>
+      sub
+        .setName('briefing')
+        .setDescription('Request an instant briefing from the Family Consigliere')),
 
   async execute(interaction) {
     if (!interaction.guildId) {
@@ -60,8 +64,41 @@ module.exports = {
     const sub = interaction.options.getSubcommand();
     if (sub === 'status') return this.handleStatus(interaction);
     if (sub === 'ask') return this.handleAsk(interaction);
+    if (sub === 'briefing') return this.handleBriefing(interaction);
 
     await interaction.reply({ content: 'Unknown AI assistant command.', ephemeral: true });
+  },
+
+  async handleBriefing(interaction) {
+    const settingsResult = aiAssistantService.getTenantSettings(interaction.guildId);
+    const useEphemeral = settingsResult.success && settingsResult.settings.responseVisibility === 'ephemeral';
+
+    await interaction.deferReply({ ephemeral: useEphemeral });
+
+    const reportText = await aiAssistantService.generateInstantBriefing(interaction.guildId, {
+      userId: interaction.user.id,
+      channelId: interaction.channelId,
+      requesterTag: interaction.user.tag,
+      memberRoleNames: interaction.member?.roles?.cache?.map(r => r.name) || [],
+      memberRoleIds: interaction.member?.roles?.cache?.map(r => r.id) || [],
+    });
+    if (!reportText) {
+      await interaction.editReply({ content: 'The Consigliere is currently unavailable. Try again later.' });
+      return;
+    }
+
+    const chunks = splitDiscordMessage(reportText, 1900);
+    await interaction.editReply({
+      content: chunks[0],
+      allowedMentions: { parse: [] },
+    });
+    for (let i = 1; i < chunks.length; i += 1) {
+      await interaction.followUp({
+        content: chunks[i],
+        ephemeral: useEphemeral,
+        allowedMentions: { parse: [] },
+      });
+    }
   },
 
   async handleStatus(interaction) {
@@ -108,6 +145,7 @@ module.exports = {
       requesterTag: interaction.user.tag,
       triggerSource: 'slash',
       memberRoleNames: interaction.member?.roles?.cache?.map(r => r.name) || [],
+      memberRoleIds: interaction.member?.roles?.cache?.map(r => r.id) || [],
     });
 
     if (!result.success) {

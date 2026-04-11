@@ -56,6 +56,7 @@ function initBattleTables() {
   try { db.exec('ALTER TABLE battle_lobbies ADD COLUMN required_role_ids TEXT'); } catch (e) {}
   try { db.exec('ALTER TABLE battle_lobbies ADD COLUMN era TEXT DEFAULT "mafia"'); } catch (e) {}
   try { db.exec('ALTER TABLE battle_lobbies ADD COLUMN bounties_json TEXT'); } catch (e) {}
+  try { db.exec('ALTER TABLE battle_lobbies ADD COLUMN guild_id TEXT'); } catch (e) {}
   // If old columns exist, populate new columns
   try {
     const rows = db.prepare('SELECT id, required_role_id, excluded_role_id FROM battle_lobbies WHERE (required_role_id IS NOT NULL OR excluded_role_id IS NOT NULL)').all();

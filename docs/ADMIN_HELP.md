@@ -3,7 +3,7 @@
 This file is the source-of-truth command reference for the current production command surface.
 
 ## Command Taxonomy
-- Canonical module commands: `/verification`, `/governance`, `/treasury`, `/wallet-tracker`, `/nft-tracker`, `/token-tracker`, `/minigames`, `/points`, `/heist`, `/config`.
+- Canonical module commands: `/verification`, `/governance`, `/treasury`, `/wallet-tracker`, `/invites`, `/nft-tracker`, `/token-tracker`, `/aiassistant`, `/minigames`, `/points`, `/heist`, `/config`.
 - Minigames currently run through dedicated commands (`/battle`, `/higherlower`, `/diceduel`, `/reactionrace`, `/numberguess`, `/slots`, `/trivia`, `/wordscramble`, `/rps`, `/blackjack`, `/gamenight`) and are mapped to the `minigames` module entitlement.
 
 ## Verification
@@ -33,6 +33,12 @@ This file is the source-of-truth command reference for the current production co
 - `/wallet-tracker holdings`
 - `/wallet-tracker refresh-all`
 
+## Invite Tracker
+- `/invites who`
+- `/invites leaderboard`
+- `/invites panel`
+- `/invites export`
+
 ## NFT Tracker
 - `/nft-tracker collection add`
 - `/nft-tracker collection remove`
@@ -54,6 +60,12 @@ This file is the source-of-truth command reference for the current production co
 - `/points shop`
 - `/points redeem`
 - `/points admin`
+
+## AI Assistant (Pro)
+- `/aiassistant ask`
+- `/aiassistant status`
+- `/aiassistant briefing`
+- Portal controls include provider selection, role/channel allowlists, channel policy modes (`off|mention|passive`), confidence threshold, and daily recap options.
 
 ## Minigames
 - Canonical: `/minigames run`, `/minigames help`

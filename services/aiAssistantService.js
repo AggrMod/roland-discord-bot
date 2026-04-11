@@ -4,6 +4,8 @@ const settingsManager = require('../config/settings');
 const tenantService = require('./tenantService');
 const entitlementService = require('./entitlementService');
 const walletService = require('./walletService');
+const roleService = require('./roleService');
+const battleService = require('./battleService');
 const { decryptSecret } = require('../utils/secretVault');
 
 const DEFAULTS = Object.freeze({
@@ -25,6 +27,9 @@ const DEFAULTS = Object.freeze({
   defaultMinConfidence: 35,
   defaultPassiveCooldownSeconds: 120,
   defaultPassiveMaxPerHour: 6,
+  summaryEnabled: false,
+  summaryChannelId: null,
+  summaryActivityChannels: [],
 });
 
 const PROMPT_DENYLIST_RULES = Object.freeze([
@@ -247,6 +252,7 @@ class AiAssistantService {
       SELECT guild_id, enabled, provider, model_openai, model_gemini, response_visibility, system_prompt, allowed_channel_ids
              , mention_enabled, allowed_role_ids, cooldown_seconds, max_response_chars
              , per_user_daily_limit, safety_filter_enabled, moderation_enabled
+             , summary_enabled, summary_channel_id, summary_activity_channels
       FROM ai_assistant_tenant_settings
       WHERE guild_id = ?
     `).get(normalizedGuildId);
@@ -263,9 +269,12 @@ class AiAssistantService {
       allowedRoleIds: normalizeAllowedRoleIds(parseJsonArray(row?.allowed_role_ids)),
       cooldownSeconds: normalizeIntegerInRange(row?.cooldown_seconds, { min: 3, max: 600, fallback: DEFAULTS.cooldownSeconds }),
       maxResponseChars: normalizeIntegerInRange(row?.max_response_chars, { min: 300, max: 1900, fallback: DEFAULTS.maxResponseChars }),
-      perUserDailyLimit: normalizeIntegerInRange(row?.per_user_daily_limit, { min: 0, max: 500, fallback: DEFAULTS.perUserDailyLimit }),
+      perUserDailyLimit: normalizeIntegerInRange(row?.per_user_daily_limit, { min: 0, max: 1000, fallback: DEFAULTS.perUserDailyLimit }),
       safetyFilterEnabled: row ? row.safety_filter_enabled !== 0 : DEFAULTS.safetyFilterEnabled,
       moderationEnabled: row ? row.moderation_enabled === 1 : DEFAULTS.moderationEnabled,
+      summaryEnabled: row ? row.summary_enabled === 1 : DEFAULTS.summaryEnabled,
+      summaryChannelId: row?.summary_channel_id || null,
+      summaryActivityChannels: normalizeAllowedChannelIds(parseJsonArray(row?.summary_activity_channels)),
     };
 
     return {
@@ -304,16 +313,19 @@ class AiAssistantService {
       next.maxResponseChars = normalizeIntegerInRange(payload.maxResponseChars, { min: 300, max: 1900, fallback: DEFAULTS.maxResponseChars });
     }
     if (payload.perUserDailyLimit !== undefined) {
-      next.perUserDailyLimit = normalizeIntegerInRange(payload.perUserDailyLimit, { min: 0, max: 500, fallback: DEFAULTS.perUserDailyLimit });
+      next.perUserDailyLimit = normalizeIntegerInRange(payload.perUserDailyLimit, { min: 0, max: 1000, fallback: DEFAULTS.perUserDailyLimit });
     }
     if (payload.safetyFilterEnabled !== undefined) next.safetyFilterEnabled = !!payload.safetyFilterEnabled;
     if (payload.moderationEnabled !== undefined) next.moderationEnabled = !!payload.moderationEnabled;
+    if (payload.summaryEnabled !== undefined) next.summaryEnabled = !!payload.summaryEnabled;
+    if (payload.summaryChannelId !== undefined) next.summaryChannelId = String(payload.summaryChannelId || '').trim() || null;
+    if (payload.summaryActivityChannels !== undefined) next.summaryActivityChannels = normalizeAllowedChannelIds(payload.summaryActivityChannels);
 
     db.prepare(`
       INSERT INTO ai_assistant_tenant_settings (
-        guild_id, enabled, provider, model_openai, model_gemini, mention_enabled, response_visibility, system_prompt, allowed_channel_ids, allowed_role_ids, cooldown_seconds, max_response_chars, per_user_daily_limit, safety_filter_enabled, moderation_enabled, updated_at
+        guild_id, enabled, provider, model_openai, model_gemini, mention_enabled, response_visibility, system_prompt, allowed_channel_ids, allowed_role_ids, cooldown_seconds, max_response_chars, per_user_daily_limit, safety_filter_enabled, moderation_enabled, summary_enabled, summary_channel_id, summary_activity_channels, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(guild_id) DO UPDATE SET
         enabled = excluded.enabled,
         provider = excluded.provider,
@@ -329,6 +341,9 @@ class AiAssistantService {
         per_user_daily_limit = excluded.per_user_daily_limit,
         safety_filter_enabled = excluded.safety_filter_enabled,
         moderation_enabled = excluded.moderation_enabled,
+        summary_enabled = excluded.summary_enabled,
+        summary_channel_id = excluded.summary_channel_id,
+        summary_activity_channels = excluded.summary_activity_channels,
         updated_at = CURRENT_TIMESTAMP
     `).run(
       normalizedGuildId,
@@ -345,7 +360,10 @@ class AiAssistantService {
       next.maxResponseChars,
       next.perUserDailyLimit,
       next.safetyFilterEnabled ? 1 : 0,
-      next.moderationEnabled ? 1 : 0
+      next.moderationEnabled ? 1 : 0,
+      next.summaryEnabled ? 1 : 0,
+      next.summaryChannelId,
+      JSON.stringify(next.summaryActivityChannels || []),
     );
 
     return { success: true, settings: next };
@@ -470,10 +488,10 @@ class AiAssistantService {
     const normalizedGuildId = normalizeGuildId(guildId);
     if (!normalizedGuildId) return { success: false, message: 'Invalid guildId' };
     const docs = db.prepare(`
-      SELECT id, guild_id, title, body, source_url, tags, enabled, created_at, updated_at
+      SELECT id, guild_id, title, body, source_url, tags, enabled, is_lore, priority, created_at, updated_at
       FROM ai_assistant_knowledge_docs
       WHERE guild_id = ?
-      ORDER BY enabled DESC, updated_at DESC, id DESC
+      ORDER BY enabled DESC, priority DESC, updated_at DESC, id DESC
       LIMIT 200
     `).all(normalizedGuildId).map(row => ({
       id: Number(row.id),
@@ -483,6 +501,8 @@ class AiAssistantService {
       sourceUrl: String(row.source_url || ''),
       tags: parseTags(row.tags).join(', '),
       enabled: row.enabled !== 0,
+      isLore: row.is_lore !== 0,
+      priority: Number(row.priority || 0),
       createdAt: row.created_at || null,
       updatedAt: row.updated_at || null,
     }));
@@ -524,22 +544,24 @@ class AiAssistantService {
     const sourceUrl = normalizeUrl(payload.sourceUrl || payload.source_url || '');
     const tags = parseTags(payload.tags).join(', ');
     const enabled = payload.enabled === undefined ? true : !!payload.enabled;
+    const isLore = !!(payload.isLore ?? payload.is_lore);
+    const priority = Number.parseInt(payload.priority, 10) || 0;
 
     if (!title) return { success: false, message: 'Title is required' };
     if (!body || body.length < 20) return { success: false, message: 'Body content is required (min 20 chars)' };
 
     let embeddingJson = null;
-    const settings = this.getTenantSettings(normalizedGuildId);
-    if (settings.success && settings.global.hasOpenaiKey) {
-      const vector = await this.generateEmbedding(`${title}\n${body}`, settings.global.openaiApiKey);
+    const global = this.getGlobalProviderSettings();
+    if (global.openaiApiKey) {
+      const vector = await this.generateEmbedding(`${title}\n${body}`, global.openaiApiKey);
       if (vector) embeddingJson = JSON.stringify(vector);
     }
 
     if (docId === null || docId === undefined) {
       const result = db.prepare(`
-        INSERT INTO ai_assistant_knowledge_docs (guild_id, title, body, source_url, tags, enabled, vector_embedding, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `).run(normalizedGuildId, title, body, sourceUrl || null, tags, enabled ? 1 : 0, embeddingJson);
+        INSERT INTO ai_assistant_knowledge_docs (guild_id, title, body, source_url, tags, enabled, is_lore, priority, vector_embedding, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `).run(normalizedGuildId, title, body, sourceUrl || null, tags, enabled ? 1 : 0, isLore ? 1 : 0, priority, embeddingJson);
       return { success: true, id: Number(result.lastInsertRowid) };
     }
 
@@ -552,9 +574,9 @@ class AiAssistantService {
 
     db.prepare(`
       UPDATE ai_assistant_knowledge_docs
-      SET title = ?, body = ?, source_url = ?, tags = ?, enabled = ?, vector_embedding = ?, updated_at = CURRENT_TIMESTAMP
+      SET title = ?, body = ?, source_url = ?, tags = ?, enabled = ?, is_lore = ?, priority = ?, vector_embedding = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND guild_id = ?
-    `).run(title, body, sourceUrl || null, tags, enabled ? 1 : 0, embeddingJson, normalizedDocId, normalizedGuildId);
+    `).run(title, body, sourceUrl || null, tags, enabled ? 1 : 0, isLore ? 1 : 0, priority, embeddingJson, normalizedDocId, normalizedGuildId);
     return { success: true, id: normalizedDocId };
   }
 
@@ -570,54 +592,227 @@ class AiAssistantService {
     return { success: true };
   }
 
+  cosineSimilarity(vecA, vecB) {
+    if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+    for (let i = 0; i < vecA.length; i++) {
+      dotProduct += vecA[i] * vecB[i];
+      normA += vecA[i] * vecA[i];
+      normB += vecB[i] * vecB[i];
+    }
+    const similarity = dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+    return Number.isFinite(similarity) ? similarity : 0;
+  }
+
+  /**
+   * Generates a concise "Family Brief" summary for a governance proposal.
+   */
+  async generateProposalBrief(guildId, proposal) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!proposal) return null;
+
+    const persona = "You are the Consigliere of the Cartoon Maffia. Your job is to provide a sharp, concise 'Family Brief' (2-3 sentences) for a new proposal. " +
+                    "Focus on the 'why' and the potential impact on the Family's treasury or territory. Keep the tone professional but gritty Mafioso.";
+
+    const prompt = `Proposal Title: ${proposal.title}\nCategory: ${proposal.category}\nDescription: ${proposal.description}\n\nProvide the brief:`;
+
+    try {
+      const response = await this.ask({
+        guildId: normalizedGuildId,
+        userId: 'system-agent',
+        channelId: null,
+        prompt,
+        triggerSource: 'proposal_brief',
+        overrideSystemPrompt: persona,
+        skipKnowledge: true,
+        skipChannelCheck: true,
+        skipRoleCheck: true,
+      });
+      return response.success ? response.text : null;
+    } catch (e) {
+      logger.error(`[ai-assistant-proposal] Error generating brief for ${proposal.proposal_id}:`, e);
+      return null;
+    }
+  }
+
+  /**
+   * Generates a "Gritty Recap" for a completed heist mission.
+   */
+  async generateMissionRecap(guildId, mission, participants) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!mission) return null;
+
+    const eraContext = `Current Era: ${await battleService.getCurrentEraConfiguration(normalizedGuildId).then(e => e?.name || 'Unknown')}`;
+    const participantNames = (participants || []).map(p => p.username).join(', ');
+    
+    const persona = "You are a underworld journalist/chronicler for the Cartoon Maffia. " +
+                    "Write a short, flavorful 'Heat Recap' (3-4 sentences) of a recently completed heist/mission. " +
+                    "Mention a few of the participants and the outcome. Keep it immersive and era-appropriate.";
+
+    const prompt = `${eraContext}\nMission: ${mission.title}\nDescription: ${mission.description}\n` +
+                   `Participants: ${participantNames}\nOutcome: Successfully completed, rewards distributed.\n\nWrite the recap:`;
+
+    try {
+      const response = await this.ask({
+        guildId: normalizedGuildId,
+        userId: 'system-agent',
+        channelId: null,
+        prompt,
+        triggerSource: 'mission_recap',
+        overrideSystemPrompt: persona,
+        skipKnowledge: true,
+        skipChannelCheck: true,
+        skipRoleCheck: true,
+      });
+      return response.success ? response.text : null;
+    } catch (e) {
+      logger.error(`[ai-assistant-mission] Error generating recap for ${mission.mission_id}:`, e);
+      return null;
+    }
+  }
+
+  /**
+   * Generates a narrative summary of all family activity from the last 24h.
+   */
+  async generateDailyFamilyRecap(guildId, activityData) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!activityData) return null;
+
+    const persona = "You are the primary chronicler for the Cartoon Maffia. " +
+                    "Your job is to write the 'Daily Family Report'—a gritty, immersive narrative summary of the last 24 hours of moves. " +
+                    "Focus on the power plays, successful heists, arena combat outcomes, and new plans hatching. Tone: Gritty, professional Mafioso. " +
+                    "Highlight 'Family Honors' (the most active members) with distinctive flair. " +
+                    "Avoid generic corporate language. Use Family terminology (e.g., 'territory', 'business', 'made men', 'the arena').";
+
+    const prompt = `Family Activity from the last 24 hours:\n\n${JSON.stringify(activityData, null, 2)}\n\n` +
+                   `Write the Daily Family Report (3 paragraphs). Include a section for 'Family Honors' acknowledging the most active members listed in the data.`;
+
+    try {
+      const response = await this.ask({
+        guildId: normalizedGuildId,
+        userId: 'system-agent',
+        channelId: null,
+        prompt,
+        triggerSource: 'daily_family_recap',
+        overrideSystemPrompt: persona,
+        skipKnowledge: true,
+        skipChannelCheck: true,
+        skipRoleCheck: true,
+      });
+      return response.success ? response.text : null;
+    } catch (e) {
+      logger.error(`[ai-assistant-daily] Error generating daily recap for ${normalizedGuildId}:`, e);
+      return null;
+    }
+  }
+
+  /**
+   * Generates an instant, personalized briefing for a member or the family.
+   */
+  async generateInstantBriefing(guildId, options = {}) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    
+    // Gather current state
+    const currentProposals = db.prepare("SELECT title, status FROM proposals WHERE guild_id = ? AND status IN ('supporting', 'voting')").all(normalizedGuildId);
+    const activeMissions = db.prepare("SELECT title FROM missions WHERE guild_id = ? AND status = 'active'").all(normalizedGuildId);
+    const recentBattles = db.prepare("SELECT lobby_id, status FROM battle_lobbies WHERE guild_id = ? AND status IN ('open', 'in_progress')").all(normalizedGuildId);
+
+    const state = {
+      proposals: currentProposals,
+      missions: activeMissions,
+      arenas: recentBattles
+    };
+
+    const persona = "You are the Family Consigliere. A member is asking for an update on current affairs. " +
+                    "Give them a sharp, concise briefing on current 'business' (proposals), 'heists' (missions), and 'the arena' (battles). " +
+                    "Tone: Efficient, loyal, slightly dangerous. If things are quiet, encourage them to stir up some trouble.";
+
+    const prompt = `Current Family State:\n\n${JSON.stringify(state, null, 2)}\n\n` +
+                   `Provide a concise status briefing for the member (1-2 paragraphs).`;
+
+    try {
+      const callerUserId = String(options.userId || '').trim() || 'system-agent';
+      const callerChannelId = String(options.channelId || '').trim() || null;
+      const response = await this.ask({
+        guildId: normalizedGuildId,
+        userId: callerUserId,
+        channelId: callerChannelId,
+        prompt,
+        requesterTag: String(options.requesterTag || '').trim(),
+        triggerSource: 'instant_briefing',
+        memberRoleNames: Array.isArray(options.memberRoleNames) ? options.memberRoleNames : [],
+        memberRoleIds: Array.isArray(options.memberRoleIds) ? options.memberRoleIds : [],
+        overrideSystemPrompt: persona,
+        skipKnowledge: true,
+        skipChannelCheck: !callerChannelId,
+        skipRoleCheck: !callerChannelId,
+      });
+      return response.success ? response.text : null;
+    } catch (e) {
+      logger.error(`[ai-assistant-briefing] Error generating briefing for ${normalizedGuildId}:`, e);
+      return null;
+    }
+  }
+
   async resolveKnowledgeContext(guildId, prompt) {
     const normalizedGuildId = normalizeGuildId(guildId);
     if (!normalizedGuildId) {
       return { success: false, code: 'invalid_guild', message: 'Invalid guild context' };
     }
 
+    const global = this.getGlobalProviderSettings();
+    let promptVector = null;
+    if (global.openaiApiKey) {
+      promptVector = await this.generateEmbedding(prompt, global.openaiApiKey);
+    }
+
     const docs = db.prepare(`
-      SELECT id, title, body, source_url, tags, vector_embedding
+      SELECT id, title, body, source_url, tags, is_lore, priority, vector_embedding
       FROM ai_assistant_knowledge_docs
       WHERE guild_id = ?
         AND enabled = 1
-      ORDER BY updated_at DESC, id DESC
-      LIMIT 250
     `).all(normalizedGuildId);
 
     if (!docs.length) {
       return { success: true, hasDocs: false, matches: [], confidence: 0 };
     }
 
-    const settings = this.getTenantSettings(normalizedGuildId);
-    const promptVector = settings.success && settings.global.hasOpenaiKey
-      ? await this.generateEmbedding(prompt, settings.global.openaiApiKey)
-      : null;
-
     const matches = [];
+
     if (promptVector) {
+      // 1. Semantic Search Branch
       for (const row of docs) {
         if (!row.vector_embedding) continue;
         try {
           const docVector = JSON.parse(row.vector_embedding);
-          const similarity = cosineSimilarity(promptVector, docVector);
-          if (similarity < 0.25) continue;
+          const similarity = this.cosineSimilarity(promptVector, docVector);
+          
+          // Hybrid Score: weight similarity + priority + lore boost
+          const loreBoost = (row.is_lore && similarity > 0.3) ? 0.15 : 0;
+          const priorityBoost = (Number(row.priority) || 0) * 0.01;
+          const totalScore = similarity + loreBoost + priorityBoost;
+
+          // Threshold for inclusion
+          if (totalScore < 0.35) continue;
 
           matches.push({
             id: Number(row.id),
             title: row.title,
             sourceUrl: String(row.source_url || ''),
             tags: row.tags,
-            score: Math.round(similarity * 100),
-            similarity,
-            snippet: row.body.slice(0, 1000),
+            score: Math.round(totalScore * 100),
+            similarity: similarity, 
+            snippet: String(row.body || '').slice(0, 1500),
           });
         } catch (e) {
           logger.error(`[ai-assistant-semantic] Error parsing vector for doc ${row.id}:`, e.message);
         }
       }
-      matches.sort((a, b) => b.similarity - a.similarity);
+      matches.sort((a, b) => b.score - a.score);
     } else {
+      // 2. Fallback Keyword Search Branch (if no OpenAI key or embedding fails)
       const promptTokens = tokenizeForSearch(prompt);
       if (promptTokens.length > 0) {
         for (const row of docs) {
@@ -625,18 +820,17 @@ class AiAssistantService {
           const body = String(row.body || '');
           const tags = parseTags(row.tags);
           const haystack = `${title}\n${body}\n${tags.join(' ')}`.toLowerCase();
-          const titleTokens = tokenizeForSearch(title);
-          const titleSet = new Set(titleTokens);
-          const bodySet = new Set(tokenizeForSearch(`${body} ${tags.join(' ')}`));
-
+          
           let overlap = 0;
-          let titleOverlap = 0;
           for (const token of promptTokens) {
-            if (bodySet.has(token) || haystack.includes(token)) overlap += 1;
-            if (titleSet.has(token)) titleOverlap += 1;
+            if (haystack.includes(token)) overlap += 1;
           }
           const overlapRatio = overlap / Math.max(promptTokens.length, 1);
-          const score = (overlap * 4) + (titleOverlap * 3) + Math.round(overlapRatio * 10);
+          
+          const loreBoost = (row.is_lore && overlapRatio > 0.2) ? 5 : 0;
+          const priorityBoost = (Number(row.priority) || 0);
+          const score = (overlap * 4) + loreBoost + priorityBoost;
+
           if (score < 3) continue;
 
           matches.push({
@@ -653,16 +847,15 @@ class AiAssistantService {
       }
     }
 
-    const topMatches = matches.slice(0, 4);
-    const top = topMatches[0] || null;
-    let confidence = 0;
-    if (top) {
-      confidence = promptVector 
-        ? Math.round(Math.min(100, top.similarity * 110))
-        : Math.round(Math.min(100, (Number(top.similarity || 0) * 100)));
-    }
+    const finalMatches = matches.slice(0, 15);
+    const highestSimilarity = finalMatches.length > 0 ? Math.max(...finalMatches.map(m => m.similarity)) : 0;
 
-    return { success: true, hasDocs: true, matches: topMatches, confidence };
+    return {
+      success: true,
+      hasDocs: true,
+      matches: finalMatches,
+      confidence: Math.round(highestSimilarity * 100),
+    };
   }
 
   isChannelAllowed(settings, channelId) {
@@ -760,15 +953,15 @@ class AiAssistantService {
     };
   }
 
-  logUsage({ guildId, userId, provider, model, status = 'ok', errorCode = null, latencyMs = 0, promptChars = 0, responseChars = 0, triggerSource = 'slash' }) {
+  logUsage({ guildId, userId, provider, model, status = 'ok', errorCode = null, latencyMs = 0, promptChars = 0, responseChars = 0, triggerSource = 'slash', promptText = null }) {
     const normalizedGuildId = normalizeGuildId(guildId);
     const normalizedUserId = String(userId || '').trim();
     if (!normalizedGuildId || !normalizedUserId) return;
     try {
       db.prepare(`
         INSERT INTO ai_assistant_usage_events (
-          guild_id, user_id, provider, model, status, error_code, latency_ms, prompt_chars, response_chars, trigger_source
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          guild_id, user_id, provider, model, status, error_code, latency_ms, prompt_chars, response_chars, trigger_source, prompt_text
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         normalizedGuildId,
         normalizedUserId,
@@ -780,6 +973,7 @@ class AiAssistantService {
         Math.max(0, parseInt(promptChars, 10) || 0),
         Math.max(0, parseInt(responseChars, 10) || 0),
         String(triggerSource || 'slash').trim() || 'slash',
+        promptText ? String(promptText).trim().slice(0, 3000) : null,
       );
     } catch (error) {
       logger.warn('[ai-assistant] failed to log usage:', error?.message || error);
@@ -856,8 +1050,80 @@ class AiAssistantService {
     return out;
   }
 
-  async ask({ guildId, userId, channelId, prompt, providerOverride = '', requesterTag = '', triggerSource = 'slash', requiredConfidence = null, memberRoleNames = [] }) {
+  async injectRpgContext(guildId, userId) {
+    const ctx = {
+      tier: 'Guest',
+      era: 'Modern',
+      recentWinner: null,
+      recentMission: null,
+    };
+
+    try {
+      // 1. User Tier
+      const user = await roleService.getUserInfo(userId);
+      if (user && user.tier) {
+        ctx.tier = user.tier;
+      }
+
+      // 2. Current Era
+      const settings = this.getTenantSettings(guildId);
+      const eraKey = settings.settings?.era || 'mafia';
+      const eraConfig = battleService.getEraConfig(eraKey);
+      ctx.era = eraConfig?.name || 'Mafia';
+
+      // 3. Recent Battle Winner
+      const battleDb = require('../database/battleDb');
+      const lastLobby = battleDb.prepare(`
+        SELECT lobby_id FROM battle_lobbies 
+        WHERE status = 'completed' AND guild_id = ? 
+        ORDER BY completed_at DESC LIMIT 1
+      `).get(guildId);
+
+      if (lastLobby) {
+        const winner = battleDb.prepare(`
+          SELECT username FROM battle_participants 
+          WHERE lobby_id = ? AND is_alive = 1 LIMIT 1
+        `).get(lastLobby.lobby_id);
+        if (winner) {
+          ctx.recentWinner = winner.username;
+        }
+      }
+
+      // 4. Recent Mission
+      const lastMission = db.prepare(`
+        SELECT title, status FROM missions 
+        WHERE guild_id = ? 
+        ORDER BY created_at DESC LIMIT 1
+      `).get(guildId);
+      if (lastMission) {
+        ctx.recentMission = `${lastMission.title} (${lastMission.status})`;
+      }
+    } catch (error) {
+      logger.warn('[ai-assistant] failed to inject RPG context:', error);
+    }
+
+    return ctx;
+  }
+
+  async ask({
+    guildId,
+    userId,
+    channelId,
+    prompt,
+    providerOverride = '',
+    requesterTag = '',
+    triggerSource = 'slash',
+    requiredConfidence = null,
+    memberRoleNames = [],
+    memberRoleIds = [],
+    overrideSystemPrompt = '',
+    skipKnowledge = false,
+    skipChannelCheck = false,
+    skipRoleCheck = false,
+  }) {
     const normalizedGuildId = normalizeGuildId(guildId);
+    const normalizedUserId = String(userId || '').trim() || 'system-agent';
+    const isSystemRequest = normalizedUserId === 'system-agent';
     const cleanPrompt = String(prompt || '').trim();
     if (!normalizedGuildId) return { success: false, code: 'invalid_guild', message: 'Invalid guild context' };
     if (!cleanPrompt) return { success: false, code: 'empty_prompt', message: 'Prompt is required' };
@@ -873,70 +1139,88 @@ class AiAssistantService {
     if (!tenantSettings.enabled) {
       return { success: false, code: 'tenant_disabled', message: 'AI Assistant is disabled in this server settings.' };
     }
-    if (!this.isChannelAllowed(tenantSettings, channelId)) {
+    if (!skipChannelCheck && !this.isChannelAllowed(tenantSettings, channelId)) {
       return { success: false, code: 'channel_blocked', message: 'AI Assistant is not enabled in this channel.' };
+    }
+    if (!skipRoleCheck && Array.isArray(tenantSettings.allowedRoleIds) && tenantSettings.allowedRoleIds.length > 0) {
+      const normalizedMemberRoleIds = Array.isArray(memberRoleIds)
+        ? memberRoleIds.map(roleId => String(roleId || '').trim()).filter(Boolean)
+        : [];
+      const hasAllowedRole = normalizedMemberRoleIds.some(roleId => tenantSettings.allowedRoleIds.includes(roleId));
+      if (!hasAllowedRole) {
+        return { success: false, code: 'role_blocked', message: 'You do not have an allowed role for AI Assistant in this server.' };
+      }
     }
 
     const allowance = this.getDailyRemaining(normalizedGuildId);
     if (!allowance.allowed) {
       return { success: false, code: 'limit_reached', message: 'Daily AI request limit reached for this plan.', allowance };
     }
-    const userAllowance = this.getUserDailyRemaining(normalizedGuildId, userId, tenantSettings.perUserDailyLimit);
+    const userAllowance = isSystemRequest
+      ? { allowed: true, limit: null, used: 0, remaining: null }
+      : this.getUserDailyRemaining(normalizedGuildId, normalizedUserId, tenantSettings.perUserDailyLimit);
     if (!userAllowance.allowed) {
       return { success: false, code: 'user_limit_reached', message: 'You reached your daily AI request limit for this server.', allowance, userAllowance };
     }
 
-    const knowledge = await this.resolveKnowledgeContext(normalizedGuildId, cleanPrompt);
+    const knowledge = skipKnowledge
+      ? { success: true, hasDocs: false, matches: [], confidence: 0 }
+      : await this.resolveKnowledgeContext(normalizedGuildId, cleanPrompt);
     if (!knowledge.success) return knowledge;
     const confidenceThreshold = requiredConfidence === null || requiredConfidence === undefined
       ? DEFAULTS.defaultMinConfidence
       : normalizeIntegerInRange(requiredConfidence, { min: 0, max: 100, fallback: DEFAULTS.defaultMinConfidence });
     const confidence = Number(knowledge.confidence || 0);
 
-    if (!knowledge.hasDocs) {
-      this.logUsage({
-        guildId: normalizedGuildId,
-        userId,
-        provider: 'knowledge',
-        model: 'local_index',
-        status: 'error',
-        errorCode: 'knowledge_not_configured',
-        latencyMs: 0,
-        promptChars: cleanPrompt.length,
-        responseChars: 0,
-        triggerSource,
-      });
-      // We log the missing knowledge but DO NOT block the request. 
-      // This allows general conversational capability.
-    } else if (!knowledge.matches.length) {
-      this.logUsage({
-        guildId: normalizedGuildId,
-        userId,
-        provider: 'knowledge',
-        model: 'local_index',
-        status: 'error',
-        errorCode: 'knowledge_no_match',
-        latencyMs: 0,
-        promptChars: cleanPrompt.length,
-        responseChars: 0,
-        triggerSource,
-      });
-    } else {
-      // We log low confidence matches, but we no longer block the request.
-      // This allows the bot to fall back to general AI knowledge.
-      if (confidence < confidenceThreshold) {
+    if (!skipKnowledge) {
+      if (!knowledge.hasDocs) {
         this.logUsage({
           guildId: normalizedGuildId,
-          userId,
+          userId: normalizedUserId,
           provider: 'knowledge',
           model: 'local_index',
           status: 'error',
-          errorCode: 'knowledge_low_confidence',
+          errorCode: 'knowledge_not_configured',
           latencyMs: 0,
           promptChars: cleanPrompt.length,
           responseChars: 0,
           triggerSource,
+          promptText: cleanPrompt,
         });
+        // We log the missing knowledge but DO NOT block the request.
+        // This allows general conversational capability.
+      } else if (!knowledge.matches.length) {
+        this.logUsage({
+          guildId: normalizedGuildId,
+          userId: normalizedUserId,
+          provider: 'knowledge',
+          model: 'local_index',
+          status: 'error',
+          errorCode: 'knowledge_no_match',
+          latencyMs: 0,
+          promptChars: cleanPrompt.length,
+          responseChars: 0,
+          triggerSource,
+          promptText: cleanPrompt,
+        });
+      } else {
+        // We log low confidence matches, but we no longer block the request.
+        // This allows the bot to fall back to general AI knowledge.
+        if (confidence < confidenceThreshold) {
+          this.logUsage({
+            guildId: normalizedGuildId,
+            userId: normalizedUserId,
+            provider: 'knowledge',
+            model: 'local_index',
+            status: 'error',
+            errorCode: 'knowledge_low_confidence',
+            latencyMs: 0,
+            promptChars: cleanPrompt.length,
+            responseChars: 0,
+            triggerSource,
+            promptText: cleanPrompt,
+          });
+        }
       }
     }
 
@@ -945,7 +1229,7 @@ class AiAssistantService {
       if (blocked) {
         this.logUsage({
           guildId: normalizedGuildId,
-          userId,
+          userId: normalizedUserId,
           provider: 'safety',
           model: 'denylist',
           status: 'error',
@@ -954,6 +1238,7 @@ class AiAssistantService {
           promptChars: cleanPrompt.length,
           responseChars: 0,
           triggerSource,
+          promptText: cleanPrompt,
         });
         return { success: false, code: 'content_blocked', message: blocked.message, allowance, userAllowance };
       }
@@ -970,7 +1255,7 @@ class AiAssistantService {
         if (moderation.flagged) {
           this.logUsage({
             guildId: normalizedGuildId,
-            userId,
+            userId: normalizedUserId,
             provider: 'moderation',
             model: 'omni-moderation-latest',
             status: 'error',
@@ -979,6 +1264,7 @@ class AiAssistantService {
             promptChars: cleanPrompt.length,
             responseChars: 0,
             triggerSource,
+            promptText: cleanPrompt,
           });
           return { success: false, code: 'content_blocked', message: 'That request is blocked by safety policy.', allowance, userAllowance };
         }
@@ -994,26 +1280,40 @@ class AiAssistantService {
       return `[K${index + 1}] ${entry.title}${sourceLabel}\n${entry.snippet}`;
     }).join('\n\n');
     
-    const walletAddress = walletService.getFavoriteWallet(userId) || walletService.getAllUserWallets(userId)[0] || null;
+    const walletAddress = walletService.getFavoriteWallet(normalizedUserId) || walletService.getAllUserWallets(normalizedUserId)[0] || null;
+    const rpg = await this.injectRpgContext(normalizedGuildId, normalizedUserId);
+
     const contextBlock = [
-      'User Context:',
-      `- Discord Tag: ${requesterTag || 'Unknown'}`,
+      'Guild & User Context:',
+      `- Server Era: ${rpg.era}`,
+      `- User Tag: ${requesterTag || 'Unknown'}`,
+      `- User RPG Rank: ${rpg.tier}`,
       `- Roles: ${Array.isArray(memberRoleNames) && memberRoleNames.length > 0 ? memberRoleNames.join(', ') : 'None'}`,
       `- Verified Wallet: ${walletAddress ? walletAddress : 'None'}`,
       `- Verification Status: ${walletAddress ? 'Verified Member' : 'Unverified Guest'}`,
-    ].join('\n');
+      rpg.recentWinner ? `- Last Battle Winner: ${rpg.recentWinner}` : null,
+      rpg.recentMission ? `- Latest Mission: ${rpg.recentMission}` : null,
+    ].filter(Boolean).join('\n');
+
+    const personaInstruction = rpg.era.toLowerCase().includes('mafia')
+      ? 'Adopt a slightly gritty, street-wise Mafia persona. Use terms like "Associate," "Consigliere," "The Syndicate," or "Family business" naturally.'
+      : 'Maintain a helpful, immersive persona consistent with the current guild era.';
 
     const groundingInstruction = [
+      personaInstruction,
+      '',
       'Grounding policy:',
       '- Use only the provided knowledge snippets for factual claims.',
       '- If snippets are insufficient, state that clearly and ask for an admin/source update.',
       '- Do not invent policies, links, dates, or procedures.',
       '- Treat K1..K4 snippets as the highest priority truth for this tenant.',
+      '- Prioritize Lore-related documents when answering world-building questions.',
       '',
       'Knowledge snippets:',
       knowledgeBlock,
     ].join('\n');
-    const systemPrompt = [tenantSettings.systemPrompt || '', contextBlock, groundingInstruction].filter(Boolean).join('\n\n');
+    const finalSystemPrompt = String(overrideSystemPrompt || tenantSettings.systemPrompt || '').trim();
+    const systemPrompt = [finalSystemPrompt, contextBlock, groundingInstruction].filter(Boolean).join('\n\n');
     let lastError = null;
 
     for (const provider of providerOrder) {
@@ -1035,7 +1335,7 @@ class AiAssistantService {
         const text = String(output || '').trim().slice(0, maxChars);
         this.logUsage({
           guildId: normalizedGuildId,
-          userId,
+          userId: normalizedUserId,
           provider,
           model,
           status: 'ok',
@@ -1043,6 +1343,7 @@ class AiAssistantService {
           promptChars: cleanPrompt.length,
           responseChars: text.length,
           triggerSource,
+          promptText: cleanPrompt,
         });
         if (requesterTag) {
           logger.log(`[ai-assistant] guild=${normalizedGuildId} provider=${provider} model=${model} by=${requesterTag}`);
@@ -1061,13 +1362,15 @@ class AiAssistantService {
           confidenceThreshold,
           responseVisibility: tenantSettings.responseVisibility,
           allowance: this.getDailyRemaining(normalizedGuildId),
-          userAllowance: this.getUserDailyRemaining(normalizedGuildId, userId, tenantSettings.perUserDailyLimit),
+          userAllowance: isSystemRequest
+            ? { allowed: true, limit: null, used: 0, remaining: null }
+            : this.getUserDailyRemaining(normalizedGuildId, normalizedUserId, tenantSettings.perUserDailyLimit),
         };
       } catch (error) {
         lastError = error;
         this.logUsage({
           guildId: normalizedGuildId,
-          userId,
+          userId: normalizedUserId,
           provider,
           model,
           status: 'error',
@@ -1076,6 +1379,7 @@ class AiAssistantService {
           promptChars: cleanPrompt.length,
           responseChars: 0,
           triggerSource,
+          promptText: cleanPrompt,
         });
       }
     }

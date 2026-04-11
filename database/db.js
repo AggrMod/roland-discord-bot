@@ -56,7 +56,8 @@ const REQUIRED_SCHEMA = Object.freeze({
   ticket_categories: ['guild_id', 'handler_role_ids', 'ping_role_ids'],
   ticket_panels: ['guild_id'],
   ticket_guild_settings: ['guild_id', 'channel_name_template'],
-  proposals: ['proposal_id', 'status', 'guild_id', 'paused'],
+  proposals: ['proposal_id', 'status', 'guild_id', 'paused', 'ai_brief'],
+  missions: ['mission_id', 'guild_id', 'status', 'ai_recap'],
   tenant_verification_settings: ['tenant_id', 'base_verified_role_id'],
   tenant_battle_settings: ['tenant_id', 'battle_default_era'],
   tenant_branding: ['tenant_id', 'bot_display_name', 'bot_server_avatar_url', 'bot_server_banner_url', 'bot_server_bio'],
@@ -68,7 +69,8 @@ const REQUIRED_SCHEMA = Object.freeze({
   nft_tracked_collections: ['guild_id', 'collection_address', 'track_bid'],
   tracked_tokens: ['guild_id', 'alert_channel_ids'],
   tracked_wallets: ['guild_id', 'wallet_address', 'token_last_signature'],
-  ai_assistant_tenant_settings: ['guild_id', 'enabled', 'provider', 'model_openai', 'model_gemini', 'mention_enabled', 'response_visibility', 'system_prompt', 'allowed_channel_ids', 'allowed_role_ids', 'cooldown_seconds', 'max_response_chars', 'per_user_daily_limit', 'safety_filter_enabled', 'moderation_enabled', 'updated_at'],
+  ai_assistant_tenant_settings: ['guild_id', 'enabled', 'provider', 'model_openai', 'model_gemini', 'mention_enabled', 'response_visibility', 'system_prompt', 'allowed_channel_ids', 'allowed_role_ids', 'cooldown_seconds', 'max_response_chars', 'per_user_daily_limit', 'safety_filter_enabled', 'moderation_enabled', 'summary_activity_channels', 'updated_at'],
+  points_ledger: ['guild_id', 'user_id', 'action_type', 'points', 'channel_id', 'created_at'],
   ai_assistant_usage_events: ['guild_id', 'user_id', 'provider', 'model', 'status', 'trigger_source', 'created_at'],
   ai_assistant_knowledge_docs: ['guild_id', 'title', 'body', 'source_url', 'tags', 'enabled', 'updated_at'],
   ai_assistant_channel_policies: ['guild_id', 'channel_id', 'mode', 'min_confidence', 'passive_cooldown_seconds', 'passive_max_per_hour', 'updated_at'],
@@ -234,6 +236,11 @@ function initDatabase() {
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN promoted_by TEXT'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN paused INTEGER DEFAULT 0'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE nft_tracked_collections ADD COLUMN me_symbol TEXT DEFAULT ""'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN ai_brief TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE missions ADD COLUMN ai_recap TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE points_ledger ADD COLUMN channel_id TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN summary_activity_channels TEXT'));
+
 
   // VP decoupling: role-to-voting-power mapping table
   db.exec(`
@@ -1619,18 +1626,29 @@ function initDatabase() {
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE verification_panels ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN mention_enabled INTEGER DEFAULT 1'));
   ignoreDuplicateMigration(() => db.exec("ALTER TABLE ai_assistant_tenant_settings ADD COLUMN allowed_role_ids TEXT DEFAULT '[]'"));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN summary_enabled INTEGER DEFAULT 0'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN summary_channel_id TEXT'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN cooldown_seconds INTEGER DEFAULT 12'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN max_response_chars INTEGER DEFAULT 1600'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN per_user_daily_limit INTEGER DEFAULT 20'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN safety_filter_enabled INTEGER DEFAULT 1'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN moderation_enabled INTEGER DEFAULT 0'));
   ignoreDuplicateMigration(() => db.exec("ALTER TABLE ai_assistant_usage_events ADD COLUMN trigger_source TEXT DEFAULT 'slash'"));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_usage_events ADD COLUMN prompt_text TEXT'));
   ignoreDuplicateMigration(() => db.exec("ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN source_url TEXT"));
   ignoreDuplicateMigration(() => db.exec("ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN tags TEXT DEFAULT ''"));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN enabled INTEGER DEFAULT 1'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'));
-  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN vector_embedding TEXT'));
-  ignoreDuplicateMigration(() => db.exec("ALTER TABLE ai_assistant_channel_policies ADD COLUMN mode TEXT DEFAULT 'mention'"));
+  try {
+    db.prepare("ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN vector_embedding BLOB").run();
+  } catch (_) {}
+  try {
+    db.prepare("ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN is_lore INTEGER DEFAULT 0").run();
+  } catch (_) {}
+  try {
+    db.prepare("ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN priority INTEGER DEFAULT 0").run();
+  } catch (_) {}
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_channel_policies ADD COLUMN mode TEXT DEFAULT \'mention\''));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_channel_policies ADD COLUMN min_confidence INTEGER DEFAULT 35'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_channel_policies ADD COLUMN passive_cooldown_seconds INTEGER DEFAULT 120'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_channel_policies ADD COLUMN passive_max_per_hour INTEGER DEFAULT 6'));

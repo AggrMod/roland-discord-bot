@@ -1,101 +1,114 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Partials, Collection, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
+const { 
+  Client, 
+  GatewayIntentBits, 
+  Partials, 
+  Collection, 
+  Events, 
+  EmbedBuilder, 
+  ActionRowBuilder, 
+  ButtonBuilder, 
+  ButtonStyle, 
+  PermissionFlagsBits 
+} = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const logger = require('./utils/logger');
-const WebServer = require('./web/server');
-const tenantService = require('./services/tenantService');
-const moduleGate = require('./middleware/moduleGate');
-const { getCommandModuleKey } = require('./config/commandModules');
 const clientProvider = require('./utils/clientProvider');
-const { applyEmbedBranding } = require('./services/embedBranding');
-const installInteractionEphemeralCompat = require('./utils/interactionEphemeralCompat');
+const tenantService = require('./services/tenantService');
+const aiAssistantService = require('./services/aiAssistantService');
+const aiSummaryService = require('./services/aiSummaryService');
 
-installInteractionEphemeralCompat();
-
-const LEGACY_MINIGAME_ALIASES = new Set([
-  'battle',
-  'gamenight',
-  'higherlower',
-  'diceduel',
-  'reactionrace',
-  'numberguess',
-  'slots',
-  'trivia',
-  'wordscramble',
-  'rps',
-  'blackjack',
-]);
-const LEGACY_ALIAS_NOTICE_TTL_MS = 12 * 60 * 60 * 1000;
-const legacyAliasNoticeCache = new Map();
+// Global caches/state
 const commandCooldownCache = new Map();
+const legacyAliasNoticeCache = new Map();
 const aiAssistantMentionCooldownCache = new Map();
+const aiAssistantPassiveChannelCache = new Map();
 const aiAssistantPassiveChannelState = new Map();
-const PLAN_TIER_RANK = Object.freeze({
-  starter: 0,
-  free: 0,
-  growth: 1,
-  pro: 2,
-  enterprise: 3,
-});
+
+const LEGACY_ALIAS_NOTICE_TTL_MS = 24 * 60 * 60 * 1000;
+const inviteRefreshMs = 120 * 1000;
+
+const COMMAND_COOLDOWN_SECONDS = {
+  default: 3,
+  verification: {
+    status: 5,
+    quick: 10,
+    check: 5
+  },
+  governance: {
+    create: 30,
+    list: 5
+  },
+  minigames: 5
+};
+
+const LEGACY_MINIGAME_ALIASES = new Set(['battle', 'heist', 'arena', 'coinflip', 'rps', 'dice', 'slots', 'higherlower', 'gamenight']);
+
+const PLAN_TIER_RANK = {
+  'starter': 0,
+  'pro': 1,
+  'enterprise': 2
+};
+
 const AI_PASSIVE_KEYWORDS = new Set([
-  'help', 'verify', 'verification', 'wallet', 'role', 'ticket', 'battle',
-  'tracker', 'proposal', 'governance', 'invite', 'panel', 'settings',
-  'connect', 'solana', 'nft', 'token', 'guildpilot'
+  'help', 'how', 'what', 'why', 'where', 'when', 'who',
+  'bot', 'ai', 'assistant', 'question', 'info', 'information',
+  'verify', 'verification', 'governance', 'proposal', 'vote',
+  'heist', 'battle', 'arena', 'minigame', 'rank', 'points',
+  'family', 'mafia', 'don', 'boss', 'consigliere', 'underboss',
+  'solana', 'nft', 'wallet', 'token', 'treasury'
 ]);
 
-const COMMAND_COOLDOWN_SECONDS = Object.freeze({
-  default: 2,
-  verification: Object.freeze({
-    refresh: 20,
-    quick: 30,
-    admin: Object.freeze({
-      'og-sync': 30,
-      reverify: 20,
-    }),
-  }),
-  battle: Object.freeze({
-    create: 15,
-    start: 10,
-  }),
-  minigames: Object.freeze({
-    run: 8,
-  }),
-  'wallet-tracker': Object.freeze({
-    feed: 15,
-  }),
-  'nft-tracker': Object.freeze({
-    feed: 15,
-  }),
-  'token-tracker': Object.freeze({
-    feed: 15,
-  }),
-});
+// Helper: Module gate for commands
+async function moduleGate(interaction, moduleKey) {
+  if (!moduleKey) return true;
+  const guildId = interaction.guildId;
+  if (!guildId) return true;
+
+  if (tenantService.isModuleEnabled(guildId, moduleKey)) {
+    return true;
+  }
+
+  const message = {
+    content: `❌ The **${moduleKey}** module is currently disabled for this server.`,
+    ephemeral: true
+  };
+
+  if (interaction.deferred || interaction.replied) {
+    await interaction.followUp(message);
+  } else {
+    await interaction.reply(message);
+  }
+  return false;
+}
+
+function getCommandModuleKey(commandName) {
+  const mapping = {
+    'verification': 'verification',
+    'governance': 'governance',
+    'proposal': 'governance',
+    'treasury': 'treasury',
+    'ticketing': 'ticketing',
+    'minigames': 'minigames',
+    'battle': 'minigames',
+    'aiassistant': 'aiassistant'
+  };
+  return mapping[commandName.toLowerCase()] || null;
+}
 
 function getCommandCooldownSeconds(interaction) {
-  const commandName = String(interaction?.commandName || '').trim().toLowerCase();
+  const commandName = String(interaction.commandName || '').toLowerCase();
+  const group = ''; 
   let subcommand = '';
-  let subcommandGroup = '';
-  try {
-    subcommandGroup = String(interaction.options?.getSubcommandGroup?.(false) || '').trim().toLowerCase();
-  } catch (_error) {
-    subcommandGroup = '';
-  }
-  try {
-    subcommand = String(interaction.options?.getSubcommand?.(false) || '').trim().toLowerCase();
-  } catch (_error) {
-    subcommand = '';
-  }
+  try { subcommand = interaction.options?.getSubcommand?.(false) || ''; } catch (_) {}
 
   const commandConfig = COMMAND_COOLDOWN_SECONDS[commandName];
-  if (!commandConfig) {
-    return COMMAND_COOLDOWN_SECONDS.default;
-  }
-  if (typeof commandConfig === 'number') {
-    return commandConfig;
-  }
-  if (subcommandGroup && typeof commandConfig[subcommandGroup] === 'object' && commandConfig[subcommandGroup] !== null) {
-    const groupConfig = commandConfig[subcommandGroup];
+  if (!commandConfig) return COMMAND_COOLDOWN_SECONDS.default;
+  if (typeof commandConfig === 'number') return commandConfig;
+
+  if (group) {
+    const groupConfig = commandConfig[group];
     if (subcommand && typeof groupConfig[subcommand] === 'number') {
       return groupConfig[subcommand];
     }
@@ -296,11 +309,11 @@ function loadCommandsFromDirectory(dir) {
 
 loadCommandsFromDirectory('commands');
 
-// Initialize web server
+// Imports requiring client ref
+const WebServer = require('./web/server');
 const webServer = new WebServer();
 webServer.start();
 
-// Set client reference in proposalService
 const proposalService = require('./services/proposalService');
 const walletService = require('./services/walletService');
 const roleService = require('./services/roleService');
@@ -311,8 +324,6 @@ const governanceLogger = require('./utils/governanceLogger');
 const ticketService = require('./services/ticketService');
 const nftActivityService = require('./services/nftActivityService');
 const inviteTrackerService = require('./services/inviteTrackerService');
-const aiAssistantService = require('./services/aiAssistantService');
-const settings = require('./config/settings.json');
 
 const intervals = [];
 
@@ -321,22 +332,19 @@ client.once(Events.ClientReady, () => {
   logger.log(`📊 Loaded ${client.commands.size} commands`);
   logger.log(`🏛️ Serving ${client.guilds.cache.size} guild(s)`);
   
-  // Bot activity status — use tenant branding if available, else generic fallback
+  // Bot activity status
   const currentGuildIdForActivity = process.env.GUILD_ID;
   let activityName = 'Serving your community';
   if (currentGuildIdForActivity) {
     try {
       const tenantCtx = tenantService.ensureTenant(currentGuildIdForActivity);
       activityName = tenantCtx?.branding?.bot_display_name || tenantCtx?.branding?.display_name || activityName;
-    } catch (_) { /* fallback to default */ }
+    } catch (_) { /* fallback */ }
   }
   client.user.setActivity(activityName, { type: 0 });
 
-  // Set client reference via clientProvider
   clientProvider.setClient(client);
   inviteTrackerService.setClient(client);
-
-  // Pass client to proposalService, webServer, governanceLogger, ticketService
   proposalService.setClient(client);
   webServer.setClient(client);
   governanceLogger.setClient(client);
@@ -347,7 +355,6 @@ client.once(Events.ClientReady, () => {
     const currentGuild = client.guilds.cache.get(currentGuildId);
     try {
       tenantService.ensureTenant(currentGuildId, currentGuild?.name || null);
-      logger.log(`🏗️ Tenant scaffold ensured for guild ${currentGuildId}${currentGuild?.name ? ` (${currentGuild.name})` : ''}`);
     } catch (error) {
       logger.error('Error ensuring startup tenant:', error);
     }
@@ -358,11 +365,8 @@ client.once(Events.ClientReady, () => {
       .catch(error => logger.error('Error syncing startup guild commands:', error));
   }
 
-  // Initialize and start micro-verify service
   microVerifyService.init();
 
-  // Sync persisted DB settings into microVerifyService on startup
-  // (in-memory _configOverrides are lost on restart; re-apply from settingsManager)
   try {
     const settingsManager = require('./config/settings');
     const saved = settingsManager.getSettings();
@@ -378,40 +382,28 @@ client.once(Events.ClientReady, () => {
 
   microVerifyService.startPolling();
 
-  // Import module guard for scheduler checks
-  const moduleGuard = require('./utils/moduleGuard');
-
-  // Start periodic vote check (every 5 minutes) - only if governance enabled
   startVoteCheckInterval();
-
-  // Start role resync scheduler (every 4 hours) - only if verification enabled
   startRoleResyncScheduler();
-
-  // Start ticket inactivity auto-close scheduler
   startTicketInactivityScheduler();
 
-  // Start treasury monitoring scheduler - only if treasury enabled
   treasuryService.setClient(client);
   treasuryService.startScheduler();
 
-  // Start micro-verify cleanup job (runs every 10 minutes) - only if verification enabled
   intervals.push(setInterval(() => {
+    const moduleGuard = require('./utils/moduleGuard');
     if (moduleGuard.isModuleEnabled('verification')) {
       microVerifyService.expireStaleRequests();
     }
   }, 10 * 60 * 1000));
 
-  // NFT activity polling cron — catches Magic Eden/Tensor listings that webhooks miss
   const pollAllCollections = () => {
     nftActivityService.pollCollectionActivity().catch(err => {
       logger.error('[nft-poll] Error in scheduled poll:', err);
     });
   };
   intervals.push(setInterval(pollAllCollections, 5 * 60 * 1000));
-  setTimeout(pollAllCollections, 30 * 1000); // first poll 30s after startup
-  logger.log('🔔 NFT activity poll scheduled (30s startup delay, then every 5 min)');
+  setTimeout(pollAllCollections, 30 * 1000);
 
-  // Holdings panel refresh cron — keep wallet holding panels up to date
   const trackedWalletsService = require('./services/trackedWalletsService');
   setTimeout(() => {
     trackedWalletsService.syncAllEnabledWalletAddressesToHeliusWebhook()
@@ -422,23 +414,21 @@ client.once(Events.ClientReady, () => {
       })
       .catch(err => logger.error('[tracked-token-webhook] startup wallet webhook sync failed:', err));
   }, 20 * 1000);
+
   const refreshAllHoldingsPanels = () => {
     trackedWalletsService.refreshAllPanels().catch(err => {
       logger.error('[wallet-panel] Error in scheduled refresh:', err);
     });
   };
-  intervals.push(setInterval(refreshAllHoldingsPanels, 30 * 60 * 1000)); // every 30 min
-  setTimeout(refreshAllHoldingsPanels, 2 * 60 * 1000); // first refresh 2 min after startup
+  intervals.push(setInterval(refreshAllHoldingsPanels, 30 * 60 * 1000));
+  setTimeout(refreshAllHoldingsPanels, 2 * 60 * 1000);
+
   setTimeout(() => {
     inviteTrackerService.primeAllGuilds()
       .then(() => logger.log('[invite-tracker] Invite cache primed for connected guilds'))
       .catch(err => logger.error('[invite-tracker] Failed to prime invite cache:', err));
   }, 15 * 1000);
-  const inviteRefreshMs = inviteTrackerService.startAutoPanelRefresh();
-  logger.log(`[invite-tracker] Leaderboard panel auto-refresh scheduled (every ${Math.round(inviteRefreshMs / 1000)}s)`);
-  logger.log('📋 Wallet holdings panel refresh scheduled (2 min startup delay, then every 30 min)');
 
-  // Tracked token activity polling (buy/sell/transfer classification for tracked wallets)
   const pollTrackedTokenActivity = () => {
     trackedWalletsService.pollTrackedTokenActivity().catch(err => {
       logger.error('[tracked-token] Error in scheduled poll:', err);
@@ -446,10 +436,8 @@ client.once(Events.ClientReady, () => {
   };
   const tokenPollIntervalMs = Math.max(30, Number(process.env.TRACKED_TOKEN_POLL_INTERVAL_SEC || 120)) * 1000;
   intervals.push(setInterval(pollTrackedTokenActivity, tokenPollIntervalMs));
-  setTimeout(pollTrackedTokenActivity, 45 * 1000); // warm-up after startup
-  logger.log(`[tracked-token] Token activity poll scheduled (45s startup delay, then every ${Math.round(tokenPollIntervalMs / 1000)}s)`);
+  setTimeout(pollTrackedTokenActivity, 45 * 1000);
 
-  // Durable webhook retry queue sweep (covers tx_not_available windows + restarts)
   const sweepWebhookRetryQueue = () => {
     trackedWalletsService.processWebhookRetryQueue()
       .catch(err => logger.error('[tracked-token-webhook] Error in durable retry sweep:', err));
@@ -457,18 +445,21 @@ client.once(Events.ClientReady, () => {
   const retrySweepIntervalMs = Math.max(10, Number(process.env.TRACKED_TOKEN_DURABLE_RETRY_SWEEP_SEC || 30)) * 1000;
   intervals.push(setInterval(sweepWebhookRetryQueue, retrySweepIntervalMs));
   setTimeout(sweepWebhookRetryQueue, 20 * 1000);
-  logger.log(`[tracked-token-webhook] Durable retry sweep scheduled (20s startup delay, then every ${Math.round(retrySweepIntervalMs / 1000)}s)`);
 
-  // Database backup scheduler (hourly by default, configurable via env)
   databaseBackupService.start();
+
+  const runAiSummaries = () => {
+    aiSummaryService.runDailySummaries(client).catch(err => logger.error('[ai-summary] daily summaries failed:', err));
+    aiSummaryService.runDailyActivityRecaps(client).catch(err => logger.error('[ai-summary] daily recaps failed:', err));
+  };
+  intervals.push(setInterval(runAiSummaries, 24 * 60 * 60 * 1000));
+  setTimeout(runAiSummaries, 60 * 60 * 1000);
 });
 
 client.on(Events.GuildCreate, async guild => {
   try {
     tenantService.ensureTenant(guild.id, guild.name);
     await inviteTrackerService.primeGuildInvites(guild);
-    logger.log(`🏗️ Tenant scaffold ensured for joined guild ${guild.id} (${guild.name})`);
-
     if (tenantService.isMultitenantEnabled()) {
       await tenantService.syncGuildCommands(client.commands, guild.id, guild.name);
     }
@@ -478,201 +469,264 @@ client.on(Events.GuildCreate, async guild => {
 });
 
 client.on(Events.InteractionCreate, async interaction => {
-  // Handle autocomplete interactions
   if (interaction.isAutocomplete()) {
     const command = client.commands.get(interaction.commandName);
     if (!command || typeof command.autocomplete !== 'function') return;
-
-    try {
-      await command.autocomplete(interaction);
-    } catch (error) {
-      logger.error(`Error handling autocomplete for ${interaction.commandName}:`, error);
-      try {
-        await interaction.respond([]);
-      } catch (_) {}
+    try { await command.autocomplete(interaction); } catch (e) {
+      logger.error(`Autocomplete error: ${e.message}`);
+      try { await interaction.respond([]); } catch (_) {}
     }
     return;
   }
 
-  // Handle slash commands
   if (interaction.isChatInputCommand()) {
     const command = client.commands.get(interaction.commandName);
-
-    if (!command) {
-      logger.warn(`No command matching ${interaction.commandName} was found.`);
-      return;
-    }
-
+    if (!command) return;
     try {
-      if (!(await enforceCommandCooldown(interaction))) {
-        return;
-      }
-
+      if (!(await enforceCommandCooldown(interaction))) return;
       const moduleKey = getCommandModuleKey(interaction.commandName);
-      if (!(await moduleGate(interaction, moduleKey))) {
-        return;
-      }
-
+      if (!(await moduleGate(interaction, moduleKey))) return;
       await command.execute(interaction);
       await maybeSendLegacyMinigameAliasNotice(interaction);
-      logger.log(`Command executed: ${interaction.commandName} by ${interaction.user.tag}`);
     } catch (error) {
-      logger.error(`Error executing ${interaction.commandName}:`, error);
-      
-      const errorMessage = { 
-        content: 'There was an error while executing this command!', 
-        ephemeral: true 
-      };
-
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp(errorMessage);
-      } else {
-        await interaction.reply(errorMessage);
-      }
+      logger.error(`Command error ${interaction.commandName}:`, error);
+      const msg = { content: 'There was an error while executing this command!', ephemeral: true };
+      if (interaction.replied || interaction.deferred) await interaction.followUp(msg).catch(() => {});
+      else await interaction.reply(msg).catch(() => {});
     }
     return;
   }
 
-  // Handle button interactions
   if (interaction.isButton()) {
     const customId = interaction.customId;
-
-    if (typeof customId === 'string' && customId.startsWith(inviteTrackerService.SORT_BUTTON_PREFIX)) {
-      try {
-        const result = await inviteTrackerService.handleSortButtonInteraction(interaction);
-        if (!result.success && !interaction.replied && !interaction.deferred) {
-          await interaction.reply({ content: result.message || 'Could not update leaderboard sorting.', ephemeral: true });
-        }
-      } catch (error) {
-        logger.warn('[invite-tracker] sort button error:', error?.message || error);
-        if (!interaction.replied && !interaction.deferred) {
-          await interaction.reply({ content: 'Could not update leaderboard sorting right now.', ephemeral: true }).catch(() => {});
-        }
-      }
+    if (customId.startsWith(inviteTrackerService.SORT_BUTTON_PREFIX)) {
+      await inviteTrackerService.handleSortButtonInteraction(interaction).catch(() => {});
       return;
     }
-
     if (customId === inviteTrackerService.CREATE_LINK_BUTTON_ID) {
       try {
         await interaction.deferReply({ ephemeral: true });
         const result = await inviteTrackerService.createUserInviteLink(interaction);
-        if (!result.success) {
-          await interaction.editReply({ content: `Could not create invite link: ${result.message || 'unknown error'}` });
-          return;
-        }
-        await interaction.editReply({ content: `Your invite link: ${result.inviteUrl}` });
-      } catch (error) {
-        logger.warn('[invite-tracker] create-link button error:', error?.message || error);
-        if (interaction.deferred || interaction.replied) {
-          await interaction.editReply({ content: 'Could not create invite link right now.' }).catch(() => {});
-        } else {
-          await interaction.reply({ content: 'Could not create invite link right now.', ephemeral: true }).catch(() => {});
+        await interaction.editReply({ content: result.success ? `Your invite link: ${result.inviteUrl}` : `Error: ${result.message}` });
+      } catch (_) {}
+      return;
+    }
+    if (customId === 'panel_verify') { await handlePanelVerifyButton(interaction); return; }
+    if (customId === 'treasury_refresh_panel') { await handleTreasuryRefreshButton(interaction); return; }
+    if (customId.startsWith('support_')) { await handleSupportButton(interaction); return; }
+    if (customId.startsWith('vote_yes_') || customId.startsWith('vote_no_') || customId.startsWith('vote_abstain_')) { await handleVoteButton(interaction); return; }
+    if (customId === 'micro_verify_check_status') { await handleMicroVerifyCheckStatus(interaction); return; }
+    if (customId === 'micro_verify_copy_amount') { await handleMicroVerifyCopyAmount(interaction); return; }
+    if (customId.startsWith('role_claim_') || customId.startsWith('claim_role_')) { await handleRoleClaimButton(interaction); return; }
+    if (customId.startsWith('ticket_open_')) { await handleTicketOpenButton(interaction); return; }
+    if (customId === 'ticket_assign_me' || customId === 'ticket_claim') { await handleTicketClaimButton(interaction); return; }
+    if (customId === 'ticket_close') { await handleTicketCloseButton(interaction); return; }
+    if (customId === 'ticket_reopen') { await handleTicketReopenButton(interaction); return; }
+    if (customId === 'ticket_delete') { await handleTicketDeleteButton(interaction); return; }
+  }
+
+  if (interaction.isModalSubmit()) {
+    if (interaction.customId.startsWith('ticket_modal_')) { await handleTicketModalSubmit(interaction); return; }
+  }
+});
+
+client.on(Events.InviteCreate, invite => inviteTrackerService.handleInviteCreate(invite));
+client.on(Events.InviteDelete, invite => inviteTrackerService.handleInviteDelete(invite));
+client.on(Events.GuildMemberAdd, member => inviteTrackerService.trackMemberJoin(member));
+client.on(Events.GuildMemberUpdate, (o, n) => inviteTrackerService.handleMemberRoleUpdate(o, n));
+
+async function handlePanelVerifyButton(interaction) {
+  try {
+    await interaction.deferReply({ ephemeral: true });
+    const discordId = interaction.user.id;
+    const username = interaction.user.username;
+    const webUrl = process.env.WEB_URL || 'http://localhost:3000';
+    const panelGuildId = String(interaction.guildId || '').trim();
+    const buildVerifyUrl = (action = '') => {
+      const url = new URL('/verify', webUrl);
+      if (panelGuildId) url.searchParams.set('guild', panelGuildId);
+      if (action) url.searchParams.set('action', action);
+      return url.toString();
+    };
+    const wallets = walletService.getLinkedWallets(discordId);
+    if (!wallets || wallets.length === 0) {
+      const embed = new EmbedBuilder().setTitle('🔗 Verification Portal').setDescription('No wallet linked yet.').setTimestamp();
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setLabel('Open Verify Portal').setStyle(ButtonStyle.Link) .setURL(buildVerifyUrl()),
+        new ButtonBuilder().setLabel('Add Wallet').setStyle(ButtonStyle.Link).setURL(buildVerifyUrl('add'))
+      );
+      return interaction.editReply({ embeds: [embed], components: [row] });
+    }
+    const updateResult = await roleService.updateUserRoles(discordId, username, panelGuildId || null);
+    if (!updateResult.success) return interaction.editReply({ content: `❌ Error: ${updateResult.message}` });
+    const embed = new EmbedBuilder().setColor('#57F287').setTitle('✅ Holdings Verified').setDescription('Holdings refreshed.').setTimestamp();
+    await interaction.editReply({ embeds: [embed] });
+  } catch (e) { logger.error('Verify button error:', e); }
+}
+
+async function handleSupportButton(interaction) {
+  try {
+    await interaction.deferReply({ ephemeral: true });
+    const proposalId = interaction.customId.replace('support_', '');
+    const discordId = interaction.user.id;
+    const wallets = walletService.getLinkedWallets(discordId);
+    if (!wallets || wallets.length === 0) return interaction.editReply({ content: '❌ Verify wallet first.' });
+    const result = proposalService.addSupporter(proposalId, discordId);
+    if (!result.success) return interaction.editReply({ content: `❌ ${result.message}` });
+    await interaction.editReply({ content: '✅ Support added!' });
+  } catch (e) { logger.error('Support button error:', e); }
+}
+
+async function handleVoteButton(interaction) {
+  try {
+    await interaction.deferReply({ ephemeral: true });
+    const parts = interaction.customId.split('_');
+    const choice = parts[1];
+    const proposalId = parts.slice(2).join('_');
+    const userInfo = await roleService.getUserInfo(interaction.user.id);
+    if (!userInfo || !userInfo.voting_power) return interaction.editReply({ content: '❌ No voting power.' });
+    const result = proposalService.castVote(proposalId, interaction.user.id, choice, userInfo.voting_power);
+    if (!result.success) return interaction.editReply({ content: `❌ ${result.message}` });
+    await proposalService.updateVotingMessage(proposalId);
+    await interaction.editReply({ content: `🗳️ Vote recorded: ${choice}` });
+  } catch (e) { logger.error('Vote button error:', e); }
+}
+
+async function handleMicroVerifyCheckStatus(interaction) {
+  try {
+    await interaction.deferReply({ ephemeral: true });
+    const res = microVerifyService.getPendingRequest(interaction.user.id);
+    await interaction.editReply({ content: res.success ? '⏳ Verification pending transfer...' : '❌ No pending request.' });
+  } catch (_) {}
+}
+
+async function handleMicroVerifyCopyAmount(interaction) {
+  try {
+    const res = microVerifyService.getPendingRequest(interaction.user.id);
+    await interaction.reply({ content: res.success ? `💰 Amount: \`${res.request.expected_amount}\`` : '❌ No request.', ephemeral: true });
+  } catch (_) {}
+}
+
+async function handleRoleClaimButton(interaction) {
+  try {
+    await interaction.deferReply({ ephemeral: true });
+    const roleId = interaction.customId.replace(/^(claim_role_|role_claim_)/, '').split('__').pop();
+    const roleClaimService = require('./services/roleClaimService');
+    const result = await roleClaimService.toggleRole(interaction.guild, interaction.member, roleId);
+    await interaction.editReply({ content: result.message });
+  } catch (_) {}
+}
+
+async function handleTreasuryRefreshButton(interaction) {
+  try {
+    await interaction.deferUpdate();
+    if (!interaction.memberPermissions.has(PermissionFlagsBits.Administrator)) return;
+    await treasuryService.fetchBalances();
+    const panel = buildTreasuryPanelFromService();
+    await interaction.editReply({ embeds: [panel.embed], components: [panel.components] });
+  } catch (_) {}
+}
+
+function buildTreasuryPanelFromService() {
+  const summary = treasuryService.getSummary();
+  const embed = new EmbedBuilder().setTitle('💰 Treasury Watch').setTimestamp();
+  if (summary.success) {
+    embed.addFields(
+      { name: '🪙 SOL', value: `${summary.treasury.sol}`, inline: true },
+      { name: '💵 USDC', value: `${summary.treasury.usdc}`, inline: true }
+    );
+  } else { embed.setDescription('⚠️ Unavailable'); }
+  const components = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('treasury_refresh_panel').setLabel('Refresh').setStyle(ButtonStyle.Primary).setEmoji('🔄'));
+  return { embed, components };
+}
+
+function startVoteCheckInterval() {
+  intervals.push(setInterval(async () => {
+    try {
+      const db = require('./database/db');
+      const activeVotes = db.prepare('SELECT * FROM proposals WHERE status = ?').all('voting');
+      for (const p of activeVotes) proposalService.checkAutoClose(p.proposal_id);
+    } catch (_) {}
+  }, 5 * 60 * 1000));
+}
+
+function startRoleResyncScheduler() {
+  intervals.push(setInterval(async () => {
+    try {
+      const guilds = client.guilds.cache;
+      for (const [id, guild] of guilds) {
+        const users = await roleService.getAllVerifiedUsers(guild);
+        for (const u of users) {
+          await roleService.updateUserRoles(u.discord_id, u.username, id);
+          await roleService.syncUserDiscordRoles(guild, u.discord_id, id);
         }
       }
-      return;
-    }
+    } catch (_) {}
+  }, 4 * 60 * 60 * 1000));
+}
 
-    // Verify panel button handler
-    if (customId === 'panel_verify') {
-      await handlePanelVerifyButton(interaction);
-      return;
-    }
+function startTicketInactivityScheduler() {
+  intervals.push(setInterval(async () => {
+    try {
+      const moduleGuard = require('./utils/moduleGuard');
+      if (moduleGuard.isModuleEnabled('ticketing')) {
+        await ticketService.runInactivitySweep({ inactiveHours: 168, warningHours: 24, maxPerRun: 20 });
+      }
+    } catch (_) {}
+  }, 15 * 60 * 1000));
+}
 
-    // Treasury panel refresh button handler
-    if (customId === 'treasury_refresh_panel') {
-      await handleTreasuryRefreshButton(interaction);
-      return;
-    }
-
-    // Support button handler
-    if (customId.startsWith('support_')) {
-      await handleSupportButton(interaction);
-      return;
-    }
-
-    // Vote button handlers
-    if (customId.startsWith('vote_yes_') || customId.startsWith('vote_no_') || customId.startsWith('vote_abstain_')) {
-      await handleVoteButton(interaction);
-      return;
-    }
-
-    // Micro-verify button handlers
-    if (customId === 'micro_verify_check_status') {
-      await handleMicroVerifyCheckStatus(interaction);
-      return;
-    }
-
-    if (customId === 'micro_verify_copy_amount') {
-      await handleMicroVerifyCopyAmount(interaction);
-      return;
-    }
-
-    // Role claim button handler
-    if (customId.startsWith('role_claim_') || customId.startsWith('claim_role_')) {
-      await handleRoleClaimButton(interaction);
-      return;
-    }
-
-    // Ticket button handlers
-    if (customId.startsWith('ticket_open_')) {
-      await handleTicketOpenButton(interaction);
-      return;
-    }
-    if (customId === 'ticket_assign_me' || customId === 'ticket_claim') {
-      await handleTicketClaimButton(interaction);
-      return;
-    }
-    if (customId === 'ticket_close') {
-      await handleTicketCloseButton(interaction);
-      return;
-    }
-    if (customId === 'ticket_reopen') {
-      await handleTicketReopenButton(interaction);
-      return;
-    }
-    if (customId === 'ticket_delete') {
-      await handleTicketDeleteButton(interaction);
-      return;
-    }
-  }
-
-  // Handle modal submissions
-  if (interaction.isModalSubmit()) {
-    const customId = interaction.customId;
-
-    if (customId.startsWith('ticket_modal_')) {
-      await handleTicketModalSubmit(interaction);
-      return;
-    }
-  }
-});
-
-client.on(Events.InviteCreate, (invite) => {
+async function handleTicketOpenButton(interaction) {
   try {
-    inviteTrackerService.handleInviteCreate(invite);
-  } catch (error) {
-    logger.warn('[invite-tracker] invite create handler warning:', error?.message || error);
-  }
-});
-client.on(Events.InviteDelete, (invite) => {
+    const cid = interaction.customId.replace('ticket_open_', '');
+    const cat = ticketService.getCategory(cid, interaction.guildId);
+    if (!cat) return interaction.reply({ content: '❌ Category not found.', ephemeral: true });
+    const modal = ticketService.buildTemplateModal(cat);
+    await interaction.showModal(modal);
+  } catch (_) {}
+}
+
+async function handleTicketModalSubmit(interaction) {
   try {
-    inviteTrackerService.handleInviteDelete(invite);
-  } catch (error) {
-    logger.warn('[invite-tracker] invite delete handler warning:', error?.message || error);
-  }
-});
-client.on(Events.GuildMemberAdd, async (member) => {
+    await interaction.deferReply({ ephemeral: true });
+    const cid = interaction.customId.replace('ticket_modal_', '');
+    const res = await ticketService.createTicket(interaction, cid, {}, interaction.guildId);
+    await interaction.editReply({ content: res.success ? `✅ Ticket #${res.ticketNumber} created!` : `❌ Error: ${res.message}` });
+  } catch (_) {}
+}
+
+async function handleTicketClaimButton(interaction) {
   try {
-    const result = await inviteTrackerService.trackMemberJoin(member);
-    if (result?.success && !result?.ignored) {
-      const inviter = result.inviterUserId ? ` inviter=${result.inviterUserId}` : ' inviter=unknown';
-      const code = result.inviteCode ? ` code=${result.inviteCode}` : '';
-      logger.log(`[invite-tracker] guild=${member.guild.id} joined=${member.id}${inviter}${code}`);
-    }
-  } catch (error) {
-    logger.warn('[invite-tracker] member join handler warning:', error?.message || error);
-  }
-});
+    await interaction.deferReply({ ephemeral: true });
+    const res = await ticketService.claimTicket(interaction, interaction.channelId);
+    await interaction.editReply({ content: res.success ? '✅ Claimed.' : `❌ ${res.message}` });
+  } catch (_) {}
+}
+
+async function handleTicketCloseButton(interaction) {
+  try {
+    await interaction.deferReply({ ephemeral: true });
+    const res = await ticketService.closeTicket(interaction, interaction.channelId);
+    await interaction.editReply({ content: res.success ? '🔒 Closed.' : `❌ ${res.message}` });
+  } catch (_) {}
+}
+
+async function handleTicketReopenButton(interaction) {
+  try {
+    await interaction.deferReply({ ephemeral: true });
+    const res = await ticketService.reopenTicket(interaction, interaction.channelId);
+    await interaction.editReply({ content: res.success ? '🔓 Reopened.' : `❌ ${res.message}` });
+  } catch (_) {}
+}
+
+async function handleTicketDeleteButton(interaction) {
+  try {
+    if (!interaction.memberPermissions.has(PermissionFlagsBits.Administrator)) return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
+    await interaction.deferReply({ ephemeral: true });
+    await interaction.editReply({ content: '🗑️ Deleting in 3s...' });
+    setTimeout(() => ticketService.deleteTicket(interaction.channelId).catch(() => {}), 3000);
+  } catch (_) {}
+}
 
 function splitDiscordText(text, maxLength = 1900) {
   const normalized = String(text || '').replace(/\r\n/g, '\n').trim();
@@ -693,1560 +747,198 @@ function splitDiscordText(text, maxLength = 1900) {
   return chunks.filter(Boolean);
 }
 
-function canUseAiAssistantPlan(guildId) {
-  if (!guildId) return false;
-  if (!tenantService.isMultitenantEnabled()) return true;
-  const tenant = tenantService.getTenant(guildId) || tenantService.ensureTenant(guildId);
-  const planRaw = String(tenant?.planKey || tenant?.plan_key || 'starter').trim().toLowerCase();
-  const tier = PLAN_TIER_RANK[planRaw] ?? 0;
-  return tier >= PLAN_TIER_RANK.pro;
-}
-
-function parseAiMentionPrompt(message, botUserId) {
+function extractMentionPrompt(message, botUserId) {
   const content = String(message?.content || '');
-  const mentionPattern = `<@!?${botUserId}>`;
-  const hasDirectMention = new RegExp(mentionPattern).test(content);
-  const repliedUserId = String(message?.mentions?.repliedUser?.id || '').trim();
-  const isReplyToBot = repliedUserId && repliedUserId === String(botUserId);
-  if (!hasDirectMention && !isReplyToBot) {
-    return { shouldHandle: false, prompt: '' };
+  if (!message?.mentions?.users?.has(botUserId)) {
+    return { isMention: false, prompt: '' };
   }
-
-  const cleaned = hasDirectMention ? content.replace(new RegExp(mentionPattern, 'g'), '').trim() : content.trim();
-  return { shouldHandle: true, prompt: cleaned };
+  const prompt = content.replace(new RegExp(`<@!?${botUserId}>`, 'g'), '').trim();
+  return {
+    isMention: true,
+    prompt: prompt || 'Give me a short update for this server.',
+  };
 }
 
 function extractPassiveAiPrompt(message, botUserId) {
   const content = String(message?.content || '').trim();
-  if (!content) return { shouldHandle: false, prompt: '' };
-  if (content.length < 8 || content.length > 1200) return { shouldHandle: false, prompt: '' };
-  if (content.startsWith('/') || content.startsWith('!')) return { shouldHandle: false, prompt: '' };
-  if (new RegExp(`<@!?${botUserId}>`).test(content)) return { shouldHandle: false, prompt: '' };
+  if (!content || content.startsWith('/')) return { shouldHandle: false, prompt: '' };
+  if (message?.mentions?.users?.has(botUserId)) return { shouldHandle: false, prompt: '' };
 
-  const lowered = content.toLowerCase();
-  const hasQuestionMark = lowered.includes('?');
-  const hasKeyword = Array.from(AI_PASSIVE_KEYWORDS).some(keyword => lowered.includes(keyword));
-  if (!hasQuestionMark && !hasKeyword) return { shouldHandle: false, prompt: '' };
+  const lower = content.toLowerCase();
+  const hasKeyword = Array.from(AI_PASSIVE_KEYWORDS).some(keyword => lower.includes(keyword));
+  const looksQuestion = content.includes('?') || lower.startsWith('guildpilot');
+  if (!hasKeyword && !looksQuestion) return { shouldHandle: false, prompt: '' };
 
   return { shouldHandle: true, prompt: content };
 }
 
-function getPassiveAiChannelState(guildId, channelId) {
-  const key = `${guildId}:${channelId}`;
-  let state = aiAssistantPassiveChannelState.get(key);
-  if (!state) {
-    state = { lastSentAt: 0, timestamps: [] };
-    aiAssistantPassiveChannelState.set(key, state);
-  }
-  return state;
-}
-
 function evaluatePassiveAiChannelBudget(guildId, channelId, policy) {
-  const state = getPassiveAiChannelState(guildId, channelId);
+  const key = `${guildId}:${channelId}`;
   const now = Date.now();
-  const cooldownSeconds = Math.max(5, Number(policy?.passiveCooldownSeconds) || 120);
-  const maxPerHour = Math.max(1, Number(policy?.passiveMaxPerHour) || 6);
-  const oneHourAgo = now - (60 * 60 * 1000);
-  state.timestamps = state.timestamps.filter(ts => ts > oneHourAgo);
-
-  if (state.lastSentAt > 0) {
-    const diff = now - state.lastSentAt;
-    if (diff < cooldownSeconds * 1000) {
-      return {
-        allowed: false,
-        reason: 'cooldown',
-        remainingSeconds: Math.max(1, Math.ceil(((cooldownSeconds * 1000) - diff) / 1000)),
-      };
-    }
-  }
-  if (state.timestamps.length >= maxPerHour) {
-    const oldestTs = Math.min(...state.timestamps);
-    return {
-      allowed: false,
-      reason: 'hourly_cap',
-      remainingSeconds: Math.max(1, Math.ceil(((oldestTs + (60 * 60 * 1000)) - now) / 1000)),
-    };
-  }
-  return { allowed: true, reason: null, remainingSeconds: 0 };
-}
-
-function markPassiveAiSent(guildId, channelId) {
-  const state = getPassiveAiChannelState(guildId, channelId);
-  const now = Date.now();
-  state.lastSentAt = now;
-  state.timestamps.push(now);
-  if (aiAssistantPassiveChannelState.size > 5000) {
-    for (const [key, value] of aiAssistantPassiveChannelState.entries()) {
-      const recent = (value?.timestamps || []).some(ts => (now - ts) < (2 * 60 * 60 * 1000));
-      if (!recent) aiAssistantPassiveChannelState.delete(key);
-    }
-  }
-}
-
-function getAiMentionCooldownState(guildId, userId, cooldownSeconds) {
-  const ttlMs = Math.max(3, Number(cooldownSeconds) || 12) * 1000;
-  const key = `${guildId}:${userId}`;
-  const now = Date.now();
-  const expiresAt = aiAssistantMentionCooldownCache.get(key) || 0;
-  if (expiresAt > now) {
-    return {
-      allowed: false,
-      remainingSeconds: Math.max(1, Math.ceil((expiresAt - now) / 1000)),
-    };
-  }
-  aiAssistantMentionCooldownCache.set(key, now + ttlMs);
-  if (aiAssistantMentionCooldownCache.size > 20000) {
-    for (const [cacheKey, expiry] of aiAssistantMentionCooldownCache.entries()) {
-      if (expiry <= now) aiAssistantMentionCooldownCache.delete(cacheKey);
-    }
-  }
-  return { allowed: true, remainingSeconds: 0 };
-}
-
-function logAiMentionOutcome(guildId, userId, outcome, details = '') {
-  const extra = details ? ` details=${details}` : '';
-  logger.log(`[ai-assistant-mention] guild=${guildId} user=${userId} outcome=${outcome}${extra}`);
-}
-client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
-  try {
-    inviteTrackerService.handleMemberRoleUpdate(oldMember, newMember);
-  } catch (error) {
-    logger.warn('[invite-tracker] member role update handler warning:', error?.message || error);
-  }
-});
-
-async function handlePanelVerifyButton(interaction) {
-  try {
-    await interaction.deferReply({ ephemeral: true });
-
-    const discordId = interaction.user.id;
-    const username = interaction.user.username;
-    const webUrl = process.env.WEB_URL || 'http://localhost:3000';
-    const panelGuildId = String(
-      interaction.guildId
-      || interaction.guild?.id
-      || interaction.message?.guildId
-      || interaction.channel?.guild?.id
-      || ''
-    ).trim();
-    const buildVerifyUrl = (action = '') => {
-      const url = new URL('/verify', webUrl);
-      if (panelGuildId) url.searchParams.set('guild', panelGuildId);
-      if (action) url.searchParams.set('action', action);
-      return url.toString();
-    };
-    const wallets = walletService.getLinkedWallets(discordId);
-
-    // If no wallets linked, send to portal
-    if (!wallets || wallets.length === 0) {
-      const embed = new EmbedBuilder()
-        .setTitle('🔗 Verification Portal')
-        .setDescription('No wallet linked yet. Connect your wallet to join the Family, then we\'ll sync your holdings automatically.')
-        .addFields(
-          { name: 'Next Steps', value: '1) Open portal\n2) Connect/sign\n3) Click Verify again', inline: false }
-        )
-        .setTimestamp();
-      applyEmbedBranding(embed, {
-        guildId: panelGuildId || interaction.guildId || '',
-        moduleKey: 'verification',
-        defaultColor: '#FFD700',
-        defaultFooter: 'Powered by Guild Pilot',
-        fallbackLogoUrl: client?.user?.displayAvatarURL?.() || null,
-      });
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setLabel('Open Verify Portal')
-          .setStyle(ButtonStyle.Link)
-          .setURL(buildVerifyUrl()),
-        new ButtonBuilder()
-          .setLabel('Add Wallet')
-          .setStyle(ButtonStyle.Link)
-          .setURL(buildVerifyUrl('add'))
-      );
-
-      await interaction.editReply({ embeds: [embed], components: [row], ephemeral: true });
-      return;
-    }
-
-    // Wallet exists: verify holdings now
-    const updateResult = await roleService.updateUserRoles(discordId, username, panelGuildId || interaction.guildId || null);
-
-    if (!updateResult.success) {
-      return interaction.editReply({
-        content: `❌ Could not verify holdings right now: ${updateResult.message || 'unknown error'}. Try again in a moment.`
-      });
-    }
-
-    // Sync Discord roles best-effort
-    let roleSyncText = 'Role sync skipped';
-    const guildForSync = interaction.guild
-      || (panelGuildId ? (client.guilds.cache.get(panelGuildId) || await client.guilds.fetch(panelGuildId).catch(() => null)) : null);
-    if (guildForSync) {
-      const syncResult = await roleService.syncUserDiscordRoles(guildForSync, discordId, panelGuildId || guildForSync.id || null);
-      roleSyncText = syncResult.success
-        ? `+${syncResult.totalAdded || 0} / -${syncResult.totalRemoved || 0}`
-        : 'Role sync partial';
-    }
-    if (panelGuildId) {
-      walletService.triggerOGRoleAssignment(discordId, username, panelGuildId);
-    }
-    let governanceEnabled = true;
-    try {
-      const governanceGuildId = panelGuildId || interaction.guildId;
-      if (governanceGuildId && tenantService.isMultitenantEnabled()) {
-        governanceEnabled = tenantService.isModuleEnabled(governanceGuildId, 'governance');
-      } else {
-        const settingsManager = require('./config/settings');
-        governanceEnabled = settingsManager.getSettings().moduleGovernanceEnabled !== false;
-      }
-    } catch (_error) {}
-
-    const tierText = updateResult.tier || 'Associate';
-    const fields = [
-      { name: 'Linked Wallets', value: `${wallets.length}`, inline: true },
-      { name: 'NFTs', value: `${updateResult.totalNFTs || 0}`, inline: true },
-      { name: 'Tracked Tokens', value: Number(updateResult.totalTokens || 0).toLocaleString(undefined, { maximumFractionDigits: 6 }), inline: true },
-      { name: 'Tier', value: `${tierText}`, inline: true },
-      { name: 'Discord Role Sync', value: roleSyncText, inline: true }
-    ];
-    if (governanceEnabled) {
-      fields.splice(4, 0, { name: 'Voting Power', value: `${updateResult.votingPower || 0}`, inline: true });
-    }
-
-    const embed = new EmbedBuilder()
-      .setColor('#57F287')
-      .setTitle('✅ Holdings Verified')
-      .setDescription('Your linked wallet(s) were detected and your holdings were refreshed.')
-      .addFields(fields)
-      .setTimestamp();
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setLabel('Add Wallet')
-        .setStyle(ButtonStyle.Link)
-        .setURL(buildVerifyUrl('add'))
-    );
-
-    await interaction.editReply({ embeds: [embed], components: [row], ephemeral: true });
-  } catch (error) {
-    logger.error('Error handling panel verify button:', error);
-    try {
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({ content: '❌ Verification button failed. Please run `/verification status` or use `/verification quick`.' });
-      } else {
-        await interaction.reply({ content: '❌ Verification button failed. Please run `/verification status` or use `/verification quick`.', ephemeral: true });
-      }
-    } catch (followUpError) {
-      logger.error('Could not send verify button error:', followUpError);
-    }
-  }
-}
-
-async function handleSupportButton(interaction) {
-  try {
-    await interaction.deferReply({ ephemeral: true });
-
-    const proposalId = interaction.customId.replace('support_', '');
-    const discordId = interaction.user.id;
-
-    // Check if user has verified wallet
-    const wallets = walletService.getLinkedWallets(discordId);
-    if (!wallets || wallets.length === 0) {
-      const embed = new EmbedBuilder()
-        .setColor('#FF0000')
-        .setTitle('❌ Not Verified')
-        .setDescription('You must verify your wallet to support proposals.\n\nUse `/verification status` to get started.')
-        .setTimestamp();
-
-      return interaction.editReply({ embeds: [embed] });
-    }
-
-    const userInfo = await roleService.getUserInfo(discordId);
-    if (!userInfo || !userInfo.voting_power || userInfo.voting_power === 0) {
-      const embed = new EmbedBuilder()
-        .setColor('#FF0000')
-        .setTitle('❌ Not Eligible')
-        .setDescription('You do not have the required voting power to support proposals.')
-        .setTimestamp();
-
-      return interaction.editReply({ embeds: [embed] });
-    }
-
-    const result = proposalService.addSupporter(proposalId, discordId);
-
-    if (!result.success) {
-      const embed = new EmbedBuilder()
-        .setTitle('❌ Cannot Support')
-        .setDescription(result.message || 'An error occurred.')
-        .setTimestamp();
-      applyEmbedBranding(embed, {
-        guildId: interaction.guildId || '',
-        moduleKey: 'governance',
-        defaultColor: '#FF0000',
-        defaultFooter: 'Powered by Guild Pilot',
-        fallbackLogoUrl: client?.user?.displayAvatarURL?.() || null,
-      });
-
-      return interaction.editReply({ embeds: [embed] });
-    }
-
-    const supporterCount = result.supporterCount;
-    const isPromoted = result.promoted;
-
-    // Update the proposal message
-    await updateProposalMessage(interaction.message, proposalId, supporterCount, isPromoted);
-
-    const embed = new EmbedBuilder()
-      .setTitle(isPromoted ? '🗳️ Promoted to Voting!' : '✅ Support Added')
-      .setDescription(isPromoted 
-        ? 'This proposal has been promoted to voting! Check the voting channel to cast your vote.'
-        : `You've supported this proposal! (${supporterCount}/4 supporters)`
-      )
-      .setTimestamp();
-    applyEmbedBranding(embed, {
-      guildId: interaction.guildId || '',
-      moduleKey: 'governance',
-      defaultColor: '#FFD700',
-      defaultFooter: 'Powered by Guild Pilot',
-      fallbackLogoUrl: client?.user?.displayAvatarURL?.() || null,
-    });
-
-    await interaction.editReply({ embeds: [embed] });
-    logger.log(`User ${discordId} supported proposal ${proposalId} (${supporterCount}/4)${isPromoted ? ' - PROMOTED' : ''}`);
-
-  } catch (error) {
-    logger.error('Error handling support button:', error);
-    await interaction.editReply({ content: 'An error occurred while processing your support.', ephemeral: true });
-  }
-}
-
-async function updateProposalMessage(message, proposalId, supporterCount, isPromoted) {
-  try {
-    const proposal = proposalService.getProposal(proposalId);
-    if (!proposal) return;
-
-    const supportThreshold = settings.supportThreshold || 4;
-
-    const embed = EmbedBuilder.from(message.embeds[0]);
-    
-    // Update supporters field
-    const fieldIndex = embed.data.fields.findIndex(f => f.name === '👥 Supporters');
-    if (fieldIndex >= 0) {
-      embed.data.fields[fieldIndex].value = isPromoted ? `${supportThreshold}/${supportThreshold} ✅` : `${supporterCount}/${supportThreshold}`;
-    }
-
-    // Update status field if promoted
-    if (isPromoted) {
-      const statusIndex = embed.data.fields.findIndex(f => f.name === '📊 Status');
-      if (statusIndex >= 0) {
-        embed.data.fields[statusIndex].value = 'PROMOTED TO VOTE ✅';
-      }
-      embed.setColor('#00FF00');
-      embed.setFooter({ text: 'This proposal has been promoted to voting!' });
-    }
-
-    // Disable button if promoted
-    const row = isPromoted 
-      ? new ActionRowBuilder()
-          .addComponents(
-            new ButtonBuilder()
-              .setCustomId(`support_${proposalId}_disabled`)
-              .setLabel('Support')
-              .setStyle(ButtonStyle.Primary)
-              .setEmoji('✅')
-              .setDisabled(true)
-          )
-      : message.components[0];
-
-    await message.edit({ embeds: [embed], components: [row] });
-  } catch (error) {
-    logger.error('Error updating proposal message:', error);
-  }
-}
-
-async function handleVoteButton(interaction) {
-  try {
-    await interaction.deferReply({ ephemeral: true });
-
-    const parts = interaction.customId.split('_');
-    const voteChoice = parts[1]; // yes, no, or abstain
-    const proposalId = parts.slice(2).join('_'); // Handle proposal IDs with underscores
-
-    const discordId = interaction.user.id;
-
-    // Check if user has verified wallet
-    const wallets = walletService.getLinkedWallets(discordId);
-    if (!wallets || wallets.length === 0) {
-      const embed = new EmbedBuilder()
-        .setColor('#FF0000')
-        .setTitle('❌ Not Verified')
-        .setDescription('You must verify your wallet to vote on proposals.\n\nUse `/verification status` to get started.')
-        .setTimestamp();
-
-      return interaction.editReply({ embeds: [embed] });
-    }
-
-    const userInfo = await roleService.getUserInfo(discordId);
-    if (!userInfo || !userInfo.voting_power || userInfo.voting_power === 0) {
-      const embed = new EmbedBuilder()
-        .setTitle('❌ Not Eligible')
-        .setDescription('You do not have the required voting power to vote.')
-        .setTimestamp();
-      applyEmbedBranding(embed, {
-        guildId: interaction.guildId || '',
-        moduleKey: 'governance',
-        defaultColor: '#FF0000',
-        defaultFooter: 'Powered by Guild Pilot',
-        fallbackLogoUrl: client?.user?.displayAvatarURL?.() || null,
-      });
-
-      return interaction.editReply({ embeds: [embed] });
-    }
-
-    const result = proposalService.castVote(proposalId, discordId, voteChoice, userInfo.voting_power);
-
-    if (!result.success) {
-      const embed = new EmbedBuilder()
-        .setTitle('❌ Cannot Vote')
-        .setDescription(result.message || 'An error occurred.')
-        .setTimestamp();
-      applyEmbedBranding(embed, {
-        guildId: interaction.guildId || '',
-        moduleKey: 'governance',
-        defaultColor: '#FF0000',
-        defaultFooter: 'Powered by Guild Pilot',
-        fallbackLogoUrl: client?.user?.displayAvatarURL?.() || null,
-      });
-
-      return interaction.editReply({ embeds: [embed] });
-    }
-
-    // Update the voting message with new tallies
-    await proposalService.updateVotingMessage(proposalId);
-
-    const choiceEmoji = {
-      'yes': '✅',
-      'no': '❌',
-      'abstain': '⚖️'
-    };
-
-    const embed = new EmbedBuilder()
-      .setTitle('🗳️ Vote Recorded!')
-      .setDescription(`Your ${choiceEmoji[voteChoice]} **${voteChoice.toUpperCase()}** vote has been recorded!\n\n**Voting Power:** ${userInfo.voting_power} VP`)
-      .setFooter({ text: 'You can change your vote any time before voting closes.' })
-      .setTimestamp();
-    applyEmbedBranding(embed, {
-      guildId: interaction.guildId || '',
-      moduleKey: 'governance',
-      defaultColor: '#FFD700',
-      defaultFooter: 'Powered by Guild Pilot',
-      fallbackLogoUrl: client?.user?.displayAvatarURL?.() || null,
-    });
-
-    await interaction.editReply({ embeds: [embed] });
-    logger.log(`User ${discordId} voted ${voteChoice} on proposal ${proposalId} with ${userInfo.voting_power} VP`);
-
-  } catch (error) {
-    logger.error('Error handling vote button:', error);
-    await interaction.editReply({ content: 'An error occurred while processing your vote.', ephemeral: true });
-  }
-}
-
-async function handleMicroVerifyCheckStatus(interaction) {
-  const microVerifyService = require('./services/microVerifyService');
-  
-  try {
-    await interaction.deferReply({ ephemeral: true });
-
-    const discordId = interaction.user.id;
-    const result = microVerifyService.getPendingRequest(discordId);
-
-    if (!result.success) {
-      // Check if user has verified wallets now
-      const wallets = walletService.getLinkedWallets(discordId);
-      
-      if (wallets && wallets.length > 0) {
-        const embed = new EmbedBuilder()
-          .setColor('#57F287')
-          .setTitle('✅ Wallet Already Verified!')
-          .setDescription('Your wallet has been successfully verified. Use `/verification status` to see your status.')
-          .setTimestamp();
-
-        await interaction.editReply({ embeds: [embed] });
-      } else {
-        const embed = new EmbedBuilder()
-          .setColor('#FFA500')
-          .setTitle('⏳ No Verification Request')
-          .setDescription(result.message || 'No pending verification request found.')
-          .setTimestamp();
-
-        await interaction.editReply({ embeds: [embed] });
-      }
-      return;
-    }
-
-    const request = result.request;
-    const expiresAt = new Date(request.expires_at);
-    const timeLeft = Math.max(0, Math.floor((expiresAt - new Date()) / 1000 / 60));
-
-    const embed = new EmbedBuilder()
-      .setColor('#FFA500')
-      .setTitle('⏳ Verification Pending')
-      .setDescription(
-        `Waiting for your transfer...\n\n` +
-        `**Amount:** \`${request.expected_amount}\` SOL\n` +
-        `**Time left:** ${timeLeft} minute(s)\n\n` +
-        `The system checks for transactions every ${microVerifyService.getConfig().pollIntervalSeconds} seconds.`
-      )
-      .setTimestamp();
-
-    await interaction.editReply({ embeds: [embed] });
-  } catch (error) {
-    logger.error('Error handling micro-verify check status:', error);
-    await interaction.editReply({ content: 'An error occurred while checking status.', ephemeral: true });
-  }
-}
-
-async function handleMicroVerifyCopyAmount(interaction) {
-  const microVerifyService = require('./services/microVerifyService');
-  
-  try {
-    const discordId = interaction.user.id;
-    const result = microVerifyService.getPendingRequest(discordId);
-
-    if (!result.success) {
-      await interaction.reply({ 
-        content: 'No pending verification request found.', 
-        ephemeral: true 
-      });
-      return;
-    }
-
-    const request = result.request;
-    
-    await interaction.reply({ 
-      content: `💰 **Amount to send:** \`${request.expected_amount}\`\n\nCopy this exact amount and send it to the verification wallet.`, 
-      ephemeral: true 
-    });
-  } catch (error) {
-    logger.error('Error handling micro-verify copy amount:', error);
-    await interaction.reply({ 
-      content: 'An error occurred.', 
-      ephemeral: true 
-    });
-  }
-}
-
-async function handleRoleClaimButton(interaction) {
-  const roleClaimService = require('./services/roleClaimService');
-  const rolePanelService = require('./services/rolePanelService');
-  
-  try {
-    await interaction.deferReply({ ephemeral: true });
-
-    // Extract role ID from customId:
-    // new format: claim_role_<panelId>__<roleId>
-    // legacy:     claim_role_<roleId> or role_claim_<roleId>
-    let panelId = null;
-    let roleId = interaction.customId.replace('claim_role_', '').replace('role_claim_', '');
-    if (interaction.customId.startsWith('claim_role_') && roleId.includes('__')) {
-      const [p, ...rest] = roleId.split('__');
-      panelId = parseInt(p, 10);
-      roleId = rest.join('__');
-    }
-
-    // Check legacy pool first, then new multi-panel system
-    const inLegacyPool = !!roleClaimService.getAllRoles().find(r => r.roleId === roleId);
-    const panelForRole = !inLegacyPool
-      ? (panelId ? rolePanelService.getPanel(panelId, interaction.guildId) : rolePanelService.getPanelByRole(roleId, interaction.guildId))
-      : null;
-    const inPanelSystem = !!panelForRole && rolePanelService.isRoleClaimable(roleId, interaction.guildId);
-
-    if (!inLegacyPool && !inPanelSystem) {
-      await interaction.editReply({ content: '❌ This role is no longer available for self-assignment.', ephemeral: true });
-      return;
-    }
-
-    const result = await roleClaimService.toggleRole(
-      interaction.guild,
-      interaction.member,
-      roleId
-    );
-
-    // Single-select panel: if user just claimed one role, remove other panel roles
-    if (result.success && result.action === 'added' && panelForRole && panelForRole.single_select === 1) {
-      const allPanelRoles = (panelForRole.roles || []).map(r => r.role_id).filter(r => r !== roleId);
-      for (const otherRoleId of allPanelRoles) {
-        const roleObj = interaction.guild.roles.cache.get(otherRoleId);
-        if (roleObj && interaction.member.roles.cache.has(otherRoleId)) {
-          try { await interaction.member.roles.remove(roleObj, 'Single-select role panel enforced'); } catch {}
-        }
-      }
-    }
-
-    const embed = new EmbedBuilder()
-      .setTitle(result.success ? (result.action === 'added' ? '✅ Role Added' : '➖ Role Removed') : '❌ Error')
-      .setDescription(result.message)
-      .setTimestamp();
-    applyEmbedBranding(embed, {
-      guildId: interaction.guildId || '',
-      moduleKey: 'selfserve',
-      defaultColor: result.success ? (result.action === 'added' ? '#57F287' : '#FEE75C') : '#ED4245',
-      defaultFooter: 'Powered by Guild Pilot',
-      fallbackLogoUrl: client?.user?.displayAvatarURL?.() || null,
-    });
-
-    await interaction.editReply({ embeds: [embed] });
-    
-    logger.log(`User ${interaction.user.tag} ${result.action || 'attempted'} role: ${roleId}`);
-  } catch (error) {
-    logger.error('Error handling role claim button:', error);
-    await interaction.editReply({ 
-      content: 'An error occurred while processing your request.', 
-      ephemeral: true 
-    });
-  }
-}
-
-async function handleTreasuryRefreshButton(interaction) {
-  try {
-    await interaction.deferUpdate();
-
-    // Check if user is admin
-    if (!interaction.memberPermissions.has(PermissionFlagsBits.Administrator)) {
-      await interaction.followUp({ 
-        content: '❌ Only administrators can refresh the treasury panel.', 
-        ephemeral: true 
-      });
-      return;
-    }
-
-    const config = treasuryService.getConfig();
-
-    if (!config || !config.enabled || !config.solana_wallet) {
-      const panel = buildTreasuryPanelFromService();
-      await interaction.editReply({ embeds: [panel.embed], components: [panel.components] });
-      
-      await interaction.followUp({ 
-        content: '⚠️ Treasury not fully configured. Enable and configure wallet to fetch live data.', 
-        ephemeral: true 
-      });
-      return;
-    }
-
-    // Fetch fresh balances
-    const result = await treasuryService.fetchBalances();
-
-    // Rebuild panel with fresh data
-    const panel = buildTreasuryPanelFromService();
-    await interaction.editReply({ embeds: [panel.embed], components: [panel.components] });
-
-    if (result.success) {
-      await interaction.followUp({ 
-        content: `✅ Treasury data refreshed: ${result.balances.sol} SOL, ${result.balances.usdc} USDC`, 
-        ephemeral: true 
-      });
-      logger.log(`Treasury panel refreshed by ${interaction.user.tag}`);
-    } else {
-      await interaction.followUp({ 
-        content: `⚠️ Refresh attempted but encountered error: ${result.message || result.error}`,
-        ephemeral: true 
-      });
-    }
-
-  } catch (error) {
-    logger.error('Error handling treasury refresh button:', error);
-    try {
-      await interaction.followUp({ 
-        content: 'An error occurred while refreshing the treasury panel.', 
-        ephemeral: true 
-      });
-    } catch (followUpError) {
-      logger.error('Could not send error follow-up:', followUpError);
-    }
-  }
-}
-
-function buildTreasuryPanelFromService() {
-  const summary = treasuryService.getSummary();
-  const status = summary.success ? summary.treasury.status : 'error';
-  const statusEmoji = status === 'ok' ? '✅' : status === 'stale' ? '⚠️' : '❌';
-
-  const embed = new EmbedBuilder()
-    .setColor('#FFD700')
-    .setTitle('💰 Treasury Watch')
-    .setDescription(summary.success
-      ? 'Live treasury snapshot'
-      : `⚠️ ${summary.message || 'Treasury unavailable'}`)
-    .addFields(
-      { name: '🪙 SOL', value: summary.success ? `${summary.treasury.sol}` : '—', inline: true },
-      { name: '💵 USDC', value: summary.success ? `${summary.treasury.usdc}` : '—', inline: true },
-      { name: 'Status', value: `${statusEmoji} ${status}`, inline: true },
-      { name: 'Last Updated', value: summary.success && summary.treasury.lastUpdated ? `<t:${Math.floor(new Date(summary.treasury.lastUpdated).getTime()/1000)}:R>` : 'Unknown', inline: false }
-    )
-    .setFooter({ text: 'Wallet hidden for security' })
-    .setTimestamp();
-
-  const components = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('treasury_refresh_panel')
-      .setLabel('Refresh')
-      .setStyle(ButtonStyle.Primary)
-      .setEmoji('🔄')
-  );
-
-  return { embed, components };
-}
-
-function startVoteCheckInterval() {
-  // Check every 5 minutes for votes that need to be closed and stale drafts
-  let proposalsGuildColumnCache = null;
-  const hasProposalsGuildColumn = () => {
-    if (typeof proposalsGuildColumnCache === 'boolean') return proposalsGuildColumnCache;
-    try {
-      const db = require('./database/db');
-      const columns = db.prepare('PRAGMA table_info(proposals)').all();
-      proposalsGuildColumnCache = columns.some(c => String(c?.name || '').toLowerCase() === 'guild_id');
-    } catch (_error) {
-      proposalsGuildColumnCache = false;
-    }
-    return proposalsGuildColumnCache;
+  const cooldownMs = Math.max(5, Number(policy?.passiveCooldownSeconds || 120)) * 1000;
+  const maxPerHour = Math.max(1, Number(policy?.passiveMaxPerHour || 6));
+  const state = aiAssistantPassiveChannelState.get(key) || {
+    windowStartAt: now,
+    sentInWindow: 0,
+    lastSentAt: 0,
   };
 
-  intervals.push(setInterval(async () => {
-    // Single-tenant legacy guard. In multi-tenant mode we check per guild below.
-    const moduleGuard = require('./utils/moduleGuard');
-    const multiTenant = tenantService.isMultitenantEnabled();
-    if (!multiTenant && !moduleGuard.isModuleEnabled('governance')) {
-      return; // Skip if governance disabled
-    }
-
-    try {
-      const db = require('./database/db');
-      const proposalsAreScoped = hasProposalsGuildColumn();
-      const activeVotes = db.prepare('SELECT * FROM proposals WHERE status = ?').all('voting');
-
-      for (const proposal of activeVotes) {
-        const proposalGuildId = String(proposal?.guild_id || '').trim();
-        if (multiTenant && proposalsAreScoped) {
-          if (!proposalGuildId) continue;
-          if (!tenantService.isModuleEnabled(proposalGuildId, 'governance')) continue;
-        }
-        proposalService.checkAutoClose(proposal.proposal_id);
-      }
-
-      if (multiTenant && proposalsAreScoped) {
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        const staleDrafts = db.prepare(`
-          SELECT proposal_id, title, guild_id
-          FROM proposals
-          WHERE status = 'draft'
-            AND created_at < ?
-        `).all(sevenDaysAgo.toISOString());
-        for (const proposal of staleDrafts) {
-          const guildId = String(proposal.guild_id || '').trim();
-          if (!guildId) continue;
-          if (!tenantService.isModuleEnabled(guildId, 'governance')) continue;
-          db.prepare("UPDATE proposals SET status = 'expired' WHERE proposal_id = ?").run(proposal.proposal_id);
-          logger.log(`Proposal ${proposal.proposal_id} expired (stale draft) [guild ${guildId}]`);
-          governanceLogger.log('proposal_expired', {
-            proposalId: proposal.proposal_id,
-            title: proposal.title,
-            guildId
-          });
-        }
-      } else {
-        // Single-tenant legacy path
-        await proposalService.expireStaleProposals();
-      }
-    } catch (error) {
-      logger.error('Error in vote check interval:', error);
-    }
-  }, 5 * 60 * 1000)); // 5 minutes
-
-  logger.log('📅 Vote auto-close and draft expiry checker started (runs every 5 minutes)');
+  if (now - state.windowStartAt >= 60 * 60 * 1000) {
+    state.windowStartAt = now;
+    state.sentInWindow = 0;
+  }
+  if (state.lastSentAt && (now - state.lastSentAt) < cooldownMs) {
+    return { allowed: false, key, state };
+  }
+  if (state.sentInWindow >= maxPerHour) {
+    return { allowed: false, key, state };
+  }
+  return { allowed: true, key, state };
 }
 
-function startRoleResyncScheduler() {
-  const RESYNC_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
-  const STARTUP_DELAY_MS = 60 * 1000; // 1 minute delay on startup to avoid race conditions
-
-  const getVerificationResyncGuildIds = () => {
-    if (!tenantService.isMultitenantEnabled()) {
-      const guildId = process.env.GUILD_ID || process.env.DISCORD_GUILD_ID;
-      return guildId ? [guildId] : [];
-    }
-
-    const guildIds = [];
-    const seen = new Set();
-    let page = 1;
-    while (page <= 100) {
-      const result = tenantService.listTenants({ page, pageSize: 200 });
-      const tenants = Array.isArray(result?.tenants) ? result.tenants : [];
-      if (tenants.length === 0) break;
-      for (const tenant of tenants) {
-        const guildId = String(tenant?.guildId || '').trim();
-        if (!guildId || seen.has(guildId)) continue;
-        seen.add(guildId);
-        if (!tenantService.isModuleEnabled(guildId, 'verification')) continue;
-        guildIds.push(guildId);
-      }
-      if (!result?.pagination || page >= Number(result.pagination.totalPages || 0)) break;
-      page += 1;
-    }
-    return guildIds;
-  };
-
-  async function performRoleResync() {
-    // Single-tenant legacy guard. Multi-tenant checks are per guild below.
-    const moduleGuard = require('./utils/moduleGuard');
-    if (!tenantService.isMultitenantEnabled() && !moduleGuard.isModuleEnabled('verification')) {
-      return; // Skip if verification disabled
-    }
-
-    try {
-      const startTime = Date.now();
-      logger.log('🔄 Starting role resync cycle...');
-
-      const guildIds = getVerificationResyncGuildIds();
-      if (guildIds.length === 0) {
-        logger.warn('⚠️ No guilds available for role resync');
-        return;
-      }
-
-      let syncedCount = 0;
-      let errorCount = 0;
-      let totalAdded = 0;
-      let totalRemoved = 0;
-      let totalUsers = 0;
-
-      for (const guildId of guildIds) {
-        const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
-        if (!guild) {
-          logger.warn(`⚠️ Guild ${guildId} not found, skipping role resync`);
-          continue;
-        }
-
-        // Resolve verified guild members for this tenant-scoped resync
-        const verifiedUsers = await roleService.getAllVerifiedUsers(guild);
-        totalUsers += verifiedUsers.length;
-        logger.log(`📊 [${guild.id}] Found ${verifiedUsers.length} verified users to resync`);
-
-        for (const user of verifiedUsers) {
-          try {
-            // Re-fetch holdings and update database
-            const updateResult = await roleService.updateUserRoles(user.discord_id, user.username, guild.id);
-
-            if (updateResult.success) {
-              // Sync Discord roles (tier + trait)
-              const syncResult = await roleService.syncUserDiscordRoles(guild, user.discord_id, guild.id);
-
-              if (syncResult.success) {
-                syncedCount++;
-                totalAdded += syncResult.totalAdded || 0;
-                totalRemoved += syncResult.totalRemoved || 0;
-              } else {
-                errorCount++;
-                logger.warn(`[${guild.id}] Failed to sync roles for user ${user.discord_id}: ${syncResult.message}`);
-              }
-            }
-
-            // Small delay to avoid rate limits
-            await new Promise(resolve => setTimeout(resolve, 500));
-          } catch (error) {
-            errorCount++;
-            logger.error(`[${guild.id}] Error processing user ${user.discord_id}:`, error);
-          }
-        }
-      }
-
-      const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-      logger.log(`✅ Role resync complete: guilds=${guildIds.length}, users=${totalUsers}, synced=${syncedCount}, errors=${errorCount}, added=${totalAdded}, removed=${totalRemoved} (${duration}s)`);
-    } catch (error) {
-      logger.error('❌ Error in role resync cycle:', error);
-    }
+function markPassiveAiSent(key, state) {
+  const now = Date.now();
+  const next = state || { windowStartAt: now, sentInWindow: 0, lastSentAt: 0 };
+  if (now - next.windowStartAt >= 60 * 60 * 1000) {
+    next.windowStartAt = now;
+    next.sentInWindow = 0;
   }
-
-  // Run once on startup with delay
-  setTimeout(() => {
-    logger.log('🚀 Running initial role resync (startup)...');
-    performRoleResync();
-  }, STARTUP_DELAY_MS);
-
-  // Schedule recurring resync every 4 hours
-  intervals.push(setInterval(() => {
-    performRoleResync();
-  }, RESYNC_INTERVAL_MS));
-
-  logger.log(`⏰ Role resync scheduler started (runs every 4 hours + on startup)`);
+  next.lastSentAt = now;
+  next.sentInWindow += 1;
+  aiAssistantPassiveChannelState.set(key, next);
 }
-
-function startTicketInactivityScheduler() {
-  const SWEEP_INTERVAL_MINUTES = 15;
-  const DEFAULT_INACTIVE_HOURS = 168;
-  const DEFAULT_WARNING_HOURS = 24;
-  const MAX_PER_RUN = 20;
-
-  const runSweep = async () => {
-    try {
-      const moduleGuard = require('./utils/moduleGuard');
-      if (!moduleGuard.isModuleEnabled('ticketing')) return;
-
-      const settingsManager = require('./config/settings');
-      const currentSettings = settingsManager.getSettings();
-
-      const automationEnabled = currentSettings.ticketAutoCloseEnabled !== false;
-      const configuredInactive = Number.parseInt(currentSettings.ticketAutoCloseInactiveHours, 10);
-      const inactiveHours = Number.isFinite(configuredInactive) && configuredInactive > 0
-        ? configuredInactive
-        : DEFAULT_INACTIVE_HOURS;
-      const configuredWarning = Number.parseInt(currentSettings.ticketAutoCloseWarningHours, 10);
-      const warningHours = Math.max(
-        0,
-        Math.min(
-          Number.isFinite(configuredWarning) ? configuredWarning : DEFAULT_WARNING_HOURS,
-          inactiveHours
-        )
-      );
-
-      if (!automationEnabled || inactiveHours <= 0) return;
-
-      const result = await ticketService.runInactivitySweep({
-        inactiveHours,
-        warningHours,
-        maxPerRun: MAX_PER_RUN,
-      });
-
-      if (!result?.success) return;
-      if (result.warnedCount || result.closedCount || result.errorCount) {
-        logger.log(`Ticket inactivity sweep: warned=${result.warnedCount}, closed=${result.closedCount}, errors=${result.errorCount}`);
-      }
-    } catch (error) {
-      logger.error('Error in ticket inactivity scheduler:', error);
-    }
-  };
-
-  setTimeout(runSweep, 2 * 60 * 1000); // first run after startup
-  intervals.push(setInterval(runSweep, SWEEP_INTERVAL_MINUTES * 60 * 1000));
-  logger.log(`Ticket inactivity scheduler started (reads Settings -> Ticketing every ${SWEEP_INTERVAL_MINUTES}m).`);
-}
-
-// ==================== Ticket Interaction Handlers ====================
-
-async function handleTicketOpenButton(interaction) {
-  try {
-    if (!ticketService.isEnabled()) {
-      return interaction.reply({ content: '❌ Ticketing is currently disabled.', ephemeral: true });
-    }
-
-    const categoryId = parseInt(interaction.customId.replace('ticket_open_', ''));
-    const category = ticketService.getCategory(categoryId, interaction.guildId, { allowLegacyFallback: false });
-
-    if (!category) {
-      return interaction.reply({ content: '❌ This ticket category no longer exists.', ephemeral: true });
-    }
-    if (!category.enabled) {
-      return interaction.reply({ content: '❌ This ticket category is currently disabled.', ephemeral: true });
-    }
-
-    const modal = ticketService.buildTemplateModal(category);
-    await interaction.showModal(modal);
-  } catch (error) {
-    logger.error('Error handling ticket open button:', error);
-    try {
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({ content: '❌ Failed to open ticket form.', ephemeral: true });
-      }
-    } catch (e) { /* ignore */ }
-  }
-}
-
-async function handleTicketModalSubmit(interaction) {
-  try {
-    await interaction.deferReply({ ephemeral: true });
-
-    const categoryId = parseInt(interaction.customId.replace('ticket_modal_', ''));
-    const category = ticketService.getCategory(categoryId, interaction.guildId, { allowLegacyFallback: false });
-    if (!category) {
-      return interaction.editReply({ content: '❌ This ticket category no longer exists.' });
-    }
-
-    const templateResponses = ticketService.extractTemplateResponses(category, interaction);
-
-    const result = await ticketService.createTicket(interaction, categoryId, templateResponses, interaction.guildId);
-
-    if (!result.success) {
-      return interaction.editReply({ content: `❌ Could not create ticket: ${result.message}` });
-    }
-
-    await interaction.editReply({
-      content: `✅ Ticket #${result.ticketNumber} created! Head to <#${result.channelId}>`
-    });
-    logger.log(`Ticket #${result.ticketNumber} created by ${interaction.user.tag} in category ${categoryId}`);
-  } catch (error) {
-    logger.error('Error handling ticket modal submit:', error);
-    try {
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({ content: '❌ An error occurred while creating your ticket.' });
-      }
-    } catch (e) { /* ignore */ }
-  }
-}
-
-async function handleTicketClaimButton(interaction) {
-  try {
-    await interaction.deferReply({ ephemeral: true });
-    const result = await ticketService.claimTicket(interaction, interaction.channelId);
-
-    if (!result.success) {
-      return interaction.editReply({ content: `❌ ${result.message}` });
-    }
-
-    await interaction.editReply({ content: 'Ticket assigned to you.' });
-    logger.log(`Ticket assigned to ${interaction.user.tag} in ${interaction.channelId}`);
-  } catch (error) {
-    logger.error('Error handling ticket assignment:', error);
-    await interaction.editReply({ content: 'Failed to assign ticket.' });
-  }
-}
-
-async function handleTicketCloseButton(interaction) {
-  try {
-    await interaction.deferReply({ ephemeral: true });
-    const result = await ticketService.closeTicket(interaction, interaction.channelId);
-
-    if (!result.success) {
-      return interaction.editReply({ content: `❌ ${result.message}` });
-    }
-
-    await interaction.editReply({ content: '🔒 Ticket closed. A transcript has been saved.' });
-    logger.log(`Ticket closed by ${interaction.user.tag} in ${interaction.channelId}`);
-  } catch (error) {
-    logger.error('Error handling ticket close:', error);
-    await interaction.editReply({ content: '❌ Failed to close ticket.' });
-  }
-}
-
-async function handleTicketReopenButton(interaction) {
-  try {
-    await interaction.deferReply({ ephemeral: true });
-    const result = await ticketService.reopenTicket(interaction, interaction.channelId);
-
-    if (!result.success) {
-      return interaction.editReply({ content: `❌ ${result.message}` });
-    }
-
-    await interaction.editReply({ content: '🔓 Ticket reopened.' });
-    logger.log(`Ticket reopened by ${interaction.user.tag} in ${interaction.channelId}`);
-  } catch (error) {
-    logger.error('Error handling ticket reopen:', error);
-    await interaction.editReply({ content: '❌ Failed to reopen ticket.' });
-  }
-}
-
-async function handleTicketDeleteButton(interaction) {
-  try {
-    // Admin only
-    if (!interaction.memberPermissions.has(PermissionFlagsBits.Administrator)) {
-      return interaction.reply({ content: '❌ Only administrators can delete tickets.', ephemeral: true });
-    }
-
-    await interaction.deferReply({ ephemeral: true });
-    await interaction.editReply({ content: '🗑️ Deleting ticket channel in 3 seconds...' });
-
-    setTimeout(async () => {
-      try {
-        await ticketService.deleteTicket(interaction.channelId);
-        logger.log(`Ticket deleted by ${interaction.user.tag} in ${interaction.channelId}`);
-      } catch (error) {
-        logger.error('Error deleting ticket channel:', error);
-      }
-    }, 3000);
-  } catch (error) {
-    logger.error('Error handling ticket delete:', error);
-    try {
-      await interaction.reply({ content: '❌ Failed to delete ticket.', ephemeral: true });
-    } catch (e) { /* ignore */ }
-  }
-}
-
-client.on(Events.Error, error => {
-  logger.error('Discord client error:', error);
-});
-
-async function fetchLobbyRolesAndBuildEmbed(battleService, lobby, reaction, participants) {
-  let requiredRoles = [];
-  let excludedRoles = [];
-  if (lobby.required_role_ids) {
-    const requiredIds = lobby.required_role_ids.split(',');
-    for (const requiredId of requiredIds) {
-      try {
-        const role = await reaction.message.guild.roles.fetch(requiredId);
-        if (role) {
-          requiredRoles.push(role);
-          continue;
-        }
-        const cachedRole = reaction.message.guild.roles.cache.get(requiredId);
-        if (cachedRole) {
-          requiredRoles.push(cachedRole);
-          continue;
-        }
-        requiredRoles.push({ id: requiredId, name: `Role ${requiredId}` });
-      } catch (error) {
-        const cachedRole = reaction.message.guild.roles.cache.get(requiredId);
-        if (cachedRole) {
-          requiredRoles.push(cachedRole);
-        } else {
-          requiredRoles.push({ id: requiredId, name: `Role ${requiredId}` });
-        }
-        logger.warn(`Failed to fetch required role ${requiredId}: ${error?.message || error}`);
-      }
-    }
-  }
-  if (lobby.excluded_role_ids) {
-    const excludedIds = lobby.excluded_role_ids.split(',');
-    for (const excludedId of excludedIds) {
-      try {
-        const role = await reaction.message.guild.roles.fetch(excludedId);
-        if (role) {
-          excludedRoles.push(role);
-          continue;
-        }
-        const cachedRole = reaction.message.guild.roles.cache.get(excludedId);
-        if (cachedRole) {
-          excludedRoles.push(cachedRole);
-          continue;
-        }
-        excludedRoles.push({ id: excludedId, name: `Role ${excludedId}` });
-      } catch (error) {
-        const cachedRole = reaction.message.guild.roles.cache.get(excludedId);
-        if (cachedRole) {
-          excludedRoles.push(cachedRole);
-        } else {
-          excludedRoles.push({ id: excludedId, name: `Role ${excludedId}` });
-        }
-        logger.warn(`Failed to fetch excluded role ${excludedId}: ${error?.message || error}`);
-      }
-    }
-  }
-  return battleService.buildLobbyEmbed(lobby, participants, requiredRoles.length ? requiredRoles : null, excludedRoles.length ? excludedRoles : null);
-}
-
-// Battle reaction handlers
-client.on(Events.MessageReactionAdd, async (reaction, user) => {
-  try {
-    // Ignore bot reactions
-    if (user.bot) return;
-
-    // Handle partial reactions
-    if (reaction.partial) {
-      try {
-        await reaction.fetch();
-      } catch (error) {
-        logger.error('Failed to fetch reaction:', error);
-        return;
-      }
-    }
-
-    // ── Engagement: award reaction points ──────────────────────────────────────
-    if (reaction.message?.guild) {
-      try {
-        const eng = require('./services/engagementService');
-        eng.tryAwardReaction(reaction.message.guild.id, user.id, user.username, `react:${reaction.message.id}`);
-      } catch (_) {}
-    }
-
-    const emojiName = reaction.emoji.name;
-
-    // ── Game registry: lobby join (all mini-games) ──────────────────────────
-    const gameRegistry = require('./services/gameRegistry');
-    const gameSvc = gameRegistry.getByJoinEmoji(emojiName);
-    if (gameSvc) {
-      const game = gameSvc.getGameByLobby(reaction.message.id);
-      if (game && game.status === 'waiting') {
-        const r = gameSvc.addPlayer(reaction.message.id, user.id, user.username);
-        if (r.success) {
-          try {
-            await reaction.message.edit({ embeds: [gameSvc.buildLobbyEmbed(game, reaction.message.guildId)] });
-          } catch (e) { logger.error('[gameRegistry] lobby update error:', e); }
-        }
-      }
-    }
-
-    // ── Game Night: lobby join ──────────────────────────────────────────────
-    const gnService = require('./services/gameNightService');
-    if (emojiName === gnService.JOIN_EMOJI) {
-      const gnSession = gnService.getByMessage(reaction.message.id);
-      if (gnSession && gnSession.status === 'waiting') {
-        const r = gnService.addPlayer(gnSession.channelId, user.id, user.username);
-        if (r.success) {
-          try {
-            await reaction.message.edit({ embeds: [gnService.buildLobbyEmbed(gnSession, reaction.message.guildId)] });
-          } catch (e) { logger.error('[GameNight] lobby update error:', e); }
-        }
-      }
-    }
-
-    // ── Higher or Lower: round guess ────────────────────────────────────────
-    const hlService = require('./services/higherLowerService');
-    if (emojiName === hlService.HIGHER_EMOJI || emojiName === hlService.LOWER_EMOJI) {
-      const game = hlService.getGameByRound(reaction.message.id);
-      if (game && game.status === 'playing') {
-        const guess = emojiName === hlService.HIGHER_EMOJI ? 'higher' : 'lower';
-        const result = hlService.recordGuess(reaction.message.id, user.id, guess);
-        if (!result.success) {
-          await reaction.users.remove(user.id).catch(() => {});
-        }
-      }
-    }
-
-    const battleService = require('./services/battleService');
-
-    // Check if this is a battle lobby reaction
-    const lobby = battleService.getLobbyByMessage(reaction.message.id);
-    if (lobby && lobby.status === 'open') {
-      const expectedJoinEmoji = battleService.getLobbyJoinEmoji(lobby.era || 'mafia');
-      if (reaction.emoji.name === expectedJoinEmoji) {
-        // Fetch member to get roles
-        let userRoles = [];
-        try {
-          const member = await reaction.message.guild.members.fetch(user.id);
-          userRoles = member.roles.cache.map(role => role.id);
-        } catch (error) {
-          logger.error('Failed to fetch member roles:', error);
-        }
-
-        const result = battleService.addParticipant(lobby.lobby_id, user.id, user.username, userRoles);
-
-        if (result.success) {
-          // Update lobby embed
-          const participants = battleService.getParticipants(lobby.lobby_id);
-          const updatedEmbed = await fetchLobbyRolesAndBuildEmbed(battleService, lobby, reaction, participants);
-          await reaction.message.edit({ embeds: [updatedEmbed] });
-          logger.log(`User ${user.username} joined battle lobby ${lobby.lobby_id} via reaction`);
-        } else if (result.message === 'Already in this lobby') {
-          // Silently ignore - user already joined
-          return;
-        } else {
-          // Remove their reaction if they can't join
-          await reaction.users.remove(user.id);
-          
-          // If they were blocked by role constraints, optionally notify them
-          if (result.requiresRole || result.blockedRole) {
-            try {
-              const msg = result.requiresRole
-                ? '❌ You need a specific role to join that battle lobby.'
-                : '❌ Your role is excluded from this battle lobby.';
-              await user.send(msg);
-            } catch (dmError) {
-              // User has DMs disabled, ignore
-              logger.log(`Could not DM user ${user.username} about role restrictions (DMs disabled)`);
-            }
-          }
-        }
-      }
-    }
-  } catch (error) {
-    logger.error('Error handling reaction add:', error);
-  }
-});
-
-client.on(Events.MessageReactionRemove, async (reaction, user) => {
-  try {
-    // Ignore bot reactions
-    if (user.bot) return;
-
-    // Handle partial reactions
-    if (reaction.partial) {
-      try {
-        await reaction.fetch();
-      } catch (error) {
-        logger.error('Failed to fetch reaction:', error);
-        return;
-      }
-    }
-
-    // ── Game registry: lobby leave (all mini-games) ────────────────────────
-    const gameRegistry = require('./services/gameRegistry');
-    const gameSvc = gameRegistry.getByJoinEmoji(reaction.emoji.name);
-    if (gameSvc) {
-      const game = gameSvc.getGameByLobby(reaction.message.id);
-      if (game && game.status === 'waiting') {
-        const r = gameSvc.removePlayer(reaction.message.id, user.id);
-        if (r.success) {
-          try {
-            await reaction.message.edit({ embeds: [gameSvc.buildLobbyEmbed(game, reaction.message.guildId)] });
-          } catch (_) {}
-        }
-      }
-    }
-
-    // ── Game Night: lobby leave ─────────────────────────────────────────────
-    const gnService = require('./services/gameNightService');
-    if (reaction.emoji.name === gnService.JOIN_EMOJI) {
-      const gnSession = gnService.getByMessage(reaction.message.id);
-      if (gnSession && gnSession.status === 'waiting') {
-        const r = gnService.removePlayer(gnSession.channelId, user.id);
-        if (r.success) {
-          try {
-            await reaction.message.edit({ embeds: [gnService.buildLobbyEmbed(gnSession, reaction.message.guildId)] });
-          } catch (_) {}
-        }
-      }
-    }
-
-    const battleService = require('./services/battleService');
-
-    // Check if this is a battle lobby reaction
-    const lobby = battleService.getLobbyByMessage(reaction.message.id);
-    if (lobby && lobby.status === 'open') {
-      const expectedJoinEmoji = battleService.getLobbyJoinEmoji(lobby.era || 'mafia');
-      if (reaction.emoji.name === expectedJoinEmoji) {
-        const result = battleService.removeParticipant(lobby.lobby_id, user.id);
-
-        if (result.success) {
-          // Update lobby embed
-          const participants = battleService.getParticipants(lobby.lobby_id);
-          const updatedEmbed = await fetchLobbyRolesAndBuildEmbed(battleService, lobby, reaction, participants);
-          await reaction.message.edit({ embeds: [updatedEmbed] });
-          logger.log(`User ${user.username} left battle lobby ${lobby.lobby_id} via reaction removal`);
-        }
-      }
-    }
-  } catch (error) {
-    logger.error('Error handling reaction remove:', error);
-  }
-});
 
 async function handleAiAssistantMentionMessage(message) {
-  const guildId = String(message?.guild?.id || message?.guildId || '').trim();
-  const botUserId = String(client?.user?.id || '').trim();
-  if (!guildId || !botUserId) return false;
-  const userId = String(message?.author?.id || '').trim();
+  const gid = message.guildId;
+  const bid = client.user.id;
+  const parsed = extractMentionPrompt(message, bid);
+  if (!parsed.isMention) return false;
+  if (!tenantService.isModuleEnabled(gid, 'aiassistant')) return true;
+  const settingsResult = aiAssistantService.getTenantSettings(gid);
+  if (!settingsResult.success || !settingsResult.settings.enabled || !settingsResult.settings.mentionEnabled) return true;
+  if (!aiAssistantService.isMemberRoleAllowed(settingsResult.settings, message.member)) return true;
 
-  const parsed = parseAiMentionPrompt(message, botUserId);
-  if (!parsed.shouldHandle) return false;
-  if (!parsed.prompt) {
-    await message.reply({
-      content: 'Ask your question after mentioning me, and I will handle it.',
-      allowedMentions: { parse: [], repliedUser: false },
-    }).catch(() => {});
-    logAiMentionOutcome(guildId, userId, 'empty_prompt');
-    return true;
-  }
+  const policyResult = aiAssistantService.getChannelPolicy(gid, message.channelId);
+  const channelPolicy = policyResult.success ? policyResult.policy : null;
+  if (channelPolicy && channelPolicy.mode === 'off') return true;
 
-  if (!tenantService.isModuleEnabled(guildId, 'aiassistant')) {
-    logAiMentionOutcome(guildId, userId, 'module_disabled');
-    return true;
-  }
-  if (!canUseAiAssistantPlan(guildId)) {
-    logAiMentionOutcome(guildId, userId, 'plan_blocked');
-    return true;
-  }
-
-  const settingsResult = aiAssistantService.getTenantSettings(guildId);
-  if (!settingsResult.success) {
-    logAiMentionOutcome(guildId, userId, 'settings_error');
-    return true;
-  }
-  const settings = settingsResult.settings || {};
-  const policyResult = aiAssistantService.getChannelPolicy(guildId, message.channelId);
-  const channelPolicy = policyResult.success ? policyResult.policy : {
-    mode: 'mention',
-    minConfidence: 35,
-    passiveCooldownSeconds: 120,
-    passiveMaxPerHour: 6,
-  };
-  if (channelPolicy.mode === 'off') {
-    logAiMentionOutcome(guildId, userId, 'channel_mode_off');
-    return true;
-  }
-  if (!settings.enabled) {
-    logAiMentionOutcome(guildId, userId, 'tenant_disabled');
-    return true;
-  }
-  if (!settings.mentionEnabled) {
-    logAiMentionOutcome(guildId, userId, 'mention_disabled');
-    return true;
-  }
-  if (!aiAssistantService.isChannelAllowed(settings, message.channelId)) {
-    logAiMentionOutcome(guildId, userId, 'channel_blocked');
-    return true;
-  }
-  if (!aiAssistantService.isMemberRoleAllowed(settings, message.member)) {
-    logAiMentionOutcome(guildId, userId, 'role_blocked');
-    return true;
-  }
-
-  const cooldownState = getAiMentionCooldownState(guildId, userId, settings.cooldownSeconds);
-  if (!cooldownState.allowed) {
-    const notice = await message.reply({
-      content: `⏱️ Slow down a little. Try again in ${cooldownState.remainingSeconds}s.`,
-      allowedMentions: { parse: [], repliedUser: false },
-    }).catch(() => null);
-    if (notice) {
-      setTimeout(() => {
-        notice.delete().catch(() => {});
-      }, 7000);
-    }
-    logAiMentionOutcome(guildId, userId, 'cooldown', `remaining=${cooldownState.remainingSeconds}`);
-    return true;
+  const cooldownSeconds = Math.max(0, Number(settingsResult.settings.cooldownSeconds || 0));
+  if (cooldownSeconds > 0) {
+    const cooldownKey = `${gid}:${message.author.id}`;
+    const now = Date.now();
+    const nextAllowedAt = Number(aiAssistantMentionCooldownCache.get(cooldownKey) || 0);
+    if (now < nextAllowedAt) return true;
+    aiAssistantMentionCooldownCache.set(cooldownKey, now + (cooldownSeconds * 1000));
   }
 
   await message.channel.sendTyping().catch(() => {});
-
-  const result = await aiAssistantService.ask({
-    guildId,
-    userId,
-    channelId: message.channelId,
-    prompt: parsed.prompt,
-    requesterTag: message.author.tag,
-    triggerSource: 'mention',
-    requiredConfidence: channelPolicy.minConfidence,
+  const res = await aiAssistantService.ask({
+    guildId: gid, userId: message.author.id, channelId: message.channelId, prompt: parsed.prompt,
+    requesterTag: message.author.tag, triggerSource: 'mention',
+    requiredConfidence: channelPolicy?.minConfidence ?? null,
     memberRoleNames: message.member?.roles?.cache?.map(r => r.name) || [],
+    memberRoleIds: message.member?.roles?.cache?.map(r => r.id) || [],
   });
-
-  if (!result.success) {
-    const reason = String(result.message || result.code || 'Could not generate a response right now.');
-    await message.reply({
-      content: `I couldn't answer right now: ${reason}`,
-      allowedMentions: { parse: [], repliedUser: false },
-    }).catch(() => {});
-    logAiMentionOutcome(guildId, userId, 'failed', `code=${result.code || 'unknown'}`);
-    return true;
+  if (res.success) {
+    const chunks = splitDiscordText(res.text);
+    for (const c of chunks) await message.reply({ content: c, allowedMentions: { parse: [], repliedUser: false } }).catch(() => {});
   }
-
-  const chunks = splitDiscordText(result.text, 1900);
-  await message.reply({
-    content: chunks[0],
-    allowedMentions: { parse: [], repliedUser: false },
-  }).catch(() => {});
-
-  for (let i = 1; i < chunks.length; i += 1) {
-    await message.channel.send({
-      content: chunks[i],
-      allowedMentions: { parse: [] },
-    }).catch(() => {});
-  }
-  logAiMentionOutcome(guildId, userId, 'ok', `provider=${result.provider || 'unknown'} confidence=${result.confidence ?? 'n/a'}`);
   return true;
 }
 
 async function handleAiAssistantPassiveMessage(message) {
-  const guildId = String(message?.guild?.id || message?.guildId || '').trim();
-  const botUserId = String(client?.user?.id || '').trim();
-  const userId = String(message?.author?.id || '').trim();
-  if (!guildId || !botUserId || !userId) return;
+  const gid = message.guildId;
+  const bid = client.user.id;
+  const passive = extractPassiveAiPrompt(message, bid);
+  if (!passive.shouldHandle) return;
+  if (!tenantService.isModuleEnabled(gid, 'aiassistant')) return;
+  const settingsResult = aiAssistantService.getTenantSettings(gid);
+  if (!settingsResult.success || !settingsResult.settings.enabled) return;
+  if (!aiAssistantService.isMemberRoleAllowed(settingsResult.settings, message.member)) return;
 
-  const passivePrompt = extractPassiveAiPrompt(message, botUserId);
-  if (!passivePrompt.shouldHandle) return;
-  if (!tenantService.isModuleEnabled(guildId, 'aiassistant')) return;
-  if (!canUseAiAssistantPlan(guildId)) return;
-
-  const settingsResult = aiAssistantService.getTenantSettings(guildId);
-  if (!settingsResult.success) return;
-  const settings = settingsResult.settings || {};
-  if (!settings.enabled) return;
-  if (!aiAssistantService.isChannelAllowed(settings, message.channelId)) return;
-  if (!aiAssistantService.isMemberRoleAllowed(settings, message.member)) return;
-
-  const policyResult = aiAssistantService.getChannelPolicy(guildId, message.channelId);
+  const policyResult = aiAssistantService.getChannelPolicy(gid, message.channelId);
   if (!policyResult.success) return;
-  const policy = policyResult.policy || {};
-  if (policy.mode !== 'passive') return;
+  const channelPolicy = policyResult.policy;
+  if (!channelPolicy || channelPolicy.mode !== 'passive') return;
 
-  const passiveBudget = evaluatePassiveAiChannelBudget(guildId, message.channelId, policy);
-  if (!passiveBudget.allowed) {
-    logAiMentionOutcome(guildId, userId, 'passive_blocked', `reason=${passiveBudget.reason}`);
-    return;
-  }
+  const budget = evaluatePassiveAiChannelBudget(gid, message.channelId, channelPolicy);
+  if (!budget.allowed) return;
 
   await message.channel.sendTyping().catch(() => {});
-  const result = await aiAssistantService.ask({
-    guildId,
-    userId,
-    channelId: message.channelId,
-    prompt: passivePrompt.prompt,
-    requesterTag: message.author.tag,
-    triggerSource: 'passive',
-    requiredConfidence: policy.minConfidence,
+  const res = await aiAssistantService.ask({
+    guildId: gid, userId: message.author.id, channelId: message.channelId, prompt: passive.prompt,
+    requesterTag: message.author.tag, triggerSource: 'passive',
+    requiredConfidence: channelPolicy.minConfidence,
     memberRoleNames: message.member?.roles?.cache?.map(r => r.name) || [],
+    memberRoleIds: message.member?.roles?.cache?.map(r => r.id) || [],
   });
-
-  if (!result.success) {
-    const silentCodes = new Set(['knowledge_low_confidence', 'knowledge_no_match', 'knowledge_not_configured', 'channel_blocked']);
-    if (!silentCodes.has(String(result.code || ''))) {
-      await message.reply({
-        content: `I couldn't answer right now: ${String(result.message || result.code || 'unknown error')}`,
-        allowedMentions: { parse: [], repliedUser: false },
-      }).catch(() => {});
-    }
-    logAiMentionOutcome(guildId, userId, 'passive_failed', `code=${result.code || 'unknown'}`);
-    return;
+  if (res.success) {
+    markPassiveAiSent(budget.key, budget.state);
+    const chunks = splitDiscordText(res.text);
+    for (const c of chunks) await message.reply({ content: c, allowedMentions: { parse: [], repliedUser: false } }).catch(() => {});
   }
-
-  const chunks = splitDiscordText(result.text, 1900);
-  await message.reply({
-    content: chunks[0],
-    allowedMentions: { parse: [], repliedUser: false },
-  }).catch(() => {});
-  for (let i = 1; i < chunks.length; i += 1) {
-    await message.channel.send({
-      content: chunks[i],
-      allowedMentions: { parse: [] },
-    }).catch(() => {});
-  }
-  markPassiveAiSent(guildId, message.channelId);
-  logAiMentionOutcome(guildId, userId, 'passive_ok', `provider=${result.provider || 'unknown'} confidence=${result.confidence ?? 'n/a'}`);
 }
 
-process.on('unhandledRejection', error => {
-  logger.error('Unhandled promise rejection:', error);
+client.on(Events.MessageCreate, async message => {
+  if (message.author.bot || !message.guild) return;
+  try { ticketService.markTicketActivity(message.channelId); } catch (_) {}
+  try {
+    const eng = require('./services/engagementService');
+    eng.tryAwardMessage(message.guildId, message.author.id, message.author.username, message.id, message.channelId);
+  } catch (_) {}
+  try {
+    const handled = await handleAiAssistantMentionMessage(message);
+    if (!handled) await handleAiAssistantPassiveMessage(message);
+  } catch (e) { logger.warn(`AI message handler error: ${e.message}`); }
 });
 
-process.on('uncaughtException', error => {
-  logger.error('Uncaught exception:', error);
-  process.exit(1);
+client.on(Events.MessageReactionAdd, async (reaction, user) => {
+  if (user.bot) return;
+  if (reaction.partial) try { await reaction.fetch(); } catch (_) { return; }
+  if (reaction.message.guild) {
+    try {
+      const eng = require('./services/engagementService');
+      eng.tryAwardReaction(reaction.message.guildId, user.id, user.username, `react:${reaction.message.id}`, reaction.message.channelId);
+    } catch (_) {}
+  }
+  const battleService = require('./services/battleService');
+  const lobby = battleService.getLobbyByMessage(reaction.message.id);
+  if (lobby && lobby.status === 'open' && reaction.emoji.name === '⚔️') {
+    const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);
+    const roles = member?.roles.cache.map(r => r.id) || [];
+    const res = battleService.addParticipant(lobby.lobby_id, user.id, user.username, roles);
+    if (res.success) await reaction.message.edit({ embeds: [battleService.buildLobbyEmbed(lobby, reaction.message.guildId)] });
+    else {
+      await reaction.users.remove(user.id).catch(() => {});
+      if (res.message) try { await user.send(`❌ ${res.message}`); } catch (_) {}
+    }
+  }
 });
 
-function gracefulShutdown(signal) {
-  logger.log(`[Bot] Graceful shutdown (${signal})...`);
+client.on(Events.MessageReactionRemove, async (reaction, user) => {
+  if (user.bot) return;
+  if (reaction.partial) try { await reaction.fetch(); } catch (_) { return; }
+  const battleService = require('./services/battleService');
+  const lobby = battleService.getLobbyByMessage(reaction.message.id);
+  if (lobby && lobby.status === 'open' && reaction.emoji.name === '⚔️') {
+    const res = battleService.removeParticipant(lobby.lobby_id, user.id);
+    if (res.success) await reaction.message.edit({ embeds: [battleService.buildLobbyEmbed(lobby, reaction.message.guildId)] });
+  }
+});
+
+client.on(Events.Error, e => logger.error(`Client error: ${e.message}`));
+process.on('unhandledRejection', e => logger.error(`Unhandled rejection: ${e.message}`));
+process.on('uncaughtException', e => { logger.error(`Uncaught exception: ${e.message}`); process.exit(1); });
+
+function gracefulShutdown(s) {
+  logger.log(`Shutdown (${s})...`);
   intervals.forEach(clearInterval);
   databaseBackupService.stop();
   webServer.stop();
   client.destroy();
   process.exit(0);
 }
-
-process.on('SIGTERM', () => {
-  gracefulShutdown('SIGTERM');
-});
-process.on('SIGINT', () => {
-  gracefulShutdown('SIGINT');
-});
-
-// ── Engagement: award points for chat messages ───────────────────────────────
-client.on(Events.MessageCreate, async (message) => {
-  if (message.author.bot || !message.guild) return;
-  try {
-    ticketService.markTicketActivity(message.channelId);
-  } catch (_) {}
-  try {
-    const eng = require('./services/engagementService');
-    eng.tryAwardMessage(message.guild.id, message.author.id, message.author.username);
-  } catch (_) {}
-  try {
-    const handledMention = await handleAiAssistantMentionMessage(message);
-    if (!handledMention) {
-      await handleAiAssistantPassiveMessage(message);
-    }
-  } catch (error) {
-    logger.warn('[ai-assistant] mention handler warning:', error?.message || error);
-  }
-});
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 client.login(process.env.DISCORD_TOKEN);
-
-

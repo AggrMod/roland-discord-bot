@@ -160,10 +160,11 @@ class ProposalService {
       // Take VP snapshot
       const snapshot = this.takeVPSnapshot();
       const totalVP = snapshot.totalVP;
-      const quorumRequired = Math.ceil(totalVP * ((settingsManager.getSettings().governanceQuorum || 25) / 100));
+      const settings = settingsManager.getSettings();
+      const quorumRequired = Math.ceil(totalVP * ((settings.governanceQuorum || 25) / 100));
 
       const startTime = new Date();
-      const voteDays = settingsManager.getSettings().voteDurationDays || 7;
+      const voteDays = settings.voteDurationDays || 7;
       const endTime = new Date(startTime.getTime() + voteDays * 24 * 60 * 60 * 1000);
 
       db.prepare(`
@@ -180,6 +181,17 @@ class ProposalService {
       logger.log(`Proposal ${proposalId} promoted to voting. Total VP: ${totalVP}, Quorum: ${quorumRequired}`);
       governanceLogger.log('proposal_promoted', { proposalId, totalVP, quorumRequired, adminId, title: proposal.title });
 
+      // Generate AI Brief if possible
+      try {
+        const aiAssistantService = require('./aiAssistantService');
+        const brief = await aiAssistantService.generateProposalBrief(proposal.guild_id || '', proposal);
+        if (brief) {
+          db.prepare('UPDATE proposals SET ai_brief = ? WHERE proposal_id = ?').run(brief, proposalId);
+        }
+      } catch (e) {
+        logger.error(`[ai-assistant] failed to generate brief for ${proposalId}:`, e);
+      }
+
       if (this.client) {
         await this.postToVotingChannel(proposalId);
       }
@@ -194,32 +206,17 @@ class ProposalService {
   takeVPSnapshot() {
     const settings = settingsManager.getSettings();
     const staffTrusteeRoles = settings.staffTrusteeRoles || ['Enforcer', 'Caporegime', 'Consigliere', 'Underboss', 'Don'];
-    const staffVP = settings.staffTrusteesVP || 10;
 
     // Get all users with NFTs
     const users = db.prepare('SELECT discord_id, total_nfts, voting_power FROM users WHERE total_nfts > 0').all();
 
     // Get role VP mappings for staff trustee check
     const roleMappings = db.prepare('SELECT * FROM role_vp_mappings').all();
-    const staffRoleMappings = roleMappings.filter(m => staffTrusteeRoles.includes(m.role_name));
 
     const voterVPs = {};
     let totalVP = 0;
 
     for (const user of users) {
-      const tierVP = getConfiguredVPForUser(user.discord_id, user.total_nfts, roleMappings);
-
-      // Check if user has a staff trustee role via role_vp_mappings
-      let isStaff = false;
-      for (const mapping of staffRoleMappings) {
-        // Check if user has this role mapping — we use the VP mapping table as indicator
-        // In a full implementation we'd check Discord roles, but for snapshot we use the mapping
-        if (mapping.voting_power > 0) {
-          // Staff trustee check would need Discord member data; for now use tier-based VP
-          // The actual staff check happens at vote time when we have the member object
-        }
-      }
-
       // For snapshot: use configurable tier VP (settings defaults as fallback)
       const vp = getConfiguredVPForUser(user.discord_id, user.total_nfts, roleMappings);
       if (vp > 0) {
@@ -505,7 +502,6 @@ class ProposalService {
       const quorumReq = proposal.quorum_required || Math.ceil(proposal.total_vp * 0.25);
       const quorumMet = totalVoted >= quorumReq;
 
-      let finalStatus = 'concluded';
       let result = 'quorum_not_met';
 
       if (quorumMet) {
@@ -517,7 +513,7 @@ class ProposalService {
       db.prepare("UPDATE proposals SET status = 'concluded' WHERE proposal_id = ?").run(proposalId);
 
       governanceLogger.log('vote_closed', {
-        proposalId, status: finalStatus, result, quorumMet,
+        proposalId, status: 'concluded', result, quorumMet,
         quorumRequired: quorumReq, totalVoted,
         yesVP: proposal.yes_vp, noVP: proposal.no_vp, abstainVP: proposal.abstain_vp
       });
@@ -526,7 +522,7 @@ class ProposalService {
       await this.postToResultsChannel(proposalId, result, quorumMet);
 
       logger.log(`Proposal ${proposalId} concluded: ${result} (quorum ${quorumMet ? 'met' : 'not met'})`);
-      return { success: true, status: finalStatus, result, quorumMet };
+      return { success: true, status: 'concluded', result, quorumMet };
     } catch (error) {
       logger.error('Error closing vote:', error);
       return { success: false };
@@ -545,9 +541,10 @@ class ProposalService {
 
   async postToVotingChannel(proposalId) {
     try {
-      const votingChannelId = process.env.VOTING_CHANNEL_ID;
+      const settings = settingsManager.getSettings();
+      const votingChannelId = settings.votingChannelId || process.env.VOTING_CHANNEL_ID;
       if (!votingChannelId) {
-        logger.warn('VOTING_CHANNEL_ID not set in .env');
+        logger.warn('votingChannelId not set in settings or .env');
         return;
       }
 
@@ -569,12 +566,19 @@ class ProposalService {
           { name: '💪 Total VP', value: proposal.total_vp.toString(), inline: true },
           { name: '📂 Category', value: proposal.category || 'Other', inline: true },
           { name: '💰 Cost', value: proposal.cost_indication || 'N/A', inline: true },
-          { name: '🎯 Quorum Required', value: `${proposal.quorum_required} VP`, inline: true },
-          { name: '⏰ Deadline', value: `<t:${Math.floor(endDate.getTime() / 1000)}:R>`, inline: false },
-          { name: '📊 Current Votes', value: '✅ Yes: 0 VP\n❌ No: 0 VP\n⚖️ Abstain: 0 VP', inline: false }
-        )
-        .setFooter({ text: 'Vote below! VP is locked at snapshot.' })
-        .setTimestamp();
+          { name: '🎯 Quorum Required', value: `${proposal.quorum_required} VP`, inline: true }
+        );
+
+      if (proposal.ai_brief) {
+        embed.addFields({ name: '📜 Consigliere\'s Family Brief', value: proposal.ai_brief, inline: false });
+      }
+
+      embed.addFields(
+        { name: '⏰ Deadline', value: `<t:${Math.floor(endDate.getTime() / 1000)}:R>`, inline: false },
+        { name: '📊 Current Votes', value: '✅ Yes: 0 VP\n❌ No: 0 VP\n⚖️ Abstain: 0 VP', inline: false }
+      )
+      .setFooter({ text: 'Vote below! VP is locked at snapshot.' })
+      .setTimestamp();
 
       const brandingGuildId = String(
         proposal?.guild_id || process.env.GUILD_ID || process.env.DISCORD_GUILD_ID || ''
@@ -608,7 +612,8 @@ class ProposalService {
       const proposal = this.getProposal(proposalId);
       if (!proposal || !proposal.voting_message_id || !this.client) return;
 
-      const votingChannelId = process.env.VOTING_CHANNEL_ID;
+      const settings = settingsManager.getSettings();
+      const votingChannelId = settings.votingChannelId || process.env.VOTING_CHANNEL_ID;
       if (!votingChannelId) return;
 
       const channel = await this.client.channels.fetch(votingChannelId);
@@ -638,7 +643,8 @@ class ProposalService {
       const proposal = this.getProposal(proposalId);
       if (!proposal || !proposal.voting_message_id || !this.client) return;
 
-      const votingChannelId = process.env.VOTING_CHANNEL_ID;
+      const settings = settingsManager.getSettings();
+      const votingChannelId = settings.votingChannelId || process.env.VOTING_CHANNEL_ID;
       if (!votingChannelId) return;
 
       const channel = await this.client.channels.fetch(votingChannelId);
@@ -684,7 +690,8 @@ class ProposalService {
 
   async postToResultsChannel(proposalId, finalResult, quorumMet) {
     try {
-      const resultsChannelId = process.env.RESULTS_CHANNEL_ID;
+      const settings = settingsManager.getSettings();
+      const resultsChannelId = settings.resultsChannelId || process.env.RESULTS_CHANNEL_ID;
       if (!resultsChannelId || !this.client) return;
 
       const proposal = this.getProposal(proposalId);
@@ -764,4 +771,3 @@ class ProposalService {
 }
 
 module.exports = new ProposalService();
-

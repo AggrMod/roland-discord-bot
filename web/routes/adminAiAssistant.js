@@ -164,10 +164,10 @@ function createAdminAiAssistantRouter({
     }
   });
 
-  router.post('/api/admin/aiassistant/knowledge', adminAuthMiddleware, (req, res) => {
+  router.post('/api/admin/aiassistant/knowledge', adminAuthMiddleware, async (req, res) => {
     if (!ensureAiAssistantModule(req, res)) return;
     try {
-      const result = aiAssistantService.saveKnowledgeDoc(req.guildId || null, req.body || {});
+      const result = await aiAssistantService.saveKnowledgeDoc(req.guildId || null, req.body || {});
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to save knowledge source', 'VALIDATION_ERROR', null, result));
       }
@@ -178,10 +178,10 @@ function createAdminAiAssistantRouter({
     }
   });
 
-  router.put('/api/admin/aiassistant/knowledge/:id', adminAuthMiddleware, (req, res) => {
+  router.put('/api/admin/aiassistant/knowledge/:id', adminAuthMiddleware, async (req, res) => {
     if (!ensureAiAssistantModule(req, res)) return;
     try {
-      const result = aiAssistantService.saveKnowledgeDoc(req.guildId || null, req.body || {}, req.params.id);
+      const result = await aiAssistantService.saveKnowledgeDoc(req.guildId || null, req.body || {}, req.params.id);
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to update knowledge source', 'VALIDATION_ERROR', null, result));
       }

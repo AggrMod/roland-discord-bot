@@ -1629,6 +1629,7 @@ function initDatabase() {
   ignoreDuplicateMigration(() => db.exec("ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN tags TEXT DEFAULT ''"));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN enabled INTEGER DEFAULT 1'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN vector_embedding TEXT'));
   ignoreDuplicateMigration(() => db.exec("ALTER TABLE ai_assistant_channel_policies ADD COLUMN mode TEXT DEFAULT 'mention'"));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_channel_policies ADD COLUMN min_confidence INTEGER DEFAULT 35'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_channel_policies ADD COLUMN passive_cooldown_seconds INTEGER DEFAULT 120'));

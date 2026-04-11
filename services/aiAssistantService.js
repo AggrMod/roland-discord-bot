@@ -52,6 +52,22 @@ const SEARCH_STOP_WORDS = new Set([
   'did', 'should', 'would', 'could', 'please', 'help', 'need', 'want', 'me', 'us'
 ]);
 
+function cosineSimilarity(vecA, vecB) {
+  if (!Array.isArray(vecA) || !Array.isArray(vecB) || vecA.length !== vecB.length) return 0;
+  let dotProduct = 0;
+  let mA = 0;
+  let mB = 0;
+  for (let i = 0; i < vecA.length; i++) {
+    dotProduct += vecA[i] * vecB[i];
+    mA += vecA[i] * vecA[i];
+    mB += vecB[i] * vecB[i];
+  }
+  mA = Math.sqrt(mA);
+  mB = Math.sqrt(mB);
+  if (mA === 0 || mB === 0) return 0;
+  return dotProduct / (mA * mB);
+}
+
 function normalizeGuildId(guildId) {
   if (typeof guildId !== 'string') return '';
   const trimmed = guildId.trim();
@@ -473,7 +489,33 @@ class AiAssistantService {
     return { success: true, docs };
   }
 
-  saveKnowledgeDoc(guildId, payload = {}, docId = null) {
+  async generateEmbedding(text, openaiKey) {
+    if (!text || !openaiKey) return null;
+    try {
+      const response = await fetch('https://api.openai.com/v1/embeddings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openaiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'text-embedding-3-small',
+          input: text.slice(0, 8000),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        logger.error('[ai-assistant-embeddings] OpenAI error:', data?.error?.message || 'Unknown');
+        return null;
+      }
+      return data?.data?.[0]?.embedding || null;
+    } catch (error) {
+      logger.error('[ai-assistant-embeddings] Network error:', error);
+      return null;
+    }
+  }
+
+  async saveKnowledgeDoc(guildId, payload = {}, docId = null) {
     const normalizedGuildId = normalizeGuildId(guildId);
     if (!normalizedGuildId) return { success: false, message: 'Invalid guildId' };
 
@@ -486,11 +528,18 @@ class AiAssistantService {
     if (!title) return { success: false, message: 'Title is required' };
     if (!body || body.length < 20) return { success: false, message: 'Body content is required (min 20 chars)' };
 
+    let embeddingJson = null;
+    const settings = this.getTenantSettings(normalizedGuildId);
+    if (settings.success && settings.global.hasOpenaiKey) {
+      const vector = await this.generateEmbedding(`${title}\n${body}`, settings.global.openaiApiKey);
+      if (vector) embeddingJson = JSON.stringify(vector);
+    }
+
     if (docId === null || docId === undefined) {
       const result = db.prepare(`
-        INSERT INTO ai_assistant_knowledge_docs (guild_id, title, body, source_url, tags, enabled, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `).run(normalizedGuildId, title, body, sourceUrl || null, tags, enabled ? 1 : 0);
+        INSERT INTO ai_assistant_knowledge_docs (guild_id, title, body, source_url, tags, enabled, vector_embedding, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `).run(normalizedGuildId, title, body, sourceUrl || null, tags, enabled ? 1 : 0, embeddingJson);
       return { success: true, id: Number(result.lastInsertRowid) };
     }
 
@@ -503,9 +552,9 @@ class AiAssistantService {
 
     db.prepare(`
       UPDATE ai_assistant_knowledge_docs
-      SET title = ?, body = ?, source_url = ?, tags = ?, enabled = ?, updated_at = CURRENT_TIMESTAMP
+      SET title = ?, body = ?, source_url = ?, tags = ?, enabled = ?, vector_embedding = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND guild_id = ?
-    `).run(title, body, sourceUrl || null, tags, enabled ? 1 : 0, normalizedDocId, normalizedGuildId);
+    `).run(title, body, sourceUrl || null, tags, enabled ? 1 : 0, embeddingJson, normalizedDocId, normalizedGuildId);
     return { success: true, id: normalizedDocId };
   }
 
@@ -521,14 +570,14 @@ class AiAssistantService {
     return { success: true };
   }
 
-  resolveKnowledgeContext(guildId, prompt) {
+  async resolveKnowledgeContext(guildId, prompt) {
     const normalizedGuildId = normalizeGuildId(guildId);
     if (!normalizedGuildId) {
       return { success: false, code: 'invalid_guild', message: 'Invalid guild context' };
     }
 
     const docs = db.prepare(`
-      SELECT id, title, body, source_url, tags
+      SELECT id, title, body, source_url, tags, vector_embedding
       FROM ai_assistant_knowledge_docs
       WHERE guild_id = ?
         AND enabled = 1
@@ -537,76 +586,83 @@ class AiAssistantService {
     `).all(normalizedGuildId);
 
     if (!docs.length) {
-      return {
-        success: true,
-        hasDocs: false,
-        matches: [],
-      };
+      return { success: true, hasDocs: false, matches: [], confidence: 0 };
     }
 
-    const promptTokens = tokenizeForSearch(prompt);
-    if (!promptTokens.length) {
-      return { success: true, hasDocs: true, matches: [] };
-    }
+    const settings = this.getTenantSettings(normalizedGuildId);
+    const promptVector = settings.success && settings.global.hasOpenaiKey
+      ? await this.generateEmbedding(prompt, settings.global.openaiApiKey)
+      : null;
 
     const matches = [];
-    for (const row of docs) {
-      const title = String(row.title || '');
-      const body = String(row.body || '');
-      const tags = parseTags(row.tags);
-      const haystack = `${title}\n${body}\n${tags.join(' ')}`.toLowerCase();
-      const titleTokens = tokenizeForSearch(title);
-      const bodyTokens = tokenizeForSearch(`${body} ${tags.join(' ')}`);
-      const titleSet = new Set(titleTokens);
-      const bodySet = new Set(bodyTokens);
+    if (promptVector) {
+      for (const row of docs) {
+        if (!row.vector_embedding) continue;
+        try {
+          const docVector = JSON.parse(row.vector_embedding);
+          const similarity = cosineSimilarity(promptVector, docVector);
+          if (similarity < 0.25) continue;
 
-      let overlap = 0;
-      let titleOverlap = 0;
-      for (const token of promptTokens) {
-        if (bodySet.has(token) || haystack.includes(token)) overlap += 1;
-        if (titleSet.has(token)) titleOverlap += 1;
+          matches.push({
+            id: Number(row.id),
+            title: row.title,
+            sourceUrl: String(row.source_url || ''),
+            tags: row.tags,
+            score: Math.round(similarity * 100),
+            similarity,
+            snippet: row.body.slice(0, 1000),
+          });
+        } catch (e) {
+          logger.error(`[ai-assistant-semantic] Error parsing vector for doc ${row.id}:`, e.message);
+        }
       }
-      const overlapRatio = overlap / Math.max(promptTokens.length, 1);
-      const score = (overlap * 4) + (titleOverlap * 3) + Math.round(overlapRatio * 10);
-      if (score <= 0) continue;
+      matches.sort((a, b) => b.similarity - a.similarity);
+    } else {
+      const promptTokens = tokenizeForSearch(prompt);
+      if (promptTokens.length > 0) {
+        for (const row of docs) {
+          const title = String(row.title || '');
+          const body = String(row.body || '');
+          const tags = parseTags(row.tags);
+          const haystack = `${title}\n${body}\n${tags.join(' ')}`.toLowerCase();
+          const titleTokens = tokenizeForSearch(title);
+          const titleSet = new Set(titleTokens);
+          const bodySet = new Set(tokenizeForSearch(`${body} ${tags.join(' ')}`));
 
-      matches.push({
-        id: Number(row.id),
-        title,
-        sourceUrl: String(row.source_url || ''),
-        tags: tags.join(', '),
-        score,
-        overlap,
-        overlapRatio,
-        titleOverlap,
-        snippet: extractSnippet(body, promptTokens),
-      });
+          let overlap = 0;
+          let titleOverlap = 0;
+          for (const token of promptTokens) {
+            if (bodySet.has(token) || haystack.includes(token)) overlap += 1;
+            if (titleSet.has(token)) titleOverlap += 1;
+          }
+          const overlapRatio = overlap / Math.max(promptTokens.length, 1);
+          const score = (overlap * 4) + (titleOverlap * 3) + Math.round(overlapRatio * 10);
+          if (score < 3) continue;
+
+          matches.push({
+            id: Number(row.id),
+            title,
+            sourceUrl: String(row.source_url || ''),
+            tags: tags.join(', '),
+            score,
+            similarity: overlapRatio,
+            snippet: extractSnippet(body, promptTokens),
+          });
+        }
+        matches.sort((a, b) => b.score - a.score);
+      }
     }
 
-    matches.sort((a, b) => b.score - a.score || a.id - b.id);
-    const topMatches = matches.filter(match => match.score >= 3).slice(0, 4);
+    const topMatches = matches.slice(0, 4);
     const top = topMatches[0] || null;
-    const second = topMatches[1] || null;
     let confidence = 0;
     if (top) {
-      confidence = Math.round(
-        Math.min(100,
-          (Math.min(1, Number(top.overlapRatio || 0)) * 70)
-          + (Math.min(4, Number(top.titleOverlap || 0)) * 6)
-          + (Math.min(40, Number(top.score || 0)) / 40 * 24)
-        )
-      );
-      if (second && (Number(top.score || 0) - Number(second.score || 0)) < 3) {
-        confidence = Math.max(0, confidence - 8);
-      }
+      confidence = promptVector 
+        ? Math.round(Math.min(100, top.similarity * 110))
+        : Math.round(Math.min(100, (Number(top.similarity || 0) * 100)));
     }
 
-    return {
-      success: true,
-      hasDocs: true,
-      matches: topMatches,
-      confidence,
-    };
+    return { success: true, hasDocs: true, matches: topMatches, confidence };
   }
 
   isChannelAllowed(settings, channelId) {
@@ -830,7 +886,7 @@ class AiAssistantService {
       return { success: false, code: 'user_limit_reached', message: 'You reached your daily AI request limit for this server.', allowance, userAllowance };
     }
 
-    const knowledge = this.resolveKnowledgeContext(normalizedGuildId, cleanPrompt);
+    const knowledge = await this.resolveKnowledgeContext(normalizedGuildId, cleanPrompt);
     if (!knowledge.success) return knowledge;
     const confidenceThreshold = requiredConfidence === null || requiredConfidence === undefined
       ? DEFAULTS.defaultMinConfidence

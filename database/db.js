@@ -1396,6 +1396,19 @@ function initDatabase() {
       joined_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  // Keep one current invite attribution row per joined user per guild.
+  // This avoids duplicate joins inflating leaderboard/event views.
+  try {
+    db.exec(`
+      DELETE FROM invite_events
+      WHERE id NOT IN (
+        SELECT MIN(id)
+        FROM invite_events
+        GROUP BY guild_id, joined_user_id
+      )
+    `);
+  } catch (e) {}
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_invite_events_guild_joined_unique ON invite_events(guild_id, joined_user_id)'); } catch (e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_invite_events_guild_joined_at ON invite_events(guild_id, joined_at DESC)'); } catch (e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_invite_events_guild_inviter ON invite_events(guild_id, inviter_user_id)'); } catch (e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_invite_events_guild_joined_user ON invite_events(guild_id, joined_user_id)'); } catch (e) {}

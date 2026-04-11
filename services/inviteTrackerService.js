@@ -477,26 +477,14 @@ class InviteTrackerService {
       return { success: false, message: 'Invalid guild/user id' };
     }
 
-    const recentDupe = db.prepare(`
-      SELECT id
-      FROM invite_events
-      WHERE guild_id = ?
-        AND joined_user_id = ?
-        AND joined_at >= datetime('now', '-30 seconds')
-      ORDER BY id DESC
-      LIMIT 1
-    `).get(normalizedGuildId, normalizedJoinedId);
-    if (recentDupe?.id) {
-      return { success: true, duplicate: true };
-    }
-
-    db.prepare(`
+    const writeResult = db.prepare(`
       INSERT INTO invite_events (
         guild_id, joined_user_id, joined_username,
         inviter_user_id, inviter_username,
-        invite_code, source
+        invite_code, source, joined_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(guild_id, joined_user_id) DO NOTHING
     `).run(
       normalizedGuildId,
       normalizedJoinedId,
@@ -506,6 +494,10 @@ class InviteTrackerService {
       inviteCode ? String(inviteCode).slice(0, 64) : null,
       String(source || 'invite').slice(0, 32)
     );
+
+    if (Number(writeResult?.changes || 0) === 0) {
+      return { success: true, duplicate: true };
+    }
 
     this.applyRetentionPolicy(normalizedGuildId);
     this.queuePanelRefresh(normalizedGuildId);

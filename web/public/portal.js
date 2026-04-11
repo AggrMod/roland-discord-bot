@@ -5,6 +5,8 @@ let isSuperadmin = false;
 let heistEnabled = false;
 let confirmCallback = null;
 let activeGuildId = localStorage.getItem('activeGuildId') || '';
+const PORTAL_SECTION_STORAGE_KEY = 'activePortalSection';
+const PORTAL_ADMIN_VIEW_STORAGE_KEY = 'activePortalAdminView';
 let serverAccessData = { managedServers: [], unmanagedServers: [], isSuperadmin: false };
 let originalFetch = window.fetch.bind(window);
 let _csrfToken = '';
@@ -451,6 +453,30 @@ function normalizePortalSectionName(sectionName) {
   const requested = String(sectionName || '').trim();
   if (!requested) return 'landing';
   return PORTAL_PAGE_EXPECTATIONS.sections.includes(requested) ? requested : 'landing';
+}
+
+function getStoredPortalSection() {
+  const raw = String(localStorage.getItem(PORTAL_SECTION_STORAGE_KEY) || '').trim();
+  if (!raw) return '';
+  return normalizePortalSectionName(raw);
+}
+
+function setStoredPortalSection(sectionName) {
+  const normalized = normalizePortalSectionName(sectionName);
+  localStorage.setItem(PORTAL_SECTION_STORAGE_KEY, normalized);
+}
+
+function getStoredAdminView() {
+  return String(localStorage.getItem(PORTAL_ADMIN_VIEW_STORAGE_KEY) || '').trim();
+}
+
+function setStoredAdminView(view) {
+  const normalized = String(view || '').trim();
+  if (!normalized) {
+    localStorage.removeItem(PORTAL_ADMIN_VIEW_STORAGE_KEY);
+    return;
+  }
+  localStorage.setItem(PORTAL_ADMIN_VIEW_STORAGE_KEY, normalized);
 }
 
 // ==================== INITIALIZATION ====================
@@ -1642,6 +1668,10 @@ async function loadServerAccess() {
     ]);
 
     const totalServerCount = serverAccessData.managedServers.length + serverAccessData.unmanagedServers.length;
+    if (activeGuildId && !knownIds.has(activeGuildId)) {
+      activeGuildId = '';
+      localStorage.removeItem('activeGuildId');
+    }
     if ((!activeGuildId || !knownIds.has(activeGuildId)) && totalServerCount === 1 && serverAccessData.managedServers.length === 1) {
       activeGuildId = serverAccessData.managedServers[0].guildId;
       localStorage.setItem('activeGuildId', activeGuildId);
@@ -1710,13 +1740,6 @@ function enforceInitialServerSelection() {
     return true;
   }
 
-  // For multi-server users, always require explicit server pick on each fresh login
-  if (managed.length > 1) {
-    setActiveGuild('', { announce: false });
-    switchSection('landing');
-    return false;
-  }
-
   if ((managed.length + unmanaged.length) > 0 && !activeGuildId) {
     setActiveGuild('', { announce: false });
     switchSection('landing');
@@ -1771,9 +1794,12 @@ async function loadPortal() {
     // Navigate to section from URL after admin check is complete
     const urlParams = new URLSearchParams(window.location.search);
     const sectionParam = urlParams.get('section');
-    const adminView = urlParams.get('adminView');
-    if (sectionParam) {
-      const section = normalizePortalSectionName(sectionParam);
+    const requestedSection = sectionParam
+      ? normalizePortalSectionName(sectionParam)
+      : (getStoredPortalSection() || '');
+    const adminView = String(urlParams.get('adminView') || getStoredAdminView() || '').trim();
+    if (requestedSection) {
+      const section = normalizePortalSectionName(requestedSection);
       if (section === 'admin' && adminView) {
         showAdminView(adminView);
       } else {
@@ -2496,6 +2522,11 @@ function switchSection(sectionName, options = {}) {
     sectionName = 'landing';
   }
 
+  setStoredPortalSection(sectionName);
+  if (sectionName !== 'admin') {
+    setStoredAdminView('');
+  }
+
   // Update nav items (both sidebar and mobile)
   document.querySelectorAll('.nav-item').forEach(item => {
     item.classList.remove('active');
@@ -2567,6 +2598,9 @@ function switchSection(sectionName, options = {}) {
     url.searchParams.delete('adminView');
   } else {
     url.searchParams.set('section', sectionName);
+    if (sectionName !== 'admin') {
+      url.searchParams.delete('adminView');
+    }
   }
   window.history.pushState({}, '', url);
 }
@@ -3386,6 +3420,11 @@ function showAdminView(view) {
   }
 
   switchSection('admin');
+  setStoredAdminView(view);
+  const url = new URL(window.location);
+  url.searchParams.set('section', 'admin');
+  url.searchParams.set('adminView', String(view || 'settings').trim() || 'settings');
+  window.history.replaceState({}, '', url);
   hideAllAdminCards();
 
   const map = {

@@ -10,9 +10,13 @@ const DEFAULTS = Object.freeze({
   provider: 'openai',
   modelOpenai: 'gpt-5.4',
   modelGemini: 'gemini-2.0-flash',
+  mentionEnabled: true,
   responseVisibility: 'public',
   systemPrompt: '',
   allowedChannelIds: [],
+  allowedRoleIds: [],
+  cooldownSeconds: 12,
+  maxResponseChars: 1600,
 });
 
 function normalizeGuildId(guildId) {
@@ -45,6 +49,26 @@ function normalizeAllowedChannelIds(input) {
     out.push(id);
   }
   return out;
+}
+
+function normalizeAllowedRoleIds(input) {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const raw of input) {
+    const id = String(raw || '').trim();
+    if (!/^\d{17,20}$/.test(id)) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function normalizeIntegerInRange(value, { min, max, fallback }) {
+  const numeric = Number.parseInt(value, 10);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(numeric)));
 }
 
 function parseJsonArray(raw) {
@@ -97,6 +121,7 @@ class AiAssistantService {
     const global = this.getGlobalProviderSettings();
     const row = db.prepare(`
       SELECT guild_id, enabled, provider, model_openai, model_gemini, response_visibility, system_prompt, allowed_channel_ids
+             , mention_enabled, allowed_role_ids, cooldown_seconds, max_response_chars
       FROM ai_assistant_tenant_settings
       WHERE guild_id = ?
     `).get(normalizedGuildId);
@@ -106,9 +131,13 @@ class AiAssistantService {
       provider: normalizeProvider(row?.provider, global.defaultProvider || DEFAULTS.provider),
       modelOpenai: String(row?.model_openai || global.defaultModelOpenai || DEFAULTS.modelOpenai).trim() || DEFAULTS.modelOpenai,
       modelGemini: String(row?.model_gemini || global.defaultModelGemini || DEFAULTS.modelGemini).trim() || DEFAULTS.modelGemini,
+      mentionEnabled: row ? row.mention_enabled !== 0 : DEFAULTS.mentionEnabled,
       responseVisibility: normalizeVisibility(row?.response_visibility, DEFAULTS.responseVisibility),
       systemPrompt: String(row?.system_prompt || '').trim(),
       allowedChannelIds: normalizeAllowedChannelIds(parseJsonArray(row?.allowed_channel_ids)),
+      allowedRoleIds: normalizeAllowedRoleIds(parseJsonArray(row?.allowed_role_ids)),
+      cooldownSeconds: normalizeIntegerInRange(row?.cooldown_seconds, { min: 3, max: 600, fallback: DEFAULTS.cooldownSeconds }),
+      maxResponseChars: normalizeIntegerInRange(row?.max_response_chars, { min: 300, max: 1900, fallback: DEFAULTS.maxResponseChars }),
     };
 
     return {
@@ -135,23 +164,35 @@ class AiAssistantService {
     if (payload.provider !== undefined) next.provider = normalizeProvider(payload.provider, next.provider);
     if (payload.modelOpenai !== undefined) next.modelOpenai = String(payload.modelOpenai || '').trim() || DEFAULTS.modelOpenai;
     if (payload.modelGemini !== undefined) next.modelGemini = String(payload.modelGemini || '').trim() || DEFAULTS.modelGemini;
+    if (payload.mentionEnabled !== undefined) next.mentionEnabled = !!payload.mentionEnabled;
     if (payload.responseVisibility !== undefined) next.responseVisibility = normalizeVisibility(payload.responseVisibility, next.responseVisibility);
     if (payload.systemPrompt !== undefined) next.systemPrompt = String(payload.systemPrompt || '').trim().slice(0, 4000);
     if (payload.allowedChannelIds !== undefined) next.allowedChannelIds = normalizeAllowedChannelIds(payload.allowedChannelIds);
+    if (payload.allowedRoleIds !== undefined) next.allowedRoleIds = normalizeAllowedRoleIds(payload.allowedRoleIds);
+    if (payload.cooldownSeconds !== undefined) {
+      next.cooldownSeconds = normalizeIntegerInRange(payload.cooldownSeconds, { min: 3, max: 600, fallback: DEFAULTS.cooldownSeconds });
+    }
+    if (payload.maxResponseChars !== undefined) {
+      next.maxResponseChars = normalizeIntegerInRange(payload.maxResponseChars, { min: 300, max: 1900, fallback: DEFAULTS.maxResponseChars });
+    }
 
     db.prepare(`
       INSERT INTO ai_assistant_tenant_settings (
-        guild_id, enabled, provider, model_openai, model_gemini, response_visibility, system_prompt, allowed_channel_ids, updated_at
+        guild_id, enabled, provider, model_openai, model_gemini, mention_enabled, response_visibility, system_prompt, allowed_channel_ids, allowed_role_ids, cooldown_seconds, max_response_chars, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(guild_id) DO UPDATE SET
         enabled = excluded.enabled,
         provider = excluded.provider,
         model_openai = excluded.model_openai,
         model_gemini = excluded.model_gemini,
+        mention_enabled = excluded.mention_enabled,
         response_visibility = excluded.response_visibility,
         system_prompt = excluded.system_prompt,
         allowed_channel_ids = excluded.allowed_channel_ids,
+        allowed_role_ids = excluded.allowed_role_ids,
+        cooldown_seconds = excluded.cooldown_seconds,
+        max_response_chars = excluded.max_response_chars,
         updated_at = CURRENT_TIMESTAMP
     `).run(
       normalizedGuildId,
@@ -159,9 +200,13 @@ class AiAssistantService {
       next.provider,
       next.modelOpenai,
       next.modelGemini,
+      next.mentionEnabled ? 1 : 0,
       next.responseVisibility,
       next.systemPrompt || null,
-      JSON.stringify(next.allowedChannelIds || [])
+      JSON.stringify(next.allowedChannelIds || []),
+      JSON.stringify(next.allowedRoleIds || []),
+      next.cooldownSeconds,
+      next.maxResponseChars
     );
 
     return { success: true, settings: next };
@@ -172,6 +217,13 @@ class AiAssistantService {
     if (allowed.length === 0) return true;
     const normalized = String(channelId || '').trim();
     return !!normalized && allowed.includes(normalized);
+  }
+
+  isMemberRoleAllowed(settings, member) {
+    const requiredRoles = Array.isArray(settings?.allowedRoleIds) ? settings.allowedRoleIds : [];
+    if (requiredRoles.length === 0) return true;
+    if (!member || !member.roles || !member.roles.cache) return false;
+    return requiredRoles.some(roleId => member.roles.cache.has(roleId));
   }
 
   getDailyRemaining(guildId) {
@@ -337,7 +389,8 @@ class AiAssistantService {
         const output = provider === 'gemini'
           ? await this.callGemini({ apiKey, model, prompt: cleanPrompt, systemPrompt })
           : await this.callOpenAi({ apiKey, model, prompt: cleanPrompt, systemPrompt });
-        const text = String(output || '').trim().slice(0, 3500);
+        const maxChars = normalizeIntegerInRange(tenantSettings.maxResponseChars, { min: 300, max: 1900, fallback: DEFAULTS.maxResponseChars });
+        const text = String(output || '').trim().slice(0, maxChars);
         this.logUsage({
           guildId: normalizedGuildId,
           userId,

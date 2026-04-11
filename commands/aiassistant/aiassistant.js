@@ -1,7 +1,25 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder } = require('discord.js');
 const moduleGuard = require('../../utils/moduleGuard');
 const aiAssistantService = require('../../services/aiAssistantService');
-const { applyEmbedBranding } = require('../../services/embedBranding');
+
+function splitDiscordMessage(text, maxLength = 1900) {
+  const normalized = String(text || '').replace(/\r\n/g, '\n').trim();
+  if (!normalized) return ['No response'];
+  if (normalized.length <= maxLength) return [normalized];
+  const chunks = [];
+  let rest = normalized;
+  while (rest.length > maxLength) {
+    let cutAt = rest.lastIndexOf('\n', maxLength);
+    if (cutAt < Math.floor(maxLength * 0.55)) {
+      cutAt = rest.lastIndexOf(' ', maxLength);
+    }
+    if (cutAt < 1) cutAt = maxLength;
+    chunks.push(rest.slice(0, cutAt).trim());
+    rest = rest.slice(cutAt).trimStart();
+  }
+  if (rest.length) chunks.push(rest);
+  return chunks.filter(Boolean);
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -54,25 +72,17 @@ module.exports = {
     }
 
     const allowance = aiAssistantService.getDailyRemaining(interaction.guildId);
-    const embed = new EmbedBuilder()
-      .setTitle('AI Assistant Status')
-      .addFields(
-        { name: 'Enabled', value: result.settings.enabled ? 'Yes' : 'No', inline: true },
-        { name: 'Provider', value: result.settings.provider, inline: true },
-        { name: 'Visibility', value: result.settings.responseVisibility, inline: true },
-        { name: 'OpenAI Key', value: result.global.hasOpenaiKey ? 'Configured' : 'Missing', inline: true },
-        { name: 'Gemini Key', value: result.global.hasGeminiKey ? 'Configured' : 'Missing', inline: true },
-        { name: 'Daily Limit', value: allowance.limit === null ? 'Unlimited' : `${allowance.used}/${allowance.limit}`, inline: true },
-      )
-      .setTimestamp();
-    applyEmbedBranding(embed, {
-      guildId: interaction.guildId,
-      moduleKey: 'aiassistant',
-      defaultColor: '#4F46E5',
-      defaultFooter: 'Powered by Guild Pilot',
-      fallbackLogoUrl: interaction.client?.user?.displayAvatarURL?.() || null,
-    });
-    await interaction.reply({ embeds: [embed], ephemeral: true });
+    const lines = [
+      '**AI Assistant Status**',
+      `Enabled: ${result.settings.enabled ? 'Yes' : 'No'}`,
+      `Mention Trigger: ${result.settings.mentionEnabled ? 'On' : 'Off'}`,
+      `Provider: ${result.settings.provider}`,
+      `Slash Visibility: ${result.settings.responseVisibility}`,
+      `OpenAI Key: ${result.global.hasOpenaiKey ? 'Configured' : 'Missing'}`,
+      `Gemini Key: ${result.global.hasGeminiKey ? 'Configured' : 'Missing'}`,
+      `Daily Limit: ${allowance.limit === null ? 'Unlimited' : `${allowance.used}/${allowance.limit}`}`,
+    ];
+    await interaction.reply({ content: lines.join('\n'), ephemeral: true, allowedMentions: { parse: [] } });
   },
 
   async handleAsk(interaction) {
@@ -100,28 +110,17 @@ module.exports = {
     }
 
     const answer = String(result.text || '').trim() || 'No response';
-    const embed = new EmbedBuilder()
-      .setTitle('AI Assistant')
-      .setDescription(answer.slice(0, 4000))
-      .addFields(
-        { name: 'Provider', value: `${result.provider} (${result.model})`, inline: true },
-        {
-          name: 'Daily Remaining',
-          value: result.allowance?.remaining === null || result.allowance?.remaining === undefined
-            ? 'Unlimited'
-            : String(result.allowance.remaining),
-          inline: true
-        },
-      )
-      .setTimestamp();
-    applyEmbedBranding(embed, {
-      guildId: interaction.guildId,
-      moduleKey: 'aiassistant',
-      defaultColor: '#4F46E5',
-      defaultFooter: 'Powered by Guild Pilot',
-      fallbackLogoUrl: interaction.client?.user?.displayAvatarURL?.() || null,
+    const chunks = splitDiscordMessage(answer, 1900);
+    await interaction.editReply({
+      content: chunks[0],
+      allowedMentions: { parse: [] },
     });
-
-    await interaction.editReply({ embeds: [embed] });
+    for (let i = 1; i < chunks.length; i += 1) {
+      await interaction.followUp({
+        content: chunks[i],
+        ephemeral: useEphemeral,
+        allowedMentions: { parse: [] },
+      });
+    }
   },
 };

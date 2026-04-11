@@ -68,7 +68,7 @@ const REQUIRED_SCHEMA = Object.freeze({
   nft_tracked_collections: ['guild_id', 'collection_address', 'track_bid'],
   tracked_tokens: ['guild_id', 'alert_channel_ids'],
   tracked_wallets: ['guild_id', 'wallet_address', 'token_last_signature'],
-  ai_assistant_tenant_settings: ['guild_id', 'enabled', 'provider', 'model_openai', 'model_gemini', 'response_visibility', 'system_prompt', 'allowed_channel_ids', 'updated_at'],
+  ai_assistant_tenant_settings: ['guild_id', 'enabled', 'provider', 'model_openai', 'model_gemini', 'mention_enabled', 'response_visibility', 'system_prompt', 'allowed_channel_ids', 'allowed_role_ids', 'cooldown_seconds', 'max_response_chars', 'updated_at'],
   ai_assistant_usage_events: ['guild_id', 'user_id', 'provider', 'model', 'status', 'created_at'],
   invite_tracker_settings: ['guild_id', 'required_join_role_id', 'panel_channel_id', 'panel_message_id', 'panel_period_days', 'panel_limit', 'panel_enable_create_link', 'include_verification_stats', 'excluded_codes', 'panel_sort_by'],
   invite_tracker_user_codes: ['guild_id', 'invite_code', 'owner_user_id', 'owner_username', 'channel_id', 'active', 'created_at', 'updated_at'],
@@ -1535,9 +1535,13 @@ function initDatabase() {
       provider TEXT DEFAULT 'openai',
       model_openai TEXT DEFAULT 'gpt-5.4',
       model_gemini TEXT DEFAULT 'gemini-2.0-flash',
+      mention_enabled INTEGER DEFAULT 1,
       response_visibility TEXT DEFAULT 'public',
       system_prompt TEXT,
       allowed_channel_ids TEXT DEFAULT '[]',
+      allowed_role_ids TEXT DEFAULT '[]',
+      cooldown_seconds INTEGER DEFAULT 12,
+      max_response_chars INTEGER DEFAULT 1600,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -1577,6 +1581,10 @@ function initDatabase() {
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE users ADD COLUMN wallet_alert_identity_opt_out INTEGER DEFAULT 0'));
   ignoreDuplicateMigration(() => db.exec("ALTER TABLE verification_panels ADD COLUMN color TEXT DEFAULT '#FFD700'"));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE verification_panels ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN mention_enabled INTEGER DEFAULT 1'));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE ai_assistant_tenant_settings ADD COLUMN allowed_role_ids TEXT DEFAULT '[]'"));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN cooldown_seconds INTEGER DEFAULT 12'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN max_response_chars INTEGER DEFAULT 1600'));
   ignoreDuplicateMigration(() => db.exec('CREATE TABLE IF NOT EXISTS user_verify_amounts (id INTEGER PRIMARY KEY AUTOINCREMENT, discord_id TEXT UNIQUE NOT NULL, username TEXT, assigned_amount REAL NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'));
 
   ignoreDuplicateMigration(() => db.exec("ALTER TABLE proposals ADD COLUMN category TEXT DEFAULT 'Other'"));

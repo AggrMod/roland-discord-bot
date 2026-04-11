@@ -7631,18 +7631,23 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
   pane.innerHTML = `<div style="${cardStyle}"><div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);"><div class="spinner"></div><p>Loading AI assistant settings...</p></div></div>`;
 
   try {
-    const [settingsRes, channelsRes] = await Promise.all([
+    const [settingsRes, channelsRes, rolesRes] = await Promise.all([
       fetch('/api/admin/aiassistant/settings', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/discord/channels', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      fetch('/api/admin/discord/roles', { credentials: 'include', headers: buildTenantRequestHeaders() }),
     ]);
     const settingsJson = await settingsRes.json();
     const channelsJson = await channelsRes.json();
+    const rolesJson = await rolesRes.json();
     if (!settingsJson.success) throw new Error(settingsJson.message || 'Failed to load AI assistant settings');
 
     const s = settingsJson.settings || {};
     const channels = (channelsJson?.channels || []).filter(c => c.type === 0 || c.type === 5);
+    const roles = (rolesJson?.roles || []);
     const channelRows = channels.map(c => `<option value="${escapeHtml(String(c.id))}">${escapeHtml(c.name || c.id)}</option>`).join('');
+    const roleRows = roles.map(r => `<option value="${escapeHtml(String(r.id))}">${escapeHtml(r.name || r.id)}</option>`).join('');
     const allowed = Array.isArray(s.allowedChannelIds) ? s.allowedChannelIds : [];
+    const allowedRoles = Array.isArray(s.allowedRoleIds) ? s.allowedRoleIds : [];
 
     pane.innerHTML = `
       <div style="${cardStyle}">
@@ -7655,6 +7660,10 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
             <input id="aiassistant_enabled" type="checkbox" ${s.enabled ? 'checked' : ''}>
             Enable AI Assistant for this server
           </label>
+          <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;">
+            <input id="aiassistant_mention_enabled" type="checkbox" ${s.mentionEnabled !== false ? 'checked' : ''}>
+            Enable mention trigger ("@GuildPilot" in chat)
+          </label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <label style="display:grid;gap:6px;">
               <span style="font-size:0.82em;color:var(--text-secondary);">Preferred Provider</span>
@@ -7664,11 +7673,21 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
               </select>
             </label>
             <label style="display:grid;gap:6px;">
-              <span style="font-size:0.82em;color:var(--text-secondary);">Response Visibility</span>
+              <span style="font-size:0.82em;color:var(--text-secondary);">Slash Response Visibility</span>
               <select id="aiassistant_visibility" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
                 <option value="public" ${s.responseVisibility === 'public' ? 'selected' : ''}>Public Replies</option>
                 <option value="ephemeral" ${s.responseVisibility === 'ephemeral' ? 'selected' : ''}>Private Replies</option>
               </select>
+            </label>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <label style="display:grid;gap:6px;">
+              <span style="font-size:0.82em;color:var(--text-secondary);">Mention Cooldown (seconds per user)</span>
+              <input id="aiassistant_cooldown_seconds" type="number" min="3" max="600" value="${escapeHtml(String(s.cooldownSeconds || 12))}" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+            </label>
+            <label style="display:grid;gap:6px;">
+              <span style="font-size:0.82em;color:var(--text-secondary);">Max Response Length (chars)</span>
+              <input id="aiassistant_max_response_chars" type="number" min="300" max="1900" value="${escapeHtml(String(s.maxResponseChars || 1600))}" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
             </label>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -7687,6 +7706,13 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
               ${channelRows}
             </select>
             <span style="font-size:0.76em;color:var(--text-secondary);">Tip: hold Ctrl/Cmd on desktop for multi-select. Mobile gets picker mode automatically.</span>
+          </label>
+          <label style="display:grid;gap:6px;">
+            <span style="font-size:0.82em;color:var(--text-secondary);">Allowed Roles (blank = all members)</span>
+            <select id="aiassistant_allowed_roles" multiple size="6" style="width:100%;padding:8px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+              ${roleRows}
+            </select>
+            <span style="font-size:0.76em;color:var(--text-secondary);">If selected, only members with one of these roles can trigger mention AI replies.</span>
           </label>
           <label style="display:grid;gap:6px;">
             <span style="font-size:0.82em;color:var(--text-secondary);">System Prompt (tenant style/policy)</span>
@@ -7710,6 +7736,16 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
         portalEnhanceMultiSelect(selectEl, { placeholder: 'All channels', allowEmptySelection: true });
       } catch (_error) {}
     }
+    const roleSelectEl = document.getElementById('aiassistant_allowed_roles');
+    if (roleSelectEl) {
+      const selectedRoles = new Set(allowedRoles.map(v => String(v)));
+      Array.from(roleSelectEl.options || []).forEach(opt => {
+        opt.selected = selectedRoles.has(String(opt.value));
+      });
+      try {
+        portalEnhanceMultiSelect(roleSelectEl, { placeholder: 'All roles', allowEmptySelection: true });
+      } catch (_error) {}
+    }
   } catch (error) {
     pane.innerHTML = `<div style="${cardStyle}"><div style="color:#fca5a5;">${escapeHtml(error.message || 'Failed to load AI assistant settings')}</div></div>`;
   }
@@ -7720,15 +7756,23 @@ async function saveAiAssistantSettings() {
   const allowedChannelIds = allowedSelect
     ? Array.from(allowedSelect.selectedOptions || []).map(opt => String(opt.value || '').trim()).filter(Boolean)
     : [];
+  const allowedRoleSelect = document.getElementById('aiassistant_allowed_roles');
+  const allowedRoleIds = allowedRoleSelect
+    ? Array.from(allowedRoleSelect.selectedOptions || []).map(opt => String(opt.value || '').trim()).filter(Boolean)
+    : [];
 
   const payload = {
     enabled: !!document.getElementById('aiassistant_enabled')?.checked,
+    mentionEnabled: !!document.getElementById('aiassistant_mention_enabled')?.checked,
     provider: String(document.getElementById('aiassistant_provider')?.value || 'openai'),
     responseVisibility: String(document.getElementById('aiassistant_visibility')?.value || 'public'),
+    cooldownSeconds: parseInt(document.getElementById('aiassistant_cooldown_seconds')?.value, 10) || 12,
+    maxResponseChars: parseInt(document.getElementById('aiassistant_max_response_chars')?.value, 10) || 1600,
     modelOpenai: String(document.getElementById('aiassistant_model_openai')?.value || '').trim() || 'gpt-5.4',
     modelGemini: String(document.getElementById('aiassistant_model_gemini')?.value || '').trim() || 'gemini-2.0-flash',
     systemPrompt: String(document.getElementById('aiassistant_system_prompt')?.value || '').trim(),
     allowedChannelIds,
+    allowedRoleIds,
   };
 
   try {

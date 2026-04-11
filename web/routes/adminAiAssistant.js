@@ -32,9 +32,13 @@ function createAdminAiAssistantRouter({
         provider: body.provider,
         modelOpenai: body.modelOpenai,
         modelGemini: body.modelGemini,
+        mentionEnabled: body.mentionEnabled,
         responseVisibility: body.responseVisibility,
         systemPrompt: body.systemPrompt,
         allowedChannelIds: body.allowedChannelIds,
+        allowedRoleIds: body.allowedRoleIds,
+        cooldownSeconds: body.cooldownSeconds,
+        maxResponseChars: body.maxResponseChars,
       });
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to save AI assistant settings', 'VALIDATION_ERROR', null, result));

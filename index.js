@@ -29,6 +29,14 @@ const LEGACY_MINIGAME_ALIASES = new Set([
 const LEGACY_ALIAS_NOTICE_TTL_MS = 12 * 60 * 60 * 1000;
 const legacyAliasNoticeCache = new Map();
 const commandCooldownCache = new Map();
+const aiAssistantMentionCooldownCache = new Map();
+const PLAN_TIER_RANK = Object.freeze({
+  starter: 0,
+  free: 0,
+  growth: 1,
+  pro: 2,
+  enterprise: 3,
+});
 
 const COMMAND_COOLDOWN_SECONDS = Object.freeze({
   default: 2,
@@ -297,6 +305,7 @@ const governanceLogger = require('./utils/governanceLogger');
 const ticketService = require('./services/ticketService');
 const nftActivityService = require('./services/nftActivityService');
 const inviteTrackerService = require('./services/inviteTrackerService');
+const aiAssistantService = require('./services/aiAssistantService');
 const settings = require('./config/settings.json');
 
 const intervals = [];
@@ -658,6 +667,63 @@ client.on(Events.GuildMemberAdd, async (member) => {
     logger.warn('[invite-tracker] member join handler warning:', error?.message || error);
   }
 });
+
+function splitDiscordText(text, maxLength = 1900) {
+  const normalized = String(text || '').replace(/\r\n/g, '\n').trim();
+  if (!normalized) return ['No response'];
+  if (normalized.length <= maxLength) return [normalized];
+  const chunks = [];
+  let rest = normalized;
+  while (rest.length > maxLength) {
+    let cutAt = rest.lastIndexOf('\n', maxLength);
+    if (cutAt < Math.floor(maxLength * 0.55)) {
+      cutAt = rest.lastIndexOf(' ', maxLength);
+    }
+    if (cutAt < 1) cutAt = maxLength;
+    chunks.push(rest.slice(0, cutAt).trim());
+    rest = rest.slice(cutAt).trimStart();
+  }
+  if (rest.length) chunks.push(rest);
+  return chunks.filter(Boolean);
+}
+
+function canUseAiAssistantPlan(guildId) {
+  if (!guildId) return false;
+  if (!tenantService.isMultitenantEnabled()) return true;
+  const tenant = tenantService.getTenant(guildId) || tenantService.ensureTenant(guildId);
+  const planRaw = String(tenant?.planKey || tenant?.plan_key || 'starter').trim().toLowerCase();
+  const tier = PLAN_TIER_RANK[planRaw] ?? 0;
+  return tier >= PLAN_TIER_RANK.pro;
+}
+
+function parseAiMentionPrompt(message, botUserId) {
+  const content = String(message?.content || '');
+  const mentionPattern = `<@!?${botUserId}>`;
+  const hasDirectMention = new RegExp(mentionPattern).test(content);
+  const repliedUserId = String(message?.mentions?.repliedUser?.id || '').trim();
+  const isReplyToBot = repliedUserId && repliedUserId === String(botUserId);
+  if (!hasDirectMention && !isReplyToBot) {
+    return { shouldHandle: false, prompt: '' };
+  }
+
+  const cleaned = hasDirectMention ? content.replace(new RegExp(mentionPattern, 'g'), '').trim() : content.trim();
+  return { shouldHandle: true, prompt: cleaned };
+}
+
+function isAiMentionOnCooldown(guildId, userId, cooldownSeconds) {
+  const ttlMs = Math.max(3, Number(cooldownSeconds) || 12) * 1000;
+  const key = `${guildId}:${userId}`;
+  const now = Date.now();
+  const expiresAt = aiAssistantMentionCooldownCache.get(key) || 0;
+  if (expiresAt > now) return true;
+  aiAssistantMentionCooldownCache.set(key, now + ttlMs);
+  if (aiAssistantMentionCooldownCache.size > 20000) {
+    for (const [cacheKey, expiry] of aiAssistantMentionCooldownCache.entries()) {
+      if (expiry <= now) aiAssistantMentionCooldownCache.delete(cacheKey);
+    }
+  }
+  return false;
+}
 client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
   try {
     inviteTrackerService.handleMemberRoleUpdate(oldMember, newMember);
@@ -1871,6 +1937,66 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
   }
 });
 
+async function handleAiAssistantMentionMessage(message) {
+  const guildId = String(message?.guild?.id || message?.guildId || '').trim();
+  const botUserId = String(client?.user?.id || '').trim();
+  if (!guildId || !botUserId) return;
+
+  const parsed = parseAiMentionPrompt(message, botUserId);
+  if (!parsed.shouldHandle) return;
+  if (!parsed.prompt) {
+    await message.reply({
+      content: 'Ask your question after mentioning me, and I will handle it.',
+      allowedMentions: { parse: [], repliedUser: false },
+    }).catch(() => {});
+    return;
+  }
+
+  if (!tenantService.isModuleEnabled(guildId, 'aiassistant')) return;
+  if (!canUseAiAssistantPlan(guildId)) return;
+
+  const settingsResult = aiAssistantService.getTenantSettings(guildId);
+  if (!settingsResult.success) return;
+  const settings = settingsResult.settings || {};
+  if (!settings.enabled) return;
+  if (!settings.mentionEnabled) return;
+  if (!aiAssistantService.isChannelAllowed(settings, message.channelId)) return;
+  if (!aiAssistantService.isMemberRoleAllowed(settings, message.member)) return;
+  if (isAiMentionOnCooldown(guildId, message.author.id, settings.cooldownSeconds)) return;
+
+  await message.channel.sendTyping().catch(() => {});
+
+  const result = await aiAssistantService.ask({
+    guildId,
+    userId: message.author.id,
+    channelId: message.channelId,
+    prompt: parsed.prompt,
+    requesterTag: message.author.tag,
+  });
+
+  if (!result.success) {
+    const reason = String(result.message || result.code || 'Could not generate a response right now.');
+    await message.reply({
+      content: `I couldn't answer right now: ${reason}`,
+      allowedMentions: { parse: [], repliedUser: false },
+    }).catch(() => {});
+    return;
+  }
+
+  const chunks = splitDiscordText(result.text, 1900);
+  await message.reply({
+    content: chunks[0],
+    allowedMentions: { parse: [], repliedUser: false },
+  }).catch(() => {});
+
+  for (let i = 1; i < chunks.length; i += 1) {
+    await message.channel.send({
+      content: chunks[i],
+      allowedMentions: { parse: [] },
+    }).catch(() => {});
+  }
+}
+
 process.on('unhandledRejection', error => {
   logger.error('Unhandled promise rejection:', error);
 });
@@ -1906,6 +2032,11 @@ client.on(Events.MessageCreate, async (message) => {
     const eng = require('./services/engagementService');
     eng.tryAwardMessage(message.guild.id, message.author.id, message.author.username);
   } catch (_) {}
+  try {
+    await handleAiAssistantMentionMessage(message);
+  } catch (error) {
+    logger.warn('[ai-assistant] mention handler warning:', error?.message || error);
+  }
 });
 
 client.login(process.env.DISCORD_TOKEN);

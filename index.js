@@ -30,6 +30,7 @@ const LEGACY_ALIAS_NOTICE_TTL_MS = 12 * 60 * 60 * 1000;
 const legacyAliasNoticeCache = new Map();
 const commandCooldownCache = new Map();
 const aiAssistantMentionCooldownCache = new Map();
+const aiAssistantPassiveChannelState = new Map();
 const PLAN_TIER_RANK = Object.freeze({
   starter: 0,
   free: 0,
@@ -37,6 +38,11 @@ const PLAN_TIER_RANK = Object.freeze({
   pro: 2,
   enterprise: 3,
 });
+const AI_PASSIVE_KEYWORDS = new Set([
+  'help', 'verify', 'verification', 'wallet', 'role', 'ticket', 'battle',
+  'tracker', 'proposal', 'governance', 'invite', 'panel', 'settings',
+  'connect', 'solana', 'nft', 'token', 'guildpilot'
+]);
 
 const COMMAND_COOLDOWN_SECONDS = Object.freeze({
   default: 2,
@@ -708,6 +714,73 @@ function parseAiMentionPrompt(message, botUserId) {
 
   const cleaned = hasDirectMention ? content.replace(new RegExp(mentionPattern, 'g'), '').trim() : content.trim();
   return { shouldHandle: true, prompt: cleaned };
+}
+
+function extractPassiveAiPrompt(message, botUserId) {
+  const content = String(message?.content || '').trim();
+  if (!content) return { shouldHandle: false, prompt: '' };
+  if (content.length < 8 || content.length > 1200) return { shouldHandle: false, prompt: '' };
+  if (content.startsWith('/') || content.startsWith('!')) return { shouldHandle: false, prompt: '' };
+  if (new RegExp(`<@!?${botUserId}>`).test(content)) return { shouldHandle: false, prompt: '' };
+
+  const lowered = content.toLowerCase();
+  const hasQuestionMark = lowered.includes('?');
+  const hasKeyword = Array.from(AI_PASSIVE_KEYWORDS).some(keyword => lowered.includes(keyword));
+  if (!hasQuestionMark && !hasKeyword) return { shouldHandle: false, prompt: '' };
+
+  return { shouldHandle: true, prompt: content };
+}
+
+function getPassiveAiChannelState(guildId, channelId) {
+  const key = `${guildId}:${channelId}`;
+  let state = aiAssistantPassiveChannelState.get(key);
+  if (!state) {
+    state = { lastSentAt: 0, timestamps: [] };
+    aiAssistantPassiveChannelState.set(key, state);
+  }
+  return state;
+}
+
+function evaluatePassiveAiChannelBudget(guildId, channelId, policy) {
+  const state = getPassiveAiChannelState(guildId, channelId);
+  const now = Date.now();
+  const cooldownSeconds = Math.max(5, Number(policy?.passiveCooldownSeconds) || 120);
+  const maxPerHour = Math.max(1, Number(policy?.passiveMaxPerHour) || 6);
+  const oneHourAgo = now - (60 * 60 * 1000);
+  state.timestamps = state.timestamps.filter(ts => ts > oneHourAgo);
+
+  if (state.lastSentAt > 0) {
+    const diff = now - state.lastSentAt;
+    if (diff < cooldownSeconds * 1000) {
+      return {
+        allowed: false,
+        reason: 'cooldown',
+        remainingSeconds: Math.max(1, Math.ceil(((cooldownSeconds * 1000) - diff) / 1000)),
+      };
+    }
+  }
+  if (state.timestamps.length >= maxPerHour) {
+    const oldestTs = Math.min(...state.timestamps);
+    return {
+      allowed: false,
+      reason: 'hourly_cap',
+      remainingSeconds: Math.max(1, Math.ceil(((oldestTs + (60 * 60 * 1000)) - now) / 1000)),
+    };
+  }
+  return { allowed: true, reason: null, remainingSeconds: 0 };
+}
+
+function markPassiveAiSent(guildId, channelId) {
+  const state = getPassiveAiChannelState(guildId, channelId);
+  const now = Date.now();
+  state.lastSentAt = now;
+  state.timestamps.push(now);
+  if (aiAssistantPassiveChannelState.size > 5000) {
+    for (const [key, value] of aiAssistantPassiveChannelState.entries()) {
+      const recent = (value?.timestamps || []).some(ts => (now - ts) < (2 * 60 * 60 * 1000));
+      if (!recent) aiAssistantPassiveChannelState.delete(key);
+    }
+  }
 }
 
 function getAiMentionCooldownState(guildId, userId, cooldownSeconds) {
@@ -1950,50 +2023,61 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
 async function handleAiAssistantMentionMessage(message) {
   const guildId = String(message?.guild?.id || message?.guildId || '').trim();
   const botUserId = String(client?.user?.id || '').trim();
-  if (!guildId || !botUserId) return;
+  if (!guildId || !botUserId) return false;
   const userId = String(message?.author?.id || '').trim();
 
   const parsed = parseAiMentionPrompt(message, botUserId);
-  if (!parsed.shouldHandle) return;
+  if (!parsed.shouldHandle) return false;
   if (!parsed.prompt) {
     await message.reply({
       content: 'Ask your question after mentioning me, and I will handle it.',
       allowedMentions: { parse: [], repliedUser: false },
     }).catch(() => {});
     logAiMentionOutcome(guildId, userId, 'empty_prompt');
-    return;
+    return true;
   }
 
   if (!tenantService.isModuleEnabled(guildId, 'aiassistant')) {
     logAiMentionOutcome(guildId, userId, 'module_disabled');
-    return;
+    return true;
   }
   if (!canUseAiAssistantPlan(guildId)) {
     logAiMentionOutcome(guildId, userId, 'plan_blocked');
-    return;
+    return true;
   }
 
   const settingsResult = aiAssistantService.getTenantSettings(guildId);
   if (!settingsResult.success) {
     logAiMentionOutcome(guildId, userId, 'settings_error');
-    return;
+    return true;
   }
   const settings = settingsResult.settings || {};
+  const policyResult = aiAssistantService.getChannelPolicy(guildId, message.channelId);
+  const channelPolicy = policyResult.success ? policyResult.policy : {
+    mode: 'mention',
+    minConfidence: 35,
+    passiveCooldownSeconds: 120,
+    passiveMaxPerHour: 6,
+  };
+  if (channelPolicy.mode === 'off') {
+    logAiMentionOutcome(guildId, userId, 'channel_mode_off');
+    return true;
+  }
   if (!settings.enabled) {
     logAiMentionOutcome(guildId, userId, 'tenant_disabled');
-    return;
+    return true;
   }
   if (!settings.mentionEnabled) {
     logAiMentionOutcome(guildId, userId, 'mention_disabled');
-    return;
+    return true;
   }
   if (!aiAssistantService.isChannelAllowed(settings, message.channelId)) {
     logAiMentionOutcome(guildId, userId, 'channel_blocked');
-    return;
+    return true;
   }
   if (!aiAssistantService.isMemberRoleAllowed(settings, message.member)) {
     logAiMentionOutcome(guildId, userId, 'role_blocked');
-    return;
+    return true;
   }
 
   const cooldownState = getAiMentionCooldownState(guildId, userId, settings.cooldownSeconds);
@@ -2008,7 +2092,7 @@ async function handleAiAssistantMentionMessage(message) {
       }, 7000);
     }
     logAiMentionOutcome(guildId, userId, 'cooldown', `remaining=${cooldownState.remainingSeconds}`);
-    return;
+    return true;
   }
 
   await message.channel.sendTyping().catch(() => {});
@@ -2020,6 +2104,7 @@ async function handleAiAssistantMentionMessage(message) {
     prompt: parsed.prompt,
     requesterTag: message.author.tag,
     triggerSource: 'mention',
+    requiredConfidence: channelPolicy.minConfidence,
   });
 
   if (!result.success) {
@@ -2029,7 +2114,7 @@ async function handleAiAssistantMentionMessage(message) {
       allowedMentions: { parse: [], repliedUser: false },
     }).catch(() => {});
     logAiMentionOutcome(guildId, userId, 'failed', `code=${result.code || 'unknown'}`);
-    return;
+    return true;
   }
 
   const chunks = splitDiscordText(result.text, 1900);
@@ -2044,7 +2129,75 @@ async function handleAiAssistantMentionMessage(message) {
       allowedMentions: { parse: [] },
     }).catch(() => {});
   }
-  logAiMentionOutcome(guildId, userId, 'ok', `provider=${result.provider || 'unknown'}`);
+  logAiMentionOutcome(guildId, userId, 'ok', `provider=${result.provider || 'unknown'} confidence=${result.confidence ?? 'n/a'}`);
+  return true;
+}
+
+async function handleAiAssistantPassiveMessage(message) {
+  const guildId = String(message?.guild?.id || message?.guildId || '').trim();
+  const botUserId = String(client?.user?.id || '').trim();
+  const userId = String(message?.author?.id || '').trim();
+  if (!guildId || !botUserId || !userId) return;
+
+  const passivePrompt = extractPassiveAiPrompt(message, botUserId);
+  if (!passivePrompt.shouldHandle) return;
+  if (!tenantService.isModuleEnabled(guildId, 'aiassistant')) return;
+  if (!canUseAiAssistantPlan(guildId)) return;
+
+  const settingsResult = aiAssistantService.getTenantSettings(guildId);
+  if (!settingsResult.success) return;
+  const settings = settingsResult.settings || {};
+  if (!settings.enabled) return;
+  if (!aiAssistantService.isChannelAllowed(settings, message.channelId)) return;
+  if (!aiAssistantService.isMemberRoleAllowed(settings, message.member)) return;
+
+  const policyResult = aiAssistantService.getChannelPolicy(guildId, message.channelId);
+  if (!policyResult.success) return;
+  const policy = policyResult.policy || {};
+  if (policy.mode !== 'passive') return;
+
+  const passiveBudget = evaluatePassiveAiChannelBudget(guildId, message.channelId, policy);
+  if (!passiveBudget.allowed) {
+    logAiMentionOutcome(guildId, userId, 'passive_blocked', `reason=${passiveBudget.reason}`);
+    return;
+  }
+
+  await message.channel.sendTyping().catch(() => {});
+  const result = await aiAssistantService.ask({
+    guildId,
+    userId,
+    channelId: message.channelId,
+    prompt: passivePrompt.prompt,
+    requesterTag: message.author.tag,
+    triggerSource: 'passive',
+    requiredConfidence: policy.minConfidence,
+  });
+
+  if (!result.success) {
+    const silentCodes = new Set(['knowledge_low_confidence', 'knowledge_no_match', 'knowledge_not_configured', 'channel_blocked']);
+    if (!silentCodes.has(String(result.code || ''))) {
+      await message.reply({
+        content: `I couldn't answer right now: ${String(result.message || result.code || 'unknown error')}`,
+        allowedMentions: { parse: [], repliedUser: false },
+      }).catch(() => {});
+    }
+    logAiMentionOutcome(guildId, userId, 'passive_failed', `code=${result.code || 'unknown'}`);
+    return;
+  }
+
+  const chunks = splitDiscordText(result.text, 1900);
+  await message.reply({
+    content: chunks[0],
+    allowedMentions: { parse: [], repliedUser: false },
+  }).catch(() => {});
+  for (let i = 1; i < chunks.length; i += 1) {
+    await message.channel.send({
+      content: chunks[i],
+      allowedMentions: { parse: [] },
+    }).catch(() => {});
+  }
+  markPassiveAiSent(guildId, message.channelId);
+  logAiMentionOutcome(guildId, userId, 'passive_ok', `provider=${result.provider || 'unknown'} confidence=${result.confidence ?? 'n/a'}`);
 }
 
 process.on('unhandledRejection', error => {
@@ -2083,7 +2236,10 @@ client.on(Events.MessageCreate, async (message) => {
     eng.tryAwardMessage(message.guild.id, message.author.id, message.author.username);
   } catch (_) {}
   try {
-    await handleAiAssistantMentionMessage(message);
+    const handledMention = await handleAiAssistantMentionMessage(message);
+    if (!handledMention) {
+      await handleAiAssistantPassiveMessage(message);
+    }
   } catch (error) {
     logger.warn('[ai-assistant] mention handler warning:', error?.message || error);
   }

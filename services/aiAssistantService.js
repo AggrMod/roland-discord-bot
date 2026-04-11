@@ -20,6 +20,10 @@ const DEFAULTS = Object.freeze({
   perUserDailyLimit: 20,
   safetyFilterEnabled: true,
   moderationEnabled: false,
+  defaultChannelMode: 'mention',
+  defaultMinConfidence: 35,
+  defaultPassiveCooldownSeconds: 120,
+  defaultPassiveMaxPerHour: 6,
 });
 
 const PROMPT_DENYLIST_RULES = Object.freeze([
@@ -56,6 +60,12 @@ function normalizeGuildId(guildId) {
 function normalizeProvider(provider, fallback = 'openai') {
   const normalized = String(provider || '').trim().toLowerCase();
   if (normalized === 'openai' || normalized === 'gemini') return normalized;
+  return fallback;
+}
+
+function normalizeChannelMode(mode, fallback = DEFAULTS.defaultChannelMode) {
+  const normalized = String(mode || '').trim().toLowerCase();
+  if (normalized === 'off' || normalized === 'mention' || normalized === 'passive') return normalized;
   return fallback;
 }
 
@@ -324,6 +334,121 @@ class AiAssistantService {
     return { success: true, settings: next };
   }
 
+  getChannelPolicy(guildId, channelId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const normalizedChannelId = String(channelId || '').trim();
+    if (!normalizedGuildId || !/^\d{17,20}$/.test(normalizedChannelId)) {
+      return { success: false, message: 'Invalid guild/channel id' };
+    }
+
+    const row = db.prepare(`
+      SELECT guild_id, channel_id, mode, min_confidence, passive_cooldown_seconds, passive_max_per_hour, updated_at
+      FROM ai_assistant_channel_policies
+      WHERE guild_id = ? AND channel_id = ?
+    `).get(normalizedGuildId, normalizedChannelId);
+
+    if (!row) {
+      return {
+        success: true,
+        policy: {
+          guildId: normalizedGuildId,
+          channelId: normalizedChannelId,
+          mode: DEFAULTS.defaultChannelMode,
+          minConfidence: DEFAULTS.defaultMinConfidence,
+          passiveCooldownSeconds: DEFAULTS.defaultPassiveCooldownSeconds,
+          passiveMaxPerHour: DEFAULTS.defaultPassiveMaxPerHour,
+          updatedAt: null,
+          isDefault: true,
+        }
+      };
+    }
+
+    return {
+      success: true,
+      policy: {
+        guildId: normalizedGuildId,
+        channelId: normalizedChannelId,
+        mode: normalizeChannelMode(row.mode),
+        minConfidence: normalizeIntegerInRange(row.min_confidence, { min: 0, max: 100, fallback: DEFAULTS.defaultMinConfidence }),
+        passiveCooldownSeconds: normalizeIntegerInRange(row.passive_cooldown_seconds, { min: 5, max: 3600, fallback: DEFAULTS.defaultPassiveCooldownSeconds }),
+        passiveMaxPerHour: normalizeIntegerInRange(row.passive_max_per_hour, { min: 1, max: 100, fallback: DEFAULTS.defaultPassiveMaxPerHour }),
+        updatedAt: row.updated_at || null,
+        isDefault: false,
+      }
+    };
+  }
+
+  listChannelPolicies(guildId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'Invalid guildId' };
+
+    const rows = db.prepare(`
+      SELECT guild_id, channel_id, mode, min_confidence, passive_cooldown_seconds, passive_max_per_hour, updated_at
+      FROM ai_assistant_channel_policies
+      WHERE guild_id = ?
+      ORDER BY channel_id ASC
+      LIMIT 500
+    `).all(normalizedGuildId);
+
+    return {
+      success: true,
+      policies: rows.map(row => ({
+        guildId: String(row.guild_id || ''),
+        channelId: String(row.channel_id || ''),
+        mode: normalizeChannelMode(row.mode),
+        minConfidence: normalizeIntegerInRange(row.min_confidence, { min: 0, max: 100, fallback: DEFAULTS.defaultMinConfidence }),
+        passiveCooldownSeconds: normalizeIntegerInRange(row.passive_cooldown_seconds, { min: 5, max: 3600, fallback: DEFAULTS.defaultPassiveCooldownSeconds }),
+        passiveMaxPerHour: normalizeIntegerInRange(row.passive_max_per_hour, { min: 1, max: 100, fallback: DEFAULTS.defaultPassiveMaxPerHour }),
+        updatedAt: row.updated_at || null,
+      })),
+    };
+  }
+
+  saveChannelPolicies(guildId, policies = []) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'Invalid guildId' };
+    if (!Array.isArray(policies)) return { success: false, message: 'Policies must be an array' };
+
+    const normalizedPolicies = [];
+    const seen = new Set();
+    for (const item of policies) {
+      const channelId = String(item?.channelId || item?.channel_id || '').trim();
+      if (!/^\d{17,20}$/.test(channelId)) continue;
+      if (seen.has(channelId)) continue;
+      seen.add(channelId);
+      normalizedPolicies.push({
+        channelId,
+        mode: normalizeChannelMode(item?.mode),
+        minConfidence: normalizeIntegerInRange(item?.minConfidence, { min: 0, max: 100, fallback: DEFAULTS.defaultMinConfidence }),
+        passiveCooldownSeconds: normalizeIntegerInRange(item?.passiveCooldownSeconds, { min: 5, max: 3600, fallback: DEFAULTS.defaultPassiveCooldownSeconds }),
+        passiveMaxPerHour: normalizeIntegerInRange(item?.passiveMaxPerHour, { min: 1, max: 100, fallback: DEFAULTS.defaultPassiveMaxPerHour }),
+      });
+      if (normalizedPolicies.length >= 500) break;
+    }
+
+    const tx = db.transaction(() => {
+      db.prepare('DELETE FROM ai_assistant_channel_policies WHERE guild_id = ?').run(normalizedGuildId);
+      const insertStmt = db.prepare(`
+        INSERT INTO ai_assistant_channel_policies (
+          guild_id, channel_id, mode, min_confidence, passive_cooldown_seconds, passive_max_per_hour, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `);
+      for (const policy of normalizedPolicies) {
+        insertStmt.run(
+          normalizedGuildId,
+          policy.channelId,
+          policy.mode,
+          policy.minConfidence,
+          policy.passiveCooldownSeconds,
+          policy.passiveMaxPerHour
+        );
+      }
+    });
+
+    tx();
+    return { success: true, count: normalizedPolicies.length };
+  }
+
   listKnowledgeDocs(guildId) {
     const normalizedGuildId = normalizeGuildId(guildId);
     if (!normalizedGuildId) return { success: false, message: 'Invalid guildId' };
@@ -450,17 +575,36 @@ class AiAssistantService {
         sourceUrl: String(row.source_url || ''),
         tags: tags.join(', '),
         score,
+        overlap,
+        overlapRatio,
+        titleOverlap,
         snippet: extractSnippet(body, promptTokens),
       });
     }
 
     matches.sort((a, b) => b.score - a.score || a.id - b.id);
     const topMatches = matches.filter(match => match.score >= 3).slice(0, 4);
+    const top = topMatches[0] || null;
+    const second = topMatches[1] || null;
+    let confidence = 0;
+    if (top) {
+      confidence = Math.round(
+        Math.min(100,
+          (Math.min(1, Number(top.overlapRatio || 0)) * 70)
+          + (Math.min(4, Number(top.titleOverlap || 0)) * 6)
+          + (Math.min(40, Number(top.score || 0)) / 40 * 24)
+        )
+      );
+      if (second && (Number(top.score || 0) - Number(second.score || 0)) < 3) {
+        confidence = Math.max(0, confidence - 8);
+      }
+    }
 
     return {
       success: true,
       hasDocs: true,
       matches: topMatches,
+      confidence,
     };
   }
 
@@ -655,7 +799,7 @@ class AiAssistantService {
     return out;
   }
 
-  async ask({ guildId, userId, channelId, prompt, providerOverride = '', requesterTag = '', triggerSource = 'slash' }) {
+  async ask({ guildId, userId, channelId, prompt, providerOverride = '', requesterTag = '', triggerSource = 'slash', requiredConfidence = null }) {
     const normalizedGuildId = normalizeGuildId(guildId);
     const cleanPrompt = String(prompt || '').trim();
     if (!normalizedGuildId) return { success: false, code: 'invalid_guild', message: 'Invalid guild context' };
@@ -727,6 +871,33 @@ class AiAssistantService {
         message: 'I could not find a trusted knowledge source for that question yet. Ask an admin to add this topic to AI knowledge sources.',
         allowance,
         userAllowance,
+      };
+    }
+    const confidenceThreshold = requiredConfidence === null || requiredConfidence === undefined
+      ? DEFAULTS.defaultMinConfidence
+      : normalizeIntegerInRange(requiredConfidence, { min: 0, max: 100, fallback: DEFAULTS.defaultMinConfidence });
+    const confidence = Number(knowledge.confidence || 0);
+    if (confidence < confidenceThreshold) {
+      this.logUsage({
+        guildId: normalizedGuildId,
+        userId,
+        provider: 'knowledge',
+        model: 'local_index',
+        status: 'error',
+        errorCode: 'knowledge_low_confidence',
+        latencyMs: 0,
+        promptChars: cleanPrompt.length,
+        responseChars: 0,
+        triggerSource,
+      });
+      return {
+        success: false,
+        code: 'knowledge_low_confidence',
+        message: 'I am not confident enough with trusted knowledge for that request yet. Please ask an admin to add/clarify this topic.',
+        allowance,
+        userAllowance,
+        confidence,
+        confidenceThreshold,
       };
     }
 
@@ -837,6 +1008,8 @@ class AiAssistantService {
             title: match.title,
             sourceUrl: match.sourceUrl || '',
           })),
+          confidence,
+          confidenceThreshold,
           responseVisibility: tenantSettings.responseVisibility,
           allowance: this.getDailyRemaining(normalizedGuildId),
           userAllowance: this.getUserDailyRemaining(normalizedGuildId, userId, tenantSettings.perUserDailyLimit),

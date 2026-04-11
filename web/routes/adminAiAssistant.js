@@ -121,6 +121,35 @@ function createAdminAiAssistantRouter({
     }
   });
 
+  router.get('/api/admin/aiassistant/channel-policies', adminAuthMiddleware, (req, res) => {
+    if (!ensureAiAssistantModule(req, res)) return;
+    try {
+      const result = aiAssistantService.listChannelPolicies(req.guildId || null);
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to load channel policies', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (error) {
+      logger.error('Error loading AI assistant channel policies:', error);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.put('/api/admin/aiassistant/channel-policies', adminAuthMiddleware, (req, res) => {
+    if (!ensureAiAssistantModule(req, res)) return;
+    try {
+      const body = req.body || {};
+      const result = aiAssistantService.saveChannelPolicies(req.guildId || null, body.policies || []);
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to save channel policies', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (error) {
+      logger.error('Error saving AI assistant channel policies:', error);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.get('/api/admin/aiassistant/knowledge', adminAuthMiddleware, (req, res) => {
     if (!ensureAiAssistantModule(req, res)) return;
     try {

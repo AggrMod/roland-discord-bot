@@ -7634,13 +7634,14 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
   pane.innerHTML = `<div style="${cardStyle}"><div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);"><div class="spinner"></div><p>Loading AI assistant settings...</p></div></div>`;
 
   try {
-    const [settingsRes, channelsRes, rolesRes, usageRes, summaryRes, knowledgeRes] = await Promise.all([
+    const [settingsRes, channelsRes, rolesRes, usageRes, summaryRes, knowledgeRes, channelPoliciesRes] = await Promise.all([
       fetch('/api/admin/aiassistant/settings', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/discord/channels', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/discord/roles', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/aiassistant/usage', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/aiassistant/usage-summary', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/aiassistant/knowledge', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      fetch('/api/admin/aiassistant/channel-policies', { credentials: 'include', headers: buildTenantRequestHeaders() }),
     ]);
     const settingsJson = await settingsRes.json();
     const channelsJson = await channelsRes.json();
@@ -7648,6 +7649,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
     const usageJson = await usageRes.json();
     const summaryJson = await summaryRes.json();
     const knowledgeJson = await knowledgeRes.json();
+    const channelPoliciesJson = await channelPoliciesRes.json();
     if (!settingsJson.success) throw new Error(settingsJson.message || 'Failed to load AI assistant settings');
 
     const s = settingsJson.settings || {};
@@ -7659,8 +7661,10 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
     const allowedRoles = Array.isArray(s.allowedRoleIds) ? s.allowedRoleIds : [];
     const usageEvents = Array.isArray(usageJson?.events) ? usageJson.events : [];
     const knowledgeDocs = Array.isArray(knowledgeJson?.docs) ? knowledgeJson.docs : [];
+    const channelPolicies = Array.isArray(channelPoliciesJson?.policies) ? channelPoliciesJson.policies : [];
     aiAssistantKnowledgeCache = knowledgeDocs;
     aiAssistantKnowledgeEditId = null;
+    const channelPolicyMap = new Map(channelPolicies.map(policy => [String(policy.channelId || ''), policy]));
     const usageSummary = summaryJson?.success ? (summaryJson || {}) : {};
     const summaryToday = usageSummary.today || { total: 0, ok: 0, errors: 0, avgLatencyMs: 0 };
     const providerRows = Array.isArray(usageSummary.byProvider) ? usageSummary.byProvider : [];
@@ -7694,6 +7698,34 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
         </td>
       </tr>
     `).join('') || '<tr><td colspan="5" style="padding:10px;color:var(--text-secondary);">No knowledge sources yet. Add your first one below.</td></tr>';
+    const channelPolicyRows = channels.map(channel => {
+      const policy = channelPolicyMap.get(String(channel.id)) || {};
+      const mode = String(policy.mode || 'mention');
+      const minConfidence = Number.isFinite(Number(policy.minConfidence)) ? Number(policy.minConfidence) : 35;
+      const passiveCooldownSeconds = Number.isFinite(Number(policy.passiveCooldownSeconds)) ? Number(policy.passiveCooldownSeconds) : 120;
+      const passiveMaxPerHour = Number.isFinite(Number(policy.passiveMaxPerHour)) ? Number(policy.passiveMaxPerHour) : 6;
+      return `
+        <tr>
+          <td style="padding:8px;color:#c9d6ff;border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(channel.name || channel.id))}</td>
+          <td style="padding:8px;border-bottom:1px solid rgba(99,102,241,0.12);">
+            <select data-ai-channel-policy-field="mode" data-channel-id="${escapeHtml(String(channel.id))}" style="padding:6px 8px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+              <option value="off" ${mode === 'off' ? 'selected' : ''}>Off</option>
+              <option value="mention" ${mode === 'mention' ? 'selected' : ''}>Mention</option>
+              <option value="passive" ${mode === 'passive' ? 'selected' : ''}>Passive</option>
+            </select>
+          </td>
+          <td style="padding:8px;border-bottom:1px solid rgba(99,102,241,0.12);">
+            <input type="number" min="0" max="100" data-ai-channel-policy-field="minConfidence" data-channel-id="${escapeHtml(String(channel.id))}" value="${minConfidence}" style="width:84px;padding:6px 8px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+          </td>
+          <td style="padding:8px;border-bottom:1px solid rgba(99,102,241,0.12);">
+            <input type="number" min="5" max="3600" data-ai-channel-policy-field="passiveCooldownSeconds" data-channel-id="${escapeHtml(String(channel.id))}" value="${passiveCooldownSeconds}" style="width:96px;padding:6px 8px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+          </td>
+          <td style="padding:8px;border-bottom:1px solid rgba(99,102,241,0.12);">
+            <input type="number" min="1" max="100" data-ai-channel-policy-field="passiveMaxPerHour" data-channel-id="${escapeHtml(String(channel.id))}" value="${passiveMaxPerHour}" style="width:84px;padding:6px 8px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+          </td>
+        </tr>
+      `;
+    }).join('') || '<tr><td colspan="5" style="padding:10px;color:var(--text-secondary);">No channels available.</td></tr>';
 
     pane.innerHTML = `
       <div style="${cardStyle}">
@@ -7784,6 +7816,29 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
           <button class="btn-secondary" onclick="loadAiAssistantSettingsView()">Reset</button>
           <button class="btn-primary" onclick="saveAiAssistantSettings()">Save AI Assistant Settings</button>
+        </div>
+      </div>
+      <div style="${cardStyle}">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+          <h3 style="margin:0;color:#c9d6ff;">🧭 Channel Modes</h3>
+          <button class="btn-primary" onclick="saveAiAssistantChannelPolicies()">Save Channel Modes</button>
+        </div>
+        <div style="color:var(--text-secondary);font-size:0.8em;margin-bottom:10px;">
+          Off: no AI replies. Mention: only replies on @GuildPilot. Passive: can also auto-reply with confidence/cooldown caps.
+        </div>
+        <div style="border:1px solid rgba(99,102,241,0.18);border-radius:8px;overflow:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.84em;">
+            <thead>
+              <tr style="background:rgba(99,102,241,0.12);">
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Channel</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Mode</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Min Confidence</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Passive Cooldown (s)</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Passive Max/Hour</th>
+              </tr>
+            </thead>
+            <tbody>${channelPolicyRows}</tbody>
+          </table>
         </div>
       </div>
       <div style="${cardStyle}">
@@ -7933,6 +7988,46 @@ async function saveAiAssistantSettings() {
     await loadAiAssistantSettingsView();
   } catch (error) {
     showError(`Failed to save AI assistant settings: ${error.message}`);
+  }
+}
+
+async function saveAiAssistantChannelPolicies() {
+  const modeFields = Array.from(document.querySelectorAll('[data-ai-channel-policy-field="mode"]'));
+  if (!modeFields.length) {
+    showError('No channel policy inputs found');
+    return;
+  }
+
+  const policies = modeFields.map(modeEl => {
+    const channelId = String(modeEl.getAttribute('data-channel-id') || '').trim();
+    const minEl = document.querySelector(`[data-ai-channel-policy-field="minConfidence"][data-channel-id="${channelId}"]`);
+    const cooldownEl = document.querySelector(`[data-ai-channel-policy-field="passiveCooldownSeconds"][data-channel-id="${channelId}"]`);
+    const maxEl = document.querySelector(`[data-ai-channel-policy-field="passiveMaxPerHour"][data-channel-id="${channelId}"]`);
+    return {
+      channelId,
+      mode: String(modeEl.value || 'mention'),
+      minConfidence: parseInt(minEl?.value, 10) || 35,
+      passiveCooldownSeconds: parseInt(cooldownEl?.value, 10) || 120,
+      passiveMaxPerHour: parseInt(maxEl?.value, 10) || 6,
+    };
+  }).filter(item => /^\d{17,20}$/.test(item.channelId));
+
+  try {
+    const res = await fetch('/api/admin/aiassistant/channel-policies', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({ policies }),
+    });
+    const json = await res.json();
+    if (!json.success) {
+      showError(json.message || 'Failed to save channel policies');
+      return;
+    }
+    showSuccess('AI channel modes saved');
+    await loadAiAssistantSettingsView();
+  } catch (error) {
+    showError(`Failed to save channel policies: ${error.message}`);
   }
 }
 

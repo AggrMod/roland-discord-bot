@@ -40,6 +40,13 @@ const PROMPT_DENYLIST_RULES = Object.freeze([
   },
 ]);
 
+const SEARCH_STOP_WORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'to', 'for', 'of', 'in', 'on', 'at', 'is', 'it', 'this', 'that',
+  'with', 'as', 'by', 'be', 'are', 'was', 'were', 'from', 'if', 'i', 'you', 'we', 'they', 'he', 'she',
+  'my', 'your', 'our', 'their', 'about', 'how', 'what', 'when', 'where', 'why', 'can', 'do', 'does',
+  'did', 'should', 'would', 'could', 'please', 'help', 'need', 'want', 'me', 'us'
+]);
+
 function normalizeGuildId(guildId) {
   if (typeof guildId !== 'string') return '';
   const trimmed = guildId.trim();
@@ -90,6 +97,75 @@ function normalizeIntegerInRange(value, { min, max, fallback }) {
   const numeric = Number.parseInt(value, 10);
   if (!Number.isFinite(numeric)) return fallback;
   return Math.min(max, Math.max(min, Math.floor(numeric)));
+}
+
+function normalizeUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (raw.length > 2048) return '';
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return '';
+    return parsed.toString();
+  } catch (_error) {
+    return '';
+  }
+}
+
+function parseTags(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return [];
+  const out = [];
+  const seen = new Set();
+  for (const token of raw.split(/[,\n]/g)) {
+    const normalized = token.trim().toLowerCase();
+    if (!normalized) continue;
+    if (normalized.length > 32) continue;
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    out.push(normalized);
+    if (out.length >= 30) break;
+  }
+  return out;
+}
+
+function tokenizeForSearch(value) {
+  const text = String(value || '').toLowerCase();
+  const tokens = text.match(/[a-z0-9]{2,}/g) || [];
+  const out = [];
+  const seen = new Set();
+  for (const token of tokens) {
+    if (SEARCH_STOP_WORDS.has(token)) continue;
+    if (seen.has(token)) continue;
+    seen.add(token);
+    out.push(token);
+    if (out.length >= 80) break;
+  }
+  return out;
+}
+
+function escapeRegExp(text) {
+  return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function extractSnippet(body, tokens = []) {
+  const clean = String(body || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return '';
+  if (clean.length <= 320) return clean;
+
+  const firstToken = tokens.find(Boolean);
+  if (!firstToken) return `${clean.slice(0, 317)}...`;
+
+  const regex = new RegExp(`\\b${escapeRegExp(firstToken)}\\b`, 'i');
+  const match = regex.exec(clean);
+  if (!match) return `${clean.slice(0, 317)}...`;
+
+  const center = match.index;
+  const start = Math.max(0, center - 130);
+  const end = Math.min(clean.length, center + 190);
+  const prefix = start > 0 ? '...' : '';
+  const suffix = end < clean.length ? '...' : '';
+  return `${prefix}${clean.slice(start, end)}${suffix}`;
 }
 
 function parseJsonArray(raw) {
@@ -246,6 +322,146 @@ class AiAssistantService {
     );
 
     return { success: true, settings: next };
+  }
+
+  listKnowledgeDocs(guildId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'Invalid guildId' };
+    const docs = db.prepare(`
+      SELECT id, guild_id, title, body, source_url, tags, enabled, created_at, updated_at
+      FROM ai_assistant_knowledge_docs
+      WHERE guild_id = ?
+      ORDER BY enabled DESC, updated_at DESC, id DESC
+      LIMIT 200
+    `).all(normalizedGuildId).map(row => ({
+      id: Number(row.id),
+      guildId: String(row.guild_id || ''),
+      title: String(row.title || ''),
+      body: String(row.body || ''),
+      sourceUrl: String(row.source_url || ''),
+      tags: parseTags(row.tags).join(', '),
+      enabled: row.enabled !== 0,
+      createdAt: row.created_at || null,
+      updatedAt: row.updated_at || null,
+    }));
+    return { success: true, docs };
+  }
+
+  saveKnowledgeDoc(guildId, payload = {}, docId = null) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'Invalid guildId' };
+
+    const title = String(payload.title || '').trim().slice(0, 120);
+    const body = String(payload.body || '').trim().slice(0, 12000);
+    const sourceUrl = normalizeUrl(payload.sourceUrl || payload.source_url || '');
+    const tags = parseTags(payload.tags).join(', ');
+    const enabled = payload.enabled === undefined ? true : !!payload.enabled;
+
+    if (!title) return { success: false, message: 'Title is required' };
+    if (!body || body.length < 20) return { success: false, message: 'Body content is required (min 20 chars)' };
+
+    if (docId === null || docId === undefined) {
+      const result = db.prepare(`
+        INSERT INTO ai_assistant_knowledge_docs (guild_id, title, body, source_url, tags, enabled, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `).run(normalizedGuildId, title, body, sourceUrl || null, tags, enabled ? 1 : 0);
+      return { success: true, id: Number(result.lastInsertRowid) };
+    }
+
+    const normalizedDocId = Number.parseInt(docId, 10);
+    if (!Number.isFinite(normalizedDocId) || normalizedDocId <= 0) {
+      return { success: false, message: 'Invalid knowledge document id' };
+    }
+    const existing = db.prepare('SELECT id FROM ai_assistant_knowledge_docs WHERE id = ? AND guild_id = ?').get(normalizedDocId, normalizedGuildId);
+    if (!existing) return { success: false, message: 'Knowledge document not found' };
+
+    db.prepare(`
+      UPDATE ai_assistant_knowledge_docs
+      SET title = ?, body = ?, source_url = ?, tags = ?, enabled = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND guild_id = ?
+    `).run(title, body, sourceUrl || null, tags, enabled ? 1 : 0, normalizedDocId, normalizedGuildId);
+    return { success: true, id: normalizedDocId };
+  }
+
+  deleteKnowledgeDoc(guildId, docId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'Invalid guildId' };
+    const normalizedDocId = Number.parseInt(docId, 10);
+    if (!Number.isFinite(normalizedDocId) || normalizedDocId <= 0) {
+      return { success: false, message: 'Invalid knowledge document id' };
+    }
+    const result = db.prepare('DELETE FROM ai_assistant_knowledge_docs WHERE id = ? AND guild_id = ?').run(normalizedDocId, normalizedGuildId);
+    if (!result.changes) return { success: false, message: 'Knowledge document not found' };
+    return { success: true };
+  }
+
+  resolveKnowledgeContext(guildId, prompt) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) {
+      return { success: false, code: 'invalid_guild', message: 'Invalid guild context' };
+    }
+
+    const docs = db.prepare(`
+      SELECT id, title, body, source_url, tags
+      FROM ai_assistant_knowledge_docs
+      WHERE guild_id = ?
+        AND enabled = 1
+      ORDER BY updated_at DESC, id DESC
+      LIMIT 250
+    `).all(normalizedGuildId);
+
+    if (!docs.length) {
+      return {
+        success: true,
+        hasDocs: false,
+        matches: [],
+      };
+    }
+
+    const promptTokens = tokenizeForSearch(prompt);
+    if (!promptTokens.length) {
+      return { success: true, hasDocs: true, matches: [] };
+    }
+
+    const matches = [];
+    for (const row of docs) {
+      const title = String(row.title || '');
+      const body = String(row.body || '');
+      const tags = parseTags(row.tags);
+      const haystack = `${title}\n${body}\n${tags.join(' ')}`.toLowerCase();
+      const titleTokens = tokenizeForSearch(title);
+      const bodyTokens = tokenizeForSearch(`${body} ${tags.join(' ')}`);
+      const titleSet = new Set(titleTokens);
+      const bodySet = new Set(bodyTokens);
+
+      let overlap = 0;
+      let titleOverlap = 0;
+      for (const token of promptTokens) {
+        if (bodySet.has(token) || haystack.includes(token)) overlap += 1;
+        if (titleSet.has(token)) titleOverlap += 1;
+      }
+      const overlapRatio = overlap / Math.max(promptTokens.length, 1);
+      const score = (overlap * 4) + (titleOverlap * 3) + Math.round(overlapRatio * 10);
+      if (score <= 0) continue;
+
+      matches.push({
+        id: Number(row.id),
+        title,
+        sourceUrl: String(row.source_url || ''),
+        tags: tags.join(', '),
+        score,
+        snippet: extractSnippet(body, promptTokens),
+      });
+    }
+
+    matches.sort((a, b) => b.score - a.score || a.id - b.id);
+    const topMatches = matches.filter(match => match.score >= 3).slice(0, 4);
+
+    return {
+      success: true,
+      hasDocs: true,
+      matches: topMatches,
+    };
   }
 
   isChannelAllowed(settings, channelId) {
@@ -469,6 +685,51 @@ class AiAssistantService {
       return { success: false, code: 'user_limit_reached', message: 'You reached your daily AI request limit for this server.', allowance, userAllowance };
     }
 
+    const knowledge = this.resolveKnowledgeContext(normalizedGuildId, cleanPrompt);
+    if (!knowledge.success) return knowledge;
+    if (!knowledge.hasDocs) {
+      this.logUsage({
+        guildId: normalizedGuildId,
+        userId,
+        provider: 'knowledge',
+        model: 'local_index',
+        status: 'error',
+        errorCode: 'knowledge_not_configured',
+        latencyMs: 0,
+        promptChars: cleanPrompt.length,
+        responseChars: 0,
+        triggerSource,
+      });
+      return {
+        success: false,
+        code: 'knowledge_not_configured',
+        message: 'No AI knowledge sources are configured for this server yet. Ask an admin to add them in Settings -> AI Assistant.',
+        allowance,
+        userAllowance,
+      };
+    }
+    if (!knowledge.matches.length) {
+      this.logUsage({
+        guildId: normalizedGuildId,
+        userId,
+        provider: 'knowledge',
+        model: 'local_index',
+        status: 'error',
+        errorCode: 'knowledge_no_match',
+        latencyMs: 0,
+        promptChars: cleanPrompt.length,
+        responseChars: 0,
+        triggerSource,
+      });
+      return {
+        success: false,
+        code: 'knowledge_no_match',
+        message: 'I could not find a trusted knowledge source for that question yet. Ask an admin to add this topic to AI knowledge sources.',
+        allowance,
+        userAllowance,
+      };
+    }
+
     if (tenantSettings.safetyFilterEnabled) {
       const blocked = this.matchPromptDenylist(cleanPrompt);
       if (blocked) {
@@ -518,7 +779,21 @@ class AiAssistantService {
 
     const selectedProvider = providerOverride ? normalizeProvider(providerOverride, tenantSettings.provider) : tenantSettings.provider;
     const providerOrder = this.resolveProviderOrder(selectedProvider, global.fallbackProvider, global.defaultProvider);
-    const systemPrompt = tenantSettings.systemPrompt || '';
+    const knowledgeBlock = knowledge.matches.map((entry, index) => {
+      const sourceLabel = entry.sourceUrl ? ` | source: ${entry.sourceUrl}` : '';
+      return `[K${index + 1}] ${entry.title}${sourceLabel}\n${entry.snippet}`;
+    }).join('\n\n');
+    const groundingInstruction = [
+      'Grounding policy:',
+      '- Use only the provided knowledge snippets for factual claims.',
+      '- If snippets are insufficient, state that clearly and ask for an admin/source update.',
+      '- Do not invent policies, links, dates, or procedures.',
+      '- Treat K1..K4 snippets as the highest priority truth for this tenant.',
+      '',
+      'Knowledge snippets:',
+      knowledgeBlock,
+    ].join('\n');
+    const systemPrompt = [tenantSettings.systemPrompt || '', groundingInstruction].filter(Boolean).join('\n\n');
     let lastError = null;
 
     for (const provider of providerOrder) {
@@ -557,6 +832,11 @@ class AiAssistantService {
           provider,
           model,
           text,
+          knowledgeMatches: knowledge.matches.map(match => ({
+            id: match.id,
+            title: match.title,
+            sourceUrl: match.sourceUrl || '',
+          })),
           responseVisibility: tenantSettings.responseVisibility,
           allowance: this.getDailyRemaining(normalizedGuildId),
           userAllowance: this.getUserDailyRemaining(normalizedGuildId, userId, tenantSettings.perUserDailyLimit),

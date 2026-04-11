@@ -70,6 +70,7 @@ const REQUIRED_SCHEMA = Object.freeze({
   tracked_wallets: ['guild_id', 'wallet_address', 'token_last_signature'],
   ai_assistant_tenant_settings: ['guild_id', 'enabled', 'provider', 'model_openai', 'model_gemini', 'mention_enabled', 'response_visibility', 'system_prompt', 'allowed_channel_ids', 'allowed_role_ids', 'cooldown_seconds', 'max_response_chars', 'per_user_daily_limit', 'safety_filter_enabled', 'moderation_enabled', 'updated_at'],
   ai_assistant_usage_events: ['guild_id', 'user_id', 'provider', 'model', 'status', 'trigger_source', 'created_at'],
+  ai_assistant_knowledge_docs: ['guild_id', 'title', 'body', 'source_url', 'tags', 'enabled', 'updated_at'],
   invite_tracker_settings: ['guild_id', 'required_join_role_id', 'panel_channel_id', 'panel_message_id', 'panel_period_days', 'panel_limit', 'panel_enable_create_link', 'include_verification_stats', 'excluded_codes', 'panel_sort_by'],
   invite_tracker_user_codes: ['guild_id', 'invite_code', 'owner_user_id', 'owner_username', 'channel_id', 'active', 'created_at', 'updated_at'],
   invite_events: ['guild_id', 'joined_user_id', 'inviter_user_id', 'invite_code', 'source', 'joined_at'],
@@ -1565,9 +1566,24 @@ function initDatabase() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_assistant_knowledge_docs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      source_url TEXT,
+      tags TEXT DEFAULT '',
+      enabled INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_settings_guild ON ai_assistant_tenant_settings(guild_id)'); } catch (e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_usage_guild_time ON ai_assistant_usage_events(guild_id, created_at DESC)'); } catch (e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_usage_user_time ON ai_assistant_usage_events(user_id, created_at DESC)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_knowledge_guild_enabled ON ai_assistant_knowledge_docs(guild_id, enabled)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_knowledge_guild_updated ON ai_assistant_knowledge_docs(guild_id, updated_at DESC)'); } catch (e) {}
 
   // Migration: add missing columns to base tables
   var ignoreDuplicateMigration = (fn) => {
@@ -1593,6 +1609,10 @@ function initDatabase() {
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN safety_filter_enabled INTEGER DEFAULT 1'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_tenant_settings ADD COLUMN moderation_enabled INTEGER DEFAULT 0'));
   ignoreDuplicateMigration(() => db.exec("ALTER TABLE ai_assistant_usage_events ADD COLUMN trigger_source TEXT DEFAULT 'slash'"));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN source_url TEXT"));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN tags TEXT DEFAULT ''"));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN enabled INTEGER DEFAULT 1'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE ai_assistant_knowledge_docs ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'));
   ignoreDuplicateMigration(() => db.exec('CREATE TABLE IF NOT EXISTS user_verify_amounts (id INTEGER PRIMARY KEY AUTOINCREMENT, discord_id TEXT UNIQUE NOT NULL, username TEXT, assigned_amount REAL NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'));
 
   ignoreDuplicateMigration(() => db.exec("ALTER TABLE proposals ADD COLUMN category TEXT DEFAULT 'Other'"));

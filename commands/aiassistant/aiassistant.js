@@ -72,11 +72,14 @@ module.exports = {
     }
 
     const allowance = aiAssistantService.getDailyRemaining(interaction.guildId);
+    const knowledgeResult = aiAssistantService.listKnowledgeDocs(interaction.guildId);
+    const knowledgeCount = knowledgeResult.success ? (knowledgeResult.docs || []).filter(doc => doc.enabled).length : 0;
     const lines = [
       '**AI Assistant Status**',
       `Enabled: ${result.settings.enabled ? 'Yes' : 'No'}`,
       `Mention Trigger: ${result.settings.mentionEnabled ? 'On' : 'Off'}`,
       `Provider: ${result.settings.provider}`,
+      `Knowledge Sources (Enabled): ${knowledgeCount}`,
       `Slash Visibility: ${result.settings.responseVisibility}`,
       `Per-User Daily Limit: ${result.settings.perUserDailyLimit > 0 ? result.settings.perUserDailyLimit : 'Unlimited'}`,
       `Safety Filter: ${result.settings.safetyFilterEnabled ? 'On' : 'Off'}`,

@@ -7621,6 +7621,9 @@ async function loadTokenTrackerSettingsView(targetPaneId = null) {
 
 // ==================== AI ASSISTANT SETTINGS ====================
 
+let aiAssistantKnowledgeEditId = null;
+let aiAssistantKnowledgeCache = [];
+
 async function loadAiAssistantSettingsView(targetPaneId = null) {
   if (!isAdmin) return;
   const pane = (targetPaneId && document.getElementById(targetPaneId))
@@ -7631,18 +7634,20 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
   pane.innerHTML = `<div style="${cardStyle}"><div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);"><div class="spinner"></div><p>Loading AI assistant settings...</p></div></div>`;
 
   try {
-    const [settingsRes, channelsRes, rolesRes, usageRes, summaryRes] = await Promise.all([
+    const [settingsRes, channelsRes, rolesRes, usageRes, summaryRes, knowledgeRes] = await Promise.all([
       fetch('/api/admin/aiassistant/settings', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/discord/channels', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/discord/roles', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/aiassistant/usage', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/aiassistant/usage-summary', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      fetch('/api/admin/aiassistant/knowledge', { credentials: 'include', headers: buildTenantRequestHeaders() }),
     ]);
     const settingsJson = await settingsRes.json();
     const channelsJson = await channelsRes.json();
     const rolesJson = await rolesRes.json();
     const usageJson = await usageRes.json();
     const summaryJson = await summaryRes.json();
+    const knowledgeJson = await knowledgeRes.json();
     if (!settingsJson.success) throw new Error(settingsJson.message || 'Failed to load AI assistant settings');
 
     const s = settingsJson.settings || {};
@@ -7653,6 +7658,9 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
     const allowed = Array.isArray(s.allowedChannelIds) ? s.allowedChannelIds : [];
     const allowedRoles = Array.isArray(s.allowedRoleIds) ? s.allowedRoleIds : [];
     const usageEvents = Array.isArray(usageJson?.events) ? usageJson.events : [];
+    const knowledgeDocs = Array.isArray(knowledgeJson?.docs) ? knowledgeJson.docs : [];
+    aiAssistantKnowledgeCache = knowledgeDocs;
+    aiAssistantKnowledgeEditId = null;
     const usageSummary = summaryJson?.success ? (summaryJson || {}) : {};
     const summaryToday = usageSummary.today || { total: 0, ok: 0, errors: 0, avgLatencyMs: 0 };
     const providerRows = Array.isArray(usageSummary.byProvider) ? usageSummary.byProvider : [];
@@ -7672,6 +7680,20 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
         <td style="padding:8px;color:var(--text-secondary);border-bottom:1px solid rgba(99,102,241,0.12);">${evt.latency_ms ? `${Number(evt.latency_ms)}ms` : '-'}</td>
       </tr>
     `).join('') || '<tr><td colspan="5" style="padding:10px;color:var(--text-secondary);">No recent AI usage yet.</td></tr>';
+    const knowledgeRows = knowledgeDocs.map(doc => `
+      <tr>
+        <td style="padding:8px;color:#c9d6ff;border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(doc.title || 'Untitled'))}</td>
+        <td style="padding:8px;color:var(--text-secondary);border-bottom:1px solid rgba(99,102,241,0.12);">${doc.enabled ? 'Enabled' : 'Disabled'}</td>
+        <td style="padding:8px;color:var(--text-secondary);border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(doc.tags || '-'))}</td>
+        <td style="padding:8px;color:var(--text-secondary);border-bottom:1px solid rgba(99,102,241,0.12);font-size:0.8em;">${escapeHtml(String(doc.updatedAt || '-'))}</td>
+        <td style="padding:8px;border-bottom:1px solid rgba(99,102,241,0.12);">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn-secondary btn-sm" onclick="editAiAssistantKnowledgeDoc(${Number(doc.id)})">Edit</button>
+            <button class="btn-danger btn-sm" onclick="deleteAiAssistantKnowledgeDoc(${Number(doc.id)})">Delete</button>
+          </div>
+        </td>
+      </tr>
+    `).join('') || '<tr><td colspan="5" style="padding:10px;color:var(--text-secondary);">No knowledge sources yet. Add your first one below.</td></tr>';
 
     pane.innerHTML = `
       <div style="${cardStyle}">
@@ -7794,6 +7816,53 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
           </table>
         </div>
       </div>
+      <div style="${cardStyle}">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+          <h3 style="margin:0;color:#c9d6ff;">📚 Knowledge Sources</h3>
+          <span style="color:var(--text-secondary);font-size:0.82em;">Tenant docs used for grounded AI answers</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
+          <label style="display:grid;gap:6px;">
+            <span style="font-size:0.82em;color:var(--text-secondary);">Title</span>
+            <input id="aiassistant_knowledge_title" type="text" maxlength="120" placeholder="Verification Rules, Mint FAQ, DAO Policy..." style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+          </label>
+          <label style="display:grid;gap:6px;">
+            <span style="font-size:0.82em;color:var(--text-secondary);">Source URL (optional)</span>
+            <input id="aiassistant_knowledge_source_url" type="url" maxlength="2048" placeholder="https://docs..." style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+          </label>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:12px;margin-bottom:10px;align-items:end;">
+          <label style="display:grid;gap:6px;">
+            <span style="font-size:0.82em;color:var(--text-secondary);">Tags (comma-separated, optional)</span>
+            <input id="aiassistant_knowledge_tags" type="text" maxlength="300" placeholder="verification, wallet, role-sync" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.86em;margin-bottom:8px;">
+            <input id="aiassistant_knowledge_enabled" type="checkbox" checked> Enabled
+          </label>
+        </div>
+        <label style="display:grid;gap:6px;margin-bottom:10px;">
+          <span style="font-size:0.82em;color:var(--text-secondary);">Knowledge Content</span>
+          <textarea id="aiassistant_knowledge_body" rows="6" maxlength="12000" placeholder="Paste trusted server documentation, process steps, FAQs, rules, and links..." style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;"></textarea>
+        </label>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px;">
+          <button class="btn-secondary" onclick="resetAiAssistantKnowledgeForm()">Reset Form</button>
+          <button class="btn-primary" onclick="saveAiAssistantKnowledgeDoc()">Save Knowledge Source</button>
+        </div>
+        <div style="border:1px solid rgba(99,102,241,0.18);border-radius:8px;overflow:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.84em;">
+            <thead>
+              <tr style="background:rgba(99,102,241,0.12);">
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Title</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Status</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Tags</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Updated</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>${knowledgeRows}</tbody>
+          </table>
+        </div>
+      </div>
     `;
 
     const selectEl = document.getElementById('aiassistant_allowed_channels');
@@ -7865,6 +7934,113 @@ async function saveAiAssistantSettings() {
   } catch (error) {
     showError(`Failed to save AI assistant settings: ${error.message}`);
   }
+}
+
+function resetAiAssistantKnowledgeForm() {
+  aiAssistantKnowledgeEditId = null;
+  const titleEl = document.getElementById('aiassistant_knowledge_title');
+  const bodyEl = document.getElementById('aiassistant_knowledge_body');
+  const sourceEl = document.getElementById('aiassistant_knowledge_source_url');
+  const tagsEl = document.getElementById('aiassistant_knowledge_tags');
+  const enabledEl = document.getElementById('aiassistant_knowledge_enabled');
+  if (titleEl) titleEl.value = '';
+  if (bodyEl) bodyEl.value = '';
+  if (sourceEl) sourceEl.value = '';
+  if (tagsEl) tagsEl.value = '';
+  if (enabledEl) enabledEl.checked = true;
+}
+
+async function saveAiAssistantKnowledgeDoc() {
+  const title = String(document.getElementById('aiassistant_knowledge_title')?.value || '').trim();
+  const body = String(document.getElementById('aiassistant_knowledge_body')?.value || '').trim();
+  const sourceUrl = String(document.getElementById('aiassistant_knowledge_source_url')?.value || '').trim();
+  const tags = String(document.getElementById('aiassistant_knowledge_tags')?.value || '').trim();
+  const enabled = !!document.getElementById('aiassistant_knowledge_enabled')?.checked;
+
+  if (!title) {
+    showError('Knowledge title is required.');
+    return;
+  }
+  if (body.length < 20) {
+    showError('Knowledge content must be at least 20 characters.');
+    return;
+  }
+
+  const payload = { title, body, sourceUrl, tags, enabled };
+  const isUpdate = Number.isFinite(Number(aiAssistantKnowledgeEditId)) && Number(aiAssistantKnowledgeEditId) > 0;
+  const endpoint = isUpdate
+    ? `/api/admin/aiassistant/knowledge/${encodeURIComponent(String(aiAssistantKnowledgeEditId))}`
+    : '/api/admin/aiassistant/knowledge';
+  const method = isUpdate ? 'PUT' : 'POST';
+
+  try {
+    const res = await fetch(endpoint, {
+      method,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!json.success) {
+      showError(json.message || 'Failed to save knowledge source');
+      return;
+    }
+    showSuccess(isUpdate ? 'Knowledge source updated' : 'Knowledge source added');
+    await loadAiAssistantSettingsView();
+  } catch (error) {
+    showError(`Failed to save knowledge source: ${error.message}`);
+  }
+}
+
+function editAiAssistantKnowledgeDoc(docId) {
+  const normalizedId = Number(docId);
+  if (!Number.isFinite(normalizedId) || normalizedId <= 0) return;
+  const doc = (aiAssistantKnowledgeCache || []).find(item => Number(item.id) === normalizedId);
+  if (!doc) {
+    showError('Knowledge source not found in current view');
+    return;
+  }
+  aiAssistantKnowledgeEditId = normalizedId;
+  const titleEl = document.getElementById('aiassistant_knowledge_title');
+  const bodyEl = document.getElementById('aiassistant_knowledge_body');
+  const sourceEl = document.getElementById('aiassistant_knowledge_source_url');
+  const tagsEl = document.getElementById('aiassistant_knowledge_tags');
+  const enabledEl = document.getElementById('aiassistant_knowledge_enabled');
+  if (titleEl) titleEl.value = String(doc.title || '');
+  if (bodyEl) bodyEl.value = String(doc.body || '');
+  if (sourceEl) sourceEl.value = String(doc.sourceUrl || '');
+  if (tagsEl) tagsEl.value = String(doc.tags || '');
+  if (enabledEl) enabledEl.checked = !!doc.enabled;
+  if (titleEl && typeof titleEl.focus === 'function') titleEl.focus();
+  showSuccess('Editing knowledge source. Save to apply changes.');
+}
+
+function deleteAiAssistantKnowledgeDoc(docId) {
+  const normalizedId = Number(docId);
+  if (!Number.isFinite(normalizedId) || normalizedId <= 0) return;
+  showConfirmModal(
+    'Delete Knowledge Source?',
+    'This will remove the source from AI retrieval for this server.',
+    async () => {
+      try {
+        const res = await fetch(`/api/admin/aiassistant/knowledge/${encodeURIComponent(String(normalizedId))}`, {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: buildTenantRequestHeaders(),
+        });
+        const json = await res.json();
+        if (!json.success) {
+          showError(json.message || 'Failed to delete knowledge source');
+          return;
+        }
+        showSuccess('Knowledge source deleted');
+        await loadAiAssistantSettingsView();
+      } catch (error) {
+        showError(`Failed to delete knowledge source: ${error.message}`);
+      }
+    },
+    'Delete'
+  );
 }
 
 // ==================== INVITE TRACKER SETTINGS ====================

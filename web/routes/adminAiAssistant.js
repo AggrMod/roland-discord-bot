@@ -121,6 +121,62 @@ function createAdminAiAssistantRouter({
     }
   });
 
+  router.get('/api/admin/aiassistant/knowledge', adminAuthMiddleware, (req, res) => {
+    if (!ensureAiAssistantModule(req, res)) return;
+    try {
+      const result = aiAssistantService.listKnowledgeDocs(req.guildId || null);
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to load knowledge sources', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (error) {
+      logger.error('Error loading AI assistant knowledge docs:', error);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/api/admin/aiassistant/knowledge', adminAuthMiddleware, (req, res) => {
+    if (!ensureAiAssistantModule(req, res)) return;
+    try {
+      const result = aiAssistantService.saveKnowledgeDoc(req.guildId || null, req.body || {});
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to save knowledge source', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (error) {
+      logger.error('Error creating AI assistant knowledge doc:', error);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.put('/api/admin/aiassistant/knowledge/:id', adminAuthMiddleware, (req, res) => {
+    if (!ensureAiAssistantModule(req, res)) return;
+    try {
+      const result = aiAssistantService.saveKnowledgeDoc(req.guildId || null, req.body || {}, req.params.id);
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to update knowledge source', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (error) {
+      logger.error('Error updating AI assistant knowledge doc:', error);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.delete('/api/admin/aiassistant/knowledge/:id', adminAuthMiddleware, (req, res) => {
+    if (!ensureAiAssistantModule(req, res)) return;
+    try {
+      const result = aiAssistantService.deleteKnowledgeDoc(req.guildId || null, req.params.id);
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to delete knowledge source', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (error) {
+      logger.error('Error deleting AI assistant knowledge doc:', error);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   return router;
 }
 

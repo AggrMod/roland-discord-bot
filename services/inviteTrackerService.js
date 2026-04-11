@@ -66,8 +66,13 @@ function chunkArray(arr, size = 100) {
 }
 
 function normalizeInviteCode(code) {
-  const normalized = String(code || '').trim().toLowerCase();
+  const normalized = String(code || '').trim();
   return normalized ? normalized.slice(0, 64) : '';
+}
+
+function normalizeInviteCodeCompare(code) {
+  const normalized = normalizeInviteCode(code);
+  return normalized ? normalized.toLowerCase() : '';
 }
 
 function parseExcludedCodesInput(value) {
@@ -88,12 +93,14 @@ function parseExcludedCodesInput(value) {
     }
   }
 
-  const uniq = new Set();
+  const uniq = new Map();
   for (const raw of source) {
     const code = normalizeInviteCode(raw);
-    if (code) uniq.add(code);
+    const key = normalizeInviteCodeCompare(code);
+    if (!key || uniq.has(key)) continue;
+    uniq.set(key, code);
   }
-  return Array.from(uniq);
+  return Array.from(uniq.values());
 }
 
 class InviteTrackerService {
@@ -366,7 +373,8 @@ class InviteTrackerService {
     db.prepare(`
       UPDATE invite_tracker_user_codes
       SET active = 0, updated_at = CURRENT_TIMESTAMP
-      WHERE guild_id = ? AND invite_code = ?
+      WHERE guild_id = ?
+        AND lower(invite_code) = lower(?)
     `).run(normalizedGuildId, normalizedCode);
   }
 
@@ -378,7 +386,7 @@ class InviteTrackerService {
       SELECT owner_user_id, owner_username
       FROM invite_tracker_user_codes
       WHERE guild_id = ?
-        AND invite_code = ?
+        AND lower(invite_code) = lower(?)
         AND active = 1
       ORDER BY id DESC
       LIMIT 1
@@ -858,7 +866,8 @@ class InviteTrackerService {
       effectiveSortBy = effectiveIncludeVerificationStats ? SORT_BY_NFTS : SORT_BY_INVITES;
     }
     const excludedCodes = parseExcludedCodesInput(settings.excludedCodes || []);
-    const excludedCodeSet = new Set(excludedCodes);
+    const excludedCodeCompareValues = excludedCodes.map(normalizeInviteCodeCompare).filter(Boolean);
+    const excludedCodeSet = new Set(excludedCodeCompareValues);
 
     const safeLimit = this._getLeaderboardLimit(normalizedGuildId, limit);
     const periodPolicy = this._getInvitePeriodPolicy(normalizedGuildId, days);
@@ -867,11 +876,11 @@ class InviteTrackerService {
     if (periodPolicy.days) params.push(`-${periodPolicy.days} days`);
 
     if (!effectiveRoleId && !effectiveIncludeVerificationStats) {
-      const excludeSql = excludedCodes.length
-        ? `AND (invite_code IS NULL OR lower(invite_code) NOT IN (${excludedCodes.map(() => '?').join(',')}))`
+      const excludeSql = excludedCodeCompareValues.length
+        ? `AND (invite_code IS NULL OR lower(invite_code) NOT IN (${excludedCodeCompareValues.map(() => '?').join(',')}))`
         : '';
       const queryParams = [...params];
-      if (excludedCodes.length) queryParams.push(...excludedCodes);
+      if (excludedCodeCompareValues.length) queryParams.push(...excludedCodeCompareValues);
       queryParams.push(safeLimit);
       const rows = db.prepare(`
         SELECT
@@ -935,7 +944,7 @@ class InviteTrackerService {
       const inviterUserId = normalizeUserId(row.inviter_user_id);
       const inviteCode = normalizeInviteCode(row.invite_code || '');
       if (!joinedUserId || !inviterUserId) continue;
-      if (inviteCode && excludedCodeSet.has(inviteCode)) continue;
+      if (inviteCode && excludedCodeSet.has(normalizeInviteCodeCompare(inviteCode))) continue;
       if (!eligibleJoined.has(joinedUserId)) continue;
 
       const key = inviterUserId;
@@ -1251,6 +1260,7 @@ class InviteTrackerService {
 
     const existingCode = this._getActiveOwnedInviteCodeForUser(guildId, interaction.user?.id || null);
     if (existingCode) {
+      const fallbackUrl = `https://discord.gg/${existingCode}`;
       try {
         const existingInvite = await interaction.guild?.invites?.fetch?.({ code: existingCode });
         if (existingInvite?.code) {
@@ -1260,7 +1270,27 @@ class InviteTrackerService {
             inviteCode: existingInvite.code,
           };
         }
-      } catch (_error) {
+      } catch (fetchError) {
+        const errorCode = Number(fetchError?.code || fetchError?.rawError?.code || 0);
+        const statusCode = Number(fetchError?.status || fetchError?.rawError?.status || 0);
+        const permissionScopedError = errorCode === 50013 || errorCode === 50001 || statusCode === 403;
+        const unknownInvite = errorCode === 10006 || statusCode === 404;
+
+        if (permissionScopedError) {
+          return {
+            success: true,
+            inviteUrl: fallbackUrl,
+            inviteCode: existingCode,
+          };
+        }
+        if (!unknownInvite) {
+          logger.warn(`[invite-tracker] could not validate existing invite for guild ${guildId}: ${fetchError?.message || fetchError}`);
+          return {
+            success: true,
+            inviteUrl: fallbackUrl,
+            inviteCode: existingCode,
+          };
+        }
         this._deactivateOwnedInviteCode(guildId, existingCode);
       }
     }

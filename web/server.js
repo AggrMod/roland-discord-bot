@@ -27,6 +27,7 @@ const microVerifyService = require('../services/microVerifyService');
 const nftActivityService = require('../services/nftActivityService');
 const trackedWalletsService = require('../services/trackedWalletsService');
 const inviteTrackerService = require('../services/inviteTrackerService');
+const aiAssistantService = require('../services/aiAssistantService');
 const ticketService = require('../services/ticketService');
 const entitlementService = require('../services/entitlementService');
 const billingService = require('../services/billingService');
@@ -676,6 +677,10 @@ class WebServer {
       return ensureTenantModuleEnabled(req, res, 'invites', 'Invite Tracker');
     }
 
+    function ensureAiAssistantModule(req, res) {
+      return ensureTenantModuleEnabled(req, res, 'aiassistant', 'AI Assistant');
+    }
+
     function ensureMinigamesModule(req, res) {
       return ensureTenantModuleEnabled(req, res, 'minigames', 'Minigames');
     }
@@ -1222,6 +1227,13 @@ class WebServer {
       ensureInviteTrackerModule,
       inviteTrackerService,
       ensureTokenTrackerModule,
+    }));
+    const createAdminAiAssistantRouter = require('./routes/adminAiAssistant');
+    this.app.use('/', createAdminAiAssistantRouter({
+      logger,
+      adminAuthMiddleware,
+      ensureAiAssistantModule,
+      aiAssistantService,
     }));
     const createAdminTicketsRouter = require('./routes/adminTickets');
     this.app.use('/', createAdminTicketsRouter({

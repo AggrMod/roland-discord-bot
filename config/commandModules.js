@@ -7,6 +7,7 @@ const COMMAND_MODULE_MAP = Object.freeze({
   invites: 'invites',
   'nft-tracker': 'nfttracker',
   'token-tracker': 'tokentracker',
+  aiassistant: 'aiassistant',
   battle: 'minigames',
   heist: 'heist',
   higherlower: 'minigames',

@@ -12,7 +12,8 @@ const MODULE_KEYS = Object.freeze([
   'selfserveroles',
   'branding',
   'analytics',
-  'engagement'
+  'engagement',
+  'aiassistant'
 ]);
 
 const PLAN_PRESETS = Object.freeze({
@@ -78,6 +79,9 @@ const PLAN_PRESETS = Object.freeze({
       analytics: {},
       engagement: {
         max_shop_items: 3
+      },
+      aiassistant: {
+        max_requests_per_day: 0
       }
     },
     modules: {
@@ -94,7 +98,8 @@ const PLAN_PRESETS = Object.freeze({
       selfserveroles: true,
       branding: true,
       analytics: true,
-      engagement: false
+      engagement: false,
+      aiassistant: false
     }
   },
   growth: {
@@ -159,6 +164,9 @@ const PLAN_PRESETS = Object.freeze({
       analytics: {},
       engagement: {
         max_shop_items: 25
+      },
+      aiassistant: {
+        max_requests_per_day: 0
       }
     },
     modules: {
@@ -175,7 +183,8 @@ const PLAN_PRESETS = Object.freeze({
       selfserveroles: true,
       branding: true,
       analytics: true,
-      engagement: true
+      engagement: true,
+      aiassistant: false
     }
   },
   pro: {
@@ -240,6 +249,9 @@ const PLAN_PRESETS = Object.freeze({
       analytics: {},
       engagement: {
         max_shop_items: 100
+      },
+      aiassistant: {
+        max_requests_per_day: 1000
       }
     },
     modules: {
@@ -256,7 +268,8 @@ const PLAN_PRESETS = Object.freeze({
       selfserveroles: true,
       branding: true,
       analytics: true,
-      engagement: true
+      engagement: true,
+      aiassistant: true
     }
   },
   enterprise: {
@@ -321,6 +334,9 @@ const PLAN_PRESETS = Object.freeze({
       analytics: {},
       engagement: {
         max_shop_items: null
+      },
+      aiassistant: {
+        max_requests_per_day: null
       }
     },
     modules: {
@@ -337,7 +353,8 @@ const PLAN_PRESETS = Object.freeze({
       selfserveroles: true,
       branding: true,
       analytics: true,
-      engagement: true
+      engagement: true,
+      aiassistant: true
     }
   }
 });

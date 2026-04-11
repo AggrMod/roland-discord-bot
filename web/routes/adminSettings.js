@@ -64,6 +64,7 @@ function createAdminSettingsRouter({
         effectiveSettings.moduleRoleClaimEnabled = !!tenantContext.modules.selfserveroles;
         effectiveSettings.moduleTicketingEnabled = !!tenantContext.modules.ticketing;
         effectiveSettings.moduleEngagementEnabled = !!tenantContext.modules.engagement;
+        effectiveSettings.moduleAiAssistantEnabled = !!tenantContext.modules.aiassistant;
         const tenantVerification = tenantService.getTenantVerificationSettings(req.guildId);
         if (tenantVerification.ogRoleId !== undefined) effectiveSettings.ogRoleId = tenantVerification.ogRoleId || '';
         if (tenantVerification.ogRoleLimit !== undefined) effectiveSettings.ogRoleLimit = tenantVerification.ogRoleLimit || 0;
@@ -122,7 +123,7 @@ function createAdminSettingsRouter({
         'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleTreasuryEnabled', 'moduleWalletTrackerEnabled',
         'moduleInviteTrackerEnabled',
         'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleBrandingEnabled', 'moduleMissionsEnabled', 'moduleBattleEnabled', 'moduleMinigamesEnabled',
-        'moduleTicketingEnabled', 'moduleRoleClaimEnabled', 'moduleEngagementEnabled',
+        'moduleTicketingEnabled', 'moduleRoleClaimEnabled', 'moduleEngagementEnabled', 'moduleAiAssistantEnabled',
         'battleRoundPauseMinSec', 'battleRoundPauseMaxSec', 'battleElitePrepSec', 'battleForcedEliminationIntervalRounds', 'battleDefaultEra',
         'baseVerifiedRoleId', 'autoResyncEnabled', 'ogRoleId', 'ogRoleLimit',
         'treasuryWalletAddress', 'treasuryRefreshInterval', 'txAlertChannelId',
@@ -177,6 +178,7 @@ function createAdminSettingsRouter({
             moduleRoleClaimEnabled: 'selfserveroles',
             moduleTicketingEnabled: 'ticketing',
             moduleEngagementEnabled: 'engagement',
+            moduleAiAssistantEnabled: 'aiassistant',
           };
           for (const [field, moduleKey] of Object.entries(moduleFieldMap)) {
             if (sanitized[field] !== undefined) {

@@ -62,6 +62,7 @@ class SettingsManager {
       moduleRoleClaimEnabled: true,
       moduleTicketingEnabled: true,
       moduleEngagementEnabled: true,
+      moduleAiAssistantEnabled: false,
 
       // Ticketing automation
       ticketAutoCloseEnabled: true,
@@ -72,6 +73,13 @@ class SettingsManager {
       // Micro-Transfer Verification
       verificationReceiveWallet: '',
       nftActivityWebhookSecret: '',
+      aiAssistantApiKeyEncrypted: '',
+      openaiApiKeyEncrypted: '',
+      geminiApiKeyEncrypted: '',
+      aiAssistantDefaultProvider: 'openai',
+      aiAssistantFallbackProvider: 'gemini',
+      aiAssistantDefaultModelOpenai: 'gpt-5.4',
+      aiAssistantDefaultModelGemini: 'gemini-2.0-flash',
       verifyRequestTtlMinutes: 15,
       pollIntervalSeconds: 30,
       verifyRateLimitMinutes: 5,
@@ -263,6 +271,34 @@ class SettingsManager {
         }
       }
 
+      if (newSettings.aiAssistantDefaultProvider !== undefined) {
+        const provider = String(newSettings.aiAssistantDefaultProvider || '').trim().toLowerCase();
+        if (!['openai', 'gemini'].includes(provider)) {
+          return { success: false, message: 'aiAssistantDefaultProvider must be "openai" or "gemini"' };
+        }
+      }
+
+      if (newSettings.aiAssistantFallbackProvider !== undefined) {
+        const fallback = String(newSettings.aiAssistantFallbackProvider || '').trim().toLowerCase();
+        if (fallback && !['openai', 'gemini'].includes(fallback)) {
+          return { success: false, message: 'aiAssistantFallbackProvider must be empty, "openai", or "gemini"' };
+        }
+      }
+
+      if (newSettings.aiAssistantDefaultModelOpenai !== undefined) {
+        const model = String(newSettings.aiAssistantDefaultModelOpenai || '').trim();
+        if (model.length > 120) {
+          return { success: false, message: 'aiAssistantDefaultModelOpenai is too long' };
+        }
+      }
+
+      if (newSettings.aiAssistantDefaultModelGemini !== undefined) {
+        const model = String(newSettings.aiAssistantDefaultModelGemini || '').trim();
+        if (model.length > 120) {
+          return { success: false, message: 'aiAssistantDefaultModelGemini is too long' };
+        }
+      }
+
       // Module toggles are booleans - validate type
       const moduleKeys = [
         'moduleBattleEnabled',
@@ -278,7 +314,8 @@ class SettingsManager {
         'moduleMicroVerifyEnabled',
         'moduleRoleClaimEnabled',
         'moduleTicketingEnabled',
-        'moduleEngagementEnabled'
+        'moduleEngagementEnabled',
+        'moduleAiAssistantEnabled'
       ];
       
       for (const key of moduleKeys) {

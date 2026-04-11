@@ -27,6 +27,7 @@ module.exports = {
               { name: 'Governance', value: 'governance' },
               { name: 'Treasury', value: 'treasury' },
               { name: 'Invite Tracker', value: 'invites' },
+              { name: 'AI Assistant', value: 'aiassistant' },
               { name: 'Minigames', value: 'minigames' },
               { name: 'Battle', value: 'battle' },
               { name: 'Heist', value: 'heist' }
@@ -173,6 +174,7 @@ function getModuleIcon(module) {
     governance: '[G]',
     treasury: '[$]',
     invites: '[INV]',
+    aiassistant: '[AI]',
     minigames: '[MG]',
     battle: '[B]',
     heist: '[H]'

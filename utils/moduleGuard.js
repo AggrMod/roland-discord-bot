@@ -14,6 +14,7 @@ const DEFAULT_TOGGLES = Object.freeze({
   tokentrackerEnabled: true,
   ticketingEnabled: true,
   engagementEnabled: true,
+  aiassistantEnabled: false,
   selfserverolesEnabled: true,
   minigamesEnabled: true,
   battleEnabled: true,

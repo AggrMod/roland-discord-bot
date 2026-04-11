@@ -1,5 +1,6 @@
 const express = require('express');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
+const { decryptSecret, encryptSecret, maskSecret } = require('../../utils/secretVault');
 
 function createSuperadminCoreRouter({
   superadminGuard,
@@ -37,6 +38,15 @@ function createSuperadminCoreRouter({
       const ogRoleService = require('../../services/ogRoleService');
       const ogCfg = ogRoleService.getConfig();
       const multiTenantEnabled = tenantService.isMultitenantEnabled();
+      const openaiApiKey = decryptSecret(settings.openaiApiKeyEncrypted)
+        || decryptSecret(settings.aiAssistantApiKeyEncrypted)
+        || String(settings.openaiApiKey || '').trim();
+      const geminiApiKey = decryptSecret(settings.geminiApiKeyEncrypted) || String(settings.geminiApiKey || '').trim();
+      const defaultProvider = ['openai', 'gemini'].includes(String(settings.aiAssistantDefaultProvider || '').toLowerCase())
+        ? String(settings.aiAssistantDefaultProvider).toLowerCase()
+        : 'openai';
+      const fallbackProviderRaw = String(settings.aiAssistantFallbackProvider || '').toLowerCase();
+      const fallbackProvider = ['openai', 'gemini'].includes(fallbackProviderRaw) ? fallbackProviderRaw : '';
 
       res.json(toSuccessResponse({
         settings: {
@@ -47,6 +57,14 @@ function createSuperadminCoreRouter({
           verifyRateLimitMinutes: settings.verifyRateLimitMinutes || 5,
           maxPendingPerUser: settings.maxPendingPerUser || 1,
           chainEmojiMap: settings.chainEmojiMap || {},
+          openaiApiKeyConfigured: !!openaiApiKey,
+          openaiApiKeyMasked: openaiApiKey ? maskSecret(openaiApiKey) : '',
+          geminiApiKeyConfigured: !!geminiApiKey,
+          geminiApiKeyMasked: geminiApiKey ? maskSecret(geminiApiKey) : '',
+          aiAssistantDefaultProvider: defaultProvider,
+          aiAssistantFallbackProvider: fallbackProvider,
+          aiAssistantDefaultModelOpenai: String(settings.aiAssistantDefaultModelOpenai || 'gpt-5.4'),
+          aiAssistantDefaultModelGemini: String(settings.aiAssistantDefaultModelGemini || 'gemini-2.0-flash'),
           ogRoleId: multiTenantEnabled ? '' : (ogCfg.roleId || ''),
           ogRoleLimit: multiTenantEnabled ? 0 : (ogCfg.limit || 0),
           ogRoleGlobalEditable: !multiTenantEnabled,
@@ -64,11 +82,35 @@ function createSuperadminCoreRouter({
         'moduleMicroVerifyEnabled', 'verificationReceiveWallet',
         'verifyRequestTtlMinutes', 'pollIntervalSeconds',
         'verifyRateLimitMinutes', 'maxPendingPerUser', 'chainEmojiMap',
+        'openaiApiKey', 'geminiApiKey',
+        'aiAssistantDefaultProvider', 'aiAssistantFallbackProvider',
+        'aiAssistantDefaultModelOpenai', 'aiAssistantDefaultModelGemini',
       ];
       const patch = {};
       for (const key of ALLOWED) {
         if (req.body[key] !== undefined) patch[key] = req.body[key];
       }
+
+      if (Object.prototype.hasOwnProperty.call(patch, 'openaiApiKey')) {
+        const rawKey = String(patch.openaiApiKey || '').trim();
+        const encrypted = rawKey ? encryptSecret(rawKey) : '';
+        if (rawKey && !encrypted) {
+          return res.status(500).json(toErrorResponse('Unable to store OpenAI API key securely; check server secret configuration'));
+        }
+        patch.openaiApiKeyEncrypted = encrypted;
+        patch.openaiApiKey = '';
+      }
+
+      if (Object.prototype.hasOwnProperty.call(patch, 'geminiApiKey')) {
+        const rawKey = String(patch.geminiApiKey || '').trim();
+        const encrypted = rawKey ? encryptSecret(rawKey) : '';
+        if (rawKey && !encrypted) {
+          return res.status(500).json(toErrorResponse('Unable to store Gemini API key securely; check server secret configuration'));
+        }
+        patch.geminiApiKeyEncrypted = encrypted;
+        patch.geminiApiKey = '';
+      }
+
       const result = settingsManager.updateSettings(patch);
       if (!result.success) return res.status(400).json(toErrorResponse(result.message || 'Failed to update global settings', 'VALIDATION_ERROR', null, result));
 

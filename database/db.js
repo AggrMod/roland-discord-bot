@@ -68,6 +68,8 @@ const REQUIRED_SCHEMA = Object.freeze({
   nft_tracked_collections: ['guild_id', 'collection_address', 'track_bid'],
   tracked_tokens: ['guild_id', 'alert_channel_ids'],
   tracked_wallets: ['guild_id', 'wallet_address', 'token_last_signature'],
+  ai_assistant_tenant_settings: ['guild_id', 'enabled', 'provider', 'model_openai', 'model_gemini', 'response_visibility', 'system_prompt', 'allowed_channel_ids', 'updated_at'],
+  ai_assistant_usage_events: ['guild_id', 'user_id', 'provider', 'model', 'status', 'created_at'],
   invite_tracker_settings: ['guild_id', 'required_join_role_id', 'panel_channel_id', 'panel_message_id', 'panel_period_days', 'panel_limit', 'panel_enable_create_link', 'include_verification_stats', 'excluded_codes', 'panel_sort_by'],
   invite_tracker_user_codes: ['guild_id', 'invite_code', 'owner_user_id', 'owner_username', 'channel_id', 'active', 'created_at', 'updated_at'],
   invite_events: ['guild_id', 'joined_user_id', 'inviter_user_id', 'invite_code', 'source', 'joined_at'],
@@ -1062,6 +1064,19 @@ function initDatabase() {
           AND existing.limit_key = tmo.limit_key
       )
   `); } catch (e) {}
+  try { db.exec(`
+    INSERT INTO tenant_modules (tenant_id, module_key, enabled, updated_at)
+    SELECT t.id, 'aiassistant',
+      CASE WHEN COALESCE(LOWER(t.plan_key), 'starter') IN ('pro', 'enterprise') THEN 1 ELSE 0 END,
+      CURRENT_TIMESTAMP
+    FROM tenants t
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM tenant_modules existing
+      WHERE existing.tenant_id = t.id
+        AND existing.module_key = 'aiassistant'
+    )
+  `); } catch (e) {}
   try { db.exec("ALTER TABLE proposals ADD COLUMN guild_id TEXT DEFAULT ''"); } catch (e) {}
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_proposals_guild ON proposals(guild_id)"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_billing ADD COLUMN customer_id TEXT"); } catch (e) {}
@@ -1511,6 +1526,40 @@ function initDatabase() {
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_token_events_wallet_time ON tracked_token_events(wallet_id, event_time)'); } catch (e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_token_events_mint_time ON tracked_token_events(token_mint, event_time)'); } catch (e) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_token_retry_due ON tracked_token_webhook_retry_queue(next_attempt_at)'); } catch (e) {}
+
+  // AI assistant tenant settings + usage telemetry (tenant-scoped)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_assistant_tenant_settings (
+      guild_id TEXT PRIMARY KEY,
+      enabled INTEGER DEFAULT 0,
+      provider TEXT DEFAULT 'openai',
+      model_openai TEXT DEFAULT 'gpt-5.4',
+      model_gemini TEXT DEFAULT 'gemini-2.0-flash',
+      response_visibility TEXT DEFAULT 'public',
+      system_prompt TEXT,
+      allowed_channel_ids TEXT DEFAULT '[]',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_assistant_usage_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      model TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'ok',
+      error_code TEXT,
+      latency_ms INTEGER,
+      prompt_chars INTEGER DEFAULT 0,
+      response_chars INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_settings_guild ON ai_assistant_tenant_settings(guild_id)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_usage_guild_time ON ai_assistant_usage_events(guild_id, created_at DESC)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_usage_user_time ON ai_assistant_usage_events(user_id, created_at DESC)'); } catch (e) {}
 
   // Migration: add missing columns to base tables
   var ignoreDuplicateMigration = (fn) => {

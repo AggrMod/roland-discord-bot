@@ -55,6 +55,9 @@ const LIMIT_DEFINITIONS = Object.freeze({
   engagement: {
     max_shop_items: { label: 'Max Shop Items' },
   },
+  aiassistant: {
+    max_requests_per_day: { label: 'AI Assistant Requests Per Day' },
+  },
 });
 
 function normalizeGuildId(guildId) {

@@ -58,6 +58,7 @@ const PORTAL_PAGE_EXPECTATIONS = Object.freeze({
     'governance',
     'verification',
     'branding',
+    'aiassistant',
     'treasury',
     'invites',
     'nfttracker',
@@ -1402,6 +1403,7 @@ function switchSettingsTab(tab) {
       if (typeof loadAdminRoles === 'function') loadAdminRoles();
     },
     branding:     () => { if (typeof loadBrandingSettingsView === 'function') loadBrandingSettingsView(); },
+    aiassistant:  () => { if (typeof loadAiAssistantSettingsView === 'function') loadAiAssistantSettingsView(); },
     invites:      () => { if (typeof loadInviteTrackerSettingsView === 'function') loadInviteTrackerSettingsView(); },
     nfttracker:   () => { if (typeof loadNftTrackerSettingsView === 'function') loadNftTrackerSettingsView(); },
     tokentracker: () => { if (typeof loadTokenTrackerSettingsView === 'function') loadTokenTrackerSettingsView(); },
@@ -1495,6 +1497,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     invites: settings.moduleInviteTrackerEnabled !== false,
     nfttracker: !!settings.moduleNftTrackerEnabled,
     tokentracker: !!settings.moduleTokenTrackerEnabled,
+    aiassistant: !!settings.moduleAiAssistantEnabled,
     heist: !!settings.moduleMissionsEnabled,
     ticketing: !!settings.moduleTicketingEnabled,
     engagement: !!settings.moduleEngagementEnabled,
@@ -1549,6 +1552,7 @@ const SETTINGS_TAB_MODULE_MAP = {
   verification: 'verification',
   branding:     'branding',
   treasury:     'wallettracker',
+  aiassistant:  'aiassistant',
   invites:      'invites',
   nfttracker:   'nfttracker',
   tokentracker: 'tokentracker',
@@ -1577,6 +1581,7 @@ function applySettingsTabVisibility(settings = {}) {
     invites: settings.moduleInviteTrackerEnabled !== false,
     nfttracker: !!settings.moduleNftTrackerEnabled,
     tokentracker: !!settings.moduleTokenTrackerEnabled,
+    aiassistant: !!settings.moduleAiAssistantEnabled,
     minigames: minigamesEnabled,
     heist: !!settings.moduleMissionsEnabled,
     selfserveroles: !!settings.moduleRoleClaimEnabled,
@@ -3523,6 +3528,7 @@ const TENANT_MODULE_LABELS = {
   governance: 'Governance',
   treasury: 'Treasury',
   wallettracker: 'Wallet Tracker',
+  aiassistant: 'AI Assistant',
   invites: 'Invite Tracker',
   minigames: 'Minigames',
   heist: 'Heist',
@@ -4142,6 +4148,60 @@ async function loadSuperadminView() {
                 placeholder="Solana wallet address that receives micro-payments"
                 style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.88em;">
             </label>
+            <div style="padding:10px; border:1px solid rgba(99,102,241,0.2); border-radius:8px; background:rgba(2,6,23,0.35); display:grid; gap:10px;">
+              <div style="color:#c9d6ff; font-weight:600;">AI Providers (Pro Module)</div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <label style="display:grid; gap:6px;">
+                  <span style="font-size:0.82em; color:var(--text-secondary);">OpenAI API Key <span style="color:#f87171;">(masked)</span></span>
+                  <input id="sa_openaiApiKey" type="password" value=""
+                    placeholder="${escapeHtml(settingsData?.settings?.openaiApiKeyMasked || 'Paste new key to rotate')}"
+                    autocomplete="new-password"
+                    style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.88em;">
+                  <label style="display:flex; align-items:center; gap:8px; color:#c9d6ff; font-size:0.78em;">
+                    <input id="sa_openaiApiKeyClear" type="checkbox" style="width:14px;height:14px;accent-color:#ef4444;"> Clear OpenAI key
+                  </label>
+                </label>
+                <label style="display:grid; gap:6px;">
+                  <span style="font-size:0.82em; color:var(--text-secondary);">Gemini API Key <span style="color:#f87171;">(masked)</span></span>
+                  <input id="sa_geminiApiKey" type="password" value=""
+                    placeholder="${escapeHtml(settingsData?.settings?.geminiApiKeyMasked || 'Paste new key to rotate')}"
+                    autocomplete="new-password"
+                    style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.88em;">
+                  <label style="display:flex; align-items:center; gap:8px; color:#c9d6ff; font-size:0.78em;">
+                    <input id="sa_geminiApiKeyClear" type="checkbox" style="width:14px;height:14px;accent-color:#ef4444;"> Clear Gemini key
+                  </label>
+                </label>
+              </div>
+              <div style="display:grid; grid-template-columns:repeat(4,minmax(120px,1fr)); gap:10px;">
+                <label style="display:grid; gap:6px;">
+                  <span style="font-size:0.8em; color:var(--text-secondary);">Default Provider</span>
+                  <select id="sa_aiProviderDefault" style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
+                    <option value="openai" ${(settingsData?.settings?.aiAssistantDefaultProvider || 'openai') === 'openai' ? 'selected' : ''}>OpenAI</option>
+                    <option value="gemini" ${(settingsData?.settings?.aiAssistantDefaultProvider || 'openai') === 'gemini' ? 'selected' : ''}>Gemini</option>
+                  </select>
+                </label>
+                <label style="display:grid; gap:6px;">
+                  <span style="font-size:0.8em; color:var(--text-secondary);">Fallback Provider</span>
+                  <select id="sa_aiProviderFallback" style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
+                    <option value="" ${(settingsData?.settings?.aiAssistantFallbackProvider || '') === '' ? 'selected' : ''}>None</option>
+                    <option value="openai" ${(settingsData?.settings?.aiAssistantFallbackProvider || '') === 'openai' ? 'selected' : ''}>OpenAI</option>
+                    <option value="gemini" ${(settingsData?.settings?.aiAssistantFallbackProvider || '') === 'gemini' ? 'selected' : ''}>Gemini</option>
+                  </select>
+                </label>
+                <label style="display:grid; gap:6px;">
+                  <span style="font-size:0.8em; color:var(--text-secondary);">OpenAI Model</span>
+                  <input id="sa_aiModelOpenai" type="text"
+                    value="${escapeHtml(settingsData?.settings?.aiAssistantDefaultModelOpenai || 'gpt-5.4')}"
+                    style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.84em;">
+                </label>
+                <label style="display:grid; gap:6px;">
+                  <span style="font-size:0.8em; color:var(--text-secondary);">Gemini Model</span>
+                  <input id="sa_aiModelGemini" type="text"
+                    value="${escapeHtml(settingsData?.settings?.aiAssistantDefaultModelGemini || 'gemini-2.0-flash')}"
+                    style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.84em;">
+                </label>
+              </div>
+            </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
               <label style="display:grid; gap:6px;">
                 <span style="font-size:0.82em; color:var(--text-secondary);">Request TTL (minutes)</span>
@@ -5381,21 +5441,39 @@ function removeSuperadmin(userId) {
 async function saveMicroVerifySettings() {
   const enabled = !!document.getElementById('sa_microVerifyEnabled')?.checked;
   const receiveWallet = document.getElementById('sa_verificationReceiveWallet')?.value?.trim() || '';
+  const openaiApiKey = document.getElementById('sa_openaiApiKey')?.value?.trim() || '';
+  const geminiApiKey = document.getElementById('sa_geminiApiKey')?.value?.trim() || '';
+  const clearOpenaiApiKey = !!document.getElementById('sa_openaiApiKeyClear')?.checked;
+  const clearGeminiApiKey = !!document.getElementById('sa_geminiApiKeyClear')?.checked;
+  const aiAssistantDefaultProvider = document.getElementById('sa_aiProviderDefault')?.value || 'openai';
+  const aiAssistantFallbackProvider = document.getElementById('sa_aiProviderFallback')?.value || '';
+  const aiAssistantDefaultModelOpenai = document.getElementById('sa_aiModelOpenai')?.value?.trim() || 'gpt-5.4';
+  const aiAssistantDefaultModelGemini = document.getElementById('sa_aiModelGemini')?.value?.trim() || 'gemini-2.0-flash';
   const ttl = parseInt(document.getElementById('sa_verifyTtlMinutes')?.value) || 15;
   const pollInterval = parseInt(document.getElementById('sa_pollIntervalSeconds')?.value) || 30;
 
   try {
+    const payload = {
+      moduleMicroVerifyEnabled: enabled,
+      verificationReceiveWallet: receiveWallet,
+      verifyRequestTtlMinutes: ttl,
+      pollIntervalSeconds: pollInterval,
+      aiAssistantDefaultProvider,
+      aiAssistantFallbackProvider,
+      aiAssistantDefaultModelOpenai,
+      aiAssistantDefaultModelGemini,
+    };
+    if (clearOpenaiApiKey) payload.openaiApiKey = '';
+    else if (openaiApiKey) payload.openaiApiKey = openaiApiKey;
+    if (clearGeminiApiKey) payload.geminiApiKey = '';
+    else if (geminiApiKey) payload.geminiApiKey = geminiApiKey;
+
     // Use the dedicated global-settings endpoint — no guild context required
     const response = await fetch('/api/superadmin/global-settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({
-        moduleMicroVerifyEnabled: enabled,
-        verificationReceiveWallet: receiveWallet,
-        verifyRequestTtlMinutes: ttl,
-        pollIntervalSeconds: pollInterval
-      })
+      body: JSON.stringify(payload)
     });
     const data = await response.json();
     if (!data.success) {
@@ -5563,6 +5641,10 @@ async function loadAdminHelpView() {
       { name: '/token-tracker remove', desc: 'Remove tracked token mint', options: 'id(required)', example: '/token-tracker remove id:2' },
       { name: '/token-tracker list', desc: 'List tracked token mints', options: '-', example: '/token-tracker list' },
       { name: '/token-tracker feed', desc: 'Show recent tracked token events', options: 'limit(optional)', example: '/token-tracker feed limit:15' }
+    ])}
+    ${cmdSection('AI Assistant', 'AI', [
+      { name: '/aiassistant ask', desc: 'Ask the AI assistant (Pro feature)', options: 'prompt(required), provider(optional)', example: '/aiassistant ask prompt:"Summarize today\'s mod actions"' },
+      { name: '/aiassistant status', desc: 'Show AI assistant status for this server', options: '-', example: '/aiassistant status' }
     ])}
 
     ${cmdSection('Points', 'PTS', [
@@ -5911,6 +5993,7 @@ async function loadAdminSettingsView() {
       { id: 'moduleBrandingEnabled',     label: 'Branding',        icon: 'BR', moduleKey: 'branding'      },
       { id: 'moduleMissionsEnabled',     label: 'Heist',           icon: 'H',  moduleKey: 'heist'         },
       { id: 'moduleWalletTrackerEnabled',label: 'Wallet Tracker',  icon: 'W',  moduleKey: 'wallettracker' },
+      { id: 'moduleAiAssistantEnabled',  label: 'AI Assistant',    icon: 'AI', moduleKey: 'aiassistant'  },
       { id: 'moduleInviteTrackerEnabled',label: 'Invite Tracker',  icon: '📨', moduleKey: 'invites'       },
       { id: 'moduleTreasuryEnabled',     label: 'Treasury',        icon: '$',  moduleKey: 'treasury'      },
       { id: 'moduleNftTrackerEnabled',   label: 'NFT Tracker',     icon: 'N',  moduleKey: 'nfttracker'    },
@@ -6024,7 +6107,7 @@ async function savePortalSettings() {
   // Only save module toggles that are actually rendered (handles assigned-module filtering)
   const moduleIds = [
     'moduleMinigamesEnabled', 'moduleBattleEnabled', 'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleBrandingEnabled',
-    'moduleMissionsEnabled', 'moduleWalletTrackerEnabled', 'moduleTreasuryEnabled', 'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled',
+    'moduleMissionsEnabled', 'moduleWalletTrackerEnabled', 'moduleTreasuryEnabled', 'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleAiAssistantEnabled',
     'moduleRoleClaimEnabled', 'moduleTicketingEnabled', 'moduleEngagementEnabled',
   ];
   const newSettings = {};
@@ -7497,6 +7580,137 @@ async function loadTokenTrackerSettingsView(targetPaneId = null) {
 
   await renderNftTrackedTokensCard('tts_tokensWrap');
   await renderNftTokenEventsCard('tts_tokenEventsWrap');
+}
+
+// ==================== AI ASSISTANT SETTINGS ====================
+
+async function loadAiAssistantSettingsView(targetPaneId = null) {
+  if (!isAdmin) return;
+  const pane = (targetPaneId && document.getElementById(targetPaneId))
+    || document.getElementById('settingsTab-aiassistant');
+  if (!pane) return;
+
+  const cardStyle = 'background:rgba(14,23,44,0.5);border:1px solid rgba(99,102,241,0.22);border-radius:10px;padding:var(--space-5);margin-bottom:var(--space-5);';
+  pane.innerHTML = `<div style="${cardStyle}"><div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);"><div class="spinner"></div><p>Loading AI assistant settings...</p></div></div>`;
+
+  try {
+    const [settingsRes, channelsRes] = await Promise.all([
+      fetch('/api/admin/aiassistant/settings', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      fetch('/api/admin/discord/channels', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+    ]);
+    const settingsJson = await settingsRes.json();
+    const channelsJson = await channelsRes.json();
+    if (!settingsJson.success) throw new Error(settingsJson.message || 'Failed to load AI assistant settings');
+
+    const s = settingsJson.settings || {};
+    const channels = (channelsJson?.channels || []).filter(c => c.type === 0 || c.type === 5);
+    const channelRows = channels.map(c => `<option value="${escapeHtml(String(c.id))}">${escapeHtml(c.name || c.id)}</option>`).join('');
+    const allowed = Array.isArray(s.allowedChannelIds) ? s.allowedChannelIds : [];
+
+    pane.innerHTML = `
+      <div style="${cardStyle}">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+          <h3 style="margin:0;color:#c9d6ff;">🤖 AI Assistant</h3>
+          <span style="color:var(--text-secondary);font-size:0.82em;">Tenant-scoped runtime settings</span>
+        </div>
+        <div style="display:grid;gap:12px;">
+          <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;">
+            <input id="aiassistant_enabled" type="checkbox" ${s.enabled ? 'checked' : ''}>
+            Enable AI Assistant for this server
+          </label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <label style="display:grid;gap:6px;">
+              <span style="font-size:0.82em;color:var(--text-secondary);">Preferred Provider</span>
+              <select id="aiassistant_provider" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+                <option value="openai" ${s.provider === 'openai' ? 'selected' : ''}>OpenAI</option>
+                <option value="gemini" ${s.provider === 'gemini' ? 'selected' : ''}>Gemini</option>
+              </select>
+            </label>
+            <label style="display:grid;gap:6px;">
+              <span style="font-size:0.82em;color:var(--text-secondary);">Response Visibility</span>
+              <select id="aiassistant_visibility" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+                <option value="public" ${s.responseVisibility === 'public' ? 'selected' : ''}>Public Replies</option>
+                <option value="ephemeral" ${s.responseVisibility === 'ephemeral' ? 'selected' : ''}>Private Replies</option>
+              </select>
+            </label>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <label style="display:grid;gap:6px;">
+              <span style="font-size:0.82em;color:var(--text-secondary);">OpenAI Model</span>
+              <input id="aiassistant_model_openai" type="text" value="${escapeHtml(String(s.modelOpenai || 'gpt-5.4'))}" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-family:monospace;">
+            </label>
+            <label style="display:grid;gap:6px;">
+              <span style="font-size:0.82em;color:var(--text-secondary);">Gemini Model</span>
+              <input id="aiassistant_model_gemini" type="text" value="${escapeHtml(String(s.modelGemini || 'gemini-2.0-flash'))}" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-family:monospace;">
+            </label>
+          </div>
+          <label style="display:grid;gap:6px;">
+            <span style="font-size:0.82em;color:var(--text-secondary);">Allowed Channels (blank = all channels)</span>
+            <select id="aiassistant_allowed_channels" multiple size="6" style="width:100%;padding:8px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+              ${channelRows}
+            </select>
+            <span style="font-size:0.76em;color:var(--text-secondary);">Tip: hold Ctrl/Cmd on desktop for multi-select. Mobile gets picker mode automatically.</span>
+          </label>
+          <label style="display:grid;gap:6px;">
+            <span style="font-size:0.82em;color:var(--text-secondary);">System Prompt (tenant style/policy)</span>
+            <textarea id="aiassistant_system_prompt" rows="6" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">${escapeHtml(String(s.systemPrompt || ''))}</textarea>
+          </label>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+          <button class="btn-secondary" onclick="loadAiAssistantSettingsView()">Reset</button>
+          <button class="btn-primary" onclick="saveAiAssistantSettings()">Save AI Assistant Settings</button>
+        </div>
+      </div>
+    `;
+
+    const selectEl = document.getElementById('aiassistant_allowed_channels');
+    if (selectEl) {
+      const selected = new Set(allowed.map(v => String(v)));
+      Array.from(selectEl.options || []).forEach(opt => {
+        opt.selected = selected.has(String(opt.value));
+      });
+      try {
+        portalEnhanceMultiSelect(selectEl, { placeholder: 'All channels', allowEmptySelection: true });
+      } catch (_error) {}
+    }
+  } catch (error) {
+    pane.innerHTML = `<div style="${cardStyle}"><div style="color:#fca5a5;">${escapeHtml(error.message || 'Failed to load AI assistant settings')}</div></div>`;
+  }
+}
+
+async function saveAiAssistantSettings() {
+  const allowedSelect = document.getElementById('aiassistant_allowed_channels');
+  const allowedChannelIds = allowedSelect
+    ? Array.from(allowedSelect.selectedOptions || []).map(opt => String(opt.value || '').trim()).filter(Boolean)
+    : [];
+
+  const payload = {
+    enabled: !!document.getElementById('aiassistant_enabled')?.checked,
+    provider: String(document.getElementById('aiassistant_provider')?.value || 'openai'),
+    responseVisibility: String(document.getElementById('aiassistant_visibility')?.value || 'public'),
+    modelOpenai: String(document.getElementById('aiassistant_model_openai')?.value || '').trim() || 'gpt-5.4',
+    modelGemini: String(document.getElementById('aiassistant_model_gemini')?.value || '').trim() || 'gemini-2.0-flash',
+    systemPrompt: String(document.getElementById('aiassistant_system_prompt')?.value || '').trim(),
+    allowedChannelIds,
+  };
+
+  try {
+    const res = await fetch('/api/admin/aiassistant/settings', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!json.success) {
+      showError(json.message || 'Failed to save AI assistant settings');
+      return;
+    }
+    showSuccess('AI assistant settings saved');
+    await loadAiAssistantSettingsView();
+  } catch (error) {
+    showError(`Failed to save AI assistant settings: ${error.message}`);
+  }
 }
 
 // ==================== INVITE TRACKER SETTINGS ====================

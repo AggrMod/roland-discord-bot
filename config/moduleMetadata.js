@@ -10,6 +10,7 @@ const MODULE_DISPLAY_NAMES = Object.freeze({
   selfserveroles: 'Self-Serve Roles',
   branding: 'Branding',
   engagement: 'Engagement',
+  aiassistant: 'AI Assistant',
   minigames: 'Minigames',
   battle: 'Battle',
   heist: 'Missions',

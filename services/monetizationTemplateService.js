@@ -20,7 +20,8 @@ const TEMPLATE_CATALOG = Object.freeze([
       branding: true,
       minigames: false,
       heist: false,
-      engagement: false
+      engagement: false,
+      aiassistant: false
     },
     limitOverrides: {}
   },
@@ -42,7 +43,8 @@ const TEMPLATE_CATALOG = Object.freeze([
       branding: true,
       minigames: true,
       heist: false,
-      engagement: true
+      engagement: true,
+      aiassistant: false
     },
     limitOverrides: {
       ticketing: { max_categories: 15 },
@@ -68,7 +70,8 @@ const TEMPLATE_CATALOG = Object.freeze([
       selfserveroles: true,
       branding: true,
       analytics: true,
-      engagement: true
+      engagement: true,
+      aiassistant: true
     },
     limitOverrides: {}
   },
@@ -91,7 +94,8 @@ const TEMPLATE_CATALOG = Object.freeze([
       selfserveroles: true,
       branding: true,
       analytics: true,
-      engagement: true
+      engagement: true,
+      aiassistant: true
     },
     limitOverrides: {
       minigames: { max_bounties_per_battle: 3 },

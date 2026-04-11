@@ -739,6 +739,9 @@ async function handlePanelVerifyButton(interaction) {
         ? `+${syncResult.totalAdded || 0} / -${syncResult.totalRemoved || 0}`
         : 'Role sync partial';
     }
+    if (panelGuildId) {
+      walletService.triggerOGRoleAssignment(discordId, username, panelGuildId);
+    }
     let governanceEnabled = true;
     try {
       const governanceGuildId = panelGuildId || interaction.guildId;

@@ -19,6 +19,16 @@ function createUserWalletVerificationRouter({
     return false;
   };
 
+  const triggerOgRoleBestEffort = (req, discordId, username) => {
+    const guildId = String(req.guildId || '').trim();
+    if (!guildId) return;
+    try {
+      walletService.triggerOGRoleAssignment(discordId, username || 'Web User', guildId);
+    } catch (error) {
+      logger.warn('OG role trigger warning (non-fatal):', error?.message || error);
+    }
+  };
+
   const refreshUserRoles = async (req, discordId, username) => {
     const guild = req.guild || await fetchGuildById(req.guildId);
     await roleService.updateUserRoles(discordId, username, req.guildId || null);
@@ -71,6 +81,7 @@ function createUserWalletVerificationRouter({
         if (existingWallet.discord_id === discordId) {
           try {
             await refreshUserRoles(req, discordId, req.session.discordUser.username || 'Web User');
+            triggerOgRoleBestEffort(req, discordId, req.session.discordUser.username || 'Web User');
           } catch (roleErr) {
             logger.error('Role refresh after verify-existing failed (non-fatal):', roleErr);
           }
@@ -98,13 +109,8 @@ function createUserWalletVerificationRouter({
         logger.error('Role update after verify failed (non-fatal):', roleErr);
       }
 
-      if (isPrimary) {
-        walletService.triggerOGRoleAssignment(
-          discordId,
-          req.session.discordUser.username || 'Web User',
-          req.guildId || null
-        );
-      }
+      // Always attempt OG assignment in guild context (safe no-op if not eligible/already assigned).
+      triggerOgRoleBestEffort(req, discordId, req.session.discordUser.username || 'Web User');
 
       logger.log(`Web signature verification: User ${discordId} linked wallet ${walletAddress}`);
       return res.json(toSuccessResponse({ message: 'Wallet verified successfully!' }));
@@ -144,6 +150,7 @@ function createUserWalletVerificationRouter({
         if (existingWallet.discord_id === discordId) {
           try {
             await refreshUserRoles(req, discordId, req.session.discordUser?.username || 'Web User');
+            triggerOgRoleBestEffort(req, discordId, req.session.discordUser?.username || 'Web User');
           } catch (roleErr) {
             logger.error('Role refresh after legacy verify-existing failed (non-fatal):', roleErr);
           }
@@ -174,13 +181,8 @@ function createUserWalletVerificationRouter({
         logger.error('Role update after legacy verify failed (non-fatal):', roleErr);
       }
 
-      if (isPrimary) {
-        walletService.triggerOGRoleAssignment(
-          discordId,
-          req.session.discordUser?.username || 'Web User',
-          req.guildId || null
-        );
-      }
+      // Always attempt OG assignment in guild context (safe no-op if not eligible/already assigned).
+      triggerOgRoleBestEffort(req, discordId, req.session.discordUser?.username || 'Web User');
 
       logger.log(`Web verification: User ${discordId} linked wallet ${walletAddress}`);
       return res.json(toSuccessResponse({ message: 'Wallet verified successfully', isFavorite }));

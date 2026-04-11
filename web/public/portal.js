@@ -4148,6 +4148,38 @@ async function loadSuperadminView() {
                 placeholder="Solana wallet address that receives micro-payments"
                 style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.88em;">
             </label>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+              <label style="display:grid; gap:6px;">
+                <span style="font-size:0.82em; color:var(--text-secondary);">Request TTL (minutes)</span>
+                <input id="sa_verifyTtlMinutes" type="number" min="1" max="60"
+                  value="${escapeHtml(String(settingsData?.settings?.verifyRequestTtlMinutes || 15))}"
+                  style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
+              </label>
+              <label style="display:grid; gap:6px;">
+                <span style="font-size:0.82em; color:var(--text-secondary);">Poll Interval (seconds)</span>
+                <input id="sa_pollIntervalSeconds" type="number" min="10" max="300"
+                  value="${escapeHtml(String(settingsData?.settings?.pollIntervalSeconds || 30))}"
+                  style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
+              </label>
+            </div>
+            <div style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); border-radius:8px; padding:10px 12px;">
+              <p style="color:#fcd34d; font-size:0.82em; margin:0; line-height:1.5;">
+                ⚠️ The receive wallet collects small SOL payments used to identify users. Keep it secure — only this superadmin panel can change it.
+              </p>
+            </div>
+          </div>
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+            <button class="btn-secondary" onclick="loadSuperadminView()" style="padding:8px 12px;">Reset</button>
+            <button class="btn-primary" onclick="saveMicroVerifySettings()" style="padding:8px 12px;">Save Micro-Verify Settings</button>
+          </div>
+        </div>
+
+        <div id="superadminSection-aiProviders" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
+            <h4 style="margin:0; color:#c9d6ff;">🤖 AI Providers <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
+            <span style="color:var(--text-secondary); font-size:0.85em;">Provider keys and default model routing</span>
+          </div>
+          <div style="display:grid; gap:12px;">
             <div style="padding:10px; border:1px solid rgba(99,102,241,0.2); border-radius:8px; background:rgba(2,6,23,0.35); display:grid; gap:10px;">
               <div style="color:#c9d6ff; font-weight:600;">AI Providers (Pro Module)</div>
               <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
@@ -4202,29 +4234,10 @@ async function loadSuperadminView() {
                 </label>
               </div>
             </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-              <label style="display:grid; gap:6px;">
-                <span style="font-size:0.82em; color:var(--text-secondary);">Request TTL (minutes)</span>
-                <input id="sa_verifyTtlMinutes" type="number" min="1" max="60"
-                  value="${escapeHtml(String(settingsData?.settings?.verifyRequestTtlMinutes || 15))}"
-                  style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
-              </label>
-              <label style="display:grid; gap:6px;">
-                <span style="font-size:0.82em; color:var(--text-secondary);">Poll Interval (seconds)</span>
-                <input id="sa_pollIntervalSeconds" type="number" min="10" max="300"
-                  value="${escapeHtml(String(settingsData?.settings?.pollIntervalSeconds || 30))}"
-                  style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
-              </label>
-            </div>
-            <div style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); border-radius:8px; padding:10px 12px;">
-              <p style="color:#fcd34d; font-size:0.82em; margin:0; line-height:1.5;">
-                ⚠️ The receive wallet collects small SOL payments used to identify users. Keep it secure — only this superadmin panel can change it.
-              </p>
-            </div>
           </div>
           <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
             <button class="btn-secondary" onclick="loadSuperadminView()" style="padding:8px 12px;">Reset</button>
-            <button class="btn-primary" onclick="saveMicroVerifySettings()" style="padding:8px 12px;">Save Micro-Verify Settings</button>
+            <button class="btn-primary" onclick="saveAiProviderSettings()" style="padding:8px 12px;">Save AI Provider Settings</button>
           </div>
         </div>
 
@@ -4884,7 +4897,7 @@ function removeSuperadminIdentityWallet(discordId, walletAddress) {
 function showSuperadminTab(tab) {
   superadminActiveTab = tab;
   const sections = {
-    superadmins: ['superadminSection-superadminsInput', 'superadminSection-superadmins', 'superadminSection-chainEmojis', 'superadminSection-microVerify'],
+    superadmins: ['superadminSection-superadminsInput', 'superadminSection-superadmins', 'superadminSection-chainEmojis', 'superadminSection-microVerify', 'superadminSection-aiProviders'],
     identity: ['superadminSection-identity'],
     tenants: ['superadminSection-tenants', 'superadminSection-detail', 'superadminSection-eras'],
   };
@@ -5441,14 +5454,6 @@ function removeSuperadmin(userId) {
 async function saveMicroVerifySettings() {
   const enabled = !!document.getElementById('sa_microVerifyEnabled')?.checked;
   const receiveWallet = document.getElementById('sa_verificationReceiveWallet')?.value?.trim() || '';
-  const openaiApiKey = document.getElementById('sa_openaiApiKey')?.value?.trim() || '';
-  const geminiApiKey = document.getElementById('sa_geminiApiKey')?.value?.trim() || '';
-  const clearOpenaiApiKey = !!document.getElementById('sa_openaiApiKeyClear')?.checked;
-  const clearGeminiApiKey = !!document.getElementById('sa_geminiApiKeyClear')?.checked;
-  const aiAssistantDefaultProvider = document.getElementById('sa_aiProviderDefault')?.value || 'openai';
-  const aiAssistantFallbackProvider = document.getElementById('sa_aiProviderFallback')?.value || '';
-  const aiAssistantDefaultModelOpenai = document.getElementById('sa_aiModelOpenai')?.value?.trim() || 'gpt-5.4';
-  const aiAssistantDefaultModelGemini = document.getElementById('sa_aiModelGemini')?.value?.trim() || 'gemini-2.0-flash';
   const ttl = parseInt(document.getElementById('sa_verifyTtlMinutes')?.value) || 15;
   const pollInterval = parseInt(document.getElementById('sa_pollIntervalSeconds')?.value) || 30;
 
@@ -5458,15 +5463,7 @@ async function saveMicroVerifySettings() {
       verificationReceiveWallet: receiveWallet,
       verifyRequestTtlMinutes: ttl,
       pollIntervalSeconds: pollInterval,
-      aiAssistantDefaultProvider,
-      aiAssistantFallbackProvider,
-      aiAssistantDefaultModelOpenai,
-      aiAssistantDefaultModelGemini,
     };
-    if (clearOpenaiApiKey) payload.openaiApiKey = '';
-    else if (openaiApiKey) payload.openaiApiKey = openaiApiKey;
-    if (clearGeminiApiKey) payload.geminiApiKey = '';
-    else if (geminiApiKey) payload.geminiApiKey = geminiApiKey;
 
     // Use the dedicated global-settings endpoint — no guild context required
     const response = await fetch('/api/superadmin/global-settings', {
@@ -5484,6 +5481,46 @@ async function saveMicroVerifySettings() {
     await loadSuperadminView();
   } catch (error) {
     showError(`Failed to save micro-verify settings: ${error.message}`);
+  }
+}
+
+async function saveAiProviderSettings() {
+  const openaiApiKey = document.getElementById('sa_openaiApiKey')?.value?.trim() || '';
+  const geminiApiKey = document.getElementById('sa_geminiApiKey')?.value?.trim() || '';
+  const clearOpenaiApiKey = !!document.getElementById('sa_openaiApiKeyClear')?.checked;
+  const clearGeminiApiKey = !!document.getElementById('sa_geminiApiKeyClear')?.checked;
+  const aiAssistantDefaultProvider = document.getElementById('sa_aiProviderDefault')?.value || 'openai';
+  const aiAssistantFallbackProvider = document.getElementById('sa_aiProviderFallback')?.value || '';
+  const aiAssistantDefaultModelOpenai = document.getElementById('sa_aiModelOpenai')?.value?.trim() || 'gpt-5.4';
+  const aiAssistantDefaultModelGemini = document.getElementById('sa_aiModelGemini')?.value?.trim() || 'gemini-2.0-flash';
+
+  try {
+    const payload = {
+      aiAssistantDefaultProvider,
+      aiAssistantFallbackProvider,
+      aiAssistantDefaultModelOpenai,
+      aiAssistantDefaultModelGemini,
+    };
+    if (clearOpenaiApiKey) payload.openaiApiKey = '';
+    else if (openaiApiKey) payload.openaiApiKey = openaiApiKey;
+    if (clearGeminiApiKey) payload.geminiApiKey = '';
+    else if (geminiApiKey) payload.geminiApiKey = geminiApiKey;
+
+    const response = await fetch('/api/superadmin/global-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (!data.success) {
+      showError(data.message || 'Failed to save AI provider settings');
+      return;
+    }
+    showSuccess('AI provider settings saved ✅');
+    await loadSuperadminView();
+  } catch (error) {
+    showError(`Failed to save AI provider settings: ${error.message}`);
   }
 }
 

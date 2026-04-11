@@ -2105,6 +2105,7 @@ async function handleAiAssistantMentionMessage(message) {
     requesterTag: message.author.tag,
     triggerSource: 'mention',
     requiredConfidence: channelPolicy.minConfidence,
+    memberRoleNames: message.member?.roles?.cache?.map(r => r.name) || [],
   });
 
   if (!result.success) {
@@ -2171,6 +2172,7 @@ async function handleAiAssistantPassiveMessage(message) {
     requesterTag: message.author.tag,
     triggerSource: 'passive',
     requiredConfidence: policy.minConfidence,
+    memberRoleNames: message.member?.roles?.cache?.map(r => r.name) || [],
   });
 
   if (!result.success) {

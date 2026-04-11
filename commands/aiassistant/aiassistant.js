@@ -107,6 +107,7 @@ module.exports = {
       providerOverride,
       requesterTag: interaction.user.tag,
       triggerSource: 'slash',
+      memberRoleNames: interaction.member?.roles?.cache?.map(r => r.name) || [],
     });
 
     if (!result.success) {

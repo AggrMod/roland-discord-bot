@@ -3,6 +3,7 @@ const logger = require('../utils/logger');
 const settingsManager = require('../config/settings');
 const tenantService = require('./tenantService');
 const entitlementService = require('./entitlementService');
+const walletService = require('./walletService');
 const { decryptSecret } = require('../utils/secretVault');
 
 const DEFAULTS = Object.freeze({
@@ -799,7 +800,7 @@ class AiAssistantService {
     return out;
   }
 
-  async ask({ guildId, userId, channelId, prompt, providerOverride = '', requesterTag = '', triggerSource = 'slash', requiredConfidence = null }) {
+  async ask({ guildId, userId, channelId, prompt, providerOverride = '', requesterTag = '', triggerSource = 'slash', requiredConfidence = null, memberRoleNames = [] }) {
     const normalizedGuildId = normalizeGuildId(guildId);
     const cleanPrompt = String(prompt || '').trim();
     if (!normalizedGuildId) return { success: false, code: 'invalid_guild', message: 'Invalid guild context' };
@@ -936,6 +937,16 @@ class AiAssistantService {
       const sourceLabel = entry.sourceUrl ? ` | source: ${entry.sourceUrl}` : '';
       return `[K${index + 1}] ${entry.title}${sourceLabel}\n${entry.snippet}`;
     }).join('\n\n');
+    
+    const walletAddress = walletService.getFavoriteWallet(userId) || walletService.getAllUserWallets(userId)[0] || null;
+    const contextBlock = [
+      'User Context:',
+      `- Discord Tag: ${requesterTag || 'Unknown'}`,
+      `- Roles: ${Array.isArray(memberRoleNames) && memberRoleNames.length > 0 ? memberRoleNames.join(', ') : 'None'}`,
+      `- Verified Wallet: ${walletAddress ? walletAddress : 'None'}`,
+      `- Verification Status: ${walletAddress ? 'Verified Member' : 'Unverified Guest'}`,
+    ].join('\n');
+
     const groundingInstruction = [
       'Grounding policy:',
       '- Use only the provided knowledge snippets for factual claims.',
@@ -946,7 +957,7 @@ class AiAssistantService {
       'Knowledge snippets:',
       knowledgeBlock,
     ].join('\n');
-    const systemPrompt = [tenantSettings.systemPrompt || '', groundingInstruction].filter(Boolean).join('\n\n');
+    const systemPrompt = [tenantSettings.systemPrompt || '', contextBlock, groundingInstruction].filter(Boolean).join('\n\n');
     let lastError = null;
 
     for (const provider of providerOrder) {

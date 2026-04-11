@@ -844,15 +844,9 @@ class AiAssistantService {
         responseChars: 0,
         triggerSource,
       });
-      return {
-        success: false,
-        code: 'knowledge_not_configured',
-        message: 'No AI knowledge sources are configured for this server yet. Ask an admin to add them in Settings -> AI Assistant.',
-        allowance,
-        userAllowance,
-      };
-    }
-    if (!knowledge.matches.length) {
+      // We log the missing knowledge but DO NOT block the request. 
+      // This allows general conversational capability.
+    } else if (!knowledge.matches.length) {
       this.logUsage({
         guildId: normalizedGuildId,
         userId,
@@ -865,40 +859,28 @@ class AiAssistantService {
         responseChars: 0,
         triggerSource,
       });
-      return {
-        success: false,
-        code: 'knowledge_no_match',
-        message: 'I could not find a trusted knowledge source for that question yet. Ask an admin to add this topic to AI knowledge sources.',
-        allowance,
-        userAllowance,
-      };
-    }
-    const confidenceThreshold = requiredConfidence === null || requiredConfidence === undefined
-      ? DEFAULTS.defaultMinConfidence
-      : normalizeIntegerInRange(requiredConfidence, { min: 0, max: 100, fallback: DEFAULTS.defaultMinConfidence });
-    const confidence = Number(knowledge.confidence || 0);
-    if (confidence < confidenceThreshold) {
-      this.logUsage({
-        guildId: normalizedGuildId,
-        userId,
-        provider: 'knowledge',
-        model: 'local_index',
-        status: 'error',
-        errorCode: 'knowledge_low_confidence',
-        latencyMs: 0,
-        promptChars: cleanPrompt.length,
-        responseChars: 0,
-        triggerSource,
-      });
-      return {
-        success: false,
-        code: 'knowledge_low_confidence',
-        message: 'I am not confident enough with trusted knowledge for that request yet. Please ask an admin to add/clarify this topic.',
-        allowance,
-        userAllowance,
-        confidence,
-        confidenceThreshold,
-      };
+    } else {
+      const confidenceThreshold = requiredConfidence === null || requiredConfidence === undefined
+        ? DEFAULTS.defaultMinConfidence
+        : normalizeIntegerInRange(requiredConfidence, { min: 0, max: 100, fallback: DEFAULTS.defaultMinConfidence });
+      const confidence = Number(knowledge.confidence || 0);
+      
+      // We log low confidence matches, but we no longer block the request.
+      // This allows the bot to fall back to general AI knowledge.
+      if (confidence < confidenceThreshold) {
+        this.logUsage({
+          guildId: normalizedGuildId,
+          userId,
+          provider: 'knowledge',
+          model: 'local_index',
+          status: 'error',
+          errorCode: 'knowledge_low_confidence',
+          latencyMs: 0,
+          promptChars: cleanPrompt.length,
+          responseChars: 0,
+          triggerSource,
+        });
+      }
     }
 
     if (tenantSettings.safetyFilterEnabled) {

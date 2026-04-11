@@ -416,6 +416,8 @@ client.once(Events.ClientReady, () => {
       .then(() => logger.log('[invite-tracker] Invite cache primed for connected guilds'))
       .catch(err => logger.error('[invite-tracker] Failed to prime invite cache:', err));
   }, 15 * 1000);
+  const inviteRefreshMs = inviteTrackerService.startAutoPanelRefresh();
+  logger.log(`[invite-tracker] Leaderboard panel auto-refresh scheduled (every ${Math.round(inviteRefreshMs / 1000)}s)`);
   logger.log('📋 Wallet holdings panel refresh scheduled (2 min startup delay, then every 30 min)');
 
   // Tracked token activity polling (buy/sell/transfer classification for tracked wallets)
@@ -516,6 +518,21 @@ client.on(Events.InteractionCreate, async interaction => {
   // Handle button interactions
   if (interaction.isButton()) {
     const customId = interaction.customId;
+
+    if (typeof customId === 'string' && customId.startsWith(inviteTrackerService.SORT_BUTTON_PREFIX)) {
+      try {
+        const result = await inviteTrackerService.handleSortButtonInteraction(interaction);
+        if (!result.success && !interaction.replied && !interaction.deferred) {
+          await interaction.reply({ content: result.message || 'Could not update leaderboard sorting.', ephemeral: true });
+        }
+      } catch (error) {
+        logger.warn('[invite-tracker] sort button error:', error?.message || error);
+        if (!interaction.replied && !interaction.deferred) {
+          await interaction.reply({ content: 'Could not update leaderboard sorting right now.', ephemeral: true }).catch(() => {});
+        }
+      }
+      return;
+    }
 
     if (customId === inviteTrackerService.CREATE_LINK_BUTTON_ID) {
       try {
@@ -653,6 +670,19 @@ async function handlePanelVerifyButton(interaction) {
     const discordId = interaction.user.id;
     const username = interaction.user.username;
     const webUrl = process.env.WEB_URL || 'http://localhost:3000';
+    const panelGuildId = String(
+      interaction.guildId
+      || interaction.guild?.id
+      || interaction.message?.guildId
+      || interaction.channel?.guild?.id
+      || ''
+    ).trim();
+    const buildVerifyUrl = (action = '') => {
+      const url = new URL('/verify', webUrl);
+      if (panelGuildId) url.searchParams.set('guild', panelGuildId);
+      if (action) url.searchParams.set('action', action);
+      return url.toString();
+    };
     const wallets = walletService.getLinkedWallets(discordId);
 
     // If no wallets linked, send to portal
@@ -665,7 +695,7 @@ async function handlePanelVerifyButton(interaction) {
         )
         .setTimestamp();
       applyEmbedBranding(embed, {
-        guildId: interaction.guildId || '',
+        guildId: panelGuildId || interaction.guildId || '',
         moduleKey: 'verification',
         defaultColor: '#FFD700',
         defaultFooter: 'Powered by Guild Pilot',
@@ -676,11 +706,11 @@ async function handlePanelVerifyButton(interaction) {
         new ButtonBuilder()
           .setLabel('Open Verify Portal')
           .setStyle(ButtonStyle.Link)
-          .setURL(`${webUrl}/verify`),
+          .setURL(buildVerifyUrl()),
         new ButtonBuilder()
           .setLabel('Add Wallet')
           .setStyle(ButtonStyle.Link)
-          .setURL(`${webUrl}/verify?action=add`)
+          .setURL(buildVerifyUrl('add'))
       );
 
       await interaction.editReply({ embeds: [embed], components: [row], ephemeral: true });
@@ -688,7 +718,7 @@ async function handlePanelVerifyButton(interaction) {
     }
 
     // Wallet exists: verify holdings now
-    const updateResult = await roleService.updateUserRoles(discordId, username, interaction.guildId || null);
+    const updateResult = await roleService.updateUserRoles(discordId, username, panelGuildId || interaction.guildId || null);
 
     if (!updateResult.success) {
       return interaction.editReply({
@@ -698,16 +728,19 @@ async function handlePanelVerifyButton(interaction) {
 
     // Sync Discord roles best-effort
     let roleSyncText = 'Role sync skipped';
-    if (interaction.guild) {
-      const syncResult = await roleService.syncUserDiscordRoles(interaction.guild, discordId, interaction.guildId || null);
+    const guildForSync = interaction.guild
+      || (panelGuildId ? (client.guilds.cache.get(panelGuildId) || await client.guilds.fetch(panelGuildId).catch(() => null)) : null);
+    if (guildForSync) {
+      const syncResult = await roleService.syncUserDiscordRoles(guildForSync, discordId, panelGuildId || guildForSync.id || null);
       roleSyncText = syncResult.success
         ? `+${syncResult.totalAdded || 0} / -${syncResult.totalRemoved || 0}`
         : 'Role sync partial';
     }
     let governanceEnabled = true;
     try {
-      if (interaction.guildId && tenantService.isMultitenantEnabled()) {
-        governanceEnabled = tenantService.isModuleEnabled(interaction.guildId, 'governance');
+      const governanceGuildId = panelGuildId || interaction.guildId;
+      if (governanceGuildId && tenantService.isMultitenantEnabled()) {
+        governanceEnabled = tenantService.isModuleEnabled(governanceGuildId, 'governance');
       } else {
         const settingsManager = require('./config/settings');
         governanceEnabled = settingsManager.getSettings().moduleGovernanceEnabled !== false;
@@ -737,7 +770,7 @@ async function handlePanelVerifyButton(interaction) {
       new ButtonBuilder()
         .setLabel('Add Wallet')
         .setStyle(ButtonStyle.Link)
-        .setURL(`${webUrl}/verify?action=add`)
+        .setURL(buildVerifyUrl('add'))
     );
 
     await interaction.editReply({ embeds: [embed], components: [row], ephemeral: true });

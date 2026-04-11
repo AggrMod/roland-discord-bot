@@ -62,7 +62,7 @@ class WalletService {
 
           const guildId = String(guildIdHint || '').trim();
           if (!guildId) {
-            logger.warn('No guild context available for OG role assignment');
+            logger.debug('OG role assignment skipped: no guild context (global verification flow)');
             return;
           }
 

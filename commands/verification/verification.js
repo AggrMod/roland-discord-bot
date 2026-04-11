@@ -25,6 +25,18 @@ function isGovernanceEnabled(guildId = null) {
   }
 }
 
+function buildVerifyPortalUrl(baseUrl, guildId = '', action = '') {
+  const url = new URL('/verify', baseUrl);
+  const normalizedGuildId = String(guildId || '').trim();
+  if (normalizedGuildId) {
+    url.searchParams.set('guild', normalizedGuildId);
+  }
+  if (action) {
+    url.searchParams.set('action', action);
+  }
+  return url.toString();
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('verification')
@@ -374,7 +386,7 @@ module.exports = {
           new ButtonBuilder()
             .setLabel('Verify')
             .setStyle(ButtonStyle.Link)
-            .setURL(`${webUrl}/verify`),
+            .setURL(buildVerifyPortalUrl(webUrl, interaction.guildId || '')),
           new ButtonBuilder()
             .setLabel('Get Help')
             .setStyle(ButtonStyle.Link)
@@ -447,7 +459,7 @@ module.exports = {
         new ButtonBuilder()
           .setLabel('Add Wallet')
           .setStyle(ButtonStyle.Link)
-          .setURL(`${webUrl}/verify?action=add`),
+          .setURL(buildVerifyPortalUrl(webUrl, interaction.guildId || '', 'add')),
         new ButtonBuilder()
           .setLabel('Get Help')
           .setStyle(ButtonStyle.Link)
@@ -628,7 +640,7 @@ module.exports = {
         new ButtonBuilder()
           .setLabel('Add Wallet')
           .setStyle(ButtonStyle.Link)
-          .setURL(`${webUrl}/verify`),
+          .setURL(buildVerifyPortalUrl(webUrl, interaction.guildId || '', 'add')),
         new ButtonBuilder()
           .setLabel('Get Help')
           .setStyle(ButtonStyle.Link)

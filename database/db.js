@@ -68,7 +68,8 @@ const REQUIRED_SCHEMA = Object.freeze({
   nft_tracked_collections: ['guild_id', 'collection_address', 'track_bid'],
   tracked_tokens: ['guild_id', 'alert_channel_ids'],
   tracked_wallets: ['guild_id', 'wallet_address', 'token_last_signature'],
-  invite_tracker_settings: ['guild_id', 'required_join_role_id', 'panel_channel_id', 'panel_message_id', 'panel_period_days', 'panel_limit', 'panel_enable_create_link', 'include_verification_stats', 'excluded_codes'],
+  invite_tracker_settings: ['guild_id', 'required_join_role_id', 'panel_channel_id', 'panel_message_id', 'panel_period_days', 'panel_limit', 'panel_enable_create_link', 'include_verification_stats', 'excluded_codes', 'panel_sort_by'],
+  invite_tracker_user_codes: ['guild_id', 'invite_code', 'owner_user_id', 'owner_username', 'channel_id', 'active', 'created_at', 'updated_at'],
   invite_events: ['guild_id', 'joined_user_id', 'inviter_user_id', 'invite_code', 'source', 'joined_at'],
   tracked_token_webhook_retry_queue: ['signature', 'attempt_count', 'next_attempt_at', 'last_reason', 'last_error'],
   nft_activity_alert_configs: ['guild_id', 'enabled', 'event_types', 'min_sol'],
@@ -1345,6 +1346,7 @@ function initDatabase() {
       panel_enable_create_link INTEGER DEFAULT 1,
       include_verification_stats INTEGER DEFAULT 0,
       excluded_codes TEXT DEFAULT '[]',
+      panel_sort_by TEXT DEFAULT 'invites',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -1358,6 +1360,28 @@ function initDatabase() {
   try { db.exec('ALTER TABLE invite_tracker_settings ADD COLUMN panel_enable_create_link INTEGER DEFAULT 1'); } catch (e) {}
   try { db.exec('ALTER TABLE invite_tracker_settings ADD COLUMN include_verification_stats INTEGER DEFAULT 0'); } catch (e) {}
   try { db.exec("ALTER TABLE invite_tracker_settings ADD COLUMN excluded_codes TEXT DEFAULT '[]'"); } catch (e) {}
+  try { db.exec("ALTER TABLE invite_tracker_settings ADD COLUMN panel_sort_by TEXT DEFAULT 'invites'"); } catch (e) {}
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS invite_tracker_user_codes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      invite_code TEXT NOT NULL,
+      owner_user_id TEXT NOT NULL,
+      owner_username TEXT,
+      channel_id TEXT,
+      active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(guild_id, invite_code)
+    )
+  `);
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_invite_tracker_user_codes_guild_owner ON invite_tracker_user_codes(guild_id, owner_user_id)'); } catch (e) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_invite_tracker_user_codes_guild_code ON invite_tracker_user_codes(guild_id, invite_code)'); } catch (e) {}
+  try { db.exec('ALTER TABLE invite_tracker_user_codes ADD COLUMN owner_username TEXT'); } catch (e) {}
+  try { db.exec('ALTER TABLE invite_tracker_user_codes ADD COLUMN channel_id TEXT'); } catch (e) {}
+  try { db.exec('ALTER TABLE invite_tracker_user_codes ADD COLUMN active INTEGER DEFAULT 1'); } catch (e) {}
+  try { db.exec('ALTER TABLE invite_tracker_user_codes ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'); } catch (e) {}
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS invite_events (

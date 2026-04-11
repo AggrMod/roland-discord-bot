@@ -7492,6 +7492,24 @@ function formatInviteUserLabel(username, userId) {
   return 'Unknown';
 }
 
+let inviteTrackerAutoRefreshHandle = null;
+
+function stopInviteTrackerAutoRefresh() {
+  if (inviteTrackerAutoRefreshHandle) {
+    clearInterval(inviteTrackerAutoRefreshHandle);
+    inviteTrackerAutoRefreshHandle = null;
+  }
+}
+
+function startInviteTrackerAutoRefresh(intervalMs = 45000) {
+  stopInviteTrackerAutoRefresh();
+  inviteTrackerAutoRefreshHandle = setInterval(() => {
+    const pane = document.getElementById('settingsTab-invites') || document.getElementById('inviteTrackerSettingsPanel');
+    if (!pane || pane.style.display === 'none' || !document.body.contains(pane)) return;
+    refreshInviteTrackerDashboard().catch(() => {});
+  }, Math.max(10000, Number(intervalMs) || 45000));
+}
+
 async function loadInviteTrackerSettingsView(targetPaneId = null) {
   if (!isAdmin) return;
   const pane = (targetPaneId && document.getElementById(targetPaneId))
@@ -7593,7 +7611,15 @@ async function loadInviteTrackerSettingsView(targetPaneId = null) {
     await populateChannelSelect('invitePanelChannelSelect', '');
   }
 
+  const refreshOnChangeIds = ['inviteTrackerPeriodSelect', 'inviteRequiredRoleSelect', 'inviteIncludeVerificationStatsToggle'];
+  refreshOnChangeIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.onchange = () => { refreshInviteTrackerDashboard().catch(() => {}); };
+  });
+
   await refreshInviteTrackerDashboard();
+  startInviteTrackerAutoRefresh();
 }
 
 function getInviteTrackerSettingsPayload() {

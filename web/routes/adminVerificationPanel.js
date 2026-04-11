@@ -12,6 +12,17 @@ function createAdminVerificationPanelRouter({
   getClient,
 }) {
   const router = express.Router();
+  const buildVerifyPortalUrl = (baseUrl, guildId = '', action = '') => {
+    const url = new URL('/verify', baseUrl);
+    const normalizedGuildId = String(guildId || '').trim();
+    if (normalizedGuildId) {
+      url.searchParams.set('guild', normalizedGuildId);
+    }
+    if (action) {
+      url.searchParams.set('action', action);
+    }
+    return url.toString();
+  };
 
   router.get('/api/admin/verification/panel', adminAuthMiddleware, (req, res) => {
     if (!ensureVerificationModule(req, res)) return;
@@ -106,7 +117,7 @@ function createAdminVerificationPanelRouter({
           new ButtonBuilder()
             .setLabel('Add Wallet')
             .setStyle(ButtonStyle.Link)
-            .setURL(`${webUrl}/verify`),
+            .setURL(buildVerifyPortalUrl(webUrl, req.guildId || '', 'add')),
           new ButtonBuilder()
             .setLabel('Get Help')
             .setStyle(ButtonStyle.Link)

@@ -1381,16 +1381,6 @@ function initDatabase() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_invite_tracker_settings_guild ON invite_tracker_settings(guild_id)'); } catch (e) {}
-  try { db.exec('ALTER TABLE invite_tracker_settings ADD COLUMN required_join_role_id TEXT'); } catch (e) {}
-  try { db.exec('ALTER TABLE invite_tracker_settings ADD COLUMN panel_channel_id TEXT'); } catch (e) {}
-  try { db.exec('ALTER TABLE invite_tracker_settings ADD COLUMN panel_message_id TEXT'); } catch (e) {}
-  try { db.exec('ALTER TABLE invite_tracker_settings ADD COLUMN panel_period_days INTEGER'); } catch (e) {}
-  try { db.exec('ALTER TABLE invite_tracker_settings ADD COLUMN panel_limit INTEGER DEFAULT 10'); } catch (e) {}
-  try { db.exec('ALTER TABLE invite_tracker_settings ADD COLUMN panel_enable_create_link INTEGER DEFAULT 1'); } catch (e) {}
-  try { db.exec('ALTER TABLE invite_tracker_settings ADD COLUMN include_verification_stats INTEGER DEFAULT 0'); } catch (e) {}
-  try { db.exec("ALTER TABLE invite_tracker_settings ADD COLUMN excluded_codes TEXT DEFAULT '[]'"); } catch (e) {}
-  try { db.exec("ALTER TABLE invite_tracker_settings ADD COLUMN panel_sort_by TEXT DEFAULT 'invites'"); } catch (e) {}
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS invite_tracker_user_codes (
@@ -1406,12 +1396,6 @@ function initDatabase() {
       UNIQUE(guild_id, invite_code)
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_invite_tracker_user_codes_guild_owner ON invite_tracker_user_codes(guild_id, owner_user_id)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_invite_tracker_user_codes_guild_code ON invite_tracker_user_codes(guild_id, invite_code)'); } catch (e) {}
-  try { db.exec('ALTER TABLE invite_tracker_user_codes ADD COLUMN owner_username TEXT'); } catch (e) {}
-  try { db.exec('ALTER TABLE invite_tracker_user_codes ADD COLUMN channel_id TEXT'); } catch (e) {}
-  try { db.exec('ALTER TABLE invite_tracker_user_codes ADD COLUMN active INTEGER DEFAULT 1'); } catch (e) {}
-  try { db.exec('ALTER TABLE invite_tracker_user_codes ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP'); } catch (e) {}
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS invite_events (
@@ -1426,22 +1410,6 @@ function initDatabase() {
       joined_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  // Keep one current invite attribution row per joined user per guild.
-  // This avoids duplicate joins inflating leaderboard/event views.
-  try {
-    db.exec(`
-      DELETE FROM invite_events
-      WHERE id NOT IN (
-        SELECT MIN(id)
-        FROM invite_events
-        GROUP BY guild_id, joined_user_id
-      )
-    `);
-  } catch (e) {}
-  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_invite_events_guild_joined_unique ON invite_events(guild_id, joined_user_id)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_invite_events_guild_joined_at ON invite_events(guild_id, joined_at DESC)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_invite_events_guild_inviter ON invite_events(guild_id, inviter_user_id)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_invite_events_guild_joined_user ON invite_events(guild_id, joined_user_id)'); } catch (e) {}
 
   // Token verification rules (tenant-scoped)
   db.exec(`
@@ -1460,9 +1428,6 @@ function initDatabase() {
       UNIQUE(guild_id, token_mint, role_id)
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_token_role_rules_guild ON token_role_rules(guild_id)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_token_role_rules_mint ON token_role_rules(token_mint)'); } catch (e) {}
-  try { db.exec('ALTER TABLE token_role_rules ADD COLUMN never_remove INTEGER DEFAULT 0'); } catch (e) {}
 
   // Token tracker config (tenant-scoped)
   db.exec(`
@@ -1485,18 +1450,8 @@ function initDatabase() {
       UNIQUE(guild_id, token_mint)
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_tokens_guild ON tracked_tokens(guild_id)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_tokens_mint ON tracked_tokens(token_mint)'); } catch (e) {}
-  try { db.exec('ALTER TABLE tracked_tokens ADD COLUMN alert_buys INTEGER DEFAULT 1'); } catch (e) {}
-  try { db.exec('ALTER TABLE tracked_tokens ADD COLUMN alert_sells INTEGER DEFAULT 1'); } catch (e) {}
-  try { db.exec('ALTER TABLE tracked_tokens ADD COLUMN alert_transfers INTEGER DEFAULT 0'); } catch (e) {}
-  try { db.exec('ALTER TABLE tracked_tokens ADD COLUMN min_alert_amount REAL DEFAULT 0'); } catch (e) {}
-  try { db.exec('ALTER TABLE tracked_tokens ADD COLUMN alert_channel_id TEXT'); } catch (e) {}
-  try { db.exec("ALTER TABLE tracked_tokens ADD COLUMN alert_channel_ids TEXT DEFAULT '[]'"); } catch (e) {}
 
-  // Cursor for per-wallet tracked token activity polling
-  try { db.exec('ALTER TABLE tracked_wallets ADD COLUMN token_last_signature TEXT'); } catch (e) {}
-  try { db.exec('ALTER TABLE tracked_wallets ADD COLUMN token_last_checked_at DATETIME'); } catch (e) {}
+  // Cursor for per-wallet tracked token activity polling is backfilled in file migration v8.
 
   // Token activity events captured for tracked wallets
   db.exec(`
@@ -1537,10 +1492,6 @@ function initDatabase() {
     )
   `);
 
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_token_events_guild_time ON tracked_token_events(guild_id, event_time)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_token_events_wallet_time ON tracked_token_events(wallet_id, event_time)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_token_events_mint_time ON tracked_token_events(token_mint, event_time)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tracked_token_retry_due ON tracked_token_webhook_retry_queue(next_attempt_at)'); } catch (e) {}
 
   // AI assistant tenant settings + usage telemetry (tenant-scoped)
   db.exec(`
@@ -1621,14 +1572,6 @@ function initDatabase() {
       UNIQUE(guild_id, channel_id)
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_settings_guild ON ai_assistant_tenant_settings(guild_id)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_usage_guild_time ON ai_assistant_usage_events(guild_id, created_at DESC)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_usage_user_time ON ai_assistant_usage_events(user_id, created_at DESC)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_usage_guild_channel_time ON ai_assistant_usage_events(guild_id, channel_id, created_at DESC)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_knowledge_guild_enabled ON ai_assistant_knowledge_docs(guild_id, enabled)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_knowledge_guild_updated ON ai_assistant_knowledge_docs(guild_id, updated_at DESC)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_knowledge_guild_stale ON ai_assistant_knowledge_docs(guild_id, stale, updated_at DESC)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_channel_policy_guild_mode ON ai_assistant_channel_policies(guild_id, mode)'); } catch (e) {}
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS ai_assistant_personas (
@@ -1709,11 +1652,6 @@ function initDatabase() {
       UNIQUE(guild_id, role_id)
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_personas_guild_scope ON ai_assistant_personas(guild_id, scope, enabled)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_memory_entries_guild_user_time ON ai_assistant_memory_entries(guild_id, user_id, created_at DESC)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_ingestion_jobs_guild_status ON ai_assistant_ingestion_jobs(guild_id, status, created_at DESC)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_action_suggestions_guild_status ON ai_assistant_action_suggestions(guild_id, status, created_at DESC)'); } catch (e) {}
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_ai_assistant_role_limits_guild_role ON ai_assistant_role_limits(guild_id, role_id)'); } catch (e) {}
 
   // Migration: add missing columns to base tables
   var ignoreDuplicateMigration = (fn) => {

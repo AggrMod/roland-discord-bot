@@ -255,6 +255,19 @@ function normalizeAudience(value, fallback = 'public') {
   return fallback;
 }
 
+function sanitizeDiscordMentions(text) {
+  const input = String(text || '');
+  if (!input) return '';
+  return input
+    // Block mass mentions.
+    .replace(/@everyone/gi, '@\u200beveryone')
+    .replace(/@here/gi, '@\u200bhere')
+    // Block role/user/channel mention tokens.
+    .replace(/<@&(\d{17,20})>/g, '<@&\u200b$1>')
+    .replace(/<@!?(\d{17,20})>/g, '<@\u200b$1>')
+    .replace(/<#(\d{17,20})>/g, '<#\u200b$1>');
+}
+
 async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -2383,7 +2396,7 @@ class AiAssistantService {
         const output = provider === 'gemini'
           ? await this.callGemini({ apiKey, model, prompt: cleanPrompt, systemPrompt })
           : await this.callOpenAi({ apiKey, model, prompt: cleanPrompt, systemPrompt });
-        const text = String(output || '').trim().slice(0, maxChars);
+        const text = sanitizeDiscordMentions(String(output || '').trim()).slice(0, maxChars);
         const estimatedTokens = this.getEstimatedTokens(cleanPrompt.length + text.length);
         this.logUsage({
           guildId: normalizedGuildId,

@@ -548,20 +548,65 @@ async function handlePanelVerifyButton(interaction) {
       if (action) url.searchParams.set('action', action);
       return url.toString();
     };
+
     const wallets = walletService.getLinkedWallets(discordId);
     if (!wallets || wallets.length === 0) {
-      const embed = new EmbedBuilder().setTitle('🔗 Verification Portal').setDescription('No wallet linked yet.').setTimestamp();
+      const embed = new EmbedBuilder().setTitle('Verification Portal').setDescription('No wallet linked yet.').setTimestamp();
       const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setLabel('Open Verify Portal').setStyle(ButtonStyle.Link) .setURL(buildVerifyUrl()),
+        new ButtonBuilder().setLabel('Open Verify Portal').setStyle(ButtonStyle.Link).setURL(buildVerifyUrl()),
         new ButtonBuilder().setLabel('Add Wallet').setStyle(ButtonStyle.Link).setURL(buildVerifyUrl('add'))
       );
       return interaction.editReply({ embeds: [embed], components: [row] });
     }
+
+    const shortenWallet = (value) => {
+      const raw = String(value || '').trim();
+      if (!raw) return 'Unknown';
+      if (raw.length <= 10) return raw;
+      return `${raw.slice(0, 5)}...${raw.slice(-5)}`;
+    };
+
+    const primaryWalletAddress = walletService.getFavoriteWallet(discordId)
+      || wallets.find(w => w && (w.is_primary || w.isPrimary || w.is_favorite || w.isFavorite))?.wallet_address
+      || wallets[0]?.wallet_address
+      || null;
+
     const updateResult = await roleService.updateUserRoles(discordId, username, panelGuildId || null);
-    if (!updateResult.success) return interaction.editReply({ content: `❌ Error: ${updateResult.message}` });
-    const embed = new EmbedBuilder().setColor('#57F287').setTitle('✅ Holdings Verified').setDescription('Holdings refreshed.').setTimestamp();
+    if (!updateResult.success) {
+      return interaction.editReply({ content: `Error: ${updateResult.message}` });
+    }
+
+    let syncResult = null;
+    if (interaction.guild) {
+      syncResult = await roleService.syncUserDiscordRoles(interaction.guild, discordId, panelGuildId || interaction.guild.id);
+    }
+
+    const totalTokens = Number(updateResult.totalTokens || 0);
+    const syncAdded = Number(syncResult?.totalAdded || 0);
+    const syncRemoved = Number(syncResult?.totalRemoved || 0);
+    const syncDescription = syncResult?.success
+      ? 'Holdings refreshed and Discord roles synchronized.'
+      : 'Holdings refreshed, but role synchronization could not fully complete.';
+
+    const embed = new EmbedBuilder()
+      .setColor(syncResult?.success === false ? '#F59E0B' : '#57F287')
+      .setTitle('Holdings Verified')
+      .setDescription(syncDescription)
+      .addFields(
+        { name: 'Linked Wallets', value: `${wallets.length}`, inline: true },
+        { name: 'Primary Wallet', value: primaryWalletAddress ? `\`${shortenWallet(primaryWalletAddress)}\`` : 'Not set', inline: true },
+        { name: 'NFTs', value: `${Number(updateResult.totalNFTs || 0)} (raw ${Number(updateResult.rawNFTs || 0)})`, inline: true },
+        { name: 'Tracked Tokens', value: totalTokens.toLocaleString(undefined, { maximumFractionDigits: 6 }), inline: true },
+        { name: 'Tier', value: String(updateResult.tier || 'None'), inline: true },
+        { name: 'Voting Power', value: `${Number(updateResult.votingPower || 0)}`, inline: true },
+        { name: 'Role Sync', value: syncResult?.success ? `+${syncAdded} / -${syncRemoved}` : (syncResult?.message || 'Not available'), inline: false }
+      )
+      .setTimestamp();
+
     await interaction.editReply({ embeds: [embed] });
-  } catch (e) { logger.error('Verify button error:', e); }
+  } catch (e) {
+    logger.error('Verify button error:', e);
+  }
 }
 
 async function handleSupportButton(interaction) {

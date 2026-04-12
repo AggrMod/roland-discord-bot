@@ -15,6 +15,7 @@ const checks = [
   { name: 'admin-user-tenant-scoping', cmd: process.execPath, args: ['tests/test-admin-user-tenant-scoping.js'] },
   { name: 'module-refactor', cmd: process.execPath, args: ['tests/test-module-refactor.js'] },
   { name: 'micro-verify', cmd: process.execPath, args: ['tests/test-micro-verify.js'] },
+  { name: 'ai-assistant-smoke', cmd: process.execPath, args: ['scripts/ai-assistant-smoke.js'] },
 ];
 
 let failed = false;

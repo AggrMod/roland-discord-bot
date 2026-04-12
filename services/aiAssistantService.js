@@ -2031,10 +2031,9 @@ class AiAssistantService {
       }
 
       // 2. Current Era
-      const settings = this.getTenantSettings(guildId);
-      const eraKey = settings.settings?.era || 'mafia';
-      const eraConfig = battleService.getEraConfig(eraKey);
-      ctx.era = eraConfig?.name || 'Mafia';
+      const battleSettings = tenantService.getTenantBattleSettings(guildId);
+      const eraKey = String(battleSettings?.battleDefaultEra || 'mafia').trim().toLowerCase().replace(/[\s-]+/g, '_');
+      ctx.era = battleService.getEraName(eraKey) || 'Mafia';
 
       // 3. Recent Battle Winner
       const battleDb = require('../database/battleDb');

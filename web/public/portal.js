@@ -7704,8 +7704,8 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
         <td style="padding:8px;color:${persona.enabled ? '#34d399' : '#fca5a5'};border-bottom:1px solid rgba(99,102,241,0.12);">${persona.enabled ? 'Enabled' : 'Disabled'}</td>
         <td style="padding:8px;border-bottom:1px solid rgba(99,102,241,0.12);">
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button class="btn-secondary btn-sm" onclick="editAiAssistantPersona('${escapeHtml(String(persona.personaKey || ''))}')">Edit</button>
-            <button class="btn-danger btn-sm" onclick="deleteAiAssistantPersona('${escapeHtml(String(persona.personaKey || ''))}')">Delete</button>
+            <button class="btn-secondary btn-sm" data-persona-key="${escapeHtml(String(persona.personaKey || ''))}" onclick="editAiAssistantPersonaFromButton(this)">Edit</button>
+            <button class="btn-danger btn-sm" data-persona-key="${escapeHtml(String(persona.personaKey || ''))}" onclick="deleteAiAssistantPersonaFromButton(this)">Delete</button>
           </div>
         </td>
       </tr>
@@ -8518,6 +8518,12 @@ function editAiAssistantPersona(personaKey) {
   if (enabledEl) enabledEl.checked = persona.enabled !== false;
 }
 
+function editAiAssistantPersonaFromButton(button) {
+  const key = String(button?.getAttribute('data-persona-key') || '').trim();
+  if (!key) return;
+  editAiAssistantPersona(key);
+}
+
 async function saveAiAssistantPersona() {
   const personaKey = String(document.getElementById('aiassistant_persona_key')?.value || '').trim();
   const displayName = String(document.getElementById('aiassistant_persona_display_name')?.value || '').trim();
@@ -8583,6 +8589,12 @@ function deleteAiAssistantPersona(personaKey) {
     },
     'Delete'
   );
+}
+
+function deleteAiAssistantPersonaFromButton(button) {
+  const key = String(button?.getAttribute('data-persona-key') || '').trim();
+  if (!key) return;
+  deleteAiAssistantPersona(key);
 }
 
 async function saveAiAssistantRoleLimits() {

@@ -19,13 +19,28 @@
       </div>
       <div class="top-links" aria-label="Top links">
         <button class="top-link" onclick="goHomePage()">Home</button>
+        <button class="top-link" onclick="switchSection('profile')" id="topNavProfile" style="display:none;">Profile</button>
         <button class="top-link" onclick="switchSection('servers')">Servers</button>
-        <button class="top-link" onclick="switchSection('help')">Docs</button>
-        <button class="top-link" id="topNavAdmin" onclick="switchSection('admin'); showAdminView('superadmin');" style="display:none;">⚙ Admin</button>
+        <button class="top-link" onclick="switchSection('module-hub')" id="topNavModules" style="display:none;">Modules</button>
+        <button class="top-link" onclick="switchSection('help')">Help</button>
+        <button class="top-link" onclick="switchSection('plans')">Pricing</button>
+        <button class="top-link" id="topNavAdminSettings" onclick="switchSection('settings')" style="display:none;">Server Settings</button>
+        <button class="top-link" id="topNavSuperadmin" onclick="switchSection('admin'); showAdminView('superadmin');" style="display:none;">Superadmin</button>
       </div>
       <div class="nav-user">
-        <img id="navAvatar" class="nav-avatar" src="" alt="User avatar" style="display:none;">
-        <span id="navUsername" class="nav-username"></span>
+        <div class="nav-user-menu-wrap">
+          <button id="navUserMenuTrigger" class="nav-user-menu-trigger" onclick="toggleUserMenu()" style="display:none;">
+            <img id="navAvatar" class="nav-avatar" src="" alt="User avatar" style="display:none;">
+            <span id="navUsername" class="nav-username"></span>
+            <span class="nav-user-caret">▾</span>
+          </button>
+          <div id="navUserDropdown" class="nav-user-dropdown" style="display:none;">
+            <button class="nav-user-dropdown__item" onclick="openUserMenuProfile()">Profile</button>
+            <button class="nav-user-dropdown__item" onclick="openUserMenuWallets()">Wallet Verification</button>
+            <button class="nav-user-dropdown__item" onclick="openUserMenuPrivacy()">Privacy Settings</button>
+            <button class="nav-user-dropdown__item nav-user-dropdown__item--danger" onclick="logout()">Logout</button>
+          </div>
+        </div>
         <span id="activeGuildBadge" class="active-guild-badge" style="display:none;"></span>
         <button id="navAuthBtn" class="btn-secondary" onclick="handleAuth()">Login</button>
       </div>
@@ -39,6 +54,14 @@
           <button class="nav-item active" data-section="landing" onclick="goHomePage(); toggleMobileMenu()">
             <span class="nav-icon" aria-hidden="true">🏠</span>
             <span class="nav-label">Home</span>
+          </button>
+          <button class="nav-item" data-section="profile" onclick="switchSection('profile'); toggleMobileMenu()" id="mobileNavProfile" style="display:none;">
+            <span class="nav-icon" aria-hidden="true">👤</span>
+            <span class="nav-label">Profile</span>
+          </button>
+          <button class="nav-item" data-section="plans" onclick="switchSection('plans'); toggleMobileMenu()">
+            <span class="nav-icon" aria-hidden="true">💎</span>
+            <span class="nav-label">Pricing</span>
           </button>
           <button class="nav-item" data-section="governance" data-module="governance" onclick="switchSection('governance'); toggleMobileMenu()" id="mobileNavGovernance" style="display:none;">
             <span class="nav-icon" aria-hidden="true">📜</span>
@@ -198,7 +221,9 @@
                 <p class="gpf-subtitle">GuildPilot brings verification, support, governance, and activity tracking into one clean control center so your community team can operate faster with less friction.</p>
                 <div class="gpf-actions">
                   <button class="btn-primary" id="homePrimaryCta" onclick="switchSection('servers')">Select Server</button>
+                  <button class="btn-secondary" onclick="switchSection('profile')">User Panel</button>
                   <button class="btn-secondary" onclick="switchSection('wallets')">Start Wallet Verification</button>
+                  <button class="btn-secondary" onclick="switchSection('plans')">View Pricing</button>
                   <button class="btn-secondary" onclick="switchSection('help')">Documentation</button>
                 </div>
                 <div class="gpf-proof-row">
@@ -208,6 +233,23 @@
                   <span>Operational consistency</span>
                 </div>
                 <div id="homeActiveContext" class="home-active-context" style="display:none;"></div>
+                <div class="home-quicklinks-grid">
+                  <article class="home-quicklink-card">
+                    <h4>User Panel</h4>
+                    <p>Manage your linked wallets, identity privacy, and account profile.</p>
+                    <button class="btn-secondary" onclick="switchSection('profile')">Open Profile</button>
+                  </article>
+                  <article class="home-quicklink-card">
+                    <h4>Admin Settings</h4>
+                    <p>Pick a server and open tenant module settings in one guided flow.</p>
+                    <button class="btn-secondary" onclick="switchSection('servers')">Open Server Selector</button>
+                  </article>
+                  <article class="home-quicklink-card" id="homeSuperadminQuicklinkCard" style="display:none;">
+                    <h4>Superadmin</h4>
+                    <p>Access tenant controls, identity overrides, global operations, and monitoring.</p>
+                    <button class="btn-secondary" onclick="switchSection('admin'); showAdminView('superadmin')">Open Superadmin</button>
+                  </article>
+                </div>
               </div>
               <aside class="gpf-role-panel">
                 <h3>Choose your path</h3>
@@ -313,6 +355,38 @@
           </div>
         </section>
 
+        <section id="section-profile" class="content-section">
+          <header class="section-header">
+            <h2>My Profile</h2>
+            <p class="section-subtitle">Manage your account identity, linked wallets, and privacy settings</p>
+          </header>
+          <div class="card" id="profileSummaryCard">
+            <div class="profile-summary-grid">
+              <div class="profile-stat"><span>Username</span><strong id="profileStatUsername">-</strong></div>
+              <div class="profile-stat"><span>Discord ID</span><strong id="profileStatDiscordId">-</strong></div>
+              <div class="profile-stat"><span>Tier</span><strong id="profileStatTier">-</strong></div>
+              <div class="profile-stat"><span>Voting Power</span><strong id="profileStatVotingPower">0</strong></div>
+              <div class="profile-stat"><span>NFTs</span><strong id="profileStatNfts">0</strong></div>
+              <div class="profile-stat"><span>Wallets</span><strong id="profileStatWallets">0</strong></div>
+            </div>
+          </div>
+          <div class="card" id="profileWalletsCard">
+            <div class="card-header">
+              <h3>Wallet Verification & Privacy</h3>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn-secondary" onclick="startWalletVerification('signature')">Connect & Sign</button>
+                <button class="btn-primary" onclick="showWalletAddForm()">Add Wallet</button>
+              </div>
+            </div>
+            <div id="profileWalletsList">
+              <div class="loading-state">
+                <div class="loading-spinner"></div>
+                <p class="loading-text">Loading wallets...</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- Dashboard Section -->
         <section id="section-dashboard" class="content-section">
           <header class="section-header">
@@ -383,13 +457,14 @@
 
 
         <!-- Servers Section -->
-        <section id="section-servers" class="content-section">
-          <header class="section-header">
+        <section id="section-servers" class="content-section servers-page servers-page--fresh">
+          <header class="section-header servers-header">
+            <p class="gpf-kicker">Guild Context</p>
             <h2>Server Selector</h2>
             <p class="section-subtitle">Choose the guild context for admin and tenant-aware actions</p>
           </header>
 
-          <div class="card" style="margin-bottom:24px;">
+          <div class="card servers-panel servers-panel--active" style="margin-bottom:24px;">
             <div class="card-header">
               <h3>Active Server</h3>
               <button class="btn-secondary" onclick="refreshServerAccess()">
@@ -400,19 +475,19 @@
             <div id="activeServerStatus" style="margin-top: var(--space-4);"></div>
           </div>
 
-          <div class="card">
+          <div class="card servers-panel">
             <div class="card-header">
               <h3>Managed Servers</h3>
-              <span style="color:var(--text-secondary); font-size:0.85em;">Admin access and bot installed</span>
+              <span class="servers-panel__hint">Admin access and bot installed</span>
             </div>
             <div id="managedServersList" class="server-grid" style="margin-top: var(--space-4);"></div>
           </div>
 
-          <div class="card">
+          <div class="card servers-panel">
             <div class="card-header">
               <h3>Unmanaged Servers</h3>
               <div style="display:flex; align-items:center; gap:10px;">
-                <span style="color:var(--text-secondary); font-size:0.85em;">Admin access, bot not installed yet</span>
+                <span class="servers-panel__hint">Admin access, bot not installed yet</span>
                 <button class="btn-secondary btn-sm" onclick="openGuildInvite()">Invite Bot</button>
               </div>
             </div>
@@ -580,6 +655,22 @@
               </div>
             </div>
           </div>
+        </section>
+
+        <section id="section-invites" class="content-section">
+          <header class="section-header">
+            <h2>Invite Tracker</h2>
+            <p class="section-subtitle">Configure leaderboard behavior, save panel periods, and monitor invite performance</p>
+          </header>
+          <div id="inviteTrackerModuleSettingsPanel"></div>
+        </section>
+
+        <section id="section-aiassistant" class="content-section">
+          <header class="section-header">
+            <h2>AI Assistant</h2>
+            <p class="section-subtitle">Tune assistant personas, guardrails, policies, and knowledge controls for this server</p>
+          </header>
+          <div id="aiAssistantModuleSettingsPanel"></div>
         </section>
 
         <!-- Battle Section -->

@@ -17,10 +17,15 @@ let _portalMultiSelectPickerState = null;
 const PORTAL_PAGE_EXPECTATIONS = Object.freeze({
   sections: [
     'landing',
+    'profile',
     'dashboard',
+    'module-hub',
+    'module-detail',
     'servers',
     'governance',
     'wallets',
+    'invites',
+    'aiassistant',
     'heist',
     'nft-activity',
     'token-activity',
@@ -453,7 +458,12 @@ function initializePortalPages() {
 function normalizePortalSectionName(sectionName) {
   const requested = String(sectionName || '').trim();
   if (!requested) return 'landing';
-  return PORTAL_PAGE_EXPECTATIONS.sections.includes(requested) ? requested : 'landing';
+  const aliases = {
+    docs: 'help',
+    dashboard: 'profile',
+  };
+  const normalized = aliases[requested] || requested;
+  return PORTAL_PAGE_EXPECTATIONS.sections.includes(normalized) ? normalized : 'landing';
 }
 
 function getStoredPortalSection() {
@@ -486,6 +496,14 @@ document.addEventListener('DOMContentLoaded', () => {
   initializePortalMultiSelects();
   fetchCsrfToken();
   loadPortal();
+
+  document.addEventListener('click', (event) => {
+    const wrap = document.querySelector('.nav-user-menu-wrap');
+    if (!wrap) return;
+    if (!wrap.contains(event.target)) {
+      closeUserMenu();
+    }
+  });
 
   // Close mobile menu when clicking outside
   document.getElementById('mobileMenu')?.addEventListener('click', (e) => {
@@ -521,6 +539,8 @@ document.addEventListener('DOMContentLoaded', () => {
       
       if (mobileMenu && mobileMenu.style.display === 'block') {
         toggleMobileMenu();
+      } else if (document.getElementById('navUserDropdown')?.style.display !== 'none') {
+        closeUserMenu();
       } else if (confirmModal && confirmModal.style.display !== 'none') {
         closeConfirmModal();
       } else if (walletVerifyModal && walletVerifyModal.style.display !== 'none') {
@@ -1026,8 +1046,8 @@ function setActiveGuild(guildId, { persist = true, announce = true, goToSettings
   }
 
   if (goToSettings && activeGuildId) {
-    switchSection('admin');
-    showAdminView('settings');
+    switchSection('settings');
+    switchSettingsTab('general');
   }
 }
 
@@ -1157,6 +1177,7 @@ function setNavBrandTitle(brandTitle, iconUrl, label) {
 function updateActiveGuildBadge() {
   const badge = document.getElementById('activeGuildBadge');
   const brandTitle = document.getElementById('navBrandTitle');
+  const topNavModules = document.getElementById('topNavModules');
   if (!badge) return;
 
   if (activeGuildId) {
@@ -1168,11 +1189,13 @@ function updateActiveGuildBadge() {
       const iconUrl = sanitizeImageUrl(getActiveBrandLogoUrl(record));
       setNavBrandTitle(brandTitle, iconUrl, record?.name || 'Portal');
     }
+    if (topNavModules) topNavModules.style.display = '';
   } else {
     badge.style.display = 'inline-flex';
     badge.textContent = 'Select server';
     badge.title = 'No active server selected';
     setNavBrandTitle(brandTitle, '/assets/branding/guildpilot-logo.png', 'GuildPilot');
+    if (topNavModules) topNavModules.style.display = 'none';
   }
 
   applyPreSelectionVisibility();
@@ -1218,7 +1241,7 @@ function setNavSectionVisibility(section, visible) {
 
 function applyPreSelectionVisibility() {
   const locked = requiresServerSelectionGate();
-  const tenantSections = ['governance', 'treasury', 'nft-activity', 'token-activity', 'heist'];
+  const tenantSections = ['governance', 'invites', 'aiassistant', 'treasury', 'nft-activity', 'token-activity', 'heist', 'battle', 'engagement', 'ticketing', 'self-serve-roles', 'settings'];
 
   tenantSections.forEach(section => {
     setNavSectionVisibility(section, !locked);
@@ -1269,8 +1292,8 @@ const MODULE_REGISTRY = [
   { key: 'wallettracker', label: 'Wallet Tracker', icon: '💰', section: 'treasury', desc: 'Monitor community floor price and tracked wallets.' },
   { key: 'nfttracker', label: 'NFT Activity', icon: '🎨', section: 'nft-activity', desc: 'Real-time sales and listings feed for collections.' },
   { key: 'tokentracker', label: 'Token Tracker', icon: '🪙', section: 'token-activity', desc: 'Monitor token transactions and swap activity.' },
-  { key: 'invites', label: 'Invite Tracker', icon: '📨', section: 'settings', tab: 'invites', adminOnly: true, desc: 'Measure invite performance, leaderboard trends, and referral activity.' },
-  { key: 'aiassistant', label: 'AI Assistant', icon: '🤖', section: 'settings', tab: 'aiassistant', adminOnly: true, desc: 'Tune prompts, safety controls, and assistant behavior for your server.' },
+  { key: 'invites', label: 'Invite Tracker', icon: '📨', section: 'invites', adminOnly: true, desc: 'Measure invite performance, leaderboard trends, and referral activity.' },
+  { key: 'aiassistant', label: 'AI Assistant', icon: '🤖', section: 'aiassistant', adminOnly: true, desc: 'Tune prompts, safety controls, and assistant behavior for your server.' },
   { key: 'ticketing', label: 'Support Tickets', icon: '🎫', section: 'ticketing', desc: 'Integrated support desk and category routing.' },
   { key: 'engagement', label: 'Engagement Hub', icon: '🏅', section: 'engagement', desc: 'Activity points, reward shop, and leaderboards.' },
   { key: 'minigames', label: 'Minigames', icon: '⚔️', section: 'battle', desc: 'Arcade module including Battle Arena sessions, lobbies, and game events.' },
@@ -1358,7 +1381,7 @@ function renderModuleHub() {
   // Add Infrastructure Tile for Superadmins
   if (isSuperadmin) {
     html += `
-      <div class="module-tile" onclick="switchSection('admin'); showAdminView('monitor')">
+      <div class="module-tile" onclick="switchSection('admin'); showAdminView('superadmin'); setTimeout(() => showSuperadminTab('monitoring'), 120);">
         <div class="module-tile__header">
           <div class="module-tile__icon">🖥️</div>
           <div class="module-tile__status status-active">System</div>
@@ -1421,15 +1444,9 @@ function renderGeneralSection() {
   const postEl = document.getElementById('generalPostSelection');
   if (!preEl || !postEl) return;
 
-  if (activeGuildId) {
-    preEl.style.display = 'none';
-    postEl.style.display = 'none';
-    renderModuleHub();
-  } else {
-    preEl.style.display = '';
-    postEl.style.display = 'none';
-    updateBreadcrumbs([]);
-  }
+  preEl.style.display = '';
+  postEl.style.display = 'none';
+  updateBreadcrumbs([]);
 
   const primaryCta = document.getElementById('homePrimaryCta');
   if (primaryCta) {
@@ -1437,9 +1454,9 @@ function renderGeneralSection() {
       const record = getServerRecord(activeGuildId);
       const canManage = isAdmin || isSuperadmin;
       primaryCta.textContent = record?.name
-        ? (canManage ? `Manage ${record.name}` : `Open ${record.name}`)
-        : (canManage ? 'Manage Server' : 'Open Server');
-      primaryCta.onclick = () => switchSection(canManage ? 'settings' : 'wallets');
+        ? `Open ${record.name} Modules`
+        : 'Open Module Workspace';
+      primaryCta.onclick = () => switchSection('module-hub');
     } else {
       primaryCta.textContent = 'Get Started';
       primaryCta.onclick = () => switchSection('servers');
@@ -1454,6 +1471,8 @@ function renderGeneralSection() {
       homeContext.style.display = '';
       homeContext.innerHTML = `
         Active server context: <strong>${escapeHtml(activeName)}</strong>.
+        <button class="btn-secondary" style="margin-left:10px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="switchSection('module-hub')">Open Modules</button>
+        ${(isAdmin || isSuperadmin) ? `<button class="btn-secondary" style="margin-left:6px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="switchSection('settings')">Admin Settings</button>` : ''}
         <button class="btn-secondary" style="margin-left:10px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="switchSection('servers')">Switch</button>
       `;
     } else {
@@ -1464,6 +1483,23 @@ function renderGeneralSection() {
 }
 
 function switchSettingsTab(tab) {
+  const moduleTabRedirects = {
+    aiassistant: 'aiassistant',
+    invites: 'invites',
+    treasury: 'treasury',
+    nfttracker: 'nft-activity',
+    tokentracker: 'token-activity',
+    selfserve: 'self-serve-roles',
+    ticketing: 'ticketing',
+    engagement: 'engagement',
+    battle: 'battle',
+    heist: 'heist',
+  };
+  if (moduleTabRedirects[tab]) {
+    switchSection(moduleTabRedirects[tab]);
+    return;
+  }
+
   document.querySelectorAll('.settings-tab').forEach(t => {
     t.classList.toggle('active', t.dataset.tab === tab);
   });
@@ -1565,13 +1601,13 @@ function updateSidebarModuleNav() {
   const battleNavMobile = document.getElementById('mobileNavBattle');
   if (battleNavMobile) battleNavMobile.style.display = 'none';
 
-  // Plans nav — superadmin only (not yet ready for general use)
+  // Pricing is now available in top/mobile navigation; keep legacy sidebar plans entry hidden.
   const plansNav = document.getElementById('sidebarNavPlans');
-  if (plansNav) plansNav.style.display = (hasServer && isSuperadmin) ? '' : 'none';
+  if (plansNav) plansNav.style.display = 'none';
 
-  // Mobile plans nav — superadmin only
+  // Keep legacy mobile plans entry hidden to avoid duplicate Pricing item.
   const mobilePlans = document.getElementById('mobileNavPlans');
-  if (mobilePlans) mobilePlans.style.display = (hasServer && isSuperadmin) ? '' : 'none';
+  if (mobilePlans) mobilePlans.style.display = 'none';
 
   const sidebarSettings = document.getElementById('sidebarNavSettings');
   if (sidebarSettings) {
@@ -1621,6 +1657,8 @@ function applyTenantModuleNavVisibility(settings = {}) {
   const sectionMap = {
     governance: moduleState.governance,
     wallets: moduleState.verification,
+    invites: moduleState.invites,
+    aiassistant: moduleState.aiassistant,
     treasury: moduleState.wallettracker,
     'nft-activity': moduleState.nfttracker,
     'token-activity': moduleState.tokentracker,
@@ -1645,6 +1683,8 @@ function applyTenantModuleNavVisibility(settings = {}) {
   const disabledActive = {
     'section-governance': !moduleState.governance,
     'section-wallets': !moduleState.verification,
+    'section-invites': !moduleState.invites,
+    'section-aiassistant': !moduleState.aiassistant,
     'section-treasury': !moduleState.wallettracker,
     'section-nft-activity': !moduleState.nfttracker,
     'section-token-activity': !moduleState.tokentracker,
@@ -1698,9 +1738,14 @@ function applySettingsTabVisibility(settings = {}) {
     ticketing: !!settings.moduleTicketingEnabled,
     engagement: !!settings.moduleEngagementEnabled,
   };
+  const sectionIntegratedTabs = new Set(['aiassistant', 'treasury', 'invites', 'nfttracker', 'tokentracker', 'battle', 'heist', 'selfserve', 'ticketing', 'engagement']);
 
   document.querySelectorAll('#section-settings .settings-tabs .settings-tab[data-tab]').forEach(btn => {
     const tab = btn.dataset.tab;
+    if (sectionIntegratedTabs.has(tab)) {
+      btn.style.display = 'none';
+      return;
+    }
     const moduleKey = SETTINGS_TAB_MODULE_MAP[tab];
     if (!moduleKey) return; // 'general' has no module key — always visible
 
@@ -1737,17 +1782,21 @@ function renderServerCard(server, { managed = true } = {}) {
     : `<div class="server-card__initials">${escapeHtml(initials)}</div>`;
 
   const onclick = managed
-    ? `onclick="setActiveGuild('${escapeJsString(server.guildId)}', { goToSettings: true })"`
+    ? `onclick="setActiveGuild('${escapeJsString(server.guildId)}', { goToSettings: false }); switchSection('${(isAdmin || isSuperadmin) ? 'settings' : 'module-hub'}')"`
     : `onclick="openGuildInvite('${escapeJsString(server.guildId)}')"`;
-
-  const borderStyle = isActive ? 'border-color:rgba(16,185,129,0.4);background:rgba(16,185,129,0.08);' : '';
+  const statusClass = isActive ? 'active' : (managed ? 'managed' : 'unmanaged');
+  const statusLabel = isActive ? 'Active' : (managed ? 'Managed' : 'Invite Needed');
+  const activeClass = isActive ? ' server-card--active' : '';
 
   return `
-    <div class="server-card" ${onclick} style="${borderStyle}">
+    <div class="server-card${activeClass}" ${onclick}>
       ${iconHtml}
-      <div style="min-width:0;overflow:hidden;">
-        <div class="server-card__title" style="font-size:0.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(name)}</div>
-        <div class="server-card__meta" style="font-size:0.75em;">${isActive ? 'Active' : (managed ? 'Managed' : 'Invite needed')}</div>
+      <div class="server-card__body">
+        <div class="server-card__title">${escapeHtml(name)}</div>
+        <div class="server-card__meta-row">
+          <span class="server-status-badge ${statusClass}">${statusLabel}</span>
+          <span class="server-card__meta">${escapeHtml(server.guildId)}</span>
+        </div>
       </div>
     </div>
   `;
@@ -1810,17 +1859,17 @@ function renderServerAccessView(errorMessage = '') {
       activeStatus.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(errorMessage)}</div></div>`;
     } else if (!activeGuildId) {
       activeStatus.innerHTML = `
-        <div style="padding:16px; border-radius:12px; border:1px solid rgba(245,158,11,0.22); background:rgba(245,158,11,0.08); color:#fcd34d;">
+        <div class="server-alert">
           Select a managed server to continue with tenant-aware actions.
         </div>
       `;
     } else {
       const record = getServerRecord(activeGuildId);
       activeStatus.innerHTML = `
-        <div class="server-card">
+        <div class="server-card server-card--context">
           <div>
             <div class="server-card__title">${escapeHtml(record?.name || activeGuildId)}</div>
-            <div class="server-card__meta">Active guild context for admin and tenant-sensitive requests.</div>
+            <div class="server-card__meta server-card__meta--context">Active guild context for admin and tenant-sensitive requests.</div>
           </div>
           <div class="server-card__actions">
             <span class="server-status-badge active">Active</span>
@@ -1834,13 +1883,13 @@ function renderServerAccessView(errorMessage = '') {
   if (managedList) {
     managedList.innerHTML = serverAccessData.managedServers.length > 0
       ? serverAccessData.managedServers.map(server => renderServerCard(server, { managed: true })).join('')
-      : '<p style="color:var(--text-secondary); text-align:center; padding:20px;">No managed servers found.</p>';
+      : '<p class="server-empty">No managed servers found.</p>';
   }
 
   if (unmanagedList) {
     unmanagedList.innerHTML = serverAccessData.unmanagedServers.length > 0
       ? serverAccessData.unmanagedServers.map(server => renderServerCard(server, { managed: false })).join('')
-      : '<p style="color:var(--text-secondary); text-align:center; padding:20px;">No unmanaged servers found.</p>';
+      : '<p class="server-empty">No unmanaged servers found.</p>';
   }
 }
 
@@ -1941,14 +1990,18 @@ function showAuthenticatedState() {
   const navAvatar = document.getElementById('navAvatar');
   const navUsername = document.getElementById('navUsername');
   const navAuthBtn = document.getElementById('navAuthBtn');
+  const navUserMenuTrigger = document.getElementById('navUserMenuTrigger');
+  const topNavProfile = document.getElementById('topNavProfile');
+  const topNavModules = document.getElementById('topNavModules');
+  const mobileNavProfile = document.getElementById('mobileNavProfile');
   
   navAvatar.src = avatarUrl;
   navAvatar.style.display = 'block';
   navUsername.textContent = userData.user.username;
-  navAuthBtn.textContent = 'Logout';
-  navAuthBtn.onclick = logout;
-  navAuthBtn.classList.remove('btn-secondary');
-  navAuthBtn.classList.add('btn-secondary');
+  if (navUserMenuTrigger) navUserMenuTrigger.style.display = 'inline-flex';
+  if (topNavProfile) topNavProfile.style.display = '';
+  if (navAuthBtn) navAuthBtn.style.display = 'none';
+  if (mobileNavProfile) mobileNavProfile.style.display = '';
 
   updateActiveGuildBadge();
 
@@ -1961,15 +2014,27 @@ function showUnauthenticatedState() {
   const navAvatar = document.getElementById('navAvatar');
   const navUsername = document.getElementById('navUsername');
   const navAuthBtn = document.getElementById('navAuthBtn');
+  const navUserMenuTrigger = document.getElementById('navUserMenuTrigger');
+  const topNavProfile = document.getElementById('topNavProfile');
+  const topNavModules = document.getElementById('topNavModules');
+  const mobileNavProfile = document.getElementById('mobileNavProfile');
   
   navAvatar.style.display = 'none';
   navUsername.textContent = '';
+  if (navUserMenuTrigger) navUserMenuTrigger.style.display = 'none';
+  if (topNavProfile) topNavProfile.style.display = 'none';
+  if (topNavModules) topNavModules.style.display = 'none';
+  closeUserMenu();
   const activeGuildBadge = document.getElementById('activeGuildBadge');
   if (activeGuildBadge) activeGuildBadge.style.display = 'none';
-  navAuthBtn.textContent = 'Login';
-  navAuthBtn.onclick = login;
-  navAuthBtn.classList.remove('btn-secondary');
-  navAuthBtn.classList.add('btn-primary');
+  if (navAuthBtn) {
+    navAuthBtn.style.display = '';
+    navAuthBtn.textContent = 'Login';
+    navAuthBtn.onclick = login;
+    navAuthBtn.classList.remove('btn-secondary');
+    navAuthBtn.classList.add('btn-primary');
+  }
+  if (mobileNavProfile) mobileNavProfile.style.display = 'none';
 
   document.getElementById('loginPrompt').style.display = 'block';
   document.getElementById('dashboardContent').style.display = 'none';
@@ -1978,13 +2043,17 @@ function showUnauthenticatedState() {
 function refreshAdminEntryVisibility() {
   // Superadmin controls are only visible for superadmin users
   const canShowSuperadminEntry = !!isSuperadmin;
+  const canShowAdminSettingsEntry = !!isAdmin || !!isSuperadmin;
+  const hasServerContext = !!activeGuildId;
   const superadminSidebarGroup = document.getElementById('adminSuperadminSidebarGroup');
   const mobileNavAdmin = document.getElementById('mobileNavAdmin');
-  const topNav = document.getElementById('topNavAdmin');
+  const topNavSuperadmin = document.getElementById('topNavSuperadmin');
+  const topNavAdminSettings = document.getElementById('topNavAdminSettings');
 
   if (superadminSidebarGroup) superadminSidebarGroup.style.display = canShowSuperadminEntry ? 'block' : 'none';
   if (mobileNavAdmin) mobileNavAdmin.style.display = canShowSuperadminEntry ? 'block' : 'none';
-  if (topNav) topNav.style.display = canShowSuperadminEntry ? '' : 'none';
+  if (topNavSuperadmin) topNavSuperadmin.style.display = canShowSuperadminEntry ? '' : 'none';
+  if (topNavAdminSettings) topNavAdminSettings.style.display = (canShowAdminSettingsEntry && hasServerContext) ? '' : 'none';
 }
 
 async function checkAdminStatus() {
@@ -2023,11 +2092,15 @@ async function checkSuperadminStatus() {
 
     const landingBtn = document.getElementById('landingSuperadminBtn');
     const landingHint = document.getElementById('landingSuperadminHint');
+    const superadminQuicklinkCard = document.getElementById('homeSuperadminQuicklinkCard');
     if (landingBtn) {
       landingBtn.style.display = isSuperadmin ? 'inline-block' : 'none';
     }
     if (landingHint) {
       landingHint.style.display = isSuperadmin ? 'none' : 'inline';
+    }
+    if (superadminQuicklinkCard) {
+      superadminQuicklinkCard.style.display = isSuperadmin ? '' : 'none';
     }
 
     if (!isSuperadmin) {
@@ -2040,8 +2113,10 @@ async function checkSuperadminStatus() {
     isSuperadmin = false;
     const landingBtn = document.getElementById('landingSuperadminBtn');
     const landingHint = document.getElementById('landingSuperadminHint');
+    const superadminQuicklinkCard = document.getElementById('homeSuperadminQuicklinkCard');
     if (landingBtn) landingBtn.style.display = 'none';
     if (landingHint) landingHint.style.display = 'inline';
+    if (superadminQuicklinkCard) superadminQuicklinkCard.style.display = 'none';
     refreshAdminEntryVisibility();
   }
 }
@@ -2355,11 +2430,39 @@ async function loadActiveVotes() {
 }
 
 // ==================== WALLETS ====================
-function renderWallets() {
-  const container = document.getElementById('walletsList');
+function renderProfileSection() {
+  const profileStatUsername = document.getElementById('profileStatUsername');
+  const profileStatDiscordId = document.getElementById('profileStatDiscordId');
+  const profileStatTier = document.getElementById('profileStatTier');
+  const profileStatVotingPower = document.getElementById('profileStatVotingPower');
+  const profileStatNfts = document.getElementById('profileStatNfts');
+  const profileStatWallets = document.getElementById('profileStatWallets');
+
+  if (userData?.user) {
+    if (profileStatUsername) profileStatUsername.textContent = userData.user.username || '-';
+    if (profileStatDiscordId) profileStatDiscordId.textContent = userData.user.discordId || '-';
+    if (profileStatTier) profileStatTier.textContent = userData.user.tier || 'None';
+    if (profileStatVotingPower) profileStatVotingPower.textContent = String(userData.user.votingPower || 0);
+    if (profileStatNfts) profileStatNfts.textContent = String(userData.user.totalNFTs || 0);
+    if (profileStatWallets) profileStatWallets.textContent = String((userData.wallets || []).length);
+  }
+
+  renderWallets({
+    containerId: 'profileWalletsList',
+    privacyToggleId: 'profileWalletIdentityOptOutToggle',
+    privacyCardId: 'profilePrivacyCard'
+  });
+}
+
+function renderWallets(options = {}) {
+  const containerId = options.containerId || 'walletsList';
+  const privacyToggleId = options.privacyToggleId || 'walletIdentityOptOutToggle';
+  const privacyCardId = options.privacyCardId || '';
+  const container = document.getElementById(containerId);
+  if (!container) return;
   const identityOptOut = Number(userData?.user?.walletAlertIdentityOptOut || 0) === 1;
   const privacyCard = `
-    <div class="card" style="margin-bottom:16px;">
+    <div class="card" style="margin-bottom:16px;" ${privacyCardId ? `id="${privacyCardId}"` : ''}>
       <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
         <div>
           <div style="font-weight:700;color:#e0e7ff;">Privacy: Tracker Identity Display</div>
@@ -2368,7 +2471,7 @@ function renderWallets() {
           </div>
         </div>
         <label style="display:flex;align-items:center;gap:8px;color:#cbd5e1;font-size:0.86em;cursor:pointer;">
-          <input id="walletIdentityOptOutToggle" type="checkbox" ${identityOptOut ? 'checked' : ''} onchange="setWalletIdentityOptOut(this.checked)">
+          <input id="${privacyToggleId}" data-wallet-privacy-toggle="1" type="checkbox" ${identityOptOut ? 'checked' : ''} onchange="setWalletIdentityOptOut(this.checked, '${privacyToggleId}')">
           Hide Username In Alerts
         </label>
       </div>
@@ -2423,8 +2526,8 @@ function renderWallets() {
   }).join('') + '</div>';
 }
 
-async function setWalletIdentityOptOut(optOut) {
-  const checkbox = document.getElementById('walletIdentityOptOutToggle');
+async function setWalletIdentityOptOut(optOut, toggleId = 'walletIdentityOptOutToggle') {
+  const checkbox = document.getElementById(toggleId);
   if (checkbox) checkbox.disabled = true;
 
   try {
@@ -2443,6 +2546,9 @@ async function setWalletIdentityOptOut(optOut) {
 
     if (!userData.user) userData.user = {};
     userData.user.walletAlertIdentityOptOut = !!data.optOut;
+    document.querySelectorAll('input[data-wallet-privacy-toggle="1"]').forEach(el => {
+      el.checked = !!data.optOut;
+    });
     showSuccess(data.optOut ? 'Username hidden in tracker alerts' : 'Username visible in tracker alerts');
   } catch (error) {
     console.error('Error updating wallet identity privacy preference:', error);
@@ -2604,12 +2710,15 @@ function switchSection(sectionName, options = {}) {
   sectionName = normalizePortalSectionName(sectionName);
 
   if (requiresServerSelectionGate()) {
-    const allowWithoutServer = ['landing', 'servers', 'wallets', 'dashboard', 'help', 'docs'];
+    const allowWithoutServer = ['landing', 'servers', 'wallets', 'profile', 'dashboard', 'help', 'docs', 'plans'];
     if (isSuperadmin && sectionName === 'admin') {
       // allow superadmin control plane without tenant selection
     } else if (!allowWithoutServer.includes(sectionName)) {
       sectionName = 'landing';
     }
+  }
+  if (sectionName === 'module-hub' && !activeGuildId) {
+    sectionName = 'landing';
   }
 
   // Gate settings section to admins only
@@ -2617,11 +2726,21 @@ function switchSection(sectionName, options = {}) {
     showInfo('Admin access required for Settings.');
     sectionName = 'landing';
   }
+  if (['invites', 'aiassistant'].includes(sectionName) && !(isAdmin || isSuperadmin)) {
+    showInfo('Admin access required for this module.');
+    sectionName = 'landing';
+  }
+  if (sectionName === 'profile' && !userData) {
+    showInfo('Please log in to access your profile.');
+    sectionName = 'landing';
+  }
 
   const moduleState = window._tenantModuleState || null;
   const sectionRequiresModule = {
     governance: 'governance',
     wallets: 'verification',
+    invites: 'invites',
+    aiassistant: 'aiassistant',
     treasury: 'wallettracker',
     'nft-activity': 'nfttracker',
     'token-activity': 'tokentracker',
@@ -2642,7 +2761,7 @@ function switchSection(sectionName, options = {}) {
     setStoredAdminView('');
   }
 
-  const resolvedSectionName = (sectionName === 'landing' && activeGuildId) ? 'module-hub' : sectionName;
+  const resolvedSectionName = sectionName;
 
   // Update nav items (both sidebar and mobile)
   document.querySelectorAll('.nav-item').forEach(item => {
@@ -2669,6 +2788,8 @@ function switchSection(sectionName, options = {}) {
 
   if (sectionName === 'landing' && !activeGuildId) {
     updateBreadcrumbs([]);
+  } else if (sectionName === 'profile') {
+    updateBreadcrumbs([{ label: 'My Profile' }]);
   } else if (sectionName === 'servers') {
     updateBreadcrumbs([{ label: 'Servers' }]);
   } else if (moduleInfo && activeGuildId) {
@@ -2691,17 +2812,21 @@ function switchSection(sectionName, options = {}) {
 
   // Load section-specific data
   if (sectionName === 'landing') {
-    if (activeGuildId) {
-      renderModuleHub();
-    } else {
-      renderGeneralSection();
-    }
+    renderGeneralSection();
+  } else if (sectionName === 'module-hub') {
+    renderModuleHub();
   } else if (sectionName === 'governance' && userData) {
     loadActiveVotes();
   } else if (sectionName === 'servers') {
     loadServerAccess();
   } else if (sectionName === 'wallets' && userData) {
     renderWallets();
+  } else if (sectionName === 'profile' && userData) {
+    renderProfileSection();
+  } else if (sectionName === 'invites') {
+    loadInviteTrackerSettingsView('inviteTrackerModuleSettingsPanel');
+  } else if (sectionName === 'aiassistant') {
+    loadAiAssistantSettingsView('aiAssistantModuleSettingsPanel');
   } else if (sectionName === 'treasury') {
     loadTreasuryWalletTable();
   } else if (sectionName === 'nft-activity') {
@@ -2727,15 +2852,10 @@ function switchSection(sectionName, options = {}) {
     if (isAdmin) loadCurrentPlan();
   }
 
-  // Toggle sidebar visibility - hide only on marketing landing
+  // Topbar-driven IA: sidebar remains hidden across all sections.
   const portalLayout = document.querySelector('.portal-layout');
   if (portalLayout) {
-    const keepSidebarSections = new Set(['servers', 'admin']);
-    if (!keepSidebarSections.has(sectionName)) {
-      portalLayout.classList.add('sidebar-hidden');
-    } else {
-      portalLayout.classList.remove('sidebar-hidden');
-    }
+    portalLayout.classList.add('sidebar-hidden');
   }
 
   // Update URL without reload
@@ -3234,6 +3354,38 @@ function toggleMobileMenu() {
   }
 }
 
+function toggleUserMenu() {
+  const dropdown = document.getElementById('navUserDropdown');
+  if (!dropdown) return;
+  const isOpen = dropdown.style.display !== 'none';
+  dropdown.style.display = isOpen ? 'none' : 'block';
+}
+
+function closeUserMenu() {
+  const dropdown = document.getElementById('navUserDropdown');
+  if (!dropdown) return;
+  dropdown.style.display = 'none';
+}
+
+function openUserMenuProfile() {
+  closeUserMenu();
+  switchSection('profile');
+}
+
+function openUserMenuWallets() {
+  closeUserMenu();
+  switchSection('wallets');
+}
+
+function openUserMenuPrivacy() {
+  closeUserMenu();
+  switchSection('profile');
+  setTimeout(() => {
+    const privacy = document.getElementById('profilePrivacyCard');
+    if (privacy) privacy.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 120);
+}
+
 // ==================== MODALS ====================
 function showConfirmModal(title, message, callback, buttonText = 'Confirm') {
   const modal = document.getElementById('confirmModal');
@@ -3420,6 +3572,7 @@ function login() {
 }
 
 function logout() {
+  closeUserMenu();
   showConfirmModal(
     'Confirm Logout',
     'Are you sure you want to log out?',
@@ -4216,8 +4369,9 @@ async function loadSuperadminView() {
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           <button data-superadmin-tab-btn="tenants" class="btn-primary" onclick="showSuperadminTab('tenants')" style="padding:8px 12px;">Tenants</button>
-          <button data-superadmin-tab-btn="superadmins" class="btn-secondary" onclick="showSuperadminTab('superadmins')" style="padding:8px 12px;">Superadmins</button>
           <button data-superadmin-tab-btn="identity" class="btn-secondary" onclick="showSuperadminTab('identity')" style="padding:8px 12px;">Identity</button>
+          <button data-superadmin-tab-btn="globalops" class="btn-secondary" onclick="showSuperadminTab('globalops')" style="padding:8px 12px;">Global Ops</button>
+          <button data-superadmin-tab-btn="monitoring" class="btn-secondary" onclick="showSuperadminTab('monitoring')" style="padding:8px 12px;">Monitoring</button>
 
           <span style="width:1px;height:24px;background:rgba(99,102,241,0.25);margin:0 4px;"></span>
 
@@ -4380,6 +4534,16 @@ async function loadSuperadminView() {
           <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
             <button class="btn-secondary" onclick="loadSuperadminView()" style="padding:8px 12px;">Reset</button>
             <button class="btn-primary" onclick="saveAiProviderSettings()" style="padding:8px 12px;">Save AI Provider Settings</button>
+          </div>
+        </div>
+
+        <div id="superadminSection-monitoring" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45); display:none;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
+            <h4 style="margin:0; color:#c9d6ff;">Platform Monitoring <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
+            <button class="btn-secondary" onclick="loadSystemStatus('superadminSystemStatusContent')" style="padding:8px 12px;">Refresh</button>
+          </div>
+          <div id="superadminSystemStatusContent">
+            <div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Gathering live diagnostics...</p></div>
           </div>
         </div>
 
@@ -5039,9 +5203,10 @@ function removeSuperadminIdentityWallet(discordId, walletAddress) {
 function showSuperadminTab(tab) {
   superadminActiveTab = tab;
   const sections = {
-    superadmins: ['superadminSection-superadminsInput', 'superadminSection-superadmins', 'superadminSection-chainEmojis', 'superadminSection-microVerify', 'superadminSection-aiProviders'],
+    globalops: ['superadminSection-superadminsInput', 'superadminSection-superadmins', 'superadminSection-chainEmojis', 'superadminSection-microVerify', 'superadminSection-aiProviders'],
     identity: ['superadminSection-identity'],
     tenants: ['superadminSection-tenants', 'superadminSection-detail', 'superadminSection-eras'],
+    monitoring: ['superadminSection-monitoring'],
   };
   Object.entries(sections).forEach(([key, ids]) => {
     ids.forEach(id => {
@@ -5058,6 +5223,8 @@ function showSuperadminTab(tab) {
     showTenantDetailTab(tenantDetailActiveTab || 'overview');
   } else if (tab === 'identity') {
     loadSuperadminIdentityView();
+  } else if (tab === 'monitoring') {
+    loadSystemStatus('superadminSystemStatusContent');
   }
 }
 
@@ -8914,7 +9081,9 @@ function stopInviteTrackerAutoRefresh() {
 function startInviteTrackerAutoRefresh(intervalMs = 45000) {
   stopInviteTrackerAutoRefresh();
   inviteTrackerAutoRefreshHandle = setInterval(() => {
-    const pane = document.getElementById('settingsTab-invites') || document.getElementById('inviteTrackerSettingsPanel');
+    const pane = document.getElementById('settingsTab-invites')
+      || document.getElementById('inviteTrackerModuleSettingsPanel')
+      || document.getElementById('inviteTrackerSettingsPanel');
     if (!pane || pane.style.display === 'none' || !document.body.contains(pane)) return;
     refreshInviteTrackerDashboard().catch(() => {});
   }, Math.max(10000, Number(intervalMs) || 45000));
@@ -8924,6 +9093,7 @@ async function loadInviteTrackerSettingsView(targetPaneId = null) {
   if (!isAdmin) return;
   const pane = (targetPaneId && document.getElementById(targetPaneId))
     || document.getElementById('settingsTab-invites')
+    || document.getElementById('inviteTrackerModuleSettingsPanel')
     || document.getElementById('inviteTrackerSettingsPanel');
   if (!pane) return;
 
@@ -9006,6 +9176,8 @@ async function loadInviteTrackerSettingsView(targetPaneId = null) {
     await populateRoleSelect('inviteRequiredRoleSelect', settings.requiredJoinRoleId || '');
     await populateChannelSelect('invitePanelChannelSelect', settings.panelChannelId || '');
     const panelPeriod = settings.panelPeriodDays ? String(settings.panelPeriodDays) : 'all';
+    const trackerPeriodSel = document.getElementById('inviteTrackerPeriodSelect');
+    if (trackerPeriodSel) trackerPeriodSel.value = panelPeriod;
     const periodSel = document.getElementById('invitePanelPeriodSelect');
     if (periodSel) periodSel.value = panelPeriod;
     const limitInput = document.getElementById('invitePanelLimitInput');
@@ -9021,12 +9193,25 @@ async function loadInviteTrackerSettingsView(targetPaneId = null) {
     await populateChannelSelect('invitePanelChannelSelect', '');
   }
 
-  const refreshOnChangeIds = ['inviteTrackerPeriodSelect', 'inviteRequiredRoleSelect', 'inviteIncludeVerificationStatsToggle'];
+  const refreshOnChangeIds = ['inviteTrackerPeriodSelect', 'invitePanelPeriodSelect', 'inviteRequiredRoleSelect', 'inviteIncludeVerificationStatsToggle'];
   refreshOnChangeIds.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     el.onchange = () => { refreshInviteTrackerDashboard().catch(() => {}); };
   });
+
+  const dashboardPeriodSel = document.getElementById('inviteTrackerPeriodSelect');
+  const panelPeriodSel = document.getElementById('invitePanelPeriodSelect');
+  if (dashboardPeriodSel && panelPeriodSel) {
+    dashboardPeriodSel.onchange = () => {
+      panelPeriodSel.value = dashboardPeriodSel.value;
+      refreshInviteTrackerDashboard().catch(() => {});
+    };
+    panelPeriodSel.onchange = () => {
+      dashboardPeriodSel.value = panelPeriodSel.value;
+      refreshInviteTrackerDashboard().catch(() => {});
+    };
+  }
 
   await refreshInviteTrackerDashboard();
   startInviteTrackerAutoRefresh();
@@ -9035,13 +9220,15 @@ async function loadInviteTrackerSettingsView(targetPaneId = null) {
 function getInviteTrackerSettingsPayload() {
   const roleSelect = document.getElementById('inviteRequiredRoleSelect');
   const panelChannelSelect = document.getElementById('invitePanelChannelSelect');
+  const trackerPeriodSelect = document.getElementById('inviteTrackerPeriodSelect');
   const panelPeriodSelect = document.getElementById('invitePanelPeriodSelect');
   const panelLimitInput = document.getElementById('invitePanelLimitInput');
   const createLinkToggle = document.getElementById('invitePanelCreateLinkToggle');
   const includeVerificationStatsToggle = document.getElementById('inviteIncludeVerificationStatsToggle');
   const excludedCodesInput = document.getElementById('inviteExcludedCodesInput');
 
-  const panelPeriodDays = inviteTrackerPeriodToDays(panelPeriodSelect?.value || 'all');
+  const selectedPeriod = trackerPeriodSelect?.value || panelPeriodSelect?.value || 'all';
+  const panelPeriodDays = inviteTrackerPeriodToDays(selectedPeriod);
   const panelLimit = Number(panelLimitInput?.value || 10);
   return {
     requiredJoinRoleId: roleSelect?.value || null,
@@ -12417,8 +12604,8 @@ async function loadCurrentPlan() {
 
 // ==================== SYSTEM MONITOR ====================
 
-async function loadSystemStatus() {
-  const el = document.getElementById('systemStatusContent');
+async function loadSystemStatus(targetId = 'systemStatusContent') {
+  const el = document.getElementById(targetId);
   if (!el) return;
   el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Gathering live diagnostics...</p></div>';
   try {

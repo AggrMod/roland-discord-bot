@@ -1261,16 +1261,175 @@ function updateModuleVisibility() {
   });
 }
 
+// ==================== MODULE REGISTRY & HUB ====================
+
+const MODULE_REGISTRY = [
+  { key: 'verification', label: 'Identity / Verification', icon: '💼', section: 'wallets', desc: 'Securely verify wallet ownership and manage roles.' },
+  { key: 'governance', label: 'Governance / Voting', icon: '📜', section: 'governance', desc: 'Participate in DAO decision-making and proposals.' },
+  { key: 'wallettracker', label: 'Wallet Tracker', icon: '💰', section: 'treasury', desc: 'Monitor community floor price and tracked wallets.' },
+  { key: 'nfttracker', label: 'NFT Activity', icon: '🎨', section: 'nft-activity', desc: 'Real-time sales and listings feed for collections.' },
+  { key: 'tokentracker', label: 'Token Tracker', icon: '🪙', section: 'token-activity', desc: 'Monitor token transactions and swap activity.' },
+  { key: 'invites', label: 'Invite Tracker', icon: '📨', section: 'settings', tab: 'invites', adminOnly: true, desc: 'Measure invite performance, leaderboard trends, and referral activity.' },
+  { key: 'aiassistant', label: 'AI Assistant', icon: '🤖', section: 'settings', tab: 'aiassistant', adminOnly: true, desc: 'Tune prompts, safety controls, and assistant behavior for your server.' },
+  { key: 'ticketing', label: 'Support Tickets', icon: '🎫', section: 'ticketing', desc: 'Integrated support desk and category routing.' },
+  { key: 'engagement', label: 'Engagement Hub', icon: '🏅', section: 'engagement', desc: 'Activity points, reward shop, and leaderboards.' },
+  { key: 'minigames', label: 'Minigames', icon: '⚔️', section: 'battle', desc: 'Arcade module including Battle Arena sessions, lobbies, and game events.' },
+  { key: 'heist', label: 'Missions', icon: '🎯', section: 'heist', desc: 'Role-based missions and strategic community goals.' },
+  { key: 'selfserveroles', label: 'Self-Serve Roles', icon: '🎭', section: 'self-serve-roles', desc: 'Claim optional roles assigned by administrators.' },
+  { key: 'help', label: 'Help Center', icon: '❓', section: 'help', desc: 'Guides, command references, and troubleshooting across all modules.' }
+];
+
+function updateBreadcrumbs(items = []) {
+  const wrap = document.getElementById('breadcrumb-wrap');
+  if (!wrap) return;
+  
+  if (!items || items.length === 0) {
+    wrap.style.display = 'none';
+    return;
+  }
+  
+  wrap.style.display = 'flex';
+  wrap.innerHTML = items.map((item, idx) => {
+    const isLast = idx === items.length - 1;
+    return `
+      <div class="breadcrumb-item ${isLast ? 'active' : ''}" 
+           ${item.action && !isLast ? `onclick="${item.action}"` : ''}>
+        ${escapeHtml(item.label)}
+      </div>
+    `;
+  }).join('');
+}
+
+function renderModuleHub() {
+  const grid = document.getElementById('module-hub-grid');
+  if (!grid) return;
+  
+  const state = window._tenantModuleState || {};
+  const record = getServerRecord(activeGuildId);
+  const name = record?.name || activeGuildId;
+  const iconUrl = record ? getGuildIconUrl(record) : '';
+  const isServerAdmin = isAdmin || isSuperadmin;
+  const infoEl = document.getElementById('moduleHubServerInfo');
+  if (infoEl && activeGuildId) {
+    infoEl.innerHTML = `
+      <div class="module-hub-server">
+        ${iconUrl
+          ? `<img src="${iconUrl}" alt="${escapeHtml(name)} icon" class="module-hub-server__icon">`
+          : `<div class="module-hub-server__icon module-hub-server__icon--fallback">${escapeHtml(name.slice(0, 2).toUpperCase())}</div>`}
+        <div class="module-hub-server__meta">
+          <div class="module-hub-server__name">${escapeHtml(name)}</div>
+          <div class="module-hub-server__id">
+            <span>ID: ${escapeHtml(activeGuildId)}</span>
+            <button class="module-hub-server__copy" onclick="navigator.clipboard.writeText('${escapeJsString(activeGuildId)}');showSuccess('Server ID copied!')">Copy</button>
+          </div>
+        </div>
+      </div>
+    `;
+  } else if (infoEl) {
+    infoEl.innerHTML = '';
+  }
+  
+  // Breadcrumbs: Servers > [Server Name]
+  updateBreadcrumbs([
+    { label: 'Servers', action: "switchSection('servers')" },
+    { label: name }
+  ]);
+  
+  let html = '';
+
+  if (isServerAdmin) {
+    html += `
+      <div class="module-tile module-tile--admin" onclick="switchSection('settings')">
+        <div class="module-tile__header">
+          <div class="module-tile__icon">⚙️</div>
+          <div class="module-tile__status status-active">Admin</div>
+        </div>
+        <div class="module-tile__body">
+          <h3 class="module-tile__title">Server Settings</h3>
+          <p class="module-tile__desc">Configure module behavior, channels, automation, and tenant-level controls.</p>
+        </div>
+        <div class="module-tile__footer">
+          <span style="font-size:0.8rem; color:var(--gold);">Open Control Panel &rarr;</span>
+        </div>
+      </div>
+    `;
+  }
+  
+  // Add Infrastructure Tile for Superadmins
+  if (isSuperadmin) {
+    html += `
+      <div class="module-tile" onclick="switchSection('admin'); showAdminView('monitor')">
+        <div class="module-tile__header">
+          <div class="module-tile__icon">🖥️</div>
+          <div class="module-tile__status status-active">System</div>
+        </div>
+        <div class="module-tile__body">
+          <h3 class="module-tile__title">Infrastructure</h3>
+          <p class="module-tile__desc">Monitor CPU, Memory, and live process status of the platform.</p>
+        </div>
+        <div class="module-tile__footer">
+          <span style="font-size:0.8rem; color:var(--gold);">Live Diagnostics &rarr;</span>
+        </div>
+      </div>
+    `;
+  }
+  
+  MODULE_REGISTRY.forEach(mod => {
+    const isEnabled = state[mod.key] !== false;
+    const isDisabledStyle = !isEnabled ? 'module-tile--disabled' : '';
+    const lockedToAdmin = !!mod.adminOnly && !isServerAdmin;
+    const statusLabel = isEnabled ? 'Active' : 'Disabled';
+    const statusClass = isEnabled ? 'status-active' : 'status-disabled';
+    
+    let onClick = '';
+    if (isEnabled && mod.tab && isServerAdmin) {
+      onClick = `switchSection('settings'); switchSettingsTab('${mod.tab}')`;
+    } else if (isEnabled && !lockedToAdmin) {
+      onClick = `switchSection('${mod.section}')`;
+    } else if (isEnabled && lockedToAdmin) {
+      onClick = `showInfo('Admin access required for this module.')`;
+    } else if (isServerAdmin) {
+      onClick = `switchSection('settings')`;
+    }
+    
+    html += `
+      <div class="module-tile ${isDisabledStyle}" ${onClick ? `onclick="${onClick}"` : ''}>
+        <div class="module-tile__header">
+          <div class="module-tile__icon">${mod.icon}</div>
+          <div class="module-tile__status ${statusClass}">${statusLabel}</div>
+        </div>
+        <div class="module-tile__body">
+          <h3 class="module-tile__title">${escapeHtml(mod.label)}</h3>
+          <p class="module-tile__desc">${escapeHtml(mod.desc)}</p>
+        </div>
+        <div class="module-tile__footer">
+          ${isServerAdmin ? '<span class="nav-icon" style="font-size:1.1rem; opacity:0.6;">⚙️</span>' : ''}
+          <span style="font-size:0.8rem; color:var(--text-muted); margin-left:8px;">${isEnabled ? 'Open Module &rarr;' : "Learn More"}</span>
+        </div>
+      </div>
+    `;
+  });
+  
+  grid.innerHTML = html;
+}
+
 // ==================== GENERAL HUB & SETTINGS ====================
+
 
 function renderGeneralSection() {
   const preEl = document.getElementById('generalPreSelection');
   const postEl = document.getElementById('generalPostSelection');
   if (!preEl || !postEl) return;
 
-  // Home should always show the main landing/marketing page.
-  preEl.style.display = '';
-  postEl.style.display = 'none';
+  if (activeGuildId) {
+    preEl.style.display = 'none';
+    postEl.style.display = 'none';
+    renderModuleHub();
+  } else {
+    preEl.style.display = '';
+    postEl.style.display = 'none';
+    updateBreadcrumbs([]);
+  }
 
   const primaryCta = document.getElementById('homePrimaryCta');
   if (primaryCta) {
@@ -1280,7 +1439,7 @@ function renderGeneralSection() {
       primaryCta.textContent = record?.name
         ? (canManage ? `Manage ${record.name}` : `Open ${record.name}`)
         : (canManage ? 'Manage Server' : 'Open Server');
-      primaryCta.onclick = () => switchSection(canManage ? 'settings' : 'servers');
+      primaryCta.onclick = () => switchSection(canManage ? 'settings' : 'wallets');
     } else {
       primaryCta.textContent = 'Get Started';
       primaryCta.onclick = () => switchSection('servers');
@@ -1301,55 +1460,6 @@ function renderGeneralSection() {
       homeContext.style.display = 'none';
       homeContext.innerHTML = '';
     }
-  }
-
-  const record = getServerRecord(activeGuildId);
-  const name = record?.name || activeGuildId;
-  const iconUrl = record ? getGuildIconUrl(record) : '';
-
-  const infoEl = document.getElementById('generalServerInfo');
-  if (infoEl) {
-    infoEl.innerHTML = `
-      <div style="display:flex;align-items:center;gap:16px;margin-bottom:8px;">
-        ${iconUrl
-          ? `<img src="${iconUrl}" style="width:64px;height:64px;border-radius:14px;object-fit:cover;">`
-          : `<div style="width:64px;height:64px;border-radius:14px;background:rgba(99,102,241,0.3);display:flex;align-items:center;justify-content:center;font-size:1.5em;font-weight:700;color:#e0e7ff;">${escapeHtml(name.slice(0, 2).toUpperCase())}</div>`}
-        <div>
-          <div style="font-size:1.4em;font-weight:700;color:#e0e7ff;">${escapeHtml(name)}</div>
-          <div style="color:var(--text-secondary);font-size:0.85em;display:flex;align-items:center;gap:6px;">
-            ID: ${escapeHtml(activeGuildId)}
-            <button onclick="navigator.clipboard.writeText('${escapeJsString(activeGuildId)}');showSuccess('Server ID copied!')" style="background:none;border:1px solid rgba(99,102,241,0.2);border-radius:4px;color:var(--text-secondary);padding:2px 6px;cursor:pointer;font-size:0.8em;">Copy</button>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  const qaEl = document.getElementById('generalQuickActions');
-  const state = window._tenantModuleState || {};
-  if (qaEl) {
-    const modules = [
-      { key: 'governance', icon: '\ud83d\udcdc', label: 'Governance', section: 'governance' },
-      { key: 'verification', icon: '\ud83d\udcbc', label: 'Verification', section: 'wallets' },
-      { key: 'wallettracker', icon: '\ud83d\udcb0', label: 'Wallet Tracker', section: 'treasury' },
-      { key: 'nfttracker', icon: '\ud83c\udfa8', label: 'NFT Tracker', section: 'nft-activity' },
-      { key: 'tokentracker', icon: '\ud83e\ude99', label: 'Token Tracker', section: 'token-activity' },
-      { key: 'heist', icon: '\ud83c\udfaf', label: 'Heist', section: 'heist' },
-    ];
-    const adminTile = (isAdmin || isSuperadmin) ? `
-      <button class="quick-action-tile" onclick="switchSection('settings')">
-        <span class="qa-icon">\u2699\ufe0f</span>
-        <span class="qa-label">Settings</span>
-      </button>` : '';
-
-    qaEl.innerHTML = modules
-      .filter(m => state[m.key] !== false)
-      .map(m => `
-        <button class="quick-action-tile" onclick="switchSection('${escapeJsString(m.section)}')">
-          <span class="qa-icon">${m.icon}</span>
-          <span class="qa-label">${m.label}</span>
-        </button>
-      `).join('') + adminTile;
   }
 }
 
@@ -2532,6 +2642,8 @@ function switchSection(sectionName, options = {}) {
     setStoredAdminView('');
   }
 
+  const resolvedSectionName = (sectionName === 'landing' && activeGuildId) ? 'module-hub' : sectionName;
+
   // Update nav items (both sidebar and mobile)
   document.querySelectorAll('.nav-item').forEach(item => {
     item.classList.remove('active');
@@ -2544,17 +2656,46 @@ function switchSection(sectionName, options = {}) {
   document.querySelectorAll('.content-section').forEach(section => {
     section.classList.remove('active');
   });
-  const targetSection = document.getElementById(`section-${sectionName}`);
+  const targetSection = document.getElementById(`section-${resolvedSectionName}`);
   if (targetSection) {
     targetSection.classList.add('active');
-    
-    // Scroll to top of content area
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // Breadcrumb Logic
+  const record = getServerRecord(activeGuildId);
+  const serverName = record?.name || activeGuildId;
+  const moduleInfo = MODULE_REGISTRY.find(m => m.section === sectionName);
+
+  if (sectionName === 'landing' && !activeGuildId) {
+    updateBreadcrumbs([]);
+  } else if (sectionName === 'servers') {
+    updateBreadcrumbs([{ label: 'Servers' }]);
+  } else if (moduleInfo && activeGuildId) {
+    updateBreadcrumbs([
+      { label: 'Servers', action: "switchSection('servers')" },
+      { label: serverName, action: "switchSection('landing')" },
+      { label: moduleInfo.label }
+    ]);
+  } else if (sectionName === 'settings' && activeGuildId) {
+    updateBreadcrumbs([
+      { label: 'Servers', action: "switchSection('servers')" },
+      { label: serverName, action: "switchSection('landing')" },
+      { label: 'Settings' }
+    ]);
+  } else if (sectionName === 'admin') {
+    updateBreadcrumbs([{ label: 'Platform Admin' }]);
+  } else if (sectionName !== 'landing') {
+    updateBreadcrumbs([]);
   }
 
   // Load section-specific data
   if (sectionName === 'landing') {
-    renderGeneralSection();
+    if (activeGuildId) {
+      renderModuleHub();
+    } else {
+      renderGeneralSection();
+    }
   } else if (sectionName === 'governance' && userData) {
     loadActiveVotes();
   } else if (sectionName === 'servers') {
@@ -2586,10 +2727,11 @@ function switchSection(sectionName, options = {}) {
     if (isAdmin) loadCurrentPlan();
   }
 
-  // Toggle sidebar visibility — hide on landing/home, show on bot management sections
+  // Toggle sidebar visibility - hide only on marketing landing
   const portalLayout = document.querySelector('.portal-layout');
   if (portalLayout) {
-    if (sectionName === 'landing') {
+    const keepSidebarSections = new Set(['servers', 'admin']);
+    if (!keepSidebarSections.has(sectionName)) {
       portalLayout.classList.add('sidebar-hidden');
     } else {
       portalLayout.classList.remove('sidebar-hidden');
@@ -6028,7 +6170,7 @@ async function loadAdminSettingsView() {
       { id: 'moduleGovernanceEnabled',   label: 'Governance',      icon: 'G',  moduleKey: 'governance'    },
       { id: 'moduleVerificationEnabled', label: 'Verification',    icon: 'V',  moduleKey: 'verification'  },
       { id: 'moduleBrandingEnabled',     label: 'Branding',        icon: 'BR', moduleKey: 'branding'      },
-      { id: 'moduleMissionsEnabled',     label: 'Heist',           icon: 'H',  moduleKey: 'heist'         },
+      { id: 'moduleMissionsEnabled',     label: 'Missions',        icon: 'H',  moduleKey: 'heist'         },
       { id: 'moduleWalletTrackerEnabled',label: 'Wallet Tracker',  icon: 'W',  moduleKey: 'wallettracker' },
       { id: 'moduleAiAssistantEnabled',  label: 'AI Assistant',    icon: 'AI', moduleKey: 'aiassistant'  },
       { id: 'moduleInviteTrackerEnabled',label: 'Invite Tracker',  icon: '📨', moduleKey: 'invites'       },
@@ -12278,71 +12420,73 @@ async function loadCurrentPlan() {
 async function loadSystemStatus() {
   const el = document.getElementById('systemStatusContent');
   if (!el) return;
-  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Gathering live diagnostics...</p></div>';
   try {
     const res = await fetch('/api/superadmin/system-status', { credentials: 'include' });
-    if (!res.ok) throw new Error('Failed');
+    if (!res.ok) throw new Error('Failed to fetch metrics');
     const d = await res.json();
 
-    const fmtBytes = b => b > 1073741824 ? (b/1073741824).toFixed(1)+'GB' : (b/1048576).toFixed(0)+'MB';
+    const fmtBytes = b => b > 1073741824 ? (b/1073741824).toFixed(1)+' GB' : (b/1048576).toFixed(0)+' MB';
     const fmtUptime = ms => {
       const h = Math.floor(ms/3600000), m = Math.floor((ms%3600000)/60000);
       return h > 0 ? `${h}h ${m}m` : `${m}m`;
     };
 
-    const memBar = `<div style="background:rgba(99,102,241,0.1);border-radius:4px;height:6px;margin-top:4px;overflow:hidden;"><div style="background:${d.memory.pct>85?'#f87171':d.memory.pct>65?'#fbbf24':'#4ade80'};height:100%;width:${d.memory.pct}%;border-radius:4px;transition:width 0.3s;"></div></div>`;
-
     const pm2Rows = d.pm2.length ? d.pm2.map(p => `
       <tr>
-        <td>${escapeHtml(p.name)}</td>
+        <td><div style="display:flex;align-items:center;"><span class="pulse"></span>${escapeHtml(p.name)}</div></td>
         <td><span class="badge ${p.status==='online'?'badge-active':'badge-paused'}">${p.status}</span></td>
-        <td>${p.uptime ? fmtUptime(p.uptime) : '\u2014'}</td>
+        <td>${p.uptime ? fmtUptime(p.uptime) : '—'}</td>
         <td>${p.restarts}</td>
         <td>${fmtBytes(p.memory)}</td>
-        <td>${p.cpu}%</td>
-      </tr>`).join('') : '<tr><td colspan="6" style="color:var(--text-secondary);text-align:center;">No PM2 processes found</td></tr>';
+        <td><div style="width:100px;background:rgba(255,255,255,0.05);height:4px;border-radius:2px;margin-bottom:4px;"><div style="width:${p.cpu}%;background:var(--gold);height:100%;border-radius:2px;"></div></div>${p.cpu}%</td>
+      </tr>`).join('') : '<tr><td colspan="6" style="text-align:center;">No PM2 processes found</td></tr>';
 
     el.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px;">
-        <div class="stat-mini">
-          <div class="stat-mini-label">RAM Usage</div>
-          <div class="stat-mini-value">${d.memory.pct}%</div>
-          <div style="font-size:0.75em;color:var(--text-secondary);">${fmtBytes(d.memory.used)} / ${fmtBytes(d.memory.total)}</div>
-          ${memBar}
+      <div class="monitor-grid">
+        <div class="monitor-stat">
+          <div class="monitor-stat__label">RAM Usage</div>
+          <div class="monitor-stat__value">${d.memory.pct}%</div>
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">${fmtBytes(d.memory.used)} / ${fmtBytes(d.memory.total)}</div>
         </div>
-        <div class="stat-mini">
-          <div class="stat-mini-label">CPU</div>
-          <div class="stat-mini-value">${d.cpu.cores} cores</div>
-          <div style="font-size:0.75em;color:var(--text-secondary);">${escapeHtml(d.cpu.model.split('@')[0].trim())}</div>
+        <div class="monitor-stat">
+          <div class="monitor-stat__label">CPU Cores</div>
+          <div class="monitor-stat__value">${d.cpu.cores}</div>
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(d.cpu.model)}">${escapeHtml(d.cpu.model.split('@')[0].trim())}</div>
         </div>
-        <div class="stat-mini">
-          <div class="stat-mini-label">System Uptime</div>
-          <div class="stat-mini-value">${d.uptime.display}</div>
-          <div style="font-size:0.75em;color:var(--text-secondary);">Node ${d.node.version}</div>
+        <div class="monitor-stat">
+          <div class="monitor-stat__label">Disk Space</div>
+          <div class="monitor-stat__value">${d.disk?.pct || '—'}</div>
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">${d.disk?.used||''} of ${d.disk?.total||''}</div>
         </div>
-        <div class="stat-mini">
-          <div class="stat-mini-label">Disk</div>
-          <div class="stat-mini-value">${d.disk?.pct || '\u2014'}</div>
-          <div style="font-size:0.75em;color:var(--text-secondary);">${d.disk?.used||''} used of ${d.disk?.total||''}</div>
+        <div class="monitor-stat">
+          <div class="monitor-stat__label">Node Runtime</div>
+          <div class="monitor-stat__value">${d.node.version}</div>
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">Heap: ${fmtBytes(d.node.heapUsed)}</div>
         </div>
-        <div class="stat-mini">
-          <div class="stat-mini-label">Heap</div>
-          <div class="stat-mini-value">${fmtBytes(d.node.heapUsed)}</div>
-          <div style="font-size:0.75em;color:var(--text-secondary);">of ${fmtBytes(d.node.heapTotal)} allocated</div>
+        <div class="monitor-stat">
+          <div class="monitor-stat__label">System Uptime</div>
+          <div class="monitor-stat__value">${d.uptime.display}</div>
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">Live Connection</div>
         </div>
       </div>
 
-      <h4 style="margin-bottom:12px;color:var(--text-secondary);font-size:0.85em;text-transform:uppercase;letter-spacing:0.05em;">PM2 Processes</h4>
-      <div style="overflow-x:auto;">
-        <div class="data-table-wrap"><table class="data-table">
-          <thead><tr><th>Name</th><th>Status</th><th>Uptime</th><th>Restarts</th><th>Memory</th><th>CPU</th></tr></thead>
-          <tbody>${pm2Rows}</tbody>
-        </table></div>
+      <div class="card" style="margin-top:var(--space-8); background:rgba(255,255,255,0.02); border-color:var(--border-subtle);">
+        <div class="card-header">
+          <h3>PM2 Process Manager</h3>
+          <span style="font-size:0.8rem; color:var(--text-muted);">Real-time node cluster status</span>
+        </div>
+        <div class="data-table-wrap" style="margin-top:var(--space-4);">
+          <table class="data-table">
+            <thead><tr><th>Process</th><th>Status</th><th>Uptime</th><th>Restarts</th><th>RAM</th><th>CPU</th></tr></thead>
+            <tbody>${pm2Rows}</tbody>
+          </table>
+        </div>
       </div>
-      <div style="color:var(--text-secondary);font-size:0.75em;margin-top:8px;text-align:right;">Last updated: ${new Date(d.timestamp).toLocaleTimeString()}</div>
+      <div style="color:var(--text-muted); font-size:0.7rem; margin-top:var(--space-4); text-align:right;">Metrics synchronized at ${new Date(d.timestamp).toLocaleTimeString()}</div>
     `;
   } catch(e) {
-    el.innerHTML = '<p style="color:var(--text-secondary);">Failed to load system status: ' + escapeHtml(e.message) + '</p>';
+    el.innerHTML = '<div class="card" style="border-color:var(--error);"><p style="color:var(--error); text-align:center;">' + escapeHtml(e.message) + '</p></div>';
   }
 }
 
@@ -12536,6 +12680,7 @@ async function saveEngagementConfigFromSettings() {
     else showError(data.message || 'Failed to save.');
   } catch (e) { showError('Error saving engagement settings.'); }
 }
+
 
 
 

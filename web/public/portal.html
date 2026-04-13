@@ -50,7 +50,7 @@
           </button>
           <button class="nav-item" data-section="battle" data-module="battle" onclick="switchSection('battle'); toggleMobileMenu()" id="mobileNavBattle" style="display:none;">
             <span class="nav-icon" aria-hidden="true">⚔️</span>
-            <span class="nav-label">Battle</span>
+            <span class="nav-label">Minigames</span>
           </button>
           <button class="nav-item" data-section="treasury" data-module="treasury" onclick="switchSection('treasury'); toggleMobileMenu()" id="mobileNavTreasury" style="display:none;">
             <span class="nav-icon" aria-hidden="true">💰</span>
@@ -74,7 +74,7 @@
           </button>
           <button class="nav-item" data-section="heist" data-module="heist" onclick="switchSection('heist'); toggleMobileMenu()" id="mobileNavHeist" style="display:none;">
             <span class="nav-icon" aria-hidden="true">🎯</span>
-            <span class="nav-label">Heist</span>
+            <span class="nav-label">Missions</span>
           </button>
           <button class="nav-item" data-section="plans" onclick="switchSection('plans'); toggleMobileMenu()" id="mobileNavPlans" style="display:none;">
             <span class="nav-icon" aria-hidden="true">💎</span>
@@ -116,7 +116,7 @@
           </button>
           <button class="nav-item" data-section="battle" data-module="battle" onclick="switchSection('battle')" id="sidebarNavBattle" style="display:none;">
             <span class="nav-icon" aria-hidden="true">⚔️</span>
-            <span class="nav-label">Battle</span>
+            <span class="nav-label">Minigames</span>
           </button>
           <button class="nav-item" data-section="treasury" data-module="treasury" onclick="switchSection('treasury')" id="sidebarNavTreasury" style="display:none;">
             <span class="nav-icon" aria-hidden="true">💰</span>
@@ -144,7 +144,7 @@
           </button>
           <button class="nav-item" data-section="heist" data-module="heist" onclick="switchSection('heist')" id="sidebarNavHeist" style="display:none;">
             <span class="nav-icon" aria-hidden="true">🎯</span>
-            <span class="nav-label">Heist</span>
+            <span class="nav-label">Missions</span>
           </button>
           <button class="nav-item" data-section="plans" onclick="switchSection('plans')" id="sidebarNavPlans" style="display:none;">
             <span class="nav-icon" aria-hidden="true">💎</span>
@@ -185,6 +185,8 @@
 
       <!-- Content Sections -->
       <main class="content-area">
+        <div id="breadcrumb-wrap" class="breadcrumb-container" style="display:none;"></div>
+
         <!-- Landing / General Section -->
         <section id="section-landing" class="content-section active">
           <!-- Pre-selection: Marketing / Landing page -->
@@ -360,6 +362,26 @@
           </div>
         </section>
 
+        <!-- Module Hub / Dashboard -->
+        <section id="section-module-hub" class="content-section">
+          <header class="section-header" style="margin-bottom: var(--space-8);">
+            <div id="moduleHubServerInfo"></div>
+            <p class="section-subtitle">Select a module to manage settings or view community data.</p>
+          </header>
+          
+          <div id="module-hub-grid" class="module-grid">
+            <!-- Tiles injected dynamically by portal.js -->
+          </div>
+        </section>
+
+        <!-- Module Detail Wrapper (Standardized View) -->
+        <section id="section-module-detail" class="content-section">
+          <div id="module-detail-container" class="module-detail">
+            <!-- Content injected dynamically by portal.js -->
+          </div>
+        </section>
+
+
         <!-- Servers Section -->
         <section id="section-servers" class="content-section">
           <header class="section-header">
@@ -498,7 +520,7 @@
         <!-- Heist Section -->
         <section id="section-heist" class="content-section">
           <header class="section-header">
-            <h2>Heist Missions</h2>
+            <h2>Missions</h2>
             <p class="section-subtitle">Join strategic missions and earn exclusive rewards</p>
           </header>
 
@@ -563,8 +585,8 @@
         <!-- Battle Section -->
         <section id="section-battle" class="content-section">
           <header class="section-header">
-            <h2>Battle Arena</h2>
-            <p class="section-subtitle">Join battles, fight for glory, last one standing wins</p>
+            <h2>Minigames</h2>
+            <p class="section-subtitle">Run the minigames module, including Battle Arena sessions and lobbies</p>
           </header>
           <div class="card">
             <div class="empty-state">
@@ -1494,8 +1516,8 @@
             <button class="settings-tab" data-tab="invites" onclick="switchSettingsTab('invites')">Invite Tracker</button>
             <button class="settings-tab" data-tab="nfttracker" onclick="switchSettingsTab('nfttracker')">NFT Tracker</button>
             <button class="settings-tab" data-tab="tokentracker" onclick="switchSettingsTab('tokentracker')">Token Tracker</button>
-            <button class="settings-tab" data-tab="battle" onclick="switchSettingsTab('battle')">Battle</button>
-            <button class="settings-tab" data-tab="heist" onclick="switchSettingsTab('heist')">Heist</button>
+            <button class="settings-tab" data-tab="battle" onclick="switchSettingsTab('battle')">Minigames</button>
+            <button class="settings-tab" data-tab="heist" onclick="switchSettingsTab('heist')">Missions</button>
             <button class="settings-tab" data-tab="selfserve" onclick="switchSettingsTab('selfserve')">Self-Serve Roles</button>
             <button class="settings-tab" data-tab="ticketing" onclick="switchSettingsTab('ticketing')">Ticketing</button>
             <button class="settings-tab" data-tab="engagement" onclick="switchSettingsTab('engagement')">Engagement</button>

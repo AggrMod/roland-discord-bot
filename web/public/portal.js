@@ -2709,6 +2709,12 @@ function goHomePage() {
 function switchSection(sectionName, options = {}) {
   sectionName = normalizePortalSectionName(sectionName);
 
+  // Prevent redundant reloads if clicking the already active section (unless forced)
+  const currentSection = getStoredPortalSection();
+  if (sectionName === currentSection && !options.force) {
+    return;
+  }
+
   if (requiresServerSelectionGate()) {
     const allowWithoutServer = ['landing', 'servers', 'wallets', 'profile', 'dashboard', 'help', 'docs', 'plans'];
     if (isSuperadmin && sectionName === 'admin') {
@@ -9200,18 +9206,8 @@ async function loadInviteTrackerSettingsView(targetPaneId = null) {
     el.onchange = () => { refreshInviteTrackerDashboard().catch(() => {}); };
   });
 
-  const dashboardPeriodSel = document.getElementById('inviteTrackerPeriodSelect');
-  const panelPeriodSel = document.getElementById('invitePanelPeriodSelect');
-  if (dashboardPeriodSel && panelPeriodSel) {
-    dashboardPeriodSel.onchange = () => {
-      panelPeriodSel.value = dashboardPeriodSel.value;
-      refreshInviteTrackerDashboard().catch(() => {});
-    };
-    panelPeriodSel.onchange = () => {
-      dashboardPeriodSel.value = panelPeriodSel.value;
-      refreshInviteTrackerDashboard().catch(() => {});
-    };
-  }
+  // No longer auto-syncing the two selects to prevent unintended settings resets.
+  // Dashboard period is for the current view; Panel period is for the configuration.
 
   await refreshInviteTrackerDashboard();
   startInviteTrackerAutoRefresh();
@@ -9227,7 +9223,7 @@ function getInviteTrackerSettingsPayload() {
   const includeVerificationStatsToggle = document.getElementById('inviteIncludeVerificationStatsToggle');
   const excludedCodesInput = document.getElementById('inviteExcludedCodesInput');
 
-  const selectedPeriod = trackerPeriodSelect?.value || panelPeriodSelect?.value || 'all';
+  const selectedPeriod = panelPeriodSelect?.value || trackerPeriodSelect?.value || 'all';
   const panelPeriodDays = inviteTrackerPeriodToDays(selectedPeriod);
   const panelLimit = Number(panelLimitInput?.value || 10);
   return {

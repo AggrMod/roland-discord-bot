@@ -751,6 +751,7 @@ class WebServer {
 
     const portalAliasRoutes = {
       '/dashboard': 'dashboard',
+      '/profile': 'profile',
       '/servers': 'servers',
       '/governance': 'governance',
       '/wallets': 'wallets',

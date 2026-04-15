@@ -203,7 +203,9 @@ class InviteTrackerService {
         requiredJoinRoleId: normalizeRoleId(row.required_join_role_id || '') || null,
         panelChannelId: normalizeChannelId(row.panel_channel_id || '') || null,
         panelMessageId: String(row.panel_message_id || '').trim() || null,
-        panelPeriodDays: Number.isFinite(Number(row.panel_period_days)) ? clampInt(row.panel_period_days, 1, 3650, null) : null,
+        panelPeriodDays: (row.panel_period_days === null || row.panel_period_days === undefined || row.panel_period_days === 0)
+          ? null
+          : clampInt(row.panel_period_days, 1, 3650, null),
         panelLimit: clampInt(row.panel_limit, 1, 100, defaults.panelLimit),
         panelEnableCreateLink: Number(row.panel_enable_create_link || 0) === 1,
         includeVerificationStats: Number(row.include_verification_stats || 0) === 1,
@@ -232,7 +234,7 @@ class InviteTrackerService {
         ? (String(payload.panelMessageId || '').trim() || null)
         : existing.panelMessageId,
       panelPeriodDays: payload.panelPeriodDays !== undefined
-        ? (payload.panelPeriodDays === null || payload.panelPeriodDays === '' ? null : clampInt(payload.panelPeriodDays, 1, 3650, null))
+        ? (payload.panelPeriodDays === null || payload.panelPeriodDays === '' || payload.panelPeriodDays === 0 || payload.panelPeriodDays === 'all' ? null : clampInt(payload.panelPeriodDays, 1, 3650, null))
         : existing.panelPeriodDays,
       panelLimit: payload.panelLimit !== undefined
         ? clampInt(payload.panelLimit, 1, 100, existing.panelLimit)

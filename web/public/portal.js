@@ -9195,11 +9195,6 @@ async function loadInviteTrackerSettingsView(targetPaneId = null) {
     const createLinkToggle = document.getElementById('invitePanelCreateLinkToggle');
     if (createLinkToggle) createLinkToggle.checked = settings.panelEnableCreateLink !== false;
     const includeVerificationStatsToggle = document.getElementById('inviteIncludeVerificationStatsToggle');
-    const limitInput = document.getElementById('invitePanelLimitInput');
-    if (limitInput) limitInput.value = String(Number(settings.panelLimit || 10));
-    const createLinkToggle = document.getElementById('invitePanelCreateLinkToggle');
-    if (createLinkToggle) createLinkToggle.checked = settings.panelEnableCreateLink !== false;
-    const includeVerificationStatsToggle = document.getElementById('inviteIncludeVerificationStatsToggle');
     if (includeVerificationStatsToggle) includeVerificationStatsToggle.checked = !!settings.includeVerificationStats;
     const excludedCodesInput = document.getElementById('inviteExcludedCodesInput');
     if (excludedCodesInput) excludedCodesInput.value = Array.isArray(settings.excludedCodes) ? settings.excludedCodes.join(', ') : '';

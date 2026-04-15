@@ -200,11 +200,14 @@ class OGRoleService {
   async getEligibleUsers(guildOrId = null) {
     try {
       const scope = this.getScopedConfig(guildOrId);
-      if (!scope.tenantScoped) {
-        if (!scope.config.enabled || !scope.config.roleId) {
-          return [];
-        }
+      logger.debug(`[OG-Role] Getting eligible users for ${scope.guildId || 'global'}, scoped: ${scope.tenantScoped}, limit: ${scope.config.limit}`);
 
+      if (!scope.config.enabled || !scope.config.roleId) {
+        logger.debug(`[OG-Role] OG role disabled or missing roleId for ${scope.guildId || 'global'}`);
+        return [];
+      }
+
+      if (!scope.tenantScoped) {
         return db.prepare(`
           SELECT u.discord_id, u.username, MIN(w.created_at) AS first_verified_at
           FROM users u
@@ -215,51 +218,43 @@ class OGRoleService {
         `).all(scope.config.limit);
       }
 
-      if (!scope.config.roleId) {
-        return [];
-      }
-
       const guild = await this.resolveGuild(guildOrId || scope.guildId);
       if (!guild) {
+        logger.warn(`[OG-Role] Could not resolve guild for ID ${scope.guildId}`);
         return [];
       }
 
-      let memberIds = [];
-      try {
-        const members = await guild.members.fetch();
-        memberIds = [...members.keys()];
-      } catch (error) {
-        memberIds = [...guild.members.cache.keys()];
-      }
-
-      if (!memberIds.length) {
-        return [];
-      }
-
-      const memberIdSet = new Set(memberIds);
-      const sampleLimit = Math.max(scope.config.limit * 25, 250);
+      // Optimization: Try to use user_tenant_memberships first as a filter
+      // This ensures we only look at people who have actually 'checked in' to this specific tenant.
       const candidates = db.prepare(`
         SELECT u.discord_id, u.username, MIN(w.created_at) AS first_verified_at
         FROM users u
         JOIN wallets w ON u.discord_id = w.discord_id
+        JOIN user_tenant_memberships utm ON u.discord_id = utm.discord_id
+        WHERE utm.guild_id = ?
         GROUP BY u.discord_id
         ORDER BY first_verified_at ASC
         LIMIT ?
-      `).all(sampleLimit);
+      `).all(guild.id, scope.config.limit * 2); // Fetch a few extra for safety
 
-      const eligible = [];
-      for (const row of candidates) {
-        if (memberIdSet.has(row.discord_id)) {
-          eligible.push(row);
-        }
-        if (eligible.length >= scope.config.limit) {
-          break;
-        }
+      if (candidates.length === 0) {
+        logger.debug(`[OG-Role] No verifiers found in memberships for guild ${guild.id}`);
       }
 
+      // Double check member status against Discord cache/fetch
+      const eligible = [];
+      for (const row of candidates) {
+        const member = guild.members.cache.get(row.discord_id) || await guild.members.fetch(row.discord_id).catch(() => null);
+        if (member) {
+          eligible.push(row);
+        }
+        if (eligible.length >= scope.config.limit) break;
+      }
+
+      logger.debug(`[OG-Role] Found ${eligible.length} eligible OG users for guild ${guild.id}`);
       return eligible;
     } catch (error) {
-      logger.error('Error getting eligible OG users:', error);
+      logger.error(`[OG-Role] Error getting eligible OG users:`, error);
       return [];
     }
   }
@@ -287,13 +282,20 @@ class OGRoleService {
     try {
       const scope = this.getScopedConfig(guildOrId);
       if (!scope.config.enabled || !scope.config.roleId) {
+        logger.debug(`[OG-Role] Eligibility skip: Not enabled or no roleId for ${guildOrId}`);
         return false;
       }
 
       const eligible = await this.getEligibleUsers(guildOrId);
-      return eligible.some(u => u.discord_id === discordId);
+      const isIncluded = eligible.some(u => u.discord_id === discordId);
+      
+      if (!isIncluded) {
+        logger.debug(`[OG-Role] User ${discordId} is not in the eligible list (limit ${scope.config.limit}) for ${guildOrId}`);
+      }
+      
+      return isIncluded;
     } catch (error) {
-      logger.error('Error checking OG eligibility:', error);
+      logger.error(`[OG-Role] Error checking OG eligibility for ${discordId}:`, error);
       return false;
     }
   }
@@ -383,7 +385,11 @@ class OGRoleService {
     try {
       const scope = this.getScopedConfig(guild);
       const config = scope.config;
+      
+      logger.debug(`[OG-Role] assignOnVerification start: ${username} (${discordId}) in guild ${guild.name} (${guild.id})`);
+
       if (!config.enabled || !config.roleId) {
+        logger.debug(`[OG-Role] OG role not enabled for guild ${guild.id}`);
         return { success: false, message: 'OG role not enabled' };
       }
 
@@ -394,20 +400,23 @@ class OGRoleService {
 
       const role = guild.roles.cache.get(config.roleId) || await guild.roles.fetch(config.roleId).catch(() => null);
       if (!role) {
+        logger.warn(`[OG-Role] OG role ${config.roleId} not found in guild ${guild.id}`);
         return { success: false, message: 'OG role not found' };
       }
 
       const member = await guild.members.fetch(discordId).catch(() => null);
       if (!member) {
+        logger.warn(`[OG-Role] Member ${discordId} not found in guild ${guild.id}`);
         return { success: false, message: 'Member not found in guild' };
       }
 
       if (member.roles.cache.has(config.roleId)) {
+        logger.debug(`[OG-Role] User ${username} already has OG role ${config.roleId}`);
         return { success: true, message: 'User already has OG role', alreadyHas: true };
       }
 
       await member.roles.add(role);
-      logger.log(`Auto-assigned OG role to ${username} (${discordId}) in guild ${guild.id}`);
+      logger.log(`[OG-Role] ✅ Auto-assigned OG role to ${username} (${discordId}) in guild ${guild.id}`);
 
       return {
         success: true,
@@ -415,10 +424,10 @@ class OGRoleService {
         assigned: true
       };
     } catch (error) {
-      logger.error('Error assigning OG role on verification:', error);
+      logger.error(`[OG-Role] Error assigning OG role to ${discordId} in guild ${guild.id}:`, error);
       return {
         success: false,
-        message: 'Failed to assign OG role'
+        message: `Failed to assign OG role: ${error.message}`
       };
     }
   }

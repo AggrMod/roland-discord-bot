@@ -6,6 +6,7 @@ const entitlementService = require('./entitlementService');
 const tenantService = require('./tenantService');
 const settingsManager = require('../config/settings');
 const logger = require('../utils/logger');
+let ogRoleService = null; // Lazy load to avoid circular deps
 
 class RoleService {
   constructor() {
@@ -270,7 +271,14 @@ class RoleService {
       changes.added.push(...tokenChanges.added);
       changes.removed.push(...tokenChanges.removed);
 
-      // 4. Assign base verified role (unconditional for all verified users)
+      // 4. Sync OG role (if applicable)
+      if (!ogRoleService) ogRoleService = require('./ogRoleService');
+      const ogResult = await ogRoleService.assignOnVerification(guild, discordId, userInfo.username);
+      if (ogResult?.assigned) {
+        changes.added.push('OG Role');
+      }
+
+      // 5. Assign base verified role (unconditional for all verified users)
       const settingsManager = require('../config/settings');
       let baseVerifiedRoleId = settingsManager.getSettings().baseVerifiedRoleId;
       if (guildId && tenantService.isMultitenantEnabled()) {

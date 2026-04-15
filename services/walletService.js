@@ -49,6 +49,7 @@ class WalletService {
 
   async triggerOGRoleAssignment(discordId, username, guildIdHint = '') {
     try {
+      logger.log(`[OG-Role] Triggering assignment for ${username} (${discordId}), hint: ${guildIdHint}`);
       // Defer OG role assignment to avoid blocking verification
       setImmediate(async () => {
         try {
@@ -56,7 +57,7 @@ class WalletService {
           const client = clientProvider.getClient();
           
           if (!client) {
-            logger.warn('Discord client not available for OG role assignment');
+            logger.warn(`[OG-Role] Discord client not available for user ${discordId}`);
             return;
           }
 
@@ -65,22 +66,33 @@ class WalletService {
             ? [hintedGuildId]
             : Array.from(client.guilds.cache.keys());
 
+          logger.log(`[OG-Role] Attempting assignment in ${candidateGuildIds.length} candidate guild(s) for ${discordId}`);
+
           let attempted = 0;
           let assigned = 0;
 
           for (const guildId of candidateGuildIds) {
             const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
-            if (!guild) continue;
+            if (!guild) {
+              logger.debug(`[OG-Role] Guild ${guildId} not found for ${discordId}`);
+              continue;
+            }
 
             // Only attempt where the user is actually in this guild.
             const member = guild.members.cache.get(discordId) || await guild.members.fetch(discordId).catch(() => null);
-            if (!member) continue;
+            if (!member) {
+              logger.debug(`[OG-Role] Member ${discordId} not found in guild ${guild.name} (${guild.id})`);
+              continue;
+            }
 
             attempted += 1;
+            logger.log(`[OG-Role] Checking eligibility for ${username} (${discordId}) in guild ${guild.name} (${guild.id})`);
             const result = await ogRoleService.assignOnVerification(guild, discordId, username);
             if (result?.assigned) {
               assigned += 1;
-              logger.log(`✨ OG role auto-assigned to ${username} (${discordId}) in guild ${guild.id}`);
+              logger.log(`[OG-Role] ✨ OG role auto-assigned to ${username} (${discordId}) in guild ${guild.id}`);
+            } else {
+              logger.log(`[OG-Role] Result for ${username} in ${guild.name}: ${result?.message || 'No assignment'}`);
             }
           }
 

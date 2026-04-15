@@ -454,6 +454,10 @@ client.once(Events.ClientReady, () => {
   };
   intervals.push(setInterval(runAiSummaries, 24 * 60 * 60 * 1000));
   setTimeout(runAiSummaries, 60 * 60 * 1000);
+  setTimeout(() => {
+    inviteTrackerService.startAutoPanelRefresh();
+    logger.log('[invite-tracker] Periodic panel refresh started');
+  }, 30 * 1000);
 });
 
 client.on(Events.GuildCreate, async guild => {
@@ -499,8 +503,8 @@ client.on(Events.InteractionCreate, async interaction => {
 
   if (interaction.isButton()) {
     const customId = interaction.customId;
-    if (customId.startsWith(inviteTrackerService.SORT_BUTTON_PREFIX)) {
-      await inviteTrackerService.handleSortButtonInteraction(interaction).catch(() => {});
+    if (customId === inviteTrackerService.REFRESH_BUTTON_ID || customId.startsWith(inviteTrackerService.SORT_BUTTON_PREFIX)) {
+      await inviteTrackerService.handlePanelInteraction(interaction).catch(() => {});
       return;
     }
     if (customId === inviteTrackerService.CREATE_LINK_BUTTON_ID) {

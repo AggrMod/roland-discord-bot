@@ -14,6 +14,7 @@ const tenantService = require('./tenantService');
 const { applyEmbedBranding } = require('./embedBranding');
 
 const CREATE_LINK_BUTTON_ID = 'invite_tracker_create_link';
+const REFRESH_BUTTON_ID = 'invite_tracker_refresh';
 const SORT_BUTTON_PREFIX = 'invite_tracker_sort_';
 const SORT_BY_INVITES = 'invites';
 const SORT_BY_NFTS = 'nfts';
@@ -1102,17 +1103,21 @@ class InviteTrackerService {
     components.push(
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
+          .setCustomId(REFRESH_BUTTON_ID)
+          .setLabel('Refresh 🔄')
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
           .setCustomId(`${SORT_BUTTON_PREFIX}${SORT_BY_INVITES}`)
-          .setLabel('Invites')
+          .setLabel('Sort: Invites')
           .setStyle(boardResult.sortBy === SORT_BY_INVITES ? ButtonStyle.Primary : ButtonStyle.Secondary),
         new ButtonBuilder()
           .setCustomId(`${SORT_BUTTON_PREFIX}${SORT_BY_NFTS}`)
-          .setLabel('NFTs')
+          .setLabel('Sort: NFTs')
           .setStyle(boardResult.sortBy === SORT_BY_NFTS ? ButtonStyle.Primary : ButtonStyle.Secondary)
           .setDisabled(!boardResult.includeVerificationStats),
         new ButtonBuilder()
           .setCustomId(`${SORT_BUTTON_PREFIX}${SORT_BY_TOKENS}`)
-          .setLabel('Tokens')
+          .setLabel('Sort: Tokens')
           .setStyle(boardResult.sortBy === SORT_BY_TOKENS ? ButtonStyle.Primary : ButtonStyle.Secondary)
           .setDisabled(!boardResult.includeTokenStats)
       )
@@ -1310,29 +1315,40 @@ class InviteTrackerService {
     };
   }
 
-  async handleSortButtonInteraction(interaction) {
+  async handlePanelInteraction(interaction) {
     const guildId = normalizeGuildId(interaction?.guildId);
     if (!guildId) return { success: false, message: 'Guild context required.' };
     const customId = String(interaction?.customId || '').trim();
-    if (!customId.startsWith(SORT_BUTTON_PREFIX)) {
-      return { success: false, message: 'Unsupported invite leaderboard sort action.' };
+
+    const isSortAction = customId.startsWith(SORT_BUTTON_PREFIX);
+    const isRefreshAction = customId === REFRESH_BUTTON_ID;
+
+    if (!isSortAction && !isRefreshAction) {
+      return { success: false, message: 'Unsupported invite leaderboard action.' };
     }
 
-    const requestedSortBy = normalizePanelSortBy(customId.slice(SORT_BUTTON_PREFIX.length));
     const settingsResult = this.getSettings(guildId);
     const settings = settingsResult.success ? settingsResult.settings : this._getDefaultSettings();
 
+    let nextSortBy = settings.panelSortBy;
+    if (isSortAction) {
+      nextSortBy = normalizePanelSortBy(customId.slice(SORT_BUTTON_PREFIX.length));
+    }
+
     const includeVerificationStats = !!settings.includeVerificationStats;
     const includeTokenStats = includeVerificationStats && this._tenantHasEnabledTokenVerificationRules(guildId);
-    let nextSortBy = requestedSortBy;
+
+    // Validate sort mode against available data
     if (nextSortBy === SORT_BY_NFTS && !includeVerificationStats) nextSortBy = SORT_BY_INVITES;
     if (nextSortBy === SORT_BY_TOKENS && !includeTokenStats) nextSortBy = includeVerificationStats ? SORT_BY_NFTS : SORT_BY_INVITES;
 
-    this.saveSettings(guildId, {
-      panelSortBy: nextSortBy,
-      panelChannelId: interaction?.channelId || settings.panelChannelId || null,
-      panelMessageId: interaction?.message?.id || settings.panelMessageId || null,
-    });
+    if (isSortAction) {
+      this.saveSettings(guildId, {
+        panelSortBy: nextSortBy,
+        panelChannelId: interaction?.channelId || settings.panelChannelId || null,
+        panelMessageId: interaction?.message?.id || settings.panelMessageId || null,
+      });
+    }
 
     const panelResult = await this.buildLeaderboardPanelEmbed(guildId, {
       days: settings.panelPeriodDays,
@@ -1354,6 +1370,7 @@ class InviteTrackerService {
 
     return {
       success: true,
+      action: isRefreshAction ? 'refresh' : 'sort',
       sortBy: normalizePanelSortBy(panelResult.metadata?.sortBy || nextSortBy),
     };
   }
@@ -1361,8 +1378,10 @@ class InviteTrackerService {
 
 const inviteTrackerService = new InviteTrackerService();
 inviteTrackerService.CREATE_LINK_BUTTON_ID = CREATE_LINK_BUTTON_ID;
+inviteTrackerService.REFRESH_BUTTON_ID = REFRESH_BUTTON_ID;
 inviteTrackerService.SORT_BUTTON_PREFIX = SORT_BUTTON_PREFIX;
 
 module.exports = inviteTrackerService;
 module.exports.CREATE_LINK_BUTTON_ID = CREATE_LINK_BUTTON_ID;
+module.exports.REFRESH_BUTTON_ID = REFRESH_BUTTON_ID;
 module.exports.SORT_BUTTON_PREFIX = SORT_BUTTON_PREFIX;

@@ -646,7 +646,7 @@ async function autoShowPendingMicroVerify() {
         </div>
 
         <div style="background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:12px 14px; margin-bottom:20px;">
-          <p style="color:#c7d2fe; font-size:0.85em; margin:0;">â„¹ï¸ Use the <strong>exact proof amount</strong> above â€” it's your unique membership identifier. Compatible with any Solana wallet. Proof expires at <strong>${expiryDisplay}</strong>.</p>
+          <p style="color:#c7d2fe; font-size:0.85em; margin:0;">ℹ️ï¸ Use the <strong>exact proof amount</strong> above â€” it's your unique membership identifier. Compatible with any Solana wallet. Proof expires at <strong>${expiryDisplay}</strong>.</p>
         </div>
 
         <div style="text-align:center;">
@@ -907,7 +907,7 @@ async function verifyByMicroTx() {
 
           <div style="background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:12px 14px; margin-bottom:20px;">
             <p style="color:#c7d2fe; font-size:0.85em; margin:0; line-height:1.5;">
-              â„¹ï¸ Use the <strong>exact proof amount</strong> above â€” it's your unique wallet identifier used only for membership confirmation.<br>
+              ℹ️ï¸ Use the <strong>exact proof amount</strong> above â€” it's your unique wallet identifier used only for membership confirmation.<br>
               Compatible with any Solana wallet (Phantom, mobile, hardware wallet, etc.).<br>
               Proof expires at <strong>${expiryDisplay}</strong>.
             </p>
@@ -2420,7 +2420,7 @@ async function loadActiveVotes() {
     container.innerHTML = `
       <div class="error-state">
         <div class="error-title">
-          <span>âš ï¸</span>
+          <span>⚠️ï¸</span>
           <span>Failed to Load Proposals</span>
         </div>
         <div class="error-message">Unable to fetch active proposals. Please try refreshing the page.</div>
@@ -2649,7 +2649,7 @@ async function loadAvailableMissions() {
     if (!endpoint) {
       container.innerHTML = `
         <div class="empty-state">
-          <div class="empty-state-icon">ðŸ§­</div>
+          <div class="empty-state-icon">🧩</div>
           <h4 class="empty-state-title">Select a Server</h4>
           <p class="empty-state-message">Pick your server first to view active missions.</p>
         </div>
@@ -2664,7 +2664,7 @@ async function loadAvailableMissions() {
     if (!data.success || missions.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
-          <div class="empty-state-icon">ðŸ—ºï¸</div>
+          <div class="empty-state-icon">🗑️</div>
           <h4 class="empty-state-title">No Missions Available</h4>
           <p class="empty-state-message">Check back later for new mission opportunities.</p>
         </div>
@@ -2682,7 +2682,7 @@ async function loadAvailableMissions() {
           ${mission.description ? `<p style="color: var(--text-secondary); margin-bottom: var(--space-2);">${escapeHtml(mission.description)}</p>` : ''}
           <div style="display: flex; gap: var(--space-4); flex-wrap: wrap; margin-top: var(--space-2);">
             <span>🎯 Slots: ${mission.filledSlots || 0}/${mission.totalSlots}</span>
-            <span>ðŸ’Ž Reward: ${mission.rewardPoints} points</span>
+            <span>💎 Reward: ${mission.rewardPoints} points</span>
           </div>
         </div>
       </div>
@@ -2692,7 +2692,7 @@ async function loadAvailableMissions() {
     container.innerHTML = `
       <div class="error-state">
         <div class="error-title">
-          <span>âš ï¸</span>
+          <span>⚠️ï¸</span>
           <span>Failed to Load Missions</span>
         </div>
         <div class="error-message">Unable to fetch available missions. Please try refreshing the page.</div>
@@ -2972,7 +2972,7 @@ async function loadTreasuryTransactions() {
     if (data.success && transactions.length > 0) {
       const rows = transactions.map(tx => {
         const direction = tx.direction || (tx.type === 'in' ? 'in' : 'out');
-        const label = direction === 'in' || direction === 'incoming' ? 'âž• Incoming' : 'âž– Outgoing';
+        const label = direction === 'in' || direction === 'incoming' ? '➕ Incoming' : '➖ Outgoing';
         const amount = tx.deltaSol ?? tx.amount ?? 'â€”';
         const hash = tx.signature || tx.tx_hash || '';
         const timestamp = tx.blockTime
@@ -3054,7 +3054,7 @@ async function loadTrackedWalletList() {
         <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
           <td style="padding:10px 12px;">
             <span style="font-family:monospace;font-size:0.85em;" title="${escapeHtml(w.wallet_address)}">${addr}</span>
-            <button class="tw-copy-btn" data-addr="${escapeHtml(w.wallet_address)}" title="Copy address" style="margin-left:4px;background:none;border:none;cursor:pointer;font-size:0.85em;">ðŸ“‹</button>
+            <button class="tw-copy-btn" data-addr="${escapeHtml(w.wallet_address)}" title="Copy address" style="margin-left:4px;background:none;border:none;cursor:pointer;font-size:0.85em;">📋</button>
           </td>
           <td style="padding:10px 12px;color:#c9d6ff;">${lbl}</td>
           <td style="padding:10px 12px;">${alertCh}</td>
@@ -3062,9 +3062,9 @@ async function loadTrackedWalletList() {
           <td style="padding:10px 12px;">${status}</td>
           <td style="padding:10px 12px;">
             <div style="display:flex;gap:6px;">
-              <button class="tw-panel-btn" data-id="${w.id}" title="Refresh Holdings Panel" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">ðŸ“‹ Panel</button>
+              <button class="tw-panel-btn" data-id="${w.id}" title="Refresh Holdings Panel" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">📋 Panel</button>
               <button class="tw-edit-btn" data-id="${w.id}" data-addr="${escapeHtml(w.wallet_address)}" data-label="${escapeHtml(w.label||'')}" data-alertch="${w.alert_channel_id||''}" data-panelch="${w.panel_channel_id||''}" title="Edit" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">âœï¸</button>
-              <button class="tw-remove-btn" data-id="${w.id}" title="Remove" style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">ðŸ—‘ï¸</button>
+              <button class="tw-remove-btn" data-id="${w.id}" title="Remove" style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
             </div>
           </td>
         </tr>`;
@@ -3145,7 +3145,7 @@ function attachTrackedWalletListeners(container) {
     btn.addEventListener('click', function() {
       navigator.clipboard.writeText(this.dataset.addr);
       this.textContent = 'âœ“';
-      setTimeout(() => this.textContent = 'ðŸ“‹', 1200);
+      setTimeout(() => this.textContent = '📋', 1200);
     });
   });
 }
@@ -3452,7 +3452,7 @@ function showNotification(message, type = 'info') {
   const toast = document.createElement('div');
   toast.className = 'toast-notification';
   const colors = { success: '#10b981', error: '#ef4444', info: '#3b82f6', warning: '#f59e0b' };
-  const icons = { success: 'âœ“', error: 'âœ•', info: 'â„¹', warning: 'âš ' };
+  const icons = { success: 'âœ“', error: '✖️', info: 'ℹ️', warning: '⚠️' };
   toast.style.cssText = `
     position:fixed; top:24px; right:24px; z-index:9999;
     padding:14px 20px; border-radius:10px; max-width:400px;
@@ -3690,8 +3690,8 @@ async function loadEnvStatusBar() {
 function renderEnvStatusBar(bar, d) {
   const pill = (label, color) => `<span style="display:inline-block;background:${color};color:#fff;border-radius:20px;padding:4px 12px;font-size:0.75em;font-weight:600;margin:0 4px 4px 0;">${label}</span>`;
   bar.innerHTML = `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;">`
-    + (d.mockMode ? pill('ðŸŸ¡ MOCK MODE', '#b8860b') : pill('ðŸŸ¢ LIVE MODE', '#2e7d32'))
-    + (d.heliusConfigured ? pill('Helius âœ“', '#2e7d32') : pill('Helius âœ—', '#c62828'))
+    + (d.mockMode ? pill('🟡 MOCK MODE', '#b8860b') : pill('🟢 LIVE MODE', '#2e7d32'))
+    + (d.heliusConfigured ? pill('Helius âœ“', '#2e7d32') : pill('Helius ✔️', '#c62828'))
     + (d.webhookSecretConfigured ? pill('Webhook âœ“', '#2e7d32') : pill('Webhook â€”', '#616161'))
     + pill('NODE_ENV: ' + (d.nodeEnv || 'development'), d.nodeEnv === 'production' ? '#1565c0' : '#616161')
     + `</div>`;
@@ -3785,7 +3785,7 @@ function showAdminView(view) {
     if (chevron) chevron.textContent = 'â–¶';
   } else {
     if (submenu) submenu.style.display = 'flex';
-    if (chevron) chevron.textContent = 'â–¼';
+    if (chevron) chevron.textContent = '▼';
   }
 
   loadEnvStatusBar();
@@ -4434,7 +4434,7 @@ async function loadSuperadminView() {
 
         <div id="superadminSection-microVerify" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
-            <h4 style="margin:0; color:#c9d6ff;">ðŸ’¸ Micro-Transaction Verification <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
+            <h4 style="margin:0; color:#c9d6ff;">💸 Micro-Transaction Verification <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
             <span style="color:var(--text-secondary); font-size:0.85em;">Wallet-extension-free verification</span>
           </div>
           <div style="display:grid; gap:12px;">
@@ -4466,7 +4466,7 @@ async function loadSuperadminView() {
             </div>
             <div style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); border-radius:8px; padding:10px 12px;">
               <p style="color:#fcd34d; font-size:0.82em; margin:0; line-height:1.5;">
-                âš ï¸ The receive wallet collects small SOL payments used to identify users. Keep it secure â€” only this superadmin panel can change it.
+                ⚠️ï¸ The receive wallet collects small SOL payments used to identify users. Keep it secure â€” only this superadmin panel can change it.
               </p>
             </div>
           </div>
@@ -5921,7 +5921,7 @@ async function loadAdminHelpView() {
           <tbody>${rows}</tbody>
         </table>
       </div>
-      ${note ? `<div style="margin:-12px 0 16px;padding:7px 12px;border-radius:0 0 10px 10px;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.12);border-top:none;color:#94a3b8;font-size:0.8em;">â„¹ï¸ ${note}</div>` : ''}`;
+      ${note ? `<div style="margin:-12px 0 16px;padding:7px 12px;border-radius:0 0 10px 10px;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.12);border-top:none;color:#94a3b8;font-size:0.8em;">ℹ️ï¸ ${note}</div>` : ''}`;
   };
 
   content.innerHTML = `
@@ -6339,7 +6339,7 @@ async function loadAdminSettingsView() {
 
     // Module toggle mapping: settingsKey -> { label, icon, moduleKey (for assigned check) }
     const MODULE_TOGGLE_DEFS = [
-      { id: 'moduleMinigamesEnabled',    label: 'Minigames',       icon: 'ðŸŽ®', moduleKey: 'minigames'     },
+      { id: 'moduleMinigamesEnabled',    label: 'Minigames',       icon: '🎮', moduleKey: 'minigames'     },
       { id: 'moduleGovernanceEnabled',   label: 'Governance',      icon: 'G',  moduleKey: 'governance'    },
       { id: 'moduleVerificationEnabled', label: 'Verification',    icon: 'V',  moduleKey: 'verification'  },
       { id: 'moduleBrandingEnabled',     label: 'Branding',        icon: 'BR', moduleKey: 'branding'      },
@@ -6397,7 +6397,7 @@ async function loadAdminSettingsView() {
 
       <!-- MODULE CONTROL â€” always visible -->
       <div style="${cardStyle}">
-        <h3 style="${cardHeader}">ðŸŽ® Module Control</h3>
+        <h3 style="${cardHeader}">🎮 Module Control</h3>
         ${visibleToggles ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--space-3);">${visibleToggles}</div>` : '<p style="color:var(--text-secondary);font-size:0.9em;">No modules assigned. Contact your Superadmin to enable modules for this server.</p>'}
       </div>
 
@@ -6433,7 +6433,7 @@ async function loadAdminSettingsView() {
     const isAuthErr = e.message === 'Not authenticated' || e.message?.includes('authenticated') || e.message?.includes('Select a server');
     content.innerHTML = isAuthErr
       ? `<div style="text-align:center;padding:var(--space-5);">
-           <p style="color:#fca5a5;font-size:0.9em;margin-bottom:16px;">âš ï¸ Your session has expired. Please log out and log back in.</p>
+           <p style="color:#fca5a5;font-size:0.9em;margin-bottom:16px;">⚠️ï¸ Your session has expired. Please log out and log back in.</p>
            <button class="btn-primary" onclick="logout()" style="font-size:0.9em;padding:10px 24px;">Log Out & Re-Login</button>
          </div>`
       : `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;
@@ -6575,7 +6575,7 @@ async function loadAdminAnalyticsView() {
       const rows = leaders.map((l, i) => {
         const name = escapeHtml(l.displayName || l.username || l.discordId || 'Unknown');
         const points = l.points ?? l.score ?? 0;
-        const medal = i === 0 ? 'ðŸ¥‡' : i === 1 ? 'ðŸ¥ˆ' : i === 2 ? 'ðŸ¥‰' : `#${i+1}`;
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`;
         return `<tr style="border-bottom:1px solid rgba(99,102,241,0.1);">
           <td style="padding:8px 10px;font-size:0.9em;">${medal}</td>
           <td style="padding:8px 10px;color:#c7d2fe;font-size:0.9em;">${name}</td>
@@ -6584,7 +6584,7 @@ async function loadAdminAnalyticsView() {
       }).join('');
       leaderboardHTML = `
         <div style="margin-top:20px;">
-          <h4 style="margin-bottom:10px;color:#e0e7ff;">ðŸ† Top 5 Leaderboard</h4>
+          <h4 style="margin-bottom:10px;color:#e0e7ff;">🏆 Top 5 Leaderboard</h4>
           <table style="width:100%;border-collapse:collapse;">
             <thead><tr style="border-bottom:2px solid rgba(99,102,241,0.2);">
               <th style="padding:8px 10px;text-align:left;color:var(--text-secondary);font-size:0.8em;">Rank</th>
@@ -6619,7 +6619,7 @@ async function loadAdminAnalyticsView() {
         </div>`).join('');
       activityHTML = `
         <div style="margin-top:20px;">
-          <h4 style="margin-bottom:10px;color:#e0e7ff;">ðŸ“‹ Recent Activity</h4>
+          <h4 style="margin-bottom:10px;color:#e0e7ff;">📋 Recent Activity</h4>
           ${rows}
         </div>`;
     }
@@ -6846,8 +6846,8 @@ async function renderNftCollectionsCard(wrapId) {
 
     const truncAddr = (a) => a && a.length > 12 ? a.slice(0, 6) + '...' + a.slice(-4) : (a || 'â€”');
     const eventIcons = (c) => [
-      c.track_mint && '🪙', c.track_sale && '💰', c.track_bid && 'ðŸ¤',
-      c.track_list && 'ðŸ“‹', c.track_delist && 'âŒ', c.track_transfer && '🔔„',
+      c.track_mint && '🤝', c.track_sale && '🤝', c.track_bid && '🤝',
+      c.track_list && '📋', c.track_delist && 'âŒ', c.track_transfer && '🔔„',
     ].filter(Boolean).join(' ') || 'â€”';
 
     if (!collections.length) {
@@ -6880,7 +6880,7 @@ async function renderNftCollectionsCard(wrapId) {
               data-transfer="${!!c.track_transfer}"
               style="font-size:0.8em;padding:4px 10px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">âœï¸ Edit</button>
             <button class="nc-remove-btn" data-id="${c.id}"
-              style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">ðŸ—‘ï¸</button>
+              style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
           </div>
         </td>
       </tr>`).join('');
@@ -7155,7 +7155,7 @@ async function renderNftTrackedTokensCard(wrapId = 'nts_tokensWrap') {
               data-min-alert="${Number(token.min_alert_amount || 0)}"
               data-enabled="${token.enabled !== false ? 'true' : 'false'}"
               style="width:30px;height:30px;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.35);border-radius:6px;cursor:pointer;color:#818cf8;font-size:0.85em;">âœï¸</button>
-            <button class="nt-remove-btn" data-id="${token.id}" style="width:30px;height:30px;background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.35);border-radius:6px;cursor:pointer;color:#fca5a5;font-size:0.85em;margin-left:4px;">ðŸ—‘ï¸</button>
+            <button class="nt-remove-btn" data-id="${token.id}" style="width:30px;height:30px;background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.35);border-radius:6px;cursor:pointer;color:#fca5a5;font-size:0.85em;margin-left:4px;">🗑️</button>
           </td>
         </tr>
       `;
@@ -7222,17 +7222,17 @@ async function renderNftTokenEventsCard(wrapId = 'nts_tokenEventsWrap') {
     }
 
     const iconByType = {
-      buy: 'ðŸŸ¢',
+      buy: '🟢',
       sell: '🔔´',
-      transfer_in: 'ðŸ“¥',
-      transfer_out: 'ðŸ“¤',
-      swap_in: 'ðŸŸ£',
-      swap_out: 'ðŸŸ ',
+      transfer_in: '📥',
+      transfer_out: '📤',
+      swap_in: '🟣',
+      swap_out: '🟠',
     };
 
     const rows = events.map(evt => {
       const type = String(evt.event_type || 'activity').toLowerCase();
-      const icon = iconByType[type] || 'ðŸ§©';
+      const icon = iconByType[type] || '🧩';
       const tokenName = evt.token_symbol || evt.token_name || (evt.token_mint ? `${String(evt.token_mint).slice(0, 4)}...${String(evt.token_mint).slice(-4)}` : 'Token');
       const amount = Number(evt.amount_delta || 0).toLocaleString(undefined, { maximumFractionDigits: 6 });
       const wallet = String(evt.wallet_address || '');
@@ -7688,17 +7688,17 @@ async function loadBrandingSettingsView() {
           <div style="color:#c9d6ff;font-weight:600;margin-bottom:8px;">Preview Variants</div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
             <div id="brandingPreviewTicket" style="padding:10px;border-radius:8px;background:rgba(30,41,59,0.55);border-left:4px solid ${escapeHtml(b.ticketing_color || b.brand_color || b.primary_color || '#6366f1')};">
-              <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || 'ðŸŽŸï¸') + ' Support Tickets')}</div>
+              <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || '🎫') + ' Support Tickets')}</div>
               <div style="color:#94a3b8;font-size:0.8em;margin-top:4px;">Open a support ticket</div>
               <div style="color:#94a3b8;font-size:0.72em;margin-top:6px;">${escapeHtml(b.footer_text || 'Powered by Guild Pilot')}</div>
             </div>
             <div id="brandingPreviewSelfserve" style="padding:10px;border-radius:8px;background:rgba(30,41,59,0.55);border-left:4px solid ${escapeHtml(b.selfserve_color || b.brand_color || b.primary_color || '#6366f1')};">
-              <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || 'ðŸŽ–ï¸') + ' Get Your Roles')}</div>
+              <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || '🎖️') + ' Get Your Roles')}</div>
               <div style="color:#94a3b8;font-size:0.8em;margin-top:4px;">Click to claim roles</div>
               <div style="color:#94a3b8;font-size:0.72em;margin-top:6px;">${escapeHtml(b.footer_text || 'Powered by Guild Pilot')}</div>
             </div>
             <div id="brandingPreviewNft" style="padding:10px;border-radius:8px;background:rgba(30,41,59,0.55);border-left:4px solid ${escapeHtml(b.nfttracker_color || b.brand_color || b.primary_color || '#6366f1')};">
-              <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || 'ðŸ“¡') + ' NFT Activity')}</div>
+              <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || '📡') + ' NFT Activity')}</div>
               <div style="color:#94a3b8;font-size:0.8em;margin-top:4px;">Collection updates</div>
               <div style="color:#94a3b8;font-size:0.72em;margin-top:6px;">${escapeHtml(b.footer_text || 'Powered by Guild Pilot')}</div>
             </div>
@@ -7712,7 +7712,7 @@ async function loadBrandingSettingsView() {
     `;
 
     const updatePreview = () => {
-      const emoji = document.getElementById('br_brand_emoji')?.value || 'âœ¨';
+      const emoji = document.getElementById('br_brand_emoji')?.value || '✨';
       const gColor = document.getElementById('br_brand_color')?.value || '#6366f1';
       const footer = document.getElementById('br_footer_text')?.value || 'Powered by Guild Pilot';
       const tColor = document.getElementById('br_ticketing_color')?.value || gColor;
@@ -7823,9 +7823,9 @@ async function renderSettingsWalletList() {
         <td style="padding:10px 12px;">${status}</td>
         <td style="padding:10px 12px;">
           <div style="display:flex;gap:6px;">
-            <button class="tw-panel-btn" data-id="${w.id}" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">ðŸ“‹</button>
+            <button class="tw-panel-btn" data-id="${w.id}" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">📋</button>
             <button class="tw-edit-btn" data-id="${w.id}" data-addr="${escapeHtml(w.wallet_address)}" data-label="${escapeHtml(w.label||'')}" data-alertch="${w.alert_channel_id||''}" data-panelch="${w.panel_channel_id||''}" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">âœï¸</button>
-            <button class="tw-remove-btn" data-id="${w.id}" style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">ðŸ—‘ï¸</button>
+            <button class="tw-remove-btn" data-id="${w.id}" style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
           </div>
         </td>
       </tr>`;
@@ -8270,7 +8270,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
       </div>
       <div style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;">ðŸ§­ Channel Modes</h3>
+          <h3 style="margin:0;color:#c9d6ff;">🧩 Channel Modes</h3>
           <button class="btn-primary" onclick="saveAiAssistantChannelPolicies()">Save Channel Modes</button>
         </div>
         <div style="color:var(--text-secondary);font-size:0.8em;margin-bottom:10px;">
@@ -8293,7 +8293,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
       </div>
       <div style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;">ðŸ“ˆ AI Usage Overview (Today)</h3>
+          <h3 style="margin:0;color:#c9d6ff;">📈 AI Usage Overview (Today)</h3>
           <button class="btn-secondary" onclick="loadAiAssistantSettingsView()">Refresh Metrics</button>
         </div>
         <div style="display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:10px;margin-bottom:12px;">
@@ -8323,7 +8323,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
       </div>
       <div style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;">ðŸ“š Knowledge Sources</h3>
+          <h3 style="margin:0;color:#c9d6ff;">📚 Knowledge Sources</h3>
           <span style="color:var(--text-secondary);font-size:0.82em;">Tenant docs used for grounded AI answers</span>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
@@ -8473,7 +8473,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
       </div>
       <div style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;">ðŸ›¡ï¸ Role Tier Limits</h3>
+          <h3 style="margin:0;color:#c9d6ff;">🚀 Role Tier Limits</h3>
           <button class="btn-primary btn-sm" onclick="saveAiAssistantRoleLimits()">Save Role Limits</button>
         </div>
         <div style="color:var(--text-secondary);font-size:0.8em;margin-bottom:10px;">Set per-role daily caps. 0 means unlimited. The strictest matching role limit is used per user.</div>
@@ -8492,7 +8492,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
       </div>
       <div style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;">ðŸ“¥ Knowledge Ingestion</h3>
+          <h3 style="margin:0;color:#c9d6ff;">📥 Knowledge Ingestion</h3>
           <button class="btn-secondary btn-sm" onclick="loadAiAssistantSettingsView()">Refresh Jobs</button>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
@@ -8544,7 +8544,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
       </div>
       <div style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;">ðŸ§  Guarded AI Actions</h3>
+          <h3 style="margin:0;color:#c9d6ff;">🧠 Guarded AI Actions</h3>
           <button class="btn-secondary btn-sm" onclick="loadAiAssistantSettingsView()">Refresh</button>
         </div>
         <div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-bottom:10px;align-items:end;">
@@ -9512,7 +9512,7 @@ async function loadVotingPowerView() {
 
       govSettingsHTML = `
         <div style="${govCardStyle}">
-          <h3 style="${govCardHeader}">ðŸ—³ï¸ Governance Settings</h3>
+          <h3 style="${govCardHeader}">⚖️ Governance Settings</h3>
           <div style="${govGridRow}">
             <div>
               <label style="${govFieldLabel}">Quorum Percentage (%)</label>
@@ -9530,7 +9530,7 @@ async function loadVotingPowerView() {
             </div>
             <div></div>
           </div>
-          <h4 style="color:#c9d6ff;font-size:0.95em;font-weight:600;margin:var(--space-4) 0 var(--space-3) 0;padding-top:var(--space-3);border-top:1px solid rgba(99,102,241,0.12);">🔔— Channel Overrides</h4>
+          <h4 style="color:#c9d6ff;font-size:0.95em;font-weight:600;margin:var(--space-4) 0 var(--space-3) 0;padding-top:var(--space-3);border-top:1px solid rgba(99,102,241,0.12);">🔔 Channel Overrides</h4>
           <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:12px;">Leave empty to use .env defaults.</p>
           <div style="${govGridRow}">
             <div>
@@ -9579,7 +9579,7 @@ async function loadVotingPowerView() {
       <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:16px;">Map Discord roles to voting power. Users get the highest VP among all their roles.</p>
       <div id="vpMappingsTableContainer" style="margin-bottom:16px;">${tableHTML}</div>
       <div style="background:rgba(30,41,59,0.5);border:1px solid rgba(99,102,241,0.15);border-radius:10px;padding:16px;margin-top:8px;">
-        <h5 style="color:#c9d6ff;font-size:0.88em;font-weight:600;margin:0 0 12px 0;">âž• Add Mapping</h5>
+        <h5 style="color:#c9d6ff;font-size:0.88em;font-weight:600;margin:0 0 12px 0;">➕ Add Mapping</h5>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);">
           <div>
             <label style="display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;">Discord Role</label>
@@ -9703,7 +9703,7 @@ async function loadAdminRoles() {
         if (!roleId) return '<span style="color:var(--text-muted);">Not set</span>';
         const role = (discordRolesCache || []).find(r => r.id === roleId);
         if (role) {
-          const dot = role.color && role.color !== '#000000' ? `<span style="color:${role.color};">\u25CF</span> ` : '';
+          const dot = role.color && role.color !== '#000000' ? `<span style="color:${role.color};">●</span> ` : '';
           return dot + escapeHtml(role.name);
         }
         return `<span style="font-family:monospace;font-size:0.85em;">${escapeHtml(roleId)}</span>`;
@@ -9805,7 +9805,7 @@ function _ensureAddRuleModal() {
 
       <div class="modal-header">
         <h3 id="addRuleModalTitle">Add Verification Rule</h3>
-        <button onclick="closeAddRuleModal()" class="modal-close">\u2715</button>
+        <button onclick="closeAddRuleModal()" class="modal-close">✕</button>
       </div>
       <div class="modal-body" style="flex:1;overflow:auto;">
         <div style="margin-bottom:20px;">
@@ -9868,7 +9868,7 @@ function _ensureAddRuleModal() {
           </div>
           <div class="form-group" style="margin-bottom:14px;">
             <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Trait Values <span style="color:#f87171;">*</span>
-              <small style="color:var(--text-secondary); font-weight:normal;"> \u2014 press Enter or comma to add</small>
+              <small style="color:var(--text-secondary); font-weight:normal;"> — press Enter or comma to add</small>
             </label>
             <div class="trait-values-container" onclick="document.getElementById('traitValueInput')?.focus()">
               <div id="traitValueTags" class="trait-value-tags"></div>
@@ -9957,7 +9957,7 @@ function renderTraitValueTags() {
   const container = document.getElementById('traitValueTags');
   if (!container) return;
   container.innerHTML = _traitValues.map((v, i) => `
-    <span class="trait-value-tag">${escapeHtml(v)}<button onclick="removeTraitValueTag(${i})" type="button">\u00D7</button></span>
+    <span class="trait-value-tag">${escapeHtml(v)}<button onclick="removeTraitValueTag(${i})" type="button">×</button></span>
   `).join('');
   document.getElementById('ruleTraitValues').value = _traitValues.join(',');
   document.getElementById('traitValueInput')?.focus();
@@ -10284,7 +10284,7 @@ function reverifyAllRoles() {
       const btn = document.querySelector('[onclick="reverifyAllRoles()"]');
       if (btn) {
         btn.disabled = true;
-        btn.innerHTML = '<span>â³</span><span>Syncing...</span>';
+        btn.innerHTML = '<span>⚡</span><span>Syncing...</span>';
       }
 
       const response = await fetch('/api/admin/roles/sync', { method: 'POST', credentials: 'include' });
@@ -10302,7 +10302,7 @@ function reverifyAllRoles() {
       const btn = document.querySelector('[onclick="reverifyAllRoles()"]');
       if (btn) {
         btn.disabled = false;
-        btn.innerHTML = '<span>🔔„</span><span>Reverify All</span>';
+        btn.innerHTML = '<span>🔔</span><span>Reverify All</span>';
       }
     }
   });
@@ -10336,9 +10336,9 @@ async function loadAdminStats() {
     document.getElementById('statLastSync').textContent = now.toLocaleTimeString();
   } catch (e) {
     console.error('Error loading stats:', e);
-    document.getElementById('statTotalUsers').textContent = 'â€”';
-    document.getElementById('statVerified').textContent = 'â€”';
-    document.getElementById('statPending').textContent = 'â€”';
+    document.getElementById('statTotalUsers').textContent = '—';
+    document.getElementById('statVerified').textContent = '—';
+    document.getElementById('statPending').textContent = '—';
   }
 }
 
@@ -10354,7 +10354,7 @@ async function loadAdminUsers() {
   const originalBtn = btn ? btn.innerHTML : null;
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<span>â³</span><span>Loading...</span>';
+    btn.innerHTML = '<span>⚡</span><span>Loading...</span>';
   }
 
   content.innerHTML = `
@@ -10418,7 +10418,7 @@ function renderAdminUsersTable(users) {
     const vp = u.voting_power ?? u.votingPower ?? 0;
     const nfts = u.total_nfts ?? u.totalNFTs ?? 0;
     const name = u.username || u.discord_username || 'Unknown';
-    const did = u.discord_id || u.discordId || 'â€”';
+    const did = u.discord_id || u.discordId || '—';
     const safeDid = String(did || '');
     const safeNameEncoded = encodeURIComponent(String(name || 'Unknown'));
 
@@ -10488,7 +10488,7 @@ async function viewUserDetails(discordId) {
     const votes = data.votes || [];
 
     showConfirmModal('User Details', '', null);
-    document.getElementById('confirmTitle').textContent = `ðŸ‘¤ ${u.username || 'User'} (${discordId})`;
+    document.getElementById('confirmTitle').textContent = `👤 ${u.username || 'User'} (${discordId})`;
     document.getElementById('confirmButton').style.display = 'none';
     document.getElementById('confirmMessage').innerHTML = `
       <div style="display:grid; gap:12px; font-size:0.9em;">
@@ -10565,7 +10565,7 @@ async function loadTreasuryTrackerView() {
         </div>
         <div style="padding:16px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.18); border-radius:10px;">
           <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:6px;">Transaction Alerts</div>
-          <div style="color:${alertsEnabled ? '#10b981' : '#ef4444'}; font-size:1.1em; font-weight:600;">${alertsEnabled ? '✅ Enabled' : 'âŒ Disabled'}</div>
+          <div style="color:${alertsEnabled ? '#10b981' : '#ef4444'}; font-size:1.1em; font-weight:600;">${alertsEnabled ? '✅ Enabled' : '❌ Disabled'}</div>
           <div style="color:var(--text-secondary); font-size:0.8em; margin-top:4px;">Channel: ${escapeHtml(String(alertChannel))}</div>
         </div>
       </div>
@@ -10574,14 +10574,14 @@ async function loadTreasuryTrackerView() {
     if (isAdmin) {
       html += `
         <div style="margin-top:16px;">
-          <button class="btn-primary" onclick="openTreasuryConfigModal()" style="font-size:0.85em; padding:8px 16px;">âš™ï¸ Edit Tracker Config</button>
+          <button class="btn-primary" onclick="openTreasuryConfigModal()" style="font-size:0.85em; padding:8px 16px;">⚙️ Edit Tracker Config</button>
         </div>
       `;
     }
 
     content.innerHTML = html;
   } catch (e) {
-    content.innerHTML = `<div style="color:var(--text-secondary); text-align:center; padding:20px;">Treasury tracker config unavailable â€” admin access may be required.</div>`;
+    content.innerHTML = `<div style="color:var(--text-secondary); text-align:center; padding:20px;">Treasury tracker config unavailable — admin access may be required.</div>`;
   }
 }
 
@@ -10591,7 +10591,7 @@ function openTreasuryConfigModal() {
   const title = document.getElementById('confirmTitle');
   const body = document.getElementById('confirmMessage');
   const btn = document.getElementById('confirmButton');
-  title.textContent = 'âš™ï¸ Treasury Tracker Configuration';
+  title.textContent = '⚙️ Treasury Tracker Configuration';
   btn.textContent = 'Save Config';
   btn.classList.remove('btn-danger');
   btn.classList.add('btn-primary');
@@ -10657,7 +10657,7 @@ async function loadNFTActivityView() {
   const container = document.getElementById('nftActivityPublicView');
   if (!container) return;
 
-  // Inject shared settings panel into tracker tab (same as Settings â†’ NFT Tracker)
+  // Inject shared settings panel into tracker tab (same as Settings → NFT Tracker)
   if (isAdmin) {
     const settingsPanel = document.getElementById('nftActivityTrackerSettingsPanel');
     if (settingsPanel) {
@@ -10741,13 +10741,13 @@ async function loadTokenActivityView() {
       const amount = Number(evt.amount_delta || 0).toLocaleString(undefined, { maximumFractionDigits: 6 });
       const when = evt.event_time ? new Date(evt.event_time).toLocaleString() : 'Unknown';
       const wallet = String(evt.wallet_address || '');
-      const walletShort = wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : 'â€”';
+      const walletShort = wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : '—';
       return `
         <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
           <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
             <div>
               <div style="color:#e0e7ff; font-weight:600; margin-bottom:4px;">${escapeHtml(type)} ${escapeHtml(tokenName)}</div>
-              <div style="color:var(--text-secondary); font-size:0.85em;">Amount: ${escapeHtml(amount)} Â· Wallet: <span style="font-family:monospace;">${escapeHtml(walletShort)}</span></div>
+              <div style="color:var(--text-secondary); font-size:0.85em;">Amount: ${escapeHtml(amount)} · Wallet: <span style="font-family:monospace;">${escapeHtml(walletShort)}</span></div>
             </div>
             <div style="color:var(--text-secondary); font-size:0.82em; white-space:nowrap;">${escapeHtml(when)}</div>
           </div>
@@ -10813,7 +10813,7 @@ async function loadAdminActivity() {
       <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid rgba(99,102,241,0.15); gap:12px;">
         <div style="display:flex; align-items:center; gap:12px; flex:1;">
           <div style="font-size:1.2em;">
-            ${a.type === 'verify' ? 'âœ“' : a.type === 'sync' ? '🔔„' : a.type === 'proposal' ? '📜' : a.type === 'treasury' ? '💰' : 'ðŸ‘¤'}
+            ${a.type === 'verify' ? '✓' : a.type === 'sync' ? '🔔' : a.type === 'proposal' ? '📜' : a.type === 'treasury' ? '💰' : '👤'}
           </div>
           <div>
             <div style="color:#e0e7ff; font-weight:600;">${escapeHtml(a.action)}</div>
@@ -10852,7 +10852,7 @@ async function loadNFTActivityAdminView(preloadedCollections = null) {
       <div style="display:grid; gap:12px;">
         <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
           <button class="btn-primary" onclick="openNftActivityAddCollectionModal()" style="justify-content:center;">
-            <span>âž•</span>
+            <span>➕</span>
             <span>Add Collection</span>
           </button>
         </div>
@@ -10877,10 +10877,10 @@ async function loadNFTActivityAdminView(preloadedCollections = null) {
             <div style="color:var(--text-secondary); font-size:0.8em; font-family:monospace;">${escapeHtml(addr)}</div>
           </div>
           <div style="display:flex; align-items:center; gap:10px;">
-            <span style="color:${isEnabled ? '#10b981' : '#ef4444'}; font-size:0.85em;">${isEnabled ? 'â— Enabled' : 'â— Disabled'}</span>
-            <button class="nft-activity-edit-btn" data-id="${escapeHtml(String(col.id))}" data-name="${escapeHtml(name)}" data-addr="${escapeHtml(addr)}" data-me="${escapeHtml(col.me_symbol||'')}" data-channel="${escapeHtml(col.channel_id||'')}" style="font-size:0.8em;padding:6px 12px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">âœï¸ Edit</button>
+            <span style="color:${isEnabled ? '#10b981' : '#ef4444'}; font-size:0.85em;">${isEnabled ? '● Enabled' : '● Disabled'}</span>
+            <button class="nft-activity-edit-btn" data-id="${escapeHtml(String(col.id))}" data-name="${escapeHtml(name)}" data-addr="${escapeHtml(addr)}" data-me="${escapeHtml(col.me_symbol||'')}" data-channel="${escapeHtml(col.channel_id||'')}" style="font-size:0.8em;padding:6px 12px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️ Edit</button>
             <button class="nft-activity-remove-btn btn-danger" data-id="${escapeHtml(String(col.id))}" data-name="${escapeHtml(name)}" style="font-size:0.8em; padding:6px 12px;">
-              <span>ðŸ—‘ï¸</span><span>Remove</span>
+              <span>🗑️</span><span>Remove</span>
             </button>
           </div>
         </div>
@@ -10913,7 +10913,7 @@ async function openEditCollectionModal(id, name, addr, meSymbol, channelId) {
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;';
   overlay.innerHTML = `
     <div style="background:var(--card-bg,#1e293b);border:1px solid rgba(99,102,241,0.3);border-radius:12px;padding:24px;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto;">
-      <h3 style="margin:0 0 16px;color:var(--text-primary,#e0e7ff);">âœï¸ Edit Collection</h3>
+      <h3 style="margin:0 0 16px;color:var(--text-primary,#e0e7ff);">✏️ Edit Collection</h3>
       <div style="display:grid;gap:14px;">
         <div><label style="${lb}">Collection Name</label><input type="text" id="ceNameInput" value="${escapeHtml(name)}" style="${fi}"></div>
         <div><label style="${lb}">Alert Channel</label><select id="ceChannelInput" style="${fi}"><option value="">Loading...</option></select></div>
@@ -10992,7 +10992,7 @@ async function openNftActivityAddCollectionModal() {
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;';
   overlay.innerHTML = `
     <div style="background:var(--card-bg,#1e293b);border:1px solid rgba(99,102,241,0.3);border-radius:12px;padding:24px;width:500px;max-width:95vw;max-height:90vh;overflow-y:auto;">
-      <h3 style="margin:0 0 16px;color:var(--text-primary,#e0e7ff);">âž• Watch New Collection</h3>
+      <h3 style="margin:0 0 16px;color:var(--text-primary,#e0e7ff);">➕ Watch New Collection</h3>
       <div style="display:grid;gap:14px;">
         <div><label style="${lb}">Collection Address *</label><input type="text" id="caAddrInput" placeholder="Solana collection address" style="${fi}font-family:monospace;"></div>
         <div><label style="${lb}">Collection Name *</label><input type="text" id="caNameInput" placeholder="e.g. Vault Runners" style="${fi}"></div>
@@ -11001,10 +11001,10 @@ async function openNftActivityAddCollectionModal() {
         <div style="display:flex;flex-wrap:wrap;gap:12px;">
           <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caMint" checked> 🪙 Mint</label>
           <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caSale" checked> 💰 Sale</label>
-          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caBid" checked> ðŸ¤ Bid</label>
-          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caList" checked> ðŸ“‹ List</label>
-          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caDelist" checked> âŒ Delist</label>
-          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caTransfer"> 🔔„ Transfer</label>
+          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caBid" checked> 🤝 Bid</label>
+          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caList" checked> 📋 List</label>
+          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caDelist" checked> ❌ Delist</label>
+          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caTransfer"> 🔔 Transfer</label>
         </div>
       </div>
       <div style="display:flex;gap:10px;align-items:center;margin-top:20px;">
@@ -11117,11 +11117,11 @@ async function loadTreasuryTrackerView() {
           </div>
           <div class="stat-card">
             <div class="stat-label">Refresh Interval</div>
-            <div class="stat-value">${c.refreshHours ?? 'â€”'} hours</div>
+            <div class="stat-value">${c.refreshHours ?? '—'} hours</div>
           </div>
           <div class="stat-card">
             <div class="stat-label">TX Alerts</div>
-            <div class="stat-value">${c.txAlertsEnabled ? '✅ Enabled' : 'âŒ Disabled'}</div>
+            <div class="stat-value">${c.txAlertsEnabled ? '✅ Enabled' : '❌ Disabled'}</div>
           </div>
           <div class="stat-card">
             <div class="stat-label">Last Sync</div>
@@ -11133,7 +11133,7 @@ async function loadTreasuryTrackerView() {
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
               <span style="color:var(--text-secondary); font-size:0.9em;">Configure treasury settings via Discord: <code style="background:rgba(0,0,0,0.3); padding:4px 8px; border-radius:4px;">/treasury admin ...</code></span>
               <button class="btn-secondary" onclick="loadTreasuryTrackerView()" style="padding:8px 16px;">
-                <span>🔔„</span>
+                <span>🔔</span>
                 <span>Refresh</span>
               </button>
             </div>
@@ -11195,10 +11195,10 @@ async function loadSelfServeRolesView() {
             </label>
           </td>
           <td style="padding:6px 10px;">
-            <button class="panel-role-remove btn-danger" data-panel="${p.id}" data-role="${escapeHtml(r.role_id)}" style="font-size:0.78em;padding:3px 8px;">ðŸ—‘ï¸</button>
+            <button class="panel-role-remove btn-danger" data-panel="${p.id}" data-role="${escapeHtml(r.role_id)}" style="font-size:0.78em;padding:3px 8px;">🗑️</button>
           </td>
         </tr>
-      `).join('') : `<tr><td colspan="4" style="padding:10px;color:var(--text-secondary);font-size:0.85em;text-align:center;">No roles yet â€” add one below.</td></tr>`;
+      `).join('') : `<tr><td colspan="4" style="padding:10px;color:var(--text-secondary);font-size:0.85em;text-align:center;">No roles yet — add one below.</td></tr>`
 
       return `
         <div style="${cardStyle}" data-panel-id="${p.id}">
@@ -11212,7 +11212,7 @@ async function loadSelfServeRolesView() {
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;">
               <button class="panel-save-meta btn-secondary" data-panel="${p.id}" style="font-size:0.8em;padding:6px 12px;">💾 Save</button>
-              <button class="panel-delete btn-danger" data-panel="${p.id}" style="font-size:0.8em;padding:6px 12px;">ðŸ—‘ï¸ Delete Panel</button>
+              <button class="panel-delete btn-danger" data-panel="${p.id}" style="font-size:0.8em;padding:6px 12px;">🗑️ Delete Panel</button>
             </div>
           </div>
           <table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
@@ -11240,7 +11240,7 @@ async function loadSelfServeRolesView() {
               <div style="font-size:0.8em;color:#94a3b8;margin-bottom:4px;">Post to Channel</div>
               <select class="panel-channel-select" data-panel="${p.id}" style="${fi}">${chOpts(p.channel_id || '')}</select>
             </div>
-            <button class="panel-post-btn btn-primary" data-panel="${p.id}" style="font-size:0.8em;padding:8px 14px;">ðŸ“¢ ${p.message_id ? 'Update Panel' : 'Post Panel'}</button>
+            <button class="panel-post-btn btn-primary" data-panel="${p.id}" style="font-size:0.8em;padding:8px 14px;">📢 ${p.message_id ? 'Update Panel' : 'Post Panel'}</button>
             <span class="panel-post-status" data-panel="${p.id}" style="font-size:0.82em;font-weight:600;"></span>
           </div>
         </div>
@@ -11249,7 +11249,7 @@ async function loadSelfServeRolesView() {
 
     content.innerHTML = `
       <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
-        <button id="srCreatePanelBtn" class="btn-primary" style="font-size:0.85em;padding:8px 18px;">âž• New Panel</button>
+        <button id="srCreatePanelBtn" class="btn-primary" style="font-size:0.85em;padding:8px 18px;">➕ New Panel</button>
       </div>
       ${panels.length ? panelCards : `<div style="${cardStyle}text-align:center;color:var(--text-secondary);"><p>No panels yet. Create your first panel above.</p></div>`}
     `;
@@ -11360,7 +11360,7 @@ async function loadSelfServeRolesView() {
           }
         } catch { if (statusEl) { statusEl.style.color = '#fca5a5'; statusEl.textContent = 'âŒ Network error'; } }
         btn.disabled = false;
-        btn.textContent = 'ðŸ“¢ Post Panel';
+        btn.textContent = '📢 Post Panel';
       });
     });
 
@@ -11369,7 +11369,7 @@ async function loadSelfServeRolesView() {
       const r = await fetch('/api/admin/role-panels', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'ðŸŽ–ï¸ Get Your Roles', description: 'Click a button below to claim or unclaim a community role.' })
+        body: JSON.stringify({ title: '🎖️ Get Your Roles', description: 'Click a button below to claim or unclaim a community role.' })
       });
       const d = await r.json();
       if (d.success) loadSelfServeRolesView();
@@ -11908,7 +11908,7 @@ function _showCategoryForm(cat) {
         <label style="font-size:0.8em;display:flex;align-items:center;gap:2px;">
           <input type="checkbox" id="tmplReq_${idx}" ${f.required !== false ? 'checked' : ''} /> Req
         </label>
-        <button onclick="removeTemplateField(${idx})" style="background:none;border:none;color:#ed4245;cursor:pointer;font-size:1em;">âœ•</button>
+        <button onclick="removeTemplateField(${idx})" style="background:none;border:none;color:#ed4245;cursor:pointer;font-size:1em;">✖️</button>
       </div>
       <input type="text" id="tmplPlaceholder_${idx}" value="${escapeHtml(f.placeholder || '')}" placeholder="Placeholder text" style="width:100%;padding:4px 8px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:4px;color:var(--text-primary);font-size:0.85em;" />
     </div>`;
@@ -11934,7 +11934,7 @@ function _showCategoryForm(cat) {
         <div style="flex:0 0 140px;">
           <label style="font-size:0.85em;font-weight:600;">Emoji</label>
           <select id="catEmoji" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
-            ${['🎫','ðŸ› ï¸','ðŸ†','ðŸ¤','💰','ðŸš¨','ðŸ“¦','ðŸ§¾','â“','ðŸ“£'].map(e => `<option value="${e}" ${(isEdit ? (cat.emoji || '🎫') : '🎫') === e ? 'selected' : ''}>${e}</option>`).join('')}
+            ${['🎫','🛠️','🏆','🤝','💰','🚨','📦','🧶','❓','📣'].map(e => `<option value="${e}" ${(isEdit ? (cat.emoji || '🎫') : '🎫') === e ? 'selected' : ''}>${e}</option>`).join('')}
           </select>
         </div>
         <div style="flex:1;">
@@ -11945,14 +11945,14 @@ function _showCategoryForm(cat) {
       <div>
         <label style="font-size:0.85em;font-weight:600;">Open Tickets Category</label>
         <select id="catParentChannel" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
-          <option value="">â€” None â€”</option>
+          <option value="">— None —</option>
           ${_ticketChannelsList.filter(c => c.kind === 'category').map(c => `<option value="${c.id}" ${isEdit && cat.parent_channel_id === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
         </select>
       </div>
       <div>
         <label style="font-size:0.85em;font-weight:600;">Closed Tickets Category</label>
         <select id="catClosedParentChannel" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
-          <option value="">â€” Keep in same category â€”</option>
+          <option value="">— Keep in same category —</option>
           ${_ticketChannelsList.filter(c => c.kind === 'category').map(c => `<option value="${c.id}" ${isEdit && cat.closed_parent_channel_id === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
         </select>
       </div>
@@ -12006,7 +12006,7 @@ window.addTemplateField = function() {
       <label style="font-size:0.8em;display:flex;align-items:center;gap:2px;">
         <input type="checkbox" id="tmplReq_${count}" checked /> Req
       </label>
-      <button onclick="removeTemplateField(${count})" style="background:none;border:none;color:#ed4245;cursor:pointer;font-size:1em;">âœ•</button>
+      <button onclick="removeTemplateField(${count})" style="background:none;border:none;color:#ed4245;cursor:pointer;font-size:1em;">✖️</button>
     </div>
     <input type="text" id="tmplPlaceholder_${count}" placeholder="Placeholder text" style="width:100%;padding:4px 8px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:4px;color:var(--text-primary);font-size:0.85em;" />
   `;
@@ -12114,7 +12114,7 @@ function loadTicketPanelTab() {
       <div>
         <label style="font-size:0.85em;font-weight:600;">Channel</label>
         <select id="ticketPanelChannelId" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
-          <option value="">â€” Select Channel â€”</option>
+          <option value="">— Select Channel —</option>
           ${textChannels.map(c => `<option value="${c.id}">#${escapeHtml(c.name)}</option>`).join('')}
         </select>
       </div>
@@ -12152,10 +12152,10 @@ async function postTicketPanel() {
     if (json.success) {
       resultEl.innerHTML = `<span style="color:#57f287;">${json.updated ? '✅ Panel updated!' : '✅ Panel posted!'}</span>`;
     } else {
-      resultEl.innerHTML = `<span style="color:#ed4245;">âŒ ${json.message || 'Failed'}</span>`;
+      resultEl.innerHTML = `<span style="color:#ed4245;">❌ ${json.message || 'Failed'}</span>`;
     }
   } catch (e) {
-    resultEl.innerHTML = '<span style="color:#ed4245;">âŒ Error posting panel</span>';
+    resultEl.innerHTML = '<span style="color:#ed4245;">❌ Error posting panel</span>';
   }
 }
 
@@ -12169,7 +12169,7 @@ async function loadTicketOpenTab() {
     if (!json.success) { container.innerHTML = 'Failed to load tickets.'; return; }
 
     const tickets = json.tickets || [];
-    let html = `<div style="margin-bottom:var(--space-3);"><button class="btn-secondary" onclick="loadTicketOpenTab()" style="font-size:0.85em;">🔔„ Refresh</button></div>`;
+    let html = `<div style="margin-bottom:var(--space-3);"><button class="btn-secondary" onclick="loadTicketOpenTab()" style="font-size:0.85em;">🔔 Refresh</button></div>`;
 
     if (tickets.length === 0) {
       html += '<p style="color:var(--text-secondary);">No open tickets.</p>';
@@ -12188,9 +12188,9 @@ async function loadTicketOpenTab() {
         const created = new Date(t.created_at).toLocaleString();
         html += `<tr style="border-bottom:1px solid var(--border-color);">
           <td style="padding:8px;font-weight:600;">${t.ticket_number}</td>
-          <td style="padding:8px;">${escapeHtml(t.category_name || 'â€”')}</td>
+          <td style="padding:8px;">${escapeHtml(t.category_name || '—')}</td>
           <td style="padding:8px;">${escapeHtml(t.opener_name || t.opener_id)}</td>
-          <td style="padding:8px;">${escapeHtml(t.claimed_by || 'â€”')}</td>
+          <td style="padding:8px;">${escapeHtml(t.claimed_by || '—')}</td>
           <td style="padding:8px;color:var(--text-secondary);font-size:0.9em;">${created}</td>
           <td style="padding:8px;text-align:center;">
             <button class="btn-secondary" onclick="viewTicketTranscript(${t.id})" style="font-size:0.8em;padding:4px 8px;">Transcript</button>
@@ -12237,7 +12237,7 @@ async function loadTicketArchiveTab() {
         </select>
         <button class="btn-primary" onclick="runTicketArchiveSearch()" style="font-size:0.85em;">Search</button>
         <button class="btn-secondary" onclick="clearTicketArchiveSearch()" style="font-size:0.85em;">Clear</button>
-        <button class="btn-secondary" onclick="exportTicketArchiveCsv()" style="font-size:0.85em;">ðŸ“¥ Export CSV</button>
+        <button class="btn-secondary" onclick="exportTicketArchiveCsv()" style="font-size:0.85em;">📥 Export CSV</button>
       </div>
     `;
 
@@ -12255,12 +12255,12 @@ async function loadTicketArchiveTab() {
         </tr></thead><tbody>`;
 
       for (const t of tickets) {
-        const closed = t.closed_at ? new Date(t.closed_at).toLocaleString() : 'â€”';
+        const closed = t.closed_at ? new Date(t.closed_at).toLocaleString() : '—';
         html += `<tr style="border-bottom:1px solid var(--border-color);">
           <td style="padding:8px;font-weight:600;">${t.ticket_number || t.id}</td>
-          <td style="padding:8px;">${escapeHtml(t.status || 'â€”')}</td>
-          <td style="padding:8px;">${escapeHtml(t.category_name || 'â€”')}</td>
-          <td style="padding:8px;">${escapeHtml(t.opener_name || t.opener_id || 'â€”')}</td>
+          <td style="padding:8px;">${escapeHtml(t.status || '—')}</td>
+          <td style="padding:8px;">${escapeHtml(t.category_name || '—')}</td>
+          <td style="padding:8px;">${escapeHtml(t.opener_name || t.opener_id || '—')}</td>
           <td style="padding:8px;color:var(--text-secondary);font-size:0.9em;">${closed}</td>
           <td style="padding:8px;text-align:center;">
             <button class="btn-secondary" onclick="viewTicketTranscript(${t.id})" style="font-size:0.8em;padding:4px 8px;">Transcript</button>
@@ -12340,7 +12340,7 @@ function safeJsonArray(value) {
   }
 }
 
-// â”€â”€ Plans â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ————————————————————————————————————————————————————————————————————————————
 // feature: { label, included: true/false/'partial', note? }
 const PLAN_CATALOG = [
   {
@@ -12355,9 +12355,9 @@ const PLAN_CATALOG = [
       { label: "Up to 5 verification roles", included: true },
       { label: "Up to 3 treasury wallets", included: true },
       { label: "Governance & proposals", included: true },
-      { label: "9 mini-games (Battle, H/L, Dice, Trivia, Slotsâ€¦)", included: true },
+      { label: "9 mini-games (Battle, H/L, Dice, Trivia, Slots…)", included: true },
       { label: "NFT activity feed", included: true },
-      { label: "ðŸŽ® Game Night orchestration", included: false },
+      { label: "🎮 Game Night orchestration", included: false },
       { label: "Trait-based roles", included: false },
       { label: "Custom branding", included: false },
       { label: "Multi-server (multi-tenant)", included: false },
@@ -12380,7 +12380,7 @@ const PLAN_CATALOG = [
       { label: "Up to 25 treasury wallets", included: true },
       { label: "Governance & proposals", included: true },
       { label: "9 mini-games (all standalone games)", included: true },
-      { label: "ðŸŽ® Game Night orchestration", included: true },
+      { label: "🎮 Game Night orchestration", included: true },
       { label: "NFT activity feed + Helius webhooks", included: true },
       { label: "Trait-based roles", included: true },
       { label: "Custom branding (logo, colors)", included: true },
@@ -12404,7 +12404,7 @@ const PLAN_CATALOG = [
       { label: "Unlimited treasury wallets", included: true },
       { label: "Governance & proposals", included: true },
       { label: "9 mini-games (all standalone games)", included: true },
-      { label: "ðŸŽ® Game Night orchestration", included: true },
+      { label: "🎮 Game Night orchestration", included: true },
       { label: "NFT activity feed + Helius webhooks", included: true },
       { label: "Trait-based roles", included: true },
       { label: "Custom branding (logo, colors)", included: true },
@@ -12455,8 +12455,8 @@ function updatePlanPrices() {
     const featureRows = plan.features.map(f => {
       const included = f.included === true;
       const icon = included
-        ? `<span style="color:#4ade80;font-size:1em;line-height:1;flex-shrink:0;">âœ“</span>`
-        : `<span style="color:rgba(148,163,184,0.35);font-size:1em;line-height:1;flex-shrink:0;">âœ•</span>`;
+        ? `<span style="color:#4ade80;font-size:1em;line-height:1;flex-shrink:0;">✓</span>`
+        : `<span style="color:rgba(148,163,184,0.35);font-size:1em;line-height:1;flex-shrink:0;">✖️</span>`;
       return `<li style="opacity:${included ? '1' : '0.5'};">${icon}<span>${escapeHtml(f.label)}</span></li>`;
     }).join('');
 
@@ -12469,7 +12469,7 @@ function updatePlanPrices() {
             <span class="plan-price-amount">${isContactPlan ? '' : '$'}${priceText}</span>
             <span class="plan-price-period">${period}</span>
           </div>
-          ${annualTotal ? `<div class="plan-annual-note">Billed as ${annualTotal} Â· Save 15%</div>` : ''}
+          ${annualTotal ? `<div class="plan-annual-note">Billed as ${annualTotal} · Save 15%</div>` : ''}
         </div>
         <ul class="plan-features">${featureRows}</ul>
         <div class="plan-cta">
@@ -12628,7 +12628,7 @@ async function loadSystemStatus(targetId = 'systemStatusContent') {
       <tr>
         <td><div style="display:flex;align-items:center;"><span class="pulse"></span>${escapeHtml(p.name)}</div></td>
         <td><span class="badge ${p.status==='online'?'badge-active':'badge-paused'}">${p.status}</span></td>
-        <td>${p.uptime ? fmtUptime(p.uptime) : 'â€”'}</td>
+        <td>${p.uptime ? fmtUptime(p.uptime) : '—'}</td>
         <td>${p.restarts}</td>
         <td>${fmtBytes(p.memory)}</td>
         <td><div style="width:100px;background:rgba(255,255,255,0.05);height:4px;border-radius:2px;margin-bottom:4px;"><div style="width:${p.cpu}%;background:var(--gold);height:100%;border-radius:2px;"></div></div>${p.cpu}%</td>
@@ -12648,7 +12648,7 @@ async function loadSystemStatus(targetId = 'systemStatusContent') {
         </div>
         <div class="monitor-stat">
           <div class="monitor-stat__label">Disk Space</div>
-          <div class="monitor-stat__value">${d.disk?.pct || 'â€”'}</div>
+          <div class="monitor-stat__value">${d.disk?.pct || '—'}</div>
           <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">${d.disk?.used||''} of ${d.disk?.total||''}</div>
         </div>
         <div class="monitor-stat">
@@ -12682,9 +12682,9 @@ async function loadSystemStatus(targetId = 'systemStatusContent') {
   }
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ========================================================================================================================================
 // ENGAGEMENT & POINTS SECTION
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ========================================================================================================================================
 
 async function loadEngagementSection() {
   await Promise.all([loadEngagementConfig(), loadEngagementLeaderboard(), loadEngagementShop()]);
@@ -12732,10 +12732,10 @@ async function loadEngagementLeaderboard() {
     const res = await fetch('/api/admin/engagement/leaderboard?limit=25', { credentials: 'include' });
     const data = await res.json();
     if (!data.success || !data.leaderboard?.length) {
-      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">ðŸ…</div><h4 class="empty-state-title">No data yet</h4><p class="empty-state-message">Points will appear here once members start chatting.</p></div>';
+      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🏆</div><h4 class="empty-state-title">No data yet</h4><p class="empty-state-message">Points will appear here once members start chatting.</p></div>';
       return;
     }
-    const medals = ['ðŸ¥‡','ðŸ¥ˆ','ðŸ¥‰'];
+    const medals = ['🥇','🥈','🥉'];
     const rows = data.leaderboard.map((r, i) => `
       <div class="table-row">
         <span style="width:36px;text-align:center;">${medals[i] || (i+1)}</span>
@@ -12754,12 +12754,12 @@ async function loadEngagementShop() {
     const res = await fetch('/api/admin/engagement/shop', { credentials: 'include' });
     const data = await res.json();
     if (!data.success || !data.items?.length) {
-      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">ðŸ›ï¸</div><h4 class="empty-state-title">Shop is empty</h4><p class="empty-state-message">Add items to reward your community.</p></div>';
+      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🛒</div><h4 class="empty-state-title">Shop is empty</h4><p class="empty-state-message">Add items to reward your community.</p></div>';
       return;
     }
     const rows = data.items.map(item => {
-      const stock = item.quantity_remaining < 0 ? 'âˆž' : item.quantity_remaining;
-      const typeLabel = { role: '🎭 Role', code: 'ðŸŽŸï¸ Code', custom: 'âœ¨ Custom' }[item.type] || item.type;
+      const stock = item.quantity_remaining < 0 ? '∞' : item.quantity_remaining;
+      const typeLabel = { role: '🎫 Role', code: '🎫 Code', custom: '🎫 Custom' }[item.type] || item.type;
       return `
         <div class="table-row" style="align-items:flex-start;">
           <span style="width:36px;font-size:0.8em;color:var(--text-muted);">#${item.id}</span>

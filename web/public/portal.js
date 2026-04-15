@@ -569,7 +569,7 @@ function showWalletAddForm() {
   const microBtn = document.getElementById('microVerifyBtn');
   if (microBtn) {
     microBtn.disabled = false;
-    microBtn.innerHTML = 'ðŸ”‘ Generate Proof Address';
+    microBtn.innerHTML = '🔔‘ Generate Proof Address';
   }
 
   const statusEl = document.getElementById('verifyStatus');
@@ -626,7 +626,7 @@ async function autoShowPendingMicroVerify() {
 
     statusEl.innerHTML = `
       <div style="margin-top:20px; padding:24px; background:rgba(99,102,241,0.08); border:2px solid rgba(99,102,241,0.35); border-radius:14px;">
-        <h4 style="color:#e0e7ff; margin:0 0 4px 0; font-size:1.05em;">ðŸ” NFT Ownership Proof â€” Awaiting On-Chain Confirmation</h4>
+        <h4 style="color:#e0e7ff; margin:0 0 4px 0; font-size:1.05em;">🔔 NFT Ownership Proof â€” Awaiting On-Chain Confirmation</h4>
         <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 14px 0;">Your unique proof amount has been generated. Complete the on-chain confirmation to verify NFT membership. We confirm wallet ownership only â€” no passwords or personal data collected. <a href="/privacy-policy" target="_blank" style="color:#a5b4fc;">Privacy Policy</a></p>
 
         <div style="margin-bottom:14px;">
@@ -886,7 +886,7 @@ async function verifyByMicroTx() {
     if (statusEl) {
       statusEl.innerHTML = `
         <div style="margin-top:20px; padding:24px; background:rgba(99,102,241,0.08); border:2px solid rgba(99,102,241,0.35); border-radius:14px;">
-          <h4 style="color:#e0e7ff; margin:0 0 6px 0; font-size:1.05em;">ðŸ” NFT Ownership Proof â€” On-Chain Confirmation</h4>
+          <h4 style="color:#e0e7ff; margin:0 0 6px 0; font-size:1.05em;">🔔 NFT Ownership Proof â€” On-Chain Confirmation</h4>
           <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 16px 0; line-height:1.5;">This is a wallet ownership proof tool for NFT community membership. It does <strong>not</strong> collect passwords, seed phrases, or personal data. We only confirm that you control the wallet. <a href="/privacy-policy" target="_blank" style="color:#a5b4fc;">Privacy Policy</a></p>
 
           <div style="margin-bottom:14px;">
@@ -933,7 +933,7 @@ async function verifyByMicroTx() {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = 'ðŸ”‘ Generate Proof Address';
+      btn.innerHTML = '🔔‘ Generate Proof Address';
     }
   }
 }
@@ -1287,19 +1287,19 @@ function updateModuleVisibility() {
 // ==================== MODULE REGISTRY & HUB ====================
 
 const MODULE_REGISTRY = [
-  { key: 'verification', label: 'Identity / Verification', icon: 'ðŸ’¼', section: 'wallets', desc: 'Securely verify wallet ownership and manage roles.' },
-  { key: 'governance', label: 'Governance / Voting', icon: 'ðŸ“œ', section: 'governance', desc: 'Participate in DAO decision-making and proposals.' },
-  { key: 'wallettracker', label: 'Wallet Tracker', icon: 'ðŸ’°', section: 'treasury', desc: 'Monitor community floor price and tracked wallets.' },
-  { key: 'nfttracker', label: 'NFT Activity', icon: 'ðŸŽ¨', section: 'nft-activity', desc: 'Real-time sales and listings feed for collections.' },
-  { key: 'tokentracker', label: 'Token Tracker', icon: 'ðŸª™', section: 'token-activity', desc: 'Monitor token transactions and swap activity.' },
-  { key: 'invites', label: 'Invite Tracker', icon: 'ðŸ“¨', section: 'invites', adminOnly: true, desc: 'Measure invite performance, leaderboard trends, and referral activity.' },
-  { key: 'aiassistant', label: 'AI Assistant', icon: 'ðŸ¤–', section: 'aiassistant', adminOnly: true, desc: 'Tune prompts, safety controls, and assistant behavior for your server.' },
-  { key: 'ticketing', label: 'Support Tickets', icon: 'ðŸŽ«', section: 'ticketing', desc: 'Integrated support desk and category routing.' },
-  { key: 'engagement', label: 'Engagement Hub', icon: 'ðŸ…', section: 'engagement', desc: 'Activity points, reward shop, and leaderboards.' },
-  { key: 'minigames', label: 'Minigames', icon: 'âš”ï¸', section: 'battle', desc: 'Arcade module including Battle Arena sessions, lobbies, and game events.' },
-  { key: 'heist', label: 'Missions', icon: 'ðŸŽ¯', section: 'heist', desc: 'Role-based missions and strategic community goals.' },
-  { key: 'selfserveroles', label: 'Self-Serve Roles', icon: 'ðŸŽ­', section: 'self-serve-roles', desc: 'Claim optional roles assigned by administrators.' },
-  { key: 'help', label: 'Help Center', icon: 'â“', section: 'help', desc: 'Guides, command references, and troubleshooting across all modules.' }
+  { key: 'verification', label: 'Identity / Verification', icon: '💼', section: 'wallets', desc: 'Securely verify wallet ownership and manage roles.' },
+  { key: 'governance', label: 'Governance / Voting', icon: '📜', section: 'governance', desc: 'Participate in DAO decision-making and proposals.' },
+  { key: 'wallettracker', label: 'Wallet Tracker', icon: '💰', section: 'treasury', desc: 'Monitor community floor price and tracked wallets.' },
+  { key: 'nfttracker', label: 'NFT Activity', icon: '🎨', section: 'nft-activity', desc: 'Real-time sales and listings feed for collections.' },
+  { key: 'tokentracker', label: 'Token Tracker', icon: '🪙', section: 'token-activity', desc: 'Monitor token transactions and swap activity.' },
+  { key: 'invites', label: 'Invite Tracker', icon: '📧', section: 'invites', adminOnly: true, desc: 'Measure invite performance, leaderboard trends, and referral activity.' },
+  { key: 'aiassistant', label: 'AI Assistant', icon: '🤖', section: 'aiassistant', adminOnly: true, desc: 'Tune prompts, safety controls, and assistant behavior for your server.' },
+  { key: 'ticketing', label: 'Support Tickets', icon: '🎫', section: 'ticketing', desc: 'Integrated support desk and category routing.' },
+  { key: 'engagement', label: 'Engagement Hub', icon: '🏆', section: 'engagement', desc: 'Activity points, reward shop, and leaderboards.' },
+  { key: 'minigames', label: 'Minigames', icon: '⚔️', section: 'battle', desc: 'Arcade module including Battle Arena sessions, lobbies, and game events.' },
+  { key: 'heist', label: 'Missions', icon: '🎯', section: 'heist', desc: 'Role-based missions and strategic community goals.' },
+  { key: 'selfserveroles', label: 'Self-Serve Roles', icon: '🎭', section: 'self-serve-roles', desc: 'Claim optional roles assigned by administrators.' },
+  { key: 'help', label: 'Help Center', icon: '❓', section: 'help', desc: 'Guides, command references, and troubleshooting across all modules.' }
 ];
 
 function updateBreadcrumbs(items = []) {
@@ -1364,7 +1364,7 @@ function renderModuleHub() {
     html += `
       <div class="module-tile module-tile--admin" onclick="switchSection('settings')">
         <div class="module-tile__header">
-          <div class="module-tile__icon">âš™ï¸</div>
+          <div class="module-tile__icon">⚙️</div>
           <div class="module-tile__status status-active">Admin</div>
         </div>
         <div class="module-tile__body">
@@ -1383,7 +1383,7 @@ function renderModuleHub() {
     html += `
       <div class="module-tile" onclick="switchSection('admin'); showAdminView('superadmin'); setTimeout(() => showSuperadminTab('monitoring'), 120);">
         <div class="module-tile__header">
-          <div class="module-tile__icon">ðŸ–¥ï¸</div>
+          <div class="module-tile__icon">🖥️</div>
           <div class="module-tile__status status-active">System</div>
         </div>
         <div class="module-tile__body">
@@ -1426,7 +1426,7 @@ function renderModuleHub() {
           <p class="module-tile__desc">${escapeHtml(mod.desc)}</p>
         </div>
         <div class="module-tile__footer">
-          ${isServerAdmin ? '<span class="nav-icon" style="font-size:1.1rem; opacity:0.6;">âš™ï¸</span>' : ''}
+          ${isServerAdmin ? '<span class="nav-icon" style="font-size:1.1rem; opacity:0.6;">⚙️</span>' : ''}
           <span style="font-size:0.8rem; color:var(--text-muted); margin-left:8px;">${isEnabled ? 'Open Module &rarr;' : "Learn More"}</span>
         </div>
       </div>
@@ -1747,7 +1747,7 @@ function applySettingsTabVisibility(settings = {}) {
       return;
     }
     const moduleKey = SETTINGS_TAB_MODULE_MAP[tab];
-    if (!moduleKey) return; // 'general' has no module key â€” always visible
+    if (!moduleKey) return; // 'general' has no module key — always visible
 
     const assignedOk = (assigned === null) ? true : assigned.includes(moduleKey);
     const enabledOk = enabledByModule[moduleKey] !== false;
@@ -2230,7 +2230,7 @@ function renderRecentActivity() {
   if (activities.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
-        <div class="empty-state-icon">ðŸ“Š</div>
+        <div class="empty-state-icon">📊</div>
         <h4 class="empty-state-title">No Recent Activity</h4>
         <p class="empty-state-message">Your governance participation and mission activity will appear here.</p>
       </div>
@@ -2242,12 +2242,12 @@ function renderRecentActivity() {
     <div class="${activity.type}-item">
       <div class="${activity.type}-header">
         <div class="${activity.type}-title">
-          ${activity.type === 'proposal' ? 'ðŸ“œ' : 'ðŸŽ¯'} ${escapeHtml(activity.title)}
+          ${activity.type === 'proposal' ? '📜' : '🎯'} ${escapeHtml(activity.title)}
         </div>
         <span class="status-badge status-${activity.status}">${activity.status}</span>
       </div>
       <div class="${activity.type}-meta">
-        ${activity.type === 'proposal' ? 'Proposal' : 'Mission'} #${activity.id} â€¢ ${formatDate(activity.date)}
+        ${activity.type === 'proposal' ? 'Proposal' : 'Mission'} #${activity.id} • ${formatDate(activity.date)}
       </div>
     </div>
   `).join('') + '</div>';
@@ -2260,12 +2260,12 @@ function renderProposals() {
   if (!userData.proposals || userData.proposals.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
-        <div class="empty-state-icon">ðŸ“œ</div>
+        <div class="empty-state-icon">📜</div>
         <h4 class="empty-state-title">No Proposals Yet</h4>
         <p class="empty-state-message">You haven't created any proposals. Use the /governance propose command in Discord to submit your first proposal.</p>
         <div class="empty-state-action">
           <button class="btn-primary" onclick="showCreateProposalForm()">
-            <span>âž•</span>
+            <span>➕</span>
             <span>Create Proposal</span>
           </button>
         </div>
@@ -2284,8 +2284,8 @@ function renderProposals() {
         </div>
       </div>
       <div class="proposal-meta">
-        Proposal #${proposal.proposal_id} â€¢ Created ${formatDate(new Date(proposal.created_at))}
-        ${proposal.cost_indication ? ` â€¢ Cost: ${escapeHtml(proposal.cost_indication)}` : ''}
+        Proposal #${proposal.proposal_id} • Created ${formatDate(new Date(proposal.created_at))}
+        ${proposal.cost_indication ? ` • Cost: ${escapeHtml(proposal.cost_indication)}` : ''}
       </div>
       ${proposal.description ? `<p style="color: var(--text-secondary); margin-top: var(--space-3); line-height: 1.6;">${escapeHtml(proposal.description)}</p>` : ''}
       ${proposal.status === 'draft' ? `<button onclick="submitProposalForReview('${escapeJsString(proposal.proposal_id)}')" style="margin-top:8px; padding:6px 14px; background:#6366f1; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Submit for Review</button>` : ''}
@@ -2319,7 +2319,7 @@ async function loadActiveVotes() {
   if (!activeGuildId) {
     container.innerHTML = `
       <div class="empty-state">
-        <div class="empty-state-icon">ðŸ—³ï¸</div>
+        <div class="empty-state-icon">🗳️</div>
         <h4 class="empty-state-title">Select a Server</h4>
         <p class="empty-state-message">Choose a server first to load active proposals for that community.</p>
       </div>
@@ -2332,7 +2332,7 @@ async function loadActiveVotes() {
     if (!endpoint) {
       container.innerHTML = `
         <div class="empty-state">
-          <div class="empty-state-icon">ðŸ—³ï¸</div>
+          <div class="empty-state-icon">🗳️</div>
           <h4 class="empty-state-title">Select a Server</h4>
           <p class="empty-state-message">Choose a server first to load active proposals for that community.</p>
         </div>
@@ -2346,7 +2346,7 @@ async function loadActiveVotes() {
     if (!data.success || proposals.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
-          <div class="empty-state-icon">ðŸ—³ï¸</div>
+          <div class="empty-state-icon">🗳️</div>
           <h4 class="empty-state-title">No Active Proposals</h4>
           <p class="empty-state-message">There are no proposals currently open for voting. Check back soon or create your own!</p>
         </div>
@@ -2371,7 +2371,7 @@ async function loadActiveVotes() {
             <span class="status-badge status-${proposal.status}">${proposal.status}</span>
           </div>
           <div class="proposal-meta" style="margin-bottom: var(--space-4);">
-            Proposal #${proposalId} â€¢ Created by ${escapeHtml(creator)}
+            Proposal #${proposalId} • Created by ${escapeHtml(creator)}
           </div>
           ${proposal.description ? `<p style="color: var(--text-secondary); margin-bottom: var(--space-4); line-height: 1.6;">${escapeHtml(proposal.description)}</p>` : ''}
           
@@ -2379,12 +2379,12 @@ async function loadActiveVotes() {
             <div class="vote-stat">
               <div class="vote-stat-label">Yes Votes</div>
               <div class="vote-stat-value">${proposal.votes?.yes?.vp || 0}</div>
-              <div class="vote-stat-secondary">${proposal.votes?.yes?.count || 0} votes â€¢ ${yesPercent}%</div>
+              <div class="vote-stat-secondary">${proposal.votes?.yes?.count || 0} votes • ${yesPercent}%</div>
             </div>
             <div class="vote-stat">
               <div class="vote-stat-label">No Votes</div>
               <div class="vote-stat-value">${proposal.votes?.no?.vp || 0}</div>
-              <div class="vote-stat-secondary">${proposal.votes?.no?.count || 0} votes â€¢ ${noPercent}%</div>
+              <div class="vote-stat-secondary">${proposal.votes?.no?.count || 0} votes • ${noPercent}%</div>
             </div>
             <div class="vote-stat">
               <div class="vote-stat-label">Abstain</div>
@@ -2403,13 +2403,13 @@ async function loadActiveVotes() {
           </div>
           <div class="quorum-indicator">
             <span>Participation Progress</span>
-            <span style="color: ${quorumMet ? 'var(--success)' : 'var(--text-muted)'};">${quorumMet ? 'âœ“ Quorum Met' : 'Quorum Pending'}</span>
+            <span style="color: ${quorumMet ? 'var(--success)' : 'var(--text-muted)'};">${quorumMet ? '✓ Quorum Met' : 'Quorum Pending'}</span>
           </div>
           ${userData ? `
           <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
-            <button class="btn-success" onclick="castVote('${escapeJsString(proposalId)}','yes')" style="flex:1; min-width:80px;">ðŸ‘ Yes</button>
-            <button class="btn-danger" onclick="castVote('${escapeJsString(proposalId)}','no')" style="flex:1; min-width:80px;">ðŸ‘Ž No</button>
-            <button class="btn-secondary" onclick="castVote('${escapeJsString(proposalId)}','abstain')" style="flex:1; min-width:80px;">â­ï¸ Abstain</button>
+            <button class="btn-success" onclick="castVote('${escapeJsString(proposalId)}','yes')" style="flex:1; min-width:80px;">👍 Yes</button>
+            <button class="btn-danger" onclick="castVote('${escapeJsString(proposalId)}','no')" style="flex:1; min-width:80px;">👎 No</button>
+            <button class="btn-secondary" onclick="castVote('${escapeJsString(proposalId)}','abstain')" style="flex:1; min-width:80px;">⭐ Abstain</button>
           </div>
           ` : ''}
         </div>
@@ -2617,7 +2617,7 @@ function renderMissions() {
   if (!userData.missions || userData.missions.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
-        <div class="empty-state-icon">ðŸŽ¯</div>
+        <div class="empty-state-icon">🎯</div>
         <h4 class="empty-state-title">No Active Missions</h4>
         <p class="empty-state-message">You haven't joined any missions yet. Check available missions below to get started.</p>
       </div>
@@ -2681,7 +2681,7 @@ async function loadAvailableMissions() {
         <div class="mission-meta" style="margin-top: var(--space-3);">
           ${mission.description ? `<p style="color: var(--text-secondary); margin-bottom: var(--space-2);">${escapeHtml(mission.description)}</p>` : ''}
           <div style="display: flex; gap: var(--space-4); flex-wrap: wrap; margin-top: var(--space-2);">
-            <span>ðŸŽ¯ Slots: ${mission.filledSlots || 0}/${mission.totalSlots}</span>
+            <span>🎯 Slots: ${mission.filledSlots || 0}/${mission.totalSlots}</span>
             <span>ðŸ’Ž Reward: ${mission.rewardPoints} points</span>
           </div>
         </div>
@@ -3505,7 +3505,7 @@ function showCreateProposalForm() {
   const body = document.getElementById('confirmMessage');
   const btn = document.getElementById('confirmButton');
   const title = document.getElementById('confirmTitle');
-  title.textContent = 'ðŸ“œ Create New Proposal';
+  title.textContent = '📜 Create New Proposal';
   btn.textContent = 'Submit Proposal';
   btn.classList.remove('btn-danger');
   btn.classList.add('btn-primary');
@@ -4478,7 +4478,7 @@ async function loadSuperadminView() {
 
         <div id="superadminSection-aiProviders" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
-            <h4 style="margin:0; color:#c9d6ff;">ðŸ¤– AI Providers <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
+            <h4 style="margin:0; color:#c9d6ff;">🤖 AI Providers <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
             <span style="color:var(--text-secondary); font-size:0.85em;">Provider keys and default model routing</span>
           </div>
           <div style="display:grid; gap:12px;">
@@ -5792,7 +5792,7 @@ async function saveMicroVerifySettings() {
       showError(data.message || 'Failed to save micro-verify settings');
       return;
     }
-    showSuccess('Micro-verify settings saved âœ…');
+    showSuccess('Micro-verify settings saved ✅');
     await loadSuperadminView();
   } catch (error) {
     showError(`Failed to save micro-verify settings: ${error.message}`);
@@ -5832,7 +5832,7 @@ async function saveAiProviderSettings() {
       showError(data.message || 'Failed to save AI provider settings');
       return;
     }
-    showSuccess('AI provider settings saved âœ…');
+    showSuccess('AI provider settings saved ✅');
     await loadSuperadminView();
   } catch (error) {
     showError(`Failed to save AI provider settings: ${error.message}`);
@@ -6346,7 +6346,7 @@ async function loadAdminSettingsView() {
       { id: 'moduleMissionsEnabled',     label: 'Missions',        icon: 'H',  moduleKey: 'heist'         },
       { id: 'moduleWalletTrackerEnabled',label: 'Wallet Tracker',  icon: 'W',  moduleKey: 'wallettracker' },
       { id: 'moduleAiAssistantEnabled',  label: 'AI Assistant',    icon: 'AI', moduleKey: 'aiassistant'  },
-      { id: 'moduleInviteTrackerEnabled',label: 'Invite Tracker',  icon: 'ðŸ“¨', moduleKey: 'invites'       },
+      { id: 'moduleInviteTrackerEnabled',label: 'Invite Tracker',  icon: '📧', moduleKey: 'invites'       },
       { id: 'moduleTreasuryEnabled',     label: 'Treasury',        icon: '$',  moduleKey: 'treasury'      },
       { id: 'moduleNftTrackerEnabled',   label: 'NFT Tracker',     icon: 'N',  moduleKey: 'nfttracker'    },
       { id: 'moduleTokenTrackerEnabled', label: 'Token Tracker',   icon: '\ud83e\ude99',  moduleKey: 'tokentracker'  },
@@ -6403,8 +6403,8 @@ async function loadAdminSettingsView() {
 
       <!-- Action Buttons â€” always visible -->
       <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);">
-        <button class="btn-danger" onclick="resetPortalSettings()" style="font-size:0.85em;padding:8px 16px;">ðŸ”„ Reset to Defaults</button>
-        <button class="btn-primary" onclick="savePortalSettings()" style="font-size:0.85em;padding:8px 16px;">ðŸ’¾ Save All Settings</button>
+        <button class="btn-danger" onclick="resetPortalSettings()" style="font-size:0.85em;padding:8px 16px;">🔔„ Reset to Defaults</button>
+        <button class="btn-primary" onclick="savePortalSettings()" style="font-size:0.85em;padding:8px 16px;">💾 Save All Settings</button>
       </div>
     `;
 
@@ -6422,7 +6422,7 @@ async function loadAdminSettingsView() {
       if (moduleControlCard) {
         const note = document.createElement('div');
         note.style.cssText = 'margin-top:10px;padding:8px 10px;border-radius:8px;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.35);color:#fde68a;font-size:0.82em;';
-        note.textContent = 'ðŸ”’ Module toggles are managed in Superadmin â†’ Tenant Management.';
+        note.textContent = '🔔’ Module toggles are managed in Superadmin â†’ Tenant Management.';
         moduleControlCard.appendChild(note);
       }
     }
@@ -6600,11 +6600,11 @@ async function loadAdminAnalyticsView() {
     const events = [];
     proposals.forEach(p => {
       const ts = p.createdAt || p.timestamp;
-      if (ts) events.push({ time: new Date(ts), text: `Proposal "${escapeHtml(p.title || p.name || 'Untitled')}" â€” ${p.status || 'unknown'}`, icon: 'ðŸ“œ' });
+      if (ts) events.push({ time: new Date(ts), text: `Proposal "${escapeHtml(p.title || p.name || 'Untitled')}" â€” ${p.status || 'unknown'}`, icon: '📜' });
     });
     missions.forEach(m => {
       const ts = m.completedAt || m.createdAt || m.timestamp;
-      if (ts) events.push({ time: new Date(ts), text: `Mission "${escapeHtml(m.name || m.title || 'Untitled')}" â€” ${m.status || 'unknown'}`, icon: 'ðŸŽ¯' });
+      if (ts) events.push({ time: new Date(ts), text: `Mission "${escapeHtml(m.name || m.title || 'Untitled')}" â€” ${m.status || 'unknown'}`, icon: '🎯' });
     });
     events.sort((a, b) => b.time - a.time);
     const recentEvents = events.slice(0, 10);
@@ -6705,7 +6705,7 @@ async function loadNftTrackerView() {
   content.innerHTML = `
     <div style="${cardStyle}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4);padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);">
-        <h3 style="color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0;">ðŸŽ¨ Tracked Collections</h3>
+        <h3 style="color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0;">🎨 Tracked Collections</h3>
         <button class="btn-primary" onclick="openAddCollectionModal()" style="font-size:0.85em;padding:8px 16px;">+ Add Collection</button>
       </div>
       <div id="nftCollectionsTableWrap"></div>
@@ -6846,8 +6846,8 @@ async function renderNftCollectionsCard(wrapId) {
 
     const truncAddr = (a) => a && a.length > 12 ? a.slice(0, 6) + '...' + a.slice(-4) : (a || 'â€”');
     const eventIcons = (c) => [
-      c.track_mint && 'ðŸª™', c.track_sale && 'ðŸ’°', c.track_bid && 'ðŸ¤',
-      c.track_list && 'ðŸ“‹', c.track_delist && 'âŒ', c.track_transfer && 'ðŸ”„',
+      c.track_mint && '🪙', c.track_sale && '💰', c.track_bid && 'ðŸ¤',
+      c.track_list && 'ðŸ“‹', c.track_delist && 'âŒ', c.track_transfer && '🔔„',
     ].filter(Boolean).join(' ') || 'â€”';
 
     if (!collections.length) {
@@ -7223,7 +7223,7 @@ async function renderNftTokenEventsCard(wrapId = 'nts_tokenEventsWrap') {
 
     const iconByType = {
       buy: 'ðŸŸ¢',
-      sell: 'ðŸ”´',
+      sell: '🔔´',
       transfer_in: 'ðŸ“¥',
       transfer_out: 'ðŸ“¤',
       swap_in: 'ðŸŸ£',
@@ -7445,7 +7445,7 @@ async function loadVerificationSettings() {
         </div>
         <div style="margin-top:var(--space-4);">
           <label style="${fieldLabel}">Panel Title</label>
-          <input type="text" id="ver_panelTitle" value="${escapeHtml(panel.title || 'ðŸ”— Verify your wallet!')}" style="${fieldInput}" placeholder="ðŸ”— Verify your wallet!">
+          <input type="text" id="ver_panelTitle" value="${escapeHtml(panel.title || '🔔— Verify your wallet!')}" style="${fieldInput}" placeholder="🔔— Verify your wallet!">
         </div>
         <div style="margin-top:var(--space-4);">
           <label style="${fieldLabel}">Panel Description</label>
@@ -7612,7 +7612,7 @@ async function loadBrandingSettingsView() {
 
     pane.innerHTML = `
       <div style="${cardStyle}">
-        <h3 style="${cardHeader}">ðŸŽ¨ Branding Module</h3>
+        <h3 style="${cardHeader}">🎨 Branding Module</h3>
         <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:14px;">Tenant admins can configure how this server's bot/panels look and feel.</p>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -7622,7 +7622,7 @@ async function loadBrandingSettingsView() {
           </div>
           <div>
             ${brandHelp('Brand Emoji', 'Used as visual prefix in embeds/panels where supported.')}
-            <input id="br_brand_emoji" type="text" value="${escapeHtml(b.brand_emoji || '')}" style="${fieldInput}" placeholder="ðŸš€">
+            <input id="br_brand_emoji" type="text" value="${escapeHtml(b.brand_emoji || '')}" style="${fieldInput}" placeholder="🚀">
           </div>
           <div>
             ${brandHelp('Brand Color', 'Primary color used in branded embeds and cards.')}
@@ -7706,7 +7706,7 @@ async function loadBrandingSettingsView() {
         </div>
 
         <div style="display:flex;justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);margin-top:var(--space-4);">
-          <button class="btn-primary" onclick="saveBrandingSettingsView()" style="font-size:0.85em;padding:8px 16px;">ðŸ’¾ Save Branding</button>
+          <button class="btn-primary" onclick="saveBrandingSettingsView()" style="font-size:0.85em;padding:8px 16px;">💾 Save Branding</button>
         </div>
       </div>
     `;
@@ -7778,7 +7778,7 @@ async function loadTreasuryModuleSettings() {
   pane.innerHTML = `
     <div style="${cardStyle}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4);padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);">
-        <h3 style="color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0;">ðŸ’¼ Tracked Wallets</h3>
+        <h3 style="color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0;">💼 Tracked Wallets</h3>
         <button class="btn-primary" onclick="openAddWalletModal()" style="font-size:0.85em;padding:8px 16px;">+ Add Wallet</button>
       </div>
       <div id="settings_walletListWrap"><div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);"><div class="spinner"></div><p>Loading wallets...</p></div></div>
@@ -8122,7 +8122,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
     pane.innerHTML = `
       <div style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;">ðŸ¤– AI Assistant</h3>
+          <h3 style="margin:0;color:#c9d6ff;">🤖 AI Assistant</h3>
           <span style="color:var(--text-secondary);font-size:0.82em;">Tenant-scoped runtime settings</span>
         </div>
         <div style="display:grid;gap:12px;">
@@ -8423,7 +8423,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
     pane.insertAdjacentHTML('beforeend', `
       <div style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;">ðŸŽ­ Persona Profiles</h3>
+          <h3 style="margin:0;color:#c9d6ff;">🎭 Persona Profiles</h3>
           <button class="btn-secondary btn-sm" onclick="loadAiAssistantSettingsView()">Refresh</button>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;margin-bottom:10px;align-items:end;">
@@ -8571,7 +8571,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
       </div>
       <div style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;">ðŸ“Š AI Analytics</h3>
+          <h3 style="margin:0;color:#c9d6ff;">📊 AI Analytics</h3>
           <button class="btn-secondary btn-sm" onclick="loadAiAssistantSettingsView()">Refresh Analytics</button>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,minmax(120px,1fr));gap:10px;margin-bottom:12px;">
@@ -9108,7 +9108,7 @@ async function loadInviteTrackerSettingsView(targetPaneId = null) {
   pane.innerHTML = `
     <div style="${cardStyle}">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-        <h3 style="margin:0;color:#c9d6ff;">ðŸ“¨ Invite Tracker</h3>
+        <h3 style="margin:0;color:#c9d6ff;">📧 Invite Tracker</h3>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <select id="inviteTrackerPeriodSelect" style="padding:8px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
             <option value="all">All-time</option>
@@ -9530,7 +9530,7 @@ async function loadVotingPowerView() {
             </div>
             <div></div>
           </div>
-          <h4 style="color:#c9d6ff;font-size:0.95em;font-weight:600;margin:var(--space-4) 0 var(--space-3) 0;padding-top:var(--space-3);border-top:1px solid rgba(99,102,241,0.12);">ðŸ”— Channel Overrides</h4>
+          <h4 style="color:#c9d6ff;font-size:0.95em;font-weight:600;margin:var(--space-4) 0 var(--space-3) 0;padding-top:var(--space-3);border-top:1px solid rgba(99,102,241,0.12);">🔔— Channel Overrides</h4>
           <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:12px;">Leave empty to use .env defaults.</p>
           <div style="${govGridRow}">
             <div>
@@ -9553,7 +9553,7 @@ async function loadVotingPowerView() {
             </div>
           </div>
           <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);margin-top:var(--space-4);">
-            <button class="btn-primary" onclick="saveGovernanceSettings()" style="font-size:0.85em;padding:8px 16px;">ðŸ’¾ Save Governance Settings</button>
+            <button class="btn-primary" onclick="saveGovernanceSettings()" style="font-size:0.85em;padding:8px 16px;">💾 Save Governance Settings</button>
           </div>
         </div>
       `;
@@ -10302,7 +10302,7 @@ function reverifyAllRoles() {
       const btn = document.querySelector('[onclick="reverifyAllRoles()"]');
       if (btn) {
         btn.disabled = false;
-        btn.innerHTML = '<span>ðŸ”„</span><span>Reverify All</span>';
+        btn.innerHTML = '<span>🔔„</span><span>Reverify All</span>';
       }
     }
   });
@@ -10565,7 +10565,7 @@ async function loadTreasuryTrackerView() {
         </div>
         <div style="padding:16px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.18); border-radius:10px;">
           <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:6px;">Transaction Alerts</div>
-          <div style="color:${alertsEnabled ? '#10b981' : '#ef4444'}; font-size:1.1em; font-weight:600;">${alertsEnabled ? 'âœ… Enabled' : 'âŒ Disabled'}</div>
+          <div style="color:${alertsEnabled ? '#10b981' : '#ef4444'}; font-size:1.1em; font-weight:600;">${alertsEnabled ? '✅ Enabled' : 'âŒ Disabled'}</div>
           <div style="color:var(--text-secondary); font-size:0.8em; margin-top:4px;">Channel: ${escapeHtml(String(alertChannel))}</div>
         </div>
       </div>
@@ -10616,7 +10616,7 @@ function openTreasuryConfigModal() {
       <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Minimum SOL to alert on</label>
         <input id="treasuryMinSolInput" type="number" min="0" step="0.1" placeholder="0" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
     </div>
-    <p style="color:var(--text-secondary); font-size:0.8em; margin-top:12px;">ðŸ’¡ These settings are also configurable via Discord: /treasury admin set-wallet, set-interval, tx-alerts</p>
+    <p style="color:var(--text-secondary); font-size:0.8em; margin-top:12px;">💡 These settings are also configurable via Discord: /treasury admin set-wallet, set-interval, tx-alerts</p>
   `;
   confirmCallback = async () => {
     const wallet = document.getElementById('treasuryWalletInput')?.value.trim();
@@ -10813,7 +10813,7 @@ async function loadAdminActivity() {
       <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid rgba(99,102,241,0.15); gap:12px;">
         <div style="display:flex; align-items:center; gap:12px; flex:1;">
           <div style="font-size:1.2em;">
-            ${a.type === 'verify' ? 'âœ“' : a.type === 'sync' ? 'ðŸ”„' : a.type === 'proposal' ? 'ðŸ“œ' : a.type === 'treasury' ? 'ðŸ’°' : 'ðŸ‘¤'}
+            ${a.type === 'verify' ? 'âœ“' : a.type === 'sync' ? '🔔„' : a.type === 'proposal' ? '📜' : a.type === 'treasury' ? '💰' : 'ðŸ‘¤'}
           </div>
           <div>
             <div style="color:#e0e7ff; font-weight:600;">${escapeHtml(a.action)}</div>
@@ -10999,12 +10999,12 @@ async function openNftActivityAddCollectionModal() {
         <div><label style="${lb}">Alert Channel</label><select id="caChannelInput" style="${fi}"><option value="">Loading...</option></select></div>
         <div><label style="${lb}">Magic Eden Symbol <small style="color:#94a3b8;">(e.g. vault_runners)</small></label><input type="text" id="caMeInput" placeholder="vault_runners" style="${fi}"></div>
         <div style="display:flex;flex-wrap:wrap;gap:12px;">
-          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caMint" checked> ðŸª™ Mint</label>
-          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caSale" checked> ðŸ’° Sale</label>
+          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caMint" checked> 🪙 Mint</label>
+          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caSale" checked> 💰 Sale</label>
           <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caBid" checked> ðŸ¤ Bid</label>
           <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caList" checked> ðŸ“‹ List</label>
           <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caDelist" checked> âŒ Delist</label>
-          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caTransfer"> ðŸ”„ Transfer</label>
+          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caTransfer"> 🔔„ Transfer</label>
         </div>
       </div>
       <div style="display:flex;gap:10px;align-items:center;margin-top:20px;">
@@ -11121,7 +11121,7 @@ async function loadTreasuryTrackerView() {
           </div>
           <div class="stat-card">
             <div class="stat-label">TX Alerts</div>
-            <div class="stat-value">${c.txAlertsEnabled ? 'âœ… Enabled' : 'âŒ Disabled'}</div>
+            <div class="stat-value">${c.txAlertsEnabled ? '✅ Enabled' : 'âŒ Disabled'}</div>
           </div>
           <div class="stat-card">
             <div class="stat-label">Last Sync</div>
@@ -11133,7 +11133,7 @@ async function loadTreasuryTrackerView() {
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
               <span style="color:var(--text-secondary); font-size:0.9em;">Configure treasury settings via Discord: <code style="background:rgba(0,0,0,0.3); padding:4px 8px; border-radius:4px;">/treasury admin ...</code></span>
               <button class="btn-secondary" onclick="loadTreasuryTrackerView()" style="padding:8px 16px;">
-                <span>ðŸ”„</span>
+                <span>🔔„</span>
                 <span>Refresh</span>
               </button>
             </div>
@@ -11211,7 +11211,7 @@ async function loadSelfServeRolesView() {
               </label>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;">
-              <button class="panel-save-meta btn-secondary" data-panel="${p.id}" style="font-size:0.8em;padding:6px 12px;">ðŸ’¾ Save</button>
+              <button class="panel-save-meta btn-secondary" data-panel="${p.id}" style="font-size:0.8em;padding:6px 12px;">💾 Save</button>
               <button class="panel-delete btn-danger" data-panel="${p.id}" style="font-size:0.8em;padding:6px 12px;">ðŸ—‘ï¸ Delete Panel</button>
             </div>
           </div>
@@ -11353,7 +11353,7 @@ async function loadSelfServeRolesView() {
           });
           const d = await r.json();
           if (d.success) {
-            if (statusEl) { statusEl.style.color = '#22c55e'; statusEl.textContent = `âœ… ${d.action === 'updated' ? 'Updated' : 'Posted'}!`; }
+            if (statusEl) { statusEl.style.color = '#22c55e'; statusEl.textContent = `✅ ${d.action === 'updated' ? 'Updated' : 'Posted'}!`; }
             loadSelfServeRolesView();
           } else {
             if (statusEl) { statusEl.style.color = '#fca5a5'; statusEl.textContent = 'âŒ ' + (d.message || 'Failed'); }
@@ -11395,8 +11395,8 @@ function loadApiRefView() {
     return `<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.75em;font-weight:700;color:#fff;background:${colors[method] || '#6b7280'};font-family:monospace;">${method}</span>`;
   };
   const authBadge = (pub) => pub
-    ? '<span style="font-size:0.8em;">ðŸ”“ Public</span>'
-    : '<span style="font-size:0.8em;">ðŸ” Session required</span>';
+    ? '<span style="font-size:0.8em;">🔔“ Public</span>'
+    : '<span style="font-size:0.8em;">🔔 Session required</span>';
 
   const endpoint = (method, path, desc, auth, example) => `
     <div style="background:var(--bg-secondary);border-radius:8px;padding:var(--space-3) var(--space-4);margin-bottom:var(--space-3);border:1px solid rgba(99,102,241,0.1);">
@@ -11855,7 +11855,7 @@ async function loadTicketCategoriesTab() {
       for (const cat of _ticketCategories) {
         const fields = safeJsonArray(cat.template_fields);
         html += `<tr style="border-bottom:1px solid var(--border-color);">
-          <td style="padding:8px;">${escapeHtml(cat.emoji || 'ðŸŽ«')}</td>
+          <td style="padding:8px;">${escapeHtml(cat.emoji || '🎫')}</td>
           <td style="padding:8px;font-weight:600;">${escapeHtml(cat.name)}</td>
           <td style="padding:8px;color:var(--text-secondary);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(cat.description || 'â€”')}</td>
           <td style="padding:8px;text-align:center;">${fields.length}</td>
@@ -11934,7 +11934,7 @@ function _showCategoryForm(cat) {
         <div style="flex:0 0 140px;">
           <label style="font-size:0.85em;font-weight:600;">Emoji</label>
           <select id="catEmoji" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
-            ${['ðŸŽ«','ðŸ› ï¸','ðŸ†','ðŸ¤','ðŸ’°','ðŸš¨','ðŸ“¦','ðŸ§¾','â“','ðŸ“£'].map(e => `<option value="${e}" ${(isEdit ? (cat.emoji || 'ðŸŽ«') : 'ðŸŽ«') === e ? 'selected' : ''}>${e}</option>`).join('')}
+            ${['🎫','ðŸ› ï¸','ðŸ†','ðŸ¤','💰','ðŸš¨','ðŸ“¦','ðŸ§¾','â“','ðŸ“£'].map(e => `<option value="${e}" ${(isEdit ? (cat.emoji || '🎫') : '🎫') === e ? 'selected' : ''}>${e}</option>`).join('')}
           </select>
         </div>
         <div style="flex:1;">
@@ -12023,7 +12023,7 @@ async function saveCategoryFromModal() {
   const name = document.getElementById('catName').value.trim();
   if (!name) return showError('Name is required');
 
-  const emoji = document.getElementById('catEmoji').value.trim() || 'ðŸŽ«';
+  const emoji = document.getElementById('catEmoji').value.trim() || '🎫';
   const description = document.getElementById('catDesc').value.trim();
   const parentChannelId = document.getElementById('catParentChannel').value || '';
   const closedParentChannelId = document.getElementById('catClosedParentChannel')?.value || '';
@@ -12120,7 +12120,7 @@ function loadTicketPanelTab() {
       </div>
       <div>
         <label style="font-size:0.85em;font-weight:600;">Panel Title</label>
-        <input type="text" id="ticketPanelTitle" value="ðŸŽ« Support" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;" />
+        <input type="text" id="ticketPanelTitle" value="🎫 Support" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;" />
       </div>
       <div>
         <label style="font-size:0.85em;font-weight:600;">Panel Description</label>
@@ -12136,7 +12136,7 @@ async function postTicketPanel() {
   const channelId = document.getElementById('ticketPanelChannelId').value;
   if (!channelId) return showError('Please select a channel');
 
-  const title = document.getElementById('ticketPanelTitle').value.trim() || 'ðŸŽ« Support';
+  const title = document.getElementById('ticketPanelTitle').value.trim() || '🎫 Support';
   const description = document.getElementById('ticketPanelDesc').value.trim();
   const resultEl = document.getElementById('ticketPanelResult');
   resultEl.innerHTML = 'Posting...';
@@ -12150,7 +12150,7 @@ async function postTicketPanel() {
     });
     const json = await res.json();
     if (json.success) {
-      resultEl.innerHTML = `<span style="color:#57f287;">${json.updated ? 'âœ… Panel updated!' : 'âœ… Panel posted!'}</span>`;
+      resultEl.innerHTML = `<span style="color:#57f287;">${json.updated ? '✅ Panel updated!' : '✅ Panel posted!'}</span>`;
     } else {
       resultEl.innerHTML = `<span style="color:#ed4245;">âŒ ${json.message || 'Failed'}</span>`;
     }
@@ -12169,7 +12169,7 @@ async function loadTicketOpenTab() {
     if (!json.success) { container.innerHTML = 'Failed to load tickets.'; return; }
 
     const tickets = json.tickets || [];
-    let html = `<div style="margin-bottom:var(--space-3);"><button class="btn-secondary" onclick="loadTicketOpenTab()" style="font-size:0.85em;">ðŸ”„ Refresh</button></div>`;
+    let html = `<div style="margin-bottom:var(--space-3);"><button class="btn-secondary" onclick="loadTicketOpenTab()" style="font-size:0.85em;">🔔„ Refresh</button></div>`;
 
     if (tickets.length === 0) {
       html += '<p style="color:var(--text-secondary);">No open tickets.</p>';
@@ -12759,7 +12759,7 @@ async function loadEngagementShop() {
     }
     const rows = data.items.map(item => {
       const stock = item.quantity_remaining < 0 ? 'âˆž' : item.quantity_remaining;
-      const typeLabel = { role: 'ðŸŽ­ Role', code: 'ðŸŽŸï¸ Code', custom: 'âœ¨ Custom' }[item.type] || item.type;
+      const typeLabel = { role: '🎭 Role', code: 'ðŸŽŸï¸ Code', custom: 'âœ¨ Custom' }[item.type] || item.type;
       return `
         <div class="table-row" style="align-items:flex-start;">
           <span style="width:36px;font-size:0.8em;color:var(--text-muted);">#${item.id}</span>

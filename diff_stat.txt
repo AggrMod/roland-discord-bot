@@ -1,0 +1,6 @@
+﻿ database/db.js                 |  21 +++++
+ index.js                       | 184 +++++++++++++++++++++++++++++++++++++----
+ services/aiAssistantService.js | 175 ++++++++++++++++++++++++++++++++++++++-
+ web/public/portal.js           |  97 +++++++++++++++++++++-
+ web/routes/adminAiAssistant.js |  29 +++++++
+ 5 files changed, 490 insertions(+), 16 deletions(-)

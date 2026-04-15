@@ -384,7 +384,7 @@ class WebServer {
     this.app.use('/api/public/', publicApiLimiter);
     this.app.use('/auth/', authLimiter);
     this.app.use('/api/verify/', verifyLimiter);
-    // Only rate-limit new request creation â€” not status/config/check-now
+    // Only rate-limit new request creation �€” not status/config/check-now
     this.app.use('/api/micro-verify/request', verifyLimiter);
     this.app.use('/api/admin/', adminLimiter);
     this.app.use('/api/superadmin/', superadminLimiter);
@@ -1328,7 +1328,7 @@ class WebServer {
 
     if (this.server) {
       this.server.close();
-      logger.log('ðŸ›‘ Web server stopped');
+      logger.log('�Ÿ›‘ Web server stopped');
     }
   }
 }

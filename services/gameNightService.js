@@ -2,7 +2,7 @@
  * GameNightService — Orchestrates multi-game sessions with cross-game scoring.
  * Growth plan feature. Runs 9 mini-games sequentially, tracks points, crowns champion.
  *
- * Scoring: 1st=10pts · 2nd=7pts · 3rd=5pts · 4th=3pts · 5th+=1pt
+ * Scoring: 1st=10pts � 2nd=7pts � 3rd=5pts � 4th=3pts � 5th+=1pt
  */
 
 const { EmbedBuilder } = require('discord.js');
@@ -104,11 +104,11 @@ class GameNightService {
     const playerList = session.players.size > 0 ? [...session.playerNames.values()].map(n => `• ${n}`).join('\n') : '*Be the first!*';
     const e = new EmbedBuilder()
       .setTitle('🎉 Game Night — Join Now!')
-      .setDescription(`React ${JOIN_EMOJI} to join!\n\n**Tonight's lineup (${session.games.length} games):**\n${lineup}\n\n**🏆 Scoring:** 🥇 10pts · 🥈 7pts · 🥉 5pts · 4th 3pts · 5th+ 1pt`)
+      .setDescription(`React ${JOIN_EMOJI} to join!\n\n**Tonight's lineup (${session.games.length} games):**\n${lineup}\n\n**🏆 Scoring:** 🥇 10pts � 🥈 7pts � 🥉 5pts � 4th 3pts � 5th+ 1pt`)
       .addFields({ name: `👥 Players (${session.players.size})`, value: playerList })
       .setTimestamp();
     this._author(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: `Starts in ${session.gatherSecs}s · Host can react ${SKIP_EMOJI} to skip a game mid-session` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: `Starts in ${session.gatherSecs}s � Host can react ${SKIP_EMOJI} to skip a game mid-session` });
     return e;
   }
 
@@ -118,7 +118,7 @@ class GameNightService {
       .setDescription(gameDesc + '\n\n*Starting in 4 seconds...*')
       .setTimestamp();
     this._author(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Game Night · ${gameIndex}/${total}` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Game Night � ${gameIndex}/${total}` });
     return e;
   }
 
@@ -131,7 +131,7 @@ class GameNightService {
       .addFields({ name: '🎮 Games to go', value: `${gamesLeft}`, inline: true })
       .setTimestamp();
     this._author(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: 'GuildPilot · Game Night' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: 'GuildPilot � Game Night' });
     return e;
   }
 
@@ -147,14 +147,14 @@ class GameNightService {
       .addFields({ name: '🎮 Total games', value: `${totalGames}`, inline: true })
       .setTimestamp();
     this._author(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot · Game Night Champion' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot � Game Night Champion' });
     return e;
   }
 
   buildCancelledEmbed(reason, guildId) {
     const e = new EmbedBuilder().setTitle('🎉 Game Night').setDescription(reason).setTimestamp();
     this._author(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#64748b', defaultFooter: 'GuildPilot · Game Night' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#64748b', defaultFooter: 'GuildPilot � Game Night' });
     return e;
   }
 
@@ -248,12 +248,12 @@ RUNNERS.diceduel = async (channel, guildId, players, playerNames, session) => {
       const tieLines = [...tieRolls.entries()].map(([id, v]) => `${FACES[v-1]} ${playerNames.get(id) || id} — ${v}`).join('\n');
       const { EmbedBuilder: EB } = require('discord.js');
       const te = new EB().setTitle(`🎲 Round ${round} — Tiebreaker!`).setDescription(`${lines}\n\n**Tiebreaker:**\n${tieLines}`).setTimestamp();
-      applyEmbedBranding(te, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: `Game Night · Dice Duel Round ${round}` });
+      applyEmbedBranding(te, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: `Game Night � Dice Duel Round ${round}` });
       await channel.send({ embeds: [te] });
     } else {
       const { EmbedBuilder: EB } = require('discord.js');
       const e = new EB().setTitle(`🎲 Round ${round}`).setDescription(lines).setTimestamp();
-      applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Game Night · Dice Duel Round ${round}` });
+      applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Game Night � Dice Duel Round ${round}` });
       await channel.send({ embeds: [e] });
     }
 
@@ -265,7 +265,7 @@ RUNNERS.diceduel = async (channel, guildId, players, playerNames, session) => {
   if (winner) {
     const { EmbedBuilder: EB } = require('discord.js');
     const we = new EB().setTitle('🎲 Dice Duel — Winner!').setDescription(`🏆 **${playerNames.get(winner) || winner}** is the last one standing!`).setTimestamp();
-    applyEmbedBranding(we, { guildId, moduleKey: 'minigames', defaultColor: '#4ade80', defaultFooter: 'Game Night · Dice Duel' });
+    applyEmbedBranding(we, { guildId, moduleKey: 'minigames', defaultColor: '#4ade80', defaultFooter: 'Game Night � Dice Duel' });
     await channel.send({ embeds: [we] });
     return [winner, ...eliminated];
   }
@@ -297,7 +297,7 @@ RUNNERS.higherlower = async (channel, guildId, players, playerNames, session) =>
       .setTitle(`🃏 Round ${round} — Higher or Lower?`)
       .setDescription(`Current card: ${cardStr(current)}\n\nReact ⬆️ Higher or ⬇️ Lower!\nYou have **20 seconds**.`)
       .setTimestamp();
-    applyEmbedBranding(qEmbed, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Game Night · Higher or Lower · ${alive.size} left` });
+    applyEmbedBranding(qEmbed, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Game Night � Higher or Lower � ${alive.size} left` });
     const qMsg = await channel.send({ embeds: [qEmbed] });
     await qMsg.react('⬆️').catch(() => {}); await qMsg.react('⬇️').catch(() => {});
 
@@ -327,7 +327,7 @@ RUNNERS.higherlower = async (channel, guildId, players, playerNames, session) =>
       .setTitle(`🃏 Round ${round} — Reveal!`)
       .setDescription(`Card was: ${cardStr(next)}\nCorrect: ${correctEmoji || '🤝 Tie! No eliminations.'}\n\n${lines}`)
       .setTimestamp();
-    applyEmbedBranding(rEmbed, { guildId, moduleKey: 'minigames', defaultColor: actualElim.length > 0 ? '#ef4444' : '#4ade80', defaultFooter: `Game Night · Higher or Lower` });
+    applyEmbedBranding(rEmbed, { guildId, moduleKey: 'minigames', defaultColor: actualElim.length > 0 ? '#ef4444' : '#4ade80', defaultFooter: `Game Night � Higher or Lower` });
     await channel.send({ embeds: [rEmbed] });
 
     for (const id of actualElim) { alive.delete(id); eliminated.unshift(id); }
@@ -338,7 +338,7 @@ RUNNERS.higherlower = async (channel, guildId, players, playerNames, session) =>
   const winner = alive.size === 1 ? [...alive][0] : null;
   if (winner) {
     const we = new EB().setTitle('🃏 Higher or Lower — Winner!').setDescription(`🏆 **${playerNames.get(winner) || winner}** is the last one standing!`).setTimestamp();
-    applyEmbedBranding(we, { guildId, moduleKey: 'minigames', defaultColor: '#4ade80', defaultFooter: 'Game Night · Higher or Lower' });
+    applyEmbedBranding(we, { guildId, moduleKey: 'minigames', defaultColor: '#4ade80', defaultFooter: 'Game Night � Higher or Lower' });
     await channel.send({ embeds: [we] });
   }
   return winner ? [winner, ...eliminated] : [...eliminated, ...(winner ? [] : [...alive])];
@@ -358,12 +358,12 @@ RUNNERS.reactionrace = async (channel, guildId, players, playerNames, session) =
     await sleep(2000);
 
     const readyE = new EB().setTitle(`⚡ Round ${round} — Get Ready!`).setDescription(`React ${RACE_EMOJI} as fast as you can when GO appears!\nRandom delay incoming...`).setTimestamp();
-    applyEmbedBranding(readyE, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Game Night · Reaction Race · ${alive.size} left` });
+    applyEmbedBranding(readyE, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Game Night � Reaction Race � ${alive.size} left` });
     const readyMsg = await channel.send({ embeds: [readyE] });
     await sleep(2000 + Math.floor(Math.random() * 5000));
 
     const goE = new EB().setTitle(`⚡ GO! GO! GO!`).setDescription(`React ${RACE_EMOJI} NOW! **8 seconds!**`).setTimestamp();
-    applyEmbedBranding(goE, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: `Game Night · Reaction Race Round ${round}` });
+    applyEmbedBranding(goE, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: `Game Night � Reaction Race Round ${round}` });
     await readyMsg.edit({ embeds: [goE] });
     await readyMsg.react(RACE_EMOJI).catch(() => {});
 
@@ -381,7 +381,7 @@ RUNNERS.reactionrace = async (channel, guildId, players, playerNames, session) =
     const noLines = noReact.map(id => `💀 **${playerNames.get(id) || id}** — didn't react`).join('\n');
 
     const resE = new EB().setTitle(`⚡ Round ${round} Results`).setDescription(`${lines}${noLines ? '\n' + noLines : ''}`).setTimestamp();
-    applyEmbedBranding(resE, { guildId, moduleKey: 'minigames', defaultColor: '#ef4444', defaultFooter: `Game Night · Reaction Race` });
+    applyEmbedBranding(resE, { guildId, moduleKey: 'minigames', defaultColor: '#ef4444', defaultFooter: `Game Night � Reaction Race` });
     await channel.send({ embeds: [resE] });
 
     for (const id of toElim) { alive.delete(id); eliminated.unshift(id); }
@@ -392,7 +392,7 @@ RUNNERS.reactionrace = async (channel, guildId, players, playerNames, session) =
   if (winner) {
     const { EmbedBuilder: EB2 } = require('discord.js');
     const we = new EB2().setTitle('⚡ Reaction Race — Winner!').setDescription(`🏆 **${playerNames.get(winner) || winner}** has the fastest reflexes!`).setTimestamp();
-    applyEmbedBranding(we, { guildId, moduleKey: 'minigames', defaultColor: '#4ade80', defaultFooter: 'Game Night · Reaction Race' });
+    applyEmbedBranding(we, { guildId, moduleKey: 'minigames', defaultColor: '#4ade80', defaultFooter: 'Game Night � Reaction Race' });
     await channel.send({ embeds: [we] });
   }
   return winner ? [winner, ...eliminated] : [...eliminated];
@@ -408,7 +408,7 @@ RUNNERS.numberguess = async (channel, guildId, players, playerNames, session) =>
     if (session.skipRequested) break;
     const secret = Math.floor(Math.random() * 100) + 1;
     const qE = new EB().setTitle(`🔢 Round ${round}/${ROUNDS} — Guess the Number!`).setDescription(`I'm thinking of a number between **1 and 100**.\nType your guess in chat! You have **30 seconds**.\nClosest wins the round!`).setTimestamp();
-    applyEmbedBranding(qE, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Game Night · Number Guess Round ${round}` });
+    applyEmbedBranding(qE, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Game Night � Number Guess Round ${round}` });
     await channel.send({ embeds: [qE] });
 
     const guesses = new Map();
@@ -429,14 +429,14 @@ RUNNERS.numberguess = async (channel, guildId, players, playerNames, session) =>
     const nonGuessers = [...players].filter(id => !guesses.has(id)).map(id => `• ${playerNames.get(id) || id}`).join(', ');
 
     const rE = new EB().setTitle(`🔢 Round ${round} — Answer: ${secret}!`).setDescription(lines + (nonGuessers ? `\n\n*Didn't guess: ${nonGuessers}*` : '')).setTimestamp();
-    applyEmbedBranding(rE, { guildId, moduleKey: 'minigames', defaultColor: '#4ade80', defaultFooter: `Game Night · Number Guess Round ${round}` });
+    applyEmbedBranding(rE, { guildId, moduleKey: 'minigames', defaultColor: '#4ade80', defaultFooter: `Game Night � Number Guess Round ${round}` });
     await channel.send({ embeds: [rE] });
     await sleep(3000);
   }
 
   const sorted = [...scores.entries()].sort((a, b) => b[1] - a[1]);
   const wE = new EB().setTitle('🔢 Number Guess — Results!').setDescription(sorted.map(([id, s], i) => `${['🥇','🥈','🥉'][i] || `${i+1}.`} **${playerNames.get(id) || id}** — ${s} pts`).join('\n')).setTimestamp();
-  applyEmbedBranding(wE, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'Game Night · Number Guess' });
+  applyEmbedBranding(wE, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'Game Night � Number Guess' });
   await channel.send({ embeds: [wE] });
   return sorted.map(([id]) => id);
 };
@@ -453,7 +453,7 @@ RUNNERS.slots = async (channel, guildId, players, playerNames, session) => {
   const lines = results.map((r, i) => `${['🥇','🥈','🥉'][i] || `${i+1}.`} **${playerNames.get(r.id) || r.id}** | ${r.reels.join('')} | ${r.score}pts`).join('\n');
 
   const e = new EB().setTitle('🎰 Slots — Results!').setDescription(lines).setTimestamp();
-  applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'Game Night · Slots' });
+  applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'Game Night � Slots' });
   await channel.send({ embeds: [e] });
   return results.map(r => r.id);
 };
@@ -483,7 +483,7 @@ RUNNERS.trivia = async (channel, guildId, players, playerNames, session) => {
     const correctIdx = q.correctIndex ?? q.ans ?? 0;
     const optLines = opts.map((o, j) => `${EMOJIS[j]} ${o}`).join('\n');
     const qE = new EB().setTitle(`❓ Q${i+1}/${questions.length}`).setDescription(`**${q.question || q.q}**\n\n${optLines}\n\nYou have **20 seconds**!`).setTimestamp();
-    applyEmbedBranding(qE, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Game Night · Trivia Q${i+1}` });
+    applyEmbedBranding(qE, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Game Night � Trivia Q${i+1}` });
     const qMsg = await channel.send({ embeds: [qE] });
     for (const e of EMOJIS) await qMsg.react(e).catch(() => {});
 
@@ -501,14 +501,14 @@ RUNNERS.trivia = async (channel, guildId, players, playerNames, session) => {
       return `${p === correctEmoji ? '✅' : p ? '❌' : '🔇'} **${playerNames.get(id) || id}**${p ? ` — ${p}` : ' — no answer'}`;
     }).join('\n');
     const aE = new EB().setTitle(`❓ Answer: ${correctEmoji} ${opts[correctIdx] || '?'}`).setDescription(lines).setTimestamp();
-    applyEmbedBranding(aE, { guildId, moduleKey: 'minigames', defaultColor: winners.length > 0 ? '#4ade80' : '#ef4444', defaultFooter: `Game Night · Trivia Q${i+1}` });
+    applyEmbedBranding(aE, { guildId, moduleKey: 'minigames', defaultColor: winners.length > 0 ? '#4ade80' : '#ef4444', defaultFooter: `Game Night � Trivia Q${i+1}` });
     await channel.send({ embeds: [aE] });
     await sleep(2500);
   }
 
   const sorted = [...scores.entries()].sort((a, b) => b[1] - a[1]);
   const wE = new EB().setTitle('❓ Trivia — Results!').setDescription(sorted.map(([id, s], i) => `${['🥇','🥈','🥉'][i] || `${i+1}.`} **${playerNames.get(id) || id}** — ${s} correct`).join('\n')).setTimestamp();
-  applyEmbedBranding(wE, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'Game Night · Trivia' });
+  applyEmbedBranding(wE, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'Game Night � Trivia' });
   await channel.send({ embeds: [wE] });
   return sorted.map(([id]) => id);
 };
@@ -528,7 +528,7 @@ RUNNERS.wordscramble = async (channel, guildId, players, playerNames, session) =
     const blanks = '_ '.repeat(word.length).trim();
 
     const qE = new EB().setTitle(`🧩 Round ${round}/5 — Unscramble!`).setDescription(`**\`${scrambled.toUpperCase()}\`**\n${blanks}\n\nType the correct word in chat! **30 seconds**. First correct wins the round!`).setTimestamp();
-    applyEmbedBranding(qE, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Game Night · Word Scramble Round ${round}` });
+    applyEmbedBranding(qE, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Game Night � Word Scramble Round ${round}` });
     await channel.send({ embeds: [qE] });
 
     let winnerId = null;
@@ -539,14 +539,14 @@ RUNNERS.wordscramble = async (channel, guildId, players, playerNames, session) =
     });
 
     const rE = new EB().setTitle(`🧩 Round ${round} — The word was **${word}**!`).setDescription(winnerId ? `🏆 **${playerNames.get(winnerId) || winnerId}** got it first!` : '😮 Nobody got it!').setTimestamp();
-    applyEmbedBranding(rE, { guildId, moduleKey: 'minigames', defaultColor: winnerId ? '#4ade80' : '#ef4444', defaultFooter: `Game Night · Word Scramble` });
+    applyEmbedBranding(rE, { guildId, moduleKey: 'minigames', defaultColor: winnerId ? '#4ade80' : '#ef4444', defaultFooter: `Game Night � Word Scramble` });
     await channel.send({ embeds: [rE] });
     await sleep(2000);
   }
 
   const sorted = [...scores.entries()].sort((a, b) => b[1] - a[1]);
   const wE = new EB().setTitle('🧩 Word Scramble — Results!').setDescription(sorted.map(([id, s], i) => `${['🥇','🥈','🥉'][i] || `${i+1}.`} **${playerNames.get(id) || id}** — ${s} round${s===1?'':'s'} won`).join('\n')).setTimestamp();
-  applyEmbedBranding(wE, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'Game Night · Word Scramble' });
+  applyEmbedBranding(wE, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'Game Night � Word Scramble' });
   await channel.send({ embeds: [wE] });
   return sorted.map(([id]) => id);
 };
@@ -570,11 +570,11 @@ RUNNERS.rps = async (channel, guildId, players, playerNames, session) => {
       if (i + 1 < list.length) matchups.push([list[i], list[i+1]]);
       else bye = list[i];
     }
-    if (bye) { const bE = new EB().setTitle(`🪨 Round ${round} — Bye`).setDescription(`**${playerNames.get(bye) || bye}** gets a free pass this round! 🍀`).setTimestamp(); applyEmbedBranding(bE,{guildId,moduleKey: 'minigames',defaultColor:'#4ade80',defaultFooter:`Game Night · RPS Round ${round}`}); await channel.send({embeds:[bE]}); }
+    if (bye) { const bE = new EB().setTitle(`🪨 Round ${round} — Bye`).setDescription(`**${playerNames.get(bye) || bye}** gets a free pass this round! 🍀`).setTimestamp(); applyEmbedBranding(bE,{guildId,moduleKey: 'minigames',defaultColor:'#4ade80',defaultFooter:`Game Night � RPS Round ${round}`}); await channel.send({embeds:[bE]}); }
 
     for (const [pA, pB] of matchups) {
-      const mE = new EB().setTitle(`🪨 Round ${round} — ${playerNames.get(pA)||pA} vs ${playerNames.get(pB)||pB}`).setDescription(`React 🪨 Rock · ✂️ Scissors · 📄 Paper\nYou have **25 seconds**!`).setTimestamp();
-      applyEmbedBranding(mE,{guildId,moduleKey: 'minigames',defaultColor:'#e74c3c',defaultFooter:`Game Night · RPS Round ${round}`});
+      const mE = new EB().setTitle(`🪨 Round ${round} — ${playerNames.get(pA)||pA} vs ${playerNames.get(pB)||pB}`).setDescription(`React 🪨 Rock � ✂️ Scissors � 📄 Paper\nYou have **25 seconds**!`).setTimestamp();
+      applyEmbedBranding(mE,{guildId,moduleKey: 'minigames',defaultColor:'#e74c3c',defaultFooter:`Game Night � RPS Round ${round}`});
       const mMsg = await channel.send({embeds:[mE]});
       for (const e of CHOICES) await mMsg.react(e).catch(()=>{});
 
@@ -594,7 +594,7 @@ RUNNERS.rps = async (channel, guildId, players, playerNames, session) => {
       const rLine = `**${playerNames.get(pA)||pA}**: ${label(cA)} vs **${playerNames.get(pB)||pB}**: ${label(cB)}`;
       const outcome = loser ? `💀 **${playerNames.get(loser)||loser}** is eliminated!` : '🤝 Draw — both advance!';
       const resE = new EB().setTitle(`🪨 Matchup Result`).setDescription(`${rLine}\n\n${outcome}`).setTimestamp();
-      applyEmbedBranding(resE,{guildId,moduleKey: 'minigames',defaultColor:loser?'#ef4444':'#6366f1',defaultFooter:`Game Night · RPS`});
+      applyEmbedBranding(resE,{guildId,moduleKey: 'minigames',defaultColor:loser?'#ef4444':'#6366f1',defaultFooter:`Game Night � RPS`});
       await channel.send({embeds:[resE]});
       if (loser) { alive.delete(loser); eliminated.unshift(loser); }
       if (!cA && !cB) { alive.delete(pA); alive.delete(pB); eliminated.unshift(pB); eliminated.unshift(pA); }
@@ -605,7 +605,7 @@ RUNNERS.rps = async (channel, guildId, players, playerNames, session) => {
   const winner = [...alive][0] || null;
   if (winner) {
     const wE = new EB().setTitle('🪨 RPS — Winner!').setDescription(`🏆 **${playerNames.get(winner)||winner}** wins the RPS Tournament!`).setTimestamp();
-    applyEmbedBranding(wE,{guildId,moduleKey: 'minigames',defaultColor:'#4ade80',defaultFooter:'Game Night · RPS'});
+    applyEmbedBranding(wE,{guildId,moduleKey: 'minigames',defaultColor:'#4ade80',defaultFooter:'Game Night � RPS'});
     await channel.send({embeds:[wE]});
   }
   return winner ? [winner, ...eliminated] : [...eliminated];
@@ -630,7 +630,7 @@ RUNNERS.blackjack = async (channel, guildId, players, playerNames, session) => {
   const tableE = new EB().setTitle('🎴 Blackjack — Cards Dealt!')
     .setDescription(`**Dealer:** ${cardStr(dealerHand[0])} 🂠\n\n` + [...players].map(id => `**${playerNames.get(id)||id}:** ${handStr(hands.get(id))} (${handVal(hands.get(id))})`).join('\n'))
     .setTimestamp();
-  applyEmbedBranding(tableE, {guildId, moduleKey: 'minigames', defaultColor:'#6366f1', defaultFooter:'Game Night · Blackjack'});
+  applyEmbedBranding(tableE, {guildId, moduleKey: 'minigames', defaultColor:'#6366f1', defaultFooter:'Game Night � Blackjack'});
   await channel.send({embeds:[tableE]});
   await sleep(2000);
 
@@ -643,7 +643,7 @@ RUNNERS.blackjack = async (channel, guildId, players, playerNames, session) => {
     const tE = new EB().setTitle(`🎴 ${playerNames.get(id)||id}'s turn!`)
       .setDescription(`Your hand: ${handStr(hand)} — **${val}**\n\nReact 👆 to **Hit** or ✋ to **Stand**. 20 seconds.`)
       .setTimestamp();
-    applyEmbedBranding(tE, {guildId, moduleKey: 'minigames', defaultColor:'#6366f1', defaultFooter:'Game Night · Blackjack'});
+    applyEmbedBranding(tE, {guildId, moduleKey: 'minigames', defaultColor:'#6366f1', defaultFooter:'Game Night � Blackjack'});
     const tMsg = await channel.send({content:`<@${id}>`, embeds:[tE]});
     await tMsg.react('👆').catch(()=>{}); await tMsg.react('✋').catch(()=>{});
 
@@ -657,7 +657,7 @@ RUNNERS.blackjack = async (channel, guildId, players, playerNames, session) => {
       val = handVal(hand);
       if (val >= 21) break;
       const updE = new EB().setTitle(`🎴 ${playerNames.get(id)||id} — Hit!`).setDescription(`Hand: ${handStr(hand)} — **${val}**${val>21?' 💀 BUST!':''}\n\nReact 👆 Hit or ✋ Stand. 20s.`).setTimestamp();
-      applyEmbedBranding(updE,{guildId,moduleKey: 'minigames',defaultColor:val>21?'#ef4444':'#6366f1',defaultFooter:'Game Night · Blackjack'});
+      applyEmbedBranding(updE,{guildId,moduleKey: 'minigames',defaultColor:val>21?'#ef4444':'#6366f1',defaultFooter:'Game Night � Blackjack'});
       await tMsg.edit({embeds:[updE]});
     }
     await sleep(1000);
@@ -686,7 +686,7 @@ RUNNERS.blackjack = async (channel, guildId, players, playerNames, session) => {
   }).join('\n');
 
   const resE = new EB().setTitle('🎴 Blackjack — Results!').setDescription(`**Dealer:** ${handStr(dealerHand)} (${dealerVal})${dealerVal>21?' 💀 BUST!':''}\n\n${lines}`).setTimestamp();
-  applyEmbedBranding(resE,{guildId,moduleKey: 'minigames',defaultColor:'#f59e0b',defaultFooter:'Game Night · Blackjack'});
+  applyEmbedBranding(resE,{guildId,moduleKey: 'minigames',defaultColor:'#f59e0b',defaultFooter:'Game Night � Blackjack'});
   await channel.send({embeds:[resE]});
   return results.map(r => r.id);
 };

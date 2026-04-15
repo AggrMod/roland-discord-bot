@@ -80,7 +80,7 @@ class NumberGuessService {
       .addFields({ name: '👥 Players', value: game.players.size > 0 ? `${game.players.size} waiting` : '*Be the first!*', inline: true })
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Starts in ${game.gatherSecs}s · Need at least 2 players` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Starts in ${game.gatherSecs}s � Need at least 2 players` });
     return e;
   }
 
@@ -123,14 +123,14 @@ class NumberGuessService {
       .setDescription(`🎉 ${mention} wins with **${score} point${score===1?'':'s'}**!\n\n**🔢 Number Guess Champion${winners.length > 1 ? 's' : ''}!**`)
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot · Number Guess' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot � Number Guess' });
     return e;
   }
 
   buildCancelledEmbed(reason, guildId) {
     const e = new EmbedBuilder().setTitle('🔢 Number Guess').setDescription(reason).setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#64748b', defaultFooter: 'GuildPilot · Number Guess' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#64748b', defaultFooter: 'GuildPilot � Number Guess' });
     return e;
   }
 }

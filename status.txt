@@ -1,0 +1,13 @@
+﻿ M database/db.js
+ M index.js
+ M services/aiAssistantService.js
+ M web/public/portal.js
+ M web/routes/adminAiAssistant.js
+?? ai-assistant-discord-bot-spec.md
+?? diff_names.txt
+?? diff_utf8.txt
+?? git_log_temp.txt
+?? log_msgs.txt
+?? log_utf8.txt
+?? status.txt
+?? web/public/previews/

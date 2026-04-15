@@ -1,0 +1,126 @@
+﻿commit 969ee1c4867c4c78356e5e91004a718674db46c0
+Author: roland-cmyk <roland@kleermaker.online>
+Date:   Fri Apr 10 08:56:14 2026 +0200
+
+    hardening: helmet, oauth state, session storage path, and multi-tenant scheduler fixes
+
+ .gitignore                        |  12 +++
+ index.js                          | 161 +++++++++++++++++++++++++++-----------
+ package-lock.json                 |  10 +++
+ package.json                      |   1 +
+ web/routes/adminCore.js           |   4 +-
+ web/routes/authUser.js            |  14 +++-
+ web/routes/superadminTenantOps.js |   4 +-
+ web/server.js                     |  16 +++-
+ 8 files changed, 171 insertions(+), 51 deletions(-)
+
+commit 4a83d74a8fa4ae0bf2e77ecc9d81b3b37786207c
+Author: roland-cmyk <roland@kleermaker.online>
+Date:   Fri Apr 10 08:55:56 2026 +0200
+
+    hardening: add helmet, oauth state, multi-tenant schedulers, and superadmin throttling
+
+ Audit-09042026/walkthrough.md.resolved | 296 ---------------------------------
+ 1 file changed, 296 deletions(-)
+
+commit 81b523ead2504dd196e929d84ea64f7861b75aec
+Author: roland-cmyk <roland@kleermaker.online>
+Date:   Fri Apr 10 08:40:22 2026 +0200
+
+    fix(verification): keep wallet verification user-scoped without tenant requirement
+
+ web/routes/microVerifyUser.js        |  4 ----
+ web/routes/userWalletVerification.js | 10 ----------
+ web/server.js                        |  2 --
+ 3 files changed, 16 deletions(-)
+
+commit 1133dc80923db6dae8ed18c929009d2dfe10b65c
+Author: roland-cmyk <roland@kleermaker.online>
+Date:   Fri Apr 10 01:33:29 2026 +0200
+
+    chore: finalize audit remediation and modular web route architecture
+
+ README.md                                          |   2 +-
+ config/roles.json                                  |  54 ---
+ config/settings.js                                 |  25 +-
+ .../archive/root/AUDIT-CROSSCHECK-2026-03-27.md    |   0
+ .../archive/root/AUDIT-PARITY-2026-03-27.md        |   0
+ .../archive/root/AUDIT-REPORT-2026-03-28.md        |   0
+ .../archive/root/AUDIT-REPORT.md                   |   0
+ BACKLOG.md => docs/archive/root/BACKLOG.md         |   0
+ .../archive/root/BATTLE_V02_DEPLOY.md              |   0
+ .../archive/root/DEPLOYMENT_GUIDE.md               |   0
+ .../archive/root/DEPLOY_HOTFIX_OG_COMMANDS.md      |   0
+ .../archive/root/DEPLOY_NOTES_API_V1.md            |   0
+ .../root/DEPLOY_NOTES_COLLECTION_RESOLVER.md       |   0
+ .../archive/root/DEPLOY_NOTES_GOVERNANCE_BUNDLE.md |   0
+ .../archive/root/DEPLOY_NOTES_MAFIA_BATTLE.md      |   0
+ .../archive/root/DEPLOY_NOTES_MICRO_VERIFY.md      |   0
+ .../archive/root/DEPLOY_NOTES_MODULE_IA.md         |   0
+ .../archive/root/DEPLOY_NOTES_ROLES_ENGINE.md      |   0
+ .../archive/root/DEPLOY_NOTES_ROLE_CONFIG_UX.md    |   0
+ .../root/DEPLOY_NOTES_SOLMATE_VERIFICATION.md      |   0
+ .../archive/root/DEPLOY_NOTES_SPRINT_A.md          |   0
+ .../archive/root/DEPLOY_NOTES_TREASURY_WATCH.md    |   0
+ .../archive/root/DEPLOY_NOTES_VERIFICATION_UX.md   |   0
+ .../archive/root/DEPLOY_SUMMARY.md                 |   0
+ .../archive/root/ENV-MIGRATION.md                  |   0
+ .../archive/root/HARDENING-CHECKLIST.md            |   0
+ .../archive/root/LEGACY-COMPAT-POLICY.md           |   0
+ .../archive/root/PHASE_1.5_SUMMARY.md              |   0
+ .../archive/root/PILOT-ONBOARDING-SOP.md           |   0
+ .../archive/root/QUICK_DEPLOY_TREASURY.md          |   0
+ .../archive/root/REFACTOR_COMPLETE.md              |   0
+ .../archive/root/SECURITY-AUDIT-SERVICES.md        |   0
+ .../archive/root/SECURITY_AUDIT_2026-03-28.md      |   0
+ .../archive/root/SPRINT_A_SUMMARY.md               |   0
+ scripts/release-gate.js                            |  18 +-
+ services/proposalService.js                        |   9 +-
+ services/roleService.js                            |  31 +-
+ services/vpService.js                              |  22 +-
+ .../test-admin-user-tenant-scoping.js              |   3 +-
+ .../test-battle-race-safety.js                     |   5 +-
+ .../test-collection-resolver.js                    |   3 +-
+ test-micro-verify.js => tests/test-micro-verify.js |   7 +-
+ .../test-module-refactor.js                        |  22 +-
+ .../test-nft-alert-config-scoping.js               |   3 +-
+ .../test-og-role-tenant-scoping.js                 |   5 +-
+ .../test-tenant-mock-scoping.js                    |  11 +-
+ .../test-ticket-tenant-safety.js                   |   7 +-
+ test-treasury.js => tests/test-treasury.js         |   5 +-
+ .../test-verification-role-safety.js               |   3 +-
+ web/routes/activityWebhooks.js                     | 103 +++++
+ web/routes/adminCore.js                            |  37 +-
+ web/routes/adminEngagement.js                      | 122 ++++++
+ web/routes/adminGovernanceMissions.js              | 297 +++++++++++++
+ web/routes/adminNftActivity.js                     |  59 +++
+ web/routes/adminRolePanels.js                      | 229 ++++++++++
+ web/routes/adminRoles.js                           | 237 ++++++++++
+ web/routes/adminSettings.js                        | 306 +++++++++++++
+ web/routes/adminTickets.js                         | 152 +++++++
+ web/routes/adminTrackers.js                        | 329 ++++++++++++++
+ web/routes/adminUsersDirectory.js                  | 253 +++++++++++
+ web/routes/adminVerificationPanel.js               | 157 +++++++
+ web/routes/authUser.js                             | 483 +++++++++++++++++++++
+ web/routes/billingWebhook.js                       | 175 ++++++++
+ web/routes/governanceUser.js                       | 237 ++++++++++
+ web/routes/microVerifyUser.js                      | 101 +++++
+ web/routes/responseCompat.js                       |  34 ++
+ web/routes/superadminAdmins.js                     |  23 +-
+ web/routes/superadminCore.js                       |  23 +-
+ web/routes/superadminIdentity.js                   |  34 +-
+ web/routes/superadminOps.js                        |  39 +-
+ web/routes/superadminTenantOps.js                  | 119 +++--
+ web/routes/userAdminCheck.js                       |  31 ++
+ web/routes/userWalletVerification.js               | 256 +++++++++++
+ web/routes/verificationRoleAdmin.js                | 453 +++++++++++++++++++
+ 74 files changed, 4266 insertions(+), 258 deletions(-)
+
+commit 8f36a193df4c3e3a1283bc3fa6541f9df36b1c07
+Author: roland-cmyk <roland@kleermaker.online>
+Date:   Fri Apr 10 01:26:23 2026 +0200
+
+    fix(web): restore admin/superadmin mounts and finalize response envelope migration
+
+ web/server.js | 3805 +++------------------------------------------------------
+ 1 file changed, 199 insertions(+), 3606 deletions(-)

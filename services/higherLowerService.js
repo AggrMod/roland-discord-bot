@@ -199,7 +199,7 @@ class HigherLowerService {
       guildId,
       moduleKey: 'minigames',
       defaultColor: '#f59e0b',
-      defaultFooter: `Starts in ${game.gatherSecs}s · Need at least 2 players`,
+      defaultFooter: `Starts in ${game.gatherSecs}s � Need at least 2 players`,
     });
     return embed;
   }
@@ -224,7 +224,7 @@ class HigherLowerService {
       guildId,
       moduleKey: 'minigames',
       defaultColor: isRed ? '#e74c3c' : '#2c3e50',
-      defaultFooter: `Round ${game.roundNumber} · ⬆️ Higher or ⬇️ Lower`,
+      defaultFooter: `Round ${game.roundNumber} � ⬆️ Higher or ⬇️ Lower`,
     });
     return embed;
   }
@@ -275,7 +275,7 @@ class HigherLowerService {
       guildId,
       moduleKey: 'minigames',
       defaultColor: '#f59e0b',
-      defaultFooter: 'GuildPilot · Higher or Lower',
+      defaultFooter: 'GuildPilot � Higher or Lower',
     });
     return embed;
   }
@@ -291,7 +291,7 @@ class HigherLowerService {
       guildId,
       moduleKey: 'minigames',
       defaultColor: '#6366f1',
-      defaultFooter: 'GuildPilot · Higher or Lower',
+      defaultFooter: 'GuildPilot � Higher or Lower',
     });
     return embed;
   }
@@ -307,7 +307,7 @@ class HigherLowerService {
       guildId,
       moduleKey: 'minigames',
       defaultColor: '#64748b',
-      defaultFooter: 'GuildPilot · Higher or Lower',
+      defaultFooter: 'GuildPilot � Higher or Lower',
     });
     return embed;
   }

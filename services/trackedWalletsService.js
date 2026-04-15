@@ -2116,7 +2116,7 @@ class TrackedWalletsService {
     const collectionLines = Object.entries(nameGroups)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 8)
-      .map(([name, count]) => `• **${name}** × ${count}`);
+      .map(([name, count]) => `• **${name}** � ${count}`);
 
     if (Object.keys(nameGroups).length > 8) {
       collectionLines.push(`_...and ${Object.keys(nameGroups).length - 8} more collections_`);

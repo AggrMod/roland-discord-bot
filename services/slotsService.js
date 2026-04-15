@@ -70,7 +70,7 @@ class SlotsService {
       .addFields({ name: '👥 Players', value: game.players.size > 0 ? `${game.players.size} waiting` : '*Be the first!*', inline: true })
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: `Starts in ${game.gatherSecs}s · Need at least 2 players` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: `Starts in ${game.gatherSecs}s � Need at least 2 players` });
     return e;
   }
 
@@ -85,7 +85,7 @@ class SlotsService {
       .setDescription(lines)
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot · Slots' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot � Slots' });
     return e;
   }
 
@@ -94,14 +94,14 @@ class SlotsService {
       .setDescription(`🎉 <@${winnerId}> wins with **${combo}** — ${reels.join(' ')} (**${score} pts**)!\n\n**🎰 Slots Champion!**`)
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot · Slots' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot � Slots' });
     return e;
   }
 
   buildCancelledEmbed(reason, guildId) {
     const e = new EmbedBuilder().setTitle('🎰 Slots').setDescription(reason).setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#64748b', defaultFooter: 'GuildPilot · Slots' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#64748b', defaultFooter: 'GuildPilot � Slots' });
     return e;
   }
 }

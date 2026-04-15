@@ -118,7 +118,7 @@ class BlackjackService {
       .addFields({ name: '👥 Players', value: game.players.size > 0 ? `${game.players.size} waiting` : '*Be the first!*', inline: true })
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: `Starts in ${game.gatherSecs}s · Need at least 2 players` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: `Starts in ${game.gatherSecs}s � Need at least 2 players` });
     return e;
   }
 
@@ -136,7 +136,7 @@ class BlackjackService {
       .setDescription(`**Dealer:** ${dealerShow}\n\n**Players:**\n${playerLines}`)
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: 'GuildPilot · Blackjack' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: 'GuildPilot � Blackjack' });
     return e;
   }
 
@@ -161,7 +161,7 @@ class BlackjackService {
       .setDescription(`**Dealer:** ${dealerStr}\n\n${lines}`)
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot · Blackjack' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot � Blackjack' });
     return e;
   }
 
@@ -171,14 +171,14 @@ class BlackjackService {
       .setDescription(`🎉 ${mention} beat${winners.length===1?'s':''} the dealer!\n\n**🎴 Blackjack Champion${winners.length>1?'s':''}!**`)
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot · Blackjack' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot � Blackjack' });
     return e;
   }
 
   buildCancelledEmbed(reason, guildId) {
     const e = new EmbedBuilder().setTitle('🎴 Blackjack').setDescription(reason).setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#64748b', defaultFooter: 'GuildPilot · Blackjack' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#64748b', defaultFooter: 'GuildPilot � Blackjack' });
     return e;
   }
 }

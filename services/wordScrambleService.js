@@ -81,7 +81,7 @@ class WordScrambleService {
       .addFields({ name: '👥 Players', value: game.players.size > 0 ? `${game.players.size} waiting` : '*Be the first!*', inline: true })
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Starts in ${game.gatherSecs}s · Need at least 2 players` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Starts in ${game.gatherSecs}s � Need at least 2 players` });
     return e;
   }
 
@@ -91,7 +91,7 @@ class WordScrambleService {
       .setDescription(`**\`${scrambled.toUpperCase()}\`**\n\n${blanks}\n\nType the correct word in chat!\nYou have **${ROUND_SECS} seconds**. First correct answer wins the round!`)
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Round ${round} of ${total} · ${scrambled.length} letters` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#6366f1', defaultFooter: `Round ${round} of ${total} � ${scrambled.length} letters` });
     return e;
   }
 
@@ -112,14 +112,14 @@ class WordScrambleService {
       .setDescription(`🎉 ${mention} wins with **${score} round${score===1?'':'s'}** won!\n\n**🧩 Word Scramble Champion${winners.length>1?'s':''}!**`)
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot · Word Scramble' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot � Word Scramble' });
     return e;
   }
 
   buildCancelledEmbed(reason, guildId) {
     const e = new EmbedBuilder().setTitle('🧩 Word Scramble').setDescription(reason).setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#64748b', defaultFooter: 'GuildPilot · Word Scramble' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#64748b', defaultFooter: 'GuildPilot � Word Scramble' });
     return e;
   }
 }

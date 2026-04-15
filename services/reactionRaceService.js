@@ -52,7 +52,7 @@ class ReactionRaceService {
       .addFields({ name: '👥 Players Joined', value: game.players.size > 0 ? `${game.players.size} waiting` : '*Be the first!*', inline: true })
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: `Starts in ${game.gatherSecs}s · Need at least 2 players` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: `Starts in ${game.gatherSecs}s � Need at least 2 players` });
     return e;
   }
 
@@ -69,7 +69,7 @@ class ReactionRaceService {
       .addFields({ name: '👥 Still In', value: `${alive}`, inline: true })
       .setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#4ade80', defaultFooter: `Round ${round} · Slowest is out!` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#4ade80', defaultFooter: `Round ${round} � Slowest is out!` });
     return e;
   }
 
@@ -89,14 +89,14 @@ class ReactionRaceService {
   buildWinnerEmbed({ winnerId, rounds, guildId }) {
     const e = new EmbedBuilder().setTitle('🏆 Reaction Race — Champion!').setDescription(`🎉 <@${winnerId}> has the fastest fingers after **${rounds} round${rounds===1?'':'s'}**!\n\n**⚡ Reaction Race Champion!**`).setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot · Reaction Race' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: 'GuildPilot � Reaction Race' });
     return e;
   }
 
   buildCancelledEmbed(reason, guildId) {
     const e = new EmbedBuilder().setTitle('⚡ Reaction Race').setDescription(reason).setTimestamp();
     this._applyAuthor(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#64748b', defaultFooter: 'GuildPilot · Reaction Race' });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#64748b', defaultFooter: 'GuildPilot � Reaction Race' });
     return e;
   }
 }

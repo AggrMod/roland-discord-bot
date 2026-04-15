@@ -141,7 +141,7 @@ class DiceDuelService {
     applyEmbedBranding(embed, {
       guildId, moduleKey: 'minigames',
       defaultColor: '#f59e0b',
-      defaultFooter: `Starts in ${game.gatherSecs}s · Need at least 2 players`,
+      defaultFooter: `Starts in ${game.gatherSecs}s � Need at least 2 players`,
     });
     return embed;
   }
@@ -202,7 +202,7 @@ class DiceDuelService {
     applyEmbedBranding(embed, {
       guildId, moduleKey: 'minigames',
       defaultColor: '#f59e0b',
-      defaultFooter: 'GuildPilot · Dice Duel',
+      defaultFooter: 'GuildPilot � Dice Duel',
     });
     return embed;
   }
@@ -217,7 +217,7 @@ class DiceDuelService {
     applyEmbedBranding(embed, {
       guildId, moduleKey: 'minigames',
       defaultColor: '#64748b',
-      defaultFooter: 'GuildPilot · Dice Duel',
+      defaultFooter: 'GuildPilot � Dice Duel',
     });
     return embed;
   }

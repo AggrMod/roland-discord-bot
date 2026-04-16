@@ -11,6 +11,10 @@ const db = require('../database/db');
 const logger = require('../utils/logger');
 const entitlementService = require('./entitlementService');
 const tenantService = require('./tenantService');
+const walletService = require('./walletService');
+const nftService = require('./nftService');
+const tokenService = require('./tokenService');
+const roleService = require('./roleService');
 const { applyEmbedBranding } = require('./embedBranding');
 
 const CREATE_LINK_BUTTON_ID = 'invite_tracker_create_link';
@@ -104,12 +108,25 @@ function parseExcludedCodesInput(value) {
   return Array.from(uniq.values());
 }
 
+function isDiscordSnowflake(value) {
+  return /^\d{17,20}$/.test(String(value || '').trim());
+}
+
+function normalizeDisplayName(value) {
+  const normalized = String(value || '').trim();
+  if (!normalized) return null;
+  if (isDiscordSnowflake(normalized)) return null;
+  return normalized;
+}
+
 class InviteTrackerService {
   constructor() {
     this.client = null;
     this.inviteCache = new Map();
     this.panelRefreshTimers = new Map();
     this.periodicPanelRefreshInterval = null;
+    this.verificationSnapshotCache = new Map();
+    this.verificationSnapshotTtlMs = Math.max(60, Number(process.env.INVITE_VERIFICATION_SNAPSHOT_TTL_SEC || 600)) * 1000;
   }
 
   setClient(client) {
@@ -693,7 +710,56 @@ class InviteTrackerService {
     return eligible;
   }
 
-  _lookupUserVerificationSnapshots(userIds) {
+  _pickDisplayName(...candidates) {
+    for (const candidate of candidates) {
+      const normalized = normalizeDisplayName(candidate);
+      if (normalized) return normalized;
+    }
+    return null;
+  }
+
+  _getCachedVerificationSnapshot(guildId, userId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const normalizedUserId = normalizeUserId(userId);
+    if (!normalizedGuildId || !normalizedUserId) return null;
+    const key = `${normalizedGuildId}:${normalizedUserId}`;
+    const cached = this.verificationSnapshotCache.get(key);
+    if (!cached) return null;
+    if ((Date.now() - Number(cached.cachedAt || 0)) > this.verificationSnapshotTtlMs) {
+      this.verificationSnapshotCache.delete(key);
+      return null;
+    }
+    return {
+      totalNfts: Math.max(0, Number(cached.totalNfts || 0)),
+      totalTokens: Math.max(0, Number(cached.totalTokens || 0)),
+    };
+  }
+
+  _setCachedVerificationSnapshot(guildId, userId, snapshot) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const normalizedUserId = normalizeUserId(userId);
+    if (!normalizedGuildId || !normalizedUserId || !snapshot) return;
+
+    if (this.verificationSnapshotCache.size > 10000) {
+      const cutoff = Date.now() - this.verificationSnapshotTtlMs;
+      for (const [key, value] of this.verificationSnapshotCache.entries()) {
+        if (Number(value?.cachedAt || 0) < cutoff) {
+          this.verificationSnapshotCache.delete(key);
+        }
+      }
+    }
+
+    this.verificationSnapshotCache.set(`${normalizedGuildId}:${normalizedUserId}`, {
+      totalNfts: Math.max(0, Number(snapshot.totalNfts || 0)),
+      totalTokens: Math.max(0, Number(snapshot.totalTokens || 0)),
+      cachedAt: Date.now(),
+    });
+  }
+
+  async _lookupUserVerificationSnapshots(userIds, {
+    guildId = null,
+    includeTokenStats = false,
+  } = {}) {
     const normalized = Array.from(new Set((userIds || []).map(normalizeUserId).filter(Boolean)));
     if (normalized.length === 0) return new Map();
 
@@ -712,6 +778,73 @@ class InviteTrackerService {
         });
       }
     }
+
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return result;
+
+    const tokenRules = includeTokenStats
+      ? roleService.getTokenRoleRules(normalizedGuildId).filter(rule => rule.enabled !== false)
+      : [];
+    const trackedMints = includeTokenStats
+      ? [...new Set(tokenRules.map(rule => String(rule.tokenMint || '').trim()).filter(Boolean))]
+      : [];
+
+    const walletsByUser = new Map();
+    for (const chunk of chunkArray(normalized, 400)) {
+      const placeholders = chunk.map(() => '?').join(',');
+      const rows = db.prepare(`
+        SELECT discord_id, wallet_address
+        FROM wallets
+        WHERE discord_id IN (${placeholders})
+      `).all(...chunk);
+      for (const row of rows) {
+        const userId = normalizeUserId(row.discord_id);
+        const wallet = String(row.wallet_address || '').trim();
+        if (!userId || !wallet) continue;
+        if (!walletsByUser.has(userId)) walletsByUser.set(userId, []);
+        walletsByUser.get(userId).push(wallet);
+      }
+    }
+
+    for (const userId of normalized) {
+      const cached = this._getCachedVerificationSnapshot(normalizedGuildId, userId);
+      if (cached) {
+        result.set(userId, cached);
+        continue;
+      }
+
+      const wallets = walletsByUser.get(userId)
+        || walletService.getAllUserWallets(userId)
+        || [];
+      if (!wallets.length) {
+        const emptySnapshot = { totalNfts: 0, totalTokens: 0 };
+        result.set(userId, emptySnapshot);
+        this._setCachedVerificationSnapshot(normalizedGuildId, userId, emptySnapshot);
+        continue;
+      }
+
+      try {
+        const nfts = await nftService.getAllNFTsForWallets(wallets, { guildId: normalizedGuildId });
+        const tierInfo = roleService.getTierForNFTs(nfts, normalizedGuildId);
+        const totalNfts = Math.max(0, Number(tierInfo?.count || 0));
+
+        let totalTokens = 0;
+        if (trackedMints.length > 0) {
+          const tokenTotals = await tokenService.getAggregateBalancesForWallets(wallets, trackedMints, { guildId: normalizedGuildId });
+          totalTokens = Object.values(tokenTotals || {}).reduce((sum, amount) => sum + Number(amount || 0), 0);
+        }
+
+        const snapshot = {
+          totalNfts,
+          totalTokens: trackedMints.length > 0 ? Number(totalTokens.toFixed(6)) : 0,
+        };
+        result.set(userId, snapshot);
+        this._setCachedVerificationSnapshot(normalizedGuildId, userId, snapshot);
+      } catch (error) {
+        logger.warn(`[invite-tracker] failed to build scoped verification snapshot for ${userId} in guild ${normalizedGuildId}: ${error?.message || error}`);
+      }
+    }
+
     return result;
   }
 
@@ -730,10 +863,65 @@ class InviteTrackerService {
       for (const row of rows) {
         const id = String(row.discord_id || '').trim();
         const name = String(row.username || '').trim();
-        if (id && name) result.set(id, name);
+        if (id) result.set(id, name);
       }
     }
     return result;
+  }
+
+  async _resolveLeaderboardDisplayNames(guildId, rows = []) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const userIds = Array.from(new Set((rows || []).map(row => normalizeUserId(row?.inviterUserId)).filter(Boolean)));
+    const displayMap = new Map();
+    if (userIds.length === 0) return displayMap;
+
+    const knownNames = this._lookupKnownUsernames(userIds);
+    for (const row of rows || []) {
+      const userId = normalizeUserId(row?.inviterUserId);
+      if (!userId) continue;
+      const picked = this._pickDisplayName(row?.inviterUsername, knownNames.get(userId));
+      if (picked) displayMap.set(userId, picked);
+    }
+
+    const guild = normalizedGuildId
+      ? (this.client?.guilds?.cache?.get(normalizedGuildId) || await this.client?.guilds?.fetch?.(normalizedGuildId).catch(() => null))
+      : null;
+    if (guild?.members?.cache) {
+      for (const userId of userIds) {
+        if (displayMap.has(userId)) continue;
+        const member = guild.members.cache.get(userId);
+        const picked = this._pickDisplayName(member?.displayName, member?.user?.globalName, member?.user?.username);
+        if (picked) displayMap.set(userId, picked);
+      }
+    }
+
+    const missing = userIds.filter(userId => !displayMap.has(userId));
+    await Promise.all(missing.map(async (userId) => {
+      try {
+        const user = await this.client?.users?.fetch?.(userId, { force: false });
+        const picked = this._pickDisplayName(user?.globalName, user?.displayName, user?.username, knownNames.get(userId));
+        if (picked) displayMap.set(userId, picked);
+      } catch (_error) {
+        // Best-effort only.
+      }
+    }));
+
+    return displayMap;
+  }
+
+  _formatLeaderboardInviterLabel(row, displayMap = new Map()) {
+    const inviterUserId = normalizeUserId(row?.inviterUserId);
+    const inviterName = this._pickDisplayName(
+      row?.inviterUsername,
+      inviterUserId ? displayMap.get(inviterUserId) : null
+    );
+
+    if (inviterName && inviterUserId) {
+      return `${inviterName} (<@${inviterUserId}>)`;
+    }
+    if (inviterName) return inviterName;
+    if (inviterUserId) return `<@${inviterUserId}>`;
+    return 'Unknown';
   }
 
   _tenantHasEnabledTokenVerificationRules(guildId) {
@@ -748,7 +936,8 @@ class InviteTrackerService {
     return Number(row?.count || 0) > 0;
   }
 
-  _buildLeaderboardRowsFromCounter(counter, inviterJoinedSetMap, {
+  async _buildLeaderboardRowsFromCounter(counter, inviterJoinedSetMap, {
+    guildId = null,
     includeVerificationStats = false,
     includeTokenStats = false,
     sortBy = SORT_BY_INVITES,
@@ -791,7 +980,10 @@ class InviteTrackerService {
       const joinedSet = inviterJoinedSetMap.get(row.inviterUserId) || new Set();
       for (const userId of joinedSet) allJoinedUsers.push(userId);
     }
-    const userSnapshots = this._lookupUserVerificationSnapshots(allJoinedUsers);
+    const userSnapshots = await this._lookupUserVerificationSnapshots(allJoinedUsers, {
+      guildId,
+      includeTokenStats,
+    });
 
     const rowsWithStats = inviters.map((row) => {
       const joinedSet = inviterJoinedSetMap.get(row.inviterUserId) || new Set();
@@ -898,7 +1090,10 @@ class InviteTrackerService {
         rows: rows.map((row, idx) => ({
           rank: idx + 1,
           inviterUserId: row.inviter_user_id,
-          inviterUsername: row.inviter_username || knownNames.get(String(row.inviter_user_id || '')) || null,
+          inviterUsername: this._pickDisplayName(
+            row.inviter_username,
+            knownNames.get(String(row.inviter_user_id || ''))
+          ),
           inviteCount: Number(row.invite_count || 0),
         })),
         limitedByPlan: periodPolicy.limitedByPlan,
@@ -953,7 +1148,8 @@ class InviteTrackerService {
       inviterJoinedSetMap.set(key, joinedSet);
     }
 
-    const rows = this._buildLeaderboardRowsFromCounter(counter, inviterJoinedSetMap, {
+    const rows = await this._buildLeaderboardRowsFromCounter(counter, inviterJoinedSetMap, {
+      guildId: normalizedGuildId,
       includeVerificationStats: effectiveIncludeVerificationStats,
       includeTokenStats: effectiveIncludeTokenStats,
       sortBy: effectiveSortBy,
@@ -962,7 +1158,10 @@ class InviteTrackerService {
     const knownNames = this._lookupKnownUsernames(rows.map(row => row.inviterUserId));
     const hydratedRows = rows.map(row => ({
       ...row,
-      inviterUsername: row.inviterUsername || knownNames.get(String(row.inviterUserId || '')) || null,
+      inviterUsername: this._pickDisplayName(
+        row.inviterUsername,
+        knownNames.get(String(row.inviterUserId || ''))
+      ),
     }));
 
     return {
@@ -1074,10 +1273,11 @@ class InviteTrackerService {
       sortBy,
     });
     if (!boardResult.success) return boardResult;
+    const inviterDisplayMap = await this._resolveLeaderboardDisplayNames(guildId, boardResult.rows || []);
 
     const lines = (boardResult.rows || []).length > 0
       ? boardResult.rows.map(row => {
-          const inviter = row.inviterUserId ? `<@${row.inviterUserId}>` : (row.inviterUsername || 'Unknown');
+          const inviter = this._formatLeaderboardInviterLabel(row, inviterDisplayMap);
           if (boardResult.includeVerificationStats) {
             if (boardResult.includeTokenStats) {
               return `**#${row.rank}** ${inviter} - **${row.inviteCount}** invites | NFTs: **${Number(row.inviteeNftsTotal || 0)}** | Tokens: **${Number(row.inviteeTokensTotal || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}**`;
@@ -1106,7 +1306,7 @@ class InviteTrackerService {
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(REFRESH_BUTTON_ID)
-          .setLabel('Refresh 🔄')
+          .setLabel('Refresh')
           .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
           .setCustomId(`${SORT_BUTTON_PREFIX}${SORT_BY_INVITES}`)
@@ -1135,7 +1335,6 @@ class InviteTrackerService {
             .setCustomId(CREATE_LINK_BUTTON_ID)
             .setLabel('Create My Invite Link')
             .setStyle(ButtonStyle.Success)
-            .setEmoji('🔗')
         )
       );
     }
@@ -1387,3 +1586,4 @@ module.exports = inviteTrackerService;
 module.exports.CREATE_LINK_BUTTON_ID = CREATE_LINK_BUTTON_ID;
 module.exports.REFRESH_BUTTON_ID = REFRESH_BUTTON_ID;
 module.exports.SORT_BUTTON_PREFIX = SORT_BUTTON_PREFIX;
+

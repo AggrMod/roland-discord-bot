@@ -11,6 +11,7 @@ let serverAccessData = { managedServers: [], unmanagedServers: [], isSuperadmin:
 let originalFetch = window.fetch.bind(window);
 let _csrfToken = '';
 let currentPlanSnapshot = null;
+let loginRedirectInFlight = false;
 const _portalMultiSelectRegistry = new Map();
 let _portalMultiSelectAutoId = 0;
 let _portalMultiSelectPickerState = null;
@@ -263,7 +264,7 @@ function openPortalMultiSelectPicker(selectId) {
     <div class="gp-ms-modal" role="dialog" aria-modal="true">
       <div class="gp-ms-header">
         <h3 class="gp-ms-title">${escapeHtml(getPortalMultiSelectTitle(select))}</h3>
-        <button type="button" class="gp-ms-close" aria-label="Close">Ã—</button>
+        <button type="button" class="gp-ms-close" aria-label="Close">×</button>
       </div>
       <div class="gp-ms-toolbar">
         <input type="text" class="gp-ms-search" placeholder="Search..." />
@@ -626,7 +627,7 @@ async function autoShowPendingMicroVerify() {
 
     statusEl.innerHTML = `
       <div style="margin-top:20px; padding:24px; background:rgba(99,102,241,0.08); border:2px solid rgba(99,102,241,0.35); border-radius:14px;">
-        <h4 style="color:#e0e7ff; margin:0 0 4px 0; font-size:1.05em;">🔔 NFT Ownership Proof — Awaiting On-Chain Confirmation</h4>
+        <h4 style="color:#e0e7ff; margin:0 0 4px 0; font-size:1.05em;">🔔 NFT Ownership Proof — Awaiting On-Chain Confirmation</h4>
         <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 14px 0;">Your unique proof amount has been generated. Complete the on-chain confirmation to verify NFT membership. We confirm wallet ownership only — no passwords or personal data collected. <a href="/privacy-policy" target="_blank" style="color:#a5b4fc;">Privacy Policy</a></p>
 
         <div style="margin-bottom:14px;">
@@ -646,7 +647,7 @@ async function autoShowPendingMicroVerify() {
         </div>
 
         <div style="background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:12px 14px; margin-bottom:20px;">
-          <p style="color:#c7d2fe; font-size:0.85em; margin:0;">ℹ️ Use the <strong>exact proof amount</strong> above — it's your unique membership identifier. Compatible with any Solana wallet. Proof expires at <strong>${expiryDisplay}</strong>.</p>
+          <p style="color:#c7d2fe; font-size:0.85em; margin:0;">ℹ️ Use the <strong>exact proof amount</strong> above — it's your unique membership identifier. Compatible with any Solana wallet. Proof expires at <strong>${expiryDisplay}</strong>.</p>
         </div>
 
         <div style="text-align:center;">
@@ -886,7 +887,7 @@ async function verifyByMicroTx() {
     if (statusEl) {
       statusEl.innerHTML = `
         <div style="margin-top:20px; padding:24px; background:rgba(99,102,241,0.08); border:2px solid rgba(99,102,241,0.35); border-radius:14px;">
-          <h4 style="color:#e0e7ff; margin:0 0 6px 0; font-size:1.05em;">🔔 NFT Ownership Proof — On-Chain Confirmation</h4>
+          <h4 style="color:#e0e7ff; margin:0 0 6px 0; font-size:1.05em;">🔔 NFT Ownership Proof — On-Chain Confirmation</h4>
           <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 16px 0; line-height:1.5;">This is a wallet ownership proof tool for NFT community membership. It does <strong>not</strong> collect passwords, seed phrases, or personal data. We only confirm that you control the wallet. <a href="/privacy-policy" target="_blank" style="color:#a5b4fc;">Privacy Policy</a></p>
 
           <div style="margin-bottom:14px;">
@@ -907,7 +908,7 @@ async function verifyByMicroTx() {
 
           <div style="background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:12px 14px; margin-bottom:20px;">
             <p style="color:#c7d2fe; font-size:0.85em; margin:0; line-height:1.5;">
-              ℹ️ Use the <strong>exact proof amount</strong> above — it's your unique wallet identifier used only for membership confirmation.<br>
+              ℹ️ Use the <strong>exact proof amount</strong> above — it's your unique wallet identifier used only for membership confirmation.<br>
               Compatible with any Solana wallet (Phantom, mobile, hardware wallet, etc.).<br>
               Proof expires at <strong>${expiryDisplay}</strong>.
             </p>
@@ -2420,7 +2421,7 @@ async function loadActiveVotes() {
     container.innerHTML = `
       <div class="error-state">
         <div class="error-title">
-          <span>⚠️</span>
+          <span>⚠️</span>
           <span>Failed to Load Proposals</span>
         </div>
         <div class="error-message">Unable to fetch active proposals. Please try refreshing the page.</div>
@@ -2664,7 +2665,7 @@ async function loadAvailableMissions() {
     if (!data.success || missions.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
-          <div class="empty-state-icon">🗺ï¸</div>
+          <div class="empty-state-icon">🗺️</div>
           <h4 class="empty-state-title">No Missions Available</h4>
           <p class="empty-state-message">Check back later for new mission opportunities.</p>
         </div>
@@ -2692,7 +2693,7 @@ async function loadAvailableMissions() {
     container.innerHTML = `
       <div class="error-state">
         <div class="error-title">
-          <span>⚠️</span>
+          <span>⚠️</span>
           <span>Failed to Load Missions</span>
         </div>
         <div class="error-message">Unable to fetch available missions. Please try refreshing the page.</div>
@@ -3063,8 +3064,8 @@ async function loadTrackedWalletList() {
           <td style="padding:10px 12px;">
             <div style="display:flex;gap:6px;">
               <button class="tw-panel-btn" data-id="${w.id}" title="Refresh Holdings Panel" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">📋 Panel</button>
-              <button class="tw-edit-btn" data-id="${w.id}" data-addr="${escapeHtml(w.wallet_address)}" data-label="${escapeHtml(w.label||'')}" data-alertch="${w.alert_channel_id||''}" data-panelch="${w.panel_channel_id||''}" title="Edit" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️</button>
-              <button class="tw-remove-btn" data-id="${w.id}" title="Remove" style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑ï¸</button>
+              <button class="tw-edit-btn" data-id="${w.id}" data-addr="${escapeHtml(w.wallet_address)}" data-label="${escapeHtml(w.label||'')}" data-alertch="${w.alert_channel_id||''}" data-panelch="${w.panel_channel_id||''}" title="Edit" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️</button>
+              <button class="tw-remove-btn" data-id="${w.id}" title="Remove" style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
             </div>
           </td>
         </tr>`;
@@ -3568,6 +3569,15 @@ function showCreateProposalForm() {
 
 // ==================== AUTH ====================
 function login() {
+  if (loginRedirectInFlight) return;
+  loginRedirectInFlight = true;
+
+  const navAuthBtn = document.getElementById('navAuthBtn');
+  if (navAuthBtn) {
+    navAuthBtn.disabled = true;
+    navAuthBtn.textContent = 'Redirecting...';
+  }
+
   // Preserve guild + current section so user lands back in the right place
   const qs = new URLSearchParams();
   const currentSection = (document.querySelector('.nav-item.active') || {}).dataset?.section || '';
@@ -3575,6 +3585,15 @@ function login() {
   if (currentSection && currentSection !== 'landing') qs.set('section', currentSection);
   const returnTo = '/' + (qs.toString() ? '?' + qs.toString() : '');
   window.location.href = '/auth/discord/login?returnTo=' + encodeURIComponent(returnTo);
+
+  // If navigation is blocked for any reason, allow retry.
+  setTimeout(() => {
+    loginRedirectInFlight = false;
+    if (navAuthBtn) {
+      navAuthBtn.disabled = false;
+      navAuthBtn.textContent = 'Login';
+    }
+  }, 10000);
 }
 
 function logout() {
@@ -4466,7 +4485,7 @@ async function loadSuperadminView() {
             </div>
             <div style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.2); border-radius:8px; padding:10px 12px;">
               <p style="color:#fcd34d; font-size:0.82em; margin:0; line-height:1.5;">
-                ⚠️ The receive wallet collects small SOL payments used to identify users. Keep it secure — only this superadmin panel can change it.
+                ⚠️ The receive wallet collects small SOL payments used to identify users. Keep it secure — only this superadmin panel can change it.
               </p>
             </div>
           </div>
@@ -5921,7 +5940,7 @@ async function loadAdminHelpView() {
           <tbody>${rows}</tbody>
         </table>
       </div>
-      ${note ? `<div style="margin:-12px 0 16px;padding:7px 12px;border-radius:0 0 10px 10px;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.12);border-top:none;color:#94a3b8;font-size:0.8em;">ℹ️ ${note}</div>` : ''}`;
+      ${note ? `<div style="margin:-12px 0 16px;padding:7px 12px;border-radius:0 0 10px 10px;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.12);border-top:none;color:#94a3b8;font-size:0.8em;">ℹ️ ${note}</div>` : ''}`;
   };
 
   content.innerHTML = `
@@ -6433,7 +6452,7 @@ async function loadAdminSettingsView() {
     const isAuthErr = e.message === 'Not authenticated' || e.message?.includes('authenticated') || e.message?.includes('Select a server');
     content.innerHTML = isAuthErr
       ? `<div style="text-align:center;padding:var(--space-5);">
-           <p style="color:#fca5a5;font-size:0.9em;margin-bottom:16px;">⚠️ Your session has expired. Please log out and log back in.</p>
+           <p style="color:#fca5a5;font-size:0.9em;margin-bottom:16px;">⚠️ Your session has expired. Please log out and log back in.</p>
            <button class="btn-primary" onclick="logout()" style="font-size:0.9em;padding:10px 24px;">Log Out & Re-Login</button>
          </div>`
       : `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;
@@ -6878,9 +6897,9 @@ async function renderNftCollectionsCard(wrapId) {
               data-list="${!!c.track_list}"
               data-delist="${!!c.track_delist}"
               data-transfer="${!!c.track_transfer}"
-              style="font-size:0.8em;padding:4px 10px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️ Edit</button>
+              style="font-size:0.8em;padding:4px 10px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️ Edit</button>
             <button class="nc-remove-btn" data-id="${c.id}"
-              style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑ï¸</button>
+              style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
           </div>
         </td>
       </tr>`).join('');
@@ -7154,8 +7173,8 @@ async function renderNftTrackedTokensCard(wrapId = 'nts_tokensWrap') {
               data-alert-transfers="${token.alert_transfers ? 'true' : 'false'}"
               data-min-alert="${Number(token.min_alert_amount || 0)}"
               data-enabled="${token.enabled !== false ? 'true' : 'false'}"
-              style="width:30px;height:30px;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.35);border-radius:6px;cursor:pointer;color:#818cf8;font-size:0.85em;">✏️</button>
-            <button class="nt-remove-btn" data-id="${token.id}" style="width:30px;height:30px;background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.35);border-radius:6px;cursor:pointer;color:#fca5a5;font-size:0.85em;margin-left:4px;">🗑ï¸</button>
+              style="width:30px;height:30px;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.35);border-radius:6px;cursor:pointer;color:#818cf8;font-size:0.85em;">✏️</button>
+            <button class="nt-remove-btn" data-id="${token.id}" style="width:30px;height:30px;background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.35);border-radius:6px;cursor:pointer;color:#fca5a5;font-size:0.85em;margin-left:4px;">🗑️</button>
           </td>
         </tr>
       `;
@@ -7655,8 +7674,8 @@ async function loadBrandingSettingsView() {
             </div>
             <div style="margin-top:8px;color:#94a3b8;font-size:0.78em;">
               Current profile:
-              Nickname <strong style="color:#cbd5e1;">${escapeHtml(profile.nickname || 'default')}</strong> Â·
-              Avatar <strong style="color:#cbd5e1;">${profile.avatar_url ? 'custom' : 'default'}</strong> Â·
+              Nickname <strong style="color:#cbd5e1;">${escapeHtml(profile.nickname || 'default')}</strong> ·
+              Avatar <strong style="color:#cbd5e1;">${profile.avatar_url ? 'custom' : 'default'}</strong> ·
               Banner <strong style="color:#cbd5e1;">${profile.banner_url ? 'custom' : 'default'}</strong>
             </div>
           </div>
@@ -7688,12 +7707,12 @@ async function loadBrandingSettingsView() {
           <div style="color:#c9d6ff;font-weight:600;margin-bottom:8px;">Preview Variants</div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
             <div id="brandingPreviewTicket" style="padding:10px;border-radius:8px;background:rgba(30,41,59,0.55);border-left:4px solid ${escapeHtml(b.ticketing_color || b.brand_color || b.primary_color || '#6366f1')};">
-              <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || '🎟ï¸') + ' Support Tickets')}</div>
+              <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || '🎟️') + ' Support Tickets')}</div>
               <div style="color:#94a3b8;font-size:0.8em;margin-top:4px;">Open a support ticket</div>
               <div style="color:#94a3b8;font-size:0.72em;margin-top:6px;">${escapeHtml(b.footer_text || 'Powered by Guild Pilot')}</div>
             </div>
             <div id="brandingPreviewSelfserve" style="padding:10px;border-radius:8px;background:rgba(30,41,59,0.55);border-left:4px solid ${escapeHtml(b.selfserve_color || b.brand_color || b.primary_color || '#6366f1')};">
-              <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || '🎖ï¸') + ' Get Your Roles')}</div>
+              <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || '🎖️') + ' Get Your Roles')}</div>
               <div style="color:#94a3b8;font-size:0.8em;margin-top:4px;">Click to claim roles</div>
               <div style="color:#94a3b8;font-size:0.72em;margin-top:6px;">${escapeHtml(b.footer_text || 'Powered by Guild Pilot')}</div>
             </div>
@@ -7824,8 +7843,8 @@ async function renderSettingsWalletList() {
         <td style="padding:10px 12px;">
           <div style="display:flex;gap:6px;">
             <button class="tw-panel-btn" data-id="${w.id}" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">📋</button>
-            <button class="tw-edit-btn" data-id="${w.id}" data-addr="${escapeHtml(w.wallet_address)}" data-label="${escapeHtml(w.label||'')}" data-alertch="${w.alert_channel_id||''}" data-panelch="${w.panel_channel_id||''}" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️</button>
-            <button class="tw-remove-btn" data-id="${w.id}" style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑ï¸</button>
+            <button class="tw-edit-btn" data-id="${w.id}" data-addr="${escapeHtml(w.wallet_address)}" data-label="${escapeHtml(w.label||'')}" data-alertch="${w.alert_channel_id||''}" data-panelch="${w.panel_channel_id||''}" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️</button>
+            <button class="tw-remove-btn" data-id="${w.id}" style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
           </div>
         </td>
       </tr>`;
@@ -8473,7 +8492,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
       </div>
       <div style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;">🛡ï¸ Role Tier Limits</h3>
+          <h3 style="margin:0;color:#c9d6ff;">🛡️ Role Tier Limits</h3>
           <button class="btn-primary btn-sm" onclick="saveAiAssistantRoleLimits()">Save Role Limits</button>
         </div>
         <div style="color:var(--text-secondary);font-size:0.8em;margin-bottom:10px;">Set per-role daily caps. 0 means unlimited. The strictest matching role limit is used per user.</div>
@@ -9512,7 +9531,7 @@ async function loadVotingPowerView() {
 
       govSettingsHTML = `
         <div style="${govCardStyle}">
-          <h3 style="${govCardHeader}">🗳ï¸ Governance Settings</h3>
+          <h3 style="${govCardHeader}">🗳️ Governance Settings</h3>
           <div style="${govGridRow}">
             <div>
               <label style="${govFieldLabel}">Quorum Percentage (%)</label>
@@ -10574,7 +10593,7 @@ async function loadTreasuryTrackerView() {
     if (isAdmin) {
       html += `
         <div style="margin-top:16px;">
-          <button class="btn-primary" onclick="openTreasuryConfigModal()" style="font-size:0.85em; padding:8px 16px;">⚙️ Edit Tracker Config</button>
+          <button class="btn-primary" onclick="openTreasuryConfigModal()" style="font-size:0.85em; padding:8px 16px;">⚙️ Edit Tracker Config</button>
         </div>
       `;
     }
@@ -10591,7 +10610,7 @@ function openTreasuryConfigModal() {
   const title = document.getElementById('confirmTitle');
   const body = document.getElementById('confirmMessage');
   const btn = document.getElementById('confirmButton');
-  title.textContent = '⚙️ Treasury Tracker Configuration';
+  title.textContent = '⚙️ Treasury Tracker Configuration';
   btn.textContent = 'Save Config';
   btn.classList.remove('btn-danger');
   btn.classList.add('btn-primary');
@@ -10747,7 +10766,7 @@ async function loadTokenActivityView() {
           <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
             <div>
               <div style="color:#e0e7ff; font-weight:600; margin-bottom:4px;">${escapeHtml(type)} ${escapeHtml(tokenName)}</div>
-              <div style="color:var(--text-secondary); font-size:0.85em;">Amount: ${escapeHtml(amount)} Â· Wallet: <span style="font-family:monospace;">${escapeHtml(walletShort)}</span></div>
+              <div style="color:var(--text-secondary); font-size:0.85em;">Amount: ${escapeHtml(amount)} · Wallet: <span style="font-family:monospace;">${escapeHtml(walletShort)}</span></div>
             </div>
             <div style="color:var(--text-secondary); font-size:0.82em; white-space:nowrap;">${escapeHtml(when)}</div>
           </div>
@@ -10878,9 +10897,9 @@ async function loadNFTActivityAdminView(preloadedCollections = null) {
           </div>
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="color:${isEnabled ? '#10b981' : '#ef4444'}; font-size:0.85em;">${isEnabled ? '● Enabled' : '● Disabled'}</span>
-            <button class="nft-activity-edit-btn" data-id="${escapeHtml(String(col.id))}" data-name="${escapeHtml(name)}" data-addr="${escapeHtml(addr)}" data-me="${escapeHtml(col.me_symbol||'')}" data-channel="${escapeHtml(col.channel_id||'')}" style="font-size:0.8em;padding:6px 12px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️ Edit</button>
+            <button class="nft-activity-edit-btn" data-id="${escapeHtml(String(col.id))}" data-name="${escapeHtml(name)}" data-addr="${escapeHtml(addr)}" data-me="${escapeHtml(col.me_symbol||'')}" data-channel="${escapeHtml(col.channel_id||'')}" style="font-size:0.8em;padding:6px 12px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️ Edit</button>
             <button class="nft-activity-remove-btn btn-danger" data-id="${escapeHtml(String(col.id))}" data-name="${escapeHtml(name)}" style="font-size:0.8em; padding:6px 12px;">
-              <span>🗑ï¸</span><span>Remove</span>
+              <span>🗑️</span><span>Remove</span>
             </button>
           </div>
         </div>
@@ -10913,7 +10932,7 @@ async function openEditCollectionModal(id, name, addr, meSymbol, channelId) {
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;';
   overlay.innerHTML = `
     <div style="background:var(--card-bg,#1e293b);border:1px solid rgba(99,102,241,0.3);border-radius:12px;padding:24px;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto;">
-      <h3 style="margin:0 0 16px;color:var(--text-primary,#e0e7ff);">✏️ Edit Collection</h3>
+      <h3 style="margin:0 0 16px;color:var(--text-primary,#e0e7ff);">✏️ Edit Collection</h3>
       <div style="display:grid;gap:14px;">
         <div><label style="${lb}">Collection Name</label><input type="text" id="ceNameInput" value="${escapeHtml(name)}" style="${fi}"></div>
         <div><label style="${lb}">Alert Channel</label><select id="ceChannelInput" style="${fi}"><option value="">Loading...</option></select></div>
@@ -11195,7 +11214,7 @@ async function loadSelfServeRolesView() {
             </label>
           </td>
           <td style="padding:6px 10px;">
-            <button class="panel-role-remove btn-danger" data-panel="${p.id}" data-role="${escapeHtml(r.role_id)}" style="font-size:0.78em;padding:3px 8px;">🗑ï¸</button>
+            <button class="panel-role-remove btn-danger" data-panel="${p.id}" data-role="${escapeHtml(r.role_id)}" style="font-size:0.78em;padding:3px 8px;">🗑️</button>
           </td>
         </tr>
       `).join('') : `<tr><td colspan="4" style="padding:10px;color:var(--text-secondary);font-size:0.85em;text-align:center;">No roles yet — add one below.</td></tr>`;
@@ -11212,7 +11231,7 @@ async function loadSelfServeRolesView() {
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;">
               <button class="panel-save-meta btn-secondary" data-panel="${p.id}" style="font-size:0.8em;padding:6px 12px;">💾 Save</button>
-              <button class="panel-delete btn-danger" data-panel="${p.id}" style="font-size:0.8em;padding:6px 12px;">🗑ï¸ Delete Panel</button>
+              <button class="panel-delete btn-danger" data-panel="${p.id}" style="font-size:0.8em;padding:6px 12px;">🗑️ Delete Panel</button>
             </div>
           </div>
           <table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
@@ -11369,7 +11388,7 @@ async function loadSelfServeRolesView() {
       const r = await fetch('/api/admin/role-panels', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: '🎖ï¸ Get Your Roles', description: 'Click a button below to claim or unclaim a community role.' })
+        body: JSON.stringify({ title: '🎖️ Get Your Roles', description: 'Click a button below to claim or unclaim a community role.' })
       });
       const d = await r.json();
       if (d.success) loadSelfServeRolesView();
@@ -11396,7 +11415,7 @@ function loadApiRefView() {
   };
   const authBadge = (pub) => pub
     ? '<span style="font-size:0.8em;">🔔 🛡️ Public</span>'
-    : '<span style="font-size:0.8em;">🔔 Session required</span>';
+    : '<span style="font-size:0.8em;">🔔 Session required</span>';
 
   const endpoint = (method, path, desc, auth, example) => `
     <div style="background:var(--bg-secondary);border-radius:8px;padding:var(--space-3) var(--space-4);margin-bottom:var(--space-3);border:1px solid rgba(99,102,241,0.1);">
@@ -11934,7 +11953,7 @@ function _showCategoryForm(cat) {
         <div style="flex:0 0 140px;">
           <label style="font-size:0.85em;font-weight:600;">Emoji</label>
           <select id="catEmoji" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
-            ${['🎫','🛠ï¸','🏆','🤝','💰','🚨','📦','🧾','❓','📣'].map(e => `<option value="${e}" ${(isEdit ? (cat.emoji || '🎫') : '🎫') === e ? 'selected' : ''}>${e}</option>`).join('')}
+            ${['🎫','🛠️','🏆','🤝','💰','🚨','📦','🧾','❓','📣'].map(e => `<option value="${e}" ${(isEdit ? (cat.emoji || '🎫') : '🎫') === e ? 'selected' : ''}>${e}</option>`).join('')}
           </select>
         </div>
         <div style="flex:1;">
@@ -12469,7 +12488,7 @@ function updatePlanPrices() {
             <span class="plan-price-amount">${isContactPlan ? '' : '$'}${priceText}</span>
             <span class="plan-price-period">${period}</span>
           </div>
-          ${annualTotal ? `<div class="plan-annual-note">Billed as ${annualTotal} Â· Save 15%</div>` : ''}
+          ${annualTotal ? `<div class="plan-annual-note">Billed as ${annualTotal} · Save 15%</div>` : ''}
         </div>
         <ul class="plan-features">${featureRows}</ul>
         <div class="plan-cta">
@@ -12682,9 +12701,9 @@ async function loadSystemStatus(targetId = 'systemStatusContent') {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 // ENGAGEMENT & POINTS SECTION
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 
 async function loadEngagementSection() {
   await Promise.all([loadEngagementConfig(), loadEngagementLeaderboard(), loadEngagementShop()]);
@@ -12754,19 +12773,19 @@ async function loadEngagementShop() {
     const res = await fetch('/api/admin/engagement/shop', { credentials: 'include' });
     const data = await res.json();
     if (!data.success || !data.items?.length) {
-      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🛍ï¸</div><h4 class="empty-state-title">Shop is empty</h4><p class="empty-state-message">Add items to reward your community.</p></div>';
+      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🛍️</div><h4 class="empty-state-title">Shop is empty</h4><p class="empty-state-message">Add items to reward your community.</p></div>';
       return;
     }
     const rows = data.items.map(item => {
       const stock = item.quantity_remaining < 0 ? '∞' : item.quantity_remaining;
-      const typeLabel = { role: '🎭 Role', code: '🎟ï¸ Code', custom: '✨ Custom' }[item.type] || item.type;
+      const typeLabel = { role: '🎭 Role', code: '🎟️ Code', custom: '✨ Custom' }[item.type] || item.type;
       return `
         <div class="table-row" style="align-items:flex-start;">
           <span style="width:36px;font-size:0.8em;color:var(--text-muted);">#${item.id}</span>
           <div style="flex:1;">
             <div style="font-weight:600;">${escapeHtml(item.name)}</div>
             ${item.description ? `<div style="font-size:0.85em;color:var(--text-muted);">${escapeHtml(item.description)}</div>` : ''}
-            <div style="font-size:0.8em;color:var(--text-muted);margin-top:2px;">${typeLabel} Â· Stock: ${stock}</div>
+            <div style="font-size:0.8em;color:var(--text-muted);margin-top:2px;">${typeLabel} · Stock: ${stock}</div>
           </div>
           <span style="color:var(--accent-gold);font-weight:600;white-space:nowrap;">${item.cost.toLocaleString()} pts</span>
           <button class="btn-danger btn-sm" style="margin-left:10px;" onclick="deleteEngShopItem(${item.id})">Remove</button>

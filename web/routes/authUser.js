@@ -26,6 +26,14 @@ function createAuthUserRouter({
   const router = express.Router();
   let hasProposalsGuildColumnCached = null;
 
+  const saveSession = (req) => new Promise((resolve) => {
+    if (!req.session || typeof req.session.save !== 'function') {
+      resolve();
+      return;
+    }
+    req.session.save(() => resolve());
+  });
+
   const hasProposalsGuildColumn = () => {
     if (typeof hasProposalsGuildColumnCached === 'boolean') return hasProposalsGuildColumnCached;
     try {
@@ -48,26 +56,33 @@ function createAuthUserRouter({
   });
 
   router.get('/auth/discord/login', (req, res) => {
-    const rawReturn = req.query.returnTo || '';
-    if (rawReturn && rawReturn.startsWith('/') && !rawReturn.startsWith('//')) {
-      req.session.returnTo = rawReturn;
-    } else if (req.query.guild || req.query.section) {
-      const qs = new URLSearchParams();
-      if (req.query.guild) qs.set('guild', req.query.guild);
-      if (req.query.section) qs.set('section', req.query.section);
-      req.session.returnTo = '/?' + qs.toString();
-    }
+    (async () => {
+      const rawReturn = req.query.returnTo || '';
+      if (rawReturn && rawReturn.startsWith('/') && !rawReturn.startsWith('//')) {
+        req.session.returnTo = rawReturn;
+      } else if (req.query.guild || req.query.section) {
+        const qs = new URLSearchParams();
+        if (req.query.guild) qs.set('guild', req.query.guild);
+        if (req.query.section) qs.set('section', req.query.section);
+        req.session.returnTo = '/?' + qs.toString();
+      }
 
-    const clientId = process.env.CLIENT_ID;
-    const oauthRedirectUri = resolveOAuthRedirectUri(req);
-    const oauthState = crypto.randomBytes(24).toString('hex');
-    req.session.oauthRedirectUri = oauthRedirectUri;
-    req.session.oauthState = oauthState;
-    const redirectUri = encodeURIComponent(oauthRedirectUri);
-    const scope = encodeURIComponent('identify guilds');
-    const state = encodeURIComponent(oauthState);
-    const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&state=${state}`;
-    return res.redirect(authUrl);
+      const clientId = process.env.CLIENT_ID;
+      const oauthRedirectUri = resolveOAuthRedirectUri(req);
+      const oauthState = crypto.randomBytes(24).toString('hex');
+      req.session.oauthRedirectUri = oauthRedirectUri;
+      req.session.oauthState = oauthState;
+      await saveSession(req);
+
+      const redirectUri = encodeURIComponent(oauthRedirectUri);
+      const scope = encodeURIComponent('identify guilds');
+      const state = encodeURIComponent(oauthState);
+      const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&state=${state}`;
+      return res.redirect(authUrl);
+    })().catch((routeError) => {
+      logger.error('OAuth login start error:', routeError);
+      return res.redirect('/dashboard?error=oauth_login_start_failed');
+    });
   });
 
   router.get('/auth/discord/callback', async (req, res) => {
@@ -116,6 +131,7 @@ function createAuthUserRouter({
 
       const returnTo = req.session.returnTo;
       delete req.session.returnTo;
+      await saveSession(req);
       const safeReturn = returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/';
       return res.redirect(safeReturn);
     } catch (routeError) {
@@ -125,8 +141,10 @@ function createAuthUserRouter({
   });
 
   router.get('/auth/discord/logout', (req, res) => {
-    req.session.destroy();
-    return res.redirect('/dashboard');
+    req.session.destroy(() => {
+      res.clearCookie('connect.sid');
+      return res.redirect('/dashboard');
+    });
   });
 
   router.get('/api/user/me', async (req, res) => {

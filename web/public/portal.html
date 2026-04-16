@@ -24,7 +24,7 @@
         <button class="top-link" onclick="switchSection('module-hub')" id="topNavModules" style="display:none;">Modules</button>
         <button class="top-link" onclick="switchSection('help')">Help</button>
         <button class="top-link" onclick="switchSection('plans')">Pricing</button>
-        <button class="top-link" id="topNavAdminSettings" onclick="switchSection('settings')" style="display:none;">Server Settings</button>
+        <button class="top-link" id="topNavAdminSettings" onclick="openAdminSettingsEntry()" style="display:none;">Server Settings</button>
         <button class="top-link" id="topNavSuperadmin" onclick="switchSection('admin'); showAdminView('superadmin');" style="display:none;">Superadmin</button>
       </div>
       <div class="nav-user">
@@ -103,7 +103,7 @@
             <span class="nav-icon" aria-hidden="true">💎</span>
             <span class="nav-label">Plans</span>
           </button>
-          <button class="nav-item" data-section="settings" onclick="switchSection('settings'); toggleMobileMenu()" id="mobileNavSettings" style="display:none;">
+          <button class="nav-item" data-section="settings" onclick="openAdminSettingsEntry(); toggleMobileMenu()" id="mobileNavSettings" style="display:none;">
             <span class="nav-icon" aria-hidden="true">⚙️</span>
             <span class="nav-label">Settings</span>
           </button>
@@ -234,15 +234,15 @@
                 </div>
                 <div id="homeActiveContext" class="home-active-context" style="display:none;"></div>
                 <div class="home-quicklinks-grid">
-                  <article class="home-quicklink-card">
+                  <article class="home-quicklink-card" id="homeUserQuicklinkCard">
                     <h4>User Panel</h4>
                     <p>Manage your linked wallets, identity privacy, and account profile.</p>
-                    <button class="btn-secondary" onclick="switchSection('profile')">Open Profile</button>
+                    <button id="homeUserQuicklinkBtn" class="btn-secondary" onclick="switchSection('profile')">Open Profile</button>
                   </article>
-                  <article class="home-quicklink-card">
+                  <article class="home-quicklink-card" id="homeAdminQuicklinkCard">
                     <h4>Admin Settings</h4>
                     <p>Pick a server and open tenant module settings in one guided flow.</p>
-                    <button class="btn-secondary" onclick="switchSection('servers')">Open Server Selector</button>
+                    <button id="homeAdminQuicklinkBtn" class="btn-secondary" onclick="switchSection('servers')">Open Server Selector</button>
                   </article>
                   <article class="home-quicklink-card" id="homeSuperadminQuicklinkCard" style="display:none;">
                     <h4>Superadmin</h4>
@@ -257,12 +257,12 @@
                   <article class="gpf-role-item">
                     <h4>Member Flow</h4>
                     <p>Connect and verify your wallet in one guided flow.</p>
-                    <button class="btn-primary" onclick="switchSection('wallets')">Verify Now</button>
+                    <button id="landingMemberFlowBtn" class="btn-primary" onclick="switchSection('wallets')">Verify Now</button>
                   </article>
                   <article class="gpf-role-item">
                     <h4>Admin Flow</h4>
                     <p>Select a server and configure all module settings quickly.</p>
-                    <button class="btn-secondary" onclick="switchSection('servers')">Open Server Selector</button>
+                    <button id="landingAdminFlowBtn" class="btn-secondary" onclick="switchSection('servers')">Open Server Selector</button>
                   </article>
                   <article class="gpf-role-item">
                     <h4>Superadmin Flow</h4>

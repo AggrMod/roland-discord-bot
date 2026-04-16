@@ -114,6 +114,40 @@ function requiresServerSelectionGate() {
   return !!userData && hasAnyServerContext && !activeGuildId;
 }
 
+function hasServerChoices() {
+  const managed = serverAccessData?.managedServers || [];
+  const unmanaged = serverAccessData?.unmanagedServers || [];
+  return (managed.length + unmanaged.length) > 0;
+}
+
+function isPublicPortalSection(sectionName) {
+  return ['landing', 'help', 'plans'].includes(String(sectionName || '').trim());
+}
+
+function getRoleDefaultSection() {
+  if (!userData) return 'landing';
+
+  const hasServers = hasServerChoices();
+  const hasContext = !!activeGuildId;
+
+  if (isSuperadmin && !hasContext) {
+    return 'admin';
+  }
+  if (!hasContext && hasServers) {
+    return 'servers';
+  }
+  if (isSuperadmin) {
+    return 'admin';
+  }
+  if (isAdmin) {
+    return 'settings';
+  }
+  if (hasContext) {
+    return 'module-hub';
+  }
+  return 'profile';
+}
+
 function isTenantSensitiveRequest(input) {
   const rawUrl = typeof input === 'string' ? input : (input?.url || '');
   try {
@@ -1402,6 +1436,7 @@ function renderModuleHub() {
     const isEnabled = state[mod.key] !== false;
     const isDisabledStyle = !isEnabled ? 'module-tile--disabled' : '';
     const lockedToAdmin = !!mod.adminOnly && !isServerAdmin;
+    if (lockedToAdmin) return;
     const statusLabel = isEnabled ? 'Active' : 'Disabled';
     const statusClass = isEnabled ? 'status-active' : 'status-disabled';
     
@@ -1410,8 +1445,6 @@ function renderModuleHub() {
       onClick = `switchSection('settings'); switchSettingsTab('${mod.tab}')`;
     } else if (isEnabled && !lockedToAdmin) {
       onClick = `switchSection('${mod.section}')`;
-    } else if (isEnabled && lockedToAdmin) {
-      onClick = `showInfo('Admin access required for this module.')`;
     } else if (isServerAdmin) {
       onClick = `switchSection('settings')`;
     }
@@ -1445,40 +1478,130 @@ function renderGeneralSection() {
   const postEl = document.getElementById('generalPostSelection');
   if (!preEl || !postEl) return;
 
+  const canManage = isAdmin || isSuperadmin;
+  const hasServers = hasServerChoices();
+
   preEl.style.display = '';
   postEl.style.display = 'none';
   updateBreadcrumbs([]);
 
   const primaryCta = document.getElementById('homePrimaryCta');
   if (primaryCta) {
-    if (activeGuildId) {
+    if (!userData) {
+      primaryCta.textContent = 'Login with Discord';
+      primaryCta.onclick = () => login();
+    } else if (activeGuildId && canManage) {
+      primaryCta.textContent = 'Open Server Settings';
+      primaryCta.onclick = () => openAdminSettingsEntry();
+    } else if (activeGuildId) {
       const record = getServerRecord(activeGuildId);
-      const canManage = isAdmin || isSuperadmin;
-      primaryCta.textContent = record?.name
-        ? `Open ${record.name} Modules`
-        : 'Open Module Workspace';
+      primaryCta.textContent = record?.name ? `Open ${record.name} Modules` : 'Open Module Workspace';
       primaryCta.onclick = () => switchSection('module-hub');
-    } else {
-      primaryCta.textContent = 'Get Started';
+    } else if (isSuperadmin) {
+      primaryCta.textContent = 'Open Superadmin';
+      primaryCta.onclick = () => showAdminView('superadmin');
+    } else if (hasServers) {
+      primaryCta.textContent = 'Select Server';
       primaryCta.onclick = () => switchSection('servers');
+    } else {
+      primaryCta.textContent = 'Open Profile';
+      primaryCta.onclick = () => switchSection('profile');
     }
   }
 
   const homeContext = document.getElementById('homeActiveContext');
   if (homeContext) {
-    if (activeGuildId) {
+    if (!userData) {
+      homeContext.style.display = 'none';
+      homeContext.innerHTML = '';
+    } else if (activeGuildId) {
       const activeRecord = getServerRecord(activeGuildId);
       const activeName = activeRecord?.name || activeGuildId;
       homeContext.style.display = '';
       homeContext.innerHTML = `
         Active server context: <strong>${escapeHtml(activeName)}</strong>.
-        <button class="btn-secondary" style="margin-left:10px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="switchSection('module-hub')">Open Modules</button>
-        ${(isAdmin || isSuperadmin) ? `<button class="btn-secondary" style="margin-left:6px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="switchSection('settings')">Admin Settings</button>` : ''}
+        ${(canManage)
+          ? `<button class="btn-secondary" style="margin-left:10px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="openAdminSettingsEntry()">Server Settings</button>
+             <button class="btn-secondary" style="margin-left:6px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="switchSection('module-hub')">Module Hub</button>`
+          : `<button class="btn-secondary" style="margin-left:10px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="switchSection('module-hub')">Open Modules</button>`}
+        ${isSuperadmin ? `<button class="btn-secondary" style="margin-left:6px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="showAdminView('superadmin')">Superadmin</button>` : ''}
         <button class="btn-secondary" style="margin-left:10px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="switchSection('servers')">Switch</button>
       `;
+    } else if (hasServers) {
+      homeContext.style.display = '';
+      homeContext.innerHTML = `
+        Select a server to unlock module workspace and tenant-aware settings.
+        <button class="btn-secondary" style="margin-left:10px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="switchSection('servers')">Open Server Selector</button>
+        ${isSuperadmin ? `<button class="btn-secondary" style="margin-left:6px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="showAdminView('superadmin')">Superadmin</button>` : ''}
+      `;
     } else {
-      homeContext.style.display = 'none';
-      homeContext.innerHTML = '';
+      homeContext.style.display = '';
+      homeContext.innerHTML = `
+        Your account has no managed servers yet.
+        <button class="btn-secondary" style="margin-left:10px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="switchSection('profile')">Open Profile</button>
+      `;
+    }
+  }
+
+  const userQuickCard = document.getElementById('homeUserQuicklinkCard');
+  const userQuickBtn = document.getElementById('homeUserQuicklinkBtn');
+  if (userQuickCard) userQuickCard.style.display = '';
+  if (userQuickBtn) {
+    if (!userData) {
+      userQuickBtn.textContent = 'Login';
+      userQuickBtn.onclick = () => login();
+    } else {
+      userQuickBtn.textContent = 'Open Profile';
+      userQuickBtn.onclick = () => switchSection('profile');
+    }
+  }
+
+  const adminQuickCard = document.getElementById('homeAdminQuicklinkCard');
+  const adminQuickBtn = document.getElementById('homeAdminQuicklinkBtn');
+  if (adminQuickCard) adminQuickCard.style.display = canManage ? '' : 'none';
+  if (adminQuickBtn) {
+    if (activeGuildId) {
+      adminQuickBtn.textContent = 'Open Server Settings';
+      adminQuickBtn.onclick = () => openAdminSettingsEntry();
+    } else {
+      adminQuickBtn.textContent = 'Open Server Selector';
+      adminQuickBtn.onclick = () => switchSection('servers');
+    }
+  }
+
+  const memberFlowBtn = document.getElementById('landingMemberFlowBtn');
+  if (memberFlowBtn) {
+    if (!userData) {
+      memberFlowBtn.textContent = 'Login to Start';
+      memberFlowBtn.onclick = () => login();
+    } else if (activeGuildId) {
+      memberFlowBtn.textContent = 'Open Modules';
+      memberFlowBtn.onclick = () => switchSection('module-hub');
+    } else if (hasServers) {
+      memberFlowBtn.textContent = 'Select Server';
+      memberFlowBtn.onclick = () => switchSection('servers');
+    } else {
+      memberFlowBtn.textContent = 'Open Profile';
+      memberFlowBtn.onclick = () => switchSection('profile');
+    }
+  }
+
+  const adminFlowBtn = document.getElementById('landingAdminFlowBtn');
+  if (adminFlowBtn) {
+    if (!canManage) {
+      adminFlowBtn.style.display = 'none';
+    } else {
+      adminFlowBtn.style.display = '';
+      if (activeGuildId) {
+        adminFlowBtn.textContent = 'Open Server Settings';
+        adminFlowBtn.onclick = () => openAdminSettingsEntry();
+      } else if (isSuperadmin) {
+        adminFlowBtn.textContent = 'Open Superadmin';
+        adminFlowBtn.onclick = () => showAdminView('superadmin');
+      } else {
+        adminFlowBtn.textContent = 'Open Server Selector';
+        adminFlowBtn.onclick = () => switchSection('servers');
+      }
     }
   }
 }
@@ -1612,11 +1735,11 @@ function updateSidebarModuleNav() {
 
   const sidebarSettings = document.getElementById('sidebarNavSettings');
   if (sidebarSettings) {
-    sidebarSettings.style.display = (hasServer && (isAdmin || isSuperadmin)) ? '' : 'none';
+    sidebarSettings.style.display = (isAdmin || isSuperadmin) ? '' : 'none';
   }
   const mobileSettings = document.getElementById('mobileNavSettings');
   if (mobileSettings) {
-    mobileSettings.style.display = (hasServer && (isAdmin || isSuperadmin)) ? '' : 'none';
+    mobileSettings.style.display = (isAdmin || isSuperadmin) ? '' : 'none';
   }
 
   // Hide dividers that have no visible nav items between them
@@ -1907,7 +2030,6 @@ function enforceInitialServerSelection() {
 
   if ((managed.length + unmanaged.length) > 0 && !activeGuildId) {
     setActiveGuild('', { announce: false });
-    switchSection('landing');
     return false;
   }
 
@@ -1942,11 +2064,6 @@ async function loadPortal() {
       await checkAdminStatus();
 
       const canProceed = enforceInitialServerSelection();
-      const hardGate = requiresServerSelectionGate();
-      if (hardGate) {
-        switchSection('landing');
-        return;
-      }
 
       if (canProceed) {
         await syncTenantModuleNavVisibility();
@@ -1970,10 +2087,15 @@ async function loadPortal() {
       } else {
         switchSection(section); // switchSection itself gates non-public sections if needed
       }
-    } else if (userData && requiresServerSelectionGate()) {
-      switchSection('landing');
     } else if (userData) {
-      switchSection('landing', { updateUrl: false });
+      const defaultSection = getRoleDefaultSection();
+      if (defaultSection === 'admin' && isSuperadmin) {
+        showAdminView('superadmin');
+      } else if (defaultSection === 'settings') {
+        switchSection('settings', { updateUrl: false, silentGate: true });
+      } else {
+        switchSection(defaultSection, { updateUrl: false, silentGate: true });
+      }
     }
   } catch (error) {
     console.error('Error loading portal:', error);
@@ -2054,7 +2176,10 @@ function refreshAdminEntryVisibility() {
   if (superadminSidebarGroup) superadminSidebarGroup.style.display = canShowSuperadminEntry ? 'block' : 'none';
   if (mobileNavAdmin) mobileNavAdmin.style.display = canShowSuperadminEntry ? 'block' : 'none';
   if (topNavSuperadmin) topNavSuperadmin.style.display = canShowSuperadminEntry ? '' : 'none';
-  if (topNavAdminSettings) topNavAdminSettings.style.display = (canShowAdminSettingsEntry && hasServerContext) ? '' : 'none';
+  if (topNavAdminSettings) {
+    topNavAdminSettings.style.display = canShowAdminSettingsEntry ? '' : 'none';
+    topNavAdminSettings.textContent = hasServerContext ? 'Server Settings' : 'Select Server';
+  }
 }
 
 async function checkAdminStatus() {
@@ -2703,6 +2828,25 @@ async function loadAvailableMissions() {
 }
 
 // ==================== NAVIGATION ====================
+function openAdminSettingsEntry() {
+  if (!userData) {
+    showInfo('Please log in to access admin settings.');
+    switchSection('landing');
+    return;
+  }
+  if (!(isAdmin || isSuperadmin)) {
+    showInfo('Admin access required for Server Settings.');
+    switchSection('landing');
+    return;
+  }
+  if (!activeGuildId) {
+    showInfo('Select a server first to open tenant settings.');
+    switchSection('servers');
+    return;
+  }
+  switchSection('settings');
+}
+
 function goHomePage() {
   switchSection('landing', { updateUrl: false });
 }
@@ -2716,30 +2860,43 @@ function switchSection(sectionName, options = {}) {
     return;
   }
 
-  if (requiresServerSelectionGate()) {
-    const allowWithoutServer = ['landing', 'servers', 'wallets', 'profile', 'dashboard', 'help', 'docs', 'plans'];
-    if (isSuperadmin && sectionName === 'admin') {
-      // allow superadmin control plane without tenant selection
-    } else if (!allowWithoutServer.includes(sectionName)) {
-      sectionName = 'landing';
-    }
-  }
-  if (sectionName === 'module-hub' && !activeGuildId) {
+  if (!isPublicPortalSection(sectionName) && !userData) {
+    if (!options.silentGate) showInfo('Please log in to access this area.');
     sectionName = 'landing';
   }
 
-  // Gate settings section to admins only
-  if (sectionName === 'settings' && !(isAdmin || isSuperadmin)) {
-    showInfo('Admin access required for Settings.');
-    sectionName = 'landing';
+  if (sectionName === 'admin' && !isSuperadmin) {
+    if (!options.silentGate) showInfo('Superadmin access required.');
+    sectionName = (isAdmin || isSuperadmin) ? (activeGuildId ? 'settings' : 'servers') : 'landing';
   }
-  if (['invites', 'aiassistant'].includes(sectionName) && !(isAdmin || isSuperadmin)) {
-    showInfo('Admin access required for this module.');
-    sectionName = 'landing';
+
+  if (['settings', 'invites', 'aiassistant'].includes(sectionName) && !(isAdmin || isSuperadmin)) {
+    if (!options.silentGate) showInfo('Admin access required for this area.');
+    sectionName = userData ? (activeGuildId ? 'module-hub' : 'profile') : 'landing';
   }
-  if (sectionName === 'profile' && !userData) {
-    showInfo('Please log in to access your profile.');
-    sectionName = 'landing';
+
+  const serverContextSections = new Set([
+    'module-hub',
+    'settings',
+    'governance',
+    'invites',
+    'aiassistant',
+    'treasury',
+    'nft-activity',
+    'token-activity',
+    'heist',
+    'battle',
+    'engagement',
+    'self-serve-roles',
+    'ticketing'
+  ]);
+  if (serverContextSections.has(sectionName) && !activeGuildId) {
+    if (userData && hasServerChoices()) {
+      if (!options.silentGate) showInfo('Select a server first to continue.');
+      sectionName = 'servers';
+    } else {
+      sectionName = userData ? (isSuperadmin ? 'admin' : 'profile') : 'landing';
+    }
   }
 
   const moduleState = window._tenantModuleState || null;
@@ -2759,8 +2916,8 @@ function switchSection(sectionName, options = {}) {
   };
   const required = sectionRequiresModule[sectionName];
   if (required && moduleState && moduleState[required] === false) {
-    showInfo('This module is disabled for the selected server.');
-    sectionName = 'landing';
+    if (!options.silentGate) showInfo('This module is disabled for the selected server.');
+    sectionName = activeGuildId ? 'module-hub' : 'servers';
   }
 
   setStoredPortalSection(sectionName);

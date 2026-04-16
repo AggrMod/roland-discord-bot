@@ -24,7 +24,7 @@
         <button class="top-link" onclick="switchSection('module-hub')" id="topNavModules" style="display:none;">Modules</button>
         <button class="top-link" onclick="switchSection('help')">Help</button>
         <button class="top-link" onclick="switchSection('plans')">Pricing</button>
-        <button class="top-link" id="topNavAdminSettings" onclick="openAdminSettingsEntry()" style="display:none;">Server Settings</button>
+        <button class="top-link" id="topNavAdminSettings" onclick="openAdminSettingsEntry()" style="display:none;">Modules</button>
         <button class="top-link" id="topNavSuperadmin" onclick="switchSection('admin'); showAdminView('superadmin');" style="display:none;">Superadmin</button>
       </div>
       <div class="nav-user">
@@ -105,7 +105,7 @@
           </button>
           <button class="nav-item" data-section="settings" onclick="openAdminSettingsEntry(); toggleMobileMenu()" id="mobileNavSettings" style="display:none;">
             <span class="nav-icon" aria-hidden="true">⚙️</span>
-            <span class="nav-label">Settings</span>
+            <span class="nav-label">Modules</span>
           </button>
           <button class="nav-item" data-section="help" onclick="switchSection('help'); toggleMobileMenu()">
             <span class="nav-icon" aria-hidden="true">❓</span>
@@ -462,6 +462,9 @@
             <p class="gpf-kicker">Guild Context</p>
             <h2>Server Selector</h2>
             <p class="section-subtitle">Choose the guild context for admin and tenant-aware actions</p>
+            <div style="margin-top:10px;display:flex;justify-content:flex-end;">
+              <button id="serversSuperadminBtn" class="btn-secondary btn-sm" onclick="switchSection('admin'); showAdminView('superadmin');" style="display:none;">Open Superadmin</button>
+            </div>
           </header>
 
           <div class="card servers-panel servers-panel--active" style="margin-bottom:24px;">

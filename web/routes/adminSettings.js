@@ -163,6 +163,7 @@ function createAdminSettingsRouter({
           delete sanitized.battleDefaultEra;
         }
         if (tenantContext?.tenant) {
+          const canToggleTenantModules = !!req.isSuperadmin || !tenantContext.readOnlyManaged;
           const moduleFieldMap = {
             moduleBattleEnabled: 'minigames',
             moduleMinigamesEnabled: 'minigames',
@@ -182,7 +183,7 @@ function createAdminSettingsRouter({
           };
           for (const [field, moduleKey] of Object.entries(moduleFieldMap)) {
             if (sanitized[field] !== undefined) {
-              if (!req.isSuperadmin) {
+              if (!canToggleTenantModules) {
                 delete sanitized[field];
                 continue;
               }

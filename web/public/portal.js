@@ -1059,6 +1059,10 @@ function setActiveGuild(guildId, { persist = true, announce = true, goToSettings
   const normalized = normalizeGuildId(guildId);
   const previous = activeGuildId;
   activeGuildId = normalized;
+  const managedIds = new Set((serverAccessData?.managedServers || []).map(server => server.guildId));
+  if (activeGuildId && managedIds.has(activeGuildId)) {
+    isAdmin = true;
+  }
 
   if (persist) {
     if (normalized) {
@@ -1078,6 +1082,8 @@ function setActiveGuild(guildId, { persist = true, announce = true, goToSettings
   if (previous !== activeGuildId) {
     clearTicketingViewCache();
     refreshTenantScopedViews();
+    // Re-evaluate admin capability in the selected tenant context.
+    checkAdminStatus().catch(() => {});
   }
 
   if (goToSettings && activeGuildId) {
@@ -1906,7 +1912,7 @@ function renderServerCard(server, { managed = true } = {}) {
     : `<div class="server-card__initials">${escapeHtml(initials)}</div>`;
 
   const onclick = managed
-    ? `onclick="setActiveGuild('${escapeJsString(server.guildId)}', { goToSettings: false }); switchSection('${(isAdmin || isSuperadmin) ? 'settings' : 'module-hub'}')"`
+    ? `onclick="setActiveGuild('${escapeJsString(server.guildId)}', { goToSettings: false }); openAdminSettingsEntry()"`
     : `onclick="openGuildInvite('${escapeJsString(server.guildId)}')"`;
   const statusClass = isActive ? 'active' : (managed ? 'managed' : 'unmanaged');
   const statusLabel = isActive ? 'Active' : (managed ? 'Managed' : 'Invite Needed');
@@ -2183,11 +2189,25 @@ function refreshAdminEntryVisibility() {
 }
 
 async function checkAdminStatus() {
+  const hasManagedServers = Array.isArray(serverAccessData?.managedServers) && serverAccessData.managedServers.length > 0;
+  if (!activeGuildId) {
+    // Without tenant context the strict endpoint returns "Select a server".
+    // Keep admin UX logical by inferring from managed-server access.
+    isAdmin = !!isSuperadmin || hasManagedServers;
+    refreshAdminEntryVisibility();
+    return;
+  }
+
   try {
     const response = await fetch('/api/user/is-admin', { credentials: 'include', headers: buildTenantRequestHeaders() });
     const data = await response.json();
+    if (!response.ok || data?.success === false) {
+      isAdmin = !!isSuperadmin || hasManagedServers;
+      refreshAdminEntryVisibility();
+      return;
+    }
 
-    isAdmin = !!data.isAdmin || isSuperadmin;
+    isAdmin = !!data.isAdmin || !!isSuperadmin;
     refreshAdminEntryVisibility();
 
     if (isAdmin) {
@@ -2205,7 +2225,7 @@ async function checkAdminStatus() {
       }
     }
   } catch (error) {
-    isAdmin = false;
+    isAdmin = !!isSuperadmin || hasManagedServers;
     refreshAdminEntryVisibility();
   }
 }

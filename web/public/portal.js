@@ -1730,7 +1730,7 @@ function switchSettingsTab(tab) {
         vPane.insertBefore(div, vPane.firstChild);
       }
       if (typeof loadVerificationSettings === 'function') loadVerificationSettings();
-      if (typeof loadAdminRoles === 'function') loadAdminRoles();
+      if (typeof loadAdminRoles === 'function') loadAdminRoles('adminRolesContent');
     },
     branding:     () => { if (typeof loadBrandingSettingsView === 'function') loadBrandingSettingsView(); },
     aiassistant:  () => { if (typeof loadAiAssistantSettingsView === 'function') loadAiAssistantSettingsView(); },
@@ -1741,7 +1741,7 @@ function switchSettingsTab(tab) {
     ticketing:    () => { if (typeof loadTicketingView === 'function') loadTicketingView(); },
     engagement:   () => { loadEngagementSettingsTab(); },
     treasury:     () => { if (typeof loadTreasuryModuleSettings === 'function') loadTreasuryModuleSettings(); },
-    battle:       () => loadBattleTimingSettings(),
+    battle:       () => loadBattleTimingSettings('settings'),
   };
   const loader = tabLoaders[tab];
   if (loader) loader();
@@ -3068,6 +3068,14 @@ function switchSection(sectionName, options = {}) {
     loadServerAccess();
   } else if (sectionName === 'wallets' && userData) {
     renderWallets();
+    const verificationSettingsCard = document.getElementById('verificationModuleSettingsCard');
+    if (verificationSettingsCard) {
+      const canManageVerification = !!(activeGuildId && (isAdmin || isSuperadmin));
+      verificationSettingsCard.style.display = canManageVerification ? '' : 'none';
+      if (canManageVerification && typeof loadAdminRoles === 'function') {
+        loadAdminRoles('verificationModuleSettingsContent');
+      }
+    }
   } else if (sectionName === 'profile' && userData) {
     renderProfileSection();
   } else if (sectionName === 'invites') {
@@ -3081,6 +3089,15 @@ function switchSection(sectionName, options = {}) {
     if (isAdmin) loadNFTActivityAdminView();
   } else if (sectionName === 'token-activity') {
     loadTokenActivityView();
+  } else if (sectionName === 'battle') {
+    const battleModuleSettingsCard = document.getElementById('battleModuleSettingsCard');
+    const canManageBattle = !!(isAdmin || isSuperadmin);
+    if (battleModuleSettingsCard) {
+      battleModuleSettingsCard.style.display = canManageBattle ? '' : 'none';
+    }
+    if (canManageBattle && typeof loadBattleModuleSettings === 'function') {
+      loadBattleModuleSettings();
+    }
   } else if (sectionName === 'settings') {
     applySettingsTabVisibility(portalSettingsData || {});
     switchSettingsTab('general');
@@ -4001,7 +4018,7 @@ function showAdminView(view) {
     monitor: { card: 'adminSystemMonitorCard', load: loadSystemStatus },
     analytics: { card: 'adminAnalyticsCard', load: loadAdminAnalyticsView },
     help: { card: 'adminHelpCard', load: loadAdminHelpView },
-    roles: { card: 'adminRolesCard', load: loadAdminRoles },
+    roles: { card: 'adminRolesCard', load: () => loadAdminRoles('adminRolesContent') },
     activity: { card: 'adminActivityCard', load: loadAdminActivity },
     votingpower: { card: 'adminVotingPowerCard', load: loadVotingPowerView },
     nfttracker: { card: 'adminNftTrackerCard', load: loadNftTrackerView },
@@ -6488,68 +6505,101 @@ function adminProposalHold(proposalId) {
 
 let portalSettingsData = null;
 
-async function loadBattleTimingSettings() {
+function getBattleSettingsFieldIds(scope = 'settings') {
+  if (scope === 'module') {
+    return {
+      min: 'battleModulePauseMinInput',
+      max: 'battleModulePauseMaxInput',
+      elite: 'battleModuleElitePrepInput',
+      forced: 'battleModuleForcedEliminationIntervalInput',
+      era: 'battleModuleDefaultEraSelect',
+    };
+  }
+  return {
+    min: 'battlePauseMinInput',
+    max: 'battlePauseMaxInput',
+    elite: 'battleElitePrepInput',
+    forced: 'battleForcedEliminationIntervalInput',
+    era: 'battleDefaultEraSelect',
+  };
+}
+
+async function loadBattleTimingSettings(scope = 'settings') {
   try {
     const [settingsRes, erasRes] = await Promise.all([
       fetch('/api/admin/settings', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/battle/eras', { credentials: 'include', headers: buildTenantRequestHeaders() }).catch(() => null),
     ]);
+
     const data = await settingsRes.json();
     const s = data.settings || {};
-    const minEl = document.getElementById('battlePauseMinInput');
-    const maxEl = document.getElementById('battlePauseMaxInput');
-    const eliteEl = document.getElementById('battleElitePrepInput');
-    const forcedEl = document.getElementById('battleForcedEliminationIntervalInput');
+    const ids = getBattleSettingsFieldIds(scope);
+
+    const minEl = document.getElementById(ids.min);
+    const maxEl = document.getElementById(ids.max);
+    const eliteEl = document.getElementById(ids.elite);
+    const forcedEl = document.getElementById(ids.forced);
     if (minEl) minEl.value = s.battleRoundPauseMinSec ?? 5;
     if (maxEl) maxEl.value = s.battleRoundPauseMaxSec ?? 10;
     if (eliteEl) eliteEl.value = s.battleElitePrepSec ?? 12;
     if (forcedEl) forcedEl.value = s.battleForcedEliminationIntervalRounds ?? 3;
 
-    // Inject era selector if not already present
-    const battlePane = document.getElementById('settingsTab-battle');
-    if (battlePane && !document.getElementById('battleDefaultEraWrap')) {
-      let eras = [{ key: 'mafia', name: 'Mafia (default)' }];
-      if (erasRes && erasRes.ok) {
-        const eraData = await erasRes.json();
-        if (eraData.eras && eraData.eras.length) eras = eraData.eras;
+    let eras = [{ key: 'mafia', name: 'Mafia (default)' }];
+    if (erasRes && erasRes.ok) {
+      const eraData = await erasRes.json();
+      if (Array.isArray(eraData.eras) && eraData.eras.length) eras = eraData.eras;
+    }
+
+    const currentEra = s.battleDefaultEra || 'mafia';
+    const opts = eras.map(e => `<option style="background:rgba(30,41,59,1);color:#e0e7ff;" value="${escapeHtml(e.key)}">${escapeHtml(e.name)}</option>`).join('');
+
+    if (scope === 'settings') {
+      const battlePane = document.getElementById('settingsTab-battle');
+      if (battlePane && !document.getElementById('battleDefaultEraWrap')) {
+        const eraWrap = document.createElement('div');
+        eraWrap.id = 'battleDefaultEraWrap';
+        eraWrap.style.cssText = 'margin-top:16px;border-top:1px solid rgba(99,102,241,0.15);padding-top:16px;position:relative;z-index:1;';
+        eraWrap.innerHTML = `
+          <label class="form-label">Default Battle Era</label>
+          <select id="battleDefaultEraSelect" class="form-input" style="width:220px;background:rgba(30,41,59,0.95);color:#e0e7ff;border:1px solid rgba(99,102,241,0.22);">
+            ${opts}
+          </select>
+          <p style="color:var(--text-secondary); font-size:0.82em; margin-top:4px;">Era used when no era is specified in /battle create. Custom eras must be assigned by a Superadmin.</p>
+        `;
+        const saveBtn = battlePane.querySelector('button');
+        const saveBtnContainer = saveBtn ? saveBtn.closest('div') : null;
+        if (saveBtnContainer) {
+          saveBtnContainer.parentElement.insertBefore(eraWrap, saveBtnContainer);
+        } else {
+          battlePane.querySelector('.card > div')?.appendChild(eraWrap);
+        }
       }
-      const currentEra = s.battleDefaultEra || 'mafia';
-      const opts = eras.map(e => `<option style="background:rgba(30,41,59,1);color:#e0e7ff;" value="${escapeHtml(e.key)}"${e.key === currentEra ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('');
-      const eraWrap = document.createElement('div');
-      eraWrap.id = 'battleDefaultEraWrap';
-      eraWrap.style.cssText = 'margin-top:16px;border-top:1px solid rgba(99,102,241,0.15);padding-top:16px;position:relative;z-index:1;';
-      eraWrap.innerHTML = `
-        <label class="form-label">Default Battle Era</label>
-        <select id="battleDefaultEraSelect" class="form-input" style="width:220px;background:rgba(30,41,59,0.95);color:#e0e7ff;border:1px solid rgba(99,102,241,0.22);">
-          ${opts}
-        </select>
-        <p style="color:var(--text-secondary); font-size:0.82em; margin-top:4px;">Era used when no era is specified in /battle create. Custom eras must be assigned by a Superadmin.</p>
-      `;
-      // Insert before the save button div
-      const saveBtn = battlePane.querySelector('button');
-      const saveBtnContainer = saveBtn ? saveBtn.closest('div') : null;
-      if (saveBtnContainer) {
-        saveBtnContainer.parentElement.insertBefore(eraWrap, saveBtnContainer);
-      } else {
-        battlePane.querySelector('.card > div')?.appendChild(eraWrap);
-      }
-    } else if (document.getElementById('battleDefaultEraSelect')) {
-      document.getElementById('battleDefaultEraSelect').value = s.battleDefaultEra || 'mafia';
+    }
+
+    const eraSelect = document.getElementById(ids.era);
+    if (eraSelect) {
+      eraSelect.innerHTML = opts;
+      eraSelect.value = currentEra;
     }
   } catch (e) {
     console.error('[Battle settings] load error:', e);
   }
 }
 
-async function saveBattleTimingSettings() {
-  const minVal = parseFloat(document.getElementById('battlePauseMinInput')?.value);
-  const maxVal = parseFloat(document.getElementById('battlePauseMaxInput')?.value);
-  const eliteVal = parseFloat(document.getElementById('battleElitePrepInput')?.value);
-  const forcedIntervalVal = parseInt(document.getElementById('battleForcedEliminationIntervalInput')?.value, 10);
+async function loadBattleModuleSettings() {
+  return loadBattleTimingSettings('module');
+}
+
+async function saveBattleTimingSettings(scope = 'settings') {
+  const ids = getBattleSettingsFieldIds(scope);
+  const minVal = parseFloat(document.getElementById(ids.min)?.value);
+  const maxVal = parseFloat(document.getElementById(ids.max)?.value);
+  const eliteVal = parseFloat(document.getElementById(ids.elite)?.value);
+  const forcedIntervalVal = parseInt(document.getElementById(ids.forced)?.value, 10);
   if (isNaN(minVal) || isNaN(maxVal) || isNaN(eliteVal) || isNaN(forcedIntervalVal)) return showError('Please enter valid numbers for all timing fields.');
   if (minVal > maxVal) return showError('Minimum pause cannot be greater than maximum pause.');
   if (forcedIntervalVal < 1 || forcedIntervalVal > 20) return showError('Forced elimination interval must be between 1 and 20 rounds.');
-  const eraVal = document.getElementById('battleDefaultEraSelect')?.value || 'mafia';
+  const eraVal = document.getElementById(ids.era)?.value || 'mafia';
   try {
     const res = await fetch('/api/admin/settings', {
       method: 'PUT',
@@ -6564,11 +6614,15 @@ async function saveBattleTimingSettings() {
       })
     });
     const data = await res.json();
-    if (data.success) showSuccess('Battle settings saved!');
+    if (data.success) showSuccess(scope === 'module' ? 'Minigames settings saved!' : 'Battle settings saved!');
     else showError(data.message || 'Failed to save battle settings.');
   } catch (e) {
     showError('Error saving battle settings.');
   }
+}
+
+async function saveBattleModuleSettings() {
+  return saveBattleTimingSettings('module');
 }
 
 async function loadAdminSettingsView() {
@@ -9911,9 +9965,14 @@ async function removeVPMapping(roleId) {
   }
 }
 
-async function loadAdminRoles() {
-  if (!isAdmin) return;
-  const content = document.getElementById('adminRolesContent');
+let verificationRulesTargetPaneId = 'adminRolesContent';
+
+async function loadAdminRoles(targetPaneId = null) {
+  if (!(isAdmin || isSuperadmin)) return;
+  if (targetPaneId) verificationRulesTargetPaneId = String(targetPaneId);
+
+  const preferred = document.getElementById(verificationRulesTargetPaneId || 'adminRolesContent');
+  const content = preferred || document.getElementById('adminRolesContent');
   if (!content) return;
 
   content.innerHTML = `<div style="text-align:center; padding: var(--space-5); color: var(--text-secondary);"><div class="spinner"></div><p>Loading roles config...</p></div>`;

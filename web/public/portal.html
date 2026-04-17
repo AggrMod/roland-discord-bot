@@ -540,6 +540,18 @@
             <p class="section-subtitle">Start instantly, verify ownership, and keep one identity across servers</p>
           </header>
 
+          <div id="verificationModuleSettingsCard" class="card" style="display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:var(--space-4); gap:8px; flex-wrap:wrap;">
+              <h3 style="margin:0;">Verification Rules</h3>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="btn-secondary" onclick="exportVerificationRoles()" style="font-size:0.85em; padding:6px 12px;">Export</button>
+                <button class="btn-secondary" onclick="reverifyAllRoles()" style="font-size:0.85em; padding:6px 12px;">Reverify All</button>
+                <button class="btn-primary" onclick="openAddRuleModal()" style="font-size:0.85em; padding:6px 12px;">Add Rule</button>
+              </div>
+            </div>
+            <div id="verificationModuleSettingsContent" style="color:var(--text-secondary);">Loading verification rules...</div>
+          </div>
+
           <div class="card gpf-verify-shell">
             <div class="gpf-verify-main">
               <h3>Start verification in one click</h3>
@@ -682,6 +694,36 @@
             <h2>Minigames</h2>
             <p class="section-subtitle">Run the minigames module, including Battle Arena sessions and lobbies</p>
           </header>
+          <div id="battleModuleSettingsCard" class="card" style="display:none; overflow:visible; margin-bottom:var(--space-4);">
+            <h3>Battle Settings</h3>
+            <p style="color:var(--text-secondary); margin-bottom:16px; font-size:0.9em;">Control the pacing of battle rounds. Lower means faster battles, higher adds more suspense.</p>
+            <div style="display:grid; gap:16px;">
+              <div>
+                <label class="form-label">Round Pause - Minimum (seconds)</label>
+                <input type="number" id="battleModulePauseMinInput" min="1" max="60" step="1" class="form-input" placeholder="5" style="width:160px;">
+              </div>
+              <div>
+                <label class="form-label">Round Pause - Maximum (seconds)</label>
+                <input type="number" id="battleModulePauseMaxInput" min="1" max="120" step="1" class="form-input" placeholder="10" style="width:160px;">
+              </div>
+              <div>
+                <label class="form-label">Elite Four Prep Delay (seconds)</label>
+                <input type="number" id="battleModuleElitePrepInput" min="1" max="120" step="1" class="form-input" placeholder="12" style="width:160px;">
+              </div>
+              <div>
+                <label class="form-label">Forced Elimination Interval (rounds)</label>
+                <input type="number" id="battleModuleForcedEliminationIntervalInput" min="1" max="20" step="1" class="form-input" placeholder="3" style="width:160px;">
+              </div>
+              <div id="battleModuleDefaultEraWrap">
+                <label class="form-label">Default Battle Era</label>
+                <select id="battleModuleDefaultEraSelect" class="form-input" style="width:220px;"></select>
+                <p style="color:var(--text-secondary); font-size:0.82em; margin-top:4px;">Era used when no era is specified in /battle create.</p>
+              </div>
+              <div>
+                <button class="btn-primary" onclick="saveBattleModuleSettings()" style="width:fit-content;">Save Battle Settings</button>
+              </div>
+            </div>
+          </div>
           <div class="card">
             <div class="empty-state">
               <div class="empty-state-icon">⚔️</div>

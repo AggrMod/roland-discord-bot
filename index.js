@@ -952,7 +952,14 @@ client.on(Events.MessageCreate, async message => {
   try { ticketService.markTicketActivity(message.channelId); } catch (_) {}
   try {
     const eng = require('./services/engagementService');
-    eng.tryAwardMessage(message.guildId, message.author.id, message.author.username, message.id, message.channelId);
+    eng.tryAwardMessage(
+      message.guildId,
+      message.author.id,
+      message.author.username,
+      message.id,
+      message.channelId,
+      { isReply: !!message.reference?.messageId }
+    );
   } catch (_) {}
   try {
     const handled = await handleAiAssistantMentionMessage(message);

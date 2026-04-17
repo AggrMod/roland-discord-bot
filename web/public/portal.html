@@ -737,7 +737,7 @@
         <section id="section-engagement" class="content-section">
           <header class="section-header">
             <h2>Engagement &amp; Points</h2>
-            <p class="section-subtitle">Reward activity, run a shop, and track your top community members</p>
+            <p class="section-subtitle">Reward activity, automate social tasks, run a marketplace, and unlock achievements</p>
           </header>
 
           <!-- Config Card -->
@@ -750,7 +750,7 @@
               <div class="settings-row">
                 <div class="settings-info">
                   <div class="settings-label">Enable Engagement</div>
-                  <div class="settings-desc">Award points for messages and reactions</div>
+                  <div class="settings-desc">Enable Discord activity rewards, social task automation, marketplace, and achievements</div>
                 </div>
                 <label class="toggle-switch">
                   <input type="checkbox" id="engEnabled">
@@ -763,6 +763,13 @@
                   <div class="settings-desc">Awarded once per cooldown window</div>
                 </div>
                 <input type="number" id="engPtsMsg" min="1" max="100" class="input-sm" style="width:80px;">
+              </div>
+              <div class="settings-row">
+                <div class="settings-info">
+                  <div class="settings-label">Points per reply</div>
+                  <div class="settings-desc">Awarded when members reply in-server</div>
+                </div>
+                <input type="number" id="engPtsReply" min="0" max="100" class="input-sm" style="width:80px;">
               </div>
               <div class="settings-row">
                 <div class="settings-info">
@@ -780,11 +787,63 @@
               </div>
               <div class="settings-row">
                 <div class="settings-info">
+                  <div class="settings-label">Reply cooldown (minutes)</div>
+                  <div class="settings-desc">Min time between reply awards per user</div>
+                </div>
+                <input type="number" id="engCooldownReply" min="0" max="1440" class="input-sm" style="width:80px;">
+              </div>
+              <div class="settings-row">
+                <div class="settings-info">
                   <div class="settings-label">Reaction daily cap</div>
                   <div class="settings-desc">Max reactions awarded per user per day</div>
                 </div>
                 <input type="number" id="engCooldownReact" min="1" max="100" class="input-sm" style="width:80px;">
               </div>
+              <div class="settings-row">
+                <div class="settings-info">
+                  <div class="settings-label">Branded currency name</div>
+                  <div class="settings-desc">Plural label shown across portal and commands</div>
+                </div>
+                <input type="text" id="engCurrencyPlural" class="input-sm" placeholder="points" style="width:160px;">
+              </div>
+              <div class="settings-row">
+                <div class="settings-info">
+                  <div class="settings-label">Currency symbol</div>
+                  <div class="settings-desc">Short suffix like pts, rep, xp</div>
+                </div>
+                <input type="text" id="engCurrencySymbol" class="input-sm" placeholder="pts" style="width:100px;">
+              </div>
+              <div class="settings-row">
+                <div class="settings-info">
+                  <div class="settings-label">Task feed channel</div>
+                  <div class="settings-desc">Where mirrored tasks and social triggers are posted</div>
+                </div>
+                <input type="text" id="engTaskFeedChannel" class="input-sm" placeholder="Discord channel ID" style="width:220px;">
+              </div>
+              <div class="settings-row">
+                <div class="settings-info">
+                  <div class="settings-label">Purchase log channel</div>
+                  <div class="settings-desc">Fallback log if manual marketplace fulfillment does not open a ticket</div>
+                </div>
+                <input type="text" id="engPurchaseLogChannel" class="input-sm" placeholder="Discord channel ID" style="width:220px;">
+              </div>
+              <div class="settings-row">
+                <div class="settings-info">
+                  <div class="settings-label">Achievement channel</div>
+                  <div class="settings-desc">Where unlock announcements are posted</div>
+                </div>
+                <input type="text" id="engAchievementChannel" class="input-sm" placeholder="Discord channel ID" style="width:220px;">
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header-row">
+              <h3 class="card-title">🔌 Provider Status</h3>
+              <button class="btn-secondary btn-sm" onclick="loadEngagementProviders()">Refresh</button>
+            </div>
+            <div id="engagementProvidersView">
+              <div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>
             </div>
           </div>
 
@@ -806,6 +865,92 @@
               <button class="btn-primary btn-sm" onclick="openEngShopModal()">+ Add Item</button>
             </div>
             <div id="engagementShopView">
+              <div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header-row">
+              <h3 class="card-title">📣 Monitored Accounts</h3>
+              <button class="btn-primary btn-sm" onclick="submitEngagementMonitoredAccount()">Add / Update</button>
+            </div>
+            <div class="settings-grid" style="margin-bottom:12px;">
+              <div><label class="form-label">Provider</label><select id="engMonitoredProvider" class="form-input"><option value="x">X</option><option value="bluesky">Bluesky</option><option value="discord">Discord</option></select></div>
+              <div><label class="form-label">Account Handle</label><input id="engMonitoredHandle" class="form-input" placeholder="@account"></div>
+              <div><label class="form-label">Mirror Channel</label><input id="engMonitoredChannel" class="form-input" placeholder="Channel ID"></div>
+              <div><label class="form-label">Task Types</label><input id="engMonitoredTasks" class="form-input" placeholder="x_like,x_repost"></div>
+              <div style="grid-column:1 / -1;"><label class="form-label">Reward JSON</label><textarea id="engMonitoredRewards" class="form-input" rows="3" placeholder='{"x_like":10,"x_repost":20}'></textarea></div>
+              <div style="grid-column:1 / -1;"><label class="form-label">Requirements JSON</label><textarea id="engMonitoredRequirements" class="form-input" rows="2" placeholder='{"commentMinLength":20}'></textarea></div>
+            </div>
+            <div id="engagementMonitoredAccountsView">
+              <div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header-row">
+              <h3 class="card-title"># Hashtag Monitors</h3>
+              <button class="btn-primary btn-sm" onclick="submitEngagementHashtagMonitor()">Add / Update</button>
+            </div>
+            <div class="settings-grid" style="margin-bottom:12px;">
+              <div><label class="form-label">Provider</label><select id="engHashtagProvider" class="form-input"><option value="x">X</option><option value="bluesky">Bluesky</option></select></div>
+              <div><label class="form-label">Hashtag</label><input id="engHashtagTag" class="form-input" placeholder="#guildpilot"></div>
+              <div><label class="form-label">Mirror Channel</label><input id="engHashtagChannel" class="form-input" placeholder="Channel ID"></div>
+              <div><label class="form-label">Task Types</label><input id="engHashtagTasks" class="form-input" placeholder="x_hashtag_post,x_like"></div>
+              <div style="grid-column:1 / -1;"><label class="form-label">Reward JSON</label><textarea id="engHashtagRewards" class="form-input" rows="3" placeholder='{"x_hashtag_post":15}'></textarea></div>
+            </div>
+            <div id="engagementHashtagView">
+              <div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header-row">
+              <h3 class="card-title">🧩 Task Automation</h3>
+              <div style="display:flex;gap:8px;">
+                <button class="btn-secondary btn-sm" onclick="submitEngagementTask('ingest')">Simulate Ingest</button>
+                <button class="btn-primary btn-sm" onclick="submitEngagementTask('manual')">Create Task</button>
+              </div>
+            </div>
+            <div class="settings-grid" style="margin-bottom:12px;">
+              <div><label class="form-label">Provider</label><select id="engTaskProvider" class="form-input"><option value="x">X</option><option value="bluesky">Bluesky</option><option value="discord">Discord</option></select></div>
+              <div><label class="form-label">Source Post ID</label><input id="engTaskSourcePostId" class="form-input" placeholder="post-123"></div>
+              <div><label class="form-label">Source Handle</label><input id="engTaskSourceHandle" class="form-input" placeholder="@account"></div>
+              <div><label class="form-label">Source URL</label><input id="engTaskSourceUrl" class="form-input" placeholder="https://..."></div>
+              <div style="grid-column:1 / -1;"><label class="form-label">Title</label><input id="engTaskTitle" class="form-input" placeholder="Engagement challenge"></div>
+              <div style="grid-column:1 / -1;"><label class="form-label">Body</label><textarea id="engTaskBody" class="form-input" rows="3" placeholder="Describe the campaign or task."></textarea></div>
+              <div><label class="form-label">Actions</label><input id="engTaskActions" class="form-input" placeholder="x_like,x_reply"></div>
+              <div style="grid-column: span 2;"><label class="form-label">Reward JSON</label><textarea id="engTaskRewards" class="form-input" rows="2" placeholder='{"x_like":10,"x_reply":25}'></textarea></div>
+            </div>
+            <div id="engagementTasksView">
+              <div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header-row">
+              <h3 class="card-title">🏅 Achievements</h3>
+              <button class="btn-primary btn-sm" onclick="submitEngagementAchievement()">Add / Update</button>
+            </div>
+            <div class="settings-grid" style="margin-bottom:12px;">
+              <div><label class="form-label">Name</label><input id="engAchievementName" class="form-input" placeholder="First 100"></div>
+              <div><label class="form-label">Metric</label><select id="engAchievementMetric" class="form-input"><option value="points_total">Points Total</option><option value="discord_messages">Discord Messages</option><option value="discord_replies">Discord Replies</option><option value="discord_reactions">Discord Reactions</option><option value="social_task_completions">Social Task Completions</option><option value="shop_purchases">Shop Purchases</option><option value="admin_grants">Admin Grants</option></select></div>
+              <div><label class="form-label">Threshold</label><input id="engAchievementThreshold" type="number" min="1" class="form-input" value="1"></div>
+              <div><label class="form-label">Reward Points</label><input id="engAchievementReward" type="number" min="0" class="form-input" value="0"></div>
+              <div><label class="form-label">Icon</label><input id="engAchievementIcon" class="form-input" placeholder="🏅"></div>
+              <div style="grid-column:1 / -1;"><label class="form-label">Description</label><textarea id="engAchievementDescription" class="form-input" rows="2" placeholder="Unlocked after ..."></textarea></div>
+            </div>
+            <div id="engagementAchievementsView">
+              <div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header-row">
+              <h3 class="card-title">🧾 Redemptions</h3>
+              <button class="btn-secondary btn-sm" onclick="loadEngagementRedemptions()">Refresh</button>
+            </div>
+            <div id="engagementRedemptionsView">
               <div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>
             </div>
           </div>

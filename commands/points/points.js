@@ -47,14 +47,15 @@ module.exports = {
         const targetId = target?.id || user.id;
         const targetName = target?.username || user.username;
         const pts = eng.getUserPoints(guildId, targetId);
+        const currencyName = eng.formatCurrency(guildId, pts.total_points);
         const rank = eng.getLeaderboard(guildId, 100).findIndex(r => r.user_id === targetId) + 1;
 
         const e = new EmbedBuilder()
           .setTitle(`🏅 ${targetId === user.id ? 'Your' : `${targetName}'s`} Points Balance`)
-          .setDescription(`**${pts.total_points.toLocaleString()} pts**`)
+          .setDescription(`**${currencyName}**`)
           .addFields(
             { name: '🏆 Server Rank', value: rank > 0 ? `#${rank}` : 'Unranked', inline: true },
-            { name: '📊 Total Earned', value: `${pts.total_points.toLocaleString()} pts`, inline: true },
+            { name: '📊 Total Earned', value: eng.formatCurrency(guildId, pts.total_points), inline: true },
           )
           .setTimestamp();
         applyEmbedBranding(e, { guildId, moduleKey: 'engagement', defaultColor: '#6366f1', defaultFooter: 'GuildPilot · Points' });
@@ -68,14 +69,14 @@ module.exports = {
         if (!board.length) return interaction.reply({ content: '📭 No points earned yet — start chatting!', ephemeral: false });
 
         const medals = ['🥇','🥈','🥉'];
-        const rows = board.map((r, i) => `${medals[i] || `${i+1}.`} **${r.username || r.user_id}** — ${r.total_points.toLocaleString()} pts`).join('\n');
+        const rows = board.map((r, i) => `${medals[i] || `${i+1}.`} **${r.username || r.user_id}** — ${eng.formatCurrency(guildId, r.total_points)}`).join('\n');
         const myRank = board.findIndex(r => r.user_id === user.id) + 1;
         const myPts = eng.getUserPoints(guildId, user.id);
 
         const e = new EmbedBuilder()
           .setTitle('🏆 Points Leaderboard')
           .setDescription(rows)
-          .addFields({ name: 'Your position', value: myRank > 0 ? `#${myRank} · ${myPts.total_points.toLocaleString()} pts` : 'Not on board yet', inline: false })
+          .addFields({ name: 'Your position', value: myRank > 0 ? `#${myRank} · ${eng.formatCurrency(guildId, myPts.total_points)}` : 'Not on board yet', inline: false })
           .setTimestamp();
         applyEmbedBranding(e, { guildId, moduleKey: 'engagement', defaultColor: '#f59e0b', defaultFooter: `Top ${limit} · GuildPilot · Points` });
         return interaction.reply({ embeds: [e] });
@@ -92,15 +93,16 @@ module.exports = {
         if (!history.length) return interaction.reply({ content: '📭 No history yet.', ephemeral: true });
 
         const ACTION_LABEL = {
-          discord_message: '💬 Message', discord_reaction: '👍 Reaction',
+          discord_message: '💬 Message', discord_reply: '↩️ Reply', discord_reaction: '👍 Reaction',
           game_win: '🏆 Game Win', game_place: '🎮 Game Place',
           game_night_champion: '🎉 Game Night', admin_grant: '✨ Admin Grant',
           admin_deduct: '➖ Admin Deduct', shop_redeem: '🛍️ Shop Redeem',
+          achievement_reward: '🏅 Achievement', social_task_reward: '📣 Social Task',
         };
         const rows = history.map(h => {
           const sign = h.points >= 0 ? '+' : '';
           const label = ACTION_LABEL[h.action_type] || h.action_type;
-          return `${label} **${sign}${h.points} pts**${h.note ? ` — ${h.note}` : ''}`;
+          return `${label} **${sign}${eng.formatCurrency(guildId, Math.abs(h.points))}**${h.note ? ` — ${h.note}` : ''}`;
         }).join('\n');
 
         const e = new EmbedBuilder()
@@ -120,12 +122,12 @@ module.exports = {
         const rows = items.map(item => {
           const stock = item.quantity_remaining < 0 ? '∞' : item.quantity_remaining;
           const canAfford = myPts.total_points >= item.cost ? '✅' : '❌';
-          return `**[${item.id}]** ${canAfford} **${item.name}** — ${item.cost} pts _(${stock} left)_\n${item.description ? `> ${item.description}` : ''}`;
+          return `**[${item.id}]** ${canAfford} **${item.name}** — ${eng.formatCurrency(guildId, item.cost)} _(${stock} left)_\n${item.description ? `> ${item.description}` : ''}`;
         }).join('\n\n');
 
         const e = new EmbedBuilder()
           .setTitle('🛍️ Points Shop')
-          .setDescription(`Your balance: **${myPts.total_points.toLocaleString()} pts**\n\n${rows}\n\nUse \`/points redeem item_id:<id>\` to redeem an item.`)
+          .setDescription(`Your balance: **${eng.formatCurrency(guildId, myPts.total_points)}**\n\n${rows}\n\nUse \`/points redeem item_id:<id>\` to redeem an item.`)
           .setTimestamp();
         applyEmbedBranding(e, { guildId, moduleKey: 'engagement', defaultColor: '#4ade80', defaultFooter: 'GuildPilot · Points Shop' });
         return interaction.reply({ embeds: [e], ephemeral: true });
@@ -136,10 +138,15 @@ module.exports = {
         await interaction.deferReply({ ephemeral: true });
         const itemId = interaction.options.getInteger('item_id');
         const myPts = eng.getUserPoints(guildId, user.id);
-        const result = eng.redeemItem(guildId, user.id, user.username, itemId);
+        const result = await eng.redeemItem(guildId, user.id, user.username, itemId);
 
         if (!result.success) {
-          const msgs = { not_found: '❌ Item not found.', insufficient: `❌ Not enough points. You have **${myPts.total_points} pts**.`, out_of_stock: '❌ Item is out of stock.', error: '❌ Something went wrong.' };
+          const msgs = {
+            not_found: '❌ Item not found.',
+            insufficient_points: `❌ Not enough points. You have **${eng.formatCurrency(guildId, myPts.total_points)}**.`,
+            out_of_stock: '❌ Item is out of stock.',
+            error: '❌ Something went wrong.',
+          };
           return interaction.editReply({ content: msgs[result.reason] || '❌ Could not redeem.' });
         }
 
@@ -151,10 +158,17 @@ module.exports = {
           } catch (e) { logger.warn('[Points] Could not assign role:', e.message); }
         }
 
+        const fulfillmentLines = [];
+        if (result.fulfillment?.mode === 'ticket') {
+          fulfillmentLines.push(`A fulfillment ticket was created${result.fulfillment.ticketNumber ? ` (#${result.fulfillment.ticketNumber})` : ''}.`);
+        } else if (result.fulfillment?.mode === 'log' || result.fulfillment?.mode === 'pending') {
+          fulfillmentLines.push('Your redemption was logged for manual fulfillment.');
+        }
+
         const e = new EmbedBuilder()
           .setTitle('✅ Redeemed!')
-          .setDescription(`**${result.item.name}** redeemed for **${result.item.cost} pts**${result.code ? `\n\n🎁 Your code: \`${result.code}\`` : ''}`)
-          .addFields({ name: 'Remaining balance', value: `${result.newTotal.toLocaleString()} pts`, inline: true })
+          .setDescription(`**${result.item.name}** redeemed for **${eng.formatCurrency(guildId, result.item.cost)}**${result.code ? `\n\n🎁 Your code: \`${result.code}\`` : ''}${fulfillmentLines.length ? `\n\n${fulfillmentLines.join(' ')}` : ''}`)
+          .addFields({ name: 'Remaining balance', value: eng.formatCurrency(guildId, result.newTotal), inline: true })
           .setTimestamp();
         applyEmbedBranding(e, { guildId, moduleKey: 'engagement', defaultColor: '#4ade80', defaultFooter: 'GuildPilot · Points Shop' });
         return interaction.editReply({ embeds: [e] });
@@ -173,8 +187,15 @@ module.exports = {
           const amount = interaction.options.getInteger('amount');
           const reason = interaction.options.getString('reason') || (action === 'grant' ? 'Admin grant' : 'Admin deduct');
           if (!target || !amount) return interaction.editReply({ content: '❌ Provide user and amount.' });
-          const result = eng.adminGrant(guildId, target.id, target.username, action === 'grant' ? amount : -amount, reason);
-          return interaction.editReply({ content: `✅ ${action === 'grant' ? '+' : '-'}**${amount} pts** ${action === 'grant' ? 'granted to' : 'deducted from'} **${target.username}**.\nNew total: **${result.newTotal} pts**` });
+          const result = eng.adminGrant(
+            guildId,
+            target.id,
+            target.username,
+            action === 'grant' ? amount : -amount,
+            interaction.user.id,
+            reason
+          );
+          return interaction.editReply({ content: `✅ ${action === 'grant' ? '+' : '-'}**${eng.formatCurrency(guildId, amount)}** ${action === 'grant' ? 'granted to' : 'deducted from'} **${target.username}**.\nNew total: **${eng.formatCurrency(guildId, result.newTotal)}**` });
         }
 
         if (action === 'add-item') {
@@ -192,7 +213,7 @@ module.exports = {
             description: descMatch?.[1] || null,
             quantity_remaining: qtyMatch ? parseInt(qtyMatch[1]) : -1,
           });
-          return interaction.editReply({ content: result.success ? `✅ Shop item added (ID: ${result.id}): **${name}** — ${costRaw} pts` : `❌ ${result.message}` });
+          return interaction.editReply({ content: result.success ? `✅ Shop item added (ID: ${result.id}): **${name}** — ${eng.formatCurrency(guildId, costRaw)}` : `❌ ${result.message}` });
         }
 
         if (action === 'remove-item') {
@@ -209,9 +230,11 @@ module.exports = {
             .setDescription('Current engagement points settings.')
             .addFields(
               { name: 'Enabled', value: cfg.enabled ? '✅ Yes' : '❌ No', inline: true },
-              { name: 'Message points', value: `${cfg.points_message} pts`, inline: true },
-              { name: 'Reaction points', value: `${cfg.points_reaction} pts`, inline: true },
+              { name: 'Message points', value: eng.formatCurrency(guildId, cfg.points_message), inline: true },
+              { name: 'Reply points', value: eng.formatCurrency(guildId, cfg.points_reply || 0), inline: true },
+              { name: 'Reaction points', value: eng.formatCurrency(guildId, cfg.points_reaction), inline: true },
               { name: 'Message cooldown', value: `${cfg.cooldown_message_mins} min`, inline: true },
+              { name: 'Reply cooldown', value: `${cfg.cooldown_reply_mins || 0} min`, inline: true },
               { name: 'Reaction daily cap', value: `${cfg.cooldown_reaction_daily}/day`, inline: true },
             )
             .setTimestamp();

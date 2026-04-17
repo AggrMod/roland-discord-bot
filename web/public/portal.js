@@ -13239,6 +13239,593 @@ async function saveEngagementConfigFromSettings() {
   } catch (e) { showError('Error saving engagement settings.'); }
 }
 
+async function loadEngagementSettingsTab() {
+  try {
+    const res = await fetch('/api/admin/engagement/config', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json();
+    if (!data.success) return;
+    const cfg = data.config || {};
+    currentEngagementConfig = cfg;
+    const en = document.getElementById('ps_moduleEngagementEnabled');
+    const pm = document.getElementById('ps_engPtsMsg');
+    const pr = document.getElementById('ps_engPtsReact');
+    const cm = document.getElementById('ps_engCooldownMsg');
+    const cr = document.getElementById('ps_engCooldownReact');
+    if (en) en.checked = !!cfg.enabled;
+    if (pm) pm.value = cfg.points_message ?? 5;
+    if (pr) pr.value = cfg.points_reaction ?? 2;
+    if (cm) cm.value = cfg.cooldown_message_mins ?? 60;
+    if (cr) cr.value = cfg.cooldown_reaction_daily ?? 5;
+  } catch (e) { console.error('[Engagement] settings tab load error:', e); }
+}
+
+let currentEngagementConfig = null;
+
+function parseEngagementJson(text, fallback = {}) {
+  const raw = String(text || '').trim();
+  if (!raw) return fallback;
+  return JSON.parse(raw);
+}
+
+function parseEngagementTaskTypes(text) {
+  return String(text || '')
+    .split(',')
+    .map(entry => entry.trim())
+    .filter(Boolean);
+}
+
+function formatEngagementAmount(value) {
+  const amount = Number(value || 0);
+  const cfg = currentEngagementConfig || {};
+  const singular = cfg.currency_name_singular || 'point';
+  const plural = cfg.currency_name_plural || 'points';
+  const icon = cfg.currency_icon ? `${cfg.currency_icon} ` : '';
+  return `${amount.toLocaleString()} ${icon}${Math.abs(amount) === 1 ? singular : plural}`.trim();
+}
+
+function engagementHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
+    ...buildTenantRequestHeaders(),
+  };
+}
+
+async function loadEngagementSection() {
+  await Promise.all([
+    loadEngagementConfig(),
+    loadEngagementProviders(),
+    loadEngagementLeaderboard(),
+    loadEngagementShop(),
+    loadEngagementMonitoredAccounts(),
+    loadEngagementHashtags(),
+    loadEngagementTasks(),
+    loadEngagementAchievements(),
+    loadEngagementRedemptions(),
+  ]);
+}
+
+async function loadEngagementConfig() {
+  try {
+    const res = await fetch('/api/admin/engagement/config', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json();
+    if (!data.success) return;
+    const cfg = data.config || {};
+    currentEngagementConfig = cfg;
+    if (document.getElementById('engEnabled')) document.getElementById('engEnabled').checked = !!cfg.enabled;
+    if (document.getElementById('engPtsMsg')) document.getElementById('engPtsMsg').value = cfg.points_message ?? 5;
+    if (document.getElementById('engPtsReply')) document.getElementById('engPtsReply').value = cfg.points_reply ?? 3;
+    if (document.getElementById('engPtsReact')) document.getElementById('engPtsReact').value = cfg.points_reaction ?? 2;
+    if (document.getElementById('engCooldownMsg')) document.getElementById('engCooldownMsg').value = cfg.cooldown_message_mins ?? 60;
+    if (document.getElementById('engCooldownReply')) document.getElementById('engCooldownReply').value = cfg.cooldown_reply_mins ?? 30;
+    if (document.getElementById('engCooldownReact')) document.getElementById('engCooldownReact').value = cfg.cooldown_reaction_daily ?? 5;
+    if (document.getElementById('engCurrencyPlural')) document.getElementById('engCurrencyPlural').value = cfg.currency_name_plural ?? 'points';
+    if (document.getElementById('engCurrencySymbol')) document.getElementById('engCurrencySymbol').value = cfg.currency_symbol ?? 'pts';
+    if (document.getElementById('engTaskFeedChannel')) document.getElementById('engTaskFeedChannel').value = cfg.task_feed_channel_id ?? '';
+    if (document.getElementById('engPurchaseLogChannel')) document.getElementById('engPurchaseLogChannel').value = cfg.purchase_log_channel_id ?? '';
+    if (document.getElementById('engAchievementChannel')) document.getElementById('engAchievementChannel').value = cfg.achievement_channel_id ?? '';
+
+    const en = document.getElementById('ps_moduleEngagementEnabled');
+    const pm = document.getElementById('ps_engPtsMsg');
+    const pr = document.getElementById('ps_engPtsReact');
+    const cm = document.getElementById('ps_engCooldownMsg');
+    const cr = document.getElementById('ps_engCooldownReact');
+    if (en) en.checked = !!cfg.enabled;
+    if (pm) pm.value = cfg.points_message ?? 5;
+    if (pr) pr.value = cfg.points_reaction ?? 2;
+    if (cm) cm.value = cfg.cooldown_message_mins ?? 60;
+    if (cr) cr.value = cfg.cooldown_reaction_daily ?? 5;
+  } catch (e) { console.error('[Engagement] config load error:', e); }
+}
+
+async function saveEngagementConfig() {
+  try {
+    const body = {
+      enabled: document.getElementById('engEnabled')?.checked ?? true,
+      points_message: parseInt(document.getElementById('engPtsMsg')?.value || '5', 10),
+      points_reply: parseInt(document.getElementById('engPtsReply')?.value || '3', 10),
+      points_reaction: parseInt(document.getElementById('engPtsReact')?.value || '2', 10),
+      cooldown_message_mins: parseInt(document.getElementById('engCooldownMsg')?.value || '60', 10),
+      cooldown_reply_mins: parseInt(document.getElementById('engCooldownReply')?.value || '30', 10),
+      cooldown_reaction_daily: parseInt(document.getElementById('engCooldownReact')?.value || '5', 10),
+      currency_name_plural: document.getElementById('engCurrencyPlural')?.value.trim() || 'points',
+      currency_symbol: document.getElementById('engCurrencySymbol')?.value.trim() || 'pts',
+      task_feed_channel_id: document.getElementById('engTaskFeedChannel')?.value.trim() || null,
+      purchase_log_channel_id: document.getElementById('engPurchaseLogChannel')?.value.trim() || null,
+      achievement_channel_id: document.getElementById('engAchievementChannel')?.value.trim() || null,
+    };
+    const res = await fetch('/api/admin/engagement/config', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: engagementHeaders(),
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.success) {
+      currentEngagementConfig = data.config || body;
+      showSuccess('Engagement settings saved!');
+      loadEngagementLeaderboard();
+      loadEngagementShop();
+      loadEngagementTasks();
+      loadEngagementAchievements();
+      loadEngagementRedemptions();
+    } else {
+      showError(data.message || 'Failed to save.');
+    }
+  } catch (e) { showError('Error saving engagement config.'); }
+}
+
+async function loadEngagementProviders() {
+  const el = document.getElementById('engagementProvidersView');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
+  try {
+    const res = await fetch('/api/admin/engagement/providers', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json();
+    if (!data.success || !data.providers?.length) {
+      el.innerHTML = '<p style="color:var(--text-secondary);">No providers available.</p>';
+      return;
+    }
+    el.innerHTML = data.providers.map(provider => `
+      <div class="table-row">
+        <div style="flex:1;">
+          <div style="font-weight:600;">${escapeHtml(provider.label)}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">
+            Monitoring: ${provider.supportsSourceMonitoring ? 'yes' : 'no'} · Hashtags: ${provider.supportsHashtagMonitoring ? 'yes' : 'no'} · Linking: ${provider.supportsAccountLinking ? 'yes' : 'no'}
+          </div>
+        </div>
+        <span class="status-badge ${provider.configured ? 'status-live' : 'status-paused'}">${provider.configured ? 'Configured' : 'Credentials Missing'}</span>
+      </div>
+    `).join('');
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--error);">Failed to load providers.</p>';
+  }
+}
+
+async function loadEngagementLeaderboard() {
+  const el = document.getElementById('engagementLeaderboardView');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
+  try {
+    const res = await fetch('/api/admin/engagement/leaderboard?limit=25', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json();
+    if (!data.success || !data.leaderboard?.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🏅</div><h4 class="empty-state-title">No data yet</h4><p class="empty-state-message">Points will appear here once members start chatting and completing tasks.</p></div>';
+      return;
+    }
+    const medals = ['🥇', '🥈', '🥉'];
+    el.innerHTML = data.leaderboard.map((row, index) => `
+      <div class="table-row">
+        <span style="width:36px;text-align:center;">${medals[index] || (index + 1)}</span>
+        <span style="flex:1;font-weight:500;">${escapeHtml(row.username || row.user_id)}</span>
+        <span style="color:var(--accent-gold);font-weight:600;">${formatEngagementAmount(row.total_points)}</span>
+      </div>
+    `).join('');
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--error);">Failed to load leaderboard.</p>';
+  }
+}
+
+async function loadEngagementShop() {
+  const el = document.getElementById('engagementShopView');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
+  try {
+    const res = await fetch('/api/admin/engagement/shop', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json();
+    if (!data.success || !data.items?.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🛍️</div><h4 class="empty-state-title">Marketplace is empty</h4><p class="empty-state-message">Add items to reward your community.</p></div>';
+      return;
+    }
+    el.innerHTML = data.items.map(item => {
+      const stock = item.quantity_remaining < 0 ? '∞' : item.quantity_remaining;
+      return `
+        <div class="table-row" style="align-items:flex-start;">
+          <span style="width:36px;font-size:0.8em;color:var(--text-muted);">#${item.id}</span>
+          <div style="flex:1;">
+            <div style="font-weight:600;">${escapeHtml(item.name)}</div>
+            ${item.description ? `<div style="font-size:0.85em;color:var(--text-muted);">${escapeHtml(item.description)}</div>` : ''}
+            <div style="font-size:0.8em;color:var(--text-muted);margin-top:2px;">${escapeHtml(item.reward_type || item.type)} · ${escapeHtml(item.fulfillment_mode || 'auto')} · Stock: ${stock}</div>
+          </div>
+          <span style="color:var(--accent-gold);font-weight:600;white-space:nowrap;">${formatEngagementAmount(item.cost)}</span>
+          <button class="btn-danger btn-sm" style="margin-left:10px;" onclick="deleteEngShopItem(${item.id})">Remove</button>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--error);">Failed to load shop items.</p>';
+  }
+}
+
+async function submitEngShopItem() {
+  const name = document.getElementById('engShopName').value.trim();
+  const cost = parseInt(document.getElementById('engShopCost').value, 10);
+  if (!name || !cost || cost < 1) { showError('Name and a valid cost are required.'); return; }
+  const type = document.getElementById('engShopType').value;
+  const body = {
+    name,
+    description: document.getElementById('engShopDesc').value.trim() || null,
+    type,
+    cost,
+    quantity: parseInt(document.getElementById('engShopQty').value, 10) || -1,
+    roleId: type === 'role' ? (document.getElementById('engShopRoleId').value.trim() || null) : null,
+    codes: type === 'code' ? document.getElementById('engShopCodes').value.trim().split('\n').map(s=>s.trim()).filter(Boolean) : null,
+    reward_type: type === 'role' ? 'auto_role' : (type === 'code' ? 'auto_code' : 'manual'),
+    fulfillment_mode: type === 'custom' ? 'manual' : 'auto',
+  };
+  try {
+    const res = await fetch('/api/admin/engagement/shop', {
+      method: 'POST',
+      credentials: 'include',
+      headers: engagementHeaders(),
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.success) { showSuccess('Shop item added!'); closeEngShopModal(); loadEngagementShop(); }
+    else showError(data.message || 'Failed to add item.');
+  } catch (e) { showError('Error adding shop item.'); }
+}
+
+async function deleteEngShopItem(itemId) {
+  if (!confirm('Remove this shop item?')) return;
+  try {
+    const res = await fetch(`/api/admin/engagement/shop/${itemId}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'X-Requested-With': 'XMLHttpRequest', ...buildTenantRequestHeaders() },
+    });
+    const data = await res.json();
+    if (data.success) { showSuccess('Item removed.'); loadEngagementShop(); }
+    else showError(data.message || 'Failed to remove item.');
+  } catch (e) { showError('Error removing item.'); }
+}
+
+async function loadEngagementMonitoredAccounts() {
+  const el = document.getElementById('engagementMonitoredAccountsView');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
+  try {
+    const res = await fetch('/api/admin/engagement/monitored-accounts', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json();
+    if (!data.success || !data.accounts?.length) {
+      el.innerHTML = '<p style="color:var(--text-secondary);">No monitored accounts configured yet.</p>';
+      return;
+    }
+    el.innerHTML = data.accounts.map(account => `
+      <div class="table-row" style="align-items:flex-start;">
+        <div style="flex:1;">
+          <div style="font-weight:600;">${escapeHtml(account.provider)} · @${escapeHtml(account.account_handle)}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">Tasks: ${escapeHtml((account.task_types || []).join(', ') || 'none')}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">Mirror channel: ${escapeHtml(account.mirror_channel_id || 'default')}</div>
+        </div>
+        <button class="btn-danger btn-sm" onclick="deleteEngagementMonitoredAccount(${account.id})">Delete</button>
+      </div>
+    `).join('');
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--error);">Failed to load monitored accounts.</p>';
+  }
+}
+
+async function submitEngagementMonitoredAccount() {
+  try {
+    const body = {
+      provider: document.getElementById('engMonitoredProvider').value,
+      account_handle: document.getElementById('engMonitoredHandle').value.trim(),
+      mirror_channel_id: document.getElementById('engMonitoredChannel').value.trim() || null,
+      task_types: parseEngagementTaskTypes(document.getElementById('engMonitoredTasks').value),
+      reward_config: parseEngagementJson(document.getElementById('engMonitoredRewards').value, {}),
+      requirements: parseEngagementJson(document.getElementById('engMonitoredRequirements').value, {}),
+    };
+    const res = await fetch('/api/admin/engagement/monitored-accounts', {
+      method: 'POST',
+      credentials: 'include',
+      headers: engagementHeaders(),
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      showError(data.message || 'Failed to save monitored account.');
+      return;
+    }
+    showSuccess('Monitored account saved.');
+    loadEngagementMonitoredAccounts();
+  } catch (e) {
+    showError('Reward/requirements JSON is invalid.');
+  }
+}
+
+async function deleteEngagementMonitoredAccount(id) {
+  try {
+    const res = await fetch(`/api/admin/engagement/monitored-accounts/${id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'X-Requested-With': 'XMLHttpRequest', ...buildTenantRequestHeaders() },
+    });
+    const data = await res.json();
+    if (data.success) {
+      showSuccess('Monitored account removed.');
+      loadEngagementMonitoredAccounts();
+    } else {
+      showError(data.message || 'Failed to remove monitored account.');
+    }
+  } catch (e) {
+    showError('Error removing monitored account.');
+  }
+}
+
+async function loadEngagementHashtags() {
+  const el = document.getElementById('engagementHashtagView');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
+  try {
+    const res = await fetch('/api/admin/engagement/hashtags', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json();
+    if (!data.success || !data.hashtags?.length) {
+      el.innerHTML = '<p style="color:var(--text-secondary);">No hashtag monitors configured yet.</p>';
+      return;
+    }
+    el.innerHTML = data.hashtags.map(monitor => `
+      <div class="table-row" style="align-items:flex-start;">
+        <div style="flex:1;">
+          <div style="font-weight:600;">${escapeHtml(monitor.provider)} · ${escapeHtml(monitor.hashtag)}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">Tasks: ${escapeHtml((monitor.task_types || []).join(', ') || 'none')}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">Mirror channel: ${escapeHtml(monitor.mirror_channel_id || 'default')}</div>
+        </div>
+        <button class="btn-danger btn-sm" onclick="deleteEngagementHashtagMonitor(${monitor.id})">Delete</button>
+      </div>
+    `).join('');
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--error);">Failed to load hashtag monitors.</p>';
+  }
+}
+
+async function submitEngagementHashtagMonitor() {
+  try {
+    const body = {
+      provider: document.getElementById('engHashtagProvider').value,
+      hashtag: document.getElementById('engHashtagTag').value.trim(),
+      mirror_channel_id: document.getElementById('engHashtagChannel').value.trim() || null,
+      task_types: parseEngagementTaskTypes(document.getElementById('engHashtagTasks').value),
+      reward_config: parseEngagementJson(document.getElementById('engHashtagRewards').value, {}),
+    };
+    const res = await fetch('/api/admin/engagement/hashtags', {
+      method: 'POST',
+      credentials: 'include',
+      headers: engagementHeaders(),
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      showError(data.message || 'Failed to save hashtag monitor.');
+      return;
+    }
+    showSuccess('Hashtag monitor saved.');
+    loadEngagementHashtags();
+  } catch (e) {
+    showError('Reward JSON is invalid.');
+  }
+}
+
+async function deleteEngagementHashtagMonitor(id) {
+  try {
+    const res = await fetch(`/api/admin/engagement/hashtags/${id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'X-Requested-With': 'XMLHttpRequest', ...buildTenantRequestHeaders() },
+    });
+    const data = await res.json();
+    if (data.success) {
+      showSuccess('Hashtag monitor removed.');
+      loadEngagementHashtags();
+    } else {
+      showError(data.message || 'Failed to remove hashtag monitor.');
+    }
+  } catch (e) {
+    showError('Error removing hashtag monitor.');
+  }
+}
+
+async function loadEngagementTasks() {
+  const el = document.getElementById('engagementTasksView');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
+  try {
+    const res = await fetch('/api/admin/engagement/tasks?limit=50', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json();
+    if (!data.success || !data.tasks?.length) {
+      el.innerHTML = '<p style="color:var(--text-secondary);">No tasks yet. Create one manually or ingest a monitored post.</p>';
+      return;
+    }
+    el.innerHTML = data.tasks.map(task => `
+      <div class="table-row" style="align-items:flex-start;">
+        <div style="flex:1;">
+          <div style="font-weight:600;">${escapeHtml(task.title || `${task.provider} task`)}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(task.provider)} · ${escapeHtml(task.trigger_type)} · ${escapeHtml((task.required_actions || []).join(', ') || 'no actions')}</div>
+          ${task.source_post_url ? `<div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(task.source_post_url)}</div>` : ''}
+        </div>
+        <span class="status-badge ${task.status === 'active' ? 'status-live' : 'status-paused'}">${escapeHtml(task.status || 'active')}</span>
+      </div>
+    `).join('');
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--error);">Failed to load tasks.</p>';
+  }
+}
+
+async function submitEngagementTask(mode) {
+  try {
+    const body = {
+      provider: document.getElementById('engTaskProvider').value,
+      source_post_id: document.getElementById('engTaskSourcePostId').value.trim(),
+      source_account_handle: document.getElementById('engTaskSourceHandle').value.trim(),
+      source_post_url: document.getElementById('engTaskSourceUrl').value.trim() || null,
+      title: document.getElementById('engTaskTitle').value.trim(),
+      body: document.getElementById('engTaskBody').value.trim(),
+      required_actions: parseEngagementTaskTypes(document.getElementById('engTaskActions').value),
+      reward_config: parseEngagementJson(document.getElementById('engTaskRewards').value, {}),
+      trigger_type: mode === 'ingest' ? 'account_post' : 'manual',
+    };
+    const endpoint = mode === 'ingest' ? '/api/admin/engagement/tasks/ingest' : '/api/admin/engagement/tasks';
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      credentials: 'include',
+      headers: engagementHeaders(),
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      showError(data.message || 'Failed to save task.');
+      return;
+    }
+    showSuccess(mode === 'ingest' ? 'Provider post ingested.' : 'Task created.');
+    loadEngagementTasks();
+  } catch (e) {
+    showError('Reward JSON is invalid.');
+  }
+}
+
+async function loadEngagementAchievements() {
+  const el = document.getElementById('engagementAchievementsView');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
+  try {
+    const res = await fetch('/api/admin/engagement/achievements', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json();
+    if (!data.success || !data.achievements?.length) {
+      el.innerHTML = '<p style="color:var(--text-secondary);">No achievements configured yet.</p>';
+      return;
+    }
+    el.innerHTML = data.achievements.map(achievement => `
+      <div class="table-row" style="align-items:flex-start;">
+        <div style="flex:1;">
+          <div style="font-weight:600;">${escapeHtml(achievement.icon || '')} ${escapeHtml(achievement.name)}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(achievement.metric_type)} · threshold ${achievement.threshold} · reward ${formatEngagementAmount(achievement.reward_points || 0)}</div>
+          ${achievement.description ? `<div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(achievement.description)}</div>` : ''}
+        </div>
+        <button class="btn-danger btn-sm" onclick="deleteEngagementAchievement(${achievement.id})">Delete</button>
+      </div>
+    `).join('');
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--error);">Failed to load achievements.</p>';
+  }
+}
+
+async function submitEngagementAchievement() {
+  const body = {
+    name: document.getElementById('engAchievementName').value.trim(),
+    metric_type: document.getElementById('engAchievementMetric').value,
+    threshold: parseInt(document.getElementById('engAchievementThreshold').value, 10) || 1,
+    reward_points: parseInt(document.getElementById('engAchievementReward').value, 10) || 0,
+    icon: document.getElementById('engAchievementIcon').value.trim() || null,
+    description: document.getElementById('engAchievementDescription').value.trim() || null,
+  };
+  if (!body.name) {
+    showError('Achievement name is required.');
+    return;
+  }
+  try {
+    const res = await fetch('/api/admin/engagement/achievements', {
+      method: 'POST',
+      credentials: 'include',
+      headers: engagementHeaders(),
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      showError(data.message || 'Failed to save achievement.');
+      return;
+    }
+    showSuccess('Achievement saved.');
+    loadEngagementAchievements();
+  } catch (e) {
+    showError('Error saving achievement.');
+  }
+}
+
+async function deleteEngagementAchievement(id) {
+  try {
+    const res = await fetch(`/api/admin/engagement/achievements/${id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'X-Requested-With': 'XMLHttpRequest', ...buildTenantRequestHeaders() },
+    });
+    const data = await res.json();
+    if (data.success) {
+      showSuccess('Achievement removed.');
+      loadEngagementAchievements();
+    } else {
+      showError(data.message || 'Failed to remove achievement.');
+    }
+  } catch (e) {
+    showError('Error removing achievement.');
+  }
+}
+
+async function loadEngagementRedemptions() {
+  const el = document.getElementById('engagementRedemptionsView');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
+  try {
+    const res = await fetch('/api/admin/engagement/redemptions?limit=50', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json();
+    if (!data.success || !data.redemptions?.length) {
+      el.innerHTML = '<p style="color:var(--text-secondary);">No redemptions yet.</p>';
+      return;
+    }
+    el.innerHTML = data.redemptions.map(redemption => `
+      <div class="table-row" style="align-items:flex-start;">
+        <div style="flex:1;">
+          <div style="font-weight:600;">${escapeHtml(redemption.item_name || `Item #${redemption.item_id}`)}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">User: ${escapeHtml(redemption.user_id)} · Cost: ${formatEngagementAmount(redemption.cost)}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">Mode: ${escapeHtml(redemption.fulfillment_mode || 'auto')} · Status: ${escapeHtml(redemption.fulfillment_status || 'completed')}</div>
+        </div>
+        <span style="font-size:0.8em;color:var(--text-muted);white-space:nowrap;">#${redemption.id}</span>
+      </div>
+    `).join('');
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--error);">Failed to load redemptions.</p>';
+  }
+}
+
+async function saveEngagementConfigFromSettings() {
+  try {
+    const body = {
+      enabled: document.getElementById('ps_moduleEngagementEnabled')?.checked ?? true,
+      points_message: parseInt(document.getElementById('ps_engPtsMsg')?.value || '5', 10),
+      points_reaction: parseInt(document.getElementById('ps_engPtsReact')?.value || '2', 10),
+      cooldown_message_mins: parseInt(document.getElementById('ps_engCooldownMsg')?.value || '60', 10),
+      cooldown_reaction_daily: parseInt(document.getElementById('ps_engCooldownReact')?.value || '5', 10),
+    };
+    const res = await fetch('/api/admin/engagement/config', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: engagementHeaders(),
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.success) showSuccess('Engagement settings saved!');
+    else showError(data.message || 'Failed to save.');
+  } catch (e) { showError('Error saving engagement settings.'); }
+}
+
 
 
 

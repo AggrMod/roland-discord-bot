@@ -1339,9 +1339,163 @@ function initDatabase() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  try { db.exec("ALTER TABLE engagement_config ADD COLUMN currency_name_singular TEXT DEFAULT 'point'"); } catch (e) {}
+  try { db.exec("ALTER TABLE engagement_config ADD COLUMN currency_name_plural TEXT DEFAULT 'points'"); } catch (e) {}
+  try { db.exec("ALTER TABLE engagement_config ADD COLUMN currency_symbol TEXT DEFAULT 'pts'"); } catch (e) {}
+  try { db.exec('ALTER TABLE engagement_config ADD COLUMN currency_icon TEXT'); } catch (e) {}
+  try { db.exec('ALTER TABLE engagement_config ADD COLUMN task_feed_channel_id TEXT'); } catch (e) {}
+  try { db.exec('ALTER TABLE engagement_config ADD COLUMN social_log_channel_id TEXT'); } catch (e) {}
+  try { db.exec('ALTER TABLE engagement_config ADD COLUMN purchase_log_channel_id TEXT'); } catch (e) {}
+  try { db.exec('ALTER TABLE engagement_config ADD COLUMN achievement_channel_id TEXT'); } catch (e) {}
+  try { db.exec('ALTER TABLE engagement_config ADD COLUMN fulfillment_ticket_category_id INTEGER'); } catch (e) {}
+  try { db.exec('ALTER TABLE engagement_config ADD COLUMN discord_messages_enabled INTEGER DEFAULT 1'); } catch (e) {}
+  try { db.exec('ALTER TABLE engagement_config ADD COLUMN discord_replies_enabled INTEGER DEFAULT 1'); } catch (e) {}
+  try { db.exec('ALTER TABLE engagement_config ADD COLUMN discord_reactions_enabled INTEGER DEFAULT 1'); } catch (e) {}
+  try { db.exec('ALTER TABLE engagement_config ADD COLUMN points_reply INTEGER DEFAULT 3'); } catch (e) {}
+  try { db.exec('ALTER TABLE engagement_config ADD COLUMN cooldown_reply_mins INTEGER DEFAULT 30'); } catch (e) {}
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS engagement_monitored_accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      account_handle TEXT NOT NULL,
+      provider_account_id TEXT,
+      display_name TEXT,
+      enabled INTEGER DEFAULT 1,
+      mirror_channel_id TEXT,
+      task_types_json TEXT DEFAULT '[]',
+      reward_config_json TEXT DEFAULT '{}',
+      requirements_json TEXT DEFAULT '{}',
+      auto_create_task INTEGER DEFAULT 1,
+      mirror_posts INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS engagement_hashtag_monitors (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      hashtag TEXT NOT NULL,
+      enabled INTEGER DEFAULT 1,
+      mirror_channel_id TEXT,
+      task_types_json TEXT DEFAULT '[]',
+      reward_config_json TEXT DEFAULT '{}',
+      requirements_json TEXT DEFAULT '{}',
+      auto_create_task INTEGER DEFAULT 1,
+      mirror_posts INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS engagement_social_accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      provider_user_id TEXT,
+      handle TEXT,
+      display_name TEXT,
+      access_token TEXT,
+      refresh_token TEXT,
+      token_expires_at DATETIME,
+      status TEXT DEFAULT 'linked',
+      metadata_json TEXT DEFAULT '{}',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS engagement_social_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      trigger_type TEXT NOT NULL DEFAULT 'manual',
+      source_post_id TEXT,
+      source_post_url TEXT,
+      source_account_handle TEXT,
+      source_account_id TEXT,
+      hashtag TEXT,
+      title TEXT,
+      body TEXT,
+      required_actions_json TEXT DEFAULT '[]',
+      reward_config_json TEXT DEFAULT '{}',
+      requirements_json TEXT DEFAULT '{}',
+      status TEXT DEFAULT 'active',
+      starts_at DATETIME,
+      ends_at DATETIME,
+      mirrored_channel_id TEXT,
+      mirrored_message_id TEXT,
+      metadata_json TEXT DEFAULT '{}',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS engagement_task_completions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id INTEGER NOT NULL REFERENCES engagement_social_tasks(id) ON DELETE CASCADE,
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      action_type TEXT NOT NULL,
+      linked_account_id INTEGER REFERENCES engagement_social_accounts(id) ON DELETE SET NULL,
+      status TEXT DEFAULT 'verified',
+      reward_points INTEGER DEFAULT 0,
+      reference_id TEXT,
+      verified_at DATETIME,
+      metadata_json TEXT DEFAULT '{}',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS engagement_achievements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      icon TEXT,
+      metric_type TEXT NOT NULL,
+      threshold INTEGER NOT NULL DEFAULT 1,
+      reward_points INTEGER DEFAULT 0,
+      enabled INTEGER DEFAULT 1,
+      filters_json TEXT DEFAULT '{}',
+      announce_enabled INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS engagement_achievement_awards (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      achievement_id INTEGER NOT NULL REFERENCES engagement_achievements(id) ON DELETE CASCADE,
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      reward_points INTEGER DEFAULT 0,
+      announced_message_id TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  try { db.exec("ALTER TABLE shop_items ADD COLUMN reward_type TEXT DEFAULT 'auto_role'"); } catch (e) {}
+  try { db.exec("ALTER TABLE shop_items ADD COLUMN fulfillment_mode TEXT DEFAULT 'auto'"); } catch (e) {}
+  try { db.exec('ALTER TABLE shop_items ADD COLUMN fulfillment_notes TEXT'); } catch (e) {}
+  try { db.exec("ALTER TABLE shop_redemptions ADD COLUMN fulfillment_status TEXT DEFAULT 'completed'"); } catch (e) {}
+  try { db.exec('ALTER TABLE shop_redemptions ADD COLUMN ticket_channel_id TEXT'); } catch (e) {}
+  try { db.exec('ALTER TABLE shop_redemptions ADD COLUMN log_message_id TEXT'); } catch (e) {}
+  try { db.exec("ALTER TABLE shop_redemptions ADD COLUMN metadata_json TEXT DEFAULT '{}'"); } catch (e) {}
+  try { db.exec('ALTER TABLE shop_redemptions ADD COLUMN fulfilled_at DATETIME'); } catch (e) {}
   // Unique dedup index for ledger
   try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_ref ON points_ledger (guild_id, user_id, reference_id) WHERE reference_id IS NOT NULL'); } catch (e) {}
   try { db.exec('ALTER TABLE points_ledger ADD COLUMN expired INTEGER DEFAULT 0'); } catch (e) {}
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_engagement_accounts_guild_provider_handle ON engagement_monitored_accounts (guild_id, provider, account_handle)'); } catch (e) {}
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_engagement_hashtags_guild_provider_tag ON engagement_hashtag_monitors (guild_id, provider, hashtag)'); } catch (e) {}
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_engagement_social_accounts_guild_user_provider ON engagement_social_accounts (guild_id, user_id, provider)'); } catch (e) {}
+  try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_engagement_social_tasks_source ON engagement_social_tasks (guild_id, provider, source_post_id, trigger_type) WHERE source_post_id IS NOT NULL"); } catch (e) {}
+  try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_engagement_task_completions_ref ON engagement_task_completions (guild_id, user_id, reference_id) WHERE reference_id IS NOT NULL"); } catch (e) {}
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_engagement_task_completion_unique_action ON engagement_task_completions (task_id, user_id, action_type)'); } catch (e) {}
+  try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_engagement_achievement_awards_unique ON engagement_achievement_awards (achievement_id, user_id)'); } catch (e) {}
 
   // ── Wallet Tracker ─────────────────────────────────────────────────────────
   // Admin-defined wallets to monitor for TX alerts + live holdings panels

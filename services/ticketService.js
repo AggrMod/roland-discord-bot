@@ -802,6 +802,54 @@ class TicketService {
     }
   }
 
+  async createSystemTicketFromCategory(categoryId, options = {}) {
+    try {
+      const normalizedGuildId = this._resolveGuildId(options.guildId, { allowSingleTenantFallback: true });
+      if (!normalizedGuildId) return { success: false, message: 'Guild is required' };
+      if (!categoryId) return { success: false, message: 'Category is required' };
+
+      const openerId = String(options.openerId || '').trim();
+      const openerName = String(options.openerName || options.username || 'system').trim() || 'system';
+      if (!openerId) return { success: false, message: 'Opener is required' };
+
+      const intro = String(options.intro || '').trim();
+      const fakeInteraction = {
+        guildId: normalizedGuildId,
+        user: {
+          id: openerId,
+          username: openerName,
+        },
+      };
+
+      const responseMap = {
+        ...(options.templateResponses && typeof options.templateResponses === 'object' ? options.templateResponses : {}),
+      };
+      if (options.title && !responseMap.Subject) {
+        responseMap.Subject = String(options.title).trim();
+      }
+      if (intro && !responseMap.Context) {
+        responseMap.Context = intro;
+      }
+
+      const result = await this.createTicket(fakeInteraction, categoryId, responseMap, normalizedGuildId);
+      if (!result?.success || !result.channelId || !this.client) {
+        return result || { success: false, message: 'Ticketing operation failed' };
+      }
+
+      if (intro) {
+        const channel = await this.client.channels.fetch(result.channelId).catch(() => null);
+        if (channel && channel.isTextBased()) {
+          await channel.send({ content: intro }).catch(() => {});
+        }
+      }
+
+      return result;
+    } catch (error) {
+      logger.error('Error creating system ticket:', error);
+      return { success: false, message: 'Ticketing operation failed' };
+    }
+  }
+
   async claimTicket(interaction, channelId) {
     try {
       const ticket = this.getTicket(channelId);

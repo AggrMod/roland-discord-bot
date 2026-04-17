@@ -45,12 +45,13 @@ class TicketService {
     if (Array.isArray(value)) {
       return value
         .map(field => ({
-          label: String(field.label || '').trim(),
-          placeholder: String(field.placeholder || ''),
+          label: String(field.label || '').trim().slice(0, 256),
+          placeholder: String(field.placeholder || '').trim().slice(0, 100),
           required: field.required !== false,
           style: field.style === 'paragraph' ? 'paragraph' : 'short'
         }))
-        .filter(field => field.label);
+        .filter(field => field.label)
+        .slice(0, 5);
     }
     if (typeof value === 'string') {
       try {
@@ -242,6 +243,99 @@ class TicketService {
       .trim();
   }
 
+  _splitTextForEmbed(value, maxLength = 1024) {
+    const text = String(value ?? '').trim();
+    if (!text) return ['(blank)'];
+    if (text.length <= maxLength) return [text];
+
+    const chunks = [];
+    let remaining = text;
+    while (remaining.length > 0) {
+      if (remaining.length <= maxLength) {
+        chunks.push(remaining);
+        break;
+      }
+
+      const window = remaining.slice(0, maxLength);
+      let splitAt = Math.max(window.lastIndexOf('\n'), window.lastIndexOf(' '));
+      if (splitAt < Math.floor(maxLength * 0.6)) {
+        splitAt = maxLength;
+      }
+
+      const chunk = remaining.slice(0, splitAt).trimEnd();
+      chunks.push(chunk || remaining.slice(0, maxLength));
+      remaining = remaining.slice(splitAt).trimStart();
+    }
+
+    return chunks.length > 0 ? chunks : ['(blank)'];
+  }
+
+  _buildTemplateResponseFields(templateResponses, maxFields = 22) {
+    if (!templateResponses || typeof templateResponses !== 'object') return [];
+
+    const fields = [];
+    let truncated = false;
+    for (const [rawLabel, rawValue] of Object.entries(templateResponses)) {
+      const labelBase = String(rawLabel || '').trim().slice(0, 240) || 'Details';
+      const chunks = this._splitTextForEmbed(rawValue, 1024);
+
+      for (let idx = 0; idx < chunks.length; idx += 1) {
+        if (fields.length >= maxFields) {
+          truncated = true;
+          break;
+        }
+        const name = idx === 0
+          ? labelBase
+          : `${labelBase} (cont. ${idx + 1})`.slice(0, 256);
+        fields.push({
+          name,
+          value: String(chunks[idx] || '(blank)').slice(0, 1024),
+          inline: false,
+        });
+      }
+
+      if (truncated) break;
+    }
+
+    if (truncated && fields.length > 0) {
+      const suffix = '\n\n[Additional responses were truncated due to Discord limits.]';
+      const lastField = fields[fields.length - 1];
+      if (lastField.value.length + suffix.length <= 1024) {
+        lastField.value += suffix;
+      }
+    }
+
+    return fields;
+  }
+
+  _serializeEmbedForTranscript(embed) {
+    if (!embed) return 'embed';
+    const parts = [];
+
+    const title = this._escapeTranscriptValue(embed.title || '');
+    const description = this._escapeTranscriptValue(embed.description || '');
+    if (title) parts.push(`title=${title}`);
+    if (description) parts.push(`description=${description}`);
+
+    const fieldParts = Array.isArray(embed.fields)
+      ? embed.fields
+        .map(field => {
+          const fieldName = this._escapeTranscriptValue(field?.name || '');
+          const fieldValue = this._escapeTranscriptValue(field?.value || '');
+          if (!fieldName && !fieldValue) return '';
+          if (!fieldName) return fieldValue;
+          if (!fieldValue) return fieldName;
+          return `${fieldName}=${fieldValue}`;
+        })
+        .filter(Boolean)
+      : [];
+    if (fieldParts.length > 0) {
+      parts.push(`fields=${fieldParts.join('; ')}`);
+    }
+
+    return parts.join(' | ') || 'embed';
+  }
+
   async _fetchAllMessages(channel, limit = 500) {
     const collected = [];
     let before;
@@ -276,7 +370,7 @@ class TicketService {
         ? ` [attachments: ${[...msg.attachments.values()].map(a => a.url).join(', ')}]`
         : '';
       const embeds = msg.embeds.length > 0
-        ? ` [embeds: ${msg.embeds.map(embed => this._escapeTranscriptValue(embed.title || embed.description || 'embed')).join(' | ')}]`
+        ? ` [embeds: ${msg.embeds.map(embed => this._serializeEmbedForTranscript(embed)).join(' || ')}]`
         : '';
       lines.push(`[${ts}] ${msg.author.tag}: ${content || '[no content]'}${attachments}${embeds}`);
     }
@@ -639,13 +733,7 @@ class TicketService {
         permissionOverwrites,
       });
 
-      // Build template responses display
-      let templateText = '';
-      if (templateResponses && Object.keys(templateResponses).length > 0) {
-        templateText = Object.entries(templateResponses)
-          .map(([label, value]) => `**${label}:**\n${String(value)}`)
-          .join('\n\n');
-      }
+      const detailFields = this._buildTemplateResponseFields(templateResponses, 22);
 
       const embed = new EmbedBuilder()
         .setColor('#5865F2')
@@ -668,8 +756,8 @@ class TicketService {
         fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
       });
 
-      if (templateText) {
-        embed.addFields({ name: 'Details', value: templateText.slice(0, 1024) });
+      if (detailFields.length > 0) {
+        embed.addFields(detailFields);
       }
 
       const actionRow = new ActionRowBuilder().addComponents(
@@ -1068,8 +1156,8 @@ class TicketService {
     if (to) { query += ' AND DATE(created_at) <= DATE(?)'; params.push(to); }
     if (q) {
       const s = `%${String(q).trim()}%`;
-      query += ' AND (opener_name LIKE ? OR opener_id LIKE ? OR category_name LIKE ? OR transcript LIKE ?)';
-      params.push(s, s, s, s);
+      query += ' AND (opener_name LIKE ? OR opener_id LIKE ? OR category_name LIKE ? OR transcript LIKE ? OR template_responses LIKE ?)';
+      params.push(s, s, s, s, s);
     }
     query += ' ORDER BY created_at DESC';
     return db.prepare(query).all(...params);

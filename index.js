@@ -719,7 +719,20 @@ function startTicketInactivityScheduler() {
     try {
       const moduleGuard = require('./utils/moduleGuard');
       if (moduleGuard.isModuleEnabled('ticketing')) {
-        await ticketService.runInactivitySweep({ inactiveHours: 168, warningHours: 24, maxPerRun: 20 });
+        const settingsManager = require('./config/settings');
+        const settings = settingsManager.getSettings ? settingsManager.getSettings() : {};
+        if (settings.ticketAutoCloseEnabled === false) return;
+
+        const configuredInactiveHours = Number(settings.ticketAutoCloseInactiveHours);
+        const configuredWarningHours = Number(settings.ticketAutoCloseWarningHours);
+        const inactiveHours = Number.isFinite(configuredInactiveHours) && configuredInactiveHours > 0
+          ? configuredInactiveHours
+          : 168;
+        const warningHours = Number.isFinite(configuredWarningHours) && configuredWarningHours >= 0
+          ? configuredWarningHours
+          : 24;
+
+        await ticketService.runInactivitySweep({ inactiveHours, warningHours, maxPerRun: 20 });
       }
     } catch (_) {}
   }, 15 * 60 * 1000));

@@ -1677,7 +1677,6 @@ function switchSettingsTab(tab) {
     nfttracker: 'nft-activity',
     tokentracker: 'token-activity',
     selfserve: 'self-serve-roles',
-    ticketing: 'ticketing',
     engagement: 'engagement',
     battle: 'battle',
     heist: 'heist',

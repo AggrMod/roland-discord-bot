@@ -3135,7 +3135,16 @@ function switchSection(sectionName, options = {}) {
   } else if (sectionName === 'self-serve-roles') {
     loadSelfServeRolesPublic();
   } else if (sectionName === 'ticketing') {
-    loadUserTicketOverview();
+    const canManageTicketing = !!(activeGuildId && (isAdmin || isSuperadmin));
+    const userCard = document.getElementById('ticketingUserOverviewCard');
+    const adminCard = document.getElementById('ticketingModuleSettingsCard');
+    if (userCard) userCard.style.display = canManageTicketing ? 'none' : '';
+    if (adminCard) adminCard.style.display = canManageTicketing ? '' : 'none';
+    if (canManageTicketing) {
+      loadTicketingView('ticketingModuleSettingsPanel');
+    } else {
+      loadUserTicketOverview();
+    }
   } else if (sectionName === 'engagement') {
     loadEngagementSection();
   } else if (sectionName === 'plans') {
@@ -11964,7 +11973,7 @@ function clearTicketingViewCache() {
 }
 
 async function loadUserTicketOverview() {
-  const section = document.querySelector('#section-ticketing .card');
+  const section = document.getElementById('ticketingUserOverviewContent');
   if (!section) return;
   section.innerHTML = `<div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading your tickets...</p></div>`;
   try {
@@ -11973,7 +11982,7 @@ async function loadUserTicketOverview() {
     if (!json.success) throw new Error(json.message || 'Failed to load tickets');
     const tickets = json.tickets || [];
     if (!tickets.length) {
-      section.innerHTML = `<p style="color:var(--text-secondary);">No tickets found for this server yet.</p>`;
+      section.innerHTML = `<p style="color:var(--text-secondary);">No tickets found for your account in this server yet.</p>`;
       return;
     }
     const rows = tickets.map(t => `
@@ -12004,8 +12013,8 @@ async function loadUserTicketOverview() {
   }
 }
 
-async function loadTicketingView() {
-  const container = document.getElementById('adminTicketingContent');
+async function loadTicketingView(targetContainerId = 'adminTicketingContent') {
+  const container = document.getElementById(targetContainerId);
   if (!container) return;
 
   container.innerHTML = `

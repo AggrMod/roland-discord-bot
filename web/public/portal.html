@@ -826,19 +826,27 @@
             </div>
           </div>
         </section>
-
         <!-- Ticketing Section -->
         <section id="section-ticketing" class="content-section">
           <header class="section-header">
             <h2>Support Tickets</h2>
             <p class="section-subtitle">Submit and track support requests</p>
           </header>
-          <div class="card">
-            <div class="empty-state">
-              <div class="empty-state-icon">🎫</div>
-              <h4 class="empty-state-title">Use Discord for Tickets</h4>
-              <p class="empty-state-message">Create tickets via the <strong>/ticket</strong> command in Discord.</p>
+          <div class="card" id="ticketingUserOverviewCard">
+            <div id="ticketingUserOverviewContent">
+              <div class="empty-state">
+                <div class="empty-state-icon">TK</div>
+                <h4 class="empty-state-title">Use Discord for Tickets</h4>
+                <p class="empty-state-message">Create tickets via the <strong>/ticket</strong> command in Discord.</p>
+              </div>
             </div>
+          </div>
+          <div class="card" id="ticketingModuleSettingsCard" style="display:none;">
+            <h3 style="margin:0 0 var(--space-2) 0;">Ticketing Admin</h3>
+            <p style="color:var(--text-secondary);margin:0 0 var(--space-3) 0;font-size:0.85em;">
+              Configure categories, post ticket panels, review open tickets, and tune automation.
+            </p>
+            <div id="ticketingModuleSettingsPanel" style="color: var(--text-secondary);">Loading...</div>
           </div>
         </section>
 

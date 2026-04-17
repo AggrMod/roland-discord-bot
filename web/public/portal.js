@@ -2219,6 +2219,7 @@ function showUnauthenticatedState() {
     navAuthBtn.classList.add('btn-primary');
   }
   if (mobileNavProfile) mobileNavProfile.style.display = 'none';
+  updateHelpCenterRoleVisibility();
 
   document.getElementById('loginPrompt').style.display = 'block';
   document.getElementById('dashboardContent').style.display = 'none';
@@ -2245,6 +2246,30 @@ function refreshAdminEntryVisibility() {
     topNavAdminSettings.style.display = canShowAdminSettingsEntry ? '' : 'none';
     topNavAdminSettings.textContent = hasServerContext ? 'Modules' : 'Select Server';
   }
+
+  updateHelpCenterRoleVisibility();
+}
+
+function canViewHelpRole(roleKey) {
+  if (!roleKey) return true;
+  if (roleKey === 'admin') return !!(isAdmin || isSuperadmin);
+  if (roleKey === 'superadmin') return !!isSuperadmin;
+  return true;
+}
+
+function updateHelpCenterRoleVisibility() {
+  document.querySelectorAll('[data-help-role]').forEach((el) => {
+    const roleKey = el.getAttribute('data-help-role');
+    const isVisible = canViewHelpRole(roleKey);
+    const isHelpContent = el.classList?.contains('help-content');
+    if (!isVisible) {
+      el.style.display = 'none';
+      el.setAttribute('aria-hidden', 'true');
+    } else {
+      if (!isHelpContent) el.style.display = '';
+      el.setAttribute('aria-hidden', 'false');
+    }
+  });
 }
 
 async function checkAdminStatus() {
@@ -3114,6 +3139,8 @@ function switchSection(sectionName, options = {}) {
   } else if (sectionName === 'plans') {
     updatePlanPrices();
     if (isAdmin) loadCurrentPlan();
+  } else if (sectionName === 'help') {
+    updateHelpCenterRoleVisibility();
   }
 
   // Topbar-driven IA: sidebar remains hidden across all sections.
@@ -3137,24 +3164,32 @@ function switchSection(sectionName, options = {}) {
 }
 
 function toggleHelp(categoryId) {
+  const content = document.getElementById(`help-${categoryId}`);
+  const requiredRole = content?.getAttribute('data-help-role');
+  if (!canViewHelpRole(requiredRole)) {
+    showError('You do not have permission to view that help section.');
+    return;
+  }
+  const wasVisible = !!content && content.style.display === 'block';
+
   // Hide all help content
   document.querySelectorAll('.help-content').forEach(content => {
     content.style.display = 'none';
   });
 
   // Show selected help content
-  const content = document.getElementById(`help-${categoryId}`);
-  if (content) {
-    const isVisible = content.style.display === 'block';
-    content.style.display = isVisible ? 'none' : 'block';
+  if (content && !wasVisible) {
+    content.style.display = 'block';
     
-    if (!isVisible) {
+    if (content.style.display === 'block') {
       // Smooth scroll to content
       setTimeout(() => {
         content.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }, 100);
     }
   }
+
+  updateHelpCenterRoleVisibility();
 }
 
 async function loadTreasuryPublicView() {

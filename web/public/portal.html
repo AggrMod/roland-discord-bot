@@ -903,6 +903,14 @@
               <h3>🚀 Getting Started</h3>
               <p>Learn the fundamentals and how to participate</p>
             </div>
+            <div class="card help-card" onclick="toggleHelp('user-flow')">
+              <h3>User Flow</h3>
+              <p>End-to-end member journey from login to module participation</p>
+            </div>
+            <div class="card help-card" onclick="toggleHelp('module-guides')">
+              <h3>Module Guides</h3>
+              <p>Role-based guidance for every module in the platform</p>
+            </div>
             <div class="card help-card" onclick="toggleHelp('wallet-setup')">
               <h3>💼 Wallet Setup</h3>
               <p>Complete guide to linking and verifying your Solana wallet</p>
@@ -922,6 +930,14 @@
             <div class="card help-card" onclick="toggleHelp('commands')">
               <h3>📚 Commands by Category</h3>
               <p>Full slash command reference grouped by system area</p>
+            </div>
+            <div id="helpAdminFlowCard" class="card help-card" data-help-role="admin" style="display:none;" onclick="toggleHelp('admin-flow')">
+              <h3>Admin Flow</h3>
+              <p>Operational workflow for server moderators and administrators</p>
+            </div>
+            <div id="helpSuperadminFlowCard" class="card help-card" data-help-role="superadmin" style="display:none;" onclick="toggleHelp('superadmin-flow')">
+              <h3>Superadmin Flow</h3>
+              <p>Tenant governance, global controls, monitoring, and rollout flow</p>
             </div>
             <div class="card help-card" onclick="toggleHelp('troubleshooting')">
               <h3>🔧 Troubleshooting</h3>
@@ -961,6 +977,97 @@
                     <p>Start voting on governance proposals and joining missions to earn rewards and shape the DAO's future.</p>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-user-flow" class="help-content" style="display:none;">
+            <div class="card">
+              <h3>User Flow</h3>
+              <div class="help-steps">
+                <div class="help-step">
+                  <div class="step-number">1</div>
+                  <div class="step-content">
+                    <h4>Authenticate and Select Context</h4>
+                    <p>Log in through Discord and select a server so module permissions and content are tenant-aware.</p>
+                  </div>
+                </div>
+                <div class="help-step">
+                  <div class="step-number">2</div>
+                  <div class="step-content">
+                    <h4>Complete Identity Setup</h4>
+                    <p>Open Wallets, connect one or more wallets, and verify ownership. Set a primary wallet for voting and tier logic.</p>
+                  </div>
+                </div>
+                <div class="help-step">
+                  <div class="step-number">3</div>
+                  <div class="step-content">
+                    <h4>Unlock Module Access</h4>
+                    <p>Use Module Hub to open enabled modules for your server, then move between governance, tracking, support, and game systems.</p>
+                  </div>
+                </div>
+                <div class="help-step">
+                  <div class="step-number">4</div>
+                  <div class="step-content">
+                    <h4>Participate and Track Outcomes</h4>
+                    <p>Vote on proposals, join missions and games, and monitor your stats in profile, points, and activity dashboards.</p>
+                  </div>
+                </div>
+                <div class="help-step">
+                  <div class="step-number">5</div>
+                  <div class="step-content">
+                    <h4>Get Support Fast</h4>
+                    <p>Use troubleshooting guidance first, then escalate in Discord support with screenshots, error messages, and steps to reproduce.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-module-guides" class="help-content" style="display:none;">
+            <div class="card">
+              <h3>Module Guides</h3>
+              <p style="color:var(--text-secondary); margin-bottom:12px;">
+                Quick operational reference by module with user, admin, and superadmin responsibilities.
+              </p>
+              <div class="help-section">
+                <h4>Module Responsibility Matrix</h4>
+                <div class="data-table-wrap"><table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Module</th>
+                      <th>User Focus</th>
+                      <th>Admin Focus</th>
+                      <th>Superadmin Focus</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Verification</td><td>Link wallet and claim roles.</td><td>Configure role rules and sync actions.</td><td>Set tenant defaults and lock policy.</td></tr>
+                    <tr><td>Governance</td><td>Create, support, and vote on proposals.</td><td>Moderate lifecycle and thresholds.</td><td>Define default governance guardrails.</td></tr>
+                    <tr><td>Treasury</td><td>View balances and movement context.</td><td>Set wallets, intervals, and tx alerts.</td><td>Review platform-wide financial posture.</td></tr>
+                    <tr><td>Wallet Tracker</td><td>Follow tracked wallets and holdings.</td><td>Manage watchlists and feed behavior.</td><td>Set baseline tracker capacity by plan.</td></tr>
+                    <tr><td>NFT Tracker</td><td>See collection activity updates.</td><td>Manage collections and feed channels.</td><td>Control capacity and defaults per tenant.</td></tr>
+                    <tr><td>Token Tracker</td><td>Monitor token movement streams.</td><td>Add and maintain token feeds.</td><td>Define scaling limits and rollout policy.</td></tr>
+                    <tr><td>Invite Tracker</td><td>Review personal invite impact.</td><td>Manage leaderboards and exports.</td><td>Standardize anti-abuse defaults.</td></tr>
+                    <tr><td>Ticketing</td><td>Open and follow support tickets.</td><td>Manage categories, handlers, automation.</td><td>Set baseline templates and limits.</td></tr>
+                    <tr><td>Engagement</td><td>Earn points and redeem rewards.</td><td>Maintain economy and reward controls.</td><td>Tune global reward policy and limits.</td></tr>
+                    <tr><td>AI Assistant</td><td>Ask questions and get contextual help.</td><td>Tune prompts, scope, and safeguards.</td><td>Approve model policy and guardrails.</td></tr>
+                    <tr><td>Minigames</td><td>Join sessions and compete.</td><td>Start, moderate, and monitor game runs.</td><td>Manage tenancy defaults and enablement.</td></tr>
+                    <tr><td>Missions (Heist)</td><td>Sign up, track status, and participate.</td><td>Create and operate mission lifecycle.</td><td>Control mission defaults at scale.</td></tr>
+                    <tr><td>Self-Serve Roles</td><td>Claim optional roles instantly.</td><td>Curate role menu and constraints.</td><td>Set governance policy for role menus.</td></tr>
+                    <tr><td>Branding</td><td>Receive branded tenant experience.</td><td>Apply server-level branding values.</td><td>Define parent-brand defaults and locks.</td></tr>
+                    <tr><td>Help Center</td><td>Follow docs and resolve blockers.</td><td>Share runbooks with moderators.</td><td>Maintain cross-tenant documentation quality.</td></tr>
+                  </tbody>
+                </table></div>
+              </div>
+              <div class="help-section">
+                <h4>Operational Pattern</h4>
+                <ol>
+                  <li>Enable only modules your server team can actively maintain.</li>
+                  <li>Document owner, escalation path, and success metric per module.</li>
+                  <li>Roll out changes in one tenant first, then scale after validation.</li>
+                  <li>Use Help Center and command docs as the single source of truth.</li>
+                </ol>
               </div>
             </div>
           </div>
@@ -1360,6 +1467,76 @@
                 </ul>
               </div>
 
+            </div>
+          </div>
+
+          <div id="help-admin-flow" class="help-content" data-help-role="admin" style="display:none;">
+            <div class="card">
+              <h3>Admin Flow</h3>
+              <div class="help-section">
+                <h4>Daily Operational Cycle</h4>
+                <ol>
+                  <li>Select the active server and open Module Hub.</li>
+                  <li>Validate module toggles, channel mappings, and automation settings.</li>
+                  <li>Review governance queue, ticket backlog, and engagement anomalies.</li>
+                  <li>Run refresh and export operations only when data drift is confirmed.</li>
+                  <li>Publish status updates and next actions for moderators.</li>
+                </ol>
+              </div>
+              <div class="help-section">
+                <h4>Admin Incident Flow</h4>
+                <ol>
+                  <li>Confirm the issue scope (single user, channel, module, or tenant-wide symptom).</li>
+                  <li>Capture evidence: command response, UI state, timestamp, and server ID.</li>
+                  <li>Apply reversible mitigations first (toggle, pause automation, fallback command).</li>
+                  <li>Escalate to superadmin for cross-tenant or infrastructure-impacting incidents.</li>
+                  <li>Document post-incident changes in the module runbook.</li>
+                </ol>
+              </div>
+              <div class="help-section">
+                <h4>Admin Quality Checklist</h4>
+                <ul>
+                  <li>Permissions tested with a non-admin user account.</li>
+                  <li>All critical commands exercised once after settings changes.</li>
+                  <li>Ticketing, governance, and tracker channels mapped correctly.</li>
+                  <li>Help section links match the currently enabled module set.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-superadmin-flow" class="help-content" data-help-role="superadmin" style="display:none;">
+            <div class="card">
+              <h3>Superadmin Flow</h3>
+              <div class="help-section">
+                <h4>Tenant Governance Lifecycle</h4>
+                <ol>
+                  <li>Provision tenant with plan, module baseline, and branding defaults.</li>
+                  <li>Define locked settings versus tenant-editable settings.</li>
+                  <li>Run onboarding validation for auth, module access, and policy enforcement.</li>
+                  <li>Monitor health dashboards and queue anomalies for intervention.</li>
+                  <li>Promote successful baseline updates to broader tenant groups.</li>
+                </ol>
+              </div>
+              <div class="help-section">
+                <h4>Change Rollout Flow</h4>
+                <ol>
+                  <li>Draft change objective and blast-radius assessment.</li>
+                  <li>Apply to pilot tenant(s) with monitoring checkpoints.</li>
+                  <li>Verify module behavior, data integrity, and command reliability.</li>
+                  <li>Communicate rollout status to admins and support teams.</li>
+                  <li>Scale rollout in phases and keep rollback path ready.</li>
+                </ol>
+              </div>
+              <div class="help-section">
+                <h4>Superadmin Control Priorities</h4>
+                <ul>
+                  <li>Platform safety before feature velocity.</li>
+                  <li>Consistent defaults and naming across tenants.</li>
+                  <li>Auditability for high-impact actions and permission changes.</li>
+                  <li>Documentation parity between product behavior and help center.</li>
+                </ul>
+              </div>
             </div>
           </div>
 

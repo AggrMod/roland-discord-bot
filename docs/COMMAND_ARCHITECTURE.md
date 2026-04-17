@@ -4,6 +4,9 @@
 **Date**: March 25, 2026  
 **Status**: Pre-Launch Refactor
 
+> This document is a migration/architecture reference.  
+> For the live command surface, use `docs/ADMIN_HELP.md`, `web/public/admin-help.html`, and `scripts/check-help-parity.js`.
+
 ## Executive Summary
 
 This document outlines the new module-first command architecture for the GuildPilot Discord bot. All commands are now organized by functional module with user/admin subcommand groups, and all modules are toggleable.

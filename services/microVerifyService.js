@@ -381,16 +381,29 @@ class MicroVerifyService {
         return { success: false, message: 'Request already processed' };
       }
 
-      // Mark as verified
+      // Link wallet to user
+      const walletService = require('./walletService');
+      const linkResult = walletService.linkWallet(request.discord_id, request.username, senderWallet, request.guild_id || '');
+      if (!linkResult.success) {
+        logger.warn(`Micro-verify wallet link failed for request ${request.id}: ${linkResult.message || 'unknown reason'}`);
+        return {
+          success: false,
+          walletLinked: false,
+          firstWalletLinked: false,
+          shouldNotify: false,
+          roleSyncQueued: false,
+          message: linkResult.message || 'Failed to link wallet',
+          errorCode: 'WALLET_LINK_FAILED'
+        };
+      }
+
+      // Only mark as verified when wallet link succeeds.
       db.prepare(`
         UPDATE micro_verify_requests 
         SET status = 'verified', sender_wallet = ?, tx_signature = ?, verified_at = datetime('now'), updated_at = datetime('now')
         WHERE id = ?
       `).run(senderWallet, txSignature, requestId);
 
-      // Link wallet to user
-      const walletService = require('./walletService');
-      const linkResult = walletService.linkWallet(request.discord_id, request.username, senderWallet, request.guild_id || '');
       const shouldNotify = linkResult.success && linkResult.isFirstWallet === true;
       const shouldSyncRoles = linkResult.success === true;
 
@@ -445,6 +458,9 @@ class MicroVerifyService {
         if (result && result.success) {
           const updated = this.getPendingRequest(discordId);
           return { success: true, status: 'verified', request: updated.request };
+        }
+        if (result && result.errorCode === 'WALLET_LINK_FAILED') {
+          return { success: false, message: result.message || 'Wallet link failed', code: result.errorCode };
         }
       }
 
@@ -664,6 +680,13 @@ class MicroVerifyService {
       if (result.success) {
         this.markTxChecked(signature, {
           status: 'matched',
+          solAmount: solRounded,
+          matchedRequestId: request.id,
+          senderWallet,
+        });
+      } else if (result && result.errorCode === 'WALLET_LINK_FAILED') {
+        this.markTxChecked(signature, {
+          status: 'link_failed',
           solAmount: solRounded,
           matchedRequestId: request.id,
           senderWallet,

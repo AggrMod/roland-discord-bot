@@ -4,48 +4,48 @@ Discord bot for the Guild Pilot NFT ecosystem featuring wallet verification, DAO
 
 ## Features
 
-### 🔐 Wallet Verification System
+### ðŸ” Wallet Verification System
 - Link multiple Solana wallets to Discord account
 - Automatic NFT counting and tier assignment
-- Role-based permissions (Associate → Don)
+- Role-based permissions (Associate â†’ Don)
 - Voting power calculation
 - OG (Original/early member) role system with configurable limits
 - Micro-verification via SOL micro-transfers
 
-### 📡 NFT Activity Tracking
+### ðŸ“¡ NFT Activity Tracking
 - Watch and monitor specific NFT collections
 - Real-time activity alerts (mints, sells, lists, etc.)
 - Configurable Discord channel posting with filters
 - Event-type emoji badges for visual clarity
 - Webhook ingest API for external event sources
 
-### 🗳️ DAO Governance
+### ðŸ—³ï¸ DAO Governance
 - Create proposals with community support system
 - Weighted voting based on NFT holdings
 - Auto-promotion after 4 supporters
 - Quorum checking (25% minimum)
 - 7-day voting periods with auto-close
 
-### 🎮 Mini-Games Suite (10 games)
+### ðŸŽ® Mini-Games Suite (10 games)
 > All game commands require **Moderator or Admin** permissions.
 > Individual games: **Free**. Game Night orchestration: **Growth+**.
 
 | Game | Command | Type |
 |---|---|---|
-| ⚔️ Battle Royale | `/battle` | HP-based elimination |
-| 🃏 Higher or Lower | `/higherlower` | Card guessing, wrong = out |
-| 🎲 Dice Duel | `/diceduel` | Lowest d6 roll eliminated |
-| ⚡ Reaction Race | `/reactionrace` | Slowest to react is out |
-| 🔢 Number Guess | `/numberguess` | Closest to secret number wins |
-| 🎰 Slots | `/slots` | Best spin combo wins |
-| ❓ Trivia | `/trivia` | Most correct answers wins |
-| 🧩 Word Scramble | `/wordscramble` | First to unscramble wins |
-| 🪨 RPS Tournament | `/rps` | Rock-paper-scissors bracket |
-| 🎴 Blackjack | `/blackjack` | Beat the dealer |
+| âš”ï¸ Battle Royale | `/battle` | HP-based elimination |
+| ðŸƒ Higher or Lower | `/higherlower` | Card guessing, wrong = out |
+| ðŸŽ² Dice Duel | `/diceduel` | Lowest d6 roll eliminated |
+| âš¡ Reaction Race | `/reactionrace` | Slowest to react is out |
+| ðŸ”¢ Number Guess | `/numberguess` | Closest to secret number wins |
+| ðŸŽ° Slots | `/slots` | Best spin combo wins |
+| â“ Trivia | `/trivia` | Most correct answers wins |
+| ðŸ§© Word Scramble | `/wordscramble` | First to unscramble wins |
+| ðŸª¨ RPS Tournament | `/rps` | Rock-paper-scissors bracket |
+| ðŸŽ´ Blackjack | `/blackjack` | Beat the dealer |
 
 All games use reaction-based lobbies. Players join by reacting with the game emoji.
 
-### 🎉 Game Night (Growth plan)
+### ðŸŽ‰ Game Night (Growth plan)
 Run a full multi-game session in sequence with cross-game scoring.
 
 ```
@@ -55,18 +55,18 @@ Run a full multi-game session in sequence with cross-game scoring.
 /gamenight leaderboard   # mid-session standings
 ```
 
-**Scoring:** 🥇 1st=10pts · 🥈 2nd=7pts · 🥉 3rd=5pts · 4th=3pts · 5th+=1pt
+**Scoring:** ðŸ¥‡ 1st=10pts Â· ðŸ¥ˆ 2nd=7pts Â· ðŸ¥‰ 3rd=5pts Â· 4th=3pts Â· 5th+=1pt
 
 At the end a champion is crowned with total points across all games.
 
-### 🎯 Heist Mission System
+### ðŸŽ¯ Heist Mission System
 - Role-based mission requirements
 - NFT assignment and locking
 - Multi-slot missions with progress tracking
 - Points-based reward system
 - *Currently disabled by default, available for future re-enable*
 
-## 🔧 CRITICAL: Recent Fixes (v1.1.0)
+## ðŸ”§ CRITICAL: Recent Fixes (v1.1.0)
 
 ### Portal Login Not Working?
 1. **Env vars validation**: Check that these are set correctly in `.env`:
@@ -83,7 +83,7 @@ At the end a champion is crowned with total points across all games.
 4. Falls back to mock data if Helius is unavailable
 
 ### Trait Roles Integration
-- **Feature**: Fully wired; configure via web admin panel (`/admin` → Verification Roles)
+- **Feature**: Fully wired; configure via web admin panel (`/admin` â†’ Verification Roles)
 - **Discord commands**: `/verification admin role-config [view|set-tier|set-trait]` shows status and next steps
 - **Web API**: `POST /api/admin/roles/traits` for programmatic trait-role assignment
 
@@ -138,103 +138,70 @@ At the end a champion is crowned with total points across all games.
 
 ## Commands
 
-### User Commands
-- `/verification status` - View your verification status and linked wallets
-- `/verification wallets` - View linked wallets and NFT holdings
-- `/verification refresh` - Update roles based on current NFT count
-- `/verification quick` - Quick micro-verification
-- `/battle create/start/cancel/stats` - Battle Royale *(mod/admin only)*
-- `/higherlower start/cancel` - 🃏 Higher or Lower *(mod/admin only)*
-- `/diceduel start/cancel` - 🎲 Dice Duel *(mod/admin only)*
-- `/reactionrace start/cancel` - ⚡ Reaction Race *(mod/admin only)*
-- `/numberguess start/cancel` - 🔢 Number Guess *(mod/admin only)*
-- `/slots start/cancel` - 🎰 Slots *(mod/admin only)*
-- `/trivia start/cancel` - ❓ Trivia *(mod/admin only)*
-- `/wordscramble start/cancel` - 🧩 Word Scramble *(mod/admin only)*
-- `/rps start/cancel` - 🪨 RPS Tournament *(mod/admin only)*
-- `/blackjack start/cancel` - 🎴 Blackjack *(mod/admin only)*
-- `/governance propose` - Create a governance proposal
-- `/governance support` - Support a draft proposal
-- `/governance vote` - Vote on an active proposal
+### Verification
+- `/verification status`, `/verification wallets`, `/verification refresh`, `/verification quick`
+- `/verification admin panel`, `/verification admin role-config`, `/verification admin actions`
+- `/verification admin export-user`, `/verification admin remove-user`, `/verification admin export-wallets`
+- `/verification admin token-role-add`, `/verification admin token-role-remove`, `/verification admin token-role-list`
+- `/verification admin og-view`, `/verification admin og-enable`, `/verification admin og-role`, `/verification admin og-limit`, `/verification admin og-sync`
 
-### Admin Commands
+### Governance
+- `/governance propose`, `/governance support`, `/governance vote`
+- `/governance admin list`, `/governance admin cancel`, `/governance admin settings`
 
-#### Verification Admin
-- `/verification admin panel` - Post verification panel
-- `/verification admin actions list` - Show all verification actions
-- `/verification admin actions add` - Add verification action
-- `/verification admin actions remove` - Remove verification action
-- `/verification admin export-user` - Export user verification data
-- `/verification admin remove-user` - Remove user from system
-- `/verification admin role-config` - Configure role assignments
-- `/verification admin og-view` - View OG role configuration
-- `/verification admin og-enable` - Enable/disable OG role system
-- `/verification admin og-role` - Set OG role
-- `/verification admin og-limit` - Set OG role limit
-- `/verification admin og-sync` - Sync OG roles to Discord
-- `/verification admin export-wallets` - Export all wallets
+### Treasury
+- `/treasury view`
+- `/treasury admin status`, `/treasury admin refresh`
+- `/treasury admin enable`, `/treasury admin disable`
+- `/treasury admin set-wallet`, `/treasury admin set-interval`
+- `/treasury admin tx-history`, `/treasury admin tx-alerts`
 
-#### NFT Activity Tracking Admin
-- `/verification admin activity-watch-add` - Add collection to watch
-- `/verification admin activity-watch-remove` - Remove watched collection
-- `/verification admin activity-watch-list` - List watched collections
-- `/verification admin activity-feed` - View recent activity events
-- `/verification admin activity-alerts` - Configure auto-post alerts (channel, event types, min SOL price)
+### Wallet Tracker
+- `/wallet-tracker add`, `/wallet-tracker edit`, `/wallet-tracker remove`
+- `/wallet-tracker list`, `/wallet-tracker holdings`, `/wallet-tracker refresh-all`
 
-#### Governance Admin
-- `/governance admin settings` - Configure governance parameters
-- `/governance admin list` - View all proposals
-- `/governance admin cancel` - Cancel a proposal (emergency)
+### NFT Tracker
+- `/nft-tracker collection add`, `/nft-tracker collection remove`
+- `/nft-tracker collection list`, `/nft-tracker collection feed`
 
-#### Treasury Admin
-- `/treasury admin status` - View treasury status
-- `/treasury admin refresh` - Manually refresh balances
-- `/treasury admin enable/disable` - Toggle monitoring
-- `/treasury admin set-wallet` - Set treasury wallet address
-- `/treasury admin set-interval` - Set refresh interval
-- `/treasury admin tx-history` - View recent treasury transactions
-- `/treasury admin tx-alerts` - Configure auto-post tx alerts (channel, filters)
+### Token Tracker
+- `/token-tracker add`, `/token-tracker edit`, `/token-tracker remove`
+- `/token-tracker list`, `/token-tracker feed`
 
-#### Battle Commands
-- `/battle create` - Create a new battle lobby
-  - `max_players` (optional) - Set max participants
-  - `required_role_1/2/3` (optional) - Require at least ONE of these roles (OR logic)
-  - `excluded_role_1/2/3` (optional) - Block users with ANY of these roles (AND logic)
-- `/battle start` - Start your open lobby (requires minimum players met)
-- `/battle cancel` - Cancel your open lobby
-- `/battle stats` - View battle stats and leaderboards
+### Invite Tracker
+- `/invites who`, `/invites leaderboard`, `/invites panel`, `/invites export`
 
-#### Battle Admin
-- `/battle admin list` - List all active battles
-- `/battle admin force-end` - Force end a battle (emergency)
-- `/battle admin settings` - Configure battle parameters
+### AI Assistant
+- `/aiassistant ask`, `/aiassistant status`, `/aiassistant briefing`
 
-**Role Gating Examples:**
-```
-# Members only, excluding bots
-/battle create max_players:10 required_role_1:@Member excluded_role_1:@Bot
+### Engagement
+- `/points balance`, `/points leaderboard`, `/points history`
+- `/points shop`, `/points redeem`, `/points admin`
 
-# Multiple required roles (any one is OK)
-/battle create max_players:20 required_role_1:@Member required_role_2:@Supporter required_role_3:@Holder
+### Minigames
+- `/minigames run`, `/minigames help`
+- `/battle create`, `/battle start`, `/battle cancel`, `/battle stats`
+- `/battle admin list`, `/battle admin force-end`, `/battle admin settings`
+- `/higherlower start`, `/higherlower cancel`
+- `/diceduel start`, `/diceduel cancel`
+- `/reactionrace start`, `/reactionrace cancel`
+- `/numberguess start`, `/numberguess cancel`
+- `/slots start`, `/slots cancel`
+- `/trivia start`, `/trivia cancel`
+- `/wordscramble start`, `/wordscramble cancel`
+- `/rps start`, `/rps cancel`
+- `/blackjack start`, `/blackjack cancel`
+- `/gamenight start`, `/gamenight skip`, `/gamenight cancel`, `/gamenight leaderboard`
 
-# Multiple excluded roles (users with any are blocked)
-/battle create excluded_role_1:@Bot excluded_role_2:@Muted excluded_role_3:@Banned
-```
+### Missions (Heist)
+- `/heist view`, `/heist signup`, `/heist status`
+- `/heist admin create`, `/heist admin list`, `/heist admin cancel`
 
-#### System Config
-- `/config modules` - View module toggle states
-- `/config toggle` - Toggle module on/off
-- `/config status` - System status overview
+### System Config
+- `/config modules`, `/config toggle`, `/config status`
 
-### Governance Commands
-- `/governance propose` - Create a new proposal
-- `/governance support` - Support a draft proposal
-- `/governance vote` - Cast your vote (yes/no/abstain)
-
-### Heist Commands (toggleable, default: disabled)
-- `/heist view` - View available missions
-- `/heist signup` - Sign up for a mission
-- `/heist status` - View your active/completed missions
+### Portal-Managed Modules (No Dedicated Slash Namespace)
+- Ticketing, Self-Serve Roles, and Branding are primarily configured through portal/admin views.
 
 ## Database Schema
 

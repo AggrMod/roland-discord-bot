@@ -911,6 +911,66 @@
               <h3>Module Guides</h3>
               <p>Role-based guidance for every module in the platform</p>
             </div>
+            <div class="card help-card" onclick="toggleHelp('module-verification')">
+              <h3>Module: Verification</h3>
+              <p>Identity proof, wallet linking, and role sync commands</p>
+            </div>
+            <div class="card help-card" onclick="toggleHelp('module-governance')">
+              <h3>Module: Governance</h3>
+              <p>Proposal creation, support flow, and voting controls</p>
+            </div>
+            <div class="card help-card" onclick="toggleHelp('module-treasury')">
+              <h3>Module: Treasury</h3>
+              <p>Treasury visibility, refresh, and alert management</p>
+            </div>
+            <div class="card help-card" onclick="toggleHelp('module-wallettracker')">
+              <h3>Module: Wallet Tracker</h3>
+              <p>Tracked wallet watchlists and holdings visibility</p>
+            </div>
+            <div class="card help-card" onclick="toggleHelp('module-nfttracker')">
+              <h3>Module: NFT Tracker</h3>
+              <p>Collection feed and NFT market activity coverage</p>
+            </div>
+            <div class="card help-card" onclick="toggleHelp('module-tokentracker')">
+              <h3>Module: Token Tracker</h3>
+              <p>Token movement feed and tracked asset controls</p>
+            </div>
+            <div class="card help-card" data-help-role="admin" style="display:none;" onclick="toggleHelp('module-invites')">
+              <h3>Module: Invite Tracker</h3>
+              <p>Referral attribution, invite leaderboard, and exports</p>
+            </div>
+            <div class="card help-card" data-help-role="admin" style="display:none;" onclick="toggleHelp('module-aiassistant')">
+              <h3>Module: AI Assistant</h3>
+              <p>Ask, summarize, and run briefings with assistant tools</p>
+            </div>
+            <div class="card help-card" onclick="toggleHelp('module-ticketing')">
+              <h3>Module: Ticketing</h3>
+              <p>Portal-managed support intake and routing workflows</p>
+            </div>
+            <div class="card help-card" onclick="toggleHelp('module-engagement')">
+              <h3>Module: Engagement</h3>
+              <p>Points economy, rewards, and leaderboard commands</p>
+            </div>
+            <div class="card help-card" onclick="toggleHelp('module-minigames')">
+              <h3>Module: Minigames</h3>
+              <p>Battle, game sessions, and Game Night orchestration</p>
+            </div>
+            <div class="card help-card" onclick="toggleHelp('module-missions')">
+              <h3>Module: Missions</h3>
+              <p>Heist mission lifecycle and participant operations</p>
+            </div>
+            <div class="card help-card" onclick="toggleHelp('module-selfserveroles')">
+              <h3>Module: Self-Serve Roles</h3>
+              <p>Member role-claim experience and role menu operation</p>
+            </div>
+            <div class="card help-card" data-help-role="admin" style="display:none;" onclick="toggleHelp('module-branding')">
+              <h3>Module: Branding</h3>
+              <p>Tenant identity, style defaults, and visual consistency</p>
+            </div>
+            <div class="card help-card" data-help-role="admin" style="display:none;" onclick="toggleHelp('module-config')">
+              <h3>Module: System Config</h3>
+              <p>Global module status and operational toggle commands</p>
+            </div>
             <div class="card help-card" onclick="toggleHelp('wallet-setup')">
               <h3>💼 Wallet Setup</h3>
               <p>Complete guide to linking and verifying your Solana wallet</p>
@@ -1068,6 +1128,274 @@
                   <li>Roll out changes in one tenant first, then scale after validation.</li>
                   <li>Use Help Center and command docs as the single source of truth.</li>
                 </ol>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-module-verification" class="help-content" style="display:none;">
+            <div class="card">
+              <h3>Module: Verification</h3>
+              <div class="help-section">
+                <h4>What It Does</h4>
+                <p>Handles wallet linking, verification proofs, role assignment, and verification-admin controls for user identity and access.</p>
+              </div>
+              <div class="help-section">
+                <h4>Commands</h4>
+                <ul>
+                  <li><code>/verification status</code>, <code>/verification wallets</code>, <code>/verification refresh</code>, <code>/verification quick</code></li>
+                  <li><code>/verification admin panel</code>, <code>/verification admin role-config</code>, <code>/verification admin actions</code></li>
+                  <li><code>/verification admin export-user</code>, <code>/verification admin remove-user</code>, <code>/verification admin export-wallets</code></li>
+                  <li><code>/verification admin token-role-add</code>, <code>/verification admin token-role-remove</code>, <code>/verification admin token-role-list</code></li>
+                  <li><code>/verification admin og-view</code>, <code>/verification admin og-enable</code>, <code>/verification admin og-role</code>, <code>/verification admin og-limit</code>, <code>/verification admin og-sync</code></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-module-governance" class="help-content" style="display:none;">
+            <div class="card">
+              <h3>Module: Governance</h3>
+              <div class="help-section">
+                <h4>What It Does</h4>
+                <p>Runs proposal workflows from draft to vote, including support collection, voting windows, and moderation controls.</p>
+              </div>
+              <div class="help-section">
+                <h4>Commands</h4>
+                <ul>
+                  <li><code>/governance propose</code>, <code>/governance support</code>, <code>/governance vote</code></li>
+                  <li><code>/governance admin list</code>, <code>/governance admin cancel</code>, <code>/governance admin settings</code></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-module-treasury" class="help-content" style="display:none;">
+            <div class="card">
+              <h3>Module: Treasury</h3>
+              <div class="help-section">
+                <h4>What It Does</h4>
+                <p>Tracks treasury balances and transaction events, with admin controls for refresh, wallet assignment, and alerting.</p>
+              </div>
+              <div class="help-section">
+                <h4>Commands</h4>
+                <ul>
+                  <li><code>/treasury view</code></li>
+                  <li><code>/treasury admin status</code>, <code>/treasury admin refresh</code></li>
+                  <li><code>/treasury admin enable</code>, <code>/treasury admin disable</code></li>
+                  <li><code>/treasury admin set-wallet</code>, <code>/treasury admin set-interval</code></li>
+                  <li><code>/treasury admin tx-history</code>, <code>/treasury admin tx-alerts</code></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-module-wallettracker" class="help-content" style="display:none;">
+            <div class="card">
+              <h3>Module: Wallet Tracker</h3>
+              <div class="help-section">
+                <h4>What It Does</h4>
+                <p>Maintains tracked-wallet watchlists and holdings snapshots so teams can monitor key wallets over time.</p>
+              </div>
+              <div class="help-section">
+                <h4>Commands</h4>
+                <ul>
+                  <li><code>/wallet-tracker add</code>, <code>/wallet-tracker remove</code>, <code>/wallet-tracker edit</code></li>
+                  <li><code>/wallet-tracker list</code>, <code>/wallet-tracker holdings</code>, <code>/wallet-tracker refresh-all</code></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-module-nfttracker" class="help-content" style="display:none;">
+            <div class="card">
+              <h3>Module: NFT Tracker</h3>
+              <div class="help-section">
+                <h4>What It Does</h4>
+                <p>Tracks configured NFT collections and pushes marketplace activity into operational feeds.</p>
+              </div>
+              <div class="help-section">
+                <h4>Commands</h4>
+                <ul>
+                  <li><code>/nft-tracker collection add</code>, <code>/nft-tracker collection remove</code></li>
+                  <li><code>/nft-tracker collection list</code>, <code>/nft-tracker collection feed</code></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-module-tokentracker" class="help-content" style="display:none;">
+            <div class="card">
+              <h3>Module: Token Tracker</h3>
+              <div class="help-section">
+                <h4>What It Does</h4>
+                <p>Monitors token activity streams for configured assets and publishes movement feeds for operators.</p>
+              </div>
+              <div class="help-section">
+                <h4>Commands</h4>
+                <ul>
+                  <li><code>/token-tracker add</code>, <code>/token-tracker edit</code>, <code>/token-tracker remove</code></li>
+                  <li><code>/token-tracker list</code>, <code>/token-tracker feed</code></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-module-invites" class="help-content" data-help-role="admin" style="display:none;">
+            <div class="card">
+              <h3>Module: Invite Tracker</h3>
+              <div class="help-section">
+                <h4>What It Does</h4>
+                <p>Measures invite attribution and campaign performance across members with export support for reporting.</p>
+              </div>
+              <div class="help-section">
+                <h4>Commands</h4>
+                <ul>
+                  <li><code>/invites who</code>, <code>/invites leaderboard</code>, <code>/invites panel</code>, <code>/invites export</code></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-module-aiassistant" class="help-content" data-help-role="admin" style="display:none;">
+            <div class="card">
+              <h3>Module: AI Assistant</h3>
+              <div class="help-section">
+                <h4>What It Does</h4>
+                <p>Provides assistant responses, briefings, and context support with tenant-configurable behavior controls.</p>
+              </div>
+              <div class="help-section">
+                <h4>Commands</h4>
+                <ul>
+                  <li><code>/aiassistant ask</code>, <code>/aiassistant status</code>, <code>/aiassistant briefing</code></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-module-ticketing" class="help-content" style="display:none;">
+            <div class="card">
+              <h3>Module: Ticketing</h3>
+              <div class="help-section">
+                <h4>What It Does</h4>
+                <p>Manages support workflows, category routing, handler assignment, and close/reopen automation from the portal.</p>
+              </div>
+              <div class="help-section">
+                <h4>Commands</h4>
+                <ul>
+                  <li>No dedicated slash command namespace is currently exposed for ticketing in this build.</li>
+                  <li>Ticketing operations are managed primarily through portal admin tools and configured workflows.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-module-engagement" class="help-content" style="display:none;">
+            <div class="card">
+              <h3>Module: Engagement</h3>
+              <div class="help-section">
+                <h4>What It Does</h4>
+                <p>Runs points economy mechanics, leaderboard visibility, and reward redemption for member participation.</p>
+              </div>
+              <div class="help-section">
+                <h4>Commands</h4>
+                <ul>
+                  <li><code>/points balance</code>, <code>/points leaderboard</code>, <code>/points history</code></li>
+                  <li><code>/points shop</code>, <code>/points redeem</code>, <code>/points admin</code></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-module-minigames" class="help-content" style="display:none;">
+            <div class="card">
+              <h3>Module: Minigames</h3>
+              <div class="help-section">
+                <h4>What It Does</h4>
+                <p>Provides battle sessions, standalone mini-games, and Game Night orchestration for engagement events.</p>
+              </div>
+              <div class="help-section">
+                <h4>Commands</h4>
+                <ul>
+                  <li><code>/minigames run</code>, <code>/minigames help</code></li>
+                  <li><code>/battle create</code>, <code>/battle start</code>, <code>/battle cancel</code>, <code>/battle stats</code>, <code>/battle admin list</code>, <code>/battle admin force-end</code>, <code>/battle admin settings</code></li>
+                  <li><code>/higherlower start</code>, <code>/higherlower cancel</code></li>
+                  <li><code>/diceduel start</code>, <code>/diceduel cancel</code></li>
+                  <li><code>/reactionrace start</code>, <code>/reactionrace cancel</code></li>
+                  <li><code>/numberguess start</code>, <code>/numberguess cancel</code></li>
+                  <li><code>/slots start</code>, <code>/slots cancel</code></li>
+                  <li><code>/trivia start</code>, <code>/trivia cancel</code></li>
+                  <li><code>/wordscramble start</code>, <code>/wordscramble cancel</code></li>
+                  <li><code>/rps start</code>, <code>/rps cancel</code></li>
+                  <li><code>/blackjack start</code>, <code>/blackjack cancel</code></li>
+                  <li><code>/gamenight start</code>, <code>/gamenight skip</code>, <code>/gamenight cancel</code>, <code>/gamenight leaderboard</code></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-module-missions" class="help-content" style="display:none;">
+            <div class="card">
+              <h3>Module: Missions (Heist)</h3>
+              <div class="help-section">
+                <h4>What It Does</h4>
+                <p>Supports mission publishing, signup flow, status visibility, and admin lifecycle actions for heist operations.</p>
+              </div>
+              <div class="help-section">
+                <h4>Commands</h4>
+                <ul>
+                  <li><code>/heist view</code>, <code>/heist signup</code>, <code>/heist status</code></li>
+                  <li><code>/heist admin create</code>, <code>/heist admin list</code>, <code>/heist admin cancel</code></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-module-selfserveroles" class="help-content" style="display:none;">
+            <div class="card">
+              <h3>Module: Self-Serve Roles</h3>
+              <div class="help-section">
+                <h4>What It Does</h4>
+                <p>Lets members claim optional roles configured by admins, with role menu eligibility rules managed in server settings.</p>
+              </div>
+              <div class="help-section">
+                <h4>Commands</h4>
+                <ul>
+                  <li>No dedicated slash command namespace is currently exposed for self-serve roles in this build.</li>
+                  <li>Role claim behavior is configured and operated through portal/admin role management views.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-module-branding" class="help-content" data-help-role="admin" style="display:none;">
+            <div class="card">
+              <h3>Module: Branding</h3>
+              <div class="help-section">
+                <h4>What It Does</h4>
+                <p>Controls tenant identity defaults such as naming, color usage, and support/contact references across surfaces.</p>
+              </div>
+              <div class="help-section">
+                <h4>Commands</h4>
+                <ul>
+                  <li>No dedicated slash command namespace is currently exposed for branding in this build.</li>
+                  <li>Branding is maintained through portal settings and superadmin policy defaults.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div id="help-module-config" class="help-content" data-help-role="admin" style="display:none;">
+            <div class="card">
+              <h3>Module: System Config</h3>
+              <div class="help-section">
+                <h4>What It Does</h4>
+                <p>Provides operator-level visibility into module state and system toggles used to enable or disable major capabilities.</p>
+              </div>
+              <div class="help-section">
+                <h4>Commands</h4>
+                <ul>
+                  <li><code>/config modules</code>, <code>/config toggle</code>, <code>/config status</code></li>
+                </ul>
               </div>
             </div>
           </div>

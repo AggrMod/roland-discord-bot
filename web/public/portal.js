@@ -988,6 +988,9 @@ async function manualCheckMicroVerify(statusEl) {
       throw new Error(`Server returned ${res.status} (not JSON) — try restarting the bot`);
     }
     const data = await res.json();
+    if (!data?.success) {
+      throw new Error(data?.message || 'Verification check failed');
+    }
     if (data.status === 'verified') {
       showSuccess('Wallet verified via micro-transaction!');
       closeWalletVerifyModal();

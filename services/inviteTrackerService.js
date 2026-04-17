@@ -937,6 +937,7 @@ class InviteTrackerService {
   }
 
   async _buildLeaderboardRowsFromCounter(counter, inviterJoinedSetMap, {
+    totalInviteCounter = null,
     guildId = null,
     includeVerificationStats = false,
     includeTokenStats = false,
@@ -945,12 +946,24 @@ class InviteTrackerService {
   } = {}) {
     const sortMode = normalizePanelSortBy(sortBy);
     const safeLimit = Math.max(1, Number(limit) || 10);
-    const inviters = Array.from(counter.entries())
-      .map(([inviterUserId, value]) => ({
+    const totalCounterMap = totalInviteCounter instanceof Map ? totalInviteCounter : null;
+    const inviterIds = new Set([
+      ...Array.from(counter.keys()),
+      ...(totalCounterMap ? Array.from(totalCounterMap.keys()) : []),
+    ]);
+    const inviters = Array.from(inviterIds).map((inviterUserId) => {
+      const qualified = counter.get(inviterUserId) || { inviterUsername: null, inviteCount: 0 };
+      const total = totalCounterMap?.get(inviterUserId) || qualified;
+      const qualifiedInviteCount = Number(qualified.inviteCount || 0);
+      const totalInviteCount = Number(total.inviteCount || qualifiedInviteCount);
+      return {
         inviterUserId,
-        inviterUsername: value.inviterUsername || null,
-        inviteCount: Number(value.inviteCount || 0),
-      }));
+        inviterUsername: qualified.inviterUsername || total.inviterUsername || null,
+        inviteCount: qualifiedInviteCount,
+        qualifiedInviteCount,
+        totalInviteCount,
+      };
+    });
 
     const compareRows = (a, b) => {
       if (sortMode === SORT_BY_TOKENS && includeTokenStats) {
@@ -962,6 +975,8 @@ class InviteTrackerService {
       }
       const inviteDelta = Number(b.inviteCount || 0) - Number(a.inviteCount || 0);
       if (inviteDelta !== 0) return inviteDelta;
+      const totalInviteDelta = Number(b.totalInviteCount || 0) - Number(a.totalInviteCount || 0);
+      if (totalInviteDelta !== 0) return totalInviteDelta;
       return String(a.inviterUserId || '').localeCompare(String(b.inviterUserId || ''));
     };
 
@@ -1095,6 +1110,8 @@ class InviteTrackerService {
             knownNames.get(String(row.inviter_user_id || ''))
           ),
           inviteCount: Number(row.invite_count || 0),
+          qualifiedInviteCount: Number(row.invite_count || 0),
+          totalInviteCount: Number(row.invite_count || 0),
         })),
         limitedByPlan: periodPolicy.limitedByPlan,
         periodDays: periodPolicy.days,
@@ -1128,6 +1145,7 @@ class InviteTrackerService {
     );
 
     const counter = new Map();
+    const totalCounter = new Map();
     const inviterJoinedSetMap = new Map();
     for (const row of eventRows) {
       const joinedUserId = normalizeUserId(row.joined_user_id);
@@ -1135,6 +1153,12 @@ class InviteTrackerService {
       const inviteCode = normalizeInviteCode(row.invite_code || '');
       if (!joinedUserId || !inviterUserId) continue;
       if (inviteCode && excludedCodeSet.has(normalizeInviteCodeCompare(inviteCode))) continue;
+
+      const totalEntry = totalCounter.get(inviterUserId) || { inviterUsername: null, inviteCount: 0 };
+      totalEntry.inviteCount += 1;
+      if (!totalEntry.inviterUsername && row.inviter_username) totalEntry.inviterUsername = row.inviter_username;
+      totalCounter.set(inviterUserId, totalEntry);
+
       if (!eligibleJoined.has(joinedUserId)) continue;
 
       const key = inviterUserId;
@@ -1149,6 +1173,7 @@ class InviteTrackerService {
     }
 
     const rows = await this._buildLeaderboardRowsFromCounter(counter, inviterJoinedSetMap, {
+      totalInviteCounter: totalCounter,
       guildId: normalizedGuildId,
       includeVerificationStats: effectiveIncludeVerificationStats,
       includeTokenStats: effectiveIncludeTokenStats,
@@ -1278,13 +1303,15 @@ class InviteTrackerService {
     const lines = (boardResult.rows || []).length > 0
       ? boardResult.rows.map(row => {
           const inviter = this._formatLeaderboardInviterLabel(row, inviterDisplayMap);
+          const totalInvites = Number(row.totalInviteCount ?? row.inviteCount ?? 0);
+          const qualifiedInvites = Number(row.qualifiedInviteCount ?? row.inviteCount ?? 0);
           if (boardResult.includeVerificationStats) {
             if (boardResult.includeTokenStats) {
-              return `**#${row.rank}** ${inviter} - **${row.inviteCount}** invites | NFTs: **${Number(row.inviteeNftsTotal || 0)}** | Tokens: **${Number(row.inviteeTokensTotal || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}**`;
+              return `**#${row.rank}** ${inviter} | Total: **${totalInvites}** | Qualified: **${qualifiedInvites}** | NFTs: **${Number(row.inviteeNftsTotal || 0)}** | Tokens: **${Number(row.inviteeTokensTotal || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}**`;
             }
-            return `**#${row.rank}** ${inviter} - **${row.inviteCount}** invites | NFTs: **${Number(row.inviteeNftsTotal || 0)}**`;
+            return `**#${row.rank}** ${inviter} | Total: **${totalInvites}** | Qualified: **${qualifiedInvites}** | NFTs: **${Number(row.inviteeNftsTotal || 0)}**`;
           }
-          return `**#${row.rank}** ${inviter} - **${row.inviteCount}**`;
+          return `**#${row.rank}** ${inviter} | Total: **${totalInvites}** | Qualified: **${qualifiedInvites}**`;
         }).join('\n')
       : 'No invite data yet.';
 

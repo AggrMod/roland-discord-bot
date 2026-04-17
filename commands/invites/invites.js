@@ -170,13 +170,15 @@ module.exports = {
 
     const lines = result.rows.map(row => {
       const inviter = row.inviterUserId ? `<@${row.inviterUserId}>` : (row.inviterUsername || 'Unknown');
+      const totalInvites = Number(row.totalInviteCount ?? row.inviteCount ?? 0);
+      const qualifiedInvites = Number(row.qualifiedInviteCount ?? row.inviteCount ?? 0);
       if (result.includeVerificationStats) {
         if (result.includeTokenStats) {
-          return `**#${row.rank}** ${inviter} - **${row.inviteCount}** | NFTs: **${Number(row.inviteeNftsTotal || 0)}** | Tokens: **${Number(row.inviteeTokensTotal || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}**`;
+          return `**#${row.rank}** ${inviter} | Total: **${totalInvites}** | Qualified: **${qualifiedInvites}** | NFTs: **${Number(row.inviteeNftsTotal || 0)}** | Tokens: **${Number(row.inviteeTokensTotal || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}**`;
         }
-        return `**#${row.rank}** ${inviter} - **${row.inviteCount}** | NFTs: **${Number(row.inviteeNftsTotal || 0)}**`;
+        return `**#${row.rank}** ${inviter} | Total: **${totalInvites}** | Qualified: **${qualifiedInvites}** | NFTs: **${Number(row.inviteeNftsTotal || 0)}**`;
       }
-      return `**#${row.rank}** ${inviter} - **${row.inviteCount}**`;
+      return `**#${row.rank}** ${inviter} | Total: **${totalInvites}** | Qualified: **${qualifiedInvites}**`;
     });
 
     const footerBits = [`Period: ${getPeriodLabel(result.periodDays)}`, `Rows: ${result.rows.length}`];
@@ -207,6 +209,12 @@ module.exports = {
         });
       }
     }
+    const totalInvitesAll = result.rows.reduce((sum, row) => sum + Number(row.totalInviteCount ?? row.inviteCount ?? 0), 0);
+    const totalInvitesQualified = result.rows.reduce((sum, row) => sum + Number(row.qualifiedInviteCount ?? row.inviteCount ?? 0), 0);
+    embed.addFields(
+      { name: 'Total Invites (Rows)', value: String(totalInvitesAll), inline: true },
+      { name: 'Qualified Invites (Rows)', value: String(totalInvitesQualified), inline: true }
+    );
 
     return interaction.editReply({ embeds: [embed] });
   },

@@ -9715,15 +9715,17 @@ async function refreshInviteTrackerDashboard(forceDays = undefined) {
       const tokenStatsEnabled = !!(boardJson.data?.includeTokenStats ?? boardJson.includeTokenStats);
       const list = rows.length
         ? rows.map(row => {
+            const totalInvites = Number(row.totalInviteCount ?? row.inviteCount ?? 0);
+            const qualifiedInvites = Number(row.qualifiedInviteCount ?? row.inviteCount ?? 0);
             const nftCell = verificationStatsEnabled
               ? `<td style="padding:8px;text-align:right;color:#93c5fd;">${Number(row.inviteeNftsTotal || 0)}</td>`
               : '';
             const tokenCell = tokenStatsEnabled
               ? `<td style="padding:8px;text-align:right;color:#86efac;">${Number(row.inviteeTokensTotal || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}</td>`
               : '';
-            return `<tr><td style="padding:8px;">#${row.rank}</td><td style="padding:8px;">${formatInviteUserLabel(row.inviterUsername, row.inviterUserId)}</td><td style="padding:8px;text-align:right;font-weight:700;color:#86efac;">${Number(row.inviteCount || 0)}</td>${nftCell}${tokenCell}</tr>`;
+            return `<tr><td style="padding:8px;">#${row.rank}</td><td style="padding:8px;">${formatInviteUserLabel(row.inviterUsername, row.inviterUserId)}</td><td style="padding:8px;text-align:right;color:#c4b5fd;">${totalInvites}</td><td style="padding:8px;text-align:right;font-weight:700;color:#86efac;">${qualifiedInvites}</td>${nftCell}${tokenCell}</tr>`;
           }).join('')
-        : `<tr><td colspan="${3 + (verificationStatsEnabled ? 1 : 0) + (tokenStatsEnabled ? 1 : 0)}" style="padding:12px;color:var(--text-secondary);">No invite data yet.</td></tr>`;
+        : `<tr><td colspan="${4 + (verificationStatsEnabled ? 1 : 0) + (tokenStatsEnabled ? 1 : 0)}" style="padding:12px;color:var(--text-secondary);">No invite data yet.</td></tr>`;
       leaderboardWrap.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <h4 style="margin:0;color:#c9d6ff;">Leaderboard</h4>
@@ -9736,7 +9738,7 @@ async function refreshInviteTrackerDashboard(forceDays = undefined) {
         </div>
         <div style="overflow-x:auto;border:1px solid rgba(99,102,241,0.18);border-radius:10px;">
           <table style="width:100%;border-collapse:collapse;">
-            <thead><tr style="background:rgba(30,41,59,0.55);"><th style="padding:8px;text-align:left;">Rank</th><th style="padding:8px;text-align:left;">Inviter</th><th style="padding:8px;text-align:right;">Invites</th>${verificationStatsEnabled ? '<th style="padding:8px;text-align:right;">Invitee NFTs</th>' : ''}${tokenStatsEnabled ? '<th style="padding:8px;text-align:right;">Invitee Tokens</th>' : ''}</tr></thead>
+            <thead><tr style="background:rgba(30,41,59,0.55);"><th style="padding:8px;text-align:left;">Rank</th><th style="padding:8px;text-align:left;">Inviter</th><th style="padding:8px;text-align:right;">Total Invites</th><th style="padding:8px;text-align:right;">Qualified Invites</th>${verificationStatsEnabled ? '<th style="padding:8px;text-align:right;">Invitee NFTs</th>' : ''}${tokenStatsEnabled ? '<th style="padding:8px;text-align:right;">Invitee Tokens</th>' : ''}</tr></thead>
             <tbody>${list}</tbody>
           </table>
         </div>

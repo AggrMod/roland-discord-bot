@@ -739,7 +739,13 @@ async function handleTicketModalSubmit(interaction) {
   try {
     await interaction.deferReply({ ephemeral: true });
     const cid = interaction.customId.replace('ticket_modal_', '');
-    const res = await ticketService.createTicket(interaction, cid, {}, interaction.guildId);
+    const cat = ticketService.getCategory(cid, interaction.guildId);
+    if (!cat) {
+      await interaction.editReply({ content: '❌ Category not found.' });
+      return;
+    }
+    const templateResponses = ticketService.extractTemplateResponses(cat, interaction);
+    const res = await ticketService.createTicket(interaction, cid, templateResponses, interaction.guildId);
     await interaction.editReply({ content: res.success ? `✅ Ticket #${res.ticketNumber} created!` : `❌ Error: ${res.message}` });
   } catch (_) {}
 }

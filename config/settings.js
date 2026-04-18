@@ -76,6 +76,11 @@ class SettingsManager {
       aiAssistantApiKeyEncrypted: '',
       openaiApiKeyEncrypted: '',
       geminiApiKeyEncrypted: '',
+      xClientId: '',
+      xClientSecretEncrypted: '',
+      xBearerTokenEncrypted: '',
+      xPollingEnabled: false,
+      xPollingIntervalSeconds: 300,
       aiAssistantDefaultProvider: 'openai',
       aiAssistantFallbackProvider: 'gemini',
       aiAssistantDefaultModelOpenai: 'gpt-5.4',
@@ -297,6 +302,24 @@ class SettingsManager {
         const model = String(newSettings.aiAssistantDefaultModelGemini || '').trim();
         if (model.length > 120) {
           return { success: false, message: 'aiAssistantDefaultModelGemini is too long' };
+        }
+      }
+
+      if (newSettings.xClientId !== undefined) {
+        const clientId = String(newSettings.xClientId || '').trim();
+        if (clientId.length > 200) {
+          return { success: false, message: 'xClientId is too long' };
+        }
+      }
+
+      if (newSettings.xPollingEnabled !== undefined && typeof newSettings.xPollingEnabled !== 'boolean') {
+        return { success: false, message: 'xPollingEnabled must be a boolean' };
+      }
+
+      if (newSettings.xPollingIntervalSeconds !== undefined) {
+        const secs = parseInt(newSettings.xPollingIntervalSeconds, 10);
+        if (isNaN(secs) || secs < 60 || secs > 3600) {
+          return { success: false, message: 'xPollingIntervalSeconds must be between 60 and 3600 seconds' };
         }
       }
 

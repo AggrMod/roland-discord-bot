@@ -1,5 +1,6 @@
 const express = require('express');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
+const xProviderService = require('../../services/xProviderService');
 
 function parseInteger(value, fallback = 0) {
   const parsed = Number.parseInt(value, 10);
@@ -72,6 +73,74 @@ function createAdminEngagementRouter({
       return res.json(toSuccessResponse({ providers: eng.getProviderCatalog() }));
     } catch (error) {
       logger.error('Error loading engagement providers:', error);
+      return res.status(500).json(toErrorResponse(error?.message || 'Internal server error'));
+    }
+  });
+
+  router.post('/api/admin/engagement/providers/x/sync', adminAuthMiddleware, async (req, res) => {
+    if (!guard(req, res)) return;
+    try {
+      if (!xProviderService.isConfigured()) {
+        return res.status(400).json(toErrorResponse('X provider is not configured', 'VALIDATION_ERROR'));
+      }
+
+      const eng = loadService();
+      const mode = String(req.body?.mode || 'account').trim().toLowerCase();
+      const maxResults = Math.max(5, Math.min(parseInteger(req.body?.max_results || req.body?.maxResults, 10), 100));
+      const sinceId = String(req.body?.since_id || req.body?.sinceId || '').trim();
+      let posts = [];
+
+      if (mode === 'hashtag') {
+        let hashtag = String(req.body?.hashtag || '').trim();
+        if (!hashtag && req.body?.hashtag_monitor_id) {
+          const monitor = eng.listHashtagMonitors(req.guildId).find(entry => Number(entry.id) === parseInteger(req.body.hashtag_monitor_id));
+          hashtag = monitor?.hashtag || '';
+        }
+        if (!hashtag) {
+          return res.status(400).json(toErrorResponse('hashtag is required', 'VALIDATION_ERROR'));
+        }
+        const query = `${hashtag.startsWith('#') ? hashtag : `#${hashtag}`} -is:retweet`;
+        const searchResult = await xProviderService.searchRecentPosts(query, { sinceId, maxResults });
+        posts = searchResult.posts || [];
+      } else {
+        let accountHandle = String(req.body?.account_handle || req.body?.accountHandle || '').trim();
+        if (!accountHandle && req.body?.monitored_account_id) {
+          const account = eng.listMonitoredAccounts(req.guildId, 'x').find(entry => Number(entry.id) === parseInteger(req.body.monitored_account_id));
+          accountHandle = account?.account_handle || '';
+        }
+        if (!accountHandle) {
+          return res.status(400).json(toErrorResponse('account_handle is required', 'VALIDATION_ERROR'));
+        }
+        const timelineResult = await xProviderService.getRecentPostsByHandle(accountHandle, { sinceId, maxResults, exclude: ['retweets'] });
+        posts = timelineResult.posts || [];
+      }
+
+      const ingested = [];
+      for (const post of posts) {
+        const ingestResult = await eng.ingestProviderPost(req.guildId, 'x', {
+          source_post_id: post.id,
+          source_post_url: `https://x.com/i/web/status/${post.id}`,
+          account_handle: req.body?.account_handle || req.body?.accountHandle || '',
+          account_id: post.author_id || null,
+          title: `X post ${post.id}`,
+          body: post.text,
+          raw: post.raw || post,
+        });
+        ingested.push({
+          postId: post.id,
+          matched: !!ingestResult?.matched,
+          createdTasks: ingestResult?.createdTasks || [],
+        });
+      }
+
+      return res.json(toSuccessResponse({
+        mode,
+        scanned: posts.length,
+        ingested,
+        newestId: posts[0]?.id || null,
+      }));
+    } catch (error) {
+      logger.error('Error syncing X provider data:', error);
       return res.status(500).json(toErrorResponse(error?.message || 'Internal server error'));
     }
   });

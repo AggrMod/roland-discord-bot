@@ -42,6 +42,9 @@ function createSuperadminCoreRouter({
         || decryptSecret(settings.aiAssistantApiKeyEncrypted)
         || String(settings.openaiApiKey || '').trim();
       const geminiApiKey = decryptSecret(settings.geminiApiKeyEncrypted) || String(settings.geminiApiKey || '').trim();
+      const xClientId = String(settings.xClientId || process.env.X_CLIENT_ID || '').trim();
+      const xClientSecret = decryptSecret(settings.xClientSecretEncrypted) || String(settings.xClientSecret || '').trim();
+      const xBearerToken = decryptSecret(settings.xBearerTokenEncrypted) || String(settings.xBearerToken || '').trim();
       const defaultProvider = ['openai', 'gemini'].includes(String(settings.aiAssistantDefaultProvider || '').toLowerCase())
         ? String(settings.aiAssistantDefaultProvider).toLowerCase()
         : 'openai';
@@ -61,6 +64,13 @@ function createSuperadminCoreRouter({
           openaiApiKeyMasked: openaiApiKey ? maskSecret(openaiApiKey) : '',
           geminiApiKeyConfigured: !!geminiApiKey,
           geminiApiKeyMasked: geminiApiKey ? maskSecret(geminiApiKey) : '',
+          xClientId: xClientId || '',
+          xClientSecretConfigured: !!xClientSecret,
+          xClientSecretMasked: xClientSecret ? maskSecret(xClientSecret) : '',
+          xBearerTokenConfigured: !!xBearerToken,
+          xBearerTokenMasked: xBearerToken ? maskSecret(xBearerToken) : '',
+          xPollingEnabled: !!settings.xPollingEnabled,
+          xPollingIntervalSeconds: Number(settings.xPollingIntervalSeconds || 300),
           aiAssistantDefaultProvider: defaultProvider,
           aiAssistantFallbackProvider: fallbackProvider,
           aiAssistantDefaultModelOpenai: String(settings.aiAssistantDefaultModelOpenai || 'gpt-5.4'),
@@ -83,6 +93,7 @@ function createSuperadminCoreRouter({
         'verifyRequestTtlMinutes', 'pollIntervalSeconds',
         'verifyRateLimitMinutes', 'maxPendingPerUser', 'chainEmojiMap',
         'openaiApiKey', 'geminiApiKey',
+        'xClientId', 'xClientSecret', 'xBearerToken', 'xPollingEnabled', 'xPollingIntervalSeconds',
         'aiAssistantDefaultProvider', 'aiAssistantFallbackProvider',
         'aiAssistantDefaultModelOpenai', 'aiAssistantDefaultModelGemini',
       ];
@@ -109,6 +120,26 @@ function createSuperadminCoreRouter({
         }
         patch.geminiApiKeyEncrypted = encrypted;
         patch.geminiApiKey = '';
+      }
+
+      if (Object.prototype.hasOwnProperty.call(patch, 'xClientSecret')) {
+        const rawSecret = String(patch.xClientSecret || '').trim();
+        const encrypted = rawSecret ? encryptSecret(rawSecret) : '';
+        if (rawSecret && !encrypted) {
+          return res.status(500).json(toErrorResponse('Unable to store X client secret securely; check server secret configuration'));
+        }
+        patch.xClientSecretEncrypted = encrypted;
+        patch.xClientSecret = '';
+      }
+
+      if (Object.prototype.hasOwnProperty.call(patch, 'xBearerToken')) {
+        const rawToken = String(patch.xBearerToken || '').trim();
+        const encrypted = rawToken ? encryptSecret(rawToken) : '';
+        if (rawToken && !encrypted) {
+          return res.status(500).json(toErrorResponse('Unable to store X bearer token securely; check server secret configuration'));
+        }
+        patch.xBearerTokenEncrypted = encrypted;
+        patch.xBearerToken = '';
       }
 
       const result = settingsManager.updateSettings(patch);

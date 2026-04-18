@@ -1,6 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
+const xProviderService = require('../../services/xProviderService');
 
 function createAuthUserRouter({
   logger,
@@ -144,6 +145,113 @@ function createAuthUserRouter({
     req.session.destroy(() => {
       res.clearCookie('connect.sid');
       return res.redirect('/dashboard');
+    });
+  });
+
+  router.get('/auth/x/login', (req, res) => {
+    (async () => {
+      if (!req.session.discordUser) {
+        return res.redirect('/dashboard?error=x_requires_login');
+      }
+      if (!xProviderService.isConfigured()) {
+        return res.redirect('/dashboard?error=x_not_configured');
+      }
+
+      const state = crypto.randomBytes(24).toString('hex');
+      const pkce = xProviderService.generatePkcePair();
+      const redirectUri = xProviderService.resolveRedirectUri(req);
+      const guildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() }) || null;
+      const rawReturn = String(req.query.returnTo || '').trim();
+      const returnTo = rawReturn && rawReturn.startsWith('/') && !rawReturn.startsWith('//')
+        ? rawReturn
+        : `/?${new URLSearchParams({
+            section: 'engagement',
+            ...(guildId ? { guild: guildId } : {}),
+          }).toString()}`;
+
+      req.session.xOAuth = {
+        state,
+        codeVerifier: pkce.verifier,
+        redirectUri,
+        guildId,
+        returnTo,
+      };
+      await saveSession(req);
+
+      const authorizeUrl = xProviderService.buildAuthorizeUrl({
+        redirectUri,
+        state,
+        codeChallenge: pkce.challenge,
+      });
+      return res.redirect(authorizeUrl);
+    })().catch((routeError) => {
+      logger.error('X OAuth login start error:', routeError);
+      return res.redirect('/dashboard?error=x_oauth_login_start_failed');
+    });
+  });
+
+  router.get('/auth/x/callback', (req, res) => {
+    (async () => {
+      const authState = req.session?.xOAuth || null;
+      const { code, state } = req.query || {};
+      if (!authState || !code || !state || String(state) !== String(authState.state || '')) {
+        if (req.session?.xOAuth) delete req.session.xOAuth;
+        await saveSession(req);
+        return res.redirect('/dashboard?error=x_invalid_state');
+      }
+
+      const tokenData = await xProviderService.exchangeCodeForTokens({
+        code: String(code),
+        codeVerifier: authState.codeVerifier,
+        redirectUri: authState.redirectUri,
+      });
+      const userData = await xProviderService.getAuthenticatedUser(tokenData.access_token);
+      const linkedUser = userData?.data || {};
+
+      const guildId = String(authState.guildId || '').trim();
+      if (!guildId) {
+        delete req.session.xOAuth;
+        await saveSession(req);
+        return res.redirect('/dashboard?error=x_missing_guild');
+      }
+
+      const eng = require('../../services/engagementService');
+      const result = eng.upsertLinkedAccount(guildId, req.session.discordUser.id, {
+        provider: 'x',
+        provider_user_id: linkedUser.id,
+        handle: linkedUser.username,
+        display_name: linkedUser.name,
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token || null,
+        token_expires_at: tokenData.expires_in
+          ? new Date(Date.now() + (Math.max(60, Number(tokenData.expires_in || 7200)) * 1000)).toISOString()
+          : null,
+        status: 'linked',
+        metadata: {
+          tokenType: tokenData.token_type || 'bearer',
+          scope: tokenData.scope || null,
+          profileImageUrl: linkedUser.profile_image_url || null,
+          description: linkedUser.description || null,
+          verified: !!linkedUser.verified,
+          publicMetrics: linkedUser.public_metrics || {},
+        },
+      });
+
+      delete req.session.xOAuth;
+      await saveSession(req);
+
+      const returnTo = authState.returnTo && String(authState.returnTo).startsWith('/') && !String(authState.returnTo).startsWith('//')
+        ? String(authState.returnTo)
+        : '/?section=engagement';
+      if (!result?.success) {
+        return res.redirect(`${returnTo}${returnTo.includes('?') ? '&' : '?'}xAuth=failed`);
+      }
+      return res.redirect(`${returnTo}${returnTo.includes('?') ? '&' : '?'}xAuth=connected`);
+    })().catch(async (routeError) => {
+      logger.error('X OAuth callback error:', routeError);
+      if (req.session?.xOAuth) delete req.session.xOAuth;
+      await saveSession(req);
+      return res.redirect('/dashboard?error=x_auth_failed');
     });
   });
 
@@ -335,13 +443,28 @@ function createAuthUserRouter({
       const guildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
       if (!guildId) return res.status(400).json(toErrorResponse('Select a server first', 'VALIDATION_ERROR'));
       const eng = require('../../services/engagementService');
-      const result = eng.recordTaskCompletion(
-        guildId,
-        Number(req.params.id),
-        req.session.discordUser.id,
-        req.session.discordUser.username,
-        req.body || {}
-      );
+      const task = eng.getTaskById(guildId, Number(req.params.id), { userId: req.session.discordUser.id });
+      if (!task) {
+        return res.status(404).json(toErrorResponse('Task not found', 'NOT_FOUND'));
+      }
+
+      let result;
+      if (task.provider === 'x') {
+        result = await eng.verifyXTaskAction(
+          guildId,
+          Number(req.params.id),
+          req.session.discordUser.id,
+          req.session.discordUser.username
+        );
+      } else {
+        result = eng.recordTaskCompletion(
+          guildId,
+          Number(req.params.id),
+          req.session.discordUser.id,
+          req.session.discordUser.username,
+          req.body || {}
+        );
+      }
       if (!result?.success) {
         return res.status(400).json(toErrorResponse(result?.message || 'Could not record task completion', 'VALIDATION_ERROR', null, result));
       }

@@ -5,7 +5,9 @@ const entitlementService = require('./entitlementService');
 const tenantService = require('./tenantService');
 const clientProvider = require('../utils/clientProvider');
 const ticketService = require('./ticketService');
+const xProviderService = require('./xProviderService');
 const { applyEmbedBranding } = require('./embedBranding');
+const { decryptSecret, encryptSecret } = require('../utils/secretVault');
 
 const DEFAULTS = Object.freeze({
   enabled: 1,
@@ -86,6 +88,25 @@ const ACHIEVEMENT_METRICS = Object.freeze({
 
 function normalizeGuildId(guildId) {
   return String(guildId || '').trim();
+}
+
+function isEncryptedSecretValue(value) {
+  const raw = String(value || '').trim();
+  return raw.startsWith('v1:') && raw.split(':').length === 4;
+}
+
+function prepareSecretForStorage(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (isEncryptedSecretValue(raw)) return raw;
+  return encryptSecret(raw) || raw;
+}
+
+function readStoredSecretValue(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (!isEncryptedSecretValue(raw)) return raw;
+  return decryptSecret(raw) || '';
 }
 
 function normalizeProvider(provider) {
@@ -351,6 +372,14 @@ function deleteMonitoredAccount(guildId, id) {
   return { success: result.changes > 0 };
 }
 
+function updateMonitoredAccountRequirements(guildId, id, requirements = {}) {
+  db.prepare(`
+    UPDATE engagement_monitored_accounts
+    SET requirements_json = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE guild_id = ? AND id = ?
+  `).run(JSON.stringify(normalizeRequirements(requirements)), normalizeGuildId(guildId), Number(id));
+}
+
 function listHashtagMonitors(guildId, provider = '') {
   const normalizedGuildId = normalizeGuildId(guildId);
   const normalizedProvider = normalizeProvider(provider);
@@ -424,6 +453,14 @@ function deleteHashtagMonitor(guildId, id) {
   return { success: result.changes > 0 };
 }
 
+function updateHashtagMonitorRequirements(guildId, id, requirements = {}) {
+  db.prepare(`
+    UPDATE engagement_hashtag_monitors
+    SET requirements_json = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE guild_id = ? AND id = ?
+  `).run(JSON.stringify(normalizeRequirements(requirements)), normalizeGuildId(guildId), Number(id));
+}
+
 function listLinkedAccounts(guildId, userId = null) {
   const normalizedGuildId = normalizeGuildId(guildId);
   const normalizedUserId = String(userId || '').trim();
@@ -450,24 +487,29 @@ function upsertLinkedAccount(guildId, userId, payload = {}) {
   const providerUserId = String(payload.provider_user_id || payload.providerUserId || '').trim() || null;
   const displayName = String(payload.display_name || payload.displayName || '').trim() || null;
   const metadata = normalizeRequirements(payload.metadata);
+  const accessToken = prepareSecretForStorage(payload.access_token || payload.accessToken || null);
+  const refreshToken = prepareSecretForStorage(payload.refresh_token || payload.refreshToken || null);
 
-  const existing = db.prepare('SELECT id FROM engagement_social_accounts WHERE guild_id = ? AND user_id = ? AND provider = ?').get(normalizedGuildId, normalizedUserId, providerKey);
+  const hasAccessToken = Object.prototype.hasOwnProperty.call(payload, 'access_token') || Object.prototype.hasOwnProperty.call(payload, 'accessToken');
+  const hasRefreshToken = Object.prototype.hasOwnProperty.call(payload, 'refresh_token') || Object.prototype.hasOwnProperty.call(payload, 'refreshToken');
+  const hasTokenExpiresAt = Object.prototype.hasOwnProperty.call(payload, 'token_expires_at') || Object.prototype.hasOwnProperty.call(payload, 'tokenExpiresAt');
+  const existing = db.prepare('SELECT id, access_token, refresh_token, token_expires_at FROM engagement_social_accounts WHERE guild_id = ? AND user_id = ? AND provider = ?').get(normalizedGuildId, normalizedUserId, providerKey);
   if (existing) {
     db.prepare(`
       UPDATE engagement_social_accounts
       SET provider_user_id = ?, handle = ?, display_name = ?, access_token = ?, refresh_token = ?, token_expires_at = ?,
           status = ?, metadata_json = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(
-      providerUserId,
-      handle || null,
-      displayName,
-      payload.access_token || payload.accessToken || null,
-      payload.refresh_token || payload.refreshToken || null,
-      payload.token_expires_at || payload.tokenExpiresAt || null,
-      String(payload.status || 'linked').trim() || 'linked',
-      JSON.stringify(metadata),
-      existing.id
+      `).run(
+        providerUserId,
+        handle || null,
+        displayName,
+        hasAccessToken ? accessToken : existing.access_token,
+        hasRefreshToken ? refreshToken : existing.refresh_token,
+        hasTokenExpiresAt ? (payload.token_expires_at || payload.tokenExpiresAt || null) : existing.token_expires_at,
+        String(payload.status || 'linked').trim() || 'linked',
+        JSON.stringify(metadata),
+        existing.id
     );
     return { success: true, id: existing.id };
   }
@@ -481,14 +523,14 @@ function upsertLinkedAccount(guildId, userId, payload = {}) {
     normalizedGuildId,
     normalizedUserId,
     providerKey,
-    providerUserId,
-    handle || null,
-    displayName,
-    payload.access_token || payload.accessToken || null,
-    payload.refresh_token || payload.refreshToken || null,
-    payload.token_expires_at || payload.tokenExpiresAt || null,
-    String(payload.status || 'linked').trim() || 'linked',
-    JSON.stringify(metadata)
+      providerUserId,
+      handle || null,
+      displayName,
+      accessToken,
+      refreshToken,
+      payload.token_expires_at || payload.tokenExpiresAt || null,
+      String(payload.status || 'linked').trim() || 'linked',
+      JSON.stringify(metadata)
   );
   return { success: true, id: Number(result.lastInsertRowid) };
 }
@@ -500,6 +542,139 @@ function disconnectLinkedAccount(guildId, userId, provider) {
     normalizeProvider(provider)
   );
   return { success: result.changes > 0 };
+}
+
+function getLinkedAccountRecord(guildId, userId, provider) {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  const normalizedUserId = String(userId || '').trim();
+  const providerKey = normalizeProvider(provider);
+  if (!normalizedGuildId || !normalizedUserId || !providerKey) return null;
+
+  const row = db.prepare(`
+    SELECT *
+    FROM engagement_social_accounts
+    WHERE guild_id = ? AND user_id = ? AND provider = ?
+    LIMIT 1
+  `).get(normalizedGuildId, normalizedUserId, providerKey);
+
+  if (!row) return null;
+  return {
+    ...row,
+    metadata: safeJsonParse(row.metadata_json, {}),
+  };
+}
+
+function persistLinkedAccountTokens(accountId, { accessToken, refreshToken, tokenExpiresAt, status = null, metadata = null } = {}) {
+  const existing = db.prepare('SELECT metadata_json FROM engagement_social_accounts WHERE id = ?').get(Number(accountId));
+  if (!existing) return false;
+
+  const nextMetadata = metadata && typeof metadata === 'object'
+    ? metadata
+    : safeJsonParse(existing.metadata_json, {});
+
+  db.prepare(`
+    UPDATE engagement_social_accounts
+    SET access_token = ?,
+        refresh_token = ?,
+        token_expires_at = ?,
+        status = COALESCE(?, status),
+        metadata_json = ?,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+    `).run(
+      prepareSecretForStorage(accessToken),
+      prepareSecretForStorage(refreshToken),
+      tokenExpiresAt || null,
+      status ? String(status).trim() || null : null,
+      JSON.stringify(nextMetadata),
+      Number(accountId)
+  );
+  return true;
+}
+
+function maybeBackfillEncryptedLinkedAccountSecrets(account) {
+  if (!account?.id) return account;
+
+  const rawAccessToken = String(account.access_token || '').trim();
+  const rawRefreshToken = String(account.refresh_token || '').trim();
+  const shouldEncryptAccess = rawAccessToken && !isEncryptedSecretValue(rawAccessToken);
+  const shouldEncryptRefresh = rawRefreshToken && !isEncryptedSecretValue(rawRefreshToken);
+  if (!shouldEncryptAccess && !shouldEncryptRefresh) return account;
+
+  const encryptedAccessToken = shouldEncryptAccess ? prepareSecretForStorage(rawAccessToken) : rawAccessToken || null;
+  const encryptedRefreshToken = shouldEncryptRefresh ? prepareSecretForStorage(rawRefreshToken) : rawRefreshToken || null;
+  if ((shouldEncryptAccess && encryptedAccessToken === rawAccessToken) || (shouldEncryptRefresh && encryptedRefreshToken === rawRefreshToken)) {
+    return account;
+  }
+
+  persistLinkedAccountTokens(account.id, {
+    accessToken: encryptedAccessToken,
+    refreshToken: encryptedRefreshToken,
+    tokenExpiresAt: account.token_expires_at || null,
+    status: account.status || 'linked',
+    metadata: account.metadata || {},
+  });
+
+  return getLinkedAccountRecord(account.guild_id, account.user_id, account.provider) || account;
+}
+
+function isTokenExpiringSoon(value, thresholdSeconds = 120) {
+  if (!value) return true;
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return true;
+  return timestamp <= (Date.now() + Math.max(30, Number(thresholdSeconds || 120)) * 1000);
+}
+
+async function refreshXLinkedAccount(account, { force = false } = {}) {
+  if (!account || normalizeProvider(account.provider) !== 'x') return null;
+
+  const currentAccessToken = readStoredSecretValue(account.access_token);
+  const currentRefreshToken = readStoredSecretValue(account.refresh_token);
+  if (!currentAccessToken && !currentRefreshToken) return null;
+  if (!force && currentAccessToken && !isTokenExpiringSoon(account.token_expires_at)) {
+    return account;
+  }
+  if (!currentRefreshToken) {
+    return currentAccessToken ? account : null;
+  }
+
+  const refreshed = await xProviderService.refreshAccessToken(currentRefreshToken);
+  const nextMetadata = {
+    ...(account.metadata || {}),
+    tokenType: refreshed.token_type || account.metadata?.tokenType || 'bearer',
+    scope: refreshed.scope || account.metadata?.scope || null,
+    refreshedAt: new Date().toISOString(),
+  };
+  const nextAccessToken = String(refreshed.access_token || '').trim();
+  const nextRefreshToken = String(refreshed.refresh_token || currentRefreshToken).trim();
+  const nextTokenExpiresAt = refreshed.expires_in
+    ? new Date(Date.now() + Math.max(60, Number(refreshed.expires_in || 7200)) * 1000).toISOString()
+    : (account.token_expires_at || null);
+
+  persistLinkedAccountTokens(account.id, {
+    accessToken: nextAccessToken,
+    refreshToken: nextRefreshToken,
+    tokenExpiresAt: nextTokenExpiresAt,
+    status: 'linked',
+    metadata: nextMetadata,
+  });
+
+  return getLinkedAccountRecord(account.guild_id, account.user_id, 'x');
+}
+
+async function getUsableXLinkedAccount(guildId, userId, { forceRefresh = false } = {}) {
+  const account = maybeBackfillEncryptedLinkedAccountSecrets(getLinkedAccountRecord(guildId, userId, 'x'));
+  if (!account) return null;
+
+  try {
+    const resolved = await refreshXLinkedAccount(account, { force: forceRefresh });
+    return resolved || account;
+  } catch (error) {
+    if (!forceRefresh) {
+      return account;
+    }
+    throw error;
+  }
 }
 
 function normalizeTaskPayload(providerKey, payload = {}) {
@@ -633,8 +808,37 @@ function listTasks(guildId, { provider, status, userId, limit = 50 } = {}) {
       WHERE task_id = ? AND user_id = ?
       ORDER BY created_at DESC
     `).all(row.id, normalizedUserId);
-    return { ...row, completions };
-  });
+      return { ...row, completions };
+    });
+}
+
+function getTaskById(guildId, taskId, { userId = null } = {}) {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  const row = db.prepare('SELECT * FROM engagement_social_tasks WHERE guild_id = ? AND id = ?').get(
+    normalizedGuildId,
+    Number(taskId)
+  );
+  if (!row) return null;
+
+  const task = {
+    ...row,
+    required_actions: safeJsonParse(row.required_actions_json, []),
+    reward_config: safeJsonParse(row.reward_config_json, {}),
+    requirements: safeJsonParse(row.requirements_json, {}),
+    metadata: safeJsonParse(row.metadata_json, {}),
+  };
+
+  if (!userId) return task;
+
+  const normalizedUserId = String(userId || '').trim();
+  const completions = db.prepare(`
+    SELECT action_type, status, reward_points, verified_at, created_at
+    FROM engagement_task_completions
+    WHERE task_id = ? AND user_id = ?
+    ORDER BY created_at DESC
+  `).all(Number(taskId), normalizedUserId);
+
+  return { ...task, completions };
 }
 
 function listTaskCompletions(guildId, { taskId = null, userId = null, limit = 100 } = {}) {
@@ -774,6 +978,122 @@ async function ingestProviderPost(guildId, provider, payload = {}) {
   }
 
   return { success: true, createdTasks, matched: true };
+}
+
+function getGuildsWithXMonitors() {
+  const rows = db.prepare(`
+    SELECT DISTINCT guild_id
+    FROM (
+      SELECT guild_id FROM engagement_monitored_accounts WHERE provider = 'x' AND enabled = 1
+      UNION
+      SELECT guild_id FROM engagement_hashtag_monitors WHERE provider = 'x' AND enabled = 1
+    )
+    WHERE guild_id IS NOT NULL AND guild_id != ''
+  `).all();
+  return rows.map(row => normalizeGuildId(row.guild_id)).filter(Boolean);
+}
+
+async function syncXProviderForGuild(guildId, { maxResults = 10 } = {}) {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  if (!normalizedGuildId) return { success: false, message: 'guildId is required' };
+  const runtime = xProviderService.getRuntimeConfig();
+  if (!runtime.bearerToken) return { success: false, message: 'X bearer token not configured' };
+
+  const accounts = listMonitoredAccounts(normalizedGuildId, 'x').filter(entry => entry.enabled);
+  const hashtags = listHashtagMonitors(normalizedGuildId, 'x').filter(entry => entry.enabled);
+  const stats = { scannedAccounts: 0, scannedHashtags: 0, scannedPosts: 0, createdTasks: 0 };
+
+  for (const account of accounts) {
+    try {
+      const sinceId = String(account.requirements?._cursor_since_id || '').trim();
+      const timeline = await xProviderService.getRecentPostsByHandle(account.account_handle, {
+        sinceId,
+        maxResults,
+        bearerToken: runtime.bearerToken,
+        exclude: ['retweets'],
+      });
+      stats.scannedAccounts += 1;
+      const posts = Array.isArray(timeline.posts) ? [...timeline.posts].reverse() : [];
+      for (const post of posts) {
+        const result = await ingestProviderPost(normalizedGuildId, 'x', {
+          source_post_id: post.id,
+          source_post_url: `https://x.com/${account.account_handle}/status/${post.id}`,
+          account_handle: account.account_handle,
+          account_id: post.author_id || timeline.user?.id || null,
+          title: `X post from @${account.account_handle}`,
+          body: post.text,
+          raw: post.raw || post,
+        });
+        stats.scannedPosts += 1;
+        stats.createdTasks += Array.isArray(result?.createdTasks) ? result.createdTasks.length : 0;
+      }
+      const newestId = posts[posts.length - 1]?.id || timeline.meta?.newest_id || null;
+      if (newestId) {
+        updateMonitoredAccountRequirements(normalizedGuildId, account.id, {
+          ...(account.requirements || {}),
+          _cursor_since_id: newestId,
+          _last_synced_at: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      logger.warn(`[engagement] X account sync failed for ${normalizedGuildId}/${account.account_handle}: ${error.message}`);
+    }
+  }
+
+  for (const monitor of hashtags) {
+    try {
+      const sinceId = String(monitor.requirements?._cursor_since_id || '').trim();
+      const search = await xProviderService.searchRecentPosts(`${monitor.hashtag} -is:retweet`, {
+        sinceId,
+        maxResults,
+        bearerToken: runtime.bearerToken,
+      });
+      stats.scannedHashtags += 1;
+      const posts = Array.isArray(search.posts) ? [...search.posts].reverse() : [];
+      for (const post of posts) {
+        const result = await ingestProviderPost(normalizedGuildId, 'x', {
+          source_post_id: post.id,
+          source_post_url: `https://x.com/i/web/status/${post.id}`,
+          account_handle: '',
+          account_id: post.author_id || null,
+          title: `X hashtag match ${monitor.hashtag}`,
+          body: post.text,
+          raw: post.raw || post,
+        });
+        stats.scannedPosts += 1;
+        stats.createdTasks += Array.isArray(result?.createdTasks) ? result.createdTasks.length : 0;
+      }
+      const newestId = posts[posts.length - 1]?.id || search.meta?.newest_id || null;
+      if (newestId) {
+        updateHashtagMonitorRequirements(normalizedGuildId, monitor.id, {
+          ...(monitor.requirements || {}),
+          _cursor_since_id: newestId,
+          _last_synced_at: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      logger.warn(`[engagement] X hashtag sync failed for ${normalizedGuildId}/${monitor.hashtag}: ${error.message}`);
+    }
+  }
+
+  return { success: true, ...stats };
+}
+
+async function runXProviderSync({ maxResults = 10 } = {}) {
+  const runtime = xProviderService.getRuntimeConfig();
+  if (!runtime.pollingEnabled) return { success: true, skipped: true, reason: 'disabled' };
+  if (!runtime.bearerToken) return { success: false, reason: 'missing_bearer_token' };
+
+  const guildIds = getGuildsWithXMonitors();
+  const summary = { success: true, guilds: 0, scannedPosts: 0, createdTasks: 0 };
+  for (const guildId of guildIds) {
+    const result = await syncXProviderForGuild(guildId, { maxResults }).catch(error => ({ success: false, message: error.message }));
+    if (!result?.success) continue;
+    summary.guilds += 1;
+    summary.scannedPosts += Number(result.scannedPosts || 0);
+    summary.createdTasks += Number(result.createdTasks || 0);
+  }
+  return summary;
 }
 
 function isOnCooldown(guildId, userId, actionType, cooldownMins) {
@@ -1448,6 +1768,116 @@ function recordTaskCompletion(guildId, taskId, userId, username, payload = {}) {
   return { success: true, rewardPoints, status };
 }
 
+async function verifyXTaskAction(guildId, taskId, userId, username = '') {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  const normalizedUserId = String(userId || '').trim();
+  const task = getTaskById(normalizedGuildId, Number(taskId), { userId: normalizedUserId });
+  if (!task || task.provider !== 'x') return { success: false, message: 'X task not found' };
+
+  let account = await getUsableXLinkedAccount(normalizedGuildId, normalizedUserId);
+  if (!account) return { success: false, message: 'No linked X account found' };
+
+  let accessToken = decryptXAccessToken(account);
+  if (!accessToken) return { success: false, message: 'Linked X account does not have an active access token' };
+
+  const results = [];
+  for (const actionType of task.required_actions || []) {
+    const existing = db.prepare('SELECT id FROM engagement_task_completions WHERE task_id = ? AND user_id = ? AND action_type = ?')
+      .get(Number(taskId), normalizedUserId, actionType);
+    if (existing) {
+      results.push({ actionType, verified: false, reason: 'already_recorded' });
+      continue;
+    }
+
+      let verified = false;
+      const verifyAction = async () => {
+        if (actionType === 'x_like' && task.source_post_id) {
+          const liked = await xProviderService.getLikedPosts(account.provider_user_id || account.metadata?.userId || account.handle, {
+            accessToken,
+            maxResults: 100,
+          });
+          return (liked.posts || []).some(post => String(post.id) === String(task.source_post_id));
+        }
+        if (actionType === 'x_repost' && task.source_post_id) {
+          const reposts = await xProviderService.getRetweetingUsers(task.source_post_id, {
+            bearerToken: xProviderService.getRuntimeConfig().bearerToken,
+            maxResults: 100,
+          });
+          return (reposts.users || []).some(entry => String(entry.id) === String(account.provider_user_id));
+        }
+        if (actionType === 'x_follow' && task.source_account_id) {
+          const following = await xProviderService.getFollowing(account.provider_user_id, {
+            accessToken,
+            maxResults: 500,
+          });
+          return (following.users || []).some(entry => String(entry.id) === String(task.source_account_id));
+        }
+        if (actionType === 'x_reply' && task.source_post_id && account.handle) {
+          const query = `conversation_id:${task.source_post_id} from:${account.handle.replace(/^@+/, '')}`;
+          const replies = await xProviderService.searchRecentPosts(query, {
+            accessToken,
+            maxResults: 50,
+          });
+          return (replies.posts || []).some(post => String(post.in_reply_to_user_id || '') !== '' && String(post.conversation_id || '') === String(task.source_post_id));
+        }
+        if (actionType === 'x_hashtag_post' && task.hashtag && account.handle) {
+          const query = `${task.hashtag} from:${account.handle.replace(/^@+/, '')} -is:retweet`;
+          const posts = await xProviderService.searchRecentPosts(query, {
+            accessToken,
+            maxResults: 25,
+          });
+          return Array.isArray(posts.posts) && posts.posts.length > 0;
+        }
+        return false;
+      };
+
+      try {
+        verified = await verifyAction();
+      } catch (error) {
+        if (Number(error?.status || 0) === 401) {
+          const refreshedAccount = await getUsableXLinkedAccount(normalizedGuildId, normalizedUserId, { forceRefresh: true });
+          if (!refreshedAccount) {
+            throw error;
+          }
+          account = refreshedAccount;
+          accessToken = decryptXAccessToken(account);
+          if (!accessToken) {
+            throw error;
+          }
+          verified = await verifyAction();
+        } else {
+          throw error;
+        }
+      }
+
+      if (verified) {
+        const completion = recordTaskCompletion(normalizedGuildId, Number(taskId), normalizedUserId, username || account.display_name || account.handle || normalizedUserId, {
+        action_type: actionType,
+        linked_account_id: account.id,
+        status: 'verified',
+        metadata: { verifiedBy: 'x_api' },
+      });
+      results.push({ actionType, verified: !!completion.success, rewardPoints: Number(completion.rewardPoints || 0) });
+    } else {
+      results.push({ actionType, verified: false, reason: 'not_found' });
+    }
+  }
+
+  return {
+    success: true,
+    results,
+    verifiedCount: results.filter(entry => entry.verified).length,
+  };
+}
+
+function decryptXAccessToken(account) {
+  if (!account) return '';
+  const stored = String(account.access_token || '').trim() === '[stored]'
+    ? (db.prepare('SELECT access_token FROM engagement_social_accounts WHERE id = ?').get(Number(account.id))?.access_token || '')
+    : String(account.access_token || '').trim();
+  return readStoredSecretValue(stored);
+}
+
 module.exports = {
   ACTION,
   ACHIEVEMENT_METRICS,
@@ -1463,12 +1893,16 @@ module.exports = {
   upsertHashtagMonitor,
   deleteHashtagMonitor,
   listLinkedAccounts,
+  getLinkedAccountRecord,
   upsertLinkedAccount,
   disconnectLinkedAccount,
   createTask,
   listTasks,
+  getTaskById,
   listTaskCompletions,
   ingestProviderPost,
+  syncXProviderForGuild,
+  runXProviderSync,
   tryAwardDiscordMessage,
   tryAwardMessage,
   tryAwardReaction,
@@ -1489,5 +1923,7 @@ module.exports = {
   listUserAchievements,
   listUserEngagementSummary,
   recordTaskCompletion,
+  getUsableXLinkedAccount,
+  verifyXTaskAction,
   evaluateAchievementsForUser,
 };

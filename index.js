@@ -385,6 +385,7 @@ client.once(Events.ClientReady, () => {
   startVoteCheckInterval();
   startRoleResyncScheduler();
   startTicketInactivityScheduler();
+  startXEngagementScheduler();
 
   treasuryService.setClient(client);
   treasuryService.startScheduler();
@@ -736,6 +737,26 @@ function startTicketInactivityScheduler() {
       }
     } catch (_) {}
   }, 15 * 60 * 1000));
+}
+
+function startXEngagementScheduler() {
+  const tick = async () => {
+    try {
+      const eng = require('./services/engagementService');
+      const result = await eng.runXProviderSync({ maxResults: 10 });
+      if (result?.success && !result?.skipped && (result.createdTasks > 0 || result.scannedPosts > 0)) {
+        logger.log(`[engagement:x] synced guilds=${result.guilds} scannedPosts=${result.scannedPosts} createdTasks=${result.createdTasks}`);
+      }
+    } catch (error) {
+      logger.warn(`[engagement:x] scheduler error: ${error.message}`);
+    }
+  };
+
+  const settingsManager = require('./config/settings');
+  const settings = settingsManager.getSettings ? settingsManager.getSettings() : {};
+  const intervalSec = Math.max(60, Number(settings.xPollingIntervalSeconds || process.env.X_POLLING_INTERVAL_SECONDS || 300));
+  intervals.push(setInterval(tick, intervalSec * 1000));
+  setTimeout(tick, 45 * 1000);
 }
 
 async function handleTicketOpenButton(interaction) {

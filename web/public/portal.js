@@ -4865,6 +4865,60 @@ async function loadSuperadminView() {
           </div>
         </div>
 
+        <div id="superadminSection-xProvider" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
+            <h4 style="margin:0; color:#c9d6ff;">𝕏 Provider <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
+            <span style="color:var(--text-secondary); font-size:0.85em;">One shared X app for all tenants, with per-user linked accounts and per-guild rules</span>
+          </div>
+          <div style="display:grid; gap:12px;">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <label style="display:grid; gap:6px;">
+                <span style="font-size:0.82em; color:var(--text-secondary);">X Client ID</span>
+                <input id="sa_xClientId" type="text"
+                  value="${escapeHtml(settingsData?.settings?.xClientId || '')}"
+                  placeholder="Paste X OAuth client ID"
+                  style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.88em;">
+              </label>
+              <label style="display:grid; gap:6px;">
+                <span style="font-size:0.82em; color:var(--text-secondary);">X Polling Interval (seconds)</span>
+                <input id="sa_xPollingInterval" type="number" min="60" max="3600"
+                  value="${escapeHtml(String(settingsData?.settings?.xPollingIntervalSeconds || 300))}"
+                  style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff;">
+              </label>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <label style="display:grid; gap:6px;">
+                <span style="font-size:0.82em; color:var(--text-secondary);">X Client Secret <span style="color:#f87171;">(masked)</span></span>
+                <input id="sa_xClientSecret" type="password" value=""
+                  placeholder="${escapeHtml(settingsData?.settings?.xClientSecretMasked || 'Paste new X client secret to rotate')}"
+                  autocomplete="new-password"
+                  style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.88em;">
+                <label style="display:flex; align-items:center; gap:8px; color:#c9d6ff; font-size:0.78em;">
+                  <input id="sa_xClientSecretClear" type="checkbox" style="width:14px;height:14px;accent-color:#ef4444;"> Clear X client secret
+                </label>
+              </label>
+              <label style="display:grid; gap:6px;">
+                <span style="font-size:0.82em; color:var(--text-secondary);">X Bearer Token <span style="color:#f87171;">(masked)</span></span>
+                <input id="sa_xBearerToken" type="password" value=""
+                  placeholder="${escapeHtml(settingsData?.settings?.xBearerTokenMasked || 'Paste new X bearer token to rotate')}"
+                  autocomplete="new-password"
+                  style="padding:9px 10px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-family:monospace; font-size:0.88em;">
+                <label style="display:flex; align-items:center; gap:8px; color:#c9d6ff; font-size:0.78em;">
+                  <input id="sa_xBearerTokenClear" type="checkbox" style="width:14px;height:14px;accent-color:#ef4444;"> Clear X bearer token
+                </label>
+              </label>
+            </div>
+            <label style="display:flex; align-items:center; gap:10px; color:#c9d6ff; font-size:0.9em; cursor:pointer;">
+              <input type="checkbox" id="sa_xPollingEnabled" ${settingsData?.settings?.xPollingEnabled ? 'checked' : ''} style="width:16px;height:16px;accent-color:#6366f1;">
+              <span>Enable automatic X polling for monitored accounts and hashtags</span>
+            </label>
+          </div>
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+            <button class="btn-secondary" onclick="loadSuperadminView()" style="padding:8px 12px;">Reset</button>
+            <button class="btn-primary" onclick="saveXProviderSettings()" style="padding:8px 12px;">Save X Provider Settings</button>
+          </div>
+        </div>
+
         <div id="superadminSection-monitoring" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45); display:none;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
             <h4 style="margin:0; color:#c9d6ff;">Platform Monitoring <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
@@ -6158,6 +6212,44 @@ async function saveAiProviderSettings() {
     await loadSuperadminView();
   } catch (error) {
     showError(`Failed to save AI provider settings: ${error.message}`);
+  }
+}
+
+async function saveXProviderSettings() {
+  const xClientId = document.getElementById('sa_xClientId')?.value?.trim() || '';
+  const xClientSecret = document.getElementById('sa_xClientSecret')?.value?.trim() || '';
+  const xBearerToken = document.getElementById('sa_xBearerToken')?.value?.trim() || '';
+  const clearXClientSecret = !!document.getElementById('sa_xClientSecretClear')?.checked;
+  const clearXBearerToken = !!document.getElementById('sa_xBearerTokenClear')?.checked;
+  const xPollingEnabled = !!document.getElementById('sa_xPollingEnabled')?.checked;
+  const xPollingIntervalSeconds = parseInt(document.getElementById('sa_xPollingInterval')?.value, 10) || 300;
+
+  try {
+    const payload = {
+      xClientId,
+      xPollingEnabled,
+      xPollingIntervalSeconds,
+    };
+    if (clearXClientSecret) payload.xClientSecret = '';
+    else if (xClientSecret) payload.xClientSecret = xClientSecret;
+    if (clearXBearerToken) payload.xBearerToken = '';
+    else if (xBearerToken) payload.xBearerToken = xBearerToken;
+
+    const response = await fetch('/api/superadmin/global-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (!data.success) {
+      showError(data.message || 'Failed to save X provider settings');
+      return;
+    }
+    showSuccess('X provider settings saved');
+    await loadSuperadminView();
+  } catch (error) {
+    showError(`Failed to save X provider settings: ${error.message}`);
   }
 }
 
@@ -13239,6 +13331,112 @@ async function saveEngagementConfigFromSettings() {
   } catch (e) { showError('Error saving engagement settings.'); }
 }
 
+function startXAccountLink() {
+  const params = new URLSearchParams();
+  params.set('returnTo', `/?${new URLSearchParams({ section: 'engagement', ...(activeGuildId ? { guild: activeGuildId } : {}) }).toString()}`);
+  if (activeGuildId) {
+    params.set('guild', activeGuildId);
+  }
+  window.location.href = `/auth/x/login?${params.toString()}`;
+}
+
+async function runXProviderSync(mode) {
+  try {
+    const body = mode === 'hashtag'
+      ? {
+          mode: 'hashtag',
+          hashtag: document.getElementById('engHashtagTag')?.value.trim() || '',
+          max_results: 10,
+        }
+      : {
+          mode: 'account',
+          account_handle: document.getElementById('engMonitoredHandle')?.value.trim() || '',
+          max_results: 10,
+        };
+
+    const res = await fetch('/api/admin/engagement/providers/x/sync', {
+      method: 'POST',
+      credentials: 'include',
+      headers: engagementHeaders(),
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      showError(data.message || 'X sync failed.');
+      return;
+    }
+    showSuccess(`X sync complete. Scanned ${Number(data.scanned || 0)} post(s).`);
+    loadEngagementTasks();
+  } catch (e) {
+    showError('Error syncing X provider.');
+  }
+}
+
+async function loadEngagementProviders() {
+  const el = document.getElementById('engagementProvidersView');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
+  try {
+    const canAdminEngagement = !!(typeof isAdmin !== 'undefined' && isAdmin) || !!(typeof isSuperadmin !== 'undefined' && isSuperadmin);
+    const providerRes = await fetch(
+      canAdminEngagement ? '/api/admin/engagement/providers' : '/api/user/engagement/accounts',
+      { credentials: 'include', headers: buildTenantRequestHeaders() }
+    );
+    const providerData = await providerRes.json();
+    const accountRes = await fetch('/api/user/engagement/accounts', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const accountData = await accountRes.json();
+    const providers = canAdminEngagement
+      ? (providerData.providers || [])
+      : (accountData.providers || providerData.providers || []);
+    const linkedAccounts = Array.isArray(accountData.accounts) ? accountData.accounts : [];
+
+    if (!providerData.success || !providers.length) {
+      el.innerHTML = '<p style="color:var(--text-secondary);">No providers available.</p>';
+      return;
+    }
+    el.innerHTML = providers.map(provider => {
+      const linked = linkedAccounts.find(account => account.provider === provider.key);
+      const linkedLabel = linked
+        ? `Linked as ${escapeHtml(linked.handle || linked.display_name || linked.provider_user_id || provider.label)}`
+        : 'Not linked for this Discord account';
+      const linkingActions = provider.key === 'x' && provider.supportsAccountLinking
+        ? `
+            <button class="btn-secondary btn-sm" onclick="startXAccountLink()">${linked ? 'Reconnect X' : 'Connect X'}</button>
+          `
+        : '';
+      const adminActions = canAdminEngagement && provider.key === 'x'
+        ? `
+            <button class="btn-secondary btn-sm" onclick="runXProviderSync('account')" ${provider.configured ? '' : 'disabled'}>Sync Account</button>
+            <button class="btn-secondary btn-sm" onclick="runXProviderSync('hashtag')" ${provider.configured ? '' : 'disabled'}>Sync Hashtag</button>
+          `
+        : '';
+      const helperText = provider.key === 'x'
+        ? (provider.configured
+            ? 'Members can link X for automatic task verification.'
+            : 'Configure the shared X app in Superadmin before linking or syncing.')
+        : `Monitoring: ${provider.supportsSourceMonitoring ? 'yes' : 'no'} · Hashtags: ${provider.supportsHashtagMonitoring ? 'yes' : 'no'} · Linking: ${provider.supportsAccountLinking ? 'yes' : 'no'}`;
+      const actions = (linkingActions || adminActions)
+        ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">${linkingActions}${adminActions}</div>`
+        : '';
+        return `
+          <div class="table-row" style="align-items:flex-start;">
+            <div style="flex:1;">
+              <div style="font-weight:600;">${escapeHtml(provider.label)}</div>
+              <div style="font-size:0.82em;color:var(--text-muted);margin:4px 0 8px 0;">
+                ${helperText}
+              </div>
+              ${provider.supportsAccountLinking ? `<div style="font-size:0.82em;color:${linked ? '#86efac' : 'var(--text-muted)'};">${linkedLabel}</div>` : ''}
+              ${actions}
+            </div>
+            <span class="status-badge ${provider.configured ? 'status-live' : 'status-paused'}">${provider.configured ? 'Configured' : 'Credentials Missing'}</span>
+          </div>
+        `;
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--error);">Failed to load providers.</p>';
+  }
+}
+
 async function loadEngagementSettingsTab() {
   try {
     const res = await fetch('/api/admin/engagement/config', { credentials: 'include', headers: buildTenantRequestHeaders() });
@@ -13649,24 +13847,82 @@ async function loadEngagementTasks() {
   if (!el) return;
   el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
   try {
-    const res = await fetch('/api/admin/engagement/tasks?limit=50', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const canAdminEngagement = !!(typeof isAdmin !== 'undefined' && isAdmin) || !!(typeof isSuperadmin !== 'undefined' && isSuperadmin);
+    const endpoint = canAdminEngagement
+      ? '/api/admin/engagement/tasks?limit=50'
+      : '/api/user/engagement/tasks?limit=50&status=active';
+    const res = await fetch(endpoint, { credentials: 'include', headers: buildTenantRequestHeaders() });
     const data = await res.json();
     if (!data.success || !data.tasks?.length) {
-      el.innerHTML = '<p style="color:var(--text-secondary);">No tasks yet. Create one manually or ingest a monitored post.</p>';
+      el.innerHTML = canAdminEngagement
+        ? '<p style="color:var(--text-secondary);">No tasks yet. Create one manually or ingest a monitored post.</p>'
+        : '<p style="color:var(--text-secondary);">No active tasks available right now.</p>';
       return;
     }
-    el.innerHTML = data.tasks.map(task => `
-      <div class="table-row" style="align-items:flex-start;">
-        <div style="flex:1;">
-          <div style="font-weight:600;">${escapeHtml(task.title || `${task.provider} task`)}</div>
-          <div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(task.provider)} · ${escapeHtml(task.trigger_type)} · ${escapeHtml((task.required_actions || []).join(', ') || 'no actions')}</div>
-          ${task.source_post_url ? `<div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(task.source_post_url)}</div>` : ''}
+    el.innerHTML = data.tasks.map(task => {
+      const completions = Array.isArray(task.completions) ? task.completions : [];
+      const completionSet = new Set(completions.map(entry => String(entry.action_type || '').trim()));
+      const actionBadges = (task.required_actions || []).map(action => {
+        const done = completionSet.has(action);
+        const verifyButton = !canAdminEngagement && !done
+          ? `<button class="btn-secondary btn-sm" onclick="completeEngagementTask(${Number(task.id)}, '${escapeJsString(action)}')" style="padding:4px 8px;">${task.provider === 'x' ? 'Verify' : 'Complete'}</button>`
+          : '';
+        return `
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 10px;border:1px solid rgba(99,102,241,0.18);border-radius:999px;background:rgba(15,23,42,0.45);">
+            <span style="font-size:0.8em;color:${done ? '#86efac' : '#cbd5e1'};">${escapeHtml(action)}</span>
+            <span class="status-badge ${done ? 'status-live' : 'status-paused'}" style="font-size:0.68em;">${done ? 'Done' : 'Pending'}</span>
+            ${verifyButton}
+          </div>
+        `;
+      }).join('');
+      return `
+        <div class="table-row" style="align-items:flex-start;">
+          <div style="flex:1;">
+            <div style="font-weight:600;">${escapeHtml(task.title || `${task.provider} task`)}</div>
+            <div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(task.provider)} · ${escapeHtml(task.trigger_type)} · ${formatEngagementAmount(Object.values(task.reward_config || {}).reduce((sum, value) => sum + Number(value || 0), 0))}</div>
+            ${task.source_post_url ? `<div style="font-size:0.82em;color:var(--text-muted);word-break:break-all;"><a href="${escapeHtml(task.source_post_url)}" target="_blank" rel="noopener noreferrer" style="color:#93c5fd;">${escapeHtml(task.source_post_url)}</a></div>` : ''}
+            ${task.body ? `<div style="font-size:0.84em;color:var(--text-secondary);margin-top:6px;">${escapeHtml(task.body)}</div>` : ''}
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">${actionBadges || '<span style="color:var(--text-muted);font-size:0.82em;">No actions configured</span>'}</div>
+          </div>
+          <span class="status-badge ${task.status === 'active' ? 'status-live' : 'status-paused'}">${escapeHtml(task.status || 'active')}</span>
         </div>
-        <span class="status-badge ${task.status === 'active' ? 'status-live' : 'status-paused'}">${escapeHtml(task.status || 'active')}</span>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   } catch (e) {
     el.innerHTML = '<p style="color:var(--error);">Failed to load tasks.</p>';
+  }
+}
+
+async function completeEngagementTask(taskId, actionType) {
+  try {
+    const response = await fetch(`/api/user/engagement/tasks/${Number(taskId)}/complete`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...buildTenantRequestHeaders(),
+      },
+      body: JSON.stringify({ action_type: actionType }),
+    });
+    const data = await response.json();
+    if (!data.success) {
+      showError(data.message || 'Could not complete the task.');
+      return;
+    }
+    const result = data.result || data.data || data;
+    const verifiedCount = Number(result.verifiedCount || 0);
+    const rewardPoints = Number(result.rewardPoints || 0);
+    if (verifiedCount > 0) {
+      showSuccess(`Verified ${verifiedCount} action(s) and awarded rewards.`);
+    } else if (rewardPoints > 0) {
+      showSuccess(`Task completed. Awarded ${formatEngagementAmount(rewardPoints)}.`);
+    } else {
+      showSuccess('Task completion recorded.');
+    }
+    loadEngagementTasks();
+    if (typeof loadEngagementLeaderboard === 'function') loadEngagementLeaderboard();
+  } catch (error) {
+    showError(`Task completion failed: ${error.message}`);
   }
 }
 

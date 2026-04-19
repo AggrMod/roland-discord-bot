@@ -14088,6 +14088,8 @@ function canAdminEngagementPortal() {
 
 function setEngagementPortalMode(canAdmin) {
   const summaryView = document.getElementById('engagementMemberSummaryView');
+  const linkedAccountsCard = document.getElementById('engagementLinkedAccountsCard');
+  const historyCard = document.getElementById('engagementHistoryCard');
   const configGrid = document.getElementById('engagementConfigGrid');
   const configSaveBtn = document.getElementById('engagementConfigSaveBtn');
   const shopAddBtn = document.getElementById('engagementShopAddBtn');
@@ -14106,6 +14108,8 @@ function setEngagementPortalMode(canAdmin) {
   ].filter(Boolean);
 
   if (summaryView) summaryView.style.display = canAdmin ? 'none' : 'block';
+  if (linkedAccountsCard) linkedAccountsCard.style.display = canAdmin ? 'none' : '';
+  if (historyCard) historyCard.style.display = canAdmin ? 'none' : '';
   if (configGrid) configGrid.style.display = canAdmin ? 'grid' : 'none';
   if (configSaveBtn) configSaveBtn.style.display = canAdmin ? 'inline-flex' : 'none';
   if (shopAddBtn) shopAddBtn.style.display = canAdmin ? 'inline-flex' : 'none';
@@ -14128,7 +14132,6 @@ function renderEngagementMemberSummary(summary = {}, currency = {}, config = {})
   if (!el) return;
 
   const points = summary.points || {};
-  const linkedAccounts = Array.isArray(summary.linkedAccounts) ? summary.linkedAccounts : [];
   const achievements = Array.isArray(summary.achievements) ? summary.achievements : [];
   const redemptions = Array.isArray(summary.redemptions) ? summary.redemptions : [];
   const tasks = Array.isArray(summary.tasks) ? summary.tasks : [];
@@ -14160,22 +14163,100 @@ function renderEngagementMemberSummary(summary = {}, currency = {}, config = {})
           <div style="font-size:0.82em;color:var(--text-secondary);">Recent redemptions: ${redemptions.length}</div>
         </div>
       </div>
-      <div style="padding:14px;border:1px solid rgba(99,102,241,0.18);border-radius:12px;background:rgba(15,23,42,0.45);">
-        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
-          <div>
-            <div style="font-weight:600;color:#f8fafc;">Linked Accounts</div>
-            <div style="font-size:0.82em;color:var(--text-secondary);">Connect your social accounts to verify tasks automatically.</div>
-          </div>
-          <div style="font-size:0.82em;color:var(--text-muted);">${linkedAccounts.length} connected</div>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
-          ${(linkedAccounts.length
-            ? linkedAccounts.map(account => `<span style="padding:6px 10px;border-radius:999px;background:rgba(34,197,94,0.16);color:#bbf7d0;font-size:0.82em;border:1px solid rgba(34,197,94,0.22);">${escapeHtml(account.provider.toUpperCase())}: ${escapeHtml(account.handle || account.display_name || account.provider_user_id || 'linked')}</span>`).join('')
-            : '<span style="font-size:0.82em;color:var(--text-muted);">No external accounts linked yet.</span>')}
-        </div>
-      </div>
     </div>
   `;
+}
+
+async function loadEngagementMemberAccounts() {
+  const el = document.getElementById('engagementLinkedAccountsView');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
+  try {
+    const res = await fetch('/api/user/engagement/accounts', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json();
+    const accounts = Array.isArray(data.accounts) ? data.accounts : [];
+    const providers = Array.isArray(data.providers) ? data.providers : [];
+    if (!data.success) {
+      el.innerHTML = '<p style="color:var(--error);">Failed to load linked accounts.</p>';
+      return;
+    }
+    if (!providers.length) {
+      el.innerHTML = '<p style="color:var(--text-secondary);">No account providers are configured yet.</p>';
+      return;
+    }
+
+    el.innerHTML = providers.map(provider => {
+      const account = accounts.find(entry => entry.provider === provider.key);
+      const isLinked = !!account;
+      const actions = [];
+      if (provider.key === 'x' && provider.supportsAccountLinking) {
+        actions.push(`<button class="btn-secondary btn-sm" onclick="startXAccountLink()">${isLinked ? 'Reconnect X' : 'Connect X'}</button>`);
+        if (isLinked) actions.push(`<button class="btn-secondary btn-sm" onclick="disconnectEngagementAccount('x')">Disconnect</button>`);
+      }
+      return `
+        <div class="table-row" style="align-items:flex-start;">
+          <div style="flex:1;">
+            <div style="font-weight:600;">${escapeHtml(provider.label)}</div>
+            <div style="font-size:0.82em;color:${isLinked ? '#86efac' : 'var(--text-muted)'};margin-top:4px;">
+              ${isLinked
+                ? `Linked as ${escapeHtml(account.handle || account.display_name || account.provider_user_id || 'connected account')}`
+                : 'Not linked yet'}
+            </div>
+            <div style="font-size:0.8em;color:var(--text-muted);margin-top:4px;">
+              ${provider.supportsAccountLinking ? 'Link this account to verify external tasks automatically.' : 'This provider does not require account linking.'}
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+            ${actions.join('')}
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (error) {
+    el.innerHTML = `<p style="color:var(--error);">Failed to load linked accounts: ${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function formatEngagementHistoryLabel(entry = {}) {
+  const action = String(entry.action_type || '').trim();
+  const labels = {
+    discord_message: 'Discord message reward',
+    discord_reply: 'Discord reply reward',
+    discord_reaction: 'Discord reaction reward',
+    social_task_reward: 'Social task reward',
+    achievement_reward: 'Achievement reward',
+    shop_redeem: 'Marketplace redemption',
+    admin_grant: 'Admin grant',
+    admin_deduct: 'Admin adjustment',
+  };
+  return labels[action] || action.replace(/_/g, ' ') || 'Activity';
+}
+
+async function loadEngagementHistory() {
+  const el = document.getElementById('engagementHistoryView');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
+  try {
+    const res = await fetch('/api/user/engagement/history?limit=25', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json();
+    const history = Array.isArray(data.history) ? data.history : [];
+    if (!data.success || !history.length) {
+      el.innerHTML = '<p style="color:var(--text-secondary);">No points history yet. Start chatting or completing tasks to earn rewards.</p>';
+      return;
+    }
+    el.innerHTML = history.map(entry => `
+      <div class="table-row" style="align-items:flex-start;">
+        <div style="flex:1;">
+          <div style="font-weight:600;">${escapeHtml(formatEngagementHistoryLabel(entry))}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(entry.note || 'No note')}</div>
+          <div style="font-size:0.78em;color:var(--text-muted);margin-top:4px;">${escapeHtml(new Date(entry.created_at).toLocaleString())}</div>
+        </div>
+        <span style="font-weight:700;color:${Number(entry.points || 0) >= 0 ? '#86efac' : '#fca5a5'};">${Number(entry.points || 0) > 0 ? '+' : ''}${Number(entry.points || 0).toLocaleString()}</span>
+      </div>
+    `).join('');
+  } catch (error) {
+    el.innerHTML = `<p style="color:var(--error);">Failed to load history: ${escapeHtml(error.message)}</p>`;
+  }
 }
 
 async function disconnectEngagementAccount(providerKey) {
@@ -14240,6 +14321,12 @@ async function loadEngagementSection() {
     loadEngagementAchievements(),
     loadEngagementRedemptions(),
   ];
+  if (!canAdmin) {
+    tasks.push(
+      loadEngagementMemberAccounts(),
+      loadEngagementHistory()
+    );
+  }
   if (canAdmin) {
     tasks.push(
       loadEngagementMonitoredAccounts(),

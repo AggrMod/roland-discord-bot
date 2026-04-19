@@ -395,6 +395,24 @@ function createAuthUserRouter({
     }
   });
 
+  router.get('/api/user/engagement/history', async (req, res) => {
+    if (!req.session.discordUser) {
+      return res.status(401).json(toErrorResponse('Not authenticated', 'UNAUTHORIZED'));
+    }
+    try {
+      const guildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
+      if (!guildId) return res.status(400).json(toErrorResponse('Select a server first', 'VALIDATION_ERROR'));
+      const eng = require('../../services/engagementService');
+      return res.json(toSuccessResponse({
+        history: eng.getUserHistory(guildId, req.session.discordUser.id, Number(req.query.limit || 25)),
+        currency: eng.getCurrencyMeta(guildId),
+      }));
+    } catch (routeError) {
+      logger.error('Error fetching user engagement history:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.get('/api/user/engagement/accounts', async (req, res) => {
     if (!req.session.discordUser) {
       return res.status(401).json(toErrorResponse('Not authenticated', 'UNAUTHORIZED'));

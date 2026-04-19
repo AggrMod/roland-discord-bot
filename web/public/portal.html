@@ -838,6 +838,26 @@
             </div>
           </div>
 
+          <div class="card" id="engagementLinkedAccountsCard" style="display:none;">
+            <div class="card-header-row">
+              <h3 class="card-title">Linked Accounts</h3>
+              <button class="btn-secondary btn-sm" onclick="loadEngagementMemberAccounts()">Refresh</button>
+            </div>
+            <div id="engagementLinkedAccountsView">
+              <div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>
+            </div>
+          </div>
+
+          <div class="card" id="engagementHistoryCard" style="display:none;">
+            <div class="card-header-row">
+              <h3 class="card-title">My History</h3>
+              <button class="btn-secondary btn-sm" onclick="loadEngagementHistory()">Refresh</button>
+            </div>
+            <div id="engagementHistoryView">
+              <div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>
+            </div>
+          </div>
+
           <div class="card">
             <div class="card-header-row">
               <h3 class="card-title">🔌 Provider Status</h3>

@@ -252,22 +252,23 @@ class RoleService {
         added: [],
         removed: []
       };
+      const currentMemberRoleIds = new Set(member.roles.cache.keys());
 
       const wallets = walletService.getAllUserWallets(discordId);
       const allNFTs = await nftService.getAllNFTsForWallets(wallets, { guildId });
 
       // 1. Sync collection tier roles (based on configured rules only)
-      const tierChanges = await this.syncTierRoles(member, allNFTs, guildId);
+      const tierChanges = await this.syncTierRoles(member, allNFTs, guildId, currentMemberRoleIds);
       changes.added.push(...tierChanges.added);
       changes.removed.push(...tierChanges.removed);
 
       // 2. Sync trait roles
-      const traitChanges = await this.syncTraitRoles(member, allNFTs, guildId);
+      const traitChanges = await this.syncTraitRoles(member, allNFTs, guildId, currentMemberRoleIds);
       changes.added.push(...traitChanges.added);
       changes.removed.push(...traitChanges.removed);
 
       // 3. Sync token balance roles
-      const tokenChanges = await this.syncTokenRoles(member, wallets, guildId);
+      const tokenChanges = await this.syncTokenRoles(member, wallets, guildId, currentMemberRoleIds);
       changes.added.push(...tokenChanges.added);
       changes.removed.push(...tokenChanges.removed);
 
@@ -289,10 +290,11 @@ class RoleService {
       }
       if (baseVerifiedRoleId) {
         try {
-          if (!member.roles.cache.has(baseVerifiedRoleId)) {
+          if (!currentMemberRoleIds.has(baseVerifiedRoleId)) {
             const baseRole = member.guild.roles.cache.get(baseVerifiedRoleId);
             if (baseRole) {
               await member.roles.add(baseRole);
+              currentMemberRoleIds.add(baseVerifiedRoleId);
               changes.added.push('Base Verified');
               logger.log(`Added base verified role to ${member.user.tag}`);
             } else {
@@ -659,12 +661,12 @@ class RoleService {
    * Sync tier roles for a member
    * Applies rules exactly as configured in Verification settings.
    */
-  async syncTierRoles(member, nfts, guildId = null) {
+  async syncTierRoles(member, nfts, guildId = null, currentMemberRoleIds = null) {
     const changes = { added: [], removed: [] };
 
     try {
       const allTiers = this.getEffectiveTiers(guildId).filter(t => t && t.roleId);
-      const currentMemberRoleIds = new Set(member.roles.cache.keys());
+      const liveRoleIds = currentMemberRoleIds || new Set(member.roles.cache.keys());
       const allNFTs = Array.isArray(nfts) ? nfts : [];
 
       // Pre-count NFTs by collection key for fast tier evaluation
@@ -699,10 +701,10 @@ class RoleService {
         roleStates.set(roleId, existing);
       }
 
-      for (const [roleId, state] of roleStates.entries()) {
-        const has = currentMemberRoleIds.has(roleId);
-        const role = member.guild.roles.cache.get(roleId);
-        if (!role) continue;
+        for (const [roleId, state] of roleStates.entries()) {
+          const has = liveRoleIds.has(roleId);
+          const role = member.guild.roles.cache.get(roleId);
+          if (!role) continue;
 
         const label = state.labels[0] || role.name || roleId;
 
@@ -710,11 +712,12 @@ class RoleService {
           if (!this.canBotManageRole(member, role)) {
             const key = `tier:add:unmanaged:${guildId || member.guild.id}:${member.id}:${role.id}`;
             this.logRoleSyncWarnOnce(key, `Skipped adding unmanaged tier role ${role.name} (${role.id}) for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-          } else {
-            await member.roles.add(role);
-            changes.added.push(label);
-            logger.log(`Added tier role ${label} to ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-          }
+            } else {
+              await member.roles.add(role);
+              liveRoleIds.add(roleId);
+              changes.added.push(label);
+              logger.log(`Added tier role ${label} to ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            }
         } else if (!state.shouldHave && has) {
           if (state.neverRemove) {
             const key = `tier:remove:override:${guildId || member.guild.id}:${member.id}:${role.id}`;
@@ -727,11 +730,12 @@ class RoleService {
           } else if (!this.canBotManageRole(member, role)) {
             const key = `tier:remove:unmanaged:${guildId || member.guild.id}:${member.id}:${role.id}`;
             this.logRoleSyncWarnOnce(key, `Skipped removing unmanaged tier role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-          } else {
-            await member.roles.remove(role);
-            changes.removed.push(label);
-            logger.log(`Removed tier role ${label} from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-          }
+            } else {
+              await member.roles.remove(role);
+              liveRoleIds.delete(roleId);
+              changes.removed.push(label);
+              logger.log(`Removed tier role ${label} from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            }
         }
       }
     } catch (error) {
@@ -744,12 +748,12 @@ class RoleService {
   /**
    * Sync trait roles for a member based on NFT attributes
    */
-  async syncTraitRoles(member, nfts, guildId = null) {
+  async syncTraitRoles(member, nfts, guildId = null, currentMemberRoleIds = null) {
     const changes = { added: [], removed: [] };
 
     try {
       const traitRoles = this.getEffectiveTraitRoles(guildId);
-      const currentMemberRoleIds = new Set(member.roles.cache.keys());
+      const liveRoleIds = currentMemberRoleIds || new Set(member.roles.cache.keys());
       const roleStates = new Map();
       const allNFTs = Array.isArray(nfts) ? nfts : [];
 
@@ -790,11 +794,11 @@ class RoleService {
         roleStates.set(roleId, existing);
       }
 
-      for (const [roleId, state] of roleStates.entries()) {
-        const has = currentMemberRoleIds.has(roleId);
-        const role = member.guild.roles.cache.get(roleId);
-        if (!role) {
-          logger.warn(`Trait role ${roleId} not found in guild`);
+        for (const [roleId, state] of roleStates.entries()) {
+          const has = liveRoleIds.has(roleId);
+          const role = member.guild.roles.cache.get(roleId);
+          if (!role) {
+            logger.warn(`Trait role ${roleId} not found in guild`);
           continue;
         }
         const label = state.labels[0] || role.name || roleId;
@@ -806,11 +810,12 @@ class RoleService {
           } else if (!this.canBotManageRole(member, role)) {
             const key = `trait:add:unmanaged:${guildId || member.guild.id}:${member.id}:${role.id}`;
             this.logRoleSyncWarnOnce(key, `Skipped adding unmanaged trait role ${role.name} (${role.id}) for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-          } else {
-            await member.roles.add(role);
-            changes.added.push(label);
-            logger.log(`Added trait role ${label} to ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-          }
+            } else {
+              await member.roles.add(role);
+              liveRoleIds.add(roleId);
+              changes.added.push(label);
+              logger.log(`Added trait role ${label} to ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            }
         } else if (!state.shouldHave && has) {
           if (state.neverRemove) {
             const key = `trait:remove:override:${guildId || member.guild.id}:${member.id}:${role.id}`;
@@ -823,11 +828,12 @@ class RoleService {
           } else if (!this.canBotManageRole(member, role)) {
             const key = `trait:remove:unmanaged:${guildId || member.guild.id}:${member.id}:${role.id}`;
             this.logRoleSyncWarnOnce(key, `Skipped removing unmanaged trait role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-          } else {
-            await member.roles.remove(role);
-            changes.removed.push(label);
-            logger.log(`Removed trait role ${label} from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-          }
+            } else {
+              await member.roles.remove(role);
+              liveRoleIds.delete(roleId);
+              changes.removed.push(label);
+              logger.log(`Removed trait role ${label} from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            }
         }
       }
     } catch (error) {
@@ -840,7 +846,7 @@ class RoleService {
   /**
    * Sync token roles for a member based on configured SPL token balance rules
    */
-  async syncTokenRoles(member, wallets, guildId = null) {
+  async syncTokenRoles(member, wallets, guildId = null, currentMemberRoleIds = null) {
     const changes = { added: [], removed: [] };
 
     try {
@@ -848,7 +854,7 @@ class RoleService {
         .filter(rule => rule && rule.roleId && rule.tokenMint && rule.enabled !== false);
       if (tokenRules.length === 0) return changes;
 
-      const currentMemberRoleIds = new Set(member.roles.cache.keys());
+      const liveRoleIds = currentMemberRoleIds || new Set(member.roles.cache.keys());
       const trackedMints = [...new Set(tokenRules.map(rule => String(rule.tokenMint || '').trim()).filter(Boolean))];
       const balancesByMint = await tokenService.getAggregateBalancesForWallets(wallets || [], trackedMints, { guildId });
       const roleStates = new Map();
@@ -876,10 +882,10 @@ class RoleService {
         roleStates.set(roleId, existing);
       }
 
-      for (const [roleId, state] of roleStates.entries()) {
-        const has = currentMemberRoleIds.has(roleId);
-        const role = member.guild.roles.cache.get(roleId);
-        if (!role) continue;
+        for (const [roleId, state] of roleStates.entries()) {
+          const has = liveRoleIds.has(roleId);
+          const role = member.guild.roles.cache.get(roleId);
+          if (!role) continue;
         const label = state.labels[0] || role.name || roleId;
 
         if (state.shouldHave && !has) {
@@ -889,11 +895,12 @@ class RoleService {
           } else if (!this.canBotManageRole(member, role)) {
             const key = `token:add:unmanaged:${guildId || member.guild.id}:${member.id}:${role.id}`;
             this.logRoleSyncWarnOnce(key, `Skipped adding unmanaged token role ${role.name} (${role.id}) for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-          } else {
-            await member.roles.add(role);
-            changes.added.push(label);
-            logger.log(`Added token role ${label} to ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-          }
+            } else {
+              await member.roles.add(role);
+              liveRoleIds.add(roleId);
+              changes.added.push(label);
+              logger.log(`Added token role ${label} to ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            }
         } else if (!state.shouldHave && has) {
           if (state.neverRemove) {
             const key = `token:remove:override:${guildId || member.guild.id}:${member.id}:${role.id}`;
@@ -906,11 +913,12 @@ class RoleService {
           } else if (!this.canBotManageRole(member, role)) {
             const key = `token:remove:unmanaged:${guildId || member.guild.id}:${member.id}:${role.id}`;
             this.logRoleSyncWarnOnce(key, `Skipped removing unmanaged token role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-          } else {
-            await member.roles.remove(role);
-            changes.removed.push(label);
-            logger.log(`Removed token role ${label} from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-          }
+            } else {
+              await member.roles.remove(role);
+              liveRoleIds.delete(roleId);
+              changes.removed.push(label);
+              logger.log(`Removed token role ${label} from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+            }
         }
       }
     } catch (error) {

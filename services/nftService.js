@@ -141,7 +141,7 @@ class NFTService {
         attributes: this.extractHeliusAttributes(item.content?.metadata?.attributes || []),
         collectionKey: item.grouping?.[0]?.group_value || null,
         assignedToMission: null
-      })).filter(nft => nft.attributes.length > 0); // Only include NFTs with metadata
+      }));
     } catch (error) {
       logger.error('Helius fetch error:', error);
       return [];

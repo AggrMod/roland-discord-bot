@@ -10745,11 +10745,29 @@ function reverifyAllRoles() {
         btn.innerHTML = '<span>⏳</span><span>Syncing...</span>';
       }
 
-      const response = await fetch('/api/admin/roles/sync', { method: 'POST', credentials: 'include' });
-      const data = await response.json();
+      const response = await fetch('/api/admin/roles/sync', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          ...buildTenantRequestHeaders()
+        },
+        body: JSON.stringify({})
+      });
+      const raw = await response.text();
+      let data = null;
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch (_error) {
+        const snippet = String(raw || '').slice(0, 160).trim();
+        throw new Error(snippet || `Server returned ${response.status}`);
+      }
 
       if (data.success) {
-        showSuccess(`Roles synced successfully (${data.usersProcessed || 0} users updated)`);
+        const synced = Number(data.syncedCount ?? data.usersProcessed ?? data.data?.syncedCount ?? 0);
+        const errors = Number(data.errorCount ?? data.data?.errorCount ?? 0);
+        showSuccess(`Roles synced successfully (${synced} users updated${errors ? `, ${errors} errors` : ''})`);
         await loadAdminRoles();
       } else {
         showError(data.message || 'Sync failed');

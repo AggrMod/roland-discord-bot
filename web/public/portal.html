@@ -744,8 +744,9 @@
           <div class="card" id="engagementConfigCard">
             <div class="card-header-row">
               <h3 class="card-title">⚙️ Settings</h3>
-              <button class="btn-primary btn-sm" onclick="saveEngagementConfig()">Save</button>
+              <button class="btn-primary btn-sm" id="engagementConfigSaveBtn" onclick="saveEngagementConfig()">Save</button>
             </div>
+            <div id="engagementMemberSummaryView" style="display:none;"></div>
             <div class="settings-grid" id="engagementConfigGrid">
               <div class="settings-row">
                 <div class="settings-info">
@@ -848,7 +849,7 @@
           </div>
 
           <!-- Leaderboard Card -->
-          <div class="card">
+          <div class="card" id="engagementLeaderboardCard">
             <div class="card-header-row">
               <h3 class="card-title">🏆 Leaderboard</h3>
               <button class="btn-secondary btn-sm" onclick="loadEngagementLeaderboard()">Refresh</button>
@@ -859,10 +860,10 @@
           </div>
 
           <!-- Shop Card -->
-          <div class="card">
+          <div class="card" id="engagementShopCard">
             <div class="card-header-row">
               <h3 class="card-title">🛍️ Points Shop</h3>
-              <button class="btn-primary btn-sm" onclick="openEngShopModal()">+ Add Item</button>
+              <button class="btn-primary btn-sm" id="engagementShopAddBtn" onclick="openEngShopModal()">+ Add Item</button>
             </div>
             <div id="engagementShopView">
               <div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>
@@ -887,7 +888,7 @@
             </div>
           </div>
 
-          <div class="card">
+          <div class="card" id="engagementHashtagsCard">
             <div class="card-header-row">
               <h3 class="card-title"># Hashtag Monitors</h3>
               <button class="btn-primary btn-sm" onclick="submitEngagementHashtagMonitor()">Add / Update</button>
@@ -908,11 +909,11 @@
             <div class="card-header-row">
               <h3 class="card-title">🧩 Task Automation</h3>
               <div style="display:flex;gap:8px;">
-                <button class="btn-secondary btn-sm" onclick="submitEngagementTask('ingest')">Simulate Ingest</button>
-                <button class="btn-primary btn-sm" onclick="submitEngagementTask('manual')">Create Task</button>
+                <button class="btn-secondary btn-sm" id="engagementTaskIngestBtn" onclick="submitEngagementTask('ingest')">Simulate Ingest</button>
+                <button class="btn-primary btn-sm" id="engagementTaskCreateBtn" onclick="submitEngagementTask('manual')">Create Task</button>
               </div>
             </div>
-            <div class="settings-grid" style="margin-bottom:12px;">
+            <div class="settings-grid" id="engagementTaskAdminForm" style="margin-bottom:12px;">
               <div><label class="form-label">Provider</label><select id="engTaskProvider" class="form-input"><option value="x">X</option><option value="bluesky">Bluesky</option><option value="discord">Discord</option></select></div>
               <div><label class="form-label">Source Post ID</label><input id="engTaskSourcePostId" class="form-input" placeholder="post-123"></div>
               <div><label class="form-label">Source Handle</label><input id="engTaskSourceHandle" class="form-input" placeholder="@account"></div>
@@ -930,9 +931,9 @@
           <div class="card">
             <div class="card-header-row">
               <h3 class="card-title">🏅 Achievements</h3>
-              <button class="btn-primary btn-sm" onclick="submitEngagementAchievement()">Add / Update</button>
+              <button class="btn-primary btn-sm" id="engagementAchievementSaveBtn" onclick="submitEngagementAchievement()">Add / Update</button>
             </div>
-            <div class="settings-grid" style="margin-bottom:12px;">
+            <div class="settings-grid" id="engagementAchievementAdminForm" style="margin-bottom:12px;">
               <div><label class="form-label">Name</label><input id="engAchievementName" class="form-input" placeholder="First 100"></div>
               <div><label class="form-label">Metric</label><select id="engAchievementMetric" class="form-input"><option value="points_total">Points Total</option><option value="discord_messages">Discord Messages</option><option value="discord_replies">Discord Replies</option><option value="discord_reactions">Discord Reactions</option><option value="social_task_completions">Social Task Completions</option><option value="shop_purchases">Shop Purchases</option><option value="admin_grants">Admin Grants</option></select></div>
               <div><label class="form-label">Threshold</label><input id="engAchievementThreshold" type="number" min="1" class="form-input" value="1"></div>
@@ -948,7 +949,7 @@
           <div class="card">
             <div class="card-header-row">
               <h3 class="card-title">🧾 Redemptions</h3>
-              <button class="btn-secondary btn-sm" onclick="loadEngagementRedemptions()">Refresh</button>
+              <button class="btn-secondary btn-sm" id="engagementRedemptionsRefreshBtn" onclick="loadEngagementRedemptions()">Refresh</button>
             </div>
             <div id="engagementRedemptionsView">
               <div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>

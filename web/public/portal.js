@@ -14082,6 +14082,393 @@ async function saveEngagementConfigFromSettings() {
   } catch (e) { showError('Error saving engagement settings.'); }
 }
 
+function canAdminEngagementPortal() {
+  return !!(typeof isAdmin !== 'undefined' && isAdmin) || !!(typeof isSuperadmin !== 'undefined' && isSuperadmin);
+}
+
+function setEngagementPortalMode(canAdmin) {
+  const summaryView = document.getElementById('engagementMemberSummaryView');
+  const configGrid = document.getElementById('engagementConfigGrid');
+  const configSaveBtn = document.getElementById('engagementConfigSaveBtn');
+  const shopAddBtn = document.getElementById('engagementShopAddBtn');
+  const taskAdminForm = document.getElementById('engagementTaskAdminForm');
+  const taskIngestBtn = document.getElementById('engagementTaskIngestBtn');
+  const taskCreateBtn = document.getElementById('engagementTaskCreateBtn');
+  const achievementAdminForm = document.getElementById('engagementAchievementAdminForm');
+  const achievementSaveBtn = document.getElementById('engagementAchievementSaveBtn');
+  const redemptionsRefreshBtn = document.getElementById('engagementRedemptionsRefreshBtn');
+  const configTitle = document.querySelector('#engagementConfigCard .card-title');
+  const tasksCard = document.getElementById('engagementTasksView')?.closest('.card');
+  const tasksTitle = tasksCard?.querySelector('.card-title');
+  const adminOnlyCards = [
+    document.getElementById('engagementMonitoredAccountsView')?.closest('.card'),
+    document.getElementById('engagementHashtagView')?.closest('.card'),
+  ].filter(Boolean);
+
+  if (summaryView) summaryView.style.display = canAdmin ? 'none' : 'block';
+  if (configGrid) configGrid.style.display = canAdmin ? 'grid' : 'none';
+  if (configSaveBtn) configSaveBtn.style.display = canAdmin ? 'inline-flex' : 'none';
+  if (shopAddBtn) shopAddBtn.style.display = canAdmin ? 'inline-flex' : 'none';
+  if (taskAdminForm) taskAdminForm.style.display = canAdmin ? 'grid' : 'none';
+  if (taskIngestBtn) taskIngestBtn.style.display = canAdmin ? 'inline-flex' : 'none';
+  if (taskCreateBtn) taskCreateBtn.style.display = canAdmin ? 'inline-flex' : 'none';
+  if (achievementAdminForm) achievementAdminForm.style.display = canAdmin ? 'grid' : 'none';
+  if (achievementSaveBtn) achievementSaveBtn.style.display = canAdmin ? 'inline-flex' : 'none';
+  if (redemptionsRefreshBtn) redemptionsRefreshBtn.style.display = 'inline-flex';
+  if (configTitle) configTitle.textContent = canAdmin ? 'Settings' : 'My Engagement';
+  if (tasksTitle) tasksTitle.textContent = canAdmin ? 'Task Automation' : 'Active Tasks';
+
+  adminOnlyCards.forEach(card => {
+    card.style.display = canAdmin ? '' : 'none';
+  });
+}
+
+function renderEngagementMemberSummary(summary = {}, currency = {}, config = {}) {
+  const el = document.getElementById('engagementMemberSummaryView');
+  if (!el) return;
+
+  const points = summary.points || {};
+  const linkedAccounts = Array.isArray(summary.linkedAccounts) ? summary.linkedAccounts : [];
+  const achievements = Array.isArray(summary.achievements) ? summary.achievements : [];
+  const redemptions = Array.isArray(summary.redemptions) ? summary.redemptions : [];
+  const tasks = Array.isArray(summary.tasks) ? summary.tasks : [];
+  const currencyLabel = escapeHtml(currency?.plural || config?.currency_name_plural || 'points');
+  const currencyIcon = currency?.icon ? `${escapeHtml(currency.icon)} ` : '';
+  const rankLabel = points.rank ? `#${Number(points.rank)}` : 'Unranked';
+
+  el.innerHTML = `
+    <div style="display:grid;gap:14px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
+        <div style="padding:14px;border:1px solid rgba(99,102,241,0.18);border-radius:12px;background:rgba(15,23,42,0.45);">
+          <div style="font-size:0.8em;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Balance</div>
+          <div style="margin-top:6px;font-size:1.65em;font-weight:700;color:#f8fafc;">${Number(points.total_points || 0).toLocaleString()}</div>
+          <div style="font-size:0.82em;color:var(--text-secondary);">${currencyIcon}${currencyLabel}</div>
+        </div>
+        <div style="padding:14px;border:1px solid rgba(99,102,241,0.18);border-radius:12px;background:rgba(15,23,42,0.45);">
+          <div style="font-size:0.8em;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Leaderboard Rank</div>
+          <div style="margin-top:6px;font-size:1.65em;font-weight:700;color:#f8fafc;">${escapeHtml(rankLabel)}</div>
+          <div style="font-size:0.82em;color:var(--text-secondary);">Among this server's members</div>
+        </div>
+        <div style="padding:14px;border:1px solid rgba(99,102,241,0.18);border-radius:12px;background:rgba(15,23,42,0.45);">
+          <div style="font-size:0.8em;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Active Tasks</div>
+          <div style="margin-top:6px;font-size:1.65em;font-weight:700;color:#f8fafc;">${tasks.length}</div>
+          <div style="font-size:0.82em;color:var(--text-secondary);">Verify actions below to earn more</div>
+        </div>
+        <div style="padding:14px;border:1px solid rgba(99,102,241,0.18);border-radius:12px;background:rgba(15,23,42,0.45);">
+          <div style="font-size:0.8em;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Unlocked Achievements</div>
+          <div style="margin-top:6px;font-size:1.65em;font-weight:700;color:#f8fafc;">${achievements.length}</div>
+          <div style="font-size:0.82em;color:var(--text-secondary);">Recent redemptions: ${redemptions.length}</div>
+        </div>
+      </div>
+      <div style="padding:14px;border:1px solid rgba(99,102,241,0.18);border-radius:12px;background:rgba(15,23,42,0.45);">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
+          <div>
+            <div style="font-weight:600;color:#f8fafc;">Linked Accounts</div>
+            <div style="font-size:0.82em;color:var(--text-secondary);">Connect your social accounts to verify tasks automatically.</div>
+          </div>
+          <div style="font-size:0.82em;color:var(--text-muted);">${linkedAccounts.length} connected</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+          ${(linkedAccounts.length
+            ? linkedAccounts.map(account => `<span style="padding:6px 10px;border-radius:999px;background:rgba(34,197,94,0.16);color:#bbf7d0;font-size:0.82em;border:1px solid rgba(34,197,94,0.22);">${escapeHtml(account.provider.toUpperCase())}: ${escapeHtml(account.handle || account.display_name || account.provider_user_id || 'linked')}</span>`).join('')
+            : '<span style="font-size:0.82em;color:var(--text-muted);">No external accounts linked yet.</span>')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function disconnectEngagementAccount(providerKey) {
+  try {
+    const res = await fetch(`/api/user/engagement/accounts/${encodeURIComponent(providerKey)}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: buildTenantRequestHeaders(),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      showError(data.message || 'Could not disconnect the account.');
+      return;
+    }
+    showSuccess(`${String(providerKey || '').toUpperCase()} account disconnected.`);
+    loadEngagementSection();
+  } catch (error) {
+    showError(`Failed to disconnect account: ${error.message}`);
+  }
+}
+
+async function redeemEngagementItem(itemId) {
+  try {
+    const res = await fetch('/api/user/engagement/redeem', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...buildTenantRequestHeaders(),
+      },
+      body: JSON.stringify({ item_id: Number(itemId) }),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      showError(data.message || 'Could not redeem the item.');
+      return;
+    }
+    const result = data.result || data.data || data;
+    const mode = String(result.fulfillmentMode || result.fulfillment_mode || '');
+    if (mode === 'manual') {
+      showSuccess('Redemption created. A fulfillment ticket/log entry has been created.');
+    } else {
+      showSuccess('Item redeemed successfully.');
+    }
+    loadEngagementConfig();
+    loadEngagementShop();
+    loadEngagementRedemptions();
+  } catch (error) {
+    showError(`Redemption failed: ${error.message}`);
+  }
+}
+
+async function loadEngagementSection() {
+  const canAdmin = canAdminEngagementPortal();
+  setEngagementPortalMode(canAdmin);
+  await loadEngagementConfig();
+  const tasks = [
+    loadEngagementProviders(),
+    loadEngagementLeaderboard(),
+    loadEngagementShop(),
+    loadEngagementTasks(),
+    loadEngagementAchievements(),
+    loadEngagementRedemptions(),
+  ];
+  if (canAdmin) {
+    tasks.push(
+      loadEngagementMonitoredAccounts(),
+      loadEngagementHashtags()
+    );
+  }
+  await Promise.all(tasks);
+}
+
+async function loadEngagementConfig() {
+  const canAdmin = canAdminEngagementPortal();
+  setEngagementPortalMode(canAdmin);
+  try {
+    const endpoint = canAdmin ? '/api/admin/engagement/config' : '/api/user/engagement/summary';
+    const res = await fetch(endpoint, { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json();
+    if (!data.success) return;
+
+    if (canAdmin) {
+      const cfg = data.config || {};
+      currentEngagementConfig = cfg;
+      if (document.getElementById('engEnabled')) document.getElementById('engEnabled').checked = !!cfg.enabled;
+      if (document.getElementById('engPtsMsg')) document.getElementById('engPtsMsg').value = cfg.points_message ?? 5;
+      if (document.getElementById('engPtsReply')) document.getElementById('engPtsReply').value = cfg.points_reply ?? 3;
+      if (document.getElementById('engPtsReact')) document.getElementById('engPtsReact').value = cfg.points_reaction ?? 2;
+      if (document.getElementById('engCooldownMsg')) document.getElementById('engCooldownMsg').value = cfg.cooldown_message_mins ?? 60;
+      if (document.getElementById('engCooldownReply')) document.getElementById('engCooldownReply').value = cfg.cooldown_reply_mins ?? 30;
+      if (document.getElementById('engCooldownReact')) document.getElementById('engCooldownReact').value = cfg.cooldown_reaction_daily ?? 5;
+      if (document.getElementById('engCurrencyPlural')) document.getElementById('engCurrencyPlural').value = cfg.currency_name_plural ?? 'points';
+      if (document.getElementById('engCurrencySymbol')) document.getElementById('engCurrencySymbol').value = cfg.currency_symbol ?? 'pts';
+      if (document.getElementById('engTaskFeedChannel')) document.getElementById('engTaskFeedChannel').value = cfg.task_feed_channel_id ?? '';
+      if (document.getElementById('engPurchaseLogChannel')) document.getElementById('engPurchaseLogChannel').value = cfg.purchase_log_channel_id ?? '';
+      if (document.getElementById('engAchievementChannel')) document.getElementById('engAchievementChannel').value = cfg.achievement_channel_id ?? '';
+      return;
+    }
+
+    currentEngagementConfig = data.config || {};
+    renderEngagementMemberSummary(data.summary || {}, data.currency || {}, data.config || {});
+  } catch (e) {
+    console.error('[Engagement] config load error:', e);
+  }
+}
+
+async function loadEngagementProviders() {
+  const el = document.getElementById('engagementProvidersView');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
+  try {
+    const canAdmin = canAdminEngagementPortal();
+    const providerRes = await fetch(
+      canAdmin ? '/api/admin/engagement/providers' : '/api/user/engagement/accounts',
+      { credentials: 'include', headers: buildTenantRequestHeaders() }
+    );
+    const providerData = await providerRes.json();
+    const accountRes = await fetch('/api/user/engagement/accounts', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const accountData = await accountRes.json();
+    const providers = canAdmin
+      ? (providerData.providers || [])
+      : (accountData.providers || providerData.providers || []);
+    const linkedAccounts = Array.isArray(accountData.accounts) ? accountData.accounts : [];
+
+    if (!providerData.success || !providers.length) {
+      el.innerHTML = '<p style="color:var(--text-secondary);">No providers available.</p>';
+      return;
+    }
+
+    el.innerHTML = providers.map(provider => {
+      const linked = linkedAccounts.find(account => account.provider === provider.key);
+      const linkBadge = linked
+        ? `<span style="font-size:0.82em;color:#86efac;">Linked as ${escapeHtml(linked.handle || linked.display_name || linked.provider_user_id || provider.label)}</span>`
+        : `<span style="font-size:0.82em;color:var(--text-muted);">Not linked for this Discord account</span>`;
+      const actions = [];
+      if (provider.key === 'x' && provider.supportsAccountLinking) {
+        actions.push(`<button class="btn-secondary btn-sm" onclick="startXAccountLink()">${linked ? 'Reconnect X' : 'Connect X'}</button>`);
+        if (linked) actions.push(`<button class="btn-secondary btn-sm" onclick="disconnectEngagementAccount('x')">Disconnect</button>`);
+      }
+      if (canAdmin && provider.key === 'x') {
+        actions.push(`<button class="btn-secondary btn-sm" onclick="runXProviderSync('account')" ${provider.configured ? '' : 'disabled'}>Sync Account</button>`);
+        actions.push(`<button class="btn-secondary btn-sm" onclick="runXProviderSync('hashtag')" ${provider.configured ? '' : 'disabled'}>Sync Hashtag</button>`);
+      }
+      const helperText = provider.key === 'x'
+        ? (provider.configured
+          ? 'Use your linked X account to verify likes, reposts, replies, and hashtag tasks.'
+          : 'An admin still needs to configure the shared X app in Superadmin.')
+        : `Monitoring: ${provider.supportsSourceMonitoring ? 'yes' : 'no'} · Hashtags: ${provider.supportsHashtagMonitoring ? 'yes' : 'no'} · Linking: ${provider.supportsAccountLinking ? 'yes' : 'no'}`;
+      return `
+        <div class="table-row" style="align-items:flex-start;">
+          <div style="flex:1;">
+            <div style="font-weight:600;">${escapeHtml(provider.label)}</div>
+            <div style="font-size:0.82em;color:var(--text-muted);margin:4px 0 8px 0;">${helperText}</div>
+            ${provider.supportsAccountLinking ? `<div style="margin-bottom:8px;">${linkBadge}</div>` : ''}
+            ${actions.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;">${actions.join('')}</div>` : ''}
+          </div>
+          <span class="status-badge ${provider.configured ? 'status-live' : 'status-paused'}">${provider.configured ? 'Configured' : 'Credentials Missing'}</span>
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--error);">Failed to load providers.</p>';
+  }
+}
+
+async function loadEngagementLeaderboard() {
+  const el = document.getElementById('engagementLeaderboardView');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
+  try {
+    const endpoint = canAdminEngagementPortal()
+      ? '/api/admin/engagement/leaderboard?limit=25'
+      : '/api/user/engagement/leaderboard?limit=25';
+    const res = await fetch(endpoint, { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json();
+    if (!data.success || !data.leaderboard?.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🏅</div><h4 class="empty-state-title">No data yet</h4><p class="empty-state-message">Points will appear here once members start chatting and completing tasks.</p></div>';
+      return;
+    }
+    const medals = ['🥇', '🥈', '🥉'];
+    el.innerHTML = data.leaderboard.map((row, index) => `
+      <div class="table-row">
+        <span style="width:36px;text-align:center;">${medals[index] || (index + 1)}</span>
+        <span style="flex:1;font-weight:500;">${escapeHtml(row.username || row.user_id)}</span>
+        <span style="color:var(--accent-gold);font-weight:600;">${formatEngagementAmount(row.total_points)}</span>
+      </div>
+    `).join('');
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--error);">Failed to load leaderboard.</p>';
+  }
+}
+
+async function loadEngagementShop() {
+  const el = document.getElementById('engagementShopView');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
+  try {
+    const canAdmin = canAdminEngagementPortal();
+    const endpoint = canAdmin ? '/api/admin/engagement/shop' : '/api/user/engagement/shop';
+    const res = await fetch(endpoint, { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json();
+    const items = data.items || [];
+    if (!data.success || !items.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🛍️</div><h4 class="empty-state-title">Marketplace is empty</h4><p class="empty-state-message">No rewards are available yet.</p></div>';
+      return;
+    }
+
+    const currentPoints = Number(data.points?.total_points || 0);
+    el.innerHTML = items.map(item => {
+      const stock = Number(item.quantity_remaining) < 0 ? '∞' : Number(item.quantity_remaining || 0);
+      const inStock = Number(item.quantity_remaining) !== 0;
+      const canAfford = currentPoints >= Number(item.cost || 0) && inStock;
+      const footer = canAdmin
+        ? `<button class="btn-danger btn-sm" style="margin-left:10px;" onclick="deleteEngShopItem(${item.id})">Remove</button>`
+        : `<button class="btn-secondary btn-sm" onclick="redeemEngagementItem(${item.id})" ${canAfford ? '' : 'disabled'}>${!inStock ? 'Sold Out' : (canAfford ? 'Redeem' : 'Not Enough Points')}</button>`;
+      return `
+        <div class="table-row" style="align-items:flex-start;">
+          <span style="width:36px;font-size:0.8em;color:var(--text-muted);">#${item.id}</span>
+          <div style="flex:1;">
+            <div style="font-weight:600;">${escapeHtml(item.name)}</div>
+            ${item.description ? `<div style="font-size:0.85em;color:var(--text-muted);">${escapeHtml(item.description)}</div>` : ''}
+            <div style="font-size:0.8em;color:var(--text-muted);margin-top:2px;">${escapeHtml(item.reward_type || item.type)} · ${escapeHtml(item.fulfillment_mode || 'auto')} · Stock: ${stock}</div>
+          </div>
+          <span style="color:var(--accent-gold);font-weight:600;white-space:nowrap;">${formatEngagementAmount(item.cost)}</span>
+          ${footer}
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--error);">Failed to load shop items.</p>';
+  }
+}
+
+async function loadEngagementAchievements() {
+  const el = document.getElementById('engagementAchievementsView');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
+  try {
+    const canAdmin = canAdminEngagementPortal();
+    const endpoint = canAdmin ? '/api/admin/engagement/achievements' : '/api/user/engagement/achievements';
+    const res = await fetch(endpoint, { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json();
+    const achievements = data.achievements || [];
+    if (!data.success || !achievements.length) {
+      el.innerHTML = `<p style="color:var(--text-secondary);">${canAdmin ? 'No achievements configured yet.' : 'No achievements unlocked yet.'}</p>`;
+      return;
+    }
+    el.innerHTML = achievements.map(achievement => `
+      <div class="table-row" style="align-items:flex-start;">
+        <div style="flex:1;">
+          <div style="font-weight:600;">${escapeHtml(achievement.icon || '')} ${escapeHtml(achievement.name || achievement.achievement_name || 'Achievement')}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(achievement.metric_type || 'unlock')} ${achievement.threshold ? `· threshold ${achievement.threshold}` : ''} ${achievement.reward_points ? `· reward ${formatEngagementAmount(achievement.reward_points)}` : ''}</div>
+          ${achievement.description ? `<div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(achievement.description)}</div>` : ''}
+          ${achievement.awarded_at ? `<div style="font-size:0.78em;color:var(--text-muted);margin-top:4px;">Unlocked ${escapeHtml(new Date(achievement.awarded_at).toLocaleString())}</div>` : ''}
+        </div>
+        ${canAdmin ? `<button class="btn-danger btn-sm" onclick="deleteEngagementAchievement(${achievement.id})">Delete</button>` : '<span class="status-badge status-live">Unlocked</span>'}
+      </div>
+    `).join('');
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--error);">Failed to load achievements.</p>';
+  }
+}
+
+async function loadEngagementRedemptions() {
+  const el = document.getElementById('engagementRedemptionsView');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
+  try {
+    const canAdmin = canAdminEngagementPortal();
+    const endpoint = canAdmin ? '/api/admin/engagement/redemptions?limit=50' : '/api/user/engagement/redemptions?limit=50';
+    const res = await fetch(endpoint, { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json();
+    const redemptions = data.redemptions || [];
+    if (!data.success || !redemptions.length) {
+      el.innerHTML = `<p style="color:var(--text-secondary);">${canAdmin ? 'No redemptions yet.' : 'You have not redeemed any items yet.'}</p>`;
+      return;
+    }
+    el.innerHTML = redemptions.map(redemption => `
+      <div class="table-row" style="align-items:flex-start;">
+        <div style="flex:1;">
+          <div style="font-weight:600;">${escapeHtml(redemption.item_name || `Item #${redemption.item_id}`)}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">${canAdmin ? `User: ${escapeHtml(redemption.user_id)} · ` : ''}Cost: ${formatEngagementAmount(redemption.cost)}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">Mode: ${escapeHtml(redemption.fulfillment_mode || 'auto')} · Status: ${escapeHtml(redemption.fulfillment_status || 'completed')}</div>
+        </div>
+        <span style="font-size:0.8em;color:var(--text-muted);white-space:nowrap;">#${redemption.id}</span>
+      </div>
+    `).join('');
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--error);">Failed to load redemptions.</p>';
+  }
+}
+
 
 
 

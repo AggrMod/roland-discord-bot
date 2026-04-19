@@ -359,6 +359,42 @@ function createAuthUserRouter({
     }
   });
 
+  router.get('/api/user/engagement/leaderboard', async (req, res) => {
+    if (!req.session.discordUser) {
+      return res.status(401).json(toErrorResponse('Not authenticated', 'UNAUTHORIZED'));
+    }
+    try {
+      const guildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
+      if (!guildId) return res.status(400).json(toErrorResponse('Select a server first', 'VALIDATION_ERROR'));
+      const eng = require('../../services/engagementService');
+      return res.json(toSuccessResponse({
+        leaderboard: eng.getLeaderboard(guildId, Number(req.query.limit || 25)),
+      }));
+    } catch (routeError) {
+      logger.error('Error fetching user engagement leaderboard:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/user/engagement/shop', async (req, res) => {
+    if (!req.session.discordUser) {
+      return res.status(401).json(toErrorResponse('Not authenticated', 'UNAUTHORIZED'));
+    }
+    try {
+      const guildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
+      if (!guildId) return res.status(400).json(toErrorResponse('Select a server first', 'VALIDATION_ERROR'));
+      const eng = require('../../services/engagementService');
+      return res.json(toSuccessResponse({
+        items: eng.getShopItems(guildId, { includeDisabled: false }),
+        points: eng.getUserPoints(guildId, req.session.discordUser.id),
+        currency: eng.getCurrencyMeta(guildId),
+      }));
+    } catch (routeError) {
+      logger.error('Error fetching user engagement shop:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.get('/api/user/engagement/accounts', async (req, res) => {
     if (!req.session.discordUser) {
       return res.status(401).json(toErrorResponse('Not authenticated', 'UNAUTHORIZED'));

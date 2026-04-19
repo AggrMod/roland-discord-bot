@@ -98,26 +98,348 @@ const ITEM_FIND_LINES = [
   "🍝 {player} inhales a plate of mama's spaghetti! (+14 HP)",
   "☕ {player} chugs an espresso shot! (+9 HP)",
   "🚬 {player} finds a pack of lucky strikes! (+11 HP)",
+  "💎 {player} pawns a hot diamond! (+13 HP)",
+  "🍷 {player} sips a stolen '47 Bordeaux! (+16 HP)",
+  "🧀 {player} discovers aged provolone in their coat! (+10 HP)",
+  "🎰 {player} hits a jackpot on the corner slot machine! (+17 HP)",
+  "🔨 {player} picks up a lead pipe! (Damage +20% next round)",
+  "⚾ {player} grabs a baseball bat from the back room! (Damage +20% next round)",
+  "🗡️ {player} finds a switchblade in the alley! (Damage +20% next round)",
+  "🧱 {player} discovers a brick. Classic weapon! (Damage +20% next round)",
+  "🍞 {player} eats a meatball sub from Sal's deli! (+15 HP)",
+  "🥛 {player} drinks whole milk straight from the carton! (+8 HP)",
+  "🍔 {player} finds a burger still warm! (+12 HP)",
+  "🥃 {player} discovers the boss's private scotch stash! (+18 HP)",
+  "💉 {player} injects... vitamins. Totally legal vitamins. (+14 HP)",
+  "🎲 {player} rolls snake eyes and feels invincible! (+11 HP)",
+  "🔑 {player} finds the key to the safe house! (+10 HP)",
+  "📿 {player} kisses their grandmother's rosary! (+9 HP)",
 ];
 
-const ERA_ALIASES = {
-  'cowboy': 'wild_west',
-  'west': 'wild_west',
-  'knight': 'medieval',
-  'middle_ages': 'medieval',
-  'samurai': 'feudal_japan',
-  'cyber': 'cyberpunk',
-  'future': 'cyberpunk',
-  'scifi': 'cyberpunk',
-};
+// FLAVOR_LINES moved to config/battleEras.js — accessed via era config
+
+const LUCKY_ESCAPE_LINES = [
+  "🍀 {player} dodges a bullet by sheer luck! (Avoided lethal damage)",
+  "✨ {player} ducks at just the right moment! (Escaped death)",
+  "🎲 {player}'s guardian angel must be working overtime! (Survived)",
+  "🙏 {player} trips on their own feet and dodges a headshot! (Lucky klutz)",
+  "📿 {player}'s grandmother's rosary deflects the bullet! (Miracle)",
+  "🎰 {player} hits the jackpot—survives on a technicality! (1 HP left)",
+  "🚪 {player} gets saved by someone opening a door at the perfect moment!",
+  "📱 {player}'s phone blocks the fatal shot! (Thanks, Nokia)",
+  "🍀 {player} sneezes and moves just enough to survive! (Allergies save lives)",
+  "💨 {player} slips on a banana peel—right out of harm's way!",
+  "🎭 {player} fakes their own death. The attacker buys it! (Survived)",
+  "🐱 {player} has nine lives apparently. Used one just now.",
+  "✝️ {player} was wearing a bulletproof Bible! (Faith pays off)",
+  "🎲 {player} rolled a natural 20 on their death save! (Critical survival)",
+  "🦆 {player} ducks like their life depends on it. Because it does!",
+  "🎪 {player} pulls a magic trick—disappears then reappears! (1 HP)",
+  "🍀 {player} finds a four-leaf clover at the perfect moment!",
+  "👻 {player} briefly becomes a ghost, then un-ghosts! (Glitch in the Matrix)",
+  "🎬 {player} yells 'CUT!' and everyone stops. Confusion saves them!",
+];
+
+const WINNER_LINES = [
+  "{winner} is the last one standing! The family is proud. 👑",
+  "{winner} wins! Don't mess with the family. 👑",
+  "{winner} came out on top! Respect. 👑",
+  "{winner} proved who runs this town! 👑",
+];
+
+// Hype finale outro templates (randomized for replayability)
+const FINALE_OUTROS = [
+  "The streets remember this night. {winner} walks away with the family crown. Nobody saw this coming, but everybody will remember. Capisce?",
+  "{winner} climbed over the bodies and earned the respect of every made man watching. This is how legends are born in the syndicate.",
+  "When the smoke cleared, only {winner} was left standing. The family crown sits heavy—but they wear it well. Salute.",
+  "They came. They saw. They conquered. {winner} just wrote their name in blood across this city. The family will not forget.",
+  "From {totalPlayers} fighters to one champion: {winner}. That's not luck—that's power. Welcome to the top of the family tree. 👑",
+  "{winner} survived {rounds} rounds of pure chaos and walked out breathing. That's the kind of soldier the syndicate needs. Respect earned.",
+  "The boss is watching. The streets are talking. And {winner}? They're wearing the crown now. Business just got very personal.",
+  "{winner} didn't just survive—they dominated. {rounds} rounds, {totalPlayers} contenders, one undisputed champion. The family is proud.",
+  "History lesson: You don't mess with {winner}. Tonight they proved it in blood. The crown is theirs. End of discussion.",
+  "Listen close: {winner} just became untouchable. Survived {rounds} rounds, outlasted {totalPlayers} soldiers. That's made-man material right there.",
+  "Somewhere, the boss is smiling. {winner} earned their stripes tonight. The family crown fits perfectly. Wear it well, champion.",
+  "{winner} walked through hell and came out the other side wearing gold. {rounds} rounds of warfare, and they didn't even break a sweat. Legend status: unlocked.",
+  "Tonight, {winner} wrote the definition of survival. {totalPlayers} entered. One walked out. That's not just winning—that's sending a message.",
+  "The syndicate has a new champion. {winner} crushed {rounds} rounds of chaos and claimed the crown. Respect? Earned. Fear? Justified.",
+  "{winner} just went from soldier to legend in {rounds} rounds. The family crown is heavy, but they're built for it. Salute to the new king.",
+  "When they tell stories about this battle, they'll start and end with {winner}. {totalPlayers} tried. One succeeded. Crown secured. 👑",
+  "You know what's harder than fighting {rounds} rounds? Winning them all. {winner} just did both. The family sees you. The crown is yours.",
+  "{winner} survived everything the streets threw at them. {rounds} rounds, {totalPlayers} enemies, one victor. That's syndicate royalty right there.",
+];
+
+const TAUNT_LINES = [
+  "💬 {attacker} trash talks {defender}: \"You fight like a rat carrying pasta!\"",
+  "💬 {attacker} to {defender}: \"I've seen stronger hits from a nonna with a wooden spoon!\"",
+  "💬 {attacker} smirks: \"Is that the best you got, or are you saving your energy for crying?\"",
+  "💬 {attacker} laughs: \"My grandmother hits harder, and she's been dead for five years!\"",
+  "💬 {attacker} yells at {defender}: \"You swing like you've never seen a fight before!\"",
+  "💬 {attacker} to {defender}: \"I've fought squirrels with more balls than you!\"",
+  "💬 {attacker} grins: \"Is your mommy watching? Tell her you're doing terrible!\"",
+  "💬 {attacker} shouts: \"The family will use you as a cautionary tale!\"",
+  "💬 {attacker} sneers: \"You're so bad at this, I'm starting to feel bad. Nah, I'm lying.\"",
+  "💬 {attacker} to {defender}: \"Keep swinging—eventually you'll hit something. Probably yourself.\"",
+  "💬 {attacker} mocks {defender}: \"Did you learn to fight from a book? A children's book?\"",
+  "💬 {attacker} laughs: \"I've seen better technique from a drunk guy at the bar!\"",
+  "💬 {attacker} taunts: \"You're making this too easy. Where's the fun in that?\"",
+  "💬 {attacker} to {defender}: \"The boss sent me to fight you? He must hate me.\"",
+  "💬 {attacker} grins wickedly: \"Your style: it's like watching someone flail in the dark.\"",
+];
+
+const TRASH_TALK_LINES = [
+  "🗣️ {attacker} after hitting {defender}: \"That's what happens when you step up!\"",
+  "🗣️ {attacker} after a solid hit: \"See? The family remembers you now!\"",
+  "🗣️ {attacker} sneers: \"You should've stayed home tonight, {defender}.\"",
+  "🗣️ {attacker} to {defender}: \"That's gonna leave a mark—on your reputation!\"",
+  "🗣️ {attacker} spits: \"The streets are talking about you now. Not in a good way.\"",
+  "🗣️ {attacker} laughs: \"Is that all you got? I expected more from a {defender}.\"",
+  "🗣️ {attacker} mockingly: \"Oof. That looked like it hurt. Good.\"",
+  "🗣️ {attacker} to {defender}: \"Next time, bring backup. You're gonna need it.\"",
+  "🗣️ {attacker} grins: \"Your resistance is noted. Not respected, just noted.\"",
+  "🗣️ {attacker} after hitting {defender}: \"Welcome to the big leagues, kid.\"",
+  "🗣️ {attacker} taunts: \"You're writing checks your body can't cash!\"",
+  "🗣️ {attacker} sneers: \"They warned you about the syndicate. You didn't listen.\"",
+  "🗣️ {attacker} to {defender}: \"Keep that energy up—it's funny.\"",
+  "🗣️ {attacker} laughs coldly: \"This is what happens when you forget your place.\"",
+  "🗣️ {attacker} after a hit: \"Stick around—there's plenty more where that came from!\"",
+];
+
+const DODGE_LINES = [
+  "⚡ {player} dodges {opponent}'s attack at the last second! (Close one)",
+  "🎯 {opponent} swings at {player}, but {player} rolls out of the way! (Slick move)",
+  "💨 {player} slips between {opponent}'s strikes like water! (Matrix vibes)",
+  "🏃 {opponent} charges at {player}, but {player} sidestepped—can't catch a ghost!",
+  "✨ {player} reads {opponent}'s telegraph and ducks! (Seventh sense)",
+  "🎲 {player} and {opponent} exchange strikes—both miss spectacularly! (Amateur hour)",
+  "👀 {player} sees the punch coming from a mile away! (Situational awareness)",
+  "🕐 {opponent} is moving in slow motion compared to {player}! (Flash step)",
+  "🤸 {player} does a backflip to dodge—unnecessary, but effective! (Showboating)",
+  "💪 {opponent} swings with all their might... {player} wasn't even there!",
+  "🎭 {player} fakes left, {opponent} falls for it—clean dodge! (Psychological warfare)",
+  "🌪️ {player} weaves through {opponent}'s assault like it's nothing!",
+  "🍀 {player} sidesteps—the miss almost threw {opponent} off balance! (Momentum nightmare)",
+];
+
+const COMEBACK_LINES = [
+  "🔥 {player} stops the bleeding and finds their rhythm! (Survival instinct kicking in)",
+  "💥 {player} fires back with renewed intensity! (Second wind activated)",
+  "👊 {player} staggers back, then plants their feet—time to even the score! (Comeback energy)",
+  "😤 {player} wipes the blood from their face: 'That all you got?'",
+  "⚡ {player} is BACK IN THE GAME! (Never count them out)",
+  "🔴 {player} has taken a beating, but the look in their eyes says it's NOT over! (Dangerous when cornered)",
+  "💪 {player} cracks their knuckles—they're just getting warmed up! (Second half incoming)",
+  "🎬 {player} rolls their shoulders and nods: 'Now the real fight begins.'",
+  "🔥 {player} has been marked for dead, but stubborn beats broken! (Willpower > HP)",
+  "⚔️ {player} and {opponent} lock eyes—both bloodied, both NOT quitting! (Respect in the chaos)",
+  "😠 {player} is FURIOUS now. {opponent} just woke up the wrong version! (Rage unlocked)",
+  "👑 {player} gets back up. The crowd goes WILD! (Crowd favorite moment)",
+];
+
+const ROUND_TRANSITION_LINES = [
+  "📢 Both warriors shake out the exhaustion. Round {round} incoming...",
+  "📯 The air is thick with tension. Who will strike first in Round {round}?",
+  "⏰ Moment of silence. Then... ROUND {round}!",
+  "🔔 *DING* The bell rings for Round {round}! Here we go!",
+  "💨 A brief pause. A few deep breaths. Time to do it again in Round {round}!",
+  "😤 Blood on the canvas. Anger in the air. Round {round} begins NOW!",
+  "🎬 Dramatic pause. The tension is unbearable. And ROUND {round}... FIGHT!",
+  "⚡ The crowd is on their feet. Here comes Round {round}!",
+  "🔥 Neither fighter is backing down. This is just getting started. Round {round}!",
+  "😤 Both soldiers nod at each other. There's still fuel in the tank. Round {round}!",
+];
+
+const GENERIC_COMBAT_LINES = [
+  "{attacker} lands a precise strike on {defender} for {damage} damage!",
+  "{attacker} breaks through {defender}'s guard! {damage} HP lost!",
+  "{attacker} catches {defender} off-balance for {damage} damage!",
+  "{attacker} unleashes a fast combo on {defender}! {damage} HP!",
+  "{attacker} drives {defender} backward with {damage} damage!",
+  "{attacker} hits hard and clean. {defender} takes {damage}!",
+  "{attacker} times the counter perfectly on {defender}! {damage} damage!",
+  "{attacker} closes distance and punishes {defender} for {damage} HP!",
+  "{attacker} strikes from an unexpected angle! {defender} loses {damage} HP!",
+  "{attacker} overwhelms {defender} with pressure. {damage} damage dealt!",
+];
+
+const GENERIC_CRIT_LINES = [
+  "{attacker} finds a huge opening on {defender}! CRITICAL {damage} damage!",
+  "{attacker} lands a devastating critical hit on {defender}! {damage}!",
+  "{attacker} executes the perfect finisher on {defender}! CRIT for {damage}!",
+  "{attacker} goes all-in and cracks {defender}'s defense! {damage} critical!",
+  "{attacker} delivers a brutal critical strike to {defender}! {damage}!",
+  "{attacker} reads {defender} perfectly and explodes with damage! CRIT {damage}!",
+];
+
+const GENERIC_ITEM_LINES = [
+  "⚡ {player} finds an adrenaline charge! (+12 HP)",
+  "🧪 {player} uses a combat stim! (+14 HP)",
+  "🛡️ {player} equips reinforced plating! (+16 HP)",
+  "💊 {player} patches up quickly! (+10 HP)",
+  "🔋 {player} reroutes power and recovers! (+11 HP)",
+  "🧰 {player} finds a field repair kit! (+13 HP)",
+  "🎯 {player} calibrates targeting optics! (Damage +20% next round)",
+  "🔧 {player} upgrades their weapon system! (Damage +20% next round)",
+  "💥 {player} primes an overcharge attack! (Damage +20% next round)",
+  "🛰️ {player} receives tactical telemetry! (Damage +20% next round)",
+];
+
+const GENERIC_TAUNT_LINES = [
+  "💬 {attacker} to {defender}: \"You're out of position and out of luck.\"",
+  "💬 {attacker} mocks {defender}: \"That was your best move?\"",
+  "💬 {attacker} grins at {defender}: \"You're reacting, I'm dictating.\"",
+  "💬 {attacker} taunts {defender}: \"Keep swinging. I'm still untouched.\"",
+  "💬 {attacker} says: \"You stepped in the wrong arena, {defender}.\"",
+];
+
+const GENERIC_TRASH_TALK_LINES = [
+  "🗣️ {attacker} after the hit: \"Control the pace or get controlled.\"",
+  "🗣️ {attacker}: \"That gap in your defense? I live there now.\"",
+  "🗣️ {attacker} to {defender}: \"You can't win trading like that.\"",
+  "🗣️ {attacker} smirks: \"I'm two steps ahead and pulling away.\"",
+  "🗣️ {attacker}: \"Every mistake adds up. Yours are adding fast.\"",
+];
+
+const GENERIC_DODGE_LINES = [
+  "⚡ {player} slips past {opponent}'s attack at the last instant!",
+  "🎯 {opponent} commits, but {player} dodges cleanly!",
+  "💨 {player} vanishes from the angle and avoids the hit!",
+  "🌀 {player} reads {opponent} and sidesteps perfectly!",
+  "🛡️ {player} avoids the damage and resets the spacing!",
+];
+
+const GENERIC_COMEBACK_LINES = [
+  "🔥 {player} steadies up and claws back momentum!",
+  "💥 {player} absorbs the pressure and answers back!",
+  "⚔️ {player} refuses to fold. The comeback starts now!",
+  "🎯 {player} regains focus and re-enters the fight!",
+  "🧠 {player} adapts on the fly and flips the script!",
+];
+
+const GENERIC_ROUND_TRANSITION_LINES = [
+  "📢 Both fighters reset. Round {round} begins.",
+  "⏱️ Brief pause, then Round {round} starts now.",
+  "🔔 Round {round}: pressure rising, margins shrinking.",
+  "⚡ Round {round} loads in. Stay sharp.",
+  "🎬 Round {round} kicks off with both sides locked in.",
+];
+
+const GENERIC_LUCKY_ESCAPE_LINES = [
+  "🍀 {player} survives by a hair and stays in the match!",
+  "✨ {player} escapes elimination with 1 HP!",
+  "🎲 {player} gets a miracle break and hangs on!",
+  "🙏 {player} somehow lives to fight the next exchange!",
+  "🫀 {player} refuses to go down and clings to 1 HP!",
+];
+
+const GENERIC_FINALE_OUTROS = [
+  "{winner} outlasted {totalPlayers} contenders across {rounds} rounds and owns the arena.",
+  "{rounds} rounds later, {winner} stands alone. Dominance confirmed.",
+  "From {totalPlayers} fighters to one: {winner}. Clean finish.",
+  "{winner} survived the chaos and closed the match in {rounds} rounds.",
+  "The final circle collapses and {winner} takes the crown.",
+];
+
+const GENERIC_VICTORY_LINES = [
+  "{winner} is the final fighter standing.",
+  "{winner} claims the win with a decisive finish.",
+  "{winner} outlasts everyone and secures the title.",
+  "{winner} closes the match and takes the crown.",
+];
+
+const ERA_ALIASES = Object.freeze({
+  vaultrunners: 'vault_runners',
+  vault_runner: 'vault_runners',
+  vault_runners: 'vault_runners',
+  yellow_catz: 'yellowcatz',
+  yellow_cats: 'yellowcatz',
+  maffia: 'mafia',
+  cowboy: 'wild_west',
+  west: 'wild_west',
+  knight: 'medieval',
+  middle_ages: 'medieval',
+  samurai: 'feudal_japan',
+  cyber: 'cyberpunk',
+  future: 'cyberpunk',
+  scifi: 'cyberpunk',
+});
 
 const ASSIGNMENT_REQUIRED_ERAS = new Set([
-  'medieval', 'cyberpunk', 'feudal_japan', 'ancient_rome', 'space_marines', 'wild_west'
+  'mafia',
+  'vault_runners',
+  'medieval',
+  'cyberpunk',
+  'feudal_japan',
+  'ancient_rome',
+  'space_marines',
+  'wild_west',
 ]);
 
 class BattleService {
   constructor() {
-    this.activeGames = new Map();
+    this.SWORD_EMOJI = '⚔️';
+  }
+
+  getEraConfig(eraKey) {
+    const normalized = this.normalizeEraKey(eraKey);
+    return BATTLE_ERAS[normalized] || BATTLE_ERAS.mafia;
+  }
+
+  getLobbyJoinEmoji(eraKey) {
+    const era = this.getEraConfig(eraKey);
+    return era.joinEmoji || this.SWORD_EMOJI;
+  }
+
+  getLobbyTitle(eraKey) {
+    const era = this.getEraConfig(eraKey);
+    if (era.lobbyTitle) return era.lobbyTitle;
+    const eraIcon = era.lobbyIcon || this.SWORD_EMOJI;
+    const eraName = era.name || 'Battle';
+    return `${eraIcon} ${eraName} Battle Lobby`;
+  }
+
+  getLobbyFooter(eraKey) {
+    const era = this.getEraConfig(eraKey);
+    if (era.lobbyFooter) return era.lobbyFooter;
+    const eraName = era.name || 'Battle';
+    return `Creator can /battle start when ready | Era: ${eraName}`;
+  }
+
+  formatVictoryTemplate(template, { winnerNameBold, winnerMention, rounds, totalPlayers, eraName }) {
+    if (!template) return '';
+    return String(template)
+      .replace(/\{winnerMention\}/g, winnerMention)
+      .replace(/\{winner\}/g, winnerNameBold)
+      .replace(/\{rounds\}/g, rounds)
+      .replace(/\{totalPlayers\}/g, totalPlayers)
+      .replace(/\{era\}/g, eraName);
+  }
+
+  getVictoryEmbedTitle(eraKey) {
+    const era = this.getEraConfig(eraKey);
+    if (era.victoryTitle) return era.victoryTitle;
+    return `${era.lobbyIcon || '🏆'} ${era.name || 'Battle'} Champion`;
+  }
+
+  getVictoryEmbedFooter(eraKey) {
+    const era = this.getEraConfig(eraKey);
+    if (era.victoryFooter) return era.victoryFooter;
+    return `Era: ${era.name || 'Battle'}`;
+  }
+
+  getVictoryAnnouncement(eraKey, winnerId) {
+    const era = this.getEraConfig(eraKey);
+    const winnerMention = `<@${winnerId}>`;
+    if (era.victoryAnnouncement) {
+      return this.formatVictoryTemplate(era.victoryAnnouncement, {
+        winnerNameBold: `**${winnerMention}**`,
+        winnerMention,
+        rounds: '',
+        totalPlayers: '',
+        eraName: era.name || 'Battle',
+      });
+    }
+    return `🏆 ${era.name || 'Battle'} champion: ${winnerMention}`;
   }
 
   normalizeEraKey(eraKey) {
@@ -263,14 +585,14 @@ class BattleService {
     }
   }
 
-  createLobby(channelId, messageId, creatorId, minPlayers = 2, maxPlayers = 999, requiredRoleIds = null, excludedRoleIds = null, era = 'mafia', bounties = null, guildId = null) {
+  createLobby(channelId, messageId, creatorId, minPlayers = 2, maxPlayers = 999, requiredRoleIds = null, excludedRoleIds = null, era = 'mafia', bounties = null) {
+    const lobbyId = `battle_${Date.now()}_${creatorId}`;
+
     try {
-      const lobbyId = `B-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
       const requiredIdsStr = requiredRoleIds && requiredRoleIds.length ? requiredRoleIds.join(',') : null;
       const excludedIdsStr = excludedRoleIds && excludedRoleIds.length ? excludedRoleIds.join(',') : null;
       const bountyTargets = this.normalizeBountyTargets(bounties || []);
       const bountyJson = bountyTargets.length ? JSON.stringify(bountyTargets) : null;
-
       const createResult = db.transaction(() => {
         const existing = db.prepare(
           "SELECT lobby_id FROM battle_lobbies WHERE channel_id = ? AND status IN ('open','in_progress') ORDER BY created_at DESC LIMIT 1"
@@ -280,9 +602,9 @@ class BattleService {
         }
 
         db.prepare(`
-          INSERT INTO battle_lobbies (lobby_id, channel_id, message_id, creator_id, min_players, max_players, required_role_ids, excluded_role_ids, era, bounties_json, guild_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(lobbyId, channelId, messageId, creatorId, minPlayers, maxPlayers, requiredIdsStr, excludedIdsStr, era, bountyJson, guildId);
+          INSERT INTO battle_lobbies (lobby_id, channel_id, message_id, creator_id, min_players, max_players, required_role_ids, excluded_role_ids, era, bounties_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(lobbyId, channelId, messageId, creatorId, minPlayers, maxPlayers, requiredIdsStr, excludedIdsStr, era, bountyJson);
         return { success: true };
       })();
 
@@ -293,7 +615,7 @@ class BattleService {
         return { success: false, message: 'Failed to create battle lobby' };
       }
 
-      logger.log(`Battle lobby created: ${lobbyId} by ${creatorId} in guild ${guildId}`);
+      logger.log(`Battle lobby created: ${lobbyId} by ${creatorId}`);
       return { success: true, lobbyId };
     } catch (error) {
       logger.error('Error creating battle lobby:', error);
@@ -346,210 +668,786 @@ class BattleService {
         const requiredSet = new Set(lobby.required_role_ids.split(','));
         const hasRequiredRole = userRoles.some(rid => requiredSet.has(rid));
         if (!hasRequiredRole) {
-          return { success: false, message: 'You do not have the required roles to join this battle.' };
+          return { 
+            success: false, 
+            message: 'You need one of the required roles to join this battle',
+            requiresRole: true 
+          };
         }
       }
 
-      // Check excluded roles (must have none)
+      // Check excluded roles
       if (lobby.excluded_role_ids) {
         const excludedSet = new Set(lobby.excluded_role_ids.split(','));
         const hasExcludedRole = userRoles.some(rid => excludedSet.has(rid));
         if (hasExcludedRole) {
-          return { success: false, message: 'You have a role that is excluded from this battle.' };
+          return {
+            success: false,
+            message: 'Your role is excluded from this battle',
+            blockedRole: true
+          };
         }
       }
 
-      const participants = this.getParticipants(lobbyId);
-      if (participants.some(p => p.user_id === userId)) {
-        return { success: false, message: 'You are already in this battle' };
-      }
+      // Use INSERT OR IGNORE + transaction to prevent race conditions
+      const joinResult = db.transaction(() => {
+        const participants = db.prepare('SELECT COUNT(*) as c FROM battle_participants WHERE lobby_id = ?').get(lobbyId);
 
-      if (participants.length >= lobby.max_players) {
+        // Check max players (999 = effectively unlimited)
+        if (lobby.max_players < 999 && participants.c >= lobby.max_players) {
+          return { full: true };
+        }
+
+        const info = db.prepare(`
+          INSERT OR IGNORE INTO battle_participants (lobby_id, user_id, username)
+          VALUES (?, ?, ?)
+        `).run(lobbyId, userId, username);
+
+        return { full: false, inserted: info.changes > 0 };
+      })();
+
+      if (joinResult.full) {
         return { success: false, message: 'Lobby is full' };
       }
+      if (!joinResult.inserted) {
+        return { success: false, message: 'You are already in this lobby' };
+      }
 
-      db.prepare(`
-        INSERT INTO battle_participants (lobby_id, user_id, username)
-        VALUES (?, ?, ?)
-      `).run(lobbyId, userId, username);
-
+      logger.log(`User ${username} joined battle lobby ${lobbyId}`);
       return { success: true };
     } catch (error) {
+      if (error.message.includes('UNIQUE constraint')) {
+        return { success: false, message: 'Already in this lobby' };
+      }
       logger.error('Error adding participant:', error);
-      return { success: false, message: 'Failed to join battle' };
+      return { success: false, message: 'Failed to join lobby' };
     }
   }
 
   removeParticipant(lobbyId, userId) {
     try {
-      db.prepare('DELETE FROM battle_participants WHERE lobby_id = ? AND user_id = ?').run(lobbyId, userId);
-      return { success: true };
+      const lobby = this.getLobby(lobbyId);
+      if (!lobby || lobby.status !== 'open') {
+        return { success: false };
+      }
+
+      const result = db.prepare('DELETE FROM battle_participants WHERE lobby_id = ? AND user_id = ?').run(lobbyId, userId);
+      
+      if (result.changes > 0) {
+        logger.log(`User ${userId} left battle lobby ${lobbyId}`);
+        return { success: true };
+      }
+      
+      return { success: false };
     } catch (error) {
       logger.error('Error removing participant:', error);
       return { success: false };
     }
   }
 
-  startBattle(lobbyId) {
+  startBattle(lobbyId, starterId) {
     try {
-      const lobby = this.getLobby(lobbyId);
-      if (!lobby || lobby.status !== 'open') {
-        return { success: false, message: 'Lobby is not open or already started' };
+      const txResult = db.transaction(() => {
+        const lobby = db.prepare('SELECT * FROM battle_lobbies WHERE lobby_id = ?').get(lobbyId);
+        if (!lobby) {
+          return { success: false, message: 'Lobby not found' };
+        }
+        if (lobby.creator_id !== starterId) {
+          return { success: false, message: 'Only the lobby creator can start the battle' };
+        }
+        if (lobby.status !== 'open') {
+          return { success: false, message: 'Battle already started or completed' };
+        }
+
+        const participants = db.prepare('SELECT * FROM battle_participants WHERE lobby_id = ? ORDER BY joined_at ASC').all(lobbyId);
+        if (participants.length < lobby.min_players) {
+          return { success: false, message: `Need at least ${lobby.min_players} players to start` };
+        }
+
+        const updateResult = db.prepare(
+          "UPDATE battle_lobbies SET status = 'in_progress', started_at = CURRENT_TIMESTAMP WHERE lobby_id = ? AND status = 'open'"
+        ).run(lobbyId);
+        if (updateResult.changes === 0) {
+          return { success: false, message: 'Battle already started or completed' };
+        }
+
+        return { success: true, participants };
+      })();
+
+      if (!txResult.success) {
+        return txResult;
       }
 
-      const participants = this.getParticipants(lobbyId);
-      if (participants.length < lobby.min_players) {
-        return { success: false, message: `Need at least ${lobby.min_players} players to start` };
-      }
-
-      db.prepare("UPDATE battle_lobbies SET status = 'in_progress', started_at = CURRENT_TIMESTAMP WHERE lobby_id = ?").run(lobbyId);
-
-      return { success: true, participants };
+      logger.log(`Battle ${lobbyId} started by ${starterId} with ${txResult.participants.length} participants`);
+      return txResult;
     } catch (error) {
       logger.error('Error starting battle:', error);
       return { success: false, message: 'Failed to start battle' };
     }
   }
 
-  cancelBattle(lobbyId) {
+  cancelBattle(lobbyId, cancelerId) {
     try {
-      db.prepare("UPDATE battle_lobbies SET status = 'cancelled' WHERE lobby_id = ?").run(lobbyId);
+      const lobby = this.getLobby(lobbyId);
+      if (!lobby) {
+        return { success: false, message: 'Lobby not found' };
+      }
+
+      if (lobby.creator_id !== cancelerId) {
+        return { success: false, message: 'Only the lobby creator can cancel the battle' };
+      }
+
+      if (lobby.status !== 'open') {
+        return { success: false, message: 'Cannot cancel a battle in progress' };
+      }
+
+      db.prepare('UPDATE battle_lobbies SET status = ? WHERE lobby_id = ?').run('cancelled', lobbyId);
+      db.prepare('DELETE FROM battle_participants WHERE lobby_id = ?').run(lobbyId);
+
+      logger.log(`Battle ${lobbyId} cancelled by ${cancelerId}`);
       return { success: true };
     } catch (error) {
       logger.error('Error cancelling battle:', error);
-      return { success: false };
+      return { success: false, message: 'Failed to cancel battle' };
     }
   }
 
-  updateParticipantHp(lobbyId, userId, hp) {
-    try {
-      db.prepare('UPDATE battle_participants SET hp = ?, is_alive = ? WHERE lobby_id = ? AND user_id = ?').run(hp, hp > 0 ? 1 : 0, lobbyId, userId);
-    } catch (error) {
-      logger.error('Error updating participant HP:', error);
+  simulateBattle(lobbyId, options = {}) {
+    const lobby = this.getLobby(lobbyId);
+    if (!lobby) {
+      logger.error(`Cannot simulate battle; lobby not found: ${lobbyId}`);
+      return null;
     }
+
+    const eraKey = options.era || 'mafia';
+    const era = this.getEraConfig(eraKey);
+    const normalizedEraKey = this.normalizeEraKey(eraKey);
+    const isMafiaEra = normalizedEraKey === 'mafia';
+    const forcedEliminationInterval = Math.max(
+      1,
+      parseInt(options.forcedEliminationInterval ?? 3, 10) || 3
+    );
+    const pool = (customLines, mafiaLines, genericLines) => (
+      Array.isArray(customLines) && customLines.length
+        ? customLines
+        : (isMafiaEra ? mafiaLines : genericLines)
+    );
+
+    const eraFlavorLines = pool(era.flavorLines, BATTLE_ERAS.mafia.flavorLines, BATTLE_ERAS.mafia.flavorLines);
+    const eraEliminationLines = pool(era.eliminationLines, DEATH_LINES, DEATH_LINES);
+    const eraArrestLines = (Array.isArray(era.arrestLines) && era.arrestLines.length) ? era.arrestLines : null;
+    const eraCombatLines = pool(era.combatLines, ATTACK_LINES, GENERIC_COMBAT_LINES);
+    const eraCritLines = pool(era.critLines, CRIT_LINES, GENERIC_CRIT_LINES);
+    const eraItemLines = pool(era.itemLines, ITEM_FIND_LINES, GENERIC_ITEM_LINES);
+    const eraTauntLines = pool(era.tauntLines, TAUNT_LINES, GENERIC_TAUNT_LINES);
+    const eraTrashTalkLines = pool(era.trashTalkLines, TRASH_TALK_LINES, GENERIC_TRASH_TALK_LINES);
+    const eraDodgeLines = pool(era.dodgeLines, DODGE_LINES, GENERIC_DODGE_LINES);
+    const eraComebackLines = pool(era.comebackLines, COMEBACK_LINES, GENERIC_COMEBACK_LINES);
+    const eraLuckyEscapeLines = pool(era.luckyEscapeLines, LUCKY_ESCAPE_LINES, GENERIC_LUCKY_ESCAPE_LINES);
+
+    const participants = this.getParticipants(lobbyId);
+    if (!participants.length) {
+      logger.warn(`Battle simulation aborted; no participants in lobby ${lobbyId}`);
+      return null;
+    }
+
+    const participantById = new Map(participants.map(p => [p.user_id, p]));
+    const bountyTargets = this.getLobbyBountyTargets(lobby)
+      .filter(userId => participantById.has(userId))
+      .slice(0, 3);
+
+    const totalPlayers = participants.length;
+    const rounds = [];
+    let alivePlayers = participants.filter(p => p.is_alive);
+    const playerBuffs = {}; // Track temporary buffs
+    const damageLedger = new Map(); // targetUserId -> Map(attackerUserId -> damage)
+    const killLog = new Map(); // targetUserId -> { killerId, cause, round }
+
+    let roundNum = 0;
+    let eliteFourMode = false;
+    let roundsWithoutElimination = 0;
+
+    const recordDamage = (attackerId, defenderId, amount) => {
+      if (!attackerId || !defenderId) return;
+      if (attackerId === defenderId) return;
+      if (!Number.isFinite(amount) || amount <= 0) return;
+
+      let defenderLedger = damageLedger.get(defenderId);
+      if (!defenderLedger) {
+        defenderLedger = new Map();
+        damageLedger.set(defenderId, defenderLedger);
+      }
+      defenderLedger.set(attackerId, (defenderLedger.get(attackerId) || 0) + amount);
+    };
+
+    const selectTopDamageDealer = (targetUserId) => {
+      const defenderLedger = damageLedger.get(targetUserId);
+      if (!defenderLedger) return null;
+      let top = null;
+      for (const [userId, damage] of defenderLedger.entries()) {
+        if (!Number.isFinite(damage) || damage <= 0) continue;
+        if (userId === targetUserId) continue;
+        if (!top || damage > top.damage || (damage === top.damage && userId < top.userId)) {
+          top = { userId, damage };
+        }
+      }
+      return top;
+    };
+
+    const buildHpSnapshot = () => {
+      const living = alivePlayers.filter(p => p.is_alive);
+      if (!living.length) return null;
+
+      const byMostHp = [...living]
+        .sort((a, b) => (b.hp - a.hp) || (b.total_damage_dealt - a.total_damage_dealt) || a.username.localeCompare(b.username))
+        .slice(0, 5)
+        .map(p => ({ userId: p.user_id, username: p.username, hp: p.hp }));
+
+      const byLeastHp = [...living]
+        .sort((a, b) => (a.hp - b.hp) || (a.total_damage_dealt - b.total_damage_dealt) || a.username.localeCompare(b.username))
+        .slice(0, 5)
+        .map(p => ({ userId: p.user_id, username: p.username, hp: p.hp }));
+
+      return { mostHp: byMostHp, leastHp: byLeastHp };
+    };
+
+    const forceEliminatePlayer = (events) => {
+      if (alivePlayers.length <= 1) return false;
+
+      const minHp = Math.min(...alivePlayers.map(p => p.hp));
+      const candidates = alivePlayers.filter(p => p.hp === minHp);
+      const victim = candidates[this.rand(candidates.length)];
+      if (!victim) return false;
+
+      victim.hp = 0;
+      victim.is_alive = false;
+
+      const template = eraEliminationLines[Math.floor(this.roll() * eraEliminationLines.length)];
+      const forcedLine = template
+        .replace('{attacker}', '**The chaos**')
+        .replace('{defender}', `**${victim.username}**`);
+
+      events.push(`⏱️ **Sudden death:** no one was eliminated for ${forcedEliminationInterval} rounds, so the arena claims a fighter.`);
+      events.push(forcedLine);
+
+      killLog.set(victim.user_id, {
+        killerId: null,
+        cause: 'forced_timeout',
+        round: roundNum,
+      });
+
+      db.prepare('UPDATE battle_participants SET is_alive = 0, hp = 0 WHERE lobby_id = ? AND user_id = ?')
+        .run(lobbyId, victim.user_id);
+
+      alivePlayers = alivePlayers.filter(p => p.user_id !== victim.user_id);
+      return true;
+    };
+
+    while (alivePlayers.length > 1) {
+      roundNum++;
+      // Shuffle alive players each round to reduce any order bias
+      alivePlayers = alivePlayers
+        .map(v => ({ v, k: this.roll() }))
+        .sort((a, b) => a.k - b.k)
+        .map(o => o.v);
+
+      const aliveAtRoundStart = alivePlayers.length;
+      const events = [];
+      let eliteFourActivatedThisRound = false;
+      let eliteFourUserIds = [];
+
+      // Elite Four mode activates once when 4 fighters remain
+      if (!eliteFourMode && alivePlayers.length === 4) {
+        eliteFourMode = true;
+        eliteFourActivatedThisRound = true;
+
+        events.push('🏆 **ELITE FOUR MODE ACTIVATED**');
+        events.push('🎭 Final circle unlocked: all four fighters are restored to **100 HP**.');
+        events.push('🚫 No lucky escapes now. No revivals. No mercy.');
+
+        for (const p of alivePlayers) {
+          p.hp = 100;
+          db.prepare('UPDATE battle_participants SET hp = ? WHERE lobby_id = ? AND user_id = ?')
+            .run(100, lobbyId, p.user_id);
+        }
+
+        eliteFourUserIds = alivePlayers.map(p => p.user_id);
+
+        const rollCall = alivePlayers
+          .map((p, idx) => `${idx + 1}) **${p.username}** — 100 HP`)
+          .join('\n');
+        events.push(`🩸 **Elite Four Roll Call**\n${rollCall}`);
+      }
+
+      if (eliteFourMode) {
+        events.push(this.getRandomRoundTransition(roundNum, eraKey));
+        // Light narrative spice in Elite mode
+        if (this.roll() < 0.40 && alivePlayers.length > 1) {
+          const attacker = alivePlayers[Math.floor(this.roll() * alivePlayers.length)];
+          let defender = alivePlayers[Math.floor(this.roll() * alivePlayers.length)];
+          let attempts = 0;
+          while (defender.user_id === attacker.user_id && attempts < 10) {
+            defender = alivePlayers[Math.floor(this.roll() * alivePlayers.length)];
+            attempts++;
+          }
+          if (defender.user_id !== attacker.user_id) {
+            const taunt = eraTauntLines[Math.floor(this.roll() * eraTauntLines.length)]
+              .replace('{attacker}', `**${attacker.username}**`)
+              .replace('{defender}', `**${defender.username}**`);
+            events.push(taunt);
+          }
+        }
+      }
+      
+      // Generate 2-5 events per round (scales with player count)
+      const eventCount = Math.min(
+        Math.floor(this.roll() * 4) + 2, // 2-5
+        Math.max(2, Math.ceil(alivePlayers.length / 2)) // At least 2, max half of players
+      );
+
+      for (let i = 0; i < eventCount; i++) {
+        // Event type distribution:
+        // Standard: 60% combat, 20% item, 20% flavor
+        // Elite Four: 75% combat, 15% item, 10% flavor
+        const rand = this.roll();
+        const combatThreshold = eliteFourMode ? 0.75 : 0.60;
+        const itemThreshold = eliteFourMode ? 0.90 : 0.80;
+        
+        if (rand < combatThreshold && alivePlayers.length > 1) {
+          // COMBAT EVENT
+          const attacker = alivePlayers[Math.floor(this.roll() * alivePlayers.length)];
+          let defender = alivePlayers[Math.floor(this.roll() * alivePlayers.length)];
+          
+          // Make sure attacker doesn't attack themselves
+          let attempts = 0;
+          while (defender.user_id === attacker.user_id && alivePlayers.length > 1 && attempts < 10) {
+            defender = alivePlayers[Math.floor(this.roll() * alivePlayers.length)];
+            attempts++;
+          }
+          if (defender.user_id === attacker.user_id) continue;
+
+          // Calculate damage (standard vs elite tuning)
+          const critChance = eliteFourMode ? 0.35 : 0.20;
+          const isCrit = this.roll() < critChance;
+          let damage = isCrit 
+            ? Math.floor(this.roll() * 11) + 40 // 40-50
+            : Math.floor(this.roll() * 21) + 10; // 10-30
+
+          if (eliteFourMode) {
+            damage = Math.floor(damage * 1.25); // Elite Four damage ramp
+          }
+
+          // Apply damage buff if exists
+          if (playerBuffs[attacker.user_id]) {
+            damage = Math.floor(damage * 1.2);
+            delete playerBuffs[attacker.user_id]; // One-time use
+          }
+
+          // 15% chance to dodge/miss entirely
+          const dodgeChance = this.roll() < 0.15;
+          
+          if (dodgeChance) {
+            const dodgeLine = eraDodgeLines[Math.floor(this.roll() * eraDodgeLines.length)]
+              .replace('{player}', `**${defender.username}**`)
+              .replace('{opponent}', `**${attacker.username}**`);
+            events.push(dodgeLine);
+          } else {
+            // Apply damage
+            defender.hp -= damage;
+            attacker.total_damage_dealt += damage;
+            recordDamage(attacker.user_id, defender.user_id, damage);
+
+            // Pick flavor text
+            const line = isCrit
+              ? eraCritLines[Math.floor(this.roll() * eraCritLines.length)]
+              : eraCombatLines[Math.floor(this.roll() * eraCombatLines.length)];
+
+            let eventText = line
+              .replace('{attacker}', `**${attacker.username}**`)
+              .replace('{defender}', `**${defender.username}**`)
+              .replace('{damage}', damage);
+
+            eventText += ` (${Math.max(defender.hp, 0)} HP left)`;
+            events.push(eventText);
+
+            // Trash talk chance increases in Elite Four
+            const trashTalkChance = eliteFourMode ? 0.50 : 0.30;
+            if (this.roll() < trashTalkChance) {
+              const trashTalk = eraTrashTalkLines[Math.floor(this.roll() * eraTrashTalkLines.length)]
+                .replace('{attacker}', `**${attacker.username}**`)
+                .replace('{defender}', `**${defender.username}**`);
+              events.push(trashTalk);
+            }
+
+            // Comeback narrative when someone is badly hurt
+            if (defender.hp > 0 && defender.hp <= 30 && this.roll() < 0.35) {
+              const comeback = eraComebackLines[Math.floor(this.roll() * eraComebackLines.length)]
+                .replace('{player}', `**${defender.username}**`)
+                .replace('{opponent}', `**${attacker.username}**`);
+              events.push(comeback);
+            }
+          }
+
+          // Check for death
+          if (defender.hp <= 0) {
+            // 5% chance to survive with 1 HP (lucky escape) - disabled in Elite Four
+            if (!eliteFourMode && this.roll() < 0.05 && alivePlayers.length > 2) {
+              defender.hp = 1;
+              const luckyLine = eraLuckyEscapeLines[Math.floor(this.roll() * eraLuckyEscapeLines.length)]
+                .replace('{player}', `**${defender.username}**`);
+              events.push(luckyLine);
+              
+              db.prepare('UPDATE battle_participants SET hp = 1 WHERE lobby_id = ? AND user_id = ?')
+                .run(lobbyId, defender.user_id);
+            } else {
+              defender.is_alive = false;
+              // 30% chance to use arrestLines if the era has them
+              const useArrest = eraArrestLines && this.roll() < 0.30;
+              const elimPool = useArrest ? eraArrestLines : eraEliminationLines;
+              const deathLine = elimPool[Math.floor(this.roll() * elimPool.length)]
+                .replace('{attacker}', `**${attacker.username}**`)
+                .replace('{defender}', `**${defender.username}**`);
+              events.push(deathLine);
+
+              killLog.set(defender.user_id, {
+                killerId: attacker.user_id,
+                cause: attacker.user_id === defender.user_id ? 'self' : 'final_blow',
+                round: roundNum,
+              });
+              
+              db.prepare('UPDATE battle_participants SET is_alive = 0, hp = 0 WHERE lobby_id = ? AND user_id = ?')
+                .run(lobbyId, defender.user_id);
+              
+              alivePlayers = alivePlayers.filter(p => p.user_id !== defender.user_id);
+            }
+          } else {
+            db.prepare('UPDATE battle_participants SET hp = ? WHERE lobby_id = ? AND user_id = ?')
+              .run(defender.hp, lobbyId, defender.user_id);
+          }
+
+          db.prepare('UPDATE battle_participants SET total_damage_dealt = ? WHERE lobby_id = ? AND user_id = ?')
+            .run(attacker.total_damage_dealt, lobbyId, attacker.user_id);
+
+        } else if (rand < itemThreshold && alivePlayers.length > 0) {
+          // ITEM FIND EVENT
+          const player = alivePlayers[Math.floor(this.roll() * alivePlayers.length)];
+          const itemLine = eraItemLines[Math.floor(this.roll() * eraItemLines.length)];
+          
+          if (itemLine.includes('Damage +20%')) {
+            playerBuffs[player.user_id] = true;
+            events.push(itemLine.replace('{player}', `**${player.username}**`));
+          } else {
+            // HP boost items
+            const hpBoost = Math.floor(this.roll() * 11) + 8; // 8-18 HP
+            player.hp = Math.min(100, player.hp + hpBoost);
+            
+            const text = itemLine.replace('{player}', `**${player.username}**`);
+            events.push(`${text} (+${hpBoost} HP, ${player.hp} HP now)`);
+            
+            db.prepare('UPDATE battle_participants SET hp = ? WHERE lobby_id = ? AND user_id = ?')
+              .run(player.hp, lobbyId, player.user_id);
+          }
+        } else if (alivePlayers.length > 0) {
+          // FLAVOR EVENT (no mechanical effect)
+          const player = alivePlayers[Math.floor(this.roll() * alivePlayers.length)];
+          const flavorLine = eraFlavorLines[Math.floor(this.roll() * eraFlavorLines.length)]
+            .replace('{player}', `**${player.username}**`);
+          events.push(flavorLine);
+        }
+
+        // Stop if we're down to 1 player
+        if (alivePlayers.length <= 1) break;
+      }
+
+      const eliminationsThisRound = Math.max(0, aliveAtRoundStart - alivePlayers.length);
+      if (eliminationsThisRound > 0) {
+        roundsWithoutElimination = 0;
+      } else {
+        roundsWithoutElimination += 1;
+      }
+
+      if (alivePlayers.length > 1 && roundsWithoutElimination >= forcedEliminationInterval) {
+        const forcedEliminated = forceEliminatePlayer(events);
+        if (forcedEliminated) {
+          roundsWithoutElimination = 0;
+        }
+      }
+
+      const hpSnapshot = (roundNum % 10 === 0) ? buildHpSnapshot() : null;
+
+      rounds.push({ 
+        round: roundNum, 
+        events,
+        playersLeft: alivePlayers.length,
+        eliteFourActivated: eliteFourActivatedThisRound,
+        eliteFourMode,
+        eliteFourUserIds,
+        hpSnapshot
+      });
+    }
+
+    if (!alivePlayers.length) {
+      logger.error(`Battle ${lobbyId} finished with no surviving player`);
+      return null;
+    }
+
+    // Winner!
+    const winner = alivePlayers[0];
+    const winnerNameBold = `**${winner.username}**`;
+    const winnerMention = `<@${winner.user_id}>`;
+    const winnerLineTemplate = era.victoryLine
+      || (isMafiaEra
+        ? WINNER_LINES[Math.floor(this.roll() * WINNER_LINES.length)]
+        : GENERIC_VICTORY_LINES[Math.floor(this.roll() * GENERIC_VICTORY_LINES.length)]);
+    const winnerLine = this.formatVictoryTemplate(winnerLineTemplate, {
+      winnerNameBold,
+      winnerMention,
+      rounds: roundNum,
+      totalPlayers,
+      eraName: era.name || 'Battle',
+    });
+
+    const eraFinaleOutros = Array.isArray(era.finaleOutros) && era.finaleOutros.length
+      ? era.finaleOutros
+      : (this.normalizeEraKey(eraKey) === 'mafia' ? FINALE_OUTROS : GENERIC_FINALE_OUTROS);
+    const finaleTemplate = eraFinaleOutros[Math.floor(this.roll() * eraFinaleOutros.length)];
+    const finaleOutro = this.formatVictoryTemplate(finaleTemplate, {
+      winnerNameBold,
+      winnerMention,
+      rounds: roundNum,
+      totalPlayers,
+      eraName: era.name || 'Battle',
+    });
+
+    // Update battle status
+    db.prepare('UPDATE battle_lobbies SET status = ?, completed_at = CURRENT_TIMESTAMP WHERE lobby_id = ?')
+      .run('completed', lobbyId);
+
+    // Update stats for all participants
+    const allParticipants = this.getParticipants(lobbyId);
+    for (const p of allParticipants) {
+      this.updateStats(p.user_id, p.username, p.user_id === winner.user_id, p.total_damage_dealt);
+    }
+
+    const finalParticipantsById = new Map(allParticipants.map(p => [p.user_id, p]));
+    const topDamageDealers = [...allParticipants]
+      .sort((a, b) => (b.total_damage_dealt - a.total_damage_dealt) || a.username.localeCompare(b.username))
+      .slice(0, 5)
+      .map((p, index) => ({
+        rank: index + 1,
+        userId: p.user_id,
+        username: p.username,
+        damage: p.total_damage_dealt || 0,
+      }));
+
+    const bountyResults = bountyTargets.map(targetId => {
+      const target = finalParticipantsById.get(targetId);
+      if (!target) {
+        return {
+          targetId,
+          targetName: targetId,
+          winnerId: null,
+          winnerName: null,
+          reason: 'invalid_target',
+          round: null,
+        };
+      }
+
+      const killInfo = killLog.get(targetId);
+      if (!killInfo) {
+        return {
+          targetId,
+          targetName: target.username,
+          winnerId: null,
+          winnerName: null,
+          reason: 'not_eliminated',
+          round: null,
+        };
+      }
+
+      let winnerId = null;
+      let reason = '';
+
+      if (killInfo.cause === 'final_blow' && killInfo.killerId && killInfo.killerId !== targetId) {
+        winnerId = killInfo.killerId;
+        reason = 'final_blow';
+      } else {
+        const topDealer = selectTopDamageDealer(targetId);
+        if (topDealer) {
+          winnerId = topDealer.userId;
+          reason = 'most_damage';
+        } else if (killInfo.killerId && killInfo.killerId !== targetId) {
+          winnerId = killInfo.killerId;
+          reason = 'final_blow';
+        } else {
+          reason = 'no_eligible_claimant';
+        }
+      }
+
+      const winnerRecord = winnerId ? finalParticipantsById.get(winnerId) : null;
+
+      return {
+        targetId,
+        targetName: target.username,
+        winnerId,
+        winnerName: winnerRecord?.username || null,
+        reason,
+        round: killInfo.round || null,
+      };
+    });
+
+    return { 
+      rounds, 
+      winner, 
+      winnerLine, 
+      finaleOutro,
+      totalPlayers,
+      roundCount: roundNum,
+      eliteFourModeUsed: eliteFourMode,
+      eraKey: this.normalizeEraKey(eraKey),
+      topDamageDealers,
+      bountyTargets,
+      bountyResults
+    };
   }
 
-  addDamageDealt(lobbyId, userId, damage) {
+  updateStats(userId, username, won, damageDealt) {
     try {
-      db.prepare('UPDATE battle_participants SET total_damage_dealt = total_damage_dealt + ? WHERE lobby_id = ? AND user_id = ?').run(damage, lobbyId, userId);
-    } catch (error) {
-      logger.error('Error adding damage dealt:', error);
-    }
-  }
-
-  completeBattle(lobbyId) {
-    try {
-      const lobby = this.getLobby(lobbyId);
-      if (!lobby) return;
-
-      db.prepare("UPDATE battle_lobbies SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE lobby_id = ?").run(lobbyId);
-
-      // Update global stats for all participants
-      const participants = this.getParticipants(lobbyId);
-      const winner = participants.find(p => p.is_alive);
-
-      for (const p of participants) {
-        this.updateGlobalStats(p.user_id, p.username, p.total_damage_dealt, winner && winner.user_id === p.user_id);
+      const existing = db.prepare('SELECT * FROM battle_stats WHERE user_id = ?').get(userId);
+      
+      if (existing) {
+        db.prepare(`
+          UPDATE battle_stats 
+          SET battles_played = battles_played + 1,
+              battles_won = battles_won + ?,
+              total_damage_dealt = total_damage_dealt + ?,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE user_id = ?
+        `).run(won ? 1 : 0, damageDealt, userId);
+      } else {
+        db.prepare(`
+          INSERT INTO battle_stats (user_id, username, battles_played, battles_won, total_damage_dealt)
+          VALUES (?, ?, 1, ?, ?)
+        `).run(userId, username, won ? 1 : 0, damageDealt);
       }
     } catch (error) {
-      logger.error('Error completing battle:', error);
+      logger.error('Error updating battle stats:', error);
     }
   }
 
-  updateGlobalStats(userId, username, damage, isWinner) {
-    try {
-      db.prepare(`
-        INSERT INTO battle_stats (user_id, username, battles_played, battles_won, total_damage_dealt, updated_at)
-        VALUES (?, ?, 1, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(user_id) DO UPDATE SET
-          username = excluded.username,
-          battles_played = battles_played + 1,
-          battles_won = battles_won + ?,
-          total_damage_dealt = total_damage_dealt + ?,
-          updated_at = CURRENT_TIMESTAMP
-      `).run(userId, username, isWinner ? 1 : 0, damage, isWinner ? 1 : 0, damage);
-    } catch (error) {
-      logger.error('Error updating global stats:', error);
-    }
-  }
-
-  getGlobalStats(limit = 10) {
-    try {
-      return db.prepare('SELECT * FROM battle_stats ORDER BY battles_won DESC, total_damage_dealt DESC LIMIT ?').all(limit);
-    } catch (error) {
-      logger.error('Error getting global stats:', error);
-      return [];
-    }
-  }
-
-  getUserStats(userId) {
+  getStats(userId) {
     try {
       return db.prepare('SELECT * FROM battle_stats WHERE user_id = ?').get(userId);
     } catch (error) {
-      logger.error('Error getting user stats:', error);
+      logger.error('Error getting battle stats:', error);
       return null;
     }
   }
 
-  buildLobbyEmbed(lobby, brandingGuildId) {
-    const participants = this.getParticipants(lobby.lobby_id);
-    const eraName = this.getEraName(lobby.era);
-    const eraEmoji = BATTLE_ERAS[this.normalizeEraKey(lobby.era)]?.emoji || '⚔️';
+  // Punchline getters
+  getRandomAttackLine() {
+    return ATTACK_LINES[Math.floor(this.roll() * ATTACK_LINES.length)];
+  }
+
+  getRandomCritLine() {
+    return CRIT_LINES[Math.floor(this.roll() * CRIT_LINES.length)];
+  }
+
+  getRandomDeathLine() {
+    return DEATH_LINES[Math.floor(this.roll() * DEATH_LINES.length)];
+  }
+
+  getRandomTauntLine() {
+    return TAUNT_LINES[Math.floor(this.roll() * TAUNT_LINES.length)];
+  }
+
+  getRandomTrashTalkLine() {
+    return TRASH_TALK_LINES[Math.floor(this.roll() * TRASH_TALK_LINES.length)];
+  }
+
+  getRandomDodgeLine() {
+    return DODGE_LINES[Math.floor(this.roll() * DODGE_LINES.length)];
+  }
+
+  getRandomComebackLine() {
+    return COMEBACK_LINES[Math.floor(this.roll() * COMEBACK_LINES.length)];
+  }
+
+  getRandomRoundTransition(round, eraKey = 'mafia') {
+    const era = this.getEraConfig(eraKey);
+    const normalizedEraKey = this.normalizeEraKey(eraKey);
+    const linePool = Array.isArray(era.roundTransitionLines) && era.roundTransitionLines.length
+      ? era.roundTransitionLines
+      : (normalizedEraKey === 'mafia' ? ROUND_TRANSITION_LINES : GENERIC_ROUND_TRANSITION_LINES);
+    const line = linePool[Math.floor(this.roll() * linePool.length)];
+    return line.replace('{round}', round);
+  }
+
+  getRandomFlavorLine(eraKey) {
+    const era = this.getEraConfig(eraKey || 'mafia');
+    const lines = era.flavorLines || BATTLE_ERAS.mafia.flavorLines;
+    return lines[Math.floor(this.roll() * lines.length)];
+  }
+
+  getRandomLuckyEscapeLine() {
+    return LUCKY_ESCAPE_LINES[Math.floor(this.roll() * LUCKY_ESCAPE_LINES.length)];
+  }
+
+  buildLobbyEmbed(lobby, participants, requiredRoles = null, excludedRoles = null) {
+    const eraKey = lobby.era || 'mafia';
+    const eraConfig = this.getEraConfig(eraKey);
+    const eraColor = eraConfig.lobbyColor || '#FFD700';
+    const joinEmoji = this.getLobbyJoinEmoji(eraKey);
+    const joinPrompt = eraConfig.lobbyJoinPrompt || `React with ${joinEmoji} to join!`;
+    const opening = `${eraConfig.lobbyOpening || 'A battle is about to begin.'}\n${joinPrompt}`;
+
+    const maxPlayersText = (!lobby.max_players || lobby.max_players >= 999) 
+      ? '∞' 
+      : lobby.max_players;
+    
+    let description = `${opening}\n\n` +
+      `**Status:** ${lobby.status === 'open' ? '🟢 Open' : '🔴 Closed'}\n` +
+      `**Players:** ${participants.length}/${maxPlayersText}\n` +
+      `**Minimum:** ${lobby.min_players} players to start`;
+
+    if ((lobby.required_role_ids || requiredRoles) && requiredRoles && requiredRoles.length) {
+      const roleNames = requiredRoles.map(r => r.name).join(', ');
+      description += `\n**Required Roles (Any):** ${roleNames}`;
+    } else if (lobby.required_role_ids) {
+      const requiredIds = lobby.required_role_ids.split(',');
+      const requiredMentions = requiredIds.map(id => `<@&${id}>`).join(', ');
+      description += `\n**Required Roles (Any):** ${requiredMentions}`;
+    }
+
+    if ((lobby.excluded_role_ids || excludedRoles) && excludedRoles && excludedRoles.length) {
+      const excludedNames = excludedRoles.map(r => r.name).join(', ');
+      description += `\n**Excluded Roles:** ${excludedNames}`;
+    } else if (lobby.excluded_role_ids) {
+      const excludedIds = lobby.excluded_role_ids.split(',');
+      const excludedMentions = excludedIds.map(id => `<@&${id}>`).join(', ');
+      description += `\n**Excluded Roles:** ${excludedMentions}`;
+    }
 
     const embed = new EmbedBuilder()
-      .setTitle(`${eraEmoji} Battle Arena: ${eraName} Era`)
-      .setDescription(
-        `A new battle is brewing! React with ⚔️ to join.\n\n` +
-        `**Status:** ${lobby.status === 'open' ? '🟢 Open' : '🟡 Starting...'}\n` +
-        `**Players:** ${participants.length} / ${lobby.max_players === 999 ? '∞' : lobby.max_players} (Min: ${lobby.min_players})`
-      )
-      .addFields({
-        name: '👥 Participants',
-        value: participants.length > 0 ? participants.map(p => `• ${p.username}`).join('\n') : '*None yet*',
-      });
-
-    if (lobby.required_role_ids || lobby.excluded_role_ids) {
-      let restrictions = '';
-      if (lobby.required_role_ids) restrictions += `• Required: at least one of <@&${lobby.required_role_ids.replace(/,/g, '>, <@&')}> \n`;
-      if (lobby.excluded_role_ids) restrictions += `• Excluded: <@&${lobby.excluded_role_ids.replace(/,/g, '>, <@&')}> \n`;
-      embed.addFields({ name: '🚫 Role Restrictions', value: restrictions });
-    }
-
-    const bounties = this.getLobbyBountyTargets(lobby);
-    if (bounties.length > 0) {
-      embed.addFields({ name: '🎯 Bounty Targets', value: bounties.map(id => `<@${id}>`).join(', ') });
-    }
+      .setTitle(this.getLobbyTitle(eraKey))
+      .setDescription(description)
+      .setFooter({ text: this.getLobbyFooter(eraKey) })
+      .setTimestamp();
 
     applyEmbedBranding(embed, {
-      guildId: brandingGuildId,
-      moduleKey: 'battle',
-      defaultColor: '#FF4500',
+      guildId: lobby.guild_id || '',
+      moduleKey: 'minigames',
+      defaultColor: eraColor,
+      defaultFooter: 'Powered by Guild Pilot',
+      fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
     });
 
+    if (participants.length > 0) {
+      const playerList = participants.map(p => `• ${p.username}`).join('\n');
+      embed.addFields({ name: eraConfig.lobbyPlayersLabel || '🥊 Fighters', value: playerList, inline: false });
+    }
+
     return embed;
-  }
-
-  getAttackLine(attacker, defender, damage) {
-    const line = this.pick(ATTACK_LINES);
-    return line.replace('{attacker}', `**${attacker}**`)
-               .replace('{defender}', `**${defender}**`)
-               .replace('{damage}', `**${damage}**`);
-  }
-
-  getCritLine(attacker, defender, damage) {
-    const line = this.pick(CRIT_LINES);
-    return line.replace('{attacker}', `**${attacker}**`)
-               .replace('{defender}', `**${defender}**`)
-               .replace('{damage}', `**${damage}**`);
-  }
-
-  getDeathLine(defender) {
-    const line = this.pick(DEATH_LINES);
-    return line.replace('{defender}', `**${defender}**`);
-  }
-
-  getItemLine(player) {
-    return this.pick(ITEM_FIND_LINES).replace('{player}', `**${player}**`);
   }
 }
 

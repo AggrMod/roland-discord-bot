@@ -1,6 +1,161 @@
 const express = require('express');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
 
+const verificationSyncJobs = new Map();
+const VERIFICATION_SYNC_ERROR_SAMPLE_LIMIT = 10;
+const VERIFICATION_SYNC_RETENTION_MS = 6 * 60 * 60 * 1000;
+
+function normalizeVerificationSyncGuildId(guildId) {
+  return String(guildId || '').trim();
+}
+
+function buildVerificationSyncJobId(guildId) {
+  return `verify-sync:${normalizeVerificationSyncGuildId(guildId)}:${Date.now()}`;
+}
+
+function pruneVerificationSyncJobs() {
+  const now = Date.now();
+  for (const [guildId, job] of verificationSyncJobs.entries()) {
+    if (!job) {
+      verificationSyncJobs.delete(guildId);
+      continue;
+    }
+    const finishedAtMs = job.finishedAt ? Date.parse(job.finishedAt) : 0;
+    if (finishedAtMs && Number.isFinite(finishedAtMs) && (now - finishedAtMs) > VERIFICATION_SYNC_RETENTION_MS) {
+      verificationSyncJobs.delete(guildId);
+    }
+  }
+}
+
+function serializeVerificationSyncJob(job) {
+  if (!job) {
+    return {
+      status: 'idle',
+      progressPercent: 0,
+      processedUsers: 0,
+      syncedCount: 0,
+      errorCount: 0
+    };
+  }
+
+  const totalUsers = Number.isFinite(Number(job.totalUsers)) ? Number(job.totalUsers) : null;
+  const processedUsers = Number(job.processedUsers || 0);
+  const progressPercent = totalUsers && totalUsers > 0
+    ? Math.max(0, Math.min(100, Math.round((processedUsers / totalUsers) * 100)))
+    : (job.status === 'completed' ? 100 : 0);
+
+  return {
+    jobId: job.jobId,
+    guildId: job.guildId,
+    status: job.status,
+    createdAt: job.createdAt,
+    startedAt: job.startedAt || null,
+    finishedAt: job.finishedAt || null,
+    totalUsers,
+    processedUsers,
+    syncedCount: Number(job.syncedCount || 0),
+    errorCount: Number(job.errorCount || 0),
+    progressPercent,
+    currentUser: job.currentUser || null,
+    message: job.message || null,
+    errors: Array.isArray(job.errors) ? job.errors : []
+  };
+}
+
+function queueVerificationSyncJob({ guild, guildId, roleService, logger }) {
+  pruneVerificationSyncJobs();
+  const normalizedGuildId = normalizeVerificationSyncGuildId(guildId);
+  const existingJob = verificationSyncJobs.get(normalizedGuildId);
+  if (existingJob && (existingJob.status === 'queued' || existingJob.status === 'running')) {
+    return { job: existingJob, alreadyRunning: true };
+  }
+
+  const job = {
+    jobId: buildVerificationSyncJobId(normalizedGuildId),
+    guildId: normalizedGuildId,
+    status: 'queued',
+    createdAt: new Date().toISOString(),
+    startedAt: null,
+    finishedAt: null,
+    totalUsers: null,
+    processedUsers: 0,
+    syncedCount: 0,
+    errorCount: 0,
+    currentUser: null,
+    message: 'Queued for processing',
+    errors: []
+  };
+
+  verificationSyncJobs.set(normalizedGuildId, job);
+
+  setImmediate(async () => {
+    job.status = 'running';
+    job.startedAt = new Date().toISOString();
+    job.message = 'Loading verified users';
+
+    try {
+      const allUsers = await roleService.getAllVerifiedUsers(guild);
+      job.totalUsers = Array.isArray(allUsers) ? allUsers.length : 0;
+      job.message = job.totalUsers
+        ? `Syncing ${job.totalUsers} verified users`
+        : 'No verified users found for this server';
+
+      for (const user of (allUsers || [])) {
+        job.currentUser = user?.username || user?.discord_id || null;
+        try {
+          await roleService.updateUserRoles(user.discord_id, user.username, normalizedGuildId);
+          const syncResult = await roleService.syncUserDiscordRoles(guild, user.discord_id, normalizedGuildId);
+          if (syncResult?.success) {
+            job.syncedCount += 1;
+          } else {
+            job.errorCount += 1;
+            if (job.errors.length < VERIFICATION_SYNC_ERROR_SAMPLE_LIMIT) {
+              job.errors.push({
+                discordId: user.discord_id,
+                message: String(syncResult?.message || 'Sync failed').slice(0, 200)
+              });
+            }
+          }
+        } catch (syncError) {
+          logger.error(`Error syncing user ${user?.discord_id}:`, syncError);
+          job.errorCount += 1;
+          if (job.errors.length < VERIFICATION_SYNC_ERROR_SAMPLE_LIMIT) {
+            job.errors.push({
+              discordId: user?.discord_id || null,
+              message: String(syncError?.message || 'Unexpected sync error').slice(0, 200)
+            });
+          }
+        } finally {
+          job.processedUsers += 1;
+          const remainingUsers = Math.max(0, Number(job.totalUsers || 0) - job.processedUsers);
+          job.message = remainingUsers > 0
+            ? `Processed ${job.processedUsers}/${job.totalUsers} users`
+            : 'Finalizing role sync';
+          if (job.processedUsers % 5 === 0) {
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
+        }
+      }
+
+      job.status = 'completed';
+      job.finishedAt = new Date().toISOString();
+      job.currentUser = null;
+      job.message = `Synced ${job.syncedCount} users${job.errorCount ? `, ${job.errorCount} errors` : ''}`;
+    } catch (jobError) {
+      logger.error(`Verification role sync job failed for guild ${normalizedGuildId}:`, jobError);
+      job.status = 'failed';
+      job.finishedAt = new Date().toISOString();
+      job.currentUser = null;
+      job.message = String(jobError?.message || 'Verification role sync failed').slice(0, 200);
+      if (job.errors.length < VERIFICATION_SYNC_ERROR_SAMPLE_LIMIT) {
+        job.errors.push({ discordId: null, message: job.message });
+      }
+    }
+  });
+
+  return { job, alreadyRunning: false };
+}
+
 function createVerificationRoleAdminRouter({
   logger,
   db,
@@ -399,6 +554,18 @@ function createVerificationRoleAdminRouter({
     }
   });
 
+  router.get('/api/admin/roles/sync-status', adminAuthMiddleware, (req, res) => {
+    if (!ensureVerificationModule(req, res)) return;
+    try {
+      const guildId = normalizeVerificationSyncGuildId(req.guildId);
+      const job = serializeVerificationSyncJob(verificationSyncJobs.get(guildId));
+      return res.json(toSuccessResponse({ job }));
+    } catch (routeError) {
+      logger.error('Error fetching verification sync status:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.post('/api/admin/roles/sync', adminAuthMiddleware, async (req, res) => {
     if (!ensureVerificationModule(req, res)) return;
     try {
@@ -420,26 +587,19 @@ function createVerificationRoleAdminRouter({
         return res.json(toSuccessResponse(syncResult));
       }
 
-      const allUsers = await roleService.getAllVerifiedUsers(guild);
-      let syncedCount = 0;
-      let errorCount = 0;
-
-      for (const user of allUsers) {
-        try {
-          await roleService.updateUserRoles(user.discord_id, user.username, guild.id);
-          const syncResult = await roleService.syncUserDiscordRoles(guild, user.discord_id, guild.id);
-          if (syncResult.success) syncedCount++;
-          else errorCount++;
-        } catch (syncError) {
-          logger.error(`Error syncing user ${user.discord_id}:`, syncError);
-          errorCount++;
-        }
-      }
-
+      const { job, alreadyRunning } = queueVerificationSyncJob({
+        guild,
+        guildId: req.guildId || guild.id,
+        roleService,
+        logger
+      });
       return res.json(toSuccessResponse({
-        message: `Synced ${syncedCount} users, ${errorCount} errors`,
-        syncedCount,
-        errorCount
+        queued: !alreadyRunning,
+        alreadyRunning,
+        message: alreadyRunning
+          ? 'A verification role sync is already running for this server'
+          : 'Verification role sync started',
+        job: serializeVerificationSyncJob(job)
       }));
     } catch (routeError) {
       logger.error('Error syncing roles:', routeError);

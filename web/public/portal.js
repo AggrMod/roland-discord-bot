@@ -10735,15 +10735,98 @@ function exportVerificationRoles() {
   }
 }
 
+let verificationSyncStatusPollTimeout = null;
+
+function setReverifyAllButtonState(active, label = 'Reverify All') {
+  const btn = document.querySelector('[onclick="reverifyAllRoles()"]');
+  if (!btn) return;
+  btn.disabled = !!active;
+  const safeLabel = escapeHtml(String(label || 'Reverify All'));
+  btn.innerHTML = active
+    ? `<span>Syncing</span><span>${safeLabel}</span>`
+    : '<span>Reverify</span><span>All</span>';
+}
+
+function stopVerificationSyncStatusPolling() {
+  if (verificationSyncStatusPollTimeout) {
+    clearTimeout(verificationSyncStatusPollTimeout);
+    verificationSyncStatusPollTimeout = null;
+  }
+}
+
+async function startVerificationSyncStatusPolling() {
+  stopVerificationSyncStatusPolling();
+
+  const poll = async () => {
+    try {
+      const response = await fetch('/api/admin/roles/sync-status', {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          ...buildTenantRequestHeaders()
+        }
+      });
+      const raw = await response.text();
+      let data = null;
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch (_error) {
+        throw new Error(String(raw || '').slice(0, 160).trim() || `Server returned ${response.status}`);
+      }
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || data.error?.message || `Server returned ${response.status}`);
+      }
+
+      const job = data.job || data.data?.job || null;
+      if (!job || job.status === 'idle') {
+        setReverifyAllButtonState(false);
+        return;
+      }
+
+      if (job.status === 'queued') {
+        setReverifyAllButtonState(true, 'Queued...');
+        verificationSyncStatusPollTimeout = setTimeout(poll, 2500);
+        return;
+      }
+
+      if (job.status === 'running') {
+        const processed = Number(job.processedUsers || 0);
+        const total = Number(job.totalUsers || 0);
+        const progressLabel = total > 0 ? `${processed}/${total}` : 'Running...';
+        setReverifyAllButtonState(true, progressLabel);
+        verificationSyncStatusPollTimeout = setTimeout(poll, 2500);
+        return;
+      }
+
+      setReverifyAllButtonState(false);
+
+      if (job.status === 'completed') {
+        const synced = Number(job.syncedCount || 0);
+        const errors = Number(job.errorCount || 0);
+        showSuccess(`Role resync finished (${synced} users updated${errors ? `, ${errors} errors` : ''})`);
+        await loadAdminRoles();
+        return;
+      }
+
+      if (job.status === 'failed') {
+        showError(job.message || 'Background verification sync failed');
+      }
+    } catch (error) {
+      setReverifyAllButtonState(false);
+      showError('Error checking sync status: ' + error.message);
+    }
+  };
+
+  await poll();
+}
+
 function reverifyAllRoles() {
   if (!isAdmin) return;
   showConfirmModal('Reverify All Roles', 'Are you sure? This will re-sync all role assignments across the Discord server.', async () => {
     try {
-      const btn = document.querySelector('[onclick="reverifyAllRoles()"]');
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<span>⏳</span><span>Syncing...</span>';
-      }
+      setReverifyAllButtonState(true, 'Starting...');
 
       const response = await fetch('/api/admin/roles/sync', {
         method: 'POST',
@@ -10764,22 +10847,33 @@ function reverifyAllRoles() {
         throw new Error(snippet || `Server returned ${response.status}`);
       }
 
-      if (data.success) {
-        const synced = Number(data.syncedCount ?? data.usersProcessed ?? data.data?.syncedCount ?? 0);
-        const errors = Number(data.errorCount ?? data.data?.errorCount ?? 0);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || data.error?.message || `Server returned ${response.status}`);
+      }
+
+      const job = data.job || data.data?.job || null;
+      if (job && (job.status === 'queued' || job.status === 'running')) {
+        showInfo(data.alreadyRunning
+          ? 'A full role resync is already running for this server. I\'ll keep the progress on the button for you.'
+          : 'Full role resync started. It now runs in the background so the request should not time out.');
+        await startVerificationSyncStatusPolling();
+        return;
+      }
+
+      if (job && job.status === 'completed') {
+        const synced = Number(job.syncedCount || 0);
+        const errors = Number(job.errorCount || 0);
         showSuccess(`Roles synced successfully (${synced} users updated${errors ? `, ${errors} errors` : ''})`);
         await loadAdminRoles();
-      } else {
-        showError(data.message || 'Sync failed');
+        setReverifyAllButtonState(false);
+        return;
       }
+
+      showInfo(data.message || 'Verification sync queued');
+      setReverifyAllButtonState(false);
     } catch (e) {
       showError('Error syncing roles: ' + e.message);
-    } finally {
-      const btn = document.querySelector('[onclick="reverifyAllRoles()"]');
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = '<span>🔔„</span><span>Reverify All</span>';
-      }
+      setReverifyAllButtonState(false);
     }
   });
 }
@@ -14573,6 +14667,9 @@ async function loadEngagementRedemptions() {
     el.innerHTML = '<p style="color:var(--error);">Failed to load redemptions.</p>';
   }
 }
+
+
+
 
 
 

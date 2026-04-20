@@ -666,30 +666,36 @@ module.exports = {
         ephemeral: true 
       });
     }
+    const resolvedProposalId = String(proposal.proposal_id || proposalId || '').trim();
+    const proposalGuildId = String(proposal.guild_id || '').trim();
 
     let updateResult;
     if (hasProposalsGuildColumn() && interaction.guildId) {
-      updateResult = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ? AND guild_id = ?').run('cancelled', proposalId, interaction.guildId);
-      if (!updateResult?.changes && !String(proposal.guild_id || '').trim()) {
+      updateResult = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ? AND guild_id = ?').run('cancelled', resolvedProposalId, interaction.guildId);
+      if (!updateResult?.changes && !proposalGuildId) {
         // Legacy proposal rows may have empty guild_id.
-        updateResult = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ?').run('cancelled', proposalId);
+        updateResult = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ?').run('cancelled', resolvedProposalId);
       }
     } else {
-      updateResult = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ?').run('cancelled', proposalId);
+      updateResult = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ?').run('cancelled', resolvedProposalId);
+    }
+
+    if (!updateResult?.changes && Number.isFinite(Number(proposal.id))) {
+      updateResult = db.prepare('UPDATE proposals SET status = ? WHERE id = ?').run('cancelled', Number(proposal.id));
     }
 
     if (!updateResult?.changes) {
       return interaction.editReply({
-        content: `❌ Failed to cancel proposal: ${proposalId}`,
+        content: `❌ Failed to cancel proposal: ${resolvedProposalId || proposalId}`,
         ephemeral: true
       });
     }
 
     await interaction.editReply({ 
-      content: `✅ Proposal ${proposalId} has been cancelled by admin.`,
+      content: `✅ Proposal ${resolvedProposalId || proposalId} has been cancelled by admin.`,
       ephemeral: true 
     });
-    logger.log(`Admin ${interaction.user.tag} cancelled proposal ${proposalId}`);
+    logger.log(`Admin ${interaction.user.tag} cancelled proposal ${resolvedProposalId || proposalId}`);
   },
 
   async handleAdminSettings(interaction) {

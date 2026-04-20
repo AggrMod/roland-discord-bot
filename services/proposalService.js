@@ -120,6 +120,41 @@ function normalizeComparableDiscordId(value) {
   return raw;
 }
 
+function buildProposalIdCandidates(rawValue) {
+  const raw = String(rawValue || '').trim();
+  if (!raw) return [];
+
+  const normalizedDash = raw.replace(/[‐‑‒–—−]/g, '-');
+  const cleaned = normalizedDash
+    .replace(/^id[:\s-]*/i, '')
+    .replace(/^#/, '')
+    .replace(/[),.;:\s]+$/g, '')
+    .trim();
+  const upper = cleaned.toUpperCase();
+
+  const candidates = new Set([
+    raw,
+    normalizedDash,
+    cleaned,
+    upper,
+  ]);
+
+  const compact = upper.replace(/\s+/g, '');
+  candidates.add(compact);
+
+  const legacyUuidNoDash = compact.match(/^P([0-9A-F]{8})$/i);
+  if (legacyUuidNoDash) {
+    candidates.add(`P-${legacyUuidNoDash[1].toUpperCase()}`);
+  }
+
+  const numericLegacy = compact.match(/^P[- ]?(\d+)$/i);
+  if (numericLegacy) {
+    candidates.add(String(Number.parseInt(numericLegacy[1], 10)));
+  }
+
+  return [...candidates].filter(Boolean);
+}
+
 class ProposalService {
   constructor() {
     this.client = null;
@@ -548,6 +583,8 @@ class ProposalService {
     try {
       const proposal = this.getProposal(proposalId);
       if (!proposal) return { success: false, message: 'Proposal not found' };
+      const resolvedProposalId = String(proposal.proposal_id || proposalId || '').trim();
+      const resolvedCreatorId = String(proposal.creator_id || '').trim();
       const proposalCreatorId = normalizeComparableDiscordId(proposal.creator_id);
       const normalizedRequesterId = normalizeComparableDiscordId(requesterId);
       if (!proposalCreatorId || !normalizedRequesterId || proposalCreatorId !== normalizedRequesterId) {
@@ -556,7 +593,7 @@ class ProposalService {
 
       const currentStatus = String(proposal.status || '').toLowerCase();
       if (currentStatus === 'cancelled') {
-        return { success: true, proposalId, status: 'cancelled' };
+        return { success: true, proposalId: resolvedProposalId, status: 'cancelled' };
       }
       const disallowedStatuses = ['vetoed'];
       if (disallowedStatuses.includes(currentStatus)) {
@@ -569,20 +606,20 @@ class ProposalService {
       if (hasProposalsGuildColumn()) {
         if (proposalGuildId) {
           result = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ? AND creator_id = ? AND guild_id = ?')
-            .run('cancelled', proposalId, proposalCreatorId, proposalGuildId);
+            .run('cancelled', resolvedProposalId, resolvedCreatorId, proposalGuildId);
         } else {
           // Legacy rows may have an empty guild_id; cancel by proposal+creator in that case.
           result = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ? AND creator_id = ?')
-            .run('cancelled', proposalId, proposalCreatorId);
+            .run('cancelled', resolvedProposalId, resolvedCreatorId);
         }
       } else {
         result = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ? AND creator_id = ?')
-          .run('cancelled', proposalId, proposalCreatorId);
+          .run('cancelled', resolvedProposalId, resolvedCreatorId);
       }
 
       if (!result?.changes) {
         // Final safety fallback: ownership already validated from loaded proposal row.
-        result = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ?').run('cancelled', proposalId);
+        result = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ?').run('cancelled', resolvedProposalId);
       }
       if (!result?.changes && Number.isFinite(Number(proposal.id))) {
         // Ultimate fallback by row id for legacy proposal_id formatting mismatches.
@@ -594,14 +631,14 @@ class ProposalService {
       }
 
       governanceLogger.log('proposal_cancelled_by_creator', {
-        proposalId,
+        proposalId: resolvedProposalId,
         requesterId,
         fromStatus: proposal.status,
         guildId: proposalGuildId || normalizedGuildId || null,
       });
-      logger.log(`Proposal ${proposalId} cancelled by creator ${requesterId}`);
+      logger.log(`Proposal ${resolvedProposalId} cancelled by creator ${requesterId}`);
 
-      return { success: true, proposalId, status: 'cancelled' };
+      return { success: true, proposalId: resolvedProposalId, status: 'cancelled' };
     } catch (error) {
       logger.error('Error cancelling proposal:', error);
       return { success: false, message: 'Failed to cancel proposal' };
@@ -685,7 +722,27 @@ class ProposalService {
 
   getProposal(proposalId) {
     try {
-      return db.prepare('SELECT * FROM proposals WHERE proposal_id = ?').get(proposalId);
+      const candidates = buildProposalIdCandidates(proposalId);
+      if (!candidates.length) return null;
+
+      for (const candidate of candidates) {
+        const exact = db.prepare('SELECT * FROM proposals WHERE proposal_id = ?').get(candidate);
+        if (exact) return exact;
+      }
+
+      for (const candidate of candidates) {
+        const ci = db.prepare('SELECT * FROM proposals WHERE UPPER(proposal_id) = UPPER(?)').get(candidate);
+        if (ci) return ci;
+      }
+
+      for (const candidate of candidates) {
+        const numericId = Number(candidate);
+        if (!Number.isFinite(numericId)) continue;
+        const byRowId = db.prepare('SELECT * FROM proposals WHERE id = ?').get(numericId);
+        if (byRowId) return byRowId;
+      }
+
+      return null;
     } catch (error) {
       logger.error('Error fetching proposal:', error);
       return null;

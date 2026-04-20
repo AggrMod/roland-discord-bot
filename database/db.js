@@ -246,6 +246,8 @@ function initDatabase() {
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN voting_message_id TEXT'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN message_id TEXT'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN channel_id TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN updated_at DATETIME'));
+  try { db.exec('UPDATE proposals SET updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP)'); } catch (_) {}
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE wallets ADD COLUMN is_favorite BOOLEAN DEFAULT 0'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE users ADD COLUMN wallet_alert_identity_opt_out INTEGER DEFAULT 0'));
   ignoreDuplicateMigration(() => db.exec("ALTER TABLE verification_panels ADD COLUMN color TEXT DEFAULT '#FFD700'"));
@@ -1842,6 +1844,8 @@ function initDatabase() {
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN voting_message_id TEXT'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN message_id TEXT'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN channel_id TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN updated_at DATETIME'));
+  try { db.exec('UPDATE proposals SET updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP)'); } catch (_) {}
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE wallets ADD COLUMN is_favorite BOOLEAN DEFAULT 0'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE users ADD COLUMN wallet_alert_identity_opt_out INTEGER DEFAULT 0'));
   ignoreDuplicateMigration(() => db.exec("ALTER TABLE verification_panels ADD COLUMN color TEXT DEFAULT '#FFD700'"));

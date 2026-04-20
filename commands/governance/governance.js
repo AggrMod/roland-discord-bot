@@ -71,6 +71,10 @@ module.exports = {
             .setDescription('Detailed description of the proposal')
             .setRequired(true))
         .addStringOption(option =>
+          option.setName('cost')
+            .setDescription('Estimated cost (e.g. 500 USDC)')
+            .setRequired(true))
+        .addStringOption(option =>
           option.setName('category')
             .setDescription('Proposal category')
             .setRequired(false)
@@ -80,11 +84,7 @@ module.exports = {
               { name: 'Rule Change', value: 'Rule Change' },
               { name: 'Community Event', value: 'Community Event' },
               { name: 'Other', value: 'Other' }
-            ))
-        .addStringOption(option =>
-          option.setName('cost')
-            .setDescription('Estimated cost (e.g. 500 USDC)')
-            .setRequired(true)))
+            )))
     
     .addSubcommand(subcommand =>
       subcommand

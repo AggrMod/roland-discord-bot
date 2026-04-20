@@ -49,6 +49,41 @@ function hasProposalsGuildColumn() {
   return _hasProposalsGuildColumnCache;
 }
 
+let _hasRoleVPGuildColumnCache = null;
+function hasRoleVPGuildColumn() {
+  if (_hasRoleVPGuildColumnCache !== null) return _hasRoleVPGuildColumnCache;
+  try {
+    const columns = db.prepare("PRAGMA table_info(role_vp_mappings)").all();
+    _hasRoleVPGuildColumnCache = columns.some(c => String(c?.name || '').toLowerCase() === 'guild_id');
+  } catch (_error) {
+    _hasRoleVPGuildColumnCache = false;
+  }
+  return _hasRoleVPGuildColumnCache;
+}
+
+function getRoleMappingCountForGuild(guildId = '') {
+  const normalizedGuildId = String(guildId || '').trim();
+  try {
+    if (hasRoleVPGuildColumn()) {
+      if (!normalizedGuildId) {
+        return Number(
+          db.prepare("SELECT COUNT(*) AS cnt FROM role_vp_mappings WHERE COALESCE(guild_id, '') = ''").get()?.cnt || 0
+        );
+      }
+      const scopedCount = Number(
+        db.prepare('SELECT COUNT(*) AS cnt FROM role_vp_mappings WHERE guild_id = ?').get(normalizedGuildId)?.cnt || 0
+      );
+      const legacyCount = Number(
+        db.prepare("SELECT COUNT(*) AS cnt FROM role_vp_mappings WHERE COALESCE(guild_id, '') = ''").get()?.cnt || 0
+      );
+      return scopedCount + legacyCount;
+    }
+    return Number(db.prepare('SELECT COUNT(*) AS cnt FROM role_vp_mappings').get()?.cnt || 0);
+  } catch (_error) {
+    return 0;
+  }
+}
+
 class ProposalService {
   constructor() {
     this.client = null;
@@ -207,15 +242,52 @@ class ProposalService {
     const normalizedGuildId = String(guildId || '').trim();
     const voterVPs = {};
     let totalVP = 0;
+    const roleMappingCount = getRoleMappingCountForGuild(normalizedGuildId);
 
     // Preferred path: compute VP from live guild roles so role->VP mappings are applied.
-    if (normalizedGuildId && this.client) {
+    if (normalizedGuildId && this.client && roleMappingCount > 0) {
       try {
         const roleService = require('./roleService');
         const guild = this.client.guilds.cache.get(normalizedGuildId)
           || await this.client.guilds.fetch(normalizedGuildId).catch(() => null);
 
         if (guild) {
+          // Build candidate voter ids from tenant memberships + known verified users.
+          // This avoids depending on full-member-list fetch availability.
+          const candidateIds = new Set();
+          const membershipRows = db.prepare('SELECT DISTINCT discord_id FROM user_tenant_memberships WHERE guild_id = ?').all(normalizedGuildId);
+          for (const row of membershipRows) {
+            const discordId = String(row?.discord_id || '').trim();
+            if (discordId) candidateIds.add(discordId);
+          }
+          const walletRows = db.prepare('SELECT DISTINCT discord_id FROM wallets').all();
+          for (const row of walletRows) {
+            const discordId = String(row?.discord_id || '').trim();
+            if (discordId) candidateIds.add(discordId);
+          }
+          const nftRows = db.prepare('SELECT discord_id FROM users WHERE total_nfts > 0').all();
+          for (const row of nftRows) {
+            const discordId = String(row?.discord_id || '').trim();
+            if (discordId) candidateIds.add(discordId);
+          }
+
+          let resolvedAnyCandidate = false;
+          for (const discordId of candidateIds) {
+            const member = guild.members.cache.get(discordId)
+              || await guild.members.fetch(discordId).catch(() => null);
+            if (!member) continue;
+            resolvedAnyCandidate = true;
+            const vp = Number(roleService.getUserVotingPower(discordId, member, normalizedGuildId) || 0);
+            if (vp > 0) {
+              voterVPs[discordId] = vp;
+              totalVP += vp;
+            }
+          }
+          if (resolvedAnyCandidate) {
+            return { totalVP, voterVPs, source: 'role_mapping_snapshot', guildId: normalizedGuildId };
+          }
+
+          // Last resort: full member fetch (may require privileged intent).
           const members = await guild.members.fetch();
           for (const member of members.values()) {
             const vp = Number(roleService.getUserVotingPower(member.id, member, normalizedGuildId) || 0);
@@ -224,7 +296,7 @@ class ProposalService {
               totalVP += vp;
             }
           }
-          return { totalVP, voterVPs };
+          return { totalVP, voterVPs, source: 'role_mapping_snapshot_bulk', guildId: normalizedGuildId };
         }
       } catch (error) {
         logger.warn(`Failed to take guild-scoped VP snapshot for ${normalizedGuildId}: ${error?.message || error}`);
@@ -241,7 +313,7 @@ class ProposalService {
       }
     }
 
-    return { totalVP, voterVPs };
+    return { totalVP, voterVPs, source: 'tier_fallback', guildId: normalizedGuildId || null };
   }
 
   castVote(proposalId, discordId, choice, votingPower) {
@@ -251,13 +323,35 @@ class ProposalService {
       if (proposal.status !== 'voting') return { success: false, message: 'Proposal is not in voting phase' };
       if (proposal.paused) return { success: false, message: 'Voting is currently paused on this proposal' };
 
-      // Use snapshotted VP if available, otherwise fall back to provided VP
-      let effectiveVP = votingPower;
+      // Use snapshotted VP if available, otherwise fall back to provided VP.
+      // Compatibility: if a legacy/tier snapshot underestimates mapped role VP,
+      // allow the live mapped VP passed by caller.
+      const providedVP = Number(votingPower || 0);
+      let effectiveVP = providedVP;
       if (proposal.vp_snapshot) {
         try {
           const snapshot = JSON.parse(proposal.vp_snapshot);
+          const snapshotSource = String(snapshot?.source || '').trim();
+          const snapshotMayBeLegacy = !snapshotSource || snapshotSource === 'tier_fallback';
+          const hasSnapshotEntry = snapshot?.voterVPs && snapshot.voterVPs[discordId] !== undefined;
           if (snapshot.voterVPs && snapshot.voterVPs[discordId] !== undefined) {
-            effectiveVP = snapshot.voterVPs[discordId];
+            const snapshotVP = Number(snapshot.voterVPs[discordId] || 0);
+            effectiveVP = snapshotVP;
+
+            const mappingsConfigured = getRoleMappingCountForGuild(proposal.guild_id || '') > 0;
+            if (
+              mappingsConfigured
+              && snapshotMayBeLegacy
+              && Number.isFinite(providedVP)
+              && providedVP > snapshotVP
+            ) {
+              effectiveVP = providedVP;
+              logger.warn(
+                `Using live mapped VP (${providedVP}) over legacy snapshot VP (${snapshotVP}) for proposal ${proposalId}, voter ${discordId}`
+              );
+            }
+          } else if (snapshotMayBeLegacy && Number.isFinite(providedVP) && providedVP > 0 && !hasSnapshotEntry) {
+            effectiveVP = providedVP;
           }
         } catch (e) {
           logger.warn(`Failed to parse VP snapshot for ${proposalId}, using provided VP`);

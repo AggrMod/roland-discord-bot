@@ -71,7 +71,7 @@ module.exports = {
         .setDescription('Support a proposal to help promote it to voting')
         .addStringOption(option =>
           option.setName('proposal_id')
-            .setDescription('The proposal ID (e.g., P-001)')
+            .setDescription('The proposal ID (e.g., 1)')
             .setRequired(true)))
     
     .addSubcommand(subcommand =>
@@ -80,7 +80,7 @@ module.exports = {
         .setDescription('Cast your vote on an active proposal')
         .addStringOption(option =>
           option.setName('proposal_id')
-            .setDescription('The proposal ID (e.g., P-001)')
+            .setDescription('The proposal ID (e.g., 1)')
             .setRequired(true))
         .addStringOption(option =>
           option.setName('choice')
@@ -98,7 +98,7 @@ module.exports = {
         .setDescription('Cancel your own proposal')
         .addStringOption(option =>
           option.setName('proposal_id')
-            .setDescription('The proposal ID (e.g., P-001)')
+            .setDescription('The proposal ID (e.g., 1)')
             .setRequired(true))
         .addBooleanOption(option =>
           option.setName('confirm')
@@ -509,13 +509,10 @@ module.exports = {
       });
     }
 
-    const updateResult = (hasProposalsGuildColumn() && interaction.guildId)
-      ? db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ? AND creator_id = ? AND guild_id = ?').run('cancelled', proposalId, interaction.user.id, interaction.guildId)
-      : db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ? AND creator_id = ?').run('cancelled', proposalId, interaction.user.id);
-
-    if (!updateResult?.changes) {
+    const cancelResult = proposalService.cancelProposal(proposalId, interaction.user.id, interaction.guildId || '');
+    if (!cancelResult?.success) {
       return interaction.editReply({
-        content: `❌ Failed to cancel proposal ${proposalId}.`,
+        content: `❌ ${cancelResult?.message || `Failed to cancel proposal ${proposalId}.`}`,
         ephemeral: true
       });
     }
@@ -614,10 +611,22 @@ module.exports = {
       });
     }
 
+    let updateResult;
     if (hasProposalsGuildColumn() && interaction.guildId) {
-      db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ? AND guild_id = ?').run('cancelled', proposalId, interaction.guildId);
+      updateResult = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ? AND guild_id = ?').run('cancelled', proposalId, interaction.guildId);
+      if (!updateResult?.changes && !String(proposal.guild_id || '').trim()) {
+        // Legacy proposal rows may have empty guild_id.
+        updateResult = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ?').run('cancelled', proposalId);
+      }
     } else {
-      db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ?').run('cancelled', proposalId);
+      updateResult = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ?').run('cancelled', proposalId);
+    }
+
+    if (!updateResult?.changes) {
+      return interaction.editReply({
+        content: `❌ Failed to cancel proposal: ${proposalId}`,
+        ephemeral: true
+      });
     }
 
     await interaction.editReply({ 
@@ -653,4 +662,3 @@ module.exports = {
     logger.log(`Admin ${interaction.user.tag} viewed governance settings`);
   }
 };
-

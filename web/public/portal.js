@@ -6412,11 +6412,11 @@ async function loadAdminHelpView() {
     ])}
     ${cmdSection('Governance', 'GOV', [
       { name: '/governance propose', desc: 'Create proposal', options: 'title, description, cost (required), category (optional)', example: '/governance propose title:"Fund X" description:"..." cost:"500 USDC"' },
-      { name: '/governance support', desc: 'Support a proposal in supporting phase', options: 'proposal_id (required)', example: '/governance support proposal_id:P-001' },
-      { name: '/governance vote', desc: 'Vote on active proposal', options: 'proposal_id, choice (required)', example: '/governance vote proposal_id:P-001 choice:yes' },
-      { name: '/governance cancel', desc: 'Cancel your own proposal', options: 'proposal_id, confirm (required)', example: '/governance cancel proposal_id:P-001 confirm:true' },
+      { name: '/governance support', desc: 'Support a proposal in supporting phase', options: 'proposal_id (required)', example: '/governance support proposal_id:1' },
+      { name: '/governance vote', desc: 'Vote on active proposal', options: 'proposal_id, choice (required)', example: '/governance vote proposal_id:1 choice:yes' },
+      { name: '/governance cancel', desc: 'Cancel your own proposal', options: 'proposal_id, confirm (required)', example: '/governance cancel proposal_id:1 confirm:true' },
       { name: '/governance admin list', desc: 'List proposals', options: 'status (optional)', example: '/governance admin list status:voting' },
-      { name: '/governance admin cancel', desc: 'Cancel proposal', options: 'proposal_id, confirm (required)', example: '/governance admin cancel proposal_id:P-001 confirm:true' },
+      { name: '/governance admin cancel', desc: 'Cancel proposal', options: 'proposal_id, confirm (required)', example: '/governance admin cancel proposal_id:1 confirm:true' },
       { name: '/governance admin settings', desc: 'View governance settings', options: '-', example: '/governance admin settings' }
     ])}
     ${cmdSection('Treasury', 'TRY', [
@@ -12108,7 +12108,7 @@ function loadApiRefView() {
     data: {
       proposals: [
         {
-          proposalId: 'P-001',
+          proposalId: '1',
           title: 'Add new trait',
           status: 'voting',
           quorum: { required: 50, current: 72 }

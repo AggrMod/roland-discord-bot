@@ -122,30 +122,63 @@ class ProposalService {
   }
 
   generateProposalId() {
-    const { randomUUID } = require('crypto');
-    return `P-${randomUUID().split('-')[0].toUpperCase()}`;
+    const row = db.prepare(`
+      SELECT COALESCE(
+        MAX(
+          CASE
+            WHEN proposal_id GLOB '[0-9]*' AND proposal_id <> ''
+              THEN CAST(proposal_id AS INTEGER)
+            ELSE NULL
+          END
+        ),
+        0
+      ) AS max_id
+      FROM proposals
+    `).get();
+    const nextId = Number(row?.max_id || 0) + 1;
+    return String(nextId);
   }
 
   // ==================== PROPOSAL LIFECYCLE ====================
 
   createProposal(creatorId, { title, description, category, costIndication, guildId = '', initialStatus = 'draft' }) {
     try {
-      const proposalId = this.generateProposalId();
       const validCategories = settingsManager.getSettings().proposalCategories || ['Partnership', 'Treasury Allocation', 'Rule Change', 'Community Event', 'Other'];
       const safeCategory = validCategories.includes(category) ? category : 'Other';
       const normalizedGuildId = String(guildId || '').trim();
       const safeInitialStatus = initialStatus === 'supporting' ? 'supporting' : 'draft';
+      const normalizedCost = String(costIndication || '').trim() || null;
 
-      if (hasProposalsGuildColumn()) {
-        db.prepare(`
-          INSERT INTO proposals (proposal_id, guild_id, creator_id, title, description, status, category, cost_indication)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(proposalId, normalizedGuildId, creatorId, title, description, safeInitialStatus, safeCategory, costIndication || null);
-      } else {
-        db.prepare(`
-          INSERT INTO proposals (proposal_id, creator_id, title, description, status, category, cost_indication)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(proposalId, creatorId, title, description, safeInitialStatus, safeCategory, costIndication || null);
+      let proposalId = '';
+      let inserted = false;
+      let lastInsertError = null;
+      for (let attempt = 0; attempt < 5 && !inserted; attempt += 1) {
+        proposalId = this.generateProposalId();
+        try {
+          if (hasProposalsGuildColumn()) {
+            db.prepare(`
+              INSERT INTO proposals (proposal_id, guild_id, creator_id, title, description, status, category, cost_indication)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(proposalId, normalizedGuildId, creatorId, title, description, safeInitialStatus, safeCategory, normalizedCost);
+          } else {
+            db.prepare(`
+              INSERT INTO proposals (proposal_id, creator_id, title, description, status, category, cost_indication)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+            `).run(proposalId, creatorId, title, description, safeInitialStatus, safeCategory, normalizedCost);
+          }
+          inserted = true;
+        } catch (insertError) {
+          const errorMessage = String(insertError?.message || '').toLowerCase();
+          if (errorMessage.includes('unique constraint failed') && errorMessage.includes('proposals.proposal_id')) {
+            lastInsertError = insertError;
+            continue;
+          }
+          throw insertError;
+        }
+      }
+
+      if (!inserted) {
+        throw (lastInsertError || new Error('Unable to allocate proposal ID'));
       }
 
       logger.log(`Proposal ${proposalId} created by ${creatorId}`);
@@ -517,13 +550,14 @@ class ProposalService {
       }
 
       const normalizedGuildId = String(guildId || '').trim();
+      const proposalGuildId = String(proposal.guild_id || '').trim();
       let result;
       if (hasProposalsGuildColumn()) {
-        const scopedGuildId = normalizedGuildId || String(proposal.guild_id || '').trim();
-        if (scopedGuildId) {
+        if (proposalGuildId) {
           result = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ? AND creator_id = ? AND guild_id = ?')
-            .run('cancelled', proposalId, requesterId, scopedGuildId);
+            .run('cancelled', proposalId, requesterId, proposalGuildId);
         } else {
+          // Legacy rows may have an empty guild_id; cancel by proposal+creator in that case.
           result = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ? AND creator_id = ?')
             .run('cancelled', proposalId, requesterId);
         }
@@ -540,7 +574,7 @@ class ProposalService {
         proposalId,
         requesterId,
         fromStatus: proposal.status,
-        guildId: normalizedGuildId || proposal.guild_id || null,
+        guildId: proposalGuildId || normalizedGuildId || null,
       });
       logger.log(`Proposal ${proposalId} cancelled by creator ${requesterId}`);
 

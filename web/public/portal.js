@@ -2478,8 +2478,14 @@ function renderRecentActivity() {
 // ==================== GOVERNANCE ====================
 function renderProposals() {
   const container = document.getElementById('myProposals');
+  const proposalRows = (userData?.proposals || []).filter((proposal) => {
+    if (!activeGuildId) return true;
+    const proposalGuildId = String(proposal?.guild_id || '').trim();
+    if (!proposalGuildId) return true;
+    return proposalGuildId === String(activeGuildId || '').trim();
+  });
   
-  if (!userData.proposals || userData.proposals.length === 0) {
+  if (!proposalRows.length) {
     container.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">📜</div>
@@ -2496,7 +2502,7 @@ function renderProposals() {
     return;
   }
 
-  container.innerHTML = '<div class="proposal-list">' + userData.proposals.map(proposal => `
+  container.innerHTML = '<div class="proposal-list">' + proposalRows.map(proposal => `
     <div class="proposal-item">
       <div class="proposal-header">
         <div class="proposal-title">${escapeHtml(proposal.title)}</div>
@@ -2512,7 +2518,7 @@ function renderProposals() {
       ${proposal.description ? `<p style="color: var(--text-secondary); margin-top: var(--space-3); line-height: 1.6;">${escapeHtml(proposal.description)}</p>` : ''}
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
         ${proposal.status === 'draft' ? `<button onclick="submitProposalForReview('${escapeJsString(proposal.proposal_id)}')" style="padding:6px 14px; background:#6366f1; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Submit for Review</button>` : ''}
-        ${['draft','pending_review','on_hold','supporting','voting'].includes(String(proposal.status || '').toLowerCase()) ? `<button onclick="cancelOwnProposal('${escapeJsString(proposal.proposal_id)}')" style="padding:6px 14px; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.35); border-radius:6px; color:#fca5a5; cursor:pointer; font-size:0.85em;">Cancel / Delete</button>` : ''}
+        ${String(proposal.status || '').toLowerCase() !== 'vetoed' ? `<button onclick="cancelOwnProposal('${escapeJsString(proposal.proposal_id)}')" style="padding:6px 14px; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.35); border-radius:6px; color:#fca5a5; cursor:pointer; font-size:0.85em;">Cancel / Delete</button>` : ''}
       </div>
     </div>
   `).join('') + '</div>';

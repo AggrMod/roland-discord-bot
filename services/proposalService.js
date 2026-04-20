@@ -544,8 +544,12 @@ class ProposalService {
         return { success: false, message: 'Only the proposal creator can cancel this proposal' };
       }
 
-      const cancellableStatuses = ['draft', 'pending_review', 'on_hold', 'supporting', 'voting'];
-      if (!cancellableStatuses.includes(String(proposal.status || '').toLowerCase())) {
+      const currentStatus = String(proposal.status || '').toLowerCase();
+      if (currentStatus === 'cancelled') {
+        return { success: true, proposalId, status: 'cancelled' };
+      }
+      const disallowedStatuses = ['vetoed'];
+      if (disallowedStatuses.includes(currentStatus)) {
         return { success: false, message: `Proposal cannot be cancelled in status "${proposal.status}"` };
       }
 

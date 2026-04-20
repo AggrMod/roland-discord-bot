@@ -34,7 +34,12 @@ function createGovernanceUserRouter({
   };
 
   const isCreatorCancellableStatus = (status) => (
-    ['draft', 'pending_review', 'on_hold', 'supporting', 'voting'].includes(String(status || '').toLowerCase())
+    (() => {
+      const normalizedStatus = String(status || '').toLowerCase();
+      if (!normalizedStatus) return false;
+      if (normalizedStatus === 'vetoed') return false;
+      return true;
+    })()
   );
 
   const resolveEffectiveVotingPower = async (discordId, guildId) => {
@@ -254,12 +259,13 @@ function createGovernanceUserRouter({
       if (!requestedGuildId) {
         return res.status(409).json(toErrorResponse('Select a server to continue', 'TENANT_REQUIRED', null, { success: false }));
       }
-      if (!isProposalInGuildScope(req.params.id, requestedGuildId)) {
-        return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND', null, { success: false }));
-      }
 
       const proposal = proposalService.getProposal(req.params.id);
       if (!proposal) {
+        return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND', null, { success: false }));
+      }
+      const proposalGuildId = String(proposal.guild_id || '').trim();
+      if (proposalGuildId && proposalGuildId !== String(requestedGuildId || '').trim()) {
         return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND', null, { success: false }));
       }
       if (String(proposal.creator_id || '') !== String(discordId || '')) {

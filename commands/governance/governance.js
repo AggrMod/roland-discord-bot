@@ -28,7 +28,10 @@ function isProposalVisibleInGuild(proposal, guildId) {
 }
 
 function isCreatorCancellableStatus(status) {
-  return ['draft', 'pending_review', 'on_hold', 'supporting', 'voting'].includes(String(status || '').toLowerCase());
+  const normalizedStatus = String(status || '').toLowerCase();
+  if (!normalizedStatus) return false;
+  if (normalizedStatus === 'vetoed') return false;
+  return true;
 }
 
 module.exports = {
@@ -477,7 +480,14 @@ module.exports = {
   async handleCancel(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
-    const proposalId = interaction.options.getString('proposal_id').toUpperCase();
+    const proposalIdRaw = interaction.options.getString('proposal_id');
+    if (!proposalIdRaw) {
+      return interaction.editReply({
+        content: '❌ Proposal ID is required.',
+        ephemeral: true
+      });
+    }
+    const proposalId = proposalIdRaw.toUpperCase();
     const confirm = interaction.options.getBoolean('confirm');
 
     if (!confirm) {

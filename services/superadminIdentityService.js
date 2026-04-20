@@ -182,7 +182,7 @@ class SuperadminIdentityService {
     if (!normalizedDiscordId) return null;
 
     const user = db.prepare(`
-      SELECT discord_id, username, total_nfts, total_tokens, tier, voting_power, created_at, updated_at
+      SELECT discord_id, username, total_nfts, total_tokens, tier, created_at, updated_at
       FROM users
       WHERE discord_id = ?
     `).get(normalizedDiscordId);
@@ -204,7 +204,6 @@ class SuperadminIdentityService {
         totalNfts: Number(user.total_nfts || 0),
         totalTokens: Number(user.total_tokens || 0),
         tier: user.tier || null,
-        votingPower: Number(user.voting_power || 0),
         createdAt: user.created_at || null,
         updatedAt: user.updated_at || null,
       },

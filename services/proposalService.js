@@ -158,7 +158,7 @@ class ProposalService {
       }
 
       // Take VP snapshot
-      const snapshot = this.takeVPSnapshot();
+      const snapshot = await this.takeVPSnapshot(proposal.guild_id || '');
       const totalVP = snapshot.totalVP;
       const settings = settingsManager.getSettings();
       const quorumRequired = Math.ceil(totalVP * ((settings.governanceQuorum || 25) / 100));
@@ -203,22 +203,38 @@ class ProposalService {
     }
   }
 
-  takeVPSnapshot() {
-    const settings = settingsManager.getSettings();
-    const staffTrusteeRoles = settings.staffTrusteeRoles || ['Enforcer', 'Caporegime', 'Consigliere', 'Underboss', 'Don'];
-
-    // Get all users with NFTs
-    const users = db.prepare('SELECT discord_id, total_nfts, voting_power FROM users WHERE total_nfts > 0').all();
-
-    // Get role VP mappings for staff trustee check
-    const roleMappings = db.prepare('SELECT * FROM role_vp_mappings').all();
-
+  async takeVPSnapshot(guildId = '') {
+    const normalizedGuildId = String(guildId || '').trim();
     const voterVPs = {};
     let totalVP = 0;
 
+    // Preferred path: compute VP from live guild roles so role->VP mappings are applied.
+    if (normalizedGuildId && this.client) {
+      try {
+        const roleService = require('./roleService');
+        const guild = this.client.guilds.cache.get(normalizedGuildId)
+          || await this.client.guilds.fetch(normalizedGuildId).catch(() => null);
+
+        if (guild) {
+          const members = await guild.members.fetch();
+          for (const member of members.values()) {
+            const vp = Number(roleService.getUserVotingPower(member.id, member, normalizedGuildId) || 0);
+            if (vp > 0) {
+              voterVPs[member.id] = vp;
+              totalVP += vp;
+            }
+          }
+          return { totalVP, voterVPs };
+        }
+      } catch (error) {
+        logger.warn(`Failed to take guild-scoped VP snapshot for ${normalizedGuildId}: ${error?.message || error}`);
+      }
+    }
+
+    // Fallback path: legacy snapshot from stored NFT totals/tier-based VP.
+    const users = db.prepare('SELECT discord_id, total_nfts FROM users WHERE total_nfts > 0').all();
     for (const user of users) {
-      // For snapshot: use configurable tier VP (settings defaults as fallback)
-      const vp = getConfiguredVPForUser(user.discord_id, user.total_nfts, roleMappings);
+      const vp = getConfiguredVPForUser(user.discord_id, user.total_nfts, []);
       if (vp > 0) {
         voterVPs[user.discord_id] = vp;
         totalVP += vp;

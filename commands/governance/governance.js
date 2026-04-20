@@ -166,9 +166,10 @@ module.exports = {
     const title = interaction.options.getString('title');
     const description = interaction.options.getString('description');
 
-    const userInfo = await roleService.getUserInfo(discordId);
+    const userInfo = await roleService.getUserInfo(discordId, interaction.guildId, interaction.member);
+    const votingPower = Number(userInfo?.voting_power || 0);
     
-    if (!userInfo || !userInfo.voting_power || userInfo.voting_power === 0) {
+    if (!userInfo || votingPower < 1) {
       const embed = new EmbedBuilder()
         .setColor('#FF0000')
         .setTitle('❌ Not Eligible')
@@ -268,9 +269,10 @@ module.exports = {
     const discordId = interaction.user.id;
     const proposalId = interaction.options.getString('proposal_id').toUpperCase();
 
-    const userInfo = await roleService.getUserInfo(discordId);
+    const userInfo = await roleService.getUserInfo(discordId, interaction.guildId, interaction.member);
+    const votingPower = Number(userInfo?.voting_power || 0);
     
-    if (!userInfo || !userInfo.voting_power || userInfo.voting_power === 0) {
+    if (!userInfo || votingPower < 1) {
       const embed = new EmbedBuilder()
         .setColor('#FF0000')
         .setTitle('❌ Not Eligible')
@@ -336,9 +338,10 @@ module.exports = {
     const proposalId = interaction.options.getString('proposal_id').toUpperCase();
     const choice = interaction.options.getString('choice');
 
-    const userInfo = await roleService.getUserInfo(discordId);
+    const userInfo = await roleService.getUserInfo(discordId, interaction.guildId, interaction.member);
+    const votingPower = Number(userInfo?.voting_power || 0);
     
-    if (!userInfo || !userInfo.voting_power || userInfo.voting_power === 0) {
+    if (!userInfo || votingPower < 1) {
       const embed = new EmbedBuilder()
         .setColor('#FF0000')
         .setTitle('❌ Not Eligible')
@@ -360,7 +363,7 @@ module.exports = {
       return interaction.editReply({ embeds: [embed] });
     }
 
-    const result = proposalService.castVote(proposalId, discordId, choice, userInfo.voting_power);
+    const result = proposalService.castVote(proposalId, discordId, choice, votingPower);
 
     if (!result.success) {
       const embed = new EmbedBuilder()
@@ -388,7 +391,7 @@ module.exports = {
       .addFields(
         { name: '🆔 Proposal ID', value: proposalId, inline: true },
         { name: 'Your Vote', value: `${choiceEmoji[choice]} ${choice.toUpperCase()}`, inline: true },
-        { name: 'Voting Power', value: `${userInfo.voting_power}`, inline: true },
+        { name: 'Voting Power', value: `${result.votingPower || votingPower}`, inline: true },
         { name: '📊 Current Results', value: `✅ Yes: ${updatedProposal.yes_vp}\n❌ No: ${updatedProposal.no_vp}\n⚖️ Abstain: ${updatedProposal.abstain_vp}\n\n**Total:** ${totalVoted} VP`, inline: false }
       )
       .setFooter({ text: 'Your vote has been recorded' })

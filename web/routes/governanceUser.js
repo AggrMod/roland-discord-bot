@@ -7,6 +7,7 @@ function createGovernanceUserRouter({
   proposalService,
   tenantService,
   getRequestedGuildId,
+  fetchGuildById,
   isProposalInGuildScope,
   ensurePublicGovernanceScope,
   commentLimiter,
@@ -28,6 +29,28 @@ function createGovernanceUserRouter({
     return null;
   };
 
+  const resolveEffectiveVotingPower = async (discordId, guildId) => {
+    const normalizedGuildId = String(guildId || '').trim();
+    const userInfo = await roleService.getUserInfo(discordId);
+    let votingPower = Number(userInfo?.voting_power || 0);
+
+    if (normalizedGuildId && typeof fetchGuildById === 'function') {
+      try {
+        const guild = await fetchGuildById(normalizedGuildId);
+        if (guild) {
+          const member = await guild.members.fetch(discordId).catch(() => null);
+          if (member) {
+            votingPower = Number(roleService.getUserVotingPower(discordId, member, normalizedGuildId) || 0);
+          }
+        }
+      } catch (_error) {
+        // Fallback to stored voting power if Discord member lookup fails.
+      }
+    }
+
+    return { userInfo, votingPower };
+  };
+
   const createProposalHandler = async (req, res, sourceLabel = 'user') => {
     if (!requireSession(req, res)) return;
 
@@ -46,8 +69,8 @@ function createGovernanceUserRouter({
         return res.status(400).json(toErrorResponse(validationErr, 'VALIDATION_ERROR', null, { success: false }));
       }
 
-      const userInfo = await roleService.getUserInfo(discordId);
-      if (!userInfo || !userInfo.voting_power || userInfo.voting_power < 1) {
+      const { userInfo, votingPower } = await resolveEffectiveVotingPower(discordId, requestedGuildId);
+      if (!userInfo || votingPower < 1) {
         return res.status(403).json(toErrorResponse('You need at least 1 verified NFT to create proposals', 'FORBIDDEN', null, { success: false }));
       }
 
@@ -75,21 +98,28 @@ function createGovernanceUserRouter({
     try {
       const discordId = req.session.discordUser.id;
       const { proposalId, choice } = req.body || {};
+      const requestedGuildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
 
       if (!proposalId || !choice) {
         return res.status(400).json(toErrorResponse('proposalId and choice are required', 'VALIDATION_ERROR', null, { success: false }));
+      }
+      if (!requestedGuildId) {
+        return res.status(409).json(toErrorResponse('Select a server to continue', 'TENANT_REQUIRED', null, { success: false }));
+      }
+      if (!isProposalInGuildScope(proposalId, requestedGuildId)) {
+        return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND', null, { success: false }));
       }
 
       if (!['yes', 'no', 'abstain'].includes(String(choice).toLowerCase())) {
         return res.status(400).json(toErrorResponse('Choice must be yes, no, or abstain', 'VALIDATION_ERROR', null, { success: false }));
       }
 
-      const userInfo = await roleService.getUserInfo(discordId);
-      if (!userInfo || !userInfo.voting_power || userInfo.voting_power < 1) {
+      const { userInfo, votingPower } = await resolveEffectiveVotingPower(discordId, requestedGuildId);
+      if (!userInfo || votingPower < 1) {
         return res.status(403).json(toErrorResponse('You need at least 1 verified NFT to vote', 'FORBIDDEN', null, { success: false }));
       }
 
-      const result = proposalService.castVote(proposalId, discordId, String(choice).toLowerCase(), userInfo.voting_power);
+      const result = proposalService.castVote(proposalId, discordId, String(choice).toLowerCase(), votingPower);
       if (result?.success) {
         proposalService.updateVotingMessage(proposalId).catch(() => {});
         return res.json(toSuccessResponse(result));

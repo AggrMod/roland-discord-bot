@@ -15,6 +15,22 @@ class RoleService {
     this.collectionsConfig = null;
     this._roleSyncWarnCache = new Map();
     this._roleSyncWarnCooldownMs = parseInt(process.env.ROLE_SYNC_WARN_COOLDOWN_MS || '600000', 10);
+    this._hasRoleVPGuildColumn = null;
+  }
+
+  normalizeGuildId(guildId) {
+    return String(guildId || '').trim();
+  }
+
+  hasRoleVPGuildColumn() {
+    if (this._hasRoleVPGuildColumn !== null) return this._hasRoleVPGuildColumn;
+    try {
+      const columns = db.prepare('PRAGMA table_info(role_vp_mappings)').all();
+      this._hasRoleVPGuildColumn = columns.some(c => String(c?.name || '').toLowerCase() === 'guild_id');
+    } catch (_error) {
+      this._hasRoleVPGuildColumn = false;
+    }
+    return this._hasRoleVPGuildColumn;
   }
 
   logRoleSyncWarnOnce(cacheKey, message) {
@@ -137,15 +153,13 @@ class RoleService {
     }
   }
 
-  async getUserInfo(discordId) {
+  async getUserInfo(discordId, guildId = null, guildMember = null) {
     try {
       const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(discordId);
-      if (user) {
-        // If role_vp_mappings has any rows, override voting_power from role mappings
-        const mappingCount = db.prepare('SELECT COUNT(*) as cnt FROM role_vp_mappings').get().cnt;
-        if (mappingCount > 0) {
-          user.voting_power = user.voting_power || 0; // keep DB value as fallback context
-        }
+      if (!user) return null;
+      const normalizedGuildId = this.normalizeGuildId(guildId);
+      if (normalizedGuildId && guildMember) {
+        user.voting_power = this.getUserVotingPower(discordId, guildMember, normalizedGuildId);
       }
       return user;
     } catch (error) {
@@ -154,24 +168,63 @@ class RoleService {
     }
   }
 
-  // ==================== VP DECOUPLING: Role → Voting Power Mappings ====================
+  // ==================== VP DECOUPLING: Role -> Voting Power Mappings ====================
 
-  getRoleVPMappings() {
+  getRoleVPMappings(guildId = null, guild = null) {
     try {
-      return db.prepare('SELECT * FROM role_vp_mappings ORDER BY voting_power DESC').all();
+      const normalizedGuildId = this.normalizeGuildId(guildId);
+      const filterLegacyMappingsForGuild = (rows) => {
+        if (!normalizedGuildId) return rows;
+        if (!(guild && guild.roles && guild.roles.cache)) return rows;
+        const roleIdsInGuild = new Set(guild.roles.cache.keys());
+        return rows.filter(row => roleIdsInGuild.has(String(row.role_id || '').trim()));
+      };
+
+      if (this.hasRoleVPGuildColumn()) {
+        if (normalizedGuildId) {
+          const scopedRows = db.prepare('SELECT * FROM role_vp_mappings WHERE guild_id = ? ORDER BY voting_power DESC').all(normalizedGuildId);
+          const legacyRows = db.prepare("SELECT * FROM role_vp_mappings WHERE COALESCE(guild_id, '') = '' ORDER BY voting_power DESC").all();
+          const filteredLegacyRows = filterLegacyMappingsForGuild(legacyRows);
+          if (scopedRows.length === 0) {
+            return filteredLegacyRows;
+          }
+          const scopedRoleIds = new Set(scopedRows.map(row => String(row.role_id || '').trim()).filter(Boolean));
+          const mergedRows = [...scopedRows];
+          for (const row of filteredLegacyRows) {
+            const roleId = String(row.role_id || '').trim();
+            if (!roleId || scopedRoleIds.has(roleId)) continue;
+            mergedRows.push(row);
+          }
+          return mergedRows;
+        }
+        return db.prepare("SELECT * FROM role_vp_mappings WHERE COALESCE(guild_id, '') = '' ORDER BY voting_power DESC").all();
+      }
+      const allRows = db.prepare('SELECT * FROM role_vp_mappings ORDER BY voting_power DESC').all();
+      return filterLegacyMappingsForGuild(allRows);
     } catch (error) {
       logger.error('Error fetching role VP mappings:', error);
       return [];
     }
   }
 
-  addRoleVPMapping(roleId, roleName, votingPower) {
+  addRoleVPMapping(roleId, roleName, votingPower, guildId = null) {
     try {
-      db.prepare(`
-        INSERT OR REPLACE INTO role_vp_mappings (role_id, role_name, voting_power)
-        VALUES (?, ?, ?)
-      `).run(roleId, roleName || null, votingPower);
-      logger.log(`Added/updated role VP mapping: ${roleName || roleId} → ${votingPower} VP`);
+      const normalizedGuildId = this.normalizeGuildId(guildId);
+      if (this.hasRoleVPGuildColumn()) {
+        if (!normalizedGuildId) {
+          return { success: false, message: 'guildId is required for VP mappings' };
+        }
+        db.prepare(`
+          INSERT OR REPLACE INTO role_vp_mappings (guild_id, role_id, role_name, voting_power)
+          VALUES (?, ?, ?, ?)
+        `).run(normalizedGuildId, roleId, roleName || null, votingPower);
+      } else {
+        db.prepare(`
+          INSERT OR REPLACE INTO role_vp_mappings (role_id, role_name, voting_power)
+          VALUES (?, ?, ?)
+        `).run(roleId, roleName || null, votingPower);
+      }
+      logger.log(`Added/updated role VP mapping: ${roleName || roleId} -> ${votingPower} VP${normalizedGuildId ? ` [guild ${normalizedGuildId}]` : ''}`);
       return { success: true };
     } catch (error) {
       logger.error('Error adding role VP mapping:', error);
@@ -179,13 +232,16 @@ class RoleService {
     }
   }
 
-  removeRoleVPMapping(roleId) {
+  removeRoleVPMapping(roleId, guildId = null) {
     try {
-      const result = db.prepare('DELETE FROM role_vp_mappings WHERE role_id = ?').run(roleId);
+      const normalizedGuildId = this.normalizeGuildId(guildId);
+      const result = this.hasRoleVPGuildColumn()
+        ? db.prepare('DELETE FROM role_vp_mappings WHERE role_id = ? AND guild_id = ?').run(roleId, normalizedGuildId)
+        : db.prepare('DELETE FROM role_vp_mappings WHERE role_id = ?').run(roleId);
       if (result.changes === 0) {
         return { success: false, message: 'Mapping not found' };
       }
-      logger.log(`Removed role VP mapping: ${roleId}`);
+      logger.log(`Removed role VP mapping: ${roleId}${normalizedGuildId ? ` [guild ${normalizedGuildId}]` : ''}`);
       return { success: true };
     } catch (error) {
       logger.error('Error removing role VP mapping:', error);
@@ -193,9 +249,9 @@ class RoleService {
     }
   }
 
-  getUserVotingPower(discordId, guildMember) {
+  getUserVotingPower(discordId, guildMember, guildId = null) {
     try {
-      const mappings = db.prepare('SELECT * FROM role_vp_mappings').all();
+      const mappings = this.getRoleVPMappings(guildId, guildMember?.guild || null);
 
       // If no mappings configured, fall back to tier-based VP from DB
       if (mappings.length === 0) {
@@ -203,14 +259,17 @@ class RoleService {
         return user ? user.voting_power : 0;
       }
 
+      if (!(guildMember && guildMember.roles && guildMember.roles.cache)) {
+        const user = db.prepare('SELECT voting_power FROM users WHERE discord_id = ?').get(discordId);
+        return user ? user.voting_power : 0;
+      }
+
       // Use highest VP among all matching roles the member has
       let highestVP = 0;
-      if (guildMember && guildMember.roles && guildMember.roles.cache) {
-        const memberRoleIds = new Set(guildMember.roles.cache.keys());
-        for (const mapping of mappings) {
-          if (memberRoleIds.has(mapping.role_id) && mapping.voting_power > highestVP) {
-            highestVP = mapping.voting_power;
-          }
+      const memberRoleIds = new Set(guildMember.roles.cache.keys());
+      for (const mapping of mappings) {
+        if (memberRoleIds.has(mapping.role_id) && mapping.voting_power > highestVP) {
+          highestVP = mapping.voting_power;
         }
       }
 
@@ -220,7 +279,6 @@ class RoleService {
       return 0;
     }
   }
-
   /**
    * Sync all Discord roles for a user (both tier and trait roles)
    * This is the main entry point for comprehensive role sync
@@ -1542,3 +1600,4 @@ class RoleService {
 }
 
 module.exports = new RoleService();
+

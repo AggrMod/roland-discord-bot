@@ -829,6 +829,7 @@ class WebServer {
       proposalService,
       tenantService,
       getRequestedGuildId,
+      fetchGuildById,
       isProposalInGuildScope: (...args) => isProposalInGuildScope(...args),
       ensurePublicGovernanceScope: (...args) => ensurePublicGovernanceScope(...args),
       commentLimiter,

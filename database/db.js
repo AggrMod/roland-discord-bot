@@ -44,6 +44,27 @@ const STRUCTURED_MIGRATIONS = Object.freeze([
       tolerantExec('ALTER TABLE tickets ADD COLUMN last_activity_at DATETIME');
       tolerantExec('ALTER TABLE tickets ADD COLUMN inactive_warning_sent_at DATETIME');
     }
+  },
+  {
+    version: 9,
+    name: 'scope_role_vp_mappings_per_guild',
+    up: () => {
+      const tolerantExec = (sql) => {
+        try {
+          db.exec(sql);
+        } catch (error) {
+          const msg = String(error?.message || '');
+          const ignorable = msg.includes('duplicate column name')
+            || msg.includes('already exists')
+            || msg.includes('no such table');
+          if (!ignorable) throw error;
+        }
+      };
+
+      tolerantExec("ALTER TABLE role_vp_mappings ADD COLUMN guild_id TEXT NOT NULL DEFAULT ''");
+      tolerantExec('CREATE INDEX IF NOT EXISTS idx_role_vp_mappings_guild_id ON role_vp_mappings(guild_id)');
+      tolerantExec('CREATE UNIQUE INDEX IF NOT EXISTS idx_role_vp_mappings_guild_role ON role_vp_mappings(guild_id, role_id)');
+    }
   }
 ]);
 
@@ -252,10 +273,12 @@ function initDatabase() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS role_vp_mappings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      role_id TEXT NOT NULL UNIQUE,
+      guild_id TEXT NOT NULL DEFAULT '',
+      role_id TEXT NOT NULL,
       role_name TEXT,
       voting_power INTEGER NOT NULL DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(guild_id, role_id)
     );
 
     CREATE TABLE IF NOT EXISTS superadmins (

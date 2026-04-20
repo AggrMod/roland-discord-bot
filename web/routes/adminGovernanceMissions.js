@@ -24,7 +24,7 @@ function createAdminGovernanceMissionsRouter({
   router.get('/api/admin/governance/vp-mappings', adminAuthMiddleware, (req, res) => {
     if (!ensureGovernanceModule(req, res)) return;
     try {
-      const mappings = roleService.getRoleVPMappings();
+      const mappings = roleService.getRoleVPMappings(req.guildId, req.guild);
       return res.json(toSuccessResponse({ mappings }));
     } catch (routeError) {
       logger.error('Error fetching role VP mappings:', routeError);
@@ -46,7 +46,7 @@ function createAdminGovernanceMissionsRouter({
         return res.status(400).json(toErrorResponse('votingPower must be between 1 and 1000', 'VALIDATION_ERROR'));
       }
 
-      const result = roleService.addRoleVPMapping(roleId, roleName || null, votingPower);
+      const result = roleService.addRoleVPMapping(roleId, roleName || null, votingPower, req.guildId);
       if (!result?.success) {
         return res.status(400).json(toErrorResponse(result?.message || 'Failed to add mapping', 'VALIDATION_ERROR', null, result));
       }
@@ -65,7 +65,7 @@ function createAdminGovernanceMissionsRouter({
         return res.status(400).json(toErrorResponse('Valid roleId is required', 'VALIDATION_ERROR'));
       }
 
-      const result = roleService.removeRoleVPMapping(roleId);
+      const result = roleService.removeRoleVPMapping(roleId, req.guildId);
       if (!result?.success) {
         return res.status(404).json(toErrorResponse(result?.message || 'Mapping not found', 'NOT_FOUND', null, result));
       }

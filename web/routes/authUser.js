@@ -324,7 +324,6 @@ function createAuthUserRouter({
           username: req.session.discordUser.username,
           avatar: req.session.discordUser.avatar,
           tier: userInfo ? userInfo.tier : 'None',
-          votingPower: userInfo ? userInfo.voting_power : 0,
           totalNFTs: userInfo ? userInfo.total_nfts : 0,
           totalPoints: pointsResult.total,
           lastVerifiedAt: effectiveLastVerifiedAt,

@@ -2356,7 +2356,6 @@ async function checkSuperadminStatus() {
 
 // ==================== DATA LOADING ====================
 async function loadDashboardData() {
-  let governanceEnabledForTenant = true;
   let verificationEnabledForTenant = true;
   let tierConfiguredForTenant = true;
 
@@ -2370,7 +2369,6 @@ async function loadDashboardData() {
       if (settingsRes && settingsRes.ok) {
         const settingsJson = await settingsRes.json().catch(() => null);
         if (settingsJson?.success && settingsJson?.settings) {
-          governanceEnabledForTenant = !!settingsJson.settings.moduleGovernanceEnabled;
           verificationEnabledForTenant = !!settingsJson.settings.moduleVerificationEnabled;
         }
       }
@@ -2383,7 +2381,6 @@ async function loadDashboardData() {
         tierConfiguredForTenant = Array.isArray(tiers) && tiers.length > 0;
       }
     } else {
-      governanceEnabledForTenant = false;
       verificationEnabledForTenant = false;
       tierConfiguredForTenant = false;
     }
@@ -2394,21 +2391,13 @@ async function loadDashboardData() {
   // Load stats
   const tierCard = document.getElementById('tierStatCard');
   const nftsCard = document.getElementById('nftsStatCard');
-  const vpCard = document.getElementById('vpStatCard');
 
   if (tierCard) tierCard.style.display = verificationEnabledForTenant ? 'block' : 'none';
   if (nftsCard) nftsCard.style.display = verificationEnabledForTenant ? 'block' : 'none';
-  if (vpCard) vpCard.style.display = governanceEnabledForTenant ? 'block' : 'none';
 
   document.getElementById('tierStat').textContent = tierConfiguredForTenant
     ? (userData.user.tier || 'None')
     : 'Unconfigured';
-
-  const vpEl = document.getElementById('vpStat');
-  if (vpEl) {
-    vpEl.textContent = userData.user.votingPower || 0;
-    vpEl.title = '';
-  }
 
   document.getElementById('nftsStat').textContent = userData.user.totalNFTs || 0;
   
@@ -2667,7 +2656,6 @@ function renderProfileSection() {
   const profileStatUsername = document.getElementById('profileStatUsername');
   const profileStatDiscordId = document.getElementById('profileStatDiscordId');
   const profileStatTier = document.getElementById('profileStatTier');
-  const profileStatVotingPower = document.getElementById('profileStatVotingPower');
   const profileStatNfts = document.getElementById('profileStatNfts');
   const profileStatWallets = document.getElementById('profileStatWallets');
 
@@ -2675,7 +2663,6 @@ function renderProfileSection() {
     if (profileStatUsername) profileStatUsername.textContent = userData.user.username || '-';
     if (profileStatDiscordId) profileStatDiscordId.textContent = userData.user.discordId || '-';
     if (profileStatTier) profileStatTier.textContent = userData.user.tier || 'None';
-    if (profileStatVotingPower) profileStatVotingPower.textContent = String(userData.user.votingPower || 0);
     if (profileStatNfts) profileStatNfts.textContent = String(userData.user.totalNFTs || 0);
     if (profileStatWallets) profileStatWallets.textContent = String((userData.wallets || []).length);
   }
@@ -5224,7 +5211,7 @@ function renderSuperadminIdentityDetail(profile) {
         </div>
       </div>
 
-      <div style="display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; font-size:0.82em;">
+      <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; font-size:0.82em;">
         <div style="padding:10px; border:1px solid rgba(99,102,241,0.14); border-radius:10px; background:rgba(30,41,59,0.45);">
           <div style="color:var(--text-secondary);">Wallets</div>
           <div style="color:#e0e7ff; font-weight:700; margin-top:3px;">${escapeHtml(String(wallets.length))}</div>
@@ -5232,10 +5219,6 @@ function renderSuperadminIdentityDetail(profile) {
         <div style="padding:10px; border:1px solid rgba(99,102,241,0.14); border-radius:10px; background:rgba(30,41,59,0.45);">
           <div style="color:var(--text-secondary);">NFTs</div>
           <div style="color:#e0e7ff; font-weight:700; margin-top:3px;">${escapeHtml(String(user.totalNfts || 0))}</div>
-        </div>
-        <div style="padding:10px; border:1px solid rgba(99,102,241,0.14); border-radius:10px; background:rgba(30,41,59,0.45);">
-          <div style="color:var(--text-secondary);">Voting Power</div>
-          <div style="color:#e0e7ff; font-weight:700; margin-top:3px;">${escapeHtml(String(user.votingPower || 0))}</div>
         </div>
       </div>
 
@@ -12113,7 +12096,7 @@ function loadApiRefView() {
       endpoint('GET', '/auth/discord/login', 'Starts the Discord OAuth flow.', false, null),
       endpoint('GET', '/auth/discord/callback?code=...', 'OAuth callback that stores the Discord session.', false, null),
       endpoint('GET', '/auth/discord/logout', 'Clears the session and returns to the portal.', false, null),
-      endpoint('GET', '/api/user/me', 'Returns the logged-in user profile.', false, JSON.stringify({ success: true, user: { discordId: '123456789', username: 'CryptoKing', tier: 'Don', votingPower: 10 } }, null, 2)),
+      endpoint('GET', '/api/user/me', 'Returns the logged-in user profile.', false, JSON.stringify({ success: true, user: { discordId: '123456789', username: 'CryptoKing', tier: 'Don', totalNFTs: 12 } }, null, 2)),
       endpoint('GET', '/api/user/is-admin', 'Checks whether the current session has Discord administrator access.', false, null),
       endpoint('POST', '/api/verify/challenge', 'Creates a wallet-signing challenge for the current session.', false, null),
       endpoint('POST', '/api/verify/signature', 'Verifies a signed wallet challenge. Body: <code>{ "walletAddress": "...", "signature": "..." }</code>', false, null),

@@ -7,6 +7,7 @@ function createAdminGovernanceMissionsRouter({
   adminAuthMiddleware,
   ensureGovernanceModule,
   ensureHeistModule,
+  roleService,
   tenantService,
   hasProposalsGuildColumn,
   isProposalInGuildScope,
@@ -19,6 +20,61 @@ function createAdminGovernanceMissionsRouter({
   getClient,
 }) {
   const router = express.Router();
+
+  router.get('/api/admin/governance/vp-mappings', adminAuthMiddleware, (req, res) => {
+    if (!ensureGovernanceModule(req, res)) return;
+    try {
+      const mappings = roleService.getRoleVPMappings();
+      return res.json(toSuccessResponse({ mappings }));
+    } catch (routeError) {
+      logger.error('Error fetching role VP mappings:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/api/admin/governance/vp-mappings', adminAuthMiddleware, (req, res) => {
+    if (!ensureGovernanceModule(req, res)) return;
+    try {
+      const roleId = String(req.body?.roleId || '').trim();
+      const roleName = String(req.body?.roleName || '').trim();
+      const votingPower = Number.parseInt(req.body?.votingPower, 10);
+
+      if (!roleId || !/^\d{17,20}$/.test(roleId)) {
+        return res.status(400).json(toErrorResponse('Valid roleId is required', 'VALIDATION_ERROR'));
+      }
+      if (!Number.isFinite(votingPower) || votingPower < 1 || votingPower > 1000) {
+        return res.status(400).json(toErrorResponse('votingPower must be between 1 and 1000', 'VALIDATION_ERROR'));
+      }
+
+      const result = roleService.addRoleVPMapping(roleId, roleName || null, votingPower);
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to add mapping', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error adding role VP mapping:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.delete('/api/admin/governance/vp-mappings/:roleId', adminAuthMiddleware, (req, res) => {
+    if (!ensureGovernanceModule(req, res)) return;
+    try {
+      const roleId = String(req.params?.roleId || '').trim();
+      if (!roleId || !/^\d{17,20}$/.test(roleId)) {
+        return res.status(400).json(toErrorResponse('Valid roleId is required', 'VALIDATION_ERROR'));
+      }
+
+      const result = roleService.removeRoleVPMapping(roleId);
+      if (!result?.success) {
+        return res.status(404).json(toErrorResponse(result?.message || 'Mapping not found', 'NOT_FOUND', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error removing role VP mapping:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
 
   router.get('/api/admin/proposals', adminAuthMiddleware, (req, res) => {
     if (!ensureGovernanceModule(req, res)) return;

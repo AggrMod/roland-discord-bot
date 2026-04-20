@@ -9954,7 +9954,10 @@ async function loadVotingPowerView(targetPaneId = null) {
     const roles = await fetchDiscordRoles();
     const rHTML = roleSelectHTML('vpRoleSelect', '', false);
 
-    const res = await fetch('/api/admin/governance/vp-mappings', { credentials: 'include' });
+    const res = await fetch('/api/admin/governance/vp-mappings', {
+      credentials: 'include',
+      headers: buildTenantRequestHeaders(),
+    });
     const data = await res.json();
     const mappings = (data.success && data.mappings) ? data.mappings : [];
 
@@ -9989,7 +9992,10 @@ async function loadVotingPowerView(targetPaneId = null) {
 
     let govSettingsHTML = '';
     try {
-      const settingsRes = await fetch('/api/admin/settings', { credentials: 'include' });
+      const settingsRes = await fetch('/api/admin/settings', {
+        credentials: 'include',
+        headers: buildTenantRequestHeaders(),
+      });
       const settingsJson = await settingsRes.json();
       const gs = settingsJson.success ? settingsJson.settings : {};
 
@@ -10044,7 +10050,10 @@ async function loadVotingPowerView(targetPaneId = null) {
       // Populate channel selects after DOM insertion (deferred below)
       setTimeout(async () => {
         try {
-          const chRes = await fetch('/api/admin/discord/channels', { credentials: 'include' });
+          const chRes = await fetch('/api/admin/discord/channels', {
+            credentials: 'include',
+            headers: buildTenantRequestHeaders(),
+          });
           if (!chRes.ok) return;
           const chJson = await chRes.json();
           const channels = chJson.success ? (chJson.channels || []) : [];
@@ -10098,7 +10107,7 @@ async function addVPMapping() {
   try {
     const res = await fetch('/api/admin/governance/vp-mappings', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
       credentials: 'include',
       body: JSON.stringify({ roleId, roleName, votingPower })
     });
@@ -10121,6 +10130,7 @@ async function removeVPMapping(roleId) {
   try {
     const res = await fetch(`/api/admin/governance/vp-mappings/${roleId}`, {
       method: 'DELETE',
+      headers: buildTenantRequestHeaders(),
       credentials: 'include'
     });
     const data = await res.json();

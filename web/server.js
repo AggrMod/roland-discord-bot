@@ -1130,6 +1130,7 @@ class WebServer {
       adminAuthMiddleware,
       ensureGovernanceModule,
       ensureHeistModule,
+      roleService,
       tenantService,
       hasProposalsGuildColumn,
       isProposalInGuildScope,

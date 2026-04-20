@@ -670,7 +670,7 @@ async function handleGovernanceCreateProposalButton(interaction) {
       .setPlaceholder('Explain implementation, impact, and timeline')
       .setStyle(TextInputStyle.Paragraph)
       .setMinLength(20)
-      .setMaxLength(5000)
+      .setMaxLength(4000)
       .setRequired(true);
 
     modal.addComponents(

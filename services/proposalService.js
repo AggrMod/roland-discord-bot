@@ -112,6 +112,20 @@ function resolveVoteDurationDays(settings = {}) {
   return 7;
 }
 
+function resolveSupportWindowHours(settings = {}) {
+  const hours = Number(settings?.supportWindowHours);
+  if (Number.isFinite(hours) && hours > 0) {
+    return hours;
+  }
+
+  const days = Number(settings?.supportWindowDays);
+  if (Number.isFinite(days) && days > 0) {
+    return days * 24;
+  }
+
+  return 72;
+}
+
 function normalizeComparableDiscordId(value) {
   const raw = String(value || '').trim();
   if (!raw) return '';
@@ -184,12 +198,17 @@ class ProposalService {
 
   // ==================== PROPOSAL LIFECYCLE ====================
 
-  createProposal(creatorId, { title, description, category, costIndication, guildId = '', initialStatus = 'draft' }) {
+  createProposal(creatorId, { title, goal, description, category, costIndication, guildId = '', initialStatus = 'draft' }) {
     try {
       const validCategories = settingsManager.getSettings().proposalCategories || ['Partnership', 'Treasury Allocation', 'Rule Change', 'Community Event', 'Other'];
       const safeCategory = validCategories.includes(category) ? category : 'Other';
       const normalizedGuildId = String(guildId || '').trim();
       const safeInitialStatus = initialStatus === 'supporting' ? 'supporting' : 'draft';
+      const supportWindowHours = resolveSupportWindowHours(settingsManager.getSettings());
+      const supportDeadlineIso = safeInitialStatus === 'supporting'
+        ? new Date(Date.now() + (supportWindowHours * 60 * 60 * 1000)).toISOString()
+        : null;
+      const normalizedGoal = String(goal || '').trim() || null;
       const normalizedCost = String(costIndication || '').trim() || null;
 
       let proposalId = '';
@@ -200,14 +219,14 @@ class ProposalService {
         try {
           if (hasProposalsGuildColumn()) {
             db.prepare(`
-              INSERT INTO proposals (proposal_id, guild_id, creator_id, title, description, status, category, cost_indication)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(proposalId, normalizedGuildId, creatorId, title, description, safeInitialStatus, safeCategory, normalizedCost);
+              INSERT INTO proposals (proposal_id, guild_id, creator_id, title, goal, description, status, support_deadline, category, cost_indication)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(proposalId, normalizedGuildId, creatorId, title, normalizedGoal, description, safeInitialStatus, supportDeadlineIso, safeCategory, normalizedCost);
           } else {
             db.prepare(`
-              INSERT INTO proposals (proposal_id, creator_id, title, description, status, category, cost_indication)
-              VALUES (?, ?, ?, ?, ?, ?, ?)
-            `).run(proposalId, creatorId, title, description, safeInitialStatus, safeCategory, normalizedCost);
+              INSERT INTO proposals (proposal_id, creator_id, title, goal, description, status, support_deadline, category, cost_indication)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(proposalId, creatorId, title, normalizedGoal, description, safeInitialStatus, supportDeadlineIso, safeCategory, normalizedCost);
           }
           inserted = true;
         } catch (insertError) {
@@ -263,7 +282,9 @@ class ProposalService {
         return { success: false, message: 'Proposal must be pending review or on hold to approve' };
       }
 
-      db.prepare("UPDATE proposals SET status = 'supporting' WHERE proposal_id = ?").run(proposalId);
+      const supportWindowHours = resolveSupportWindowHours(settingsManager.getSettings());
+      const supportDeadlineIso = new Date(Date.now() + (supportWindowHours * 60 * 60 * 1000)).toISOString();
+      db.prepare("UPDATE proposals SET status = 'supporting', support_deadline = ? WHERE proposal_id = ?").run(supportDeadlineIso, proposalId);
       governanceLogger.log('proposal_approved', { proposalId, adminId });
       return { success: true };
     } catch (error) {
@@ -311,7 +332,7 @@ class ProposalService {
       db.prepare(`
         UPDATE proposals
         SET status = 'voting', start_time = ?, end_time = ?, total_vp = ?,
-            vp_snapshot = ?, quorum_required = ?, promoted_by = ?
+            vp_snapshot = ?, quorum_required = ?, promoted_by = ?, support_deadline = NULL
         WHERE proposal_id = ?
       `).run(
         startTime.toISOString(), endTime.toISOString(), totalVP,
@@ -334,6 +355,8 @@ class ProposalService {
       }
 
       if (this.client) {
+        await this.removeSupportingMessage(proposal);
+        db.prepare('UPDATE proposals SET message_id = NULL, channel_id = NULL WHERE proposal_id = ?').run(proposalId);
         await this.postToVotingChannel(proposalId);
       }
 
@@ -514,8 +537,8 @@ class ProposalService {
     try {
       const proposal = this.getProposal(proposalId);
       if (!proposal) return { success: false, message: 'Proposal not found' };
-      if (!['supporting', 'voting', 'concluded', 'passed', 'rejected', 'quorum_not_met'].includes(proposal.status)) {
-        return { success: false, message: 'This proposal cannot be vetoed in its current state' };
+      if (String(proposal.status || '').toLowerCase() !== 'passed') {
+        return { success: false, message: 'Council veto is only available for passed proposals' };
       }
 
       // Record veto vote
@@ -555,6 +578,9 @@ class ProposalService {
       db.prepare("UPDATE proposals SET status = 'vetoed', veto_reason = ? WHERE proposal_id = ?")
         .run(reason || 'Unanimous council veto', proposalId);
       governanceLogger.log('proposal_vetoed', { proposalId, reason });
+      if (this.client) {
+        this.postVetoNotice(proposalId, reason || 'Unanimous council veto').catch(() => {});
+      }
       return { success: true };
     } catch (error) {
       logger.error('Error applying veto:', error);
@@ -595,8 +621,8 @@ class ProposalService {
       if (currentStatus === 'cancelled') {
         return { success: true, proposalId: resolvedProposalId, status: 'cancelled' };
       }
-      const disallowedStatuses = ['vetoed'];
-      if (disallowedStatuses.includes(currentStatus)) {
+      const cancellableStatuses = ['draft', 'pending_review', 'on_hold', 'supporting', 'voting'];
+      if (!cancellableStatuses.includes(currentStatus)) {
         return { success: false, message: `Proposal cannot be cancelled in status "${proposal.status}"` };
       }
 
@@ -628,6 +654,12 @@ class ProposalService {
 
       if (!result?.changes) {
         return { success: false, message: 'Failed to cancel proposal' };
+      }
+
+      db.prepare('UPDATE proposals SET message_id = NULL, channel_id = NULL, voting_message_id = NULL WHERE proposal_id = ?').run(resolvedProposalId);
+      if (this.client) {
+        this.removeSupportingMessage(proposal).catch(() => {});
+        this.removeVotingMessage(proposal).catch(() => {});
       }
 
       governanceLogger.log('proposal_cancelled_by_creator', {
@@ -821,6 +853,8 @@ class ProposalService {
 
       await this.updateVotingMessageFinal(proposalId, result, quorumMet);
       await this.postToResultsChannel(proposalId, result, quorumMet);
+      await this.removeVotingMessage(proposalId);
+      db.prepare('UPDATE proposals SET voting_message_id = NULL WHERE proposal_id = ?').run(proposalId);
 
       logger.log(`Proposal ${proposalId} concluded: ${result} (quorum ${quorumMet ? 'met' : 'not met'})`);
       return { success: true, status: result, result, quorumMet };
@@ -835,10 +869,145 @@ class ProposalService {
   }
 
   getConcludedProposals() {
-    return db.prepare("SELECT * FROM proposals WHERE status IN ('concluded', 'vetoed', 'passed', 'rejected', 'quorum_not_met') ORDER BY created_at DESC").all();
+    return db.prepare("SELECT * FROM proposals WHERE status IN ('concluded', 'vetoed', 'passed', 'rejected', 'quorum_not_met', 'not_supported', 'cancelled') ORDER BY created_at DESC").all();
   }
 
   // ==================== DISCORD CHANNEL POSTING ====================
+
+  async postToProposalsChannel(proposalId, { creatorDisplayName = '', targetChannelId = '' } = {}) {
+    try {
+      const settings = settingsManager.getSettings();
+      const proposalsChannelId = String(targetChannelId || settings.proposalsChannelId || process.env.PROPOSALS_CHANNEL_ID || '').trim();
+      if (!proposalsChannelId || !this.client) return { success: false, message: 'Proposals channel is not configured' };
+
+      const proposal = this.getProposal(proposalId);
+      if (!proposal) return { success: false, message: 'Proposal not found' };
+
+      const channel = await this.client.channels.fetch(proposalsChannelId);
+      if (!channel || !channel.isTextBased()) return { success: false, message: 'Proposals channel is not text-based' };
+
+      const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+      const supportThreshold = Number(settings.supportThreshold || 4);
+      const supportCount = Number(this.getSupporterCount(proposal.proposal_id) || 0);
+      const deadline = proposal.support_deadline ? new Date(proposal.support_deadline) : null;
+      const deadlineUnix = (deadline && Number.isFinite(deadline.getTime()))
+        ? Math.floor(deadline.getTime() / 1000)
+        : null;
+
+      const embed = new EmbedBuilder()
+        .setTitle(`📜 ${proposal.title}`)
+        .setDescription(String(proposal.description || '').trim().slice(0, 4096) || 'No description provided.')
+        .addFields(
+          { name: '🆔 Proposal ID', value: String(proposal.proposal_id), inline: true },
+          { name: '👤 Creator', value: `<@${proposal.creator_id}>`, inline: true },
+          { name: '📊 Stage', value: 'Supporting', inline: true },
+          { name: '👥 Support', value: `${supportCount}/${supportThreshold}`, inline: true },
+          { name: '📂 Category', value: proposal.category || 'Other', inline: true },
+          { name: '💰 Costs', value: proposal.cost_indication || 'Not specified', inline: true }
+        )
+        .setTimestamp();
+
+      if (proposal.goal) {
+        embed.addFields({ name: '🎯 Goal', value: String(proposal.goal).slice(0, 1024), inline: false });
+      }
+      if (deadlineUnix) {
+        embed.addFields({ name: '⏳ Support Window', value: `<t:${deadlineUnix}:R>`, inline: false });
+      }
+
+      applyEmbedBranding(embed, {
+        guildId: String(proposal.guild_id || '').trim(),
+        moduleKey: 'governance',
+        defaultColor: '#FFD700',
+        defaultFooter: 'Powered by Guild Pilot',
+        fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
+      });
+
+      if (creatorDisplayName) {
+        embed.setFooter({ text: `Created by ${creatorDisplayName}` });
+      }
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`support_${proposal.proposal_id}`)
+          .setLabel('Support')
+          .setStyle(ButtonStyle.Primary)
+          .setEmoji('✅')
+      );
+
+      let sentMessage = null;
+      const existingMessageId = String(proposal.message_id || '').trim();
+      if (existingMessageId) {
+        try {
+          const existingMessage = await channel.messages.fetch(existingMessageId);
+          if (existingMessage) {
+            await existingMessage.edit({ embeds: [embed], components: [row] });
+            sentMessage = existingMessage;
+          }
+        } catch (_error) {
+          // Fall through to posting a new message.
+        }
+      }
+
+      if (!sentMessage) {
+        sentMessage = await channel.send({ embeds: [embed], components: [row] });
+      }
+
+      db.prepare('UPDATE proposals SET message_id = ?, channel_id = ? WHERE proposal_id = ?')
+        .run(sentMessage.id, proposalsChannelId, proposal.proposal_id);
+
+      return { success: true, messageId: sentMessage.id };
+    } catch (error) {
+      logger.error('Error posting proposal to proposals channel:', error);
+      return { success: false, message: 'Failed to post proposal card' };
+    }
+  }
+
+  async removeSupportingMessage(proposalOrId) {
+    try {
+      if (!this.client) return;
+      const proposal = typeof proposalOrId === 'string'
+        ? this.getProposal(proposalOrId)
+        : proposalOrId;
+      if (!proposal) return;
+
+      const channelId = String(proposal.channel_id || '').trim();
+      const messageId = String(proposal.message_id || '').trim();
+      if (!channelId || !messageId) return;
+
+      const channel = await this.client.channels.fetch(channelId).catch(() => null);
+      if (!channel || !channel.isTextBased()) return;
+      const message = await channel.messages.fetch(messageId).catch(() => null);
+      if (!message) return;
+      await message.delete().catch(() => null);
+    } catch (error) {
+      logger.warn(`Failed to remove supporting message for proposal ${proposalOrId?.proposal_id || proposalOrId}: ${error?.message || error}`);
+    }
+  }
+
+  async removeVotingMessage(proposalOrId) {
+    try {
+      if (!this.client) return;
+      const proposal = typeof proposalOrId === 'string'
+        ? this.getProposal(proposalOrId)
+        : proposalOrId;
+      if (!proposal) return;
+
+      const messageId = String(proposal.voting_message_id || '').trim();
+      if (!messageId) return;
+
+      const settings = settingsManager.getSettings();
+      const votingChannelId = settings.votingChannelId || process.env.VOTING_CHANNEL_ID;
+      if (!votingChannelId) return;
+
+      const channel = await this.client.channels.fetch(votingChannelId).catch(() => null);
+      if (!channel || !channel.isTextBased()) return;
+      const message = await channel.messages.fetch(messageId).catch(() => null);
+      if (!message) return;
+      await message.delete().catch(() => null);
+    } catch (error) {
+      logger.warn(`Failed to remove voting message for proposal ${proposalOrId?.proposal_id || proposalOrId}: ${error?.message || error}`);
+    }
+  }
 
   async postToVotingChannel(proposalId) {
     try {
@@ -869,6 +1038,10 @@ class ProposalService {
           { name: '💰 Cost', value: proposal.cost_indication || 'N/A', inline: true },
           { name: '🎯 Quorum Required', value: `${proposal.quorum_required} VP`, inline: true }
         );
+
+      if (proposal.goal) {
+        embed.addFields({ name: '🎯 Goal', value: String(proposal.goal).slice(0, 1024), inline: false });
+      }
 
       if (proposal.ai_brief) {
         embed.addFields({ name: '📜 Consigliere\'s Family Brief', value: proposal.ai_brief, inline: false });
@@ -923,7 +1096,7 @@ class ProposalService {
       const message = await channel.messages.fetch(proposal.voting_message_id);
       if (!message) return;
 
-      const { EmbedBuilder } = require('discord.js');
+      const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
       const embed = message.embeds[0];
       const newEmbed = EmbedBuilder.from(embed);
       const fieldIndex = newEmbed.data.fields.findIndex(f => f.name === '📊 Current Votes');
@@ -1005,12 +1178,22 @@ class ProposalService {
 
       const totalVoted = proposal.yes_vp + proposal.no_vp + proposal.abstain_vp;
       const quorumPercent = proposal.total_vp > 0 ? Math.round((totalVoted / proposal.total_vp) * 100) : 0;
+      const yesPercent = totalVoted > 0 ? Math.round((proposal.yes_vp / totalVoted) * 100) : 0;
+      const noPercent = totalVoted > 0 ? Math.round((proposal.no_vp / totalVoted) * 100) : 0;
+      const abstainPercent = totalVoted > 0 ? Math.round((proposal.abstain_vp / totalVoted) * 100) : 0;
       const voterCount = db.prepare('SELECT COUNT(DISTINCT voter_id) as count FROM votes WHERE proposal_id = ?').get(proposalId).count;
 
       let statusText = '', color = '#808080';
       if (finalResult === 'passed') { statusText = '✅ PASSED'; color = '#FFD700'; }
       else if (finalResult === 'rejected') { statusText = '❌ REJECTED'; color = '#FF0000'; }
       else { statusText = '⚠️ QUORUM NOT MET'; color = '#808080'; }
+
+      let failureReason = '';
+      if (finalResult === 'quorum_not_met') {
+        failureReason = `Quorum requirement was not met (${quorumPercent}% participation).`;
+      } else if (finalResult === 'rejected') {
+        failureReason = `More voting power opposed the proposal than supported it (${yesPercent}% yes vs ${noPercent}% no).`;
+      }
 
       const embed = new EmbedBuilder()
         .setTitle(`📊 Vote Results: ${proposal.title}`)
@@ -1019,15 +1202,25 @@ class ProposalService {
           { name: '🆔 Proposal ID', value: proposal.proposal_id, inline: true },
           { name: '👤 Creator', value: `<@${proposal.creator_id}>`, inline: true },
           { name: '📂 Category', value: proposal.category || 'Other', inline: true },
-          { name: '✅ Yes Votes', value: `${proposal.yes_vp} VP`, inline: true },
-          { name: '❌ No Votes', value: `${proposal.no_vp} VP`, inline: true },
-          { name: '⚖️ Abstain', value: `${proposal.abstain_vp} VP`, inline: true },
+          { name: '✅ Yes Votes', value: `${proposal.yes_vp} VP (${yesPercent}%)`, inline: true },
+          { name: '❌ No Votes', value: `${proposal.no_vp} VP (${noPercent}%)`, inline: true },
+          { name: '⚖️ Abstain', value: `${proposal.abstain_vp} VP (${abstainPercent}%)`, inline: true },
           { name: '📊 Total Voted', value: `${totalVoted} VP`, inline: true },
           { name: '🎯 Quorum', value: `${quorumPercent}% (needed ${proposal.quorum_required || '25%'})`, inline: true },
           { name: '👥 Voters', value: voterCount.toString(), inline: true }
         )
         .setFooter({ text: `Proposal concluded: ${new Date().toLocaleString()}` })
         .setTimestamp();
+
+      if (proposal.goal) {
+        embed.addFields({ name: '🎯 Goal', value: String(proposal.goal).slice(0, 1024), inline: false });
+      }
+      if (proposal.cost_indication) {
+        embed.addFields({ name: '💰 Costs', value: String(proposal.cost_indication).slice(0, 1024), inline: false });
+      }
+      if (failureReason) {
+        embed.addFields({ name: 'Why Not Passed', value: failureReason, inline: false });
+      }
 
       const brandingGuildId = String(
         proposal?.guild_id || process.env.GUILD_ID || process.env.DISCORD_GUILD_ID || ''
@@ -1041,13 +1234,113 @@ class ProposalService {
         fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
       });
 
-      await channel.send({ embeds: [embed] });
+      const components = [];
+      if (finalResult === 'passed') {
+        components.push(
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`veto_${proposalId}`)
+              .setLabel('Council Veto')
+              .setStyle(ButtonStyle.Danger)
+              .setEmoji('🛑')
+          )
+        );
+      }
+
+      await channel.send({ embeds: [embed], components });
     } catch (error) {
       logger.error('Error posting to results channel:', error);
     }
   }
 
+  async postVetoNotice(proposalId, reason) {
+    try {
+      const settings = settingsManager.getSettings();
+      const resultsChannelId = settings.resultsChannelId || process.env.RESULTS_CHANNEL_ID;
+      if (!resultsChannelId || !this.client) return;
+
+      const proposal = this.getProposal(proposalId);
+      if (!proposal) return;
+
+      const channel = await this.client.channels.fetch(resultsChannelId).catch(() => null);
+      if (!channel || !channel.isTextBased()) return;
+
+      const { EmbedBuilder } = require('discord.js');
+      const embed = new EmbedBuilder()
+        .setColor('#ef4444')
+        .setTitle(`🛑 Proposal Vetoed: ${proposal.title}`)
+        .setDescription('Council reached unanimous veto.')
+        .addFields(
+          { name: '🆔 Proposal ID', value: String(proposal.proposal_id), inline: true },
+          { name: 'Reason', value: String(reason || proposal.veto_reason || 'Unanimous council veto').slice(0, 1024), inline: false }
+        )
+        .setTimestamp();
+
+      applyEmbedBranding(embed, {
+        guildId: String(proposal.guild_id || '').trim(),
+        moduleKey: 'governance',
+        defaultColor: '#ef4444',
+        defaultFooter: 'Powered by Guild Pilot',
+        fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
+      });
+
+      await channel.send({ embeds: [embed] });
+    } catch (error) {
+      logger.error('Error posting veto notice:', error);
+    }
+  }
+
   // ==================== STALE EXPIRY ====================
+
+  async expireUnsupportedProposals() {
+    try {
+      const settings = settingsManager.getSettings();
+      const supportThreshold = Number(settings.supportThreshold || 4);
+      const supportWindowHours = resolveSupportWindowHours(settings);
+      const nowIso = new Date().toISOString();
+
+      const candidates = db.prepare(`
+        SELECT *
+        FROM proposals
+        WHERE status = 'supporting'
+          AND (
+            (support_deadline IS NOT NULL AND support_deadline <> '' AND support_deadline <= ?)
+            OR (
+              (support_deadline IS NULL OR support_deadline = '')
+              AND DATETIME(created_at) <= DATETIME(?, '-' || ? || ' hours')
+            )
+          )
+      `).all(nowIso, nowIso, String(Math.max(1, Math.round(supportWindowHours))));
+
+      for (const proposal of candidates) {
+        const supporterCount = Number(this.getSupporterCount(proposal.proposal_id) || 0);
+        if (supporterCount >= supportThreshold) {
+          continue;
+        }
+
+        const updateResult = db.prepare(`
+          UPDATE proposals
+          SET status = 'not_supported'
+          WHERE proposal_id = ? AND status = 'supporting'
+        `).run(proposal.proposal_id);
+
+        if (!updateResult?.changes) continue;
+
+        await this.removeSupportingMessage(proposal);
+        db.prepare('UPDATE proposals SET message_id = NULL, channel_id = NULL WHERE proposal_id = ?').run(proposal.proposal_id);
+
+        governanceLogger.log('proposal_not_supported', {
+          proposalId: proposal.proposal_id,
+          title: proposal.title,
+          supportCount: supporterCount,
+          supportThreshold,
+        });
+        logger.log(`Proposal ${proposal.proposal_id} marked not_supported (${supporterCount}/${supportThreshold})`);
+      }
+    } catch (error) {
+      logger.error('Error expiring unsupported proposals:', error);
+    }
+  }
 
   async expireStaleProposals() {
     try {

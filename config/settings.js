@@ -35,6 +35,7 @@ class SettingsManager {
       characterRoles: DEFAULT_CHARACTER_ROLES,
       quorumPercentage: 25,
       supportThreshold: 4,
+      supportWindowHours: 72,
       voteDurationDays: 7,
       governanceQuorum: 25,
       staffTrusteesVP: 10,
@@ -157,6 +158,13 @@ class SettingsManager {
         const threshold = parseInt(newSettings.supportThreshold);
         if (isNaN(threshold) || threshold < 1) {
           return { success: false, message: 'Support threshold must be at least 1' };
+        }
+      }
+
+      if (newSettings.supportWindowHours !== undefined) {
+        const hours = parseInt(newSettings.supportWindowHours, 10);
+        if (isNaN(hours) || hours < 1 || hours > 720) {
+          return { success: false, message: 'Support window must be between 1 and 720 hours' };
         }
       }
 

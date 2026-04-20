@@ -23,9 +23,11 @@ function createGovernanceUserRouter({
   };
 
   const validateProposalInput = (body) => {
-    const { title, description, costIndication } = body || {};
+    const { title, goal, description, costIndication } = body || {};
     if (!title?.trim()) return 'Title is required';
     if (title.length > 200) return 'Title must be 200 characters or less';
+    if (!goal?.trim()) return 'Goal is required';
+    if (String(goal).length > 500) return 'Goal must be 500 characters or less';
     if (!description?.trim()) return 'Description is required';
     if (description.length > 5000) return 'Description must be 5000 characters or less';
     if (!String(costIndication || '').trim()) return 'Cost indication is required';
@@ -36,9 +38,7 @@ function createGovernanceUserRouter({
   const isCreatorCancellableStatus = (status) => (
     (() => {
       const normalizedStatus = String(status || '').toLowerCase();
-      if (!normalizedStatus) return false;
-      if (normalizedStatus === 'vetoed') return false;
-      return true;
+      return ['draft', 'pending_review', 'on_hold', 'supporting', 'voting'].includes(normalizedStatus);
     })()
   );
 
@@ -73,32 +73,46 @@ function createGovernanceUserRouter({
     return raw;
   };
 
-  const canMemberVetoProposal = async (discordId, guildId) => {
+  const getCouncilMemberIds = async (guildId) => {
     const normalizedGuildId = String(guildId || '').trim();
-    if (!normalizedGuildId || typeof fetchGuildById !== 'function') return false;
+    if (!normalizedGuildId || typeof fetchGuildById !== 'function') return [];
 
     const guild = await fetchGuildById(normalizedGuildId).catch(() => null);
-    if (!guild) return false;
-
-    const member = await guild.members.fetch(discordId).catch(() => null);
-    if (!member) return false;
-
-    if (
-      member.permissions?.has?.(PermissionFlagsBits.Administrator)
-      || member.permissions?.has?.(PermissionFlagsBits.ManageGuild)
-    ) {
-      return true;
-    }
+    if (!guild) return [];
 
     const trusteeRoleNames = Array.isArray(settingsManager?.getSettings?.()?.staffTrusteeRoles)
       ? settingsManager.getSettings().staffTrusteeRoles.map(normalizeRoleName).filter(Boolean)
       : [];
 
-    if (!trusteeRoleNames.length) {
-      return false;
+    let membersCollection = guild.members?.cache;
+    try {
+      membersCollection = await guild.members.fetch();
+    } catch (_error) {
+      // fall back to current cache
     }
 
-    return member.roles?.cache?.some((role) => trusteeRoleNames.includes(normalizeRoleName(role?.name))) === true;
+    const council = new Set();
+    for (const member of membersCollection.values()) {
+      if (
+        member.permissions?.has?.(PermissionFlagsBits.Administrator)
+        || member.permissions?.has?.(PermissionFlagsBits.ManageGuild)
+      ) {
+        council.add(member.id);
+        continue;
+      }
+      if (
+        trusteeRoleNames.length
+        && member.roles?.cache?.some((role) => trusteeRoleNames.includes(normalizeRoleName(role?.name)))
+      ) {
+        council.add(member.id);
+      }
+    }
+    return [...council];
+  };
+
+  const canMemberVetoProposal = async (discordId, guildId) => {
+    const councilMemberIds = await getCouncilMemberIds(guildId);
+    return councilMemberIds.includes(String(discordId || '').trim());
   };
 
   const createProposalHandler = async (req, res, sourceLabel = 'user') => {
@@ -108,7 +122,7 @@ function createGovernanceUserRouter({
       const discordId = req.session.discordUser.id;
       const allowFallback = !tenantService.isMultitenantEnabled();
       const requestedGuildId = getRequestedGuildId(req, { allowFallback });
-      const { title, description, category, costIndication } = req.body || {};
+      const { title, goal, description, category, costIndication } = req.body || {};
 
       if (!requestedGuildId) {
         return res.status(409).json(toErrorResponse('Select a server to continue', 'TENANT_REQUIRED', null, { success: false }));
@@ -126,13 +140,18 @@ function createGovernanceUserRouter({
 
       const result = proposalService.createProposal(discordId, {
         title,
+        goal,
         description,
         category: category || 'Other',
         costIndication: String(costIndication || '').trim(),
-        guildId: requestedGuildId || ''
+        guildId: requestedGuildId || '',
+        initialStatus: 'supporting'
       });
 
       if (result?.success) {
+        await proposalService.postToProposalsChannel(result.proposalId, {
+          creatorDisplayName: req.session?.discordUser?.username || ''
+        });
         return res.json(toSuccessResponse(result));
       }
       return res.status(400).json(toErrorResponse(result?.message || 'Failed to create proposal', 'VALIDATION_ERROR', null, result));
@@ -357,6 +376,13 @@ function createGovernanceUserRouter({
       if (!isProposalInGuildScope(req.params.id, requestedGuildId)) {
         return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND', null, { success: false }));
       }
+      const proposal = proposalService.getProposal(req.params.id);
+      if (!proposal) {
+        return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND', null, { success: false }));
+      }
+      if (String(proposal.status || '').toLowerCase() !== 'passed') {
+        return res.status(400).json(toErrorResponse('Veto is only available for passed proposals', 'VALIDATION_ERROR', null, { success: false }));
+      }
       const canVeto = await canMemberVetoProposal(req.session.discordUser.id, requestedGuildId);
       if (!canVeto) {
         return res.status(403).json(toErrorResponse('Only governance trustees can cast veto votes', 'FORBIDDEN', null, { success: false }));
@@ -365,7 +391,22 @@ function createGovernanceUserRouter({
       const { reason } = req.body || {};
       const result = proposalService.vetoProposal(req.params.id, req.session.discordUser.id, reason);
       if (result?.success) {
-        return res.json(toSuccessResponse(result));
+        const councilMemberIds = await getCouncilMemberIds(requestedGuildId);
+        const vetoVoterIds = Array.isArray(result.vetoVoterIds) ? result.vetoVoterIds.map(String) : [];
+        const vetoSet = new Set(vetoVoterIds);
+        const outstandingCouncil = councilMemberIds.filter((memberId) => !vetoSet.has(String(memberId)));
+        let vetoApplied = false;
+        if (councilMemberIds.length > 0 && outstandingCouncil.length === 0) {
+          const applyResult = proposalService.applyVeto(req.params.id, reason || 'Unanimous council veto');
+          vetoApplied = !!applyResult?.success;
+        }
+
+        return res.json(toSuccessResponse({
+          ...result,
+          vetoApplied,
+          councilRequired: councilMemberIds.length,
+          councilRemaining: outstandingCouncil.length,
+        }));
       }
       return res.status(400).json(toErrorResponse(result?.message || 'Failed to veto proposal', 'VALIDATION_ERROR', null, result));
     } catch (routeError) {

@@ -256,6 +256,8 @@ function initDatabase() {
 
   // Governance overhaul migrations
   ignoreDuplicateMigration(() => db.exec("ALTER TABLE proposals ADD COLUMN category TEXT DEFAULT 'Other'"));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN goal TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN support_deadline DATETIME'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN cost_indication TEXT'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN veto_reason TEXT'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN veto_votes TEXT'));
@@ -369,8 +371,10 @@ function initDatabase() {
       creator_id TEXT NOT NULL,
       creator_wallet TEXT,
       title TEXT NOT NULL,
+      goal TEXT,
       description TEXT NOT NULL,
       status TEXT DEFAULT 'draft',
+      support_deadline DATETIME,
       total_vp INTEGER DEFAULT 0,
       yes_vp INTEGER DEFAULT 0,
       no_vp INTEGER DEFAULT 0,
@@ -1896,6 +1900,8 @@ function initDatabase() {
   ignoreDuplicateMigration(() => db.exec('CREATE TABLE IF NOT EXISTS user_verify_amounts (id INTEGER PRIMARY KEY AUTOINCREMENT, discord_id TEXT UNIQUE NOT NULL, username TEXT, assigned_amount REAL NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)'));
 
   ignoreDuplicateMigration(() => db.exec("ALTER TABLE proposals ADD COLUMN category TEXT DEFAULT 'Other'"));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN goal TEXT'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN support_deadline DATETIME'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN cost_indication TEXT'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN veto_reason TEXT'));
   ignoreDuplicateMigration(() => db.exec('ALTER TABLE proposals ADD COLUMN veto_votes TEXT'));

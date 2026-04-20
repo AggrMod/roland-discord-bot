@@ -47,9 +47,7 @@ function normalizeComparableDiscordId(value) {
 
 function isCreatorCancellableStatus(status) {
   const normalizedStatus = String(status || '').toLowerCase();
-  if (!normalizedStatus) return false;
-  if (normalizedStatus === 'vetoed') return false;
-  return true;
+  return ['draft', 'pending_review', 'on_hold', 'supporting', 'voting'].includes(normalizedStatus);
 }
 
 module.exports = {
@@ -69,6 +67,10 @@ module.exports = {
         .addStringOption(option =>
           option.setName('description')
             .setDescription('Detailed description of the proposal')
+            .setRequired(true))
+        .addStringOption(option =>
+          option.setName('goal')
+            .setDescription('Main objective this proposal tries to achieve')
             .setRequired(true))
         .addStringOption(option =>
           option.setName('cost')
@@ -150,6 +152,7 @@ module.exports = {
                   { name: 'Draft', value: 'draft' },
                   { name: 'Pending Review', value: 'pending_review' },
                   { name: 'On Hold', value: 'on_hold' },
+                  { name: 'Not Supported', value: 'not_supported' },
                   { name: 'Cancelled', value: 'cancelled' },
                   { name: 'Expired', value: 'expired' }
                 )))
@@ -170,7 +173,16 @@ module.exports = {
         .addSubcommand(subcommand =>
           subcommand
             .setName('settings')
-            .setDescription('View/update governance settings'))),
+            .setDescription('View/update governance settings'))
+
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('panel')
+            .setDescription('Post or refresh the proposal creation panel')
+            .addChannelOption(option =>
+              option.setName('channel')
+                .setDescription('Channel to post panel in (defaults to proposals channel)')
+                .setRequired(false)))),
 
   async execute(interaction) {
     // Check if governance module is enabled
@@ -197,6 +209,9 @@ module.exports = {
             break;
           case 'settings':
             await this.handleAdminSettings(interaction);
+            break;
+          case 'panel':
+            await this.handleAdminPanel(interaction);
             break;
         }
       } else {
@@ -235,6 +250,7 @@ module.exports = {
     const discordId = interaction.user.id;
     const title = interaction.options.getString('title');
     const description = interaction.options.getString('description');
+    const goal = String(interaction.options.getString('goal') || '').trim();
 
     const userInfo = await roleService.getUserInfo(discordId, interaction.guildId, interaction.member);
     const votingPower = Number(userInfo?.voting_power || 0);
@@ -262,6 +278,7 @@ module.exports = {
 
     const result = proposalService.createProposal(discordId, {
       title,
+      goal,
       description,
       category,
       costIndication,
@@ -290,6 +307,7 @@ module.exports = {
         { name: '🆔 Proposal ID', value: result.proposalId, inline: true },
         { name: '👤 Creator', value: interaction.user.username, inline: true },
         { name: '📊 Status', value: `Supporting (Needs ${supportThreshold} supporters)`, inline: true },
+        { name: '🎯 Goal', value: goal || 'Not specified', inline: false },
         { name: '💰 Cost', value: costIndication, inline: true }
       )
       .setFooter({ text: 'Posted to proposals channel - waiting for supporters' })
@@ -298,49 +316,7 @@ module.exports = {
     await interaction.editReply({ embeds: [embed] });
     logger.log(`User ${interaction.user.username} created proposal ${result.proposalId}`);
 
-    // Post to proposals channel
-    const proposalsChannelId = settings.proposalsChannelId || process.env.PROPOSALS_CHANNEL_ID;
-    if (proposalsChannelId) {
-      try {
-        const proposalsChannel = await interaction.client.channels.fetch(proposalsChannelId);
-        
-        if (proposalsChannel && proposalsChannel.isTextBased()) {
-          const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-          
-          const channelEmbed = new EmbedBuilder()
-            .setColor('#FFD700')
-            .setTitle(`📜 ${title}`)
-            .setDescription(description)
-            .addFields(
-              { name: '🆔 Proposal ID', value: result.proposalId, inline: true },
-              { name: '👤 Creator', value: interaction.user.username, inline: true },
-              { name: '📊 Status', value: 'Supporting', inline: true },
-              { name: '👥 Supporters', value: `0/${supportThreshold}`, inline: true },
-              { name: '💰 Cost', value: costIndication, inline: true }
-            )
-            .setFooter({ text: `Click Support below to help promote this proposal (${supportThreshold} needed)` })
-            .setTimestamp();
-
-          const row = new ActionRowBuilder()
-            .addComponents(
-              new ButtonBuilder()
-                .setCustomId(`support_${result.proposalId}`)
-                .setLabel('Support')
-                .setStyle(ButtonStyle.Primary)
-                .setEmoji('✅')
-            );
-
-          const message = await proposalsChannel.send({ embeds: [channelEmbed], components: [row] });
-          
-          db.prepare('UPDATE proposals SET message_id = ?, channel_id = ? WHERE proposal_id = ?')
-            .run(message.id, proposalsChannelId, result.proposalId);
-          
-          logger.log(`Proposal ${result.proposalId} posted to channel ${proposalsChannelId}`);
-        }
-      } catch (error) {
-        logger.error('Error posting proposal to channel:', error);
-      }
-    }
+    await proposalService.postToProposalsChannel(result.proposalId, { creatorDisplayName: interaction.user.username });
   },
 
   async handleSupport(interaction) {
@@ -622,6 +598,7 @@ module.exports = {
         'vetoed': '🛑',
         'pending_review': '🕒',
         'on_hold': '⏸️',
+        'not_supported': '🧊',
         'cancelled': '🚫',
         'expired': '⌛'
       };
@@ -698,6 +675,41 @@ module.exports = {
     logger.log(`Admin ${interaction.user.tag} cancelled proposal ${resolvedProposalId || proposalId}`);
   },
 
+  async handleAdminPanel(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    const settings = settingsManager.getSettings();
+    const selectedChannel = interaction.options.getChannel('channel');
+    const configuredChannelId = settings.proposalsChannelId || process.env.PROPOSALS_CHANNEL_ID || '';
+    const targetChannelId = String(selectedChannel?.id || configuredChannelId || interaction.channelId || '').trim();
+    if (!targetChannelId) {
+      return interaction.editReply({ content: '❌ No target channel found. Set proposals channel in settings or pass a channel option.', ephemeral: true });
+    }
+
+    const targetChannel = await interaction.client.channels.fetch(targetChannelId).catch(() => null);
+    if (!targetChannel || !targetChannel.isTextBased()) {
+      return interaction.editReply({ content: '❌ Target channel is unavailable or not text-based.', ephemeral: true });
+    }
+
+    const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+    const panelEmbed = new EmbedBuilder()
+      .setColor('#FFD700')
+      .setTitle('📜 Governance Proposals')
+      .setDescription('Click **Create Proposal** to submit a new governance proposal.\n\nRequired fields: Title, Goal, Description, Costs (SOL/USDC), and Category.')
+      .setFooter({ text: 'Powered by Guild Pilot' })
+      .setTimestamp();
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('governance_create_proposal')
+        .setLabel('Create Proposal')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('📝')
+    );
+
+    const message = await targetChannel.send({ embeds: [panelEmbed], components: [row] });
+    await interaction.editReply({ content: `✅ Proposal panel posted in <#${targetChannel.id}> (${message.id}).`, ephemeral: true });
+  },
+
   async handleAdminSettings(interaction) {
     await interaction.deferReply({ ephemeral: true });
     const settings = settingsManager.getSettings();
@@ -707,6 +719,9 @@ module.exports = {
     const effectiveVoteDays = Number.isFinite(Number(settings.voteDurationDays))
       ? Number(settings.voteDurationDays)
       : Math.max(1, Math.round(Number(settings.voteDurationHours || 168) / 24));
+    const effectiveSupportWindowHours = Number.isFinite(Number(settings.supportWindowHours))
+      ? Number(settings.supportWindowHours)
+      : 72;
 
     const embed = new EmbedBuilder()
       .setColor('#FFD700')
@@ -714,6 +729,7 @@ module.exports = {
       .setDescription('Current governance configuration')
       .addFields(
         { name: 'Support Threshold', value: `${settings.supportThreshold} supporters`, inline: true },
+        { name: 'Support Window', value: `${effectiveSupportWindowHours} hours`, inline: true },
         { name: 'Quorum Percentage', value: `${effectiveQuorum}%`, inline: true },
         { name: 'Vote Duration', value: `${effectiveVoteDays} days`, inline: true }
       )

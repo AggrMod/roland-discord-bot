@@ -11,6 +11,7 @@ const db = require('../../database/db');
 const treasuryService = require('../../services/treasuryService');
 const nftActivityService = require('../../services/nftActivityService');
 const tenantService = require('../../services/tenantService');
+const settingsManager = require('../../config/settings');
 const { success, error, sanitize, redactWallet } = require('../../utils/apiResponse');
 const { asyncHandler, notFoundError, validationError } = require('../../utils/apiErrorHandler');
 
@@ -118,6 +119,10 @@ router.get('/proposals/active', asyncHandler(async (req, res) => {
     : db.prepare('SELECT * FROM proposals WHERE status IN (?, ?) ORDER BY created_at DESC').all(...activeStatuses);
   
   const enrichedProposals = proposals.map(p => {
+    const supportThreshold = Number(settingsManager.getSettings?.().supportThreshold || 4);
+    const supportCount = Number(
+      db.prepare('SELECT COUNT(*) as c FROM proposal_supporters WHERE proposal_id = ?').get(p.proposal_id)?.c || 0
+    );
     const votes = {
       yes: { 
         vp: p.yes_vp, 
@@ -140,16 +145,22 @@ router.get('/proposals/active', asyncHandler(async (req, res) => {
     return {
       proposalId: p.proposal_id,
       title: p.title,
+      goal: p.goal || null,
       description: p.description,
       costIndication: p.cost_indication || null,
       status: p.status,
       creatorId: redactWallet(p.creator_id), // Redact Discord ID for privacy
       votes,
+      support: {
+        count: supportCount,
+        required: supportThreshold,
+        deadline: p.support_deadline || null,
+      },
       quorum: {
         required: p.quorum_required || p.quorum_threshold || 0,
         current: quorumPercentage
       },
-      deadline: p.end_time,
+      deadline: p.status === 'supporting' ? (p.support_deadline || p.end_time) : p.end_time,
       createdAt: p.created_at
     };
   });
@@ -168,22 +179,22 @@ router.get('/proposals/concluded', asyncHandler(async (req, res) => {
   const guildId = resolvePublicGovernanceScope(req);
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
   const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
-  const concludedStatuses = ['passed', 'rejected', 'quorum_not_met', 'concluded'];
+  const concludedStatuses = ['passed', 'rejected', 'quorum_not_met', 'concluded', 'not_supported', 'vetoed', 'cancelled'];
 
   const proposals = (hasProposalsGuildColumn() && guildId)
     ? db.prepare(
-      'SELECT * FROM proposals WHERE guild_id = ? AND status IN (?, ?, ?, ?) ORDER BY created_at DESC LIMIT ? OFFSET ?'
+      'SELECT * FROM proposals WHERE guild_id = ? AND status IN (?, ?, ?, ?, ?, ?, ?) ORDER BY created_at DESC LIMIT ? OFFSET ?'
     ).all(guildId, ...concludedStatuses, limit, offset)
     : db.prepare(
-      'SELECT * FROM proposals WHERE status IN (?, ?, ?, ?) ORDER BY created_at DESC LIMIT ? OFFSET ?'
+      'SELECT * FROM proposals WHERE status IN (?, ?, ?, ?, ?, ?, ?) ORDER BY created_at DESC LIMIT ? OFFSET ?'
     ).all(...concludedStatuses, limit, offset);
 
   const totalCount = (hasProposalsGuildColumn() && guildId)
     ? db.prepare(
-      'SELECT COUNT(*) as count FROM proposals WHERE guild_id = ? AND status IN (?, ?, ?, ?)'
+      'SELECT COUNT(*) as count FROM proposals WHERE guild_id = ? AND status IN (?, ?, ?, ?, ?, ?, ?)'
     ).get(guildId, ...concludedStatuses).count
     : db.prepare(
-      'SELECT COUNT(*) as count FROM proposals WHERE status IN (?, ?, ?, ?)'
+      'SELECT COUNT(*) as count FROM proposals WHERE status IN (?, ?, ?, ?, ?, ?, ?)'
     ).get(...concludedStatuses).count;
 
   const enrichedProposals = proposals.map(p => {
@@ -208,6 +219,7 @@ router.get('/proposals/concluded', asyncHandler(async (req, res) => {
     return {
       proposalId: p.proposal_id,
       title: p.title,
+      goal: p.goal || null,
       description: p.description,
       costIndication: p.cost_indication || null,
       status: normalizeConcludedStatus(p),
@@ -271,6 +283,7 @@ router.get('/proposals/:id', asyncHandler(async (req, res) => {
   const proposalData = {
     proposalId: proposal.proposal_id,
     title: proposal.title,
+    goal: proposal.goal || null,
     description: proposal.description,
     costIndication: proposal.cost_indication || null,
     status: proposal.status,

@@ -119,7 +119,7 @@ function createAdminSettingsRouter({
     try {
       const ALLOWED_SETTINGS_FIELDS = [
         'proposalsChannelId', 'votingChannelId', 'resultsChannelId', 'governanceLogChannelId',
-        'quorumPercentage', 'governanceQuorum', 'supportThreshold', 'voteDurationDays', 'voteDurationHours',
+        'quorumPercentage', 'governanceQuorum', 'supportThreshold', 'supportWindowHours', 'voteDurationDays', 'voteDurationHours',
         'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleTreasuryEnabled', 'moduleWalletTrackerEnabled',
         'moduleInviteTrackerEnabled',
         'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleBrandingEnabled', 'moduleMissionsEnabled', 'moduleBattleEnabled', 'moduleMinigamesEnabled',

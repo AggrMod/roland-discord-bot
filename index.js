@@ -9,6 +9,9 @@ const {
   ActionRowBuilder, 
   ButtonBuilder, 
   ButtonStyle, 
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
   PermissionFlagsBits 
 } = require('discord.js');
 const fs = require('fs');
@@ -518,8 +521,10 @@ client.on(Events.InteractionCreate, async interaction => {
     }
     if (customId === 'panel_verify') { await handlePanelVerifyButton(interaction); return; }
     if (customId === 'treasury_refresh_panel') { await handleTreasuryRefreshButton(interaction); return; }
+    if (customId === 'governance_create_proposal') { await handleGovernanceCreateProposalButton(interaction); return; }
     if (customId.startsWith('support_')) { await handleSupportButton(interaction); return; }
     if (customId.startsWith('vote_yes_') || customId.startsWith('vote_no_') || customId.startsWith('vote_abstain_')) { await handleVoteButton(interaction); return; }
+    if (customId.startsWith('veto_')) { await handleVetoButton(interaction); return; }
     if (customId === 'micro_verify_check_status') { await handleMicroVerifyCheckStatus(interaction); return; }
     if (customId === 'micro_verify_copy_amount') { await handleMicroVerifyCopyAmount(interaction); return; }
     if (customId.startsWith('role_claim_') || customId.startsWith('claim_role_')) { await handleRoleClaimButton(interaction); return; }
@@ -532,6 +537,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
   if (interaction.isModalSubmit()) {
     if (interaction.customId.startsWith('ticket_modal_')) { await handleTicketModalSubmit(interaction); return; }
+    if (interaction.customId === 'governance_create_proposal_modal') { await handleGovernanceCreateProposalModal(interaction); return; }
   }
 });
 
@@ -615,6 +621,129 @@ async function handlePanelVerifyButton(interaction) {
     await interaction.editReply({ embeds: [embed] });
   } catch (e) {
     logger.error('Verify button error:', e);
+  }
+}
+
+async function handleGovernanceCreateProposalButton(interaction) {
+  try {
+    const modal = new ModalBuilder()
+      .setCustomId('governance_create_proposal_modal')
+      .setTitle('Create Governance Proposal');
+
+    const titleInput = new TextInputBuilder()
+      .setCustomId('proposal_title')
+      .setLabel('Title')
+      .setPlaceholder('Short, clear proposal title')
+      .setStyle(TextInputStyle.Short)
+      .setMinLength(5)
+      .setMaxLength(200)
+      .setRequired(true);
+
+    const goalInput = new TextInputBuilder()
+      .setCustomId('proposal_goal')
+      .setLabel('Goal')
+      .setPlaceholder('What is the objective?')
+      .setStyle(TextInputStyle.Short)
+      .setMinLength(5)
+      .setMaxLength(500)
+      .setRequired(true);
+
+    const categoryInput = new TextInputBuilder()
+      .setCustomId('proposal_category')
+      .setLabel('Category')
+      .setPlaceholder('Partnership / Treasury Allocation / Rule Change / Community Event / Other')
+      .setStyle(TextInputStyle.Short)
+      .setMaxLength(100)
+      .setRequired(true);
+
+    const costInput = new TextInputBuilder()
+      .setCustomId('proposal_cost')
+      .setLabel('Costs (SOL or USDC)')
+      .setPlaceholder('Example: 50 SOL or 500 USDC')
+      .setStyle(TextInputStyle.Short)
+      .setMaxLength(200)
+      .setRequired(true);
+
+    const descriptionInput = new TextInputBuilder()
+      .setCustomId('proposal_description')
+      .setLabel('Description')
+      .setPlaceholder('Explain implementation, impact, and timeline')
+      .setStyle(TextInputStyle.Paragraph)
+      .setMinLength(20)
+      .setMaxLength(5000)
+      .setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(titleInput),
+      new ActionRowBuilder().addComponents(goalInput),
+      new ActionRowBuilder().addComponents(categoryInput),
+      new ActionRowBuilder().addComponents(costInput),
+      new ActionRowBuilder().addComponents(descriptionInput)
+    );
+
+    await interaction.showModal(modal);
+  } catch (error) {
+    logger.error('Governance create button error:', error);
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content: 'Unable to open proposal form right now.' });
+      } else {
+        await interaction.reply({ content: 'Unable to open proposal form right now.', ephemeral: true });
+      }
+    } catch (_) {}
+  }
+}
+
+async function handleGovernanceCreateProposalModal(interaction) {
+  try {
+    await interaction.deferReply({ ephemeral: true });
+
+    const discordId = interaction.user.id;
+    const title = String(interaction.fields.getTextInputValue('proposal_title') || '').trim();
+    const goal = String(interaction.fields.getTextInputValue('proposal_goal') || '').trim();
+    const description = String(interaction.fields.getTextInputValue('proposal_description') || '').trim();
+    const categoryRaw = String(interaction.fields.getTextInputValue('proposal_category') || '').trim();
+    const costIndication = String(interaction.fields.getTextInputValue('proposal_cost') || '').trim();
+
+    const userInfo = await roleService.getUserInfo(discordId, interaction.guildId || '', interaction.member || null);
+    const votingPower = Number(userInfo?.voting_power || 0);
+    if (!userInfo || votingPower < 1) {
+      return interaction.editReply({ content: 'You need at least 1 voting power to create proposals.' });
+    }
+
+    const settingsManager = require('./config/settings');
+    const settings = settingsManager.getSettings ? settingsManager.getSettings() : {};
+    const validCategories = Array.isArray(settings.proposalCategories) && settings.proposalCategories.length
+      ? settings.proposalCategories
+      : ['Partnership', 'Treasury Allocation', 'Rule Change', 'Community Event', 'Other'];
+    const normalizedCategory = validCategories.find(
+      (candidate) => String(candidate || '').toLowerCase() === categoryRaw.toLowerCase()
+    ) || 'Other';
+
+    const result = proposalService.createProposal(discordId, {
+      title,
+      goal,
+      description,
+      category: normalizedCategory,
+      costIndication,
+      guildId: interaction.guildId || '',
+      initialStatus: 'supporting'
+    });
+    if (!result?.success) {
+      return interaction.editReply({ content: result?.message || 'Failed to create proposal.' });
+    }
+
+    await proposalService.postToProposalsChannel(result.proposalId, {
+      creatorDisplayName: interaction.user.username,
+      targetChannelId: interaction.channelId || ''
+    });
+
+    await interaction.editReply({ content: `Proposal ${result.proposalId} created and submitted to supporting stage.` });
+  } catch (error) {
+    logger.error('Governance modal submit error:', error);
+    try {
+      await interaction.editReply({ content: 'Something went wrong while creating the proposal.' });
+    } catch (_) {}
   }
 }
 
@@ -722,6 +851,99 @@ async function handleVoteButton(interaction) {
   }
 }
 
+function normalizeRoleName(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+async function getCouncilMemberIdsForGuild(guild) {
+  if (!guild) return [];
+  const settingsManager = require('./config/settings');
+  const settings = settingsManager.getSettings ? settingsManager.getSettings() : {};
+  const trusteeRoleNames = Array.isArray(settings.staffTrusteeRoles)
+    ? settings.staffTrusteeRoles.map(normalizeRoleName).filter(Boolean)
+    : [];
+
+  let membersCollection = guild.members?.cache;
+  try {
+    membersCollection = await guild.members.fetch();
+  } catch (_error) {
+    // fall back to cache
+  }
+
+  const council = new Set();
+  for (const member of membersCollection.values()) {
+    if (
+      member.permissions?.has?.(PermissionFlagsBits.Administrator)
+      || member.permissions?.has?.(PermissionFlagsBits.ManageGuild)
+    ) {
+      council.add(member.id);
+      continue;
+    }
+    if (
+      trusteeRoleNames.length
+      && member.roles?.cache?.some((role) => trusteeRoleNames.includes(normalizeRoleName(role?.name)))
+    ) {
+      council.add(member.id);
+    }
+  }
+  return [...council];
+}
+
+async function handleVetoButton(interaction) {
+  try {
+    await interaction.deferReply({ ephemeral: true });
+
+    const proposalId = interaction.customId.replace(/^veto_/, '').trim();
+    const proposal = proposalService.getProposal(proposalId);
+    if (!proposal) {
+      return interaction.editReply({ content: 'Proposal not found.' });
+    }
+    if (String(proposal.status || '').toLowerCase() !== 'passed') {
+      return interaction.editReply({ content: 'Council veto is only available for passed proposals.' });
+    }
+
+    const proposalGuildId = String(proposal.guild_id || '').trim();
+    const interactionGuildId = String(interaction.guildId || '').trim();
+    if (proposalGuildId && interactionGuildId && proposalGuildId !== interactionGuildId) {
+      return interaction.editReply({ content: 'This proposal belongs to a different server.' });
+    }
+
+    const councilMemberIds = await getCouncilMemberIdsForGuild(interaction.guild);
+    if (!councilMemberIds.includes(interaction.user.id)) {
+      return interaction.editReply({ content: 'Only council members can cast veto votes.' });
+    }
+
+    const vetoResult = proposalService.vetoProposal(proposalId, interaction.user.id, 'Discord council veto');
+    if (!vetoResult?.success) {
+      return interaction.editReply({ content: vetoResult?.message || 'Failed to cast veto vote.' });
+    }
+
+    const vetoSet = new Set((vetoResult.vetoVoterIds || []).map((id) => String(id)));
+    const remaining = councilMemberIds.filter((id) => !vetoSet.has(String(id)));
+
+    if (councilMemberIds.length > 0 && remaining.length === 0) {
+      const applyResult = proposalService.applyVeto(proposalId, 'Unanimous council veto');
+      if (applyResult?.success) {
+        return interaction.editReply({ content: '🛑 Unanimous council veto reached. Proposal status set to vetoed.' });
+      }
+      return interaction.editReply({ content: 'All council votes collected, but applying veto failed.' });
+    }
+
+    return interaction.editReply({
+      content: `Veto vote recorded (${vetoResult.vetoCount}/${councilMemberIds.length}). ${remaining.length} council vote(s) remaining.`
+    });
+  } catch (error) {
+    logger.error('Veto button error:', error);
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content: 'Something went wrong while casting veto.' });
+      } else {
+        await interaction.reply({ content: 'Something went wrong while casting veto.', ephemeral: true });
+      }
+    } catch (_ignored) {}
+  }
+}
+
 async function handleMicroVerifyCheckStatus(interaction) {
   try {
     await interaction.deferReply({ ephemeral: true });
@@ -776,6 +998,7 @@ function startVoteCheckInterval() {
       const db = require('./database/db');
       const activeVotes = db.prepare('SELECT * FROM proposals WHERE status = ?').all('voting');
       for (const p of activeVotes) proposalService.checkAutoClose(p.proposal_id);
+      await proposalService.expireUnsupportedProposals();
     } catch (_) {}
   }, 5 * 60 * 1000));
 }

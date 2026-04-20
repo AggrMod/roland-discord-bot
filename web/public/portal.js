@@ -2491,7 +2491,7 @@ function renderProposals() {
       <div class="empty-state">
         <div class="empty-state-icon">📜</div>
         <h4 class="empty-state-title">No Proposals Yet</h4>
-        <p class="empty-state-message">You haven't created any proposals. Use the /governance propose command in Discord to submit your first proposal.</p>
+        <p class="empty-state-message">You haven't created any proposals yet. Start one now from web or Discord.</p>
         <div class="empty-state-action">
           <button class="btn-primary" onclick="showCreateProposalForm()">
             <span>➕</span>
@@ -2516,10 +2516,10 @@ function renderProposals() {
         Proposal #${proposal.proposal_id} • Created ${formatDate(new Date(proposal.created_at))}
         ${proposal.cost_indication ? ` • Cost: ${escapeHtml(proposal.cost_indication)}` : ''}
       </div>
+      ${proposal.goal ? `<p style="color: var(--text-primary); margin-top: var(--space-2);"><strong>Goal:</strong> ${escapeHtml(proposal.goal)}</p>` : ''}
       ${proposal.description ? `<p style="color: var(--text-secondary); margin-top: var(--space-3); line-height: 1.6;">${escapeHtml(proposal.description)}</p>` : ''}
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
-        ${proposal.status === 'draft' ? `<button onclick="submitProposalForReview('${escapeJsString(proposal.proposal_id)}')" style="padding:6px 14px; background:#6366f1; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Submit for Review</button>` : ''}
-        ${String(proposal.status || '').toLowerCase() !== 'vetoed' ? `<button onclick="cancelOwnProposal('${escapeJsString(proposal.proposal_id)}')" style="padding:6px 14px; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.35); border-radius:6px; color:#fca5a5; cursor:pointer; font-size:0.85em;">Cancel / Delete</button>` : ''}
+        ${['draft', 'pending_review', 'on_hold', 'supporting', 'voting'].includes(String(proposal.status || '').toLowerCase()) ? `<button onclick="cancelOwnProposal('${escapeJsString(proposal.proposal_id)}')" style="padding:6px 14px; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.35); border-radius:6px; color:#fca5a5; cursor:pointer; font-size:0.85em;">Cancel / Delete</button>` : ''}
       </div>
     </div>
   `).join('') + '</div>';
@@ -2644,6 +2644,7 @@ async function loadActiveVotes() {
             Proposal #${proposalId} • Created by ${escapeHtml(creator)}
             ${(proposal.costIndication || proposal.cost_indication) ? ` • Cost: ${escapeHtml(proposal.costIndication || proposal.cost_indication)}` : ''}
           </div>
+          ${proposal.goal ? `<p style="color: var(--text-primary); margin-bottom: var(--space-2);"><strong>Goal:</strong> ${escapeHtml(proposal.goal)}</p>` : ''}
           ${proposal.description ? `<p style="color: var(--text-secondary); margin-bottom: var(--space-4); line-height: 1.6;">${escapeHtml(proposal.description)}</p>` : ''}
           
           <div class="proposal-votes">
@@ -3880,6 +3881,10 @@ function showCreateProposalForm() {
         <input id="proposalTitleInput" type="text" placeholder="Enter a clear, descriptive title" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
       </div>
       <div>
+        <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Goal *</label>
+        <input id="proposalGoalInput" type="text" placeholder="What should this proposal accomplish?" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
+      </div>
+      <div>
         <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Category *</label>
         <select id="proposalCategoryInput" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
           <option value="Partnership">Partnership</option>
@@ -3902,22 +3907,29 @@ function showCreateProposalForm() {
 
   confirmCallback = async () => {
     const proposalTitle = document.getElementById('proposalTitleInput')?.value.trim();
+    const proposalGoal = document.getElementById('proposalGoalInput')?.value.trim();
     const proposalDesc = document.getElementById('proposalDescInput')?.value.trim();
     const proposalCategory = document.getElementById('proposalCategoryInput')?.value || 'Other';
     const proposalCost = document.getElementById('proposalCostInput')?.value.trim() || '';
-    if (!proposalTitle || !proposalDesc || !proposalCost) {
-      showError('Please fill in title, cost, and description');
+    if (!proposalTitle || !proposalGoal || !proposalDesc || !proposalCost) {
+      showError('Please fill in title, goal, description, and costs');
       return;
     }
     try {
       const response = await fetch('/api/user/proposals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: proposalTitle, description: proposalDesc, category: proposalCategory, costIndication: proposalCost })
+        body: JSON.stringify({
+          title: proposalTitle,
+          goal: proposalGoal,
+          description: proposalDesc,
+          category: proposalCategory,
+          costIndication: proposalCost
+        })
       });
       const data = await response.json();
       if (data.success) {
-        showSuccess('Proposal submitted! It will be reviewed by admins.');
+        showSuccess('Proposal submitted to supporting stage.');
         await loadPortal();
         switchSection('governance');
       } else {
@@ -6418,7 +6430,7 @@ async function loadAdminHelpView() {
       { name: '/verification admin og-sync', desc: 'Sync OG role assignment', options: 'full (optional)', example: '/verification admin og-sync full:true' }
     ])}
     ${cmdSection('Governance', 'GOV', [
-      { name: '/governance propose', desc: 'Create proposal', options: 'title, description, cost (required), category (optional)', example: '/governance propose title:"Fund X" description:"..." cost:"500 USDC"' },
+      { name: '/governance propose', desc: 'Create proposal', options: 'title, goal, description, cost (required), category (optional)', example: '/governance propose title:"Fund X" goal:"Grow treasury" description:"..." cost:"500 USDC"' },
       { name: '/governance support', desc: 'Support a proposal in supporting phase', options: 'proposal_id (required)', example: '/governance support proposal_id:1' },
       { name: '/governance vote', desc: 'Vote on active proposal', options: 'proposal_id, choice (required)', example: '/governance vote proposal_id:1 choice:yes' },
       { name: '/governance cancel', desc: 'Cancel your own proposal', options: 'proposal_id, confirm (required)', example: '/governance cancel proposal_id:1 confirm:true' },
@@ -7843,6 +7855,7 @@ async function saveGovernanceSettings() {
   const payload = {
     quorumPercentage: parseFloat(document.getElementById('gov_quorumPercentage')?.value) || 0,
     supportThreshold: parseInt(document.getElementById('gov_supportThreshold')?.value) || 0,
+    supportWindowHours: parseInt(document.getElementById('gov_supportWindowHours')?.value) || 0,
     voteDurationDays: parseInt(document.getElementById('gov_voteDurationDays')?.value) || 0,
     proposalsChannelId: document.getElementById('gov_proposalsChannelId')?.value || '',
     votingChannelId: document.getElementById('gov_votingChannelId')?.value || '',
@@ -10071,7 +10084,10 @@ async function loadVotingPowerView(targetPaneId = null) {
               <label style="${govFieldLabel}">Vote Duration (Days)</label>
               <input type="number" id="gov_voteDurationDays" min="1" max="30" value="${gs.voteDurationDays ?? ''}" style="${govFieldInput}">
             </div>
-            <div></div>
+            <div>
+              <label style="${govFieldLabel}">Support Window (Hours)</label>
+              <input type="number" id="gov_supportWindowHours" min="1" max="720" value="${gs.supportWindowHours ?? 72}" style="${govFieldInput}">
+            </div>
           </div>
           <h4 style="color:#c9d6ff;font-size:0.95em;font-weight:600;margin:var(--space-4) 0 var(--space-3) 0;padding-top:var(--space-3);border-top:1px solid rgba(99,102,241,0.12);">🔔— Channel Overrides</h4>
           <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:12px;">Leave empty to use .env defaults.</p>
@@ -12175,7 +12191,7 @@ function loadApiRefView() {
       endpoint('GET', '/api/micro-verify/status', 'Checks the current micro-transfer verification status.', false, null),
       endpoint('GET', '/api/micro-verify/config', 'Returns the current micro-transfer configuration.', false, null),
       endpoint('POST', '/api/user/vote', 'Casts a vote on a proposal. Body: <code>{ "proposalId": "...", "choice": "yes" }</code>', false, null),
-      endpoint('POST', '/api/user/proposals', 'Creates a governance proposal. Body: <code>{ "title": "...", "description": "...", "costIndication": "~500 USDC", "category": "Other" }</code>', false, null),
+      endpoint('POST', '/api/user/proposals', 'Creates a governance proposal. Body: <code>{ "title": "...", "goal": "...", "description": "...", "costIndication": "~500 USDC", "category": "Other" }</code>', false, null),
       endpoint('POST', '/api/governance/proposals/:id/submit', 'Submits a draft proposal for review.', false, null),
       endpoint('POST', '/api/governance/proposals/:id/support', 'Adds support to a proposal in supporting phase.', false, null),
       endpoint('POST', '/api/governance/proposals/:id/cancel', 'Cancels a proposal owned by the current user.', false, null),

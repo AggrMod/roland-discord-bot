@@ -592,6 +592,10 @@ async function handlePanelVerifyButton(interaction) {
     const syncDescription = syncResult?.success
       ? 'Holdings refreshed and Discord roles synchronized.'
       : 'Holdings refreshed, but role synchronization could not fully complete.';
+    const effectiveGuildId = panelGuildId || interaction.guildId || '';
+    const effectiveVotingPower = interaction.member
+      ? Number(roleService.getUserVotingPower(discordId, interaction.member, effectiveGuildId) || 0)
+      : Number(updateResult.votingPower || 0);
 
     const embed = new EmbedBuilder()
       .setColor(syncResult?.success === false ? '#F59E0B' : '#57F287')
@@ -603,7 +607,7 @@ async function handlePanelVerifyButton(interaction) {
         { name: 'NFTs', value: `${Number(updateResult.totalNFTs || 0)} (raw ${Number(updateResult.rawNFTs || 0)})`, inline: true },
         { name: 'Tracked Tokens', value: totalTokens.toLocaleString(undefined, { maximumFractionDigits: 6 }), inline: true },
         { name: 'Tier', value: String(updateResult.tier || 'None'), inline: true },
-        { name: 'Voting Power', value: `${Number(updateResult.votingPower || 0)}`, inline: true },
+        { name: 'Voting Power', value: `${effectiveVotingPower}`, inline: true },
         { name: 'Role Sync', value: syncResult?.success ? `+${syncAdded} / -${syncRemoved}` : (syncResult?.message || 'Not available'), inline: false }
       )
       .setTimestamp();
@@ -633,9 +637,11 @@ async function handleVoteButton(interaction) {
     const parts = interaction.customId.split('_');
     const choice = parts[1];
     const proposalId = parts.slice(2).join('_');
-    const userInfo = await roleService.getUserInfo(interaction.user.id);
-    if (!userInfo || !userInfo.voting_power) return interaction.editReply({ content: '❌ No voting power.' });
-    const result = proposalService.castVote(proposalId, interaction.user.id, choice, userInfo.voting_power);
+    const discordId = interaction.user.id;
+    const userInfo = await roleService.getUserInfo(discordId, interaction.guildId || '', interaction.member || null);
+    const votingPower = Number(userInfo?.voting_power || 0);
+    if (!userInfo || votingPower < 1) return interaction.editReply({ content: '❌ No voting power.' });
+    const result = proposalService.castVote(proposalId, discordId, choice, votingPower);
     if (!result.success) return interaction.editReply({ content: `❌ ${result.message}` });
     await proposalService.updateVotingMessage(proposalId);
     await interaction.editReply({ content: `🗳️ Vote recorded: ${choice}` });

@@ -138,6 +138,7 @@ function isTenantSensitiveRequest(input) {
       url.pathname.startsWith('/api/admin/') ||
       url.pathname.startsWith('/api/user/') ||
       url.pathname === '/api/user/proposals' ||
+      /^\/api\/user\/proposals\/[^/]+\/cancel$/.test(url.pathname) ||
       url.pathname === '/api/governance/proposals' ||
       /^\/api\/governance\/proposals\/[^/]+\/(submit|support|cancel|comments|veto)$/.test(url.pathname) ||
       url.pathname.startsWith('/api/public/v1/') ||

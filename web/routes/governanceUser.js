@@ -65,6 +65,13 @@ function createGovernanceUserRouter({
   };
 
   const normalizeRoleName = (value) => String(value || '').trim().toLowerCase();
+  const normalizeComparableDiscordId = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const numericMatch = raw.match(/\d{17,20}/);
+    if (numericMatch) return numericMatch[0];
+    return raw;
+  };
 
   const canMemberVetoProposal = async (discordId, guildId) => {
     const normalizedGuildId = String(guildId || '').trim();
@@ -250,32 +257,30 @@ function createGovernanceUserRouter({
     }
   });
 
-  router.post('/api/governance/proposals/:id/cancel', async (req, res) => {
+  const cancelProposalHandler = async (req, res) => {
     if (!requireSession(req, res)) return;
 
     try {
       const discordId = req.session.discordUser.id;
-      const requestedGuildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
-      if (!requestedGuildId) {
-        return res.status(409).json(toErrorResponse('Select a server to continue', 'TENANT_REQUIRED', null, { success: false }));
-      }
 
       const proposal = proposalService.getProposal(req.params.id);
       if (!proposal) {
         return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND', null, { success: false }));
       }
+      const requestedGuildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
       const proposalGuildId = String(proposal.guild_id || '').trim();
-      if (proposalGuildId && proposalGuildId !== String(requestedGuildId || '').trim()) {
+      if (proposalGuildId && requestedGuildId && proposalGuildId !== String(requestedGuildId || '').trim()) {
         return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND', null, { success: false }));
       }
-      if (String(proposal.creator_id || '').trim() !== String(discordId || '').trim()) {
+      if (normalizeComparableDiscordId(proposal.creator_id) !== normalizeComparableDiscordId(discordId)) {
         return res.status(403).json(toErrorResponse('Only the proposal creator can cancel this proposal', 'FORBIDDEN', null, { success: false }));
       }
       if (!isCreatorCancellableStatus(proposal.status)) {
         return res.status(400).json(toErrorResponse(`Proposal cannot be cancelled in status "${proposal.status}"`, 'VALIDATION_ERROR', null, { success: false }));
       }
 
-      const result = proposalService.cancelProposal(req.params.id, discordId, requestedGuildId);
+      const effectiveGuildId = requestedGuildId || proposalGuildId || '';
+      const result = proposalService.cancelProposal(req.params.id, discordId, effectiveGuildId);
       if (result?.success) {
         return res.json(toSuccessResponse(result));
       }
@@ -284,7 +289,10 @@ function createGovernanceUserRouter({
       logger.error('Error cancelling proposal:', routeError);
       return res.status(500).json(toErrorResponse('Internal server error'));
     }
-  });
+  };
+
+  router.post('/api/governance/proposals/:id/cancel', cancelProposalHandler);
+  router.post('/api/user/proposals/:id/cancel', cancelProposalHandler);
 
   router.get('/api/governance/proposals/:id/comments', (req, res) => {
     try {

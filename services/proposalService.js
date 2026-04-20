@@ -112,6 +112,14 @@ function resolveVoteDurationDays(settings = {}) {
   return 7;
 }
 
+function normalizeComparableDiscordId(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const numericMatch = raw.match(/\d{17,20}/);
+  if (numericMatch) return numericMatch[0];
+  return raw;
+}
+
 class ProposalService {
   constructor() {
     this.client = null;
@@ -540,8 +548,8 @@ class ProposalService {
     try {
       const proposal = this.getProposal(proposalId);
       if (!proposal) return { success: false, message: 'Proposal not found' };
-      const proposalCreatorId = String(proposal.creator_id || '').trim();
-      const normalizedRequesterId = String(requesterId || '').trim();
+      const proposalCreatorId = normalizeComparableDiscordId(proposal.creator_id);
+      const normalizedRequesterId = normalizeComparableDiscordId(requesterId);
       if (!proposalCreatorId || !normalizedRequesterId || proposalCreatorId !== normalizedRequesterId) {
         return { success: false, message: 'Only the proposal creator can cancel this proposal' };
       }
@@ -575,6 +583,10 @@ class ProposalService {
       if (!result?.changes) {
         // Final safety fallback: ownership already validated from loaded proposal row.
         result = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ?').run('cancelled', proposalId);
+      }
+      if (!result?.changes && Number.isFinite(Number(proposal.id))) {
+        // Ultimate fallback by row id for legacy proposal_id formatting mismatches.
+        result = db.prepare('UPDATE proposals SET status = ? WHERE id = ?').run('cancelled', Number(proposal.id));
       }
 
       if (!result?.changes) {

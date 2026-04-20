@@ -37,6 +37,14 @@ function normalizeProposalIdInput(rawValue) {
   return raw.toUpperCase();
 }
 
+function normalizeComparableDiscordId(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const numericMatch = raw.match(/\d{17,20}/);
+  if (numericMatch) return numericMatch[0];
+  return raw;
+}
+
 function isCreatorCancellableStatus(status) {
   const normalizedStatus = String(status || '').toLowerCase();
   if (!normalizedStatus) return false;
@@ -537,7 +545,7 @@ module.exports = {
       });
     }
 
-    if (String(proposal.creator_id || '').trim() !== String(interaction.user.id || '').trim()) {
+    if (normalizeComparableDiscordId(proposal.creator_id) !== normalizeComparableDiscordId(interaction.user.id)) {
       return interaction.editReply({
         content: '❌ You can only cancel proposals you created.',
         ephemeral: true

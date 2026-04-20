@@ -1,6 +1,6 @@
 /**
  * Public API v1 Routes
- * 
+ *
  * Versioned, standardized API endpoints for external integrations
  * All responses follow the standard envelope format
  */
@@ -84,6 +84,26 @@ function resolvePublicScope(req, { requireInMultitenant = true, tableHasGuildCol
   return guildId;
 }
 
+function normalizeConcludedStatus(proposal) {
+  const rawStatus = String(proposal?.status || '').toLowerCase();
+  if (rawStatus !== 'concluded') {
+    return rawStatus;
+  }
+
+  const yesVp = Number(proposal?.yes_vp || 0);
+  const noVp = Number(proposal?.no_vp || 0);
+  const abstainVp = Number(proposal?.abstain_vp || 0);
+  const totalVp = Number(proposal?.total_vp || 0);
+  const quorumRequired = Number(proposal?.quorum_required || Math.ceil(totalVp * 0.25));
+  const totalVoted = yesVp + noVp + abstainVp;
+
+  if (totalVoted < quorumRequired) {
+    return 'quorum_not_met';
+  }
+
+  return yesVp > noVp ? 'passed' : 'rejected';
+}
+
 // ==================== GOVERNANCE ENDPOINTS ====================
 
 /**
@@ -92,9 +112,10 @@ function resolvePublicScope(req, { requireInMultitenant = true, tableHasGuildCol
  */
 router.get('/proposals/active', asyncHandler(async (req, res) => {
   const guildId = resolvePublicGovernanceScope(req);
+  const activeStatuses = ['supporting', 'voting'];
   const proposals = (hasProposalsGuildColumn() && guildId)
-    ? db.prepare('SELECT * FROM proposals WHERE guild_id = ? AND status = ? ORDER BY created_at DESC').all(guildId, 'voting')
-    : db.prepare('SELECT * FROM proposals WHERE status = ? ORDER BY created_at DESC').all('voting');
+    ? db.prepare('SELECT * FROM proposals WHERE guild_id = ? AND status IN (?, ?) ORDER BY created_at DESC').all(guildId, ...activeStatuses)
+    : db.prepare('SELECT * FROM proposals WHERE status IN (?, ?) ORDER BY created_at DESC').all(...activeStatuses);
   
   const enrichedProposals = proposals.map(p => {
     const votes = {
@@ -124,7 +145,7 @@ router.get('/proposals/active', asyncHandler(async (req, res) => {
       creatorId: redactWallet(p.creator_id), // Redact Discord ID for privacy
       votes,
       quorum: {
-        required: p.quorum_threshold,
+        required: p.quorum_required || p.quorum_threshold || 0,
         current: quorumPercentage
       },
       deadline: p.end_time,
@@ -146,22 +167,23 @@ router.get('/proposals/concluded', asyncHandler(async (req, res) => {
   const guildId = resolvePublicGovernanceScope(req);
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
   const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+  const concludedStatuses = ['passed', 'rejected', 'quorum_not_met', 'concluded'];
 
   const proposals = (hasProposalsGuildColumn() && guildId)
     ? db.prepare(
-      'SELECT * FROM proposals WHERE guild_id = ? AND status IN (?, ?, ?) ORDER BY created_at DESC LIMIT ? OFFSET ?'
-    ).all(guildId, 'passed', 'rejected', 'quorum_not_met', limit, offset)
+      'SELECT * FROM proposals WHERE guild_id = ? AND status IN (?, ?, ?, ?) ORDER BY created_at DESC LIMIT ? OFFSET ?'
+    ).all(guildId, ...concludedStatuses, limit, offset)
     : db.prepare(
-      'SELECT * FROM proposals WHERE status IN (?, ?, ?) ORDER BY created_at DESC LIMIT ? OFFSET ?'
-    ).all('passed', 'rejected', 'quorum_not_met', limit, offset);
+      'SELECT * FROM proposals WHERE status IN (?, ?, ?, ?) ORDER BY created_at DESC LIMIT ? OFFSET ?'
+    ).all(...concludedStatuses, limit, offset);
 
   const totalCount = (hasProposalsGuildColumn() && guildId)
     ? db.prepare(
-      'SELECT COUNT(*) as count FROM proposals WHERE guild_id = ? AND status IN (?, ?, ?)'
-    ).get(guildId, 'passed', 'rejected', 'quorum_not_met').count
+      'SELECT COUNT(*) as count FROM proposals WHERE guild_id = ? AND status IN (?, ?, ?, ?)'
+    ).get(guildId, ...concludedStatuses).count
     : db.prepare(
-      'SELECT COUNT(*) as count FROM proposals WHERE status IN (?, ?, ?)'
-    ).get('passed', 'rejected', 'quorum_not_met').count;
+      'SELECT COUNT(*) as count FROM proposals WHERE status IN (?, ?, ?, ?)'
+    ).get(...concludedStatuses).count;
 
   const enrichedProposals = proposals.map(p => {
     const votes = {
@@ -186,11 +208,11 @@ router.get('/proposals/concluded', asyncHandler(async (req, res) => {
       proposalId: p.proposal_id,
       title: p.title,
       description: p.description,
-      status: p.status,
+      status: normalizeConcludedStatus(p),
       creatorId: redactWallet(p.creator_id),
       votes,
       quorum: {
-        required: p.quorum_threshold,
+        required: p.quorum_required || p.quorum_threshold || 0,
         current: quorumPercentage
       },
       startTime: p.start_time,
@@ -252,7 +274,7 @@ router.get('/proposals/:id', asyncHandler(async (req, res) => {
     creatorId: redactWallet(proposal.creator_id),
     votes,
     quorum: {
-      required: proposal.quorum_threshold,
+      required: proposal.quorum_required || proposal.quorum_threshold || 0,
       current: quorumPercentage
     },
     startTime: proposal.start_time,

@@ -119,7 +119,7 @@ function createAdminSettingsRouter({
     try {
       const ALLOWED_SETTINGS_FIELDS = [
         'proposalsChannelId', 'votingChannelId', 'resultsChannelId', 'governanceLogChannelId',
-        'quorumPercentage', 'supportThreshold', 'voteDurationHours',
+        'quorumPercentage', 'governanceQuorum', 'supportThreshold', 'voteDurationDays', 'voteDurationHours',
         'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleTreasuryEnabled', 'moduleWalletTrackerEnabled',
         'moduleInviteTrackerEnabled',
         'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleBrandingEnabled', 'moduleMissionsEnabled', 'moduleBattleEnabled', 'moduleMinigamesEnabled',
@@ -136,6 +136,20 @@ function createAdminSettingsRouter({
       const sanitized = {};
       for (const key of ALLOWED_SETTINGS_FIELDS) {
         if (req.body[key] !== undefined) sanitized[key] = req.body[key];
+      }
+      if (sanitized.voteDurationDays === undefined && sanitized.voteDurationHours !== undefined) {
+        const voteDurationHours = Number(sanitized.voteDurationHours);
+        if (Number.isFinite(voteDurationHours) && voteDurationHours > 0) {
+          sanitized.voteDurationDays = Math.max(1, Math.round(voteDurationHours / 24));
+        }
+      }
+      delete sanitized.voteDurationHours;
+
+      if (sanitized.quorumPercentage !== undefined && sanitized.governanceQuorum === undefined) {
+        sanitized.governanceQuorum = sanitized.quorumPercentage;
+      }
+      if (sanitized.governanceQuorum !== undefined && sanitized.quorumPercentage === undefined) {
+        sanitized.quorumPercentage = sanitized.governanceQuorum;
       }
 
       if (!req.isSuperadmin) {

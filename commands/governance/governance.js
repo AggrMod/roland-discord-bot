@@ -2,8 +2,30 @@
 const proposalService = require('../../services/proposalService');
 const roleService = require('../../services/roleService');
 const settingsManager = require('../../config/settings');
+const db = require('../../database/db');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
+
+let _hasProposalsGuildColumnCache = null;
+function hasProposalsGuildColumn() {
+  if (_hasProposalsGuildColumnCache !== null) return _hasProposalsGuildColumnCache;
+  try {
+    const columns = db.prepare('PRAGMA table_info(proposals)').all();
+    _hasProposalsGuildColumnCache = columns.some((column) => String(column?.name || '').toLowerCase() === 'guild_id');
+  } catch (_error) {
+    _hasProposalsGuildColumnCache = false;
+  }
+  return _hasProposalsGuildColumnCache;
+}
+
+function isProposalVisibleInGuild(proposal, guildId) {
+  if (!proposal) return false;
+  if (!hasProposalsGuildColumn()) return true;
+  const proposalGuildId = String(proposal.guild_id || '').trim();
+  const requestedGuildId = String(guildId || '').trim();
+  if (!proposalGuildId) return true;
+  return !!requestedGuildId && proposalGuildId === requestedGuildId;
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -42,7 +64,7 @@ module.exports = {
     .addSubcommand(subcommand =>
       subcommand
         .setName('support')
-        .setDescription('Support a draft proposal to help promote it to voting')
+        .setDescription('Support a proposal to help promote it to voting')
         .addStringOption(option =>
           option.setName('proposal_id')
             .setDescription('The proposal ID (e.g., P-001)')
@@ -81,10 +103,17 @@ module.exports = {
                 .setDescription('Filter by status (optional)')
                 .setRequired(false)
                 .addChoices(
-                  { name: 'Draft', value: 'draft' },
+                  { name: 'Supporting', value: 'supporting' },
                   { name: 'Voting', value: 'voting' },
                   { name: 'Passed', value: 'passed' },
-                  { name: 'Failed', value: 'failed' }
+                  { name: 'Rejected', value: 'rejected' },
+                  { name: 'Quorum Not Met', value: 'quorum_not_met' },
+                  { name: 'Vetoed', value: 'vetoed' },
+                  { name: 'Draft', value: 'draft' },
+                  { name: 'Pending Review', value: 'pending_review' },
+                  { name: 'On Hold', value: 'on_hold' },
+                  { name: 'Cancelled', value: 'cancelled' },
+                  { name: 'Expired', value: 'expired' }
                 )))
         
         .addSubcommand(subcommand =>
@@ -187,7 +216,8 @@ module.exports = {
       description,
       category,
       costIndication,
-      guildId: interaction.guildId || ''
+      guildId: interaction.guildId || '',
+      initialStatus: 'supporting'
     });
 
     if (!result.success) {
@@ -210,7 +240,7 @@ module.exports = {
       .addFields(
         { name: '🆔 Proposal ID', value: result.proposalId, inline: true },
         { name: '👤 Creator', value: interaction.user.username, inline: true },
-        { name: '📊 Status', value: `Draft (Needs ${supportThreshold} supporters)`, inline: true }
+        { name: '📊 Status', value: `Supporting (Needs ${supportThreshold} supporters)`, inline: true }
       )
       .setFooter({ text: 'Posted to proposals channel - waiting for supporters' })
       .setTimestamp();
@@ -219,7 +249,7 @@ module.exports = {
     logger.log(`User ${interaction.user.username} created proposal ${result.proposalId}`);
 
     // Post to proposals channel
-    const proposalsChannelId = process.env.PROPOSALS_CHANNEL_ID;
+    const proposalsChannelId = settings.proposalsChannelId || process.env.PROPOSALS_CHANNEL_ID;
     if (proposalsChannelId) {
       try {
         const proposalsChannel = await interaction.client.channels.fetch(proposalsChannelId);
@@ -234,7 +264,7 @@ module.exports = {
             .addFields(
               { name: '🆔 Proposal ID', value: result.proposalId, inline: true },
               { name: '👤 Creator', value: interaction.user.username, inline: true },
-              { name: '📊 Status', value: 'Draft', inline: true },
+              { name: '📊 Status', value: 'Supporting', inline: true },
               { name: '👥 Supporters', value: `0/${supportThreshold}`, inline: true }
             )
             .setFooter({ text: `Click Support below to help promote this proposal (${supportThreshold} needed)` })
@@ -251,7 +281,6 @@ module.exports = {
 
           const message = await proposalsChannel.send({ embeds: [channelEmbed], components: [row] });
           
-          const db = require('../../database/db');
           db.prepare('UPDATE proposals SET message_id = ?, channel_id = ? WHERE proposal_id = ?')
             .run(message.id, proposalsChannelId, result.proposalId);
           
@@ -284,7 +313,7 @@ module.exports = {
 
     const proposal = proposalService.getProposal(proposalId);
     
-    if (!proposal) {
+    if (!proposal || !isProposalVisibleInGuild(proposal, interaction.guildId)) {
       const embed = new EmbedBuilder()
         .setColor('#FF0000')
         .setTitle('❌ Proposal Not Found')
@@ -309,7 +338,21 @@ module.exports = {
     const settings = settingsManager.getSettings();
     const supportThreshold = settings.supportThreshold || 4;
     const supporterCount = result.supporterCount;
-    const isPromoted = result.promoted;
+    let isPromoted = false;
+
+    if (String(proposal.status || '').toLowerCase() === 'supporting' && supporterCount >= supportThreshold) {
+      const promoteResult = await proposalService.promoteToVoting(proposalId, discordId);
+      if (promoteResult?.success) {
+        isPromoted = true;
+      } else if (!String(promoteResult?.message || '').toLowerCase().includes('only supporting proposals')) {
+        logger.warn(`[governance] Failed auto-promotion for ${proposalId}: ${promoteResult?.message || 'unknown error'}`);
+      }
+    }
+
+    const proposalAfterSupport = proposalService.getProposal(proposalId);
+    if (!isPromoted && String(proposalAfterSupport?.status || '').toLowerCase() === 'voting') {
+      isPromoted = true;
+    }
 
     const embed = new EmbedBuilder()
       .setColor('#FFD700')
@@ -318,7 +361,7 @@ module.exports = {
       .addFields(
         { name: '🆔 Proposal ID', value: proposalId, inline: true },
         { name: '👥 Supporters', value: `${supporterCount}/${supportThreshold}`, inline: true },
-        { name: '📊 Status', value: isPromoted ? 'Now Voting' : 'Still in Draft', inline: true }
+        { name: '📊 Status', value: isPromoted ? 'Now Voting' : 'Still Supporting', inline: true }
       )
       .setFooter({ 
         text: isPromoted 
@@ -353,7 +396,7 @@ module.exports = {
 
     const proposal = proposalService.getProposal(proposalId);
     
-    if (!proposal) {
+    if (!proposal || !isProposalVisibleInGuild(proposal, interaction.guildId)) {
       const embed = new EmbedBuilder()
         .setColor('#FF0000')
         .setTitle('❌ Proposal Not Found')
@@ -410,11 +453,21 @@ module.exports = {
     const db = require('../../database/db');
     
     let query = 'SELECT * FROM proposals';
-    let params = [];
+    const params = [];
+    const whereClauses = [];
+
+    if (hasProposalsGuildColumn() && interaction.guildId) {
+      whereClauses.push('guild_id = ?');
+      params.push(interaction.guildId);
+    }
     
     if (statusFilter) {
-      query += ' WHERE status = ?';
+      whereClauses.push('status = ?');
       params.push(statusFilter);
+    }
+
+    if (whereClauses.length) {
+      query += ` WHERE ${whereClauses.join(' AND ')}`;
     }
     
     query += ' ORDER BY created_at DESC LIMIT 10';
@@ -431,9 +484,16 @@ module.exports = {
     const proposalList = proposals.map((p, i) => {
       const statusEmoji = {
         'draft': '📝',
+        'supporting': '🤝',
         'voting': '🗳️',
         'passed': '✅',
-        'failed': '❌'
+        'rejected': '❌',
+        'quorum_not_met': '⚠️',
+        'vetoed': '🛑',
+        'pending_review': '🕒',
+        'on_hold': '⏸️',
+        'cancelled': '🚫',
+        'expired': '⌛'
       };
       return `${i + 1}. ${statusEmoji[p.status] || '📜'} **${p.proposal_id}**: ${p.title} (${p.status})`;
     }).join('\n');
@@ -464,15 +524,18 @@ module.exports = {
 
     const proposal = proposalService.getProposal(proposalId);
     
-    if (!proposal) {
+    if (!proposal || !isProposalVisibleInGuild(proposal, interaction.guildId)) {
       return interaction.editReply({ 
         content: `❌ Proposal not found: ${proposalId}`,
         ephemeral: true 
       });
     }
 
-    const db = require('../../database/db');
-    db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ?').run('cancelled', proposalId);
+    if (hasProposalsGuildColumn() && interaction.guildId) {
+      db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ? AND guild_id = ?').run('cancelled', proposalId, interaction.guildId);
+    } else {
+      db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ?').run('cancelled', proposalId);
+    }
 
     await interaction.editReply({ 
       content: `✅ Proposal ${proposalId} has been cancelled by admin.`,
@@ -483,15 +546,22 @@ module.exports = {
 
   async handleAdminSettings(interaction) {
     await interaction.deferReply({ ephemeral: true });
+    const settings = settingsManager.getSettings();
+    const effectiveQuorum = Number.isFinite(Number(settings.quorumPercentage))
+      ? Number(settings.quorumPercentage)
+      : Number(settings.governanceQuorum || 25);
+    const effectiveVoteDays = Number.isFinite(Number(settings.voteDurationDays))
+      ? Number(settings.voteDurationDays)
+      : Math.max(1, Math.round(Number(settings.voteDurationHours || 168) / 24));
 
     const embed = new EmbedBuilder()
       .setColor('#FFD700')
       .setTitle('⚙️ Governance Settings')
       .setDescription('Current governance configuration')
       .addFields(
-        { name: 'Support Threshold', value: `${settingsManager.getSettings().supportThreshold} supporters`, inline: true },
-        { name: 'Quorum Percentage', value: `${settingsManager.getSettings().quorumPercentage}%`, inline: true },
-        { name: 'Vote Duration', value: `${settingsManager.getSettings().voteDurationDays} days`, inline: true }
+        { name: 'Support Threshold', value: `${settings.supportThreshold} supporters`, inline: true },
+        { name: 'Quorum Percentage', value: `${effectiveQuorum}%`, inline: true },
+        { name: 'Vote Duration', value: `${effectiveVoteDays} days`, inline: true }
       )
       .setFooter({ text: 'Edit config/settings.json to change (Sprint B: admin UI)' })
       .setTimestamp();

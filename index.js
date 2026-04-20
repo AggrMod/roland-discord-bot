@@ -623,12 +623,64 @@ async function handleSupportButton(interaction) {
     await interaction.deferReply({ ephemeral: true });
     const proposalId = interaction.customId.replace('support_', '');
     const discordId = interaction.user.id;
+    const interactionGuildId = String(interaction.guildId || '').trim();
+    const proposal = proposalService.getProposal(proposalId);
+    if (!proposal) {
+      return interaction.editReply({ content: 'Proposal not found.' });
+    }
+
+    const proposalGuildId = String(proposal.guild_id || '').trim();
+    if (proposalGuildId && interactionGuildId && proposalGuildId !== interactionGuildId) {
+      return interaction.editReply({ content: 'This proposal belongs to a different server.' });
+    }
+
     const wallets = walletService.getLinkedWallets(discordId);
-    if (!wallets || wallets.length === 0) return interaction.editReply({ content: '❌ Verify wallet first.' });
+    if (!wallets || wallets.length === 0) {
+      return interaction.editReply({ content: 'Verify wallet first.' });
+    }
+
+    const userInfo = await roleService.getUserInfo(discordId, interactionGuildId, interaction.member || null);
+    const votingPower = Number(userInfo?.voting_power || 0);
+    if (!userInfo || votingPower < 1) {
+      return interaction.editReply({ content: 'You need at least 1 voting power to support proposals.' });
+    }
+
     const result = proposalService.addSupporter(proposalId, discordId);
-    if (!result.success) return interaction.editReply({ content: `❌ ${result.message}` });
-    await interaction.editReply({ content: '✅ Support added!' });
-  } catch (e) { logger.error('Support button error:', e); }
+    if (!result.success) {
+      return interaction.editReply({ content: result.message || 'Failed to add support.' });
+    }
+
+    let promoted = false;
+    const settingsManager = require('./config/settings');
+    const settings = settingsManager.getSettings ? settingsManager.getSettings() : {};
+    const supportThreshold = Number(settings.supportThreshold || 4);
+    if (String(proposal.status || '').toLowerCase() === 'supporting' && Number(result.supporterCount || 0) >= supportThreshold) {
+      const promoteResult = await proposalService.promoteToVoting(proposalId, discordId);
+      if (promoteResult?.success) {
+        promoted = true;
+      }
+    }
+
+    if (!promoted) {
+      const refreshedProposal = proposalService.getProposal(proposalId);
+      promoted = String(refreshedProposal?.status || '').toLowerCase() === 'voting';
+    }
+
+    await interaction.editReply({
+      content: promoted
+        ? 'Support added. Proposal reached threshold and is now in voting.'
+        : 'Support added.'
+    });
+  } catch (e) {
+    logger.error('Support button error:', e);
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content: 'Something went wrong while adding support. Please try again.' });
+      } else {
+        await interaction.reply({ content: 'Something went wrong while adding support. Please try again.', ephemeral: true });
+      }
+    } catch (_ignored) {}
+  }
 }
 
 async function handleVoteButton(interaction) {
@@ -638,14 +690,36 @@ async function handleVoteButton(interaction) {
     const choice = parts[1];
     const proposalId = parts.slice(2).join('_');
     const discordId = interaction.user.id;
+    const interactionGuildId = String(interaction.guildId || '').trim();
+    const proposal = proposalService.getProposal(proposalId);
+    if (!proposal) {
+      return interaction.editReply({ content: 'Proposal not found.' });
+    }
+
+    const proposalGuildId = String(proposal.guild_id || '').trim();
+    if (proposalGuildId && interactionGuildId && proposalGuildId !== interactionGuildId) {
+      return interaction.editReply({ content: 'This proposal belongs to a different server.' });
+    }
+
     const userInfo = await roleService.getUserInfo(discordId, interaction.guildId || '', interaction.member || null);
     const votingPower = Number(userInfo?.voting_power || 0);
-    if (!userInfo || votingPower < 1) return interaction.editReply({ content: '❌ No voting power.' });
+    if (!userInfo || votingPower < 1) return interaction.editReply({ content: 'No voting power.' });
+
     const result = proposalService.castVote(proposalId, discordId, choice, votingPower);
-    if (!result.success) return interaction.editReply({ content: `❌ ${result.message}` });
+    if (!result.success) return interaction.editReply({ content: result.message || 'Failed to cast vote.' });
+
     await proposalService.updateVotingMessage(proposalId);
-    await interaction.editReply({ content: `🗳️ Vote recorded: ${choice}` });
-  } catch (e) { logger.error('Vote button error:', e); }
+    await interaction.editReply({ content: `Vote recorded: ${choice}` });
+  } catch (e) {
+    logger.error('Vote button error:', e);
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content: 'Something went wrong while casting your vote. Please try again.' });
+      } else {
+        await interaction.reply({ content: 'Something went wrong while casting your vote. Please try again.', ephemeral: true });
+      }
+    } catch (_ignored) {}
+  }
 }
 
 async function handleMicroVerifyCheckStatus(interaction) {

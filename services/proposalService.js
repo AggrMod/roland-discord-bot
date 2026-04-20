@@ -84,6 +84,34 @@ function getRoleMappingCountForGuild(guildId = '') {
   }
 }
 
+function resolveGovernanceQuorumPercentage(settings = {}) {
+  const quorumCandidates = [
+    settings?.governanceQuorum,
+    settings?.quorumPercentage,
+  ];
+  for (const value of quorumCandidates) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 100) {
+      return parsed;
+    }
+  }
+  return 25;
+}
+
+function resolveVoteDurationDays(settings = {}) {
+  const days = Number(settings?.voteDurationDays);
+  if (Number.isFinite(days) && days > 0) {
+    return days;
+  }
+
+  const hours = Number(settings?.voteDurationHours);
+  if (Number.isFinite(hours) && hours > 0) {
+    return hours / 24;
+  }
+
+  return 7;
+}
+
 class ProposalService {
   constructor() {
     this.client = null;
@@ -100,23 +128,24 @@ class ProposalService {
 
   // ==================== PROPOSAL LIFECYCLE ====================
 
-  createProposal(creatorId, { title, description, category, costIndication, guildId = '' }) {
+  createProposal(creatorId, { title, description, category, costIndication, guildId = '', initialStatus = 'draft' }) {
     try {
       const proposalId = this.generateProposalId();
       const validCategories = settingsManager.getSettings().proposalCategories || ['Partnership', 'Treasury Allocation', 'Rule Change', 'Community Event', 'Other'];
       const safeCategory = validCategories.includes(category) ? category : 'Other';
       const normalizedGuildId = String(guildId || '').trim();
+      const safeInitialStatus = initialStatus === 'supporting' ? 'supporting' : 'draft';
 
       if (hasProposalsGuildColumn()) {
         db.prepare(`
           INSERT INTO proposals (proposal_id, guild_id, creator_id, title, description, status, category, cost_indication)
-          VALUES (?, ?, ?, ?, ?, 'draft', ?, ?)
-        `).run(proposalId, normalizedGuildId, creatorId, title, description, safeCategory, costIndication || null);
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(proposalId, normalizedGuildId, creatorId, title, description, safeInitialStatus, safeCategory, costIndication || null);
       } else {
         db.prepare(`
           INSERT INTO proposals (proposal_id, creator_id, title, description, status, category, cost_indication)
-          VALUES (?, ?, ?, ?, 'draft', ?, ?)
-        `).run(proposalId, creatorId, title, description, safeCategory, costIndication || null);
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(proposalId, creatorId, title, description, safeInitialStatus, safeCategory, costIndication || null);
       }
 
       logger.log(`Proposal ${proposalId} created by ${creatorId}`);
@@ -196,10 +225,11 @@ class ProposalService {
       const snapshot = await this.takeVPSnapshot(proposal.guild_id || '');
       const totalVP = snapshot.totalVP;
       const settings = settingsManager.getSettings();
-      const quorumRequired = Math.ceil(totalVP * ((settings.governanceQuorum || 25) / 100));
+      const quorumPercentage = resolveGovernanceQuorumPercentage(settings);
+      const quorumRequired = Math.ceil(totalVP * (quorumPercentage / 100));
 
       const startTime = new Date();
-      const voteDays = settings.voteDurationDays || 7;
+      const voteDays = resolveVoteDurationDays(settings);
       const endTime = new Date(startTime.getTime() + voteDays * 24 * 60 * 60 * 1000);
 
       db.prepare(`
@@ -408,7 +438,7 @@ class ProposalService {
     try {
       const proposal = this.getProposal(proposalId);
       if (!proposal) return { success: false, message: 'Proposal not found' };
-      if (!['voting', 'concluded', 'passed'].includes(proposal.status) && proposal.status !== 'supporting') {
+      if (!['supporting', 'voting', 'concluded', 'passed', 'rejected', 'quorum_not_met'].includes(proposal.status)) {
         return { success: false, message: 'This proposal cannot be vetoed in its current state' };
       }
 
@@ -619,11 +649,10 @@ class ProposalService {
         result = passed ? 'passed' : 'rejected';
       }
 
-      // Status is 'concluded' with the result stored in description or logged
-      db.prepare("UPDATE proposals SET status = 'concluded' WHERE proposal_id = ?").run(proposalId);
+      db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ?').run(result, proposalId);
 
       governanceLogger.log('vote_closed', {
-        proposalId, status: 'concluded', result, quorumMet,
+        proposalId, status: result, result, quorumMet,
         quorumRequired: quorumReq, totalVoted,
         yesVP: proposal.yes_vp, noVP: proposal.no_vp, abstainVP: proposal.abstain_vp
       });
@@ -632,7 +661,7 @@ class ProposalService {
       await this.postToResultsChannel(proposalId, result, quorumMet);
 
       logger.log(`Proposal ${proposalId} concluded: ${result} (quorum ${quorumMet ? 'met' : 'not met'})`);
-      return { success: true, status: 'concluded', result, quorumMet };
+      return { success: true, status: result, result, quorumMet };
     } catch (error) {
       logger.error('Error closing vote:', error);
       return { success: false };

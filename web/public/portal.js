@@ -2585,6 +2585,23 @@ async function loadActiveVotes() {
       const quorumMet = quorumPercent >= quorumRequired;
       const proposalId = proposal.proposalId || proposal.proposal_id;
       const creator = proposal.creator || proposal.creatorId || 'Unknown';
+      const status = String(proposal.status || '').toLowerCase();
+      let actionButtons = '';
+      if (userData && status === 'supporting') {
+        actionButtons = `
+          <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;"> 
+            <button class="btn-primary" onclick="supportProposal('${escapeJsString(proposalId)}')" style="flex:1; min-width:120px;">Support</button>
+          </div>
+        `;
+      } else if (userData && status === 'voting') {
+        actionButtons = `
+          <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
+            <button class="btn-success" onclick="castVote('${escapeJsString(proposalId)}','yes')" style="flex:1; min-width:80px;">Yes</button>
+            <button class="btn-danger" onclick="castVote('${escapeJsString(proposalId)}','no')" style="flex:1; min-width:80px;">No</button>
+            <button class="btn-secondary" onclick="castVote('${escapeJsString(proposalId)}','abstain')" style="flex:1; min-width:80px;">Abstain</button>
+          </div>
+        `;
+      }
       
       return `
         <div class="proposal-item">
@@ -2627,13 +2644,7 @@ async function loadActiveVotes() {
             <span>Participation Progress</span>
             <span style="color: ${quorumMet ? 'var(--success)' : 'var(--text-muted)'};">${quorumMet ? '✓ Quorum Met' : 'Quorum Pending'}</span>
           </div>
-          ${userData ? `
-          <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
-            <button class="btn-success" onclick="castVote('${escapeJsString(proposalId)}','yes')" style="flex:1; min-width:80px;">👍 Yes</button>
-            <button class="btn-danger" onclick="castVote('${escapeJsString(proposalId)}','no')" style="flex:1; min-width:80px;">👎 No</button>
-            <button class="btn-secondary" onclick="castVote('${escapeJsString(proposalId)}','abstain')" style="flex:1; min-width:80px;">⭐ Abstain</button>
-          </div>
-          ` : ''}
+          ${actionButtons}
         </div>
       `;
     }).join('') + '</div>';
@@ -3759,6 +3770,33 @@ function showNotification(message, type = 'info') {
 }
 
 // ==================== VOTING ====================
+async function supportProposal(proposalId) {
+  if (!userData) {
+    showError('Please log in to support proposals');
+    return;
+  }
+
+  showConfirmModal('Support Proposal?', 'Add your support to help promote this proposal to voting?', async () => {
+    try {
+      const response = await fetch(`/api/governance/proposals/${encodeURIComponent(proposalId)}/support`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const data = await response.json();
+      if (data.success) {
+        const promoted = !!(data.data?.promoted || data.promoted);
+        showSuccess(promoted ? 'Support added. Proposal moved to voting.' : 'Support added.');
+        await loadActiveVotes();
+      } else {
+        showError(data.message || 'Failed to support proposal');
+      }
+    } catch (e) {
+      showError('Error supporting proposal: ' + e.message);
+    }
+  }, 'Support');
+}
+
 async function castVote(proposalId, choice) {
   if (!userData) {
     showError('Please log in to vote');
@@ -14690,7 +14728,6 @@ async function loadEngagementRedemptions() {
     el.innerHTML = '<p style="color:var(--error);">Failed to load redemptions.</p>';
   }
 }
-
 
 
 

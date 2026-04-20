@@ -1,4 +1,5 @@
 const express = require('express');
+const { PermissionFlagsBits } = require('discord.js');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
 
 function createGovernanceUserRouter({
@@ -8,6 +9,7 @@ function createGovernanceUserRouter({
   tenantService,
   getRequestedGuildId,
   fetchGuildById,
+  settingsManager,
   isProposalInGuildScope,
   ensurePublicGovernanceScope,
   commentLimiter,
@@ -49,6 +51,36 @@ function createGovernanceUserRouter({
     }
 
     return { userInfo, votingPower };
+  };
+
+  const normalizeRoleName = (value) => String(value || '').trim().toLowerCase();
+
+  const canMemberVetoProposal = async (discordId, guildId) => {
+    const normalizedGuildId = String(guildId || '').trim();
+    if (!normalizedGuildId || typeof fetchGuildById !== 'function') return false;
+
+    const guild = await fetchGuildById(normalizedGuildId).catch(() => null);
+    if (!guild) return false;
+
+    const member = await guild.members.fetch(discordId).catch(() => null);
+    if (!member) return false;
+
+    if (
+      member.permissions?.has?.(PermissionFlagsBits.Administrator)
+      || member.permissions?.has?.(PermissionFlagsBits.ManageGuild)
+    ) {
+      return true;
+    }
+
+    const trusteeRoleNames = Array.isArray(settingsManager?.getSettings?.()?.staffTrusteeRoles)
+      ? settingsManager.getSettings().staffTrusteeRoles.map(normalizeRoleName).filter(Boolean)
+      : [];
+
+    if (!trusteeRoleNames.length) {
+      return false;
+    }
+
+    return member.roles?.cache?.some((role) => trusteeRoleNames.includes(normalizeRoleName(role?.name))) === true;
   };
 
   const createProposalHandler = async (req, res, sourceLabel = 'user') => {
@@ -166,6 +198,7 @@ function createGovernanceUserRouter({
     if (!requireSession(req, res)) return;
 
     try {
+      const discordId = req.session.discordUser.id;
       const requestedGuildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
       if (!requestedGuildId) {
         return res.status(409).json(toErrorResponse('Select a server to continue', 'TENANT_REQUIRED', null, { success: false }));
@@ -174,9 +207,30 @@ function createGovernanceUserRouter({
         return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND', null, { success: false }));
       }
 
-      const result = proposalService.addSupporter(req.params.id, req.session.discordUser.id);
+      const { userInfo, votingPower } = await resolveEffectiveVotingPower(discordId, requestedGuildId);
+      if (!userInfo || votingPower < 1) {
+        return res.status(403).json(toErrorResponse('You need at least 1 verified NFT to support proposals', 'FORBIDDEN', null, { success: false }));
+      }
+
+      const proposal = proposalService.getProposal(req.params.id);
+      const result = proposalService.addSupporter(req.params.id, discordId);
       if (result?.success) {
-        return res.json(toSuccessResponse(result));
+        let promoted = false;
+        const supportThreshold = Number(settingsManager?.getSettings?.()?.supportThreshold || 4);
+
+        if (String(proposal?.status || '').toLowerCase() === 'supporting' && Number(result.supporterCount || 0) >= supportThreshold) {
+          const promoteResult = await proposalService.promoteToVoting(req.params.id, discordId);
+          if (promoteResult?.success) {
+            promoted = true;
+          }
+        }
+
+        if (!promoted) {
+          const refreshedProposal = proposalService.getProposal(req.params.id);
+          promoted = String(refreshedProposal?.status || '').toLowerCase() === 'voting';
+        }
+
+        return res.json(toSuccessResponse({ ...result, promoted }));
       }
       return res.status(400).json(toErrorResponse(result?.message || 'Failed to support proposal', 'VALIDATION_ERROR', null, result));
     } catch (routeError) {
@@ -247,6 +301,10 @@ function createGovernanceUserRouter({
       }
       if (!isProposalInGuildScope(req.params.id, requestedGuildId)) {
         return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND', null, { success: false }));
+      }
+      const canVeto = await canMemberVetoProposal(req.session.discordUser.id, requestedGuildId);
+      if (!canVeto) {
+        return res.status(403).json(toErrorResponse('Only governance trustees can cast veto votes', 'FORBIDDEN', null, { success: false }));
       }
 
       const { reason } = req.body || {};

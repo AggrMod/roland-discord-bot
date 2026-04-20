@@ -27,6 +27,16 @@ function isProposalVisibleInGuild(proposal, guildId) {
   return !!requestedGuildId && proposalGuildId === requestedGuildId;
 }
 
+function normalizeProposalIdInput(rawValue) {
+  const raw = String(rawValue || '').trim();
+  if (!raw) return '';
+  const legacyNumericMatch = raw.match(/^p-(\d+)$/i);
+  if (legacyNumericMatch) {
+    return String(Number.parseInt(legacyNumericMatch[1], 10));
+  }
+  return raw.toUpperCase();
+}
+
 function isCreatorCancellableStatus(status) {
   const normalizedStatus = String(status || '').toLowerCase();
   if (!normalizedStatus) return false;
@@ -329,7 +339,15 @@ module.exports = {
     await interaction.deferReply();
 
     const discordId = interaction.user.id;
-    const proposalId = interaction.options.getString('proposal_id').toUpperCase();
+    const proposalId = normalizeProposalIdInput(interaction.options.getString('proposal_id'));
+    if (!proposalId) {
+      const embed = new EmbedBuilder()
+        .setColor('#FF0000')
+        .setTitle('❌ Proposal ID Required')
+        .setDescription('Please provide a valid proposal ID.')
+        .setTimestamp();
+      return interaction.editReply({ embeds: [embed] });
+    }
 
     const userInfo = await roleService.getUserInfo(discordId, interaction.guildId, interaction.member);
     const votingPower = Number(userInfo?.voting_power || 0);
@@ -411,7 +429,15 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
 
     const discordId = interaction.user.id;
-    const proposalId = interaction.options.getString('proposal_id').toUpperCase();
+    const proposalId = normalizeProposalIdInput(interaction.options.getString('proposal_id'));
+    if (!proposalId) {
+      const embed = new EmbedBuilder()
+        .setColor('#FF0000')
+        .setTitle('❌ Proposal ID Required')
+        .setDescription('Please provide a valid proposal ID.')
+        .setTimestamp();
+      return interaction.editReply({ embeds: [embed] });
+    }
     const choice = interaction.options.getString('choice');
 
     const userInfo = await roleService.getUserInfo(discordId, interaction.guildId, interaction.member);
@@ -487,7 +513,13 @@ module.exports = {
         ephemeral: true
       });
     }
-    const proposalId = proposalIdRaw.toUpperCase();
+    const proposalId = normalizeProposalIdInput(proposalIdRaw);
+    if (!proposalId) {
+      return interaction.editReply({
+        content: '❌ Proposal ID is required.',
+        ephemeral: true
+      });
+    }
     const confirm = interaction.options.getBoolean('confirm');
 
     if (!confirm) {
@@ -505,7 +537,7 @@ module.exports = {
       });
     }
 
-    if (String(proposal.creator_id || '') !== String(interaction.user.id || '')) {
+    if (String(proposal.creator_id || '').trim() !== String(interaction.user.id || '').trim()) {
       return interaction.editReply({
         content: '❌ You can only cancel proposals you created.',
         ephemeral: true
@@ -602,7 +634,13 @@ module.exports = {
   async handleAdminCancel(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
-    const proposalId = interaction.options.getString('proposal_id').toUpperCase();
+    const proposalId = normalizeProposalIdInput(interaction.options.getString('proposal_id'));
+    if (!proposalId) {
+      return interaction.editReply({
+        content: '❌ Proposal ID is required.',
+        ephemeral: true
+      });
+    }
     const confirm = interaction.options.getBoolean('confirm');
 
     if (!confirm) {

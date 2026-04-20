@@ -268,7 +268,7 @@ function createGovernanceUserRouter({
       if (proposalGuildId && proposalGuildId !== String(requestedGuildId || '').trim()) {
         return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND', null, { success: false }));
       }
-      if (String(proposal.creator_id || '') !== String(discordId || '')) {
+      if (String(proposal.creator_id || '').trim() !== String(discordId || '').trim()) {
         return res.status(403).json(toErrorResponse('Only the proposal creator can cancel this proposal', 'FORBIDDEN', null, { success: false }));
       }
       if (!isCreatorCancellableStatus(proposal.status)) {

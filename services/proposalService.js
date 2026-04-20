@@ -540,7 +540,9 @@ class ProposalService {
     try {
       const proposal = this.getProposal(proposalId);
       if (!proposal) return { success: false, message: 'Proposal not found' };
-      if (String(proposal.creator_id || '') !== String(requesterId || '')) {
+      const proposalCreatorId = String(proposal.creator_id || '').trim();
+      const normalizedRequesterId = String(requesterId || '').trim();
+      if (!proposalCreatorId || !normalizedRequesterId || proposalCreatorId !== normalizedRequesterId) {
         return { success: false, message: 'Only the proposal creator can cancel this proposal' };
       }
 
@@ -559,15 +561,20 @@ class ProposalService {
       if (hasProposalsGuildColumn()) {
         if (proposalGuildId) {
           result = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ? AND creator_id = ? AND guild_id = ?')
-            .run('cancelled', proposalId, requesterId, proposalGuildId);
+            .run('cancelled', proposalId, proposalCreatorId, proposalGuildId);
         } else {
           // Legacy rows may have an empty guild_id; cancel by proposal+creator in that case.
           result = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ? AND creator_id = ?')
-            .run('cancelled', proposalId, requesterId);
+            .run('cancelled', proposalId, proposalCreatorId);
         }
       } else {
         result = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ? AND creator_id = ?')
-          .run('cancelled', proposalId, requesterId);
+          .run('cancelled', proposalId, proposalCreatorId);
+      }
+
+      if (!result?.changes) {
+        // Final safety fallback: ownership already validated from loaded proposal row.
+        result = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ?').run('cancelled', proposalId);
       }
 
       if (!result?.changes) {

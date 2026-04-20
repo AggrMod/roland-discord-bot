@@ -503,6 +503,54 @@ class ProposalService {
     }
   }
 
+  cancelProposal(proposalId, requesterId, guildId = '') {
+    try {
+      const proposal = this.getProposal(proposalId);
+      if (!proposal) return { success: false, message: 'Proposal not found' };
+      if (String(proposal.creator_id || '') !== String(requesterId || '')) {
+        return { success: false, message: 'Only the proposal creator can cancel this proposal' };
+      }
+
+      const cancellableStatuses = ['draft', 'pending_review', 'on_hold', 'supporting', 'voting'];
+      if (!cancellableStatuses.includes(String(proposal.status || '').toLowerCase())) {
+        return { success: false, message: `Proposal cannot be cancelled in status "${proposal.status}"` };
+      }
+
+      const normalizedGuildId = String(guildId || '').trim();
+      let result;
+      if (hasProposalsGuildColumn()) {
+        const scopedGuildId = normalizedGuildId || String(proposal.guild_id || '').trim();
+        if (scopedGuildId) {
+          result = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ? AND creator_id = ? AND guild_id = ?')
+            .run('cancelled', proposalId, requesterId, scopedGuildId);
+        } else {
+          result = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ? AND creator_id = ?')
+            .run('cancelled', proposalId, requesterId);
+        }
+      } else {
+        result = db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ? AND creator_id = ?')
+          .run('cancelled', proposalId, requesterId);
+      }
+
+      if (!result?.changes) {
+        return { success: false, message: 'Failed to cancel proposal' };
+      }
+
+      governanceLogger.log('proposal_cancelled_by_creator', {
+        proposalId,
+        requesterId,
+        fromStatus: proposal.status,
+        guildId: normalizedGuildId || proposal.guild_id || null,
+      });
+      logger.log(`Proposal ${proposalId} cancelled by creator ${requesterId}`);
+
+      return { success: true, proposalId, status: 'cancelled' };
+    } catch (error) {
+      logger.error('Error cancelling proposal:', error);
+      return { success: false, message: 'Failed to cancel proposal' };
+    }
+  }
+
   // ==================== COMMENTS ====================
 
   addComment(proposalId, authorId, authorName, content) {

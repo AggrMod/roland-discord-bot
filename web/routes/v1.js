@@ -141,6 +141,7 @@ router.get('/proposals/active', asyncHandler(async (req, res) => {
       proposalId: p.proposal_id,
       title: p.title,
       description: p.description,
+      costIndication: p.cost_indication || null,
       status: p.status,
       creatorId: redactWallet(p.creator_id), // Redact Discord ID for privacy
       votes,
@@ -208,6 +209,7 @@ router.get('/proposals/concluded', asyncHandler(async (req, res) => {
       proposalId: p.proposal_id,
       title: p.title,
       description: p.description,
+      costIndication: p.cost_indication || null,
       status: normalizeConcludedStatus(p),
       creatorId: redactWallet(p.creator_id),
       votes,
@@ -270,6 +272,7 @@ router.get('/proposals/:id', asyncHandler(async (req, res) => {
     proposalId: proposal.proposal_id,
     title: proposal.title,
     description: proposal.description,
+    costIndication: proposal.cost_indication || null,
     status: proposal.status,
     creatorId: redactWallet(proposal.creator_id),
     votes,

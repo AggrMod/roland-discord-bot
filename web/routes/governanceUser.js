@@ -23,13 +23,19 @@ function createGovernanceUserRouter({
   };
 
   const validateProposalInput = (body) => {
-    const { title, description } = body || {};
+    const { title, description, costIndication } = body || {};
     if (!title?.trim()) return 'Title is required';
     if (title.length > 200) return 'Title must be 200 characters or less';
     if (!description?.trim()) return 'Description is required';
     if (description.length > 5000) return 'Description must be 5000 characters or less';
+    if (!String(costIndication || '').trim()) return 'Cost indication is required';
+    if (String(costIndication || '').trim().length > 200) return 'Cost indication must be 200 characters or less';
     return null;
   };
+
+  const isCreatorCancellableStatus = (status) => (
+    ['draft', 'pending_review', 'on_hold', 'supporting', 'voting'].includes(String(status || '').toLowerCase())
+  );
 
   const resolveEffectiveVotingPower = async (discordId, guildId) => {
     const normalizedGuildId = String(guildId || '').trim();
@@ -110,7 +116,7 @@ function createGovernanceUserRouter({
         title,
         description,
         category: category || 'Other',
-        costIndication: costIndication || null,
+        costIndication: String(costIndication || '').trim(),
         guildId: requestedGuildId || ''
       });
 
@@ -235,6 +241,41 @@ function createGovernanceUserRouter({
       return res.status(400).json(toErrorResponse(result?.message || 'Failed to support proposal', 'VALIDATION_ERROR', null, result));
     } catch (routeError) {
       logger.error('Error adding support:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/api/governance/proposals/:id/cancel', async (req, res) => {
+    if (!requireSession(req, res)) return;
+
+    try {
+      const discordId = req.session.discordUser.id;
+      const requestedGuildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
+      if (!requestedGuildId) {
+        return res.status(409).json(toErrorResponse('Select a server to continue', 'TENANT_REQUIRED', null, { success: false }));
+      }
+      if (!isProposalInGuildScope(req.params.id, requestedGuildId)) {
+        return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND', null, { success: false }));
+      }
+
+      const proposal = proposalService.getProposal(req.params.id);
+      if (!proposal) {
+        return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND', null, { success: false }));
+      }
+      if (String(proposal.creator_id || '') !== String(discordId || '')) {
+        return res.status(403).json(toErrorResponse('Only the proposal creator can cancel this proposal', 'FORBIDDEN', null, { success: false }));
+      }
+      if (!isCreatorCancellableStatus(proposal.status)) {
+        return res.status(400).json(toErrorResponse(`Proposal cannot be cancelled in status "${proposal.status}"`, 'VALIDATION_ERROR', null, { success: false }));
+      }
+
+      const result = proposalService.cancelProposal(req.params.id, discordId, requestedGuildId);
+      if (result?.success) {
+        return res.json(toSuccessResponse(result));
+      }
+      return res.status(400).json(toErrorResponse(result?.message || 'Failed to cancel proposal', 'VALIDATION_ERROR', null, result));
+    } catch (routeError) {
+      logger.error('Error cancelling proposal:', routeError);
       return res.status(500).json(toErrorResponse('Internal server error'));
     }
   });

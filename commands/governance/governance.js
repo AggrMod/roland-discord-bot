@@ -27,6 +27,10 @@ function isProposalVisibleInGuild(proposal, guildId) {
   return !!requestedGuildId && proposalGuildId === requestedGuildId;
 }
 
+function isCreatorCancellableStatus(status) {
+  return ['draft', 'pending_review', 'on_hold', 'supporting', 'voting'].includes(String(status || '').toLowerCase());
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('governance')
@@ -59,7 +63,7 @@ module.exports = {
         .addStringOption(option =>
           option.setName('cost')
             .setDescription('Estimated cost (e.g. 500 USDC)')
-            .setRequired(false)))
+            .setRequired(true)))
     
     .addSubcommand(subcommand =>
       subcommand
@@ -87,6 +91,19 @@ module.exports = {
               { name: '❌ No', value: 'no' },
               { name: '⚖️ Abstain', value: 'abstain' }
             )))
+
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName('cancel')
+        .setDescription('Cancel your own proposal')
+        .addStringOption(option =>
+          option.setName('proposal_id')
+            .setDescription('The proposal ID (e.g., P-001)')
+            .setRequired(true))
+        .addBooleanOption(option =>
+          option.setName('confirm')
+            .setDescription('Confirm cancellation')
+            .setRequired(true)))
     
     // Admin subgroup
     .addSubcommandGroup(group =>
@@ -173,6 +190,9 @@ module.exports = {
           case 'vote':
             await this.handleVote(interaction);
             break;
+          case 'cancel':
+            await this.handleCancel(interaction);
+            break;
         }
       }
     } catch (error) {
@@ -209,7 +229,15 @@ module.exports = {
     }
 
     const category = interaction.options.getString('category') || 'Other';
-    const costIndication = interaction.options.getString('cost') || null;
+    const costIndication = String(interaction.options.getString('cost') || '').trim();
+    if (!costIndication) {
+      const embed = new EmbedBuilder()
+        .setColor('#FF0000')
+        .setTitle('❌ Missing Cost')
+        .setDescription('Please include the estimated cost for your proposal.')
+        .setTimestamp();
+      return interaction.editReply({ embeds: [embed] });
+    }
 
     const result = proposalService.createProposal(discordId, {
       title,
@@ -240,7 +268,8 @@ module.exports = {
       .addFields(
         { name: '🆔 Proposal ID', value: result.proposalId, inline: true },
         { name: '👤 Creator', value: interaction.user.username, inline: true },
-        { name: '📊 Status', value: `Supporting (Needs ${supportThreshold} supporters)`, inline: true }
+        { name: '📊 Status', value: `Supporting (Needs ${supportThreshold} supporters)`, inline: true },
+        { name: '💰 Cost', value: costIndication, inline: true }
       )
       .setFooter({ text: 'Posted to proposals channel - waiting for supporters' })
       .setTimestamp();
@@ -265,7 +294,8 @@ module.exports = {
               { name: '🆔 Proposal ID', value: result.proposalId, inline: true },
               { name: '👤 Creator', value: interaction.user.username, inline: true },
               { name: '📊 Status', value: 'Supporting', inline: true },
-              { name: '👥 Supporters', value: `0/${supportThreshold}`, inline: true }
+              { name: '👥 Supporters', value: `0/${supportThreshold}`, inline: true },
+              { name: '💰 Cost', value: costIndication, inline: true }
             )
             .setFooter({ text: `Click Support below to help promote this proposal (${supportThreshold} needed)` })
             .setTimestamp();
@@ -442,6 +472,59 @@ module.exports = {
 
     await interaction.editReply({ embeds: [embed] });
     logger.log(`User ${interaction.user.username} voted ${choice} on proposal ${proposalId}`);
+  },
+
+  async handleCancel(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const proposalId = interaction.options.getString('proposal_id').toUpperCase();
+    const confirm = interaction.options.getBoolean('confirm');
+
+    if (!confirm) {
+      return interaction.editReply({
+        content: '❌ You must set confirm=true to cancel your proposal.',
+        ephemeral: true
+      });
+    }
+
+    const proposal = proposalService.getProposal(proposalId);
+    if (!proposal || !isProposalVisibleInGuild(proposal, interaction.guildId)) {
+      return interaction.editReply({
+        content: `❌ Proposal not found: ${proposalId}`,
+        ephemeral: true
+      });
+    }
+
+    if (String(proposal.creator_id || '') !== String(interaction.user.id || '')) {
+      return interaction.editReply({
+        content: '❌ You can only cancel proposals you created.',
+        ephemeral: true
+      });
+    }
+
+    if (!isCreatorCancellableStatus(proposal.status)) {
+      return interaction.editReply({
+        content: `❌ Proposal ${proposalId} cannot be cancelled in status "${proposal.status}".`,
+        ephemeral: true
+      });
+    }
+
+    const updateResult = (hasProposalsGuildColumn() && interaction.guildId)
+      ? db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ? AND creator_id = ? AND guild_id = ?').run('cancelled', proposalId, interaction.user.id, interaction.guildId)
+      : db.prepare('UPDATE proposals SET status = ? WHERE proposal_id = ? AND creator_id = ?').run('cancelled', proposalId, interaction.user.id);
+
+    if (!updateResult?.changes) {
+      return interaction.editReply({
+        content: `❌ Failed to cancel proposal ${proposalId}.`,
+        ephemeral: true
+      });
+    }
+
+    await interaction.editReply({
+      content: `✅ Proposal ${proposalId} has been cancelled.`,
+      ephemeral: true
+    });
+    logger.log(`User ${interaction.user.tag} cancelled own proposal ${proposalId}`);
   },
 
   // ==================== ADMIN COMMANDS ====================

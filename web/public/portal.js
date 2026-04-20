@@ -139,7 +139,7 @@ function isTenantSensitiveRequest(input) {
       url.pathname.startsWith('/api/user/') ||
       url.pathname === '/api/user/proposals' ||
       url.pathname === '/api/governance/proposals' ||
-      /^\/api\/governance\/proposals\/[^/]+\/(submit|support|comments|veto)$/.test(url.pathname) ||
+      /^\/api\/governance\/proposals\/[^/]+\/(submit|support|cancel|comments|veto)$/.test(url.pathname) ||
       url.pathname.startsWith('/api/public/v1/') ||
       url.pathname.startsWith('/api/verify/') ||
       url.pathname.startsWith('/api/micro-verify/') ||
@@ -2510,7 +2510,10 @@ function renderProposals() {
         ${proposal.cost_indication ? ` • Cost: ${escapeHtml(proposal.cost_indication)}` : ''}
       </div>
       ${proposal.description ? `<p style="color: var(--text-secondary); margin-top: var(--space-3); line-height: 1.6;">${escapeHtml(proposal.description)}</p>` : ''}
-      ${proposal.status === 'draft' ? `<button onclick="submitProposalForReview('${escapeJsString(proposal.proposal_id)}')" style="margin-top:8px; padding:6px 14px; background:#6366f1; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Submit for Review</button>` : ''}
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+        ${proposal.status === 'draft' ? `<button onclick="submitProposalForReview('${escapeJsString(proposal.proposal_id)}')" style="padding:6px 14px; background:#6366f1; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85em;">Submit for Review</button>` : ''}
+        ${['draft','pending_review','on_hold','supporting','voting'].includes(String(proposal.status || '').toLowerCase()) ? `<button onclick="cancelOwnProposal('${escapeJsString(proposal.proposal_id)}')" style="padding:6px 14px; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.35); border-radius:6px; color:#fca5a5; cursor:pointer; font-size:0.85em;">Cancel / Delete</button>` : ''}
+      </div>
     </div>
   `).join('') + '</div>';
 
@@ -2534,6 +2537,27 @@ async function submitProposalForReview(proposalId) {
       showError('Error: ' + e.message);
     }
   }, 'Submit');
+}
+
+async function cancelOwnProposal(proposalId) {
+  showConfirmModal('Cancel Proposal?', 'This will cancel and hide your proposal from active governance flow.', async () => {
+    try {
+      const response = await fetch(`/api/governance/proposals/${proposalId}/cancel`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        showSuccess('Proposal cancelled.');
+        await loadPortal();
+        switchSection('governance');
+      } else {
+        showError(data.message || 'Failed to cancel proposal');
+      }
+    } catch (e) {
+      showError('Error cancelling proposal: ' + e.message);
+    }
+  }, 'Cancel Proposal');
 }
 
 async function loadActiveVotes() {
@@ -2611,6 +2635,7 @@ async function loadActiveVotes() {
           </div>
           <div class="proposal-meta" style="margin-bottom: var(--space-4);">
             Proposal #${proposalId} • Created by ${escapeHtml(creator)}
+            ${(proposal.costIndication || proposal.cost_indication) ? ` • Cost: ${escapeHtml(proposal.costIndication || proposal.cost_indication)}` : ''}
           </div>
           ${proposal.description ? `<p style="color: var(--text-secondary); margin-bottom: var(--space-4); line-height: 1.6;">${escapeHtml(proposal.description)}</p>` : ''}
           
@@ -3858,7 +3883,7 @@ function showCreateProposalForm() {
         </select>
       </div>
       <div>
-        <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Cost Indication (optional)</label>
+        <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Cost Indication *</label>
         <input id="proposalCostInput" type="text" placeholder="e.g. ~500 USDC" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
       </div>
       <div>
@@ -3872,9 +3897,9 @@ function showCreateProposalForm() {
     const proposalTitle = document.getElementById('proposalTitleInput')?.value.trim();
     const proposalDesc = document.getElementById('proposalDescInput')?.value.trim();
     const proposalCategory = document.getElementById('proposalCategoryInput')?.value || 'Other';
-    const proposalCost = document.getElementById('proposalCostInput')?.value.trim() || null;
-    if (!proposalTitle || !proposalDesc) {
-      showError('Please fill in both title and description');
+    const proposalCost = document.getElementById('proposalCostInput')?.value.trim() || '';
+    if (!proposalTitle || !proposalDesc || !proposalCost) {
+      showError('Please fill in title, cost, and description');
       return;
     }
     try {
@@ -6386,9 +6411,10 @@ async function loadAdminHelpView() {
       { name: '/verification admin og-sync', desc: 'Sync OG role assignment', options: 'full (optional)', example: '/verification admin og-sync full:true' }
     ])}
     ${cmdSection('Governance', 'GOV', [
-      { name: '/governance propose', desc: 'Create proposal', options: 'title, description (required), category, cost', example: '/governance propose title:"Fund X" description:"..."' },
-      { name: '/governance support', desc: 'Support draft proposal', options: 'proposal_id (required)', example: '/governance support proposal_id:P-001' },
+      { name: '/governance propose', desc: 'Create proposal', options: 'title, description, cost (required), category (optional)', example: '/governance propose title:"Fund X" description:"..." cost:"500 USDC"' },
+      { name: '/governance support', desc: 'Support a proposal in supporting phase', options: 'proposal_id (required)', example: '/governance support proposal_id:P-001' },
       { name: '/governance vote', desc: 'Vote on active proposal', options: 'proposal_id, choice (required)', example: '/governance vote proposal_id:P-001 choice:yes' },
+      { name: '/governance cancel', desc: 'Cancel your own proposal', options: 'proposal_id, confirm (required)', example: '/governance cancel proposal_id:P-001 confirm:true' },
       { name: '/governance admin list', desc: 'List proposals', options: 'status (optional)', example: '/governance admin list status:voting' },
       { name: '/governance admin cancel', desc: 'Cancel proposal', options: 'proposal_id, confirm (required)', example: '/governance admin cancel proposal_id:P-001 confirm:true' },
       { name: '/governance admin settings', desc: 'View governance settings', options: '-', example: '/governance admin settings' }
@@ -12142,9 +12168,10 @@ function loadApiRefView() {
       endpoint('GET', '/api/micro-verify/status', 'Checks the current micro-transfer verification status.', false, null),
       endpoint('GET', '/api/micro-verify/config', 'Returns the current micro-transfer configuration.', false, null),
       endpoint('POST', '/api/user/vote', 'Casts a vote on a proposal. Body: <code>{ "proposalId": "...", "choice": "yes" }</code>', false, null),
-      endpoint('POST', '/api/user/proposals', 'Creates a governance proposal. Body: <code>{ "title": "...", "description": "...", "category": "Other", "costIndication": "~500 USDC" }</code>', false, null),
+      endpoint('POST', '/api/user/proposals', 'Creates a governance proposal. Body: <code>{ "title": "...", "description": "...", "costIndication": "~500 USDC", "category": "Other" }</code>', false, null),
       endpoint('POST', '/api/governance/proposals/:id/submit', 'Submits a draft proposal for review.', false, null),
-      endpoint('POST', '/api/governance/proposals/:id/support', 'Adds support to a draft proposal.', false, null),
+      endpoint('POST', '/api/governance/proposals/:id/support', 'Adds support to a proposal in supporting phase.', false, null),
+      endpoint('POST', '/api/governance/proposals/:id/cancel', 'Cancels a proposal owned by the current user.', false, null),
       endpoint('GET', '/api/governance/proposals/:id/comments', 'Returns proposal comments.', false, null),
       endpoint('POST', '/api/governance/proposals/:id/comments', 'Adds a proposal comment.', false, null),
       endpoint('POST', '/api/user/wallets/:address/favorite', 'Marks a linked wallet as primary.', false, null),
@@ -14728,9 +14755,3 @@ async function loadEngagementRedemptions() {
     el.innerHTML = '<p style="color:var(--error);">Failed to load redemptions.</p>';
   }
 }
-
-
-
-
-
-

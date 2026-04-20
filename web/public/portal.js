@@ -1128,6 +1128,7 @@ function refreshTenantScopedViews() {
 
   if (activeSection === 'section-governance') {
     loadActiveVotes();
+    syncGovernanceModuleSettingsCard();
   } else if (activeSection === 'section-treasury') {
     loadTreasuryWalletTable();
     if (isAdmin) showAdminTreasuryElements();
@@ -1722,7 +1723,7 @@ function switchSettingsTab(tab) {
   // Trigger data loads for the relevant tab
   const tabLoaders = {
     general:      () => { if (typeof loadAdminSettingsView === 'function') loadAdminSettingsView(); },
-    governance:   () => { if (typeof loadVotingPowerView === 'function') loadVotingPowerView(); },
+    governance:   () => { if (typeof loadVotingPowerView === 'function') loadVotingPowerView('adminVotingPowerContent'); },
     verification: () => {
       // Ensure verification settings container exists before the roles card
       const vPane = document.getElementById('settingsTab-verification');
@@ -3091,6 +3092,7 @@ function switchSection(sectionName, options = {}) {
     renderModuleHub();
   } else if (sectionName === 'governance' && userData) {
     loadActiveVotes();
+    syncGovernanceModuleSettingsCard();
   } else if (sectionName === 'servers') {
     loadServerAccess();
   } else if (sectionName === 'wallets' && userData) {
@@ -4066,7 +4068,7 @@ function showAdminView(view) {
     help: { card: 'adminHelpCard', load: loadAdminHelpView },
     roles: { card: 'adminRolesCard', load: () => loadAdminRoles('adminRolesContent') },
     activity: { card: 'adminActivityCard', load: loadAdminActivity },
-    votingpower: { card: 'adminVotingPowerCard', load: loadVotingPowerView },
+    votingpower: { card: 'adminVotingPowerCard', load: () => loadVotingPowerView('adminVotingPowerContent') },
     nfttracker: { card: 'adminNftTrackerCard', load: loadNftTrackerView },
     invites: { card: 'adminInviteTrackerCard', load: loadInviteTrackerSettingsView },
     selfserveroles: { card: 'adminSelfServeRolesCard', load: loadSelfServeRolesView },
@@ -7809,6 +7811,19 @@ async function saveGovernanceSettings() {
   }
 }
 
+function syncGovernanceModuleSettingsCard() {
+  const governanceSettingsCard = document.getElementById('governanceModuleSettingsCard');
+  if (!governanceSettingsCard) return;
+
+  const canManageGovernance = !!(activeGuildId && (isAdmin || isSuperadmin));
+  governanceSettingsCard.style.display = canManageGovernance ? '' : 'none';
+  if (!canManageGovernance) return;
+
+  if (typeof loadVotingPowerView === 'function') {
+    loadVotingPowerView('governanceModuleSettingsContent');
+  }
+}
+
 // ==================== VERIFICATION SETTINGS ====================
 
 async function loadVerificationSettings() {
@@ -9913,10 +9928,25 @@ async function exportInviteTrackerCsv() {
 }
 // ==================== VP MAPPINGS ====================
 
-async function loadVotingPowerView() {
-  if (!isAdmin) return;
-  const content = document.getElementById('adminVotingPowerContent');
+let governanceSettingsTargetPaneId = 'adminVotingPowerContent';
+
+async function loadVotingPowerView(targetPaneId = null) {
+  if (!(isAdmin || isSuperadmin)) return;
+  if (targetPaneId) governanceSettingsTargetPaneId = String(targetPaneId);
+
+  const preferred = document.getElementById(governanceSettingsTargetPaneId || 'adminVotingPowerContent');
+  const content = preferred || document.getElementById('adminVotingPowerContent');
   if (!content) return;
+
+  const alternatePaneId = governanceSettingsTargetPaneId === 'adminVotingPowerContent'
+    ? 'governanceModuleSettingsContent'
+    : 'adminVotingPowerContent';
+  const alternatePane = document.getElementById(alternatePaneId);
+  if (alternatePane && alternatePane !== content) {
+    alternatePane.innerHTML = alternatePaneId === 'governanceModuleSettingsContent'
+      ? 'Open Governance to load governance settings.'
+      : 'Select <strong>Voting Power</strong> to load data.';
+  }
 
   content.innerHTML = `<div style="text-align:center; padding: var(--space-5); color: var(--text-secondary);"><div class="spinner"></div><p>Loading voting power mappings...</p></div>`;
 

@@ -505,6 +505,14 @@
             <p class="section-subtitle">Participate in DAO decision-making and proposal voting</p>
           </header>
 
+          <div id="governanceModuleSettingsCard" class="card" style="display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:var(--space-4); gap:8px; flex-wrap:wrap;">
+              <h3 style="margin:0;">Governance Settings</h3>
+              <button class="btn-secondary" onclick="loadVotingPowerView('governanceModuleSettingsContent')" style="font-size:0.85em; padding:6px 12px;">Refresh</button>
+            </div>
+            <div id="governanceModuleSettingsContent" style="color:var(--text-secondary);">Loading governance settings...</div>
+          </div>
+
           <div class="card">
             <div class="card-header">
               <h3>Active Proposals</h3>

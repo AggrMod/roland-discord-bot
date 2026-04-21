@@ -283,6 +283,13 @@ router.get('/proposals/:id', asyncHandler(async (req, res) => {
 
   const totalVoted = proposal.yes_vp + proposal.no_vp + proposal.abstain_vp;
   const quorumPercentage = proposal.total_vp > 0 ? Math.round((totalVoted / proposal.total_vp) * 100) : 0;
+  const supportThreshold = Number(settingsManager.getSettings?.().supportThreshold || 4);
+  const supportCount = Number(
+    db.prepare('SELECT COUNT(*) as c FROM proposal_supporters WHERE proposal_id = ?').get(id)?.c || 0
+  );
+  const commentCount = Number(
+    db.prepare('SELECT COUNT(*) as c FROM proposal_comments WHERE proposal_id = ?').get(id)?.c || 0
+  );
 
   const proposalData = {
     proposalId: proposal.proposal_id,
@@ -290,9 +297,16 @@ router.get('/proposals/:id', asyncHandler(async (req, res) => {
     goal: proposal.goal || null,
     description: proposal.description,
     costIndication: proposal.cost_indication || null,
-    status: proposal.status,
+    category: proposal.category || 'Other',
+    status: normalizeConcludedStatus(proposal),
     creatorId: redactWallet(proposal.creator_id),
     votes,
+    support: {
+      count: supportCount,
+      required: supportThreshold,
+      deadline: proposal.support_deadline || null,
+    },
+    commentCount,
     quorum: {
       required: proposal.quorum_required || proposal.quorum_threshold || 0,
       current: quorumPercentage

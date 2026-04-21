@@ -212,6 +212,88 @@ function createAuthUserRouter({
     return getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
   };
 
+  const getScopedProposalForGuild = (proposalId, guildId = '') => {
+    const normalizedProposalId = String(proposalId || '').trim();
+    const normalizedGuildId = String(guildId || '').trim();
+    if (!normalizedProposalId) return null;
+
+    if (hasProposalsGuildColumn() && normalizedGuildId) {
+      return db.prepare('SELECT * FROM proposals WHERE proposal_id = ? AND guild_id = ?').get(normalizedProposalId, normalizedGuildId) || null;
+    }
+    return db.prepare('SELECT * FROM proposals WHERE proposal_id = ?').get(normalizedProposalId) || null;
+  };
+
+  const resolvePublicWebAuthContext = async (
+    req,
+    res,
+    {
+      requireGuild = true,
+      requireMembership = true,
+      requireVotingPower = false,
+    } = {}
+  ) => {
+    const token = getBearerToken(req);
+    if (!token) {
+      res.status(401).json(toErrorResponse('Missing bearer token', 'UNAUTHORIZED'));
+      return null;
+    }
+
+    const payload = verifySignedToken(token);
+    const now = Date.now();
+    if (!payload || payload.kind !== WEB_AUTH_TOKEN_KIND || Number(payload.exp || 0) < now) {
+      res.status(401).json(toErrorResponse('Invalid or expired bearer token', 'UNAUTHORIZED'));
+      return null;
+    }
+
+    const tokenGuildId = normalizeGuildId(String(payload.guildId || '').trim());
+    const requestedGuildId = resolvePublicGuildId(req);
+    const guildId = normalizeGuildId(String(requestedGuildId || tokenGuildId || '').trim());
+
+    if (requireGuild && !guildId) {
+      res.status(400).json(toErrorResponse('guildId query parameter is required', 'VALIDATION_ERROR'));
+      return null;
+    }
+    if (tokenGuildId && guildId && tokenGuildId !== guildId) {
+      res.status(403).json(toErrorResponse('Token guild does not match requested guild', 'FORBIDDEN'));
+      return null;
+    }
+
+    const userId = String(payload.sub || '').trim();
+    if (!userId) {
+      res.status(401).json(toErrorResponse('Invalid bearer token subject', 'UNAUTHORIZED'));
+      return null;
+    }
+
+    const membership = guildId
+      ? await checkGuildMembership(guildId, userId)
+      : { isMember: false, guild: null, member: null };
+
+    if (requireMembership && guildId && !membership.isMember) {
+      res.status(403).json(toErrorResponse('You must be a member of this Discord server', 'FORBIDDEN'));
+      return null;
+    }
+
+    const userInfo = await roleService.getUserInfo(userId);
+    const votingPower = membership.member
+      ? Number(roleService.getUserVotingPower(userId, membership.member, guildId) || 0)
+      : Number(userInfo?.voting_power || 0);
+
+    if (requireVotingPower && (!userInfo || votingPower < 1)) {
+      res.status(403).json(toErrorResponse('You need at least 1 verified NFT to perform this action', 'FORBIDDEN'));
+      return null;
+    }
+
+    return {
+      payload,
+      userId,
+      username: String(payload.username || '').trim() || 'Member',
+      guildId,
+      membership,
+      userInfo,
+      votingPower,
+    };
+  };
+
   router.get('/api/features', publicApiLimiter, (_req, res) => {
     try {
       const heistEnabled = process.env.HEIST_ENABLED === 'true';
@@ -424,6 +506,246 @@ function createAuthUserRouter({
       }));
     } catch (routeError) {
       logger.error('Error resolving public web auth identity:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/public/v1/governance/proposals/:id/comments', async (req, res) => {
+    try {
+      const proposalId = String(req.params.id || '').trim();
+      const scopedGuildId = resolvePublicGuildId(req);
+      if (tenantService.isMultitenantEnabled() && !scopedGuildId) {
+        return res.status(400).json(toErrorResponse('guildId query parameter is required', 'VALIDATION_ERROR'));
+      }
+
+      const proposal = getScopedProposalForGuild(proposalId, scopedGuildId);
+      if (!proposal) {
+        return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND'));
+      }
+
+      const comments = proposalService.getComments(proposalId);
+      return res.json(toSuccessResponse({ comments }));
+    } catch (routeError) {
+      logger.error('Error fetching public governance comments:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/public/v1/governance/proposals/:id/my-state', async (req, res) => {
+    try {
+      const auth = await resolvePublicWebAuthContext(req, res, {
+        requireGuild: true,
+        requireMembership: false,
+        requireVotingPower: false,
+      });
+      if (!auth) return;
+
+      const proposalId = String(req.params.id || '').trim();
+      const proposal = getScopedProposalForGuild(proposalId, auth.guildId);
+      if (!proposal) {
+        return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND'));
+      }
+
+      const supportRow = db.prepare(
+        'SELECT 1 AS supported FROM proposal_supporters WHERE proposal_id = ? AND supporter_id = ?'
+      ).get(proposalId, auth.userId);
+      const voteRow = db.prepare(
+        'SELECT vote_choice, voting_power, voted_at FROM votes WHERE proposal_id = ? AND voter_id = ?'
+      ).get(proposalId, auth.userId);
+
+      return res.json(toSuccessResponse({
+        proposalId,
+        guildId: auth.guildId,
+        isGuildMember: !!auth.membership?.isMember,
+        hasSupported: !!supportRow,
+        vote: voteRow
+          ? {
+              choice: String(voteRow.vote_choice || '').toLowerCase(),
+              votingPower: Number(voteRow.voting_power || 0),
+              votedAt: voteRow.voted_at || null,
+            }
+          : null,
+      }));
+    } catch (routeError) {
+      logger.error('Error fetching public governance proposal user state:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/api/public/v1/governance/proposals', async (req, res) => {
+    try {
+      const auth = await resolvePublicWebAuthContext(req, res, {
+        requireGuild: true,
+        requireMembership: true,
+        requireVotingPower: true,
+      });
+      if (!auth) return;
+
+      const {
+        title,
+        goal,
+        description,
+        category,
+        costIndication,
+      } = req.body || {};
+
+      if (!String(title || '').trim()) {
+        return res.status(400).json(toErrorResponse('Title is required', 'VALIDATION_ERROR'));
+      }
+      if (!String(goal || '').trim()) {
+        return res.status(400).json(toErrorResponse('Goal is required', 'VALIDATION_ERROR'));
+      }
+      if (!String(description || '').trim()) {
+        return res.status(400).json(toErrorResponse('Description is required', 'VALIDATION_ERROR'));
+      }
+      if (!String(costIndication || '').trim()) {
+        return res.status(400).json(toErrorResponse('Costs are required', 'VALIDATION_ERROR'));
+      }
+      if (!String(category || '').trim()) {
+        return res.status(400).json(toErrorResponse('Category is required', 'VALIDATION_ERROR'));
+      }
+
+      const result = proposalService.createProposal(auth.userId, {
+        title: String(title).trim(),
+        goal: String(goal).trim(),
+        description: String(description).trim(),
+        category: String(category).trim(),
+        costIndication: String(costIndication).trim(),
+        guildId: auth.guildId,
+        initialStatus: 'supporting',
+      });
+
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to create proposal', 'VALIDATION_ERROR', null, result));
+      }
+
+      proposalService.postToProposalsChannel(result.proposalId, {
+        creatorDisplayName: auth.username || '',
+      }).catch(() => {});
+
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error creating public governance proposal:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/api/public/v1/governance/proposals/:id/support', async (req, res) => {
+    try {
+      const auth = await resolvePublicWebAuthContext(req, res, {
+        requireGuild: true,
+        requireMembership: true,
+        requireVotingPower: true,
+      });
+      if (!auth) return;
+
+      const proposalId = String(req.params.id || '').trim();
+      const proposal = getScopedProposalForGuild(proposalId, auth.guildId);
+      if (!proposal) {
+        return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND'));
+      }
+
+      const result = proposalService.addSupporter(proposalId, auth.userId);
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to support proposal', 'VALIDATION_ERROR', null, result));
+      }
+
+      let promoted = false;
+      const supportThreshold = Number(settingsManager?.getSettings?.()?.supportThreshold || 4);
+      if (String(proposal?.status || '').toLowerCase() === 'supporting' && Number(result.supporterCount || 0) >= supportThreshold) {
+        const promoteResult = await proposalService.promoteToVoting(proposalId, auth.userId);
+        promoted = !!promoteResult?.success;
+      }
+
+      if (!promoted) {
+        const refreshedProposal = proposalService.getProposal(proposalId);
+        promoted = String(refreshedProposal?.status || '').toLowerCase() === 'voting';
+        if (!promoted && String(refreshedProposal?.status || '').toLowerCase() === 'supporting') {
+          proposalService.postToProposalsChannel(proposalId).catch(() => {});
+        }
+      }
+
+      return res.json(toSuccessResponse({ ...result, promoted }));
+    } catch (routeError) {
+      logger.error('Error adding public governance support:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/api/public/v1/governance/proposals/:id/vote', async (req, res) => {
+    try {
+      const auth = await resolvePublicWebAuthContext(req, res, {
+        requireGuild: true,
+        requireMembership: true,
+        requireVotingPower: true,
+      });
+      if (!auth) return;
+
+      const proposalId = String(req.params.id || '').trim();
+      const proposal = getScopedProposalForGuild(proposalId, auth.guildId);
+      if (!proposal) {
+        return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND'));
+      }
+
+      const choice = String(req.body?.choice || '').trim().toLowerCase();
+      if (!['yes', 'no', 'abstain'].includes(choice)) {
+        return res.status(400).json(toErrorResponse('Choice must be yes, no, or abstain', 'VALIDATION_ERROR'));
+      }
+
+      const result = proposalService.castVote(proposalId, auth.userId, choice, auth.votingPower);
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to cast vote', 'VALIDATION_ERROR', null, result));
+      }
+
+      proposalService.updateVotingMessage(proposalId).catch(() => {});
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error casting public governance vote:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/api/public/v1/governance/proposals/:id/comments', async (req, res) => {
+    try {
+      const auth = await resolvePublicWebAuthContext(req, res, {
+        requireGuild: true,
+        requireMembership: true,
+        requireVotingPower: false,
+      });
+      if (!auth) return;
+
+      const proposalId = String(req.params.id || '').trim();
+      const proposal = getScopedProposalForGuild(proposalId, auth.guildId);
+      if (!proposal) {
+        return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND'));
+      }
+
+      const content = String(req.body?.content || '').trim();
+      if (!content) {
+        return res.status(400).json(toErrorResponse('Content is required', 'VALIDATION_ERROR'));
+      }
+      if (content.length > 1000) {
+        return res.status(400).json(toErrorResponse('Comment must be 1000 characters or less', 'VALIDATION_ERROR'));
+      }
+
+      const result = proposalService.addComment(
+        proposalId,
+        auth.userId,
+        auth.username,
+        content
+      );
+
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to add comment', 'VALIDATION_ERROR', null, result));
+      }
+
+      proposalService.postCommentToDiscussion(proposalId, result.comment, { source: 'web' }).catch((routeError) => {
+        logger.warn(`Failed to mirror public governance comment ${proposalId}: ${routeError?.message || routeError}`);
+      });
+
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error posting public governance comment:', routeError);
       return res.status(500).json(toErrorResponse('Internal server error'));
     }
   });

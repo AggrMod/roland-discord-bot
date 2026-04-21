@@ -212,6 +212,19 @@ function createAuthUserRouter({
     return getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
   };
 
+  const normalizeComparableDiscordId = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const numericMatch = raw.match(/\d{17,20}/);
+    if (numericMatch) return numericMatch[0];
+    return raw;
+  };
+
+  const isCreatorCancellableStatus = (status) => {
+    const normalized = String(status || '').toLowerCase();
+    return ['draft', 'pending_review', 'on_hold', 'supporting', 'voting'].includes(normalized);
+  };
+
   const getScopedProposalForGuild = (proposalId, guildId = '') => {
     const normalizedProposalId = String(proposalId || '').trim();
     const normalizedGuildId = String(guildId || '').trim();
@@ -552,12 +565,15 @@ function createAuthUserRouter({
       const voteRow = db.prepare(
         'SELECT vote_choice, voting_power, voted_at FROM votes WHERE proposal_id = ? AND voter_id = ?'
       ).get(proposalId, auth.userId);
+      const creatorMatches = normalizeComparableDiscordId(proposal.creator_id) === normalizeComparableDiscordId(auth.userId);
+      const canCancel = creatorMatches && isCreatorCancellableStatus(proposal.status);
 
       return res.json(toSuccessResponse({
         proposalId,
         guildId: auth.guildId,
         isGuildMember: !!auth.membership?.isMember,
         hasSupported: !!supportRow,
+        canCancel,
         vote: voteRow
           ? {
               choice: String(voteRow.vote_choice || '').toLowerCase(),
@@ -746,6 +762,39 @@ function createAuthUserRouter({
       return res.json(toSuccessResponse(result));
     } catch (routeError) {
       logger.error('Error posting public governance comment:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/api/public/v1/governance/proposals/:id/cancel', async (req, res) => {
+    try {
+      const auth = await resolvePublicWebAuthContext(req, res, {
+        requireGuild: true,
+        requireMembership: true,
+        requireVotingPower: false,
+      });
+      if (!auth) return;
+
+      const proposalId = String(req.params.id || '').trim();
+      const proposal = getScopedProposalForGuild(proposalId, auth.guildId);
+      if (!proposal) {
+        return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND'));
+      }
+
+      if (normalizeComparableDiscordId(proposal.creator_id) !== normalizeComparableDiscordId(auth.userId)) {
+        return res.status(403).json(toErrorResponse('Only the proposal creator can cancel this proposal', 'FORBIDDEN'));
+      }
+      if (!isCreatorCancellableStatus(proposal.status)) {
+        return res.status(400).json(toErrorResponse(`Proposal cannot be cancelled in status "${proposal.status}"`, 'VALIDATION_ERROR'));
+      }
+
+      const result = proposalService.cancelProposal(proposalId, auth.userId, auth.guildId);
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to cancel proposal', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error cancelling public governance proposal:', routeError);
       return res.status(500).json(toErrorResponse('Internal server error'));
     }
   });

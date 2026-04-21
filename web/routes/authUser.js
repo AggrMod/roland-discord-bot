@@ -46,6 +46,160 @@ function createAuthUserRouter({
     return hasProposalsGuildColumnCached;
   };
 
+  const parseCommaSeparated = (value) => String(value || '')
+    .split(',')
+    .map(entry => entry.trim())
+    .filter(Boolean);
+
+  const normalizeOrigin = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    try {
+      const parsed = new URL(raw);
+      return parsed.origin;
+    } catch (_error) {
+      try {
+        const parsed = new URL(`https://${raw}`);
+        return parsed.origin;
+      } catch (_error2) {
+        return '';
+      }
+    }
+  };
+
+  const getRequestOrigin = (req) => {
+    const forwardedHost = String(req.get('x-forwarded-host') || '').split(',')[0].trim();
+    const directHost = String(req.get('host') || '').trim();
+    const host = forwardedHost || directHost;
+    if (!host) return '';
+    const forwardedProto = String(req.get('x-forwarded-proto') || '').split(',')[0].trim();
+    const protocol = forwardedProto || req.protocol || 'https';
+    return `${protocol}://${host}`;
+  };
+
+  const getPublicWebAuthSecret = () => String(
+    process.env.PUBLIC_WEB_AUTH_SECRET
+      || process.env.SESSION_SECRET
+      || process.env.DISCORD_CLIENT_SECRET
+      || ''
+  ).trim();
+
+  const toBase64Url = (value) => Buffer.from(String(value || ''), 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+
+  const fromBase64Url = (value) => {
+    const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+    const padding = normalized.length % 4;
+    const padded = padding ? normalized + '='.repeat(4 - padding) : normalized;
+    return Buffer.from(padded, 'base64').toString('utf8');
+  };
+
+  const signPayload = (payload) => {
+    const secret = getPublicWebAuthSecret();
+    if (!secret) {
+      return null;
+    }
+    const encodedPayload = toBase64Url(JSON.stringify(payload || {}));
+    const signature = crypto.createHmac('sha256', secret).update(encodedPayload).digest('hex');
+    return `${encodedPayload}.${signature}`;
+  };
+
+  const verifySignedToken = (token) => {
+    const secret = getPublicWebAuthSecret();
+    if (!secret) return null;
+    const raw = String(token || '').trim();
+    const [encodedPayload, providedSignature] = raw.split('.');
+    if (!encodedPayload || !providedSignature) return null;
+
+    const expectedSignature = crypto.createHmac('sha256', secret).update(encodedPayload).digest('hex');
+    if (providedSignature.length !== expectedSignature.length) return null;
+    if (!crypto.timingSafeEqual(Buffer.from(providedSignature), Buffer.from(expectedSignature))) return null;
+
+    try {
+      return JSON.parse(fromBase64Url(encodedPayload));
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  const WEB_AUTH_TOKEN_KIND = 'public_web_access_v1';
+  const WEB_AUTH_STATE_KIND = 'public_web_oauth_state_v1';
+  const WEB_AUTH_TOKEN_TTL_MS = Math.max(5 * 60 * 1000, Number(process.env.PUBLIC_WEB_ACCESS_TOKEN_TTL_MS || 8 * 60 * 60 * 1000));
+  const WEB_AUTH_STATE_TTL_MS = Math.max(60 * 1000, Number(process.env.PUBLIC_WEB_OAUTH_STATE_TTL_MS || 10 * 60 * 1000));
+
+  const getAllowedWebReturnOrigins = (req) => {
+    const configured = parseCommaSeparated(process.env.PUBLIC_WEB_ALLOWED_RETURN_ORIGINS)
+      .map(normalizeOrigin)
+      .filter(Boolean);
+    const defaults = [
+      'https://the-solpranos.com',
+      'https://www.the-solpranos.com',
+      normalizeOrigin(getRequestOrigin(req)),
+    ].filter(Boolean);
+    return Array.from(new Set([...configured, ...defaults]));
+  };
+
+  const sanitizeExternalReturnTo = (rawReturnTo, req) => {
+    const raw = String(rawReturnTo || '').trim();
+    if (!raw) return '';
+
+    let parsed;
+    try {
+      parsed = new URL(raw);
+    } catch (_error) {
+      return '';
+    }
+
+    const allowedOrigins = getAllowedWebReturnOrigins(req);
+    if (!allowedOrigins.includes(parsed.origin)) {
+      return '';
+    }
+    return parsed.toString();
+  };
+
+  const getPublicWebDiscordRedirectUri = (req) => {
+    const configured = String(process.env.PUBLIC_WEB_DISCORD_REDIRECT_URI || '').trim();
+    if (configured) return configured;
+    const requestOrigin = normalizeOrigin(getRequestOrigin(req));
+    if (!requestOrigin) return '';
+    return `${requestOrigin}/api/public/v1/auth/discord/callback`;
+  };
+
+  const buildReturnUrlWithFragment = (returnTo, params) => {
+    const target = new URL(returnTo);
+    const fragment = new URLSearchParams();
+    for (const [key, value] of Object.entries(params || {})) {
+      if (value === undefined || value === null) continue;
+      fragment.set(key, String(value));
+    }
+    target.hash = fragment.toString();
+    return target.toString();
+  };
+
+  const checkGuildMembership = async (guildId, discordId) => {
+    const normalizedGuildId = String(guildId || '').trim();
+    const normalizedDiscordId = String(discordId || '').trim();
+    if (!normalizedGuildId || !normalizedDiscordId || typeof fetchGuildById !== 'function') {
+      return { isMember: false, guild: null, member: null };
+    }
+
+    const guild = await fetchGuildById(normalizedGuildId).catch(() => null);
+    if (!guild) {
+      return { isMember: false, guild: null, member: null };
+    }
+    const member = await guild.members.fetch(normalizedDiscordId).catch(() => null);
+    return { isMember: !!member, guild, member };
+  };
+
+  const getBearerToken = (req) => {
+    const header = String(req.get('authorization') || '').trim();
+    if (!header.toLowerCase().startsWith('bearer ')) return '';
+    return header.slice('bearer '.length).trim();
+  };
+
   router.get('/api/features', publicApiLimiter, (_req, res) => {
     try {
       const heistEnabled = process.env.HEIST_ENABLED === 'true';
@@ -53,6 +207,201 @@ function createAuthUserRouter({
     } catch (routeError) {
       logger.error('Error fetching feature flags:', routeError);
       return res.json(toSuccessResponse({ heistEnabled: false }));
+    }
+  });
+
+  router.get('/api/public/v1/auth/discord/start', (req, res) => {
+    (async () => {
+      if (!getPublicWebAuthSecret()) {
+        return res.status(500).json(
+          toErrorResponse('PUBLIC_WEB_AUTH_SECRET is not configured', 'CONFIG_ERROR')
+        );
+      }
+
+      const guildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
+      if (!guildId) {
+        return res.status(400).json(
+          toErrorResponse('guildId query parameter is required', 'VALIDATION_ERROR')
+        );
+      }
+
+      const rawReturnTo = String(req.query.returnTo || '').trim();
+      const safeReturnTo = sanitizeExternalReturnTo(rawReturnTo, req);
+      if (rawReturnTo && !safeReturnTo) {
+        return res.status(400).json(
+          toErrorResponse('returnTo origin is not allowed', 'VALIDATION_ERROR')
+        );
+      }
+
+      const redirectUri = getPublicWebDiscordRedirectUri(req);
+      if (!redirectUri) {
+        return res.status(500).json(
+          toErrorResponse('Public OAuth redirect URI is not configured', 'CONFIG_ERROR')
+        );
+      }
+
+      const now = Date.now();
+      const stateToken = signPayload({
+        kind: WEB_AUTH_STATE_KIND,
+        guildId,
+        returnTo: safeReturnTo,
+        nonce: crypto.randomBytes(12).toString('hex'),
+        iat: now,
+        exp: now + WEB_AUTH_STATE_TTL_MS,
+      });
+      if (!stateToken) {
+        return res.status(500).json(toErrorResponse('Could not create auth state', 'CONFIG_ERROR'));
+      }
+
+      const clientId = String(process.env.CLIENT_ID || '').trim();
+      if (!clientId) {
+        return res.status(500).json(toErrorResponse('CLIENT_ID is not configured', 'CONFIG_ERROR'));
+      }
+
+      const authUrl = new URL('https://discord.com/api/oauth2/authorize');
+      authUrl.searchParams.set('client_id', clientId);
+      authUrl.searchParams.set('redirect_uri', redirectUri);
+      authUrl.searchParams.set('response_type', 'code');
+      authUrl.searchParams.set('scope', 'identify guilds');
+      authUrl.searchParams.set('state', stateToken);
+      return res.redirect(authUrl.toString());
+    })().catch((routeError) => {
+      logger.error('Public Discord OAuth start error:', routeError);
+      return res.status(500).json(toErrorResponse('Failed to start Discord OAuth', 'INTERNAL_ERROR'));
+    });
+  });
+
+  router.get('/api/public/v1/auth/discord/callback', async (req, res) => {
+    const code = String(req.query.code || '').trim();
+    const state = String(req.query.state || '').trim();
+    if (!code || !state) {
+      return res.status(400).json(toErrorResponse('Missing code or state', 'VALIDATION_ERROR'));
+    }
+
+    const statePayload = verifySignedToken(state);
+    const now = Date.now();
+    if (!statePayload || statePayload.kind !== WEB_AUTH_STATE_KIND || Number(statePayload.exp || 0) < now) {
+      return res.status(400).json(toErrorResponse('Invalid or expired OAuth state', 'VALIDATION_ERROR'));
+    }
+
+    try {
+      const redirectUri = getPublicWebDiscordRedirectUri(req);
+      if (!redirectUri) {
+        return res.status(500).json(toErrorResponse('Public OAuth redirect URI is not configured', 'CONFIG_ERROR'));
+      }
+
+      const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: process.env.CLIENT_ID,
+          client_secret: process.env.DISCORD_CLIENT_SECRET,
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: redirectUri
+        })
+      });
+      const tokenData = await tokenResponse.json();
+      if (!tokenResponse.ok || !tokenData?.access_token) {
+        return res.status(400).json(toErrorResponse('Discord token exchange failed', 'OAUTH_ERROR'));
+      }
+
+      const userResponse = await fetch('https://discord.com/api/users/@me', {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` }
+      });
+      const userData = await userResponse.json();
+      if (!userResponse.ok || !userData?.id) {
+        return res.status(400).json(toErrorResponse('Could not fetch Discord user profile', 'OAUTH_ERROR'));
+      }
+
+      const guildId = String(statePayload.guildId || '').trim();
+      const membership = await checkGuildMembership(guildId, userData.id);
+
+      const expiresAt = Date.now() + WEB_AUTH_TOKEN_TTL_MS;
+      const accessToken = signPayload({
+        kind: WEB_AUTH_TOKEN_KIND,
+        sub: String(userData.id),
+        username: String(userData.username || ''),
+        avatar: userData.avatar ? String(userData.avatar) : null,
+        guildId,
+        iat: Date.now(),
+        exp: expiresAt,
+      });
+
+      if (!accessToken) {
+        return res.status(500).json(toErrorResponse('Failed to issue web access token', 'CONFIG_ERROR'));
+      }
+
+      const payload = {
+        accessToken,
+        tokenType: 'Bearer',
+        expiresAt,
+        guildId,
+        isGuildMember: !!membership.isMember,
+        user: {
+          id: String(userData.id),
+          username: String(userData.username || ''),
+          avatar: userData.avatar ? String(userData.avatar) : null,
+        }
+      };
+
+      const returnTo = String(statePayload.returnTo || '').trim();
+      if (returnTo) {
+        const redirectTarget = buildReturnUrlWithFragment(returnTo, {
+          gp_auth: 'ok',
+          gp_access_token: accessToken,
+          gp_guild_id: guildId,
+          gp_member: membership.isMember ? '1' : '0',
+          gp_expires_at: String(expiresAt),
+        });
+        return res.redirect(redirectTarget);
+      }
+
+      return res.json(toSuccessResponse(payload));
+    } catch (routeError) {
+      logger.error('Public Discord OAuth callback error:', routeError);
+      return res.status(500).json(toErrorResponse('Discord OAuth callback failed', 'INTERNAL_ERROR'));
+    }
+  });
+
+  router.get('/api/public/v1/me', async (req, res) => {
+    try {
+      const token = getBearerToken(req);
+      if (!token) {
+        return res.status(401).json(toErrorResponse('Missing bearer token', 'UNAUTHORIZED'));
+      }
+
+      const payload = verifySignedToken(token);
+      const now = Date.now();
+      if (!payload || payload.kind !== WEB_AUTH_TOKEN_KIND || Number(payload.exp || 0) < now) {
+        return res.status(401).json(toErrorResponse('Invalid or expired bearer token', 'UNAUTHORIZED'));
+      }
+
+      const guildId = String(payload.guildId || '').trim();
+      const userId = String(payload.sub || '').trim();
+      const membership = await checkGuildMembership(guildId, userId);
+
+      const userInfo = await roleService.getUserInfo(userId);
+      const totalNfts = Number(userInfo?.total_nfts || 0);
+      const votingPower = membership.member
+        ? Number(roleService.getUserVotingPower(userId, membership.member, guildId) || 0)
+        : Number(userInfo?.voting_power || 0);
+
+      return res.json(toSuccessResponse({
+        user: {
+          id: userId,
+          username: String(payload.username || ''),
+          avatar: payload.avatar || null,
+        },
+        guildId,
+        isGuildMember: !!membership.isMember,
+        hasVerifiedNft: totalNfts > 0,
+        totalNfts,
+        votingPower,
+      }));
+    } catch (routeError) {
+      logger.error('Error resolving public web auth identity:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 

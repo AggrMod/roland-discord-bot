@@ -42,10 +42,15 @@ function createGovernanceUserRouter({
     })()
   );
 
-  const resolveEffectiveVotingPower = async (discordId, guildId) => {
+  const resolveEffectiveVotingPower = async (discordId, guildId, guildMember = null) => {
     const normalizedGuildId = String(guildId || '').trim();
     const userInfo = await roleService.getUserInfo(discordId);
     let votingPower = Number(userInfo?.voting_power || 0);
+
+    if (normalizedGuildId && guildMember) {
+      votingPower = Number(roleService.getUserVotingPower(discordId, guildMember, normalizedGuildId) || 0);
+      return { userInfo, votingPower };
+    }
 
     if (normalizedGuildId && typeof fetchGuildById === 'function') {
       try {
@@ -115,6 +120,43 @@ function createGovernanceUserRouter({
     return councilMemberIds.includes(String(discordId || '').trim());
   };
 
+  const ensureGuildMembership = async (req, res, guildId, discordId) => {
+    const normalizedGuildId = String(guildId || '').trim();
+    const normalizedDiscordId = String(discordId || '').trim();
+    if (!normalizedGuildId) {
+      res.status(409).json(toErrorResponse('Select a server to continue', 'TENANT_REQUIRED', null, { success: false }));
+      return null;
+    }
+    if (!normalizedDiscordId) {
+      res.status(401).json(toErrorResponse('Not authenticated', 'UNAUTHORIZED', null, { success: false }));
+      return null;
+    }
+    if (typeof fetchGuildById !== 'function') {
+      return { guild: null, member: null };
+    }
+
+    const guild = await fetchGuildById(normalizedGuildId).catch(() => null);
+    if (!guild) {
+      res.status(404).json(toErrorResponse('Server not found', 'NOT_FOUND', null, { success: false }));
+      return null;
+    }
+
+    const member = await guild.members.fetch(normalizedDiscordId).catch(() => null);
+    if (!member) {
+      res.status(403).json(
+        toErrorResponse(
+          'Join the Discord server to participate in governance',
+          'NOT_GUILD_MEMBER',
+          null,
+          { success: false }
+        )
+      );
+      return null;
+    }
+
+    return { guild, member };
+  };
+
   const createProposalHandler = async (req, res, sourceLabel = 'user') => {
     if (!requireSession(req, res)) return;
 
@@ -133,7 +175,10 @@ function createGovernanceUserRouter({
         return res.status(400).json(toErrorResponse(validationErr, 'VALIDATION_ERROR', null, { success: false }));
       }
 
-      const { userInfo, votingPower } = await resolveEffectiveVotingPower(discordId, requestedGuildId);
+      const membership = await ensureGuildMembership(req, res, requestedGuildId, discordId);
+      if (!membership) return;
+
+      const { userInfo, votingPower } = await resolveEffectiveVotingPower(discordId, requestedGuildId, membership.member);
       if (!userInfo || votingPower < 1) {
         return res.status(403).json(toErrorResponse('You need at least 1 verified NFT to create proposals', 'FORBIDDEN', null, { success: false }));
       }
@@ -183,7 +228,10 @@ function createGovernanceUserRouter({
         return res.status(400).json(toErrorResponse('Choice must be yes, no, or abstain', 'VALIDATION_ERROR', null, { success: false }));
       }
 
-      const { userInfo, votingPower } = await resolveEffectiveVotingPower(discordId, requestedGuildId);
+      const membership = await ensureGuildMembership(req, res, requestedGuildId, discordId);
+      if (!membership) return;
+
+      const { userInfo, votingPower } = await resolveEffectiveVotingPower(discordId, requestedGuildId, membership.member);
       if (!userInfo || votingPower < 1) {
         return res.status(403).json(toErrorResponse('You need at least 1 verified NFT to vote', 'FORBIDDEN', null, { success: false }));
       }
@@ -208,7 +256,7 @@ function createGovernanceUserRouter({
     return createProposalHandler(req, res, 'governance');
   });
 
-  router.post('/api/governance/proposals/:id/submit', (req, res) => {
+  router.post('/api/governance/proposals/:id/submit', async (req, res) => {
     if (!requireSession(req, res)) return;
 
     try {
@@ -219,6 +267,9 @@ function createGovernanceUserRouter({
       if (!isProposalInGuildScope(req.params.id, requestedGuildId)) {
         return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND', null, { success: false }));
       }
+
+      const membership = await ensureGuildMembership(req, res, requestedGuildId, req.session.discordUser.id);
+      if (!membership) return;
 
       const result = proposalService.submitForReview(req.params.id, req.session.discordUser.id);
       if (result?.success) {
@@ -244,7 +295,10 @@ function createGovernanceUserRouter({
         return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND', null, { success: false }));
       }
 
-      const { userInfo, votingPower } = await resolveEffectiveVotingPower(discordId, requestedGuildId);
+      const membership = await ensureGuildMembership(req, res, requestedGuildId, discordId);
+      if (!membership) return;
+
+      const { userInfo, votingPower } = await resolveEffectiveVotingPower(discordId, requestedGuildId, membership.member);
       if (!userInfo || votingPower < 1) {
         return res.status(403).json(toErrorResponse('You need at least 1 verified NFT to support proposals', 'FORBIDDEN', null, { success: false }));
       }
@@ -294,6 +348,9 @@ function createGovernanceUserRouter({
       if (proposalGuildId && requestedGuildId && proposalGuildId !== String(requestedGuildId || '').trim()) {
         return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND', null, { success: false }));
       }
+      const effectiveGuildId = requestedGuildId || proposalGuildId || '';
+      const membership = await ensureGuildMembership(req, res, effectiveGuildId, discordId);
+      if (!membership) return;
       if (normalizeComparableDiscordId(proposal.creator_id) !== normalizeComparableDiscordId(discordId)) {
         return res.status(403).json(toErrorResponse('Only the proposal creator can cancel this proposal', 'FORBIDDEN', null, { success: false }));
       }
@@ -301,7 +358,6 @@ function createGovernanceUserRouter({
         return res.status(400).json(toErrorResponse(`Proposal cannot be cancelled in status "${proposal.status}"`, 'VALIDATION_ERROR', null, { success: false }));
       }
 
-      const effectiveGuildId = requestedGuildId || proposalGuildId || '';
       const result = proposalService.cancelProposal(req.params.id, discordId, effectiveGuildId);
       if (result?.success) {
         return res.json(toSuccessResponse(result));
@@ -344,6 +400,9 @@ function createGovernanceUserRouter({
         return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND', null, { success: false }));
       }
 
+      const membership = await ensureGuildMembership(req, res, requestedGuildId, req.session.discordUser.id);
+      if (!membership) return;
+
       const { content } = req.body || {};
       if (!content || !String(content).trim()) {
         return res.status(400).json(toErrorResponse('Content is required', 'VALIDATION_ERROR', null, { success: false }));
@@ -382,6 +441,8 @@ function createGovernanceUserRouter({
       if (!isProposalInGuildScope(req.params.id, requestedGuildId)) {
         return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND', null, { success: false }));
       }
+      const membership = await ensureGuildMembership(req, res, requestedGuildId, req.session.discordUser.id);
+      if (!membership) return;
       const proposal = proposalService.getProposal(req.params.id);
       if (!proposal) {
         return res.status(404).json(toErrorResponse('Proposal not found', 'NOT_FOUND', null, { success: false }));

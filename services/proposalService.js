@@ -1452,10 +1452,13 @@ class ProposalService {
       const proposal = this.getProposal(proposalId);
       if (!proposal) return;
 
-      const channel = await this.client.channels.fetch(resultsChannelId);
-      if (!channel || !channel.isTextBased()) return;
+      const channel = await this.client.channels.fetch(resultsChannelId).catch(() => null);
+      if (!channel || !channel.isTextBased()) {
+        logger.warn(`Results channel ${resultsChannelId} unavailable for proposal ${proposalId}`);
+        return;
+      }
 
-      const { EmbedBuilder } = require('discord.js');
+      const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
       const totalVoted = proposal.yes_vp + proposal.no_vp + proposal.abstain_vp;
       const quorumPercent = proposal.total_vp > 0 ? Math.round((totalVoted / proposal.total_vp) * 100) : 0;
@@ -1528,7 +1531,12 @@ class ProposalService {
         );
       }
 
-      await channel.send({ embeds: [embed], components });
+      const payload = { embeds: [embed] };
+      if (components.length) {
+        payload.components = components;
+      }
+
+      await channel.send(payload);
     } catch (error) {
       logger.error('Error posting to results channel:', error);
     }

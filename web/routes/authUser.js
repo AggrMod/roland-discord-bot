@@ -200,6 +200,18 @@ function createAuthUserRouter({
     return header.slice('bearer '.length).trim();
   };
 
+  const resolvePublicGuildId = (req) => {
+    const queryGuildId = normalizeGuildId(String(req.query?.guildId || req.query?.guild || '').trim());
+    if (queryGuildId) {
+      return queryGuildId;
+    }
+    const headerGuildId = normalizeGuildId(String(req.get('x-guild-id') || '').trim());
+    if (headerGuildId) {
+      return headerGuildId;
+    }
+    return getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
+  };
+
   router.get('/api/features', publicApiLimiter, (_req, res) => {
     try {
       const heistEnabled = process.env.HEIST_ENABLED === 'true';
@@ -218,7 +230,7 @@ function createAuthUserRouter({
         );
       }
 
-      const guildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
+      const guildId = resolvePublicGuildId(req);
       if (!guildId) {
         return res.status(400).json(
           toErrorResponse('guildId query parameter is required', 'VALIDATION_ERROR')

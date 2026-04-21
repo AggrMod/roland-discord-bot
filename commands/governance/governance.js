@@ -388,6 +388,9 @@ module.exports = {
     if (!isPromoted && String(proposalAfterSupport?.status || '').toLowerCase() === 'voting') {
       isPromoted = true;
     }
+    if (!isPromoted && String(proposalAfterSupport?.status || '').toLowerCase() === 'supporting') {
+      proposalService.postToProposalsChannel(proposalId).catch(() => {});
+    }
 
     const embed = new EmbedBuilder()
       .setColor('#FFD700')

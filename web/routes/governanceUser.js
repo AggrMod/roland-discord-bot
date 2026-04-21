@@ -265,6 +265,9 @@ function createGovernanceUserRouter({
         if (!promoted) {
           const refreshedProposal = proposalService.getProposal(req.params.id);
           promoted = String(refreshedProposal?.status || '').toLowerCase() === 'voting';
+          if (!promoted && String(refreshedProposal?.status || '').toLowerCase() === 'supporting') {
+            proposalService.postToProposalsChannel(req.params.id).catch(() => {});
+          }
         }
 
         return res.json(toSuccessResponse({ ...result, promoted }));

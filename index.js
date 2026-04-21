@@ -793,6 +793,9 @@ async function handleSupportButton(interaction) {
     if (!promoted) {
       const refreshedProposal = proposalService.getProposal(proposalId);
       promoted = String(refreshedProposal?.status || '').toLowerCase() === 'voting';
+      if (!promoted && String(refreshedProposal?.status || '').toLowerCase() === 'supporting') {
+        proposalService.postToProposalsChannel(proposalId).catch(() => {});
+      }
     }
 
     await interaction.editReply({

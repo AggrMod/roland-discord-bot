@@ -169,6 +169,46 @@ function buildProposalIdCandidates(rawValue) {
   return [...candidates].filter(Boolean);
 }
 
+function normalizeBriefText(rawText) {
+  const text = String(rawText || '').trim();
+  if (!text) return '';
+  if (/[.!?]["')\]]?\s*$/.test(text)) return text;
+
+  const lastSentenceEnd = Math.max(text.lastIndexOf('.'), text.lastIndexOf('!'), text.lastIndexOf('?'));
+  if (lastSentenceEnd >= Math.floor(text.length * 0.45)) {
+    return text.slice(0, lastSentenceEnd + 1).trim();
+  }
+
+  const lastSpace = text.lastIndexOf(' ');
+  if (lastSpace > 0) {
+    return `${text.slice(0, lastSpace).trim()}...`;
+  }
+
+  return `${text}...`;
+}
+
+function splitEmbedText(text, maxLen = 1024) {
+  const clean = String(text || '').trim();
+  if (!clean) return [];
+  if (clean.length <= maxLen) return [clean];
+
+  const parts = [];
+  let rest = clean;
+  while (rest.length > maxLen) {
+    let breakAt = rest.lastIndexOf('\n', maxLen);
+    if (breakAt < Math.floor(maxLen * 0.5)) {
+      breakAt = rest.lastIndexOf(' ', maxLen);
+    }
+    if (breakAt < Math.floor(maxLen * 0.5)) {
+      breakAt = maxLen;
+    }
+    parts.push(rest.slice(0, breakAt).trim());
+    rest = rest.slice(breakAt).trim();
+  }
+  if (rest) parts.push(rest);
+  return parts;
+}
+
 class ProposalService {
   constructor() {
     this.client = null;
@@ -348,16 +388,29 @@ class ProposalService {
         const aiAssistantService = require('./aiAssistantService');
         const brief = await aiAssistantService.generateProposalBrief(proposal.guild_id || '', proposal);
         if (brief) {
-          db.prepare('UPDATE proposals SET ai_brief = ? WHERE proposal_id = ?').run(brief, proposalId);
+          db.prepare('UPDATE proposals SET ai_brief = ? WHERE proposal_id = ?').run(normalizeBriefText(brief), proposalId);
         }
       } catch (e) {
         logger.error(`[ai-assistant] failed to generate brief for ${proposalId}:`, e);
       }
 
       if (this.client) {
+        const sourceChannelId = String(proposal.channel_id || '').trim();
+        const sourceMessageId = String(proposal.message_id || '').trim();
+
+        const votingPost = await this.postToVotingChannel(proposalId);
+        if (votingPost?.success && sourceChannelId && sourceMessageId) {
+          await this.migrateSupportingThreadToVoting({
+            proposalId,
+            fromChannelId: sourceChannelId,
+            fromMessageId: sourceMessageId,
+            toChannelId: votingPost.channelId,
+            toMessageId: votingPost.messageId,
+          });
+        }
+
         await this.removeSupportingMessage(proposal);
         db.prepare('UPDATE proposals SET message_id = NULL, channel_id = NULL WHERE proposal_id = ?').run(proposalId);
-        await this.postToVotingChannel(proposalId);
       }
 
       return { success: true, totalVP, quorumRequired };
@@ -999,6 +1052,100 @@ class ProposalService {
 
   // ==================== DISCORD CHANNEL POSTING ====================
 
+  appendLongEmbedField(embed, fieldName, fieldValue) {
+    const chunks = splitEmbedText(fieldValue, 1024);
+    if (!chunks.length) return;
+    chunks.forEach((chunk, index) => {
+      embed.addFields({
+        name: index === 0 ? fieldName : `${fieldName} (cont.)`,
+        value: chunk,
+        inline: false,
+      });
+    });
+  }
+
+  async getStarterThread(channel, starterMessageId) {
+    if (!channel || !starterMessageId) return null;
+    if (!channel.threads || typeof channel.threads.fetch !== 'function') return null;
+    return channel.threads.fetch(starterMessageId).catch(() => null);
+  }
+
+  async archiveStarterThread(channel, starterMessageId, closingNote = '') {
+    const thread = await this.getStarterThread(channel, starterMessageId);
+    if (!thread) return { success: false, found: false };
+
+    try {
+      if (closingNote && thread.isTextBased() && !thread.archived) {
+        await thread.send({ content: closingNote, allowedMentions: { parse: [] } }).catch(() => {});
+      }
+      if (!thread.archived) {
+        await thread.setArchived(true, 'Governance stage changed').catch(() => {});
+      }
+      if (typeof thread.setLocked === 'function' && !thread.locked) {
+        await thread.setLocked(true, 'Governance stage changed').catch(() => {});
+      }
+      return { success: true, found: true, threadId: thread.id };
+    } catch (_error) {
+      return { success: false, found: true, threadId: thread.id };
+    }
+  }
+
+  async ensureStarterThread(channel, starterMessage, proposalId) {
+    if (!channel || !starterMessage) return null;
+    const existing = await this.getStarterThread(channel, starterMessage.id);
+    if (existing) return existing;
+
+    return starterMessage.startThread({
+      name: `proposal-${proposalId}-discussion`,
+      autoArchiveDuration: 1440,
+      reason: 'Governance proposal discussion thread',
+    }).catch(() => null);
+  }
+
+  async migrateSupportingThreadToVoting({
+    proposalId,
+    fromChannelId,
+    fromMessageId,
+    toChannelId,
+    toMessageId,
+  }) {
+    const sourceChannelId = String(fromChannelId || '').trim();
+    const sourceMessageId = String(fromMessageId || '').trim();
+    const targetChannelId = String(toChannelId || '').trim();
+    const targetMessageId = String(toMessageId || '').trim();
+    if (!sourceChannelId || !sourceMessageId || !targetChannelId || !targetMessageId || !this.client) return;
+
+    const sourceChannel = await this.client.channels.fetch(sourceChannelId).catch(() => null);
+    const sourceThread = sourceChannel ? await this.getStarterThread(sourceChannel, sourceMessageId) : null;
+    if (!sourceThread || sourceThread.archived) return;
+
+    const targetChannel = await this.client.channels.fetch(targetChannelId).catch(() => null);
+    if (!targetChannel || !targetChannel.isTextBased()) {
+      await this.archiveStarterThread(sourceChannel, sourceMessageId, 'Discussion closed: proposal moved to voting stage.');
+      return;
+    }
+
+    const targetMessage = await targetChannel.messages.fetch(targetMessageId).catch(() => null);
+    if (!targetMessage) {
+      await this.archiveStarterThread(sourceChannel, sourceMessageId, 'Discussion closed: proposal moved to voting stage.');
+      return;
+    }
+
+    const targetThread = await this.ensureStarterThread(targetChannel, targetMessage, proposalId);
+    if (targetThread && targetThread.isTextBased()) {
+      await targetThread.send({
+        content: 'Discussion moved here from the supporting stage.',
+        allowedMentions: { parse: [] },
+      }).catch(() => {});
+    }
+
+    await this.archiveStarterThread(
+      sourceChannel,
+      sourceMessageId,
+      'This discussion is now closed in supporting stage. Continue in the voting-stage thread.'
+    );
+  }
+
   async postToProposalsChannel(proposalId, { creatorDisplayName = '', targetChannelId = '' } = {}) {
     try {
       const settings = settingsManager.getSettings();
@@ -1106,6 +1253,7 @@ class ProposalService {
 
       const channel = await this.client.channels.fetch(channelId).catch(() => null);
       if (!channel || !channel.isTextBased()) return;
+      await this.archiveStarterThread(channel, messageId, '').catch(() => {});
       const message = await channel.messages.fetch(messageId).catch(() => null);
       if (!message) return;
       await message.delete().catch(() => null);
@@ -1145,14 +1293,14 @@ class ProposalService {
       const votingChannelId = settings.votingChannelId || process.env.VOTING_CHANNEL_ID;
       if (!votingChannelId) {
         logger.warn('votingChannelId not set in settings or .env');
-        return;
+        return { success: false, message: 'Voting channel not configured' };
       }
 
       const proposal = this.getProposal(proposalId);
-      if (!proposal) return;
+      if (!proposal) return { success: false, message: 'Proposal not found' };
 
       const votingChannel = await this.client.channels.fetch(votingChannelId);
-      if (!votingChannel || !votingChannel.isTextBased()) return;
+      if (!votingChannel || !votingChannel.isTextBased()) return { success: false, message: 'Voting channel unavailable' };
 
       const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
@@ -1174,7 +1322,7 @@ class ProposalService {
       }
 
       if (proposal.ai_brief) {
-        embed.addFields({ name: '📜 Consigliere\'s Family Brief', value: proposal.ai_brief, inline: false });
+        this.appendLongEmbedField(embed, '📜 Consigliere\'s Family Brief', normalizeBriefText(proposal.ai_brief));
       }
 
       embed.addFields(
@@ -1207,8 +1355,10 @@ class ProposalService {
       const message = await votingChannel.send({ embeds: [embed], components: [row] });
       db.prepare('UPDATE proposals SET voting_message_id = ? WHERE proposal_id = ?').run(message.id, proposalId);
       logger.log(`Proposal ${proposalId} posted to voting channel, message ${message.id}`);
+      return { success: true, messageId: message.id, channelId: votingChannelId };
     } catch (error) {
       logger.error('Error posting to voting channel:', error);
+      return { success: false, message: 'Failed to post voting message' };
     }
   }
 

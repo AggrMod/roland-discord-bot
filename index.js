@@ -523,6 +523,7 @@ client.on(Events.InteractionCreate, async interaction => {
     if (customId === 'treasury_refresh_panel') { await handleTreasuryRefreshButton(interaction); return; }
     if (customId === 'governance_create_proposal') { await handleGovernanceCreateProposalButton(interaction); return; }
     if (customId.startsWith('support_')) { await handleSupportButton(interaction); return; }
+    if (customId.startsWith('comment_')) { await handleGovernanceCommentButton(interaction); return; }
     if (customId.startsWith('vote_yes_') || customId.startsWith('vote_no_') || customId.startsWith('vote_abstain_')) { await handleVoteButton(interaction); return; }
     if (customId.startsWith('veto_')) { await handleVetoButton(interaction); return; }
     if (customId === 'micro_verify_check_status') { await handleMicroVerifyCheckStatus(interaction); return; }
@@ -538,6 +539,7 @@ client.on(Events.InteractionCreate, async interaction => {
   if (interaction.isModalSubmit()) {
     if (interaction.customId.startsWith('ticket_modal_')) { await handleTicketModalSubmit(interaction); return; }
     if (interaction.customId === 'governance_create_proposal_modal') { await handleGovernanceCreateProposalModal(interaction); return; }
+    if (interaction.customId.startsWith('governance_comment_modal_')) { await handleGovernanceCommentModal(interaction); return; }
   }
 });
 
@@ -743,6 +745,117 @@ async function handleGovernanceCreateProposalModal(interaction) {
     logger.error('Governance modal submit error:', error);
     try {
       await interaction.editReply({ content: 'Something went wrong while creating the proposal.' });
+    } catch (_) {}
+  }
+}
+
+async function handleGovernanceCommentButton(interaction) {
+  try {
+    const proposalId = String(interaction.customId || '').replace(/^comment_/, '').trim();
+    if (!proposalId) {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content: 'Unable to identify this proposal comment target.' });
+      } else {
+        await interaction.reply({ content: 'Unable to identify this proposal comment target.', ephemeral: true });
+      }
+      return;
+    }
+
+    const proposal = proposalService.getProposal(proposalId);
+    if (!proposal) {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content: 'Proposal not found.' });
+      } else {
+        await interaction.reply({ content: 'Proposal not found.', ephemeral: true });
+      }
+      return;
+    }
+
+    const interactionGuildId = String(interaction.guildId || '').trim();
+    const proposalGuildId = String(proposal.guild_id || '').trim();
+    if (proposalGuildId && interactionGuildId && proposalGuildId !== interactionGuildId) {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content: 'This proposal belongs to a different server.' });
+      } else {
+        await interaction.reply({ content: 'This proposal belongs to a different server.', ephemeral: true });
+      }
+      return;
+    }
+
+    const modal = new ModalBuilder()
+      .setCustomId(`governance_comment_modal_${proposalId}`)
+      .setTitle(`Comment on Proposal ${proposalId}`);
+
+    const commentInput = new TextInputBuilder()
+      .setCustomId('proposal_comment_content')
+      .setLabel('Comment')
+      .setPlaceholder('Share your feedback, concerns, or suggestions')
+      .setStyle(TextInputStyle.Paragraph)
+      .setMinLength(1)
+      .setMaxLength(1000)
+      .setRequired(true);
+
+    modal.addComponents(new ActionRowBuilder().addComponents(commentInput));
+    await interaction.showModal(modal);
+  } catch (error) {
+    logger.error('Governance comment button error:', error);
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content: 'Unable to open comment form right now.' });
+      } else {
+        await interaction.reply({ content: 'Unable to open comment form right now.', ephemeral: true });
+      }
+    } catch (_) {}
+  }
+}
+
+async function handleGovernanceCommentModal(interaction) {
+  try {
+    await interaction.deferReply({ ephemeral: true });
+
+    const proposalId = String(interaction.customId || '').replace(/^governance_comment_modal_/, '').trim();
+    if (!proposalId) {
+      return interaction.editReply({ content: 'Proposal ID is missing for this comment.' });
+    }
+
+    const proposal = proposalService.getProposal(proposalId);
+    if (!proposal) {
+      return interaction.editReply({ content: 'Proposal not found.' });
+    }
+
+    const interactionGuildId = String(interaction.guildId || '').trim();
+    const proposalGuildId = String(proposal.guild_id || '').trim();
+    if (proposalGuildId && interactionGuildId && proposalGuildId !== interactionGuildId) {
+      return interaction.editReply({ content: 'This proposal belongs to a different server.' });
+    }
+
+    const content = String(interaction.fields.getTextInputValue('proposal_comment_content') || '').trim();
+    if (!content) {
+      return interaction.editReply({ content: 'Comment cannot be empty.' });
+    }
+    if (content.length > 1000) {
+      return interaction.editReply({ content: 'Comment must be 1000 characters or less.' });
+    }
+
+    const result = proposalService.addComment(
+      proposalId,
+      interaction.user.id,
+      interaction.user.username,
+      content
+    );
+    if (!result?.success) {
+      return interaction.editReply({ content: result?.message || 'Failed to add comment.' });
+    }
+
+    await proposalService.postCommentToDiscussion(proposalId, result.comment, { source: 'discord_button' }).catch((error) => {
+      logger.warn(`Failed to mirror button comment for proposal ${proposalId}: ${error?.message || error}`);
+    });
+
+    await interaction.editReply({ content: `Comment posted on proposal ${proposalId}.` });
+  } catch (error) {
+    logger.error('Governance comment modal submit error:', error);
+    try {
+      await interaction.editReply({ content: 'Something went wrong while posting your comment.' });
     } catch (_) {}
   }
 }

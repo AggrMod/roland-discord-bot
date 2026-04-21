@@ -683,13 +683,32 @@ class ProposalService {
     try {
       const proposal = this.getProposal(proposalId);
       if (!proposal) return { success: false, message: 'Proposal not found' };
+      const sanitizedContent = String(content || '').trim();
+      if (!sanitizedContent) return { success: false, message: 'Comment cannot be empty' };
+      if (sanitizedContent.length > 1000) return { success: false, message: 'Comment must be 1000 characters or less' };
 
-      db.prepare(`
+      const insert = db.prepare(`
         INSERT INTO proposal_comments (proposal_id, author_id, author_name, content)
         VALUES (?, ?, ?, ?)
-      `).run(proposalId, authorId, authorName || 'Unknown', content);
+      `).run(proposal.proposal_id, authorId, authorName || 'Unknown', sanitizedContent);
 
-      return { success: true };
+      const createdComment = db.prepare(`
+        SELECT id, proposal_id, author_id, author_name, content, created_at
+        FROM proposal_comments
+        WHERE id = ?
+      `).get(insert.lastInsertRowid);
+
+      return {
+        success: true,
+        comment: createdComment || {
+          id: insert.lastInsertRowid,
+          proposal_id: proposal.proposal_id,
+          author_id: authorId,
+          author_name: authorName || 'Unknown',
+          content: sanitizedContent,
+          created_at: new Date().toISOString(),
+        },
+      };
     } catch (error) {
       logger.error('Error adding comment:', error);
       return { success: false, message: 'Failed to add comment' };
@@ -702,6 +721,103 @@ class ProposalService {
     } catch (error) {
       logger.error('Error fetching comments:', error);
       return [];
+    }
+  }
+
+  async postCommentToDiscussion(proposalId, comment, { source = 'unknown' } = {}) {
+    try {
+      if (!this.client) return { success: false, message: 'Discord client unavailable' };
+
+      const proposal = this.getProposal(proposalId);
+      if (!proposal) return { success: false, message: 'Proposal not found' };
+
+      const commentBody = String(comment?.content || '').trim();
+      if (!commentBody) return { success: false, message: 'Comment body missing' };
+
+      const authorLabel = String(comment?.author_name || 'Unknown').trim();
+      const sourceLabel = source === 'web'
+        ? 'Web'
+        : source === 'discord_button'
+          ? 'Discord Button'
+          : source === 'discord_command'
+            ? 'Discord Command'
+            : 'Portal';
+      const messageText = `💬 **${authorLabel}** (${sourceLabel}): ${commentBody}`;
+      const safeText = messageText.length > 1900 ? `${messageText.slice(0, 1897)}...` : messageText;
+
+      const settings = settingsManager.getSettings ? settingsManager.getSettings() : {};
+      const candidateAnchors = [];
+      const supportingChannelId = String(proposal.channel_id || '').trim();
+      const supportingMessageId = String(proposal.message_id || '').trim();
+      const votingChannelId = String(settings.votingChannelId || process.env.VOTING_CHANNEL_ID || '').trim();
+      const votingMessageId = String(proposal.voting_message_id || '').trim();
+
+      if (supportingChannelId && supportingMessageId) {
+        candidateAnchors.push({ channelId: supportingChannelId, messageId: supportingMessageId });
+      }
+      if (votingChannelId && votingMessageId) {
+        candidateAnchors.push({ channelId: votingChannelId, messageId: votingMessageId });
+      }
+
+      for (const anchor of candidateAnchors) {
+        const channel = await this.client.channels.fetch(anchor.channelId).catch(() => null);
+        if (!channel || !channel.isTextBased()) continue;
+
+        const message = await channel.messages.fetch(anchor.messageId).catch(() => null);
+        if (!message) continue;
+
+        let thread = null;
+        if (channel.threads && typeof channel.threads.fetch === 'function') {
+          thread = await channel.threads.fetch(anchor.messageId).catch(() => null);
+        }
+        if (!thread) {
+          thread = await message.startThread({
+            name: `proposal-${proposal.proposal_id}-discussion`,
+            autoArchiveDuration: 1440,
+            reason: 'Governance proposal discussion thread',
+          }).catch(() => null);
+        }
+
+        if (thread && thread.isTextBased()) {
+          await thread.send({
+            content: safeText,
+            allowedMentions: { parse: [] },
+          });
+          return { success: true, postedTo: 'thread', channelId: thread.id };
+        }
+
+        await channel.send({
+          content: `💬 Proposal ${proposal.proposal_id} comment: ${safeText}`,
+          allowedMentions: { parse: [] },
+        });
+        return { success: true, postedTo: 'channel', channelId: channel.id };
+      }
+
+      const fallbackChannelId = String(
+        settings.governanceLogChannelId
+        || settings.proposalsChannelId
+        || settings.resultsChannelId
+        || process.env.GOVERNANCE_LOG_CHANNEL_ID
+        || process.env.PROPOSALS_CHANNEL_ID
+        || process.env.RESULTS_CHANNEL_ID
+        || ''
+      ).trim();
+      if (!fallbackChannelId) return { success: false, message: 'No discussion channel configured' };
+
+      const fallbackChannel = await this.client.channels.fetch(fallbackChannelId).catch(() => null);
+      if (!fallbackChannel || !fallbackChannel.isTextBased()) {
+        return { success: false, message: 'Fallback discussion channel unavailable' };
+      }
+
+      await fallbackChannel.send({
+        content: `💬 Proposal ${proposal.proposal_id} comment by **${authorLabel}** (${sourceLabel}): ${commentBody}`,
+        allowedMentions: { parse: [] },
+      });
+
+      return { success: true, postedTo: 'fallback', channelId: fallbackChannel.id };
+    } catch (error) {
+      logger.error(`Error posting proposal comment to Discord for proposal ${proposalId}:`, error);
+      return { success: false, message: 'Failed to post comment to Discord' };
     }
   }
 
@@ -940,7 +1056,12 @@ class ProposalService {
           .setCustomId(`support_${proposal.proposal_id}`)
           .setLabel('Support')
           .setStyle(ButtonStyle.Primary)
-          .setEmoji('✅')
+          .setEmoji('✅'),
+        new ButtonBuilder()
+          .setCustomId(`comment_${proposal.proposal_id}`)
+          .setLabel('Comment')
+          .setStyle(ButtonStyle.Secondary)
+          .setEmoji('💬')
       );
 
       let sentMessage = null;
@@ -1079,7 +1200,8 @@ class ProposalService {
         .addComponents(
           new ButtonBuilder().setCustomId(`vote_yes_${proposalId}`).setLabel('Yes').setStyle(ButtonStyle.Success).setEmoji('✅'),
           new ButtonBuilder().setCustomId(`vote_no_${proposalId}`).setLabel('No').setStyle(ButtonStyle.Danger).setEmoji('❌'),
-          new ButtonBuilder().setCustomId(`vote_abstain_${proposalId}`).setLabel('Abstain').setStyle(ButtonStyle.Secondary).setEmoji('⚖️')
+          new ButtonBuilder().setCustomId(`vote_abstain_${proposalId}`).setLabel('Abstain').setStyle(ButtonStyle.Secondary).setEmoji('⚖️'),
+          new ButtonBuilder().setCustomId(`comment_${proposalId}`).setLabel('Comment').setStyle(ButtonStyle.Secondary).setEmoji('💬')
         );
 
       const message = await votingChannel.send({ embeds: [embed], components: [row] });

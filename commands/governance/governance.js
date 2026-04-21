@@ -117,6 +117,20 @@ module.exports = {
 
     .addSubcommand(subcommand =>
       subcommand
+        .setName('comment')
+        .setDescription('Add a discussion comment to a proposal')
+        .addStringOption(option =>
+          option.setName('proposal_id')
+            .setDescription('The proposal ID (e.g., 1)')
+            .setRequired(true))
+        .addStringOption(option =>
+          option.setName('content')
+            .setDescription('Your comment (max 1000 characters)')
+            .setRequired(true)
+            .setMaxLength(1000)))
+
+    .addSubcommand(subcommand =>
+      subcommand
         .setName('cancel')
         .setDescription('Cancel your own proposal')
         .addStringOption(option =>
@@ -225,6 +239,9 @@ module.exports = {
             break;
           case 'vote':
             await this.handleVote(interaction);
+            break;
+          case 'comment':
+            await this.handleComment(interaction);
             break;
           case 'cancel':
             await this.handleCancel(interaction);
@@ -488,6 +505,80 @@ module.exports = {
 
     await interaction.editReply({ embeds: [embed] });
     logger.log(`User ${interaction.user.username} voted ${choice} on proposal ${proposalId}`);
+  },
+
+  async handleComment(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const proposalId = normalizeProposalIdInput(interaction.options.getString('proposal_id'));
+    if (!proposalId) {
+      const embed = new EmbedBuilder()
+        .setColor('#FF0000')
+        .setTitle('❌ Proposal ID Required')
+        .setDescription('Please provide a valid proposal ID.')
+        .setTimestamp();
+      return interaction.editReply({ embeds: [embed] });
+    }
+
+    const content = String(interaction.options.getString('content') || '').trim();
+    if (!content) {
+      const embed = new EmbedBuilder()
+        .setColor('#FF0000')
+        .setTitle('❌ Comment Required')
+        .setDescription('Please provide a comment.')
+        .setTimestamp();
+      return interaction.editReply({ embeds: [embed] });
+    }
+    if (content.length > 1000) {
+      const embed = new EmbedBuilder()
+        .setColor('#FF0000')
+        .setTitle('❌ Comment Too Long')
+        .setDescription('Comment must be 1000 characters or less.')
+        .setTimestamp();
+      return interaction.editReply({ embeds: [embed] });
+    }
+
+    const proposal = proposalService.getProposal(proposalId);
+    if (!proposal || !isProposalVisibleInGuild(proposal, interaction.guildId)) {
+      const embed = new EmbedBuilder()
+        .setColor('#FF0000')
+        .setTitle('❌ Proposal Not Found')
+        .setDescription(`No proposal found with ID: ${proposalId}`)
+        .setTimestamp();
+      return interaction.editReply({ embeds: [embed] });
+    }
+
+    const result = proposalService.addComment(
+      proposalId,
+      interaction.user.id,
+      interaction.user.username,
+      content
+    );
+
+    if (!result?.success) {
+      const embed = new EmbedBuilder()
+        .setColor('#FF0000')
+        .setTitle('❌ Failed to Add Comment')
+        .setDescription(result.message || 'An error occurred while adding your comment.')
+        .setTimestamp();
+      return interaction.editReply({ embeds: [embed] });
+    }
+
+    await proposalService.postCommentToDiscussion(proposalId, result.comment, { source: 'discord_command' }).catch((error) => {
+      logger.warn(`Unable to mirror command comment for proposal ${proposalId}: ${error?.message || error}`);
+    });
+
+    const successEmbed = new EmbedBuilder()
+      .setColor('#22C55E')
+      .setTitle('💬 Comment Added')
+      .setDescription(`Your comment was added to proposal **${proposal.title}**.`)
+      .addFields(
+        { name: '🆔 Proposal ID', value: proposalId, inline: true },
+        { name: 'Characters', value: `${content.length}`, inline: true }
+      )
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [successEmbed] });
   },
 
   async handleCancel(interaction) {

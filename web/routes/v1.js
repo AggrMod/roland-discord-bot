@@ -123,6 +123,9 @@ router.get('/proposals/active', asyncHandler(async (req, res) => {
     const supportCount = Number(
       db.prepare('SELECT COUNT(*) as c FROM proposal_supporters WHERE proposal_id = ?').get(p.proposal_id)?.c || 0
     );
+    const commentCount = Number(
+      db.prepare('SELECT COUNT(*) as c FROM proposal_comments WHERE proposal_id = ?').get(p.proposal_id)?.c || 0
+    );
     const votes = {
       yes: { 
         vp: p.yes_vp, 
@@ -156,6 +159,7 @@ router.get('/proposals/active', asyncHandler(async (req, res) => {
         required: supportThreshold,
         deadline: p.support_deadline || null,
       },
+      commentCount,
       quorum: {
         required: p.quorum_required || p.quorum_threshold || 0,
         current: quorumPercentage

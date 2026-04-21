@@ -2620,11 +2620,13 @@ async function loadActiveVotes() {
       const supportCount = Number(proposal.support?.count || 0);
       const supportRequired = Number(proposal.support?.required || 0);
       const supportPercent = supportRequired > 0 ? Math.min(100, Math.round((supportCount / supportRequired) * 100)) : 0;
+      const commentCount = Number(proposal.commentCount || proposal.comment_count || 0);
       let actionButtons = '';
       if (userData && status === 'supporting') {
         actionButtons = `
           <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;"> 
             <button class="btn-primary" onclick="supportProposal('${escapeJsString(proposalId)}')" style="flex:1; min-width:120px;">Support</button>
+            <button class="btn-secondary" onclick="openProposalDiscussion('${escapeJsString(proposalId)}','${escapeJsString(proposal.title || '')}')" style="flex:1; min-width:120px;">Discuss (${commentCount})</button>
           </div>
         `;
       } else if (userData && status === 'voting') {
@@ -2633,6 +2635,7 @@ async function loadActiveVotes() {
             <button class="btn-success" onclick="castVote('${escapeJsString(proposalId)}','yes')" style="flex:1; min-width:80px;">Yes</button>
             <button class="btn-danger" onclick="castVote('${escapeJsString(proposalId)}','no')" style="flex:1; min-width:80px;">No</button>
             <button class="btn-secondary" onclick="castVote('${escapeJsString(proposalId)}','abstain')" style="flex:1; min-width:80px;">Abstain</button>
+            <button class="btn-secondary" onclick="openProposalDiscussion('${escapeJsString(proposalId)}','${escapeJsString(proposal.title || '')}')" style="flex:1; min-width:120px;">Discuss (${commentCount})</button>
           </div>
         `;
       }
@@ -3765,9 +3768,17 @@ function closeConfirmModal() {
   }
 }
 
-function confirmAction() {
+async function confirmAction() {
   if (confirmCallback) {
-    confirmCallback();
+    try {
+      const result = await confirmCallback();
+      if (result === false) {
+        return;
+      }
+    } catch (error) {
+      showError(error?.message || 'Action failed');
+      return;
+    }
   }
   closeConfirmModal();
 }
@@ -3807,6 +3818,108 @@ function showNotification(message, type = 'info') {
 }
 
 // ==================== VOTING ====================
+async function openProposalDiscussion(proposalId, proposalTitle = '') {
+  if (!userData) {
+    showError('Please log in to comment on proposals');
+    return;
+  }
+
+  const safeTitle = proposalTitle ? escapeHtml(proposalTitle) : `Proposal ${escapeHtml(proposalId)}`;
+  showConfirmModal(`Discussion: ${proposalId}`, 'Loading comments...', null, 'Post Comment');
+
+  const modalBody = document.getElementById('confirmMessage');
+  if (modalBody) {
+    modalBody.innerHTML = `
+      <div style="display:grid; gap:12px;">
+        <div style="font-size:0.9em; color:var(--text-secondary); line-height:1.4;">
+          <strong style="color:var(--text-primary);">${safeTitle}</strong><br>
+          Add your comment below. It will be visible in Discord discussion.
+        </div>
+        <div id="proposalCommentsList" style="max-height:220px; overflow:auto; border:1px solid rgba(99,102,241,0.2); border-radius:8px; padding:10px; background:rgba(15,23,42,0.45);"></div>
+        <div>
+          <label style="display:block; color:#c9d6ff; font-size:0.88em; margin-bottom:6px;">Comment</label>
+          <textarea id="proposalCommentInput" rows="4" maxlength="1000" placeholder="Share your feedback..." style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; resize:vertical;"></textarea>
+          <div style="margin-top:6px; color:var(--text-muted); font-size:0.8em;">Max 1000 characters.</div>
+        </div>
+      </div>
+    `;
+  }
+
+  await loadProposalDiscussionComments(proposalId);
+
+  confirmCallback = async () => {
+    const input = document.getElementById('proposalCommentInput');
+    const content = String(input?.value || '').trim();
+    if (!content) {
+      showError('Please enter a comment');
+      return false;
+    }
+    if (content.length > 1000) {
+      showError('Comment must be 1000 characters or less');
+      return false;
+    }
+
+    try {
+      const response = await fetch(`/api/governance/proposals/${encodeURIComponent(proposalId)}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      });
+      const data = await response.json();
+      if (!data.success) {
+        showError(data.message || 'Failed to add comment');
+        return false;
+      }
+      showSuccess('Comment posted');
+      await loadActiveVotes();
+      return true;
+    } catch (error) {
+      showError(`Error posting comment: ${error.message}`);
+      return false;
+    }
+  };
+}
+
+async function loadProposalDiscussionComments(proposalId) {
+  const list = document.getElementById('proposalCommentsList');
+  if (!list) return;
+  list.innerHTML = `<div style="color:var(--text-secondary);">Loading comments...</div>`;
+
+  try {
+    const response = await fetch(`/api/governance/proposals/${encodeURIComponent(proposalId)}/comments`, {
+      credentials: 'include'
+    });
+    const data = await response.json();
+    const comments = data?.data?.comments || data?.comments || [];
+
+    if (!data.success || !Array.isArray(comments)) {
+      throw new Error(data.message || 'Failed to load comments');
+    }
+
+    if (!comments.length) {
+      list.innerHTML = `<div style="color:var(--text-muted);">No comments yet. Start the discussion.</div>`;
+      return;
+    }
+
+    list.innerHTML = comments.map((comment) => {
+      const author = escapeHtml(comment.author_name || 'Unknown');
+      const content = escapeHtml(comment.content || '');
+      const created = comment.created_at ? new Date(comment.created_at).toLocaleString() : '';
+      return `
+        <div style="padding:8px 0; border-bottom:1px solid rgba(99,102,241,0.12);">
+          <div style="display:flex; justify-content:space-between; gap:8px; margin-bottom:4px;">
+            <span style="color:var(--text-primary); font-weight:600;">${author}</span>
+            <span style="color:var(--text-muted); font-size:0.78em;">${escapeHtml(created)}</span>
+          </div>
+          <div style="color:var(--text-secondary); font-size:0.88em; white-space:pre-wrap; line-height:1.45;">${content}</div>
+        </div>
+      `;
+    }).join('');
+  } catch (error) {
+    list.innerHTML = `<div style="color:#fca5a5;">Unable to load comments: ${escapeHtml(error.message)}</div>`;
+  }
+}
+
 async function supportProposal(proposalId) {
   if (!userData) {
     showError('Please log in to support proposals');
@@ -6437,6 +6550,7 @@ async function loadAdminHelpView() {
       { name: '/governance propose', desc: 'Create proposal', options: 'title, goal, description, cost (required), category (optional)', example: '/governance propose title:"Fund X" goal:"Grow treasury" description:"..." cost:"500 USDC"' },
       { name: '/governance support', desc: 'Support a proposal in supporting phase', options: 'proposal_id (required)', example: '/governance support proposal_id:1' },
       { name: '/governance vote', desc: 'Vote on active proposal', options: 'proposal_id, choice (required)', example: '/governance vote proposal_id:1 choice:yes' },
+      { name: '/governance comment', desc: 'Comment on a proposal', options: 'proposal_id, content (required)', example: '/governance comment proposal_id:1 content:"I support this with adjustments..."' },
       { name: '/governance cancel', desc: 'Cancel your own proposal', options: 'proposal_id, confirm (required)', example: '/governance cancel proposal_id:1 confirm:true' },
       { name: '/governance admin list', desc: 'List proposals', options: 'status (optional)', example: '/governance admin list status:voting' },
       { name: '/governance admin cancel', desc: 'Cancel proposal', options: 'proposal_id, confirm (required)', example: '/governance admin cancel proposal_id:1 confirm:true' },

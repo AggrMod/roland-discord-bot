@@ -332,7 +332,7 @@ function createGovernanceUserRouter({
     }
   });
 
-  router.post('/api/governance/proposals/:id/comments', commentLimiter, (req, res) => {
+  router.post('/api/governance/proposals/:id/comments', commentLimiter, async (req, res) => {
     if (!requireSession(req, res)) return;
 
     try {
@@ -359,6 +359,9 @@ function createGovernanceUserRouter({
         String(content).trim()
       );
       if (result?.success) {
+        proposalService.postCommentToDiscussion(req.params.id, result.comment, { source: 'web' }).catch((error) => {
+          logger.warn(`Failed to mirror proposal comment ${req.params.id} to Discord discussion: ${error?.message || error}`);
+        });
         return res.json(toSuccessResponse(result));
       }
       return res.status(400).json(toErrorResponse(result?.message || 'Failed to add comment', 'VALIDATION_ERROR', null, result));

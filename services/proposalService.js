@@ -715,7 +715,11 @@ class ProposalService {
         return { success: false, message: 'Can only support proposals in the supporting phase' };
       }
       if (proposal.creator_id === supporterId) {
-        governanceLogger.log('support_blocked', { proposalId, userId: supporterId });
+        governanceLogger.log('support_blocked', {
+          proposalId,
+          userId: supporterId,
+          guildId: String(proposal.guild_id || '').trim() || null,
+        });
         return { success: false, message: 'You cannot support your own proposal' };
       }
 
@@ -731,7 +735,12 @@ class ProposalService {
 
       const supporterCount = db.prepare('SELECT COUNT(*) as count FROM proposal_supporters WHERE proposal_id = ?').get(proposalId).count;
 
-      governanceLogger.log('support_added', { proposalId, supporterId, supporterCount });
+      governanceLogger.log('support_added', {
+        proposalId,
+        supporterId,
+        supporterCount,
+        guildId: String(proposal.guild_id || '').trim() || null,
+      });
       logger.log(`User ${supporterId} supported proposal ${proposalId} (${supporterCount} supporters)`);
 
       return { success: true, supporterCount };

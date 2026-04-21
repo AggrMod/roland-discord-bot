@@ -394,7 +394,18 @@ function createAuthUserRouter({
       const membership = await checkGuildMembership(guildId, userId);
 
       const userInfo = await roleService.getUserInfo(userId);
-      const totalNfts = Number(userInfo?.total_nfts || 0);
+      let totalNfts = Number(userInfo?.total_nfts || 0);
+      try {
+        const wallets = walletService.getAllUserWallets(userId);
+        if (Array.isArray(wallets) && wallets.length > 0 && guildId) {
+          const nftService = require('../../services/nftService');
+          const allNFTs = await nftService.getAllNFTsForWallets(wallets, { guildId });
+          const tierInfo = roleService.getTierForNFTs(allNFTs, guildId);
+          totalNfts = Number(tierInfo?.count ?? allNFTs.length ?? 0);
+        }
+      } catch (scopeError) {
+        logger.warn(`Public /me scoped NFT count fallback for ${userId}: ${scopeError?.message || scopeError}`);
+      }
       const votingPower = membership.member
         ? Number(roleService.getUserVotingPower(userId, membership.member, guildId) || 0)
         : Number(userInfo?.voting_power || 0);

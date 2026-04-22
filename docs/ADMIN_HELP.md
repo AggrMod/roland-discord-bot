@@ -19,7 +19,9 @@ This file is the source-of-truth command reference for the current production co
 - `/governance propose`
 - `/governance support`
 - `/governance vote`
-- Admin: `/governance admin list|cancel|settings`
+- `/governance comment`
+- `/governance cancel`
+- Admin: `/governance admin list|cancel|settings|panel`
 
 ## Treasury
 - `/treasury view`
@@ -76,8 +78,11 @@ This file is the source-of-truth command reference for the current production co
 - Legacy alias policy: dedicated game commands remain supported for one migration cycle and now show an in-app hint to use `/minigames run`.
 
 ## Missions (Heist)
-- `/heist view|signup|status`
-- Admin: `/heist admin create|list|cancel`
+- `/heist board`
+- `/heist profile`
+- `/heist join`
+- `/heist leave`
+- Admin: `/heist admin panel|templates|template-create|spawn-now|resolve|cancel`
 
 ## Config
 - `/config modules`

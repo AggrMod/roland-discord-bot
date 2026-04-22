@@ -745,32 +745,40 @@
                 <input id="heistTplXpReward" type="number" min="1" max="100000" class="input-sm" placeholder="XP reward">
                 <input id="heistTplStreetReward" type="number" min="1" max="100000" class="input-sm" placeholder="Streetcredit reward">
                 <input id="heistTplSpawnWeight" type="number" min="1" max="1000" class="input-sm" placeholder="Spawn weight">
-                <select id="heistTplGateMode" class="input-sm">
-                  <option value="and">Access Gate: NFT collection AND trait</option>
-                  <option value="or">Access Gate: NFT collection OR trait</option>
-                </select>
-                <select id="heistTplCollectionRegistrySelect" class="input-sm">
-                  <option value="">Select collection from registry</option>
-                </select>
-                <button class="btn-secondary btn-sm" type="button" onclick="addHeistTemplateCollectionRequirement()">Add Collection Gate</button>
                 <input id="heistTplImageUrl" type="text" class="input-sm" placeholder="Image URL for mission cards/panels">
                 <input id="heistTplImageFile" type="file" class="input-sm" accept="image/*">
               </div>
-              <div id="heistTplCollectionRequirementList" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;"></div>
-              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:10px;">
-                <select id="heistTplTraitCatalogCollection" class="input-sm">
-                  <option value="">Trait source collection</option>
-                </select>
-                <select id="heistTplTraitType" class="input-sm">
-                  <option value="">Trait type</option>
-                </select>
-                <select id="heistTplTraitValue" class="input-sm">
-                  <option value="">Trait value (optional)</option>
-                </select>
-                <button class="btn-secondary btn-sm" type="button" onclick="addHeistTemplateTraitRequirement()">Add Trait Gate</button>
+              <p id="heistTplCategoryHint" style="margin-top:8px;color:var(--text-secondary);font-size:0.82em;">
+                Choose a category to show relevant template settings.
+              </p>
+              <div id="heistTplNftAccessSection" style="margin-top:10px;">
+                <h5 style="margin:0 0 8px 0;">NFT Access Rules</h5>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
+                  <select id="heistTplGateMode" class="input-sm">
+                    <option value="and">Access Gate: NFT collection AND trait</option>
+                    <option value="or">Access Gate: NFT collection OR trait</option>
+                  </select>
+                  <select id="heistTplCollectionRegistrySelect" class="input-sm">
+                    <option value="">Select collection from registry</option>
+                  </select>
+                  <button class="btn-secondary btn-sm" type="button" onclick="addHeistTemplateCollectionRequirement()">Add Collection Gate</button>
+                </div>
+                <div id="heistTplCollectionRequirementList" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;"></div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:10px;">
+                  <select id="heistTplTraitCatalogCollection" class="input-sm">
+                    <option value="">Trait source collection</option>
+                  </select>
+                  <select id="heistTplTraitType" class="input-sm">
+                    <option value="">Trait type</option>
+                  </select>
+                  <select id="heistTplTraitValue" class="input-sm">
+                    <option value="">Trait value (optional)</option>
+                  </select>
+                  <button class="btn-secondary btn-sm" type="button" onclick="addHeistTemplateTraitRequirement()">Add Trait Gate</button>
+                </div>
+                <div id="heistTplTraitRequirementList" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;"></div>
               </div>
-              <div id="heistTplTraitRequirementList" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;"></div>
-              <div style="margin-top:10px;">
+              <div id="heistTplSlotRequirementSection" style="margin-top:10px;">
                 <h5 style="margin:0 0 8px 0;">Slot Requirements (Optional)</h5>
                 <div id="heistTplSlotRequirementRows" style="display:grid;gap:8px;"></div>
                 <button class="btn-secondary btn-sm" type="button" onclick="addHeistSlotRequirementRow()">Add Slot Requirement</button>

@@ -67,6 +67,13 @@ function buildBoardEmbed(guildId, missions = []) {
 
   const lines = missions.slice(0, 10).map((mission) => formatMissionLine(mission));
   embed.setDescription(lines.join('\n\n'));
+  const firstImage = missions
+    .map((mission) => mission?.image_url || mission?.imageUrl || mission?.metadata?.image_url || mission?.metadata?.imageUrl || '')
+    .map((value) => String(value || '').trim())
+    .find((value) => /^https?:\/\//i.test(value) || value.startsWith('data:image/'));
+  if (firstImage) {
+    embed.setThumbnail(firstImage);
+  }
   if (missions.length > 10) {
     embed.addFields({ name: 'More Missions', value: `${missions.length - 10} more mission(s) available.` });
   }

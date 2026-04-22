@@ -3,6 +3,9 @@ let userData = null;
 let isAdmin = false;
 let isSuperadmin = false;
 let heistEnabled = true;
+let heistEditingTemplateId = null;
+let heistTreasuryNfts = [];
+let heistSelectedTreasuryNft = null;
 let confirmCallback = null;
 let activeGuildId = localStorage.getItem('activeGuildId') || '';
 const PORTAL_SECTION_STORAGE_KEY = 'activePortalSection';
@@ -2884,8 +2887,17 @@ async function removeWallet(address) {
 // ==================== MISSIONS (HEIST) ====================
 function normalizeMissionRecord(mission) {
   if (!mission || typeof mission !== 'object') return null;
+  const metadata = mission && typeof mission.metadata === 'object' ? mission.metadata : {};
+  const imageUrl = String(
+    mission.image_url
+    || mission.imageUrl
+    || metadata.image_url
+    || metadata.imageUrl
+    || ''
+  ).trim();
   return {
     missionId: String(mission.mission_id || mission.missionId || '').trim(),
+    templateId: Number(mission.template_id || mission.templateId || 0) || null,
     title: String(mission.title || 'Untitled Mission'),
     status: String(mission.status || 'recruiting').toLowerCase(),
     description: String(mission.description || '').trim(),
@@ -2898,7 +2910,74 @@ function normalizeMissionRecord(mission) {
     assignedNftName: String(mission.assigned_nft_name || mission.assignedNftName || '').trim(),
     pointsAwarded: Number(mission.points_awarded || mission.pointsAwarded || 0),
     endsAt: mission.ends_at || mission.endsAt || null,
+    imageUrl: imageUrl || null,
+    traitRequirements: mission.traitRequirements || mission.trait_requirements || {},
   };
+}
+
+function normalizeMissionAccessRequirements(requirements) {
+  const raw = requirements && typeof requirements === 'object' ? requirements : {};
+  const requiredTraits = Array.isArray(raw.requiredTraits)
+    ? raw.requiredTraits
+    : (Array.isArray(raw.required_traits) ? raw.required_traits : []);
+  const requiredCollections = Array.isArray(raw.requiredCollections)
+    ? raw.requiredCollections
+    : (Array.isArray(raw.required_collections) ? raw.required_collections : []);
+  const gateMode = String(raw.gateMode || raw.gate_mode || 'and').trim().toLowerCase() === 'or' ? 'or' : 'and';
+  return {
+    requiredTraits,
+    requiredCollections,
+    gateMode,
+  };
+}
+
+function formatMissionAccessSummary(requirements) {
+  const normalized = normalizeMissionAccessRequirements(requirements);
+  const traitParts = (normalized.requiredTraits || [])
+    .map((rule) => {
+      const type = String(rule?.traitType || rule?.trait_type || '').trim();
+      if (!type) return '';
+      const values = Array.isArray(rule?.values)
+        ? rule.values.map((value) => String(value || '').trim()).filter(Boolean)
+        : [];
+      return values.length ? `${type}: ${values.join(' / ')}` : `${type}: any`;
+    })
+    .filter(Boolean);
+  const collectionParts = (normalized.requiredCollections || [])
+    .map((entry) => String(entry || '').trim())
+    .filter(Boolean);
+  const pieces = [];
+  if (collectionParts.length) pieces.push(`Collections: ${collectionParts.join(', ')}`);
+  if (traitParts.length) pieces.push(`Traits: ${traitParts.join('; ')}`);
+  if (!pieces.length) return 'No access gate';
+  return `${pieces.join(` ${normalized.gateMode.toUpperCase()} `)}`;
+}
+
+async function joinAvailableMission(missionId) {
+  const id = String(missionId || '').trim();
+  if (!id) return;
+  try {
+    const endpoint = buildPublicV1Url(`/api/public/v1/heist/missions/${encodeURIComponent(id)}/join`, { requireGuild: true });
+    if (!endpoint) {
+      showError('Select a server first.');
+      return;
+    }
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({}),
+    });
+    const json = await response.json();
+    if (!response.ok || !json?.success) {
+      throw new Error(json?.message || json?.error?.message || 'Failed to join mission');
+    }
+    showSuccess(`Joined mission ${id}.`);
+    await Promise.all([loadAvailableMissions(), loadPortal()]);
+  } catch (error) {
+    console.error('[Missions] join available mission failed:', error);
+    showError(error?.message || 'Failed to join mission.');
+  }
 }
 
 function renderMissions() {
@@ -2942,7 +3021,7 @@ async function loadAvailableMissions() {
   if (!container) return;
 
   try {
-    const endpoint = buildPublicV1Url('/api/public/v1/missions/active', { requireGuild: true });
+    const endpoint = buildPublicV1Url('/api/public/v1/heist/missions/active', { requireGuild: true });
     if (!endpoint) {
       container.innerHTML = `
         <div class="empty-state">
@@ -2976,12 +3055,26 @@ async function loadAvailableMissions() {
           <span class="status-badge status-${mission.status}">${mission.status}</span>
         </div>
         <div class="mission-meta" style="margin-top: var(--space-3);">
+          ${mission.imageUrl ? `
+            <div style="margin-bottom: var(--space-3);">
+              <img src="${escapeHtml(mission.imageUrl)}" alt="" style="width:100%;max-width:340px;border-radius:10px;border:1px solid var(--border-color);object-fit:cover;">
+            </div>
+          ` : ''}
           ${mission.description ? `<p style="color: var(--text-secondary); margin-bottom: var(--space-2);">${escapeHtml(mission.description)}</p>` : ''}
           <div style="display: flex; gap: var(--space-4); flex-wrap: wrap; margin-top: var(--space-2);">
             <span>Slots: ${mission.filledSlots || 0}/${mission.totalSlots || 0}</span>
             <span>Streetcredit: ${mission.rewardStreetcredit || 0}</span>
             <span>XP: ${mission.rewardXp || 0}</span>
             ${mission.endsAt ? `<span>Ends: ${escapeHtml(new Date(mission.endsAt).toLocaleString())}</span>` : ''}
+          </div>
+          <div style="margin-top:8px;color:var(--text-secondary);font-size:0.84em;">
+            Access: ${escapeHtml(formatMissionAccessSummary(mission.traitRequirements))}
+          </div>
+          <div style="margin-top:10px;">
+            <button class="btn-primary btn-sm" onclick="joinAvailableMission('${escapeJsString(mission.missionId || '')}')"
+              ${(mission.totalSlots > 0 && mission.filledSlots >= mission.totalSlots) ? 'disabled' : ''}>
+              ${(mission.totalSlots > 0 && mission.filledSlots >= mission.totalSlots) ? 'Mission Full' : 'Join Mission'}
+            </button>
           </div>
         </div>
       </div>
@@ -3017,6 +3110,55 @@ function populateHeistTemplateSelectors(templates) {
   });
 }
 
+function populateHeistTraitBonusTemplateSelector(templates) {
+  const select = document.getElementById('heistBonusTemplateId');
+  if (!select) return;
+  const selected = String(select.value || '').trim();
+  select.innerHTML = '';
+  const anyOption = document.createElement('option');
+  anyOption.value = '';
+  anyOption.textContent = 'Template: All (legacy)';
+  select.appendChild(anyOption);
+  (Array.isArray(templates) ? templates : []).forEach((template) => {
+    const option = document.createElement('option');
+    option.value = String(template.id);
+    option.textContent = `Template: #${template.id} ${template.name || 'Unnamed'}`;
+    select.appendChild(option);
+  });
+  if (selected && Array.from(select.options).some((option) => option.value === selected)) {
+    select.value = selected;
+  }
+}
+
+function populateHeistTreasuryNftSelector(nfts) {
+  const select = document.getElementById('heistTreasuryNftSelect');
+  if (!select) return;
+  const selected = String(select.value || '').trim();
+  select.innerHTML = '';
+  const list = Array.isArray(nfts) ? nfts : [];
+  if (!list.length) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'No treasury NFTs found';
+    select.appendChild(option);
+    return;
+  }
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Select treasury NFT...';
+  select.appendChild(placeholder);
+  list.forEach((nft) => {
+    const option = document.createElement('option');
+    const mint = String(nft?.mint || '').trim();
+    option.value = mint;
+    option.textContent = `${String(nft?.name || mint || 'NFT').trim()}${nft?.collectionKey ? ` (${nft.collectionKey})` : ''}`;
+    select.appendChild(option);
+  });
+  if (selected && Array.from(select.options).some((option) => option.value === selected)) {
+    select.value = selected;
+  }
+}
+
 function renderHeistTemplateList(templates) {
   const wrap = document.getElementById('heistTemplateList');
   if (!wrap) return;
@@ -3034,8 +3176,15 @@ function renderHeistTemplateList(templates) {
             ${escapeHtml(template.mode || 'solo')} | slots ${Number(template.required_slots || 0)}/${Number(template.total_slots || 0)} | duration ${Number(template.duration_minutes || 0)}m
             | xp ${Number(template.base_xp_reward || 0)} | streetcredit ${Number(template.base_streetcredit_reward || 0)} | weight ${Number(template.spawn_weight || 0)}
           </div>
+          <div style="font-size:0.8em;color:var(--text-secondary);margin-top:6px;">
+            ${escapeHtml(formatMissionAccessSummary(template.trait_requirements || {}))}
+          </div>
+          ${template.image_url ? `<div style="margin-top:8px;"><img src="${escapeHtml(String(template.image_url))}" alt="" style="width:120px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--border-color);"></div>` : ''}
         </div>
-        <button class="btn-secondary btn-sm" onclick="deleteHeistTemplate(${Number(template.id)})">Delete</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn-secondary btn-sm" onclick="editHeistTemplate(${Number(template.id)})">Edit</button>
+          <button class="btn-secondary btn-sm" onclick="deleteHeistTemplate(${Number(template.id)})">Delete</button>
+        </div>
       </div>
     </div>
   `).join('');
@@ -3169,7 +3318,7 @@ function renderHeistTraitBonuses(rules) {
       <div style="font-size:0.9em;color:var(--text-secondary);">
         <div style="color:var(--text-primary);font-weight:600;">${escapeHtml(String(rule.trait_type || ''))}: ${escapeHtml(String(rule.trait_value || ''))}</div>
         <div>metric ${escapeHtml(String(rule.target_metric || 'xp'))} | multiplier ${Number(rule.multiplier || 1)} | flat ${Number(rule.flat_bonus || 0)} | max ${rule.max_bonus === null || rule.max_bonus === undefined ? '-' : Number(rule.max_bonus)}</div>
-        <div>mission type ${escapeHtml(String(rule.mission_type || 'any'))} | ${Number(rule.enabled || 0) === 1 ? 'enabled' : 'disabled'}</div>
+        <div>template ${escapeHtml(String(rule.template_name || (rule.template_id ? `#${rule.template_id}` : 'any')))} | mission type ${escapeHtml(String(rule.mission_type || 'any'))} | ${Number(rule.enabled || 0) === 1 ? 'enabled' : 'disabled'}</div>
       </div>
       <button class="btn-secondary btn-sm" onclick="deleteHeistTraitBonus(${Number(rule.id)})">Delete</button>
     </div>
@@ -3186,6 +3335,10 @@ async function submitHeistTraitBonus() {
   const payload = {
     trait_type: traitType,
     trait_value: traitValue,
+    template_id: (() => {
+      const raw = Number(getHeistConfigInputValue('heistBonusTemplateId', '0'));
+      return Number.isFinite(raw) && raw > 0 ? raw : null;
+    })(),
     mission_type: getHeistConfigInputValue('heistBonusMissionType', '') || null,
     target_metric: getHeistConfigInputValue('heistBonusMetric', 'xp') || 'xp',
     multiplier: Number(getHeistConfigInputValue('heistBonusMultiplier', '1')) || 1,
@@ -3211,6 +3364,8 @@ async function submitHeistTraitBonus() {
     });
     const metricEl = document.getElementById('heistBonusMetric');
     if (metricEl) metricEl.value = 'xp';
+    const templateEl = document.getElementById('heistBonusTemplateId');
+    if (templateEl) templateEl.value = '';
     const enabledEl = document.getElementById('heistBonusEnabled');
     if (enabledEl) enabledEl.checked = true;
     await loadHeistAdminPanel();
@@ -3256,10 +3411,56 @@ function renderHeistVaultItems(items) {
         <div style="color:var(--text-primary);font-weight:600;">#${Number(item.id)} ${escapeHtml(String(item.name || 'Unnamed item'))}</div>
         <div>cost ${Number(item.cost_streetcredit || 0)} | tier ${Number(item.required_vault_tier || 0)} | reward ${escapeHtml(String(item.reward_type || 'manual'))} | fulfillment ${escapeHtml(String(item.fulfillment_mode || 'manual'))}</div>
         <div>stock ${Number(item.quantity_remaining) < 0 ? 'unlimited' : Number(item.quantity_remaining || 0)} | ${Number(item.enabled || 0) === 1 ? 'enabled' : 'disabled'}</div>
+        ${(item?.metadata?.source === 'treasury_nft' && item?.metadata?.mint) ? `<div>treasury NFT: ${escapeHtml(String(item.metadata.mint))}</div>` : ''}
       </div>
       <button class="btn-secondary btn-sm" onclick="deleteHeistVaultItem(${Number(item.id)})">Delete</button>
     </div>
   `).join('');
+}
+
+async function loadHeistTreasuryNfts() {
+  if (!(isAdmin || isSuperadmin) || !activeGuildId) return;
+  try {
+    const res = await fetch('/api/admin/heist/treasury-nfts?limit=1000', {
+      credentials: 'include',
+      headers: buildTenantRequestHeaders(),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || json?.error?.message || 'Failed to load treasury NFTs');
+    }
+    heistTreasuryNfts = json?.data?.nfts || [];
+    populateHeistTreasuryNftSelector(heistTreasuryNfts);
+    showSuccess(`Loaded ${heistTreasuryNfts.length} treasury NFTs.`);
+  } catch (error) {
+    console.error('[Missions] load treasury NFTs failed:', error);
+    showError(error?.message || 'Failed to load treasury NFTs.');
+  }
+}
+
+function prefillVaultItemFromTreasuryNft() {
+  const select = document.getElementById('heistTreasuryNftSelect');
+  const mint = String(select?.value || '').trim();
+  if (!mint) {
+    showError('Select a treasury NFT first.');
+    return;
+  }
+  const nft = (Array.isArray(heistTreasuryNfts) ? heistTreasuryNfts : []).find((entry) => String(entry?.mint || '').trim() === mint);
+  if (!nft) {
+    showError('Selected treasury NFT was not found. Refresh and try again.');
+    return;
+  }
+  heistSelectedTreasuryNft = nft;
+  const setValue = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.value = value;
+  };
+  setValue('heistVaultName', String(nft.name || mint));
+  setValue('heistVaultDescription', `Treasury NFT reward (${mint})`);
+  if (String(getHeistConfigInputValue('heistVaultRewardType', 'manual')) === 'manual') {
+    setValue('heistVaultRewardType', 'manual');
+  }
+  showSuccess('Vault item prefilled from treasury NFT.');
 }
 
 function renderHeistRedemptions(redemptions) {
@@ -3314,6 +3515,16 @@ async function updateHeistRedemptionStatus(redemptionId) {
 }
 
 async function createHeistVaultItem() {
+  const metadata = heistSelectedTreasuryNft && typeof heistSelectedTreasuryNft === 'object'
+    ? {
+      source: 'treasury_nft',
+      mint: String(heistSelectedTreasuryNft.mint || '').trim() || null,
+      image: String(heistSelectedTreasuryNft.image || '').trim() || null,
+      collectionKey: String(heistSelectedTreasuryNft.collectionKey || '').trim() || null,
+      walletAddress: String(heistSelectedTreasuryNft.walletAddress || '').trim() || null,
+      walletLabel: String(heistSelectedTreasuryNft.walletLabel || '').trim() || null,
+    }
+    : null;
   const payload = {
     name: getHeistConfigInputValue('heistVaultName', ''),
     description: getHeistConfigInputValue('heistVaultDescription', ''),
@@ -3324,6 +3535,7 @@ async function createHeistVaultItem() {
     role_id: getHeistConfigInputValue('heistVaultRoleId', '') || null,
     quantity_remaining: getHeistConfigInputValue('heistVaultQuantity', '') === '' ? -1 : (Number(getHeistConfigInputValue('heistVaultQuantity', '-1')) || -1),
     enabled: !!document.getElementById('heistVaultEnabled')?.checked,
+    metadata: metadata || undefined,
   };
   if (!payload.name) {
     showError('Vault item name is required.');
@@ -3351,6 +3563,9 @@ async function createHeistVaultItem() {
     if (fulfillEl) fulfillEl.value = 'manual';
     const enabledEl = document.getElementById('heistVaultEnabled');
     if (enabledEl) enabledEl.checked = true;
+    heistSelectedTreasuryNft = null;
+    const treasurySelect = document.getElementById('heistTreasuryNftSelect');
+    if (treasurySelect) treasurySelect.value = '';
     await loadHeistAdminPanel();
   } catch (error) {
     console.error('[Missions] create vault item failed:', error);
@@ -3391,7 +3606,7 @@ async function loadHeistAdminPanel() {
 
   try {
     const headers = buildTenantRequestHeaders();
-    const [configRes, templatesRes, missionsRes, channelsRes, ladderRes, bonusRes, vaultRes, redemptionsRes] = await Promise.all([
+    const [configRes, templatesRes, missionsRes, channelsRes, ladderRes, bonusRes, vaultRes, redemptionsRes, treasuryNftsRes] = await Promise.all([
       fetch('/api/admin/heist/config', { credentials: 'include', headers }),
       fetch('/api/admin/heist/templates', { credentials: 'include', headers }),
       fetch('/api/admin/heist/missions?statuses=recruiting,active&limit=50', { credentials: 'include', headers }),
@@ -3400,8 +3615,9 @@ async function loadHeistAdminPanel() {
       fetch('/api/admin/heist/trait-bonuses', { credentials: 'include', headers }),
       fetch('/api/admin/heist/vault/items?includeDisabled=1', { credentials: 'include', headers }),
       fetch('/api/admin/heist/vault/redemptions?limit=50', { credentials: 'include', headers }),
+      fetch('/api/admin/heist/treasury-nfts?limit=1000', { credentials: 'include', headers }),
     ]);
-    const [configJson, templatesJson, missionsJson, channelsJson, ladderJson, bonusJson, vaultJson, redemptionsJson] = await Promise.all([
+    const [configJson, templatesJson, missionsJson, channelsJson, ladderJson, bonusJson, vaultJson, redemptionsJson, treasuryNftsJson] = await Promise.all([
       configRes.json(),
       templatesRes.json(),
       missionsRes.json(),
@@ -3410,6 +3626,7 @@ async function loadHeistAdminPanel() {
       bonusRes.json(),
       vaultRes.json(),
       redemptionsRes.json(),
+      treasuryNftsRes.json(),
     ]);
 
     if (!configRes.ok || !configJson.success) {
@@ -3424,7 +3641,13 @@ async function loadHeistAdminPanel() {
     const traitBonuses = bonusJson?.success ? (bonusJson?.data?.rules || []) : [];
     const vaultItems = vaultJson?.success ? (vaultJson?.data?.items || []) : [];
     const redemptions = redemptionsJson?.success ? (redemptionsJson?.data?.redemptions || []) : [];
+    heistTreasuryNfts = treasuryNftsJson?.success ? (treasuryNftsJson?.data?.nfts || []) : [];
     window._heistAdminTemplates = templates;
+    if (heistEditingTemplateId && !templates.some((template) => Number(template.id) === Number(heistEditingTemplateId))) {
+      resetHeistTemplateForm();
+    } else {
+      updateHeistTemplateSubmitState();
+    }
 
     populateChannelSelects(
       ['heistCfgMissionFeedChannel', 'heistCfgMissionLogChannel', 'heistCfgVaultLogChannel'],
@@ -3459,12 +3682,15 @@ async function loadHeistAdminPanel() {
     setValue('heistCfgDefaultMaxNfts', Number(config.default_max_nfts_per_user || 2));
 
     populateHeistTemplateSelectors(templates);
+    populateHeistTraitBonusTemplateSelector(templates);
+    populateHeistTreasuryNftSelector(heistTreasuryNfts);
     renderHeistTemplateList(templates);
     renderHeistMissionOps(missions);
     renderHeistLadder(ladder);
     renderHeistTraitBonuses(traitBonuses);
     renderHeistVaultItems(vaultItems);
     renderHeistRedemptions(redemptions);
+    bindHeistTemplateImageUpload();
   } catch (error) {
     console.error('[Missions] Failed to load admin panel:', error);
     showError(error?.message || 'Failed to load missions admin panel.');
@@ -3481,6 +3707,217 @@ function getHeistConfigNumericValue(id, fallback, min, max) {
   const raw = Number(getHeistConfigInputValue(id, String(fallback)));
   if (!Number.isFinite(raw)) return fallback;
   return Math.max(min, Math.min(max, Math.round(raw)));
+}
+
+function parseHeistTraitRequirementInput(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return [];
+  return text
+    .split(';')
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .map((segment) => {
+      const [typeRaw, valuesRaw] = segment.split(':');
+      const traitType = String(typeRaw || '').trim();
+      if (!traitType) return null;
+      const values = valuesRaw
+        ? valuesRaw.split('|').map((entry) => String(entry || '').trim()).filter(Boolean)
+        : [];
+      return { traitType, values };
+    })
+    .filter(Boolean);
+}
+
+function serializeHeistTraitRequirementInput(requiredTraits) {
+  const rows = Array.isArray(requiredTraits) ? requiredTraits : [];
+  return rows
+    .map((rule) => {
+      const traitType = String(rule?.traitType || rule?.trait_type || '').trim();
+      if (!traitType) return '';
+      const values = Array.isArray(rule?.values)
+        ? rule.values.map((entry) => String(entry || '').trim()).filter(Boolean)
+        : [];
+      return values.length ? `${traitType}:${values.join('|')}` : traitType;
+    })
+    .filter(Boolean)
+    .join(';');
+}
+
+function buildHeistTemplatePayloadFromForm() {
+  const gateMode = getHeistConfigInputValue('heistTplGateMode', 'and') === 'or' ? 'or' : 'and';
+  const requiredCollections = getHeistConfigInputValue('heistTplRequiredCollections', '')
+    .split(',')
+    .map((entry) => String(entry || '').trim())
+    .filter(Boolean);
+  const requiredTraits = parseHeistTraitRequirementInput(getHeistConfigInputValue('heistTplRequiredTraits', ''));
+  const imageUrlRaw = getHeistConfigInputValue('heistTplImageUrl', '');
+  const metadata = {};
+  if (imageUrlRaw) metadata.image_url = imageUrlRaw;
+
+  return {
+    name: getHeistConfigInputValue('heistTplName', ''),
+    description: getHeistConfigInputValue('heistTplDescription', ''),
+    mode: getHeistConfigInputValue('heistTplMode', 'solo') || 'solo',
+    duration_minutes: getHeistConfigNumericValue('heistTplDuration', 1440, 15, 10080),
+    required_slots: getHeistConfigNumericValue('heistTplRequiredSlots', 1, 1, 100),
+    total_slots: getHeistConfigNumericValue('heistTplTotalSlots', 1, 1, 100),
+    max_nfts_per_user: getHeistConfigNumericValue('heistTplMaxNfts', 2, 1, 10),
+    base_xp_reward: getHeistConfigNumericValue('heistTplXpReward', 25, 1, 100000),
+    base_streetcredit_reward: getHeistConfigNumericValue('heistTplStreetReward', 25, 1, 100000),
+    spawn_weight: getHeistConfigNumericValue('heistTplSpawnWeight', 1, 1, 1000),
+    trait_requirements: {
+      gateMode,
+      requiredCollections,
+      requiredTraits,
+    },
+    metadata,
+    image_url: imageUrlRaw || null,
+  };
+}
+
+function updateHeistTemplateSubmitState() {
+  const button = document.getElementById('heistTplSubmitBtn');
+  if (!button) return;
+  if (heistEditingTemplateId) {
+    button.textContent = `Save Template #${heistEditingTemplateId}`;
+  } else {
+    button.textContent = 'Create Template';
+  }
+}
+
+function bindHeistTemplateImageUpload() {
+  const input = document.getElementById('heistTplImageFile');
+  if (!input || input.dataset.bound === '1') return;
+  input.dataset.bound = '1';
+  input.addEventListener('change', async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const isImage = String(file.type || '').toLowerCase().startsWith('image/');
+    if (!isImage) {
+      showError('Please select an image file.');
+      input.value = '';
+      return;
+    }
+    if (Number(file.size || 0) > 1024 * 1024) {
+      showError('Image too large. Keep it under 1MB for mission cards/panels.');
+      input.value = '';
+      return;
+    }
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('Could not read image file'));
+      reader.readAsDataURL(file);
+    }).catch((error) => {
+      showError(error?.message || 'Could not read image file.');
+      return '';
+    });
+    if (!dataUrl) return;
+    const imageUrlInput = document.getElementById('heistTplImageUrl');
+    if (imageUrlInput) imageUrlInput.value = dataUrl;
+    showSuccess('Mission image uploaded. Save template to apply.');
+  });
+}
+
+function resetHeistTemplateForm() {
+  heistEditingTemplateId = null;
+  const defaults = {
+    heistTplName: '',
+    heistTplDescription: '',
+    heistTplMode: 'solo',
+    heistTplDuration: '1440',
+    heistTplRequiredSlots: '1',
+    heistTplTotalSlots: '1',
+    heistTplMaxNfts: '2',
+    heistTplXpReward: '25',
+    heistTplStreetReward: '25',
+    heistTplSpawnWeight: '1',
+    heistTplGateMode: 'and',
+    heistTplRequiredCollections: '',
+    heistTplRequiredTraits: '',
+    heistTplImageUrl: '',
+  };
+  Object.entries(defaults).forEach(([id, value]) => {
+    const element = document.getElementById(id);
+    if (element) element.value = value;
+  });
+  const fileInput = document.getElementById('heistTplImageFile');
+  if (fileInput) fileInput.value = '';
+  updateHeistTemplateSubmitState();
+}
+
+function editHeistTemplate(templateId) {
+  const normalized = Number(templateId);
+  if (!Number.isFinite(normalized) || normalized <= 0) return;
+  const templates = Array.isArray(window._heistAdminTemplates) ? window._heistAdminTemplates : [];
+  const template = templates.find((entry) => Number(entry.id) === normalized);
+  if (!template) {
+    showError('Template not found.');
+    return;
+  }
+  heistEditingTemplateId = normalized;
+  const requirements = normalizeMissionAccessRequirements(template.trait_requirements || {});
+  const setValue = (id, value) => {
+    const element = document.getElementById(id);
+    if (element) element.value = value === undefined || value === null ? '' : String(value);
+  };
+  setValue('heistTplName', template.name || '');
+  setValue('heistTplDescription', template.description || '');
+  setValue('heistTplMode', template.mode || 'solo');
+  setValue('heistTplDuration', Number(template.duration_minutes || 1440));
+  setValue('heistTplRequiredSlots', Number(template.required_slots || 1));
+  setValue('heistTplTotalSlots', Number(template.total_slots || 1));
+  setValue('heistTplMaxNfts', Number(template.max_nfts_per_user || 2));
+  setValue('heistTplXpReward', Number(template.base_xp_reward || 25));
+  setValue('heistTplStreetReward', Number(template.base_streetcredit_reward || 25));
+  setValue('heistTplSpawnWeight', Number(template.spawn_weight || 1));
+  setValue('heistTplGateMode', requirements.gateMode || 'and');
+  setValue('heistTplRequiredCollections', (requirements.requiredCollections || []).join(','));
+  setValue('heistTplRequiredTraits', serializeHeistTraitRequirementInput(requirements.requiredTraits || []));
+  setValue('heistTplImageUrl', template.image_url || template?.metadata?.image_url || '');
+  const fileInput = document.getElementById('heistTplImageFile');
+  if (fileInput) fileInput.value = '';
+  updateHeistTemplateSubmitState();
+}
+
+async function submitHeistTemplate() {
+  if (!(isAdmin || isSuperadmin) || !activeGuildId) {
+    showError('Admin access and active server are required.');
+    return;
+  }
+  try {
+    const payload = buildHeistTemplatePayloadFromForm();
+    if (!payload.name || !payload.description) {
+      showError('Template name and description are required.');
+      return;
+    }
+    const editingId = Number(heistEditingTemplateId || 0);
+    const isEditing = Number.isFinite(editingId) && editingId > 0;
+    const endpoint = isEditing
+      ? `/api/admin/heist/templates/${encodeURIComponent(String(editingId))}`
+      : '/api/admin/heist/templates';
+    const method = isEditing ? 'PUT' : 'POST';
+    const res = await fetch(endpoint, {
+      method,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || json?.error?.message || `Failed to ${isEditing ? 'update' : 'create'} template`);
+    }
+    showSuccess(isEditing ? `Template #${editingId} updated.` : 'Mission template created.');
+    resetHeistTemplateForm();
+    await loadHeistAdminPanel();
+  } catch (error) {
+    console.error('[Missions] submit template failed:', error);
+    showError(error?.message || 'Failed to save mission template.');
+  }
+}
+
+async function createHeistTemplate() {
+  await submitHeistTemplate();
 }
 
 async function saveHeistConfig() {
@@ -3520,51 +3957,6 @@ async function saveHeistConfig() {
   } catch (error) {
     console.error('[Missions] save config failed:', error);
     showError(error?.message || 'Failed to save missions settings.');
-  }
-}
-
-async function createHeistTemplate() {
-  if (!(isAdmin || isSuperadmin) || !activeGuildId) {
-    showError('Admin access and active server are required.');
-    return;
-  }
-  try {
-    const payload = {
-      name: getHeistConfigInputValue('heistTplName', ''),
-      description: getHeistConfigInputValue('heistTplDescription', ''),
-      mode: getHeistConfigInputValue('heistTplMode', 'solo') || 'solo',
-      duration_minutes: getHeistConfigNumericValue('heistTplDuration', 1440, 15, 10080),
-      required_slots: getHeistConfigNumericValue('heistTplRequiredSlots', 1, 1, 100),
-      total_slots: getHeistConfigNumericValue('heistTplTotalSlots', 1, 1, 100),
-      max_nfts_per_user: getHeistConfigNumericValue('heistTplMaxNfts', 2, 1, 10),
-      base_xp_reward: getHeistConfigNumericValue('heistTplXpReward', 25, 1, 100000),
-      base_streetcredit_reward: getHeistConfigNumericValue('heistTplStreetReward', 25, 1, 100000),
-      spawn_weight: getHeistConfigNumericValue('heistTplSpawnWeight', 1, 1, 1000),
-    };
-    if (!payload.name || !payload.description) {
-      showError('Template name and description are required.');
-      return;
-    }
-
-    const res = await fetch('/api/admin/heist/templates', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
-      body: JSON.stringify(payload),
-    });
-    const json = await res.json();
-    if (!res.ok || !json?.success) {
-      throw new Error(json?.message || json?.error?.message || 'Failed to create template');
-    }
-    showSuccess('Mission template created.');
-    ['heistTplName', 'heistTplDescription'].forEach((id) => {
-      const element = document.getElementById(id);
-      if (element) element.value = '';
-    });
-    await loadHeistAdminPanel();
-  } catch (error) {
-    console.error('[Missions] create template failed:', error);
-    showError(error?.message || 'Failed to create mission template.');
   }
 }
 

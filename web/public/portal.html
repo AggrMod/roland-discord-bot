@@ -710,7 +710,7 @@
             </div>
 
             <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
-              <h4 style="margin-bottom:12px;">Create Template</h4>
+              <h4 style="margin-bottom:12px;">Create / Edit Template</h4>
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
                 <input id="heistTplName" type="text" class="input-sm" placeholder="Template name">
                 <input id="heistTplDescription" type="text" class="input-sm" placeholder="Description">
@@ -725,9 +725,21 @@
                 <input id="heistTplXpReward" type="number" min="1" max="100000" class="input-sm" placeholder="XP reward">
                 <input id="heistTplStreetReward" type="number" min="1" max="100000" class="input-sm" placeholder="Streetcredit reward">
                 <input id="heistTplSpawnWeight" type="number" min="1" max="1000" class="input-sm" placeholder="Spawn weight">
+                <select id="heistTplGateMode" class="input-sm">
+                  <option value="and">Access Gate: NFT collection AND trait</option>
+                  <option value="or">Access Gate: NFT collection OR trait</option>
+                </select>
+                <input id="heistTplRequiredCollections" type="text" class="input-sm" placeholder="Required collections (comma-separated)">
+                <input id="heistTplRequiredTraits" type="text" class="input-sm" placeholder="Required traits (Trait:ValueA|ValueB;Trait2)">
+                <input id="heistTplImageUrl" type="text" class="input-sm" placeholder="Image URL for mission cards/panels">
+                <input id="heistTplImageFile" type="file" class="input-sm" accept="image/*">
               </div>
+              <p style="margin-top:8px;color:var(--text-secondary);font-size:0.82em;">
+                Trait format example: <code>Role:Don|Underboss;Weapon</code> (trait without values means "any value")
+              </p>
               <div style="margin-top:10px;">
-                <button class="btn-primary" onclick="createHeistTemplate()">Create Template</button>
+                <button class="btn-primary" id="heistTplSubmitBtn" onclick="submitHeistTemplate()">Create Template</button>
+                <button class="btn-secondary" onclick="resetHeistTemplateForm()">Clear</button>
               </div>
             </div>
 
@@ -751,6 +763,13 @@
 
             <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
               <h4 style="margin-bottom:12px;">Ladder (Ranks and Vault Access)</h4>
+              <div class="heist-ladder-header">
+                <span>Rank Name</span>
+                <span>Rank Key</span>
+                <span>Min XP</span>
+                <span>Vault Tier</span>
+                <span>Action</span>
+              </div>
               <div id="heistLadderRows" style="display:grid;gap:8px;"></div>
               <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
                 <button class="btn-secondary btn-sm" onclick="addHeistLadderRow()">Add Rank</button>
@@ -761,6 +780,7 @@
             <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
               <h4 style="margin-bottom:12px;">Trait Bonus Rules</h4>
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">
+                <select id="heistBonusTemplateId" class="input-sm"></select>
                 <input id="heistBonusTraitType" type="text" class="input-sm" placeholder="Trait type">
                 <input id="heistBonusTraitValue" type="text" class="input-sm" placeholder="Trait value">
                 <input id="heistBonusMissionType" type="text" class="input-sm" placeholder="Mission type (optional)">
@@ -785,6 +805,11 @@
 
             <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
               <h4 style="margin-bottom:12px;">Vault Items (Streetcredit Store)</h4>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+                <select id="heistTreasuryNftSelect" class="input-sm" style="min-width:320px;"></select>
+                <button class="btn-secondary btn-sm" onclick="loadHeistTreasuryNfts()">Refresh Treasury NFTs</button>
+                <button class="btn-primary btn-sm" onclick="prefillVaultItemFromTreasuryNft()">Use Selected NFT</button>
+              </div>
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
                 <input id="heistVaultName" type="text" class="input-sm" placeholder="Item name">
                 <input id="heistVaultDescription" type="text" class="input-sm" placeholder="Description">

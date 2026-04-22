@@ -5,6 +5,7 @@ const tenantService = require('./tenantService');
 const entitlementService = require('./entitlementService');
 const walletService = require('./walletService');
 const nftService = require('./nftService');
+const treasuryService = require('./treasuryService');
 const { getModuleDisplayName } = require('./moduleLabelService');
 
 const DEFAULT_CONFIG = Object.freeze({
@@ -90,6 +91,49 @@ function parseNonNegativeInt(value, fallback = 0) {
   return parsed;
 }
 
+function sanitizeImageUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (raw.startsWith('data:image/')) return raw;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return null;
+}
+
+function normalizeGateMode(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'or' ? 'or' : 'and';
+}
+
+function normalizeTraitRequirements(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const requiredTraitsRaw = Array.isArray(source.requiredTraits)
+    ? source.requiredTraits
+    : (Array.isArray(source.required_traits) ? source.required_traits : []);
+  const requiredTraits = requiredTraitsRaw
+    .map((entry) => {
+      const traitType = String(entry?.traitType || entry?.trait_type || '').trim().slice(0, 64);
+      if (!traitType) return null;
+      const values = Array.isArray(entry?.values)
+        ? entry.values.map((item) => String(item || '').trim().slice(0, 128)).filter(Boolean)
+        : [];
+      return { traitType, values };
+    })
+    .filter(Boolean);
+  const requiredCollectionsRaw = Array.isArray(source.requiredCollections)
+    ? source.requiredCollections
+    : (Array.isArray(source.required_collections) ? source.required_collections : []);
+  const requiredCollections = requiredCollectionsRaw
+    .map((value) => String(value || '').trim().slice(0, 128))
+    .filter(Boolean);
+  const gateMode = normalizeGateMode(source.gateMode || source.gate_mode);
+
+  return {
+    requiredTraits,
+    requiredCollections,
+    gateMode,
+  };
+}
+
 function inListPlaceholders(length) {
   return Array.from({ length }, () => '?').join(', ');
 }
@@ -120,18 +164,38 @@ function sanitizeTemplatePayload(payload = {}) {
   const cooldownMinutes = Math.max(0, Math.min(7 * 24 * 60, parseNonNegativeInt(payload.cooldownMinutes ?? payload.cooldown_minutes, 0)));
   const enabled = payload.enabled === undefined ? 1 : (payload.enabled ? 1 : 0);
   const objective = Array.isArray(payload.objective) ? payload.objective : safeJsonParse(payload.objective_json, []);
-  const traitRequirements = typeof payload.traitRequirements === 'object' && payload.traitRequirements !== null
+  const traitRequirementsRaw = typeof payload.traitRequirements === 'object' && payload.traitRequirements !== null
     ? payload.traitRequirements
-    : safeJsonParse(payload.trait_requirements_json, {});
+    : (
+      (typeof payload.trait_requirements === 'object' && payload.trait_requirements !== null)
+        ? payload.trait_requirements
+        : safeJsonParse(payload.trait_requirements_json, {})
+    );
+  const traitRequirements = normalizeTraitRequirements(traitRequirementsRaw);
   const rewardRules = typeof payload.rewardRules === 'object' && payload.rewardRules !== null
     ? payload.rewardRules
     : safeJsonParse(payload.reward_rules_json, {});
   const activeWindow = typeof payload.activeWindow === 'object' && payload.activeWindow !== null
     ? payload.activeWindow
     : safeJsonParse(payload.active_window_json, {});
-  const metadata = typeof payload.metadata === 'object' && payload.metadata !== null
+  const metadataRaw = typeof payload.metadata === 'object' && payload.metadata !== null
     ? payload.metadata
     : safeJsonParse(payload.metadata_json, {});
+  const imageUrl = sanitizeImageUrl(
+    payload.image_url
+      ?? payload.imageUrl
+      ?? metadataRaw?.image_url
+      ?? metadataRaw?.imageUrl
+  );
+  const metadata = {
+    ...(metadataRaw && typeof metadataRaw === 'object' ? metadataRaw : {}),
+  };
+  if (imageUrl) {
+    metadata.image_url = imageUrl;
+  } else {
+    delete metadata.image_url;
+    delete metadata.imageUrl;
+  }
 
   return {
     name,
@@ -151,6 +215,7 @@ function sanitizeTemplatePayload(payload = {}) {
     spawnWeight,
     cooldownMinutes,
     enabled,
+    imageUrl,
     metadata,
   };
 }
@@ -232,6 +297,15 @@ class HeistService {
         if (summary.length > 0) {
           embed.addFields({ name: 'Outcome', value: summary.join(' | '), inline: false });
         }
+      }
+
+      const imageUrl = sanitizeImageUrl(
+        mission?.image_url
+        || mission?.metadata?.image_url
+        || mission?.metadata?.imageUrl
+      );
+      if (imageUrl) {
+        embed.setThumbnail(imageUrl);
       }
 
       await channel.send({ embeds: [embed] });
@@ -570,14 +644,26 @@ class HeistService {
     );
   }
 
-  listTraitBonusRules(guildId) {
+  listTraitBonusRules(guildId, { templateId = null } = {}) {
     const normalizedGuildId = normalizeGuildId(guildId);
     if (!normalizedGuildId) return [];
+    const normalizedTemplateId = Number(templateId);
+    const filterByTemplate = Number.isFinite(normalizedTemplateId) && normalizedTemplateId > 0;
+    if (filterByTemplate) {
+      return db.prepare(`
+        SELECT r.*, t.name AS template_name
+        FROM heist_trait_bonus_rules r
+        LEFT JOIN heist_templates t ON t.guild_id = r.guild_id AND t.id = r.template_id
+        WHERE r.guild_id = ? AND r.template_id = ?
+        ORDER BY r.created_at DESC, r.id DESC
+      `).all(normalizedGuildId, normalizedTemplateId);
+    }
     return db.prepare(`
-      SELECT *
-      FROM heist_trait_bonus_rules
-      WHERE guild_id = ?
-      ORDER BY created_at DESC, id DESC
+      SELECT r.*, t.name AS template_name
+      FROM heist_trait_bonus_rules r
+      LEFT JOIN heist_templates t ON t.guild_id = r.guild_id AND t.id = r.template_id
+      WHERE r.guild_id = ?
+      ORDER BY r.created_at DESC, r.id DESC
     `).all(normalizedGuildId);
   }
 
@@ -588,6 +674,8 @@ class HeistService {
     const traitType = String(payload.trait_type || payload.traitType || '').trim().slice(0, 64);
     const traitValue = String(payload.trait_value || payload.traitValue || '').trim().slice(0, 128);
     const missionType = String(payload.mission_type || payload.missionType || '').trim().toLowerCase().slice(0, 48) || null;
+    const templateIdRaw = Number(payload.template_id ?? payload.templateId ?? 0);
+    const templateId = Number.isFinite(templateIdRaw) && templateIdRaw > 0 ? Math.floor(templateIdRaw) : null;
     const targetMetric = String(payload.target_metric || payload.targetMetric || '').trim().toLowerCase();
     const enabled = payload.enabled === undefined ? 1 : (payload.enabled ? 1 : 0);
     const multiplier = Number(payload.multiplier);
@@ -599,6 +687,12 @@ class HeistService {
     }
     if (!SUPPORTED_METRICS.has(targetMetric)) {
       return { success: false, message: 'target_metric must be xp, streetcredit, or speed' };
+    }
+    if (templateId) {
+      const exists = db.prepare('SELECT id FROM heist_templates WHERE guild_id = ? AND id = ?').get(normalizedGuildId, templateId);
+      if (!exists) {
+        return { success: false, message: 'template_id is invalid for this guild' };
+      }
     }
 
     const normalizedMultiplier = Number.isFinite(multiplier) ? multiplier : 1;
@@ -613,6 +707,7 @@ class HeistService {
         SET
           trait_type = ?,
           trait_value = ?,
+          template_id = ?,
           mission_type = ?,
           target_metric = ?,
           multiplier = ?,
@@ -624,6 +719,7 @@ class HeistService {
       `).run(
         traitType,
         traitValue,
+        templateId,
         missionType,
         targetMetric,
         normalizedMultiplier,
@@ -639,12 +735,13 @@ class HeistService {
 
     db.prepare(`
       INSERT INTO heist_trait_bonus_rules (
-        guild_id, trait_type, trait_value, mission_type, target_metric, multiplier, flat_bonus, max_bonus, enabled
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        guild_id, trait_type, trait_value, template_id, mission_type, target_metric, multiplier, flat_bonus, max_bonus, enabled
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       normalizedGuildId,
       traitType,
       traitValue,
+      templateId,
       missionType,
       targetMetric,
       normalizedMultiplier,
@@ -673,13 +770,16 @@ class HeistService {
   }
 
   _hydrateTemplate(row) {
+    const metadata = safeJsonParse(row.metadata_json, {});
+    const imageUrl = sanitizeImageUrl(row.image_url || metadata?.image_url || metadata?.imageUrl || null);
     return {
       ...row,
       objective: safeJsonParse(row.objective_json, []),
-      trait_requirements: safeJsonParse(row.trait_requirements_json, {}),
+      trait_requirements: normalizeTraitRequirements(safeJsonParse(row.trait_requirements_json, {})),
       reward_rules: safeJsonParse(row.reward_rules_json, {}),
       active_window: safeJsonParse(row.active_window_json, {}),
-      metadata: safeJsonParse(row.metadata_json, {}),
+      metadata,
+      image_url: imageUrl,
     };
   }
 
@@ -733,7 +833,7 @@ class HeistService {
       ...existing,
       ...payload,
       objective_json: payload.objective_json ?? payload.objective ?? existing.objective_json,
-      trait_requirements_json: payload.trait_requirements_json ?? payload.traitRequirements ?? existing.trait_requirements_json,
+      trait_requirements_json: payload.trait_requirements_json ?? payload.trait_requirements ?? payload.traitRequirements ?? existing.trait_requirements_json,
       reward_rules_json: payload.reward_rules_json ?? payload.rewardRules ?? existing.reward_rules_json,
       active_window_json: payload.active_window_json ?? payload.activeWindow ?? existing.active_window_json,
       metadata_json: payload.metadata_json ?? payload.metadata ?? existing.metadata_json,
@@ -829,6 +929,7 @@ class HeistService {
     const endsAt = toIsoOffsetFromNow(templateRow.duration_minutes || DEFAULT_CONFIG.default_duration_minutes);
     const title = String(templateRow.name || 'Mission').trim().slice(0, 120) || 'Mission';
 
+    const templateMetadata = safeJsonParse(templateRow.metadata_json, {});
     db.prepare(`
       INSERT INTO heist_missions (
         mission_id, guild_id, template_id, title, description, mission_type, mode, status,
@@ -858,6 +959,10 @@ class HeistService {
       endsAt,
       safeJsonStringify({
         templateName: templateRow.name || null,
+        image_url: sanitizeImageUrl(
+          templateMetadata?.image_url
+          || templateMetadata?.imageUrl
+        ),
       }, '{}')
     );
 
@@ -961,12 +1066,15 @@ class HeistService {
 
   _hydrateMission(row, { includeSlots = false } = {}) {
     if (!row) return null;
+    const metadata = safeJsonParse(row.metadata_json, {});
+    const imageUrl = sanitizeImageUrl(row.image_url || metadata?.image_url || metadata?.imageUrl || null);
     const mission = {
       ...row,
       objective: safeJsonParse(row.objective_json, []),
-      trait_requirements: safeJsonParse(row.trait_requirements_json, {}),
+      trait_requirements: normalizeTraitRequirements(safeJsonParse(row.trait_requirements_json, {})),
       reward_rules: safeJsonParse(row.reward_rules_json, {}),
-      metadata: safeJsonParse(row.metadata_json, {}),
+      metadata,
+      image_url: imageUrl,
     };
     if (!includeSlots) return mission;
     const slots = db.prepare(`
@@ -1071,7 +1179,9 @@ class HeistService {
 
   _passesTraitRequirements(nft, requirements = {}) {
     if (!requirements || typeof requirements !== 'object') return true;
-    const requiredTraits = Array.isArray(requirements.requiredTraits) ? requirements.requiredTraits : [];
+    const requiredTraits = Array.isArray(requirements.requiredTraits)
+      ? requirements.requiredTraits
+      : (Array.isArray(requirements.required_traits) ? requirements.required_traits : []);
     if (requiredTraits.length === 0) return true;
     const traitMap = this._extractTraitMap(nft?.attributes || []);
     for (const rule of requiredTraits) {
@@ -1087,6 +1197,41 @@ class HeistService {
       }
     }
     return true;
+  }
+
+  _passesCollectionRequirements(nft, requirements = {}) {
+    if (!requirements || typeof requirements !== 'object') return true;
+    const requiredCollections = Array.isArray(requirements.requiredCollections)
+      ? requirements.requiredCollections
+      : (Array.isArray(requirements.required_collections) ? requirements.required_collections : []);
+    if (!requiredCollections.length) return true;
+    const normalizedRequired = new Set(
+      requiredCollections.map((entry) => String(entry || '').trim()).filter(Boolean)
+    );
+    if (!normalizedRequired.size) return true;
+    const collectionKeys = [
+      nft?.collectionKey,
+      nft?.collection_key,
+      nft?.collection,
+      nft?.collectionAddress,
+      nft?.collection_address,
+      nft?.symbol,
+    ].map((entry) => String(entry || '').trim()).filter(Boolean);
+    return collectionKeys.some((key) => normalizedRequired.has(key));
+  }
+
+  _passesMissionAccessRequirements(nft, requirements = {}) {
+    const normalized = normalizeTraitRequirements(requirements);
+    const hasTraitRules = Array.isArray(normalized.requiredTraits) && normalized.requiredTraits.length > 0;
+    const hasCollectionRules = Array.isArray(normalized.requiredCollections) && normalized.requiredCollections.length > 0;
+    if (!hasTraitRules && !hasCollectionRules) return true;
+
+    const traitPass = hasTraitRules ? this._passesTraitRequirements(nft, normalized) : false;
+    const collectionPass = hasCollectionRules ? this._passesCollectionRequirements(nft, normalized) : false;
+    if (hasTraitRules && hasCollectionRules) {
+      return normalized.gateMode === 'or' ? (traitPass || collectionPass) : (traitPass && collectionPass);
+    }
+    return hasTraitRules ? traitPass : collectionPass;
   }
 
   async _getUserNftsByWallet(guildId, userId) {
@@ -1115,12 +1260,14 @@ class HeistService {
       WHERE guild_id = ?
     `).all(guildId);
     const lockedMints = new Set(lockedRows.map((row) => String(row.nft_mint || '').trim()).filter(Boolean));
-    const requirements = safeJsonParse(mission.trait_requirements_json, mission.trait_requirements || {});
+    const requirements = normalizeTraitRequirements(
+      safeJsonParse(mission.trait_requirements_json, mission.trait_requirements || {})
+    );
 
     return allNfts.filter((nft) => {
       const mint = String(nft.mint || '').trim();
       if (!mint || lockedMints.has(mint)) return false;
-      return this._passesTraitRequirements(nft, requirements);
+      return this._passesMissionAccessRequirements(nft, requirements);
     });
   }
 
@@ -1396,8 +1543,21 @@ class HeistService {
     }
   }
 
-  _collectTraitBonusRules(guildId, missionType) {
+  _collectTraitBonusRules(guildId, missionType, templateId = null) {
     const normalizedMissionType = String(missionType || '').trim().toLowerCase();
+    const normalizedTemplateId = Number(templateId);
+    const hasTemplateId = Number.isFinite(normalizedTemplateId) && normalizedTemplateId > 0;
+    if (hasTemplateId) {
+      return db.prepare(`
+        SELECT *
+        FROM heist_trait_bonus_rules
+        WHERE guild_id = ?
+          AND enabled = 1
+          AND (mission_type IS NULL OR mission_type = '' OR mission_type = ?)
+          AND (template_id IS NULL OR template_id = ?)
+        ORDER BY CASE WHEN template_id = ? THEN 0 ELSE 1 END ASC, id ASC
+      `).all(guildId, normalizedMissionType, normalizedTemplateId, normalizedTemplateId);
+    }
     return db.prepare(`
       SELECT *
       FROM heist_trait_bonus_rules
@@ -1512,7 +1672,7 @@ class HeistService {
     const totalSlotsForSplit = Math.max(1, Number(mission.total_slots || slots.length || 1));
     const baseXpPerSlot = Math.max(1, Math.floor(Number(mission.base_xp_reward || 0) / totalSlotsForSplit));
     const baseStreetPerSlot = Math.max(1, Math.floor(Number(mission.base_streetcredit_reward || 0) / totalSlotsForSplit));
-    const bonusRules = this._collectTraitBonusRules(normalizedGuildId, mission.mission_type);
+    const bonusRules = this._collectTraitBonusRules(normalizedGuildId, mission.mission_type, mission.template_id);
     const nftCacheByUser = new Map();
 
     const slotOutcomes = [];
@@ -1721,6 +1881,45 @@ class HeistService {
     const resolvedResults = await this.resolveDueMissions();
     resolved = resolvedResults.filter((entry) => entry?.success).length;
     return { success: true, guilds: guildIds.length, spawned, resolved };
+  }
+
+  async listTreasuryNfts(guildId, { limit = 500 } = {}) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return [];
+    const safeLimit = Math.max(1, Math.min(5000, Number(limit || 500)));
+    const wallets = treasuryService
+      .listWallets(normalizedGuildId)
+      .filter((wallet) => Number(wallet?.enabled ?? 1) === 1);
+    if (!wallets.length) return [];
+
+    const byMint = new Map();
+    for (const wallet of wallets) {
+      const walletAddress = String(wallet?.address || '').trim();
+      if (!walletAddress) continue;
+      let nfts = [];
+      try {
+        nfts = await nftService.getNFTsForWallet(walletAddress, { guildId: normalizedGuildId });
+      } catch (error) {
+        logger.warn(`[heist] treasury NFT fetch failed (${walletAddress}): ${error?.message || error}`);
+      }
+      for (const nft of (Array.isArray(nfts) ? nfts : [])) {
+        const mint = String(nft?.mint || '').trim();
+        if (!mint || byMint.has(mint)) continue;
+        byMint.set(mint, {
+          mint,
+          name: String(nft?.name || '').trim() || mint.slice(0, 8),
+          image: sanitizeImageUrl(nft?.image || '') || null,
+          collectionKey: String(nft?.collectionKey || nft?.collection_key || '').trim() || null,
+          attributes: Array.isArray(nft?.attributes) ? nft.attributes : [],
+          walletAddress,
+          walletLabel: String(wallet?.label || '').trim() || null,
+        });
+        if (byMint.size >= safeLimit) break;
+      }
+      if (byMint.size >= safeLimit) break;
+    }
+
+    return Array.from(byMint.values()).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }));
   }
 
   listVaultItems(guildId, { includeDisabled = false } = {}) {
@@ -2120,7 +2319,10 @@ class HeistService {
       resolvedAt: mission.resolved_at,
       spawnSource: mission.spawn_source,
       objective: mission.objective || [],
+      traitRequirements: mission.trait_requirements || {},
       metadata: mission.metadata || {},
+      imageUrl: mission.image_url || null,
+      image_url: mission.image_url || null,
       createdAt: mission.created_at,
       updatedAt: mission.updated_at,
     };

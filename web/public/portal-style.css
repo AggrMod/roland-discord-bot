@@ -1309,6 +1309,23 @@ h4,
   padding: 10px;
 }
 
+.heist-ladder-header {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  border-radius: 10px;
+  background: rgba(31, 41, 61, 0.55);
+  color: #c7d4ef;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
 /* ==================== TABLES ==================== */
 .data-table-wrap {
   overflow-x: auto;
@@ -2630,6 +2647,10 @@ h4,
 
   .card-header-row {
     flex-wrap: wrap;
+  }
+
+  .heist-ladder-header {
+    display: none;
   }
 
   #section-admin [style*="grid-template-columns:1fr 1fr"],

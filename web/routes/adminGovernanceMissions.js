@@ -563,7 +563,9 @@ function createAdminGovernanceMissionsRouter({
   router.get('/api/admin/heist/trait-bonuses', adminAuthMiddleware, (req, res) => {
     if (!ensureHeistModule(req, res)) return;
     try {
-      const rules = heistService?.listTraitBonusRules(req.guildId || '') || [];
+      const templateIdRaw = Number(req.query.templateId || req.query.template_id || 0);
+      const templateId = Number.isFinite(templateIdRaw) && templateIdRaw > 0 ? Math.floor(templateIdRaw) : null;
+      const rules = heistService?.listTraitBonusRules(req.guildId || '', { templateId }) || [];
       return res.json(toSuccessResponse({ rules }));
     } catch (routeError) {
       logger.error('Error listing heist trait bonuses:', routeError);
@@ -609,6 +611,19 @@ function createAdminGovernanceMissionsRouter({
       return res.json(toSuccessResponse(result));
     } catch (routeError) {
       logger.error('Error deleting heist trait bonus rule:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/admin/heist/treasury-nfts', adminAuthMiddleware, async (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const nfts = await heistService?.listTreasuryNfts(req.guildId || '', {
+        limit: Number(req.query.limit || 500),
+      });
+      return res.json(toSuccessResponse({ nfts: Array.isArray(nfts) ? nfts : [] }));
+    } catch (routeError) {
+      logger.error('Error listing treasury NFTs for heist vault:', routeError);
       return res.status(500).json(toErrorResponse('Internal server error'));
     }
   });

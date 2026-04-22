@@ -120,6 +120,14 @@ function normalizeConcludedStatus(proposal) {
 
 function mapHeistMissionToLegacyShape(missionPayload = {}) {
   const slots = Array.isArray(missionPayload.slots) ? missionPayload.slots : [];
+  const metadata = missionPayload && typeof missionPayload.metadata === 'object' ? missionPayload.metadata : {};
+  const imageUrl = String(
+    missionPayload.imageUrl
+    || missionPayload.image_url
+    || metadata.image_url
+    || metadata.imageUrl
+    || ''
+  ).trim() || null;
   return {
     missionId: missionPayload.missionId,
     title: missionPayload.title,
@@ -140,6 +148,9 @@ function mapHeistMissionToLegacyShape(missionPayload = {}) {
     endsAt: missionPayload.endsAt || null,
     mode: missionPayload.mode || 'solo',
     missionType: missionPayload.missionType || 'standard',
+    imageUrl,
+    image_url: imageUrl,
+    traitRequirements: missionPayload.traitRequirements || {},
   };
 }
 

@@ -2,7 +2,7 @@
 let userData = null;
 let isAdmin = false;
 let isSuperadmin = false;
-let heistEnabled = false;
+let heistEnabled = true;
 let confirmCallback = null;
 let activeGuildId = localStorage.getItem('activeGuildId') || '';
 const PORTAL_SECTION_STORAGE_KEY = 'activePortalSection';
@@ -2106,7 +2106,7 @@ async function loadPortal() {
     const flagsResponse = await fetch('/api/features', { credentials: 'include' });
     if (flagsResponse.ok) {
       const flags = await flagsResponse.json();
-      heistEnabled = flags.heistEnabled || false;
+      heistEnabled = flags?.heistEnabled !== false;
 
       // Nav/module visibility is handled by tenant-aware gating helpers.
       const heistPointsCard = document.getElementById('heistPointsCard');
@@ -3872,7 +3872,7 @@ function switchSection(sectionName, options = {}) {
     switchSettingsTab('general');
   } else if (sectionName === 'admin') {
     loadEnvStatusBar();
-  } else if (sectionName === 'heist' && userData && heistEnabled) {
+  } else if (sectionName === 'heist' && userData) {
     loadHeistSection();
   } else if (sectionName === 'self-serve-roles') {
     loadSelfServeRolesPublic();

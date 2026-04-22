@@ -333,13 +333,21 @@ function createAuthUserRouter({
     };
   };
 
+  const parseOptionalBooleanEnv = (rawValue, defaultValue) => {
+    const normalized = String(rawValue ?? '').trim().toLowerCase();
+    if (!normalized) return defaultValue;
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+    if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+    return defaultValue;
+  };
+
   router.get('/api/features', publicApiLimiter, (_req, res) => {
     try {
-      const heistEnabled = process.env.HEIST_ENABLED === 'true';
+      const heistEnabled = parseOptionalBooleanEnv(process.env.HEIST_ENABLED, true);
       return res.json(toSuccessResponse({ heistEnabled }));
     } catch (routeError) {
       logger.error('Error fetching feature flags:', routeError);
-      return res.json(toSuccessResponse({ heistEnabled: false }));
+      return res.json(toSuccessResponse({ heistEnabled: true }));
     }
   });
 

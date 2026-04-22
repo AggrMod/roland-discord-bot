@@ -147,7 +147,7 @@ function mapHeistMissionToLegacyShape(missionPayload = {}) {
     createdAt: missionPayload.createdAt || null,
     endsAt: missionPayload.endsAt || null,
     mode: missionPayload.mode || 'solo',
-    missionType: missionPayload.missionType || 'standard',
+    missionType: missionPayload.missionType || 'nft',
     imageUrl,
     image_url: imageUrl,
     traitRequirements: missionPayload.traitRequirements || {},

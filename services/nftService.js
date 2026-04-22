@@ -256,6 +256,84 @@ class NFTService {
     
     return result;
   }
+
+  /**
+   * Build a trait catalog for a collection directly from chain indexer data.
+   * Returns { collectionId, sampleCount, traits: [{ traitType, values[] }] }.
+   */
+  async getCollectionTraitCatalog(collectionId, { limit = 250 } = {}) {
+    const normalizedCollectionId = String(collectionId || '').trim();
+    if (!normalizedCollectionId) {
+      return { collectionId: '', sampleCount: 0, traits: [] };
+    }
+
+    const heliusApiKey = process.env.HELIUS_API_KEY;
+    if (!heliusApiKey) {
+      logger.warn(`[nft] HELIUS_API_KEY missing; cannot build trait catalog for ${normalizedCollectionId}`);
+      return { collectionId: normalizedCollectionId, sampleCount: 0, traits: [] };
+    }
+
+    const safeLimit = Math.max(25, Math.min(1000, Number(limit || 250)));
+    try {
+      const response = await heliusRateLimited(() => fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'helius-trait-catalog',
+          method: 'getAssetsByGroup',
+          params: {
+            groupKey: 'collection',
+            groupValue: normalizedCollectionId,
+            page: 1,
+            limit: safeLimit,
+            sortBy: {
+              sortBy: 'none',
+              sortDirection: 'asc',
+            },
+            displayOptions: {
+              showCollectionMetadata: true,
+            },
+          },
+        }),
+      }));
+
+      const data = await response.json();
+      if (data?.error) {
+        logger.warn(`[nft] Helius trait-catalog error for ${normalizedCollectionId}: ${JSON.stringify(data.error)}`);
+        return { collectionId: normalizedCollectionId, sampleCount: 0, traits: [] };
+      }
+
+      const items = Array.isArray(data?.result?.items) ? data.result.items : [];
+      const traitMap = new Map();
+      for (const item of items) {
+        const attributes = Array.isArray(item?.content?.metadata?.attributes) ? item.content.metadata.attributes : [];
+        for (const attr of attributes) {
+          const traitType = String(attr?.trait_type || attr?.traitType || '').trim();
+          const value = String(attr?.value || '').trim();
+          if (!traitType || !value) continue;
+          if (!traitMap.has(traitType)) traitMap.set(traitType, new Set());
+          traitMap.get(traitType).add(value);
+        }
+      }
+
+      const traits = Array.from(traitMap.entries())
+        .map(([traitType, valueSet]) => ({
+          traitType,
+          values: Array.from(valueSet).sort((a, b) => a.localeCompare(b)),
+        }))
+        .sort((a, b) => a.traitType.localeCompare(b.traitType));
+
+      return {
+        collectionId: normalizedCollectionId,
+        sampleCount: items.length,
+        traits,
+      };
+    } catch (error) {
+      logger.warn(`[nft] failed to build trait catalog for ${normalizedCollectionId}: ${error?.message || error}`);
+      return { collectionId: normalizedCollectionId, sampleCount: 0, traits: [] };
+    }
+  }
 }
 
 module.exports = new NFTService();

@@ -413,6 +413,65 @@ function createAdminGovernanceMissionsRouter({
     }
   });
 
+  router.get('/api/admin/heist/categories', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const categories = heistService?.listMissionCategories(req.guildId || '') || [];
+      return res.json(toSuccessResponse({ categories }));
+    } catch (routeError) {
+      logger.error('Error fetching heist categories:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/admin/heist/collections', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const collections = heistService?.listMissionCollections(req.guildId || '') || [];
+      return res.json(toSuccessResponse({ collections }));
+    } catch (routeError) {
+      logger.error('Error fetching heist mission collections:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.put('/api/admin/heist/collections', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const rawCollections = Array.isArray(req.body?.collections)
+        ? req.body.collections
+        : (Array.isArray(req.body?.missionCollections) ? req.body.missionCollections : []);
+      const result = heistService?.setManualMissionCollections(req.guildId || '', rawCollections);
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to save mission collections', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error updating heist mission collections:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/admin/heist/collections/:collectionId/trait-catalog', adminAuthMiddleware, async (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const collectionId = decodeURIComponent(String(req.params.collectionId || '').trim());
+      if (!collectionId) {
+        return res.status(400).json(toErrorResponse('collectionId is required', 'VALIDATION_ERROR'));
+      }
+      const catalog = await heistService?.getCollectionTraitCatalog(req.guildId || '', collectionId, {
+        limit: Number(req.query.limit || 250),
+      });
+      if (!catalog?.success) {
+        return res.status(400).json(toErrorResponse(catalog?.message || 'Failed to fetch trait catalog', 'VALIDATION_ERROR', null, catalog));
+      }
+      return res.json(toSuccessResponse(catalog));
+    } catch (routeError) {
+      logger.error('Error fetching heist trait catalog:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.get('/api/admin/heist/ladder', adminAuthMiddleware, (req, res) => {
     if (!ensureHeistModule(req, res)) return;
     try {

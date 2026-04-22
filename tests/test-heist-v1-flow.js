@@ -41,6 +41,7 @@ async function run() {
   try {
     nftInventory.set(user1.wallet, [
       { mint: 'MINT_A', name: 'The Driver', attributes: [{ trait_type: 'Role', value: 'Driver' }] },
+      { mint: 'MINT_A2', name: 'The Scout', attributes: [{ trait_type: 'Role', value: 'Scout' }] },
     ]);
     nftInventory.set(user2.wallet, [
       { mint: 'MINT_C', name: 'The Enforcer', attributes: [{ trait_type: 'Role', value: 'Enforcer' }] },
@@ -50,9 +51,9 @@ async function run() {
       name: 'Solo Smoke Mission',
       description: 'Simple solo mission for smoke validation',
       mode: 'solo',
-      required_slots: 1,
-      total_slots: 1,
-      max_nfts_per_user: 1,
+      required_slots: 2,
+      total_slots: 2,
+      max_nfts_per_user: 2,
       duration_minutes: 60,
       base_xp_reward: 100,
       base_streetcredit_reward: 50,
@@ -74,7 +75,7 @@ async function run() {
       missionId: soloSpawn.missionId,
       userId: user1.id,
       username: user1.name,
-      selectedMints: ['MINT_A'],
+      selectedMints: ['MINT_A', 'MINT_A2'],
     });
     assert.strictEqual(soloJoin.success, true, 'user should join solo mission');
 
@@ -83,9 +84,9 @@ async function run() {
       missionId: soloSpawn.missionId,
       userId: user1.id,
       username: user1.name,
-      selectedMints: ['MINT_A'],
+      selectedMints: ['MINT_A2'],
     });
-    assert.strictEqual(duplicateSoloJoin.success, false, 'duplicate join with same lock should fail');
+    assert.strictEqual(duplicateSoloJoin.success, false, 'duplicate join in the same mission window should fail');
 
     const soloResolve = await heistService.resolveMission(guildId, soloSpawn.missionId);
     assert.strictEqual(soloResolve.success, true, 'solo mission should resolve');

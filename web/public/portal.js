@@ -6,6 +6,9 @@ let heistEnabled = true;
 let heistEditingTemplateId = null;
 let heistTreasuryNfts = [];
 let heistSelectedTreasuryNft = null;
+let heistMissionCollections = [];
+let heistMissionCategories = [];
+let heistTraitCatalogByCollection = new Map();
 let confirmCallback = null;
 let activeGuildId = localStorage.getItem('activeGuildId') || '';
 const PORTAL_SECTION_STORAGE_KEY = 'activePortalSection';
@@ -2901,7 +2904,9 @@ function normalizeMissionRecord(mission) {
     title: String(mission.title || 'Untitled Mission'),
     status: String(mission.status || 'recruiting').toLowerCase(),
     description: String(mission.description || '').trim(),
+    missionType: String(mission.mission_type || mission.missionType || 'nft').trim().toLowerCase() || 'nft',
     mode: String(mission.mode || 'solo').trim(),
+    requiredSlots: Number(mission.required_slots || mission.requiredSlots || 0),
     totalSlots: Number(mission.total_slots || mission.totalSlots || 0),
     filledSlots: Number(mission.filled_slots || mission.filledSlots || 0),
     rewardStreetcredit: Number(mission.base_streetcredit_reward || mission.baseStreetcreditReward || mission.reward_points || mission.rewardPoints || 0),
@@ -2951,6 +2956,491 @@ function formatMissionAccessSummary(requirements) {
   if (traitParts.length) pieces.push(`Traits: ${traitParts.join('; ')}`);
   if (!pieces.length) return 'No access gate';
   return `${pieces.join(` ${normalized.gateMode.toUpperCase()} `)}`;
+}
+
+function normalizeMissionCategoryKey(value) {
+  const key = String(value || '').trim().toLowerCase();
+  if (!key) return 'nft';
+  return key;
+}
+
+function getMissionCategoryLabel(value) {
+  const key = normalizeMissionCategoryKey(value);
+  const fromConfig = (Array.isArray(heistMissionCategories) ? heistMissionCategories : [])
+    .find((entry) => String(entry?.key || '').trim().toLowerCase() === key);
+  if (fromConfig?.label) return String(fromConfig.label);
+  const fallback = {
+    nft: 'NFT Ops',
+    engagement: 'Engagement Ops',
+    discord: 'Discord Ops',
+    governance: 'Governance Ops',
+    event: 'Event Ops',
+  };
+  return fallback[key] || key.toUpperCase();
+}
+
+function parseHeistCollectionRequirementInput(raw) {
+  const seen = new Set();
+  return String(raw || '')
+    .split(',')
+    .map((entry) => String(entry || '').trim())
+    .filter(Boolean)
+    .filter((entry) => {
+      const key = entry.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function syncHeistTemplateCollectionInput(collections) {
+  const input = document.getElementById('heistTplRequiredCollections');
+  if (!input) return;
+  input.value = (Array.isArray(collections) ? collections : []).join(',');
+}
+
+function renderHeistTemplateCollectionRequirements() {
+  const wrap = document.getElementById('heistTplCollectionRequirementList');
+  if (!wrap) return;
+  const collections = parseHeistCollectionRequirementInput(
+    document.getElementById('heistTplRequiredCollections')?.value || ''
+  );
+  if (!collections.length) {
+    wrap.innerHTML = '<span style="color:var(--text-secondary);font-size:0.82em;">No collection gate set.</span>';
+    return;
+  }
+  wrap.innerHTML = collections.map((collection, index) => `
+    <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;border:1px solid var(--border-color);background:rgba(15,23,42,0.45);font-size:0.82em;color:var(--text-primary);">
+      ${escapeHtml(collection)}
+      <button class="btn-secondary btn-sm" style="padding:2px 6px;line-height:1;" onclick="removeHeistTemplateCollectionRequirement(${index})">x</button>
+    </span>
+  `).join('');
+}
+
+function addHeistTemplateCollectionRequirement() {
+  const select = document.getElementById('heistTplCollectionRegistrySelect');
+  const selected = String(select?.value || '').trim();
+  if (!selected) {
+    showError('Select a collection first.');
+    return;
+  }
+  const collections = parseHeistCollectionRequirementInput(
+    document.getElementById('heistTplRequiredCollections')?.value || ''
+  );
+  if (!collections.some((entry) => entry.toLowerCase() === selected.toLowerCase())) {
+    collections.push(selected);
+  }
+  syncHeistTemplateCollectionInput(collections);
+  renderHeistTemplateCollectionRequirements();
+}
+
+function removeHeistTemplateCollectionRequirement(index) {
+  const collections = parseHeistCollectionRequirementInput(
+    document.getElementById('heistTplRequiredCollections')?.value || ''
+  );
+  const safeIndex = Number(index);
+  if (!Number.isFinite(safeIndex) || safeIndex < 0 || safeIndex >= collections.length) return;
+  collections.splice(safeIndex, 1);
+  syncHeistTemplateCollectionInput(collections);
+  renderHeistTemplateCollectionRequirements();
+}
+
+function syncHeistTemplateTraitInput(requiredTraits) {
+  const input = document.getElementById('heistTplRequiredTraits');
+  if (!input) return;
+  input.value = serializeHeistTraitRequirementInput(requiredTraits);
+}
+
+function renderHeistTemplateTraitRequirements() {
+  const wrap = document.getElementById('heistTplTraitRequirementList');
+  if (!wrap) return;
+  const requirements = parseHeistTraitRequirementInput(
+    document.getElementById('heistTplRequiredTraits')?.value || ''
+  );
+  if (!requirements.length) {
+    wrap.innerHTML = '<span style="color:var(--text-secondary);font-size:0.82em;">No trait gate set.</span>';
+    return;
+  }
+  wrap.innerHTML = requirements.map((rule, index) => {
+    const traitType = String(rule?.traitType || rule?.trait_type || '').trim();
+    const values = Array.isArray(rule?.values) ? rule.values.map((entry) => String(entry || '').trim()).filter(Boolean) : [];
+    const label = values.length ? `${traitType}: ${values.join(' / ')}` : `${traitType}: any`;
+    return `
+      <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;border:1px solid var(--border-color);background:rgba(15,23,42,0.45);font-size:0.82em;color:var(--text-primary);">
+        ${escapeHtml(label)}
+        <button class="btn-secondary btn-sm" style="padding:2px 6px;line-height:1;" onclick="removeHeistTemplateTraitRequirement(${index})">x</button>
+      </span>
+    `;
+  }).join('');
+}
+
+function addHeistTemplateTraitRequirement() {
+  const traitType = String(document.getElementById('heistTplTraitType')?.value || '').trim();
+  const traitValue = String(document.getElementById('heistTplTraitValue')?.value || '').trim();
+  if (!traitType) {
+    showError('Select a trait type first.');
+    return;
+  }
+  const requirements = parseHeistTraitRequirementInput(
+    document.getElementById('heistTplRequiredTraits')?.value || ''
+  );
+  const existing = requirements.find((rule) => String(rule?.traitType || rule?.trait_type || '').trim() === traitType);
+  if (existing) {
+    if (traitValue) {
+      const currentValues = Array.isArray(existing.values) ? existing.values : [];
+      if (!currentValues.some((entry) => String(entry).trim() === traitValue)) {
+        currentValues.push(traitValue);
+      }
+      existing.values = currentValues;
+    }
+  } else {
+    requirements.push({
+      traitType,
+      values: traitValue ? [traitValue] : [],
+    });
+  }
+  syncHeistTemplateTraitInput(requirements);
+  renderHeistTemplateTraitRequirements();
+}
+
+function removeHeistTemplateTraitRequirement(index) {
+  const requirements = parseHeistTraitRequirementInput(
+    document.getElementById('heistTplRequiredTraits')?.value || ''
+  );
+  const safeIndex = Number(index);
+  if (!Number.isFinite(safeIndex) || safeIndex < 0 || safeIndex >= requirements.length) return;
+  requirements.splice(safeIndex, 1);
+  syncHeistTemplateTraitInput(requirements);
+  renderHeistTemplateTraitRequirements();
+}
+
+function createHeistSlotRequirementRow(rule = {}) {
+  const row = document.createElement('div');
+  row.className = 'heist-slot-rule-row';
+  row.style.display = 'grid';
+  row.style.gridTemplateColumns = '90px 1fr 160px 1fr 1fr auto';
+  row.style.gap = '8px';
+  row.style.alignItems = 'center';
+  const slotIndex = Math.max(1, Number(rule.slotIndex || rule.slot_index || 1));
+  const label = String(rule.label || '').trim();
+  const gateMode = String(rule.gateMode || rule.gate_mode || 'and').trim().toLowerCase() === 'or' ? 'or' : 'and';
+  const collections = Array.isArray(rule.requiredCollections || rule.required_collections)
+    ? (rule.requiredCollections || rule.required_collections).join(',')
+    : '';
+  const traitsText = serializeHeistTraitRequirementInput(rule.requiredTraits || rule.required_traits || []);
+  row.innerHTML = `
+    <input class="input-sm heist-slot-rule-index" type="number" min="1" max="100" value="${slotIndex}" placeholder="Slot #">
+    <input class="input-sm heist-slot-rule-label" type="text" value="${escapeHtml(label)}" placeholder="Label (optional)">
+    <select class="input-sm heist-slot-rule-gate">
+      <option value="and" ${gateMode === 'and' ? 'selected' : ''}>AND</option>
+      <option value="or" ${gateMode === 'or' ? 'selected' : ''}>OR</option>
+    </select>
+    <input class="input-sm heist-slot-rule-collections" type="text" value="${escapeHtml(collections)}" placeholder="Collections (comma)">
+    <input class="input-sm heist-slot-rule-traits" type="text" value="${escapeHtml(traitsText)}" placeholder="Traits (Role:Don|Capo)">
+    <button class="btn-secondary btn-sm" type="button" onclick="removeHeistSlotRequirementRow(this)">Remove</button>
+  `;
+  return row;
+}
+
+function addHeistSlotRequirementRow(rule = {}) {
+  const wrap = document.getElementById('heistTplSlotRequirementRows');
+  if (!wrap) return;
+  wrap.appendChild(createHeistSlotRequirementRow(rule));
+}
+
+function removeHeistSlotRequirementRow(button) {
+  const row = button?.closest?.('.heist-slot-rule-row');
+  if (row) row.remove();
+}
+
+function renderHeistSlotRequirementRows(rules = []) {
+  const wrap = document.getElementById('heistTplSlotRequirementRows');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const list = Array.isArray(rules) ? rules : [];
+  if (!list.length) {
+    addHeistSlotRequirementRow({ slotIndex: 1 });
+    return;
+  }
+  list.forEach((rule) => addHeistSlotRequirementRow(rule));
+}
+
+function collectHeistSlotRequirementPayload() {
+  const rows = Array.from(document.querySelectorAll('#heistTplSlotRequirementRows .heist-slot-rule-row'));
+  const payload = rows.map((row) => {
+    const slotIndex = Math.max(1, Number(row.querySelector('.heist-slot-rule-index')?.value || 1));
+    const label = String(row.querySelector('.heist-slot-rule-label')?.value || '').trim();
+    const gateMode = String(row.querySelector('.heist-slot-rule-gate')?.value || 'and').trim().toLowerCase() === 'or' ? 'or' : 'and';
+    const requiredCollections = parseHeistCollectionRequirementInput(row.querySelector('.heist-slot-rule-collections')?.value || '');
+    const requiredTraits = parseHeistTraitRequirementInput(row.querySelector('.heist-slot-rule-traits')?.value || '');
+    return {
+      slotIndex,
+      label: label || null,
+      gateMode,
+      requiredCollections,
+      requiredTraits,
+    };
+  });
+  return payload.filter((entry) => entry.slotIndex > 0);
+}
+
+function renderHeistMissionCollectionRegistry() {
+  const wrap = document.getElementById('heistCollectionRegistryList');
+  if (!wrap) return;
+  const list = Array.isArray(heistMissionCollections) ? heistMissionCollections : [];
+  if (!list.length) {
+    wrap.innerHTML = '<span style="color:var(--text-secondary);font-size:0.82em;">No mission collections configured yet.</span>';
+    return;
+  }
+  wrap.innerHTML = list.map((entry, index) => {
+    const collectionId = String(entry?.collectionId || '').trim();
+    const label = String(entry?.label || '').trim();
+    const source = String(entry?.source || 'manual').trim().toLowerCase();
+    return `
+      <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;border:1px solid var(--border-color);background:rgba(15,23,42,0.45);font-size:0.82em;color:var(--text-primary);">
+        ${escapeHtml(label ? `${label} (${collectionId})` : collectionId)}
+        <span style="opacity:0.75;">${escapeHtml(source)}</span>
+        ${source === 'manual' ? `<button class="btn-secondary btn-sm" style="padding:2px 6px;line-height:1;" onclick="removeHeistMissionCollectionFromRegistry(${index})">x</button>` : ''}
+      </span>
+    `;
+  }).join('');
+}
+
+function populateHeistCollectionRegistrySelect(collections) {
+  const select = document.getElementById('heistTplCollectionRegistrySelect');
+  const traitCollectionSelect = document.getElementById('heistTplTraitCatalogCollection');
+  const currentSelectValue = String(select?.value || '').trim();
+  const currentTraitValue = String(traitCollectionSelect?.value || '').trim();
+  const list = Array.isArray(collections) ? collections : [];
+
+  if (select) {
+    select.innerHTML = '<option value="">Select collection from registry</option>';
+  }
+  if (traitCollectionSelect) {
+    traitCollectionSelect.innerHTML = '<option value="">Trait source collection</option>';
+  }
+
+  list.forEach((entry) => {
+    const collectionId = String(entry?.collectionId || '').trim();
+    if (!collectionId) return;
+    const label = String(entry?.label || '').trim();
+    const text = label ? `${label} (${collectionId})` : collectionId;
+    if (select) {
+      const option = document.createElement('option');
+      option.value = collectionId;
+      option.textContent = text;
+      select.appendChild(option);
+    }
+    if (traitCollectionSelect) {
+      const option = document.createElement('option');
+      option.value = collectionId;
+      option.textContent = text;
+      traitCollectionSelect.appendChild(option);
+    }
+  });
+
+  if (select && currentSelectValue && Array.from(select.options).some((option) => option.value === currentSelectValue)) {
+    select.value = currentSelectValue;
+  }
+  if (traitCollectionSelect && currentTraitValue && Array.from(traitCollectionSelect.options).some((option) => option.value === currentTraitValue)) {
+    traitCollectionSelect.value = currentTraitValue;
+  }
+}
+
+function populateHeistMissionTypeSelector(categories) {
+  const select = document.getElementById('heistTplMissionType');
+  if (!select) return;
+  const selected = String(select.value || '').trim() || 'nft';
+  const list = Array.isArray(categories) ? categories : [];
+  select.innerHTML = '';
+  if (!list.length) {
+    select.innerHTML = `
+      <option value="nft">Category: NFT Ops</option>
+      <option value="engagement">Category: Engagement Ops</option>
+      <option value="discord">Category: Discord Ops</option>
+      <option value="governance">Category: Governance Ops</option>
+      <option value="event">Category: Event Ops</option>
+    `;
+  } else {
+    list.forEach((category) => {
+      const option = document.createElement('option');
+      option.value = String(category?.key || '').trim();
+      option.textContent = `Category: ${String(category?.label || category?.key || '').trim()}`;
+      if (category?.enabled === false) {
+        option.disabled = true;
+        option.textContent += ' (module disabled)';
+      }
+      select.appendChild(option);
+    });
+  }
+  const hasSelected = Array.from(select.options).some((option) => option.value === selected && !option.disabled);
+  if (hasSelected) {
+    select.value = selected;
+  } else {
+    const firstEnabled = Array.from(select.options).find((option) => !option.disabled);
+    if (firstEnabled) select.value = firstEnabled.value;
+  }
+}
+
+async function loadHeistTraitCatalog(collectionId, { force = false } = {}) {
+  const normalizedCollectionId = String(collectionId || '').trim();
+  if (!normalizedCollectionId) return null;
+  if (!force && heistTraitCatalogByCollection.has(normalizedCollectionId)) {
+    return heistTraitCatalogByCollection.get(normalizedCollectionId);
+  }
+  const res = await fetch(`/api/admin/heist/collections/${encodeURIComponent(normalizedCollectionId)}/trait-catalog?limit=400`, {
+    credentials: 'include',
+    headers: buildTenantRequestHeaders(),
+  });
+  const json = await res.json();
+  if (!res.ok || !json?.success) {
+    throw new Error(json?.message || json?.error?.message || 'Failed to load trait catalog');
+  }
+  const payload = {
+    collectionId: normalizedCollectionId,
+    traits: Array.isArray(json?.data?.traits) ? json.data.traits : [],
+    sampleCount: Number(json?.data?.sampleCount || 0),
+  };
+  heistTraitCatalogByCollection.set(normalizedCollectionId, payload);
+  return payload;
+}
+
+function populateHeistTraitCatalogTypeSelect(catalogPayload) {
+  const typeSelect = document.getElementById('heistTplTraitType');
+  const valueSelect = document.getElementById('heistTplTraitValue');
+  if (!typeSelect || !valueSelect) return;
+  const selectedType = String(typeSelect.value || '').trim();
+  typeSelect.innerHTML = '<option value="">Trait type</option>';
+  valueSelect.innerHTML = '<option value="">Trait value (optional)</option>';
+  const traits = Array.isArray(catalogPayload?.traits) ? catalogPayload.traits : [];
+  traits.forEach((trait) => {
+    const traitType = String(trait?.traitType || trait?.trait_type || '').trim();
+    if (!traitType) return;
+    const option = document.createElement('option');
+    option.value = traitType;
+    option.textContent = traitType;
+    typeSelect.appendChild(option);
+  });
+  if (selectedType && Array.from(typeSelect.options).some((option) => option.value === selectedType)) {
+    typeSelect.value = selectedType;
+  }
+  populateHeistTraitCatalogValueSelect();
+}
+
+function populateHeistTraitCatalogValueSelect() {
+  const collectionSelect = document.getElementById('heistTplTraitCatalogCollection');
+  const typeSelect = document.getElementById('heistTplTraitType');
+  const valueSelect = document.getElementById('heistTplTraitValue');
+  if (!collectionSelect || !typeSelect || !valueSelect) return;
+  const collectionId = String(collectionSelect.value || '').trim();
+  const traitType = String(typeSelect.value || '').trim();
+  const selectedValue = String(valueSelect.value || '').trim();
+  valueSelect.innerHTML = '<option value="">Trait value (optional)</option>';
+  if (!collectionId || !traitType) return;
+  const catalog = heistTraitCatalogByCollection.get(collectionId);
+  const trait = (Array.isArray(catalog?.traits) ? catalog.traits : [])
+    .find((entry) => String(entry?.traitType || entry?.trait_type || '').trim() === traitType);
+  const values = Array.isArray(trait?.values) ? trait.values : [];
+  values.forEach((entry) => {
+    const value = String(entry || '').trim();
+    if (!value) return;
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = value;
+    valueSelect.appendChild(option);
+  });
+  if (selectedValue && Array.from(valueSelect.options).some((option) => option.value === selectedValue)) {
+    valueSelect.value = selectedValue;
+  }
+}
+
+async function handleHeistTraitCatalogCollectionChange() {
+  const select = document.getElementById('heistTplTraitCatalogCollection');
+  const collectionId = String(select?.value || '').trim();
+  if (!collectionId) {
+    populateHeistTraitCatalogTypeSelect({ traits: [] });
+    return;
+  }
+  try {
+    const catalog = await loadHeistTraitCatalog(collectionId);
+    populateHeistTraitCatalogTypeSelect(catalog);
+  } catch (error) {
+    console.error('[Missions] trait catalog load failed:', error);
+    showError(error?.message || 'Failed to load collection trait catalog.');
+  }
+}
+
+function bindHeistTemplateCatalogHandlers() {
+  const collectionSelect = document.getElementById('heistTplTraitCatalogCollection');
+  const typeSelect = document.getElementById('heistTplTraitType');
+  if (collectionSelect && collectionSelect.dataset.bound !== '1') {
+    collectionSelect.dataset.bound = '1';
+    collectionSelect.addEventListener('change', () => {
+      handleHeistTraitCatalogCollectionChange().catch(() => {});
+    });
+  }
+  if (typeSelect && typeSelect.dataset.bound !== '1') {
+    typeSelect.dataset.bound = '1';
+    typeSelect.addEventListener('change', () => populateHeistTraitCatalogValueSelect());
+  }
+}
+
+function addHeistMissionCollectionToRegistry() {
+  const input = document.getElementById('heistCollectionRegistryManualInput');
+  const collectionId = String(input?.value || '').trim();
+  if (!collectionId) {
+    showError('Enter a collection address.');
+    return;
+  }
+  const exists = (Array.isArray(heistMissionCollections) ? heistMissionCollections : [])
+    .some((entry) => String(entry?.collectionId || '').trim().toLowerCase() === collectionId.toLowerCase());
+  if (!exists) {
+    heistMissionCollections.push({ collectionId, label: null, source: 'manual' });
+  }
+  if (input) input.value = '';
+  renderHeistMissionCollectionRegistry();
+  populateHeistCollectionRegistrySelect(heistMissionCollections);
+}
+
+function removeHeistMissionCollectionFromRegistry(index) {
+  const safeIndex = Number(index);
+  if (!Number.isFinite(safeIndex) || safeIndex < 0 || safeIndex >= heistMissionCollections.length) return;
+  const entry = heistMissionCollections[safeIndex];
+  if (String(entry?.source || '').trim().toLowerCase() !== 'manual') return;
+  heistMissionCollections.splice(safeIndex, 1);
+  renderHeistMissionCollectionRegistry();
+  populateHeistCollectionRegistrySelect(heistMissionCollections);
+}
+
+async function saveHeistMissionCollectionRegistry() {
+  if (!(isAdmin || isSuperadmin) || !activeGuildId) {
+    showError('Admin access and active server are required.');
+    return;
+  }
+  try {
+    const manualCollections = (Array.isArray(heistMissionCollections) ? heistMissionCollections : [])
+      .filter((entry) => String(entry?.source || '').trim().toLowerCase() === 'manual')
+      .map((entry) => ({
+        collectionId: String(entry?.collectionId || '').trim(),
+        label: String(entry?.label || '').trim() || null,
+      }))
+      .filter((entry) => entry.collectionId);
+    const res = await fetch('/api/admin/heist/collections', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({ collections: manualCollections }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || json?.error?.message || 'Failed to save collection registry');
+    }
+    showSuccess('Mission collection registry saved.');
+    await loadHeistAdminPanel();
+  } catch (error) {
+    console.error('[Missions] save collection registry failed:', error);
+    showError(error?.message || 'Failed to save mission collection registry.');
+  }
 }
 
 async function joinAvailableMission(missionId) {
@@ -3055,6 +3545,9 @@ async function loadAvailableMissions() {
           <span class="status-badge status-${mission.status}">${mission.status}</span>
         </div>
         <div class="mission-meta" style="margin-top: var(--space-3);">
+          <div style="margin-bottom: var(--space-2); color: var(--text-secondary); font-size: 0.82em;">
+            Category: ${escapeHtml(getMissionCategoryLabel(mission.missionType))}
+          </div>
           ${mission.imageUrl ? `
             <div style="margin-bottom: var(--space-3);">
               <img src="${escapeHtml(mission.imageUrl)}" alt="" style="width:100%;max-width:340px;border-radius:10px;border:1px solid var(--border-color);object-fit:cover;">
@@ -3071,10 +3564,16 @@ async function loadAvailableMissions() {
             Access: ${escapeHtml(formatMissionAccessSummary(mission.traitRequirements))}
           </div>
           <div style="margin-top:10px;">
+            ${(() => {
+    const isCoop = String(mission.mode || '').trim().toLowerCase() === 'coop';
+    const isFull = isCoop && mission.totalSlots > 0 && mission.filledSlots >= mission.totalSlots;
+    return `
             <button class="btn-primary btn-sm" onclick="joinAvailableMission('${escapeJsString(mission.missionId || '')}')"
-              ${(mission.totalSlots > 0 && mission.filledSlots >= mission.totalSlots) ? 'disabled' : ''}>
-              ${(mission.totalSlots > 0 && mission.filledSlots >= mission.totalSlots) ? 'Mission Full' : 'Join Mission'}
+              ${isFull ? 'disabled' : ''}>
+              ${isFull ? 'Mission Full' : 'Join Mission'}
             </button>
+    `;
+  })()}
           </div>
         </div>
       </div>
@@ -3173,7 +3672,7 @@ function renderHeistTemplateList(templates) {
         <div>
           <div style="font-weight:600;color:var(--text-primary);">#${template.id} ${escapeHtml(template.name || 'Unnamed')}</div>
           <div style="font-size:0.85em;color:var(--text-secondary);margin-top:4px;">
-            ${escapeHtml(template.mode || 'solo')} | slots ${Number(template.required_slots || 0)}/${Number(template.total_slots || 0)} | duration ${Number(template.duration_minutes || 0)}m
+            ${escapeHtml(getMissionCategoryLabel(template.mission_type || template.missionType || 'nft'))} | ${escapeHtml(template.mode || 'solo')} | slots ${Number(template.required_slots || 0)}/${Number(template.total_slots || 0)} | duration ${Number(template.duration_minutes || 0)}m
             | xp ${Number(template.base_xp_reward || 0)} | streetcredit ${Number(template.base_streetcredit_reward || 0)} | weight ${Number(template.spawn_weight || 0)}
           </div>
           <div style="font-size:0.8em;color:var(--text-secondary);margin-top:6px;">
@@ -3204,7 +3703,7 @@ function renderHeistMissionOps(missions) {
         <div>
           <div style="font-weight:600;color:var(--text-primary);">#${escapeHtml(mission.missionId || '?')} ${escapeHtml(mission.title || 'Untitled')}</div>
           <div style="font-size:0.85em;color:var(--text-secondary);margin-top:4px;">
-            ${escapeHtml(mission.status)} | slots ${mission.filledSlots}/${mission.totalSlots}
+            ${escapeHtml(mission.status)} | ${escapeHtml(getMissionCategoryLabel(mission.missionType || 'nft'))} | slots ${mission.filledSlots}/${mission.totalSlots}
           </div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -3606,7 +4105,7 @@ async function loadHeistAdminPanel() {
 
   try {
     const headers = buildTenantRequestHeaders();
-    const [configRes, templatesRes, missionsRes, channelsRes, ladderRes, bonusRes, vaultRes, redemptionsRes, treasuryNftsRes] = await Promise.all([
+    const [configRes, templatesRes, missionsRes, channelsRes, ladderRes, bonusRes, vaultRes, redemptionsRes, treasuryNftsRes, categoriesRes, collectionsRes] = await Promise.all([
       fetch('/api/admin/heist/config', { credentials: 'include', headers }),
       fetch('/api/admin/heist/templates', { credentials: 'include', headers }),
       fetch('/api/admin/heist/missions?statuses=recruiting,active&limit=50', { credentials: 'include', headers }),
@@ -3616,8 +4115,10 @@ async function loadHeistAdminPanel() {
       fetch('/api/admin/heist/vault/items?includeDisabled=1', { credentials: 'include', headers }),
       fetch('/api/admin/heist/vault/redemptions?limit=50', { credentials: 'include', headers }),
       fetch('/api/admin/heist/treasury-nfts?limit=1000', { credentials: 'include', headers }),
+      fetch('/api/admin/heist/categories', { credentials: 'include', headers }),
+      fetch('/api/admin/heist/collections', { credentials: 'include', headers }),
     ]);
-    const [configJson, templatesJson, missionsJson, channelsJson, ladderJson, bonusJson, vaultJson, redemptionsJson, treasuryNftsJson] = await Promise.all([
+    const [configJson, templatesJson, missionsJson, channelsJson, ladderJson, bonusJson, vaultJson, redemptionsJson, treasuryNftsJson, categoriesJson, collectionsJson] = await Promise.all([
       configRes.json(),
       templatesRes.json(),
       missionsRes.json(),
@@ -3627,6 +4128,8 @@ async function loadHeistAdminPanel() {
       vaultRes.json(),
       redemptionsRes.json(),
       treasuryNftsRes.json(),
+      categoriesRes.json(),
+      collectionsRes.json(),
     ]);
 
     if (!configRes.ok || !configJson.success) {
@@ -3641,6 +4144,8 @@ async function loadHeistAdminPanel() {
     const traitBonuses = bonusJson?.success ? (bonusJson?.data?.rules || []) : [];
     const vaultItems = vaultJson?.success ? (vaultJson?.data?.items || []) : [];
     const redemptions = redemptionsJson?.success ? (redemptionsJson?.data?.redemptions || []) : [];
+    heistMissionCategories = categoriesJson?.success ? (categoriesJson?.data?.categories || []) : [];
+    heistMissionCollections = collectionsJson?.success ? (collectionsJson?.data?.collections || []) : [];
     heistTreasuryNfts = treasuryNftsJson?.success ? (treasuryNftsJson?.data?.nfts || []) : [];
     window._heistAdminTemplates = templates;
     if (heistEditingTemplateId && !templates.some((template) => Number(template.id) === Number(heistEditingTemplateId))) {
@@ -3681,6 +4186,9 @@ async function loadHeistAdminPanel() {
     setValue('heistCfgDefaultDuration', Number(config.default_duration_minutes || 1440));
     setValue('heistCfgDefaultMaxNfts', Number(config.default_max_nfts_per_user || 2));
 
+    populateHeistMissionTypeSelector(heistMissionCategories);
+    populateHeistCollectionRegistrySelect(heistMissionCollections);
+    renderHeistMissionCollectionRegistry();
     populateHeistTemplateSelectors(templates);
     populateHeistTraitBonusTemplateSelector(templates);
     populateHeistTreasuryNftSelector(heistTreasuryNfts);
@@ -3691,6 +4199,16 @@ async function loadHeistAdminPanel() {
     renderHeistVaultItems(vaultItems);
     renderHeistRedemptions(redemptions);
     bindHeistTemplateImageUpload();
+    bindHeistTemplateCatalogHandlers();
+    renderHeistTemplateCollectionRequirements();
+    renderHeistTemplateTraitRequirements();
+    const selectedTraitCollection = String(document.getElementById('heistTplTraitCatalogCollection')?.value || '').trim();
+    if (selectedTraitCollection) {
+      await handleHeistTraitCatalogCollectionChange();
+    }
+    if (!document.querySelector('#heistTplSlotRequirementRows .heist-slot-rule-row')) {
+      renderHeistSlotRequirementRows([]);
+    }
   } catch (error) {
     console.error('[Missions] Failed to load admin panel:', error);
     showError(error?.message || 'Failed to load missions admin panel.');
@@ -3745,26 +4263,34 @@ function serializeHeistTraitRequirementInput(requiredTraits) {
 
 function buildHeistTemplatePayloadFromForm() {
   const gateMode = getHeistConfigInputValue('heistTplGateMode', 'and') === 'or' ? 'or' : 'and';
-  const requiredCollections = getHeistConfigInputValue('heistTplRequiredCollections', '')
-    .split(',')
-    .map((entry) => String(entry || '').trim())
-    .filter(Boolean);
+  const requiredCollections = parseHeistCollectionRequirementInput(getHeistConfigInputValue('heistTplRequiredCollections', ''));
   const requiredTraits = parseHeistTraitRequirementInput(getHeistConfigInputValue('heistTplRequiredTraits', ''));
   const imageUrlRaw = getHeistConfigInputValue('heistTplImageUrl', '');
   const metadata = {};
   if (imageUrlRaw) metadata.image_url = imageUrlRaw;
+  const slotRequirements = collectHeistSlotRequirementPayload();
+  const mode = getHeistConfigInputValue('heistTplMode', 'solo') || 'solo';
+  const requiredSlots = getHeistConfigNumericValue('heistTplRequiredSlots', 1, 1, 100);
+  const totalSlots = getHeistConfigNumericValue('heistTplTotalSlots', 1, 1, 100);
 
   return {
     name: getHeistConfigInputValue('heistTplName', ''),
     description: getHeistConfigInputValue('heistTplDescription', ''),
-    mode: getHeistConfigInputValue('heistTplMode', 'solo') || 'solo',
+    mission_type: normalizeMissionCategoryKey(getHeistConfigInputValue('heistTplMissionType', 'nft')),
+    mode,
     duration_minutes: getHeistConfigNumericValue('heistTplDuration', 1440, 15, 10080),
-    required_slots: getHeistConfigNumericValue('heistTplRequiredSlots', 1, 1, 100),
-    total_slots: getHeistConfigNumericValue('heistTplTotalSlots', 1, 1, 100),
-    max_nfts_per_user: getHeistConfigNumericValue('heistTplMaxNfts', 2, 1, 10),
+    required_slots: requiredSlots,
+    total_slots: totalSlots,
+    max_nfts_per_user: mode === 'coop'
+      ? 1
+      : Math.max(
+        requiredSlots,
+        Math.min(totalSlots, getHeistConfigNumericValue('heistTplMaxNfts', 2, 1, 10))
+      ),
     base_xp_reward: getHeistConfigNumericValue('heistTplXpReward', 25, 1, 100000),
     base_streetcredit_reward: getHeistConfigNumericValue('heistTplStreetReward', 25, 1, 100000),
     spawn_weight: getHeistConfigNumericValue('heistTplSpawnWeight', 1, 1, 1000),
+    slot_requirements: slotRequirements,
     trait_requirements: {
       gateMode,
       requiredCollections,
@@ -3824,6 +4350,7 @@ function resetHeistTemplateForm() {
   const defaults = {
     heistTplName: '',
     heistTplDescription: '',
+    heistTplMissionType: 'nft',
     heistTplMode: 'solo',
     heistTplDuration: '1440',
     heistTplRequiredSlots: '1',
@@ -3835,6 +4362,10 @@ function resetHeistTemplateForm() {
     heistTplGateMode: 'and',
     heistTplRequiredCollections: '',
     heistTplRequiredTraits: '',
+    heistTplCollectionRegistrySelect: '',
+    heistTplTraitCatalogCollection: '',
+    heistTplTraitType: '',
+    heistTplTraitValue: '',
     heistTplImageUrl: '',
   };
   Object.entries(defaults).forEach(([id, value]) => {
@@ -3843,6 +4374,10 @@ function resetHeistTemplateForm() {
   });
   const fileInput = document.getElementById('heistTplImageFile');
   if (fileInput) fileInput.value = '';
+  populateHeistTraitCatalogTypeSelect({ traits: [] });
+  renderHeistTemplateCollectionRequirements();
+  renderHeistTemplateTraitRequirements();
+  renderHeistSlotRequirementRows([]);
   updateHeistTemplateSubmitState();
 }
 
@@ -3863,6 +4398,7 @@ function editHeistTemplate(templateId) {
   };
   setValue('heistTplName', template.name || '');
   setValue('heistTplDescription', template.description || '');
+  setValue('heistTplMissionType', normalizeMissionCategoryKey(template.mission_type || template.missionType || 'nft'));
   setValue('heistTplMode', template.mode || 'solo');
   setValue('heistTplDuration', Number(template.duration_minutes || 1440));
   setValue('heistTplRequiredSlots', Number(template.required_slots || 1));
@@ -3875,6 +4411,21 @@ function editHeistTemplate(templateId) {
   setValue('heistTplRequiredCollections', (requirements.requiredCollections || []).join(','));
   setValue('heistTplRequiredTraits', serializeHeistTraitRequirementInput(requirements.requiredTraits || []));
   setValue('heistTplImageUrl', template.image_url || template?.metadata?.image_url || '');
+  const primaryCollection = Array.isArray(requirements.requiredCollections) && requirements.requiredCollections.length
+    ? String(requirements.requiredCollections[0] || '').trim()
+    : '';
+  setValue('heistTplCollectionRegistrySelect', primaryCollection);
+  setValue('heistTplTraitCatalogCollection', primaryCollection);
+  renderHeistTemplateCollectionRequirements();
+  renderHeistTemplateTraitRequirements();
+  renderHeistSlotRequirementRows(
+    Array.isArray(template?.metadata?.slot_requirements)
+      ? template.metadata.slot_requirements
+      : (Array.isArray(template?.slot_requirements) ? template.slot_requirements : [])
+  );
+  if (primaryCollection) {
+    handleHeistTraitCatalogCollectionChange().catch(() => {});
+  }
   const fileInput = document.getElementById('heistTplImageFile');
   if (fileInput) fileInput.value = '';
   updateHeistTemplateSubmitState();
@@ -3889,6 +4440,12 @@ async function submitHeistTemplate() {
     const payload = buildHeistTemplatePayloadFromForm();
     if (!payload.name || !payload.description) {
       showError('Template name and description are required.');
+      return;
+    }
+    const selectedCategory = (Array.isArray(heistMissionCategories) ? heistMissionCategories : [])
+      .find((entry) => String(entry?.key || '').trim() === String(payload.mission_type || '').trim());
+    if (selectedCategory && selectedCategory.enabled === false) {
+      showError(`Category "${selectedCategory.label || selectedCategory.key}" is disabled because its required module is not enabled.`);
       return;
     }
     const editingId = Number(heistEditingTemplateId || 0);

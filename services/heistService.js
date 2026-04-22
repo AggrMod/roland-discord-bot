@@ -6,6 +6,7 @@ const entitlementService = require('./entitlementService');
 const walletService = require('./walletService');
 const nftService = require('./nftService');
 const treasuryService = require('./treasuryService');
+const roleService = require('./roleService');
 const { getModuleDisplayName } = require('./moduleLabelService');
 
 const DEFAULT_CONFIG = Object.freeze({
@@ -40,8 +41,18 @@ const ALLOWED_MISSION_STATUSES = new Set(['recruiting', 'active', 'completed', '
 const ACTIVE_STATUSES = Object.freeze(['recruiting', 'active']);
 const RESOLVABLE_STATUSES = Object.freeze(['recruiting', 'active']);
 const SUPPORTED_METRICS = new Set(['xp', 'streetcredit', 'speed']);
+const SUPPORTED_MISSION_TYPES = new Set(['nft', 'engagement', 'discord', 'governance', 'event']);
+const MISSION_TYPE_DEFINITIONS = Object.freeze([
+  { key: 'nft', label: 'NFT Ops', description: 'NFT/trait gated missions with locked assets', requiresModule: null },
+  { key: 'engagement', label: 'Engagement Ops', description: 'Social or engagement-linked objectives', requiresModule: 'engagement' },
+  { key: 'discord', label: 'Discord Ops', description: 'Server-native activity missions', requiresModule: null },
+  { key: 'governance', label: 'Governance Ops', description: 'Proposal and voting related missions', requiresModule: 'governance' },
+  { key: 'event', label: 'Event Ops', description: 'Special event or seasonal missions', requiresModule: null },
+]);
 const MAX_TEMPLATE_NAME = 120;
 const MAX_TEMPLATE_DESC = 2000;
+const HEIST_TRAIT_CATALOG_CACHE_TTL_MS = Math.max(60, Number(process.env.HEIST_TRAIT_CATALOG_CACHE_TTL_SEC || 600)) * 1000;
+const heistTraitCatalogCache = new Map();
 
 function normalizeGuildId(guildId) {
   const normalized = String(guildId || '').trim();
@@ -134,6 +145,64 @@ function normalizeTraitRequirements(raw) {
   };
 }
 
+function sanitizeCollectionId(value) {
+  return String(value || '').trim().slice(0, 128);
+}
+
+function normalizeMissionCollections(raw) {
+  if (!Array.isArray(raw)) return [];
+  const unique = new Set();
+  const list = [];
+  for (const entry of raw) {
+    const collectionId = sanitizeCollectionId(
+      typeof entry === 'string'
+        ? entry
+        : (entry?.collectionId || entry?.collection_id || entry?.id || '')
+    );
+    if (!collectionId) continue;
+    const key = collectionId.toLowerCase();
+    if (unique.has(key)) continue;
+    unique.add(key);
+    list.push({
+      collectionId,
+      label: String(entry?.label || entry?.name || '').trim().slice(0, 120) || null,
+      source: String(entry?.source || '').trim().toLowerCase() || 'manual',
+    });
+  }
+  return list;
+}
+
+function normalizeSlotRequirement(raw = {}, index = 1) {
+  const slotIndexRaw = Number(raw.slotIndex ?? raw.slot_index ?? index);
+  const slotIndex = Number.isFinite(slotIndexRaw) && slotIndexRaw > 0 ? Math.floor(slotIndexRaw) : index;
+  const traitRequirements = normalizeTraitRequirements(raw);
+  const label = String(raw.label || '').trim().slice(0, 80) || null;
+  return {
+    slotIndex,
+    label,
+    gateMode: traitRequirements.gateMode,
+    requiredCollections: traitRequirements.requiredCollections,
+    requiredTraits: traitRequirements.requiredTraits,
+  };
+}
+
+function normalizeSlotRequirements(raw, totalSlots = 1) {
+  const size = Math.max(1, Math.min(100, Number(totalSlots || 1)));
+  const source = Array.isArray(raw) ? raw : [];
+  const byIndex = new Map();
+  for (const entry of source) {
+    const normalized = normalizeSlotRequirement(entry, 1);
+    if (!normalized || !normalized.slotIndex) continue;
+    if (normalized.slotIndex > size) continue;
+    byIndex.set(normalized.slotIndex, normalized);
+  }
+  const result = [];
+  for (let index = 1; index <= size; index += 1) {
+    result.push(byIndex.get(index) || normalizeSlotRequirement({ slotIndex: index }, index));
+  }
+  return result;
+}
+
 function inListPlaceholders(length) {
   return Array.from({ length }, () => '?').join(', ');
 }
@@ -151,7 +220,8 @@ function hasBrandingEnabledForGuild(guildId) {
 function sanitizeTemplatePayload(payload = {}) {
   const name = String(payload.name || '').trim().slice(0, MAX_TEMPLATE_NAME);
   const description = String(payload.description || '').trim().slice(0, MAX_TEMPLATE_DESC);
-  const missionType = String(payload.missionType || payload.mission_type || 'standard').trim().toLowerCase() || 'standard';
+  const missionTypeRaw = String(payload.missionType || payload.mission_type || 'nft').trim().toLowerCase() || 'nft';
+  const missionType = SUPPORTED_MISSION_TYPES.has(missionTypeRaw) ? missionTypeRaw : 'nft';
   const modeRaw = String(payload.mode || 'solo').trim().toLowerCase();
   const mode = modeRaw === 'coop' || modeRaw === 'co-op' ? 'coop' : 'solo';
   const requiredSlots = Math.max(1, parsePositiveInt(payload.requiredSlots ?? payload.required_slots, 1));
@@ -181,6 +251,12 @@ function sanitizeTemplatePayload(payload = {}) {
   const metadataRaw = typeof payload.metadata === 'object' && payload.metadata !== null
     ? payload.metadata
     : safeJsonParse(payload.metadata_json, {});
+  const slotRequirementsRaw = Array.isArray(payload.slot_requirements)
+    ? payload.slot_requirements
+    : (Array.isArray(payload.slotRequirements)
+      ? payload.slotRequirements
+      : (Array.isArray(metadataRaw?.slot_requirements) ? metadataRaw.slot_requirements : []));
+  const slotRequirements = normalizeSlotRequirements(slotRequirementsRaw, totalSlots);
   const imageUrl = sanitizeImageUrl(
     payload.image_url
       ?? payload.imageUrl
@@ -189,6 +265,7 @@ function sanitizeTemplatePayload(payload = {}) {
   );
   const metadata = {
     ...(metadataRaw && typeof metadataRaw === 'object' ? metadataRaw : {}),
+    slot_requirements: slotRequirements,
   };
   if (imageUrl) {
     metadata.image_url = imageUrl;
@@ -210,6 +287,7 @@ function sanitizeTemplatePayload(payload = {}) {
     baseStreetcreditReward,
     objective,
     traitRequirements,
+    slotRequirements,
     rewardRules,
     activeWindow,
     spawnWeight,
@@ -488,6 +566,129 @@ class HeistService {
     );
 
     return { success: true, config: this.getConfig(normalizedGuildId) };
+  }
+
+  _resolveVerificationCollections(guildId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return [];
+    const unique = new Map();
+    const push = (collectionId, source = 'verification') => {
+      const normalized = sanitizeCollectionId(collectionId);
+      if (!normalized) return;
+      const key = normalized.toLowerCase();
+      if (unique.has(key)) return;
+      unique.set(key, {
+        collectionId: normalized,
+        source,
+      });
+    };
+
+    try {
+      const tiers = roleService.getEffectiveTiers(normalizedGuildId) || [];
+      for (const tier of tiers) {
+        push(tier?.collectionId || tier?.collection_id);
+      }
+      const traitRoles = roleService.getEffectiveTraitRoles(normalizedGuildId) || [];
+      for (const traitRole of traitRoles) {
+        push(traitRole?.collectionId || traitRole?.collection_id);
+      }
+    } catch (error) {
+      logger.warn(`[heist] failed to resolve verification collections for ${normalizedGuildId}: ${error?.message || error}`);
+    }
+
+    return Array.from(unique.values());
+  }
+
+  listMissionCategories(guildId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    return MISSION_TYPE_DEFINITIONS.map((entry) => {
+      const requiresModule = String(entry.requiresModule || '').trim() || null;
+      const enabled = !requiresModule
+        ? true
+        : !normalizedGuildId
+          ? false
+          : tenantService.isModuleEnabled(normalizedGuildId, requiresModule);
+      return {
+        key: entry.key,
+        label: entry.label,
+        description: entry.description,
+        requiresModule,
+        enabled,
+      };
+    });
+  }
+
+  listMissionCollections(guildId) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return [];
+    const config = this.getConfig(normalizedGuildId) || { metadata: {} };
+    const metadata = config.metadata && typeof config.metadata === 'object' ? config.metadata : {};
+    const manual = normalizeMissionCollections(metadata.mission_collections || []);
+    const verification = this._resolveVerificationCollections(normalizedGuildId);
+    const unique = new Map();
+    for (const entry of [...verification, ...manual]) {
+      const key = String(entry.collectionId || '').trim().toLowerCase();
+      if (!key) continue;
+      if (!unique.has(key)) unique.set(key, { ...entry });
+      else if (entry.source === 'manual') unique.get(key).source = 'manual';
+    }
+
+    const collectionList = Array.from(unique.values());
+    if (!collectionList.length) return [];
+    const placeholders = collectionList.map(() => '?').join(', ');
+    const nameRows = db.prepare(`
+      SELECT LOWER(TRIM(collection_address)) AS key, MAX(collection_name) AS collection_name
+      FROM nft_tracked_collections
+      WHERE guild_id = ? AND LOWER(TRIM(collection_address)) IN (${placeholders})
+      GROUP BY LOWER(TRIM(collection_address))
+    `).all(normalizedGuildId, ...collectionList.map((entry) => String(entry.collectionId || '').trim().toLowerCase()));
+    const nameByKey = new Map(nameRows.map((row) => [String(row.key || '').trim(), String(row.collection_name || '').trim() || null]));
+    return collectionList.map((entry) => ({
+      ...entry,
+      label: entry.label || nameByKey.get(String(entry.collectionId || '').trim().toLowerCase()) || null,
+    }));
+  }
+
+  setManualMissionCollections(guildId, collections = []) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'guildId is required' };
+    const config = this.getConfig(normalizedGuildId) || { metadata: {} };
+    const metadata = config.metadata && typeof config.metadata === 'object' ? { ...config.metadata } : {};
+    metadata.mission_collections = normalizeMissionCollections(collections).map((entry) => ({
+      collectionId: entry.collectionId,
+      label: entry.label || null,
+      source: 'manual',
+    }));
+    return this.updateConfig(normalizedGuildId, { metadata });
+  }
+
+  async getCollectionTraitCatalog(guildId, collectionId, { limit = 250 } = {}) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const normalizedCollectionId = sanitizeCollectionId(collectionId);
+    if (!normalizedGuildId || !normalizedCollectionId) {
+      return { success: false, message: 'guildId and collectionId are required', traits: [] };
+    }
+    const cacheKey = `${normalizedGuildId}:${normalizedCollectionId.toLowerCase()}`;
+    const cached = heistTraitCatalogCache.get(cacheKey);
+    if (cached && (Date.now() - Number(cached.cachedAt || 0)) < HEIST_TRAIT_CATALOG_CACHE_TTL_MS) {
+      return { success: true, ...cached.payload, cached: true };
+    }
+
+    try {
+      const payload = await nftService.getCollectionTraitCatalog(normalizedCollectionId, {
+        guildId: normalizedGuildId,
+        limit,
+      });
+      const safePayload = payload && typeof payload === 'object' ? payload : { collectionId: normalizedCollectionId, traits: [], sampleCount: 0 };
+      heistTraitCatalogCache.set(cacheKey, {
+        cachedAt: Date.now(),
+        payload: safePayload,
+      });
+      return { success: true, ...safePayload, cached: false };
+    } catch (error) {
+      logger.warn(`[heist] failed trait catalog fetch for ${normalizedCollectionId}: ${error?.message || error}`);
+      return { success: false, message: 'Failed to fetch trait catalog', traits: [], sampleCount: 0, collectionId: normalizedCollectionId };
+    }
   }
 
   getLadder(guildId) {
@@ -944,7 +1145,7 @@ class HeistService {
       Number(templateRow.id),
       title,
       String(templateRow.description || '').trim() || null,
-      String(templateRow.mission_type || 'standard'),
+      String(templateRow.mission_type || 'nft'),
       String(templateRow.mode || 'solo'),
       Number(templateRow.required_slots || 1),
       Number(templateRow.total_slots || 1),
@@ -959,6 +1160,10 @@ class HeistService {
       endsAt,
       safeJsonStringify({
         templateName: templateRow.name || null,
+        slot_requirements: normalizeSlotRequirements(
+          templateMetadata?.slot_requirements || templateMetadata?.slotRequirements || [],
+          Number(templateRow.total_slots || 1)
+        ),
         image_url: sanitizeImageUrl(
           templateMetadata?.image_url
           || templateMetadata?.imageUrl
@@ -1234,6 +1439,26 @@ class HeistService {
     return hasTraitRules ? traitPass : collectionPass;
   }
 
+  _getMissionSlotRequirements(mission) {
+    if (!mission || typeof mission !== 'object') return [];
+    const metadata = mission.metadata && typeof mission.metadata === 'object'
+      ? mission.metadata
+      : safeJsonParse(mission.metadata_json, {});
+    const totalSlots = Number(mission.total_slots || mission.totalSlots || 1);
+    return normalizeSlotRequirements(metadata?.slot_requirements || metadata?.slotRequirements || [], totalSlots);
+  }
+
+  _findEligibleOpenSlotForNft(nft, slotRequirements = [], occupiedSlotIndexes = new Set()) {
+    for (const slotRequirement of (Array.isArray(slotRequirements) ? slotRequirements : [])) {
+      const slotIndex = Number(slotRequirement?.slotIndex || slotRequirement?.slot_index || 0);
+      if (!slotIndex || occupiedSlotIndexes.has(slotIndex)) continue;
+      if (this._passesMissionAccessRequirements(nft, slotRequirement)) {
+        return slotIndex;
+      }
+    }
+    return null;
+  }
+
   async _getUserNftsByWallet(guildId, userId) {
     const wallets = walletService.getAllUserWallets(userId);
     const result = [];
@@ -1251,23 +1476,53 @@ class HeistService {
   }
 
   async listEligibleNftsForMission(guildId, userId, missionId) {
-    const mission = this.getMission(guildId, missionId, { includeSlots: false });
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const normalizedUserId = normalizeUserId(userId);
+    const normalizedMissionId = String(missionId || '').trim();
+    if (!normalizedGuildId || !normalizedUserId || !normalizedMissionId) return [];
+    const mission = this.getMission(normalizedGuildId, normalizedMissionId, { includeSlots: true });
     if (!mission) return [];
-    const allNfts = await this._getUserNftsByWallet(guildId, userId);
+    const isCoopMode = String(mission.mode || '').trim().toLowerCase() === 'coop';
+    const existingUserSlots = Number(
+      db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM heist_mission_slots
+        WHERE guild_id = ? AND mission_id = ? AND user_id = ? AND status IN ('joined', 'completed')
+      `).get(normalizedGuildId, normalizedMissionId, normalizedUserId)?.count || 0
+    );
+    if (existingUserSlots > 0) {
+      return [];
+    }
+
+    const allNfts = await this._getUserNftsByWallet(normalizedGuildId, normalizedUserId);
     const lockedRows = db.prepare(`
       SELECT nft_mint
       FROM heist_locked_nfts
       WHERE guild_id = ?
-    `).all(guildId);
+    `).all(normalizedGuildId);
     const lockedMints = new Set(lockedRows.map((row) => String(row.nft_mint || '').trim()).filter(Boolean));
-    const requirements = normalizeTraitRequirements(
+    const missionRequirements = normalizeTraitRequirements(
       safeJsonParse(mission.trait_requirements_json, mission.trait_requirements || {})
     );
+    const slotRequirements = this._getMissionSlotRequirements(mission);
+    const occupiedSlots = isCoopMode
+      ? new Set(
+        (Array.isArray(mission.slots) ? mission.slots : [])
+          .map((slot) => Number(slot.slot_index || slot.slotIndex || 0))
+          .filter((slotIndex) => Number.isFinite(slotIndex) && slotIndex > 0)
+      )
+      : new Set();
+    const hasOpenSlotRequirements = slotRequirements.some((slotRequirement) => {
+      const slotIndex = Number(slotRequirement?.slotIndex || 0);
+      return slotIndex > 0 && !occupiedSlots.has(slotIndex);
+    });
 
     return allNfts.filter((nft) => {
       const mint = String(nft.mint || '').trim();
       if (!mint || lockedMints.has(mint)) return false;
-      return this._passesMissionAccessRequirements(nft, requirements);
+      if (!this._passesMissionAccessRequirements(nft, missionRequirements)) return false;
+      if (!hasOpenSlotRequirements) return true;
+      return this._findEligibleOpenSlotForNft(nft, slotRequirements, occupiedSlots) !== null;
     });
   }
 
@@ -1287,25 +1542,45 @@ class HeistService {
     if (mission.ends_at && new Date(mission.ends_at).getTime() < Date.now()) {
       return { success: false, message: 'Mission has already ended' };
     }
+    const mode = String(mission.mode || '').trim().toLowerCase() === 'coop' ? 'coop' : 'solo';
+    const isCoopMode = mode === 'coop';
+    const requiredSlots = Math.max(1, Number(mission.required_slots || 1));
+    const totalSlots = Math.max(requiredSlots, Number(mission.total_slots || 1));
 
     const eligibleNfts = await this.listEligibleNftsForMission(normalizedGuildId, normalizedUserId, normalizedMissionId);
     if (!eligibleNfts.length) {
-      return { success: false, message: 'No eligible NFTs available for this mission' };
+      if (isCoopMode) {
+        return { success: false, message: 'No eligible NFTs available or you already joined this co-op mission.' };
+      }
+      return { success: false, message: 'No eligible NFTs available or you already joined this mission window.' };
     }
 
     const pickedMints = Array.isArray(selectedMints)
       ? selectedMints.map((mint) => String(mint || '').trim()).filter(Boolean)
       : String(selectedMints || '').split(',').map((mint) => mint.trim()).filter(Boolean);
     const uniquePickedMints = Array.from(new Set(pickedMints));
+    const defaultPickCount = isCoopMode ? 1 : requiredSlots;
     const selected = uniquePickedMints.length > 0
       ? eligibleNfts.filter((nft) => uniquePickedMints.includes(String(nft.mint || '').trim()))
-      : eligibleNfts.slice(0, 1);
+      : eligibleNfts.slice(0, defaultPickCount);
 
     if (selected.length === 0) {
       return { success: false, message: 'Selected NFTs are not eligible' };
     }
 
-    const maxNftsPerUser = Math.max(1, Number(mission.max_nfts_per_user || 1));
+    const maxNftsPerUserConfigured = Math.max(1, Number(mission.max_nfts_per_user || 1));
+    const maxNftsPerUser = isCoopMode
+      ? 1
+      : Math.max(requiredSlots, Math.min(maxNftsPerUserConfigured, totalSlots));
+    if (isCoopMode && selected.length !== 1) {
+      return { success: false, message: 'Co-op missions require exactly 1 NFT per participant.' };
+    }
+    if (!isCoopMode && selected.length < requiredSlots) {
+      return { success: false, message: `This mission requires at least ${requiredSlots} NFT slot(s).` };
+    }
+    if (!isCoopMode && selected.length > totalSlots) {
+      return { success: false, message: `This mission allows up to ${totalSlots} NFT slot(s).` };
+    }
     const existingUserSlots = Number(
       db.prepare(`
         SELECT COUNT(*) AS count
@@ -1313,6 +1588,14 @@ class HeistService {
         WHERE guild_id = ? AND mission_id = ? AND user_id = ? AND status IN ('joined', 'completed')
       `).get(normalizedGuildId, normalizedMissionId, normalizedUserId)?.count || 0
     );
+    if (existingUserSlots > 0) {
+      return {
+        success: false,
+        message: isCoopMode
+          ? 'You already joined this co-op mission.'
+          : 'You can run this mission once per mission window.',
+      };
+    }
     if ((existingUserSlots + selected.length) > maxNftsPerUser) {
       return { success: false, message: `You can lock up to ${maxNftsPerUser} NFTs in this mission.` };
     }
@@ -1328,17 +1611,88 @@ class HeistService {
       if (!RESOLVABLE_STATUSES.includes(String(currentMission.status || '').toLowerCase())) {
         throw new Error('Mission is not accepting participants');
       }
+      const currentMode = String(currentMission.mode || '').trim().toLowerCase() === 'coop' ? 'coop' : 'solo';
+      const currentIsCoopMode = currentMode === 'coop';
+      const currentRequiredSlots = Math.max(1, Number(currentMission.required_slots || 1));
+      const currentTotalSlots = Math.max(currentRequiredSlots, Number(currentMission.total_slots || 1));
+      const currentMaxNftsPerUser = currentIsCoopMode
+        ? 1
+        : Math.max(
+          currentRequiredSlots,
+          Math.min(Math.max(1, Number(currentMission.max_nfts_per_user || 1)), currentTotalSlots)
+        );
+      if (!currentIsCoopMode && selected.length < currentRequiredSlots) {
+        throw new Error(`This mission requires at least ${currentRequiredSlots} NFT slot(s).`);
+      }
+      if (!currentIsCoopMode && selected.length > currentTotalSlots) {
+        throw new Error(`This mission allows up to ${currentTotalSlots} NFT slot(s).`);
+      }
 
-      const available = Number(currentMission.total_slots || 0) - Number(currentMission.filled_slots || 0);
-      if (available <= 0) throw new Error('Mission is full');
-      if (selected.length > available) throw new Error(`Only ${available} slot(s) left.`);
+      const currentUserSlotCount = Number(
+        db.prepare(`
+          SELECT COUNT(*) AS count
+          FROM heist_mission_slots
+          WHERE guild_id = ? AND mission_id = ? AND user_id = ? AND status IN ('joined', 'completed')
+        `).get(normalizedGuildId, normalizedMissionId, normalizedUserId)?.count || 0
+      );
+      if (currentUserSlotCount > 0) {
+        throw new Error(
+          currentIsCoopMode
+            ? 'You already joined this co-op mission.'
+            : 'You can run this mission once per mission window.'
+        );
+      }
+      if ((currentUserSlotCount + selected.length) > currentMaxNftsPerUser) {
+        throw new Error(`You can lock up to ${currentMaxNftsPerUser} NFTs in this mission.`);
+      }
 
-      const maxSlotRow = db.prepare(`
-        SELECT COALESCE(MAX(slot_index), 0) AS max_slot
+      const existingSlots = db.prepare(`
+        SELECT slot_index
         FROM heist_mission_slots
-        WHERE mission_id = ?
-      `).get(normalizedMissionId);
-      let nextSlot = Number(maxSlotRow?.max_slot || 0);
+        WHERE guild_id = ? AND mission_id = ? AND status IN ('joined', 'completed')
+      `).all(normalizedGuildId, normalizedMissionId);
+      const occupiedSlotIndexes = new Set(
+        existingSlots
+          .map((row) => Number(row.slot_index || 0))
+          .filter((value) => Number.isFinite(value) && value > 0)
+      );
+      const slotRequirements = this._getMissionSlotRequirements(currentMission);
+      const maxSlot = occupiedSlotIndexes.size ? Math.max(...occupiedSlotIndexes) : 0;
+      let nextSlot = maxSlot;
+      const assignments = [];
+
+      if (currentIsCoopMode) {
+        const available = currentTotalSlots - Number(currentMission.filled_slots || 0);
+        if (available <= 0) throw new Error('Mission is full');
+        if (selected.length > available) throw new Error(`Only ${available} slot(s) left.`);
+        for (const nft of selected) {
+          const slotIndex = this._findEligibleOpenSlotForNft(nft, slotRequirements, occupiedSlotIndexes);
+          if (!slotIndex) {
+            throw new Error('Selected NFT does not match any open slot requirement.');
+          }
+          occupiedSlotIndexes.add(slotIndex);
+          assignments.push({
+            nft,
+            slotIndex,
+            ruleSlotIndex: slotIndex,
+          });
+        }
+      } else {
+        const localUsedRequirementSlots = new Set();
+        for (const nft of selected) {
+          const ruleSlotIndex = this._findEligibleOpenSlotForNft(nft, slotRequirements, localUsedRequirementSlots);
+          if (!ruleSlotIndex && slotRequirements.length > 0) {
+            throw new Error('Selected NFTs do not satisfy the required slot traits.');
+          }
+          if (ruleSlotIndex) localUsedRequirementSlots.add(ruleSlotIndex);
+          nextSlot += 1;
+          assignments.push({
+            nft,
+            slotIndex: nextSlot,
+            ruleSlotIndex: ruleSlotIndex || null,
+          });
+        }
+      }
 
       const slotInsert = db.prepare(`
         INSERT INTO heist_mission_slots (
@@ -1352,13 +1706,13 @@ class HeistService {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
-      for (const nft of selected) {
-        nextSlot += 1;
+      for (const assignment of assignments) {
+        const nft = assignment.nft;
         const traitSnapshot = Array.isArray(nft.attributes) ? nft.attributes : [];
         const slotResult = slotInsert.run(
           normalizedGuildId,
           normalizedMissionId,
-          nextSlot,
+          Number(assignment.slotIndex),
           normalizedUserId,
           String(username || '').trim() || null,
           String(nft.wallet_address || '').trim(),
@@ -1375,12 +1729,17 @@ class HeistService {
           normalizedMissionId,
           Number(slotResult.lastInsertRowid || 0) || null,
           currentMission.ends_at || null,
-          safeJsonStringify({ missionTitle: currentMission.title || null }, '{}')
+          safeJsonStringify({
+            missionTitle: currentMission.title || null,
+            slotRuleIndex: assignment.ruleSlotIndex || null,
+          }, '{}')
         );
       }
 
-      const updatedFilled = Number(currentMission.filled_slots || 0) + selected.length;
-      const shouldActivate = updatedFilled >= Number(currentMission.required_slots || 1);
+      const updatedFilled = Number(currentMission.filled_slots || 0) + assignments.length;
+      const shouldActivate = currentIsCoopMode
+        ? updatedFilled >= currentRequiredSlots
+        : updatedFilled > 0;
       activatedNow = shouldActivate && String(currentMission.status || '').toLowerCase() !== 'active';
       db.prepare(`
         UPDATE heist_missions
@@ -1405,7 +1764,7 @@ class HeistService {
         normalizedGuildId,
         normalizedMissionId,
         normalizedUserId,
-        safeJsonStringify({ slotsAdded: selected.length, mints: selected.map((nft) => nft.mint) }, '{}')
+        safeJsonStringify({ slotsAdded: assignments.length, mints: assignments.map((entry) => entry.nft.mint) }, '{}')
       );
     });
 

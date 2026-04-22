@@ -34,12 +34,24 @@ function parseMintInput(value) {
 
 function missionStatusEmoji(status) {
   const key = String(status || '').trim().toLowerCase();
-  if (key === 'recruiting') return '🟡';
-  if (key === 'active') return '🟢';
-  if (key === 'completed') return '✅';
-  if (key === 'failed') return '❌';
-  if (key === 'cancelled') return '⛔';
-  return '📜';
+  if (key === 'recruiting') return '[R]';
+  if (key === 'active') return '[A]';
+  if (key === 'completed') return '[OK]';
+  if (key === 'failed') return '[X]';
+  if (key === 'cancelled') return '[!]';
+  return '[?]';
+}
+
+function missionCategoryLabel(missionType) {
+  const key = String(missionType || 'nft').trim().toLowerCase();
+  const map = {
+    nft: 'NFT Ops',
+    engagement: 'Engagement Ops',
+    discord: 'Discord Ops',
+    governance: 'Governance Ops',
+    event: 'Event Ops',
+  };
+  return map[key] || key.toUpperCase();
 }
 
 function formatMissionLine(mission) {
@@ -48,9 +60,12 @@ function formatMissionLine(mission) {
   const status = String(mission.status || 'recruiting');
   const filled = Number(mission.filled_slots || mission.filledSlots || 0);
   const total = Number(mission.total_slots || mission.totalSlots || 0);
+  const mode = String(mission.mode || 'solo');
+  const category = missionCategoryLabel(mission.mission_type || mission.missionType || 'nft');
   const endsAt = mission.ends_at || mission.endsAt || null;
   const endsText = endsAt ? `<t:${Math.floor(new Date(endsAt).getTime() / 1000)}:R>` : 'N/A';
-  return `${missionStatusEmoji(status)} **${id}** - ${title}\nSlots: ${filled}/${total} - Ends: ${endsText}`;
+  return `${missionStatusEmoji(status)} **${id}** - ${title}
+${category} | ${mode} | Slots: ${filled}/${total} - Ends: ${endsText}`;
 }
 
 function buildBoardEmbed(guildId, missions = []) {
@@ -193,6 +208,18 @@ module.exports = {
                 .addChoices(
                   { name: 'Solo', value: 'solo' },
                   { name: 'Co-op', value: 'coop' },
+                ))
+            .addStringOption((option) =>
+              option
+                .setName('mission_type')
+                .setDescription('Mission category')
+                .setRequired(false)
+                .addChoices(
+                  { name: 'NFT Ops', value: 'nft' },
+                  { name: 'Engagement Ops', value: 'engagement' },
+                  { name: 'Discord Ops', value: 'discord' },
+                  { name: 'Governance Ops', value: 'governance' },
+                  { name: 'Event Ops', value: 'event' },
                 ))
             .addIntegerOption((option) =>
               option.setName('duration_minutes').setDescription('Duration in minutes').setRequired(false).setMinValue(15).setMaxValue(10080))
@@ -358,7 +385,7 @@ module.exports = {
         return;
       }
       const lines = templates.slice(0, 20).map((template) =>
-        `• #${template.id} ${template.enabled ? '✅' : '⛔'} ${template.name} (${template.mode}, weight ${template.spawn_weight})`
+        `- #${template.id} ${template.enabled ? '[ENABLED]' : '[DISABLED]'} ${template.name} (${missionCategoryLabel(template.mission_type || 'nft')} | ${template.mode}, weight ${template.spawn_weight})`
       );
       await interaction.editReply({
         embeds: [
@@ -377,6 +404,7 @@ module.exports = {
       const payload = {
         name: interaction.options.getString('name'),
         description: interaction.options.getString('description'),
+        mission_type: interaction.options.getString('mission_type') || 'nft',
         mode: interaction.options.getString('mode') || 'solo',
         duration_minutes: interaction.options.getInteger('duration_minutes'),
         required_slots: interaction.options.getInteger('required_slots'),
@@ -403,12 +431,14 @@ module.exports = {
         await interaction.editReply({ content: `Failed to spawn mission: ${result?.message || 'Unknown error'}` });
         return;
       }
+      const mission = result?.mission
+        || (result?.missionId ? heistService.getMission(guildId, result.missionId, { includeSlots: false }) : null);
       await interaction.editReply({
         embeds: [
           new EmbedBuilder()
             .setColor('#2c8f6c')
             .setTitle('Mission Spawned')
-            .setDescription(formatMissionLine(result.mission))
+            .setDescription(formatMissionLine(mission || { mission_id: result?.missionId || 'N/A', title: 'New mission', status: 'recruiting' }))
             .setTimestamp(),
         ],
       });

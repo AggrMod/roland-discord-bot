@@ -748,6 +748,74 @@
               <h4 style="margin-bottom:12px;">Templates</h4>
               <div id="heistTemplateList" style="display:grid;gap:8px;"></div>
             </div>
+
+            <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
+              <h4 style="margin-bottom:12px;">Ladder (Ranks and Vault Access)</h4>
+              <div id="heistLadderRows" style="display:grid;gap:8px;"></div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
+                <button class="btn-secondary btn-sm" onclick="addHeistLadderRow()">Add Rank</button>
+                <button class="btn-primary btn-sm" onclick="saveHeistLadder()">Save Ladder</button>
+              </div>
+            </div>
+
+            <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
+              <h4 style="margin-bottom:12px;">Trait Bonus Rules</h4>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">
+                <input id="heistBonusTraitType" type="text" class="input-sm" placeholder="Trait type">
+                <input id="heistBonusTraitValue" type="text" class="input-sm" placeholder="Trait value">
+                <input id="heistBonusMissionType" type="text" class="input-sm" placeholder="Mission type (optional)">
+                <select id="heistBonusMetric" class="input-sm">
+                  <option value="xp">XP</option>
+                  <option value="streetcredit">Streetcredit</option>
+                  <option value="speed">Speed</option>
+                </select>
+                <input id="heistBonusMultiplier" type="number" step="0.01" min="0" class="input-sm" placeholder="Multiplier (1.00)">
+                <input id="heistBonusFlat" type="number" step="1" class="input-sm" placeholder="Flat bonus">
+                <input id="heistBonusMax" type="number" step="1" min="0" class="input-sm" placeholder="Max bonus (optional)">
+                <label style="display:flex;align-items:center;gap:8px;font-size:0.9em;color:var(--text-secondary);">
+                  <input id="heistBonusEnabled" type="checkbox" checked>
+                  Enabled
+                </label>
+              </div>
+              <div style="margin-top:10px;">
+                <button class="btn-primary btn-sm" onclick="submitHeistTraitBonus()">Add Trait Bonus Rule</button>
+              </div>
+              <div id="heistTraitBonusList" style="display:grid;gap:8px;margin-top:12px;"></div>
+            </div>
+
+            <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
+              <h4 style="margin-bottom:12px;">Vault Items (Streetcredit Store)</h4>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
+                <input id="heistVaultName" type="text" class="input-sm" placeholder="Item name">
+                <input id="heistVaultDescription" type="text" class="input-sm" placeholder="Description">
+                <input id="heistVaultCost" type="number" min="0" class="input-sm" placeholder="Streetcredit cost">
+                <input id="heistVaultTier" type="number" min="0" class="input-sm" placeholder="Required vault tier">
+                <select id="heistVaultRewardType" class="input-sm">
+                  <option value="manual">manual</option>
+                  <option value="auto_role">auto_role</option>
+                  <option value="auto_code">auto_code</option>
+                </select>
+                <select id="heistVaultFulfillment" class="input-sm">
+                  <option value="manual">manual</option>
+                  <option value="auto">auto</option>
+                </select>
+                <input id="heistVaultRoleId" type="text" class="input-sm" placeholder="Role ID (optional)">
+                <input id="heistVaultQuantity" type="number" class="input-sm" placeholder="Stock (-1 unlimited)">
+                <label style="display:flex;align-items:center;gap:8px;font-size:0.9em;color:var(--text-secondary);">
+                  <input id="heistVaultEnabled" type="checkbox" checked>
+                  Enabled
+                </label>
+              </div>
+              <div style="margin-top:10px;">
+                <button class="btn-primary btn-sm" onclick="createHeistVaultItem()">Add Vault Item</button>
+              </div>
+              <div id="heistVaultItemList" style="display:grid;gap:8px;margin-top:12px;"></div>
+            </div>
+
+            <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
+              <h4 style="margin-bottom:12px;">Recent Vault Redemptions</h4>
+              <div id="heistRedemptionList" style="display:grid;gap:8px;"></div>
+            </div>
           </div>
         </section>
 

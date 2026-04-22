@@ -3067,6 +3067,285 @@ function renderHeistMissionOps(missions) {
   `).join('');
 }
 
+function createHeistLadderRow(rank = {}) {
+  const row = document.createElement('div');
+  row.className = 'heist-ladder-row';
+  row.style.display = 'grid';
+  row.style.gridTemplateColumns = '1.2fr 1fr 1fr 1fr auto';
+  row.style.gap = '8px';
+  row.style.alignItems = 'center';
+  row.innerHTML = `
+    <input class="input-sm heist-rank-name" type="text" placeholder="Rank name" value="${escapeHtml(String(rank.rank_name || rank.rankName || ''))}">
+    <input class="input-sm heist-rank-key" type="text" placeholder="rank_key" value="${escapeHtml(String(rank.rank_key || rank.rankKey || ''))}">
+    <input class="input-sm heist-rank-min-xp" type="number" min="0" placeholder="Min XP" value="${Number(rank.min_xp ?? rank.minXp ?? 0)}">
+    <input class="input-sm heist-rank-vault-tier" type="number" min="0" placeholder="Vault tier" value="${Number(rank.vault_tier ?? rank.vaultTier ?? 0)}">
+    <button class="btn-secondary btn-sm" onclick="removeHeistLadderRow(this)">Remove</button>
+  `;
+  return row;
+}
+
+function addHeistLadderRow(rank = {}) {
+  const wrap = document.getElementById('heistLadderRows');
+  if (!wrap) return;
+  wrap.appendChild(createHeistLadderRow(rank));
+}
+
+function removeHeistLadderRow(button) {
+  const row = button?.closest?.('.heist-ladder-row');
+  if (row) row.remove();
+}
+
+function renderHeistLadder(ladder) {
+  const wrap = document.getElementById('heistLadderRows');
+  if (!wrap) return;
+  const list = Array.isArray(ladder) ? ladder : [];
+  wrap.innerHTML = '';
+  if (!list.length) {
+    addHeistLadderRow({ rank_name: 'Associate', rank_key: 'associate', min_xp: 0, vault_tier: 0 });
+    return;
+  }
+  list.forEach((entry) => addHeistLadderRow(entry));
+}
+
+function collectHeistLadderPayload() {
+  const rows = Array.from(document.querySelectorAll('#heistLadderRows .heist-ladder-row'));
+  return rows
+    .map((row, idx) => {
+      const rankName = String(row.querySelector('.heist-rank-name')?.value || '').trim();
+      const rankKeyInput = String(row.querySelector('.heist-rank-key')?.value || '').trim();
+      const rankKey = rankKeyInput || rankName.toLowerCase().replace(/[^a-z0-9_]+/g, '_');
+      const minXp = Number(row.querySelector('.heist-rank-min-xp')?.value || 0);
+      const vaultTier = Number(row.querySelector('.heist-rank-vault-tier')?.value || 0);
+      return {
+        rank_name: rankName,
+        rank_key: rankKey || `rank_${idx + 1}`,
+        min_xp: Number.isFinite(minXp) ? Math.max(0, Math.floor(minXp)) : 0,
+        vault_tier: Number.isFinite(vaultTier) ? Math.max(0, Math.floor(vaultTier)) : 0,
+        sort_order: idx + 1,
+      };
+    })
+    .filter((entry) => entry.rank_name);
+}
+
+async function saveHeistLadder() {
+  if (!(isAdmin || isSuperadmin) || !activeGuildId) {
+    showError('Admin access and active server are required.');
+    return;
+  }
+  try {
+    const ladder = collectHeistLadderPayload();
+    if (!ladder.length) {
+      showError('Add at least one rank before saving.');
+      return;
+    }
+    const res = await fetch('/api/admin/heist/ladder', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({ ladder }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || json?.error?.message || 'Failed to save ladder');
+    }
+    showSuccess('Missions ladder saved.');
+    await loadHeistAdminPanel();
+  } catch (error) {
+    console.error('[Missions] save ladder failed:', error);
+    showError(error?.message || 'Failed to save ladder.');
+  }
+}
+
+function renderHeistTraitBonuses(rules) {
+  const wrap = document.getElementById('heistTraitBonusList');
+  if (!wrap) return;
+  const list = Array.isArray(rules) ? rules : [];
+  if (!list.length) {
+    wrap.innerHTML = '<p style="color:var(--text-secondary);font-size:0.9em;">No trait bonus rules yet.</p>';
+    return;
+  }
+  wrap.innerHTML = list.map((rule) => `
+    <div style="border:1px solid var(--border-color);border-radius:10px;padding:10px;background:rgba(15,23,42,0.35);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+      <div style="font-size:0.9em;color:var(--text-secondary);">
+        <div style="color:var(--text-primary);font-weight:600;">${escapeHtml(String(rule.trait_type || ''))}: ${escapeHtml(String(rule.trait_value || ''))}</div>
+        <div>metric ${escapeHtml(String(rule.target_metric || 'xp'))} | multiplier ${Number(rule.multiplier || 1)} | flat ${Number(rule.flat_bonus || 0)} | max ${rule.max_bonus === null || rule.max_bonus === undefined ? '-' : Number(rule.max_bonus)}</div>
+        <div>mission type ${escapeHtml(String(rule.mission_type || 'any'))} | ${Number(rule.enabled || 0) === 1 ? 'enabled' : 'disabled'}</div>
+      </div>
+      <button class="btn-secondary btn-sm" onclick="deleteHeistTraitBonus(${Number(rule.id)})">Delete</button>
+    </div>
+  `).join('');
+}
+
+async function submitHeistTraitBonus() {
+  const traitType = getHeistConfigInputValue('heistBonusTraitType', '');
+  const traitValue = getHeistConfigInputValue('heistBonusTraitValue', '');
+  if (!traitType || !traitValue) {
+    showError('Trait type and trait value are required.');
+    return;
+  }
+  const payload = {
+    trait_type: traitType,
+    trait_value: traitValue,
+    mission_type: getHeistConfigInputValue('heistBonusMissionType', '') || null,
+    target_metric: getHeistConfigInputValue('heistBonusMetric', 'xp') || 'xp',
+    multiplier: Number(getHeistConfigInputValue('heistBonusMultiplier', '1')) || 1,
+    flat_bonus: Number(getHeistConfigInputValue('heistBonusFlat', '0')) || 0,
+    max_bonus: getHeistConfigInputValue('heistBonusMax', '') === '' ? null : Number(getHeistConfigInputValue('heistBonusMax', '0')),
+    enabled: !!document.getElementById('heistBonusEnabled')?.checked,
+  };
+  try {
+    const res = await fetch('/api/admin/heist/trait-bonuses', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || json?.error?.message || 'Failed to add trait bonus rule');
+    }
+    showSuccess('Trait bonus rule added.');
+    ['heistBonusTraitType', 'heistBonusTraitValue', 'heistBonusMissionType', 'heistBonusMultiplier', 'heistBonusFlat', 'heistBonusMax'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    const metricEl = document.getElementById('heistBonusMetric');
+    if (metricEl) metricEl.value = 'xp';
+    const enabledEl = document.getElementById('heistBonusEnabled');
+    if (enabledEl) enabledEl.checked = true;
+    await loadHeistAdminPanel();
+  } catch (error) {
+    console.error('[Missions] add trait rule failed:', error);
+    showError(error?.message || 'Failed to add trait bonus rule.');
+  }
+}
+
+async function deleteHeistTraitBonus(ruleId) {
+  const id = Number(ruleId);
+  if (!Number.isFinite(id) || id <= 0) return;
+  if (!confirm(`Delete trait bonus rule #${id}?`)) return;
+  try {
+    const res = await fetch(`/api/admin/heist/trait-bonuses/${encodeURIComponent(String(id))}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: buildTenantRequestHeaders(),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || json?.error?.message || 'Failed to delete trait bonus rule');
+    }
+    showSuccess(`Trait bonus rule #${id} deleted.`);
+    await loadHeistAdminPanel();
+  } catch (error) {
+    console.error('[Missions] delete trait rule failed:', error);
+    showError(error?.message || 'Failed to delete trait bonus rule.');
+  }
+}
+
+function renderHeistVaultItems(items) {
+  const wrap = document.getElementById('heistVaultItemList');
+  if (!wrap) return;
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) {
+    wrap.innerHTML = '<p style="color:var(--text-secondary);font-size:0.9em;">No vault items yet.</p>';
+    return;
+  }
+  wrap.innerHTML = list.map((item) => `
+    <div style="border:1px solid var(--border-color);border-radius:10px;padding:10px;background:rgba(15,23,42,0.35);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+      <div style="font-size:0.9em;color:var(--text-secondary);">
+        <div style="color:var(--text-primary);font-weight:600;">#${Number(item.id)} ${escapeHtml(String(item.name || 'Unnamed item'))}</div>
+        <div>cost ${Number(item.cost_streetcredit || 0)} | tier ${Number(item.required_vault_tier || 0)} | reward ${escapeHtml(String(item.reward_type || 'manual'))} | fulfillment ${escapeHtml(String(item.fulfillment_mode || 'manual'))}</div>
+        <div>stock ${Number(item.quantity_remaining) < 0 ? 'unlimited' : Number(item.quantity_remaining || 0)} | ${Number(item.enabled || 0) === 1 ? 'enabled' : 'disabled'}</div>
+      </div>
+      <button class="btn-secondary btn-sm" onclick="deleteHeistVaultItem(${Number(item.id)})">Delete</button>
+    </div>
+  `).join('');
+}
+
+function renderHeistRedemptions(redemptions) {
+  const wrap = document.getElementById('heistRedemptionList');
+  if (!wrap) return;
+  const list = Array.isArray(redemptions) ? redemptions : [];
+  if (!list.length) {
+    wrap.innerHTML = '<p style="color:var(--text-secondary);font-size:0.9em;">No redemptions yet.</p>';
+    return;
+  }
+  wrap.innerHTML = list.slice(0, 25).map((entry) => `
+    <div style="border:1px solid var(--border-color);border-radius:10px;padding:10px;background:rgba(15,23,42,0.35);font-size:0.9em;color:var(--text-secondary);">
+      <div style="color:var(--text-primary);font-weight:600;">#${Number(entry.id)} ${escapeHtml(String(entry.item_name || `Item ${entry.item_id || '-'}`))}</div>
+      <div>user ${escapeHtml(String(entry.username || entry.user_id || 'unknown'))} | cost ${Number(entry.cost_streetcredit || 0)} | status ${escapeHtml(String(entry.fulfillment_status || 'pending'))}</div>
+      <div>${escapeHtml(new Date(entry.created_at).toLocaleString())}</div>
+    </div>
+  `).join('');
+}
+
+async function createHeistVaultItem() {
+  const payload = {
+    name: getHeistConfigInputValue('heistVaultName', ''),
+    description: getHeistConfigInputValue('heistVaultDescription', ''),
+    cost_streetcredit: Number(getHeistConfigInputValue('heistVaultCost', '0')) || 0,
+    required_vault_tier: Number(getHeistConfigInputValue('heistVaultTier', '0')) || 0,
+    reward_type: getHeistConfigInputValue('heistVaultRewardType', 'manual') || 'manual',
+    fulfillment_mode: getHeistConfigInputValue('heistVaultFulfillment', 'manual') || 'manual',
+    role_id: getHeistConfigInputValue('heistVaultRoleId', '') || null,
+    quantity_remaining: getHeistConfigInputValue('heistVaultQuantity', '') === '' ? -1 : (Number(getHeistConfigInputValue('heistVaultQuantity', '-1')) || -1),
+    enabled: !!document.getElementById('heistVaultEnabled')?.checked,
+  };
+  if (!payload.name) {
+    showError('Vault item name is required.');
+    return;
+  }
+  try {
+    const res = await fetch('/api/admin/heist/vault/items', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || json?.error?.message || 'Failed to create vault item');
+    }
+    showSuccess('Vault item created.');
+    ['heistVaultName', 'heistVaultDescription', 'heistVaultCost', 'heistVaultTier', 'heistVaultRoleId', 'heistVaultQuantity'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    const rewardEl = document.getElementById('heistVaultRewardType');
+    if (rewardEl) rewardEl.value = 'manual';
+    const fulfillEl = document.getElementById('heistVaultFulfillment');
+    if (fulfillEl) fulfillEl.value = 'manual';
+    const enabledEl = document.getElementById('heistVaultEnabled');
+    if (enabledEl) enabledEl.checked = true;
+    await loadHeistAdminPanel();
+  } catch (error) {
+    console.error('[Missions] create vault item failed:', error);
+    showError(error?.message || 'Failed to create vault item.');
+  }
+}
+
+async function deleteHeistVaultItem(itemId) {
+  const id = Number(itemId);
+  if (!Number.isFinite(id) || id <= 0) return;
+  if (!confirm(`Delete vault item #${id}?`)) return;
+  try {
+    const res = await fetch(`/api/admin/heist/vault/items/${encodeURIComponent(String(id))}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: buildTenantRequestHeaders(),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || json?.error?.message || 'Failed to delete vault item');
+    }
+    showSuccess(`Vault item #${id} deleted.`);
+    await loadHeistAdminPanel();
+  } catch (error) {
+    console.error('[Missions] delete vault item failed:', error);
+    showError(error?.message || 'Failed to delete vault item.');
+  }
+}
+
 async function loadHeistAdminPanel() {
   const panel = document.getElementById('heistAdminPanel');
   if (!panel) return;
@@ -3078,17 +3357,25 @@ async function loadHeistAdminPanel() {
 
   try {
     const headers = buildTenantRequestHeaders();
-    const [configRes, templatesRes, missionsRes, channelsRes] = await Promise.all([
+    const [configRes, templatesRes, missionsRes, channelsRes, ladderRes, bonusRes, vaultRes, redemptionsRes] = await Promise.all([
       fetch('/api/admin/heist/config', { credentials: 'include', headers }),
       fetch('/api/admin/heist/templates', { credentials: 'include', headers }),
       fetch('/api/admin/heist/missions?statuses=recruiting,active&limit=50', { credentials: 'include', headers }),
       fetch('/api/admin/discord/channels', { credentials: 'include', headers }),
+      fetch('/api/admin/heist/ladder', { credentials: 'include', headers }),
+      fetch('/api/admin/heist/trait-bonuses', { credentials: 'include', headers }),
+      fetch('/api/admin/heist/vault/items?includeDisabled=1', { credentials: 'include', headers }),
+      fetch('/api/admin/heist/vault/redemptions?limit=50', { credentials: 'include', headers }),
     ]);
-    const [configJson, templatesJson, missionsJson, channelsJson] = await Promise.all([
+    const [configJson, templatesJson, missionsJson, channelsJson, ladderJson, bonusJson, vaultJson, redemptionsJson] = await Promise.all([
       configRes.json(),
       templatesRes.json(),
       missionsRes.json(),
       channelsRes.json(),
+      ladderRes.json(),
+      bonusRes.json(),
+      vaultRes.json(),
+      redemptionsRes.json(),
     ]);
 
     if (!configRes.ok || !configJson.success) {
@@ -3099,6 +3386,10 @@ async function loadHeistAdminPanel() {
     const templates = templatesJson?.success ? (templatesJson?.data?.templates || []) : [];
     const missions = missionsJson?.success ? (missionsJson?.data?.missions || []) : [];
     const channels = channelsJson?.success ? (channelsJson?.channels || channelsJson?.data?.channels || []) : [];
+    const ladder = ladderJson?.success ? (ladderJson?.data?.ladder || []) : [];
+    const traitBonuses = bonusJson?.success ? (bonusJson?.data?.rules || []) : [];
+    const vaultItems = vaultJson?.success ? (vaultJson?.data?.items || []) : [];
+    const redemptions = redemptionsJson?.success ? (redemptionsJson?.data?.redemptions || []) : [];
     window._heistAdminTemplates = templates;
 
     populateChannelSelects(
@@ -3136,6 +3427,10 @@ async function loadHeistAdminPanel() {
     populateHeistTemplateSelectors(templates);
     renderHeistTemplateList(templates);
     renderHeistMissionOps(missions);
+    renderHeistLadder(ladder);
+    renderHeistTraitBonuses(traitBonuses);
+    renderHeistVaultItems(vaultItems);
+    renderHeistRedemptions(redemptions);
   } catch (error) {
     console.error('[Missions] Failed to load admin panel:', error);
     showError(error?.message || 'Failed to load missions admin panel.');

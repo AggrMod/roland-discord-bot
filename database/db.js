@@ -1226,6 +1226,7 @@ function initDatabase() {
   try { db.exec("ALTER TABLE tenant_branding ADD COLUMN logo_url TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_branding ADD COLUMN primary_color TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE tenant_branding ADD COLUMN display_name TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE tenant_branding ADD COLUMN missions_label TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE missions ADD COLUMN guild_id TEXT DEFAULT ''"); } catch (e) {}
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_missions_guild_status ON missions(guild_id, status)"); } catch (e) {}
 

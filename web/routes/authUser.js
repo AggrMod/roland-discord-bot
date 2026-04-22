@@ -2,6 +2,8 @@ const express = require('express');
 const crypto = require('crypto');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
 const xProviderService = require('../../services/xProviderService');
+const { getModuleDisplayName } = require('../../services/moduleLabelService');
+const settingsManager = require('../../config/settings');
 
 function createAuthUserRouter({
   logger,
@@ -12,6 +14,7 @@ function createAuthUserRouter({
   tenantService,
   roleService,
   missionService,
+  heistService,
   ticketService,
   walletService,
   proposalService,
@@ -307,6 +310,29 @@ function createAuthUserRouter({
     };
   };
 
+  const ensureHeistServiceAvailable = () => {
+    if (!heistService) {
+      return { ok: false, message: 'Heist service is not configured' };
+    }
+    return { ok: true };
+  };
+
+  const hydrateHeistProfileResponse = (guildId, userId, username) => {
+    const config = heistService.getConfig(guildId);
+    const profile = heistService.getProfile(guildId, userId, username);
+    const ladder = heistService.getLadder(guildId);
+    return {
+      moduleDisplayName: config?.moduleDisplayName || 'Missions',
+      config: config ? {
+        xpLabel: config.xp_label,
+        streetcreditLabel: config.streetcredit_label,
+        taskLabel: config.task_label,
+      } : null,
+      profile,
+      ladder,
+    };
+  };
+
   router.get('/api/features', publicApiLimiter, (_req, res) => {
     try {
       const heistEnabled = process.env.HEIST_ENABLED === 'true';
@@ -505,6 +531,10 @@ function createAuthUserRouter({
         ? Number(roleService.getUserVotingPower(userId, membership.member, guildId) || 0)
         : Number(userInfo?.voting_power || 0);
 
+      const moduleDisplayNames = {
+        heist: getModuleDisplayName('heist', guildId),
+      };
+
       return res.json(toSuccessResponse({
         user: {
           id: userId,
@@ -516,9 +546,306 @@ function createAuthUserRouter({
         hasVerifiedNft: totalNfts > 0,
         totalNfts,
         votingPower,
+        moduleDisplayNames,
       }));
     } catch (routeError) {
       logger.error('Error resolving public web auth identity:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/public/v1/heist/meta', async (req, res) => {
+    try {
+      const guildId = resolvePublicGuildId(req);
+      if (tenantService.isMultitenantEnabled() && !guildId) {
+        return res.status(400).json(toErrorResponse('guildId query parameter is required', 'VALIDATION_ERROR'));
+      }
+      const displayName = getModuleDisplayName('heist', guildId);
+      return res.json(toSuccessResponse({
+        guildId: guildId || null,
+        moduleDisplayName: displayName,
+      }));
+    } catch (routeError) {
+      logger.error('Error fetching heist meta:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/public/v1/heist/me', async (req, res) => {
+    try {
+      const serviceCheck = ensureHeistServiceAvailable();
+      if (!serviceCheck.ok) {
+        return res.status(500).json(toErrorResponse(serviceCheck.message, 'CONFIG_ERROR'));
+      }
+
+      const auth = await resolvePublicWebAuthContext(req, res, {
+        requireGuild: true,
+        requireMembership: true,
+        requireVotingPower: false,
+      });
+      if (!auth) return;
+
+      const payload = hydrateHeistProfileResponse(auth.guildId, auth.userId, auth.username);
+      return res.json(toSuccessResponse(payload));
+    } catch (routeError) {
+      logger.error('Error fetching heist identity summary:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/public/v1/heist/missions/active', async (req, res) => {
+    try {
+      const serviceCheck = ensureHeistServiceAvailable();
+      if (!serviceCheck.ok) {
+        return res.status(500).json(toErrorResponse(serviceCheck.message, 'CONFIG_ERROR'));
+      }
+      const auth = await resolvePublicWebAuthContext(req, res, {
+        requireGuild: true,
+        requireMembership: true,
+        requireVotingPower: false,
+      });
+      if (!auth) return;
+
+      const missions = heistService.listMissions(auth.guildId, {
+        statuses: ['recruiting', 'active'],
+        limit: Number(req.query.limit || 50),
+        offset: Number(req.query.offset || 0),
+      }).map((mission) => heistService.getPublicMissionPayload(auth.guildId, mission));
+
+      return res.json(toSuccessResponse({
+        moduleDisplayName: getModuleDisplayName('heist', auth.guildId),
+        missions,
+      }));
+    } catch (routeError) {
+      logger.error('Error fetching active heist missions:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/public/v1/heist/missions/history', async (req, res) => {
+    try {
+      const serviceCheck = ensureHeistServiceAvailable();
+      if (!serviceCheck.ok) {
+        return res.status(500).json(toErrorResponse(serviceCheck.message, 'CONFIG_ERROR'));
+      }
+      const auth = await resolvePublicWebAuthContext(req, res, {
+        requireGuild: true,
+        requireMembership: true,
+        requireVotingPower: false,
+      });
+      if (!auth) return;
+
+      const statuses = String(req.query.scope || '').trim().toLowerCase() === 'all'
+        ? null
+        : ['completed', 'failed', 'cancelled'];
+      const missions = heistService.listUserMissions(auth.guildId, auth.userId, {
+        statuses,
+        limit: Number(req.query.limit || 100),
+        offset: Number(req.query.offset || 0),
+      }).map((mission) => heistService.getPublicMissionPayload(auth.guildId, mission));
+
+      return res.json(toSuccessResponse({
+        moduleDisplayName: getModuleDisplayName('heist', auth.guildId),
+        missions,
+      }));
+    } catch (routeError) {
+      logger.error('Error fetching heist mission history:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/public/v1/heist/missions/:id', async (req, res) => {
+    try {
+      const serviceCheck = ensureHeistServiceAvailable();
+      if (!serviceCheck.ok) {
+        return res.status(500).json(toErrorResponse(serviceCheck.message, 'CONFIG_ERROR'));
+      }
+      const auth = await resolvePublicWebAuthContext(req, res, {
+        requireGuild: true,
+        requireMembership: true,
+        requireVotingPower: false,
+      });
+      if (!auth) return;
+
+      const missionId = String(req.params.id || '').trim();
+      const mission = heistService.getMission(auth.guildId, missionId, { includeSlots: true });
+      if (!mission) {
+        return res.status(404).json(toErrorResponse('Mission not found', 'NOT_FOUND'));
+      }
+      const eligibleNfts = await heistService.listEligibleNftsForMission(auth.guildId, auth.userId, missionId);
+      return res.json(toSuccessResponse({
+        moduleDisplayName: getModuleDisplayName('heist', auth.guildId),
+        mission: heistService.getPublicMissionPayload(auth.guildId, mission, { includeSlots: true }),
+        eligibleNfts: eligibleNfts.map((nft) => ({
+          mint: nft.mint,
+          name: nft.name,
+          walletAddress: nft.wallet_address,
+          attributes: Array.isArray(nft.attributes) ? nft.attributes : [],
+        })),
+      }));
+    } catch (routeError) {
+      logger.error('Error fetching heist mission detail:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/api/public/v1/heist/missions/:id/join', async (req, res) => {
+    try {
+      const serviceCheck = ensureHeistServiceAvailable();
+      if (!serviceCheck.ok) {
+        return res.status(500).json(toErrorResponse(serviceCheck.message, 'CONFIG_ERROR'));
+      }
+      const auth = await resolvePublicWebAuthContext(req, res, {
+        requireGuild: true,
+        requireMembership: true,
+        requireVotingPower: false,
+      });
+      if (!auth) return;
+
+      const wallets = walletService.getAllUserWallets(auth.userId);
+      if (!Array.isArray(wallets) || wallets.length === 0) {
+        return res.status(403).json(toErrorResponse('You need a linked wallet to join missions', 'FORBIDDEN'));
+      }
+
+      const missionId = String(req.params.id || '').trim();
+      const selectedMints = Array.isArray(req.body?.selectedMints)
+        ? req.body.selectedMints
+        : (Array.isArray(req.body?.mints) ? req.body.mints : []);
+      const result = await heistService.joinMission({
+        guildId: auth.guildId,
+        missionId,
+        userId: auth.userId,
+        username: auth.username,
+        selectedMints,
+      });
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to join mission', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error joining heist mission:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/api/public/v1/heist/missions/:id/leave', async (req, res) => {
+    try {
+      const serviceCheck = ensureHeistServiceAvailable();
+      if (!serviceCheck.ok) {
+        return res.status(500).json(toErrorResponse(serviceCheck.message, 'CONFIG_ERROR'));
+      }
+      const auth = await resolvePublicWebAuthContext(req, res, {
+        requireGuild: true,
+        requireMembership: true,
+        requireVotingPower: false,
+      });
+      if (!auth) return;
+
+      const missionId = String(req.params.id || '').trim();
+      const result = heistService.leaveMission({
+        guildId: auth.guildId,
+        missionId,
+        userId: auth.userId,
+      });
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to leave mission', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error leaving heist mission:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/public/v1/heist/vault/items', async (req, res) => {
+    try {
+      const serviceCheck = ensureHeistServiceAvailable();
+      if (!serviceCheck.ok) {
+        return res.status(500).json(toErrorResponse(serviceCheck.message, 'CONFIG_ERROR'));
+      }
+      const auth = await resolvePublicWebAuthContext(req, res, {
+        requireGuild: true,
+        requireMembership: true,
+        requireVotingPower: false,
+      });
+      if (!auth) return;
+
+      const items = heistService.listVaultItems(auth.guildId, { includeDisabled: false });
+      const profile = heistService.getProfile(auth.guildId, auth.userId, auth.username);
+      return res.json(toSuccessResponse({
+        moduleDisplayName: getModuleDisplayName('heist', auth.guildId),
+        items,
+        profile,
+      }));
+    } catch (routeError) {
+      logger.error('Error fetching heist vault items:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/api/public/v1/heist/vault/redeem', async (req, res) => {
+    try {
+      const serviceCheck = ensureHeistServiceAvailable();
+      if (!serviceCheck.ok) {
+        return res.status(500).json(toErrorResponse(serviceCheck.message, 'CONFIG_ERROR'));
+      }
+      const auth = await resolvePublicWebAuthContext(req, res, {
+        requireGuild: true,
+        requireMembership: true,
+        requireVotingPower: false,
+      });
+      if (!auth) return;
+
+      const wallets = walletService.getAllUserWallets(auth.userId);
+      if (!Array.isArray(wallets) || wallets.length === 0) {
+        return res.status(403).json(toErrorResponse('You need a linked wallet to redeem vault items', 'FORBIDDEN'));
+      }
+
+      const itemId = Number(req.body?.itemId || req.body?.item_id || 0);
+      if (!Number.isFinite(itemId) || itemId <= 0) {
+        return res.status(400).json(toErrorResponse('Valid itemId is required', 'VALIDATION_ERROR'));
+      }
+
+      const result = await heistService.redeemVaultItem(auth.guildId, auth.userId, auth.username, itemId);
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to redeem item', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error redeeming heist vault item:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/public/v1/heist/profile/history', async (req, res) => {
+    try {
+      const serviceCheck = ensureHeistServiceAvailable();
+      if (!serviceCheck.ok) {
+        return res.status(500).json(toErrorResponse(serviceCheck.message, 'CONFIG_ERROR'));
+      }
+      const auth = await resolvePublicWebAuthContext(req, res, {
+        requireGuild: true,
+        requireMembership: true,
+        requireVotingPower: false,
+      });
+      if (!auth) return;
+
+      const history = heistService.listVaultRedemptions(auth.guildId, {
+        userId: auth.userId,
+        limit: Number(req.query.limit || 50),
+      });
+      const missions = heistService.listUserMissions(auth.guildId, auth.userId, {
+        statuses: ['completed', 'failed', 'cancelled'],
+        limit: Number(req.query.missionLimit || 100),
+      }).map((mission) => heistService.getPublicMissionPayload(auth.guildId, mission));
+
+      return res.json(toSuccessResponse({
+        moduleDisplayName: getModuleDisplayName('heist', auth.guildId),
+        missions,
+        redemptions: history,
+      }));
+    } catch (routeError) {
+      logger.error('Error fetching heist profile history:', routeError);
       return res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
@@ -1027,6 +1354,10 @@ function createAuthUserRouter({
       let proposals = [];
       let missions = [];
       let pointsResult = { total: 0 };
+      let heistProfile = null;
+      const moduleDisplayNames = {
+        heist: getModuleDisplayName('heist', requestedGuildId || ''),
+      };
 
       if (!missingTenantSelection) {
         proposals = (hasProposalsGuildColumn() && requestedGuildId)
@@ -1057,11 +1388,23 @@ function createAuthUserRouter({
             WHERE mp.participant_id = ? AND m.guild_id = ?
           `).get(discordId, requestedGuildId)
           : db.prepare('SELECT COALESCE(SUM(points_awarded), 0) as total FROM mission_participants WHERE participant_id = ?').get(discordId);
+
+        if (heistService && requestedGuildId) {
+          const nextHeistMissions = heistService.listUserMissions(requestedGuildId, discordId, {
+            statuses: ['recruiting', 'active'],
+            limit: 50,
+          }).map((mission) => heistService.getPublicMissionPayload(requestedGuildId, mission));
+          if (nextHeistMissions.length > 0) {
+            missions = nextHeistMissions;
+          }
+          heistProfile = heistService.getProfile(requestedGuildId, discordId, req.session.discordUser.username);
+        }
       }
 
       return res.json(toSuccessResponse({
         requiresServerSelection: missingTenantSelection,
         activeGuildId: requestedGuildId || null,
+        moduleDisplayNames,
         user: {
           discordId,
           username: req.session.discordUser.username,
@@ -1074,7 +1417,10 @@ function createAuthUserRouter({
         },
         wallets: walletsWithVerificationTime,
         proposals,
-        missions
+        missions,
+        heist: {
+          profile: heistProfile,
+        }
       }));
     } catch (routeError) {
       logger.error('Error fetching user data:', routeError);

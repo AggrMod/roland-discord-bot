@@ -93,6 +93,7 @@ function getCommandModuleKey(commandName) {
     'proposal': 'governance',
     'treasury': 'treasury',
     'ticketing': 'ticketing',
+    'heist': 'heist',
     'minigames': 'minigames',
     'battle': 'minigames',
     'aiassistant': 'aiassistant'
@@ -327,6 +328,7 @@ const governanceLogger = require('./utils/governanceLogger');
 const ticketService = require('./services/ticketService');
 const nftActivityService = require('./services/nftActivityService');
 const inviteTrackerService = require('./services/inviteTrackerService');
+const heistService = require('./services/heistService');
 
 const intervals = [];
 
@@ -389,6 +391,7 @@ client.once(Events.ClientReady, () => {
   startRoleResyncScheduler();
   startTicketInactivityScheduler();
   startXEngagementScheduler();
+  startHeistScheduler();
 
   treasuryService.setClient(client);
   treasuryService.startScheduler();
@@ -521,6 +524,7 @@ client.on(Events.InteractionCreate, async interaction => {
     }
     if (customId === 'panel_verify') { await handlePanelVerifyButton(interaction); return; }
     if (customId === 'treasury_refresh_panel') { await handleTreasuryRefreshButton(interaction); return; }
+    if (customId === 'heist_panel_discover' || customId === 'heist_panel_status' || customId === 'heist_panel_join') { await handleHeistPanelButton(interaction); return; }
     if (customId === 'governance_create_proposal') { await handleGovernanceCreateProposalButton(interaction); return; }
     if (customId.startsWith('support_')) { await handleSupportButton(interaction); return; }
     if (customId.startsWith('comment_')) { await handleGovernanceCommentButton(interaction); return; }
@@ -538,6 +542,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
   if (interaction.isModalSubmit()) {
     if (interaction.customId.startsWith('ticket_modal_')) { await handleTicketModalSubmit(interaction); return; }
+    if (interaction.customId === 'heist_panel_join_modal') { await handleHeistPanelModal(interaction); return; }
     if (interaction.customId === 'governance_create_proposal_modal') { await handleGovernanceCreateProposalModal(interaction); return; }
     if (interaction.customId.startsWith('governance_comment_modal_')) { await handleGovernanceCommentModal(interaction); return; }
   }
@@ -1108,6 +1113,46 @@ function buildTreasuryPanelFromService() {
   return { embed, components };
 }
 
+async function handleHeistPanelButton(interaction) {
+  try {
+    const heistCommand = client.commands.get('heist');
+    if (!heistCommand || typeof heistCommand.handlePanelButton !== 'function') {
+      await interaction.reply({ content: 'Missions panel handler is unavailable right now.', ephemeral: true });
+      return;
+    }
+    await heistCommand.handlePanelButton(interaction);
+  } catch (error) {
+    logger.error('[heist] panel button error:', error);
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content: 'Something went wrong while handling this missions action.' });
+      } else {
+        await interaction.reply({ content: 'Something went wrong while handling this missions action.', ephemeral: true });
+      }
+    } catch (_) {}
+  }
+}
+
+async function handleHeistPanelModal(interaction) {
+  try {
+    const heistCommand = client.commands.get('heist');
+    if (!heistCommand || typeof heistCommand.handlePanelModal !== 'function') {
+      await interaction.reply({ content: 'Missions panel handler is unavailable right now.', ephemeral: true });
+      return;
+    }
+    await heistCommand.handlePanelModal(interaction);
+  } catch (error) {
+    logger.error('[heist] panel modal error:', error);
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content: 'Something went wrong while submitting this missions form.' });
+      } else {
+        await interaction.reply({ content: 'Something went wrong while submitting this missions form.', ephemeral: true });
+      }
+    } catch (_) {}
+  }
+}
+
 function startVoteCheckInterval() {
   intervals.push(setInterval(async () => {
     try {
@@ -1176,6 +1221,22 @@ function startXEngagementScheduler() {
   const intervalSec = Math.max(60, Number(settings.xPollingIntervalSeconds || process.env.X_POLLING_INTERVAL_SECONDS || 300));
   intervals.push(setInterval(tick, intervalSec * 1000));
   setTimeout(tick, 45 * 1000);
+}
+
+function startHeistScheduler() {
+  const tick = async () => {
+    try {
+      const result = await heistService.runSchedulerTick();
+      if (result?.success && (result.spawned > 0 || result.resolved > 0)) {
+        logger.log(`[heist] scheduler tick guilds=${result.guilds} spawned=${result.spawned} resolved=${result.resolved}`);
+      }
+    } catch (error) {
+      logger.warn(`[heist] scheduler error: ${error?.message || error}`);
+    }
+  };
+
+  intervals.push(setInterval(tick, 60 * 1000));
+  setTimeout(tick, 20 * 1000);
 }
 
 async function handleTicketOpenButton(interaction) {

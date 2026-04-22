@@ -11,6 +11,7 @@ const db = require('../../database/db');
 const treasuryService = require('../../services/treasuryService');
 const nftActivityService = require('../../services/nftActivityService');
 const tenantService = require('../../services/tenantService');
+const heistService = require('../../services/heistService');
 const settingsManager = require('../../config/settings');
 const { success, error, sanitize, redactWallet } = require('../../utils/apiResponse');
 const { asyncHandler, notFoundError, validationError } = require('../../utils/apiErrorHandler');
@@ -58,6 +59,18 @@ function hasMissionsGuildColumn() {
   return _hasMissionsGuildColumnCache;
 }
 
+let _hasHeistMissionsTableCache = null;
+function hasHeistMissionsTable() {
+  if (_hasHeistMissionsTableCache !== null) return _hasHeistMissionsTableCache;
+  try {
+    const columns = db.prepare('PRAGMA table_info(heist_missions)').all();
+    _hasHeistMissionsTableCache = Array.isArray(columns) && columns.length > 0;
+  } catch (_error) {
+    _hasHeistMissionsTableCache = false;
+  }
+  return _hasHeistMissionsTableCache;
+}
+
 function resolvePublicGovernanceScope(req) {
   const guildId = getRequestedGuildId(req);
   const multiTenantEnabled = tenantService.isMultitenantEnabled();
@@ -103,6 +116,31 @@ function normalizeConcludedStatus(proposal) {
   }
 
   return yesVp > noVp ? 'passed' : 'rejected';
+}
+
+function mapHeistMissionToLegacyShape(missionPayload = {}) {
+  const slots = Array.isArray(missionPayload.slots) ? missionPayload.slots : [];
+  return {
+    missionId: missionPayload.missionId,
+    title: missionPayload.title,
+    description: missionPayload.description,
+    status: missionPayload.status,
+    totalSlots: Number(missionPayload.totalSlots || 0),
+    filledSlots: Number(missionPayload.filledSlots || 0),
+    rewardPoints: Number(missionPayload.baseStreetcreditReward || 0),
+    participants: slots.map((slot) => ({
+      participantId: redactWallet(slot.userId),
+      nftName: slot.nftName || null,
+      role: null,
+      pointsAwarded: Number(slot.payoutStreetcredit || 0),
+      joinedAt: slot.joinedAt || null,
+    })),
+    startTime: missionPayload.startedAt || null,
+    createdAt: missionPayload.createdAt || null,
+    endsAt: missionPayload.endsAt || null,
+    mode: missionPayload.mode || 'solo',
+    missionType: missionPayload.missionType || 'standard',
+  };
 }
 
 // ==================== GOVERNANCE ENDPOINTS ====================
@@ -450,7 +488,21 @@ router.get('/nft/activity', asyncHandler(async (req, res) => {
  * Returns active and recruiting missions
  */
 router.get('/missions/active', asyncHandler(async (req, res) => {
-  const guildId = resolvePublicScope(req, { tableHasGuildColumn: hasMissionsGuildColumn() });
+  const guildId = resolvePublicScope(req, { tableHasGuildColumn: hasMissionsGuildColumn() || hasHeistMissionsTable() });
+  if (guildId && hasHeistMissionsTable()) {
+    const missions = heistService.listMissions(guildId, {
+      statuses: ['recruiting', 'active'],
+      limit: Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 200),
+      offset: Math.max(parseInt(req.query.offset, 10) || 0, 0),
+    }).map((mission) => heistService.getPublicMissionPayload(guildId, mission, { includeSlots: true }));
+
+    const enrichedMissions = missions.map((mission) => mapHeistMissionToLegacyShape(mission));
+    return res.json(success(
+      { missions: enrichedMissions },
+      { count: enrichedMissions.length, guildId: guildId || null, source: 'heist' }
+    ));
+  }
+
   const missions = (hasMissionsGuildColumn() && guildId)
     ? db.prepare(
       'SELECT * FROM missions WHERE guild_id = ? AND status IN (?, ?) ORDER BY created_at DESC'
@@ -490,9 +542,30 @@ router.get('/missions/active', asyncHandler(async (req, res) => {
  * Returns completed missions
  */
 router.get('/missions/completed', asyncHandler(async (req, res) => {
-  const guildId = resolvePublicScope(req, { tableHasGuildColumn: hasMissionsGuildColumn() });
+  const guildId = resolvePublicScope(req, { tableHasGuildColumn: hasMissionsGuildColumn() || hasHeistMissionsTable() });
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
   const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
+  if (guildId && hasHeistMissionsTable()) {
+    const missions = heistService.listMissions(guildId, {
+      statuses: ['completed'],
+      limit,
+      offset,
+    }).map((mission) => heistService.getPublicMissionPayload(guildId, mission, { includeSlots: true }));
+    const totalCount = db.prepare('SELECT COUNT(*) AS count FROM heist_missions WHERE guild_id = ? AND status = ?').get(guildId, 'completed')?.count || 0;
+    const enrichedMissions = missions.map((mission) => mapHeistMissionToLegacyShape(mission));
+    return res.json(success(
+      { missions: enrichedMissions },
+      {
+        count: enrichedMissions.length,
+        total: Number(totalCount || 0),
+        limit,
+        offset,
+        guildId: guildId || null,
+        source: 'heist',
+      }
+    ));
+  }
 
   const missions = (hasMissionsGuildColumn() && guildId)
     ? db.prepare(
@@ -550,8 +623,18 @@ router.get('/missions/completed', asyncHandler(async (req, res) => {
  * Returns detailed mission information
  */
 router.get('/missions/:id', asyncHandler(async (req, res) => {
-  const guildId = resolvePublicScope(req, { tableHasGuildColumn: hasMissionsGuildColumn() });
+  const guildId = resolvePublicScope(req, { tableHasGuildColumn: hasMissionsGuildColumn() || hasHeistMissionsTable() });
   const { id } = req.params;
+
+  if (guildId && hasHeistMissionsTable()) {
+    const mission = heistService.getMission(guildId, id, { includeSlots: true });
+    if (!mission) {
+      notFoundError('Mission');
+    }
+    const payload = heistService.getPublicMissionPayload(guildId, mission, { includeSlots: true });
+    return res.json(success({ mission: mapHeistMissionToLegacyShape(payload) }, { guildId: guildId || null, source: 'heist' }));
+  }
+
   const mission = (hasMissionsGuildColumn() && guildId)
     ? db.prepare('SELECT * FROM missions WHERE mission_id = ? AND guild_id = ?').get(id, guildId)
     : db.prepare('SELECT * FROM missions WHERE mission_id = ?').get(id);

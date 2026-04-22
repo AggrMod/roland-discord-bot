@@ -323,6 +323,7 @@ class TenantService {
       selfserve_panel_description: brandingRow.selfserve_panel_description || null,
       nfttracker_panel_title: brandingRow.nfttracker_panel_title || null,
       nfttracker_panel_description: brandingRow.nfttracker_panel_description || null,
+      missions_label: brandingRow.missions_label || null,
       raw: brandingRow
     } : null;
 
@@ -1063,7 +1064,8 @@ class TenantService {
       'selfserve_panel_title',
       'selfserve_panel_description',
       'nfttracker_panel_title',
-      'nfttracker_panel_description'
+      'nfttracker_panel_description',
+      'missions_label'
     ];
 
     const patch = {};
@@ -1139,7 +1141,8 @@ class TenantService {
       selfserve_panel_title: patch.selfserve_panel_title !== undefined ? patch.selfserve_panel_title : (brandingRow.selfserve_panel_title || null),
       selfserve_panel_description: patch.selfserve_panel_description !== undefined ? patch.selfserve_panel_description : (brandingRow.selfserve_panel_description || null),
       nfttracker_panel_title: patch.nfttracker_panel_title !== undefined ? patch.nfttracker_panel_title : (brandingRow.nfttracker_panel_title || null),
-      nfttracker_panel_description: patch.nfttracker_panel_description !== undefined ? patch.nfttracker_panel_description : (brandingRow.nfttracker_panel_description || null)
+      nfttracker_panel_description: patch.nfttracker_panel_description !== undefined ? patch.nfttracker_panel_description : (brandingRow.nfttracker_panel_description || null),
+      missions_label: patch.missions_label !== undefined ? patch.missions_label : (brandingRow.missions_label || null)
     };
 
     db.prepare(`
@@ -1166,9 +1169,10 @@ class TenantService {
         selfserve_panel_title,
         selfserve_panel_description,
         nfttracker_panel_title,
-        nfttracker_panel_description
+        nfttracker_panel_description,
+        missions_label
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(tenant_id) DO UPDATE SET
         bot_display_name = excluded.bot_display_name,
         bot_server_avatar_url = excluded.bot_server_avatar_url,
@@ -1192,6 +1196,7 @@ class TenantService {
         selfserve_panel_description = excluded.selfserve_panel_description,
         nfttracker_panel_title = excluded.nfttracker_panel_title,
         nfttracker_panel_description = excluded.nfttracker_panel_description,
+        missions_label = excluded.missions_label,
         updated_at = CURRENT_TIMESTAMP
     `).run(
       tenantId,
@@ -1216,7 +1221,8 @@ class TenantService {
       nextBranding.selfserve_panel_title,
       nextBranding.selfserve_panel_description,
       nextBranding.nfttracker_panel_title,
-      nextBranding.nfttracker_panel_description
+      nextBranding.nfttracker_panel_description,
+      nextBranding.missions_label
     );
 
     const after = this.getTenantContext(normalizedGuildId);

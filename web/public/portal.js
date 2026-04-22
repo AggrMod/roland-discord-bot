@@ -2882,45 +2882,71 @@ async function removeWallet(address) {
 }
 
 // ==================== MISSIONS (HEIST) ====================
+function normalizeMissionRecord(mission) {
+  if (!mission || typeof mission !== 'object') return null;
+  return {
+    missionId: String(mission.mission_id || mission.missionId || '').trim(),
+    title: String(mission.title || 'Untitled Mission'),
+    status: String(mission.status || 'recruiting').toLowerCase(),
+    description: String(mission.description || '').trim(),
+    mode: String(mission.mode || 'solo').trim(),
+    totalSlots: Number(mission.total_slots || mission.totalSlots || 0),
+    filledSlots: Number(mission.filled_slots || mission.filledSlots || 0),
+    rewardStreetcredit: Number(mission.base_streetcredit_reward || mission.baseStreetcreditReward || mission.reward_points || mission.rewardPoints || 0),
+    rewardXp: Number(mission.base_xp_reward || mission.baseXpReward || 0),
+    assignedRole: String(mission.assigned_role || mission.assignedRole || '').trim(),
+    assignedNftName: String(mission.assigned_nft_name || mission.assignedNftName || '').trim(),
+    pointsAwarded: Number(mission.points_awarded || mission.pointsAwarded || 0),
+    endsAt: mission.ends_at || mission.endsAt || null,
+  };
+}
+
 function renderMissions() {
   const container = document.getElementById('myMissions');
-  
-  if (!userData.missions || userData.missions.length === 0) {
+  if (!container) return;
+
+  const missions = Array.isArray(userData?.missions)
+    ? userData.missions.map(normalizeMissionRecord).filter(Boolean)
+    : [];
+
+  if (missions.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
-        <div class="empty-state-icon">🎯</div>
+        <div class="empty-state-icon">&#128188;</div>
         <h4 class="empty-state-title">No Active Missions</h4>
         <p class="empty-state-message">You haven't joined any missions yet. Check available missions below to get started.</p>
       </div>
     `;
   } else {
-    container.innerHTML = '<div class="mission-list">' + userData.missions.map(mission => `
+    container.innerHTML = '<div class="mission-list">' + missions.map(mission => `
       <div class="mission-item">
         <div class="mission-header">
           <div class="mission-title">${escapeHtml(mission.title)}</div>
           <span class="status-badge status-${mission.status}">${mission.status}</span>
         </div>
         <div class="mission-meta">
-          Mission #${mission.mission_id} • Role: ${escapeHtml(mission.assigned_role || 'Pending')}
-          ${mission.assigned_nft_name ? ` • NFT: ${escapeHtml(mission.assigned_nft_name)}` : ''}
-          ${mission.points_awarded > 0 ? ` • <span style="color: var(--success);">+${mission.points_awarded} pts</span>` : ''}
+          Mission #${escapeHtml(mission.missionId || '?')} | Mode: ${escapeHtml(mission.mode || 'solo')}
+          | Slots: ${mission.filledSlots}/${mission.totalSlots}
+          ${mission.assignedRole ? ` | Role: ${escapeHtml(mission.assignedRole)}` : ''}
+          ${mission.assignedNftName ? ` | NFT: ${escapeHtml(mission.assignedNftName)}` : ''}
+          ${mission.pointsAwarded > 0 ? ` | <span style="color: var(--success);">+${mission.pointsAwarded}</span>` : ''}
+          ${mission.endsAt ? ` | Ends ${escapeHtml(new Date(mission.endsAt).toLocaleString())}` : ''}
         </div>
       </div>
     `).join('') + '</div>';
   }
-
-  loadAvailableMissions();
 }
 
 async function loadAvailableMissions() {
   const container = document.getElementById('availableMissions');
-  
+  if (!container) return;
+
   try {
     const endpoint = buildPublicV1Url('/api/public/v1/missions/active', { requireGuild: true });
     if (!endpoint) {
       container.innerHTML = `
         <div class="empty-state">
-          <div class="empty-state-icon">🧭</div>
+          <div class="empty-state-icon">&#128269;</div>
           <h4 class="empty-state-title">Select a Server</h4>
           <p class="empty-state-message">Pick your server first to view active missions.</p>
         </div>
@@ -2930,12 +2956,12 @@ async function loadAvailableMissions() {
 
     const response = await fetch(endpoint, { credentials: 'include' });
     const data = await response.json();
-    const missions = data?.data?.missions || data?.missions || [];
-    
+    const missions = (data?.data?.missions || data?.missions || []).map(normalizeMissionRecord).filter(Boolean);
+
     if (!data.success || missions.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
-          <div class="empty-state-icon">🗺️</div>
+          <div class="empty-state-icon">&#127919;</div>
           <h4 class="empty-state-title">No Missions Available</h4>
           <p class="empty-state-message">Check back later for new mission opportunities.</p>
         </div>
@@ -2952,8 +2978,10 @@ async function loadAvailableMissions() {
         <div class="mission-meta" style="margin-top: var(--space-3);">
           ${mission.description ? `<p style="color: var(--text-secondary); margin-bottom: var(--space-2);">${escapeHtml(mission.description)}</p>` : ''}
           <div style="display: flex; gap: var(--space-4); flex-wrap: wrap; margin-top: var(--space-2);">
-            <span>🎯 Slots: ${mission.filledSlots || 0}/${mission.totalSlots}</span>
-            <span>💎 Reward: ${mission.rewardPoints} points</span>
+            <span>Slots: ${mission.filledSlots || 0}/${mission.totalSlots || 0}</span>
+            <span>Streetcredit: ${mission.rewardStreetcredit || 0}</span>
+            <span>XP: ${mission.rewardXp || 0}</span>
+            ${mission.endsAt ? `<span>Ends: ${escapeHtml(new Date(mission.endsAt).toLocaleString())}</span>` : ''}
           </div>
         </div>
       </div>
@@ -2963,12 +2991,357 @@ async function loadAvailableMissions() {
     container.innerHTML = `
       <div class="error-state">
         <div class="error-title">
-          <span>⚠️</span>
+          <span>&#9888;</span>
           <span>Failed to Load Missions</span>
         </div>
         <div class="error-message">Unable to fetch available missions. Please try refreshing the page.</div>
       </div>
     `;
+  }
+}
+
+function populateHeistTemplateSelectors(templates) {
+  const spawnSelect = document.getElementById('heistSpawnTemplateId');
+  if (!spawnSelect) return;
+  spawnSelect.innerHTML = '';
+  const list = Array.isArray(templates) ? templates : [];
+  if (!list.length) {
+    spawnSelect.innerHTML = '<option value="">No templates</option>';
+    return;
+  }
+  list.forEach((template) => {
+    const option = document.createElement('option');
+    option.value = String(template.id);
+    option.textContent = `#${template.id} ${template.name || 'Unnamed'} (${template.mode || 'solo'})`;
+    spawnSelect.appendChild(option);
+  });
+}
+
+function renderHeistTemplateList(templates) {
+  const wrap = document.getElementById('heistTemplateList');
+  if (!wrap) return;
+  const list = Array.isArray(templates) ? templates : [];
+  if (!list.length) {
+    wrap.innerHTML = '<p style="color:var(--text-secondary);font-size:0.9em;">No templates configured yet.</p>';
+    return;
+  }
+  wrap.innerHTML = list.map((template) => `
+    <div style="border:1px solid var(--border-color);border-radius:10px;padding:10px;background:rgba(15,23,42,0.35);">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;">
+        <div>
+          <div style="font-weight:600;color:var(--text-primary);">#${template.id} ${escapeHtml(template.name || 'Unnamed')}</div>
+          <div style="font-size:0.85em;color:var(--text-secondary);margin-top:4px;">
+            ${escapeHtml(template.mode || 'solo')} | slots ${Number(template.required_slots || 0)}/${Number(template.total_slots || 0)} | duration ${Number(template.duration_minutes || 0)}m
+            | xp ${Number(template.base_xp_reward || 0)} | streetcredit ${Number(template.base_streetcredit_reward || 0)} | weight ${Number(template.spawn_weight || 0)}
+          </div>
+        </div>
+        <button class="btn-secondary btn-sm" onclick="deleteHeistTemplate(${Number(template.id)})">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderHeistMissionOps(missions) {
+  const wrap = document.getElementById('heistActiveMissionOps');
+  if (!wrap) return;
+  const list = (Array.isArray(missions) ? missions : []).map(normalizeMissionRecord).filter(Boolean);
+  if (!list.length) {
+    wrap.innerHTML = '<p style="color:var(--text-secondary);font-size:0.9em;">No recruiting/active missions right now.</p>';
+    return;
+  }
+  wrap.innerHTML = list.map((mission) => `
+    <div style="border:1px solid var(--border-color);border-radius:10px;padding:10px;background:rgba(15,23,42,0.35);">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;">
+        <div>
+          <div style="font-weight:600;color:var(--text-primary);">#${escapeHtml(mission.missionId || '?')} ${escapeHtml(mission.title || 'Untitled')}</div>
+          <div style="font-size:0.85em;color:var(--text-secondary);margin-top:4px;">
+            ${escapeHtml(mission.status)} | slots ${mission.filledSlots}/${mission.totalSlots}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn-secondary btn-sm" onclick="resolveHeistMission('${escapeJsString(mission.missionId || '')}')">Resolve</button>
+          <button class="btn-secondary btn-sm" onclick="cancelHeistMission('${escapeJsString(mission.missionId || '')}')">Cancel</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function loadHeistAdminPanel() {
+  const panel = document.getElementById('heistAdminPanel');
+  if (!panel) return;
+  if (!(isAdmin || isSuperadmin) || !activeGuildId) {
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = '';
+
+  try {
+    const headers = buildTenantRequestHeaders();
+    const [configRes, templatesRes, missionsRes, channelsRes] = await Promise.all([
+      fetch('/api/admin/heist/config', { credentials: 'include', headers }),
+      fetch('/api/admin/heist/templates', { credentials: 'include', headers }),
+      fetch('/api/admin/heist/missions?statuses=recruiting,active&limit=50', { credentials: 'include', headers }),
+      fetch('/api/admin/discord/channels', { credentials: 'include', headers }),
+    ]);
+    const [configJson, templatesJson, missionsJson, channelsJson] = await Promise.all([
+      configRes.json(),
+      templatesRes.json(),
+      missionsRes.json(),
+      channelsRes.json(),
+    ]);
+
+    if (!configRes.ok || !configJson.success) {
+      throw new Error(configJson?.message || configJson?.error?.message || 'Failed to load mission config');
+    }
+
+    const config = configJson?.data?.config || {};
+    const templates = templatesJson?.success ? (templatesJson?.data?.templates || []) : [];
+    const missions = missionsJson?.success ? (missionsJson?.data?.missions || []) : [];
+    const channels = channelsJson?.success ? (channelsJson?.channels || channelsJson?.data?.channels || []) : [];
+    window._heistAdminTemplates = templates;
+
+    populateChannelSelects(
+      ['heistCfgMissionFeedChannel', 'heistCfgMissionLogChannel', 'heistCfgVaultLogChannel'],
+      channels,
+      {
+        mission_feed_channel_id: config.mission_feed_channel_id || '',
+        mission_log_channel_id: config.mission_log_channel_id || '',
+        vault_log_channel_id: config.vault_log_channel_id || '',
+      },
+      ['mission_feed_channel_id', 'mission_log_channel_id', 'vault_log_channel_id']
+    );
+
+    const setValue = (id, value) => {
+      const element = document.getElementById(id);
+      if (!element) return;
+      element.value = value === undefined || value === null ? '' : String(value);
+    };
+    const setChecked = (id, value) => {
+      const element = document.getElementById(id);
+      if (element) element.checked = !!value;
+    };
+
+    setChecked('heistCfgEnabled', Number(config.enabled || 0) === 1);
+    setValue('heistCfgModuleName', config.module_display_name || config.moduleDisplayName || 'Missions');
+    setValue('heistCfgXpLabel', config.xp_label || 'XP');
+    setValue('heistCfgStreetLabel', config.streetcredit_label || 'Streetcredit');
+    setValue('heistCfgTaskLabel', config.task_label || 'Jobs');
+    setChecked('heistCfgSpawnEnabled', Number(config.mission_spawn_enabled || 0) === 1);
+    setValue('heistCfgSpawnInterval', Number(config.spawn_interval_minutes || 180));
+    setValue('heistCfgMaxActive', Number(config.max_active_missions || 5));
+    setValue('heistCfgDefaultDuration', Number(config.default_duration_minutes || 1440));
+    setValue('heistCfgDefaultMaxNfts', Number(config.default_max_nfts_per_user || 2));
+
+    populateHeistTemplateSelectors(templates);
+    renderHeistTemplateList(templates);
+    renderHeistMissionOps(missions);
+  } catch (error) {
+    console.error('[Missions] Failed to load admin panel:', error);
+    showError(error?.message || 'Failed to load missions admin panel.');
+  }
+}
+
+function getHeistConfigInputValue(id, fallback = '') {
+  const element = document.getElementById(id);
+  if (!element) return fallback;
+  return String(element.value || '').trim();
+}
+
+function getHeistConfigNumericValue(id, fallback, min, max) {
+  const raw = Number(getHeistConfigInputValue(id, String(fallback)));
+  if (!Number.isFinite(raw)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(raw)));
+}
+
+async function saveHeistConfig() {
+  if (!(isAdmin || isSuperadmin) || !activeGuildId) {
+    showError('Admin access and active server are required.');
+    return;
+  }
+  try {
+    const payload = {
+      enabled: !!document.getElementById('heistCfgEnabled')?.checked,
+      module_display_name: getHeistConfigInputValue('heistCfgModuleName', 'Missions'),
+      xp_label: getHeistConfigInputValue('heistCfgXpLabel', 'XP'),
+      streetcredit_label: getHeistConfigInputValue('heistCfgStreetLabel', 'Streetcredit'),
+      task_label: getHeistConfigInputValue('heistCfgTaskLabel', 'Jobs'),
+      mission_feed_channel_id: getHeistConfigInputValue('heistCfgMissionFeedChannel', ''),
+      mission_log_channel_id: getHeistConfigInputValue('heistCfgMissionLogChannel', ''),
+      vault_log_channel_id: getHeistConfigInputValue('heistCfgVaultLogChannel', ''),
+      mission_spawn_enabled: !!document.getElementById('heistCfgSpawnEnabled')?.checked,
+      spawn_interval_minutes: getHeistConfigNumericValue('heistCfgSpawnInterval', 180, 15, 10080),
+      max_active_missions: getHeistConfigNumericValue('heistCfgMaxActive', 5, 1, 1000),
+      default_duration_minutes: getHeistConfigNumericValue('heistCfgDefaultDuration', 1440, 15, 10080),
+      default_max_nfts_per_user: getHeistConfigNumericValue('heistCfgDefaultMaxNfts', 2, 1, 10),
+    };
+
+    const res = await fetch('/api/admin/heist/config', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || json?.error?.message || 'Failed to save missions settings');
+    }
+    showSuccess('Missions settings saved.');
+    await loadHeistAdminPanel();
+  } catch (error) {
+    console.error('[Missions] save config failed:', error);
+    showError(error?.message || 'Failed to save missions settings.');
+  }
+}
+
+async function createHeistTemplate() {
+  if (!(isAdmin || isSuperadmin) || !activeGuildId) {
+    showError('Admin access and active server are required.');
+    return;
+  }
+  try {
+    const payload = {
+      name: getHeistConfigInputValue('heistTplName', ''),
+      description: getHeistConfigInputValue('heistTplDescription', ''),
+      mode: getHeistConfigInputValue('heistTplMode', 'solo') || 'solo',
+      duration_minutes: getHeistConfigNumericValue('heistTplDuration', 1440, 15, 10080),
+      required_slots: getHeistConfigNumericValue('heistTplRequiredSlots', 1, 1, 100),
+      total_slots: getHeistConfigNumericValue('heistTplTotalSlots', 1, 1, 100),
+      max_nfts_per_user: getHeistConfigNumericValue('heistTplMaxNfts', 2, 1, 10),
+      base_xp_reward: getHeistConfigNumericValue('heistTplXpReward', 25, 1, 100000),
+      base_streetcredit_reward: getHeistConfigNumericValue('heistTplStreetReward', 25, 1, 100000),
+      spawn_weight: getHeistConfigNumericValue('heistTplSpawnWeight', 1, 1, 1000),
+    };
+    if (!payload.name || !payload.description) {
+      showError('Template name and description are required.');
+      return;
+    }
+
+    const res = await fetch('/api/admin/heist/templates', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || json?.error?.message || 'Failed to create template');
+    }
+    showSuccess('Mission template created.');
+    ['heistTplName', 'heistTplDescription'].forEach((id) => {
+      const element = document.getElementById(id);
+      if (element) element.value = '';
+    });
+    await loadHeistAdminPanel();
+  } catch (error) {
+    console.error('[Missions] create template failed:', error);
+    showError(error?.message || 'Failed to create mission template.');
+  }
+}
+
+async function deleteHeistTemplate(templateId) {
+  const normalized = Number(templateId);
+  if (!Number.isFinite(normalized) || normalized <= 0) return;
+  if (!confirm(`Delete template #${normalized}?`)) return;
+  try {
+    const res = await fetch(`/api/admin/heist/templates/${encodeURIComponent(String(normalized))}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: buildTenantRequestHeaders(),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || json?.error?.message || 'Failed to delete template');
+    }
+    showSuccess(`Template #${normalized} deleted.`);
+    await loadHeistAdminPanel();
+  } catch (error) {
+    console.error('[Missions] delete template failed:', error);
+    showError(error?.message || 'Failed to delete template.');
+  }
+}
+
+async function spawnHeistMissionNow() {
+  const select = document.getElementById('heistSpawnTemplateId');
+  const templateId = Number(select?.value || 0);
+  if (!Number.isFinite(templateId) || templateId <= 0) {
+    showError('Select a template to spawn.');
+    return;
+  }
+  try {
+    const res = await fetch('/api/admin/heist/missions/spawn-now', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({ templateId }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || json?.error?.message || 'Failed to spawn mission');
+    }
+    showSuccess(`Mission spawned from template #${templateId}.`);
+    await loadAvailableMissions();
+    await loadHeistAdminPanel();
+  } catch (error) {
+    console.error('[Missions] spawn failed:', error);
+    showError(error?.message || 'Failed to spawn mission.');
+  }
+}
+
+async function resolveHeistMission(missionId) {
+  const id = String(missionId || '').trim();
+  if (!id) return;
+  if (!confirm(`Resolve mission ${id} now?`)) return;
+  try {
+    const res = await fetch(`/api/admin/heist/missions/${encodeURIComponent(id)}/resolve`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: buildTenantRequestHeaders(),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || json?.error?.message || 'Failed to resolve mission');
+    }
+    showSuccess(`Mission ${id} resolved.`);
+    await loadAvailableMissions();
+    await loadHeistAdminPanel();
+  } catch (error) {
+    console.error('[Missions] resolve failed:', error);
+    showError(error?.message || 'Failed to resolve mission.');
+  }
+}
+
+async function cancelHeistMission(missionId) {
+  const id = String(missionId || '').trim();
+  if (!id) return;
+  if (!confirm(`Cancel mission ${id}?`)) return;
+  try {
+    const res = await fetch(`/api/admin/heist/missions/${encodeURIComponent(id)}/cancel`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: buildTenantRequestHeaders(),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || json?.error?.message || 'Failed to cancel mission');
+    }
+    showSuccess(`Mission ${id} cancelled.`);
+    await loadAvailableMissions();
+    await loadHeistAdminPanel();
+  } catch (error) {
+    console.error('[Missions] cancel failed:', error);
+    showError(error?.message || 'Failed to cancel mission.');
+  }
+}
+
+async function loadHeistSection() {
+  renderMissions();
+  await loadAvailableMissions();
+  if (isAdmin || isSuperadmin) {
+    await loadHeistAdminPanel();
+  } else {
+    const panel = document.getElementById('heistAdminPanel');
+    if (panel) panel.style.display = 'none';
   }
 }
 
@@ -3171,7 +3544,7 @@ function switchSection(sectionName, options = {}) {
   } else if (sectionName === 'admin') {
     loadEnvStatusBar();
   } else if (sectionName === 'heist' && userData && heistEnabled) {
-    loadAvailableMissions();
+    loadHeistSection();
   } else if (sectionName === 'self-serve-roles') {
     loadSelfServeRolesPublic();
   } else if (sectionName === 'ticketing') {
@@ -4342,7 +4715,7 @@ const TENANT_MODULE_LABELS = {
   aiassistant: 'AI Assistant',
   invites: 'Invite Tracker',
   minigames: 'Minigames',
-  heist: 'Heist',
+  heist: 'Missions',
   ticketing: 'Ticketing',
   nfttracker: 'NFT Tracker',
   tokentracker: 'Token Tracker',
@@ -6607,13 +6980,17 @@ async function loadAdminHelpView() {
       { name: '/points redeem', desc: 'Redeem item', options: 'item_id (required)', example: '/points redeem item_id:4' },
       { name: '/points admin', desc: 'Manage points and shop', options: 'action(required: grant/deduct/add-item/remove-item/config) + optional user/amount/reason/value/item_id', example: '/points admin action:grant user:@member amount:50 reason:"Event"' }
     ])}
-    ${cmdSection('Heist', 'HEIST', [
-      { name: '/heist view', desc: 'View available missions', options: '-', example: '/heist view' },
-      { name: '/heist signup', desc: 'Sign up for mission', options: 'mission_id, role (required)', example: '/heist signup mission_id:H-001 role:hacker' },
-      { name: '/heist status', desc: 'View mission status', options: '-', example: '/heist status' },
-      { name: '/heist admin create', desc: 'Create mission', options: 'title, description, slots, reward (required)', example: '/heist admin create title:"Bank Job" description:"..." slots:4 reward:100' },
-      { name: '/heist admin list', desc: 'List missions', options: '-', example: '/heist admin list' },
-      { name: '/heist admin cancel', desc: 'Cancel mission', options: 'mission_id, confirm (required)', example: '/heist admin cancel mission_id:H-001 confirm:true' }
+    ${cmdSection('Missions', 'MISSIONS', [
+      { name: '/heist board', desc: 'View recruiting and active missions', options: '-', example: '/heist board' },
+      { name: '/heist profile', desc: 'Show your missions profile (XP/Streetcredit/rank)', options: '-', example: '/heist profile' },
+      { name: '/heist join', desc: 'Join mission with optional NFT mints', options: 'mission_id(required), mints(optional comma-separated)', example: '/heist join mission_id:M-8E2A47 mints:mint1,mint2' },
+      { name: '/heist leave', desc: 'Leave a recruiting mission', options: 'mission_id(required)', example: '/heist leave mission_id:M-8E2A47' },
+      { name: '/heist admin panel', desc: 'Post missions action panel with buttons', options: 'channel(optional)', example: '/heist admin panel channel:#missions' },
+      { name: '/heist admin templates', desc: 'List mission templates', options: '-', example: '/heist admin templates' },
+      { name: '/heist admin template-create', desc: 'Create mission template', options: 'name, description(required) + mode/duration/rewards(optional)', example: '/heist admin template-create name:"Vault Run" description:"..." mode:coop total_slots:8 required_slots:4' },
+      { name: '/heist admin spawn-now', desc: 'Spawn mission from template now', options: 'template_id(required)', example: '/heist admin spawn-now template_id:3' },
+      { name: '/heist admin resolve', desc: 'Resolve mission immediately', options: 'mission_id(required)', example: '/heist admin resolve mission_id:M-8E2A47' },
+      { name: '/heist admin cancel', desc: 'Cancel mission and release locks', options: 'mission_id(required), confirm(required)', example: '/heist admin cancel mission_id:M-8E2A47 confirm:true' }
     ])}
     ${cmdSection('Battle and Games', 'GAMES', [
       { name: '/battle create', desc: 'Create battle lobby', options: 'max_players, required/excluded roles, era', example: '/battle create max_players:20 era:mafia' },
@@ -14896,3 +15273,4 @@ async function loadEngagementRedemptions() {
     el.innerHTML = '<p style="color:var(--error);">Failed to load redemptions.</p>';
   }
 }
+

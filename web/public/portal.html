@@ -414,7 +414,7 @@
                 <div style="font-size:2em; font-weight:700; color:#86efac;" id="nftsStat">0</div>
               </div>
               <div id="heistPointsCard" style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px; display:none;">
-                <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:8px;">Heist Points</div>
+                <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:8px;">Mission Points</div>
                 <div style="font-size:2em; font-weight:700; color:#fcd34d;" id="pointsStat">0</div>
               </div>
             </div>
@@ -610,7 +610,7 @@
           </div>
         </section>
 
-        <!-- Heist Section -->
+        <!-- Missions Section -->
         <section id="section-heist" class="content-section">
           <header class="section-header">
             <h2>Missions</h2>
@@ -635,6 +635,118 @@
                 <div class="loading-spinner"></div>
                 <p class="loading-text">Loading missions...</p>
               </div>
+            </div>
+          </div>
+
+          <div id="heistAdminPanel" class="card" style="display:none;">
+            <h3>Mission Module Settings</h3>
+            <p style="color:var(--text-secondary);margin-bottom:16px;">Configure scheduler, labels, channels, and templates for this server.</p>
+            <div class="settings-grid">
+              <div class="settings-row">
+                <div class="settings-info">
+                  <div class="settings-label">Enable Missions</div>
+                  <div class="settings-desc">Master toggle for mission lifecycle</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="heistCfgEnabled">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="settings-row">
+                <div class="settings-info"><div class="settings-label">Display Name</div><div class="settings-desc">Defaults to Missions</div></div>
+                <input id="heistCfgModuleName" type="text" class="input-sm" style="width:180px;">
+              </div>
+              <div class="settings-row">
+                <div class="settings-info"><div class="settings-label">XP Label</div><div class="settings-desc">Progression points label</div></div>
+                <input id="heistCfgXpLabel" type="text" class="input-sm" style="width:120px;">
+              </div>
+              <div class="settings-row">
+                <div class="settings-info"><div class="settings-label">Streetcredit Label</div><div class="settings-desc">Reward currency label</div></div>
+                <input id="heistCfgStreetLabel" type="text" class="input-sm" style="width:160px;">
+              </div>
+              <div class="settings-row">
+                <div class="settings-info"><div class="settings-label">Task Label</div><div class="settings-desc">Job/Task naming</div></div>
+                <input id="heistCfgTaskLabel" type="text" class="input-sm" style="width:140px;">
+              </div>
+              <div class="settings-row">
+                <div class="settings-info"><div class="settings-label">Mission Feed Channel</div><div class="settings-desc">Spawned/started updates</div></div>
+                <select id="heistCfgMissionFeedChannel" class="input-sm" style="width:220px;"></select>
+              </div>
+              <div class="settings-row">
+                <div class="settings-info"><div class="settings-label">Mission Log Channel</div><div class="settings-desc">Completed/failed/cancelled logs</div></div>
+                <select id="heistCfgMissionLogChannel" class="input-sm" style="width:220px;"></select>
+              </div>
+              <div class="settings-row">
+                <div class="settings-info"><div class="settings-label">Vault Log Channel</div><div class="settings-desc">Manual redemption logs</div></div>
+                <select id="heistCfgVaultLogChannel" class="input-sm" style="width:220px;"></select>
+              </div>
+              <div class="settings-row">
+                <div class="settings-info"><div class="settings-label">Enable Random Spawn</div><div class="settings-desc">Template weighted scheduler</div></div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="heistCfgSpawnEnabled">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="settings-row">
+                <div class="settings-info"><div class="settings-label">Spawn Interval (minutes)</div><div class="settings-desc">Minimum time between random spawns</div></div>
+                <input id="heistCfgSpawnInterval" type="number" min="15" max="10080" class="input-sm" style="width:110px;">
+              </div>
+              <div class="settings-row">
+                <div class="settings-info"><div class="settings-label">Max Active Missions</div><div class="settings-desc">Concurrent recruiting/active cap</div></div>
+                <input id="heistCfgMaxActive" type="number" min="1" max="1000" class="input-sm" style="width:100px;">
+              </div>
+              <div class="settings-row">
+                <div class="settings-info"><div class="settings-label">Default Duration (minutes)</div><div class="settings-desc">Template fallback duration</div></div>
+                <input id="heistCfgDefaultDuration" type="number" min="15" max="10080" class="input-sm" style="width:110px;">
+              </div>
+              <div class="settings-row">
+                <div class="settings-info"><div class="settings-label">Default Max NFTs/User</div><div class="settings-desc">Default lock limit per user</div></div>
+                <input id="heistCfgDefaultMaxNfts" type="number" min="1" max="10" class="input-sm" style="width:90px;">
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
+              <button class="btn-primary" onclick="saveHeistConfig()">Save Missions Settings</button>
+              <button class="btn-secondary" onclick="loadHeistAdminPanel()">Refresh</button>
+            </div>
+
+            <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
+              <h4 style="margin-bottom:12px;">Create Template</h4>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
+                <input id="heistTplName" type="text" class="input-sm" placeholder="Template name">
+                <input id="heistTplDescription" type="text" class="input-sm" placeholder="Description">
+                <select id="heistTplMode" class="input-sm">
+                  <option value="solo">Solo</option>
+                  <option value="coop">Co-op</option>
+                </select>
+                <input id="heistTplDuration" type="number" min="15" max="10080" class="input-sm" placeholder="Duration (min)">
+                <input id="heistTplRequiredSlots" type="number" min="1" max="100" class="input-sm" placeholder="Required slots">
+                <input id="heistTplTotalSlots" type="number" min="1" max="100" class="input-sm" placeholder="Total slots">
+                <input id="heistTplMaxNfts" type="number" min="1" max="10" class="input-sm" placeholder="Max NFTs/user">
+                <input id="heistTplXpReward" type="number" min="1" max="100000" class="input-sm" placeholder="XP reward">
+                <input id="heistTplStreetReward" type="number" min="1" max="100000" class="input-sm" placeholder="Streetcredit reward">
+                <input id="heistTplSpawnWeight" type="number" min="1" max="1000" class="input-sm" placeholder="Spawn weight">
+              </div>
+              <div style="margin-top:10px;">
+                <button class="btn-primary" onclick="createHeistTemplate()">Create Template</button>
+              </div>
+            </div>
+
+            <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
+              <h4 style="margin-bottom:12px;">Spawn Mission</h4>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                <select id="heistSpawnTemplateId" class="input-sm" style="min-width:220px;"></select>
+                <button class="btn-primary" onclick="spawnHeistMissionNow()">Spawn Now</button>
+              </div>
+            </div>
+
+            <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
+              <h4 style="margin-bottom:12px;">Active Mission Operations</h4>
+              <div id="heistActiveMissionOps" style="display:grid;gap:8px;"></div>
+            </div>
+
+            <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
+              <h4 style="margin-bottom:12px;">Templates</h4>
+              <div id="heistTemplateList" style="display:grid;gap:8px;"></div>
             </div>
           </div>
         </section>
@@ -1134,7 +1246,7 @@
             </div>
             <div class="card help-card" onclick="toggleHelp('module-missions')">
               <h3>Module: Missions</h3>
-              <p>Heist mission lifecycle and participant operations</p>
+              <p>Missions lifecycle and participant operations</p>
             </div>
             <div class="card help-card" onclick="toggleHelp('module-selfserveroles')">
               <h3>Module: Self-Serve Roles</h3>
@@ -1290,7 +1402,7 @@
                     <tr><td>Engagement</td><td>Earn points and redeem rewards.</td><td>Maintain economy and reward controls.</td><td>Tune global reward policy and limits.</td></tr>
                     <tr><td>AI Assistant</td><td>Ask questions and get contextual help.</td><td>Tune prompts, scope, and safeguards.</td><td>Approve model policy and guardrails.</td></tr>
                     <tr><td>Minigames</td><td>Join sessions and compete.</td><td>Start, moderate, and monitor game runs.</td><td>Manage tenancy defaults and enablement.</td></tr>
-                    <tr><td>Missions (Heist)</td><td>Sign up, track status, and participate.</td><td>Create and operate mission lifecycle.</td><td>Control mission defaults at scale.</td></tr>
+                    <tr><td>Missions</td><td>Sign up, track status, and participate.</td><td>Create and operate mission lifecycle.</td><td>Control mission defaults at scale.</td></tr>
                     <tr><td>Self-Serve Roles</td><td>Claim optional roles instantly.</td><td>Curate role menu and constraints.</td><td>Set governance policy for role menus.</td></tr>
                     <tr><td>Branding</td><td>Receive branded tenant experience.</td><td>Apply server-level branding values.</td><td>Define parent-brand defaults and locks.</td></tr>
                     <tr><td>Help Center</td><td>Follow docs and resolve blockers.</td><td>Share runbooks with moderators.</td><td>Maintain cross-tenant documentation quality.</td></tr>
@@ -1512,16 +1624,17 @@
 
           <div id="help-module-missions" class="help-content" style="display:none;">
             <div class="card">
-              <h3>Module: Missions (Heist)</h3>
+              <h3>Module: Missions</h3>
               <div class="help-section">
                 <h4>What It Does</h4>
-                <p>Supports mission publishing, signup flow, status visibility, and admin lifecycle actions for heist operations.</p>
+                <p>Supports randomized solo/co-op missions with NFT locking, progression rewards, and full admin lifecycle controls.</p>
               </div>
               <div class="help-section">
                 <h4>Commands</h4>
                 <ul>
-                  <li><code>/heist view</code>, <code>/heist signup</code>, <code>/heist status</code></li>
-                  <li><code>/heist admin create</code>, <code>/heist admin list</code>, <code>/heist admin cancel</code></li>
+                  <li><code>/heist board</code>, <code>/heist profile</code>, <code>/heist join</code>, <code>/heist leave</code></li>
+                  <li><code>/heist admin panel</code>, <code>/heist admin templates</code>, <code>/heist admin template-create</code></li>
+                  <li><code>/heist admin spawn-now</code>, <code>/heist admin resolve</code>, <code>/heist admin cancel</code></li>
                 </ul>
               </div>
             </div>
@@ -1762,7 +1875,7 @@
                   <li><strong>Ticketing:</strong> category-based ticketing, handler/ping role assignment, templates, claim/reopen/close flows, auto-close automation.</li>
                   <li><strong>Engagement:</strong> points economy, leaderboard/history, reward shop, redemption and admin grant/deduct flows.</li>
                   <li><strong>Games:</strong> battle royale + standalone mini-games + cross-game Game Night sessions.</li>
-                  <li><strong>Missions:</strong> Heist mission lifecycle and participant role assignment.</li>
+                  <li><strong>Missions:</strong> Mission lifecycle and participant role assignment.</li>
                 </ul>
               </div>
 
@@ -1909,13 +2022,17 @@
               </div>
 
               <div class="help-section">
-                <h4>Heist Missions</h4>
+                <h4>Missions</h4>
                 <ul>
-                  <li><code>/heist view</code></li>
-                  <li><code>/heist signup</code></li>
-                  <li><code>/heist status</code></li>
-                  <li><code>/heist admin create</code></li>
-                  <li><code>/heist admin list</code></li>
+                  <li><code>/heist board</code></li>
+                  <li><code>/heist profile</code></li>
+                  <li><code>/heist join</code></li>
+                  <li><code>/heist leave</code></li>
+                  <li><code>/heist admin panel</code></li>
+                  <li><code>/heist admin templates</code></li>
+                  <li><code>/heist admin template-create</code></li>
+                  <li><code>/heist admin spawn-now</code></li>
+                  <li><code>/heist admin resolve</code></li>
                   <li><code>/heist admin cancel</code></li>
                 </ul>
               </div>
@@ -2400,7 +2517,7 @@
               </div>
             </div>
             <div id="settingsTab-heist" class="settings-tab-pane" style="display:none;">
-              <div class="card"><p style="color:var(--text-secondary);">Heist settings are configured via the Discord bot commands or will be available in a future update.</p></div>
+              <div class="card"><p style="color:var(--text-secondary);">Missions settings are configured via admin APIs and Discord commands.</p></div>
             </div>
             <div id="settingsTab-selfserve" class="settings-tab-pane" style="display:none;">
               <!-- adminSelfServeRolesCard content loaded here dynamically -->

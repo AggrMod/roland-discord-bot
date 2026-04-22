@@ -16,6 +16,7 @@ function createAdminGovernanceMissionsRouter({
   countActiveGovernanceProposals,
   entitlementService,
   missionService,
+  heistService,
   aiAssistantService,
   getClient,
 }) {
@@ -377,6 +378,304 @@ function createAdminGovernanceMissionsRouter({
       return res.json(toSuccessResponse({ message: 'Mission completed and points awarded' }));
     } catch (routeError) {
       logger.error('Error completing mission:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/admin/heist/config', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      if (!heistService) {
+        return res.status(500).json(toErrorResponse('Heist service unavailable', 'CONFIG_ERROR'));
+      }
+      const config = heistService.getConfig(req.guildId || '');
+      return res.json(toSuccessResponse({ config }));
+    } catch (routeError) {
+      logger.error('Error fetching heist config:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.put('/api/admin/heist/config', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      if (!heistService) {
+        return res.status(500).json(toErrorResponse('Heist service unavailable', 'CONFIG_ERROR'));
+      }
+      const result = heistService.updateConfig(req.guildId || '', req.body || {});
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to update heist config', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error updating heist config:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/admin/heist/ladder', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const ladder = heistService?.getLadder(req.guildId || '') || [];
+      return res.json(toSuccessResponse({ ladder }));
+    } catch (routeError) {
+      logger.error('Error fetching heist ladder:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.put('/api/admin/heist/ladder', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const ladder = Array.isArray(req.body?.ladder) ? req.body.ladder : [];
+      const result = heistService?.setLadder(req.guildId || '', ladder);
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to update ladder', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error updating heist ladder:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/admin/heist/templates', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const includeDisabled = String(req.query.includeDisabled || '').trim() === '1';
+      const templates = heistService?.listTemplates(req.guildId || '', { includeDisabled }) || [];
+      return res.json(toSuccessResponse({ templates }));
+    } catch (routeError) {
+      logger.error('Error listing heist templates:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/api/admin/heist/templates', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const result = heistService?.createTemplate(req.guildId || '', req.body || {});
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to create template', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error creating heist template:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.put('/api/admin/heist/templates/:id', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const result = heistService?.updateTemplate(req.guildId || '', Number(req.params.id), req.body || {});
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to update template', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error updating heist template:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.delete('/api/admin/heist/templates/:id', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const result = heistService?.deleteTemplate(req.guildId || '', Number(req.params.id));
+      if (!result?.success) {
+        return res.status(404).json(toErrorResponse(result?.message || 'Template not found', 'NOT_FOUND', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error deleting heist template:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/admin/heist/missions', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const statusesRaw = String(req.query.statuses || '').trim();
+      const statuses = statusesRaw ? statusesRaw.split(',').map((item) => item.trim()).filter(Boolean) : null;
+      const missions = heistService?.listMissions(req.guildId || '', {
+        statuses,
+        limit: Number(req.query.limit || 100),
+        offset: Number(req.query.offset || 0),
+      }) || [];
+      return res.json(toSuccessResponse({ missions }));
+    } catch (routeError) {
+      logger.error('Error listing heist missions:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/api/admin/heist/missions/spawn-now', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const templateId = Number(req.body?.templateId || req.body?.template_id || 0);
+      if (!Number.isFinite(templateId) || templateId <= 0) {
+        return res.status(400).json(toErrorResponse('Valid templateId is required', 'VALIDATION_ERROR'));
+      }
+      const result = heistService?.spawnMissionNow(req.guildId || '', templateId, { spawnSource: 'admin' });
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to spawn mission', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error spawning heist mission:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/api/admin/heist/missions/:id/cancel', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const missionId = String(req.params.id || '').trim();
+      const result = heistService?.cancelMission(req.guildId || '', missionId, req.session?.discordUser?.id || null);
+      if (!result?.success) {
+        const lowerMessage = String(result?.message || '').toLowerCase();
+        const statusCode = lowerMessage.includes('not found') ? 404 : 400;
+        return res.status(statusCode).json(toErrorResponse(result?.message || 'Failed to cancel mission', statusCode === 404 ? 'NOT_FOUND' : 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error cancelling heist mission:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/api/admin/heist/missions/:id/resolve', adminAuthMiddleware, async (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const missionId = String(req.params.id || '').trim();
+      const result = await heistService?.resolveMission(req.guildId || '', missionId);
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to resolve mission', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error resolving heist mission:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/admin/heist/trait-bonuses', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const rules = heistService?.listTraitBonusRules(req.guildId || '') || [];
+      return res.json(toSuccessResponse({ rules }));
+    } catch (routeError) {
+      logger.error('Error listing heist trait bonuses:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/api/admin/heist/trait-bonuses', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const result = heistService?.upsertTraitBonusRule(req.guildId || '', req.body || null);
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to save rule', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error creating heist trait bonus rule:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.put('/api/admin/heist/trait-bonuses/:id', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const result = heistService?.upsertTraitBonusRule(req.guildId || '', req.body || null, Number(req.params.id));
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to update rule', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error updating heist trait bonus rule:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.delete('/api/admin/heist/trait-bonuses/:id', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const result = heistService?.deleteTraitBonusRule(req.guildId || '', Number(req.params.id));
+      if (!result?.success) {
+        return res.status(404).json(toErrorResponse(result?.message || 'Rule not found', 'NOT_FOUND', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error deleting heist trait bonus rule:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/admin/heist/vault/items', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const includeDisabled = String(req.query.includeDisabled || '').trim() === '1';
+      const items = heistService?.listVaultItems(req.guildId || '', { includeDisabled }) || [];
+      return res.json(toSuccessResponse({ items }));
+    } catch (routeError) {
+      logger.error('Error listing heist vault items:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/api/admin/heist/vault/items', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const result = heistService?.createVaultItem(req.guildId || '', req.body || {});
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to create vault item', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error creating heist vault item:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.put('/api/admin/heist/vault/items/:id', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const result = heistService?.updateVaultItem(req.guildId || '', Number(req.params.id), req.body || {});
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to update vault item', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error updating heist vault item:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.delete('/api/admin/heist/vault/items/:id', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const result = heistService?.deleteVaultItem(req.guildId || '', Number(req.params.id));
+      if (!result?.success) {
+        return res.status(404).json(toErrorResponse(result?.message || 'Item not found', 'NOT_FOUND', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error deleting heist vault item:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/admin/heist/vault/redemptions', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const redemptions = heistService?.listVaultRedemptions(req.guildId || '', {
+        limit: Number(req.query.limit || 100),
+      }) || [];
+      return res.json(toSuccessResponse({ redemptions }));
+    } catch (routeError) {
+      logger.error('Error listing heist redemptions:', routeError);
       return res.status(500).json(toErrorResponse('Internal server error'));
     }
   });

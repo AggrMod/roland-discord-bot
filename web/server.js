@@ -22,6 +22,7 @@ const walletService = require('../services/walletService');
 const roleService = require('../services/roleService');
 const proposalService = require('../services/proposalService');
 const missionService = require('../services/missionService');
+const heistService = require('../services/heistService');
 const treasuryService = require('../services/treasuryService');
 const microVerifyService = require('../services/microVerifyService');
 const nftActivityService = require('../services/nftActivityService');
@@ -810,6 +811,7 @@ class WebServer {
       tenantService,
       roleService,
       missionService,
+      heistService,
       ticketService,
       walletService,
       proposalService,
@@ -1141,6 +1143,7 @@ class WebServer {
       countActiveGovernanceProposals,
       entitlementService,
       missionService,
+      heistService,
       aiAssistantService,
       getClient: () => this.client,
     }));

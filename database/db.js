@@ -380,10 +380,12 @@ function initDatabase() {
       no_vp INTEGER DEFAULT 0,
       abstain_vp INTEGER DEFAULT 0,
       quorum_threshold INTEGER DEFAULT 25,
+      paused INTEGER DEFAULT 0,
       start_time DATETIME,
       end_time DATETIME,
       message_id TEXT,
       channel_id TEXT,
+      ai_brief TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (creator_id) REFERENCES users(discord_id)
     );
@@ -453,6 +455,7 @@ function initDatabase() {
       reward_points INTEGER DEFAULT 0,
       status TEXT DEFAULT 'recruiting',
       start_time DATETIME,
+      ai_recap TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -1307,6 +1310,7 @@ function initDatabase() {
       username TEXT,
       action_type TEXT NOT NULL,
       points INTEGER NOT NULL DEFAULT 0,
+      channel_id TEXT,
       reference_id TEXT,
       note TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -1695,6 +1699,7 @@ function initDatabase() {
       per_user_daily_limit INTEGER DEFAULT 20,
       safety_filter_enabled INTEGER DEFAULT 1,
       moderation_enabled INTEGER DEFAULT 0,
+      summary_activity_channels TEXT DEFAULT '[]',
       memory_enabled INTEGER DEFAULT 1,
       memory_window_messages INTEGER DEFAULT 6,
       public_persona_key TEXT DEFAULT 'default_public',

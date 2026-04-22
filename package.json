@@ -10,7 +10,8 @@
     "lint": "eslint --config eslint.config.cjs .",
     "audit": "npm audit --production",
     "check:help-parity": "node scripts/check-help-parity.js",
-    "check:release-gate": "node scripts/release-gate.js"
+    "check:release-gate": "node scripts/release-gate.js",
+    "check:missions-smoke": "node tests/test-heist-v1-flow.js"
   },
   "dependencies": {
     "@solana/web3.js": "^1.95.8",

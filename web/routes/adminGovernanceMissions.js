@@ -680,6 +680,27 @@ function createAdminGovernanceMissionsRouter({
     }
   });
 
+  router.put('/api/admin/heist/vault/redemptions/:id', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const redemptionId = Number(req.params.id);
+      const result = heistService?.updateVaultRedemptionStatus(
+        req.guildId || '',
+        redemptionId,
+        req.body || {},
+        req.session?.discordUser?.id || null
+      );
+      if (!result?.success) {
+        const statusCode = String(result?.message || '').toLowerCase().includes('not found') ? 404 : 400;
+        return res.status(statusCode).json(toErrorResponse(result?.message || 'Failed to update redemption', statusCode === 404 ? 'NOT_FOUND' : 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error updating heist redemption status:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   return router;
 }
 

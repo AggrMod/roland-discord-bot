@@ -1881,6 +1881,59 @@ class HeistService {
     }));
   }
 
+  updateVaultRedemptionStatus(guildId, redemptionId, payload = {}, actorUserId = null) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const normalizedRedemptionId = Number(redemptionId);
+    if (!normalizedGuildId) return { success: false, message: 'guildId is required' };
+    if (!Number.isFinite(normalizedRedemptionId) || normalizedRedemptionId <= 0) {
+      return { success: false, message: 'Valid redemptionId is required' };
+    }
+
+    const nextStatus = String(payload.fulfillment_status || payload.fulfillmentStatus || '')
+      .trim()
+      .toLowerCase();
+    const allowedStatuses = new Set(['pending', 'completed', 'cancelled', 'failed']);
+    if (!allowedStatuses.has(nextStatus)) {
+      return { success: false, message: 'fulfillment_status must be pending, completed, cancelled, or failed' };
+    }
+
+    const existing = db.prepare(`
+      SELECT *
+      FROM heist_vault_redemptions
+      WHERE guild_id = ? AND id = ?
+    `).get(normalizedGuildId, normalizedRedemptionId);
+    if (!existing) return { success: false, message: 'Redemption not found' };
+
+    const note = String(payload.note || payload.fulfillment_note || '').trim().slice(0, 1000);
+    const metadata = safeJsonParse(existing.metadata_json, {});
+    const nextMetadata = {
+      ...metadata,
+      lastStatusUpdateBy: actorUserId || null,
+      lastStatusUpdateAt: nowIso(),
+      ...(note ? { fulfillmentNote: note } : {}),
+    };
+
+    const result = db.prepare(`
+      UPDATE heist_vault_redemptions
+      SET
+        fulfillment_status = ?,
+        fulfilled_at = CASE
+          WHEN ? = 'completed' THEN COALESCE(fulfilled_at, CURRENT_TIMESTAMP)
+          ELSE fulfilled_at
+        END,
+        metadata_json = ?
+      WHERE guild_id = ? AND id = ?
+    `).run(
+      nextStatus,
+      nextStatus,
+      safeJsonStringify(nextMetadata, '{}'),
+      normalizedGuildId,
+      normalizedRedemptionId
+    );
+    if (!result.changes) return { success: false, message: 'Redemption not found' };
+    return { success: true };
+  }
+
   async redeemVaultItem(guildId, userId, username, itemId) {
     const normalizedGuildId = normalizeGuildId(guildId);
     const normalizedUserId = normalizeUserId(userId);

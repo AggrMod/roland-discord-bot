@@ -3275,8 +3275,42 @@ function renderHeistRedemptions(redemptions) {
       <div style="color:var(--text-primary);font-weight:600;">#${Number(entry.id)} ${escapeHtml(String(entry.item_name || `Item ${entry.item_id || '-'}`))}</div>
       <div>user ${escapeHtml(String(entry.username || entry.user_id || 'unknown'))} | cost ${Number(entry.cost_streetcredit || 0)} | status ${escapeHtml(String(entry.fulfillment_status || 'pending'))}</div>
       <div>${escapeHtml(new Date(entry.created_at).toLocaleString())}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:center;">
+        <select id="heistRedemptionStatus_${Number(entry.id)}" class="input-sm" style="max-width:160px;">
+          <option value="pending"${String(entry.fulfillment_status || '').toLowerCase() === 'pending' ? ' selected' : ''}>pending</option>
+          <option value="completed"${String(entry.fulfillment_status || '').toLowerCase() === 'completed' ? ' selected' : ''}>completed</option>
+          <option value="cancelled"${String(entry.fulfillment_status || '').toLowerCase() === 'cancelled' ? ' selected' : ''}>cancelled</option>
+          <option value="failed"${String(entry.fulfillment_status || '').toLowerCase() === 'failed' ? ' selected' : ''}>failed</option>
+        </select>
+        <button class="btn-secondary btn-sm" onclick="updateHeistRedemptionStatus(${Number(entry.id)})">Update Status</button>
+      </div>
     </div>
   `).join('');
+}
+
+async function updateHeistRedemptionStatus(redemptionId) {
+  const id = Number(redemptionId);
+  if (!Number.isFinite(id) || id <= 0) return;
+  const statusEl = document.getElementById(`heistRedemptionStatus_${id}`);
+  const nextStatus = String(statusEl?.value || '').trim().toLowerCase();
+  if (!nextStatus) return;
+  try {
+    const res = await fetch(`/api/admin/heist/vault/redemptions/${encodeURIComponent(String(id))}`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({ fulfillment_status: nextStatus }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || json?.error?.message || 'Failed to update redemption');
+    }
+    showSuccess(`Redemption #${id} updated to ${nextStatus}.`);
+    await loadHeistAdminPanel();
+  } catch (error) {
+    console.error('[Missions] update redemption status failed:', error);
+    showError(error?.message || 'Failed to update redemption status.');
+  }
 }
 
 async function createHeistVaultItem() {

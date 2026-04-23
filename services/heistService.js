@@ -2784,6 +2784,15 @@ class HeistService {
       WHERE guild_id = ? AND id = ? AND enabled = 1
     `).get(normalizedGuildId, Number(itemId));
     if (!item) return { success: false, message: 'Vault item not found' };
+    const itemMetadata = safeJsonParse(item.metadata_json, {}) || {};
+    const itemImageUrl = sanitizeImageUrl(
+      itemMetadata.image_url
+      || itemMetadata.imageUrl
+      || itemMetadata.image
+      || itemMetadata.item_image_url
+      || itemMetadata.itemImageUrl
+      || null
+    );
 
     const cost = Math.max(0, Number(item.cost_streetcredit || 0));
     if (Number(profile.total_streetcredit || 0) < cost) {
@@ -2825,9 +2834,22 @@ class HeistService {
         ) VALUES (?, ?, ?, ?, ?, ?, ?)
       `);
       const fulfillmentStatus = String(currentItem.fulfillment_mode || 'manual').toLowerCase() === 'auto' ? 'completed' : 'pending';
+      const currentItemMetadata = safeJsonParse(currentItem.metadata_json, {}) || {};
+      const currentItemImageUrl = sanitizeImageUrl(
+        currentItemMetadata.image_url
+        || currentItemMetadata.imageUrl
+        || currentItemMetadata.image
+        || currentItemMetadata.item_image_url
+        || currentItemMetadata.itemImageUrl
+        || null
+      );
       const meta = {
         reward_type: currentItem.reward_type,
         fulfillment_mode: currentItem.fulfillment_mode,
+        item_category: currentItemMetadata.item_category || currentItemMetadata.source || null,
+        item_mint: currentItemMetadata.mint || null,
+        item_collection: currentItemMetadata.collectionKey || null,
+        item_image_url: currentItemImageUrl || null,
       };
       const redemptionInsert = insertRedemption.run(
         normalizedGuildId,
@@ -2860,9 +2882,36 @@ class HeistService {
     try {
       const fulfillmentMode = String(item.fulfillment_mode || 'manual').trim().toLowerCase();
       if (fulfillmentMode === 'manual') {
+        const { EmbedBuilder } = require('discord.js');
+        const clientProvider = require('../utils/clientProvider');
         const settings = this.getConfig(normalizedGuildId);
         const context = tenantService.getTenantContext(normalizedGuildId);
         const ticketingEnabled = !!context?.modules?.ticketing;
+        const moduleName = getModuleDisplayName('heist', normalizedGuildId);
+        const redemptionEmbed = new EmbedBuilder()
+          .setColor('#f4c430')
+          .setTitle(`${moduleName} Vault Redemption`)
+          .setDescription(`Manual fulfillment requested for **${item.name}**.`)
+          .addFields(
+            { name: 'Member', value: `<@${normalizedUserId}>`, inline: true },
+            { name: 'Cost', value: `${cost} Streetcredit`, inline: true },
+            { name: 'Redemption', value: `#${Number(redemptionRecord?.id || 0)}`, inline: true },
+          )
+          .setTimestamp();
+        if (itemImageUrl) {
+          redemptionEmbed.setImage(itemImageUrl);
+        }
+        const sendRedemptionPanel = async (channelId, mentionMember = false) => {
+          const client = clientProvider.getClient();
+          if (!client || !channelId) return null;
+          const channel = await client.channels.fetch(String(channelId)).catch(() => null);
+          if (!channel || !channel.isTextBased()) return null;
+          return channel.send({
+            content: mentionMember ? `<@${normalizedUserId}>` : undefined,
+            embeds: [redemptionEmbed],
+          }).catch(() => null);
+        };
+
         if (ticketingEnabled) {
           const ticketService = require('./ticketService');
           const engagementConfig = settings?.metadata?.fulfillment_ticket_category_id
@@ -2884,6 +2933,7 @@ class HeistService {
               },
             });
             if (ticketResult?.success) {
+              const panelMessage = await sendRedemptionPanel(ticketResult.channelId, false);
               db.prepare(`
                 UPDATE heist_vault_redemptions
                 SET ticket_channel_id = ?, metadata_json = ?
@@ -2894,33 +2944,27 @@ class HeistService {
                   ...(safeJsonParse(redemptionRecord.metadata_json, {}) || {}),
                   ticketChannelId: ticketResult.channelId || null,
                   ticketNumber: ticketResult.ticketNumber || null,
+                  ticketDetailsMessageId: panelMessage?.id || null,
                 }, '{}'),
                 Number(redemptionRecord.id)
               );
             }
           }
         } else if (settings?.vault_log_channel_id) {
-          const clientProvider = require('../utils/clientProvider');
-          const client = clientProvider.getClient();
-          const channel = client && await client.channels.fetch(String(settings.vault_log_channel_id)).catch(() => null);
-          if (channel && channel.isTextBased()) {
-            const message = await channel.send({
-              content: `Vault redemption pending: user <@${normalizedUserId}> redeemed **${item.name}** for ${cost} Streetcredit (ID #${redemptionRecord.id}).`,
-            }).catch(() => null);
-            if (message?.id) {
-              db.prepare(`
-                UPDATE heist_vault_redemptions
-                SET log_message_id = ?, metadata_json = ?
-                WHERE id = ?
-              `).run(
-                message.id,
-                safeJsonStringify({
-                  ...(safeJsonParse(redemptionRecord.metadata_json, {}) || {}),
-                  logMessageId: message.id,
-                }, '{}'),
-                Number(redemptionRecord.id)
-              );
-            }
+          const message = await sendRedemptionPanel(settings.vault_log_channel_id, true);
+          if (message?.id) {
+            db.prepare(`
+              UPDATE heist_vault_redemptions
+              SET log_message_id = ?, metadata_json = ?
+              WHERE id = ?
+            `).run(
+              message.id,
+              safeJsonStringify({
+                ...(safeJsonParse(redemptionRecord.metadata_json, {}) || {}),
+                logMessageId: message.id,
+              }, '{}'),
+              Number(redemptionRecord.id)
+            );
           }
         }
       }

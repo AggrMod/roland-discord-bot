@@ -82,6 +82,9 @@ const PORTAL_PAGE_EXPECTATIONS = Object.freeze({
     'engagement'
   ]
 });
+const HEIST_ADMIN_TAB_STORAGE_KEY = 'activeHeistAdminTab';
+const HEIST_ADMIN_TABS = Object.freeze(['general', 'templates', 'operations', 'ranks', 'vault']);
+
 async function fetchCsrfToken() {
   try {
     const r = await originalFetch('/api/csrf-token', { credentials: 'include' });
@@ -1694,7 +1697,7 @@ function switchSettingsTab(tab) {
     return;
   }
 
-  document.querySelectorAll('.settings-tab').forEach(t => {
+  document.querySelectorAll('.settings-tab[data-tab]').forEach(t => {
     t.classList.toggle('active', t.dataset.tab === tab);
   });
   document.querySelectorAll('.settings-tab-pane').forEach(p => {
@@ -1755,6 +1758,29 @@ function switchSettingsTab(tab) {
   };
   const loader = tabLoaders[tab];
   if (loader) loader();
+}
+
+function normalizeHeistAdminTabKey(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!HEIST_ADMIN_TABS.includes(normalized)) return 'general';
+  return normalized;
+}
+
+function switchHeistAdminTab(tabKey, { persist = true } = {}) {
+  const targetTab = normalizeHeistAdminTabKey(tabKey);
+  HEIST_ADMIN_TABS.forEach((key) => {
+    const button = document.getElementById(`heistTabBtn-${key}`);
+    if (button) {
+      button.classList.toggle('active', key === targetTab);
+    }
+    const pane = document.getElementById(`heistTabPane-${key}`);
+    if (pane) {
+      pane.style.display = key === targetTab ? '' : 'none';
+    }
+  });
+  if (persist) {
+    localStorage.setItem(HEIST_ADMIN_TAB_STORAGE_KEY, targetTab);
+  }
 }
 
 function updateSidebarModuleNav() {
@@ -3406,14 +3432,10 @@ function updateHeistTemplateCategorySettings() {
   const missionType = normalizeMissionCategoryKey(getHeistConfigInputValue('heistTplMissionType', 'nft'));
   const nftOnly = missionType === 'nft';
 
-  const nftAccessSection = document.getElementById('heistTplNftAccessSection');
   const slotSection = document.getElementById('heistTplSlotRequirementSection');
   const maxNftsInput = document.getElementById('heistTplMaxNfts');
   const categoryHint = document.getElementById('heistTplCategoryHint');
 
-  if (nftAccessSection) {
-    nftAccessSection.style.display = nftOnly ? '' : 'none';
-  }
   if (slotSection) {
     slotSection.style.display = nftOnly ? '' : 'none';
   }
@@ -3424,11 +3446,11 @@ function updateHeistTemplateCategorySettings() {
 
   if (categoryHint) {
     const hintByCategory = {
-      nft: 'NFT Ops uses collection/trait gates and slot-level trait requirements.',
-      engagement: 'Engagement Ops hides NFT gate fields and focuses on social objective style missions.',
-      discord: 'Discord Ops hides NFT gate fields and uses server-native mission setups.',
-      governance: 'Governance Ops hides NFT gate fields for proposal/voting themed missions.',
-      event: 'Event Ops hides NFT gate fields for seasonal or special event missions.',
+      nft: 'NFT Ops uses slot requirements with collection/trait dropdowns. No separate NFT access rule is needed.',
+      engagement: 'Engagement Ops focuses on social objectives. NFT slot requirements are disabled.',
+      discord: 'Discord Ops focuses on server-native mission objectives. NFT slot requirements are disabled.',
+      governance: 'Governance Ops focuses on governance-themed missions. NFT slot requirements are disabled.',
+      event: 'Event Ops is for seasonal/special missions. NFT slot requirements are disabled.',
     };
     categoryHint.textContent = hintByCategory[missionType] || 'Choose a category to show relevant template settings.';
   }
@@ -3723,9 +3745,6 @@ async function loadAvailableMissions() {
             <span>XP: ${mission.rewardXp || 0}</span>
             ${mission.endsAt ? `<span>Ends: ${escapeHtml(new Date(mission.endsAt).toLocaleString())}</span>` : ''}
           </div>
-          <div style="margin-top:8px;color:var(--text-secondary);font-size:0.84em;">
-            Access: ${escapeHtml(formatMissionAccessSummary(mission.traitRequirements))}
-          </div>
           <div style="margin-top:10px;">
             ${(() => {
     const isCoop = String(mission.mode || '').trim().toLowerCase() === 'coop';
@@ -3829,27 +3848,30 @@ function renderHeistTemplateList(templates) {
     wrap.innerHTML = '<p style="color:var(--text-secondary);font-size:0.9em;">No templates configured yet.</p>';
     return;
   }
-  wrap.innerHTML = list.map((template) => `
-    <div style="border:1px solid var(--border-color);border-radius:10px;padding:10px;background:rgba(15,23,42,0.35);">
-      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;">
-        <div>
-          <div style="font-weight:600;color:var(--text-primary);">#${template.id} ${escapeHtml(template.name || 'Unnamed')}</div>
-          <div style="font-size:0.85em;color:var(--text-secondary);margin-top:4px;">
-            ${escapeHtml(getMissionCategoryLabel(template.mission_type || template.missionType || 'nft'))} | ${escapeHtml(template.mode || 'solo')} | slots ${Number(template.required_slots || 0)}/${Number(template.total_slots || 0)} | duration ${Number(template.duration_minutes || 0)}m
-            | xp ${Number(template.base_xp_reward || 0)} | streetcredit ${Number(template.base_streetcredit_reward || 0)} | weight ${Number(template.spawn_weight || 0)}
+  wrap.innerHTML = list.map((template) => {
+    const slotRules = Array.isArray(template?.metadata?.slot_requirements)
+      ? template.metadata.slot_requirements
+      : (Array.isArray(template?.slot_requirements) ? template.slot_requirements : []);
+    const slotSummary = slotRules.length ? ` | slot rules ${slotRules.length}` : '';
+    return `
+      <div style="border:1px solid var(--border-color);border-radius:10px;padding:10px;background:rgba(15,23,42,0.35);">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;">
+          <div>
+            <div style="font-weight:600;color:var(--text-primary);">#${template.id} ${escapeHtml(template.name || 'Unnamed')}</div>
+            <div style="font-size:0.85em;color:var(--text-secondary);margin-top:4px;">
+              ${escapeHtml(getMissionCategoryLabel(template.mission_type || template.missionType || 'nft'))} | ${escapeHtml(template.mode || 'solo')} | slots ${Number(template.required_slots || 0)}/${Number(template.total_slots || 0)} | duration ${Number(template.duration_minutes || 0)}m
+              | xp ${Number(template.base_xp_reward || 0)} | streetcredit ${Number(template.base_streetcredit_reward || 0)} | weight ${Number(template.spawn_weight || 0)}${slotSummary}
+            </div>
+            ${template.image_url ? `<div style="margin-top:8px;"><img src="${escapeHtml(String(template.image_url))}" alt="" style="width:120px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--border-color);"></div>` : ''}
           </div>
-          <div style="font-size:0.8em;color:var(--text-secondary);margin-top:6px;">
-            ${escapeHtml(formatMissionAccessSummary(template.trait_requirements || {}))}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn-secondary btn-sm" onclick="editHeistTemplate(${Number(template.id)})">Edit</button>
+            <button class="btn-secondary btn-sm" onclick="deleteHeistTemplate(${Number(template.id)})">Delete</button>
           </div>
-          ${template.image_url ? `<div style="margin-top:8px;"><img src="${escapeHtml(String(template.image_url))}" alt="" style="width:120px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--border-color);"></div>` : ''}
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn-secondary btn-sm" onclick="editHeistTemplate(${Number(template.id)})">Edit</button>
-          <button class="btn-secondary btn-sm" onclick="deleteHeistTemplate(${Number(template.id)})">Delete</button>
         </div>
       </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 function renderHeistMissionOps(missions) {
@@ -4348,6 +4370,7 @@ async function loadHeistAdminPanel() {
     setValue('heistCfgMaxActive', Number(config.max_active_missions || 5));
     setValue('heistCfgDefaultDuration', Number(config.default_duration_minutes || 1440));
     setValue('heistCfgDefaultMaxNfts', Number(config.default_max_nfts_per_user || 2));
+    switchHeistAdminTab(localStorage.getItem(HEIST_ADMIN_TAB_STORAGE_KEY), { persist: false });
 
     populateHeistMissionTypeSelector(heistMissionCategories);
     bindHeistTemplateCategoryHandler();
@@ -4366,12 +4389,6 @@ async function loadHeistAdminPanel() {
     renderHeistRedemptions(redemptions);
     bindHeistTemplateImageUpload();
     bindHeistTemplateCatalogHandlers();
-    renderHeistTemplateCollectionRequirements();
-    renderHeistTemplateTraitRequirements();
-    const selectedTraitCollection = String(document.getElementById('heistTplTraitCatalogCollection')?.value || '').trim();
-    if (selectedTraitCollection) {
-      await handleHeistTraitCatalogCollectionChange();
-    }
     if (!document.querySelector('#heistTplSlotRequirementRows .heist-slot-rule-row')) {
       renderHeistSlotRequirementRows([]);
     }
@@ -4430,13 +4447,6 @@ function serializeHeistTraitRequirementInput(requiredTraits) {
 function buildHeistTemplatePayloadFromForm() {
   const missionType = normalizeMissionCategoryKey(getHeistConfigInputValue('heistTplMissionType', 'nft'));
   const nftCategory = missionType === 'nft';
-  const gateMode = getHeistConfigInputValue('heistTplGateMode', 'and') === 'or' ? 'or' : 'and';
-  const requiredCollections = nftCategory
-    ? parseHeistCollectionRequirementInput(getHeistConfigInputValue('heistTplRequiredCollections', ''))
-    : [];
-  const requiredTraits = nftCategory
-    ? parseHeistTraitRequirementInput(getHeistConfigInputValue('heistTplRequiredTraits', ''))
-    : [];
   const imageUrlRaw = getHeistConfigInputValue('heistTplImageUrl', '');
   const metadata = {};
   if (imageUrlRaw) metadata.image_url = imageUrlRaw;
@@ -4464,9 +4474,9 @@ function buildHeistTemplatePayloadFromForm() {
     spawn_weight: getHeistConfigNumericValue('heistTplSpawnWeight', 1, 1, 1000),
     slot_requirements: slotRequirements,
     trait_requirements: {
-      gateMode,
-      requiredCollections,
-      requiredTraits,
+      gateMode: 'and',
+      requiredCollections: [],
+      requiredTraits: [],
     },
     metadata,
     image_url: imageUrlRaw || null,
@@ -4531,13 +4541,6 @@ function resetHeistTemplateForm() {
     heistTplXpReward: '25',
     heistTplStreetReward: '25',
     heistTplSpawnWeight: '1',
-    heistTplGateMode: 'and',
-    heistTplRequiredCollections: '',
-    heistTplRequiredTraits: '',
-    heistTplCollectionRegistrySelect: '',
-    heistTplTraitCatalogCollection: '',
-    heistTplTraitType: '',
-    heistTplTraitValue: '',
     heistTplImageUrl: '',
   };
   Object.entries(defaults).forEach(([id, value]) => {
@@ -4548,8 +4551,6 @@ function resetHeistTemplateForm() {
   if (fileInput) fileInput.value = '';
   populateHeistTraitCatalogTypeSelect({ traits: [] });
   updateHeistTemplateCategorySettings();
-  renderHeistTemplateCollectionRequirements();
-  renderHeistTemplateTraitRequirements();
   renderHeistSlotRequirementRows([]);
   updateHeistTemplateSubmitState();
 }
@@ -4564,7 +4565,9 @@ function editHeistTemplate(templateId) {
     return;
   }
   heistEditingTemplateId = normalized;
-  const requirements = normalizeMissionAccessRequirements(template.trait_requirements || {});
+  const slotRequirements = Array.isArray(template?.metadata?.slot_requirements)
+    ? template.metadata.slot_requirements
+    : (Array.isArray(template?.slot_requirements) ? template.slot_requirements : []);
   const setValue = (id, value) => {
     const element = document.getElementById(id);
     if (element) element.value = value === undefined || value === null ? '' : String(value);
@@ -4580,26 +4583,9 @@ function editHeistTemplate(templateId) {
   setValue('heistTplXpReward', Number(template.base_xp_reward || 25));
   setValue('heistTplStreetReward', Number(template.base_streetcredit_reward || 25));
   setValue('heistTplSpawnWeight', Number(template.spawn_weight || 1));
-  setValue('heistTplGateMode', requirements.gateMode || 'and');
-  setValue('heistTplRequiredCollections', (requirements.requiredCollections || []).join(','));
-  setValue('heistTplRequiredTraits', serializeHeistTraitRequirementInput(requirements.requiredTraits || []));
   setValue('heistTplImageUrl', template.image_url || template?.metadata?.image_url || '');
-  const primaryCollection = Array.isArray(requirements.requiredCollections) && requirements.requiredCollections.length
-    ? String(requirements.requiredCollections[0] || '').trim()
-    : '';
-  setValue('heistTplCollectionRegistrySelect', primaryCollection);
-  setValue('heistTplTraitCatalogCollection', primaryCollection);
   updateHeistTemplateCategorySettings();
-  renderHeistTemplateCollectionRequirements();
-  renderHeistTemplateTraitRequirements();
-  renderHeistSlotRequirementRows(
-    Array.isArray(template?.metadata?.slot_requirements)
-      ? template.metadata.slot_requirements
-      : (Array.isArray(template?.slot_requirements) ? template.slot_requirements : [])
-  );
-  if (primaryCollection) {
-    handleHeistTraitCatalogCollectionChange().catch(() => {});
-  }
+  renderHeistSlotRequirementRows(slotRequirements);
   const fileInput = document.getElementById('heistTplImageFile');
   if (fileInput) fileInput.value = '';
   updateHeistTemplateSubmitState();

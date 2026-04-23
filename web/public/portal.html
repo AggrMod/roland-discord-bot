@@ -641,6 +641,14 @@
           <div id="heistAdminPanel" class="card" style="display:none;">
             <h3>Mission Module Settings</h3>
             <p style="color:var(--text-secondary);margin-bottom:16px;">Configure scheduler, labels, channels, and templates for this server.</p>
+            <div class="settings-tabs heist-admin-tabs">
+              <button class="settings-tab active" id="heistTabBtn-general" onclick="switchHeistAdminTab('general')">General</button>
+              <button class="settings-tab" id="heistTabBtn-templates" onclick="switchHeistAdminTab('templates')">Templates</button>
+              <button class="settings-tab" id="heistTabBtn-operations" onclick="switchHeistAdminTab('operations')">Operations</button>
+              <button class="settings-tab" id="heistTabBtn-ranks" onclick="switchHeistAdminTab('ranks')">Ranks</button>
+              <button class="settings-tab" id="heistTabBtn-vault" onclick="switchHeistAdminTab('vault')">Vault</button>
+            </div>
+            <div id="heistTabPane-general" class="heist-admin-tab-pane" style="display:block;">
             <div class="settings-grid">
               <div class="settings-row">
                 <div class="settings-info">
@@ -704,12 +712,13 @@
                 <input id="heistCfgDefaultMaxNfts" type="number" min="1" max="10" class="input-sm" style="width:90px;">
               </div>
             </div>
-            <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
+            <div class="heist-admin-actions">
               <button class="btn-primary" onclick="saveHeistConfig()">Save Missions Settings</button>
               <button class="btn-secondary" onclick="loadHeistAdminPanel()">Refresh</button>
             </div>
-
-            <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
+            </div>
+            <div id="heistTabPane-templates" class="heist-admin-tab-pane" style="display:none;">
+            <div class="heist-admin-block">
               <h4 style="margin-bottom:12px;">Mission Collection Registry</h4>
               <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;">
                 <input id="heistCollectionRegistryManualInput" type="text" class="input-sm" placeholder="Add collection address to registry">
@@ -722,7 +731,7 @@
               </div>
             </div>
 
-            <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
+            <div class="heist-admin-block">
               <h4 style="margin-bottom:12px;">Create / Edit Template</h4>
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
                 <input id="heistTplName" type="text" class="input-sm" placeholder="Template name">
@@ -751,84 +760,24 @@
               <p id="heistTplCategoryHint" style="margin-top:8px;color:var(--text-secondary);font-size:0.82em;">
                 Choose a category to show relevant template settings.
               </p>
-              <div id="heistTplNftAccessSection" style="margin-top:10px;">
-                <h5 style="margin:0 0 8px 0;">NFT Access Rules</h5>
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
-                  <select id="heistTplGateMode" class="input-sm">
-                    <option value="and">Access Gate: NFT collection AND trait</option>
-                    <option value="or">Access Gate: NFT collection OR trait</option>
-                  </select>
-                  <select id="heistTplCollectionRegistrySelect" class="input-sm">
-                    <option value="">Select collection from registry</option>
-                  </select>
-                  <button class="btn-secondary btn-sm" type="button" onclick="addHeistTemplateCollectionRequirement()">Add Collection Gate</button>
-                </div>
-                <div id="heistTplCollectionRequirementList" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;"></div>
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:10px;">
-                  <select id="heistTplTraitCatalogCollection" class="input-sm">
-                    <option value="">Trait source collection</option>
-                  </select>
-                  <select id="heistTplTraitType" class="input-sm">
-                    <option value="">Trait type</option>
-                  </select>
-                  <select id="heistTplTraitValue" class="input-sm">
-                    <option value="">Trait value (optional)</option>
-                  </select>
-                  <button class="btn-secondary btn-sm" type="button" onclick="addHeistTemplateTraitRequirement()">Add Trait Gate</button>
-                </div>
-                <div id="heistTplTraitRequirementList" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;"></div>
-              </div>
               <div id="heistTplSlotRequirementSection" style="margin-top:10px;">
                 <h5 style="margin:0 0 8px 0;">Slot Requirements (Optional)</h5>
                 <div id="heistTplSlotRequirementRows" style="display:grid;gap:8px;"></div>
                 <button class="btn-secondary btn-sm" type="button" onclick="addHeistSlotRequirementRow()">Add Slot Requirement</button>
               </div>
-              <input id="heistTplRequiredCollections" type="text" class="input-sm" placeholder="Required collections (comma-separated)" style="display:none;">
-              <input id="heistTplRequiredTraits" type="text" class="input-sm" placeholder="Required traits (Trait:ValueA|ValueB;Trait2)" style="display:none;">
               <p style="margin-top:8px;color:var(--text-secondary);font-size:0.82em;">
-                Trait catalog is pulled from chain data. Slot requirements let you define exact slot-by-slot filters.
+                Category determines template type. Slot requirements are only used for NFT category templates.
               </p>
               <div style="margin-top:10px;">
                 <button class="btn-primary" id="heistTplSubmitBtn" onclick="submitHeistTemplate()">Create Template</button>
                 <button class="btn-secondary" onclick="resetHeistTemplateForm()">Clear</button>
               </div>
             </div>
-
-            <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
-              <h4 style="margin-bottom:12px;">Spawn Mission</h4>
-              <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-                <select id="heistSpawnTemplateId" class="input-sm" style="min-width:220px;"></select>
-                <button class="btn-primary" onclick="spawnHeistMissionNow()">Spawn Now</button>
-              </div>
-            </div>
-
-            <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
-              <h4 style="margin-bottom:12px;">Active Mission Operations</h4>
-              <div id="heistActiveMissionOps" style="display:grid;gap:8px;"></div>
-            </div>
-
-            <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
+            <div class="heist-admin-block">
               <h4 style="margin-bottom:12px;">Templates</h4>
               <div id="heistTemplateList" style="display:grid;gap:8px;"></div>
             </div>
-
-            <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
-              <h4 style="margin-bottom:12px;">Ladder (Ranks and Vault Access)</h4>
-              <div class="heist-ladder-header">
-                <span>Rank Name</span>
-                <span>Rank Key</span>
-                <span>Min XP</span>
-                <span>Vault Tier</span>
-                <span>Action</span>
-              </div>
-              <div id="heistLadderRows" style="display:grid;gap:8px;"></div>
-              <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
-                <button class="btn-secondary btn-sm" onclick="addHeistLadderRow()">Add Rank</button>
-                <button class="btn-primary btn-sm" onclick="saveHeistLadder()">Save Ladder</button>
-              </div>
-            </div>
-
-            <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
+            <div class="heist-admin-block">
               <h4 style="margin-bottom:12px;">Trait Bonus Rules</h4>
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">
                 <select id="heistBonusTemplateId" class="input-sm"></select>
@@ -853,8 +802,41 @@
               </div>
               <div id="heistTraitBonusList" style="display:grid;gap:8px;margin-top:12px;"></div>
             </div>
+            </div>
 
-            <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
+            <div id="heistTabPane-operations" class="heist-admin-tab-pane" style="display:none;">
+            <div class="heist-admin-block">
+              <h4 style="margin-bottom:12px;">Spawn Mission</h4>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                <select id="heistSpawnTemplateId" class="input-sm" style="min-width:220px;"></select>
+                <button class="btn-primary" onclick="spawnHeistMissionNow()">Spawn Now</button>
+              </div>
+            </div>
+            <div class="heist-admin-block">
+              <h4 style="margin-bottom:12px;">Active Mission Operations</h4>
+              <div id="heistActiveMissionOps" style="display:grid;gap:8px;"></div>
+            </div>
+            </div>
+
+            <div id="heistTabPane-ranks" class="heist-admin-tab-pane" style="display:none;">
+            <div class="heist-admin-block">
+              <h4 style="margin-bottom:12px;">Ladder (Ranks and Vault Access)</h4>
+              <div class="heist-ladder-header">
+                <span>Rank Name</span>
+                <span>Rank Key</span>
+                <span>Min XP</span>
+                <span>Vault Tier</span>
+                <span>Action</span>
+              </div>
+              <div id="heistLadderRows" style="display:grid;gap:8px;"></div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
+                <button class="btn-secondary btn-sm" onclick="addHeistLadderRow()">Add Rank</button>
+                <button class="btn-primary btn-sm" onclick="saveHeistLadder()">Save Ladder</button>
+              </div>
+            </div>
+            </div>
+            <div id="heistTabPane-vault" class="heist-admin-tab-pane" style="display:none;">
+            <div class="heist-admin-block">
               <h4 style="margin-bottom:12px;">Vault Items (Streetcredit Store)</h4>
               <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
                 <select id="heistTreasuryNftSelect" class="input-sm" style="min-width:320px;"></select>
@@ -888,9 +870,10 @@
               <div id="heistVaultItemList" style="display:grid;gap:8px;margin-top:12px;"></div>
             </div>
 
-            <div style="margin-top:20px;border-top:1px solid var(--border-color);padding-top:16px;">
+            <div class="heist-admin-block">
               <h4 style="margin-bottom:12px;">Recent Vault Redemptions</h4>
               <div id="heistRedemptionList" style="display:grid;gap:8px;"></div>
+            </div>
             </div>
           </div>
         </section>

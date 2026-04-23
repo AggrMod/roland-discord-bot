@@ -839,6 +839,11 @@
             <div class="heist-admin-block">
               <h4 style="margin-bottom:12px;">Vault Items (Streetcredit Store)</h4>
               <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+                <select id="heistTreasurySourceWallet" class="input-sm" style="min-width:320px;"></select>
+                <button class="btn-secondary btn-sm" onclick="saveHeistTreasurySourceWallet()">Save Source Wallet</button>
+                <span style="color:var(--text-secondary);font-size:0.82em;">Vault scans NFTs/tokens from the selected treasury wallet.</span>
+              </div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
                 <select id="heistTreasuryNftSelect" class="input-sm" style="min-width:320px;"></select>
                 <button class="btn-secondary btn-sm" onclick="loadHeistTreasuryNfts()">Refresh Treasury NFTs</button>
                 <button class="btn-primary btn-sm" onclick="prefillVaultItemFromTreasuryNft()">Use Selected NFT</button>

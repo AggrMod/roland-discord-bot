@@ -674,6 +674,18 @@ function createAdminGovernanceMissionsRouter({
     }
   });
 
+  router.get('/api/admin/heist/treasury-wallets', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const includeDisabled = String(req.query.includeDisabled || '').trim() === '1';
+      const wallets = heistService?.listTreasurySourceWallets(req.guildId || '', { includeDisabled: includeDisabled || false }) || [];
+      return res.json(toSuccessResponse({ wallets }));
+    } catch (routeError) {
+      logger.error('Error listing treasury wallets for heist source config:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.get('/api/admin/heist/treasury-nfts', adminAuthMiddleware, async (req, res) => {
     if (!ensureHeistModule(req, res)) return;
     try {

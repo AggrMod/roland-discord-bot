@@ -5,6 +5,7 @@ let isSuperadmin = false;
 let heistEnabled = true;
 let heistEditingTemplateId = null;
 let heistTreasuryNfts = [];
+let heistTreasuryWallets = [];
 let heistSelectedTreasuryNft = null;
 let heistMissionCollections = [];
 let heistMissionCategories = [];
@@ -3811,6 +3812,46 @@ function populateHeistTraitBonusTemplateSelector(templates) {
   }
 }
 
+function populateHeistTreasurySourceWalletSelector(wallets, selectedAddress = '') {
+  const select = document.getElementById('heistTreasurySourceWallet');
+  if (!select) return;
+  const selected = String(selectedAddress || select.value || '').trim();
+  select.innerHTML = '';
+
+  const defaultOption = document.createElement('option');
+  defaultOption.value = '';
+  defaultOption.textContent = 'Use all enabled treasury wallets (default)';
+  select.appendChild(defaultOption);
+
+  const list = Array.isArray(wallets) ? wallets : [];
+  if (!list.length) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'No treasury wallets configured';
+    option.disabled = true;
+    select.appendChild(option);
+    select.value = '';
+    return;
+  }
+
+  list.forEach((wallet) => {
+    const address = String(wallet?.address || '').trim();
+    if (!address) return;
+    const option = document.createElement('option');
+    option.value = address;
+    const label = String(wallet?.label || '').trim();
+    const enabled = Number(wallet?.enabled ?? 1) === 1;
+    option.textContent = `${label ? `${label} - ` : ''}${address}${enabled ? '' : ' (disabled)'}`;
+    select.appendChild(option);
+  });
+
+  if (selected && Array.from(select.options).some((option) => option.value === selected)) {
+    select.value = selected;
+  } else {
+    select.value = '';
+  }
+}
+
 function populateHeistTreasuryNftSelector(nfts) {
   const select = document.getElementById('heistTreasuryNftSelect');
   if (!select) return;
@@ -4290,7 +4331,7 @@ async function loadHeistAdminPanel() {
 
   try {
     const headers = buildTenantRequestHeaders();
-    const [configRes, templatesRes, missionsRes, channelsRes, ladderRes, bonusRes, vaultRes, redemptionsRes, treasuryNftsRes, categoriesRes, collectionsRes] = await Promise.all([
+    const [configRes, templatesRes, missionsRes, channelsRes, ladderRes, bonusRes, vaultRes, redemptionsRes, treasuryWalletsRes, treasuryNftsRes, categoriesRes, collectionsRes] = await Promise.all([
       fetch('/api/admin/heist/config', { credentials: 'include', headers }),
       fetch('/api/admin/heist/templates', { credentials: 'include', headers }),
       fetch('/api/admin/heist/missions?statuses=recruiting,active&limit=50', { credentials: 'include', headers }),
@@ -4299,11 +4340,12 @@ async function loadHeistAdminPanel() {
       fetch('/api/admin/heist/trait-bonuses', { credentials: 'include', headers }),
       fetch('/api/admin/heist/vault/items?includeDisabled=1', { credentials: 'include', headers }),
       fetch('/api/admin/heist/vault/redemptions?limit=50', { credentials: 'include', headers }),
+      fetch('/api/admin/heist/treasury-wallets?includeDisabled=1', { credentials: 'include', headers }),
       fetch('/api/admin/heist/treasury-nfts?limit=1000', { credentials: 'include', headers }),
       fetch('/api/admin/heist/categories', { credentials: 'include', headers }),
       fetch('/api/admin/heist/collections', { credentials: 'include', headers }),
     ]);
-    const [configJson, templatesJson, missionsJson, channelsJson, ladderJson, bonusJson, vaultJson, redemptionsJson, treasuryNftsJson, categoriesJson, collectionsJson] = await Promise.all([
+    const [configJson, templatesJson, missionsJson, channelsJson, ladderJson, bonusJson, vaultJson, redemptionsJson, treasuryWalletsJson, treasuryNftsJson, categoriesJson, collectionsJson] = await Promise.all([
       configRes.json(),
       templatesRes.json(),
       missionsRes.json(),
@@ -4312,6 +4354,7 @@ async function loadHeistAdminPanel() {
       bonusRes.json(),
       vaultRes.json(),
       redemptionsRes.json(),
+      treasuryWalletsRes.json(),
       treasuryNftsRes.json(),
       categoriesRes.json(),
       collectionsRes.json(),
@@ -4329,6 +4372,7 @@ async function loadHeistAdminPanel() {
     const traitBonuses = bonusJson?.success ? (bonusJson?.data?.rules || []) : [];
     const vaultItems = vaultJson?.success ? (vaultJson?.data?.items || []) : [];
     const redemptions = redemptionsJson?.success ? (redemptionsJson?.data?.redemptions || []) : [];
+    heistTreasuryWallets = treasuryWalletsJson?.success ? (treasuryWalletsJson?.data?.wallets || []) : [];
     heistMissionCategories = categoriesJson?.success ? (categoriesJson?.data?.categories || []) : [];
     heistMissionCollections = collectionsJson?.success ? (collectionsJson?.data?.collections || []) : [];
     heistTreasuryNfts = treasuryNftsJson?.success ? (treasuryNftsJson?.data?.nfts || []) : [];
@@ -4370,6 +4414,14 @@ async function loadHeistAdminPanel() {
     setValue('heistCfgMaxActive', Number(config.max_active_missions || 5));
     setValue('heistCfgDefaultDuration', Number(config.default_duration_minutes || 1440));
     setValue('heistCfgDefaultMaxNfts', Number(config.default_max_nfts_per_user || 2));
+    populateHeistTreasurySourceWalletSelector(
+      heistTreasuryWallets,
+      config.treasury_source_wallet_address
+        || config.treasurySourceWalletAddress
+        || config?.metadata?.treasury_source_wallet_address
+        || config?.metadata?.treasurySourceWalletAddress
+        || ''
+    );
     switchHeistAdminTab(localStorage.getItem(HEIST_ADMIN_TAB_STORAGE_KEY), { persist: false });
 
     populateHeistMissionTypeSelector(heistMissionCategories);
@@ -4657,6 +4709,7 @@ async function saveHeistConfig() {
       max_active_missions: getHeistConfigNumericValue('heistCfgMaxActive', 5, 1, 1000),
       default_duration_minutes: getHeistConfigNumericValue('heistCfgDefaultDuration', 1440, 15, 10080),
       default_max_nfts_per_user: getHeistConfigNumericValue('heistCfgDefaultMaxNfts', 2, 1, 10),
+      treasury_source_wallet_address: getHeistConfigInputValue('heistTreasurySourceWallet', '') || null,
     };
 
     const res = await fetch('/api/admin/heist/config', {
@@ -4674,6 +4727,33 @@ async function saveHeistConfig() {
   } catch (error) {
     console.error('[Missions] save config failed:', error);
     showError(error?.message || 'Failed to save missions settings.');
+  }
+}
+
+async function saveHeistTreasurySourceWallet() {
+  if (!(isAdmin || isSuperadmin) || !activeGuildId) {
+    showError('Admin access and active server are required.');
+    return;
+  }
+  try {
+    const payload = {
+      treasury_source_wallet_address: getHeistConfigInputValue('heistTreasurySourceWallet', '') || null,
+    };
+    const res = await fetch('/api/admin/heist/config', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || json?.error?.message || 'Failed to save treasury source wallet');
+    }
+    showSuccess('Treasury source wallet saved.');
+    await loadHeistAdminPanel();
+  } catch (error) {
+    console.error('[Missions] save treasury source wallet failed:', error);
+    showError(error?.message || 'Failed to save treasury source wallet.');
   }
 }
 

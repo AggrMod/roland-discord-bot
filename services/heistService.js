@@ -2526,6 +2526,94 @@ class HeistService {
     return { success: true };
   }
 
+  async importVaultCollectionItems(guildId, payload = {}) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'guildId is required' };
+    const collectionKey = String(payload.collectionKey || payload.collection_key || '').trim();
+    if (!collectionKey) return { success: false, message: 'collectionKey is required' };
+
+    const cost = Math.max(0, parseNonNegativeInt(payload.cost_streetcredit ?? payload.costStreetcredit, 0));
+    const requiredVaultTier = Math.max(0, parseNonNegativeInt(payload.required_vault_tier ?? payload.requiredVaultTier, 0));
+    const quantityRemaining = Number(payload.quantity_remaining ?? payload.quantityRemaining);
+    const stock = Number.isFinite(quantityRemaining) ? Math.floor(quantityRemaining) : -1;
+    const enabled = payload.enabled === undefined ? 1 : (payload.enabled ? 1 : 0);
+    const safeLimit = Math.max(1, Math.min(5000, parseNonNegativeInt(payload.limit, 1000) || 1000));
+
+    const treasuryNfts = await this.listTreasuryNfts(normalizedGuildId, { limit: safeLimit });
+    const normalizedCollectionKey = collectionKey.toLowerCase();
+    const collectionNfts = treasuryNfts.filter((nft) => String(nft?.collectionKey || '').trim().toLowerCase() === normalizedCollectionKey);
+    if (!collectionNfts.length) {
+      return { success: false, message: `No treasury NFTs found for collection ${collectionKey}` };
+    }
+
+    const existingItems = this.listVaultItems(normalizedGuildId, { includeDisabled: true });
+    const existingMints = new Set();
+    for (const item of (Array.isArray(existingItems) ? existingItems : [])) {
+      const mint = String(item?.metadata?.mint || '').trim();
+      if (!mint) continue;
+      existingMints.add(mint.toLowerCase());
+    }
+
+    let createdCount = 0;
+    let skippedCount = 0;
+    const now = nowIso();
+    const tx = db.transaction(() => {
+      for (const nft of collectionNfts) {
+        const mint = String(nft?.mint || '').trim();
+        if (!mint || existingMints.has(mint.toLowerCase())) {
+          skippedCount += 1;
+          continue;
+        }
+
+        const name = String(nft?.name || mint).trim().slice(0, 120) || mint.slice(0, 12);
+        const description = `Treasury NFT reward (${mint})`;
+        const metadata = {
+          item_category: 'nft',
+          source: 'treasury_nft',
+          imported_at: now,
+          mint,
+          image: sanitizeImageUrl(nft?.image || '') || null,
+          collectionKey: String(nft?.collectionKey || '').trim() || null,
+          walletAddress: String(nft?.walletAddress || '').trim() || null,
+          walletLabel: String(nft?.walletLabel || '').trim() || null,
+        };
+
+        db.prepare(`
+          INSERT INTO heist_vault_items (
+            guild_id, name, description, cost_streetcredit, required_vault_tier, reward_type, fulfillment_mode, role_id,
+            code_pool_json, quantity_remaining, enabled, metadata_json
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          normalizedGuildId,
+          name,
+          description,
+          cost,
+          requiredVaultTier,
+          'manual',
+          'manual',
+          null,
+          '[]',
+          stock,
+          enabled,
+          safeJsonStringify(metadata, '{}')
+        );
+
+        existingMints.add(mint.toLowerCase());
+        createdCount += 1;
+      }
+    });
+
+    tx();
+    return {
+      success: true,
+      collectionKey,
+      totalCount: collectionNfts.length,
+      createdCount,
+      skippedCount,
+    };
+  }
+
   updateVaultItem(guildId, itemId, payload = {}) {
     const normalizedGuildId = normalizeGuildId(guildId);
     if (!normalizedGuildId) return { success: false, message: 'guildId is required' };

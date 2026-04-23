@@ -733,6 +733,20 @@ function createAdminGovernanceMissionsRouter({
     }
   });
 
+  router.post('/api/admin/heist/vault/import-collection', adminAuthMiddleware, async (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const result = await heistService?.importVaultCollectionItems(req.guildId || '', req.body || {});
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to import collection NFTs', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error importing heist vault collection items:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.put('/api/admin/heist/vault/items/:id', adminAuthMiddleware, (req, res) => {
     if (!ensureHeistModule(req, res)) return;
     try {

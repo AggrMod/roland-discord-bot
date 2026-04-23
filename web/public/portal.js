@@ -3870,6 +3870,37 @@ function renderHeistTreasuryTokenSummary(tokens) {
   wrap.textContent = `Detected ${list.length} token mint${list.length === 1 ? '' : 's'} | ${preview.join(' | ')}`;
 }
 
+function populateHeistTreasuryTokenSelect(tokens) {
+  const select = document.getElementById('heistTreasuryTokenSelect');
+  if (!select) return;
+  const current = String(select.value || '').trim();
+  const list = Array.isArray(tokens) ? tokens : [];
+  select.innerHTML = '';
+  if (!list.length) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'No treasury tokens found';
+    select.appendChild(option);
+    return;
+  }
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Select token mint...';
+  select.appendChild(placeholder);
+  list.forEach((token) => {
+    const mint = String(token?.mint || '').trim();
+    if (!mint) return;
+    const option = document.createElement('option');
+    option.value = mint;
+    const amount = Number(token?.amount || 0);
+    option.textContent = `${mint} (${Number.isFinite(amount) ? amount.toLocaleString(undefined, { maximumFractionDigits: 6 }) : '0'})`;
+    select.appendChild(option);
+  });
+  if (current && Array.from(select.options).some((option) => option.value === current)) {
+    select.value = current;
+  }
+}
+
 function populateHeistTreasuryNftSelector(nfts) {
   const select = document.getElementById('heistTreasuryNftSelect');
   if (!select) return;
@@ -3896,6 +3927,69 @@ function populateHeistTreasuryNftSelector(nfts) {
   });
   if (selected && Array.from(select.options).some((option) => option.value === selected)) {
     select.value = selected;
+  }
+}
+
+function getHeistVaultCategory() {
+  return String(getHeistConfigInputValue('heistVaultCategory', 'nft') || 'nft')
+    .trim()
+    .toLowerCase();
+}
+
+function updateHeistVaultCategoryUi() {
+  const category = getHeistVaultCategory();
+  const blocks = {
+    nft: document.getElementById('heistVaultCategoryFieldsNft'),
+    token: document.getElementById('heistVaultCategoryFieldsToken'),
+    partner_wl: document.getElementById('heistVaultCategoryFieldsPartnerWl'),
+    raffle_ticket: document.getElementById('heistVaultCategoryFieldsRaffle'),
+    discord_role: document.getElementById('heistVaultCategoryFieldsRole'),
+  };
+  Object.entries(blocks).forEach(([key, node]) => {
+    if (!node) return;
+    node.style.display = key === category ? 'grid' : 'none';
+  });
+}
+
+function populateHeistTreasuryCollectionSelect(nfts) {
+  const select = document.getElementById('heistTreasuryCollectionSelect');
+  if (!select) return;
+  const current = String(select.value || '').trim();
+  const grouped = new Map();
+  (Array.isArray(nfts) ? nfts : []).forEach((entry) => {
+    const key = String(entry?.collectionKey || '').trim();
+    if (!key) return;
+    const row = grouped.get(key) || { key, count: 0 };
+    row.count += 1;
+    grouped.set(key, row);
+  });
+
+  const list = Array.from(grouped.values())
+    .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key, undefined, { sensitivity: 'base' }));
+
+  select.innerHTML = '';
+  if (!list.length) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'No collections found in treasury';
+    select.appendChild(option);
+    return;
+  }
+
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Select collection to bulk-add...';
+  select.appendChild(placeholder);
+
+  list.forEach((row) => {
+    const option = document.createElement('option');
+    option.value = row.key;
+    option.textContent = `${row.key} (${row.count} NFT${row.count === 1 ? '' : 's'})`;
+    select.appendChild(option);
+  });
+
+  if (current && Array.from(select.options).some((option) => option.value === current)) {
+    select.value = current;
   }
 }
 
@@ -4152,9 +4246,13 @@ function renderHeistVaultItems(items) {
     <div style="border:1px solid var(--border-color);border-radius:10px;padding:10px;background:rgba(15,23,42,0.35);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
       <div style="font-size:0.9em;color:var(--text-secondary);">
         <div style="color:var(--text-primary);font-weight:600;">#${Number(item.id)} ${escapeHtml(String(item.name || 'Unnamed item'))}</div>
+        <div>category ${escapeHtml(String(item?.metadata?.item_category || item?.metadata?.source || 'custom'))}</div>
         <div>cost ${Number(item.cost_streetcredit || 0)} | tier ${Number(item.required_vault_tier || 0)} | reward ${escapeHtml(String(item.reward_type || 'manual'))} | fulfillment ${escapeHtml(String(item.fulfillment_mode || 'manual'))}</div>
         <div>stock ${Number(item.quantity_remaining) < 0 ? 'unlimited' : Number(item.quantity_remaining || 0)} | ${Number(item.enabled || 0) === 1 ? 'enabled' : 'disabled'}</div>
         ${(item?.metadata?.source === 'treasury_nft' && item?.metadata?.mint) ? `<div>treasury NFT: ${escapeHtml(String(item.metadata.mint))}</div>` : ''}
+        ${(item?.metadata?.source === 'treasury_token' && item?.metadata?.tokenMint) ? `<div>token: ${escapeHtml(String(item.metadata.tokenMint))} (${escapeHtml(String(item.metadata.tokenAmount || '0'))})</div>` : ''}
+        ${(item?.metadata?.source === 'partner_wl' && item?.metadata?.partnerName) ? `<div>partner: ${escapeHtml(String(item.metadata.partnerName))} | spots ${escapeHtml(String(item.metadata.wlSpots || '0'))}</div>` : ''}
+        ${(item?.metadata?.source === 'raffle_ticket' && item?.metadata?.raffleKey) ? `<div>raffle: ${escapeHtml(String(item.metadata.raffleKey))} | tickets ${escapeHtml(String(item.metadata.ticketCount || '0'))}</div>` : ''}
       </div>
       <button class="btn-secondary btn-sm" onclick="deleteHeistVaultItem(${Number(item.id)})">Delete</button>
     </div>
@@ -4175,6 +4273,8 @@ async function loadHeistTreasuryNfts() {
     heistTreasuryNfts = json?.data?.nfts || [];
     heistTreasuryTokens = json?.data?.tokens || [];
     populateHeistTreasuryNftSelector(heistTreasuryNfts);
+    populateHeistTreasuryCollectionSelect(heistTreasuryNfts);
+    populateHeistTreasuryTokenSelect(heistTreasuryTokens);
     renderHeistTreasuryTokenSummary(heistTreasuryTokens);
     showSuccess(`Loaded ${heistTreasuryNfts.length} treasury NFTs and ${heistTreasuryTokens.length} token mints.`);
   } catch (error) {
@@ -4200,12 +4300,76 @@ function prefillVaultItemFromTreasuryNft() {
     const el = document.getElementById(id);
     if (el) el.value = value;
   };
+  setValue('heistVaultCategory', 'nft');
+  updateHeistVaultCategoryUi();
   setValue('heistVaultName', String(nft.name || mint));
   setValue('heistVaultDescription', `Treasury NFT reward (${mint})`);
-  if (String(getHeistConfigInputValue('heistVaultRewardType', 'manual')) === 'manual') {
-    setValue('heistVaultRewardType', 'manual');
-  }
   showSuccess('Vault item prefilled from treasury NFT.');
+}
+
+function prefillVaultItemFromTreasuryToken() {
+  const select = document.getElementById('heistTreasuryTokenSelect');
+  const mint = String(select?.value || '').trim();
+  if (!mint) {
+    showError('Select a treasury token first.');
+    return;
+  }
+  const token = (Array.isArray(heistTreasuryTokens) ? heistTreasuryTokens : []).find((entry) => String(entry?.mint || '').trim() === mint);
+  if (!token) {
+    showError('Selected treasury token was not found. Refresh and try again.');
+    return;
+  }
+  const setValue = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.value = value;
+  };
+  setValue('heistVaultCategory', 'token');
+  updateHeistVaultCategoryUi();
+  setValue('heistVaultTokenMint', mint);
+  setValue('heistVaultTokenAmount', String(Number(token?.amount || 0)));
+  setValue('heistVaultName', `Token Reward (${mint.slice(0, 6)}...${mint.slice(-4)})`);
+  setValue('heistVaultDescription', `Treasury token reward (${mint})`);
+  showSuccess('Vault item prefilled from treasury token.');
+}
+
+async function importHeistVaultCollectionNfts() {
+  if (!(isAdmin || isSuperadmin) || !activeGuildId) return;
+  const collectionKey = getHeistConfigInputValue('heistTreasuryCollectionSelect', '');
+  if (!collectionKey) {
+    showError('Select a treasury collection first.');
+    return;
+  }
+  const cost = Number(getHeistConfigInputValue('heistVaultCost', '0'));
+  const requiredTier = Number(getHeistConfigInputValue('heistVaultTier', '0'));
+  const quantityRaw = getHeistConfigInputValue('heistVaultQuantity', '');
+  const quantityRemaining = quantityRaw === '' ? -1 : Number(quantityRaw);
+  const enabled = !!document.getElementById('heistVaultEnabled')?.checked;
+  const confirmed = confirm(`Add all treasury NFTs from collection "${collectionKey}" to the vault?`);
+  if (!confirmed) return;
+  try {
+    const res = await fetch('/api/admin/heist/vault/import-collection', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({
+        collectionKey,
+        cost_streetcredit: Number.isFinite(cost) && cost >= 0 ? cost : 0,
+        required_vault_tier: Number.isFinite(requiredTier) && requiredTier >= 0 ? requiredTier : 0,
+        quantity_remaining: Number.isFinite(quantityRemaining) ? Math.floor(quantityRemaining) : -1,
+        enabled,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || json?.error?.message || 'Failed to import collection NFTs');
+    }
+    const summary = json?.data || {};
+    showSuccess(`Imported collection NFTs. Created: ${Number(summary.createdCount || 0)}, skipped: ${Number(summary.skippedCount || 0)}.`);
+    await loadHeistAdminPanel();
+  } catch (error) {
+    console.error('[Missions] import collection NFTs failed:', error);
+    showError(error?.message || 'Failed to import collection NFTs.');
+  }
 }
 
 function renderHeistRedemptions(redemptions) {
@@ -4260,25 +4424,96 @@ async function updateHeistRedemptionStatus(redemptionId) {
 }
 
 async function createHeistVaultItem() {
-  const metadata = heistSelectedTreasuryNft && typeof heistSelectedTreasuryNft === 'object'
-    ? {
-      source: 'treasury_nft',
-      mint: String(heistSelectedTreasuryNft.mint || '').trim() || null,
-      image: String(heistSelectedTreasuryNft.image || '').trim() || null,
-      collectionKey: String(heistSelectedTreasuryNft.collectionKey || '').trim() || null,
-      walletAddress: String(heistSelectedTreasuryNft.walletAddress || '').trim() || null,
-      walletLabel: String(heistSelectedTreasuryNft.walletLabel || '').trim() || null,
+  const category = getHeistVaultCategory();
+  const quantityRaw = getHeistConfigInputValue('heistVaultQuantity', '');
+  const parsedQuantity = quantityRaw === '' ? -1 : Number(quantityRaw);
+  const metadata = { item_category: category };
+  let roleId = null;
+  let rewardType = 'manual';
+  let fulfillmentMode = 'manual';
+
+  if (category === 'nft') {
+    const selectedMint = getHeistConfigInputValue('heistTreasuryNftSelect', '');
+    const selectedNft = heistSelectedTreasuryNft && typeof heistSelectedTreasuryNft === 'object'
+      ? heistSelectedTreasuryNft
+      : (Array.isArray(heistTreasuryNfts) ? heistTreasuryNfts : []).find((entry) => String(entry?.mint || '').trim() === selectedMint);
+    if (!selectedNft) {
+      showError('Select a treasury NFT first for NFT vault items.');
+      return;
     }
-    : null;
+    metadata.source = 'treasury_nft';
+    metadata.mint = String(selectedNft.mint || '').trim() || null;
+    metadata.image = String(selectedNft.image || '').trim() || null;
+    metadata.collectionKey = String(selectedNft.collectionKey || '').trim() || null;
+    metadata.walletAddress = String(selectedNft.walletAddress || '').trim() || null;
+    metadata.walletLabel = String(selectedNft.walletLabel || '').trim() || null;
+  } else if (category === 'token') {
+    const mint = getHeistConfigInputValue('heistVaultTokenMint', '');
+    const amount = Number(getHeistConfigInputValue('heistVaultTokenAmount', '0'));
+    if (!mint) {
+      showError('Token mint is required for token vault items.');
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      showError('Token amount must be greater than zero.');
+      return;
+    }
+    metadata.source = 'treasury_token';
+    metadata.tokenMint = mint;
+    metadata.tokenAmount = amount;
+    metadata.tokenSymbol = getHeistConfigInputValue('heistVaultTokenSymbol', '') || null;
+  } else if (category === 'partner_wl') {
+    const partnerName = getHeistConfigInputValue('heistVaultPartnerName', '');
+    const wlSpots = Number(getHeistConfigInputValue('heistVaultPartnerSpots', '0'));
+    if (!partnerName) {
+      showError('Partner project name is required for Partner WL items.');
+      return;
+    }
+    if (!Number.isFinite(wlSpots) || wlSpots <= 0) {
+      showError('Whitelist spots must be greater than zero.');
+      return;
+    }
+    metadata.source = 'partner_wl';
+    metadata.partnerName = partnerName;
+    metadata.wlSpots = Math.floor(wlSpots);
+    metadata.notes = getHeistConfigInputValue('heistVaultPartnerNotes', '') || null;
+  } else if (category === 'raffle_ticket') {
+    const raffleKey = getHeistConfigInputValue('heistVaultRaffleKey', '');
+    const ticketCount = Number(getHeistConfigInputValue('heistVaultRaffleTickets', '0'));
+    if (!raffleKey) {
+      showError('Raffle ID/campaign key is required for raffle ticket items.');
+      return;
+    }
+    if (!Number.isFinite(ticketCount) || ticketCount <= 0) {
+      showError('Ticket count must be greater than zero.');
+      return;
+    }
+    metadata.source = 'raffle_ticket';
+    metadata.raffleKey = raffleKey;
+    metadata.ticketCount = Math.floor(ticketCount);
+    metadata.notes = getHeistConfigInputValue('heistVaultRaffleNotes', '') || null;
+  } else if (category === 'discord_role') {
+    roleId = getHeistConfigInputValue('heistVaultRoleId', '') || null;
+    if (!roleId) {
+      showError('Role ID is required for Discord role rewards.');
+      return;
+    }
+    rewardType = 'auto_role';
+    fulfillmentMode = 'auto';
+    metadata.source = 'discord_role';
+  } else {
+    metadata.source = 'custom';
+  }
+
   const payload = {
     name: getHeistConfigInputValue('heistVaultName', ''),
     description: getHeistConfigInputValue('heistVaultDescription', ''),
     cost_streetcredit: Number(getHeistConfigInputValue('heistVaultCost', '0')) || 0,
     required_vault_tier: Number(getHeistConfigInputValue('heistVaultTier', '0')) || 0,
-    reward_type: getHeistConfigInputValue('heistVaultRewardType', 'manual') || 'manual',
-    fulfillment_mode: getHeistConfigInputValue('heistVaultFulfillment', 'manual') || 'manual',
-    role_id: getHeistConfigInputValue('heistVaultRoleId', '') || null,
-    quantity_remaining: getHeistConfigInputValue('heistVaultQuantity', '') === '' ? -1 : (Number(getHeistConfigInputValue('heistVaultQuantity', '-1')) || -1),
+    reward_type: rewardType,
+    fulfillment_mode: fulfillmentMode,
+    role_id: roleId,
+    quantity_remaining: Number.isFinite(parsedQuantity) ? Math.floor(parsedQuantity) : -1,
     enabled: !!document.getElementById('heistVaultEnabled')?.checked,
     metadata: metadata || undefined,
   };
@@ -4298,14 +4533,13 @@ async function createHeistVaultItem() {
       throw new Error(json?.message || json?.error?.message || 'Failed to create vault item');
     }
     showSuccess('Vault item created.');
-    ['heistVaultName', 'heistVaultDescription', 'heistVaultCost', 'heistVaultTier', 'heistVaultRoleId', 'heistVaultQuantity'].forEach((id) => {
+    ['heistVaultName', 'heistVaultDescription', 'heistVaultCost', 'heistVaultTier', 'heistVaultRoleId', 'heistVaultQuantity', 'heistVaultTokenMint', 'heistVaultTokenAmount', 'heistVaultTokenSymbol', 'heistVaultPartnerName', 'heistVaultPartnerSpots', 'heistVaultPartnerNotes', 'heistVaultRaffleKey', 'heistVaultRaffleTickets', 'heistVaultRaffleNotes'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.value = '';
     });
-    const rewardEl = document.getElementById('heistVaultRewardType');
-    if (rewardEl) rewardEl.value = 'manual';
-    const fulfillEl = document.getElementById('heistVaultFulfillment');
-    if (fulfillEl) fulfillEl.value = 'manual';
+    const categoryEl = document.getElementById('heistVaultCategory');
+    if (categoryEl) categoryEl.value = 'nft';
+    updateHeistVaultCategoryUi();
     const enabledEl = document.getElementById('heistVaultEnabled');
     if (enabledEl) enabledEl.checked = true;
     heistSelectedTreasuryNft = null;
@@ -4454,7 +4688,10 @@ async function loadHeistAdminPanel() {
     populateHeistTemplateSelectors(templates);
     populateHeistTraitBonusTemplateSelector(templates);
     populateHeistTreasuryNftSelector(heistTreasuryNfts);
+    populateHeistTreasuryCollectionSelect(heistTreasuryNfts);
+    populateHeistTreasuryTokenSelect(heistTreasuryTokens);
     renderHeistTreasuryTokenSummary(heistTreasuryTokens);
+    updateHeistVaultCategoryUi();
     renderHeistTemplateList(templates);
     renderHeistMissionOps(missions);
     renderHeistLadder(ladder);
@@ -5554,8 +5791,10 @@ async function loadTreasuryAlertsConfig() {
     container.innerHTML = `
       <div style="display:flex; flex-direction:column; gap:16px; max-width:500px;">
         <div>
-          <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">TX Alert Channel ID</label>
-          <input id="alertsCfgChannel" type="text" value="${c.txAlertChannelId || ''}" placeholder="Discord channel ID" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; font-family:monospace; box-sizing:border-box;">
+          <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">TX Alert Channel</label>
+          <select id="alertsCfgChannel" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; box-sizing:border-box;">
+            <option value="">Loading channels...</option>
+          </select>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
           <input id="alertsCfgIncoming" type="checkbox" ${c.txAlertIncomingOnly ? 'checked' : ''} style="width:18px; height:18px;">
@@ -5571,6 +5810,7 @@ async function loadTreasuryAlertsConfig() {
         </div>
       </div>
     `;
+    await populateChannelSelect('alertsCfgChannel', c.txAlertChannelId || '');
   } catch (err) {
     container.innerHTML = '<p style="color:#ef4444;">Error loading alert config.</p>';
   }
@@ -13315,7 +13555,7 @@ async function loadTreasuryTrackerView() {
   }
 }
 
-function openTreasuryConfigModal() {
+async function openTreasuryConfigModal() {
   if (!isAdmin) return;
   showConfirmModal('Edit Treasury Config', '', null);
   const title = document.getElementById('confirmTitle');
@@ -13337,8 +13577,10 @@ function openTreasuryConfigModal() {
         <input id="treasuryAlertsEnabledInput" type="checkbox" style="width:18px; height:18px;">
         <span>Enable transaction alerts</span>
       </label></div>
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Alert Channel ID</label>
-        <input id="treasuryAlertChannelInput" type="text" placeholder="Discord channel ID for alerts" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; font-family:monospace;"></div>
+      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Alert Channel</label>
+        <select id="treasuryAlertChannelInput" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
+          <option value="">Loading channels...</option>
+        </select></div>
       <div><label style="display:flex; align-items:center; gap:8px; color:#c9d6ff;">
         <input id="treasuryIncomingOnlyInput" type="checkbox" style="width:18px; height:18px;">
         <span>Incoming only</span>
@@ -13380,6 +13622,7 @@ function openTreasuryConfigModal() {
       showError('Error updating config: ' + e.message);
     }
   };
+  await populateChannelSelect('treasuryAlertChannelInput', '');
 }
 
 // ==================== NFT ACTIVITY TRACKER ====================

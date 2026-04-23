@@ -5,6 +5,7 @@ let isSuperadmin = false;
 let heistEnabled = true;
 let heistEditingTemplateId = null;
 let heistTreasuryNfts = [];
+let heistTreasuryTokens = [];
 let heistTreasuryWallets = [];
 let heistSelectedTreasuryNft = null;
 let heistMissionCollections = [];
@@ -3852,6 +3853,23 @@ function populateHeistTreasurySourceWalletSelector(wallets, selectedAddress = ''
   }
 }
 
+function renderHeistTreasuryTokenSummary(tokens) {
+  const wrap = document.getElementById('heistTreasuryTokenSummary');
+  if (!wrap) return;
+  const list = Array.isArray(tokens) ? tokens : [];
+  if (!list.length) {
+    wrap.textContent = 'No token balances found for the selected treasury wallet(s).';
+    return;
+  }
+  const preview = list.slice(0, 5).map((token) => {
+    const mint = String(token?.mint || '').trim();
+    const amount = Number(token?.amount || 0);
+    const label = mint ? `${mint.slice(0, 4)}...${mint.slice(-4)}` : 'unknown';
+    return `${label}: ${Number.isFinite(amount) ? amount.toLocaleString(undefined, { maximumFractionDigits: 4 }) : '0'}`;
+  });
+  wrap.textContent = `Detected ${list.length} token mint${list.length === 1 ? '' : 's'} | ${preview.join(' | ')}`;
+}
+
 function populateHeistTreasuryNftSelector(nfts) {
   const select = document.getElementById('heistTreasuryNftSelect');
   if (!select) return;
@@ -4155,8 +4173,10 @@ async function loadHeistTreasuryNfts() {
       throw new Error(json?.message || json?.error?.message || 'Failed to load treasury NFTs');
     }
     heistTreasuryNfts = json?.data?.nfts || [];
+    heistTreasuryTokens = json?.data?.tokens || [];
     populateHeistTreasuryNftSelector(heistTreasuryNfts);
-    showSuccess(`Loaded ${heistTreasuryNfts.length} treasury NFTs.`);
+    renderHeistTreasuryTokenSummary(heistTreasuryTokens);
+    showSuccess(`Loaded ${heistTreasuryNfts.length} treasury NFTs and ${heistTreasuryTokens.length} token mints.`);
   } catch (error) {
     console.error('[Missions] load treasury NFTs failed:', error);
     showError(error?.message || 'Failed to load treasury NFTs.');
@@ -4376,6 +4396,7 @@ async function loadHeistAdminPanel() {
     heistMissionCategories = categoriesJson?.success ? (categoriesJson?.data?.categories || []) : [];
     heistMissionCollections = collectionsJson?.success ? (collectionsJson?.data?.collections || []) : [];
     heistTreasuryNfts = treasuryNftsJson?.success ? (treasuryNftsJson?.data?.nfts || []) : [];
+    heistTreasuryTokens = treasuryNftsJson?.success ? (treasuryNftsJson?.data?.tokens || []) : [];
     window._heistAdminTemplates = templates;
     if (heistEditingTemplateId && !templates.some((template) => Number(template.id) === Number(heistEditingTemplateId))) {
       resetHeistTemplateForm();
@@ -4433,6 +4454,7 @@ async function loadHeistAdminPanel() {
     populateHeistTemplateSelectors(templates);
     populateHeistTraitBonusTemplateSelector(templates);
     populateHeistTreasuryNftSelector(heistTreasuryNfts);
+    renderHeistTreasuryTokenSummary(heistTreasuryTokens);
     renderHeistTemplateList(templates);
     renderHeistMissionOps(missions);
     renderHeistLadder(ladder);
@@ -5153,7 +5175,10 @@ async function loadTreasuryPublicView() {
       data = await trackerResponse.json();
     } else {
       source = 'treasury';
-      const response = await fetch('/api/public/v1/treasury', { credentials: 'include', headers: buildTenantRequestHeaders() });
+      const response = await fetch('/api/public/v1/treasury', {
+        credentials: 'include',
+        headers: buildTenantRequestHeaders(),
+      });
       data = await response.json();
     }
 
@@ -5200,7 +5225,10 @@ async function loadTreasuryTransactions() {
   if (!content) return;
   
   try {
-    const response = await fetch('/api/public/v1/treasury/transactions?limit=10', { credentials: 'include' });
+    const response = await fetch('/api/public/v1/treasury/transactions?limit=10', {
+      credentials: 'include',
+      headers: buildTenantRequestHeaders(),
+    });
     const data = await response.json();
     const transactions = data.data?.transactions || data.transactions || [];
     
@@ -5251,9 +5279,15 @@ function showAdminTreasuryElements() {
 }
 
 async function loadTreasuryWalletTable() {
-  // Alias — now delegates to tracked wallets list
+  // Alias - load full wallet tracker stack
   if (isAdmin) showAdminTreasuryElements();
-  await loadTrackedWalletList();
+  const jobs = [
+    loadTrackedWalletList(),
+    loadTreasuryPublicView(),
+    loadTreasuryTransactions(),
+  ];
+  if (isAdmin) jobs.push(loadTreasuryAlertsConfig());
+  await Promise.allSettled(jobs);
 }
 
 async function loadTrackedWalletList() {
@@ -5509,10 +5543,13 @@ async function loadTreasuryAlertsConfig() {
   if (!container) return;
 
   try {
-    const res = await fetch('/api/admin/treasury', { credentials: 'include' });
+    const res = await fetch('/api/admin/treasury', {
+      credentials: 'include',
+      headers: buildTenantRequestHeaders(),
+    });
     if (!res.ok) { container.innerHTML = '<p style="color:var(--text-secondary);">Admin access required.</p>'; return; }
     const data = await res.json();
-    const c = data.config || data;
+    const c = data?.data?.config || data.config || data;
 
     container.innerHTML = `
       <div style="display:flex; flex-direction:column; gap:16px; max-width:500px;">
@@ -5552,7 +5589,7 @@ async function saveTreasuryAlertsCfg() {
   }
   try {
     const res = await fetch('/api/admin/treasury/config', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      method: 'PUT', headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
       credentials: 'include', body: JSON.stringify(payload)
     });
     const result = await res.json();
@@ -10411,7 +10448,7 @@ async function saveTreasuryModuleSettings() {
   try {
     const res = await fetch('/api/admin/treasury/config', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
       credentials: 'include',
       body: JSON.stringify(payload)
     });
@@ -13333,7 +13370,7 @@ function openTreasuryConfigModal() {
 
       await fetch('/api/admin/treasury/config', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
         credentials: 'include',
         body: JSON.stringify(payload)
       });
@@ -13797,11 +13834,15 @@ async function loadTreasuryTrackerView() {
   if (!container) return;
 
   try {
-    const response = await fetch('/api/admin/treasury', { credentials: 'include' });
+    const response = await fetch('/api/admin/treasury', {
+      credentials: 'include',
+      headers: buildTenantRequestHeaders(),
+    });
     const data = await response.json();
+    const config = data?.data?.config || data?.config || null;
 
-    if (data.success && data.config) {
-      const c = data.config;
+    if (data.success && config) {
+      const c = config;
       container.innerHTML = `
         <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
           <div class="stat-card">

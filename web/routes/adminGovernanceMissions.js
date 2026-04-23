@@ -689,10 +689,18 @@ function createAdminGovernanceMissionsRouter({
   router.get('/api/admin/heist/treasury-nfts', adminAuthMiddleware, async (req, res) => {
     if (!ensureHeistModule(req, res)) return;
     try {
-      const nfts = await heistService?.listTreasuryNfts(req.guildId || '', {
-        limit: Number(req.query.limit || 500),
-      });
-      return res.json(toSuccessResponse({ nfts: Array.isArray(nfts) ? nfts : [] }));
+      const [nfts, tokens] = await Promise.all([
+        heistService?.listTreasuryNfts(req.guildId || '', {
+          limit: Number(req.query.limit || 500),
+        }) || [],
+        heistService?.listTreasuryTokens(req.guildId || '', {
+          limit: Number(req.query.tokenLimit || 250),
+        }) || [],
+      ]);
+      return res.json(toSuccessResponse({
+        nfts: Array.isArray(nfts) ? nfts : [],
+        tokens: Array.isArray(tokens) ? tokens : [],
+      }));
     } catch (routeError) {
       logger.error('Error listing treasury NFTs for heist vault:', routeError);
       return res.status(500).json(toErrorResponse('Internal server error'));

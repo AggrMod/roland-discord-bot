@@ -5,7 +5,9 @@ const tenantService = require('./tenantService');
 const entitlementService = require('./entitlementService');
 const walletService = require('./walletService');
 const nftService = require('./nftService');
+const tokenService = require('./tokenService');
 const treasuryService = require('./treasuryService');
+const trackedWalletsService = require('./trackedWalletsService');
 const roleService = require('./roleService');
 const { getModuleDisplayName } = require('./moduleLabelService');
 
@@ -519,7 +521,7 @@ class HeistService {
         if (!treasuryService.isValidSolanaAddress(rawWalletAddress)) {
           return { success: false, message: 'Invalid treasury source wallet address' };
         }
-        const availableWallets = treasuryService.listWallets(normalizedGuildId);
+        const availableWallets = this.listTreasurySourceWallets(normalizedGuildId, { includeDisabled: true });
         const walletExists = availableWallets.some((wallet) => String(wallet?.address || '').trim() === rawWalletAddress);
         if (!walletExists) {
           return { success: false, message: 'Selected treasury source wallet was not found for this server' };
@@ -608,20 +610,91 @@ class HeistService {
     return { success: true, config: this.getConfig(normalizedGuildId) };
   }
 
-  listTreasurySourceWallets(guildId, { includeDisabled = true } = {}) {
+  _listTreasurySourceWalletRows(guildId, { includeDisabled = true } = {}) {
     const normalizedGuildId = normalizeGuildId(guildId);
     if (!normalizedGuildId) return [];
-    return treasuryService
-      .listWallets(normalizedGuildId)
-      .filter((wallet) => includeDisabled ? true : Number(wallet?.enabled ?? 1) === 1)
-      .map((wallet) => ({
-        id: Number(wallet?.id || 0),
-        address: String(wallet?.address || '').trim(),
-        label: String(wallet?.label || '').trim() || null,
-        enabled: Number(wallet?.enabled ?? 1) === 1,
-        created_at: wallet?.created_at || null,
-      }))
-      .filter((wallet) => !!wallet.address);
+    const unique = new Map();
+    const add = (walletAddress, label, enabled, source, id, createdAt) => {
+      const address = String(walletAddress || '').trim();
+      if (!address) return;
+      const key = address.toLowerCase();
+      const entry = unique.get(key);
+      if (!entry) {
+        unique.set(key, {
+          id: Number(id || 0),
+          address,
+          label: String(label || '').trim() || null,
+          enabled: !!enabled,
+          sources: [source],
+          created_at: createdAt || null,
+        });
+        return;
+      }
+      entry.enabled = entry.enabled || !!enabled;
+      if (!entry.label && label) entry.label = String(label || '').trim() || null;
+      if (!entry.sources.includes(source)) entry.sources.push(source);
+      if (!entry.id && id) entry.id = Number(id || 0);
+      if (!entry.created_at && createdAt) entry.created_at = createdAt;
+    };
+
+    const trackedWallets = trackedWalletsService.getTrackedWallets(normalizedGuildId);
+    for (const wallet of (Array.isArray(trackedWallets) ? trackedWallets : [])) {
+      add(
+        wallet?.wallet_address,
+        wallet?.label,
+        Number(wallet?.enabled || 0) === 1,
+        'wallet_tracker',
+        wallet?.id,
+        wallet?.created_at
+      );
+    }
+
+    const treasuryWallets = treasuryService.listWallets(normalizedGuildId);
+    for (const wallet of (Array.isArray(treasuryWallets) ? treasuryWallets : [])) {
+      add(
+        wallet?.address,
+        wallet?.label,
+        Number(wallet?.enabled ?? 1) === 1,
+        'treasury',
+        wallet?.id,
+        wallet?.created_at
+      );
+    }
+
+    // Legacy/global treasury config wallet (wallet tracker main wallet).
+    // Keep this as a fallback source so missions can scan treasury inventory
+    // even when guild-scoped tracked wallets were not added yet.
+    try {
+      const treasuryConfig = treasuryService.getConfig?.();
+      const legacyWallet = String(treasuryConfig?.solana_wallet || '').trim();
+      if (legacyWallet) {
+        add(
+          legacyWallet,
+          'Primary Treasury Wallet',
+          Number(treasuryConfig?.enabled ?? 1) === 1,
+          'treasury_config',
+          0,
+          treasuryConfig?.updated_at || treasuryConfig?.created_at || null
+        );
+      }
+    } catch (error) {
+      logger.warn(`[heist] failed to read treasury config wallet for source list: ${error?.message || error}`);
+    }
+
+    return Array.from(unique.values())
+      .filter((wallet) => includeDisabled ? true : wallet.enabled)
+      .sort((a, b) => String(a.label || a.address).localeCompare(String(b.label || b.address), undefined, { sensitivity: 'base' }));
+  }
+
+  listTreasurySourceWallets(guildId, { includeDisabled = true } = {}) {
+    return this._listTreasurySourceWalletRows(guildId, { includeDisabled }).map((wallet) => ({
+      id: Number(wallet?.id || 0),
+      address: String(wallet?.address || '').trim(),
+      label: String(wallet?.label || '').trim() || null,
+      enabled: !!wallet?.enabled,
+      source: Array.isArray(wallet?.sources) ? wallet.sources.join(',') : String(wallet?.sources || ''),
+      created_at: wallet?.created_at || null,
+    }));
   }
 
   _resolveVerificationCollections(guildId) {
@@ -2298,24 +2371,33 @@ class HeistService {
     return { success: true, guilds: guildIds.length, spawned, resolved };
   }
 
-  async listTreasuryNfts(guildId, { limit = 500 } = {}) {
+  _resolveTreasuryScanWallets(guildId, { includeDisabledFallback = false } = {}) {
     const normalizedGuildId = normalizeGuildId(guildId);
     if (!normalizedGuildId) return [];
-    const safeLimit = Math.max(1, Math.min(5000, Number(limit || 500)));
     const config = this.getConfig(normalizedGuildId);
     const sourceWalletAddress = String(config?.treasury_source_wallet_address || '').trim();
-    const allWallets = treasuryService.listWallets(normalizedGuildId);
-    let wallets = [];
+    const allWallets = this._listTreasurySourceWalletRows(normalizedGuildId, { includeDisabled: true });
+    if (!allWallets.length) return [];
+
     if (sourceWalletAddress) {
       const selected = allWallets.find((wallet) => String(wallet?.address || '').trim() === sourceWalletAddress);
       if (!selected) {
         logger.warn(`[heist] configured treasury source wallet not found for guild ${normalizedGuildId}: ${sourceWalletAddress}`);
         return [];
       }
-      wallets = [selected];
-    } else {
-      wallets = allWallets.filter((wallet) => Number(wallet?.enabled ?? 1) === 1);
+      return [selected];
     }
+
+    const enabledWallets = allWallets.filter((wallet) => !!wallet.enabled);
+    if (enabledWallets.length) return enabledWallets;
+    return includeDisabledFallback ? allWallets : [];
+  }
+
+  async listTreasuryNfts(guildId, { limit = 500 } = {}) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return [];
+    const safeLimit = Math.max(1, Math.min(5000, Number(limit || 500)));
+    const wallets = this._resolveTreasuryScanWallets(normalizedGuildId, { includeDisabledFallback: true });
     if (!wallets.length) return [];
 
     const byMint = new Map();
@@ -2346,6 +2428,45 @@ class HeistService {
     }
 
     return Array.from(byMint.values()).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }));
+  }
+
+  async listTreasuryTokens(guildId, { limit = 250 } = {}) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return [];
+    const safeLimit = Math.max(1, Math.min(2000, Number(limit || 250)));
+    const wallets = this._resolveTreasuryScanWallets(normalizedGuildId, { includeDisabledFallback: true });
+    if (!wallets.length) return [];
+
+    const byMint = new Map();
+    for (const wallet of wallets) {
+      const walletAddress = String(wallet?.address || '').trim();
+      if (!walletAddress) continue;
+      let balances = [];
+      try {
+        balances = await tokenService.getWalletTokenBalances(walletAddress, { guildId: normalizedGuildId });
+      } catch (error) {
+        logger.warn(`[heist] treasury token fetch failed (${walletAddress}): ${error?.message || error}`);
+      }
+      for (const token of (Array.isArray(balances) ? balances : [])) {
+        const mint = String(token?.mint || '').trim();
+        if (!mint) continue;
+        const amount = Number(token?.amount || 0);
+        if (!Number.isFinite(amount) || amount <= 0) continue;
+        const current = byMint.get(mint) || {
+          mint,
+          amount: 0,
+          decimals: Number(token?.decimals || 0) || 0,
+          walletCount: 0,
+        };
+        current.amount += amount;
+        current.walletCount += 1;
+        byMint.set(mint, current);
+      }
+    }
+
+    return Array.from(byMint.values())
+      .sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0))
+      .slice(0, safeLimit);
   }
 
   listVaultItems(guildId, { includeDisabled = false } = {}) {

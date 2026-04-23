@@ -1236,6 +1236,7 @@ class WebServer {
       ensureInviteTrackerModule,
       inviteTrackerService,
       ensureTokenTrackerModule,
+      treasuryService,
     }));
     const createAdminAiAssistantRouter = require('./routes/adminAiAssistant');
     this.app.use('/', createAdminAiAssistantRouter({

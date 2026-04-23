@@ -13,6 +13,7 @@ function createAdminTrackersRouter({
   ensureInviteTrackerModule,
   inviteTrackerService,
   ensureTokenTrackerModule,
+  treasuryService,
 }) {
   const router = express.Router();
 
@@ -106,6 +107,48 @@ function createAdminTrackersRouter({
       return res.json(toSuccessResponse({ eras }));
     } catch (routeError) {
       logger.error('Error fetching battle eras for tenant:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/admin/treasury', adminAuthMiddleware, (req, res) => {
+    if (!ensureWalletTrackerModule(req, res)) return;
+    try {
+      const summary = treasuryService?.getAdminSummary?.();
+      if (!summary?.success) {
+        return res.status(400).json(toErrorResponse(summary?.message || 'Failed to load treasury config', 'VALIDATION_ERROR', null, summary || null));
+      }
+      return res.json(toSuccessResponse(summary));
+    } catch (routeError) {
+      logger.error('Error loading treasury admin summary:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.put('/api/admin/treasury/config', adminAuthMiddleware, (req, res) => {
+    if (!ensureWalletTrackerModule(req, res)) return;
+    try {
+      const body = req.body || {};
+      const result = treasuryService?.updateConfig?.({
+        enabled: body.enabled,
+        solanaWallet: body.solanaWallet ?? body.walletAddress ?? body.treasuryWalletAddress,
+        refreshHours: body.refreshHours ?? body.treasuryRefreshInterval,
+        txAlertsEnabled: body.txAlertsEnabled ?? body.treasuryAlerts ?? body.tx_alerts_enabled,
+        txAlertChannelId: body.txAlertChannelId ?? body.treasuryAlertsChannel ?? body.tx_alert_channel_id,
+        txAlertIncomingOnly: body.txAlertIncomingOnly ?? body.tx_alert_incoming_only,
+        txAlertMinSol: body.txAlertMinSol ?? body.tx_alert_min_sol,
+        watchChannelId: body.watchChannelId ?? body.watch_channel_id,
+      });
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to update treasury config', 'VALIDATION_ERROR', null, result || null));
+      }
+      const summary = treasuryService?.getAdminSummary?.();
+      return res.json(toSuccessResponse({
+        ...result,
+        config: summary?.config || null,
+      }));
+    } catch (routeError) {
+      logger.error('Error updating treasury config:', routeError);
       return res.status(500).json(toErrorResponse('Internal server error'));
     }
   });

@@ -5,6 +5,8 @@ const tenantService = require('./tenantService');
 const MOCK_MODE = process.env.MOCK_MODE === 'true';
 const IS_PRODUCTION = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
 const ALLOW_MOCK_IN_PROD = process.env.ALLOW_MOCK_IN_PROD === 'true';
+const NFT_FETCH_CACHE_TTL_MS = Math.max(5_000, Number(process.env.NFT_FETCH_CACHE_TTL_MS || 45_000));
+const HELIUS_RATE_LIMIT_BACKOFF_MS = Math.max(5_000, Number(process.env.HELIUS_RATE_LIMIT_BACKOFF_MS || 20_000));
 
 // Helius rate limiter — default 10 req/sec (free tier), set HELIUS_RPS in .env to override
 const HELIUS_RPS = parseInt(process.env.HELIUS_RPS || '10');
@@ -42,6 +44,29 @@ class NFTService {
     this.connection = new Connection(process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com');
     this.invalidWalletWarned = new Set();
     this.mockInProdWarnedGuilds = new Set();
+    this.walletNftCache = new Map();
+    this.walletNftInFlight = new Map();
+    this.heliusBackoffUntil = 0;
+  }
+
+  getCacheKey(walletAddress, guildId = null) {
+    return `${String(guildId || 'global').trim()}:${String(walletAddress || '').trim()}`;
+  }
+
+  getCachedWalletNfts(cacheKey, { allowStale = false } = {}) {
+    const entry = this.walletNftCache.get(cacheKey);
+    if (!entry || !Array.isArray(entry.nfts)) return null;
+    if (allowStale || Number(entry.expiresAt || 0) > Date.now()) {
+      return entry.nfts;
+    }
+    return null;
+  }
+
+  setCachedWalletNfts(cacheKey, nfts) {
+    this.walletNftCache.set(cacheKey, {
+      nfts: Array.isArray(nfts) ? nfts : [],
+      expiresAt: Date.now() + NFT_FETCH_CACHE_TTL_MS,
+    });
   }
 
   async getNFTsForWallet(walletAddress, options = {}) {
@@ -86,13 +111,40 @@ class NFTService {
       return [];
     }
 
+    const cacheKey = this.getCacheKey(normalizedWallet, guildId);
+    const cachedFresh = this.getCachedWalletNfts(cacheKey);
+    if (cachedFresh) {
+      return cachedFresh;
+    }
+
+    if (this.heliusBackoffUntil > Date.now()) {
+      return this.getCachedWalletNfts(cacheKey, { allowStale: true }) || [];
+    }
+
+    const existingRequest = this.walletNftInFlight.get(cacheKey);
+    if (existingRequest) {
+      return existingRequest;
+    }
+
+    const requestPromise = (async () => {
+      try {
+        logger.log(`Fetching NFTs for wallet: ${normalizedWallet}`);
+        const nfts = await this.fetchNFTsFromHelius(normalizedWallet);
+        this.setCachedWalletNfts(cacheKey, nfts);
+        return nfts;
+      } catch (error) {
+        logger.error('Error fetching NFTs:', error);
+        return this.getCachedWalletNfts(cacheKey, { allowStale: true }) || [];
+      } finally {
+        this.walletNftInFlight.delete(cacheKey);
+      }
+    })();
+
+    this.walletNftInFlight.set(cacheKey, requestPromise);
     try {
-      logger.log(`Fetching NFTs for wallet: ${normalizedWallet}`);
-      return await this.fetchNFTsFromHelius(normalizedWallet);
-    } catch (error) {
-      logger.error('Error fetching NFTs:', error);
-      // Fail closed outside mock mode to prevent accidental role grants.
-      return [];
+      return await requestPromise;
+    } catch (_error) {
+      return this.getCachedWalletNfts(cacheKey, { allowStale: true }) || [];
     }
   }
 
@@ -123,8 +175,19 @@ class NFTService {
         })
       }));
 
+      if (!response.ok) {
+        if (response.status === 429) {
+          this.heliusBackoffUntil = Date.now() + HELIUS_RATE_LIMIT_BACKOFF_MS;
+        }
+        logger.error(`Helius HTTP error: ${response.status} ${response.statusText}`);
+        return [];
+      }
+
       const data = await response.json();
       if (data.error) {
+        if (Number(data.error?.code || 0) === -32429) {
+          this.heliusBackoffUntil = Date.now() + HELIUS_RATE_LIMIT_BACKOFF_MS;
+        }
         logger.error('Helius API error:', data.error);
         return [];
       }
@@ -134,14 +197,16 @@ class NFTService {
       }
 
       // Transform Helius response to NFT format
-      return data.result.items.map(item => ({
-        mint: item.id,
-        name: item.content?.metadata?.name || 'Unknown NFT',
-        image: item.content?.links?.image || '',
-        attributes: this.extractHeliusAttributes(item.content?.metadata?.attributes || []),
-        collectionKey: item.grouping?.[0]?.group_value || null,
-        assignedToMission: null
-      }));
+      return data.result.items
+        .filter(item => item && typeof item === 'object')
+        .map(item => ({
+          mint: item.id,
+          name: item.content?.metadata?.name || 'Unknown NFT',
+          image: item.content?.links?.image || '',
+          attributes: this.extractHeliusAttributes(item.content?.metadata?.attributes || []),
+          collectionKey: item.grouping?.[0]?.group_value || null,
+          assignedToMission: null
+        }));
     } catch (error) {
       logger.error('Helius fetch error:', error);
       return [];
@@ -150,10 +215,13 @@ class NFTService {
 
   extractHeliusAttributes(attributes) {
     if (!Array.isArray(attributes)) return [];
-    return attributes.map(attr => ({
-      trait_type: attr.trait_type || attr.traitType || 'Unknown',
-      value: attr.value
-    })).filter(a => a.value);
+    return attributes
+      .filter(attr => attr && typeof attr === 'object')
+      .map(attr => ({
+        trait_type: attr.trait_type || attr.traitType || 'Unknown',
+        value: attr.value
+      }))
+      .filter(a => a.value !== null && a.value !== undefined && String(a.value).trim() !== '');
   }
 
   getMockNFTs(walletAddress, context = {}) {

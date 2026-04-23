@@ -4,6 +4,30 @@ const aiAssistantService = require('./aiAssistantService');
 const { EmbedBuilder } = require('discord.js');
 
 class AiSummaryService {
+  constructor() {
+    this._missionsTimeColumn = null;
+  }
+
+  getMissionsRecapTimeColumn() {
+    if (this._missionsTimeColumn) return this._missionsTimeColumn;
+    try {
+      const columns = db.prepare('PRAGMA table_info(missions)').all();
+      const names = new Set((Array.isArray(columns) ? columns : []).map((entry) => String(entry?.name || '').trim().toLowerCase()));
+      if (names.has('updated_at')) {
+        this._missionsTimeColumn = 'updated_at';
+      } else if (names.has('completed_at')) {
+        this._missionsTimeColumn = 'completed_at';
+      } else if (names.has('created_at')) {
+        this._missionsTimeColumn = 'created_at';
+      } else {
+        this._missionsTimeColumn = null;
+      }
+    } catch (_error) {
+      this._missionsTimeColumn = null;
+    }
+    return this._missionsTimeColumn;
+  }
+
   /**
    * Main entry point for the daily background job.
    * Logic: Find all guilds with summaries enabled and trigger their reports.
@@ -161,12 +185,16 @@ class AiSummaryService {
       `).all(guildId);
 
       // 2. Gather Completed Missions
-      const missions = db.prepare(`
-        SELECT title, ai_recap FROM missions
-        WHERE guild_id = ?
-          AND status = 'completed'
-          AND updated_at >= datetime('now', '-1 day')
-      `).all(guildId);
+      const missionTimeColumn = this.getMissionsRecapTimeColumn();
+      let missions = [];
+      if (missionTimeColumn) {
+        missions = db.prepare(`
+          SELECT title, ai_recap FROM missions
+          WHERE guild_id = ?
+            AND status = 'completed'
+            AND ${missionTimeColumn} >= datetime('now', '-1 day')
+        `).all(guildId);
+      }
 
       // 3. Gather Recent Battles
       const battles = db.prepare(`

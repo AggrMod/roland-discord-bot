@@ -733,6 +733,20 @@ function createAdminGovernanceMissionsRouter({
     }
   });
 
+  router.post('/api/admin/heist/vault/bulk-update', adminAuthMiddleware, (req, res) => {
+    if (!ensureHeistModule(req, res)) return;
+    try {
+      const result = heistService?.bulkUpdateVaultItems(req.guildId || '', req.body || {});
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to apply bulk update', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.error('Error applying heist vault bulk update:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.post('/api/admin/heist/vault/import-collection', adminAuthMiddleware, async (req, res) => {
     if (!ensureHeistModule(req, res)) return;
     try {

@@ -2677,6 +2677,79 @@ class HeistService {
     return { success: true };
   }
 
+  bulkUpdateVaultItems(guildId, payload = {}) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'guildId is required' };
+
+    const scopeRaw = String(payload.scope || payload.category || 'all').trim().toLowerCase() || 'all';
+    const hasCost = payload.cost_streetcredit !== undefined || payload.costStreetcredit !== undefined;
+    const hasTier = payload.required_vault_tier !== undefined || payload.requiredVaultTier !== undefined;
+    if (!hasCost && !hasTier) {
+      return { success: false, message: 'At least one field is required (cost_streetcredit and/or required_vault_tier)' };
+    }
+
+    const nextCost = hasCost
+      ? Math.max(0, parseNonNegativeInt(payload.cost_streetcredit ?? payload.costStreetcredit, 0))
+      : null;
+    const nextTier = hasTier
+      ? Math.max(0, parseNonNegativeInt(payload.required_vault_tier ?? payload.requiredVaultTier, 0))
+      : null;
+
+    const normalizeCategory = (item) => {
+      const raw = String(item?.metadata?.item_category || item?.metadata?.source || '').trim().toLowerCase();
+      if (!raw) return 'custom';
+      if (raw === 'treasury_nft') return 'nft';
+      if (raw === 'treasury_token') return 'token';
+      return raw;
+    };
+
+    const allItems = this.listVaultItems(normalizedGuildId, { includeDisabled: true });
+    const targets = scopeRaw === 'all'
+      ? allItems
+      : allItems.filter((item) => normalizeCategory(item) === scopeRaw);
+    if (!targets.length) {
+      return { success: true, scope: scopeRaw, matchedCount: 0, updatedCount: 0 };
+    }
+
+    const setClauses = [];
+    const baseParams = [];
+    if (hasCost) {
+      setClauses.push('cost_streetcredit = ?');
+      baseParams.push(nextCost);
+    }
+    if (hasTier) {
+      setClauses.push('required_vault_tier = ?');
+      baseParams.push(nextTier);
+    }
+    setClauses.push('updated_at = CURRENT_TIMESTAMP');
+
+    const updateStmt = db.prepare(`
+      UPDATE heist_vault_items
+      SET ${setClauses.join(', ')}
+      WHERE guild_id = ? AND id = ?
+    `);
+
+    let updatedCount = 0;
+    const tx = db.transaction(() => {
+      for (const item of targets) {
+        const result = updateStmt.run(...baseParams, normalizedGuildId, Number(item.id));
+        if (Number(result?.changes || 0) > 0) {
+          updatedCount += 1;
+        }
+      }
+    });
+    tx();
+
+    return {
+      success: true,
+      scope: scopeRaw,
+      matchedCount: targets.length,
+      updatedCount,
+      ...(hasCost ? { cost_streetcredit: nextCost } : {}),
+      ...(hasTier ? { required_vault_tier: nextTier } : {}),
+    };
+  }
+
   deleteVaultItem(guildId, itemId) {
     const normalizedGuildId = normalizeGuildId(guildId);
     if (!normalizedGuildId) return { success: false, message: 'guildId is required' };

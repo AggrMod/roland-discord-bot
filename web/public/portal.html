@@ -892,6 +892,21 @@
               </div>
               <div style="margin-top:10px;">
                 <button class="btn-primary btn-sm" onclick="createHeistVaultItem()">Add Vault Item</button>
+                <button class="btn-secondary btn-sm" id="heistVaultCancelEditBtn" style="display:none;" onclick="resetHeistVaultForm()">Cancel Edit</button>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid rgba(99,102,241,0.12);">
+                <select id="heistVaultBulkScope" class="input-sm">
+                  <option value="all">Bulk scope: All items</option>
+                  <option value="nft">NFT items</option>
+                  <option value="token">Token items</option>
+                  <option value="partner_wl">Partner WL items</option>
+                  <option value="raffle_ticket">Raffle Ticket items</option>
+                  <option value="discord_role">Discord Role items</option>
+                  <option value="custom">Custom items</option>
+                </select>
+                <input id="heistVaultBulkCost" type="number" min="0" class="input-sm" placeholder="Bulk streetcredit cost">
+                <input id="heistVaultBulkTier" type="number" min="0" class="input-sm" placeholder="Bulk required tier">
+                <button class="btn-secondary btn-sm" onclick="applyHeistVaultBulkSettings()">Apply Bulk Settings</button>
               </div>
               <div id="heistVaultItemList" style="display:grid;gap:8px;margin-top:12px;"></div>
             </div>

@@ -4,9 +4,11 @@ let isAdmin = false;
 let isSuperadmin = false;
 let heistEnabled = true;
 let heistEditingTemplateId = null;
+let heistEditingVaultItemId = null;
 let heistTreasuryNfts = [];
 let heistTreasuryTokens = [];
 let heistTreasuryWallets = [];
+let heistVaultItemsCache = [];
 let heistSelectedTreasuryNft = null;
 let heistMissionCollections = [];
 let heistMissionCategories = [];
@@ -4027,6 +4029,178 @@ function renderHeistTemplateList(templates) {
   }).join('');
 }
 
+function normalizeHeistVaultItemCategory(item) {
+  const raw = String(item?.metadata?.item_category || item?.metadata?.source || '').trim().toLowerCase();
+  if (!raw) return 'custom';
+  if (raw === 'treasury_nft') return 'nft';
+  if (raw === 'treasury_token') return 'token';
+  if (raw === 'partner_wl') return 'partner_wl';
+  if (raw === 'raffle_ticket') return 'raffle_ticket';
+  if (raw === 'discord_role') return 'discord_role';
+  if (raw === 'token' || raw === 'nft' || raw === 'custom') return raw;
+  return raw;
+}
+
+function getHeistVaultSubmitButton() {
+  return document.querySelector('#heistTabPane-vault button[onclick="createHeistVaultItem()"]');
+}
+
+function updateHeistVaultSubmitState() {
+  const submitBtn = getHeistVaultSubmitButton();
+  const cancelBtn = document.getElementById('heistVaultCancelEditBtn');
+  if (submitBtn) {
+    submitBtn.textContent = heistEditingVaultItemId ? `Save Vault Item #${heistEditingVaultItemId}` : 'Add Vault Item';
+  }
+  if (cancelBtn) {
+    cancelBtn.style.display = heistEditingVaultItemId ? 'inline-flex' : 'none';
+  }
+}
+
+function resetHeistVaultForm() {
+  heistEditingVaultItemId = null;
+  [
+    'heistVaultName',
+    'heistVaultDescription',
+    'heistVaultCost',
+    'heistVaultTier',
+    'heistVaultRoleId',
+    'heistVaultQuantity',
+    'heistVaultTokenMint',
+    'heistVaultTokenAmount',
+    'heistVaultTokenSymbol',
+    'heistVaultPartnerName',
+    'heistVaultPartnerSpots',
+    'heistVaultPartnerNotes',
+    'heistVaultRaffleKey',
+    'heistVaultRaffleTickets',
+    'heistVaultRaffleNotes',
+  ].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const categoryEl = document.getElementById('heistVaultCategory');
+  if (categoryEl) categoryEl.value = 'nft';
+  const enabledEl = document.getElementById('heistVaultEnabled');
+  if (enabledEl) enabledEl.checked = true;
+  const treasurySelect = document.getElementById('heistTreasuryNftSelect');
+  if (treasurySelect) treasurySelect.value = '';
+  heistSelectedTreasuryNft = null;
+  updateHeistVaultCategoryUi();
+  updateHeistVaultSubmitState();
+}
+
+function editHeistVaultItem(itemId) {
+  const id = Number(itemId);
+  if (!Number.isFinite(id) || id <= 0) return;
+  const item = (Array.isArray(heistVaultItemsCache) ? heistVaultItemsCache : []).find((entry) => Number(entry?.id) === id);
+  if (!item) {
+    showError('Vault item not found in current list. Refresh and try again.');
+    return;
+  }
+
+  const metadata = item?.metadata && typeof item.metadata === 'object' ? item.metadata : {};
+  const category = normalizeHeistVaultItemCategory(item);
+  heistEditingVaultItemId = id;
+
+  const setValue = (elementId, value) => {
+    const element = document.getElementById(elementId);
+    if (element) element.value = value === undefined || value === null ? '' : String(value);
+  };
+  const setChecked = (elementId, value) => {
+    const element = document.getElementById(elementId);
+    if (element) element.checked = !!value;
+  };
+
+  setValue('heistVaultCategory', category);
+  updateHeistVaultCategoryUi();
+  setValue('heistVaultName', item.name || '');
+  setValue('heistVaultDescription', item.description || '');
+  setValue('heistVaultCost', Number(item.cost_streetcredit || 0));
+  setValue('heistVaultTier', Number(item.required_vault_tier || 0));
+  setValue('heistVaultQuantity', Number(item.quantity_remaining ?? -1));
+  setChecked('heistVaultEnabled', Number(item.enabled || 0) === 1);
+
+  setValue('heistVaultTokenMint', metadata.tokenMint || '');
+  setValue('heistVaultTokenAmount', metadata.tokenAmount || '');
+  setValue('heistVaultTokenSymbol', metadata.tokenSymbol || '');
+  setValue('heistVaultPartnerName', metadata.partnerName || '');
+  setValue('heistVaultPartnerSpots', metadata.wlSpots || '');
+  setValue('heistVaultPartnerNotes', metadata.notes || '');
+  setValue('heistVaultRaffleKey', metadata.raffleKey || '');
+  setValue('heistVaultRaffleTickets', metadata.ticketCount || '');
+  setValue('heistVaultRaffleNotes', metadata.notes || '');
+  setValue('heistVaultRoleId', item.role_id || '');
+
+  if (category === 'nft') {
+    const mint = String(metadata.mint || '').trim();
+    const treasurySelect = document.getElementById('heistTreasuryNftSelect');
+    if (mint && treasurySelect && Array.from(treasurySelect.options).some((option) => option.value === mint)) {
+      treasurySelect.value = mint;
+      const selected = (Array.isArray(heistTreasuryNfts) ? heistTreasuryNfts : []).find((entry) => String(entry?.mint || '').trim() === mint);
+      heistSelectedTreasuryNft = selected || null;
+    }
+  }
+
+  updateHeistVaultSubmitState();
+  showSuccess(`Editing vault item #${id}.`);
+}
+
+async function applyHeistVaultBulkSettings() {
+  if (!(isAdmin || isSuperadmin) || !activeGuildId) return;
+  const scope = String(document.getElementById('heistVaultBulkScope')?.value || 'all').trim().toLowerCase() || 'all';
+  const costRaw = getHeistConfigInputValue('heistVaultBulkCost', '');
+  const tierRaw = getHeistConfigInputValue('heistVaultBulkTier', '');
+  const hasCost = costRaw !== '';
+  const hasTier = tierRaw !== '';
+
+  if (!hasCost && !hasTier) {
+    showError('Set at least one bulk value (cost and/or required tier).');
+    return;
+  }
+
+  const payload = {
+    scope,
+  };
+  if (hasCost) {
+    const parsedCost = Number(costRaw);
+    if (!Number.isFinite(parsedCost) || parsedCost < 0) {
+      showError('Bulk streetcredit cost must be 0 or higher.');
+      return;
+    }
+    payload.cost_streetcredit = Math.floor(parsedCost);
+  }
+  if (hasTier) {
+    const parsedTier = Number(tierRaw);
+    if (!Number.isFinite(parsedTier) || parsedTier < 0) {
+      showError('Bulk required tier must be 0 or higher.');
+      return;
+    }
+    payload.required_vault_tier = Math.floor(parsedTier);
+  }
+
+  const confirmed = confirm(`Apply bulk settings to ${scope === 'all' ? 'all vault items' : `${scope} vault items`}?\nThis updates existing items.`);
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch('/api/admin/heist/vault/bulk-update', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || json?.error?.message || 'Failed to apply bulk settings');
+    }
+    const result = json?.data || {};
+    showSuccess(`Bulk update complete. Updated ${Number(result.updatedCount || 0)} item(s).`);
+    await loadHeistAdminPanel();
+  } catch (error) {
+    console.error('[Missions] bulk vault update failed:', error);
+    showError(error?.message || 'Failed to apply bulk settings.');
+  }
+}
+
 function renderHeistMissionOps(missions) {
   const wrap = document.getElementById('heistActiveMissionOps');
   if (!wrap) return;
@@ -4238,6 +4412,7 @@ function renderHeistVaultItems(items) {
   const wrap = document.getElementById('heistVaultItemList');
   if (!wrap) return;
   const list = Array.isArray(items) ? items : [];
+  heistVaultItemsCache = list;
   if (!list.length) {
     wrap.innerHTML = '<p style="color:var(--text-secondary);font-size:0.9em;">No vault items yet.</p>';
     return;
@@ -4246,7 +4421,7 @@ function renderHeistVaultItems(items) {
     <div style="border:1px solid var(--border-color);border-radius:10px;padding:10px;background:rgba(15,23,42,0.35);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
       <div style="font-size:0.9em;color:var(--text-secondary);">
         <div style="color:var(--text-primary);font-weight:600;">#${Number(item.id)} ${escapeHtml(String(item.name || 'Unnamed item'))}</div>
-        <div>category ${escapeHtml(String(item?.metadata?.item_category || item?.metadata?.source || 'custom'))}</div>
+        <div>category ${escapeHtml(normalizeHeistVaultItemCategory(item))}</div>
         <div>cost ${Number(item.cost_streetcredit || 0)} | tier ${Number(item.required_vault_tier || 0)} | reward ${escapeHtml(String(item.reward_type || 'manual'))} | fulfillment ${escapeHtml(String(item.fulfillment_mode || 'manual'))}</div>
         <div>stock ${Number(item.quantity_remaining) < 0 ? 'unlimited' : Number(item.quantity_remaining || 0)} | ${Number(item.enabled || 0) === 1 ? 'enabled' : 'disabled'}</div>
         ${(item?.metadata?.source === 'treasury_nft' && item?.metadata?.mint) ? `<div>treasury NFT: ${escapeHtml(String(item.metadata.mint))}</div>` : ''}
@@ -4254,7 +4429,10 @@ function renderHeistVaultItems(items) {
         ${(item?.metadata?.source === 'partner_wl' && item?.metadata?.partnerName) ? `<div>partner: ${escapeHtml(String(item.metadata.partnerName))} | spots ${escapeHtml(String(item.metadata.wlSpots || '0'))}</div>` : ''}
         ${(item?.metadata?.source === 'raffle_ticket' && item?.metadata?.raffleKey) ? `<div>raffle: ${escapeHtml(String(item.metadata.raffleKey))} | tickets ${escapeHtml(String(item.metadata.ticketCount || '0'))}</div>` : ''}
       </div>
-      <button class="btn-secondary btn-sm" onclick="deleteHeistVaultItem(${Number(item.id)})">Delete</button>
+      <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;">
+        <button class="btn-secondary btn-sm" onclick="editHeistVaultItem(${Number(item.id)})">Edit</button>
+        <button class="btn-danger btn-sm" onclick="deleteHeistVaultItem(${Number(item.id)})">Delete</button>
+      </div>
     </div>
   `).join('');
 }
@@ -4522,33 +4700,27 @@ async function createHeistVaultItem() {
     return;
   }
   try {
-    const res = await fetch('/api/admin/heist/vault/items', {
-      method: 'POST',
+    const isEditing = Number.isFinite(Number(heistEditingVaultItemId)) && Number(heistEditingVaultItemId) > 0;
+    const endpoint = isEditing
+      ? `/api/admin/heist/vault/items/${encodeURIComponent(String(Number(heistEditingVaultItemId)))}`
+      : '/api/admin/heist/vault/items';
+    const method = isEditing ? 'PUT' : 'POST';
+    const res = await fetch(endpoint, {
+      method,
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
       body: JSON.stringify(payload),
     });
     const json = await res.json();
     if (!res.ok || !json?.success) {
-      throw new Error(json?.message || json?.error?.message || 'Failed to create vault item');
+      throw new Error(json?.message || json?.error?.message || (isEditing ? 'Failed to update vault item' : 'Failed to create vault item'));
     }
-    showSuccess('Vault item created.');
-    ['heistVaultName', 'heistVaultDescription', 'heistVaultCost', 'heistVaultTier', 'heistVaultRoleId', 'heistVaultQuantity', 'heistVaultTokenMint', 'heistVaultTokenAmount', 'heistVaultTokenSymbol', 'heistVaultPartnerName', 'heistVaultPartnerSpots', 'heistVaultPartnerNotes', 'heistVaultRaffleKey', 'heistVaultRaffleTickets', 'heistVaultRaffleNotes'].forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) el.value = '';
-    });
-    const categoryEl = document.getElementById('heistVaultCategory');
-    if (categoryEl) categoryEl.value = 'nft';
-    updateHeistVaultCategoryUi();
-    const enabledEl = document.getElementById('heistVaultEnabled');
-    if (enabledEl) enabledEl.checked = true;
-    heistSelectedTreasuryNft = null;
-    const treasurySelect = document.getElementById('heistTreasuryNftSelect');
-    if (treasurySelect) treasurySelect.value = '';
+    showSuccess(isEditing ? `Vault item #${Number(heistEditingVaultItemId)} updated.` : 'Vault item created.');
+    resetHeistVaultForm();
     await loadHeistAdminPanel();
   } catch (error) {
     console.error('[Missions] create vault item failed:', error);
-    showError(error?.message || 'Failed to create vault item.');
+    showError(error?.message || (Number(heistEditingVaultItemId) > 0 ? 'Failed to update vault item.' : 'Failed to create vault item.'));
   }
 }
 
@@ -4567,6 +4739,9 @@ async function deleteHeistVaultItem(itemId) {
       throw new Error(json?.message || json?.error?.message || 'Failed to delete vault item');
     }
     showSuccess(`Vault item #${id} deleted.`);
+    if (Number(heistEditingVaultItemId) === id) {
+      resetHeistVaultForm();
+    }
     await loadHeistAdminPanel();
   } catch (error) {
     console.error('[Missions] delete vault item failed:', error);
@@ -4697,6 +4872,11 @@ async function loadHeistAdminPanel() {
     renderHeistLadder(ladder);
     renderHeistTraitBonuses(traitBonuses);
     renderHeistVaultItems(vaultItems);
+    if (heistEditingVaultItemId && !vaultItems.some((item) => Number(item?.id) === Number(heistEditingVaultItemId))) {
+      resetHeistVaultForm();
+    } else {
+      updateHeistVaultSubmitState();
+    }
     renderHeistRedemptions(redemptions);
     bindHeistTemplateImageUpload();
     bindHeistTemplateCatalogHandlers();

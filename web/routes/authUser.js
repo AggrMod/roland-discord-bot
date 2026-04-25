@@ -765,6 +765,29 @@ function createAuthUserRouter({
     }
   });
 
+  router.get('/api/public/v1/heist/vault/catalog', async (req, res) => {
+    try {
+      const serviceCheck = ensureHeistServiceAvailable();
+      if (!serviceCheck.ok) {
+        return res.status(500).json(toErrorResponse(serviceCheck.message, 'CONFIG_ERROR'));
+      }
+
+      const guildId = resolvePublicGuildId(req);
+      if (!guildId) {
+        return res.status(400).json(toErrorResponse('guildId query parameter is required', 'VALIDATION_ERROR'));
+      }
+
+      const items = heistService.listVaultItems(guildId, { includeDisabled: false });
+      return res.json(toSuccessResponse({
+        moduleDisplayName: getModuleDisplayName('heist', guildId),
+        items,
+      }));
+    } catch (routeError) {
+      logger.error('Error fetching public heist vault catalog:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.get('/api/public/v1/heist/vault/items', async (req, res) => {
     try {
       const serviceCheck = ensureHeistServiceAvailable();

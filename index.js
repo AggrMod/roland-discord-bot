@@ -526,6 +526,13 @@ client.on(Events.InteractionCreate, async interaction => {
     if (customId === 'panel_verify') { await handlePanelVerifyButton(interaction); return; }
     if (customId === 'treasury_refresh_panel') { await handleTreasuryRefreshButton(interaction); return; }
     if (customId === 'heist_panel_discover' || customId === 'heist_panel_status' || customId === 'heist_panel_join') { await handleHeistPanelButton(interaction); return; }
+    if (customId.startsWith('vault_panel_')) {
+      const vaultCommand = client.commands.get('vault');
+      if (vaultCommand && typeof vaultCommand.handlePanelButton === 'function') {
+        const handled = await vaultCommand.handlePanelButton(interaction);
+        if (handled) return;
+      }
+    }
     if (customId === 'governance_create_proposal') { await handleGovernanceCreateProposalButton(interaction); return; }
     if (customId.startsWith('support_')) { await handleSupportButton(interaction); return; }
     if (customId.startsWith('comment_')) { await handleGovernanceCommentButton(interaction); return; }

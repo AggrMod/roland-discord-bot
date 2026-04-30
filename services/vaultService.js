@@ -28,6 +28,13 @@ function normalizeSeasonId(seasonId) {
   return String(seasonId || '').trim() || 'default';
 }
 
+function normalizeRewardQuantity(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const qty = Number.parseInt(value, 10);
+  if (!Number.isFinite(qty)) return null;
+  return Math.max(0, qty);
+}
+
 class VaultService {
   getDefaultConfig() {
     return {
@@ -39,18 +46,12 @@ class VaultService {
       },
       theme: {
         keyName: 'Reward Key',
-        pointsName: 'Points',
-        bonusEntryName: 'Bonus Entries',
       },
       mintRules: {
         keysPerPaidMint: 1,
         keysPerFreeMint: 0,
-        bonusEntriesPerPaidMint: 1,
-        bonusEntriesPerFreeMint: 0,
         pressurePerPaidMint: 1,
         pressurePerFreeMint: 0,
-        pointsPerPaidMint: 0,
-        pointsPerFreeMint: 0,
       },
       mintSource: {
         mode: 'custom_webhook',
@@ -65,33 +66,37 @@ class VaultService {
       },
       rewardTable: {
         version: 'default',
+        noRewardWeight: 0,
         rewards: [
           {
-            code: 'points_small',
-            name: 'Small Points Pack',
+            code: 'sticker_pack',
+            name: 'Sticker Pack',
             tier: 'common',
             weight: 70,
             enabled: true,
-            type: 'points',
-            payload: { amount: 5 },
+            quantity: 250,
+            type: 'claimable_reward',
+            payload: { reward: 'sticker_pack' },
           },
           {
-            code: 'bonus_entry',
-            name: 'Bonus Draw Entry',
-            tier: 'common',
-            weight: 25,
+            code: 'merch_coupon',
+            name: 'Merch Coupon',
+            tier: 'rare',
+            weight: 20,
             enabled: true,
-            type: 'bonus_entries',
-            payload: { amount: 1 },
+            quantity: 80,
+            type: 'claimable_reward',
+            payload: { reward: 'merch_coupon' },
           },
           {
             code: 'mystery_box',
             name: 'Mystery Box Claim',
             tier: 'rare',
-            weight: 5,
+            weight: 10,
             enabled: true,
+            quantity: 35,
             type: 'claimable_reward',
-            payload: { amount: 1, reward: 'mystery_box' },
+            payload: { reward: 'mystery_box' },
           },
         ],
       },
@@ -100,6 +105,7 @@ class VaultService {
         noKeys: 'You do not have any available keys.',
         vaultInactive: 'The vault is currently inactive.',
         openSuccess: 'Vault opened! You received **{{rewardName}}**.',
+        noRewardOpen: 'Vault opened, but this key did not reveal a reward.',
       },
     };
   }
@@ -283,7 +289,12 @@ class VaultService {
 
   getRewards(guildId) {
     const cfg = this.getConfig(guildId);
-    return Array.isArray(cfg?.rewardTable?.rewards) ? cfg.rewardTable.rewards : [];
+    return Array.isArray(cfg?.rewardTable?.rewards)
+      ? cfg.rewardTable.rewards.map(reward => ({
+          ...reward,
+          quantity: normalizeRewardQuantity(reward?.quantity),
+        }))
+      : [];
   }
 
   addReward(guildId, reward) {
@@ -301,7 +312,8 @@ class VaultService {
       tier: String(reward?.tier || 'common').trim().toLowerCase(),
       weight: clampInt(reward?.weight, 0, 0),
       enabled: reward?.enabled !== false,
-      type: String(reward?.type || 'none').trim(),
+      quantity: normalizeRewardQuantity(reward?.quantity),
+      type: String(reward?.type || 'claimable_reward').trim(),
       payload: reward?.payload || null,
     });
     cfg.rewardTable = cfg.rewardTable || {};
@@ -315,7 +327,11 @@ class VaultService {
     const rewards = Array.isArray(cfg.rewardTable?.rewards) ? [...cfg.rewardTable.rewards] : [];
     const idx = rewards.findIndex(r => String(r.code || '').toLowerCase() === String(code || '').trim().toLowerCase());
     if (idx < 0) return { success: false, message: 'Reward not found' };
-    rewards[idx] = { ...rewards[idx], ...patch };
+    const nextPatch = { ...patch };
+    if (Object.prototype.hasOwnProperty.call(nextPatch, 'quantity')) {
+      nextPatch.quantity = normalizeRewardQuantity(nextPatch.quantity);
+    }
+    rewards[idx] = { ...rewards[idx], ...nextPatch };
     cfg.rewardTable = cfg.rewardTable || {};
     cfg.rewardTable.rewards = rewards;
     return this.saveConfig(guildId, cfg);
@@ -332,24 +348,28 @@ class VaultService {
   }
 
   rollReward(guildId) {
+    const cfg = this.getConfig(guildId) || {};
+    const noRewardWeight = clampInt(cfg?.rewardTable?.noRewardWeight, 0, 0);
     const rewards = this.getRewards(guildId)
-      .filter(r => r && r.enabled !== false && Number(r.weight || 0) > 0);
-    if (!rewards.length) {
-      return {
-        code: 'empty',
-        name: 'Empty Vault',
-        tier: 'common',
-        type: 'none',
-        payload: null,
-      };
-    }
-    const total = rewards.reduce((sum, r) => sum + Number(r.weight || 0), 0);
+      .filter((reward) => {
+        if (!reward || reward.enabled === false || Number(reward.weight || 0) <= 0) return false;
+        const quantity = normalizeRewardQuantity(reward.quantity);
+        if (quantity === null) return true;
+        return quantity > 0;
+      });
+    const weightedRewardTotal = rewards.reduce((sum, reward) => sum + Number(reward.weight || 0), 0);
+    const total = weightedRewardTotal + noRewardWeight;
+    if (total <= 0) return null;
     let roll = Math.random() * total;
+    if (noRewardWeight > 0) {
+      roll -= noRewardWeight;
+      if (roll < 0) return null;
+    }
     for (const reward of rewards) {
       roll -= Number(reward.weight || 0);
       if (roll <= 0) return reward;
     }
-    return rewards[rewards.length - 1];
+    return rewards.length ? rewards[rewards.length - 1] : null;
   }
 
   ensureUserStats(guildId, seasonId, discordUserId, walletAddress = null) {
@@ -414,13 +434,13 @@ class VaultService {
     const gid = normalizeGuildId(guildId);
     const season = seasonId ? this.getSeason(guildId, seasonId) : this.getActiveSeason(guildId);
     if (!season) return { success: false, message: 'No active season' };
-    const allowed = new Set(['keys_used', 'points', 'paid_mints', 'pressure', 'bonus_entries']);
+    const allowed = new Set(['keys_used', 'keys_earned', 'paid_mints', 'free_mints', 'rewards_won', 'pressure']);
     const sortCol = allowed.has(String(sortBy || '').trim()) ? String(sortBy).trim() : 'keys_used';
     const rows = db.prepare(`
-      SELECT discord_user_id, keys_earned, keys_used, points, paid_mints, pressure, bonus_entries, rewards_won
+      SELECT discord_user_id, keys_earned, keys_used, paid_mints, free_mints, pressure, rewards_won
       FROM vault_user_stats
       WHERE guild_id = ? AND season_id = ?
-      ORDER BY ${sortCol} DESC, keys_used DESC, points DESC
+      ORDER BY ${sortCol} DESC, keys_used DESC, rewards_won DESC
       LIMIT ?
     `).all(gid, season.season_id, Math.max(1, Math.min(100, Number(limit) || 10)));
     return { success: true, season, rows };
@@ -437,7 +457,16 @@ class VaultService {
     const season = this.getActiveSeason(gid);
     if (!season) return { success: false, message: 'No active season' };
 
-    const reward = this.rollReward(gid);
+    const rolledReward = this.rollReward(gid);
+    const reward = rolledReward || {
+      code: 'no_reward',
+      name: 'No Reward',
+      tier: 'none',
+      type: 'none',
+      payload: null,
+    };
+    const openingStatus = reward.code === 'no_reward' ? 'empty' : 'completed';
+    const rewardWonIncrement = reward.code === 'no_reward' ? 0 : 1;
     let openingResult = null;
 
     const tx = db.transaction(() => {
@@ -451,9 +480,9 @@ class VaultService {
 
       db.prepare(`
         UPDATE vault_user_stats
-        SET keys_used = keys_used + 1, rewards_won = rewards_won + 1, updated_at = CURRENT_TIMESTAMP
+        SET keys_used = keys_used + 1, rewards_won = rewards_won + ?, updated_at = CURRENT_TIMESTAMP
         WHERE guild_id = ? AND season_id = ? AND discord_user_id = ?
-      `).run(gid, season.season_id, uid);
+      `).run(rewardWonIncrement, gid, season.season_id, uid);
 
       const updatedStats = db.prepare(`
         SELECT *
@@ -466,7 +495,7 @@ class VaultService {
         INSERT INTO vault_openings (
           guild_id, season_id, discord_user_id,
           reward_tier, reward_code, reward_name, reward_payload, key_number, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'completed', CURRENT_TIMESTAMP)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       `).run(
         gid,
         season.season_id,
@@ -475,7 +504,8 @@ class VaultService {
         String(reward.code || 'unknown'),
         String(reward.name || 'Unknown Reward'),
         reward.payload !== undefined ? JSON.stringify(reward.payload) : null,
-        keyNumber
+        keyNumber,
+        openingStatus
       );
 
       this.applyRewardEffects({
@@ -511,29 +541,6 @@ class VaultService {
 
   applyRewardEffects({ guildId, seasonId, discordUserId, reward }) {
     const type = String(reward?.type || 'none').trim().toLowerCase();
-    const payload = reward?.payload || {};
-    if (type === 'points') {
-      const amount = clampInt(payload.amount, 0, 0);
-      if (amount > 0) {
-        db.prepare(`
-          UPDATE vault_user_stats
-          SET points = points + ?, updated_at = CURRENT_TIMESTAMP
-          WHERE guild_id = ? AND season_id = ? AND discord_user_id = ?
-        `).run(amount, guildId, seasonId, discordUserId);
-      }
-      return;
-    }
-    if (type === 'bonus_entries') {
-      const amount = clampInt(payload.amount, 0, 0);
-      if (amount > 0) {
-        db.prepare(`
-          UPDATE vault_user_stats
-          SET bonus_entries = bonus_entries + ?, updated_at = CURRENT_TIMESTAMP
-          WHERE guild_id = ? AND season_id = ? AND discord_user_id = ?
-        `).run(amount, guildId, seasonId, discordUserId);
-      }
-      return;
-    }
     if (type === 'claimable_reward') {
       db.prepare(`
         INSERT INTO vault_rewards (
@@ -549,6 +556,43 @@ class VaultService {
         reward.payload !== undefined ? JSON.stringify(reward.payload) : null
       );
     }
+  }
+
+  decrementRewardInventoryOnClaim(guildId, rewardCode, decrementBy = 1) {
+    const gid = normalizeGuildId(guildId);
+    const code = String(rewardCode || '').trim().toLowerCase();
+    const qtyToSubtract = Math.max(1, Number.parseInt(decrementBy, 10) || 1);
+    if (!gid || !code) return { success: false, message: 'Invalid inventory decrement input' };
+
+    const cfg = this.getConfig(gid);
+    if (!cfg) return { success: false, message: 'Config unavailable' };
+    const rewards = Array.isArray(cfg.rewardTable?.rewards) ? [...cfg.rewardTable.rewards] : [];
+    const idx = rewards.findIndex(reward => String(reward?.code || '').trim().toLowerCase() === code);
+    if (idx < 0) return { success: true, changed: false, removed: false, remainingQuantity: null };
+
+    const reward = { ...rewards[idx] };
+    const currentQty = normalizeRewardQuantity(reward.quantity);
+    if (currentQty === null) {
+      return { success: true, changed: false, removed: false, remainingQuantity: null };
+    }
+
+    const nextQty = Math.max(0, currentQty - qtyToSubtract);
+    if (nextQty <= 0) {
+      rewards.splice(idx, 1);
+      cfg.rewardTable = cfg.rewardTable || {};
+      cfg.rewardTable.rewards = rewards;
+      const saveResult = this.saveConfig(gid, cfg);
+      if (!saveResult.success) return saveResult;
+      return { success: true, changed: true, removed: true, remainingQuantity: 0 };
+    }
+
+    reward.quantity = nextQty;
+    rewards[idx] = reward;
+    cfg.rewardTable = cfg.rewardTable || {};
+    cfg.rewardTable.rewards = rewards;
+    const saveResult = this.saveConfig(gid, cfg);
+    if (!saveResult.success) return saveResult;
+    return { success: true, changed: true, removed: false, remainingQuantity: nextQty };
   }
 
   assignManualReward(guildId, seasonId, discordUserId, reward = {}, source = 'manual_admin') {
@@ -599,6 +643,13 @@ class VaultService {
       WHERE id = ? AND guild_id = ?
     `).run(status, id, gid);
 
+    let inventoryUpdate = null;
+    const claimedStatuses = new Set(['claimed', 'fulfilled']);
+    const previousStatus = String(row.claim_status || '').trim().toLowerCase();
+    if (claimedStatuses.has(status) && !claimedStatuses.has(previousStatus)) {
+      inventoryUpdate = this.decrementRewardInventoryOnClaim(gid, row.reward_code, 1);
+    }
+
     return {
       success: true,
       reward: {
@@ -606,6 +657,7 @@ class VaultService {
         claim_status: status,
         claim_note: claimNote ? String(claimNote) : null,
       },
+      inventoryUpdate,
     };
   }
 
@@ -749,9 +801,7 @@ class VaultService {
       paid_mints: paid ? 1 : 0,
       free_mints: free ? 1 : 0,
       keys_granted: paid ? clampInt(rules.keysPerPaidMint, 0, 0) : (free ? clampInt(rules.keysPerFreeMint, 0, 0) : 0),
-      bonus_entries_granted: paid ? clampInt(rules.bonusEntriesPerPaidMint, 0, 0) : (free ? clampInt(rules.bonusEntriesPerFreeMint, 0, 0) : 0),
       pressure_granted: paid ? clampInt(rules.pressurePerPaidMint, 0, 0) : (free ? clampInt(rules.pressurePerFreeMint, 0, 0) : 0),
-      points_granted: paid ? clampInt(rules.pointsPerPaidMint, 0, 0) : (free ? clampInt(rules.pointsPerFreeMint, 0, 0) : 0),
     };
   }
 
@@ -763,18 +813,14 @@ class VaultService {
         paid_mints = paid_mints + ?,
         free_mints = free_mints + ?,
         keys_earned = keys_earned + ?,
-        bonus_entries = bonus_entries + ?,
         pressure = pressure + ?,
-        points = points + ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE guild_id = ? AND season_id = ? AND discord_user_id = ?
     `).run(
       clampInt(grants.paid_mints, 0, 0),
       clampInt(grants.free_mints, 0, 0),
       clampInt(grants.keys_granted, 0, 0),
-      clampInt(grants.bonus_entries_granted, 0, 0),
       clampInt(grants.pressure_granted, 0, 0),
-      clampInt(grants.points_granted, 0, 0),
       normalizeGuildId(guildId),
       normalizeSeasonId(seasonId),
       String(discordUserId || '').trim()
@@ -813,9 +859,9 @@ class VaultService {
       const tx = db.transaction(() => {
         db.prepare(`
           INSERT INTO vault_mint_events (
-            guild_id, season_id, tx_signature, mint_address, wallet_address, discord_user_id, mint_type,
-            keys_granted, bonus_entries_granted, pressure_granted, points_granted, metadata_json, created_at, processed_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          guild_id, season_id, tx_signature, mint_address, wallet_address, discord_user_id, mint_type,
+          keys_granted, bonus_entries_granted, pressure_granted, points_granted, metadata_json, created_at, processed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `).run(
           guildId,
           season.season_id,
@@ -825,9 +871,9 @@ class VaultService {
           linkedUserId || null,
           mintType,
           grants.keys_granted,
-          grants.bonus_entries_granted,
+          0,
           grants.pressure_granted,
-          grants.points_granted,
+          0,
           JSON.stringify({
             source: event?.source || 'vault_webhook',
             raw: event || null,
@@ -884,9 +930,7 @@ class VaultService {
           paid_mints: String(row.mint_type || '').toLowerCase() === 'paid' ? 1 : 0,
           free_mints: String(row.mint_type || '').toLowerCase() === 'free' ? 1 : 0,
           keys_granted: clampInt(row.keys_granted, 0, 0),
-          bonus_entries_granted: clampInt(row.bonus_entries_granted, 0, 0),
           pressure_granted: clampInt(row.pressure_granted, 0, 0),
-          points_granted: clampInt(row.points_granted, 0, 0),
         };
         this.applyMintGrantsToUser(gid, season.season_id, uid, wallet, grants);
         db.prepare(`

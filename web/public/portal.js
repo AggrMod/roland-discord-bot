@@ -9535,6 +9535,43 @@ function vaultFormatRows(rows, emptyText) {
   return rows.map((row, idx) => `${idx + 1}. ${row}`).join('\n');
 }
 
+function vaultFormatQuantity(value) {
+  if (value === null || value === undefined || value === '') return 'Unlimited';
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return 'Unlimited';
+  return `${Math.max(0, parsed)}`;
+}
+
+function vaultBuildChannelOptions(channels, selectedId) {
+  const selected = String(selectedId || '').trim();
+  if (!Array.isArray(channels) || channels.length === 0) {
+    return '<option value="">No channels found</option>';
+  }
+
+  const grouped = channels.reduce((acc, channel) => {
+    const name = String(channel?.parentName || 'No Category');
+    if (!acc[name]) acc[name] = [];
+    acc[name].push(channel);
+    return acc;
+  }, {});
+
+  return Object.keys(grouped)
+    .sort((a, b) => a.localeCompare(b))
+    .map((groupName) => {
+      const options = grouped[groupName]
+        .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')))
+        .map((channel) => {
+          const id = String(channel?.id || '').trim();
+          const channelName = String(channel?.name || id || 'unknown');
+          const isSelected = id && id === selected ? ' selected' : '';
+          return `<option value="${escapeHtml(id)}"${isSelected}>#${escapeHtml(channelName)}</option>`;
+        })
+        .join('');
+      return `<optgroup label="${escapeHtml(groupName)}">${options}</optgroup>`;
+    })
+    .join('');
+}
+
 async function vaultFetchJson(url, options = {}) {
   const response = await fetch(url, {
     credentials: 'include',
@@ -9567,7 +9604,10 @@ function vaultRenderAdminPanel() {
   const openings = Array.isArray(vaultSettingsCache?.openings) ? vaultSettingsCache.openings : [];
   const claims = Array.isArray(vaultSettingsCache?.claims) ? vaultSettingsCache.claims : [];
   const audit = Array.isArray(vaultSettingsCache?.audit) ? vaultSettingsCache.audit : [];
+  const channels = Array.isArray(vaultSettingsCache?.channels) ? vaultSettingsCache.channels : [];
   const activeSeasonId = vaultGetCachedActiveSeasonId();
+  const channelOptions = vaultBuildChannelOptions(channels, announcements.channelId);
+  const noRewardWeight = Math.max(0, Number(config?.rewardTable?.noRewardWeight || 0) || 0);
 
   const rewardsRows = rewards.length
     ? rewards.map(reward => `
@@ -9576,6 +9616,7 @@ function vaultRenderAdminPanel() {
         <td>${escapeHtml(String(reward.name || ''))}</td>
         <td>${escapeHtml(String(reward.tier || 'common'))}</td>
         <td>${Number(reward.weight || 0)}</td>
+        <td>${vaultFormatQuantity(reward.quantity)}</td>
         <td>${reward.enabled === false ? 'disabled' : 'enabled'}</td>
         <td>
           <button class="btn-secondary" onclick="vaultLoadRewardToForm('${escapeJsString(String(reward.code || ''))}')">Edit</button>
@@ -9583,7 +9624,7 @@ function vaultRenderAdminPanel() {
         </td>
       </tr>
     `).join('')
-    : '<tr><td colspan="6" style="color:var(--text-secondary);">No rewards configured.</td></tr>';
+    : '<tr><td colspan="7" style="color:var(--text-secondary);">No rewards configured.</td></tr>';
 
   const seasonsRows = seasons.length
     ? seasons.map(season => `
@@ -9607,8 +9648,6 @@ function vaultRenderAdminPanel() {
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Vault Name</div></div><input id="vault_gameName" class="input-sm" value="${escapeHtml(String(general.gameName || ''))}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Season Label</div></div><input id="vault_seasonName" class="input-sm" value="${escapeHtml(String(general.seasonName || ''))}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Key Label</div></div><input id="vault_keyName" class="input-sm" value="${escapeHtml(String(theme.keyName || 'Reward Key'))}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Points Label</div></div><input id="vault_pointsName" class="input-sm" value="${escapeHtml(String(theme.pointsName || 'Points'))}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Bonus Entries Label</div></div><input id="vault_bonusEntryName" class="input-sm" value="${escapeHtml(String(theme.bonusEntryName || 'Bonus Entries'))}"></div>
       </div>
 
       <h4 style="margin:16px 0 8px 0;">Mint Rules and Security</h4>
@@ -9617,13 +9656,10 @@ function vaultRenderAdminPanel() {
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Open Cooldown (sec)</div></div><input id="vault_openCooldownSeconds" type="number" class="input-sm" min="0" value="${Number(security.openCooldownSeconds || 0)}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Keys / Paid Mint</div></div><input id="vault_keysPerPaidMint" type="number" class="input-sm" min="0" value="${Number(mintRules.keysPerPaidMint || 0)}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Keys / Free Mint</div></div><input id="vault_keysPerFreeMint" type="number" class="input-sm" min="0" value="${Number(mintRules.keysPerFreeMint || 0)}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Bonus Entries / Paid</div></div><input id="vault_bonusEntriesPerPaidMint" type="number" class="input-sm" min="0" value="${Number(mintRules.bonusEntriesPerPaidMint || 0)}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Bonus Entries / Free</div></div><input id="vault_bonusEntriesPerFreeMint" type="number" class="input-sm" min="0" value="${Number(mintRules.bonusEntriesPerFreeMint || 0)}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Pressure / Paid</div></div><input id="vault_pressurePerPaidMint" type="number" class="input-sm" min="0" value="${Number(mintRules.pressurePerPaidMint || 0)}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Pressure / Free</div></div><input id="vault_pressurePerFreeMint" type="number" class="input-sm" min="0" value="${Number(mintRules.pressurePerFreeMint || 0)}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Points / Paid</div></div><input id="vault_pointsPerPaidMint" type="number" class="input-sm" min="0" value="${Number(mintRules.pointsPerPaidMint || 0)}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Points / Free</div></div><input id="vault_pointsPerFreeMint" type="number" class="input-sm" min="0" value="${Number(mintRules.pointsPerFreeMint || 0)}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Announcements Channel</div></div><input id="vault_announceChannelId" class="input-sm" value="${escapeHtml(String(announcements.channelId || ''))}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">No Reward Weight</div></div><input id="vault_noRewardWeight" type="number" class="input-sm" min="0" value="${noRewardWeight}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Announcements Channel</div></div><select id="vault_announceChannelId" class="input-sm"><option value="">No announcement channel</option>${channelOptions}</select></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Announce Tiers (CSV)</div></div><input id="vault_announceTiers" class="input-sm" value="${escapeHtml((announcements.announceRewardTiers || []).join(','))}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Announce Common Rewards</div></div><input id="vault_announceCommonRewards" type="checkbox" ${announcements.announceCommonRewards ? 'checked' : ''}></div>
       </div>
@@ -9633,6 +9669,7 @@ function vaultRenderAdminPanel() {
         <textarea id="vault_msgNoKeys" class="form-input" rows="2" placeholder="No keys message">${escapeHtml(String(messages.noKeys || ''))}</textarea>
         <textarea id="vault_msgInactive" class="form-input" rows="2" placeholder="Vault inactive message">${escapeHtml(String(messages.vaultInactive || ''))}</textarea>
         <textarea id="vault_msgSuccess" class="form-input" rows="2" placeholder="Open success message">${escapeHtml(String(messages.openSuccess || ''))}</textarea>
+        <textarea id="vault_msgNoRewardOpen" class="form-input" rows="2" placeholder="No reward open message">${escapeHtml(String(messages.noRewardOpen || ''))}</textarea>
       </div>
       <div style="margin-top:12px;"><button class="btn-primary" onclick="vaultSaveGeneralConfig()">Save Vault Config</button></div>
 
@@ -9649,16 +9686,17 @@ function vaultRenderAdminPanel() {
       <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultUpsertSeason()">Create/Update Season</button></div>
 
       <h4 style="margin:20px 0 8px 0;">Reward Table Manager</h4>
-      <table style="width:100%;border-collapse:collapse;"><thead><tr><th align="left">Code</th><th align="left">Name</th><th align="left">Tier</th><th align="left">Weight</th><th align="left">State</th><th align="left">Actions</th></tr></thead><tbody>${rewardsRows}</tbody></table>
+      <table style="width:100%;border-collapse:collapse;"><thead><tr><th align="left">Code</th><th align="left">Name</th><th align="left">Tier</th><th align="left">Weight</th><th align="left">Qty</th><th align="left">State</th><th align="left">Actions</th></tr></thead><tbody>${rewardsRows}</tbody></table>
       <div class="settings-grid" style="margin-top:10px;">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Code</div></div><input id="vaultRewardCodeInput" class="input-sm" placeholder="reward_code"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Name</div></div><input id="vaultRewardNameInput" class="input-sm" placeholder="Reward Name"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Tier</div></div><input id="vaultRewardTierInput" class="input-sm" placeholder="common|rare|epic|legendary"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Weight</div></div><input id="vaultRewardWeightInput" type="number" min="0" class="input-sm" value="1"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Type</div></div><input id="vaultRewardTypeInput" class="input-sm" placeholder="points|bonus_entries|claimable_reward|none"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Quantity</div></div><input id="vaultRewardQuantityInput" type="number" min="0" class="input-sm" placeholder="blank = unlimited"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Type</div></div><select id="vaultRewardTypeInput" class="input-sm"><option value="claimable_reward">claimable_reward</option><option value="none">none</option></select></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Enabled</div></div><input id="vaultRewardEnabledInput" type="checkbox" checked></div>
       </div>
-      <textarea id="vaultRewardPayloadInput" class="form-input" rows="2" placeholder='{"amount":1}'></textarea>
+      <textarea id="vaultRewardPayloadInput" class="form-input" rows="2" placeholder='{"reward":"sticker_pack"}'></textarea>
       <div style="margin-top:8px;">
         <button class="btn-primary" onclick="vaultSaveReward()">Save Reward</button>
       </div>
@@ -9729,7 +9767,7 @@ async function loadVaultSettingsTab() {
   if (!pane) return;
   pane.innerHTML = '<div class="card"><p style="color:var(--text-secondary);">Loading vault settings...</p></div>';
   try {
-    const [configRes, seasonsRes, rewardsRes, milestonesRes, openingsRes, claimsRes, auditRes] = await Promise.all([
+    const [configRes, seasonsRes, rewardsRes, milestonesRes, openingsRes, claimsRes, auditRes, channelsRes] = await Promise.all([
       vaultFetchJson('/api/admin/vault/config'),
       vaultFetchJson('/api/admin/vault/seasons'),
       vaultFetchJson('/api/admin/vault/rewards'),
@@ -9737,6 +9775,7 @@ async function loadVaultSettingsTab() {
       vaultFetchJson('/api/admin/vault/openings?limit=50'),
       vaultFetchJson('/api/admin/vault/rewards/claims?limit=50'),
       vaultFetchJson('/api/admin/vault/audit?limit=50'),
+      vaultFetchJson('/api/admin/discord/channels'),
     ]);
     vaultSettingsCache = {
       config: configRes?.data?.config || configRes?.config || {},
@@ -9746,6 +9785,7 @@ async function loadVaultSettingsTab() {
       openings: openingsRes?.data?.openings || openingsRes?.openings || [],
       claims: claimsRes?.data?.rewards || claimsRes?.rewards || [],
       audit: auditRes?.data?.logs || auditRes?.logs || [],
+      channels: channelsRes?.data?.channels || channelsRes?.channels || [],
     };
     vaultRenderAdminPanel();
   } catch (error) {
@@ -9771,19 +9811,21 @@ async function vaultSaveGeneralConfig() {
     next.general.seasonName = String(document.getElementById('vault_seasonName')?.value || '').trim();
 
     next.theme.keyName = String(document.getElementById('vault_keyName')?.value || '').trim();
-    next.theme.pointsName = String(document.getElementById('vault_pointsName')?.value || '').trim();
-    next.theme.bonusEntryName = String(document.getElementById('vault_bonusEntryName')?.value || '').trim();
+    if (Object.prototype.hasOwnProperty.call(next.theme, 'pointsName')) delete next.theme.pointsName;
+    if (Object.prototype.hasOwnProperty.call(next.theme, 'bonusEntryName')) delete next.theme.bonusEntryName;
 
     next.mintSource.mode = String(document.getElementById('vault_mintMode')?.value || '').trim() || 'custom_webhook';
     next.security.openCooldownSeconds = Number(document.getElementById('vault_openCooldownSeconds')?.value || 0) || 0;
     next.mintRules.keysPerPaidMint = Number(document.getElementById('vault_keysPerPaidMint')?.value || 0) || 0;
     next.mintRules.keysPerFreeMint = Number(document.getElementById('vault_keysPerFreeMint')?.value || 0) || 0;
-    next.mintRules.bonusEntriesPerPaidMint = Number(document.getElementById('vault_bonusEntriesPerPaidMint')?.value || 0) || 0;
-    next.mintRules.bonusEntriesPerFreeMint = Number(document.getElementById('vault_bonusEntriesPerFreeMint')?.value || 0) || 0;
     next.mintRules.pressurePerPaidMint = Number(document.getElementById('vault_pressurePerPaidMint')?.value || 0) || 0;
     next.mintRules.pressurePerFreeMint = Number(document.getElementById('vault_pressurePerFreeMint')?.value || 0) || 0;
-    next.mintRules.pointsPerPaidMint = Number(document.getElementById('vault_pointsPerPaidMint')?.value || 0) || 0;
-    next.mintRules.pointsPerFreeMint = Number(document.getElementById('vault_pointsPerFreeMint')?.value || 0) || 0;
+    if (Object.prototype.hasOwnProperty.call(next.mintRules, 'bonusEntriesPerPaidMint')) delete next.mintRules.bonusEntriesPerPaidMint;
+    if (Object.prototype.hasOwnProperty.call(next.mintRules, 'bonusEntriesPerFreeMint')) delete next.mintRules.bonusEntriesPerFreeMint;
+    if (Object.prototype.hasOwnProperty.call(next.mintRules, 'pointsPerPaidMint')) delete next.mintRules.pointsPerPaidMint;
+    if (Object.prototype.hasOwnProperty.call(next.mintRules, 'pointsPerFreeMint')) delete next.mintRules.pointsPerFreeMint;
+    next.rewardTable = next.rewardTable || {};
+    next.rewardTable.noRewardWeight = Math.max(0, Number(document.getElementById('vault_noRewardWeight')?.value || 0) || 0);
 
     next.announcements.channelId = String(document.getElementById('vault_announceChannelId')?.value || '').trim();
     next.announcements.announceRewardTiers = String(document.getElementById('vault_announceTiers')?.value || '')
@@ -9795,6 +9837,7 @@ async function vaultSaveGeneralConfig() {
     next.messages.noKeys = String(document.getElementById('vault_msgNoKeys')?.value || '').trim();
     next.messages.vaultInactive = String(document.getElementById('vault_msgInactive')?.value || '').trim();
     next.messages.openSuccess = String(document.getElementById('vault_msgSuccess')?.value || '').trim();
+    next.messages.noRewardOpen = String(document.getElementById('vault_msgNoRewardOpen')?.value || '').trim();
 
     await vaultFetchJson('/api/admin/vault/config', {
       method: 'PUT',
@@ -9889,7 +9932,8 @@ function vaultLoadRewardToForm(code) {
   setValue('vaultRewardNameInput', String(reward.name || ''));
   setValue('vaultRewardTierInput', String(reward.tier || 'common'));
   setValue('vaultRewardWeightInput', Number(reward.weight || 0));
-  setValue('vaultRewardTypeInput', String(reward.type || 'none'));
+  setValue('vaultRewardQuantityInput', reward.quantity === null || reward.quantity === undefined ? '' : Number(reward.quantity || 0));
+  setValue('vaultRewardTypeInput', String(reward.type || 'claimable_reward'));
   setValue('vaultRewardPayloadInput', reward.payload !== undefined ? JSON.stringify(reward.payload, null, 2) : '');
   const enabledEl = document.getElementById('vaultRewardEnabledInput');
   if (enabledEl) enabledEl.checked = reward.enabled !== false;
@@ -9906,10 +9950,12 @@ async function vaultSaveReward() {
     name: String(document.getElementById('vaultRewardNameInput')?.value || '').trim() || code,
     tier: String(document.getElementById('vaultRewardTierInput')?.value || 'common').trim().toLowerCase(),
     weight: Number(document.getElementById('vaultRewardWeightInput')?.value || 0) || 0,
-    type: String(document.getElementById('vaultRewardTypeInput')?.value || 'none').trim(),
+    type: String(document.getElementById('vaultRewardTypeInput')?.value || 'claimable_reward').trim(),
     enabled: !!document.getElementById('vaultRewardEnabledInput')?.checked,
     payload: vaultJsonParseInput(document.getElementById('vaultRewardPayloadInput')?.value, null),
   };
+  const quantityRaw = String(document.getElementById('vaultRewardQuantityInput')?.value || '').trim();
+  payload.quantity = quantityRaw === '' ? null : Math.max(0, Number.parseInt(quantityRaw, 10) || 0);
 
   const exists = (Array.isArray(vaultSettingsCache?.rewards) ? vaultSettingsCache.rewards : [])
     .some(item => String(item?.code || '').toLowerCase() === code.toLowerCase());

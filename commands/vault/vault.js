@@ -9,6 +9,8 @@ const {
 const moduleGuard = require('../../utils/moduleGuard');
 const vaultService = require('../../services/vaultService');
 const logger = require('../../utils/logger');
+const { applyEmbedBranding } = require('../../services/embedBranding');
+const { getModuleDisplayName } = require('../../services/moduleLabelService');
 
 function parseConfigValue(raw) {
   if (raw === undefined || raw === null) return null;
@@ -293,26 +295,27 @@ module.exports = {
 
   buildPanelMessage(guildId) {
     const config = vaultService.getConfig(guildId);
-    const season = vaultService.getActiveSeason(guildId);
-    const rewards = vaultService.getRewards(guildId)
-      .filter((reward) => reward && reward.enabled !== false && Number(reward.weight || 0) > 0)
-      .filter((reward) => reward.quantity === null || Number(reward.quantity || 0) > 0);
+    const moduleName = getModuleDisplayName('vault', guildId);
+    const gameName = String(config?.general?.gameName || moduleName || 'Reward Vault');
+    const keyLabel = String(config?.theme?.keyName || 'Reward Key');
 
     const embed = new EmbedBuilder()
-      .setColor('#f59e0b')
-      .setTitle(`${config?.general?.gameName || 'Reward Vault'} Panel`)
-      .setDescription('Open the vault, inspect available rewards, or view leaderboard standing.')
-      .addFields(
-        { name: 'Season', value: String(season?.season_name || season?.season_id || 'default'), inline: true },
-        { name: 'Status', value: config?.general?.enabled ? 'Enabled' : 'Disabled', inline: true },
-        { name: 'Available Reward Types', value: String(rewards.length), inline: true },
-      )
+      .setTitle(`${moduleName} Control Panel`)
+      .setDescription(`Use the buttons below to open **${gameName}**, view available rewards, or check leaderboard standings.\nEvery eligible mint can grant a **${keyLabel}**.`)
       .setTimestamp();
+    applyEmbedBranding(embed, {
+      guildId,
+      moduleKey: 'vault',
+      defaultColor: '#f4c430',
+      defaultFooter: 'Powered by Guild Pilot',
+      fallbackLogoUrl: null,
+      useThumbnail: false,
+    });
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('vault_panel_open').setLabel('Open Vault').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('vault_panel_rewards').setLabel('View Rewards').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('vault_panel_leaderboard').setLabel('Leaderboard').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('vault_panel_open').setLabel('Open Vault').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('vault_panel_rewards').setLabel('My Rewards').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('vault_panel_leaderboard').setLabel('Leaderboard').setStyle(ButtonStyle.Primary),
     );
 
     return { embeds: [embed], components: [row] };

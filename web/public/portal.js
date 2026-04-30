@@ -5516,6 +5516,12 @@ function switchSection(sectionName, options = {}) {
     loadHeistSection();
   } else if (sectionName === 'self-serve-roles') {
     loadSelfServeRolesPublic();
+    const canManageSelfServe = !!(activeGuildId && (isAdmin || isSuperadmin));
+    const adminCard = document.getElementById('selfServeRolesModuleSettingsCard');
+    if (adminCard) adminCard.style.display = canManageSelfServe ? '' : 'none';
+    if (canManageSelfServe) {
+      loadSelfServeRolesView('selfServeRolesModuleSettingsPanel');
+    }
   } else if (sectionName === 'ticketing') {
     const canManageTicketing = !!(activeGuildId && (isAdmin || isSuperadmin));
     const userCard = document.getElementById('ticketingUserOverviewCard');
@@ -14974,18 +14980,26 @@ async function loadTreasuryTrackerView() {
   }
 }
 // ==================== SELF-SERVE ROLES ====================
-async function loadSelfServeRolesView() {
+async function loadSelfServeRolesView(targetId = null) {
   if (!isAdmin) return;
-  // Route to settings tab if in settings section, else admin panel content
+  const activeSectionId = document.querySelector('.content-section.active')?.id || '';
   const pane = document.getElementById('settingsTab-selfserve');
-  const content = pane || document.getElementById('adminSelfServeRolesContent');
+  const explicitTarget = targetId ? document.getElementById(String(targetId)) : null;
+  const defaultContent = activeSectionId === 'section-settings'
+    ? (pane || document.getElementById('adminSelfServeRolesContent'))
+    : (document.getElementById('selfServeRolesModuleSettingsPanel')
+      || document.getElementById('adminSelfServeRolesContent')
+      || pane);
+  const content = explicitTarget || defaultContent;
   if (!content) return;
+  const resolvedTargetId = content.id || null;
+  const reloadView = () => loadSelfServeRolesView(resolvedTargetId);
   content.innerHTML = '<p style="color:var(--text-secondary);">Loading panels...</p>';
 
   try {
     const [panelsRes, chRes] = await Promise.all([
-      fetch('/api/admin/role-panels', { credentials: 'include' }),
-      fetch('/api/admin/discord/channels', { credentials: 'include' }),
+      fetch('/api/admin/role-panels', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      fetch('/api/admin/discord/channels', { credentials: 'include', headers: buildTenantRequestHeaders() }),
     ]);
     const panelsData = panelsRes.ok ? await panelsRes.json() : {};
     const panels = panelsData.panels || [];
@@ -15099,7 +15113,7 @@ async function loadSelfServeRolesView() {
         if (track) track.style.background = this.checked ? 'var(--gold,#f59e0b)' : '#555';
         await fetch(`/api/admin/role-panels/${this.dataset.panel}/roles/${encodeURIComponent(this.dataset.role)}`, {
           method: 'PUT', credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
           body: JSON.stringify({ enabled: this.checked })
         });
       });
@@ -15109,8 +15123,12 @@ async function loadSelfServeRolesView() {
     content.querySelectorAll('.panel-role-remove').forEach(btn => {
       btn.addEventListener('click', async () => {
         if (!confirm('Remove this role from the panel?')) return;
-        await fetch(`/api/admin/role-panels/${btn.dataset.panel}/roles/${encodeURIComponent(btn.dataset.role)}`, { method: 'DELETE', credentials: 'include' });
-        loadSelfServeRolesView();
+        await fetch(`/api/admin/role-panels/${btn.dataset.panel}/roles/${encodeURIComponent(btn.dataset.role)}`, {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: buildTenantRequestHeaders()
+        });
+        reloadView();
       });
     });
 
@@ -15123,7 +15141,7 @@ async function loadSelfServeRolesView() {
         const singleSelect = !!content.querySelector(`.panel-single-select[data-panel="${panelId}"]`)?.checked;
         const r = await fetch(`/api/admin/role-panels/${panelId}`, {
           method: 'PUT', credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
           body: JSON.stringify({ title, description, singleSelect })
         });
         const d = await r.json();
@@ -15136,8 +15154,12 @@ async function loadSelfServeRolesView() {
     content.querySelectorAll('.panel-delete').forEach(btn => {
       btn.addEventListener('click', async () => {
         if (!confirm('Delete this panel? This cannot be undone.')) return;
-        await fetch(`/api/admin/role-panels/${btn.dataset.panel}`, { method: 'DELETE', credentials: 'include' });
-        loadSelfServeRolesView();
+        await fetch(`/api/admin/role-panels/${btn.dataset.panel}`, {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: buildTenantRequestHeaders()
+        });
+        reloadView();
       });
     });
 
@@ -15151,12 +15173,12 @@ async function loadSelfServeRolesView() {
         btn.disabled = true;
         const r = await fetch(`/api/admin/role-panels/${panelId}/roles`, {
           method: 'POST', credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
           body: JSON.stringify({ roleId, label })
         });
         const d = await r.json();
         btn.disabled = false;
-        if (d.success) loadSelfServeRolesView();
+        if (d.success) reloadView();
         else showError(d.message || 'Failed to add role');
       });
     });
@@ -15173,13 +15195,13 @@ async function loadSelfServeRolesView() {
         try {
           const r = await fetch(`/api/admin/role-panels/${panelId}/post`, {
             method: 'POST', credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
             body: JSON.stringify({ channelId })
           });
           const d = await r.json();
           if (d.success) {
             if (statusEl) { statusEl.style.color = '#22c55e'; statusEl.textContent = `✅ ${d.action === 'updated' ? 'Updated' : 'Posted'}!`; }
-            loadSelfServeRolesView();
+            reloadView();
           } else {
             if (statusEl) { statusEl.style.color = '#fca5a5'; statusEl.textContent = '❜ ' + (d.message || 'Failed'); }
           }
@@ -15193,11 +15215,11 @@ async function loadSelfServeRolesView() {
     document.getElementById('srCreatePanelBtn')?.addEventListener('click', async () => {
       const r = await fetch('/api/admin/role-panels', {
         method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
         body: JSON.stringify({ title: '🎖️ Get Your Roles', description: 'Click a button below to claim or unclaim a community role.' })
       });
       const d = await r.json();
-      if (d.success) loadSelfServeRolesView();
+      if (d.success) reloadView();
       else showError(d.message || 'Failed to create panel');
     });
 

@@ -9601,6 +9601,17 @@ function vaultRenderAdminPanel() {
   const theme = config.theme || {};
   const mintRules = config.mintRules || {};
   const mintSource = config.mintSource || {};
+  const paymentWalletsList = Array.isArray(mintSource.paymentWalletAddresses)
+    ? mintSource.paymentWalletAddresses
+    : (String(mintSource.paymentWalletAddresses || '')
+      .split(/[\n,\s]+/)
+      .map(value => value.trim())
+      .filter(Boolean));
+  if (String(mintSource.paymentWalletAddress || '').trim() && !paymentWalletsList.includes(String(mintSource.paymentWalletAddress || '').trim())) {
+    paymentWalletsList.unshift(String(mintSource.paymentWalletAddress || '').trim());
+  }
+  const paymentWalletsCsv = paymentWalletsList.join(', ');
+  const paymentMinLamports = Math.max(0, Number(mintSource.paymentMinLamports ?? 1) || 0);
   const announcements = config.announcements || {};
   const security = config.security || {};
   const messages = config.messages || {};
@@ -9660,6 +9671,9 @@ function vaultRenderAdminPanel() {
       <h4 style="margin:16px 0 8px 0;">Mint Rules and Security</h4>
       <div class="settings-grid" style="margin-bottom:16px;">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Mint Mode</div></div><input id="vault_mintMode" class="input-sm" value="${escapeHtml(String(mintSource.mode || 'custom_webhook'))}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Use Payment Transfers as Mints</div></div><input id="vault_usePaymentTransfersAsMints" type="checkbox" ${(mintSource.countTransfersToPaymentWallet || mintSource.usePaymentTransfersAsMints) ? 'checked' : ''}></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Mint Payment Wallet(s)</div></div><input id="vault_paymentWalletAddresses" class="input-sm" placeholder="wallet1,wallet2" value="${escapeHtml(paymentWalletsCsv)}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Min Payment (Lamports)</div></div><input id="vault_paymentMinLamports" type="number" class="input-sm" min="0" value="${paymentMinLamports}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Open Cooldown (sec)</div></div><input id="vault_openCooldownSeconds" type="number" class="input-sm" min="0" value="${Number(security.openCooldownSeconds || 0)}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Keys / Paid Mint</div></div><input id="vault_keysPerPaidMint" type="number" class="input-sm" min="0" value="${Number(mintRules.keysPerPaidMint || 0)}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Keys / Free Mint</div></div><input id="vault_keysPerFreeMint" type="number" class="input-sm" min="0" value="${Number(mintRules.keysPerFreeMint || 0)}"></div>
@@ -9823,6 +9837,15 @@ async function vaultSaveGeneralConfig() {
     if (Object.prototype.hasOwnProperty.call(next.theme, 'bonusEntryName')) delete next.theme.bonusEntryName;
 
     next.mintSource.mode = String(document.getElementById('vault_mintMode')?.value || '').trim() || 'custom_webhook';
+    next.mintSource.countTransfersToPaymentWallet = !!document.getElementById('vault_usePaymentTransfersAsMints')?.checked;
+    const paymentWalletsRaw = String(document.getElementById('vault_paymentWalletAddresses')?.value || '').trim();
+    const paymentWallets = paymentWalletsRaw
+      .split(/[\n,\s]+/)
+      .map(value => value.trim())
+      .filter(Boolean);
+    next.mintSource.paymentWalletAddresses = paymentWallets;
+    next.mintSource.paymentWalletAddress = paymentWallets[0] || '';
+    next.mintSource.paymentMinLamports = Math.max(0, Number(document.getElementById('vault_paymentMinLamports')?.value || 0) || 0);
     next.security.openCooldownSeconds = Number(document.getElementById('vault_openCooldownSeconds')?.value || 0) || 0;
     next.mintRules.keysPerPaidMint = Number(document.getElementById('vault_keysPerPaidMint')?.value || 0) || 0;
     next.mintRules.keysPerFreeMint = Number(document.getElementById('vault_keysPerFreeMint')?.value || 0) || 0;

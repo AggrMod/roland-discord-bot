@@ -55,6 +55,10 @@ class VaultService {
       },
       mintSource: {
         mode: 'custom_webhook',
+        countTransfersToPaymentWallet: false,
+        paymentWalletAddress: '',
+        paymentWalletAddresses: [],
+        paymentMinLamports: 1,
       },
       announcements: {
         channelId: '',
@@ -858,7 +862,92 @@ class VaultService {
     };
   }
 
-  classifyMintEventType(event) {
+  getConfiguredPaymentWalletSet(config) {
+    const source = config?.mintSource || {};
+    const out = new Set();
+    const addWallet = (value) => {
+      const wallet = String(value || '').trim();
+      if (wallet) out.add(wallet);
+    };
+
+    addWallet(source.paymentWalletAddress);
+    addWallet(source.mintWalletAddress);
+    addWallet(source.transferTargetWallet);
+
+    if (Array.isArray(source.paymentWalletAddresses)) {
+      source.paymentWalletAddresses.forEach(addWallet);
+    } else if (typeof source.paymentWalletAddresses === 'string') {
+      source.paymentWalletAddresses
+        .split(/[\n,\s]+/)
+        .map(value => value.trim())
+        .filter(Boolean)
+        .forEach(addWallet);
+    }
+
+    return out;
+  }
+
+  detectPaymentWalletTransfer(event, config) {
+    const source = config?.mintSource || {};
+    const enabled = source.countTransfersToPaymentWallet === true || source.usePaymentTransfersAsMints === true;
+    const paymentWallets = this.getConfiguredPaymentWalletSet(config);
+    const minLamports = clampInt(source.paymentMinLamports, 0, 1);
+
+    if (!enabled || paymentWallets.size === 0) {
+      return {
+        enabled,
+        matched: false,
+        minLamports,
+        candidatePayers: [],
+      };
+    }
+
+    const candidatePayers = new Set();
+    const matches = [];
+    const nativeTransfers = Array.isArray(event?.nativeTransfers)
+      ? event.nativeTransfers
+      : (Array.isArray(event?.native_transfers) ? event.native_transfers : []);
+    for (const transfer of nativeTransfers) {
+      const toWallet = String(
+        transfer?.toUserAccount
+        || transfer?.to_user_account
+        || transfer?.to
+        || transfer?.destination
+        || ''
+      ).trim();
+      if (!toWallet || !paymentWallets.has(toWallet)) continue;
+
+      const lamports = Number(transfer?.amount || transfer?.lamports || transfer?.nativeAmount || 0);
+      if (!Number.isFinite(lamports) || lamports < minLamports) continue;
+
+      const fromWallet = String(
+        transfer?.fromUserAccount
+        || transfer?.from_user_account
+        || transfer?.from
+        || transfer?.source
+        || ''
+      ).trim();
+      if (fromWallet) candidatePayers.add(fromWallet);
+
+      matches.push({
+        toWallet,
+        fromWallet: fromWallet || null,
+        lamports,
+      });
+    }
+
+    return {
+      enabled,
+      matched: matches.length > 0,
+      minLamports,
+      paymentWallets: [...paymentWallets],
+      candidatePayers: [...candidatePayers],
+      matches,
+      reason: matches.length > 0 ? 'native_transfer_to_configured_payment_wallet' : 'no_matching_native_transfer',
+    };
+  }
+
+  classifyMintEventType(event, config = null) {
     const explicitType = this.normalizeMintTypeValue(event?.mintType || event?.mint_type);
     if (['paid', 'free', 'manual'].includes(explicitType)) {
       return { mintType: explicitType, reason: 'explicit_mint_type' };
@@ -867,6 +956,16 @@ class VaultService {
     const eventTypeRaw = event?.type || event?.eventType || event?.transactionType || event?.txnType || '';
     const eventType = String(eventTypeRaw || '').trim().toUpperCase();
     const signals = this.detectPositiveMintSignals(event);
+    const paymentTransfer = this.detectPaymentWalletTransfer(event, config);
+
+    if (paymentTransfer.matched) {
+      return {
+        mintType: 'paid',
+        reason: 'payment_transfer_to_configured_wallet',
+        signals,
+        paymentTransfer,
+      };
+    }
 
     const paidTypeSet = new Set(['NFT_MINT', 'TOKEN_MINT', 'COMPRESSED_NFT_MINT', 'MINT_TO']);
     const freeTypeSet = new Set(['FREE_MINT']);
@@ -882,12 +981,18 @@ class VaultService {
       return { mintType: 'paid', reason: 'positive_token_signal_with_mint_context', signals };
     }
 
-    return { mintType: 'unknown', reason: eventType ? `unmapped_event_type:${eventType}` : 'unknown_event_type', signals };
+    return {
+      mintType: 'unknown',
+      reason: eventType ? `unmapped_event_type:${eventType}` : 'unknown_event_type',
+      signals,
+      paymentTransfer,
+    };
   }
 
-  extractCanonicalMintEvent(event) {
-    const classification = this.classifyMintEventType(event || {});
+  extractCanonicalMintEvent(event, config = null) {
+    const classification = this.classifyMintEventType(event || {}, config);
     const signals = classification.signals || this.detectPositiveMintSignals(event || {});
+    const paymentTransfer = classification.paymentTransfer || this.detectPaymentWalletTransfer(event || {}, config);
 
     const txSignature = String(
       event?.txSignature
@@ -905,6 +1010,7 @@ class VaultService {
       || event?.fee_payer
       || event?.payer
       || event?.events?.nft?.buyer
+      || paymentTransfer?.candidatePayers?.[0]
       || signals.candidateWallets?.[0]
       || ''
     ).trim() || null;
@@ -927,6 +1033,7 @@ class VaultService {
       mintType: classification.mintType,
       classificationReason: classification.reason,
       signals,
+      paymentTransfer,
       discordUserId,
     };
   }
@@ -970,11 +1077,11 @@ class VaultService {
     const guildId = normalizeGuildId(event?.guildId || event?.guild_id);
     if (!guildId) return { success: false, message: 'guildId is required' };
 
-    const canonical = this.extractCanonicalMintEvent(event || {});
+    const config = this.getConfig(guildId);
+    const canonical = this.extractCanonicalMintEvent(event || {}, config);
     const txSignature = canonical.txSignature;
     if (!txSignature) return { success: false, message: 'txSignature is required' };
 
-    const config = this.getConfig(guildId);
     const season = event?.seasonId
       ? (this.getSeason(guildId, event.seasonId) || this.getActiveSeason(guildId))
       : this.getActiveSeason(guildId);

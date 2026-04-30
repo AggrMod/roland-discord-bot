@@ -345,9 +345,9 @@ module.exports = {
     });
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('vault_panel_open').setLabel('Open Vault').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId('vault_panel_rewards').setLabel('My Rewards').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('vault_panel_leaderboard').setLabel('Leaderboard').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('vault_panel_open').setLabel('Open Vault').setEmoji('🔓').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('vault_panel_rewards').setLabel('Available Rewards').setEmoji('🎁').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('vault_panel_leaderboard').setLabel('Leaderboard').setEmoji('🏆').setStyle(ButtonStyle.Primary),
     );
 
     return { embeds: [embed], components: [row] };

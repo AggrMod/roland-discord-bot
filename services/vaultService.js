@@ -806,8 +806,133 @@ class VaultService {
     return row?.discord_id ? String(row.discord_id).trim() : null;
   }
 
+  normalizeMintTypeValue(rawMintType) {
+    const key = String(rawMintType || '').trim().toLowerCase();
+    if (!key) return 'unknown';
+    if (['paid', 'mint', 'nft_mint', 'token_mint', 'compressed_nft_mint', 'mint_to'].includes(key)) return 'paid';
+    if (['free', 'free_mint', 'airdrop', 'gift'].includes(key)) return 'free';
+    if (key === 'manual') return 'manual';
+    if (key === 'unknown') return 'unknown';
+    return key;
+  }
+
+  detectPositiveMintSignals(event) {
+    const candidateMints = new Set();
+    const candidateWallets = new Set();
+
+    const addMint = (value) => {
+      const mint = String(value || '').trim();
+      if (mint) candidateMints.add(mint);
+    };
+    const addWallet = (value) => {
+      const wallet = String(value || '').trim();
+      if (wallet) candidateWallets.add(wallet);
+    };
+
+    const tokenTransfers = Array.isArray(event?.tokenTransfers) ? event.tokenTransfers : [];
+    for (const transfer of tokenTransfers) {
+      const amount = Number(transfer?.tokenAmount || transfer?.amount || 0);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+      addMint(transfer?.mint);
+      addWallet(transfer?.toUserAccount || transfer?.to_user_account || transfer?.to || null);
+    }
+
+    const accountRows = Array.isArray(event?.accountData) ? event.accountData : [];
+    for (const accountRow of accountRows) {
+      const balanceChanges = Array.isArray(accountRow?.tokenBalanceChanges) ? accountRow.tokenBalanceChanges : [];
+      for (const change of balanceChanges) {
+        const rawAmount = Number(change?.rawTokenAmount?.tokenAmount || change?.raw_token_amount?.token_amount || 0);
+        if (!Number.isFinite(rawAmount) || rawAmount <= 0) continue;
+        addMint(change?.mint);
+        addWallet(change?.userAccount || change?.user_account || null);
+      }
+    }
+
+    const nftMints = Array.isArray(event?.events?.nft?.nfts) ? event.events.nft.nfts : [];
+    for (const nft of nftMints) addMint(nft?.mint);
+
+    return {
+      hasPositiveTokenSignal: candidateMints.size > 0,
+      candidateMints: [...candidateMints],
+      candidateWallets: [...candidateWallets],
+    };
+  }
+
+  classifyMintEventType(event) {
+    const explicitType = this.normalizeMintTypeValue(event?.mintType || event?.mint_type);
+    if (['paid', 'free', 'manual'].includes(explicitType)) {
+      return { mintType: explicitType, reason: 'explicit_mint_type' };
+    }
+
+    const eventTypeRaw = event?.type || event?.eventType || event?.transactionType || event?.txnType || '';
+    const eventType = String(eventTypeRaw || '').trim().toUpperCase();
+    const signals = this.detectPositiveMintSignals(event);
+
+    const paidTypeSet = new Set(['NFT_MINT', 'TOKEN_MINT', 'COMPRESSED_NFT_MINT', 'MINT_TO']);
+    const freeTypeSet = new Set(['FREE_MINT']);
+    if (paidTypeSet.has(eventType)) return { mintType: 'paid', reason: `event_type:${eventType}`, signals };
+    if (freeTypeSet.has(eventType)) return { mintType: 'free', reason: `event_type:${eventType}`, signals };
+
+    const createAccountTypeSet = new Set(['CREATE_ACCOUNT', 'CREATE', 'INITIALIZE_ACCOUNT']);
+    if (createAccountTypeSet.has(eventType) && signals.hasPositiveTokenSignal) {
+      return { mintType: 'paid', reason: `create_account_with_token_signal:${eventType}`, signals };
+    }
+
+    if (signals.hasPositiveTokenSignal && (event?.events?.nft || event?.events?.compressedNft || /MINT/.test(eventType))) {
+      return { mintType: 'paid', reason: 'positive_token_signal_with_mint_context', signals };
+    }
+
+    return { mintType: 'unknown', reason: eventType ? `unmapped_event_type:${eventType}` : 'unknown_event_type', signals };
+  }
+
+  extractCanonicalMintEvent(event) {
+    const classification = this.classifyMintEventType(event || {});
+    const signals = classification.signals || this.detectPositiveMintSignals(event || {});
+
+    const txSignature = String(
+      event?.txSignature
+      || event?.tx_signature
+      || event?.signature
+      || event?.transactionSignature
+      || event?.txnSignature
+      || ''
+    ).trim();
+
+    const walletAddress = String(
+      event?.walletAddress
+      || event?.wallet_address
+      || event?.feePayer
+      || event?.fee_payer
+      || event?.payer
+      || event?.events?.nft?.buyer
+      || signals.candidateWallets?.[0]
+      || ''
+    ).trim() || null;
+
+    const mintAddress = String(
+      event?.mintAddress
+      || event?.mint_address
+      || event?.events?.nft?.nfts?.[0]?.mint
+      || event?.tokenTransfers?.[0]?.mint
+      || signals.candidateMints?.[0]
+      || ''
+    ).trim() || null;
+
+    const discordUserId = String(event?.discordUserId || event?.discord_user_id || '').trim() || null;
+
+    return {
+      txSignature,
+      walletAddress,
+      mintAddress,
+      mintType: classification.mintType,
+      classificationReason: classification.reason,
+      signals,
+      discordUserId,
+    };
+  }
+
   computeMintGrants(config, mintType) {
-    const normalizedType = String(mintType || 'unknown').trim().toLowerCase();
+    const normalizedType = this.normalizeMintTypeValue(mintType);
     const paid = normalizedType === 'paid';
     const free = normalizedType === 'free';
     const rules = config?.mintRules || {};
@@ -845,7 +970,8 @@ class VaultService {
     const guildId = normalizeGuildId(event?.guildId || event?.guild_id);
     if (!guildId) return { success: false, message: 'guildId is required' };
 
-    const txSignature = String(event?.txSignature || event?.tx_signature || '').trim();
+    const canonical = this.extractCanonicalMintEvent(event || {});
+    const txSignature = canonical.txSignature;
     if (!txSignature) return { success: false, message: 'txSignature is required' };
 
     const config = this.getConfig(guildId);
@@ -854,20 +980,105 @@ class VaultService {
       : this.getActiveSeason(guildId);
     if (!season) return { success: false, message: 'No active season' };
 
-    const walletAddress = String(event?.walletAddress || event?.wallet_address || '').trim() || null;
-    const mintType = String(event?.mintType || event?.mint_type || 'unknown').trim().toLowerCase();
-    const mintAddress = String(event?.mintAddress || event?.mint_address || '').trim() || null;
+    const walletAddress = canonical.walletAddress;
+    const mintType = canonical.mintType;
+    const mintAddress = canonical.mintAddress;
+    const classificationReason = canonical.classificationReason;
 
-    const exists = db.prepare(`
-      SELECT id
+    const existing = db.prepare(`
+      SELECT *
       FROM vault_mint_events
       WHERE guild_id = ? AND tx_signature = ?
       LIMIT 1
     `).get(guildId, txSignature);
-    if (exists) return { success: true, duplicate: true, message: 'Duplicate tx signature ignored' };
-
+    const existingGrants = existing
+      ? {
+          paid_mints: String(existing.mint_type || '').toLowerCase() === 'paid' ? 1 : 0,
+          free_mints: String(existing.mint_type || '').toLowerCase() === 'free' ? 1 : 0,
+          keys_granted: clampInt(existing.keys_granted, 0, 0),
+          pressure_granted: clampInt(existing.pressure_granted, 0, 0),
+        }
+      : null;
     const grants = this.computeMintGrants(config, mintType);
-    const linkedUserId = walletAddress ? this.findLinkedDiscordUserByWallet(walletAddress) : null;
+    const linkedUserId = canonical.discordUserId || (walletAddress ? this.findLinkedDiscordUserByWallet(walletAddress) : null);
+
+    if (existing) {
+      const shouldUpgradeUnknown = String(existing.mint_type || '').trim().toLowerCase() === 'unknown'
+        && (mintType === 'paid' || mintType === 'free')
+        && (grants.keys_granted > 0 || grants.pressure_granted > 0 || grants.paid_mints > 0 || grants.free_mints > 0);
+      const shouldAttachLinkedUser = !String(existing.discord_user_id || '').trim() && !!linkedUserId;
+
+      if (!shouldUpgradeUnknown && !shouldAttachLinkedUser) {
+        return { success: true, duplicate: true, message: 'Duplicate tx signature ignored' };
+      }
+
+      const txUpgrade = db.transaction(() => {
+        const nextDiscordUserId = shouldAttachLinkedUser ? linkedUserId : (String(existing.discord_user_id || '').trim() || null);
+        const nextMintType = shouldUpgradeUnknown ? mintType : String(existing.mint_type || 'unknown').trim().toLowerCase();
+        const nextMintAddress = existing.mint_address || mintAddress || null;
+        const nextWalletAddress = existing.wallet_address || walletAddress || null;
+        const nextKeysGranted = shouldUpgradeUnknown ? grants.keys_granted : clampInt(existing.keys_granted, 0, 0);
+        const nextPressureGranted = shouldUpgradeUnknown ? grants.pressure_granted : clampInt(existing.pressure_granted, 0, 0);
+
+        db.prepare(`
+          UPDATE vault_mint_events
+          SET
+            mint_type = ?,
+            mint_address = COALESCE(mint_address, ?),
+            wallet_address = COALESCE(wallet_address, ?),
+            discord_user_id = COALESCE(discord_user_id, ?),
+            keys_granted = ?,
+            pressure_granted = ?,
+            metadata_json = ?,
+            processed_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).run(
+          nextMintType,
+          nextMintAddress,
+          nextWalletAddress,
+          nextDiscordUserId,
+          nextKeysGranted,
+          nextPressureGranted,
+          JSON.stringify({
+            source: event?.source || 'vault_webhook',
+            classificationReason,
+            raw: event || null,
+            receivedAt: nowIso(),
+          }),
+          existing.id
+        );
+
+        if (nextDiscordUserId) {
+          const prior = existingGrants || { paid_mints: 0, free_mints: 0, keys_granted: 0, pressure_granted: 0 };
+          const delta = {
+            paid_mints: Math.max(0, clampInt(grants.paid_mints, 0, 0) - clampInt(prior.paid_mints, 0, 0)),
+            free_mints: Math.max(0, clampInt(grants.free_mints, 0, 0) - clampInt(prior.free_mints, 0, 0)),
+            keys_granted: Math.max(0, clampInt(nextKeysGranted, 0, 0) - clampInt(prior.keys_granted, 0, 0)),
+            pressure_granted: Math.max(0, clampInt(nextPressureGranted, 0, 0) - clampInt(prior.pressure_granted, 0, 0)),
+          };
+
+          const hasDelta = delta.paid_mints > 0 || delta.free_mints > 0 || delta.keys_granted > 0 || delta.pressure_granted > 0;
+          const shouldReplayExisting = shouldAttachLinkedUser && !shouldUpgradeUnknown && (prior.keys_granted > 0 || prior.pressure_granted > 0 || prior.paid_mints > 0 || prior.free_mints > 0);
+
+          if (hasDelta) {
+            this.applyMintGrantsToUser(guildId, season.season_id, nextDiscordUserId, nextWalletAddress, delta);
+          } else if (shouldReplayExisting) {
+            this.applyMintGrantsToUser(guildId, season.season_id, nextDiscordUserId, nextWalletAddress, prior);
+          }
+        }
+      });
+      txUpgrade();
+
+      return {
+        success: true,
+        duplicate: false,
+        upgraded: shouldUpgradeUnknown,
+        linkedUserId: linkedUserId || null,
+        seasonId: season.season_id,
+        grants: shouldUpgradeUnknown ? grants : existingGrants,
+        message: shouldUpgradeUnknown ? 'Duplicate tx upgraded from unknown mint type' : 'Linked existing tx to wallet owner',
+      };
+    }
 
     try {
       const tx = db.transaction(() => {
@@ -890,6 +1101,7 @@ class VaultService {
           0,
           JSON.stringify({
             source: event?.source || 'vault_webhook',
+            classificationReason,
             raw: event || null,
             receivedAt: nowIso(),
           })

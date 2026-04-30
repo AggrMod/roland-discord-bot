@@ -36,7 +36,15 @@ function createVaultWebhooksRouter({
       const auth = verifyWebhookAuth(req);
       if (!auth.ok) return res.status(auth.status).json(auth.payload);
 
-      const incoming = Array.isArray(req.body) ? req.body : [req.body];
+      const queryGuildId = String(req.query?.guildId || req.query?.guild_id || '').trim();
+      const headerGuildId = String(req.headers['x-guild-id'] || req.headers['x-guildid'] || '').trim();
+      const defaultGuildId = queryGuildId || headerGuildId || '';
+
+      const body = req.body;
+      const incomingRaw = Array.isArray(body?.events)
+        ? body.events
+        : (Array.isArray(body) ? body : [body]);
+      const incoming = incomingRaw.filter(Boolean);
       const summary = {
         received: incoming.length,
         processed: 0,
@@ -48,12 +56,22 @@ function createVaultWebhooksRouter({
       for (const event of incoming) {
         const normalized = {
           ...event,
-          guildId: event?.guildId || event?.guild_id,
+          guildId: event?.guildId || event?.guild_id || defaultGuildId || null,
           seasonId: event?.seasonId || event?.season_id || null,
-          walletAddress: event?.walletAddress || event?.wallet_address || null,
-          txSignature: event?.txSignature || event?.tx_signature || null,
-          mintAddress: event?.mintAddress || event?.mint_address || null,
-          mintType: event?.mintType || event?.mint_type || 'unknown',
+          walletAddress: event?.walletAddress || event?.wallet_address || event?.feePayer || event?.fee_payer || event?.payer || null,
+          txSignature: event?.txSignature
+            || event?.tx_signature
+            || event?.signature
+            || event?.transactionSignature
+            || event?.txnSignature
+            || null,
+          mintAddress: event?.mintAddress
+            || event?.mint_address
+            || event?.mint
+            || event?.events?.nft?.nfts?.[0]?.mint
+            || event?.tokenTransfers?.[0]?.mint
+            || null,
+          mintType: event?.mintType || event?.mint_type || event?.type || event?.eventType || event?.transactionType || event?.txnType || 'unknown',
           source: 'vault_webhook',
         };
         const result = vaultService.ingestMintEvent(normalized);

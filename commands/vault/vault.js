@@ -61,6 +61,15 @@ function renderTemplate(rawTemplate, variables = {}) {
   return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key) => String(variables[key] ?? ''));
 }
 
+function rewardTierEmoji(tier) {
+  const key = String(tier || '').trim().toLowerCase();
+  if (key === 'legendary') return '👑';
+  if (key === 'epic') return '💎';
+  if (key === 'rare') return '✨';
+  if (key === 'uncommon') return '🔹';
+  return '📦';
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('vault')
@@ -258,7 +267,13 @@ module.exports = {
         await interaction.editReply({ content: `ERROR: ${result.message}` });
         return true;
       }
-      await interaction.editReply({ content: this.buildOpenResultMessage(guildId, result, { trailingLabel: 'Available keys' }) });
+      await interaction.editReply({
+        embeds: [this.buildPanelResponseEmbed(guildId, {
+          title: 'Vault Opening Result',
+          description: this.buildOpenResultMessage(guildId, result, { trailingLabel: 'Available keys' }),
+          accentColor: String(result?.reward?.code || '') === 'no_reward' ? '#ef4444' : '#22c55e',
+        })],
+      });
       return true;
     }
 
@@ -268,11 +283,20 @@ module.exports = {
         .filter((reward) => reward && reward.enabled !== false && Number(reward.weight || 0) > 0)
         .filter((reward) => reward.quantity === null || Number(reward.quantity || 0) > 0);
       if (!rewards.length) {
-        await interaction.editReply({ content: 'No available rewards configured.' });
+        await interaction.editReply({
+          embeds: [this.buildPanelResponseEmbed(guildId, {
+            title: 'Reward Catalog',
+            description: 'No available rewards configured.',
+          })],
+        });
         return true;
       }
-      const lines = rewards.slice(0, 25).map((reward) => `- ${formatRewardInventory(reward)}`);
-      await interaction.editReply({ content: `Available rewards:\n${lines.join('\n')}` });
+      await interaction.editReply({
+        embeds: this.buildRewardCatalogEmbeds(guildId, rewards, {
+          title: 'Reward Catalog',
+          subtitle: 'Current rewards that can be pulled from the vault.',
+        }),
+      });
       return true;
     }
 
@@ -280,12 +304,20 @@ module.exports = {
       await interaction.deferReply({ ephemeral: true });
       const result = vaultService.getLeaderboard(guildId, null, 'keys_used', 10);
       if (!result.success || !Array.isArray(result.rows) || result.rows.length === 0) {
-        await interaction.editReply({ content: 'No leaderboard data yet.' });
+        await interaction.editReply({
+          embeds: [this.buildPanelResponseEmbed(guildId, {
+            title: 'Vault Leaderboard',
+            description: 'No leaderboard data yet.',
+          })],
+        });
         return true;
       }
       const lines = result.rows.map((row, index) => `${index + 1}. <@${row.discord_user_id}> - keys used: ${row.keys_used} - rewards won: ${row.rewards_won}`);
       await interaction.editReply({
-        content: `${result.season?.season_name || result.season?.season_id || 'Season'} leaderboard:\n${lines.join('\n')}`,
+        embeds: [this.buildPanelResponseEmbed(guildId, {
+          title: `${result.season?.season_name || result.season?.season_id || 'Season'} Leaderboard`,
+          description: lines.join('\n'),
+        })],
       });
       return true;
     }
@@ -319,6 +351,50 @@ module.exports = {
     );
 
     return { embeds: [embed], components: [row] };
+  },
+
+  buildPanelResponseEmbed(guildId, options = {}) {
+    const embed = new EmbedBuilder()
+      .setTitle(String(options.title || 'Vault Panel'))
+      .setDescription(String(options.description || ''))
+      .setTimestamp();
+    applyEmbedBranding(embed, {
+      guildId,
+      moduleKey: 'vault',
+      defaultColor: String(options.accentColor || '#f4c430'),
+      defaultFooter: 'Powered by Guild Pilot',
+      fallbackLogoUrl: null,
+      useThumbnail: false,
+    });
+    return embed;
+  },
+
+  buildRewardCatalogEmbeds(guildId, rewards, options = {}) {
+    const sorted = [...(Array.isArray(rewards) ? rewards : [])]
+      .sort((a, b) => Number(b.weight || 0) - Number(a.weight || 0));
+    const totalWeight = sorted.reduce((sum, reward) => sum + Math.max(0, Number(reward.weight || 0)), 0);
+    const lines = sorted.slice(0, 24).map((reward) => {
+      const qty = normalizeQuantity(reward?.quantity);
+      const qtyLabel = qty === null ? '∞' : `${qty}`;
+      const weight = Math.max(0, Number(reward.weight || 0));
+      const chance = totalWeight > 0 ? ((weight / totalWeight) * 100).toFixed(1) : '0.0';
+      const tierEmoji = rewardTierEmoji(reward?.tier);
+      return `${tierEmoji} **${reward.name || reward.code}**\n` +
+        `• Tier: \`${String(reward.tier || 'common')}\`  • Qty: \`${qtyLabel}\`  • Chance: \`${chance}%\``;
+    });
+
+    const embed = this.buildPanelResponseEmbed(guildId, {
+      title: String(options.title || 'Reward Catalog'),
+      description: String(options.subtitle || ''),
+    });
+    embed.addFields({
+      name: `Available Rewards (${Math.min(sorted.length, 24)} shown)`,
+      value: lines.join('\n\n') || 'No rewards available.',
+    });
+    if (sorted.length > 24) {
+      embed.addFields({ name: 'More Rewards', value: `${sorted.length - 24} additional rewards are configured.` });
+    }
+    return [embed];
   },
 
   async handleAdminPanel(interaction, guildId) {
@@ -434,9 +510,20 @@ module.exports = {
     const rewards = vaultService.getRewards(guildId)
       .filter((reward) => reward && reward.enabled !== false && Number(reward.weight || 0) > 0)
       .filter((reward) => reward.quantity === null || Number(reward.quantity || 0) > 0);
-    if (!rewards.length) return interaction.editReply({ content: 'No available rewards configured.' });
-    const lines = rewards.slice(0, 30).map((reward) => `- ${formatRewardInventory(reward)}`);
-    return interaction.editReply({ content: `Available rewards:\n${lines.join('\n')}` });
+    if (!rewards.length) {
+      return interaction.editReply({
+        embeds: [this.buildPanelResponseEmbed(guildId, {
+          title: 'Reward Catalog',
+          description: 'No available rewards configured.',
+        })],
+      });
+    }
+    return interaction.editReply({
+      embeds: this.buildRewardCatalogEmbeds(guildId, rewards, {
+        title: 'Reward Catalog',
+        subtitle: 'Current rewards that can be pulled from the vault.',
+      }),
+    });
   },
 
   async handleLeaderboard(interaction, guildId) {

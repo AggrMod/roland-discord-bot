@@ -25,6 +25,7 @@ let loginRedirectInFlight = false;
 const _portalMultiSelectRegistry = new Map();
 let _portalMultiSelectAutoId = 0;
 let _portalMultiSelectPickerState = null;
+let vaultSettingsCache = null;
 const PORTAL_PAGE_EXPECTATIONS = Object.freeze({
   sections: [
     'landing',
@@ -81,6 +82,7 @@ const PORTAL_PAGE_EXPECTATIONS = Object.freeze({
     'tokentracker',
     'battle',
     'heist',
+    'vault',
     'selfserve',
     'ticketing',
     'engagement'
@@ -1338,6 +1340,7 @@ const MODULE_REGISTRY = [
   { key: 'engagement', label: 'Engagement Hub', icon: '🏆', section: 'engagement', desc: 'Activity points, reward shop, and leaderboards.' },
   { key: 'minigames', label: 'Minigames', icon: '⚔️', section: 'battle', desc: 'Arcade module including Battle Arena sessions, lobbies, and game events.' },
   { key: 'heist', label: 'Missions', icon: '🎯', section: 'heist', desc: 'Role-based missions and strategic community goals.' },
+  { key: 'vault', label: 'Vault', icon: '🔐', section: 'settings', desc: 'Key rewards, mint sync rules, seasons, and vault operations.' },
   { key: 'selfserveroles', label: 'Self-Serve Roles', icon: '🎭', section: 'self-serve-roles', desc: 'Claim optional roles assigned by administrators.' },
   { key: 'help', label: 'Help Center', icon: '❓', section: 'help', desc: 'Guides, command references, and troubleshooting across all modules.' }
 ];
@@ -1354,6 +1357,7 @@ const MODULE_TOGGLE_SETTING_FIELD_MAP = Object.freeze({
   engagement: ['moduleEngagementEnabled'],
   minigames: ['moduleMinigamesEnabled', 'moduleBattleEnabled'],
   heist: ['moduleMissionsEnabled'],
+  vault: ['moduleVaultEnabled'],
   selfserveroles: ['moduleRoleClaimEnabled'],
 });
 
@@ -1512,7 +1516,11 @@ function renderModuleHub() {
     const statusLabel = isEnabled ? 'Active' : 'Disabled';
     const statusClass = isEnabled ? 'status-active' : 'status-disabled';
     
-    const onClick = isEnabled ? `switchSection('${mod.section}')` : '';
+    const onClick = !isEnabled
+      ? ''
+      : (mod.key === 'vault'
+        ? "switchSection('settings');switchSettingsTab('vault')"
+        : `switchSection('${mod.section}')`);
     const toggleHtml = (canManageModules && canToggleModuleFromHub(mod.key))
       ? `
         <div style="display:flex;align-items:center;gap:8px; margin-left:auto;" onclick="event.stopPropagation()">
@@ -1759,6 +1767,7 @@ function switchSettingsTab(tab) {
     engagement:   () => { loadEngagementSettingsTab(); },
     treasury:     () => { if (typeof loadTreasuryModuleSettings === 'function') loadTreasuryModuleSettings(); },
     battle:       () => loadBattleTimingSettings('settings'),
+    vault:        () => { if (typeof loadVaultSettingsTab === 'function') loadVaultSettingsTab(); },
   };
   const loader = tabLoaders[tab];
   if (loader) loader();
@@ -1869,6 +1878,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     tokentracker: !!settings.moduleTokenTrackerEnabled,
     aiassistant: !!settings.moduleAiAssistantEnabled,
     heist: !!settings.moduleMissionsEnabled,
+    vault: !!settings.moduleVaultEnabled,
     ticketing: !!settings.moduleTicketingEnabled,
     engagement: !!settings.moduleEngagementEnabled,
     roleclaim: !!settings.moduleRoleClaimEnabled,
@@ -1932,6 +1942,7 @@ const SETTINGS_TAB_MODULE_MAP = {
   tokentracker: 'tokentracker',
   battle:       'minigames',
   heist:        'heist',
+  vault:        'vault',
   selfserve:    'selfserveroles',
   ticketing:    'ticketing',
   engagement:   'engagement',
@@ -1958,6 +1969,7 @@ function applySettingsTabVisibility(settings = {}) {
     aiassistant: !!settings.moduleAiAssistantEnabled,
     minigames: minigamesEnabled,
     heist: !!settings.moduleMissionsEnabled,
+    vault: !!settings.moduleVaultEnabled,
     selfserveroles: !!settings.moduleRoleClaimEnabled,
     ticketing: !!settings.moduleTicketingEnabled,
     engagement: !!settings.moduleEngagementEnabled,
@@ -9333,6 +9345,7 @@ async function loadAdminSettingsView() {
       { id: 'moduleVerificationEnabled', label: 'Verification',    icon: 'V',  moduleKey: 'verification'  },
       { id: 'moduleBrandingEnabled',     label: 'Branding',        icon: 'BR', moduleKey: 'branding'      },
       { id: 'moduleMissionsEnabled',     label: 'Missions',        icon: 'H',  moduleKey: 'heist'         },
+      { id: 'moduleVaultEnabled',        label: 'Vault',           icon: '🔐', moduleKey: 'vault'         },
       { id: 'moduleWalletTrackerEnabled',label: 'Wallet Tracker',  icon: 'W',  moduleKey: 'wallettracker' },
       { id: 'moduleAiAssistantEnabled',  label: 'AI Assistant',    icon: 'AI', moduleKey: 'aiassistant'  },
       { id: 'moduleInviteTrackerEnabled',label: 'Invite Tracker',  icon: '📧', moduleKey: 'invites'       },
@@ -9448,7 +9461,7 @@ async function savePortalSettings() {
   // Only save module toggles that are actually rendered (handles assigned-module filtering)
   const moduleIds = [
     'moduleMinigamesEnabled', 'moduleBattleEnabled', 'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleBrandingEnabled',
-    'moduleMissionsEnabled', 'moduleWalletTrackerEnabled', 'moduleTreasuryEnabled', 'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleAiAssistantEnabled',
+    'moduleMissionsEnabled', 'moduleVaultEnabled', 'moduleWalletTrackerEnabled', 'moduleTreasuryEnabled', 'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleAiAssistantEnabled',
     'moduleRoleClaimEnabled', 'moduleTicketingEnabled', 'moduleEngagementEnabled',
   ];
   const newSettings = {};
@@ -9498,6 +9511,612 @@ async function resetPortalSettings() {
   } catch (error) {
     console.error('Error resetting settings:', error);
     showError('Failed to reset settings');
+  }
+}
+
+function vaultJsonParseInput(raw, fallback = null) {
+  try {
+    const text = String(raw || '').trim();
+    if (!text) return fallback;
+    return JSON.parse(text);
+  } catch (_error) {
+    return fallback;
+  }
+}
+
+function vaultGetCachedActiveSeasonId() {
+  const seasons = Array.isArray(vaultSettingsCache?.seasons) ? vaultSettingsCache.seasons : [];
+  const active = seasons.find(season => Number(season?.active || 0) === 1);
+  return active?.season_id || seasons[0]?.season_id || 'default';
+}
+
+function vaultFormatRows(rows, emptyText) {
+  if (!Array.isArray(rows) || rows.length === 0) return emptyText;
+  return rows.map((row, idx) => `${idx + 1}. ${row}`).join('\n');
+}
+
+async function vaultFetchJson(url, options = {}) {
+  const response = await fetch(url, {
+    credentials: 'include',
+    ...options,
+    headers: buildTenantRequestHeaders({
+      ...(options.headers || {}),
+    }),
+  });
+  const payload = await response.json();
+  if (!response.ok || payload?.success === false) {
+    throw new Error(payload?.message || payload?.error?.message || `Request failed (${response.status})`);
+  }
+  return payload;
+}
+
+function vaultRenderAdminPanel() {
+  const pane = document.getElementById('settingsTab-vault');
+  if (!pane) return;
+  const config = vaultSettingsCache?.config || {};
+  const general = config.general || {};
+  const theme = config.theme || {};
+  const mintRules = config.mintRules || {};
+  const mintSource = config.mintSource || {};
+  const announcements = config.announcements || {};
+  const security = config.security || {};
+  const messages = config.messages || {};
+  const rewards = Array.isArray(vaultSettingsCache?.rewards) ? vaultSettingsCache.rewards : [];
+  const seasons = Array.isArray(vaultSettingsCache?.seasons) ? vaultSettingsCache.seasons : [];
+  const milestones = Array.isArray(vaultSettingsCache?.milestones) ? vaultSettingsCache.milestones : [];
+  const openings = Array.isArray(vaultSettingsCache?.openings) ? vaultSettingsCache.openings : [];
+  const claims = Array.isArray(vaultSettingsCache?.claims) ? vaultSettingsCache.claims : [];
+  const audit = Array.isArray(vaultSettingsCache?.audit) ? vaultSettingsCache.audit : [];
+  const activeSeasonId = vaultGetCachedActiveSeasonId();
+
+  const rewardsRows = rewards.length
+    ? rewards.map(reward => `
+      <tr>
+        <td><code>${escapeHtml(String(reward.code || ''))}</code></td>
+        <td>${escapeHtml(String(reward.name || ''))}</td>
+        <td>${escapeHtml(String(reward.tier || 'common'))}</td>
+        <td>${Number(reward.weight || 0)}</td>
+        <td>${reward.enabled === false ? 'disabled' : 'enabled'}</td>
+        <td>
+          <button class="btn-secondary" onclick="vaultLoadRewardToForm('${escapeJsString(String(reward.code || ''))}')">Edit</button>
+          <button class="btn-danger" onclick="vaultDeleteReward('${escapeJsString(String(reward.code || ''))}')">Delete</button>
+        </td>
+      </tr>
+    `).join('')
+    : '<tr><td colspan="6" style="color:var(--text-secondary);">No rewards configured.</td></tr>';
+
+  const seasonsRows = seasons.length
+    ? seasons.map(season => `
+      <tr>
+        <td><code>${escapeHtml(String(season.season_id || ''))}</code></td>
+        <td>${escapeHtml(String(season.season_name || season.season_id || ''))}</td>
+        <td>${Number(season.active || 0) === 1 ? 'active' : 'inactive'}</td>
+        <td><button class="btn-secondary" onclick="vaultActivateSeason('${escapeJsString(String(season.season_id || ''))}')">Activate</button></td>
+      </tr>
+    `).join('')
+    : '<tr><td colspan="4" style="color:var(--text-secondary);">No seasons available.</td></tr>';
+
+  pane.innerHTML = `
+    <div class="card">
+      <h3>Vault Module Admin</h3>
+      <p style="color:var(--text-secondary);margin-bottom:16px;">All Vault settings are editable here and persist tenant-scoped.</p>
+
+      <div class="settings-grid" style="margin-bottom:16px;">
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Enabled</div></div><input id="vault_enabled" type="checkbox" ${general.enabled ? 'checked' : ''}></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Project Name</div></div><input id="vault_projectName" class="input-sm" value="${escapeHtml(String(general.projectName || ''))}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Vault Name</div></div><input id="vault_gameName" class="input-sm" value="${escapeHtml(String(general.gameName || ''))}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Season Label</div></div><input id="vault_seasonName" class="input-sm" value="${escapeHtml(String(general.seasonName || ''))}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Key Label</div></div><input id="vault_keyName" class="input-sm" value="${escapeHtml(String(theme.keyName || 'Reward Key'))}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Points Label</div></div><input id="vault_pointsName" class="input-sm" value="${escapeHtml(String(theme.pointsName || 'Points'))}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Bonus Entries Label</div></div><input id="vault_bonusEntryName" class="input-sm" value="${escapeHtml(String(theme.bonusEntryName || 'Bonus Entries'))}"></div>
+      </div>
+
+      <h4 style="margin:16px 0 8px 0;">Mint Rules and Security</h4>
+      <div class="settings-grid" style="margin-bottom:16px;">
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Mint Mode</div></div><input id="vault_mintMode" class="input-sm" value="${escapeHtml(String(mintSource.mode || 'custom_webhook'))}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Open Cooldown (sec)</div></div><input id="vault_openCooldownSeconds" type="number" class="input-sm" min="0" value="${Number(security.openCooldownSeconds || 0)}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Keys / Paid Mint</div></div><input id="vault_keysPerPaidMint" type="number" class="input-sm" min="0" value="${Number(mintRules.keysPerPaidMint || 0)}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Keys / Free Mint</div></div><input id="vault_keysPerFreeMint" type="number" class="input-sm" min="0" value="${Number(mintRules.keysPerFreeMint || 0)}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Bonus Entries / Paid</div></div><input id="vault_bonusEntriesPerPaidMint" type="number" class="input-sm" min="0" value="${Number(mintRules.bonusEntriesPerPaidMint || 0)}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Bonus Entries / Free</div></div><input id="vault_bonusEntriesPerFreeMint" type="number" class="input-sm" min="0" value="${Number(mintRules.bonusEntriesPerFreeMint || 0)}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Pressure / Paid</div></div><input id="vault_pressurePerPaidMint" type="number" class="input-sm" min="0" value="${Number(mintRules.pressurePerPaidMint || 0)}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Pressure / Free</div></div><input id="vault_pressurePerFreeMint" type="number" class="input-sm" min="0" value="${Number(mintRules.pressurePerFreeMint || 0)}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Points / Paid</div></div><input id="vault_pointsPerPaidMint" type="number" class="input-sm" min="0" value="${Number(mintRules.pointsPerPaidMint || 0)}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Points / Free</div></div><input id="vault_pointsPerFreeMint" type="number" class="input-sm" min="0" value="${Number(mintRules.pointsPerFreeMint || 0)}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Announcements Channel</div></div><input id="vault_announceChannelId" class="input-sm" value="${escapeHtml(String(announcements.channelId || ''))}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Announce Tiers (CSV)</div></div><input id="vault_announceTiers" class="input-sm" value="${escapeHtml((announcements.announceRewardTiers || []).join(','))}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Announce Common Rewards</div></div><input id="vault_announceCommonRewards" type="checkbox" ${announcements.announceCommonRewards ? 'checked' : ''}></div>
+      </div>
+
+      <h4 style="margin:16px 0 8px 0;">Messages</h4>
+      <div style="display:grid;gap:8px;">
+        <textarea id="vault_msgNoKeys" class="form-input" rows="2" placeholder="No keys message">${escapeHtml(String(messages.noKeys || ''))}</textarea>
+        <textarea id="vault_msgInactive" class="form-input" rows="2" placeholder="Vault inactive message">${escapeHtml(String(messages.vaultInactive || ''))}</textarea>
+        <textarea id="vault_msgSuccess" class="form-input" rows="2" placeholder="Open success message">${escapeHtml(String(messages.openSuccess || ''))}</textarea>
+      </div>
+      <div style="margin-top:12px;"><button class="btn-primary" onclick="vaultSaveGeneralConfig()">Save Vault Config</button></div>
+
+      <h4 style="margin:20px 0 8px 0;">Season Management</h4>
+      <table style="width:100%;border-collapse:collapse;"><thead><tr><th align="left">ID</th><th align="left">Name</th><th align="left">Status</th><th align="left">Action</th></tr></thead><tbody>${seasonsRows}</tbody></table>
+      <div class="settings-grid" style="margin-top:10px;">
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Season ID</div></div><input id="vaultSeasonIdInput" class="input-sm" placeholder="season_2026_q2" value="${escapeHtml(activeSeasonId)}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Season Name</div></div><input id="vaultSeasonNameInput" class="input-sm" placeholder="Season Name"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Start (ISO)</div></div><input id="vaultSeasonStartInput" class="input-sm" placeholder="2026-04-01T00:00:00Z"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">End (ISO)</div></div><input id="vaultSeasonEndInput" class="input-sm" placeholder="2026-06-30T23:59:59Z"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Active</div></div><input id="vaultSeasonActiveInput" type="checkbox"></div>
+      </div>
+      <textarea id="vaultSeasonMetadataInput" class="form-input" rows="2" placeholder='{"note":"optional metadata"}'></textarea>
+      <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultUpsertSeason()">Create/Update Season</button></div>
+
+      <h4 style="margin:20px 0 8px 0;">Reward Table Manager</h4>
+      <table style="width:100%;border-collapse:collapse;"><thead><tr><th align="left">Code</th><th align="left">Name</th><th align="left">Tier</th><th align="left">Weight</th><th align="left">State</th><th align="left">Actions</th></tr></thead><tbody>${rewardsRows}</tbody></table>
+      <div class="settings-grid" style="margin-top:10px;">
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Code</div></div><input id="vaultRewardCodeInput" class="input-sm" placeholder="reward_code"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Name</div></div><input id="vaultRewardNameInput" class="input-sm" placeholder="Reward Name"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Tier</div></div><input id="vaultRewardTierInput" class="input-sm" placeholder="common|rare|epic|legendary"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Weight</div></div><input id="vaultRewardWeightInput" type="number" min="0" class="input-sm" value="1"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Type</div></div><input id="vaultRewardTypeInput" class="input-sm" placeholder="points|bonus_entries|claimable_reward|none"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Enabled</div></div><input id="vaultRewardEnabledInput" type="checkbox" checked></div>
+      </div>
+      <textarea id="vaultRewardPayloadInput" class="form-input" rows="2" placeholder='{"amount":1}'></textarea>
+      <div style="margin-top:8px;">
+        <button class="btn-primary" onclick="vaultSaveReward()">Save Reward</button>
+      </div>
+
+      <h4 style="margin:20px 0 8px 0;">Milestones / Pressure Rules</h4>
+      <textarea id="vaultMilestonesInput" class="form-input" rows="6">${escapeHtml(JSON.stringify(milestones, null, 2))}</textarea>
+      <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultSaveMilestones()">Save Milestones JSON</button></div>
+
+      <h4 style="margin:20px 0 8px 0;">Manual Operations</h4>
+      <div class="settings-grid">
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Discord User ID</div></div><input id="vaultManualDiscordId" class="input-sm" placeholder="123456789012345678"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Season ID</div></div><input id="vaultManualSeasonId" class="input-sm" value="${escapeHtml(activeSeasonId)}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Keys Amount</div></div><input id="vaultManualKeyAmount" type="number" class="input-sm" min="1" value="1"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Action</div></div><input id="vaultManualKeyAction" class="input-sm" value="add"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Reason</div></div><input id="vaultManualReason" class="input-sm" value="portal_manual"></div>
+      </div>
+      <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultMutateKeys()">Apply Key Mutation</button></div>
+
+      <div class="settings-grid" style="margin-top:10px;">
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Assign Reward Code</div></div><input id="vaultAssignRewardCode" class="input-sm" placeholder="reward_code"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Assign Reward Name</div></div><input id="vaultAssignRewardName" class="input-sm" placeholder="Manual reward"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Assign Reward Tier</div></div><input id="vaultAssignRewardTier" class="input-sm" value="rare"></div>
+      </div>
+      <textarea id="vaultAssignRewardPayload" class="form-input" rows="2" placeholder='{"note":"manual assignment"}'></textarea>
+      <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultAssignReward()">Assign Reward</button></div>
+
+      <div class="settings-grid" style="margin-top:10px;">
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Backfill Wallet</div></div><input id="vaultBackfillWallet" class="input-sm" placeholder="wallet address"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Backfill Discord ID (optional)</div></div><input id="vaultBackfillDiscordId" class="input-sm" placeholder="optional"></div>
+      </div>
+      <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultRunBackfill()">Run Active-Season Backfill</button></div>
+
+      <h4 style="margin:20px 0 8px 0;">Import / Export Config JSON</h4>
+      <textarea id="vaultConfigImportExport" class="form-input" rows="8" placeholder='{"config": {...}, "seasons": [...]}'></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn-secondary" onclick="vaultExportConfig()">Export</button>
+        <button class="btn-primary" onclick="vaultImportConfig()">Import</button>
+      </div>
+
+      <h4 style="margin:20px 0 8px 0;">Audit / Openings / Claims Status</h4>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <button class="btn-secondary" onclick="vaultRefreshActivity()">Refresh Activity</button>
+      </div>
+      <pre id="vaultOpeningsView" style="white-space:pre-wrap;max-height:180px;overflow:auto;">${escapeHtml(vaultFormatRows(openings.map(item => `[${item.created_at || ''}] ${item.discord_user_id || '-'} -> ${item.reward_name || item.reward_code || '-'}`), 'No openings yet.'))}</pre>
+      <pre id="vaultClaimsView" style="white-space:pre-wrap;max-height:180px;overflow:auto;">${escapeHtml(vaultFormatRows(claims.map(item => `#${item.id} [${item.claim_status}] ${item.discord_user_id || '-'} -> ${item.reward_name || item.reward_code || '-'}`), 'No claims yet.'))}</pre>
+      <pre id="vaultAuditView" style="white-space:pre-wrap;max-height:180px;overflow:auto;">${escapeHtml(vaultFormatRows(audit.map(item => `[${item.created_at || ''}] ${item.action || '-'} by ${item.admin_discord_user_id || 'system'}`), 'No audit records yet.'))}</pre>
+
+      <div class="settings-grid" style="margin-top:10px;">
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Claim ID</div></div><input id="vaultClaimIdInput" class="input-sm" placeholder="numeric reward id"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Claim Status</div></div><input id="vaultClaimStatusInput" class="input-sm" placeholder="pending|approved|fulfilled|rejected"></div>
+      </div>
+      <textarea id="vaultClaimNoteInput" class="form-input" rows="2" placeholder="optional note"></textarea>
+      <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultUpdateClaimStatus()">Update Claim Status</button></div>
+
+      <h4 style="margin:20px 0 8px 0;">Raw Config Fallback (Full Coverage)</h4>
+      <textarea id="vaultRawConfigInput" class="form-input" rows="10">${escapeHtml(JSON.stringify(config, null, 2))}</textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn-secondary" onclick="vaultSetRawFromCurrent()">Reset to Current</button>
+        <button class="btn-primary" onclick="vaultSaveRawConfig()">Save Raw Config</button>
+      </div>
+    </div>
+  `;
+}
+
+async function loadVaultSettingsTab() {
+  if (!isAdmin) return;
+  const pane = document.getElementById('settingsTab-vault');
+  if (!pane) return;
+  pane.innerHTML = '<div class="card"><p style="color:var(--text-secondary);">Loading vault settings...</p></div>';
+  try {
+    const [configRes, seasonsRes, rewardsRes, milestonesRes, openingsRes, claimsRes, auditRes] = await Promise.all([
+      vaultFetchJson('/api/admin/vault/config'),
+      vaultFetchJson('/api/admin/vault/seasons'),
+      vaultFetchJson('/api/admin/vault/rewards'),
+      vaultFetchJson('/api/admin/vault/milestones'),
+      vaultFetchJson('/api/admin/vault/openings?limit=50'),
+      vaultFetchJson('/api/admin/vault/rewards/claims?limit=50'),
+      vaultFetchJson('/api/admin/vault/audit?limit=50'),
+    ]);
+    vaultSettingsCache = {
+      config: configRes?.data?.config || configRes?.config || {},
+      seasons: seasonsRes?.data?.seasons || seasonsRes?.seasons || [],
+      rewards: rewardsRes?.data?.rewards || rewardsRes?.rewards || [],
+      milestones: milestonesRes?.data?.milestones || milestonesRes?.milestones || [],
+      openings: openingsRes?.data?.openings || openingsRes?.openings || [],
+      claims: claimsRes?.data?.rewards || claimsRes?.rewards || [],
+      audit: auditRes?.data?.logs || auditRes?.logs || [],
+    };
+    vaultRenderAdminPanel();
+  } catch (error) {
+    pane.innerHTML = `<div class="card"><p style="color:#fca5a5;">Failed to load vault settings: ${escapeHtml(error.message || 'Unknown error')}</p></div>`;
+  }
+}
+
+async function vaultSaveGeneralConfig() {
+  try {
+    const current = vaultSettingsCache?.config || {};
+    const next = JSON.parse(JSON.stringify(current));
+    next.general = next.general || {};
+    next.theme = next.theme || {};
+    next.mintRules = next.mintRules || {};
+    next.mintSource = next.mintSource || {};
+    next.announcements = next.announcements || {};
+    next.security = next.security || {};
+    next.messages = next.messages || {};
+
+    next.general.enabled = !!document.getElementById('vault_enabled')?.checked;
+    next.general.projectName = String(document.getElementById('vault_projectName')?.value || '').trim();
+    next.general.gameName = String(document.getElementById('vault_gameName')?.value || '').trim();
+    next.general.seasonName = String(document.getElementById('vault_seasonName')?.value || '').trim();
+
+    next.theme.keyName = String(document.getElementById('vault_keyName')?.value || '').trim();
+    next.theme.pointsName = String(document.getElementById('vault_pointsName')?.value || '').trim();
+    next.theme.bonusEntryName = String(document.getElementById('vault_bonusEntryName')?.value || '').trim();
+
+    next.mintSource.mode = String(document.getElementById('vault_mintMode')?.value || '').trim() || 'custom_webhook';
+    next.security.openCooldownSeconds = Number(document.getElementById('vault_openCooldownSeconds')?.value || 0) || 0;
+    next.mintRules.keysPerPaidMint = Number(document.getElementById('vault_keysPerPaidMint')?.value || 0) || 0;
+    next.mintRules.keysPerFreeMint = Number(document.getElementById('vault_keysPerFreeMint')?.value || 0) || 0;
+    next.mintRules.bonusEntriesPerPaidMint = Number(document.getElementById('vault_bonusEntriesPerPaidMint')?.value || 0) || 0;
+    next.mintRules.bonusEntriesPerFreeMint = Number(document.getElementById('vault_bonusEntriesPerFreeMint')?.value || 0) || 0;
+    next.mintRules.pressurePerPaidMint = Number(document.getElementById('vault_pressurePerPaidMint')?.value || 0) || 0;
+    next.mintRules.pressurePerFreeMint = Number(document.getElementById('vault_pressurePerFreeMint')?.value || 0) || 0;
+    next.mintRules.pointsPerPaidMint = Number(document.getElementById('vault_pointsPerPaidMint')?.value || 0) || 0;
+    next.mintRules.pointsPerFreeMint = Number(document.getElementById('vault_pointsPerFreeMint')?.value || 0) || 0;
+
+    next.announcements.channelId = String(document.getElementById('vault_announceChannelId')?.value || '').trim();
+    next.announcements.announceRewardTiers = String(document.getElementById('vault_announceTiers')?.value || '')
+      .split(',')
+      .map(value => value.trim())
+      .filter(Boolean);
+    next.announcements.announceCommonRewards = !!document.getElementById('vault_announceCommonRewards')?.checked;
+
+    next.messages.noKeys = String(document.getElementById('vault_msgNoKeys')?.value || '').trim();
+    next.messages.vaultInactive = String(document.getElementById('vault_msgInactive')?.value || '').trim();
+    next.messages.openSuccess = String(document.getElementById('vault_msgSuccess')?.value || '').trim();
+
+    await vaultFetchJson('/api/admin/vault/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config: next }),
+    });
+    showSuccess('Vault config saved.');
+    await loadVaultSettingsTab();
+  } catch (error) {
+    showError(error.message || 'Failed to save vault config.');
+  }
+}
+
+function vaultSetRawFromCurrent() {
+  const rawEl = document.getElementById('vaultRawConfigInput');
+  if (!rawEl) return;
+  rawEl.value = JSON.stringify(vaultSettingsCache?.config || {}, null, 2);
+}
+
+async function vaultSaveRawConfig() {
+  const rawEl = document.getElementById('vaultRawConfigInput');
+  if (!rawEl) return;
+  const parsed = vaultJsonParseInput(rawEl.value, null);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    showError('Raw config must be a JSON object.');
+    return;
+  }
+  try {
+    await vaultFetchJson('/api/admin/vault/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config: parsed }),
+    });
+    showSuccess('Raw vault config saved.');
+    await loadVaultSettingsTab();
+  } catch (error) {
+    showError(error.message || 'Failed to save raw vault config.');
+  }
+}
+
+async function vaultUpsertSeason() {
+  const seasonId = String(document.getElementById('vaultSeasonIdInput')?.value || '').trim();
+  if (!seasonId) {
+    showError('Season ID is required.');
+    return;
+  }
+  const payload = {
+    seasonId,
+    seasonName: String(document.getElementById('vaultSeasonNameInput')?.value || '').trim() || seasonId,
+    startsAt: String(document.getElementById('vaultSeasonStartInput')?.value || '').trim() || null,
+    endsAt: String(document.getElementById('vaultSeasonEndInput')?.value || '').trim() || null,
+    active: !!document.getElementById('vaultSeasonActiveInput')?.checked,
+    metadata: vaultJsonParseInput(document.getElementById('vaultSeasonMetadataInput')?.value, null),
+  };
+  try {
+    await vaultFetchJson(`/api/admin/vault/seasons/${encodeURIComponent(seasonId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    showSuccess('Season saved.');
+    await loadVaultSettingsTab();
+  } catch (error) {
+    showError(error.message || 'Failed to save season.');
+  }
+}
+
+async function vaultActivateSeason(seasonId) {
+  try {
+    await vaultFetchJson(`/api/admin/vault/seasons/${encodeURIComponent(String(seasonId || '').trim())}/activate`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    showSuccess('Season activated.');
+    await loadVaultSettingsTab();
+  } catch (error) {
+    showError(error.message || 'Failed to activate season.');
+  }
+}
+
+function vaultLoadRewardToForm(code) {
+  const rewards = Array.isArray(vaultSettingsCache?.rewards) ? vaultSettingsCache.rewards : [];
+  const reward = rewards.find(item => String(item?.code || '').toLowerCase() === String(code || '').toLowerCase());
+  if (!reward) return;
+  const setValue = (id, value) => {
+    const input = document.getElementById(id);
+    if (!input) return;
+    input.value = value;
+  };
+  setValue('vaultRewardCodeInput', String(reward.code || ''));
+  setValue('vaultRewardNameInput', String(reward.name || ''));
+  setValue('vaultRewardTierInput', String(reward.tier || 'common'));
+  setValue('vaultRewardWeightInput', Number(reward.weight || 0));
+  setValue('vaultRewardTypeInput', String(reward.type || 'none'));
+  setValue('vaultRewardPayloadInput', reward.payload !== undefined ? JSON.stringify(reward.payload, null, 2) : '');
+  const enabledEl = document.getElementById('vaultRewardEnabledInput');
+  if (enabledEl) enabledEl.checked = reward.enabled !== false;
+}
+
+async function vaultSaveReward() {
+  const code = String(document.getElementById('vaultRewardCodeInput')?.value || '').trim();
+  if (!code) {
+    showError('Reward code is required.');
+    return;
+  }
+  const payload = {
+    code,
+    name: String(document.getElementById('vaultRewardNameInput')?.value || '').trim() || code,
+    tier: String(document.getElementById('vaultRewardTierInput')?.value || 'common').trim().toLowerCase(),
+    weight: Number(document.getElementById('vaultRewardWeightInput')?.value || 0) || 0,
+    type: String(document.getElementById('vaultRewardTypeInput')?.value || 'none').trim(),
+    enabled: !!document.getElementById('vaultRewardEnabledInput')?.checked,
+    payload: vaultJsonParseInput(document.getElementById('vaultRewardPayloadInput')?.value, null),
+  };
+
+  const exists = (Array.isArray(vaultSettingsCache?.rewards) ? vaultSettingsCache.rewards : [])
+    .some(item => String(item?.code || '').toLowerCase() === code.toLowerCase());
+
+  try {
+    await vaultFetchJson(exists ? `/api/admin/vault/rewards/${encodeURIComponent(code)}` : '/api/admin/vault/rewards', {
+      method: exists ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    showSuccess(`Reward ${exists ? 'updated' : 'created'}.`);
+    await loadVaultSettingsTab();
+  } catch (error) {
+    showError(error.message || 'Failed to save reward.');
+  }
+}
+
+async function vaultDeleteReward(code) {
+  const normalizedCode = String(code || '').trim();
+  if (!normalizedCode) return;
+  if (!confirm(`Delete reward "${normalizedCode}"?`)) return;
+  try {
+    await vaultFetchJson(`/api/admin/vault/rewards/${encodeURIComponent(normalizedCode)}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    showSuccess('Reward deleted.');
+    await loadVaultSettingsTab();
+  } catch (error) {
+    showError(error.message || 'Failed to delete reward.');
+  }
+}
+
+async function vaultSaveMilestones() {
+  const parsed = vaultJsonParseInput(document.getElementById('vaultMilestonesInput')?.value, null);
+  if (!Array.isArray(parsed)) {
+    showError('Milestones must be a JSON array.');
+    return;
+  }
+  try {
+    const currentMilestones = Array.isArray(vaultSettingsCache?.milestones) ? vaultSettingsCache.milestones : [];
+    const nextIds = new Set(
+      parsed
+        .map(item => String(item?.id || item?.milestone_id || '').trim())
+        .filter(Boolean)
+    );
+    for (const current of currentMilestones) {
+      const id = String(current?.id || current?.milestone_id || '').trim();
+      if (!id || nextIds.has(id)) continue;
+      await vaultFetchJson(`/api/admin/vault/milestones/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+    }
+    for (const milestone of parsed) {
+      await vaultFetchJson('/api/admin/vault/milestones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(milestone),
+      });
+    }
+    showSuccess('Milestones saved.');
+    await loadVaultSettingsTab();
+  } catch (error) {
+    showError(error.message || 'Failed to save milestones.');
+  }
+}
+
+async function vaultMutateKeys() {
+  const discordId = String(document.getElementById('vaultManualDiscordId')?.value || '').trim();
+  if (!discordId) return showError('Discord user ID is required.');
+  const body = {
+    seasonId: String(document.getElementById('vaultManualSeasonId')?.value || vaultGetCachedActiveSeasonId()).trim(),
+    amount: Number(document.getElementById('vaultManualKeyAmount')?.value || 0) || 0,
+    action: String(document.getElementById('vaultManualKeyAction')?.value || 'add').trim().toLowerCase(),
+    reason: String(document.getElementById('vaultManualReason')?.value || 'portal_manual').trim(),
+  };
+  try {
+    await vaultFetchJson(`/api/admin/vault/users/${encodeURIComponent(discordId)}/keys`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    showSuccess('Key mutation completed.');
+    await loadVaultSettingsTab();
+  } catch (error) {
+    showError(error.message || 'Failed to mutate keys.');
+  }
+}
+
+async function vaultAssignReward() {
+  const discordId = String(document.getElementById('vaultManualDiscordId')?.value || '').trim();
+  if (!discordId) return showError('Discord user ID is required.');
+  const payload = {
+    seasonId: String(document.getElementById('vaultManualSeasonId')?.value || vaultGetCachedActiveSeasonId()).trim(),
+    reward: {
+      code: String(document.getElementById('vaultAssignRewardCode')?.value || '').trim() || 'manual_reward',
+      name: String(document.getElementById('vaultAssignRewardName')?.value || '').trim() || 'Manual Reward',
+      tier: String(document.getElementById('vaultAssignRewardTier')?.value || 'rare').trim().toLowerCase(),
+      payload: vaultJsonParseInput(document.getElementById('vaultAssignRewardPayload')?.value, null),
+    },
+  };
+  try {
+    await vaultFetchJson(`/api/admin/vault/users/${encodeURIComponent(discordId)}/rewards`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    showSuccess('Reward assigned.');
+    await loadVaultSettingsTab();
+  } catch (error) {
+    showError(error.message || 'Failed to assign reward.');
+  }
+}
+
+async function vaultRunBackfill() {
+  const walletAddress = String(document.getElementById('vaultBackfillWallet')?.value || '').trim();
+  if (!walletAddress) return showError('Wallet address is required for backfill.');
+  const discordUserId = String(document.getElementById('vaultBackfillDiscordId')?.value || '').trim();
+  try {
+    const data = await vaultFetchJson('/api/admin/vault/backfill', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletAddress, discordUserId }),
+    });
+    const processed = Number(data?.data?.processed ?? data?.processed ?? 0);
+    showSuccess(`Backfill completed. Processed: ${processed}.`);
+    await loadVaultSettingsTab();
+  } catch (error) {
+    showError(error.message || 'Failed to run backfill.');
+  }
+}
+
+async function vaultExportConfig() {
+  try {
+    const data = await vaultFetchJson('/api/admin/vault/config/export');
+    const out = document.getElementById('vaultConfigImportExport');
+    if (out) {
+      out.value = JSON.stringify(data?.data || data, null, 2);
+    }
+    showSuccess('Vault config exported.');
+  } catch (error) {
+    showError(error.message || 'Failed to export vault config.');
+  }
+}
+
+async function vaultImportConfig() {
+  const input = document.getElementById('vaultConfigImportExport');
+  const parsed = vaultJsonParseInput(input?.value, null);
+  if (!parsed || typeof parsed !== 'object') {
+    showError('Import payload must be valid JSON.');
+    return;
+  }
+  try {
+    const payload = parsed.config ? parsed : { config: parsed, seasons: [] };
+    await vaultFetchJson('/api/admin/vault/config/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    showSuccess('Vault config imported.');
+    await loadVaultSettingsTab();
+  } catch (error) {
+    showError(error.message || 'Failed to import vault config.');
+  }
+}
+
+async function vaultRefreshActivity() {
+  try {
+    const [openingsRes, claimsRes, auditRes] = await Promise.all([
+      vaultFetchJson('/api/admin/vault/openings?limit=50'),
+      vaultFetchJson('/api/admin/vault/rewards/claims?limit=50'),
+      vaultFetchJson('/api/admin/vault/audit?limit=50'),
+    ]);
+    vaultSettingsCache = {
+      ...(vaultSettingsCache || {}),
+      openings: openingsRes?.data?.openings || openingsRes?.openings || [],
+      claims: claimsRes?.data?.rewards || claimsRes?.rewards || [],
+      audit: auditRes?.data?.logs || auditRes?.logs || [],
+    };
+    vaultRenderAdminPanel();
+    showSuccess('Vault activity refreshed.');
+  } catch (error) {
+    showError(error.message || 'Failed to refresh vault activity.');
+  }
+}
+
+async function vaultUpdateClaimStatus() {
+  const claimId = String(document.getElementById('vaultClaimIdInput')?.value || '').trim();
+  const claimStatus = String(document.getElementById('vaultClaimStatusInput')?.value || '').trim();
+  if (!claimId || !claimStatus) {
+    showError('Claim ID and claim status are required.');
+    return;
+  }
+  const claimNote = String(document.getElementById('vaultClaimNoteInput')?.value || '').trim();
+  try {
+    await vaultFetchJson(`/api/admin/vault/rewards/claims/${encodeURIComponent(claimId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ claimStatus, claimNote }),
+    });
+    showSuccess('Claim status updated.');
+    await loadVaultSettingsTab();
+  } catch (error) {
+    showError(error.message || 'Failed to update claim status.');
   }
 }
 

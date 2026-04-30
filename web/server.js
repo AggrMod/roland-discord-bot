@@ -23,6 +23,7 @@ const roleService = require('../services/roleService');
 const proposalService = require('../services/proposalService');
 const missionService = require('../services/missionService');
 const heistService = require('../services/heistService');
+const vaultService = require('../services/vaultService');
 const treasuryService = require('../services/treasuryService');
 const microVerifyService = require('../services/microVerifyService');
 const nftActivityService = require('../services/nftActivityService');
@@ -658,6 +659,10 @@ class WebServer {
       return ensureTenantModuleEnabled(req, res, 'heist', 'Missions');
     }
 
+    function ensureVaultModule(req, res) {
+      return ensureTenantModuleEnabled(req, res, 'vault', 'Vault');
+    }
+
     function ensureBrandingModule(req, res) {
       return ensureTenantModuleEnabled(req, res, 'branding', 'Branding');
     }
@@ -1202,6 +1207,7 @@ class WebServer {
       fetchGuildById,
       roleService,
       walletService,
+      vaultService,
       verifySignature: (walletAddress, signature, message) => this.verifySignature(walletAddress, signature, message),
     }));
     const createMicroVerifyUserRouter = require('./routes/microVerifyUser');
@@ -1252,6 +1258,13 @@ class WebServer {
       ensureTicketingModule,
       ticketService,
     }));
+    const createAdminVaultRouter = require('./routes/adminVault');
+    this.app.use('/', createAdminVaultRouter({
+      logger,
+      adminAuthMiddleware,
+      ensureVaultModule,
+      vaultService,
+    }));
     const createBillingWebhookRouter = require('./routes/billingWebhook');
     this.app.use('/', createBillingWebhookRouter({
       logger,
@@ -1269,6 +1282,13 @@ class WebServer {
       nftActivityService,
       trackedWalletsService,
       getActivityWebhookSecret,
+      normalizeWebhookSecretHeader,
+      timingSafeEquals,
+    }));
+    const createVaultWebhooksRouter = require('./routes/vaultWebhooks');
+    this.app.use('/', createVaultWebhooksRouter({
+      logger,
+      vaultService,
       normalizeWebhookSecretHeader,
       timingSafeEquals,
     }));

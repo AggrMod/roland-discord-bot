@@ -11,6 +11,7 @@ const MODULE_DISPLAY_NAMES = Object.freeze({
   branding: 'Branding',
   engagement: 'Engagement',
   aiassistant: 'AI Assistant',
+  vault: 'Vault',
   minigames: 'Minigames',
   battle: 'Battle',
   heist: 'Missions',

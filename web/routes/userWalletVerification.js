@@ -9,6 +9,7 @@ function createUserWalletVerificationRouter({
   fetchGuildById,
   roleService,
   walletService,
+  vaultService,
   verifySignature,
 }) {
   const router = express.Router();
@@ -34,6 +35,17 @@ function createUserWalletVerificationRouter({
     await roleService.updateUserRoles(discordId, username, req.guildId || null);
     if (guild) {
       await roleService.syncUserDiscordRoles(guild, discordId, req.guildId || null);
+    }
+  };
+
+  const triggerVaultBackfillBestEffort = (req, discordId, walletAddress) => {
+    try {
+      const guildId = String(req.guildId || '').trim();
+      const service = vaultService || require('../../services/vaultService');
+      if (!guildId || !service || typeof service.onWalletLinked !== 'function') return;
+      service.onWalletLinked(guildId, discordId, walletAddress);
+    } catch (error) {
+      logger.warn('Vault wallet-link backfill trigger warning (non-fatal):', error?.message || error);
     }
   };
 
@@ -79,6 +91,7 @@ function createUserWalletVerificationRouter({
       const existingWallet = db.prepare('SELECT * FROM wallets WHERE wallet_address = ?').get(walletAddress);
       if (existingWallet) {
         if (existingWallet.discord_id === discordId) {
+          triggerVaultBackfillBestEffort(req, discordId, walletAddress);
           try {
             await refreshUserRoles(req, discordId, req.session.discordUser.username || 'Web User');
             triggerOgRoleBestEffort(req, discordId, req.session.discordUser.username || 'Web User');
@@ -95,13 +108,10 @@ function createUserWalletVerificationRouter({
         db.prepare('INSERT INTO users (discord_id, username) VALUES (?, ?)').run(discordId, req.session.discordUser.username || 'Web User');
       }
 
-      const walletCount = db.prepare('SELECT COUNT(*) as count FROM wallets WHERE discord_id = ?').get(discordId).count;
-      const isFavorite = walletCount === 0 ? 1 : 0;
-      const isPrimary = walletCount === 0 ? 1 : 0;
-
-      db.prepare('INSERT INTO wallets (discord_id, wallet_address, primary_wallet, is_favorite) VALUES (?, ?, ?, ?)').run(
-        discordId, walletAddress, isPrimary, isFavorite
-      );
+      const linkResult = walletService.linkWallet(discordId, req.session.discordUser.username || 'Web User', walletAddress, req.guildId || '');
+      if (!linkResult?.success) {
+        return res.status(400).json(toErrorResponse(linkResult?.message || 'Failed to link wallet', 'VALIDATION_ERROR'));
+      }
 
       try {
         await refreshUserRoles(req, discordId, req.session.discordUser.username || 'Web User');
@@ -148,6 +158,7 @@ function createUserWalletVerificationRouter({
       const existingWallet = db.prepare('SELECT * FROM wallets WHERE wallet_address = ?').get(walletAddress);
       if (existingWallet) {
         if (existingWallet.discord_id === discordId) {
+          triggerVaultBackfillBestEffort(req, discordId, walletAddress);
           try {
             await refreshUserRoles(req, discordId, req.session.discordUser?.username || 'Web User');
             triggerOgRoleBestEffort(req, discordId, req.session.discordUser?.username || 'Web User');
@@ -164,16 +175,10 @@ function createUserWalletVerificationRouter({
         db.prepare('INSERT INTO users (discord_id, username) VALUES (?, ?)').run(discordId, 'Web User');
       }
 
-      const walletCount = db.prepare('SELECT COUNT(*) as count FROM wallets WHERE discord_id = ?').get(discordId).count;
-      const isFavorite = walletCount === 0 ? 1 : 0;
-      const isPrimary = walletCount === 0 ? 1 : 0;
-
-      db.prepare('INSERT INTO wallets (discord_id, wallet_address, primary_wallet, is_favorite) VALUES (?, ?, ?, ?)').run(
-        discordId,
-        walletAddress,
-        isPrimary,
-        isFavorite
-      );
+      const linkResult = walletService.linkWallet(discordId, req.session.discordUser?.username || 'Web User', walletAddress, req.guildId || '');
+      if (!linkResult?.success) {
+        return res.status(400).json(toErrorResponse(linkResult?.message || 'Failed to link wallet', 'VALIDATION_ERROR'));
+      }
 
       try {
         await refreshUserRoles(req, discordId, 'Web User');
@@ -185,7 +190,7 @@ function createUserWalletVerificationRouter({
       triggerOgRoleBestEffort(req, discordId, req.session.discordUser?.username || 'Web User');
 
       logger.log(`Web verification: User ${discordId} linked wallet ${walletAddress}`);
-      return res.json(toSuccessResponse({ message: 'Wallet verified successfully', isFavorite }));
+      return res.json(toSuccessResponse({ message: 'Wallet verified successfully', isFavorite: !!linkResult?.isFirstWallet }));
     } catch (routeError) {
       logger.error('Error verifying wallet:', routeError);
       return res.status(500).json(toErrorResponse('Internal server error'));

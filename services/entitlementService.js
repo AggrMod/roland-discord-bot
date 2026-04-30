@@ -36,6 +36,9 @@ const LIMIT_DEFINITIONS = Object.freeze({
   heist: {
     max_active_missions: { label: 'Max Active Missions' },
   },
+  vault: {
+    max_rewards: { label: 'Max Vault Rewards' },
+  },
   ticketing: {
     max_categories: { label: 'Max Ticket Categories' },
   },

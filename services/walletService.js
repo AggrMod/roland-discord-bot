@@ -3,6 +3,21 @@ const logger = require('../utils/logger');
 const clientProvider = require('../utils/clientProvider');
 
 class WalletService {
+  triggerVaultBackfill(discordId, guildId, walletAddress) {
+    try {
+      const normalizedGuildId = String(guildId || '').trim();
+      const normalizedDiscordId = String(discordId || '').trim();
+      const normalizedWallet = String(walletAddress || '').trim();
+      if (!normalizedGuildId || !normalizedDiscordId || !normalizedWallet) return;
+      const vaultService = require('./vaultService');
+      if (vaultService && typeof vaultService.onWalletLinked === 'function') {
+        vaultService.onWalletLinked(normalizedGuildId, normalizedDiscordId, normalizedWallet);
+      }
+    } catch (error) {
+      logger.warn('[vault] wallet backfill trigger warning:', error?.message || error);
+    }
+  }
+
   linkWallet(discordId, username, walletAddress, guildId = '') {
     try {
       // Wrap existence check + INSERT in a transaction to prevent race conditions
@@ -26,7 +41,8 @@ class WalletService {
         const isPrimary = walletCount === 0 ? 1 : 0;
         const isFirstWallet = walletCount === 0;
 
-        db.prepare('INSERT INTO wallets (discord_id, wallet_address, primary_wallet) VALUES (?, ?, ?)').run(discordId, walletAddress, isPrimary);
+        db.prepare('INSERT INTO wallets (discord_id, wallet_address, primary_wallet, is_favorite) VALUES (?, ?, ?, ?)')
+          .run(discordId, walletAddress, isPrimary, isPrimary);
 
         return { success: true, message: 'Wallet linked successfully', isFirstWallet };
       });
@@ -36,8 +52,10 @@ class WalletService {
       if (result.success && result.isFirstWallet) {
         logger.log(`Wallet ${walletAddress} linked to user ${discordId}`);
         this.triggerOGRoleAssignment(discordId, username, guildId);
+        this.triggerVaultBackfill(discordId, guildId, walletAddress);
       } else if (result.success) {
         logger.log(`Wallet ${walletAddress} linked to user ${discordId}`);
+        this.triggerVaultBackfill(discordId, guildId, walletAddress);
       }
 
       return result;

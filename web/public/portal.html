@@ -2625,6 +2625,7 @@
             <button class="settings-tab" data-tab="tokentracker" onclick="switchSettingsTab('tokentracker')">Token Tracker</button>
             <button class="settings-tab" data-tab="battle" onclick="switchSettingsTab('battle')">Minigames</button>
             <button class="settings-tab" data-tab="heist" onclick="switchSettingsTab('heist')">Missions</button>
+            <button class="settings-tab" data-tab="vault" onclick="switchSettingsTab('vault')">Vault</button>
             <button class="settings-tab" data-tab="selfserve" onclick="switchSettingsTab('selfserve')">Self-Serve Roles</button>
             <button class="settings-tab" data-tab="ticketing" onclick="switchSettingsTab('ticketing')">Ticketing</button>
             <button class="settings-tab" data-tab="engagement" onclick="switchSettingsTab('engagement')">Engagement</button>
@@ -2690,6 +2691,12 @@
             </div>
             <div id="settingsTab-heist" class="settings-tab-pane" style="display:none;">
               <div class="card"><p style="color:var(--text-secondary);">Missions settings are configured via admin APIs and Discord commands.</p></div>
+            </div>
+            <div id="settingsTab-vault" class="settings-tab-pane" style="display:none;">
+              <div id="vaultAdminPanel" class="card">
+                <h3>Vault</h3>
+                <p style="color:var(--text-secondary);">Vault admin settings load here.</p>
+              </div>
             </div>
             <div id="settingsTab-selfserve" class="settings-tab-pane" style="display:none;">
               <!-- adminSelfServeRolesCard content loaded here dynamically -->

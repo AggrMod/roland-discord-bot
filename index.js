@@ -94,6 +94,7 @@ function getCommandModuleKey(commandName) {
     'treasury': 'treasury',
     'ticketing': 'ticketing',
     'heist': 'heist',
+    'vault': 'vault',
     'minigames': 'minigames',
     'battle': 'minigames',
     'aiassistant': 'aiassistant'

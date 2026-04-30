@@ -30,7 +30,8 @@ module.exports = {
               { name: 'AI Assistant', value: 'aiassistant' },
               { name: 'Minigames', value: 'minigames' },
               { name: 'Battle', value: 'battle' },
-              { name: 'Heist', value: 'heist' }
+              { name: 'Heist', value: 'heist' },
+              { name: 'Vault', value: 'vault' }
             ))
         .addBooleanOption(option =>
           option
@@ -177,7 +178,8 @@ function getModuleIcon(module) {
     aiassistant: '[AI]',
     minigames: '[MG]',
     battle: '[B]',
-    heist: '[H]'
+    heist: '[H]',
+    vault: '[VLT]'
   };
   return icons[module] || '[M]';
 }

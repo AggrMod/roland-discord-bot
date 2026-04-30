@@ -278,6 +278,34 @@ function createAdminVaultRouter({
     }
   });
 
+  router.post('/api/admin/vault/backfill-all', adminAuthMiddleware, async (req, res) => {
+    if (!ensureVaultModule(req, res)) return;
+    try {
+      const limitPerWallet = Number(req.body?.limitPerWallet || req.body?.limit_per_wallet || 5000);
+      const result = await vaultService.backfillAllMissingMintTransfersForActiveSeason(req.guildId || '', { limitPerWallet });
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to run bulk backfill', 'VALIDATION_ERROR', null, result));
+      }
+      vaultService.logAdminAction(
+        req.guildId || '',
+        req.session?.discordUser?.id || null,
+        'bulk_backfill_missing_mints',
+        null,
+        {
+          seasonId: result.seasonId || null,
+          ingested: Number(result.ingested || 0),
+          duplicates: Number(result.duplicates || 0),
+          failed: Number(result.failed || 0),
+          scannedSignatures: Number(result.scannedSignatures || 0),
+        }
+      );
+      return res.json(toSuccessResponse(result));
+    } catch (error) {
+      logger.error('Error in vault bulk backfill endpoint:', error);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.post('/api/admin/vault/users/:discordId/rewards', adminAuthMiddleware, (req, res) => {
     if (!ensureVaultModule(req, res)) return;
     try {

@@ -1238,6 +1238,7 @@ h4,
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  flex: 1 1 42%;
 }
 
 .settings-label {
@@ -1277,6 +1278,22 @@ h4,
 
 .input-sm::placeholder {
   color: #8ea0be;
+}
+
+.settings-row .input-sm {
+  flex: 1 1 58%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.settings-row select.input-sm {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-row input[type="checkbox"] {
+  flex: 0 0 auto;
 }
 
 /* Missions admin panel polish */

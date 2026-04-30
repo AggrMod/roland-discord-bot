@@ -9751,6 +9751,13 @@ function vaultRenderAdminPanel() {
       </div>
       <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultRunBackfill()">Run Active-Season Backfill</button></div>
 
+      <div class="settings-grid" style="margin-top:10px;">
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Bulk Backfill Max Signatures / Wallet</div><div class="settings-desc">Scans newest to oldest until this max is reached (safe to rerun; duplicates are skipped).</div></div><input id="vaultBulkBackfillLimitPerWallet" type="number" class="input-sm" min="1" max="50000" value="5000"></div>
+      </div>
+      <div style="margin-top:8px;">
+        <button class="btn-secondary" onclick="vaultRunBackfillAllMissingTx()">Backfill Missing TXs (All Configured Mint Wallets)</button>
+      </div>
+
       <h4 style="margin:20px 0 8px 0;">Import / Export Config JSON</h4>
       <textarea id="vaultConfigImportExport" class="form-input" rows="8" placeholder='{"config": {...}, "seasons": [...]}'></textarea>
       <div style="display:flex;gap:8px;margin-top:8px;">
@@ -10120,6 +10127,29 @@ async function vaultRunBackfill() {
     await loadVaultSettingsTab();
   } catch (error) {
     showError(error.message || 'Failed to run backfill.');
+  }
+}
+
+async function vaultRunBackfillAllMissingTx() {
+  const limitPerWallet = Math.max(1, Math.min(50000, Number(document.getElementById('vaultBulkBackfillLimitPerWallet')?.value || 5000) || 5000));
+  try {
+    const data = await vaultFetchJson('/api/admin/vault/backfill-all', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ limitPerWallet }),
+    });
+
+    const summary = data?.data || data || {};
+    const scanned = Number(summary.scannedSignatures || 0);
+    const matched = Number(summary.matchedTransfers || 0);
+    const ingested = Number(summary.ingested || 0);
+    const duplicates = Number(summary.duplicates || 0);
+    const failed = Number(summary.failed || 0);
+    const errorCount = Array.isArray(summary.errors) ? summary.errors.length : 0;
+    showSuccess(`Bulk backfill finished. scanned=${scanned}, matched=${matched}, ingested=${ingested}, duplicates=${duplicates}, failed=${failed}, walletErrors=${errorCount}`);
+    await loadVaultSettingsTab();
+  } catch (error) {
+    showError(error.message || 'Failed to run bulk backfill.');
   }
 }
 

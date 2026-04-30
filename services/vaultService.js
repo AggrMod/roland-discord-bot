@@ -1,5 +1,6 @@
 const db = require('../database/db');
 const logger = require('../utils/logger');
+const { Connection, PublicKey } = require('@solana/web3.js');
 
 function nowIso() {
   return new Date().toISOString();
@@ -36,6 +37,28 @@ function normalizeRewardQuantity(value) {
 }
 
 class VaultService {
+  constructor() {
+    this.rpcConnection = null;
+    this.rpcUrl = null;
+  }
+
+  getRpcUrl() {
+    const explicit = String(process.env.SOLANA_RPC_URL || '').trim();
+    if (explicit) return explicit;
+    const heliusApiKey = String(process.env.HELIUS_API_KEY || '').trim();
+    if (heliusApiKey) return `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`;
+    return 'https://api.mainnet-beta.solana.com';
+  }
+
+  getRpcConnection() {
+    const rpcUrl = this.getRpcUrl();
+    if (!this.rpcConnection || this.rpcUrl !== rpcUrl) {
+      this.rpcUrl = rpcUrl;
+      this.rpcConnection = new Connection(rpcUrl, 'confirmed');
+    }
+    return this.rpcConnection;
+  }
+
   getDefaultConfig() {
     return {
       general: {
@@ -947,6 +970,49 @@ class VaultService {
     };
   }
 
+  extractNativeTransfersFromParsedTransaction(parsedTx) {
+    const transfers = [];
+    const pushTransfer = (fromWallet, toWallet, lamports) => {
+      const from = String(fromWallet || '').trim();
+      const to = String(toWallet || '').trim();
+      const amount = Number(lamports || 0);
+      if (!from || !to) return;
+      if (!Number.isFinite(amount) || amount <= 0) return;
+      transfers.push({
+        fromUserAccount: from,
+        toUserAccount: to,
+        amount,
+      });
+    };
+
+    const readInstruction = (ix) => {
+      if (!ix || typeof ix !== 'object') return;
+      const parsed = ix.parsed;
+      const program = String(ix.program || '').trim().toLowerCase();
+      const type = String(parsed?.type || '').trim().toLowerCase();
+      if (program !== 'system' || type !== 'transfer') return;
+      const info = parsed?.info || {};
+      pushTransfer(
+        info.source || info.from || info.fromUserAccount,
+        info.destination || info.to || info.toUserAccount,
+        info.lamports || info.amount
+      );
+    };
+
+    const outerInstructions = Array.isArray(parsedTx?.transaction?.message?.instructions)
+      ? parsedTx.transaction.message.instructions
+      : [];
+    outerInstructions.forEach(readInstruction);
+
+    const innerRows = Array.isArray(parsedTx?.meta?.innerInstructions) ? parsedTx.meta.innerInstructions : [];
+    for (const row of innerRows) {
+      const innerInstructions = Array.isArray(row?.instructions) ? row.instructions : [];
+      innerInstructions.forEach(readInstruction);
+    }
+
+    return transfers;
+  }
+
   classifyMintEventType(event, config = null) {
     const explicitType = this.normalizeMintTypeValue(event?.mintType || event?.mint_type);
     if (['paid', 'free', 'manual'].includes(explicitType)) {
@@ -1276,6 +1342,122 @@ class VaultService {
     tx();
 
     return { success: true, seasonId: season.season_id, processed: pendingRows.length };
+  }
+
+  async backfillAllMissingMintTransfersForActiveSeason(guildId, options = {}) {
+    const gid = normalizeGuildId(guildId);
+    if (!gid) return { success: false, message: 'Invalid guildId' };
+
+    const season = this.getActiveSeason(gid);
+    if (!season) return { success: false, message: 'No active season' };
+
+    const config = this.getConfig(gid);
+    const paymentWallets = [...this.getConfiguredPaymentWalletSet(config)];
+    if (!paymentWallets.length) {
+      return { success: false, message: 'No mint payment wallet configured in Vault settings' };
+    }
+
+    const mintSource = config?.mintSource || {};
+    const minLamports = clampInt(mintSource.paymentMinLamports, 0, 1);
+    const maxSignaturesPerWallet = Math.max(1, Math.min(50000, clampInt(options?.limitPerWallet, 1, 5000)));
+    const connection = this.getRpcConnection();
+
+    const summary = {
+      success: true,
+      seasonId: season.season_id,
+      paymentWallets,
+      minLamports,
+      maxSignaturesPerWallet,
+      scannedSignatures: 0,
+      matchedTransfers: 0,
+      ingested: 0,
+      duplicates: 0,
+      failed: 0,
+      errors: [],
+    };
+
+    for (const walletAddress of paymentWallets) {
+      try {
+        const walletPubkey = new PublicKey(walletAddress);
+        let beforeSignature = null;
+        let remaining = maxSignaturesPerWallet;
+
+        while (remaining > 0) {
+          const fetchLimit = Math.min(1000, remaining);
+          const signatureRows = await connection.getSignaturesForAddress(walletPubkey, {
+            limit: fetchLimit,
+            before: beforeSignature || undefined,
+          });
+          const signatures = (signatureRows || [])
+            .map(row => String(row?.signature || '').trim())
+            .filter(Boolean);
+          if (!signatures.length) break;
+
+          summary.scannedSignatures += signatures.length;
+          remaining -= signatures.length;
+          beforeSignature = signatures[signatures.length - 1] || null;
+
+          const parsedTransactions = await connection.getParsedTransactions(signatures, { maxSupportedTransactionVersion: 0 });
+          for (let i = 0; i < signatures.length; i += 1) {
+            const signature = signatures[i];
+            const tx = parsedTransactions?.[i] || null;
+            if (!signature || !tx) continue;
+
+            const exists = db.prepare(`
+              SELECT id
+              FROM vault_mint_events
+              WHERE guild_id = ? AND tx_signature = ?
+              LIMIT 1
+            `).get(gid, signature);
+            if (exists) {
+              summary.duplicates += 1;
+              continue;
+            }
+
+            const nativeTransfers = this.extractNativeTransfersFromParsedTransaction(tx);
+            const matchingTransfers = nativeTransfers.filter((transfer) => {
+              const destination = String(transfer?.toUserAccount || transfer?.to || '').trim();
+              const lamports = Number(transfer?.amount || transfer?.lamports || 0);
+              return destination === walletAddress && Number.isFinite(lamports) && lamports >= minLamports;
+            });
+            if (!matchingTransfers.length) continue;
+            summary.matchedTransfers += 1;
+
+            matchingTransfers.sort((a, b) => Number(b?.amount || 0) - Number(a?.amount || 0));
+            const payerWallet = String(matchingTransfers[0]?.fromUserAccount || '').trim() || null;
+
+            const ingestResult = this.ingestMintEvent({
+              guildId: gid,
+              seasonId: season.season_id,
+              txSignature: signature,
+              walletAddress: payerWallet,
+              mintType: 'paid',
+              type: 'TRANSFER',
+              source: 'vault_backfill_transfer',
+              paymentWalletAddress: walletAddress,
+              nativeTransfers: matchingTransfers,
+            });
+
+            if (ingestResult?.success) {
+              if (ingestResult?.duplicate) summary.duplicates += 1;
+              else summary.ingested += 1;
+            } else {
+              summary.failed += 1;
+            }
+          }
+
+          if (signatures.length < fetchLimit) break;
+        }
+      } catch (error) {
+        summary.errors.push({
+          walletAddress,
+          message: String(error?.message || error),
+        });
+        summary.failed += 1;
+      }
+    }
+
+    return summary;
   }
 
   onWalletLinked(guildId, discordUserId, walletAddress) {

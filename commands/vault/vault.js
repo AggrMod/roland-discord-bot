@@ -38,6 +38,27 @@ function formatRewardInventory(reward) {
   return `\`${reward.code}\` | ${reward.name} | tier=${reward.tier} | weight=${reward.weight} | qty=${quantityLabel} | ${status}`;
 }
 
+function toStringArray(value, fallback = []) {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => String(entry || '').trim())
+      .filter(Boolean);
+  }
+  return fallback;
+}
+
+function pickRandom(values, fallback) {
+  const choices = Array.isArray(values) ? values.filter(Boolean) : [];
+  if (!choices.length) return fallback;
+  return choices[Math.floor(Math.random() * choices.length)] || fallback;
+}
+
+function renderTemplate(rawTemplate, variables = {}) {
+  const template = String(rawTemplate || '').trim();
+  if (!template) return '';
+  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key) => String(variables[key] ?? ''));
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('vault')
@@ -235,17 +256,7 @@ module.exports = {
         await interaction.editReply({ content: `ERROR: ${result.message}` });
         return true;
       }
-      const config = vaultService.getConfig(guildId);
-      if (String(result.reward?.code || '') === 'no_reward') {
-        const noRewardText = String(config?.messages?.noRewardOpen || 'Vault opened. No reward this time.');
-        await interaction.editReply({
-          content: `${noRewardText}\nAvailable keys: ${result.stats.available_keys}`,
-        });
-        return true;
-      }
-      await interaction.editReply({
-        content: `Vault opened.\nReward: **${result.reward?.name || 'Unknown'}** (${result.reward?.tier || 'common'})\nAvailable keys: ${result.stats.available_keys}`,
-      });
+      await interaction.editReply({ content: this.buildOpenResultMessage(guildId, result, { trailingLabel: 'Available keys' }) });
       return true;
     }
 
@@ -345,18 +356,62 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
     const result = vaultService.openVault(guildId, interaction.user.id);
     if (!result.success) return interaction.editReply({ content: `ERROR: ${result.message}` });
-    const config = vaultService.getConfig(guildId);
+    return interaction.editReply({ content: this.buildOpenResultMessage(guildId, result, { trailingLabel: 'Available keys now' }) });
+  },
 
-    if (String(result.reward?.code || '') === 'no_reward') {
-      const noRewardText = String(config?.messages?.noRewardOpen || 'Vault opened. No reward this time.');
-      return interaction.editReply({
-        content: `${noRewardText}\nAvailable keys now: ${result.stats.available_keys}`,
-      });
+  buildOpenResultMessage(guildId, result, options = {}) {
+    const config = vaultService.getConfig(guildId) || {};
+    const gameName = String(config?.general?.gameName || 'Reward Vault');
+    const rewardName = String(result?.reward?.name || 'Unknown Reward');
+    const rewardTier = String(result?.reward?.tier || 'common').toLowerCase();
+    const availableKeys = Number(result?.stats?.available_keys || 0);
+    const trailingLabel = String(options.trailingLabel || 'Available keys');
+    const vars = { gameName, rewardName, rewardTier, availableKeys };
+
+    const suspenseFallback = [
+      'You slide your key into the lock. Steel groans and everyone holds their breath.',
+      'The vault clicks once, then twice. The final lock starts to turn.',
+      'The handle moves slowly. For a second, it feels like time stops.',
+    ];
+    const failFallback = [
+      'The vault coughed, laughed, and swallowed your key.',
+      'A small note slides out: "Nice try. Come back with better luck."',
+      'The door cracks open an inch, then slams shut. Not today.',
+      'The lock spins, sparks, and then absolutely refuses to cooperate.',
+    ];
+    const hitFallback = {
+      common: [
+        'The vault opens just enough for a small envelope to slide out.',
+        'A dusty drawer clicks open with a reward inside.',
+      ],
+      rare: [
+        'The room goes quiet. This pull feels heavier than usual.',
+        'The bolts release with a deep thud. Something valuable appears.',
+      ],
+      epic: [
+        'The inner chamber unlocks. This is the kind of pull people remember.',
+      ],
+      legendary: [
+        'Every lock disengages at once. Even the vault did not expect this.',
+      ],
+    };
+
+    const suspenseLines = toStringArray(config?.messages?.openSuspenseLines, suspenseFallback);
+    const failLines = toStringArray(config?.messages?.noRewardOpenVariants, failFallback);
+    const noRewardText = String(config?.messages?.noRewardOpen || 'Vault opened, but this key did not reveal a reward.');
+    const successTemplate = String(config?.messages?.openSuccess || 'Vault opened! You received **{{rewardName}}**.');
+
+    if (String(result?.reward?.code || '') === 'no_reward') {
+      const suspense = pickRandom(suspenseLines, suspenseFallback[0]);
+      const funnyFail = pickRandom(failLines, failFallback[0]);
+      return `${suspense}\n${funnyFail}\n${noRewardText}\n${trailingLabel}: ${availableKeys}`;
     }
 
-    return interaction.editReply({
-      content: `Vault opened.\nReward: **${result.reward?.name || 'Unknown Reward'}** (${result.reward?.tier || 'common'})\nAvailable keys now: ${result.stats.available_keys}`,
-    });
+    const tierLines = hitFallback[rewardTier] || hitFallback.common;
+    const suspense = pickRandom(suspenseLines, suspenseFallback[0]);
+    const hitLead = pickRandom(tierLines, hitFallback.common[0]);
+    const rewardLine = renderTemplate(successTemplate, vars) || `Vault opened! You received **${rewardName}**.`;
+    return `${suspense}\n${hitLead}\n${rewardLine}\n${trailingLabel}: ${availableKeys}`;
   },
 
   async handleHistory(interaction, guildId) {
@@ -422,6 +477,7 @@ module.exports = {
       `Vault Name: ${config?.general?.gameName || '-'}`,
       `Active Season: ${season?.season_name || season?.season_id || 'none'}`,
       `Rewards: ${rewards.length}`,
+      `Fail Chance (%): ${Number(config?.rewardTable?.failChancePercent ?? 75)}`,
       `No Reward Weight: ${Number(config?.rewardTable?.noRewardWeight || 0)}`,
       `Mint Mode: ${config?.mintSource?.mode || 'custom_webhook'}`,
       `Keys per paid mint: ${config?.mintRules?.keysPerPaidMint ?? 0}`,

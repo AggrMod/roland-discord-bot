@@ -9607,6 +9607,7 @@ function vaultRenderAdminPanel() {
   const channels = Array.isArray(vaultSettingsCache?.channels) ? vaultSettingsCache.channels : [];
   const activeSeasonId = vaultGetCachedActiveSeasonId();
   const channelOptions = vaultBuildChannelOptions(channels, announcements.channelId);
+  const failChancePercent = Math.max(0, Math.min(100, Number(config?.rewardTable?.failChancePercent ?? 75) || 0));
   const noRewardWeight = Math.max(0, Number(config?.rewardTable?.noRewardWeight || 0) || 0);
 
   const rewardsRows = rewards.length
@@ -9658,6 +9659,7 @@ function vaultRenderAdminPanel() {
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Keys / Free Mint</div></div><input id="vault_keysPerFreeMint" type="number" class="input-sm" min="0" value="${Number(mintRules.keysPerFreeMint || 0)}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Pressure / Paid</div></div><input id="vault_pressurePerPaidMint" type="number" class="input-sm" min="0" value="${Number(mintRules.pressurePerPaidMint || 0)}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Pressure / Free</div></div><input id="vault_pressurePerFreeMint" type="number" class="input-sm" min="0" value="${Number(mintRules.pressurePerFreeMint || 0)}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Fail Chance (%)</div></div><input id="vault_failChancePercent" type="number" class="input-sm" min="0" max="100" value="${failChancePercent}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">No Reward Weight</div></div><input id="vault_noRewardWeight" type="number" class="input-sm" min="0" value="${noRewardWeight}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Announcements Channel</div></div><select id="vault_announceChannelId" class="input-sm"><option value="">No announcement channel</option>${channelOptions}</select></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Announce Tiers (CSV)</div></div><input id="vault_announceTiers" class="input-sm" value="${escapeHtml((announcements.announceRewardTiers || []).join(','))}"></div>
@@ -9825,6 +9827,7 @@ async function vaultSaveGeneralConfig() {
     if (Object.prototype.hasOwnProperty.call(next.mintRules, 'pointsPerPaidMint')) delete next.mintRules.pointsPerPaidMint;
     if (Object.prototype.hasOwnProperty.call(next.mintRules, 'pointsPerFreeMint')) delete next.mintRules.pointsPerFreeMint;
     next.rewardTable = next.rewardTable || {};
+    next.rewardTable.failChancePercent = Math.max(0, Math.min(100, Number(document.getElementById('vault_failChancePercent')?.value || 0) || 0));
     next.rewardTable.noRewardWeight = Math.max(0, Number(document.getElementById('vault_noRewardWeight')?.value || 0) || 0);
 
     next.announcements.channelId = String(document.getElementById('vault_announceChannelId')?.value || '').trim();

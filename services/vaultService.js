@@ -66,6 +66,7 @@ class VaultService {
       },
       rewardTable: {
         version: 'default',
+        failChancePercent: 75,
         noRewardWeight: 0,
         rewards: [
           {
@@ -106,6 +107,17 @@ class VaultService {
         vaultInactive: 'The vault is currently inactive.',
         openSuccess: 'Vault opened! You received **{{rewardName}}**.',
         noRewardOpen: 'Vault opened, but this key did not reveal a reward.',
+        openSuspenseLines: [
+          'You slide the key into the lock. The vault hums and the room goes quiet.',
+          'The mechanism clicks once, then twice. Everyone waits for the final turn.',
+          'You pull the handle. Steel groans and the vault decides your fate.',
+        ],
+        noRewardOpenVariants: [
+          'The vault coughed, laughed, and swallowed your key.',
+          'A note slides out: "Nice try. Come back with better luck."',
+          'The lock opens an inch, then slams shut. Not today.',
+          'The vault guard nods, shrugs, and says: "That key was training mode."',
+        ],
       },
     };
   }
@@ -349,6 +361,8 @@ class VaultService {
 
   rollReward(guildId) {
     const cfg = this.getConfig(guildId) || {};
+    const failChancePercent = Math.max(0, Math.min(100, Number(cfg?.rewardTable?.failChancePercent ?? 75) || 0));
+    if (failChancePercent > 0 && (Math.random() * 100) < failChancePercent) return null;
     const noRewardWeight = clampInt(cfg?.rewardTable?.noRewardWeight, 0, 0);
     const rewards = this.getRewards(guildId)
       .filter((reward) => {

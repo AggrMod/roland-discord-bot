@@ -90,6 +90,22 @@ const PORTAL_PAGE_EXPECTATIONS = Object.freeze({
 });
 const HEIST_ADMIN_TAB_STORAGE_KEY = 'activeHeistAdminTab';
 const HEIST_ADMIN_TABS = Object.freeze(['general', 'templates', 'operations', 'ranks', 'vault']);
+const SETTINGS_TAB_META = Object.freeze({
+  general: { basic: true, keywords: ['general', 'setup', 'server', 'base'] },
+  governance: { basic: true, keywords: ['governance', 'vote', 'proposal', 'quorum'] },
+  verification: { basic: true, keywords: ['verification', 'roles', 'wallet', 'identity'] },
+  branding: { basic: true, keywords: ['branding', 'theme', 'name', 'logo'] },
+  ticketing: { basic: true, keywords: ['ticket', 'support', 'helpdesk'] },
+  engagement: { basic: true, keywords: ['engagement', 'points', 'shop', 'leaderboard'] },
+  treasury: { basic: false, keywords: ['treasury', 'wallet', 'tracker', 'balance'] },
+  invites: { basic: false, keywords: ['invite', 'referral'] },
+  nfttracker: { basic: false, keywords: ['nft', 'collection', 'sales'] },
+  tokentracker: { basic: false, keywords: ['token', 'trades', 'transfers'] },
+  aiassistant: { basic: false, keywords: ['ai', 'assistant', 'prompt'] },
+  battle: { basic: false, keywords: ['battle', 'minigames', 'arena'] },
+  heist: { basic: false, keywords: ['heist', 'missions'] },
+  selfserve: { basic: false, keywords: ['self-serve', 'roles'] },
+});
 
 async function fetchCsrfToken() {
   try {
@@ -1768,6 +1784,37 @@ function switchSettingsTab(tab) {
   };
   const loader = tabLoaders[tab];
   if (loader) loader();
+}
+
+function refreshSettingsTabVisibility() {
+  const searchEl = document.getElementById('settingsTabSearch');
+  const basicOnlyEl = document.getElementById('settingsBasicOnlyToggle');
+  const query = String(searchEl?.value || '').trim().toLowerCase();
+  const basicOnly = !!basicOnlyEl?.checked;
+
+  document.querySelectorAll('#section-settings .settings-tabs .settings-tab[data-tab]').forEach((btn) => {
+    const tab = String(btn.dataset.tab || '').trim();
+    const meta = SETTINGS_TAB_META[tab] || { basic: false, keywords: [] };
+    const label = String(btn.textContent || '').toLowerCase();
+    const haystack = `${tab} ${label} ${(meta.keywords || []).join(' ')}`.toLowerCase();
+    const matchesQuery = !query || haystack.includes(query);
+    const matchesBasic = !basicOnly || !!meta.basic;
+    btn.style.display = (matchesQuery && matchesBasic) ? '' : 'none';
+  });
+}
+
+function initializeSettingsClarityControls() {
+  const searchEl = document.getElementById('settingsTabSearch');
+  const basicOnlyEl = document.getElementById('settingsBasicOnlyToggle');
+  if (searchEl && !searchEl.dataset.bound) {
+    searchEl.addEventListener('input', refreshSettingsTabVisibility);
+    searchEl.dataset.bound = '1';
+  }
+  if (basicOnlyEl && !basicOnlyEl.dataset.bound) {
+    basicOnlyEl.addEventListener('change', refreshSettingsTabVisibility);
+    basicOnlyEl.dataset.bound = '1';
+  }
+  refreshSettingsTabVisibility();
 }
 
 function normalizeHeistAdminTabKey(value) {
@@ -5536,6 +5583,7 @@ function switchSection(sectionName, options = {}) {
     }
   } else if (sectionName === 'settings') {
     applySettingsTabVisibility(portalSettingsData || {});
+    initializeSettingsClarityControls();
     switchSettingsTab('general');
   } else if (sectionName === 'vault') {
     if (typeof loadVaultSettingsTab === 'function') {
@@ -9720,8 +9768,12 @@ function vaultRenderAdminPanel() {
 
   pane.innerHTML = `
     <div class="card">
-      <h3>Vault Module Admin</h3>
-      <p style="color:var(--text-secondary);margin-bottom:16px;">All Vault settings are editable here and persist tenant-scoped.</p>
+      <h3>Vault Setup</h3>
+      <p style="color:var(--text-secondary);margin-bottom:12px;">Configure your key economy and prize flow. Start with the basic setup below, then open advanced tools only if needed.</p>
+      <div style="padding:10px;border:1px solid rgba(99,102,241,0.25);border-radius:10px;margin-bottom:12px;background:rgba(99,102,241,0.08);">
+        <strong>Quick start:</strong>
+        1) Enable Vault and set names -> 2) Configure mint and key rules -> 3) Add rewards -> 4) Save config.
+      </div>
       <div style="padding:10px;border:1px solid var(--border-primary);border-radius:10px;margin-bottom:12px;background:var(--bg-glass);">
         <strong>Health:</strong>
         enabled=${health.enabled ? 'yes' : 'no'},
@@ -9760,7 +9812,9 @@ function vaultRenderAdminPanel() {
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Ticket Failure Alert Channel</div><div class="settings-desc">Optional channel for alerts when ticket creation fails.</div></div><select id="vault_ticketAlertChannelId" class="input-sm">${ticketAlertChannelOptions}</select></div>
       </div>
 
-      <h4 style="margin:16px 0 8px 0;">Key Tiers and Inheritance</h4>
+      <details style="margin-top:16px;">
+      <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Advanced: Key Tiers, Inheritance, and SOL Routing</summary>
+      <h4 style="margin:10px 0 8px 0;">Key Tiers and Inheritance</h4>
       <p style="color:var(--text-secondary);margin:0 0 8px 0;">Define tiers as JSON array: <code>[{"id":"bronze","name":"Bronze Key","enabled":true,"inheritsFrom":null}]</code></p>
       <textarea id="vault_keyTiersJson" class="form-input" rows="5">${escapeHtml(JSON.stringify(keyTiers, null, 2))}</textarea>
       <p style="color:var(--text-secondary);margin:8px 0 8px 0;">Define mint grants per tier JSON object: <code>{"bronze":{"paid":1,"free":0}}</code></p>
@@ -9779,6 +9833,7 @@ function vaultRenderAdminPanel() {
       <div style="display:flex;gap:8px;margin-top:8px;">
         <button class="btn-secondary" onclick="vaultApplyTierTemplate()">Apply Bronze/Silver/Gold Template</button>
       </div>
+      </details>
 
       <h4 style="margin:16px 0 8px 0;">Messages</h4>
       <div style="display:grid;gap:8px;">
@@ -9818,11 +9873,16 @@ function vaultRenderAdminPanel() {
         <button class="btn-primary" onclick="vaultSaveReward()">Save Reward</button>
       </div>
 
-      <h4 style="margin:20px 0 8px 0;">Milestones / Pressure Rules</h4>
+      <details style="margin-top:20px;">
+      <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Advanced: Milestones and Pressure Rules</summary>
+      <h4 style="margin:10px 0 8px 0;">Milestones / Pressure Rules</h4>
       <textarea id="vaultMilestonesInput" class="form-input" rows="6">${escapeHtml(JSON.stringify(milestones, null, 2))}</textarea>
       <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultSaveMilestones()">Save Milestones JSON</button></div>
+      </details>
 
-      <h4 style="margin:20px 0 8px 0;">Manual Operations</h4>
+      <details style="margin-top:20px;">
+      <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Operations: Manual Adjustments and Support Actions</summary>
+      <h4 style="margin:10px 0 8px 0;">Manual Operations</h4>
       <div class="settings-grid">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Discord User ID</div></div><input id="vaultManualDiscordId" class="input-sm" placeholder="123456789012345678"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Season ID</div></div><input id="vaultManualSeasonId" class="input-sm" value="${escapeHtml(activeSeasonId)}"></div>
@@ -9858,7 +9918,10 @@ function vaultRenderAdminPanel() {
       </div>
       <textarea id="vaultAssignRewardPayload" class="form-input" rows="2" placeholder='{"note":"manual assignment"}'></textarea>
       <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultAssignReward()">Assign Reward</button></div>
+      </details>
 
+      <details style="margin-top:20px;">
+      <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Advanced: Backfill and Recovery Tools</summary>
       <div class="settings-grid" style="margin-top:10px;">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Backfill Wallet</div></div><input id="vaultBackfillWallet" class="input-sm" placeholder="wallet address"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Backfill Discord ID (optional)</div></div><input id="vaultBackfillDiscordId" class="input-sm" placeholder="optional"></div>
@@ -9875,8 +9938,11 @@ function vaultRenderAdminPanel() {
       <div style="margin-top:8px;">
         <button class="btn-secondary" onclick="vaultRunBackfillAllMissingTx()">Backfill Missing TXs (All Configured Mint Wallets)</button>
       </div>
+      </details>
 
-      <h4 style="margin:20px 0 8px 0;">Import / Export Config JSON</h4>
+      <details style="margin-top:20px;">
+      <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Advanced: Import / Export and Raw Config</summary>
+      <h4 style="margin:10px 0 8px 0;">Import / Export Config JSON</h4>
       <textarea id="vaultConfigImportExport" class="form-input" rows="8" placeholder='{"config": {...}, "seasons": [...]}'></textarea>
       <div style="display:flex;gap:8px;margin-top:8px;">
         <button class="btn-secondary" onclick="vaultExportConfig()">Export</button>
@@ -9907,6 +9973,7 @@ function vaultRenderAdminPanel() {
         <button class="btn-secondary" onclick="vaultSetRawFromCurrent()">Reset to Current</button>
         <button class="btn-primary" onclick="vaultSaveRawConfig()">Save Raw Config</button>
       </div>
+      </details>
     </div>
   `;
 }

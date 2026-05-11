@@ -7,6 +7,37 @@ const clientProvider = require('../utils/clientProvider');
 const settings = require('../config/settings');
 const tenantService = require('./tenantService');
 
+const DISCORD_SEND_RETRY_MAX = Math.max(0, Math.min(4, Number(process.env.DISCORD_SEND_RETRY_MAX || 2)));
+const DISCORD_SEND_RETRY_BASE_MS = Math.max(250, Number(process.env.DISCORD_SEND_RETRY_BASE_MS || 1000));
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isTransientDiscordSendError(error) {
+  const status = Number(error?.status || error?.rawError?.status || 0);
+  const code = String(error?.code || '').toUpperCase();
+  const msg = String(error?.message || '').toLowerCase();
+  return status === 429 || status === 502 || status === 503 || status === 504
+    || code === 'ABORT_ERR'
+    || msg.includes('service unavailable')
+    || msg.includes('aborted');
+}
+
+async function sendDiscordMessageWithRetry(channel, payload) {
+  for (let attempt = 0; attempt <= DISCORD_SEND_RETRY_MAX; attempt++) {
+    try {
+      return await channel.send(payload);
+    } catch (error) {
+      if (!isTransientDiscordSendError(error) || attempt >= DISCORD_SEND_RETRY_MAX) {
+        throw error;
+      }
+      await sleep(DISCORD_SEND_RETRY_BASE_MS * Math.pow(2, attempt));
+    }
+  }
+  return null;
+}
+
 const CHAIN_PRICE_META = {
   solana: { unit: 'SOL', icon: '<:1000042064:1488241763222290564>' },
   ethereum: { unit: 'ETH', icon: '⟠' },
@@ -653,7 +684,7 @@ class NFTActivityService {
       if (explorer) embed.setURL(explorer);
 
       try {
-        await channel.send({ embeds: [embed], components });
+        await sendDiscordMessageWithRetry(channel, { embeds: [embed], components });
         logger.log(`[nft-alert] sent guild=${target.guild_id || 'global'} channel=${target.channel_id} type=${evt.eventType} tx=${evt.txSignature || 'none'}`);
       } catch (sendErr) {
         logger.error(`[nft-alert] failed guild=${target.guild_id || 'global'} channel=${target.channel_id} type=${evt.eventType} tx=${evt.txSignature || 'none'}`, sendErr);

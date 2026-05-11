@@ -7,6 +7,9 @@ const IS_PRODUCTION = String(process.env.NODE_ENV || '').toLowerCase() === 'prod
 const ALLOW_MOCK_IN_PROD = process.env.ALLOW_MOCK_IN_PROD === 'true';
 const NFT_FETCH_CACHE_TTL_MS = Math.max(5_000, Number(process.env.NFT_FETCH_CACHE_TTL_MS || 45_000));
 const HELIUS_RATE_LIMIT_BACKOFF_MS = Math.max(5_000, Number(process.env.HELIUS_RATE_LIMIT_BACKOFF_MS || 20_000));
+const HELIUS_FETCH_TIMEOUT_MS = Math.max(3_000, Number(process.env.HELIUS_FETCH_TIMEOUT_MS || 15_000));
+const HELIUS_FETCH_MAX_RETRIES = Math.max(0, Number(process.env.HELIUS_FETCH_MAX_RETRIES || 2));
+const HELIUS_RETRY_BASE_MS = Math.max(250, Number(process.env.HELIUS_RETRY_BASE_MS || 1200));
 
 // Helius rate limiter — default 10 req/sec (free tier), set HELIUS_RPS in .env to override
 const HELIUS_RPS = parseInt(process.env.HELIUS_RPS || '10');
@@ -23,6 +26,30 @@ function heliusRateLimited(fn) {
     return fn();
   });
   return _heliusQueue;
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = HELIUS_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function isHeliusTransientError(error) {
+  const code = String(error?.cause?.code || error?.code || '').toUpperCase();
+  const msg = String(error?.message || '').toLowerCase();
+  return code === 'UND_ERR_CONNECT_TIMEOUT'
+    || code === 'ABORT_ERR'
+    || msg.includes('fetch failed')
+    || msg.includes('timeout')
+    || msg.includes('network');
 }
 
 function isValidSolanaAddress(address) {
@@ -47,6 +74,7 @@ class NFTService {
     this.walletNftCache = new Map();
     this.walletNftInFlight = new Map();
     this.heliusBackoffUntil = 0;
+    this.lastHeliusErrorLogAt = 0;
   }
 
   getCacheKey(walletAddress, guildId = null) {
@@ -155,64 +183,81 @@ class NFTService {
       return [];
     }
 
-    try {
-      const response = await heliusRateLimited(() => fetch(`https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 'helius-nft-fetch',
-          method: 'getAssetsByOwner',
-          params: {
-            ownerAddress: walletAddress,
-            displayOptions: {
-              showFungible: false,
-              showCollectionMetadata: true,
-              showInscription: false
-            },
-            limit: 1000
+    const endpoint = `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`;
+    for (let attempt = 0; attempt <= HELIUS_FETCH_MAX_RETRIES; attempt++) {
+      try {
+        const response = await heliusRateLimited(() => fetchWithTimeout(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 'helius-nft-fetch',
+            method: 'getAssetsByOwner',
+            params: {
+              ownerAddress: walletAddress,
+              displayOptions: {
+                showFungible: false,
+                showCollectionMetadata: true,
+                showInscription: false
+              },
+              limit: 1000
+            }
+          })
+        }, HELIUS_FETCH_TIMEOUT_MS));
+
+        if (!response.ok) {
+          if (response.status === 429) {
+            this.heliusBackoffUntil = Date.now() + HELIUS_RATE_LIMIT_BACKOFF_MS;
           }
-        })
-      }));
-
-      if (!response.ok) {
-        if (response.status === 429) {
-          this.heliusBackoffUntil = Date.now() + HELIUS_RATE_LIMIT_BACKOFF_MS;
+          if ((response.status === 429 || response.status >= 500) && attempt < HELIUS_FETCH_MAX_RETRIES) {
+            await delay(HELIUS_RETRY_BASE_MS * Math.pow(2, attempt));
+            continue;
+          }
+          logger.error(`Helius HTTP error: ${response.status} ${response.statusText}`);
+          return [];
         }
-        logger.error(`Helius HTTP error: ${response.status} ${response.statusText}`);
-        return [];
-      }
 
-      const data = await response.json();
-      if (data.error) {
-        if (Number(data.error?.code || 0) === -32429) {
-          this.heliusBackoffUntil = Date.now() + HELIUS_RATE_LIMIT_BACKOFF_MS;
+        const data = await response.json();
+        if (data.error) {
+          if (Number(data.error?.code || 0) === -32429) {
+            this.heliusBackoffUntil = Date.now() + HELIUS_RATE_LIMIT_BACKOFF_MS;
+          }
+          logger.error('Helius API error:', data.error);
+          return [];
         }
-        logger.error('Helius API error:', data.error);
+
+        if (!data.result || !data.result.items) {
+          return [];
+        }
+
+        return data.result.items
+          .filter(item => item && typeof item === 'object')
+          .map(item => ({
+            mint: item.id,
+            name: item.content?.metadata?.name || 'Unknown NFT',
+            image: item.content?.links?.image || '',
+            attributes: this.extractHeliusAttributes(item.content?.metadata?.attributes || []),
+            collectionKey: item.grouping?.[0]?.group_value || null,
+            assignedToMission: null
+          }));
+      } catch (error) {
+        if (isHeliusTransientError(error) && attempt < HELIUS_FETCH_MAX_RETRIES) {
+          await delay(HELIUS_RETRY_BASE_MS * Math.pow(2, attempt));
+          continue;
+        }
+        const now = Date.now();
+        if (now - this.lastHeliusErrorLogAt > 30_000) {
+          logger.error('Helius fetch error:', error);
+          this.lastHeliusErrorLogAt = now;
+        } else {
+          logger.warn(`Helius transient fetch failure (suppressed duplicate): ${error?.message || 'unknown error'}`);
+        }
         return [];
       }
-
-      if (!data.result || !data.result.items) {
-        return [];
-      }
-
-      // Transform Helius response to NFT format
-      return data.result.items
-        .filter(item => item && typeof item === 'object')
-        .map(item => ({
-          mint: item.id,
-          name: item.content?.metadata?.name || 'Unknown NFT',
-          image: item.content?.links?.image || '',
-          attributes: this.extractHeliusAttributes(item.content?.metadata?.attributes || []),
-          collectionKey: item.grouping?.[0]?.group_value || null,
-          assignedToMission: null
-        }));
-    } catch (error) {
-      logger.error('Helius fetch error:', error);
-      return [];
     }
-  }
 
+    return [];
+  }
   extractHeliusAttributes(attributes) {
     if (!Array.isArray(attributes)) return [];
     return attributes

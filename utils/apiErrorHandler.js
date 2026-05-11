@@ -6,6 +6,8 @@
 
 const logger = require('./logger');
 const { error } = require('./apiResponse');
+const warnThrottleCache = new Map();
+const WARN_THROTTLE_MS = Math.max(5_000, Number(process.env.API_WARN_THROTTLE_MS || 60_000));
 
 /**
  * Error codes mapping
@@ -54,9 +56,14 @@ function errorHandler(err, req, res, next) {
 
   // Log error details (avoid error-level noise for expected 4xx validation/auth flows)
   if (isClientError) {
-    logger.warn(
-      `API ${statusCode}: ${req.method} ${req.path} ${err?.message ? `- ${err.message}` : ''}`.trim()
-    );
+    const message = `API ${statusCode}: ${req.method} ${req.path} ${err?.message ? `- ${err.message}` : ''}`.trim();
+    const throttleKey = `${statusCode}:${req.method}:${req.path}:${String(err?.message || '').slice(0, 120)}`;
+    const now = Date.now();
+    const lastLoggedAt = warnThrottleCache.get(throttleKey) || 0;
+    if (now - lastLoggedAt >= WARN_THROTTLE_MS) {
+      warnThrottleCache.set(throttleKey, now);
+      logger.warn(message);
+    }
   } else {
     logger.error(`API Error: ${req.method} ${req.path}`, err);
   }

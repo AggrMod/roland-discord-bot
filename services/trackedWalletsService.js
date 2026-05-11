@@ -25,6 +25,36 @@ const TOKEN_WEBHOOK_DURABLE_RETRY_BASE_MS = Math.max(5 * 1000, Number(process.en
 const TOKEN_WEBHOOK_DURABLE_RETRY_MAX_DELAY_MS = Math.max(TOKEN_WEBHOOK_DURABLE_RETRY_BASE_MS, Number(process.env.TRACKED_TOKEN_DURABLE_RETRY_MAX_DELAY_MS || 30 * 60 * 1000));
 const TOKEN_WEBHOOK_DURABLE_RETRY_BATCH_SIZE = Math.max(1, Math.min(100, Number(process.env.TRACKED_TOKEN_DURABLE_RETRY_BATCH_SIZE || 20)));
 const TRANSIENT_WEBHOOK_RETRY_REASONS = new Set(['tx_not_available', 'parsed_tx_fetch_failed']);
+const DISCORD_SEND_RETRY_MAX = Math.max(0, Math.min(4, Number(process.env.DISCORD_SEND_RETRY_MAX || 2)));
+const DISCORD_SEND_RETRY_BASE_MS = Math.max(250, Number(process.env.DISCORD_SEND_RETRY_BASE_MS || 1000));
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isTransientDiscordSendError(error) {
+  const status = Number(error?.status || error?.rawError?.status || 0);
+  const code = String(error?.code || '').toUpperCase();
+  const msg = String(error?.message || '').toLowerCase();
+  return status === 429 || status === 502 || status === 503 || status === 504
+    || code === 'ABORT_ERR'
+    || msg.includes('service unavailable')
+    || msg.includes('aborted');
+}
+
+async function sendDiscordMessageWithRetry(channel, payload) {
+  for (let attempt = 0; attempt <= DISCORD_SEND_RETRY_MAX; attempt++) {
+    try {
+      return await channel.send(payload);
+    } catch (error) {
+      if (!isTransientDiscordSendError(error) || attempt >= DISCORD_SEND_RETRY_MAX) {
+        throw error;
+      }
+      await sleep(DISCORD_SEND_RETRY_BASE_MS * Math.pow(2, attempt));
+    }
+  }
+  return null;
+}
 
 function safeToNumber(value) {
   const n = Number(value);
@@ -2246,7 +2276,7 @@ class TrackedWalletsService {
     }
 
     // Post fresh panel
-    const msg = await channel.send({ embeds: [embed], components });
+    const msg = await sendDiscordMessageWithRetry(channel, { embeds: [embed], components });
     this.savePanelMessageId(walletRow.id, msg.id);
     logger.log(`[wallet-panel] posted panel for ${walletRow.wallet_address} in channel ${channelId}`);
     return { success: true, action: 'posted', messageId: msg.id };
@@ -2440,7 +2470,7 @@ class TrackedWalletsService {
         continue;
       }
       try {
-        await channel.send({ embeds: [embed], components });
+        await sendDiscordMessageWithRetry(channel, { embeds: [embed], components });
         sent += 1;
         logger.log(`[tracked-token-alert] sent wallet=${walletRow.wallet_address} guild=${guildId || ''} channel=${channelId} type=${eventType} token=${tokenMint || 'unknown'}`);
       } catch (e) {
@@ -2503,7 +2533,7 @@ class TrackedWalletsService {
     const components = buttons.length ? [new ActionRowBuilder().addComponents(...buttons)] : [];
 
     try {
-      await channel.send({ embeds: [embed], components });
+      await sendDiscordMessageWithRetry(channel, { embeds: [embed], components });
       logger.log(`[wallet-alert] sent for wallet=${walletRow.wallet_address} guild=${guildId} channel=${walletRow.alert_channel_id}`);
     } catch (e) {
       logger.error(`[wallet-alert] failed for wallet=${walletRow.wallet_address}:`, e.message);

@@ -9667,6 +9667,179 @@ function vaultBuildChannelSelect(channels, selectedId, noneLabel = 'No channel s
   return `<option value="">${escapeHtml(noneLabel)}</option>${fallbackSelectedOption}${options}`;
 }
 
+function vaultGetJsonArrayInputValue(inputId, fallback = []) {
+  const parsed = vaultJsonParseInput(document.getElementById(inputId)?.value, null);
+  return Array.isArray(parsed) ? parsed : fallback;
+}
+
+function vaultGetJsonObjectInputValue(inputId, fallback = {}) {
+  const parsed = vaultJsonParseInput(document.getElementById(inputId)?.value, null);
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : fallback;
+}
+
+function vaultRenderSimpleConfigEditors() {
+  const tiersWrap = document.getElementById('vaultSimpleTiersRows');
+  const grantsWrap = document.getElementById('vaultSimpleGrantsRows');
+  const bandsWrap = document.getElementById('vaultSimpleBandsRows');
+  const conversionsWrap = document.getElementById('vaultSimpleConversionsRows');
+  if (!tiersWrap || !grantsWrap || !bandsWrap || !conversionsWrap) return;
+
+  const tiers = vaultGetJsonArrayInputValue('vault_keyTiersJson', []);
+  const grants = vaultGetJsonObjectInputValue('vault_keyTierGrantsJson', {});
+  const bands = vaultGetJsonArrayInputValue('vault_paymentBandsJson', []);
+  const conversions = vaultGetJsonArrayInputValue('vault_keyTierConversionsJson', []);
+
+  tiersWrap.innerHTML = tiers.map((tier, idx) => `
+    <div class="settings-grid" data-vault-simple-tier-row="${idx}" style="margin-bottom:6px;">
+      <input class="input-sm" data-vault-tier-id value="${escapeHtml(String(tier?.id || ''))}" placeholder="id (bronze)">
+      <input class="input-sm" data-vault-tier-name value="${escapeHtml(String(tier?.name || ''))}" placeholder="display name">
+      <input class="input-sm" data-vault-tier-inherits value="${escapeHtml(String(tier?.inheritsFrom || ''))}" placeholder="inherits from (optional)">
+      <label style="display:flex;align-items:center;gap:6px;color:var(--text-secondary);"><input type="checkbox" data-vault-tier-enabled ${tier?.enabled === false ? '' : 'checked'}> enabled</label>
+      <button class="btn-danger" onclick="vaultRemoveSimpleTierRow(${idx})">Remove</button>
+    </div>
+  `).join('') || '<p style="color:var(--text-secondary);">No tiers yet.</p>';
+
+  const tierIds = tiers.map(t => String(t?.id || '').trim()).filter(Boolean);
+  grantsWrap.innerHTML = tierIds.map((tierId) => {
+    const row = grants[tierId] || {};
+    return `
+      <div class="settings-grid" data-vault-simple-grant-row="${escapeHtml(tierId)}" style="margin-bottom:6px;">
+        <input class="input-sm" value="${escapeHtml(tierId)}" disabled>
+        <input class="input-sm" data-vault-grant-paid="${escapeHtml(tierId)}" type="number" min="0" value="${Number(row?.paid || 0)}" placeholder="paid keys">
+        <input class="input-sm" data-vault-grant-free="${escapeHtml(tierId)}" type="number" min="0" value="${Number(row?.free || 0)}" placeholder="free keys">
+      </div>
+    `;
+  }).join('') || '<p style="color:var(--text-secondary);">Define tiers first to edit grants.</p>';
+
+  bandsWrap.innerHTML = bands.map((band, idx) => `
+    <div class="settings-grid" data-vault-simple-band-row="${idx}" style="margin-bottom:6px;">
+      <input class="input-sm" data-vault-band-tier value="${escapeHtml(String(band?.keyTier || band?.key_tier || ''))}" placeholder="tier id">
+      <input class="input-sm" data-vault-band-min type="number" min="0" value="${Number(band?.minLamports ?? band?.min_lamports ?? 0) || 0}" placeholder="min lamports">
+      <input class="input-sm" data-vault-band-max type="number" min="0" value="${band?.maxLamports === null || band?.max_lamports === null ? '' : (Number(band?.maxLamports ?? band?.max_lamports ?? 0) || '')}" placeholder="max lamports (blank = no max)">
+      <input class="input-sm" data-vault-band-paid type="number" min="0" value="${Number(band?.paid || 0)}" placeholder="paid keys">
+      <input class="input-sm" data-vault-band-free type="number" min="0" value="${Number(band?.free || 0)}" placeholder="free keys">
+      <button class="btn-danger" onclick="vaultRemoveSimpleBandRow(${idx})">Remove</button>
+    </div>
+  `).join('') || '<p style="color:var(--text-secondary);">No payment bands yet.</p>';
+
+  conversionsWrap.innerHTML = conversions.map((rule, idx) => `
+    <div class="settings-grid" data-vault-simple-conversion-row="${idx}" style="margin-bottom:6px;">
+      <input class="input-sm" data-vault-conv-from value="${escapeHtml(String(rule?.fromTier || rule?.from_tier || ''))}" placeholder="from tier">
+      <input class="input-sm" data-vault-conv-to value="${escapeHtml(String(rule?.toTier || rule?.to_tier || ''))}" placeholder="to tier">
+      <input class="input-sm" data-vault-conv-from-amount type="number" min="1" value="${Math.max(1, Number(rule?.fromAmount ?? rule?.from_amount ?? 1) || 1)}" placeholder="from amount">
+      <input class="input-sm" data-vault-conv-to-amount type="number" min="1" value="${Math.max(1, Number(rule?.toAmount ?? rule?.to_amount ?? 1) || 1)}" placeholder="to amount">
+      <label style="display:flex;align-items:center;gap:6px;color:var(--text-secondary);"><input type="checkbox" data-vault-conv-enabled ${rule?.enabled === false ? '' : 'checked'}> enabled</label>
+      <button class="btn-danger" onclick="vaultRemoveSimpleConversionRow(${idx})">Remove</button>
+    </div>
+  `).join('') || '<p style="color:var(--text-secondary);">No upgrade rules yet.</p>';
+}
+
+function vaultSyncSimpleEditorsToJson() {
+  const tierRows = Array.from(document.querySelectorAll('[data-vault-simple-tier-row]'));
+  const tiers = tierRows.map((row) => ({
+    id: String(row.querySelector('[data-vault-tier-id]')?.value || '').trim().toLowerCase(),
+    name: String(row.querySelector('[data-vault-tier-name]')?.value || '').trim(),
+    inheritsFrom: String(row.querySelector('[data-vault-tier-inherits]')?.value || '').trim() || null,
+    enabled: !!row.querySelector('[data-vault-tier-enabled]')?.checked,
+  })).filter((tier) => tier.id && tier.name);
+  const uniqueById = new Map();
+  tiers.forEach((tier) => uniqueById.set(tier.id, tier));
+  const normalizedTiers = Array.from(uniqueById.values());
+  const tierIds = new Set(normalizedTiers.map(t => t.id));
+
+  const grants = {};
+  normalizedTiers.forEach((tier) => {
+    const paidEl = document.querySelector(`[data-vault-grant-paid="${tier.id}"]`);
+    const freeEl = document.querySelector(`[data-vault-grant-free="${tier.id}"]`);
+    grants[tier.id] = {
+      paid: Math.max(0, Number(paidEl?.value || 0) || 0),
+      free: Math.max(0, Number(freeEl?.value || 0) || 0),
+    };
+  });
+
+  const bandRows = Array.from(document.querySelectorAll('[data-vault-simple-band-row]'));
+  const bands = bandRows.map((row) => {
+    const tier = String(row.querySelector('[data-vault-band-tier]')?.value || '').trim().toLowerCase();
+    const maxRaw = String(row.querySelector('[data-vault-band-max]')?.value || '').trim();
+    return {
+      keyTier: tier || 'default',
+      minLamports: Math.max(0, Number(row.querySelector('[data-vault-band-min]')?.value || 0) || 0),
+      maxLamports: maxRaw === '' ? null : Math.max(0, Number(maxRaw) || 0),
+      paid: Math.max(0, Number(row.querySelector('[data-vault-band-paid]')?.value || 0) || 0),
+      free: Math.max(0, Number(row.querySelector('[data-vault-band-free]')?.value || 0) || 0),
+    };
+  }).filter((band) => !!band.keyTier);
+
+  const conversionRows = Array.from(document.querySelectorAll('[data-vault-simple-conversion-row]'));
+  const conversions = conversionRows.map((row) => ({
+    fromTier: String(row.querySelector('[data-vault-conv-from]')?.value || '').trim().toLowerCase(),
+    toTier: String(row.querySelector('[data-vault-conv-to]')?.value || '').trim().toLowerCase(),
+    fromAmount: Math.max(1, Number(row.querySelector('[data-vault-conv-from-amount]')?.value || 1) || 1),
+    toAmount: Math.max(1, Number(row.querySelector('[data-vault-conv-to-amount]')?.value || 1) || 1),
+    enabled: !!row.querySelector('[data-vault-conv-enabled]')?.checked,
+  })).filter((rule) => rule.fromTier && rule.toTier);
+
+  const tiersEl = document.getElementById('vault_keyTiersJson');
+  const grantsEl = document.getElementById('vault_keyTierGrantsJson');
+  const bandsEl = document.getElementById('vault_paymentBandsJson');
+  const convEl = document.getElementById('vault_keyTierConversionsJson');
+  if (tiersEl) tiersEl.value = JSON.stringify(normalizedTiers, null, 2);
+  if (grantsEl) grantsEl.value = JSON.stringify(grants, null, 2);
+  if (bandsEl) bandsEl.value = JSON.stringify(bands, null, 2);
+  if (convEl) convEl.value = JSON.stringify(conversions, null, 2);
+}
+
+function vaultAddSimpleTierRow() {
+  const tiers = vaultGetJsonArrayInputValue('vault_keyTiersJson', []);
+  tiers.push({ id: '', name: '', inheritsFrom: null, enabled: true });
+  const tiersEl = document.getElementById('vault_keyTiersJson');
+  if (tiersEl) tiersEl.value = JSON.stringify(tiers, null, 2);
+  vaultRenderSimpleConfigEditors();
+}
+
+function vaultRemoveSimpleTierRow(index) {
+  const tiers = vaultGetJsonArrayInputValue('vault_keyTiersJson', []);
+  if (index < 0 || index >= tiers.length) return;
+  tiers.splice(index, 1);
+  const tiersEl = document.getElementById('vault_keyTiersJson');
+  if (tiersEl) tiersEl.value = JSON.stringify(tiers, null, 2);
+  vaultRenderSimpleConfigEditors();
+}
+
+function vaultAddSimpleBandRow() {
+  const bands = vaultGetJsonArrayInputValue('vault_paymentBandsJson', []);
+  bands.push({ keyTier: '', minLamports: 0, maxLamports: null, paid: 1, free: 0 });
+  const bandsEl = document.getElementById('vault_paymentBandsJson');
+  if (bandsEl) bandsEl.value = JSON.stringify(bands, null, 2);
+  vaultRenderSimpleConfigEditors();
+}
+
+function vaultRemoveSimpleBandRow(index) {
+  const bands = vaultGetJsonArrayInputValue('vault_paymentBandsJson', []);
+  if (index < 0 || index >= bands.length) return;
+  bands.splice(index, 1);
+  const bandsEl = document.getElementById('vault_paymentBandsJson');
+  if (bandsEl) bandsEl.value = JSON.stringify(bands, null, 2);
+  vaultRenderSimpleConfigEditors();
+}
+
+function vaultAddSimpleConversionRow() {
+  const rows = vaultGetJsonArrayInputValue('vault_keyTierConversionsJson', []);
+  rows.push({ fromTier: '', toTier: '', fromAmount: 10, toAmount: 1, enabled: true });
+  const convEl = document.getElementById('vault_keyTierConversionsJson');
+  if (convEl) convEl.value = JSON.stringify(rows, null, 2);
+  vaultRenderSimpleConfigEditors();
+}
+
+function vaultRemoveSimpleConversionRow(index) {
+  const rows = vaultGetJsonArrayInputValue('vault_keyTierConversionsJson', []);
+  if (index < 0 || index >= rows.length) return;
+  rows.splice(index, 1);
+  const convEl = document.getElementById('vault_keyTierConversionsJson');
+  if (convEl) convEl.value = JSON.stringify(rows, null, 2);
+  vaultRenderSimpleConfigEditors();
+}
+
 async function vaultFetchJson(url, options = {}) {
   const response = await fetch(url, {
     credentials: 'include',
@@ -9809,31 +9982,48 @@ function vaultRenderAdminPanel() {
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Announce Common Rewards</div></div><input id="vault_announceCommonRewards" type="checkbox" ${announcements.announceCommonRewards ? 'checked' : ''}></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Create Ticket On Win</div></div><input id="vault_createTicketOnWin" type="checkbox" ${ticketing.createTicketOnWin ? 'checked' : ''}></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Reward Ticket Category ID</div><div class="settings-desc">Ticket category where winning rewards create fulfillment tickets.</div></div><input id="vault_rewardTicketCategoryId" class="input-sm" value="${escapeHtml(String(ticketing.rewardTicketCategoryId || ''))}" placeholder="e.g. 3"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Ticket Failure Alert Channel</div><div class="settings-desc">Optional channel for alerts when ticket creation fails.</div></div><select id="vault_ticketAlertChannelId" class="input-sm">${ticketAlertChannelOptions}</select></div>
+      <div class="settings-row"><div class="settings-info"><div class="settings-label">Ticket Failure Alert Channel</div><div class="settings-desc">Optional channel for alerts when ticket creation fails.</div></div><select id="vault_ticketAlertChannelId" class="input-sm">${ticketAlertChannelOptions}</select></div>
       </div>
 
-      <details style="margin-top:16px;">
-      <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Advanced: Key Tiers, Inheritance, and SOL Routing</summary>
-      <h4 style="margin:10px 0 8px 0;">Key Tiers and Inheritance</h4>
-      <p style="color:var(--text-secondary);margin:0 0 8px 0;">Define tiers as JSON array: <code>[{"id":"bronze","name":"Bronze Key","enabled":true,"inheritsFrom":null}]</code></p>
-      <textarea id="vault_keyTiersJson" class="form-input" rows="5">${escapeHtml(JSON.stringify(keyTiers, null, 2))}</textarea>
-      <p style="color:var(--text-secondary);margin:8px 0 8px 0;">Define mint grants per tier JSON object: <code>{"bronze":{"paid":1,"free":0}}</code></p>
-      <textarea id="vault_keyTierGrantsJson" class="form-input" rows="4">${escapeHtml(JSON.stringify(keyTierGrants, null, 2))}</textarea>
-      <p style="color:var(--text-secondary);margin:8px 0 8px 0;">Optional SOL payment bands (lamports) to route keys by mint spend: <code>[{"keyTier":"gold","minLamports":1000000000,"maxLamports":null,"paid":1}]</code></p>
-      <textarea id="vault_paymentBandsJson" class="form-input" rows="4">${escapeHtml(JSON.stringify(paymentBands, null, 2))}</textarea>
-      <p style="color:var(--text-secondary);margin:8px 0 8px 0;">User key upgrade rules: <code>[{"fromTier":"bronze","toTier":"gold","fromAmount":10,"toAmount":1}]</code></p>
-      <textarea id="vault_keyTierConversionsJson" class="form-input" rows="4">${escapeHtml(JSON.stringify(keyTierConversions, null, 2))}</textarea>
-      <div class="settings-grid" style="margin-top:8px;">
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">SOL->Tier Preview (lamports)</div></div><input id="vaultPreviewLamportsInput" type="number" class="input-sm" min="0" value="1000000000"></div>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:8px;">
-        <button class="btn-secondary" onclick="vaultPreviewPaymentBand()">Preview Tier Match</button>
-      </div>
-      <pre id="vaultPreviewBandResult" style="white-space:pre-wrap;max-height:120px;overflow:auto;margin-top:8px;">No preview yet.</pre>
-      <div style="display:flex;gap:8px;margin-top:8px;">
+      <h4 style="margin:16px 0 8px 0;">No-JSON Setup (Recommended)</h4>
+      <p style="color:var(--text-secondary);margin:0 0 10px 0;">Use these editors if you don’t want to touch JSON. Click <strong>Apply to JSON</strong> before saving.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        <button class="btn-secondary" onclick="vaultSyncSimpleEditorsToJson()">Apply to JSON</button>
+        <button class="btn-secondary" onclick="vaultRenderSimpleConfigEditors()">Reload From JSON</button>
         <button class="btn-secondary" onclick="vaultApplyTierTemplate()">Apply Bronze/Silver/Gold Template</button>
       </div>
-      </details>
+
+      <div class="card" style="margin-bottom:10px;">
+        <h5 style="margin:0 0 8px 0;">Key Tiers</h5>
+        <div id="vaultSimpleTiersRows"></div>
+        <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleTierRow()">Add Tier</button></div>
+      </div>
+
+      <div class="card" style="margin-bottom:10px;">
+        <h5 style="margin:0 0 8px 0;">Mint Grants (Per Tier)</h5>
+        <p style="color:var(--text-secondary);margin:0 0 8px 0;">Set keys granted for paid and free mints.</p>
+        <div id="vaultSimpleGrantsRows"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:10px;">
+        <h5 style="margin:0 0 8px 0;">SOL Payment Bands</h5>
+        <p style="color:var(--text-secondary);margin:0 0 8px 0;">Map payment ranges (lamports) to key tiers.</p>
+        <div id="vaultSimpleBandsRows"></div>
+        <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleBandRow()">Add Payment Band</button></div>
+      </div>
+
+      <div class="card" style="margin-bottom:10px;">
+        <h5 style="margin:0 0 8px 0;">Upgrade Rules</h5>
+        <p style="color:var(--text-secondary);margin:0 0 8px 0;">Example: 10 bronze -> 1 gold.</p>
+        <div id="vaultSimpleConversionsRows"></div>
+        <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleConversionRow()">Add Upgrade Rule</button></div>
+      </div>
+
+      <textarea id="vault_keyTiersJson" style="display:none;">${escapeHtml(JSON.stringify(keyTiers, null, 2))}</textarea>
+      <textarea id="vault_keyTierGrantsJson" style="display:none;">${escapeHtml(JSON.stringify(keyTierGrants, null, 2))}</textarea>
+      <textarea id="vault_paymentBandsJson" style="display:none;">${escapeHtml(JSON.stringify(paymentBands, null, 2))}</textarea>
+      <textarea id="vault_keyTierConversionsJson" style="display:none;">${escapeHtml(JSON.stringify(keyTierConversions, null, 2))}</textarea>
+
 
       <h4 style="margin:16px 0 8px 0;">Messages</h4>
       <div style="display:grid;gap:8px;">
@@ -9853,7 +10043,6 @@ function vaultRenderAdminPanel() {
         <div class="settings-row"><div class="settings-info"><div class="settings-label">End (ISO)</div></div><input id="vaultSeasonEndInput" class="input-sm" placeholder="2026-06-30T23:59:59Z"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Active</div></div><input id="vaultSeasonActiveInput" type="checkbox"></div>
       </div>
-      <textarea id="vaultSeasonMetadataInput" class="form-input" rows="2" placeholder='{"note":"optional metadata"}'></textarea>
       <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultUpsertSeason()">Create/Update Season</button></div>
 
       <h4 style="margin:20px 0 8px 0;">Reward Table Manager</h4>
@@ -9868,17 +10057,12 @@ function vaultRenderAdminPanel() {
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Type</div></div><select id="vaultRewardTypeInput" class="input-sm"><option value="claimable_reward">claimable_reward</option><option value="none">none</option></select></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Enabled</div></div><input id="vaultRewardEnabledInput" type="checkbox" checked></div>
       </div>
-      <textarea id="vaultRewardPayloadInput" class="form-input" rows="2" placeholder='{"reward":"sticker_pack"}'></textarea>
       <div style="margin-top:8px;">
         <button class="btn-primary" onclick="vaultSaveReward()">Save Reward</button>
       </div>
 
-      <details style="margin-top:20px;">
-      <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Advanced: Milestones and Pressure Rules</summary>
-      <h4 style="margin:10px 0 8px 0;">Milestones / Pressure Rules</h4>
-      <textarea id="vaultMilestonesInput" class="form-input" rows="6">${escapeHtml(JSON.stringify(milestones, null, 2))}</textarea>
-      <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultSaveMilestones()">Save Milestones JSON</button></div>
-      </details>
+      <h4 style="margin:20px 0 8px 0;">Milestones / Pressure Rules</h4>
+      <p style="color:var(--text-secondary);margin:0 0 8px 0;">Managed automatically in this simplified view.</p>
 
       <details style="margin-top:20px;">
       <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Operations: Manual Adjustments and Support Actions</summary>
@@ -9916,7 +10100,6 @@ function vaultRenderAdminPanel() {
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Assign Reward Name</div></div><input id="vaultAssignRewardName" class="input-sm" placeholder="Manual reward"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Assign Reward Tier</div></div><input id="vaultAssignRewardTier" class="input-sm" value="rare"></div>
       </div>
-      <textarea id="vaultAssignRewardPayload" class="form-input" rows="2" placeholder='{"note":"manual assignment"}'></textarea>
       <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultAssignReward()">Assign Reward</button></div>
       </details>
 
@@ -9941,14 +10124,7 @@ function vaultRenderAdminPanel() {
       </details>
 
       <details style="margin-top:20px;">
-      <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Advanced: Import / Export and Raw Config</summary>
-      <h4 style="margin:10px 0 8px 0;">Import / Export Config JSON</h4>
-      <textarea id="vaultConfigImportExport" class="form-input" rows="8" placeholder='{"config": {...}, "seasons": [...]}'></textarea>
-      <div style="display:flex;gap:8px;margin-top:8px;">
-        <button class="btn-secondary" onclick="vaultExportConfig()">Export</button>
-        <button class="btn-primary" onclick="vaultImportConfig()">Import</button>
-      </div>
-
+      <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Advanced: Activity and Claim Operations</summary>
       <h4 style="margin:20px 0 8px 0;">Audit / Openings / Claims Status</h4>
       <div style="display:flex;gap:8px;margin-bottom:8px;">
         <button class="btn-secondary" onclick="vaultRefreshActivity()">Refresh Activity</button>
@@ -9967,15 +10143,10 @@ function vaultRenderAdminPanel() {
       <textarea id="vaultClaimNoteInput" class="form-input" rows="2" placeholder="optional note"></textarea>
       <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultUpdateClaimStatus()">Update Claim Status</button></div>
 
-      <h4 style="margin:20px 0 8px 0;">Raw Config Fallback (Full Coverage)</h4>
-      <textarea id="vaultRawConfigInput" class="form-input" rows="10">${escapeHtml(JSON.stringify(config, null, 2))}</textarea>
-      <div style="display:flex;gap:8px;margin-top:8px;">
-        <button class="btn-secondary" onclick="vaultSetRawFromCurrent()">Reset to Current</button>
-        <button class="btn-primary" onclick="vaultSaveRawConfig()">Save Raw Config</button>
-      </div>
       </details>
     </div>
   `;
+  vaultRenderSimpleConfigEditors();
 }
 
 async function loadVaultSettingsTab() {
@@ -10016,6 +10187,7 @@ async function loadVaultSettingsTab() {
 
 async function vaultSaveGeneralConfig() {
   try {
+    vaultSyncSimpleEditorsToJson();
     const current = vaultSettingsCache?.config || {};
     const next = JSON.parse(JSON.stringify(current));
     next.general = next.general || {};
@@ -10126,6 +10298,7 @@ function vaultApplyTierTemplate() {
   if (bandsEl) bandsEl.value = JSON.stringify(paymentBandsTemplate, null, 2);
   const convEl = document.getElementById('vault_keyTierConversionsJson');
   if (convEl) convEl.value = JSON.stringify(conversionsTemplate, null, 2);
+  vaultRenderSimpleConfigEditors();
   showSuccess('Bronze/Silver/Gold template applied. Save Vault Config to persist.');
 }
 

@@ -43,6 +43,7 @@ const PORTAL_PAGE_EXPECTATIONS = Object.freeze({
     'token-activity',
     'battle',
     'engagement',
+    'vault',
     'self-serve-roles',
     'ticketing',
     'treasury',
@@ -82,13 +83,11 @@ const PORTAL_PAGE_EXPECTATIONS = Object.freeze({
     'tokentracker',
     'battle',
     'heist',
-    'vault',
     'selfserve',
     'ticketing',
     'engagement'
   ]
 });
-const VIRTUAL_PORTAL_SECTIONS = Object.freeze(['vault']);
 const HEIST_ADMIN_TAB_STORAGE_KEY = 'activeHeistAdminTab';
 const HEIST_ADMIN_TABS = Object.freeze(['general', 'templates', 'operations', 'ranks', 'vault']);
 
@@ -497,7 +496,6 @@ function normalizePortalSectionName(sectionName) {
     dashboard: 'profile',
   };
   const normalized = aliases[requested] || requested;
-  if (VIRTUAL_PORTAL_SECTIONS.includes(normalized)) return normalized;
   return PORTAL_PAGE_EXPECTATIONS.sections.includes(normalized) ? normalized : 'landing';
 }
 
@@ -1767,7 +1765,6 @@ function switchSettingsTab(tab) {
     engagement:   () => { loadEngagementSettingsTab(); },
     treasury:     () => { if (typeof loadTreasuryModuleSettings === 'function') loadTreasuryModuleSettings(); },
     battle:       () => loadBattleTimingSettings('settings'),
-    vault:        () => { if (typeof loadVaultSettingsTab === 'function') loadVaultSettingsTab(); },
   };
   const loader = tabLoaders[tab];
   if (loader) loader();
@@ -5446,7 +5443,7 @@ function switchSection(sectionName, options = {}) {
     setStoredAdminView('');
   }
 
-  const resolvedSectionName = sectionName === 'vault' ? 'settings' : sectionName;
+  const resolvedSectionName = sectionName;
 
   // Update nav items (both sidebar and mobile)
   document.querySelectorAll('.nav-item').forEach(item => {
@@ -5541,8 +5538,9 @@ function switchSection(sectionName, options = {}) {
     applySettingsTabVisibility(portalSettingsData || {});
     switchSettingsTab('general');
   } else if (sectionName === 'vault') {
-    applySettingsTabVisibility(portalSettingsData || {});
-    switchSettingsTab('vault');
+    if (typeof loadVaultSettingsTab === 'function') {
+      loadVaultSettingsTab();
+    }
   } else if (sectionName === 'admin') {
     loadEnvStatusBar();
   } else if (sectionName === 'heist' && userData) {
@@ -9637,7 +9635,7 @@ async function vaultFetchJson(url, options = {}) {
 }
 
 function vaultRenderAdminPanel() {
-  const pane = document.getElementById('settingsTab-vault');
+  const pane = document.getElementById('vaultStandalonePanel');
   if (!pane) return;
   const config = vaultSettingsCache?.config || {};
   const general = config.general || {};
@@ -9915,7 +9913,7 @@ function vaultRenderAdminPanel() {
 
 async function loadVaultSettingsTab() {
   if (!isAdmin) return;
-  const pane = document.getElementById('settingsTab-vault');
+  const pane = document.getElementById('vaultStandalonePanel');
   if (!pane) return;
   pane.innerHTML = '<div class="card"><p style="color:var(--text-secondary);">Loading vault settings...</p></div>';
   try {

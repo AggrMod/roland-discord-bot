@@ -2655,6 +2655,11 @@
                 Basic tabs only
               </label>
             </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:10px;">
+              <span style="color:var(--text-secondary);font-size:0.85em;">Navigation:</span>
+              <button id="settingsModeTabsBtn" class="btn-secondary" type="button">Tabs</button>
+              <button id="settingsModeAccordionBtn" class="btn-secondary" type="button">Accordion</button>
+            </div>
           </div>
           <div class="settings-tabs">
             <button class="settings-tab active" data-tab="general" onclick="switchSettingsTab('general')">General Setup</button>
@@ -2672,6 +2677,7 @@
             <button class="settings-tab" data-tab="ticketing" onclick="switchSettingsTab('ticketing')">Ticketing</button>
             <button class="settings-tab" data-tab="engagement" onclick="switchSettingsTab('engagement')">Engagement</button>
           </div>
+          <div id="settingsAccordionNav" class="card" style="display:none;margin-top:10px;margin-bottom:12px;"></div>
           <div id="settingsTabContent" style="margin-top:24px;">
             <div id="settingsTab-general" class="settings-tab-pane">
               <!-- adminSettingsCard content loaded here dynamically -->

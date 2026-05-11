@@ -17,6 +17,7 @@ let confirmCallback = null;
 let activeGuildId = localStorage.getItem('activeGuildId') || '';
 const PORTAL_SECTION_STORAGE_KEY = 'activePortalSection';
 const PORTAL_ADMIN_VIEW_STORAGE_KEY = 'activePortalAdminView';
+const SETTINGS_NAV_MODE_STORAGE_KEY = 'settingsNavMode';
 let serverAccessData = { managedServers: [], unmanagedServers: [], isSuperadmin: false };
 let originalFetch = window.fetch.bind(window);
 let _csrfToken = '';
@@ -1784,6 +1785,68 @@ function switchSettingsTab(tab) {
   };
   const loader = tabLoaders[tab];
   if (loader) loader();
+  refreshSettingsAccordionNav();
+}
+
+function getSettingsNavMode() {
+  const raw = String(localStorage.getItem(SETTINGS_NAV_MODE_STORAGE_KEY) || '').trim().toLowerCase();
+  return raw === 'accordion' ? 'accordion' : 'tabs';
+}
+
+function setSettingsNavMode(mode) {
+  const normalized = String(mode || '').trim().toLowerCase() === 'accordion' ? 'accordion' : 'tabs';
+  localStorage.setItem(SETTINGS_NAV_MODE_STORAGE_KEY, normalized);
+}
+
+function refreshSettingsAccordionNav() {
+  const accordionWrap = document.getElementById('settingsAccordionNav');
+  if (!accordionWrap) return;
+  const visibleTabs = Array.from(document.querySelectorAll('#section-settings .settings-tabs .settings-tab[data-tab]'))
+    .filter((btn) => btn.style.display !== 'none');
+
+  if (!visibleTabs.length) {
+    accordionWrap.innerHTML = '<p style="color:var(--text-secondary);margin:0;">No settings tabs match your filters.</p>';
+    return;
+  }
+
+  const activeTab = visibleTabs.find((btn) => btn.classList.contains('active'))?.dataset?.tab || 'general';
+  accordionWrap.innerHTML = `
+    <div style="display:grid;gap:8px;">
+      ${visibleTabs.map((btn) => {
+        const tab = String(btn.dataset.tab || '').trim();
+        const label = String(btn.textContent || tab).trim();
+        const active = tab === activeTab;
+        return `
+          <button type="button"
+            class="${active ? 'btn-primary' : 'btn-secondary'}"
+            style="text-align:left;justify-content:flex-start;"
+            onclick="switchSettingsTab('${escapeJsString(tab)}')">
+            ${escapeHtml(label)}
+          </button>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function applySettingsNavigationMode() {
+  const mode = getSettingsNavMode();
+  const tabsWrap = document.querySelector('#section-settings .settings-tabs');
+  const accordionWrap = document.getElementById('settingsAccordionNav');
+  const tabsBtn = document.getElementById('settingsModeTabsBtn');
+  const accBtn = document.getElementById('settingsModeAccordionBtn');
+
+  if (tabsWrap) tabsWrap.style.display = mode === 'accordion' ? 'none' : '';
+  if (accordionWrap) accordionWrap.style.display = mode === 'accordion' ? 'block' : 'none';
+
+  if (tabsBtn) tabsBtn.classList.toggle('btn-primary', mode === 'tabs');
+  if (tabsBtn) tabsBtn.classList.toggle('btn-secondary', mode !== 'tabs');
+  if (accBtn) accBtn.classList.toggle('btn-primary', mode === 'accordion');
+  if (accBtn) accBtn.classList.toggle('btn-secondary', mode !== 'accordion');
+
+  if (mode === 'accordion') {
+    refreshSettingsAccordionNav();
+  }
 }
 
 function refreshSettingsTabVisibility() {
@@ -1814,7 +1877,24 @@ function initializeSettingsClarityControls() {
     basicOnlyEl.addEventListener('change', refreshSettingsTabVisibility);
     basicOnlyEl.dataset.bound = '1';
   }
+  const tabsBtn = document.getElementById('settingsModeTabsBtn');
+  const accBtn = document.getElementById('settingsModeAccordionBtn');
+  if (tabsBtn && !tabsBtn.dataset.bound) {
+    tabsBtn.addEventListener('click', () => {
+      setSettingsNavMode('tabs');
+      applySettingsNavigationMode();
+    });
+    tabsBtn.dataset.bound = '1';
+  }
+  if (accBtn && !accBtn.dataset.bound) {
+    accBtn.addEventListener('click', () => {
+      setSettingsNavMode('accordion');
+      applySettingsNavigationMode();
+    });
+    accBtn.dataset.bound = '1';
+  }
   refreshSettingsTabVisibility();
+  applySettingsNavigationMode();
 }
 
 function normalizeHeistAdminTabKey(value) {

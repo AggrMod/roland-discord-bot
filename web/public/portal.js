@@ -88,6 +88,7 @@ const PORTAL_PAGE_EXPECTATIONS = Object.freeze({
     'engagement'
   ]
 });
+const VIRTUAL_PORTAL_SECTIONS = Object.freeze(['vault']);
 const HEIST_ADMIN_TAB_STORAGE_KEY = 'activeHeistAdminTab';
 const HEIST_ADMIN_TABS = Object.freeze(['general', 'templates', 'operations', 'ranks', 'vault']);
 
@@ -496,6 +497,7 @@ function normalizePortalSectionName(sectionName) {
     dashboard: 'profile',
   };
   const normalized = aliases[requested] || requested;
+  if (VIRTUAL_PORTAL_SECTIONS.includes(normalized)) return normalized;
   return PORTAL_PAGE_EXPECTATIONS.sections.includes(normalized) ? normalized : 'landing';
 }
 
@@ -1340,7 +1342,7 @@ const MODULE_REGISTRY = [
   { key: 'engagement', label: 'Engagement Hub', icon: '🏆', section: 'engagement', desc: 'Activity points, reward shop, and leaderboards.' },
   { key: 'minigames', label: 'Minigames', icon: '⚔️', section: 'battle', desc: 'Arcade module including Battle Arena sessions, lobbies, and game events.' },
   { key: 'heist', label: 'Missions', icon: '🎯', section: 'heist', desc: 'Role-based missions and strategic community goals.' },
-  { key: 'vault', label: 'Vault', icon: '🔐', section: 'settings', desc: 'Key rewards, mint sync rules, seasons, and vault operations.' },
+  { key: 'vault', label: 'Vault', icon: '🔐', section: 'vault', desc: 'Key rewards, mint sync rules, seasons, and vault operations.' },
   { key: 'selfserveroles', label: 'Self-Serve Roles', icon: '🎭', section: 'self-serve-roles', desc: 'Claim optional roles assigned by administrators.' },
   { key: 'help', label: 'Help Center', icon: '❓', section: 'help', desc: 'Guides, command references, and troubleshooting across all modules.' }
 ];
@@ -1518,9 +1520,7 @@ function renderModuleHub() {
     
     const onClick = !isEnabled
       ? ''
-      : (mod.key === 'vault'
-        ? "switchSection('settings');switchSettingsTab('vault')"
-        : `switchSection('${mod.section}')`);
+      : `switchSection('${mod.section}')`;
     const toggleHtml = (canManageModules && canToggleModuleFromHub(mod.key))
       ? `
         <div style="display:flex;align-items:center;gap:8px; margin-left:auto;" onclick="event.stopPropagation()">
@@ -2163,9 +2163,28 @@ async function loadPortal() {
       }
     }
 
-    // Try to load user data (credentials CRITICAL for session cookies)
-    const response = await fetch('/api/user/me', { credentials: 'include' });
-    const data = await response.json();
+    const urlParams = new URLSearchParams(window.location.search);
+    const justCompletedAuth = String(urlParams.get('auth') || '').trim().toLowerCase() === 'ready';
+
+    // Try to load user data (credentials CRITICAL for session cookies).
+    // After OAuth redirect, give the session store a short warm-up window.
+    const fetchUserData = async () => {
+      const response = await fetch('/api/user/me', { credentials: 'include' });
+      const data = await response.json().catch(() => ({ success: false }));
+      return { response, data };
+    };
+
+    let response;
+    let data;
+    ({ response, data } = await fetchUserData());
+    if ((!data?.success || response.status === 401) && justCompletedAuth) {
+      const retryDelaysMs = [350, 800, 1500];
+      for (const delayMs of retryDelaysMs) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        ({ response, data } = await fetchUserData());
+        if (data?.success) break;
+      }
+    }
 
     if (data.success) {
       userData = data;
@@ -2186,7 +2205,6 @@ async function loadPortal() {
     }
 
     // Navigate to section from URL after admin check is complete
-    const urlParams = new URLSearchParams(window.location.search);
     const sectionParam = urlParams.get('section');
     const storedSection = getStoredPortalSection() || '';
     const requestedSection = sectionParam
@@ -2209,6 +2227,12 @@ async function loadPortal() {
       } else {
         switchSection(defaultSection, { updateUrl: false, silentGate: true });
       }
+    }
+
+    if (justCompletedAuth && userData) {
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete('auth');
+      window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
     }
   } catch (error) {
     console.error('Error loading portal:', error);
@@ -5365,10 +5389,15 @@ function switchSection(sectionName, options = {}) {
     if (!options.silentGate) showInfo('Admin access required for this area.');
     sectionName = userData ? (activeGuildId ? 'module-hub' : 'profile') : 'landing';
   }
+  if (sectionName === 'vault' && !(isAdmin || isSuperadmin)) {
+    if (!options.silentGate) showInfo('Admin access required for this area.');
+    sectionName = userData ? (activeGuildId ? 'module-hub' : 'profile') : 'landing';
+  }
 
   const serverContextSections = new Set([
     'module-hub',
     'settings',
+    'vault',
     'governance',
     'invites',
     'aiassistant',
@@ -5401,6 +5430,7 @@ function switchSection(sectionName, options = {}) {
     'token-activity': 'tokentracker',
     heist: 'heist',
     battle: 'minigames',
+    vault: 'vault',
     'self-serve-roles': 'selfserveroles',
     ticketing: 'ticketing',
     engagement: 'engagement'
@@ -5416,7 +5446,7 @@ function switchSection(sectionName, options = {}) {
     setStoredAdminView('');
   }
 
-  const resolvedSectionName = sectionName;
+  const resolvedSectionName = sectionName === 'vault' ? 'settings' : sectionName;
 
   // Update nav items (both sidebar and mobile)
   document.querySelectorAll('.nav-item').forEach(item => {
@@ -5510,6 +5540,9 @@ function switchSection(sectionName, options = {}) {
   } else if (sectionName === 'settings') {
     applySettingsTabVisibility(portalSettingsData || {});
     switchSettingsTab('general');
+  } else if (sectionName === 'vault') {
+    applySettingsTabVisibility(portalSettingsData || {});
+    switchSettingsTab('vault');
   } else if (sectionName === 'admin') {
     loadEnvStatusBar();
   } else if (sectionName === 'heist' && userData) {
@@ -9578,6 +9611,16 @@ function vaultBuildChannelOptions(channels, selectedId) {
     .join('');
 }
 
+function vaultBuildChannelSelect(channels, selectedId, noneLabel = 'No channel selected') {
+  const selected = String(selectedId || '').trim();
+  const options = vaultBuildChannelOptions(channels, selected);
+  const hasSelected = selected && String(options).includes(`value="${escapeHtml(selected)}"`);
+  const fallbackSelectedOption = (selected && !hasSelected)
+    ? `<option value="${escapeHtml(selected)}" selected>Unknown channel (${escapeHtml(selected)})</option>`
+    : '';
+  return `<option value="">${escapeHtml(noneLabel)}</option>${fallbackSelectedOption}${options}`;
+}
+
 async function vaultFetchJson(url, options = {}) {
   const response = await fetch(url, {
     credentials: 'include',
@@ -9630,7 +9673,8 @@ function vaultRenderAdminPanel() {
   const keyTierConversions = Array.isArray(config.keyTierConversions) ? config.keyTierConversions : [];
   const keyTierGrants = (mintRules && mintRules.keyTierGrants && typeof mintRules.keyTierGrants === 'object') ? mintRules.keyTierGrants : {};
   const activeSeasonId = vaultGetCachedActiveSeasonId();
-  const channelOptions = vaultBuildChannelOptions(channels, announcements.channelId);
+  const announceChannelOptions = vaultBuildChannelSelect(channels, announcements.channelId, 'No announcement channel');
+  const ticketAlertChannelOptions = vaultBuildChannelSelect(channels, ticketing.alertChannelId, 'No alert channel');
   const failChancePercent = Math.max(0, Math.min(100, Number(config?.rewardTable?.failChancePercent ?? 75) || 0));
   const noRewardWeight = Math.max(0, Number(config?.rewardTable?.noRewardWeight || 0) || 0);
 
@@ -9710,12 +9754,12 @@ function vaultRenderAdminPanel() {
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Pressure / Free</div></div><input id="vault_pressurePerFreeMint" type="number" class="input-sm" min="0" value="${Number(mintRules.pressurePerFreeMint || 0)}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Fail Chance (%)</div></div><input id="vault_failChancePercent" type="number" class="input-sm" min="0" max="100" value="${failChancePercent}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">No Reward Weight</div></div><input id="vault_noRewardWeight" type="number" class="input-sm" min="0" value="${noRewardWeight}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Announcements Channel</div></div><select id="vault_announceChannelId" class="input-sm"><option value="">No announcement channel</option>${channelOptions}</select></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Announcements Channel</div></div><select id="vault_announceChannelId" class="input-sm">${announceChannelOptions}</select></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Announce Tiers (CSV)</div></div><input id="vault_announceTiers" class="input-sm" value="${escapeHtml((announcements.announceRewardTiers || []).join(','))}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Announce Common Rewards</div></div><input id="vault_announceCommonRewards" type="checkbox" ${announcements.announceCommonRewards ? 'checked' : ''}></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Create Ticket On Win</div></div><input id="vault_createTicketOnWin" type="checkbox" ${ticketing.createTicketOnWin ? 'checked' : ''}></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Reward Ticket Category ID</div><div class="settings-desc">Ticket category where winning rewards create fulfillment tickets.</div></div><input id="vault_rewardTicketCategoryId" class="input-sm" value="${escapeHtml(String(ticketing.rewardTicketCategoryId || ''))}" placeholder="e.g. 3"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Ticket Failure Alert Channel ID</div><div class="settings-desc">Optional channel for alerts when ticket creation fails.</div></div><input id="vault_ticketAlertChannelId" class="input-sm" value="${escapeHtml(String(ticketing.alertChannelId || ''))}" placeholder="Discord channel id"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Ticket Failure Alert Channel</div><div class="settings-desc">Optional channel for alerts when ticket creation fails.</div></div><select id="vault_ticketAlertChannelId" class="input-sm">${ticketAlertChannelOptions}</select></div>
       </div>
 
       <h4 style="margin:16px 0 8px 0;">Key Tiers and Inheritance</h4>
@@ -14758,8 +14802,10 @@ async function openTreasuryConfigModal() {
         <input id="treasuryWalletInput" type="text" placeholder="Solana wallet address" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; font-family:monospace;"></div>
       <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Refresh Interval (hours)</label>
         <input id="treasuryIntervalInput" type="number" min="1" max="168" step="1" placeholder="6" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Watch Channel ID</label>
-        <input id="treasuryWatchChannelInput" type="text" placeholder="Discord channel ID for treasury panel updates" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; font-family:monospace;"></div>
+      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Watch Channel</label>
+        <select id="treasuryWatchChannelInput" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
+          <option value="">Loading channels...</option>
+        </select></div>
       <div><label style="display:flex; align-items:center; gap:8px; color:#c9d6ff;">
         <input id="treasuryAlertsEnabledInput" type="checkbox" style="width:18px; height:18px;">
         <span>Enable transaction alerts</span>
@@ -14809,7 +14855,17 @@ async function openTreasuryConfigModal() {
       showError('Error updating config: ' + e.message);
     }
   };
-  await populateChannelSelect('treasuryAlertChannelInput', '');
+  let currentConfig = {};
+  try {
+    const cfgRes = await fetch('/api/admin/treasury/config', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const cfgJson = await cfgRes.json();
+    currentConfig = cfgJson?.success ? (cfgJson.config || {}) : {};
+  } catch (_error) {
+    currentConfig = {};
+  }
+
+  await populateChannelSelect('treasuryWatchChannelInput', String(currentConfig.watchChannelId || '').trim());
+  await populateChannelSelect('treasuryAlertChannelInput', String(currentConfig.txAlertChannelId || '').trim());
 }
 
 // ==================== NFT ACTIVITY TRACKER ====================
@@ -17242,9 +17298,13 @@ async function loadEngagementConfig() {
     if (document.getElementById('engCooldownReact')) document.getElementById('engCooldownReact').value = cfg.cooldown_reaction_daily ?? 5;
     if (document.getElementById('engCurrencyPlural')) document.getElementById('engCurrencyPlural').value = cfg.currency_name_plural ?? 'points';
     if (document.getElementById('engCurrencySymbol')) document.getElementById('engCurrencySymbol').value = cfg.currency_symbol ?? 'pts';
-    if (document.getElementById('engTaskFeedChannel')) document.getElementById('engTaskFeedChannel').value = cfg.task_feed_channel_id ?? '';
-    if (document.getElementById('engPurchaseLogChannel')) document.getElementById('engPurchaseLogChannel').value = cfg.purchase_log_channel_id ?? '';
-    if (document.getElementById('engAchievementChannel')) document.getElementById('engAchievementChannel').value = cfg.achievement_channel_id ?? '';
+    await Promise.all([
+      populateChannelSelect('engTaskFeedChannel', cfg.task_feed_channel_id ?? ''),
+      populateChannelSelect('engPurchaseLogChannel', cfg.purchase_log_channel_id ?? ''),
+      populateChannelSelect('engAchievementChannel', cfg.achievement_channel_id ?? ''),
+      populateChannelSelect('engMonitoredChannel', ''),
+      populateChannelSelect('engHashtagChannel', ''),
+    ]);
 
     const en = document.getElementById('ps_moduleEngagementEnabled');
     const pm = document.getElementById('ps_engPtsMsg');
@@ -18080,9 +18140,13 @@ async function loadEngagementConfig() {
       if (document.getElementById('engCooldownReact')) document.getElementById('engCooldownReact').value = cfg.cooldown_reaction_daily ?? 5;
       if (document.getElementById('engCurrencyPlural')) document.getElementById('engCurrencyPlural').value = cfg.currency_name_plural ?? 'points';
       if (document.getElementById('engCurrencySymbol')) document.getElementById('engCurrencySymbol').value = cfg.currency_symbol ?? 'pts';
-      if (document.getElementById('engTaskFeedChannel')) document.getElementById('engTaskFeedChannel').value = cfg.task_feed_channel_id ?? '';
-      if (document.getElementById('engPurchaseLogChannel')) document.getElementById('engPurchaseLogChannel').value = cfg.purchase_log_channel_id ?? '';
-      if (document.getElementById('engAchievementChannel')) document.getElementById('engAchievementChannel').value = cfg.achievement_channel_id ?? '';
+      await Promise.all([
+        populateChannelSelect('engTaskFeedChannel', cfg.task_feed_channel_id ?? ''),
+        populateChannelSelect('engPurchaseLogChannel', cfg.purchase_log_channel_id ?? ''),
+        populateChannelSelect('engAchievementChannel', cfg.achievement_channel_id ?? ''),
+        populateChannelSelect('engMonitoredChannel', ''),
+        populateChannelSelect('engHashtagChannel', ''),
+      ]);
       return;
     }
 

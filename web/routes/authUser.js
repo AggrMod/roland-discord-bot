@@ -1235,7 +1235,10 @@ function createAuthUserRouter({
       delete req.session.returnTo;
       await saveSession(req);
       const safeReturn = returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/';
-      return res.redirect(safeReturn);
+      const loginReadyRedirect = safeReturn.includes('?')
+        ? `${safeReturn}&auth=ready`
+        : `${safeReturn}?auth=ready`;
+      return res.redirect(loginReadyRedirect);
     } catch (routeError) {
       logger.error('OAuth callback error:', routeError);
       return res.redirect('/dashboard?error=auth_failed');

@@ -1102,21 +1102,27 @@
                   <div class="settings-label">Task feed channel</div>
                   <div class="settings-desc">Where mirrored tasks and social triggers are posted</div>
                 </div>
-                <input type="text" id="engTaskFeedChannel" class="input-sm" placeholder="Discord channel ID" style="width:220px;">
+                <select id="engTaskFeedChannel" class="input-sm" style="width:220px;">
+                  <option value="">— None —</option>
+                </select>
               </div>
               <div class="settings-row">
                 <div class="settings-info">
                   <div class="settings-label">Purchase log channel</div>
                   <div class="settings-desc">Fallback log if manual marketplace fulfillment does not open a ticket</div>
                 </div>
-                <input type="text" id="engPurchaseLogChannel" class="input-sm" placeholder="Discord channel ID" style="width:220px;">
+                <select id="engPurchaseLogChannel" class="input-sm" style="width:220px;">
+                  <option value="">— None —</option>
+                </select>
               </div>
               <div class="settings-row">
                 <div class="settings-info">
                   <div class="settings-label">Achievement channel</div>
                   <div class="settings-desc">Where unlock announcements are posted</div>
                 </div>
-                <input type="text" id="engAchievementChannel" class="input-sm" placeholder="Discord channel ID" style="width:220px;">
+                <select id="engAchievementChannel" class="input-sm" style="width:220px;">
+                  <option value="">— None —</option>
+                </select>
               </div>
             </div>
           </div>
@@ -1181,7 +1187,11 @@
             <div class="settings-grid" style="margin-bottom:12px;">
               <div><label class="form-label">Provider</label><select id="engMonitoredProvider" class="form-input"><option value="x">X</option><option value="bluesky">Bluesky</option><option value="discord">Discord</option></select></div>
               <div><label class="form-label">Account Handle</label><input id="engMonitoredHandle" class="form-input" placeholder="@account"></div>
-              <div><label class="form-label">Mirror Channel</label><input id="engMonitoredChannel" class="form-input" placeholder="Channel ID"></div>
+              <div><label class="form-label">Mirror Channel</label>
+                <select id="engMonitoredChannel" class="form-input">
+                  <option value="">— None —</option>
+                </select>
+              </div>
               <div><label class="form-label">Task Types</label><input id="engMonitoredTasks" class="form-input" placeholder="x_like,x_repost"></div>
               <div style="grid-column:1 / -1;"><label class="form-label">Reward JSON</label><textarea id="engMonitoredRewards" class="form-input" rows="3" placeholder='{"x_like":10,"x_repost":20}'></textarea></div>
               <div style="grid-column:1 / -1;"><label class="form-label">Requirements JSON</label><textarea id="engMonitoredRequirements" class="form-input" rows="2" placeholder='{"commentMinLength":20}'></textarea></div>
@@ -1199,7 +1209,11 @@
             <div class="settings-grid" style="margin-bottom:12px;">
               <div><label class="form-label">Provider</label><select id="engHashtagProvider" class="form-input"><option value="x">X</option><option value="bluesky">Bluesky</option></select></div>
               <div><label class="form-label">Hashtag</label><input id="engHashtagTag" class="form-input" placeholder="#guildpilot"></div>
-              <div><label class="form-label">Mirror Channel</label><input id="engHashtagChannel" class="form-input" placeholder="Channel ID"></div>
+              <div><label class="form-label">Mirror Channel</label>
+                <select id="engHashtagChannel" class="form-input">
+                  <option value="">— None —</option>
+                </select>
+              </div>
               <div><label class="form-label">Task Types</label><input id="engHashtagTasks" class="form-input" placeholder="x_hashtag_post,x_like"></div>
               <div style="grid-column:1 / -1;"><label class="form-label">Reward JSON</label><textarea id="engHashtagRewards" class="form-input" rows="3" placeholder='{"x_hashtag_post":15}'></textarea></div>
             </div>

@@ -245,9 +245,10 @@ function createAdminVaultRouter({
       const amount = Number(req.body?.amount || 0);
       const action = String(req.body?.action || 'add').trim().toLowerCase();
       const reason = String(req.body?.reason || 'portal_manual').trim();
+      const keyTier = String(req.body?.keyTier || req.body?.key_tier || 'default').trim() || 'default';
       const result = action === 'remove'
-        ? vaultService.removeKeys(req.guildId || '', seasonId, discordId, amount, reason, req.session?.discordUser?.id || null)
-        : vaultService.addKeys(req.guildId || '', seasonId, discordId, amount, reason, req.session?.discordUser?.id || null);
+        ? vaultService.removeKeys(req.guildId || '', seasonId, discordId, amount, reason, req.session?.discordUser?.id || null, keyTier)
+        : vaultService.addKeys(req.guildId || '', seasonId, discordId, amount, reason, req.session?.discordUser?.id || null, keyTier);
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to mutate keys', 'VALIDATION_ERROR', null, result));
       }
@@ -282,7 +283,17 @@ function createAdminVaultRouter({
     if (!ensureVaultModule(req, res)) return;
     try {
       const limitPerWallet = Number(req.body?.limitPerWallet || req.body?.limit_per_wallet || 5000);
-      const result = await vaultService.backfillAllMissingMintTransfersForActiveSeason(req.guildId || '', { limitPerWallet });
+      const dryRun = req.body?.dryRun === true || req.body?.dry_run === true;
+      const delayMs = Number(req.body?.delayMs ?? req.body?.delay_ms ?? 250);
+      const maxRuntimeMs = Number(req.body?.maxRuntimeMs ?? req.body?.max_runtime_ms ?? (10 * 60 * 1000));
+      const rpcRetryMax = Number(req.body?.rpcRetryMax ?? req.body?.rpc_retry_max ?? 2);
+      const result = await vaultService.backfillAllMissingMintTransfersForActiveSeason(req.guildId || '', {
+        limitPerWallet,
+        dryRun,
+        delayMs,
+        maxRuntimeMs,
+        rpcRetryMax,
+      });
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to run bulk backfill', 'VALIDATION_ERROR', null, result));
       }
@@ -383,6 +394,30 @@ function createAdminVaultRouter({
       return res.json(toSuccessResponse({ logs }));
     } catch (error) {
       logger.error('Error listing vault audit logs:', error);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/admin/vault/users/keys-overview', adminAuthMiddleware, (req, res) => {
+    if (!ensureVaultModule(req, res)) return;
+    try {
+      const seasonId = req.query?.seasonId || req.query?.season_id || null;
+      const limit = Number(req.query?.limit || 200);
+      const rows = vaultService.listUserKeyOverview(req.guildId || '', seasonId, limit);
+      return res.json(toSuccessResponse({ rows }));
+    } catch (error) {
+      logger.error('Error listing vault key overview:', error);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/admin/vault/health', adminAuthMiddleware, (req, res) => {
+    if (!ensureVaultModule(req, res)) return;
+    try {
+      const health = vaultService.getVaultHealthSummary(req.guildId || '');
+      return res.json(toSuccessResponse({ health }));
+    } catch (error) {
+      logger.error('Error loading vault health summary:', error);
       return res.status(500).json(toErrorResponse('Internal server error'));
     }
   });

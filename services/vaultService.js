@@ -36,6 +36,22 @@ function normalizeRewardQuantity(value) {
   return Math.max(0, qty);
 }
 
+function normalizeKeyTierId(value) {
+  const id = String(value || '').trim().toLowerCase();
+  return id || 'default';
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+
+function parseDbTimestampMs(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return NaN;
+  const normalized = raw.includes('T') ? raw : `${raw.replace(' ', 'T')}Z`;
+  return new Date(normalized).getTime();
+}
+
 class VaultService {
   constructor() {
     this.rpcConnection = null;
@@ -59,6 +75,16 @@ class VaultService {
     return this.rpcConnection;
   }
 
+  normalizeSolanaAddress(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+    try {
+      return new PublicKey(raw).toBase58();
+    } catch (_error) {
+      return null;
+    }
+  }
+
   getDefaultConfig() {
     return {
       general: {
@@ -70,11 +96,26 @@ class VaultService {
       theme: {
         keyName: 'Reward Key',
       },
+      keyTiers: [
+        {
+          id: 'default',
+          name: 'Default Key',
+          enabled: true,
+          inheritsFrom: null,
+        },
+      ],
+      keyTierConversions: [],
       mintRules: {
         keysPerPaidMint: 1,
         keysPerFreeMint: 0,
         pressurePerPaidMint: 1,
         pressurePerFreeMint: 0,
+        keyTierGrants: {
+          default: {
+            paid: 1,
+            free: 0,
+          },
+        },
       },
       mintSource: {
         mode: 'custom_webhook',
@@ -82,14 +123,22 @@ class VaultService {
         paymentWalletAddress: '',
         paymentWalletAddresses: [],
         paymentMinLamports: 1,
+        paymentBands: [],
       },
       announcements: {
         channelId: '',
         announceRewardTiers: ['rare', 'epic', 'legendary'],
         announceCommonRewards: false,
       },
+      ticketing: {
+        createTicketOnWin: false,
+        rewardTicketCategoryId: null,
+        alertChannelId: null,
+      },
       security: {
         openCooldownSeconds: 3,
+        upgradeCooldownSeconds: 0,
+        upgradeDailyCapPerUser: 0,
       },
       rewardTable: {
         version: 'default',
@@ -162,6 +211,130 @@ class VaultService {
     return out;
   }
 
+  validateAndNormalizeConfig(config) {
+    const next = this.mergeConfig(this.getDefaultConfig(), config || {});
+    const keyTiersRaw = Array.isArray(next.keyTiers) ? next.keyTiers : [];
+    const normalizedTiers = [];
+    const seen = new Set();
+    for (const tier of keyTiersRaw) {
+      const id = normalizeKeyTierId(tier?.id || tier?.keyTier || tier?.key_tier);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      normalizedTiers.push({
+        id,
+        name: String(tier?.name || tier?.label || id).trim() || id,
+        enabled: tier?.enabled !== false,
+        inheritsFrom: tier?.inheritsFrom ? normalizeKeyTierId(tier.inheritsFrom) : null,
+      });
+    }
+    if (!seen.has('default')) {
+      normalizedTiers.unshift({
+        id: 'default',
+        name: String(next?.theme?.keyName || 'Reward Key'),
+        enabled: true,
+        inheritsFrom: null,
+      });
+      seen.add('default');
+    }
+
+    const byId = new Map(normalizedTiers.map(t => [t.id, t]));
+    for (const tier of normalizedTiers) {
+      if (tier.id === 'default') {
+        tier.inheritsFrom = null;
+        continue;
+      }
+      if (tier.inheritsFrom && !byId.has(tier.inheritsFrom)) {
+        throw new Error(`Key tier "${tier.id}" inherits from unknown tier "${tier.inheritsFrom}"`);
+      }
+    }
+
+    const visitState = new Map(); // 0=unvisited,1=visiting,2=done
+    const dfs = (tierId) => {
+      const state = visitState.get(tierId) || 0;
+      if (state === 1) throw new Error(`Key tier inheritance cycle detected at "${tierId}"`);
+      if (state === 2) return;
+      visitState.set(tierId, 1);
+      const tier = byId.get(tierId);
+      if (tier?.inheritsFrom) dfs(tier.inheritsFrom);
+      visitState.set(tierId, 2);
+    };
+    for (const tier of normalizedTiers) dfs(tier.id);
+
+    next.keyTiers = normalizedTiers;
+    const keyTierConversionsRaw = Array.isArray(next.keyTierConversions) ? next.keyTierConversions : [];
+    next.keyTierConversions = keyTierConversionsRaw
+      .map((rule) => ({
+        fromTier: normalizeKeyTierId(rule?.fromTier || rule?.from_tier),
+        toTier: normalizeKeyTierId(rule?.toTier || rule?.to_tier),
+        fromAmount: Math.max(1, clampInt(rule?.fromAmount ?? rule?.from_amount, 1, 1)),
+        toAmount: Math.max(1, clampInt(rule?.toAmount ?? rule?.to_amount, 1, 1)),
+        enabled: rule?.enabled !== false,
+      }))
+      .filter((rule) => byId.has(rule.fromTier) && byId.has(rule.toTier))
+      .filter((rule) => rule.fromTier !== rule.toTier);
+    const pairSeen = new Set();
+    for (const rule of next.keyTierConversions) {
+      const pair = `${rule.fromTier}->${rule.toTier}`;
+      if (pairSeen.has(pair)) {
+        throw new Error(`Duplicate conversion rule for ${pair}`);
+      }
+      pairSeen.add(pair);
+    }
+
+    const keyTierGrantsRaw = next?.mintRules?.keyTierGrants && typeof next.mintRules.keyTierGrants === 'object'
+      ? next.mintRules.keyTierGrants
+      : {};
+    const normalizedGrants = {};
+    for (const [tierIdRaw, grant] of Object.entries(keyTierGrantsRaw)) {
+      const tierId = normalizeKeyTierId(tierIdRaw);
+      if (!byId.has(tierId)) continue;
+      normalizedGrants[tierId] = {
+        paid: clampInt(grant?.paid, 0, 0),
+        free: clampInt(grant?.free, 0, 0),
+      };
+    }
+    if (!normalizedGrants.default) {
+      normalizedGrants.default = {
+        paid: clampInt(next?.mintRules?.keysPerPaidMint, 0, 0),
+        free: clampInt(next?.mintRules?.keysPerFreeMint, 0, 0),
+      };
+    }
+    next.mintRules = next.mintRules || {};
+    next.mintRules.keyTierGrants = normalizedGrants;
+
+    const paymentBandsRaw = Array.isArray(next?.mintSource?.paymentBands) ? next.mintSource.paymentBands : [];
+    const normalizedBands = paymentBandsRaw
+      .map((band) => ({
+        keyTier: normalizeKeyTierId(band?.keyTier || band?.key_tier || 'default'),
+        minLamports: Math.max(0, clampInt(band?.minLamports ?? band?.min_lamports, 0, 0)),
+        maxLamports: band?.maxLamports === null || band?.maxLamports === undefined || band?.maxLamports === ''
+          ? null
+          : Math.max(0, clampInt(band?.maxLamports ?? band?.max_lamports, 0, 0)),
+        paid: Math.max(0, clampInt(band?.paid, 0, 1)),
+        free: Math.max(0, clampInt(band?.free, 0, 0)),
+      }))
+      .filter((band) => byId.has(band.keyTier))
+      .filter((band) => band.maxLamports === null || band.maxLamports >= band.minLamports)
+      .sort((a, b) => Number(a.minLamports || 0) - Number(b.minLamports || 0));
+    next.mintSource = next.mintSource || {};
+    next.mintSource.paymentBands = normalizedBands;
+
+    const rewards = Array.isArray(next?.rewardTable?.rewards) ? next.rewardTable.rewards : [];
+    next.rewardTable = next.rewardTable || {};
+    next.rewardTable.rewards = rewards.map((reward) => {
+      const keyTier = reward?.keyTier ? normalizeKeyTierId(reward.keyTier) : null;
+      if (keyTier && !byId.has(keyTier)) {
+        throw new Error(`Reward "${String(reward?.code || 'unknown')}" references unknown key tier "${keyTier}"`);
+      }
+      return {
+        ...reward,
+        keyTier,
+      };
+    });
+
+    return next;
+  }
+
   ensureConfig(guildId) {
     const gid = normalizeGuildId(guildId);
     if (!gid) return null;
@@ -184,7 +357,12 @@ class VaultService {
   saveConfig(guildId, fullConfig) {
     const gid = normalizeGuildId(guildId);
     if (!gid) return { success: false, message: 'Invalid guildId' };
-    const merged = this.mergeConfig(this.getDefaultConfig(), fullConfig || {});
+    let merged = null;
+    try {
+      merged = this.validateAndNormalizeConfig(fullConfig || {});
+    } catch (error) {
+      return { success: false, message: String(error?.message || error || 'Invalid config') };
+    }
     db.prepare(`
       INSERT INTO vault_config (guild_id, config_json, created_at, updated_at)
       VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -331,9 +509,95 @@ class VaultService {
     return Array.isArray(cfg?.rewardTable?.rewards)
       ? cfg.rewardTable.rewards.map(reward => ({
           ...reward,
+          keyTier: reward?.keyTier ? normalizeKeyTierId(reward.keyTier) : null,
           quantity: normalizeRewardQuantity(reward?.quantity),
         }))
       : [];
+  }
+
+  getKeyTiers(guildId) {
+    const cfg = this.getConfig(guildId) || {};
+    const raw = Array.isArray(cfg.keyTiers) ? cfg.keyTiers : [];
+    const normalized = raw
+      .map((tier) => ({
+        id: normalizeKeyTierId(tier?.id || tier?.keyTier || tier?.key_tier),
+        name: String(tier?.name || tier?.label || tier?.id || 'Default Key').trim() || 'Default Key',
+        enabled: tier?.enabled !== false,
+        inheritsFrom: tier?.inheritsFrom ? normalizeKeyTierId(tier.inheritsFrom) : null,
+      }))
+      .filter(tier => !!tier.id);
+
+    if (!normalized.length) {
+      return [{ id: 'default', name: String(cfg?.theme?.keyName || 'Reward Key'), enabled: true, inheritsFrom: null }];
+    }
+    if (!normalized.some(tier => tier.id === 'default')) {
+      normalized.unshift({ id: 'default', name: String(cfg?.theme?.keyName || 'Reward Key'), enabled: true, inheritsFrom: null });
+    }
+    return normalized;
+  }
+
+  resolveKeyTier(guildId, keyTierId = null) {
+    const tiers = this.getKeyTiers(guildId);
+    const requested = normalizeKeyTierId(keyTierId || 'default');
+    const byId = new Map(tiers.map(tier => [tier.id, tier]));
+    return byId.get(requested) || byId.get('default') || tiers[0] || null;
+  }
+
+  getInheritedTierChain(guildId, keyTierId = null) {
+    const tiers = this.getKeyTiers(guildId);
+    const byId = new Map(tiers.map(tier => [tier.id, tier]));
+    const start = this.resolveKeyTier(guildId, keyTierId);
+    if (!start) return [];
+    const chain = [];
+    const seen = new Set();
+    let cursor = start;
+    while (cursor && !seen.has(cursor.id)) {
+      chain.push(cursor.id);
+      seen.add(cursor.id);
+      const parentId = cursor.inheritsFrom ? normalizeKeyTierId(cursor.inheritsFrom) : null;
+      cursor = parentId ? byId.get(parentId) : null;
+    }
+    return chain;
+  }
+
+  getStatsKeyBalances(stats) {
+    const parsed = safeJsonParse(stats?.key_balances_json, {});
+    if (!parsed || typeof parsed !== 'object') return {};
+    const out = {};
+    for (const [tierKey, amountRaw] of Object.entries(parsed)) {
+      const tierId = normalizeKeyTierId(tierKey);
+      const amount = Number.parseInt(amountRaw, 10);
+      out[tierId] = Number.isFinite(amount) ? Math.max(0, amount) : 0;
+    }
+    return out;
+  }
+
+  getAvailableKeysForTier(stats, keyTierId = 'default') {
+    const tierId = normalizeKeyTierId(keyTierId);
+    const balances = this.getStatsKeyBalances(stats);
+    if (Object.prototype.hasOwnProperty.call(balances, tierId)) {
+      return Math.max(0, Number(balances[tierId] || 0));
+    }
+    if (tierId === 'default') {
+      return Math.max(0, Number(stats?.keys_earned || 0) - Number(stats?.keys_used || 0));
+    }
+    return 0;
+  }
+
+  getKeyTierConversions(guildId) {
+    const cfg = this.getConfig(guildId) || {};
+    return Array.isArray(cfg.keyTierConversions) ? cfg.keyTierConversions : [];
+  }
+
+  getKeyTierConversionRule(guildId, fromTier, toTier) {
+    const fromId = normalizeKeyTierId(fromTier);
+    const toId = normalizeKeyTierId(toTier);
+    const rules = this.getKeyTierConversions(guildId);
+    return rules.find((rule) =>
+      rule && rule.enabled !== false
+      && normalizeKeyTierId(rule.fromTier) === fromId
+      && normalizeKeyTierId(rule.toTier) === toId
+    ) || null;
   }
 
   addReward(guildId, reward) {
@@ -352,6 +616,7 @@ class VaultService {
       weight: clampInt(reward?.weight, 0, 0),
       enabled: reward?.enabled !== false,
       quantity: normalizeRewardQuantity(reward?.quantity),
+      keyTier: reward?.keyTier ? normalizeKeyTierId(reward.keyTier) : null,
       type: String(reward?.type || 'claimable_reward').trim(),
       payload: reward?.payload || null,
     });
@@ -370,6 +635,9 @@ class VaultService {
     if (Object.prototype.hasOwnProperty.call(nextPatch, 'quantity')) {
       nextPatch.quantity = normalizeRewardQuantity(nextPatch.quantity);
     }
+    if (Object.prototype.hasOwnProperty.call(nextPatch, 'keyTier')) {
+      nextPatch.keyTier = nextPatch.keyTier ? normalizeKeyTierId(nextPatch.keyTier) : null;
+    }
     rewards[idx] = { ...rewards[idx], ...nextPatch };
     cfg.rewardTable = cfg.rewardTable || {};
     cfg.rewardTable.rewards = rewards;
@@ -386,14 +654,17 @@ class VaultService {
     return this.saveConfig(guildId, cfg);
   }
 
-  rollReward(guildId) {
+  rollReward(guildId, keyTierId = 'default') {
     const cfg = this.getConfig(guildId) || {};
     const failChancePercent = Math.max(0, Math.min(100, Number(cfg?.rewardTable?.failChancePercent ?? 75) || 0));
     if (failChancePercent > 0 && (Math.random() * 100) < failChancePercent) return null;
     const noRewardWeight = clampInt(cfg?.rewardTable?.noRewardWeight, 0, 0);
+    const inheritedTiers = new Set(this.getInheritedTierChain(guildId, keyTierId));
     const rewards = this.getRewards(guildId)
       .filter((reward) => {
         if (!reward || reward.enabled === false || Number(reward.weight || 0) <= 0) return false;
+        const rewardKeyTier = reward?.keyTier ? normalizeKeyTierId(reward.keyTier) : null;
+        if (rewardKeyTier && !inheritedTiers.has(rewardKeyTier)) return false;
         const quantity = normalizeRewardQuantity(reward.quantity);
         if (quantity === null) return true;
         return quantity > 0;
@@ -421,9 +692,9 @@ class VaultService {
     db.prepare(`
       INSERT OR IGNORE INTO vault_user_stats (
         guild_id, season_id, discord_user_id, wallet_address,
-        paid_mints, free_mints, keys_earned, keys_used, bonus_entries, pressure, points, rewards_won,
+        paid_mints, free_mints, keys_earned, keys_used, key_balances_json, bonus_entries, pressure, points, rewards_won,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, 0, 0, 0, 0, 0, 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ) VALUES (?, ?, ?, ?, 0, 0, 0, 0, '{}', 0, 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `).run(gid, sid, uid, walletAddress || null);
     if (walletAddress) {
       db.prepare(`
@@ -451,6 +722,7 @@ class VaultService {
       stats: {
         ...stats,
         available_keys: Number(stats.keys_earned || 0) - Number(stats.keys_used || 0),
+        key_balances: this.getStatsKeyBalances(stats),
       },
     };
   }
@@ -487,7 +759,7 @@ class VaultService {
     return { success: true, season, rows };
   }
 
-  openVault(guildId, discordUserId) {
+  openVault(guildId, discordUserId, options = {}) {
     const gid = normalizeGuildId(guildId);
     const uid = String(discordUserId || '').trim();
     if (!gid || !uid) return { success: false, message: 'Missing guild or user id' };
@@ -498,7 +770,12 @@ class VaultService {
     const season = this.getActiveSeason(gid);
     if (!season) return { success: false, message: 'No active season' };
 
-    const rolledReward = this.rollReward(gid);
+    const selectedTier = this.resolveKeyTier(gid, options?.keyTier || options?.key_tier || 'default');
+    if (!selectedTier || selectedTier.enabled === false) {
+      return { success: false, message: 'Selected key tier is disabled' };
+    }
+
+    const rolledReward = this.rollReward(gid, selectedTier.id);
     const reward = rolledReward || {
       code: 'no_reward',
       name: 'No Reward',
@@ -513,17 +790,44 @@ class VaultService {
     const tx = db.transaction(() => {
       const stats = this.ensureUserStats(gid, season.season_id, uid);
       if (!stats) return { success: false, message: 'Could not load user stats' };
-
-      const availableKeys = Number(stats.keys_earned || 0) - Number(stats.keys_used || 0);
-      if (availableKeys <= 0) {
-        return { success: false, code: 'no_keys', message: cfg?.messages?.noKeys || 'No keys available' };
+      const cooldownSec = Math.max(0, Number(cfg?.security?.openCooldownSeconds || 0) || 0);
+      if (cooldownSec > 0) {
+        const lastOpen = db.prepare(`
+          SELECT created_at
+          FROM vault_openings
+          WHERE guild_id = ? AND season_id = ? AND discord_user_id = ?
+          ORDER BY datetime(created_at) DESC, id DESC
+          LIMIT 1
+        `).get(gid, season.season_id, uid);
+        if (lastOpen?.created_at) {
+          const elapsedMs = Date.now() - parseDbTimestampMs(lastOpen.created_at);
+          if (Number.isFinite(elapsedMs) && elapsedMs >= 0 && elapsedMs < (cooldownSec * 1000)) {
+            const waitSec = Math.max(1, Math.ceil(((cooldownSec * 1000) - elapsedMs) / 1000));
+            return { success: false, code: 'cooldown_active', message: `Vault cooldown active. Try again in ${waitSec}s.` };
+          }
+        }
       }
 
-      db.prepare(`
-        UPDATE vault_user_stats
-        SET keys_used = keys_used + 1, rewards_won = rewards_won + ?, updated_at = CURRENT_TIMESTAMP
-        WHERE guild_id = ? AND season_id = ? AND discord_user_id = ?
-      `).run(rewardWonIncrement, gid, season.season_id, uid);
+      const balances = this.getStatsKeyBalances(stats);
+      const availableKeys = this.getAvailableKeysForTier(stats, selectedTier.id);
+      if (availableKeys <= 0) {
+        return { success: false, code: 'no_keys', message: `${cfg?.messages?.noKeys || 'No keys available'} (${selectedTier.name})` };
+      }
+
+      if (selectedTier.id === 'default') {
+        db.prepare(`
+          UPDATE vault_user_stats
+          SET keys_used = keys_used + 1, rewards_won = rewards_won + ?, updated_at = CURRENT_TIMESTAMP
+          WHERE guild_id = ? AND season_id = ? AND discord_user_id = ?
+        `).run(rewardWonIncrement, gid, season.season_id, uid);
+      } else {
+        balances[selectedTier.id] = Math.max(0, Number(balances[selectedTier.id] || 0) - 1);
+        db.prepare(`
+          UPDATE vault_user_stats
+          SET key_balances_json = ?, rewards_won = rewards_won + ?, updated_at = CURRENT_TIMESTAMP
+          WHERE guild_id = ? AND season_id = ? AND discord_user_id = ?
+        `).run(JSON.stringify(balances), rewardWonIncrement, gid, season.season_id, uid);
+      }
 
       const updatedStats = db.prepare(`
         SELECT *
@@ -535,8 +839,8 @@ class VaultService {
       const ins = db.prepare(`
         INSERT INTO vault_openings (
           guild_id, season_id, discord_user_id,
-          reward_tier, reward_code, reward_name, reward_payload, key_number, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          reward_tier, reward_code, reward_name, reward_payload, key_number, key_tier, status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       `).run(
         gid,
         season.season_id,
@@ -546,6 +850,7 @@ class VaultService {
         String(reward.name || 'Unknown Reward'),
         reward.payload !== undefined ? JSON.stringify(reward.payload) : null,
         keyNumber,
+        selectedTier.id,
         openingStatus
       );
 
@@ -570,7 +875,10 @@ class VaultService {
         stats: {
           ...freshStats,
           available_keys: Number(freshStats.keys_earned || 0) - Number(freshStats.keys_used || 0),
+          key_balances: this.getStatsKeyBalances(freshStats),
         },
+        keyTier: selectedTier.id,
+        keyTierName: selectedTier.name,
       };
       return openingResult;
     });
@@ -702,38 +1010,166 @@ class VaultService {
     };
   }
 
-  addKeys(guildId, seasonId, discordUserId, amount, reason = 'manual_add', adminId = null) {
-    const gid = normalizeGuildId(guildId);
-    const sid = normalizeSeasonId(seasonId);
-    const uid = String(discordUserId || '').trim();
-    const amt = clampInt(amount, 1, 0);
-    if (!gid || !uid || amt <= 0) return { success: false, message: 'Invalid input' };
-    this.ensureUserStats(gid, sid, uid);
-    db.prepare(`
-      UPDATE vault_user_stats
-      SET keys_earned = keys_earned + ?, updated_at = CURRENT_TIMESTAMP
-      WHERE guild_id = ? AND season_id = ? AND discord_user_id = ?
-    `).run(amt, gid, sid, uid);
-    this.logAdminAction(gid, adminId, 'add_keys', uid, { seasonId: sid, amount: amt, reason });
-    return { success: true };
-  }
-
-  removeKeys(guildId, seasonId, discordUserId, amount, reason = 'manual_remove', adminId = null) {
+  addKeys(guildId, seasonId, discordUserId, amount, reason = 'manual_add', adminId = null, keyTier = 'default') {
     const gid = normalizeGuildId(guildId);
     const sid = normalizeSeasonId(seasonId);
     const uid = String(discordUserId || '').trim();
     const amt = clampInt(amount, 1, 0);
     if (!gid || !uid || amt <= 0) return { success: false, message: 'Invalid input' };
     const stats = this.ensureUserStats(gid, sid, uid);
-    const available = Number(stats.keys_earned || 0) - Number(stats.keys_used || 0);
-    if (available < amt) return { success: false, message: 'Insufficient available keys' };
+    const tierId = normalizeKeyTierId(keyTier);
+    const balances = this.getStatsKeyBalances(stats);
+    balances[tierId] = Math.max(0, Number(balances[tierId] || 0) + amt);
     db.prepare(`
       UPDATE vault_user_stats
-      SET keys_earned = keys_earned - ?, updated_at = CURRENT_TIMESTAMP
+      SET keys_earned = keys_earned + ?, key_balances_json = ?, updated_at = CURRENT_TIMESTAMP
       WHERE guild_id = ? AND season_id = ? AND discord_user_id = ?
-    `).run(amt, gid, sid, uid);
-    this.logAdminAction(gid, adminId, 'remove_keys', uid, { seasonId: sid, amount: amt, reason });
+    `).run(amt, JSON.stringify(balances), gid, sid, uid);
+    this.logAdminAction(gid, adminId, 'add_keys', uid, { seasonId: sid, amount: amt, reason, keyTier: tierId });
     return { success: true };
+  }
+
+  removeKeys(guildId, seasonId, discordUserId, amount, reason = 'manual_remove', adminId = null, keyTier = 'default') {
+    const gid = normalizeGuildId(guildId);
+    const sid = normalizeSeasonId(seasonId);
+    const uid = String(discordUserId || '').trim();
+    const amt = clampInt(amount, 1, 0);
+    if (!gid || !uid || amt <= 0) return { success: false, message: 'Invalid input' };
+    const stats = this.ensureUserStats(gid, sid, uid);
+    const tierId = normalizeKeyTierId(keyTier);
+    const available = this.getAvailableKeysForTier(stats, tierId);
+    if (available < amt) return { success: false, message: 'Insufficient available keys' };
+    const balances = this.getStatsKeyBalances(stats);
+    balances[tierId] = Math.max(0, Number(balances[tierId] || 0) - amt);
+    db.prepare(`
+      UPDATE vault_user_stats
+      SET keys_earned = keys_earned - ?, key_balances_json = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE guild_id = ? AND season_id = ? AND discord_user_id = ?
+    `).run(amt, JSON.stringify(balances), gid, sid, uid);
+    this.logAdminAction(gid, adminId, 'remove_keys', uid, { seasonId: sid, amount: amt, reason, keyTier: tierId });
+    return { success: true };
+  }
+
+  upgradeKeys(guildId, discordUserId, options = {}) {
+    const gid = normalizeGuildId(guildId);
+    const uid = String(discordUserId || '').trim();
+    const season = options?.seasonId ? this.getSeason(gid, options.seasonId) : this.getActiveSeason(gid);
+    if (!gid || !uid) return { success: false, message: 'Invalid input' };
+    if (!season) return { success: false, message: 'No active season' };
+
+    const fromTier = normalizeKeyTierId(options?.fromTier || options?.from_tier || 'default');
+    const toTier = normalizeKeyTierId(options?.toTier || options?.to_tier || 'default');
+    const times = Math.max(1, Math.min(1000, clampInt(options?.times, 1, 1)));
+    const cfg = this.getConfig(gid) || {};
+    const upgradeCooldownSeconds = Math.max(0, Number(cfg?.security?.upgradeCooldownSeconds || 0) || 0);
+    const upgradeDailyCapPerUser = Math.max(0, Number(cfg?.security?.upgradeDailyCapPerUser || 0) || 0);
+    const rule = this.getKeyTierConversionRule(gid, fromTier, toTier);
+    if (!rule) return { success: false, message: `No conversion rule configured for ${fromTier} -> ${toTier}` };
+
+    const requiredFrom = Math.max(1, clampInt(rule.fromAmount, 1, 1)) * times;
+    const gainedTo = Math.max(1, clampInt(rule.toAmount, 1, 1)) * times;
+
+    let out = null;
+    const tx = db.transaction(() => {
+      const stats = this.ensureUserStats(gid, season.season_id, uid);
+      if (!stats) return { success: false, message: 'Could not load user stats' };
+      if (upgradeCooldownSeconds > 0) {
+        const recent = db.prepare(`
+          SELECT created_at
+          FROM vault_admin_logs
+          WHERE guild_id = ? AND action = 'key_upgrade' AND target_discord_user_id = ?
+          ORDER BY datetime(created_at) DESC, id DESC
+          LIMIT 1
+        `).get(gid, uid);
+        if (recent?.created_at) {
+          const elapsedMs = Date.now() - parseDbTimestampMs(recent.created_at);
+          if (Number.isFinite(elapsedMs) && elapsedMs >= 0 && elapsedMs < (upgradeCooldownSeconds * 1000)) {
+            const waitSec = Math.max(1, Math.ceil(((upgradeCooldownSeconds * 1000) - elapsedMs) / 1000));
+            return { success: false, message: `Upgrade cooldown active. Try again in ${waitSec}s.` };
+          }
+        }
+      }
+      if (upgradeDailyCapPerUser > 0) {
+        const today = new Date().toISOString().slice(0, 10);
+        const rows = db.prepare(`
+          SELECT details_json
+          FROM vault_admin_logs
+          WHERE guild_id = ? AND action = 'key_upgrade' AND target_discord_user_id = ?
+            AND date(created_at) = date(?)
+        `).all(gid, uid, today);
+        let usedToday = 0;
+        for (const row of rows) {
+          const details = safeJsonParse(row?.details_json, {});
+          usedToday += Math.max(0, Number(details?.requiredFrom || 0));
+        }
+        if ((usedToday + requiredFrom) > upgradeDailyCapPerUser) {
+          return { success: false, message: `Daily upgrade cap reached (${upgradeDailyCapPerUser} source keys/day)` };
+        }
+      }
+      const balances = this.getStatsKeyBalances(stats);
+      const fromAvailable = this.getAvailableKeysForTier(stats, fromTier);
+      if (fromAvailable < requiredFrom) {
+        return { success: false, message: `Insufficient ${fromTier} keys (${fromAvailable} available, ${requiredFrom} required)` };
+      }
+
+      balances[fromTier] = Math.max(0, fromAvailable - requiredFrom);
+      const toAvailable = this.getAvailableKeysForTier(stats, toTier);
+      balances[toTier] = Math.max(0, toAvailable + gainedTo);
+
+      const rawKeysEarnedDelta = gainedTo - requiredFrom;
+      const currentKeysEarned = Number(stats.keys_earned || 0);
+      const keysEarnedDelta = Math.max(-currentKeysEarned, rawKeysEarnedDelta);
+      db.prepare(`
+        UPDATE vault_user_stats
+        SET
+          keys_earned = keys_earned + ?,
+          key_balances_json = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE guild_id = ? AND season_id = ? AND discord_user_id = ?
+      `).run(keysEarnedDelta, JSON.stringify(balances), gid, season.season_id, uid);
+
+      const fresh = db.prepare(`
+        SELECT *
+        FROM vault_user_stats
+        WHERE guild_id = ? AND season_id = ? AND discord_user_id = ?
+        LIMIT 1
+      `).get(gid, season.season_id, uid);
+
+      out = {
+        success: true,
+        seasonId: season.season_id,
+        rule: {
+          fromTier,
+          toTier,
+          fromAmount: rule.fromAmount,
+          toAmount: rule.toAmount,
+          times,
+        },
+        moved: {
+          consumed: requiredFrom,
+          added: gainedTo,
+        },
+        stats: {
+          ...fresh,
+          available_keys: Number(fresh.keys_earned || 0) - Number(fresh.keys_used || 0),
+          key_balances: this.getStatsKeyBalances(fresh),
+        },
+      };
+      return out;
+    });
+
+    const result = tx();
+    if (!result?.success) return result || { success: false, message: 'Key upgrade failed' };
+    this.logAdminAction(gid, null, 'key_upgrade', uid, {
+      seasonId: season.season_id,
+      fromTier,
+      toTier,
+      times,
+      requiredFrom,
+      gainedTo,
+      source: 'user_upgrade',
+    });
+    return result;
   }
 
   listOpenings(guildId, seasonId = null, limit = 50) {
@@ -790,6 +1226,54 @@ class VaultService {
     }));
   }
 
+  listUserKeyOverview(guildId, seasonId = null, limit = 200) {
+    const gid = normalizeGuildId(guildId);
+    if (!gid) return [];
+    const sid = seasonId ? normalizeSeasonId(seasonId) : (this.getActiveSeason(gid)?.season_id || 'default');
+    const rows = db.prepare(`
+      SELECT discord_user_id, wallet_address, keys_earned, keys_used, key_balances_json, paid_mints, free_mints, rewards_won, updated_at
+      FROM vault_user_stats
+      WHERE guild_id = ? AND season_id = ?
+      ORDER BY datetime(updated_at) DESC, discord_user_id ASC
+      LIMIT ?
+    `).all(gid, sid, Math.max(1, Math.min(2000, Number(limit) || 200)));
+    return rows.map((row) => {
+      const keyBalances = this.getStatsKeyBalances(row);
+      const availableLegacy = Math.max(0, Number(row.keys_earned || 0) - Number(row.keys_used || 0));
+      const availableByTier = Object.values(keyBalances).reduce((sum, n) => sum + Math.max(0, Number(n || 0)), 0);
+      return {
+        ...row,
+        season_id: sid,
+        key_balances: keyBalances,
+        available_keys_legacy: availableLegacy,
+        available_keys_total: availableByTier || availableLegacy,
+      };
+    });
+  }
+
+  getVaultHealthSummary(guildId) {
+    const gid = normalizeGuildId(guildId);
+    const cfg = this.getConfig(gid) || {};
+    const season = this.getActiveSeason(gid);
+    const paymentBands = Array.isArray(cfg?.mintSource?.paymentBands) ? cfg.mintSource.paymentBands : [];
+    const conversions = Array.isArray(cfg?.keyTierConversions) ? cfg.keyTierConversions.filter(r => r && r.enabled !== false) : [];
+    const ticketing = cfg?.ticketing || {};
+    return {
+      enabled: !!cfg?.general?.enabled,
+      activeSeasonId: season?.season_id || null,
+      activeSeasonName: season?.season_name || null,
+      cooldownSeconds: Number(cfg?.security?.openCooldownSeconds || 0),
+      upgradeCooldownSeconds: Number(cfg?.security?.upgradeCooldownSeconds || 0),
+      upgradeDailyCapPerUser: Number(cfg?.security?.upgradeDailyCapPerUser || 0),
+      paymentBandsConfigured: paymentBands.length,
+      keyConversionRulesEnabled: conversions.length,
+      ticketOnWinEnabled: !!ticketing.createTicketOnWin,
+      rewardTicketCategoryId: ticketing.rewardTicketCategoryId || null,
+      rewardTicketAlertChannelId: ticketing.alertChannelId || null,
+      rpcUrlConfigured: !!this.getRpcUrl(),
+    };
+  }
+
   logAdminAction(guildId, adminUserId, action, targetUserId = null, details = null, seasonId = null) {
     try {
       db.prepare(`
@@ -822,15 +1306,15 @@ class VaultService {
   }
 
   findLinkedDiscordUserByWallet(walletAddress) {
-    const wallet = String(walletAddress || '').trim();
+    const wallet = this.normalizeSolanaAddress(walletAddress);
     if (!wallet) return null;
     const row = db.prepare(`
-      SELECT discord_id
+      SELECT discord_id, wallet_address
       FROM wallets
-      WHERE lower(wallet_address) = lower(?)
-      LIMIT 1
-    `).get(wallet);
-    return row?.discord_id ? String(row.discord_id).trim() : null;
+    `).all();
+    const match = row.find((entry) => this.normalizeSolanaAddress(entry?.wallet_address) === wallet);
+    if (!match) return null;
+    return match?.discord_id ? String(match.discord_id).trim() : null;
   }
 
   normalizeMintTypeValue(rawMintType) {
@@ -1104,27 +1588,76 @@ class VaultService {
     };
   }
 
-  computeMintGrants(config, mintType) {
+  computeMintGrants(config, mintType, context = {}) {
     const normalizedType = this.normalizeMintTypeValue(mintType);
     const paid = normalizedType === 'paid';
     const free = normalizedType === 'free';
     const rules = config?.mintRules || {};
+    const transferLamports = Number(context?.transferLamports || 0);
+    const hasLamports = Number.isFinite(transferLamports) && transferLamports > 0;
+    const configuredTierGrants = rules?.keyTierGrants && typeof rules.keyTierGrants === 'object'
+      ? rules.keyTierGrants
+      : {};
+    const keyTierGrants = {};
+
+    const paymentBands = Array.isArray(config?.mintSource?.paymentBands) ? config.mintSource.paymentBands : [];
+    const matchedBand = (paid || free) && hasLamports
+      ? paymentBands.find((band) => {
+          const min = Math.max(0, Number(band?.minLamports || 0) || 0);
+          const maxRaw = band?.maxLamports;
+          const max = maxRaw === null || maxRaw === undefined || maxRaw === '' ? null : Math.max(0, Number(maxRaw) || 0);
+          if (transferLamports < min) return false;
+          if (max !== null && transferLamports > max) return false;
+          return true;
+        })
+      : null;
+
+    if (matchedBand) {
+      const bandTier = normalizeKeyTierId(matchedBand.keyTier || 'default');
+      keyTierGrants[bandTier] = paid ? clampInt(matchedBand.paid, 0, 1) : (free ? clampInt(matchedBand.free, 0, 0) : 0);
+    } else {
+      for (const [tierIdRaw, tierRule] of Object.entries(configuredTierGrants)) {
+        const tierId = normalizeKeyTierId(tierIdRaw);
+        const paidGrant = clampInt(tierRule?.paid, 0, 0);
+        const freeGrant = clampInt(tierRule?.free, 0, 0);
+        keyTierGrants[tierId] = paid ? paidGrant : (free ? freeGrant : 0);
+      }
+    }
+    if (!Object.prototype.hasOwnProperty.call(keyTierGrants, 'default')) {
+      keyTierGrants.default = paid ? clampInt(rules.keysPerPaidMint, 0, 0) : (free ? clampInt(rules.keysPerFreeMint, 0, 0) : 0);
+    }
+    const totalKeysGranted = Object.values(keyTierGrants).reduce((sum, next) => sum + clampInt(next, 0, 0), 0);
+
     return {
       paid_mints: paid ? 1 : 0,
       free_mints: free ? 1 : 0,
-      keys_granted: paid ? clampInt(rules.keysPerPaidMint, 0, 0) : (free ? clampInt(rules.keysPerFreeMint, 0, 0) : 0),
+      keys_granted: totalKeysGranted,
+      key_tier_grants: keyTierGrants,
+      grant_source: matchedBand ? 'payment_band' : 'default_tier_rules',
+      matched_payment_band: matchedBand || null,
       pressure_granted: paid ? clampInt(rules.pressurePerPaidMint, 0, 0) : (free ? clampInt(rules.pressurePerFreeMint, 0, 0) : 0),
     };
   }
 
   applyMintGrantsToUser(guildId, seasonId, discordUserId, walletAddress, grants) {
-    this.ensureUserStats(guildId, seasonId, discordUserId, walletAddress || null);
+    const stats = this.ensureUserStats(guildId, seasonId, discordUserId, walletAddress || null);
+    const balances = this.getStatsKeyBalances(stats);
+    const tierGrants = grants?.key_tier_grants && typeof grants.key_tier_grants === 'object'
+      ? grants.key_tier_grants
+      : { default: clampInt(grants?.keys_granted, 0, 0) };
+    for (const [tierIdRaw, deltaRaw] of Object.entries(tierGrants)) {
+      const tierId = normalizeKeyTierId(tierIdRaw);
+      const delta = clampInt(deltaRaw, 0, 0);
+      if (delta <= 0) continue;
+      balances[tierId] = Math.max(0, Number(balances[tierId] || 0) + delta);
+    }
     db.prepare(`
       UPDATE vault_user_stats
       SET
         paid_mints = paid_mints + ?,
         free_mints = free_mints + ?,
         keys_earned = keys_earned + ?,
+        key_balances_json = ?,
         pressure = pressure + ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE guild_id = ? AND season_id = ? AND discord_user_id = ?
@@ -1132,6 +1665,7 @@ class VaultService {
       clampInt(grants.paid_mints, 0, 0),
       clampInt(grants.free_mints, 0, 0),
       clampInt(grants.keys_granted, 0, 0),
+      JSON.stringify(balances),
       clampInt(grants.pressure_granted, 0, 0),
       normalizeGuildId(guildId),
       normalizeSeasonId(seasonId),
@@ -1169,10 +1703,17 @@ class VaultService {
           paid_mints: String(existing.mint_type || '').toLowerCase() === 'paid' ? 1 : 0,
           free_mints: String(existing.mint_type || '').toLowerCase() === 'free' ? 1 : 0,
           keys_granted: clampInt(existing.keys_granted, 0, 0),
+          key_tier_grants: { default: clampInt(existing.keys_granted, 0, 0) },
           pressure_granted: clampInt(existing.pressure_granted, 0, 0),
         }
       : null;
-    const grants = this.computeMintGrants(config, mintType);
+    const topLamports = Array.isArray(canonical?.paymentTransfer?.matches) && canonical.paymentTransfer.matches.length
+      ? Number(canonical.paymentTransfer.matches.reduce((best, next) => {
+          const lamports = Number(next?.lamports || 0);
+          return lamports > best ? lamports : best;
+        }, 0))
+      : 0;
+    const grants = this.computeMintGrants(config, mintType, { transferLamports: topLamports });
     const linkedUserId = canonical.discordUserId || (walletAddress ? this.findLinkedDiscordUserByWallet(walletAddress) : null);
 
     if (existing) {
@@ -1227,6 +1768,7 @@ class VaultService {
             paid_mints: Math.max(0, clampInt(grants.paid_mints, 0, 0) - clampInt(prior.paid_mints, 0, 0)),
             free_mints: Math.max(0, clampInt(grants.free_mints, 0, 0) - clampInt(prior.free_mints, 0, 0)),
             keys_granted: Math.max(0, clampInt(nextKeysGranted, 0, 0) - clampInt(prior.keys_granted, 0, 0)),
+            key_tier_grants: grants.key_tier_grants || { default: Math.max(0, clampInt(nextKeysGranted, 0, 0) - clampInt(prior.keys_granted, 0, 0)) },
             pressure_granted: Math.max(0, clampInt(nextPressureGranted, 0, 0) - clampInt(prior.pressure_granted, 0, 0)),
           };
 
@@ -1304,20 +1846,20 @@ class VaultService {
 
   backfillWalletForActiveSeason(guildId, walletAddress, discordUserId) {
     const gid = normalizeGuildId(guildId);
-    const wallet = String(walletAddress || '').trim();
+    const wallet = this.normalizeSolanaAddress(walletAddress);
     const uid = String(discordUserId || '').trim();
     if (!gid || !wallet || !uid) return { success: false, message: 'Invalid inputs' };
     const season = this.getActiveSeason(gid);
     if (!season) return { success: false, message: 'No active season' };
 
-    const pendingRows = db.prepare(`
+    const candidateRows = db.prepare(`
       SELECT *
       FROM vault_mint_events
       WHERE guild_id = ?
         AND season_id = ?
-        AND lower(wallet_address) = lower(?)
         AND (discord_user_id IS NULL OR discord_user_id = '')
-    `).all(gid, season.season_id, wallet);
+    `).all(gid, season.season_id);
+    const pendingRows = candidateRows.filter(row => this.normalizeSolanaAddress(row.wallet_address) === wallet);
 
     if (!pendingRows.length) {
       return { success: true, seasonId: season.season_id, processed: 0 };
@@ -1329,6 +1871,7 @@ class VaultService {
           paid_mints: String(row.mint_type || '').toLowerCase() === 'paid' ? 1 : 0,
           free_mints: String(row.mint_type || '').toLowerCase() === 'free' ? 1 : 0,
           keys_granted: clampInt(row.keys_granted, 0, 0),
+          key_tier_grants: { default: clampInt(row.keys_granted, 0, 0) },
           pressure_granted: clampInt(row.pressure_granted, 0, 0),
         };
         this.applyMintGrantsToUser(gid, season.season_id, uid, wallet, grants);
@@ -1360,6 +1903,11 @@ class VaultService {
     const mintSource = config?.mintSource || {};
     const minLamports = clampInt(mintSource.paymentMinLamports, 0, 1);
     const maxSignaturesPerWallet = Math.max(1, Math.min(50000, clampInt(options?.limitPerWallet, 1, 5000)));
+    const dryRun = options?.dryRun === true || String(options?.dryRun || '').trim().toLowerCase() === 'true';
+    const delayMs = Math.max(0, Math.min(5000, Number(options?.delayMs ?? 250) || 0));
+    const maxRuntimeMs = Math.max(10_000, Math.min(30 * 60 * 1000, Number(options?.maxRuntimeMs ?? (10 * 60 * 1000)) || (10 * 60 * 1000)));
+    const rpcRetryMax = Math.max(0, Math.min(5, Number(options?.rpcRetryMax ?? 2) || 0));
+    const startTs = Date.now();
     const connection = this.getRpcConnection();
 
     const summary = {
@@ -1371,8 +1919,10 @@ class VaultService {
       scannedSignatures: 0,
       matchedTransfers: 0,
       ingested: 0,
+      dryRun,
       duplicates: 0,
       failed: 0,
+      timedOut: false,
       errors: [],
     };
 
@@ -1383,11 +1933,27 @@ class VaultService {
         let remaining = maxSignaturesPerWallet;
 
         while (remaining > 0) {
+          if ((Date.now() - startTs) > maxRuntimeMs) {
+            summary.timedOut = true;
+            break;
+          }
           const fetchLimit = Math.min(1000, remaining);
-          const signatureRows = await connection.getSignaturesForAddress(walletPubkey, {
-            limit: fetchLimit,
-            before: beforeSignature || undefined,
-          });
+          let signatureRows = [];
+          let fetchErr = null;
+          for (let attempt = 0; attempt <= rpcRetryMax; attempt += 1) {
+            try {
+              signatureRows = await connection.getSignaturesForAddress(walletPubkey, {
+                limit: fetchLimit,
+                before: beforeSignature || undefined,
+              });
+              fetchErr = null;
+              break;
+            } catch (error) {
+              fetchErr = error;
+              if (attempt < rpcRetryMax) await sleep(delayMs * Math.max(1, attempt + 1));
+            }
+          }
+          if (fetchErr) throw fetchErr;
           const signatures = (signatureRows || [])
             .map(row => String(row?.signature || '').trim())
             .filter(Boolean);
@@ -1397,7 +1963,19 @@ class VaultService {
           remaining -= signatures.length;
           beforeSignature = signatures[signatures.length - 1] || null;
 
-          const parsedTransactions = await connection.getParsedTransactions(signatures, { maxSupportedTransactionVersion: 0 });
+          let parsedTransactions = null;
+          let parseErr = null;
+          for (let attempt = 0; attempt <= rpcRetryMax; attempt += 1) {
+            try {
+              parsedTransactions = await connection.getParsedTransactions(signatures, { maxSupportedTransactionVersion: 0 });
+              parseErr = null;
+              break;
+            } catch (error) {
+              parseErr = error;
+              if (attempt < rpcRetryMax) await sleep(delayMs * Math.max(1, attempt + 1));
+            }
+          }
+          if (parseErr) throw parseErr;
           for (let i = 0; i < signatures.length; i += 1) {
             const signature = signatures[i];
             const tx = parsedTransactions?.[i] || null;
@@ -1426,17 +2004,19 @@ class VaultService {
             matchingTransfers.sort((a, b) => Number(b?.amount || 0) - Number(a?.amount || 0));
             const payerWallet = String(matchingTransfers[0]?.fromUserAccount || '').trim() || null;
 
-            const ingestResult = this.ingestMintEvent({
-              guildId: gid,
-              seasonId: season.season_id,
-              txSignature: signature,
-              walletAddress: payerWallet,
-              mintType: 'paid',
-              type: 'TRANSFER',
-              source: 'vault_backfill_transfer',
-              paymentWalletAddress: walletAddress,
-              nativeTransfers: matchingTransfers,
-            });
+            const ingestResult = dryRun
+              ? { success: true, duplicate: false }
+              : this.ingestMintEvent({
+                  guildId: gid,
+                  seasonId: season.season_id,
+                  txSignature: signature,
+                  walletAddress: payerWallet,
+                  mintType: 'paid',
+                  type: 'TRANSFER',
+                  source: 'vault_backfill_transfer',
+                  paymentWalletAddress: walletAddress,
+                  nativeTransfers: matchingTransfers,
+                });
 
             if (ingestResult?.success) {
               if (ingestResult?.duplicate) summary.duplicates += 1;
@@ -1447,6 +2027,7 @@ class VaultService {
           }
 
           if (signatures.length < fetchLimit) break;
+          if (delayMs > 0) await sleep(delayMs);
         }
       } catch (error) {
         summary.errors.push({
@@ -1455,6 +2036,7 @@ class VaultService {
         });
         summary.failed += 1;
       }
+      if (summary.timedOut) break;
     }
 
     return summary;

@@ -8,6 +8,7 @@ const db = new Database(dbPath);
 
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+db.pragma(`busy_timeout = ${Math.max(1000, Math.min(30000, Number(process.env.SQLITE_BUSY_TIMEOUT_MS || 8000) || 8000))}`);
 
 const LEGACY_BASELINE_MIGRATION_VERSION = 1;
 const FILE_MIGRATIONS_DIR = path.join(__dirname, 'migrations');

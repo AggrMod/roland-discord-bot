@@ -550,6 +550,13 @@ client.on(Events.InteractionCreate, async interaction => {
 
   if (interaction.isModalSubmit()) {
     if (interaction.customId.startsWith('ticket_modal_')) { await handleTicketModalSubmit(interaction); return; }
+    if (interaction.customId === 'vault_panel_upgrade_modal') {
+      const vaultCommand = client.commands.get('vault');
+      if (vaultCommand && typeof vaultCommand.handlePanelModal === 'function') {
+        await vaultCommand.handlePanelModal(interaction);
+        return;
+      }
+    }
     if (interaction.customId === 'heist_panel_join_modal') { await handleHeistPanelModal(interaction); return; }
     if (interaction.customId === 'governance_create_proposal_modal') { await handleGovernanceCreateProposalModal(interaction); return; }
     if (interaction.customId.startsWith('governance_comment_modal_')) { await handleGovernanceCommentModal(interaction); return; }

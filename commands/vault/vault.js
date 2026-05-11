@@ -5,9 +5,13 @@ const {
   ButtonBuilder,
   ButtonStyle,
   ChannelType,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
 } = require('discord.js');
 const moduleGuard = require('../../utils/moduleGuard');
 const vaultService = require('../../services/vaultService');
+const ticketService = require('../../services/ticketService');
 const logger = require('../../utils/logger');
 const { applyEmbedBranding } = require('../../services/embedBranding');
 const { getModuleDisplayName } = require('../../services/moduleLabelService');
@@ -37,7 +41,8 @@ function formatRewardInventory(reward) {
   const quantity = normalizeQuantity(reward?.quantity);
   const quantityLabel = quantity === null ? 'unlimited' : `${quantity}`;
   const status = reward?.enabled === false ? 'disabled' : 'enabled';
-  return `\`${reward.code}\` | ${reward.name} | tier=${reward.tier} | weight=${reward.weight} | qty=${quantityLabel} | ${status}`;
+  const keyTier = reward?.keyTier ? String(reward.keyTier) : 'all';
+  return `\`${reward.code}\` | ${reward.name} | tier=${reward.tier} | keyTier=${keyTier} | weight=${reward.weight} | qty=${quantityLabel} | ${status}`;
 }
 
 function toStringArray(value, fallback = []) {
@@ -70,6 +75,22 @@ function rewardTierEmoji(tier) {
   return '📦';
 }
 
+function rewardTierColorHex(tier) {
+  const key = String(tier || '').trim().toLowerCase();
+  if (key === 'legendary') return '#f59e0b';
+  if (key === 'epic') return '#a855f7';
+  if (key === 'rare') return '#38bdf8';
+  if (key === 'uncommon') return '#22c55e';
+  if (key === 'none') return '#ef4444';
+  return '#f4c430';
+}
+
+function formatTierBalancesInline(balances) {
+  const pairs = Object.entries(balances && typeof balances === 'object' ? balances : {})
+    .map(([tier, amount]) => `${tier}:${Number(amount || 0)}`);
+  return pairs.length ? pairs.join(' | ') : 'default:0';
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('vault')
@@ -77,7 +98,11 @@ module.exports = {
     .addSubcommand((sub) =>
       sub.setName('balance').setDescription('Show your vault balance and season stats'))
     .addSubcommand((sub) =>
-      sub.setName('open').setDescription('Spend one key to open the vault'))
+      sub
+        .setName('open')
+        .setDescription('Spend one key to open the vault')
+        .addStringOption((option) =>
+          option.setName('key_tier').setDescription('Key tier to spend (default/bronze/silver/gold)').setRequired(false)))
     .addSubcommand((sub) =>
       sub
         .setName('history')
@@ -104,6 +129,13 @@ module.exports = {
             ))
         .addIntegerOption((option) =>
           option.setName('limit').setDescription('Rows to show (1-25)').setRequired(false).setMinValue(1).setMaxValue(25)))
+    .addSubcommand((sub) =>
+      sub
+        .setName('upgrade')
+        .setDescription('Upgrade one key tier into another using configured conversion rules')
+        .addStringOption((option) => option.setName('from_tier').setDescription('Source key tier (e.g. bronze)').setRequired(true))
+        .addStringOption((option) => option.setName('to_tier').setDescription('Target key tier (e.g. gold)').setRequired(true))
+        .addIntegerOption((option) => option.setName('times').setDescription('How many conversions to execute').setRequired(false).setMinValue(1).setMaxValue(1000)))
     .addSubcommandGroup((group) =>
       group
         .setName('admin')
@@ -137,6 +169,7 @@ module.exports = {
             .setDescription('Add keys to a user')
             .addUserOption((option) => option.setName('user').setDescription('Target user').setRequired(true))
             .addIntegerOption((option) => option.setName('amount').setDescription('Amount to add').setRequired(true).setMinValue(1))
+            .addStringOption((option) => option.setName('key_tier').setDescription('Key tier').setRequired(false))
             .addStringOption((option) => option.setName('reason').setDescription('Reason').setRequired(false)))
         .addSubcommand((sub) =>
           sub
@@ -144,6 +177,7 @@ module.exports = {
             .setDescription('Remove available keys from a user')
             .addUserOption((option) => option.setName('user').setDescription('Target user').setRequired(true))
             .addIntegerOption((option) => option.setName('amount').setDescription('Amount to remove').setRequired(true).setMinValue(1))
+            .addStringOption((option) => option.setName('key_tier').setDescription('Key tier').setRequired(false))
             .addStringOption((option) => option.setName('reason').setDescription('Reason').setRequired(false)))
         .addSubcommand((sub) =>
           sub
@@ -167,6 +201,7 @@ module.exports = {
                 ))
             .addIntegerOption((option) => option.setName('weight').setDescription('Weight >= 0').setRequired(true).setMinValue(0))
             .addIntegerOption((option) => option.setName('quantity').setDescription('Available quantity (leave empty for unlimited)').setRequired(false).setMinValue(0))
+            .addStringOption((option) => option.setName('key_tier').setDescription('Key tier pool for this reward').setRequired(false))
             .addStringOption((option) => option.setName('type').setDescription('claimable_reward|none').setRequired(false))
             .addStringOption((option) => option.setName('payload_json').setDescription('JSON payload').setRequired(false)))
         .addSubcommand((sub) =>
@@ -187,6 +222,7 @@ module.exports = {
                 ))
             .addIntegerOption((option) => option.setName('weight').setDescription('Weight >= 0').setRequired(false).setMinValue(0))
             .addIntegerOption((option) => option.setName('quantity').setDescription('Available quantity (set 0 to disable inventory)').setRequired(false).setMinValue(0))
+            .addStringOption((option) => option.setName('key_tier').setDescription('Key tier pool for this reward').setRequired(false))
             .addBooleanOption((option) => option.setName('enabled').setDescription('Enable/disable reward').setRequired(false))
             .addStringOption((option) => option.setName('type').setDescription('claimable_reward|none').setRequired(false))
             .addStringOption((option) => option.setName('payload_json').setDescription('JSON payload').setRequired(false)))
@@ -241,6 +277,7 @@ module.exports = {
         case 'history': return this.handleHistory(interaction, guildId);
         case 'rewards': return this.handleRewards(interaction, guildId);
         case 'leaderboard': return this.handleLeaderboard(interaction, guildId);
+        case 'upgrade': return this.handleUpgrade(interaction, guildId);
         default:
           return interaction.reply({ content: 'Unknown subcommand.', ephemeral: true });
       }
@@ -267,13 +304,93 @@ module.exports = {
         await interaction.editReply({ content: `ERROR: ${result.message}` });
         return true;
       }
+      const ticket = await this.maybeCreateRewardTicket(guildId, interaction.user, result);
+      const ticketLine = ticket?.created ? `\nFulfillment ticket created: #${ticket.ticketNumber || '?'} (<#${ticket.channelId}>)` : '';
+      const rewardTier = String(result?.reward?.tier || 'common').toLowerCase();
+      const tierEmoji = rewardTierEmoji(rewardTier);
+      const isSpotlight = rewardTier === 'epic' || rewardTier === 'legendary';
+      const title = isSpotlight
+        ? `${tierEmoji} Spotlight Reward Unlocked`
+        : 'Vault Opening Result';
+      const accentColor = String(result?.reward?.code || '') === 'no_reward'
+        ? '#ef4444'
+        : rewardTierColorHex(rewardTier);
+      const details = [
+        `Reward: **${String(result?.reward?.name || result?.reward?.code || 'Unknown Reward')}**`,
+        `Tier: \`${rewardTier}\``,
+        `Key Tier Used: \`${String(result?.keyTier || 'default')}\``,
+        `Opening ID: \`${String(result?.openingId || 'n/a')}\``,
+        `Tier Balances: ${formatTierBalancesInline(result?.stats?.key_balances)}`,
+      ].join('\n');
       await interaction.editReply({
         embeds: [this.buildPanelResponseEmbed(guildId, {
-          title: 'Vault Opening Result',
-          description: this.buildOpenResultMessage(guildId, result, { trailingLabel: 'Available keys' }),
-          accentColor: String(result?.reward?.code || '') === 'no_reward' ? '#ef4444' : '#22c55e',
+          title,
+          description: `${this.buildOpenResultMessage(guildId, result, { trailingLabel: 'Available keys' })}\n\n${details}${ticketLine}`,
+          accentColor,
         })],
       });
+      return true;
+    }
+
+    if (customId === 'vault_panel_upgrade') {
+      const modal = new ModalBuilder()
+        .setCustomId('vault_panel_upgrade_modal')
+        .setTitle('Upgrade Vault Keys');
+      const fromTierInput = new TextInputBuilder()
+        .setCustomId('from_tier')
+        .setLabel('From Tier (e.g. bronze)')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(32)
+        .setPlaceholder('bronze');
+      const toTierInput = new TextInputBuilder()
+        .setCustomId('to_tier')
+        .setLabel('To Tier (e.g. gold)')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(32)
+        .setPlaceholder('gold');
+      const timesInput = new TextInputBuilder()
+        .setCustomId('times')
+        .setLabel('Times (default 1)')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setMaxLength(5)
+        .setPlaceholder('1');
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(fromTierInput),
+        new ActionRowBuilder().addComponents(toTierInput),
+        new ActionRowBuilder().addComponents(timesInput),
+      );
+      await interaction.showModal(modal);
+      return true;
+    }
+
+    if (customId === 'vault_panel_conversions') {
+      await interaction.deferReply({ ephemeral: true });
+      const rules = vaultService.getKeyTierConversions(guildId).filter(rule => rule && rule.enabled !== false);
+      if (!rules.length) {
+        await interaction.editReply({
+          embeds: [this.buildPanelResponseEmbed(guildId, {
+            title: 'Key Conversion Rules',
+            description: 'No conversion rules configured.',
+          })],
+        });
+        return true;
+      }
+      const lines = rules.slice(0, 24).map((rule, index) =>
+        `${index + 1}. ${Number(rule.fromAmount || 1)} **${String(rule.fromTier || 'default')}** → ${Number(rule.toAmount || 1)} **${String(rule.toTier || 'default')}**`
+      );
+      const embed = this.buildPanelResponseEmbed(guildId, {
+        title: 'Key Conversion Rules',
+        description: 'Upgrade paths currently available for your keys.',
+        accentColor: '#38bdf8',
+      });
+      embed.addFields({
+        name: `Active Rules (${rules.length})`,
+        value: lines.join('\n'),
+      });
+      await interaction.editReply({ embeds: [embed] });
       return true;
     }
 
@@ -325,6 +442,36 @@ module.exports = {
     return false;
   },
 
+  async handlePanelModal(interaction) {
+    if (!interaction?.isModalSubmit?.()) return false;
+    if (!await moduleGuard.checkModuleEnabled(interaction, 'vault')) return true;
+    const customId = String(interaction.customId || '');
+    if (customId !== 'vault_panel_upgrade_modal') return false;
+    const guildId = interaction.guildId;
+    const fromTier = String(interaction.fields.getTextInputValue('from_tier') || '').trim();
+    const toTier = String(interaction.fields.getTextInputValue('to_tier') || '').trim();
+    const timesRaw = String(interaction.fields.getTextInputValue('times') || '').trim();
+    const times = Math.max(1, Math.min(1000, Number.parseInt(timesRaw || '1', 10) || 1));
+    await interaction.deferReply({ ephemeral: true });
+    const result = vaultService.upgradeKeys(guildId, interaction.user.id, { fromTier, toTier, times });
+    if (!result.success) {
+      await interaction.editReply({ content: `ERROR: ${result.message}` });
+      return true;
+    }
+    const embed = this.buildPanelResponseEmbed(guildId, {
+      title: 'Key Upgrade Completed',
+      description: `Converted ${result.moved.consumed} **${fromTier}** keys into ${result.moved.added} **${toTier}** keys.`,
+      accentColor: '#22c55e',
+    });
+    embed.addFields(
+      { name: 'Conversion Count', value: `x${times}`, inline: true },
+      { name: 'Season', value: String(result?.seasonId || 'default'), inline: true },
+      { name: 'Tier Balances', value: formatTierBalancesInline(result?.stats?.key_balances), inline: false },
+    );
+    await interaction.editReply({ embeds: [embed] });
+    return true;
+  },
+
   buildPanelMessage(guildId) {
     const config = vaultService.getConfig(guildId);
     const moduleName = getModuleDisplayName('vault', guildId);
@@ -346,6 +493,8 @@ module.exports = {
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('vault_panel_open').setLabel('Open Vault').setEmoji('🔓').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('vault_panel_upgrade').setLabel('Upgrade Key').setEmoji('⬆️').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('vault_panel_conversions').setLabel('View Conversions').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('vault_panel_rewards').setLabel('Available Rewards').setEmoji('🎁').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('vault_panel_leaderboard').setLabel('Leaderboard').setEmoji('🏆').setStyle(ButtonStyle.Primary),
     );
@@ -367,6 +516,63 @@ module.exports = {
       useThumbnail: false,
     });
     return embed;
+  },
+
+  async maybeCreateRewardTicket(guildId, user, openResult) {
+    try {
+      const reward = openResult?.reward || {};
+      if (!openResult?.success || String(reward?.code || '') === 'no_reward') {
+        return { created: false, reason: 'no_reward' };
+      }
+      const cfg = vaultService.getConfig(guildId) || {};
+      const ticketing = cfg.ticketing || {};
+      if (!ticketing.createTicketOnWin) return { created: false, reason: 'disabled' };
+      const categoryId = Number(ticketing.rewardTicketCategoryId || 0);
+      if (!Number.isFinite(categoryId) || categoryId <= 0) return { created: false, reason: 'missing_category' };
+
+      const tierBalances = openResult?.stats?.key_balances || {};
+      const intro = [
+        'Vault reward fulfillment ticket created automatically.',
+        `User: <@${user.id}> (${user.username})`,
+        `Season: ${openResult?.season?.season_name || openResult?.season?.season_id || 'default'}`,
+        `Opening ID: ${openResult?.openingId || 'n/a'}`,
+        `Reward: ${reward?.name || reward?.code || 'unknown'}`,
+        `Reward Code: ${reward?.code || 'unknown'}`,
+        `Reward Tier: ${reward?.tier || 'unknown'}`,
+        `Key Tier Used: ${openResult?.keyTier || 'default'}`,
+        `Available Keys After Open: ${Number(openResult?.stats?.available_keys || 0)}`,
+        `Tier Balances: ${JSON.stringify(tierBalances)}`,
+        reward?.payload ? `Reward Payload: ${JSON.stringify(reward.payload)}` : 'Reward Payload: null',
+      ].join('\n');
+
+      const ticketResult = await ticketService.createSystemTicketFromCategory(categoryId, {
+        guildId,
+        openerId: String(user.id),
+        openerName: String(user.username || user.tag || user.id),
+        title: `Vault Reward: ${String(reward?.name || reward?.code || 'reward').slice(0, 80)}`,
+        intro,
+        templateResponses: {
+          Subject: `Vault Reward Fulfillment: ${reward?.name || reward?.code || 'reward'}`,
+          Context: `Auto-created from vault opening ${openResult?.openingId || ''}`.trim(),
+        },
+      });
+      if (!ticketResult?.success) {
+        const alertChannelId = String(ticketing.alertChannelId || '').trim();
+        if (alertChannelId && ticketService?.client) {
+          const channel = await ticketService.client.channels.fetch(alertChannelId).catch(() => null);
+          if (channel && channel.isTextBased()) {
+            await channel.send({
+              content: `[Vault Ticket Failure] guild=${guildId} user=<@${user.id}> reward=${reward?.code || 'unknown'} reason=${ticketResult?.message || 'ticket_failed'}`,
+            }).catch(() => {});
+          }
+        }
+        return { created: false, reason: ticketResult?.message || 'ticket_failed' };
+      }
+      return { created: true, ticketNumber: ticketResult.ticketNumber, channelId: ticketResult.channelId };
+    } catch (error) {
+      logger.error('[vault] reward ticket creation failed:', error);
+      return { created: false, reason: 'exception' };
+    }
   },
 
   buildRewardCatalogEmbeds(guildId, rewards, options = {}) {
@@ -416,12 +622,17 @@ module.exports = {
     if (!result.success) return interaction.editReply({ content: `ERROR: ${result.message}` });
     const config = vaultService.getConfig(guildId);
     const stats = result.stats;
+    const keyBalances = stats?.key_balances && typeof stats.key_balances === 'object' ? stats.key_balances : {};
+    const keyBalanceLine = Object.entries(keyBalances)
+      .map(([tierId, amount]) => `${tierId}:${Number(amount || 0)}`)
+      .join(' | ') || 'default:0';
     const embed = new EmbedBuilder()
       .setColor('#f59e0b')
       .setTitle(`${config?.general?.gameName || 'Vault'} Status`)
       .addFields(
         { name: 'Season', value: String(result.season?.season_name || result.season?.season_id || 'default'), inline: true },
         { name: 'Available Keys', value: String(stats.available_keys || 0), inline: true },
+        { name: 'Tier Balances', value: keyBalanceLine, inline: false },
         { name: 'Keys Used', value: String(stats.keys_used || 0), inline: true },
         { name: 'Keys Earned', value: String(stats.keys_earned || 0), inline: true },
         { name: 'Paid Mints', value: String(stats.paid_mints || 0), inline: true },
@@ -433,9 +644,33 @@ module.exports = {
 
   async handleOpen(interaction, guildId) {
     await interaction.deferReply({ ephemeral: true });
-    const result = vaultService.openVault(guildId, interaction.user.id);
+    const keyTier = interaction.options.getString('key_tier');
+    const result = vaultService.openVault(guildId, interaction.user.id, { keyTier });
     if (!result.success) return interaction.editReply({ content: `ERROR: ${result.message}` });
-    return interaction.editReply({ content: this.buildOpenResultMessage(guildId, result, { trailingLabel: 'Available keys now' }) });
+    const ticket = await this.maybeCreateRewardTicket(guildId, interaction.user, result);
+    const ticketLine = ticket?.created ? `\nFulfillment ticket created: #${ticket.ticketNumber || '?'} (<#${ticket.channelId}>)` : '';
+    const rewardTier = String(result?.reward?.tier || 'common').toLowerCase();
+    const tierEmoji = rewardTierEmoji(rewardTier);
+    const isSpotlight = rewardTier === 'epic' || rewardTier === 'legendary';
+    const title = isSpotlight
+      ? `${tierEmoji} Spotlight Reward Unlocked`
+      : 'Vault Opening Result';
+    const accentColor = String(result?.reward?.code || '') === 'no_reward'
+      ? '#ef4444'
+      : rewardTierColorHex(rewardTier);
+    const details = [
+      `Reward: **${String(result?.reward?.name || result?.reward?.code || 'Unknown Reward')}**`,
+      `Tier: \`${rewardTier}\``,
+      `Key Tier Used: \`${String(result?.keyTier || 'default')}\``,
+      `Opening ID: \`${String(result?.openingId || 'n/a')}\``,
+      `Tier Balances: ${formatTierBalancesInline(result?.stats?.key_balances)}`,
+    ].join('\n');
+    const embed = this.buildPanelResponseEmbed(guildId, {
+      title,
+      description: `${this.buildOpenResultMessage(guildId, result, { trailingLabel: 'Available keys now' })}\n\n${details}${ticketLine}`,
+      accentColor,
+    });
+    return interaction.editReply({ embeds: [embed] });
   },
 
   buildOpenResultMessage(guildId, result, options = {}) {
@@ -444,8 +679,9 @@ module.exports = {
     const rewardName = String(result?.reward?.name || 'Unknown Reward');
     const rewardTier = String(result?.reward?.tier || 'common').toLowerCase();
     const availableKeys = Number(result?.stats?.available_keys || 0);
+    const keyTierName = String(result?.keyTierName || result?.keyTier || 'default');
     const trailingLabel = String(options.trailingLabel || 'Available keys');
-    const vars = { gameName, rewardName, rewardTier, availableKeys };
+    const vars = { gameName, rewardName, rewardTier, availableKeys, keyTierName };
 
     const suspenseFallback = [
       'You slide your key into the lock. Steel groans and everyone holds their breath.',
@@ -483,14 +719,14 @@ module.exports = {
     if (String(result?.reward?.code || '') === 'no_reward') {
       const suspense = pickRandom(suspenseLines, suspenseFallback[0]);
       const funnyFail = pickRandom(failLines, failFallback[0]);
-      return `${suspense}\n${funnyFail}\n${noRewardText}\n${trailingLabel}: ${availableKeys}`;
+      return `${suspense}\n${funnyFail}\n${noRewardText}\nKey Tier: ${keyTierName}\n${trailingLabel}: ${availableKeys}`;
     }
 
     const tierLines = hitFallback[rewardTier] || hitFallback.common;
     const suspense = pickRandom(suspenseLines, suspenseFallback[0]);
     const hitLead = pickRandom(tierLines, hitFallback.common[0]);
     const rewardLine = renderTemplate(successTemplate, vars) || `Vault opened! You received **${rewardName}**.`;
-    return `${suspense}\n${hitLead}\n${rewardLine}\n${trailingLabel}: ${availableKeys}`;
+    return `${suspense}\n${hitLead}\n${rewardLine}\nKey Tier: ${keyTierName}\n${trailingLabel}: ${availableKeys}`;
   },
 
   async handleHistory(interaction, guildId) {
@@ -542,6 +778,26 @@ module.exports = {
     });
   },
 
+  async handleUpgrade(interaction, guildId) {
+    await interaction.deferReply({ ephemeral: true });
+    const fromTier = String(interaction.options.getString('from_tier', true) || '').trim();
+    const toTier = String(interaction.options.getString('to_tier', true) || '').trim();
+    const times = interaction.options.getInteger('times') || 1;
+    const result = vaultService.upgradeKeys(guildId, interaction.user.id, { fromTier, toTier, times });
+    if (!result.success) return interaction.editReply({ content: `ERROR: ${result.message}` });
+    const embed = this.buildPanelResponseEmbed(guildId, {
+      title: 'Key Upgrade Completed',
+      description: `Converted ${result.moved.consumed} **${fromTier}** keys into ${result.moved.added} **${toTier}** keys.`,
+      accentColor: '#22c55e',
+    });
+    embed.addFields(
+      { name: 'Conversion Count', value: `x${times}`, inline: true },
+      { name: 'Season', value: String(result?.seasonId || 'default'), inline: true },
+      { name: 'Tier Balances', value: formatTierBalancesInline(result?.stats?.key_balances), inline: false },
+    );
+    return interaction.editReply({ embeds: [embed] });
+  },
+
   async handleAdminSetup(interaction, guildId) {
     await interaction.deferReply({ ephemeral: true });
     const config = vaultService.getConfig(guildId);
@@ -590,22 +846,24 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
     const user = interaction.options.getUser('user', true);
     const amount = interaction.options.getInteger('amount', true);
+    const keyTier = interaction.options.getString('key_tier') || 'default';
     const reason = interaction.options.getString('reason') || 'manual_add';
     const season = vaultService.getActiveSeason(guildId);
-    const result = vaultService.addKeys(guildId, season?.season_id || 'default', user.id, amount, reason, interaction.user.id);
+    const result = vaultService.addKeys(guildId, season?.season_id || 'default', user.id, amount, reason, interaction.user.id, keyTier);
     if (!result.success) return interaction.editReply({ content: `ERROR: ${result.message}` });
-    return interaction.editReply({ content: `Added ${amount} keys to <@${user.id}>.` });
+    return interaction.editReply({ content: `Added ${amount} ${keyTier} keys to <@${user.id}>.` });
   },
 
   async handleAdminRemoveKeys(interaction, guildId) {
     await interaction.deferReply({ ephemeral: true });
     const user = interaction.options.getUser('user', true);
     const amount = interaction.options.getInteger('amount', true);
+    const keyTier = interaction.options.getString('key_tier') || 'default';
     const reason = interaction.options.getString('reason') || 'manual_remove';
     const season = vaultService.getActiveSeason(guildId);
-    const result = vaultService.removeKeys(guildId, season?.season_id || 'default', user.id, amount, reason, interaction.user.id);
+    const result = vaultService.removeKeys(guildId, season?.season_id || 'default', user.id, amount, reason, interaction.user.id, keyTier);
     if (!result.success) return interaction.editReply({ content: `ERROR: ${result.message}` });
-    return interaction.editReply({ content: `Removed ${amount} keys from <@${user.id}>.` });
+    return interaction.editReply({ content: `Removed ${amount} ${keyTier} keys from <@${user.id}>.` });
   },
 
   async handleAdminRewardsList(interaction, guildId) {
@@ -623,10 +881,11 @@ module.exports = {
     const tier = interaction.options.getString('tier', true);
     const weight = interaction.options.getInteger('weight', true);
     const quantity = interaction.options.getInteger('quantity');
+    const keyTier = interaction.options.getString('key_tier');
     const type = interaction.options.getString('type') || 'claimable_reward';
     const payloadRaw = interaction.options.getString('payload_json');
     const payload = payloadRaw ? parseConfigValue(payloadRaw) : null;
-    const result = vaultService.addReward(guildId, { code, name, tier, weight, quantity, type, payload, enabled: true });
+    const result = vaultService.addReward(guildId, { code, name, tier, weight, quantity, keyTier, type, payload, enabled: true });
     if (!result.success) return interaction.editReply({ content: `ERROR: ${result.message}` });
     vaultService.logAdminAction(guildId, interaction.user.id, 'reward_add', null, { code, tier, weight, quantity });
     return interaction.editReply({ content: `Added reward \`${code}\`.` });
@@ -640,6 +899,7 @@ module.exports = {
     const tier = interaction.options.getString('tier');
     const weight = interaction.options.getInteger('weight');
     const quantity = interaction.options.getInteger('quantity');
+    const keyTier = interaction.options.getString('key_tier');
     const enabled = interaction.options.getBoolean('enabled');
     const type = interaction.options.getString('type');
     const payloadRaw = interaction.options.getString('payload_json');
@@ -647,6 +907,7 @@ module.exports = {
     if (tier !== null) patch.tier = tier;
     if (weight !== null) patch.weight = weight;
     if (quantity !== null) patch.quantity = quantity;
+    if (keyTier !== null) patch.keyTier = keyTier;
     if (enabled !== null) patch.enabled = enabled;
     if (type !== null) patch.type = type;
     if (payloadRaw !== null) patch.payload = parseConfigValue(payloadRaw);

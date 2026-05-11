@@ -9601,6 +9601,7 @@ function vaultRenderAdminPanel() {
   const theme = config.theme || {};
   const mintRules = config.mintRules || {};
   const mintSource = config.mintSource || {};
+  const paymentBands = Array.isArray(mintSource.paymentBands) ? mintSource.paymentBands : [];
   const paymentWalletsList = Array.isArray(mintSource.paymentWalletAddresses)
     ? mintSource.paymentWalletAddresses
     : (String(mintSource.paymentWalletAddresses || '')
@@ -9615,13 +9616,19 @@ function vaultRenderAdminPanel() {
   const announcements = config.announcements || {};
   const security = config.security || {};
   const messages = config.messages || {};
+  const ticketing = config.ticketing || {};
   const rewards = Array.isArray(vaultSettingsCache?.rewards) ? vaultSettingsCache.rewards : [];
   const seasons = Array.isArray(vaultSettingsCache?.seasons) ? vaultSettingsCache.seasons : [];
   const milestones = Array.isArray(vaultSettingsCache?.milestones) ? vaultSettingsCache.milestones : [];
   const openings = Array.isArray(vaultSettingsCache?.openings) ? vaultSettingsCache.openings : [];
   const claims = Array.isArray(vaultSettingsCache?.claims) ? vaultSettingsCache.claims : [];
   const audit = Array.isArray(vaultSettingsCache?.audit) ? vaultSettingsCache.audit : [];
+  const keyOverview = Array.isArray(vaultSettingsCache?.keyOverview) ? vaultSettingsCache.keyOverview : [];
+  const health = vaultSettingsCache?.health || {};
   const channels = Array.isArray(vaultSettingsCache?.channels) ? vaultSettingsCache.channels : [];
+  const keyTiers = Array.isArray(config.keyTiers) ? config.keyTiers : [];
+  const keyTierConversions = Array.isArray(config.keyTierConversions) ? config.keyTierConversions : [];
+  const keyTierGrants = (mintRules && mintRules.keyTierGrants && typeof mintRules.keyTierGrants === 'object') ? mintRules.keyTierGrants : {};
   const activeSeasonId = vaultGetCachedActiveSeasonId();
   const channelOptions = vaultBuildChannelOptions(channels, announcements.channelId);
   const failChancePercent = Math.max(0, Math.min(100, Number(config?.rewardTable?.failChancePercent ?? 75) || 0));
@@ -9634,6 +9641,7 @@ function vaultRenderAdminPanel() {
         <td>${escapeHtml(String(reward.name || ''))}</td>
         <td>${escapeHtml(String(reward.tier || 'common'))}</td>
         <td>${Number(reward.weight || 0)}</td>
+        <td>${escapeHtml(String(reward.keyTier || 'all'))}</td>
         <td>${vaultFormatQuantity(reward.quantity)}</td>
         <td>${reward.enabled === false ? 'disabled' : 'enabled'}</td>
         <td>
@@ -9642,7 +9650,20 @@ function vaultRenderAdminPanel() {
         </td>
       </tr>
     `).join('')
-    : '<tr><td colspan="7" style="color:var(--text-secondary);">No rewards configured.</td></tr>';
+    : '<tr><td colspan="8" style="color:var(--text-secondary);">No rewards configured.</td></tr>';
+
+  const keyOverviewRows = keyOverview.length
+    ? keyOverview.map(row => `
+      <tr>
+        <td><code>${escapeHtml(String(row.discord_user_id || ''))}</code></td>
+        <td>${escapeHtml(String(row.wallet_address || '-'))}</td>
+        <td>${Number(row.available_keys_total || 0)}</td>
+        <td>${escapeHtml(JSON.stringify(row.key_balances || {}))}</td>
+        <td>${Number(row.keys_earned || 0)}</td>
+        <td>${Number(row.keys_used || 0)}</td>
+      </tr>
+    `).join('')
+    : '<tr><td colspan="6" style="color:var(--text-secondary);">No key holders in this season yet.</td></tr>';
 
   const seasonsRows = seasons.length
     ? seasons.map(season => `
@@ -9659,6 +9680,14 @@ function vaultRenderAdminPanel() {
     <div class="card">
       <h3>Vault Module Admin</h3>
       <p style="color:var(--text-secondary);margin-bottom:16px;">All Vault settings are editable here and persist tenant-scoped.</p>
+      <div style="padding:10px;border:1px solid var(--border-primary);border-radius:10px;margin-bottom:12px;background:var(--bg-glass);">
+        <strong>Health:</strong>
+        enabled=${health.enabled ? 'yes' : 'no'},
+        season=${escapeHtml(String(health.activeSeasonId || 'none'))},
+        bands=${Number(health.paymentBandsConfigured || 0)},
+        conversions=${Number(health.keyConversionRulesEnabled || 0)},
+        ticketOnWin=${health.ticketOnWinEnabled ? 'yes' : 'no'}
+      </div>
 
       <div class="settings-grid" style="margin-bottom:16px;">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Enabled</div></div><input id="vault_enabled" type="checkbox" ${general.enabled ? 'checked' : ''}></div>
@@ -9684,6 +9713,29 @@ function vaultRenderAdminPanel() {
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Announcements Channel</div></div><select id="vault_announceChannelId" class="input-sm"><option value="">No announcement channel</option>${channelOptions}</select></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Announce Tiers (CSV)</div></div><input id="vault_announceTiers" class="input-sm" value="${escapeHtml((announcements.announceRewardTiers || []).join(','))}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Announce Common Rewards</div></div><input id="vault_announceCommonRewards" type="checkbox" ${announcements.announceCommonRewards ? 'checked' : ''}></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Create Ticket On Win</div></div><input id="vault_createTicketOnWin" type="checkbox" ${ticketing.createTicketOnWin ? 'checked' : ''}></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Reward Ticket Category ID</div><div class="settings-desc">Ticket category where winning rewards create fulfillment tickets.</div></div><input id="vault_rewardTicketCategoryId" class="input-sm" value="${escapeHtml(String(ticketing.rewardTicketCategoryId || ''))}" placeholder="e.g. 3"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Ticket Failure Alert Channel ID</div><div class="settings-desc">Optional channel for alerts when ticket creation fails.</div></div><input id="vault_ticketAlertChannelId" class="input-sm" value="${escapeHtml(String(ticketing.alertChannelId || ''))}" placeholder="Discord channel id"></div>
+      </div>
+
+      <h4 style="margin:16px 0 8px 0;">Key Tiers and Inheritance</h4>
+      <p style="color:var(--text-secondary);margin:0 0 8px 0;">Define tiers as JSON array: <code>[{"id":"bronze","name":"Bronze Key","enabled":true,"inheritsFrom":null}]</code></p>
+      <textarea id="vault_keyTiersJson" class="form-input" rows="5">${escapeHtml(JSON.stringify(keyTiers, null, 2))}</textarea>
+      <p style="color:var(--text-secondary);margin:8px 0 8px 0;">Define mint grants per tier JSON object: <code>{"bronze":{"paid":1,"free":0}}</code></p>
+      <textarea id="vault_keyTierGrantsJson" class="form-input" rows="4">${escapeHtml(JSON.stringify(keyTierGrants, null, 2))}</textarea>
+      <p style="color:var(--text-secondary);margin:8px 0 8px 0;">Optional SOL payment bands (lamports) to route keys by mint spend: <code>[{"keyTier":"gold","minLamports":1000000000,"maxLamports":null,"paid":1}]</code></p>
+      <textarea id="vault_paymentBandsJson" class="form-input" rows="4">${escapeHtml(JSON.stringify(paymentBands, null, 2))}</textarea>
+      <p style="color:var(--text-secondary);margin:8px 0 8px 0;">User key upgrade rules: <code>[{"fromTier":"bronze","toTier":"gold","fromAmount":10,"toAmount":1}]</code></p>
+      <textarea id="vault_keyTierConversionsJson" class="form-input" rows="4">${escapeHtml(JSON.stringify(keyTierConversions, null, 2))}</textarea>
+      <div class="settings-grid" style="margin-top:8px;">
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">SOL->Tier Preview (lamports)</div></div><input id="vaultPreviewLamportsInput" type="number" class="input-sm" min="0" value="1000000000"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn-secondary" onclick="vaultPreviewPaymentBand()">Preview Tier Match</button>
+      </div>
+      <pre id="vaultPreviewBandResult" style="white-space:pre-wrap;max-height:120px;overflow:auto;margin-top:8px;">No preview yet.</pre>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn-secondary" onclick="vaultApplyTierTemplate()">Apply Bronze/Silver/Gold Template</button>
       </div>
 
       <h4 style="margin:16px 0 8px 0;">Messages</h4>
@@ -9708,12 +9760,13 @@ function vaultRenderAdminPanel() {
       <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultUpsertSeason()">Create/Update Season</button></div>
 
       <h4 style="margin:20px 0 8px 0;">Reward Table Manager</h4>
-      <table style="width:100%;border-collapse:collapse;"><thead><tr><th align="left">Code</th><th align="left">Name</th><th align="left">Tier</th><th align="left">Weight</th><th align="left">Qty</th><th align="left">State</th><th align="left">Actions</th></tr></thead><tbody>${rewardsRows}</tbody></table>
+      <table style="width:100%;border-collapse:collapse;"><thead><tr><th align="left">Code</th><th align="left">Name</th><th align="left">Tier</th><th align="left">Weight</th><th align="left">Key Tier</th><th align="left">Qty</th><th align="left">State</th><th align="left">Actions</th></tr></thead><tbody>${rewardsRows}</tbody></table>
       <div class="settings-grid" style="margin-top:10px;">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Code</div></div><input id="vaultRewardCodeInput" class="input-sm" placeholder="reward_code"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Name</div></div><input id="vaultRewardNameInput" class="input-sm" placeholder="Reward Name"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Tier</div></div><input id="vaultRewardTierInput" class="input-sm" placeholder="common|rare|epic|legendary"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Weight</div></div><input id="vaultRewardWeightInput" type="number" min="0" class="input-sm" value="1"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Key Tier</div></div><input id="vaultRewardKeyTierInput" class="input-sm" placeholder="blank = all tiers"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Quantity</div></div><input id="vaultRewardQuantityInput" type="number" min="0" class="input-sm" placeholder="blank = unlimited"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Type</div></div><select id="vaultRewardTypeInput" class="input-sm"><option value="claimable_reward">claimable_reward</option><option value="none">none</option></select></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Enabled</div></div><input id="vaultRewardEnabledInput" type="checkbox" checked></div>
@@ -9732,10 +9785,29 @@ function vaultRenderAdminPanel() {
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Discord User ID</div></div><input id="vaultManualDiscordId" class="input-sm" placeholder="123456789012345678"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Season ID</div></div><input id="vaultManualSeasonId" class="input-sm" value="${escapeHtml(activeSeasonId)}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Keys Amount</div></div><input id="vaultManualKeyAmount" type="number" class="input-sm" min="1" value="1"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Key Tier</div></div><input id="vaultManualKeyTier" class="input-sm" value="default"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Action</div></div><input id="vaultManualKeyAction" class="input-sm" value="add"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Reason</div></div><input id="vaultManualReason" class="input-sm" value="portal_manual"></div>
       </div>
       <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultMutateKeys()">Apply Key Mutation</button></div>
+
+      <h4 style="margin:20px 0 8px 0;">Key Holdings Overview (Active Season)</h4>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <button class="btn-secondary" onclick="vaultExportKeyOverviewCsv()">Export CSV</button>
+      </div>
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th align="left">Discord ID</th>
+            <th align="left">Wallet</th>
+            <th align="left">Available Total</th>
+            <th align="left">Tier Balances</th>
+            <th align="left">Keys Earned</th>
+            <th align="left">Keys Used</th>
+          </tr>
+        </thead>
+        <tbody>${keyOverviewRows}</tbody>
+      </table>
 
       <div class="settings-grid" style="margin-top:10px;">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Assign Reward Code</div></div><input id="vaultAssignRewardCode" class="input-sm" placeholder="reward_code"></div>
@@ -9753,6 +9825,10 @@ function vaultRenderAdminPanel() {
 
       <div class="settings-grid" style="margin-top:10px;">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Bulk Backfill Max Signatures / Wallet</div><div class="settings-desc">Scans newest to oldest until this max is reached (safe to rerun; duplicates are skipped).</div></div><input id="vaultBulkBackfillLimitPerWallet" type="number" class="input-sm" min="1" max="50000" value="5000"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Dry Run</div><div class="settings-desc">Analyze and count candidates without ingesting events.</div></div><input id="vaultBulkBackfillDryRun" type="checkbox"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Delay Per Batch (ms)</div><div class="settings-desc">Throttle between RPC batches.</div></div><input id="vaultBulkBackfillDelayMs" type="number" class="input-sm" min="0" max="5000" value="250"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Max Runtime (sec)</div><div class="settings-desc">Stops scan when this runtime is exceeded.</div></div><input id="vaultBulkBackfillMaxRuntimeSec" type="number" class="input-sm" min="10" max="1800" value="600"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">RPC Retry Attempts</div><div class="settings-desc">Retries transient RPC failures.</div></div><input id="vaultBulkBackfillRpcRetryMax" type="number" class="input-sm" min="0" max="5" value="2"></div>
       </div>
       <div style="margin-top:8px;">
         <button class="btn-secondary" onclick="vaultRunBackfillAllMissingTx()">Backfill Missing TXs (All Configured Mint Wallets)</button>
@@ -9768,6 +9844,9 @@ function vaultRenderAdminPanel() {
       <h4 style="margin:20px 0 8px 0;">Audit / Openings / Claims Status</h4>
       <div style="display:flex;gap:8px;margin-bottom:8px;">
         <button class="btn-secondary" onclick="vaultRefreshActivity()">Refresh Activity</button>
+        <button class="btn-secondary" onclick="vaultExportOpeningsCsv()">Export Openings CSV</button>
+        <button class="btn-secondary" onclick="vaultExportClaimsCsv()">Export Claims CSV</button>
+        <button class="btn-secondary" onclick="vaultExportAuditCsv()">Export Audit CSV</button>
       </div>
       <pre id="vaultOpeningsView" style="white-space:pre-wrap;max-height:180px;overflow:auto;">${escapeHtml(vaultFormatRows(openings.map(item => `[${item.created_at || ''}] ${item.discord_user_id || '-'} -> ${item.reward_name || item.reward_code || '-'}`), 'No openings yet.'))}</pre>
       <pre id="vaultClaimsView" style="white-space:pre-wrap;max-height:180px;overflow:auto;">${escapeHtml(vaultFormatRows(claims.map(item => `#${item.id} [${item.claim_status}] ${item.discord_user_id || '-'} -> ${item.reward_name || item.reward_code || '-'}`), 'No claims yet.'))}</pre>
@@ -9796,7 +9875,7 @@ async function loadVaultSettingsTab() {
   if (!pane) return;
   pane.innerHTML = '<div class="card"><p style="color:var(--text-secondary);">Loading vault settings...</p></div>';
   try {
-    const [configRes, seasonsRes, rewardsRes, milestonesRes, openingsRes, claimsRes, auditRes, channelsRes] = await Promise.all([
+    const [configRes, seasonsRes, rewardsRes, milestonesRes, openingsRes, claimsRes, auditRes, keyOverviewRes, healthRes, channelsRes] = await Promise.all([
       vaultFetchJson('/api/admin/vault/config'),
       vaultFetchJson('/api/admin/vault/seasons'),
       vaultFetchJson('/api/admin/vault/rewards'),
@@ -9804,6 +9883,8 @@ async function loadVaultSettingsTab() {
       vaultFetchJson('/api/admin/vault/openings?limit=50'),
       vaultFetchJson('/api/admin/vault/rewards/claims?limit=50'),
       vaultFetchJson('/api/admin/vault/audit?limit=50'),
+      vaultFetchJson('/api/admin/vault/users/keys-overview?limit=300'),
+      vaultFetchJson('/api/admin/vault/health'),
       vaultFetchJson('/api/admin/discord/channels'),
     ]);
     vaultSettingsCache = {
@@ -9814,6 +9895,8 @@ async function loadVaultSettingsTab() {
       openings: openingsRes?.data?.openings || openingsRes?.openings || [],
       claims: claimsRes?.data?.rewards || claimsRes?.rewards || [],
       audit: auditRes?.data?.logs || auditRes?.logs || [],
+      keyOverview: keyOverviewRes?.data?.rows || keyOverviewRes?.rows || [],
+      health: healthRes?.data?.health || healthRes?.health || {},
       channels: channelsRes?.data?.channels || channelsRes?.channels || [],
     };
     vaultRenderAdminPanel();
@@ -9831,6 +9914,7 @@ async function vaultSaveGeneralConfig() {
     next.mintRules = next.mintRules || {};
     next.mintSource = next.mintSource || {};
     next.announcements = next.announcements || {};
+    next.ticketing = next.ticketing || {};
     next.security = next.security || {};
     next.messages = next.messages || {};
 
@@ -9858,6 +9942,14 @@ async function vaultSaveGeneralConfig() {
     next.mintRules.keysPerFreeMint = Number(document.getElementById('vault_keysPerFreeMint')?.value || 0) || 0;
     next.mintRules.pressurePerPaidMint = Number(document.getElementById('vault_pressurePerPaidMint')?.value || 0) || 0;
     next.mintRules.pressurePerFreeMint = Number(document.getElementById('vault_pressurePerFreeMint')?.value || 0) || 0;
+    const keyTiersParsed = vaultJsonParseInput(document.getElementById('vault_keyTiersJson')?.value, null);
+    const keyTierGrantsParsed = vaultJsonParseInput(document.getElementById('vault_keyTierGrantsJson')?.value, null);
+    const paymentBandsParsed = vaultJsonParseInput(document.getElementById('vault_paymentBandsJson')?.value, null);
+    const keyTierConversionsParsed = vaultJsonParseInput(document.getElementById('vault_keyTierConversionsJson')?.value, null);
+    next.keyTiers = Array.isArray(keyTiersParsed) ? keyTiersParsed : [];
+    next.mintRules.keyTierGrants = keyTierGrantsParsed && typeof keyTierGrantsParsed === 'object' ? keyTierGrantsParsed : {};
+    next.mintSource.paymentBands = Array.isArray(paymentBandsParsed) ? paymentBandsParsed : [];
+    next.keyTierConversions = Array.isArray(keyTierConversionsParsed) ? keyTierConversionsParsed : [];
     if (Object.prototype.hasOwnProperty.call(next.mintRules, 'bonusEntriesPerPaidMint')) delete next.mintRules.bonusEntriesPerPaidMint;
     if (Object.prototype.hasOwnProperty.call(next.mintRules, 'bonusEntriesPerFreeMint')) delete next.mintRules.bonusEntriesPerFreeMint;
     if (Object.prototype.hasOwnProperty.call(next.mintRules, 'pointsPerPaidMint')) delete next.mintRules.pointsPerPaidMint;
@@ -9872,6 +9964,11 @@ async function vaultSaveGeneralConfig() {
       .map(value => value.trim())
       .filter(Boolean);
     next.announcements.announceCommonRewards = !!document.getElementById('vault_announceCommonRewards')?.checked;
+    next.ticketing.createTicketOnWin = !!document.getElementById('vault_createTicketOnWin')?.checked;
+    const ticketCategoryRaw = String(document.getElementById('vault_rewardTicketCategoryId')?.value || '').trim();
+    next.ticketing.rewardTicketCategoryId = ticketCategoryRaw ? Number.parseInt(ticketCategoryRaw, 10) || null : null;
+    const ticketAlertChannelRaw = String(document.getElementById('vault_ticketAlertChannelId')?.value || '').trim();
+    next.ticketing.alertChannelId = ticketAlertChannelRaw || null;
 
     next.messages.noKeys = String(document.getElementById('vault_msgNoKeys')?.value || '').trim();
     next.messages.vaultInactive = String(document.getElementById('vault_msgInactive')?.value || '').trim();
@@ -9888,6 +9985,171 @@ async function vaultSaveGeneralConfig() {
   } catch (error) {
     showError(error.message || 'Failed to save vault config.');
   }
+}
+
+function vaultApplyTierTemplate() {
+  const tiersEl = document.getElementById('vault_keyTiersJson');
+  const grantsEl = document.getElementById('vault_keyTierGrantsJson');
+  if (!tiersEl || !grantsEl) return;
+  const tierTemplate = [
+    { id: 'default', name: 'Default Key', enabled: true, inheritsFrom: null },
+    { id: 'bronze', name: 'Bronze Key', enabled: true, inheritsFrom: null },
+    { id: 'silver', name: 'Silver Key', enabled: true, inheritsFrom: 'bronze' },
+    { id: 'gold', name: 'Gold Key', enabled: true, inheritsFrom: 'silver' },
+  ];
+  const grantTemplate = {
+    default: { paid: 0, free: 0 },
+    bronze: { paid: 1, free: 0 },
+    silver: { paid: 0, free: 0 },
+    gold: { paid: 0, free: 0 },
+  };
+  const paymentBandsTemplate = [
+    { keyTier: 'bronze', minLamports: 1, maxLamports: 499999999, paid: 1, free: 0 },
+    { keyTier: 'silver', minLamports: 500000000, maxLamports: 999999999, paid: 1, free: 0 },
+    { keyTier: 'gold', minLamports: 1000000000, maxLamports: null, paid: 1, free: 0 },
+  ];
+  const conversionsTemplate = [
+    { fromTier: 'bronze', toTier: 'gold', fromAmount: 10, toAmount: 1, enabled: true },
+  ];
+  tiersEl.value = JSON.stringify(tierTemplate, null, 2);
+  grantsEl.value = JSON.stringify(grantTemplate, null, 2);
+  const bandsEl = document.getElementById('vault_paymentBandsJson');
+  if (bandsEl) bandsEl.value = JSON.stringify(paymentBandsTemplate, null, 2);
+  const convEl = document.getElementById('vault_keyTierConversionsJson');
+  if (convEl) convEl.value = JSON.stringify(conversionsTemplate, null, 2);
+  showSuccess('Bronze/Silver/Gold template applied. Save Vault Config to persist.');
+}
+
+function vaultPreviewPaymentBand() {
+  const lamports = Math.max(0, Number(document.getElementById('vaultPreviewLamportsInput')?.value || 0) || 0);
+  const bands = vaultJsonParseInput(document.getElementById('vault_paymentBandsJson')?.value, []);
+  const out = document.getElementById('vaultPreviewBandResult');
+  if (!out) return;
+  if (!Array.isArray(bands) || !bands.length) {
+    out.textContent = 'No payment bands configured.';
+    return;
+  }
+  const normalized = bands
+    .map((band) => ({
+      keyTier: String(band?.keyTier || band?.key_tier || 'default').trim().toLowerCase() || 'default',
+      minLamports: Math.max(0, Number(band?.minLamports ?? band?.min_lamports ?? 0) || 0),
+      maxLamports: (band?.maxLamports === null || band?.maxLamports === undefined || band?.maxLamports === '')
+        ? null
+        : Math.max(0, Number(band?.maxLamports ?? band?.max_lamports ?? 0) || 0),
+      paid: Math.max(0, Number(band?.paid ?? 1) || 0),
+      free: Math.max(0, Number(band?.free ?? 0) || 0),
+    }))
+    .sort((a, b) => a.minLamports - b.minLamports);
+  const match = normalized.find((band) => {
+    if (lamports < band.minLamports) return false;
+    if (band.maxLamports !== null && lamports > band.maxLamports) return false;
+    return true;
+  });
+  out.textContent = match
+    ? `Matched tier=${match.keyTier}, paid=${match.paid}, free=${match.free}, range=[${match.minLamports}..${match.maxLamports === null ? '∞' : match.maxLamports}]`
+    : 'No matching band for this lamport amount (fallback rules would apply).';
+}
+
+function vaultExportKeyOverviewCsv() {
+  const rows = Array.isArray(vaultSettingsCache?.keyOverview) ? vaultSettingsCache.keyOverview : [];
+  if (!rows.length) {
+    showError('No key overview rows to export.');
+    return;
+  }
+  const escapeCsv = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+  const header = [
+    'discord_user_id',
+    'wallet_address',
+    'season_id',
+    'available_keys_total',
+    'available_keys_legacy',
+    'keys_earned',
+    'keys_used',
+    'paid_mints',
+    'free_mints',
+    'rewards_won',
+    'key_balances_json',
+    'updated_at',
+  ];
+  const lines = [header.join(',')];
+  for (const row of rows) {
+    lines.push([
+      escapeCsv(row.discord_user_id),
+      escapeCsv(row.wallet_address),
+      escapeCsv(row.season_id),
+      escapeCsv(Number(row.available_keys_total || 0)),
+      escapeCsv(Number(row.available_keys_legacy || 0)),
+      escapeCsv(Number(row.keys_earned || 0)),
+      escapeCsv(Number(row.keys_used || 0)),
+      escapeCsv(Number(row.paid_mints || 0)),
+      escapeCsv(Number(row.free_mints || 0)),
+      escapeCsv(Number(row.rewards_won || 0)),
+      escapeCsv(JSON.stringify(row.key_balances || {})),
+      escapeCsv(row.updated_at),
+    ].join(','));
+  }
+  const csvText = lines.join('\n');
+  const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `vault-key-overview-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  showSuccess('Key overview CSV exported.');
+}
+
+function vaultDownloadCsv(filenamePrefix, header, rows) {
+  const escapeCsv = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+  const lines = [header.join(',')];
+  for (const row of rows) {
+    lines.push(row.map(escapeCsv).join(','));
+  }
+  const csvText = lines.join('\n');
+  const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${filenamePrefix}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function vaultExportOpeningsCsv() {
+  const openings = Array.isArray(vaultSettingsCache?.openings) ? vaultSettingsCache.openings : [];
+  if (!openings.length) return showError('No openings to export.');
+  vaultDownloadCsv(
+    'vault-openings',
+    ['id', 'created_at', 'season_id', 'discord_user_id', 'key_tier', 'reward_code', 'reward_name', 'reward_tier', 'status'],
+    openings.map(o => [o.id, o.created_at, o.season_id, o.discord_user_id, o.key_tier, o.reward_code, o.reward_name, o.reward_tier, o.status])
+  );
+  showSuccess('Openings CSV exported.');
+}
+
+function vaultExportClaimsCsv() {
+  const claims = Array.isArray(vaultSettingsCache?.claims) ? vaultSettingsCache.claims : [];
+  if (!claims.length) return showError('No claims to export.');
+  vaultDownloadCsv(
+    'vault-claims',
+    ['id', 'created_at', 'season_id', 'discord_user_id', 'reward_code', 'reward_name', 'reward_tier', 'claim_status', 'source'],
+    claims.map(c => [c.id, c.created_at, c.season_id, c.discord_user_id, c.reward_code, c.reward_name, c.reward_tier, c.claim_status, c.source])
+  );
+  showSuccess('Claims CSV exported.');
+}
+
+function vaultExportAuditCsv() {
+  const logs = Array.isArray(vaultSettingsCache?.audit) ? vaultSettingsCache.audit : [];
+  if (!logs.length) return showError('No audit logs to export.');
+  vaultDownloadCsv(
+    'vault-audit',
+    ['id', 'created_at', 'season_id', 'admin_discord_user_id', 'action', 'target_discord_user_id', 'details_json'],
+    logs.map(l => [l.id, l.created_at, l.season_id, l.admin_discord_user_id, l.action, l.target_discord_user_id, JSON.stringify(l.details || l.details_json || null)])
+  );
+  showSuccess('Audit CSV exported.');
 }
 
 function vaultSetRawFromCurrent() {
@@ -9971,6 +10233,7 @@ function vaultLoadRewardToForm(code) {
   setValue('vaultRewardNameInput', String(reward.name || ''));
   setValue('vaultRewardTierInput', String(reward.tier || 'common'));
   setValue('vaultRewardWeightInput', Number(reward.weight || 0));
+  setValue('vaultRewardKeyTierInput', String(reward.keyTier || ''));
   setValue('vaultRewardQuantityInput', reward.quantity === null || reward.quantity === undefined ? '' : Number(reward.quantity || 0));
   setValue('vaultRewardTypeInput', String(reward.type || 'claimable_reward'));
   setValue('vaultRewardPayloadInput', reward.payload !== undefined ? JSON.stringify(reward.payload, null, 2) : '');
@@ -9989,6 +10252,7 @@ async function vaultSaveReward() {
     name: String(document.getElementById('vaultRewardNameInput')?.value || '').trim() || code,
     tier: String(document.getElementById('vaultRewardTierInput')?.value || 'common').trim().toLowerCase(),
     weight: Number(document.getElementById('vaultRewardWeightInput')?.value || 0) || 0,
+    keyTier: String(document.getElementById('vaultRewardKeyTierInput')?.value || '').trim() || null,
     type: String(document.getElementById('vaultRewardTypeInput')?.value || 'claimable_reward').trim(),
     enabled: !!document.getElementById('vaultRewardEnabledInput')?.checked,
     payload: vaultJsonParseInput(document.getElementById('vaultRewardPayloadInput')?.value, null),
@@ -10071,6 +10335,7 @@ async function vaultMutateKeys() {
   const body = {
     seasonId: String(document.getElementById('vaultManualSeasonId')?.value || vaultGetCachedActiveSeasonId()).trim(),
     amount: Number(document.getElementById('vaultManualKeyAmount')?.value || 0) || 0,
+    keyTier: String(document.getElementById('vaultManualKeyTier')?.value || 'default').trim() || 'default',
     action: String(document.getElementById('vaultManualKeyAction')?.value || 'add').trim().toLowerCase(),
     reason: String(document.getElementById('vaultManualReason')?.value || 'portal_manual').trim(),
   };
@@ -10132,11 +10397,21 @@ async function vaultRunBackfill() {
 
 async function vaultRunBackfillAllMissingTx() {
   const limitPerWallet = Math.max(1, Math.min(50000, Number(document.getElementById('vaultBulkBackfillLimitPerWallet')?.value || 5000) || 5000));
+  const dryRun = !!document.getElementById('vaultBulkBackfillDryRun')?.checked;
+  const delayMs = Math.max(0, Math.min(5000, Number(document.getElementById('vaultBulkBackfillDelayMs')?.value || 250) || 0));
+  const maxRuntimeSec = Math.max(10, Math.min(1800, Number(document.getElementById('vaultBulkBackfillMaxRuntimeSec')?.value || 600) || 600));
+  const rpcRetryMax = Math.max(0, Math.min(5, Number(document.getElementById('vaultBulkBackfillRpcRetryMax')?.value || 2) || 0));
   try {
     const data = await vaultFetchJson('/api/admin/vault/backfill-all', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ limitPerWallet }),
+      body: JSON.stringify({
+        limitPerWallet,
+        dryRun,
+        delayMs,
+        maxRuntimeMs: maxRuntimeSec * 1000,
+        rpcRetryMax,
+      }),
     });
 
     const summary = data?.data || data || {};
@@ -10145,8 +10420,9 @@ async function vaultRunBackfillAllMissingTx() {
     const ingested = Number(summary.ingested || 0);
     const duplicates = Number(summary.duplicates || 0);
     const failed = Number(summary.failed || 0);
+    const timedOut = !!summary.timedOut;
     const errorCount = Array.isArray(summary.errors) ? summary.errors.length : 0;
-    showSuccess(`Bulk backfill finished. scanned=${scanned}, matched=${matched}, ingested=${ingested}, duplicates=${duplicates}, failed=${failed}, walletErrors=${errorCount}`);
+    showSuccess(`Bulk backfill finished (${dryRun ? 'dry-run' : 'live'}). scanned=${scanned}, matched=${matched}, ingested=${ingested}, duplicates=${duplicates}, failed=${failed}, walletErrors=${errorCount}${timedOut ? ', timedOut=true' : ''}`);
     await loadVaultSettingsTab();
   } catch (error) {
     showError(error.message || 'Failed to run bulk backfill.');
@@ -10189,16 +10465,20 @@ async function vaultImportConfig() {
 
 async function vaultRefreshActivity() {
   try {
-    const [openingsRes, claimsRes, auditRes] = await Promise.all([
+    const [openingsRes, claimsRes, auditRes, keyOverviewRes, healthRes] = await Promise.all([
       vaultFetchJson('/api/admin/vault/openings?limit=50'),
       vaultFetchJson('/api/admin/vault/rewards/claims?limit=50'),
       vaultFetchJson('/api/admin/vault/audit?limit=50'),
+      vaultFetchJson('/api/admin/vault/users/keys-overview?limit=300'),
+      vaultFetchJson('/api/admin/vault/health'),
     ]);
     vaultSettingsCache = {
       ...(vaultSettingsCache || {}),
       openings: openingsRes?.data?.openings || openingsRes?.openings || [],
       claims: claimsRes?.data?.rewards || claimsRes?.rewards || [],
       audit: auditRes?.data?.logs || auditRes?.logs || [],
+      keyOverview: keyOverviewRes?.data?.rows || keyOverviewRes?.rows || [],
+      health: healthRes?.data?.health || healthRes?.health || {},
     };
     vaultRenderAdminPanel();
     showSuccess('Vault activity refreshed.');

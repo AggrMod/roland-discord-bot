@@ -3443,12 +3443,12 @@ h4,
 }
 
 .sa-menu-card {
-  min-height: 128px;
+  min-height: 214px;
   text-align: left;
 }
 
 .sa-menu-grid--compact .sa-menu-card {
-  min-height: 82px;
+  min-height: 158px;
 }
 
 .sa-menu-card.active {

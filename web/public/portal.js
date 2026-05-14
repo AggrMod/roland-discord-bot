@@ -10224,7 +10224,7 @@ function vaultRenderAdminPanel() {
     : '<tr><td colspan="4" style="color:var(--text-secondary);">No seasons available.</td></tr>';
 
   pane.innerHTML = `
-    <div class="card">
+    <div class="card gp-workspace-card gp-workspace-stack">
       <style>
         .vault-admin-table { width:100%; border-collapse:collapse; font-size:0.9em; }
         .vault-admin-table th { text-align:left; color:#c9d6ff; padding:8px 10px; border-bottom:1px solid rgba(99,102,241,0.25); }
@@ -10237,11 +10237,11 @@ function vaultRenderAdminPanel() {
         <button id="vaultUiSimpleBtn" class="btn-primary" onclick="vaultSetUiMode('simple');vaultApplyUiMode()">Simple Setup</button>
         <button id="vaultUiAdvancedBtn" class="btn-secondary" onclick="vaultSetUiMode('advanced');vaultApplyUiMode()">Advanced Setup</button>
       </div>
-      <div class="vault-section-card">
+      <div class="vault-section-card gp-subtle-panel">
         <strong>Quick start:</strong>
         1) Enable Vault and set names -> 2) Configure mint and key rules -> 3) Add rewards -> 4) Save config.
       </div>
-      <div class="vault-section-card">
+      <div class="vault-section-card gp-subtle-panel">
         <strong>Health:</strong>
         enabled=${health.enabled ? 'yes' : 'no'},
         season=${escapeHtml(String(health.activeSeasonId || 'none'))},
@@ -10287,26 +10287,26 @@ function vaultRenderAdminPanel() {
         <button class="btn-secondary" onclick="vaultApplyTierTemplate()">Apply Bronze/Silver/Gold Template</button>
       </div>
 
-      <div class="card" style="margin-bottom:10px;">
+      <div class="card gp-workspace-card" style="margin-bottom:10px;">
         <h5 style="margin:0 0 8px 0;">Key Tiers</h5>
         <div id="vaultSimpleTiersRows"></div>
         <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleTierRow()">Add Tier</button></div>
       </div>
 
-      <div class="card" style="margin-bottom:10px;">
+      <div class="card gp-workspace-card" style="margin-bottom:10px;">
         <h5 style="margin:0 0 8px 0;">Mint Grants (Per Tier)</h5>
         <p style="color:var(--text-secondary);margin:0 0 8px 0;">Set keys granted for paid and free mints.</p>
         <div id="vaultSimpleGrantsRows"></div>
       </div>
 
-      <div class="card" style="margin-bottom:10px;">
+      <div class="card gp-workspace-card" style="margin-bottom:10px;">
         <h5 style="margin:0 0 8px 0;">SOL Payment Bands</h5>
         <p style="color:var(--text-secondary);margin:0 0 8px 0;">Map payment ranges (lamports) to key tiers.</p>
         <div id="vaultSimpleBandsRows"></div>
         <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleBandRow()">Add Payment Band</button></div>
       </div>
 
-      <div class="card" style="margin-bottom:10px;">
+      <div class="card gp-workspace-card" style="margin-bottom:10px;">
         <h5 style="margin:0 0 8px 0;">Upgrade Rules</h5>
         <p style="color:var(--text-secondary);margin:0 0 8px 0;">Example: 10 bronze -> 1 gold.</p>
         <div id="vaultSimpleConversionsRows"></div>
@@ -10469,7 +10469,7 @@ async function loadVaultSettingsTab() {
   if (!isAdmin) return;
   const pane = document.getElementById('vaultStandalonePanel');
   if (!pane) return;
-  pane.innerHTML = '<div class="card"><p style="color:var(--text-secondary);">Loading vault settings...</p></div>';
+  pane.innerHTML = '<div class="card gp-workspace-card"><p style="color:var(--text-secondary);">Loading vault settings...</p></div>';
   try {
     const [configRes, seasonsRes, rewardsRes, milestonesRes, openingsRes, claimsRes, auditRes, keyOverviewRes, healthRes, channelsRes] = await Promise.all([
       vaultFetchJson('/api/admin/vault/config'),
@@ -10497,7 +10497,7 @@ async function loadVaultSettingsTab() {
     };
     vaultRenderAdminPanel();
   } catch (error) {
-    pane.innerHTML = `<div class="card"><p style="color:#fca5a5;">Failed to load vault settings: ${escapeHtml(error.message || 'Unknown error')}</p></div>`;
+    pane.innerHTML = `<div class="card gp-workspace-card"><p style="color:#fca5a5;">Failed to load vault settings: ${escapeHtml(error.message || 'Unknown error')}</p></div>`;
   }
 }
 
@@ -14144,7 +14144,7 @@ async function loadVotingPowerView(targetPaneId = null) {
         <td style="padding:10px 12px;color:#a5b4fc;font-weight:600;">${m.voting_power}</td>
         <td style="padding:10px 12px;"><button onclick="removeVPMapping('${escapeJsString(m.role_id)}')" style="padding:4px 12px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);border-radius:6px;color:#fca5a5;font-size:0.82em;cursor:pointer;">Remove</button></td>
       </tr>`).join('');
-      tableHTML = `<div style="overflow-x:auto;border-radius:10px;border:1px solid rgba(99,102,241,0.12);">
+      tableHTML = `<div class="gp-subtle-panel" style="overflow-x:auto;">
         <table style="width:100%;border-collapse:collapse;">
           <thead><tr style="background:rgba(30,41,59,0.7);">
             <th style="padding:10px 12px;text-align:left;color:#94a3b8;font-size:0.82em;font-weight:600;">Role</th>
@@ -14174,7 +14174,7 @@ async function loadVotingPowerView(targetPaneId = null) {
       const gs = settingsJson.success ? settingsJson.settings : {};
 
       govSettingsHTML = `
-        <div style="${govCardStyle}">
+        <div style="${govCardStyle}" class="gp-workspace-card">
           <h3 style="${govCardHeader}">🗳️ Governance Settings</h3>
           <div style="${govGridRow}">
             <div>
@@ -14218,7 +14218,7 @@ async function loadVotingPowerView(targetPaneId = null) {
               <select id="gov_governanceLogChannelId" style="${govSelectStyle}"><option value="">Loading channels...</option></select>
             </div>
           </div>
-          <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);margin-top:var(--space-4);">
+          <div class="gp-actions-row" style="padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);margin-top:var(--space-4);">
             <button class="btn-primary" onclick="saveGovernanceSettings()" style="font-size:0.85em;padding:8px 16px;">💾 Save Governance Settings</button>
           </div>
         </div>
@@ -14247,7 +14247,7 @@ async function loadVotingPowerView(targetPaneId = null) {
       ${govSettingsHTML}
       <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:16px;">Map Discord roles to voting power. Users get the highest VP among all their roles.</p>
       <div id="vpMappingsTableContainer" style="margin-bottom:16px;">${tableHTML}</div>
-      <div style="background:rgba(30,41,59,0.5);border:1px solid rgba(99,102,241,0.15);border-radius:10px;padding:16px;margin-top:8px;">
+      <div class="gp-workspace-card" style="margin-top:8px;">
         <h5 style="color:#c9d6ff;font-size:0.88em;font-weight:600;margin:0 0 12px 0;">➕ Add Mapping</h5>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);">
           <div>
@@ -14259,7 +14259,7 @@ async function loadVotingPowerView(targetPaneId = null) {
             <input type="number" id="vpAmountInput" min="1" max="1000" placeholder="e.g. 10" value="1" style="width:100%;padding:10px 14px;background:rgba(15,23,42,0.6);border:1px solid rgba(99,102,241,0.2);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
           </div>
         </div>
-        <button onclick="addVPMapping()" style="margin-top:12px;padding:8px 20px;background:linear-gradient(135deg,rgba(99,102,241,0.7),rgba(139,92,246,0.7));border:1px solid rgba(99,102,241,0.3);border-radius:8px;color:#e0e7ff;font-size:0.88em;cursor:pointer;">Add Mapping</button>
+        <button class="btn-primary" onclick="addVPMapping()" style="margin-top:12px;">Add Mapping</button>
       </div>
       <p style="color:var(--text-secondary);font-size:0.8em;font-style:italic;margin-top:16px;">Falls back to NFT tier-based VP if no mappings are configured.</p>
     `;

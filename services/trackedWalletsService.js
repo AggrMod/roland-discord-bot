@@ -2120,16 +2120,22 @@ class TrackedWalletsService {
 
     // Fetch NFTs and balances in parallel
     let nfts = [];
+    let nftMeta = null;
     let balances = { sol: null, usdc: null };
     let tokenBalances = [];
     try {
       [nfts, balances, tokenBalances] = await Promise.all([
-        nftService.getNFTsForWallet(addr, { guildId }).catch(e => { logger.error('Error fetching NFTs:', e); return []; }),
+        nftService.getNFTsForWalletWithMeta(addr, { guildId }).catch(e => {
+          logger.error('Error fetching NFTs:', e);
+          return { nfts: [], degraded: true, stale: false, source: 'exception' };
+        }),
         _getSolanaBalances(addr),
         trackedMints.length
           ? tokenService.getWalletTokenBalances(addr, { guildId, mintFilter: trackedMints }).catch(e => { logger.error('Error fetching tracked token balances:', e); return []; })
           : Promise.resolve([])
       ]);
+      nftMeta = nfts || null;
+      nfts = Array.isArray(nftMeta?.nfts) ? nftMeta.nfts : [];
     } catch (e) {
       logger.error('Error fetching holdings data:', e);
     }
@@ -2173,6 +2179,7 @@ class TrackedWalletsService {
     const solEmoji  = chainEmojiMap['solana'] || process.env.SOL_EMOJI  || '◎';
     const usdcEmoji = chainEmojiMap['usdc']   || process.env.USDC_EMOJI || '💵';
 
+    const healthTag = nftMeta?.stale ? ' (stale NFT data)' : (nftMeta?.degraded ? ' (NFT fetch degraded)' : '');
     const embed = new EmbedBuilder()
       .setTitle(`💼 Holdings: ${label}`)
       .setDescription(
@@ -2181,7 +2188,7 @@ class TrackedWalletsService {
           : collectionLines.join('\n')
       )
       .setTimestamp()
-      .setFooter({ text: `Last updated` });
+      .setFooter({ text: `Last updated${healthTag}` });
 
     // SOL and USDC balance row
     if (balances.sol !== null) {

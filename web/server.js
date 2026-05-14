@@ -290,7 +290,17 @@ class WebServer {
       contentSecurityPolicy: false,
       crossOriginEmbedderPolicy: false,
     }));
-    this.app.use(express.static(path.join(__dirname, 'public')));
+    this.app.use(express.static(path.join(__dirname, 'public'), {
+      setHeaders: (res, filePath) => {
+        // Keep portal shell/script fresh so module setting UX changes are visible immediately.
+        if (filePath.endsWith(`${path.sep}portal.js`) || filePath.endsWith(`${path.sep}portal.html`)) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+          res.setHeader('Pragma', 'no-cache');
+          res.setHeader('Expires', '0');
+          res.setHeader('Surrogate-Control', 'no-store');
+        }
+      }
+    }));
 
     this.app.get('/health', (_req, res) => {
       res.json({

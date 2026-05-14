@@ -75,6 +75,36 @@ class NFTService {
     this.walletNftInFlight = new Map();
     this.heliusBackoffUntil = 0;
     this.lastHeliusErrorLogAt = 0;
+    this.providerHealth = {
+      degraded: false,
+      since: null,
+      lastErrorAt: null,
+      lastRecoveryAt: null,
+      reason: ''
+    };
+  }
+
+  markProviderDegraded(reason = 'unknown') {
+    if (!this.providerHealth.degraded) {
+      this.providerHealth.degraded = true;
+      this.providerHealth.since = Date.now();
+      this.providerHealth.reason = String(reason || 'unknown');
+      logger.warn(`[nft] Provider entered degraded mode: ${this.providerHealth.reason}`);
+    }
+    this.providerHealth.lastErrorAt = Date.now();
+  }
+
+  markProviderHealthy() {
+    if (this.providerHealth.degraded) {
+      this.providerHealth.degraded = false;
+      this.providerHealth.lastRecoveryAt = Date.now();
+      this.providerHealth.reason = '';
+      logger.log('[nft] Provider recovered from degraded mode');
+    }
+  }
+
+  getProviderHealth() {
+    return { ...this.providerHealth };
   }
 
   getCacheKey(walletAddress, guildId = null) {
@@ -98,9 +128,20 @@ class NFTService {
   }
 
   async getNFTsForWallet(walletAddress, options = {}) {
+    const result = await this.getNFTsForWalletWithMeta(walletAddress, options);
+    return result.nfts;
+  }
+
+  async getNFTsForWalletWithMeta(walletAddress, options = {}) {
     const normalizedWallet = String(walletAddress || '').trim();
     if (!normalizedWallet) {
-      return [];
+      return {
+        wallet: normalizedWallet,
+        nfts: [],
+        degraded: false,
+        stale: false,
+        source: 'empty-wallet'
+      };
     }
 
     const guildId = options.guildId;
@@ -118,15 +159,27 @@ class NFTService {
 
     if (MOCK_MODE || tenantMockEnabled) {
       if (IS_PRODUCTION && !ALLOW_MOCK_IN_PROD) {
-        return [];
+        return {
+          wallet: normalizedWallet,
+          nfts: [],
+          degraded: true,
+          stale: false,
+          source: 'mock-disabled-in-prod'
+        };
       }
       if (tenantMockEnabled && !MOCK_MODE) {
         logger.warn(`Tenant mock_data_enabled active for guild ${guildId}; serving mock NFTs for ${normalizedWallet}`);
       }
-      return this.getMockNFTs(normalizedWallet, {
+      return {
+        wallet: normalizedWallet,
+        nfts: this.getMockNFTs(normalizedWallet, {
         guildId,
         mockReason: tenantMockEnabled && !MOCK_MODE ? 'tenant-mock-data-enabled' : 'global-mock-mode'
-      });
+        }),
+        degraded: false,
+        stale: false,
+        source: 'mock'
+      };
     }
 
     // Legacy mock wallet IDs can remain in DB; skip invalid addresses before hitting Helius.
@@ -136,17 +189,39 @@ class NFTService {
         logger.warn(`Skipping invalid wallet address for NFT fetch: ${normalizedWallet}${guildId ? ` (guild ${guildId})` : ''}`);
         this.invalidWalletWarned.add(warnKey);
       }
-      return [];
+      return {
+        wallet: normalizedWallet,
+        nfts: [],
+        degraded: false,
+        stale: false,
+        source: 'invalid-wallet'
+      };
     }
 
     const cacheKey = this.getCacheKey(normalizedWallet, guildId);
     const cachedFresh = this.getCachedWalletNfts(cacheKey);
     if (cachedFresh) {
-      return cachedFresh;
+      return {
+        wallet: normalizedWallet,
+        nfts: cachedFresh,
+        degraded: false,
+        stale: false,
+        source: 'fresh-cache'
+      };
     }
 
     if (this.heliusBackoffUntil > Date.now()) {
-      return this.getCachedWalletNfts(cacheKey, { allowStale: true }) || [];
+      const staleNfts = this.getCachedWalletNfts(cacheKey, { allowStale: true }) || [];
+      if (staleNfts.length === 0) {
+        this.markProviderDegraded('helius-backoff-no-cache');
+      }
+      return {
+        wallet: normalizedWallet,
+        nfts: staleNfts,
+        degraded: staleNfts.length === 0,
+        stale: staleNfts.length > 0,
+        source: staleNfts.length > 0 ? 'stale-cache-backoff' : 'empty-backoff'
+      };
     }
 
     const existingRequest = this.walletNftInFlight.get(cacheKey);
@@ -159,10 +234,27 @@ class NFTService {
         logger.log(`Fetching NFTs for wallet: ${normalizedWallet}`);
         const nfts = await this.fetchNFTsFromHelius(normalizedWallet);
         this.setCachedWalletNfts(cacheKey, nfts);
-        return nfts;
+        this.markProviderHealthy();
+        return {
+          wallet: normalizedWallet,
+          nfts,
+          degraded: false,
+          stale: false,
+          source: 'fresh-network'
+        };
       } catch (error) {
         logger.error('Error fetching NFTs:', error);
-        return this.getCachedWalletNfts(cacheKey, { allowStale: true }) || [];
+        const staleNfts = this.getCachedWalletNfts(cacheKey, { allowStale: true }) || [];
+        if (staleNfts.length === 0) {
+          this.markProviderDegraded('fetch-error-no-cache');
+        }
+        return {
+          wallet: normalizedWallet,
+          nfts: staleNfts,
+          degraded: staleNfts.length === 0,
+          stale: staleNfts.length > 0,
+          source: staleNfts.length > 0 ? 'stale-cache-on-error' : 'empty-on-error'
+        };
       } finally {
         this.walletNftInFlight.delete(cacheKey);
       }
@@ -172,7 +264,17 @@ class NFTService {
     try {
       return await requestPromise;
     } catch (_error) {
-      return this.getCachedWalletNfts(cacheKey, { allowStale: true }) || [];
+      const staleNfts = this.getCachedWalletNfts(cacheKey, { allowStale: true }) || [];
+      if (staleNfts.length === 0) {
+        this.markProviderDegraded('request-exception-no-cache');
+      }
+      return {
+        wallet: normalizedWallet,
+        nfts: staleNfts,
+        degraded: staleNfts.length === 0,
+        stale: staleNfts.length > 0,
+        source: staleNfts.length > 0 ? 'stale-cache-on-exception' : 'empty-on-exception'
+      };
     }
   }
 
@@ -323,6 +425,39 @@ class NFTService {
       allNFTs.push(...nfts);
     }
     return allNFTs;
+  }
+
+  async getAllNFTsForWalletsWithHealth(walletAddresses, options = {}) {
+    const allNFTs = [];
+    const wallets = Array.isArray(walletAddresses) ? walletAddresses : [];
+    const details = [];
+
+    for (const wallet of wallets) {
+      const result = await this.getNFTsForWalletWithMeta(wallet, options);
+      const nfts = Array.isArray(result?.nfts) ? result.nfts : [];
+      allNFTs.push(...nfts);
+      details.push({
+        wallet: String(wallet || '').trim(),
+        count: nfts.length,
+        degraded: !!result?.degraded,
+        stale: !!result?.stale,
+        source: String(result?.source || 'unknown')
+      });
+    }
+
+    const degradedWallets = details.filter(item => item.degraded).map(item => item.wallet);
+    const staleWallets = details.filter(item => item.stale).map(item => item.wallet);
+
+    return {
+      nfts: allNFTs,
+      health: {
+        totalWallets: details.length,
+        degradedWallets,
+        staleWallets,
+        hadFailureWithoutCache: degradedWallets.length > 0,
+        details
+      }
+    };
   }
 
   /**

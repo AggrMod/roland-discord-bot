@@ -112,7 +112,18 @@ class RoleService {
         return { success: false, message: 'No wallets linked' };
       }
 
-      const allNFTs = await nftService.getAllNFTsForWallets(wallets, { guildId });
+      const nftSnapshot = await nftService.getAllNFTsForWalletsWithHealth(wallets, { guildId });
+      const allNFTs = Array.isArray(nftSnapshot?.nfts) ? nftSnapshot.nfts : [];
+      const nftHealth = nftSnapshot?.health || null;
+      if (nftHealth?.hadFailureWithoutCache) {
+        logger.error(`Skipping user stats update for ${discordId}: NFT provider degraded (no safe cache)${guildId ? ` [guild ${guildId}]` : ''}`);
+        return {
+          success: false,
+          skipped: true,
+          reason: 'nft_provider_degraded',
+          message: 'NFT provider degraded; skipped user stats update to prevent data corruption'
+        };
+      }
       const tierInfo = this.getTierForNFTs(allNFTs, guildId);
       const scopedNFTCount = tierInfo.count;
       const tier = tierInfo.tier;
@@ -313,7 +324,19 @@ class RoleService {
       const currentMemberRoleIds = new Set(member.roles.cache.keys());
 
       const wallets = walletService.getAllUserWallets(discordId);
-      const allNFTs = await nftService.getAllNFTsForWallets(wallets, { guildId });
+      const nftSnapshot = await nftService.getAllNFTsForWalletsWithHealth(wallets, { guildId });
+      const allNFTs = Array.isArray(nftSnapshot?.nfts) ? nftSnapshot.nfts : [];
+      const nftHealth = nftSnapshot?.health || null;
+
+      if (nftHealth?.hadFailureWithoutCache) {
+        logger.error(`Aborted role sync for ${discordId}: NFT provider degraded (no safe cache)${guildId ? ` [guild ${guildId}]` : ''}`);
+        return {
+          success: false,
+          skipped: true,
+          reason: 'nft_provider_degraded',
+          message: 'Role sync skipped because NFT provider data is currently unreliable'
+        };
+      }
 
       // 1. Sync collection tier roles (based on configured rules only)
       const tierChanges = await this.syncTierRoles(member, allNFTs, guildId, currentMemberRoleIds);

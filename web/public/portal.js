@@ -7423,8 +7423,8 @@ async function loadSuperadminView() {
     const chainEmojiMap = settingsData?.settings?.chainEmojiMap || {};
 
     content.innerHTML = `
-      <style>.sa-shell{display:grid;gap:16px;}.sa-card{padding:14px;border:1px solid rgba(99,102,241,0.22);border-radius:10px;background:rgba(14,23,44,0.45);}.sa-tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;}.sa-tab-btn{width:100%;text-align:left;justify-content:flex-start;}</style><div class="sa-shell">
-        <div style="padding:14px 16px;border:1px solid rgba(99,102,241,0.28);border-radius:12px;background:linear-gradient(135deg,rgba(99,102,241,0.16),rgba(30,41,59,0.52));display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div class="sa-shell">
+        <div class="sa-context-card">
           <div>
             <div style="color:#c9d6ff;font-size:0.82em;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;">Active Tenant Context</div>
             <div style="color:#e0e7ff;font-size:1em;font-weight:700;margin-top:2px;">${escapeHtml(activeTenantName)}</div>
@@ -7440,12 +7440,12 @@ async function loadSuperadminView() {
 
           
 
-          <div id="superadminTenantDetailTabGroup" style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button data-tenant-detail-tab="overview" class="btn-primary" onclick="showTenantDetailTab('overview')" style="padding:8px 12px;">Overview</button>
-            <button data-tenant-detail-tab="controls" class="btn-secondary" onclick="showTenantDetailTab('controls')" style="padding:8px 12px;">Plan & Status</button>
-            <button data-tenant-detail-tab="branding" class="btn-secondary" onclick="showTenantDetailTab('branding')" style="padding:8px 12px;">Branding</button>
-            <button data-tenant-detail-tab="modules" class="btn-secondary" onclick="showTenantDetailTab('modules')" style="padding:8px 12px;">Modules</button>
-            <button data-tenant-detail-tab="eras" class="btn-secondary" onclick="showTenantDetailTab('eras')" style="padding:8px 12px;">Era Assignments</button>
+          <div id="superadminTenantDetailTabGroup" class="sa-subtabs">
+            <button data-tenant-detail-tab="overview" class="btn-primary sa-subtab-btn" onclick="showTenantDetailTab('overview')">Overview</button>
+            <button data-tenant-detail-tab="controls" class="btn-secondary sa-subtab-btn" onclick="showTenantDetailTab('controls')">Plan & Status</button>
+            <button data-tenant-detail-tab="branding" class="btn-secondary sa-subtab-btn" onclick="showTenantDetailTab('branding')">Branding</button>
+            <button data-tenant-detail-tab="modules" class="btn-secondary sa-subtab-btn" onclick="showTenantDetailTab('modules')">Modules</button>
+            <button data-tenant-detail-tab="eras" class="btn-secondary sa-subtab-btn" onclick="showTenantDetailTab('eras')">Era Assignments</button>
           </div>
         </div>
 
@@ -8330,7 +8330,7 @@ function showSuperadminTab(tab) {
     });
   });
   document.querySelectorAll('[data-superadmin-tab-btn]').forEach(btn => {
-    btn.className = (btn.dataset.superadminTabBtn === tab) ? 'btn-primary' : 'btn-secondary';
+    btn.className = (btn.dataset.superadminTabBtn === tab) ? 'btn-primary sa-tab-btn' : 'btn-secondary sa-tab-btn';
   });
   const tenantDetailGroup = document.getElementById('superadminTenantDetailTabGroup');
   if (tenantDetailGroup) tenantDetailGroup.style.display = (tab === 'tenants') ? 'flex' : 'none';
@@ -8394,7 +8394,7 @@ function showTenantDetailTab(tab) {
     });
   });
   document.querySelectorAll('[data-tenant-detail-tab]').forEach(btn => {
-    btn.className = (btn.dataset.tenantDetailTab === tab) ? 'btn-primary' : 'btn-secondary';
+    btn.className = (btn.dataset.tenantDetailTab === tab) ? 'btn-primary sa-subtab-btn' : 'btn-secondary sa-subtab-btn';
   });
 }
 

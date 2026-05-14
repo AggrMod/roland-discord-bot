@@ -7434,79 +7434,45 @@ async function loadSuperadminView() {
           </div>
           <div style="color:#cbd5e1;font-size:0.82em;max-width:520px;">Tenant-scoped actions below (plan/modules/branding/status) apply to this server. Superadmin list + era catalog are global controls.</div>
         </div>
-        <div class="sa-ops-grid">
-          <button data-superadmin-tab-btn="tenants" class="sa-ops-tile active" onclick="showSuperadminTab('tenants')">
-            <strong>Tenants</strong>
-            <span>Directory, plans, branding, modules</span>
+        <div class="sa-menu-grid">
+          <button data-superadmin-tab-btn="tenants" class="module-tile sa-menu-card active" onclick="showSuperadminTab('tenants')">
+            <div class="module-tile__header"><div class="module-tile__icon">🏢</div><div class="module-tile__status status-active">Workspace</div></div>
+            <div class="module-tile__body"><h3 class="module-tile__title">Tenants</h3><p class="module-tile__desc">Directory, plans, branding, modules</p></div>
           </button>
-          <button data-superadmin-tab-btn="identity" class="sa-ops-tile" onclick="showSuperadminTab('identity')">
-            <strong>Identity</strong>
-            <span>Wallet links, flags, audit trail</span>
+          <button data-superadmin-tab-btn="identity" class="module-tile sa-menu-card" onclick="showSuperadminTab('identity')">
+            <div class="module-tile__header"><div class="module-tile__icon">🪪</div><div class="module-tile__status status-active">Global</div></div>
+            <div class="module-tile__body"><h3 class="module-tile__title">Identity</h3><p class="module-tile__desc">Wallet links, flags, audit trail</p></div>
           </button>
-          <button data-superadmin-tab-btn="globalops" class="sa-ops-tile" onclick="showSuperadminTab('globalops')">
-            <strong>Global Ops</strong>
-            <span>Global integrations and platform settings</span>
+          <button data-superadmin-tab-btn="globalops" class="module-tile sa-menu-card" onclick="showSuperadminTab('globalops')">
+            <div class="module-tile__header"><div class="module-tile__icon">⚙️</div><div class="module-tile__status status-active">Platform</div></div>
+            <div class="module-tile__body"><h3 class="module-tile__title">Global Ops</h3><p class="module-tile__desc">Integrations and platform settings</p></div>
           </button>
-          <button data-superadmin-tab-btn="monitoring" class="sa-ops-tile" onclick="showSuperadminTab('monitoring')">
-            <strong>Monitoring</strong>
-            <span>System diagnostics and process health</span>
-          </button>
-        </div>
-
-        <div id="superadminTenantDetailTabGroup" class="sa-ops-grid sa-ops-grid--compact">
-          <button data-tenant-detail-tab="overview" class="sa-ops-tile active" onclick="showTenantDetailTab('overview')">
-            <strong>Overview</strong>
-          </button>
-          <button data-tenant-detail-tab="controls" class="sa-ops-tile" onclick="showTenantDetailTab('controls')">
-            <strong>Plan & Status</strong>
-          </button>
-          <button data-tenant-detail-tab="branding" class="sa-ops-tile" onclick="showTenantDetailTab('branding')">
-            <strong>Branding</strong>
-          </button>
-          <button data-tenant-detail-tab="modules" class="sa-ops-tile" onclick="showTenantDetailTab('modules')">
-            <strong>Modules</strong>
-          </button>
-          <button data-tenant-detail-tab="eras" class="sa-ops-tile" onclick="showTenantDetailTab('eras')">
-            <strong>Era Assignments</strong>
+          <button data-superadmin-tab-btn="monitoring" class="module-tile sa-menu-card" onclick="showSuperadminTab('monitoring')">
+            <div class="module-tile__header"><div class="module-tile__icon">📈</div><div class="module-tile__status status-active">System</div></div>
+            <div class="module-tile__body"><h3 class="module-tile__title">Monitoring</h3><p class="module-tile__desc">System diagnostics and process health</p></div>
           </button>
         </div>
 
-        <div id="superadminSection-globalopsNav" class="sa-ops-grid" style="display:none;">
-          <button class="sa-ops-tile active" data-sa-ops-panel="superadmins" onclick="showSuperadminGlobalOpsPanel('superadmins')">
-            <strong>Superadmins</strong>
-            <span>Manage root/global admin access</span>
-          </button>
-          <button class="sa-ops-tile" data-sa-ops-panel="chainEmojis" onclick="showSuperadminGlobalOpsPanel('chainEmojis')">
-            <strong>Chain Emojis</strong>
-            <span>Global chain icon mapping and replay</span>
-          </button>
-          <button class="sa-ops-tile" data-sa-ops-panel="microVerify" onclick="showSuperadminGlobalOpsPanel('microVerify')">
-            <strong>Micro Verify</strong>
-            <span>Ownership verification and wallet controls</span>
-          </button>
-          <button class="sa-ops-tile" data-sa-ops-panel="aiProviders" onclick="showSuperadminGlobalOpsPanel('aiProviders')">
-            <strong>AI Settings</strong>
-            <span>Keys, models, provider routing</span>
-          </button>
-          <button class="sa-ops-tile" data-sa-ops-panel="xProvider" onclick="showSuperadminGlobalOpsPanel('xProvider')">
-            <strong>X Settings</strong>
-            <span>OAuth, polling, and provider credentials</span>
-          </button>
+        <div id="superadminTenantDetailTabGroup" class="sa-menu-grid sa-menu-grid--compact">
+          <button data-tenant-detail-tab="overview" class="module-tile sa-menu-card active" onclick="showTenantDetailTab('overview')"><div class="module-tile__body"><h3 class="module-tile__title">Overview</h3></div></button>
+          <button data-tenant-detail-tab="controls" class="module-tile sa-menu-card" onclick="showTenantDetailTab('controls')"><div class="module-tile__body"><h3 class="module-tile__title">Plan & Status</h3></div></button>
+          <button data-tenant-detail-tab="branding" class="module-tile sa-menu-card" onclick="showTenantDetailTab('branding')"><div class="module-tile__body"><h3 class="module-tile__title">Branding</h3></div></button>
+          <button data-tenant-detail-tab="modules" class="module-tile sa-menu-card" onclick="showTenantDetailTab('modules')"><div class="module-tile__body"><h3 class="module-tile__title">Modules</h3></div></button>
+          <button data-tenant-detail-tab="eras" class="module-tile sa-menu-card" onclick="showTenantDetailTab('eras')"><div class="module-tile__body"><h3 class="module-tile__title">Era Assignments</h3></div></button>
         </div>
 
-        <div id="superadminSection-tenantsNav" class="sa-ops-grid" style="display:none;">
-          <button class="sa-ops-tile active" data-sa-tenants-panel="directory" onclick="showSuperadminTenantsPanel('directory')">
-            <strong>Tenant Directory</strong>
-            <span>Search and select guilds</span>
-          </button>
-          <button class="sa-ops-tile" data-sa-tenants-panel="detail" onclick="showSuperadminTenantsPanel('detail')">
-            <strong>Tenant Detail</strong>
-            <span>Plan, branding, modules and controls</span>
-          </button>
-          <button class="sa-ops-tile" data-sa-tenants-panel="eras" onclick="showSuperadminTenantsPanel('eras')">
-            <strong>Era Assignments</strong>
-            <span>Global era binding for selected tenant</span>
-          </button>
+        <div id="superadminSection-globalopsNav" class="sa-menu-grid" style="display:none;">
+          <button class="module-tile sa-menu-card active" data-sa-ops-panel="superadmins" onclick="showSuperadminGlobalOpsPanel('superadmins')"><div class="module-tile__body"><h3 class="module-tile__title">Superadmins</h3><p class="module-tile__desc">Manage root/global admin access</p></div></button>
+          <button class="module-tile sa-menu-card" data-sa-ops-panel="chainEmojis" onclick="showSuperadminGlobalOpsPanel('chainEmojis')"><div class="module-tile__body"><h3 class="module-tile__title">Chain Emojis</h3><p class="module-tile__desc">Global chain icon mapping and replay</p></div></button>
+          <button class="module-tile sa-menu-card" data-sa-ops-panel="microVerify" onclick="showSuperadminGlobalOpsPanel('microVerify')"><div class="module-tile__body"><h3 class="module-tile__title">Micro Verify</h3><p class="module-tile__desc">Ownership verification and wallet controls</p></div></button>
+          <button class="module-tile sa-menu-card" data-sa-ops-panel="aiProviders" onclick="showSuperadminGlobalOpsPanel('aiProviders')"><div class="module-tile__body"><h3 class="module-tile__title">AI Settings</h3><p class="module-tile__desc">Keys, models, provider routing</p></div></button>
+          <button class="module-tile sa-menu-card" data-sa-ops-panel="xProvider" onclick="showSuperadminGlobalOpsPanel('xProvider')"><div class="module-tile__body"><h3 class="module-tile__title">X Settings</h3><p class="module-tile__desc">OAuth, polling, provider credentials</p></div></button>
+        </div>
+
+        <div id="superadminSection-tenantsNav" class="sa-menu-grid" style="display:none;">
+          <button class="module-tile sa-menu-card active" data-sa-tenants-panel="directory" onclick="showSuperadminTenantsPanel('directory')"><div class="module-tile__body"><h3 class="module-tile__title">Tenant Directory</h3><p class="module-tile__desc">Search and select guilds</p></div></button>
+          <button class="module-tile sa-menu-card" data-sa-tenants-panel="detail" onclick="showSuperadminTenantsPanel('detail')"><div class="module-tile__body"><h3 class="module-tile__title">Tenant Detail</h3><p class="module-tile__desc">Plan, branding, modules and controls</p></div></button>
+          <button class="module-tile sa-menu-card" data-sa-tenants-panel="eras" onclick="showSuperadminTenantsPanel('eras')"><div class="module-tile__body"><h3 class="module-tile__title">Era Assignments</h3><p class="module-tile__desc">Global era binding for selected tenant</p></div></button>
         </div>
 
         <div id="superadminSection-superadminsInput" style="display:grid; gap:12px; grid-template-columns:minmax(0,1fr) auto;">

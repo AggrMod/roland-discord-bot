@@ -7432,20 +7432,20 @@ async function loadSuperadminView() {
           </div>
           <div style="color:#cbd5e1;font-size:0.82em;max-width:520px;">Tenant-scoped actions below (plan/modules/branding/status) apply to this server. Superadmin list + era catalog are global controls.</div>
         </div>
-        <div class="sa-tabs">
-          <button data-superadmin-tab-btn="tenants" class="btn-primary sa-tab-btn" onclick="showSuperadminTab('tenants')">Tenants</button>
-          <button data-superadmin-tab-btn="identity" class="btn-secondary sa-tab-btn" onclick="showSuperadminTab('identity')">Identity</button>
-          <button data-superadmin-tab-btn="globalops" class="btn-secondary sa-tab-btn" onclick="showSuperadminTab('globalops')">Global Ops</button>
-          <button data-superadmin-tab-btn="monitoring" class="btn-secondary sa-tab-btn" onclick="showSuperadminTab('monitoring')">Monitoring</button>
+        <div class="settings-tabs sa-tabs">
+          <button data-superadmin-tab-btn="tenants" class="settings-tab active" onclick="showSuperadminTab('tenants')">Tenants</button>
+          <button data-superadmin-tab-btn="identity" class="settings-tab" onclick="showSuperadminTab('identity')">Identity</button>
+          <button data-superadmin-tab-btn="globalops" class="settings-tab" onclick="showSuperadminTab('globalops')">Global Ops</button>
+          <button data-superadmin-tab-btn="monitoring" class="settings-tab" onclick="showSuperadminTab('monitoring')">Monitoring</button>
 
           
 
-          <div id="superadminTenantDetailTabGroup" class="sa-subtabs">
-            <button data-tenant-detail-tab="overview" class="btn-primary sa-subtab-btn" onclick="showTenantDetailTab('overview')">Overview</button>
-            <button data-tenant-detail-tab="controls" class="btn-secondary sa-subtab-btn" onclick="showTenantDetailTab('controls')">Plan & Status</button>
-            <button data-tenant-detail-tab="branding" class="btn-secondary sa-subtab-btn" onclick="showTenantDetailTab('branding')">Branding</button>
-            <button data-tenant-detail-tab="modules" class="btn-secondary sa-subtab-btn" onclick="showTenantDetailTab('modules')">Modules</button>
-            <button data-tenant-detail-tab="eras" class="btn-secondary sa-subtab-btn" onclick="showTenantDetailTab('eras')">Era Assignments</button>
+          <div id="superadminTenantDetailTabGroup" class="settings-tabs sa-subtabs">
+            <button data-tenant-detail-tab="overview" class="settings-tab active" onclick="showTenantDetailTab('overview')">Overview</button>
+            <button data-tenant-detail-tab="controls" class="settings-tab" onclick="showTenantDetailTab('controls')">Plan & Status</button>
+            <button data-tenant-detail-tab="branding" class="settings-tab" onclick="showTenantDetailTab('branding')">Branding</button>
+            <button data-tenant-detail-tab="modules" class="settings-tab" onclick="showTenantDetailTab('modules')">Modules</button>
+            <button data-tenant-detail-tab="eras" class="settings-tab" onclick="showTenantDetailTab('eras')">Era Assignments</button>
           </div>
         </div>
 
@@ -8330,7 +8330,7 @@ function showSuperadminTab(tab) {
     });
   });
   document.querySelectorAll('[data-superadmin-tab-btn]').forEach(btn => {
-    btn.className = (btn.dataset.superadminTabBtn === tab) ? 'btn-primary sa-tab-btn' : 'btn-secondary sa-tab-btn';
+    btn.classList.toggle('active', btn.dataset.superadminTabBtn === tab);
   });
   const tenantDetailGroup = document.getElementById('superadminTenantDetailTabGroup');
   if (tenantDetailGroup) tenantDetailGroup.style.display = (tab === 'tenants') ? 'flex' : 'none';
@@ -8394,7 +8394,7 @@ function showTenantDetailTab(tab) {
     });
   });
   document.querySelectorAll('[data-tenant-detail-tab]').forEach(btn => {
-    btn.className = (btn.dataset.tenantDetailTab === tab) ? 'btn-primary sa-subtab-btn' : 'btn-secondary sa-subtab-btn';
+    btn.classList.toggle('active', btn.dataset.tenantDetailTab === tab);
   });
 }
 

@@ -6864,6 +6864,7 @@ let superadminTemplateCatalog = [];
 let superadminTenantSearch = '';
 let superadminActiveTab = 'tenants';
 let superadminGlobalOpsPanel = 'superadmins';
+let superadminTenantsPanel = 'directory';
 let tenantDetailActiveTab = 'overview';
 let superadminTenantDirectoryCollapsed = false;
 let superadminTenantPage = 1;
@@ -7470,6 +7471,21 @@ async function loadSuperadminView() {
           <button class="sa-ops-tile" data-sa-ops-panel="xProvider" onclick="showSuperadminGlobalOpsPanel('xProvider')">
             <strong>X Settings</strong>
             <span>OAuth, polling, and provider credentials</span>
+          </button>
+        </div>
+
+        <div id="superadminSection-tenantsNav" class="sa-ops-grid" style="display:none;">
+          <button class="sa-ops-tile active" data-sa-tenants-panel="directory" onclick="showSuperadminTenantsPanel('directory')">
+            <strong>Tenant Directory</strong>
+            <span>Search and select guilds</span>
+          </button>
+          <button class="sa-ops-tile" data-sa-tenants-panel="detail" onclick="showSuperadminTenantsPanel('detail')">
+            <strong>Tenant Detail</strong>
+            <span>Plan, branding, modules and controls</span>
+          </button>
+          <button class="sa-ops-tile" data-sa-tenants-panel="eras" onclick="showSuperadminTenantsPanel('eras')">
+            <strong>Era Assignments</strong>
+            <span>Global era binding for selected tenant</span>
           </button>
         </div>
 
@@ -8344,7 +8360,7 @@ function showSuperadminTab(tab) {
   const sections = {
     globalops: ['superadminSection-globalopsNav', 'superadminSection-superadminsInput', 'superadminSection-superadmins', 'superadminSection-chainEmojis', 'superadminSection-microVerify', 'superadminSection-aiProviders', 'superadminSection-xProvider'],
     identity: ['superadminSection-identity'],
-    tenants: ['superadminSection-tenants', 'superadminSection-detail', 'superadminSection-eras'],
+    tenants: ['superadminSection-tenantsNav', 'superadminSection-tenants', 'superadminSection-detail', 'superadminSection-eras'],
     monitoring: ['superadminSection-monitoring'],
   };
   Object.entries(sections).forEach(([key, ids]) => {
@@ -8357,9 +8373,9 @@ function showSuperadminTab(tab) {
     btn.classList.toggle('active', btn.dataset.superadminTabBtn === tab);
   });
   const tenantDetailGroup = document.getElementById('superadminTenantDetailTabGroup');
-  if (tenantDetailGroup) tenantDetailGroup.style.display = (tab === 'tenants') ? 'flex' : 'none';
+  if (tenantDetailGroup) tenantDetailGroup.style.display = 'none';
   if (tab === 'tenants') {
-    showTenantDetailTab(tenantDetailActiveTab || 'overview');
+    showSuperadminTenantsPanel(superadminTenantsPanel || 'directory');
   } else if (tab === 'globalops') {
     showSuperadminGlobalOpsPanel(superadminGlobalOpsPanel || 'superadmins');
   } else if (tab === 'identity') {
@@ -8399,6 +8415,36 @@ function showSuperadminGlobalOpsPanel(panel) {
   document.querySelectorAll('[data-sa-ops-panel]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.saOpsPanel === normalized);
   });
+}
+
+function showSuperadminTenantsPanel(panel) {
+  const normalized = String(panel || '').trim() || 'directory';
+  superadminTenantsPanel = normalized;
+
+  const mapping = {
+    directory: ['superadminSection-tenants'],
+    detail: ['superadminSection-detail'],
+    eras: ['superadminSection-eras'],
+  };
+  const allIds = ['superadminSection-tenants', 'superadminSection-detail', 'superadminSection-eras'];
+  const visible = new Set(mapping[normalized] || mapping.directory);
+
+  allIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = visible.has(id) ? '' : 'none';
+  });
+
+  document.querySelectorAll('[data-sa-tenants-panel]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.saTenantsPanel === normalized);
+  });
+
+  const tenantDetailGroup = document.getElementById('superadminTenantDetailTabGroup');
+  if (tenantDetailGroup) {
+    tenantDetailGroup.style.display = normalized === 'detail' ? 'flex' : 'none';
+  }
+  if (normalized === 'detail') {
+    showTenantDetailTab(tenantDetailActiveTab || 'overview');
+  }
 }
 
 function selectTenantGuild(guildId) {

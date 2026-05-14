@@ -27,6 +27,7 @@ const _portalMultiSelectRegistry = new Map();
 let _portalMultiSelectAutoId = 0;
 let _portalMultiSelectPickerState = null;
 let vaultSettingsCache = null;
+let vaultConfigModalState = { type: '', index: -1 };
 const PORTAL_PAGE_EXPECTATIONS = Object.freeze({
   sections: [
     'landing',
@@ -9769,59 +9770,97 @@ function vaultRenderSimpleConfigEditors() {
   const bands = vaultGetJsonArrayInputValue('vault_paymentBandsJson', []);
   const conversions = vaultGetJsonArrayInputValue('vault_keyTierConversionsJson', []);
 
-  tiersWrap.innerHTML = tiers.map((tier, idx) => `
-    <div class="settings-grid" data-vault-simple-tier-row="${idx}" style="margin-bottom:6px;">
-      <input class="input-sm" data-vault-tier-id value="${escapeHtml(String(tier?.id || ''))}" placeholder="id (bronze)">
-      <input class="input-sm" data-vault-tier-name value="${escapeHtml(String(tier?.name || ''))}" placeholder="display name">
-      <input class="input-sm" data-vault-tier-inherits value="${escapeHtml(String(tier?.inheritsFrom || ''))}" placeholder="inherits from (optional)">
-      <label style="display:flex;align-items:center;gap:6px;color:var(--text-secondary);"><input type="checkbox" data-vault-tier-enabled ${tier?.enabled === false ? '' : 'checked'}> enabled</label>
-      <button class="btn-danger" onclick="vaultRemoveSimpleTierRow(${idx})">Remove</button>
-    </div>
-  `).join('') || '<p style="color:var(--text-secondary);">No tiers yet.</p>';
+  tiersWrap.innerHTML = tiers.length ? `
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr><th align="left">Tier ID</th><th align="left">Name</th><th align="left">Inherits</th><th align="left">Enabled</th><th align="left">Actions</th></tr></thead>
+      <tbody>
+        ${tiers.map((tier, idx) => `
+          <tr data-vault-simple-tier-row="${idx}">
+            <td><code>${escapeHtml(String(tier?.id || ''))}</code></td>
+            <td>${escapeHtml(String(tier?.name || '-'))}</td>
+            <td>${escapeHtml(String(tier?.inheritsFrom || '-'))}</td>
+            <td>${tier?.enabled === false ? 'No' : 'Yes'}</td>
+            <td style="display:flex;gap:6px;">
+              <button class="btn-secondary" onclick="vaultOpenConfigRowModal('tier', ${idx})">Edit</button>
+              <button class="btn-danger" onclick="vaultRemoveSimpleTierRow(${idx})">Delete</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  ` : '<p style="color:var(--text-secondary);">No tiers yet.</p>';
 
   const tierIds = tiers.map(t => String(t?.id || '').trim()).filter(Boolean);
-  grantsWrap.innerHTML = tierIds.map((tierId) => {
+  grantsWrap.innerHTML = tierIds.length ? `
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr><th align="left">Tier ID</th><th align="left">Paid Mint Keys</th><th align="left">Free Mint Keys</th></tr></thead>
+      <tbody>
+        ${tierIds.map((tierId) => {
     const row = grants[tierId] || {};
     return `
-      <div class="settings-grid" data-vault-simple-grant-row="${escapeHtml(tierId)}" style="margin-bottom:6px;">
-        <input class="input-sm" value="${escapeHtml(tierId)}" disabled>
-        <input class="input-sm" data-vault-grant-paid="${escapeHtml(tierId)}" type="number" min="0" value="${Number(row?.paid || 0)}" placeholder="paid keys">
-        <input class="input-sm" data-vault-grant-free="${escapeHtml(tierId)}" type="number" min="0" value="${Number(row?.free || 0)}" placeholder="free keys">
-      </div>
+      <tr data-vault-simple-grant-row="${escapeHtml(tierId)}">
+        <td><code>${escapeHtml(tierId)}</code></td>
+        <td><input class="input-sm" data-vault-grant-paid="${escapeHtml(tierId)}" type="number" min="0" value="${Number(row?.paid || 0)}" placeholder="paid keys"></td>
+        <td><input class="input-sm" data-vault-grant-free="${escapeHtml(tierId)}" type="number" min="0" value="${Number(row?.free || 0)}" placeholder="free keys"></td>
+      </tr>
     `;
-  }).join('') || '<p style="color:var(--text-secondary);">Define tiers first to edit grants.</p>';
+  }).join('')}
+      </tbody>
+    </table>
+  ` : '<p style="color:var(--text-secondary);">Define tiers first to edit grants.</p>';
 
-  bandsWrap.innerHTML = bands.map((band, idx) => `
-    <div class="settings-grid" data-vault-simple-band-row="${idx}" style="margin-bottom:6px;">
-      <input class="input-sm" data-vault-band-tier value="${escapeHtml(String(band?.keyTier || band?.key_tier || ''))}" placeholder="tier id">
-      <input class="input-sm" data-vault-band-min type="number" min="0" value="${Number(band?.minLamports ?? band?.min_lamports ?? 0) || 0}" placeholder="min lamports">
-      <input class="input-sm" data-vault-band-max type="number" min="0" value="${band?.maxLamports === null || band?.max_lamports === null ? '' : (Number(band?.maxLamports ?? band?.max_lamports ?? 0) || '')}" placeholder="max lamports (blank = no max)">
-      <input class="input-sm" data-vault-band-paid type="number" min="0" value="${Number(band?.paid || 0)}" placeholder="paid keys">
-      <input class="input-sm" data-vault-band-free type="number" min="0" value="${Number(band?.free || 0)}" placeholder="free keys">
-      <button class="btn-danger" onclick="vaultRemoveSimpleBandRow(${idx})">Remove</button>
-    </div>
-  `).join('') || '<p style="color:var(--text-secondary);">No payment bands yet.</p>';
+  bandsWrap.innerHTML = bands.length ? `
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr><th align="left">Tier</th><th align="left">Min Lamports</th><th align="left">Max Lamports</th><th align="left">Paid</th><th align="left">Free</th><th align="left">Actions</th></tr></thead>
+      <tbody>
+        ${bands.map((band, idx) => `
+          <tr data-vault-simple-band-row="${idx}">
+            <td><code>${escapeHtml(String(band?.keyTier || band?.key_tier || ''))}</code></td>
+            <td>${Number(band?.minLamports ?? band?.min_lamports ?? 0) || 0}</td>
+            <td>${band?.maxLamports === null || band?.max_lamports === null ? '∞' : (Number(band?.maxLamports ?? band?.max_lamports ?? 0) || 0)}</td>
+            <td>${Number(band?.paid || 0)}</td>
+            <td>${Number(band?.free || 0)}</td>
+            <td style="display:flex;gap:6px;">
+              <button class="btn-secondary" onclick="vaultOpenConfigRowModal('band', ${idx})">Edit</button>
+              <button class="btn-danger" onclick="vaultRemoveSimpleBandRow(${idx})">Delete</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  ` : '<p style="color:var(--text-secondary);">No payment bands yet.</p>';
 
-  conversionsWrap.innerHTML = conversions.map((rule, idx) => `
-    <div class="settings-grid" data-vault-simple-conversion-row="${idx}" style="margin-bottom:6px;">
-      <input class="input-sm" data-vault-conv-from value="${escapeHtml(String(rule?.fromTier || rule?.from_tier || ''))}" placeholder="from tier">
-      <input class="input-sm" data-vault-conv-to value="${escapeHtml(String(rule?.toTier || rule?.to_tier || ''))}" placeholder="to tier">
-      <input class="input-sm" data-vault-conv-from-amount type="number" min="1" value="${Math.max(1, Number(rule?.fromAmount ?? rule?.from_amount ?? 1) || 1)}" placeholder="from amount">
-      <input class="input-sm" data-vault-conv-to-amount type="number" min="1" value="${Math.max(1, Number(rule?.toAmount ?? rule?.to_amount ?? 1) || 1)}" placeholder="to amount">
-      <label style="display:flex;align-items:center;gap:6px;color:var(--text-secondary);"><input type="checkbox" data-vault-conv-enabled ${rule?.enabled === false ? '' : 'checked'}> enabled</label>
-      <button class="btn-danger" onclick="vaultRemoveSimpleConversionRow(${idx})">Remove</button>
-    </div>
-  `).join('') || '<p style="color:var(--text-secondary);">No upgrade rules yet.</p>';
+  conversionsWrap.innerHTML = conversions.length ? `
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr><th align="left">From</th><th align="left">To</th><th align="left">From Amount</th><th align="left">To Amount</th><th align="left">Enabled</th><th align="left">Actions</th></tr></thead>
+      <tbody>
+        ${conversions.map((rule, idx) => `
+          <tr data-vault-simple-conversion-row="${idx}">
+            <td><code>${escapeHtml(String(rule?.fromTier || rule?.from_tier || ''))}</code></td>
+            <td><code>${escapeHtml(String(rule?.toTier || rule?.to_tier || ''))}</code></td>
+            <td>${Math.max(1, Number(rule?.fromAmount ?? rule?.from_amount ?? 1) || 1)}</td>
+            <td>${Math.max(1, Number(rule?.toAmount ?? rule?.to_amount ?? 1) || 1)}</td>
+            <td>${rule?.enabled === false ? 'No' : 'Yes'}</td>
+            <td style="display:flex;gap:6px;">
+              <button class="btn-secondary" onclick="vaultOpenConfigRowModal('conversion', ${idx})">Edit</button>
+              <button class="btn-danger" onclick="vaultRemoveSimpleConversionRow(${idx})">Delete</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  ` : '<p style="color:var(--text-secondary);">No upgrade rules yet.</p>';
 }
 
 function vaultSyncSimpleEditorsToJson() {
-  const tierRows = Array.from(document.querySelectorAll('[data-vault-simple-tier-row]'));
-  const tiers = tierRows.map((row) => ({
-    id: String(row.querySelector('[data-vault-tier-id]')?.value || '').trim().toLowerCase(),
-    name: String(row.querySelector('[data-vault-tier-name]')?.value || '').trim(),
-    inheritsFrom: String(row.querySelector('[data-vault-tier-inherits]')?.value || '').trim() || null,
-    enabled: !!row.querySelector('[data-vault-tier-enabled]')?.checked,
-  })).filter((tier) => tier.id && tier.name);
+  const tiers = vaultGetJsonArrayInputValue('vault_keyTiersJson', [])
+    .map((tier) => ({
+      id: String(tier?.id || '').trim().toLowerCase(),
+      name: String(tier?.name || '').trim(),
+      inheritsFrom: String(tier?.inheritsFrom || '').trim() || null,
+      enabled: tier?.enabled !== false,
+    }))
+    .filter((tier) => tier.id && tier.name);
   const uniqueById = new Map();
   tiers.forEach((tier) => uniqueById.set(tier.id, tier));
   const normalizedTiers = Array.from(uniqueById.values());
@@ -9837,27 +9876,25 @@ function vaultSyncSimpleEditorsToJson() {
     };
   });
 
-  const bandRows = Array.from(document.querySelectorAll('[data-vault-simple-band-row]'));
-  const bands = bandRows.map((row) => {
-    const tier = String(row.querySelector('[data-vault-band-tier]')?.value || '').trim().toLowerCase();
-    const maxRaw = String(row.querySelector('[data-vault-band-max]')?.value || '').trim();
-    return {
-      keyTier: tier || 'default',
-      minLamports: Math.max(0, Number(row.querySelector('[data-vault-band-min]')?.value || 0) || 0),
-      maxLamports: maxRaw === '' ? null : Math.max(0, Number(maxRaw) || 0),
-      paid: Math.max(0, Number(row.querySelector('[data-vault-band-paid]')?.value || 0) || 0),
-      free: Math.max(0, Number(row.querySelector('[data-vault-band-free]')?.value || 0) || 0),
-    };
-  }).filter((band) => !!band.keyTier);
+  const bands = vaultGetJsonArrayInputValue('vault_paymentBandsJson', [])
+    .map((band) => ({
+      keyTier: String(band?.keyTier || '').trim().toLowerCase() || 'default',
+      minLamports: Math.max(0, Number(band?.minLamports ?? 0) || 0),
+      maxLamports: band?.maxLamports === null || band?.maxLamports === '' || band?.maxLamports === undefined ? null : Math.max(0, Number(band?.maxLamports || 0) || 0),
+      paid: Math.max(0, Number(band?.paid || 0) || 0),
+      free: Math.max(0, Number(band?.free || 0) || 0),
+    }))
+    .filter((band) => !!band.keyTier);
 
-  const conversionRows = Array.from(document.querySelectorAll('[data-vault-simple-conversion-row]'));
-  const conversions = conversionRows.map((row) => ({
-    fromTier: String(row.querySelector('[data-vault-conv-from]')?.value || '').trim().toLowerCase(),
-    toTier: String(row.querySelector('[data-vault-conv-to]')?.value || '').trim().toLowerCase(),
-    fromAmount: Math.max(1, Number(row.querySelector('[data-vault-conv-from-amount]')?.value || 1) || 1),
-    toAmount: Math.max(1, Number(row.querySelector('[data-vault-conv-to-amount]')?.value || 1) || 1),
-    enabled: !!row.querySelector('[data-vault-conv-enabled]')?.checked,
-  })).filter((rule) => rule.fromTier && rule.toTier);
+  const conversions = vaultGetJsonArrayInputValue('vault_keyTierConversionsJson', [])
+    .map((rule) => ({
+      fromTier: String(rule?.fromTier || '').trim().toLowerCase(),
+      toTier: String(rule?.toTier || '').trim().toLowerCase(),
+      fromAmount: Math.max(1, Number(rule?.fromAmount || 1) || 1),
+      toAmount: Math.max(1, Number(rule?.toAmount || 1) || 1),
+      enabled: rule?.enabled !== false,
+    }))
+    .filter((rule) => rule.fromTier && rule.toTier);
 
   const tiersEl = document.getElementById('vault_keyTiersJson');
   const grantsEl = document.getElementById('vault_keyTierGrantsJson');
@@ -9870,11 +9907,7 @@ function vaultSyncSimpleEditorsToJson() {
 }
 
 function vaultAddSimpleTierRow() {
-  const tiers = vaultGetJsonArrayInputValue('vault_keyTiersJson', []);
-  tiers.push({ id: '', name: '', inheritsFrom: null, enabled: true });
-  const tiersEl = document.getElementById('vault_keyTiersJson');
-  if (tiersEl) tiersEl.value = JSON.stringify(tiers, null, 2);
-  vaultRenderSimpleConfigEditors();
+  vaultOpenConfigRowModal('tier', -1);
 }
 
 function vaultRemoveSimpleTierRow(index) {
@@ -9887,11 +9920,7 @@ function vaultRemoveSimpleTierRow(index) {
 }
 
 function vaultAddSimpleBandRow() {
-  const bands = vaultGetJsonArrayInputValue('vault_paymentBandsJson', []);
-  bands.push({ keyTier: '', minLamports: 0, maxLamports: null, paid: 1, free: 0 });
-  const bandsEl = document.getElementById('vault_paymentBandsJson');
-  if (bandsEl) bandsEl.value = JSON.stringify(bands, null, 2);
-  vaultRenderSimpleConfigEditors();
+  vaultOpenConfigRowModal('band', -1);
 }
 
 function vaultRemoveSimpleBandRow(index) {
@@ -9904,11 +9933,7 @@ function vaultRemoveSimpleBandRow(index) {
 }
 
 function vaultAddSimpleConversionRow() {
-  const rows = vaultGetJsonArrayInputValue('vault_keyTierConversionsJson', []);
-  rows.push({ fromTier: '', toTier: '', fromAmount: 10, toAmount: 1, enabled: true });
-  const convEl = document.getElementById('vault_keyTierConversionsJson');
-  if (convEl) convEl.value = JSON.stringify(rows, null, 2);
-  vaultRenderSimpleConfigEditors();
+  vaultOpenConfigRowModal('conversion', -1);
 }
 
 function vaultRemoveSimpleConversionRow(index) {
@@ -9917,6 +9942,100 @@ function vaultRemoveSimpleConversionRow(index) {
   rows.splice(index, 1);
   const convEl = document.getElementById('vault_keyTierConversionsJson');
   if (convEl) convEl.value = JSON.stringify(rows, null, 2);
+  vaultRenderSimpleConfigEditors();
+}
+
+function vaultOpenConfigRowModal(type, index = -1) {
+  vaultConfigModalState = { type: String(type || ''), index: Number(index) };
+  const modal = document.getElementById('vaultConfigRowModal');
+  const title = document.getElementById('vaultConfigRowModalTitle');
+  const body = document.getElementById('vaultConfigRowModalBody');
+  if (!modal || !title || !body) return;
+
+  if (type === 'tier') {
+    const rows = vaultGetJsonArrayInputValue('vault_keyTiersJson', []);
+    const row = Number(index) >= 0 ? (rows[index] || {}) : {};
+    title.textContent = Number(index) >= 0 ? 'Edit Key Tier' : 'Add Key Tier';
+    body.innerHTML = `
+      <label class="form-label">Tier ID</label><input id="vaultModalTierId" class="form-input" value="${escapeHtml(String(row?.id || ''))}" placeholder="bronze">
+      <label class="form-label">Tier Name</label><input id="vaultModalTierName" class="form-input" value="${escapeHtml(String(row?.name || ''))}" placeholder="Bronze Key">
+      <label class="form-label">Inherits From</label><input id="vaultModalTierInherits" class="form-input" value="${escapeHtml(String(row?.inheritsFrom || ''))}" placeholder="optional">
+      <label style="display:flex;gap:8px;align-items:center;margin-top:8px;"><input id="vaultModalTierEnabled" type="checkbox" ${row?.enabled === false ? '' : 'checked'}> Enabled</label>
+    `;
+  } else if (type === 'band') {
+    const rows = vaultGetJsonArrayInputValue('vault_paymentBandsJson', []);
+    const row = Number(index) >= 0 ? (rows[index] || {}) : {};
+    title.textContent = Number(index) >= 0 ? 'Edit Payment Band' : 'Add Payment Band';
+    body.innerHTML = `
+      <label class="form-label">Tier ID</label><input id="vaultModalBandTier" class="form-input" value="${escapeHtml(String(row?.keyTier || row?.key_tier || ''))}" placeholder="bronze">
+      <label class="form-label">Min Lamports</label><input id="vaultModalBandMin" class="form-input" type="number" min="0" value="${Number(row?.minLamports ?? row?.min_lamports ?? 0) || 0}">
+      <label class="form-label">Max Lamports (blank = no max)</label><input id="vaultModalBandMax" class="form-input" type="number" min="0" value="${row?.maxLamports === null || row?.max_lamports === null ? '' : (Number(row?.maxLamports ?? row?.max_lamports ?? 0) || '')}">
+      <label class="form-label">Paid Keys</label><input id="vaultModalBandPaid" class="form-input" type="number" min="0" value="${Number(row?.paid || 0)}">
+      <label class="form-label">Free Keys</label><input id="vaultModalBandFree" class="form-input" type="number" min="0" value="${Number(row?.free || 0)}">
+    `;
+  } else if (type === 'conversion') {
+    const rows = vaultGetJsonArrayInputValue('vault_keyTierConversionsJson', []);
+    const row = Number(index) >= 0 ? (rows[index] || {}) : {};
+    title.textContent = Number(index) >= 0 ? 'Edit Upgrade Rule' : 'Add Upgrade Rule';
+    body.innerHTML = `
+      <label class="form-label">From Tier</label><input id="vaultModalConvFrom" class="form-input" value="${escapeHtml(String(row?.fromTier || row?.from_tier || ''))}">
+      <label class="form-label">To Tier</label><input id="vaultModalConvTo" class="form-input" value="${escapeHtml(String(row?.toTier || row?.to_tier || ''))}">
+      <label class="form-label">From Amount</label><input id="vaultModalConvFromAmount" class="form-input" type="number" min="1" value="${Math.max(1, Number(row?.fromAmount ?? row?.from_amount ?? 1) || 1)}">
+      <label class="form-label">To Amount</label><input id="vaultModalConvToAmount" class="form-input" type="number" min="1" value="${Math.max(1, Number(row?.toAmount ?? row?.to_amount ?? 1) || 1)}">
+      <label style="display:flex;gap:8px;align-items:center;margin-top:8px;"><input id="vaultModalConvEnabled" type="checkbox" ${row?.enabled === false ? '' : 'checked'}> Enabled</label>
+    `;
+  }
+  modal.style.display = 'flex';
+}
+
+function vaultCloseConfigRowModal() {
+  const modal = document.getElementById('vaultConfigRowModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function vaultSaveConfigRowModal() {
+  const { type, index } = vaultConfigModalState || {};
+  if (type === 'tier') {
+    const rows = vaultGetJsonArrayInputValue('vault_keyTiersJson', []);
+    const next = {
+      id: String(document.getElementById('vaultModalTierId')?.value || '').trim().toLowerCase(),
+      name: String(document.getElementById('vaultModalTierName')?.value || '').trim(),
+      inheritsFrom: String(document.getElementById('vaultModalTierInherits')?.value || '').trim() || null,
+      enabled: !!document.getElementById('vaultModalTierEnabled')?.checked,
+    };
+    if (!next.id || !next.name) return showError('Tier ID and name are required.');
+    if (Number(index) >= 0 && Number(index) < rows.length) rows[index] = next; else rows.push(next);
+    const el = document.getElementById('vault_keyTiersJson');
+    if (el) el.value = JSON.stringify(rows, null, 2);
+  } else if (type === 'band') {
+    const rows = vaultGetJsonArrayInputValue('vault_paymentBandsJson', []);
+    const maxRaw = String(document.getElementById('vaultModalBandMax')?.value || '').trim();
+    const next = {
+      keyTier: String(document.getElementById('vaultModalBandTier')?.value || '').trim().toLowerCase(),
+      minLamports: Math.max(0, Number(document.getElementById('vaultModalBandMin')?.value || 0) || 0),
+      maxLamports: maxRaw === '' ? null : Math.max(0, Number(maxRaw) || 0),
+      paid: Math.max(0, Number(document.getElementById('vaultModalBandPaid')?.value || 0) || 0),
+      free: Math.max(0, Number(document.getElementById('vaultModalBandFree')?.value || 0) || 0),
+    };
+    if (!next.keyTier) return showError('Tier ID is required for payment band.');
+    if (Number(index) >= 0 && Number(index) < rows.length) rows[index] = next; else rows.push(next);
+    const el = document.getElementById('vault_paymentBandsJson');
+    if (el) el.value = JSON.stringify(rows, null, 2);
+  } else if (type === 'conversion') {
+    const rows = vaultGetJsonArrayInputValue('vault_keyTierConversionsJson', []);
+    const next = {
+      fromTier: String(document.getElementById('vaultModalConvFrom')?.value || '').trim().toLowerCase(),
+      toTier: String(document.getElementById('vaultModalConvTo')?.value || '').trim().toLowerCase(),
+      fromAmount: Math.max(1, Number(document.getElementById('vaultModalConvFromAmount')?.value || 1) || 1),
+      toAmount: Math.max(1, Number(document.getElementById('vaultModalConvToAmount')?.value || 1) || 1),
+      enabled: !!document.getElementById('vaultModalConvEnabled')?.checked,
+    };
+    if (!next.fromTier || !next.toTier) return showError('Both tiers are required.');
+    if (Number(index) >= 0 && Number(index) < rows.length) rows[index] = next; else rows.push(next);
+    const el = document.getElementById('vault_keyTierConversionsJson');
+    if (el) el.value = JSON.stringify(rows, null, 2);
+  }
+  vaultCloseConfigRowModal();
   vaultRenderSimpleConfigEditors();
 }
 
@@ -9988,7 +10107,7 @@ function vaultRenderAdminPanel() {
         <td>${vaultFormatQuantity(reward.quantity)}</td>
         <td>${reward.enabled === false ? 'disabled' : 'enabled'}</td>
         <td>
-          <button class="btn-secondary" onclick="vaultLoadRewardToForm('${escapeJsString(String(reward.code || ''))}')">Edit</button>
+          <button class="btn-secondary" onclick="vaultOpenRewardModal('${escapeJsString(String(reward.code || ''))}')">Edit</button>
           <button class="btn-danger" onclick="vaultDeleteReward('${escapeJsString(String(reward.code || ''))}')">Delete</button>
         </td>
       </tr>
@@ -10099,6 +10218,17 @@ function vaultRenderAdminPanel() {
         <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleConversionRow()">Add Upgrade Rule</button></div>
       </div>
 
+      <div id="vaultConfigRowModal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)vaultCloseConfigRowModal()">
+        <div class="modal" style="max-width:560px;">
+          <div class="modal-header"><h3 class="modal-title" id="vaultConfigRowModalTitle">Edit Row</h3></div>
+          <div class="modal-body" id="vaultConfigRowModalBody" style="display:grid;gap:8px;"></div>
+          <div class="modal-footer">
+            <button class="btn-secondary" onclick="vaultCloseConfigRowModal()">Cancel</button>
+            <button class="btn-primary" onclick="vaultSaveConfigRowModal()">Save</button>
+          </div>
+        </div>
+      </div>
+
       <textarea id="vault_keyTiersJson" style="display:none;">${escapeHtml(JSON.stringify(keyTiers, null, 2))}</textarea>
       <textarea id="vault_keyTierGrantsJson" style="display:none;">${escapeHtml(JSON.stringify(keyTierGrants, null, 2))}</textarea>
       <textarea id="vault_paymentBandsJson" style="display:none;">${escapeHtml(JSON.stringify(paymentBands, null, 2))}</textarea>
@@ -10127,18 +10257,28 @@ function vaultRenderAdminPanel() {
 
       <h4 style="margin:20px 0 8px 0;">Reward Table Manager</h4>
       <table style="width:100%;border-collapse:collapse;"><thead><tr><th align="left">Code</th><th align="left">Name</th><th align="left">Tier</th><th align="left">Weight</th><th align="left">Key Tier</th><th align="left">Qty</th><th align="left">State</th><th align="left">Actions</th></tr></thead><tbody>${rewardsRows}</tbody></table>
-      <div class="settings-grid" style="margin-top:10px;">
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Code</div></div><input id="vaultRewardCodeInput" class="input-sm" placeholder="reward_code"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Name</div></div><input id="vaultRewardNameInput" class="input-sm" placeholder="Reward Name"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Tier</div></div><input id="vaultRewardTierInput" class="input-sm" placeholder="common|rare|epic|legendary"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Weight</div></div><input id="vaultRewardWeightInput" type="number" min="0" class="input-sm" value="1"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Key Tier</div></div><input id="vaultRewardKeyTierInput" class="input-sm" placeholder="blank = all tiers"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Quantity</div></div><input id="vaultRewardQuantityInput" type="number" min="0" class="input-sm" placeholder="blank = unlimited"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Type</div></div><select id="vaultRewardTypeInput" class="input-sm"><option value="claimable_reward">claimable_reward</option><option value="none">none</option></select></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Enabled</div></div><input id="vaultRewardEnabledInput" type="checkbox" checked></div>
-      </div>
       <div style="margin-top:8px;">
-        <button class="btn-primary" onclick="vaultSaveReward()">Save Reward</button>
+        <button class="btn-primary" onclick="vaultOpenRewardModal()">Add Reward</button>
+      </div>
+
+      <div id="vaultRewardModal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)vaultCloseRewardModal()">
+        <div class="modal" style="max-width:620px;">
+          <div class="modal-header"><h3 class="modal-title" id="vaultRewardModalTitle">Reward</h3></div>
+          <div class="modal-body" style="display:grid;gap:8px;">
+            <label class="form-label">Code</label><input id="vaultRewardCodeInput" class="form-input" placeholder="reward_code">
+            <label class="form-label">Name</label><input id="vaultRewardNameInput" class="form-input" placeholder="Reward Name">
+            <label class="form-label">Tier</label><input id="vaultRewardTierInput" class="form-input" placeholder="common|rare|epic|legendary">
+            <label class="form-label">Weight</label><input id="vaultRewardWeightInput" type="number" min="0" class="form-input" value="1">
+            <label class="form-label">Key Tier (optional)</label><input id="vaultRewardKeyTierInput" class="form-input" placeholder="blank = all tiers">
+            <label class="form-label">Quantity (blank = unlimited)</label><input id="vaultRewardQuantityInput" type="number" min="0" class="form-input">
+            <label class="form-label">Type</label><select id="vaultRewardTypeInput" class="form-input"><option value="claimable_reward">claimable_reward</option><option value="none">none</option></select>
+            <label style="display:flex;gap:8px;align-items:center;margin-top:8px;"><input id="vaultRewardEnabledInput" type="checkbox" checked> Enabled</label>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-secondary" onclick="vaultCloseRewardModal()">Cancel</button>
+            <button class="btn-primary" onclick="vaultSaveReward()">Save Reward</button>
+          </div>
+        </div>
       </div>
 
       <h4 style="margin:20px 0 8px 0;">Milestones / Pressure Rules</h4>
@@ -10603,6 +10743,37 @@ function vaultLoadRewardToForm(code) {
   if (enabledEl) enabledEl.checked = reward.enabled !== false;
 }
 
+function vaultOpenRewardModal(code = '') {
+  const titleEl = document.getElementById('vaultRewardModalTitle');
+  const modal = document.getElementById('vaultRewardModal');
+  if (!modal || !titleEl) return;
+  if (code) {
+    vaultLoadRewardToForm(code);
+    titleEl.textContent = `Edit Reward: ${code}`;
+  } else {
+    const setValue = (id, value) => {
+      const input = document.getElementById(id);
+      if (input) input.value = value;
+    };
+    setValue('vaultRewardCodeInput', '');
+    setValue('vaultRewardNameInput', '');
+    setValue('vaultRewardTierInput', 'common');
+    setValue('vaultRewardWeightInput', '1');
+    setValue('vaultRewardKeyTierInput', '');
+    setValue('vaultRewardQuantityInput', '');
+    setValue('vaultRewardTypeInput', 'claimable_reward');
+    const enabledEl = document.getElementById('vaultRewardEnabledInput');
+    if (enabledEl) enabledEl.checked = true;
+    titleEl.textContent = 'Add Reward';
+  }
+  modal.style.display = 'flex';
+}
+
+function vaultCloseRewardModal() {
+  const modal = document.getElementById('vaultRewardModal');
+  if (modal) modal.style.display = 'none';
+}
+
 async function vaultSaveReward() {
   const code = String(document.getElementById('vaultRewardCodeInput')?.value || '').trim();
   if (!code) {
@@ -10632,6 +10803,7 @@ async function vaultSaveReward() {
       body: JSON.stringify(payload),
     });
     showSuccess(`Reward ${exists ? 'updated' : 'created'}.`);
+    vaultCloseRewardModal();
     await loadVaultSettingsTab();
   } catch (error) {
     showError(error.message || 'Failed to save reward.');

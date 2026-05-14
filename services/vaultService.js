@@ -227,8 +227,8 @@ class VaultService {
         inheritsFrom: tier?.inheritsFrom ? normalizeKeyTierId(tier.inheritsFrom) : null,
       });
     }
-    if (!seen.has('default')) {
-      normalizedTiers.unshift({
+    if (!normalizedTiers.length) {
+      normalizedTiers.push({
         id: 'default',
         name: String(next?.theme?.keyName || 'Reward Key'),
         enabled: true,
@@ -293,8 +293,9 @@ class VaultService {
         free: clampInt(grant?.free, 0, 0),
       };
     }
-    if (!normalizedGrants.default) {
-      normalizedGrants.default = {
+    if (!Object.keys(normalizedGrants).length && normalizedTiers.length) {
+      const fallbackTierId = normalizedTiers[0].id;
+      normalizedGrants[fallbackTierId] = {
         paid: clampInt(next?.mintRules?.keysPerPaidMint, 0, 0),
         free: clampInt(next?.mintRules?.keysPerFreeMint, 0, 0),
       };
@@ -530,9 +531,6 @@ class VaultService {
     if (!normalized.length) {
       return [{ id: 'default', name: String(cfg?.theme?.keyName || 'Reward Key'), enabled: true, inheritsFrom: null }];
     }
-    if (!normalized.some(tier => tier.id === 'default')) {
-      normalized.unshift({ id: 'default', name: String(cfg?.theme?.keyName || 'Reward Key'), enabled: true, inheritsFrom: null });
-    }
     return normalized;
   }
 
@@ -540,7 +538,7 @@ class VaultService {
     const tiers = this.getKeyTiers(guildId);
     const requested = normalizeKeyTierId(keyTierId || 'default');
     const byId = new Map(tiers.map(tier => [tier.id, tier]));
-    return byId.get(requested) || byId.get('default') || tiers[0] || null;
+    return byId.get(requested) || tiers.find(tier => tier.enabled !== false) || tiers[0] || null;
   }
 
   getInheritedTierChain(guildId, keyTierId = null) {
@@ -1612,8 +1610,10 @@ class VaultService {
         })
       : null;
 
+    const tierList = Array.isArray(config?.keyTiers) ? config.keyTiers : [];
+    const fallbackTierId = normalizeKeyTierId(tierList[0]?.id || 'default');
     if (matchedBand) {
-      const bandTier = normalizeKeyTierId(matchedBand.keyTier || 'default');
+      const bandTier = normalizeKeyTierId(matchedBand.keyTier || fallbackTierId);
       keyTierGrants[bandTier] = paid ? clampInt(matchedBand.paid, 0, 1) : (free ? clampInt(matchedBand.free, 0, 0) : 0);
     } else {
       for (const [tierIdRaw, tierRule] of Object.entries(configuredTierGrants)) {
@@ -1623,8 +1623,8 @@ class VaultService {
         keyTierGrants[tierId] = paid ? paidGrant : (free ? freeGrant : 0);
       }
     }
-    if (!Object.prototype.hasOwnProperty.call(keyTierGrants, 'default')) {
-      keyTierGrants.default = paid ? clampInt(rules.keysPerPaidMint, 0, 0) : (free ? clampInt(rules.keysPerFreeMint, 0, 0) : 0);
+    if (!Object.keys(keyTierGrants).length) {
+      keyTierGrants[fallbackTierId] = paid ? clampInt(rules.keysPerPaidMint, 0, 0) : (free ? clampInt(rules.keysPerFreeMint, 0, 0) : 0);
     }
     const totalKeysGranted = Object.values(keyTierGrants).reduce((sum, next) => sum + clampInt(next, 0, 0), 0);
 

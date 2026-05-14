@@ -6863,6 +6863,7 @@ let selectedTenantTemplatePreview = null;
 let superadminTemplateCatalog = [];
 let superadminTenantSearch = '';
 let superadminActiveTab = 'tenants';
+let superadminGlobalOpsPanel = 'superadmins';
 let tenantDetailActiveTab = 'overview';
 let superadminTenantDirectoryCollapsed = false;
 let superadminTenantPage = 1;
@@ -7447,6 +7448,29 @@ async function loadSuperadminView() {
             <button data-tenant-detail-tab="modules" class="settings-tab" onclick="showTenantDetailTab('modules')">Modules</button>
             <button data-tenant-detail-tab="eras" class="settings-tab" onclick="showTenantDetailTab('eras')">Era Assignments</button>
           </div>
+        </div>
+
+        <div id="superadminSection-globalopsNav" class="sa-ops-grid" style="display:none;">
+          <button class="sa-ops-tile active" data-sa-ops-panel="superadmins" onclick="showSuperadminGlobalOpsPanel('superadmins')">
+            <strong>Superadmins</strong>
+            <span>Manage root/global admin access</span>
+          </button>
+          <button class="sa-ops-tile" data-sa-ops-panel="chainEmojis" onclick="showSuperadminGlobalOpsPanel('chainEmojis')">
+            <strong>Chain Emojis</strong>
+            <span>Global chain icon mapping and replay</span>
+          </button>
+          <button class="sa-ops-tile" data-sa-ops-panel="microVerify" onclick="showSuperadminGlobalOpsPanel('microVerify')">
+            <strong>Micro Verify</strong>
+            <span>Ownership verification and wallet controls</span>
+          </button>
+          <button class="sa-ops-tile" data-sa-ops-panel="aiProviders" onclick="showSuperadminGlobalOpsPanel('aiProviders')">
+            <strong>AI Settings</strong>
+            <span>Keys, models, provider routing</span>
+          </button>
+          <button class="sa-ops-tile" data-sa-ops-panel="xProvider" onclick="showSuperadminGlobalOpsPanel('xProvider')">
+            <strong>X Settings</strong>
+            <span>OAuth, polling, and provider credentials</span>
+          </button>
         </div>
 
         <div id="superadminSection-superadminsInput" style="display:grid; gap:12px; grid-template-columns:minmax(0,1fr) auto;">
@@ -8318,7 +8342,7 @@ function removeSuperadminIdentityWallet(discordId, walletAddress) {
 function showSuperadminTab(tab) {
   superadminActiveTab = tab;
   const sections = {
-    globalops: ['superadminSection-superadminsInput', 'superadminSection-superadmins', 'superadminSection-chainEmojis', 'superadminSection-microVerify', 'superadminSection-aiProviders'],
+    globalops: ['superadminSection-globalopsNav', 'superadminSection-superadminsInput', 'superadminSection-superadmins', 'superadminSection-chainEmojis', 'superadminSection-microVerify', 'superadminSection-aiProviders', 'superadminSection-xProvider'],
     identity: ['superadminSection-identity'],
     tenants: ['superadminSection-tenants', 'superadminSection-detail', 'superadminSection-eras'],
     monitoring: ['superadminSection-monitoring'],
@@ -8336,11 +8360,45 @@ function showSuperadminTab(tab) {
   if (tenantDetailGroup) tenantDetailGroup.style.display = (tab === 'tenants') ? 'flex' : 'none';
   if (tab === 'tenants') {
     showTenantDetailTab(tenantDetailActiveTab || 'overview');
+  } else if (tab === 'globalops') {
+    showSuperadminGlobalOpsPanel(superadminGlobalOpsPanel || 'superadmins');
   } else if (tab === 'identity') {
     loadSuperadminIdentityView();
   } else if (tab === 'monitoring') {
     loadSystemStatus('superadminSystemStatusContent');
   }
+}
+
+function showSuperadminGlobalOpsPanel(panel) {
+  const normalized = String(panel || '').trim() || 'superadmins';
+  superadminGlobalOpsPanel = normalized;
+
+  const mapping = {
+    superadmins: ['superadminSection-superadminsInput', 'superadminSection-superadmins'],
+    chainEmojis: ['superadminSection-chainEmojis'],
+    microVerify: ['superadminSection-microVerify'],
+    aiProviders: ['superadminSection-aiProviders'],
+    xProvider: ['superadminSection-xProvider'],
+  };
+
+  const allIds = [
+    'superadminSection-superadminsInput',
+    'superadminSection-superadmins',
+    'superadminSection-chainEmojis',
+    'superadminSection-microVerify',
+    'superadminSection-aiProviders',
+    'superadminSection-xProvider',
+  ];
+  const visible = new Set(mapping[normalized] || mapping.superadmins);
+
+  allIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = visible.has(id) ? '' : 'none';
+  });
+
+  document.querySelectorAll('[data-sa-ops-panel]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.saOpsPanel === normalized);
+  });
 }
 
 function selectTenantGuild(guildId) {

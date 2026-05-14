@@ -7434,21 +7434,41 @@ async function loadSuperadminView() {
           </div>
           <div style="color:#cbd5e1;font-size:0.82em;max-width:520px;">Tenant-scoped actions below (plan/modules/branding/status) apply to this server. Superadmin list + era catalog are global controls.</div>
         </div>
-        <div class="settings-tabs sa-tabs">
-          <button data-superadmin-tab-btn="tenants" class="settings-tab active" onclick="showSuperadminTab('tenants')">Tenants</button>
-          <button data-superadmin-tab-btn="identity" class="settings-tab" onclick="showSuperadminTab('identity')">Identity</button>
-          <button data-superadmin-tab-btn="globalops" class="settings-tab" onclick="showSuperadminTab('globalops')">Global Ops</button>
-          <button data-superadmin-tab-btn="monitoring" class="settings-tab" onclick="showSuperadminTab('monitoring')">Monitoring</button>
+        <div class="sa-ops-grid">
+          <button data-superadmin-tab-btn="tenants" class="sa-ops-tile active" onclick="showSuperadminTab('tenants')">
+            <strong>Tenants</strong>
+            <span>Directory, plans, branding, modules</span>
+          </button>
+          <button data-superadmin-tab-btn="identity" class="sa-ops-tile" onclick="showSuperadminTab('identity')">
+            <strong>Identity</strong>
+            <span>Wallet links, flags, audit trail</span>
+          </button>
+          <button data-superadmin-tab-btn="globalops" class="sa-ops-tile" onclick="showSuperadminTab('globalops')">
+            <strong>Global Ops</strong>
+            <span>Global integrations and platform settings</span>
+          </button>
+          <button data-superadmin-tab-btn="monitoring" class="sa-ops-tile" onclick="showSuperadminTab('monitoring')">
+            <strong>Monitoring</strong>
+            <span>System diagnostics and process health</span>
+          </button>
+        </div>
 
-          
-
-          <div id="superadminTenantDetailTabGroup" class="settings-tabs sa-subtabs">
-            <button data-tenant-detail-tab="overview" class="settings-tab active" onclick="showTenantDetailTab('overview')">Overview</button>
-            <button data-tenant-detail-tab="controls" class="settings-tab" onclick="showTenantDetailTab('controls')">Plan & Status</button>
-            <button data-tenant-detail-tab="branding" class="settings-tab" onclick="showTenantDetailTab('branding')">Branding</button>
-            <button data-tenant-detail-tab="modules" class="settings-tab" onclick="showTenantDetailTab('modules')">Modules</button>
-            <button data-tenant-detail-tab="eras" class="settings-tab" onclick="showTenantDetailTab('eras')">Era Assignments</button>
-          </div>
+        <div id="superadminTenantDetailTabGroup" class="sa-ops-grid sa-ops-grid--compact">
+          <button data-tenant-detail-tab="overview" class="sa-ops-tile active" onclick="showTenantDetailTab('overview')">
+            <strong>Overview</strong>
+          </button>
+          <button data-tenant-detail-tab="controls" class="sa-ops-tile" onclick="showTenantDetailTab('controls')">
+            <strong>Plan & Status</strong>
+          </button>
+          <button data-tenant-detail-tab="branding" class="sa-ops-tile" onclick="showTenantDetailTab('branding')">
+            <strong>Branding</strong>
+          </button>
+          <button data-tenant-detail-tab="modules" class="sa-ops-tile" onclick="showTenantDetailTab('modules')">
+            <strong>Modules</strong>
+          </button>
+          <button data-tenant-detail-tab="eras" class="sa-ops-tile" onclick="showTenantDetailTab('eras')">
+            <strong>Era Assignments</strong>
+          </button>
         </div>
 
         <div id="superadminSection-globalopsNav" class="sa-ops-grid" style="display:none;">

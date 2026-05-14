@@ -9771,7 +9771,7 @@ function vaultRenderSimpleConfigEditors() {
   const conversions = vaultGetJsonArrayInputValue('vault_keyTierConversionsJson', []);
 
   tiersWrap.innerHTML = tiers.length ? `
-    <table style="width:100%;border-collapse:collapse;">
+    <table class="vault-admin-table">
       <thead><tr><th align="left">Tier ID</th><th align="left">Name</th><th align="left">Inherits</th><th align="left">Enabled</th><th align="left">Actions</th></tr></thead>
       <tbody>
         ${tiers.map((tier, idx) => `
@@ -9792,7 +9792,7 @@ function vaultRenderSimpleConfigEditors() {
 
   const tierIds = tiers.map(t => String(t?.id || '').trim()).filter(Boolean);
   grantsWrap.innerHTML = tierIds.length ? `
-    <table style="width:100%;border-collapse:collapse;">
+    <table class="vault-admin-table">
       <thead><tr><th align="left">Tier ID</th><th align="left">Paid Mint Keys</th><th align="left">Free Mint Keys</th></tr></thead>
       <tbody>
         ${tierIds.map((tierId) => {
@@ -9810,7 +9810,7 @@ function vaultRenderSimpleConfigEditors() {
   ` : '<p style="color:var(--text-secondary);">Define tiers first to edit grants.</p>';
 
   bandsWrap.innerHTML = bands.length ? `
-    <table style="width:100%;border-collapse:collapse;">
+    <table class="vault-admin-table">
       <thead><tr><th align="left">Tier</th><th align="left">Min Lamports</th><th align="left">Max Lamports</th><th align="left">Paid</th><th align="left">Free</th><th align="left">Actions</th></tr></thead>
       <tbody>
         ${bands.map((band, idx) => `
@@ -9831,7 +9831,7 @@ function vaultRenderSimpleConfigEditors() {
   ` : '<p style="color:var(--text-secondary);">No payment bands yet.</p>';
 
   conversionsWrap.innerHTML = conversions.length ? `
-    <table style="width:100%;border-collapse:collapse;">
+    <table class="vault-admin-table">
       <thead><tr><th align="left">From</th><th align="left">To</th><th align="left">From Amount</th><th align="left">To Amount</th><th align="left">Enabled</th><th align="left">Actions</th></tr></thead>
       <tbody>
         ${conversions.map((rule, idx) => `
@@ -10140,13 +10140,19 @@ function vaultRenderAdminPanel() {
 
   pane.innerHTML = `
     <div class="card">
+      <style>
+        .vault-admin-table { width:100%; border-collapse:collapse; font-size:0.9em; }
+        .vault-admin-table th { text-align:left; color:#c9d6ff; padding:8px 10px; border-bottom:1px solid rgba(99,102,241,0.25); }
+        .vault-admin-table td { padding:8px 10px; border-bottom:1px solid rgba(99,102,241,0.12); color:#e2e8f0; }
+        .vault-section-card { margin-top:14px; padding:12px; border:1px solid rgba(99,102,241,0.18); border-radius:10px; background:rgba(15,23,42,0.35); }
+      </style>
       <h3>Vault Setup</h3>
       <p style="color:var(--text-secondary);margin-bottom:12px;">Configure your key economy and prize flow. Start with the basic setup below, then open advanced tools only if needed.</p>
-      <div style="padding:10px;border:1px solid rgba(99,102,241,0.25);border-radius:10px;margin-bottom:12px;background:rgba(99,102,241,0.08);">
+      <div class="vault-section-card">
         <strong>Quick start:</strong>
         1) Enable Vault and set names -> 2) Configure mint and key rules -> 3) Add rewards -> 4) Save config.
       </div>
-      <div style="padding:10px;border:1px solid var(--border-primary);border-radius:10px;margin-bottom:12px;background:var(--bg-glass);">
+      <div class="vault-section-card">
         <strong>Health:</strong>
         enabled=${health.enabled ? 'yes' : 'no'},
         season=${escapeHtml(String(health.activeSeasonId || 'none'))},
@@ -10245,7 +10251,7 @@ function vaultRenderAdminPanel() {
       <div style="margin-top:12px;"><button class="btn-primary" onclick="vaultSaveGeneralConfig()">Save Vault Config</button></div>
 
       <h4 style="margin:20px 0 8px 0;">Season Management</h4>
-      <table style="width:100%;border-collapse:collapse;"><thead><tr><th align="left">ID</th><th align="left">Name</th><th align="left">Status</th><th align="left">Action</th></tr></thead><tbody>${seasonsRows}</tbody></table>
+      <table class="vault-admin-table"><thead><tr><th align="left">ID</th><th align="left">Name</th><th align="left">Status</th><th align="left">Action</th></tr></thead><tbody>${seasonsRows}</tbody></table>
       <div class="settings-grid" style="margin-top:10px;">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Season ID</div></div><input id="vaultSeasonIdInput" class="input-sm" placeholder="season_2026_q2" value="${escapeHtml(activeSeasonId)}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Season Name</div></div><input id="vaultSeasonNameInput" class="input-sm" placeholder="Season Name"></div>
@@ -10256,7 +10262,7 @@ function vaultRenderAdminPanel() {
       <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultUpsertSeason()">Create/Update Season</button></div>
 
       <h4 style="margin:20px 0 8px 0;">Reward Table Manager</h4>
-      <table style="width:100%;border-collapse:collapse;"><thead><tr><th align="left">Code</th><th align="left">Name</th><th align="left">Tier</th><th align="left">Weight</th><th align="left">Key Tier</th><th align="left">Qty</th><th align="left">State</th><th align="left">Actions</th></tr></thead><tbody>${rewardsRows}</tbody></table>
+      <table class="vault-admin-table"><thead><tr><th align="left">Code</th><th align="left">Name</th><th align="left">Tier</th><th align="left">Weight</th><th align="left">Key Tier</th><th align="left">Qty</th><th align="left">State</th><th align="left">Actions</th></tr></thead><tbody>${rewardsRows}</tbody></table>
       <div style="margin-top:8px;">
         <button class="btn-primary" onclick="vaultOpenRewardModal()">Add Reward</button>
       </div>
@@ -10301,7 +10307,7 @@ function vaultRenderAdminPanel() {
       <div style="display:flex;gap:8px;margin-bottom:8px;">
         <button class="btn-secondary" onclick="vaultExportKeyOverviewCsv()">Export CSV</button>
       </div>
-      <table style="width:100%;border-collapse:collapse;">
+      <table class="vault-admin-table">
         <thead>
           <tr>
             <th align="left">Discord ID</th>

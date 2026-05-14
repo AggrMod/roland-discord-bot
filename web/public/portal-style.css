@@ -3212,6 +3212,57 @@ h4,
 .module-grid .module-tile:nth-child(7) { animation-delay: 0.18s; }
 .module-grid .module-tile:nth-child(8) { animation-delay: 0.21s; }
 
+/* ==================== Shared Workspace Primitives ==================== */
+.gp-workspace-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.gp-workspace-card {
+  padding: 18px 18px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(248, 182, 76, 0.22);
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015)),
+    radial-gradient(100% 120% at 0% 0%, rgba(248, 182, 76, 0.12), rgba(248, 182, 76, 0));
+  box-shadow: 0 14px 30px rgba(4, 9, 19, 0.35);
+  backdrop-filter: blur(10px);
+}
+
+.gp-context-card {
+  padding: 14px 16px;
+  border: 1px solid rgba(248, 182, 76, 0.26);
+  border-radius: 14px;
+  background: linear-gradient(140deg, rgba(248, 182, 76, 0.12), rgba(13, 24, 38, 0.72));
+  box-shadow: 0 14px 30px rgba(4, 9, 19, 0.34);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.gp-subtle-panel {
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.gp-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.gp-section-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  gap: 12px;
+}
+
 /* ==================== Superadmin ==================== */
 .sa-shell {
   display: grid;
@@ -3340,6 +3391,15 @@ h4,
   .sa-subtabs {
     overflow-x: auto;
     flex-wrap: nowrap;
+  }
+
+  .gp-actions-row {
+    justify-content: stretch;
+    flex-direction: column;
+  }
+
+  .gp-actions-row button {
+    width: 100%;
   }
 }
 

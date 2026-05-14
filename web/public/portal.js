@@ -7423,8 +7423,8 @@ async function loadSuperadminView() {
     const chainEmojiMap = settingsData?.settings?.chainEmojiMap || {};
 
     content.innerHTML = `
-      <div class="sa-shell">
-        <div class="sa-context-card">
+      <div class="sa-shell gp-workspace-stack">
+        <div class="sa-context-card gp-context-card">
           <div>
             <div style="color:#c9d6ff;font-size:0.82em;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;">Active Tenant Context</div>
             <div style="color:#e0e7ff;font-size:1em;font-weight:700;margin-top:2px;">${escapeHtml(activeTenantName)}</div>
@@ -7454,18 +7454,18 @@ async function loadSuperadminView() {
           <button id="adminSuperadminAddBtn" class="btn-primary" onclick="addSuperadminFromInput()" style="padding:10px 16px;">Add</button>
         </div>
 
-        <div id="superadminSection-superadmins" class="sa-card">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
+        <div id="superadminSection-superadmins" class="sa-card gp-workspace-card">
+          <div class="gp-section-title-row">
             <h4 style="margin:0; color:#c9d6ff;">Current superadmins <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
             <span style="color:var(--text-secondary); font-size:0.85em;">Env roots cannot be removed</span>
           </div>
-          <div style="border:1px solid rgba(99,102,241,0.15); border-radius:10px; overflow:hidden;">
+          <div class="gp-subtle-panel">
             ${superadminRows}
           </div>
         </div>
 
-        <div id="superadminSection-chainEmojis" class="sa-card">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
+        <div id="superadminSection-chainEmojis" class="sa-card gp-workspace-card">
+          <div class="gp-section-title-row">
             <h4 style="margin:0; color:#c9d6ff;">Chain Emoji Map <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
             <span style="color:var(--text-secondary); font-size:0.85em;">Used by NFT tracker price display</span>
           </div>
@@ -7477,7 +7477,7 @@ async function loadSuperadminView() {
               </label>
             `).join('')}
           </div>
-          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+          <div class="gp-actions-row">
             <button class="btn-secondary" onclick="loadSuperadminView()" style="padding:8px 12px;">Reset</button>
             <button class="btn-primary" onclick="saveChainEmojiMap()" style="padding:8px 12px;">Save Chain Emojis</button>
           </div>
@@ -7491,8 +7491,8 @@ async function loadSuperadminView() {
           </div>
         </div>
 
-        <div id="superadminSection-microVerify" class="sa-card">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
+        <div id="superadminSection-microVerify" class="sa-card gp-workspace-card">
+          <div class="gp-section-title-row">
             <h4 style="margin:0; color:#c9d6ff;">💸 Micro-Transaction Verification <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
             <span style="color:var(--text-secondary); font-size:0.85em;">Wallet-extension-free verification</span>
           </div>
@@ -7529,14 +7529,14 @@ async function loadSuperadminView() {
               </p>
             </div>
           </div>
-          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+          <div class="gp-actions-row">
             <button class="btn-secondary" onclick="loadSuperadminView()" style="padding:8px 12px;">Reset</button>
             <button class="btn-primary" onclick="saveMicroVerifySettings()" style="padding:8px 12px;">Save Micro-Verify Settings</button>
           </div>
         </div>
 
-        <div id="superadminSection-aiProviders" class="sa-card">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
+        <div id="superadminSection-aiProviders" class="sa-card gp-workspace-card">
+          <div class="gp-section-title-row">
             <h4 style="margin:0; color:#c9d6ff;">🤖 AI Providers <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
             <span style="color:var(--text-secondary); font-size:0.85em;">Provider keys and default model routing</span>
           </div>
@@ -7596,7 +7596,7 @@ async function loadSuperadminView() {
               </div>
             </div>
           </div>
-          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+          <div class="gp-actions-row">
             <button class="btn-secondary" onclick="loadSuperadminView()" style="padding:8px 12px;">Reset</button>
             <button class="btn-primary" onclick="saveAiProviderSettings()" style="padding:8px 12px;">Save AI Provider Settings</button>
           </div>

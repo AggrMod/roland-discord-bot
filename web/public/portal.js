@@ -7423,7 +7423,7 @@ async function loadSuperadminView() {
     const chainEmojiMap = settingsData?.settings?.chainEmojiMap || {};
 
     content.innerHTML = `
-      <div style="display:grid; gap:16px;">
+      <style>.sa-shell{display:grid;gap:16px;}.sa-card{padding:14px;border:1px solid rgba(99,102,241,0.22);border-radius:10px;background:rgba(14,23,44,0.45);}.sa-tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;}.sa-tab-btn{width:100%;text-align:left;justify-content:flex-start;}</style><div class="sa-shell">
         <div style="padding:14px 16px;border:1px solid rgba(99,102,241,0.28);border-radius:12px;background:linear-gradient(135deg,rgba(99,102,241,0.16),rgba(30,41,59,0.52));display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
           <div>
             <div style="color:#c9d6ff;font-size:0.82em;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;">Active Tenant Context</div>
@@ -7432,13 +7432,13 @@ async function loadSuperadminView() {
           </div>
           <div style="color:#cbd5e1;font-size:0.82em;max-width:520px;">Tenant-scoped actions below (plan/modules/branding/status) apply to this server. Superadmin list + era catalog are global controls.</div>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <button data-superadmin-tab-btn="tenants" class="btn-primary" onclick="showSuperadminTab('tenants')" style="padding:8px 12px;">Tenants</button>
-          <button data-superadmin-tab-btn="identity" class="btn-secondary" onclick="showSuperadminTab('identity')" style="padding:8px 12px;">Identity</button>
-          <button data-superadmin-tab-btn="globalops" class="btn-secondary" onclick="showSuperadminTab('globalops')" style="padding:8px 12px;">Global Ops</button>
-          <button data-superadmin-tab-btn="monitoring" class="btn-secondary" onclick="showSuperadminTab('monitoring')" style="padding:8px 12px;">Monitoring</button>
+        <div class="sa-tabs">
+          <button data-superadmin-tab-btn="tenants" class="btn-primary sa-tab-btn" onclick="showSuperadminTab('tenants')">Tenants</button>
+          <button data-superadmin-tab-btn="identity" class="btn-secondary sa-tab-btn" onclick="showSuperadminTab('identity')">Identity</button>
+          <button data-superadmin-tab-btn="globalops" class="btn-secondary sa-tab-btn" onclick="showSuperadminTab('globalops')">Global Ops</button>
+          <button data-superadmin-tab-btn="monitoring" class="btn-secondary sa-tab-btn" onclick="showSuperadminTab('monitoring')">Monitoring</button>
 
-          <span style="width:1px;height:24px;background:rgba(99,102,241,0.25);margin:0 4px;"></span>
+          
 
           <div id="superadminTenantDetailTabGroup" style="display:flex;gap:8px;flex-wrap:wrap;">
             <button data-tenant-detail-tab="overview" class="btn-primary" onclick="showTenantDetailTab('overview')" style="padding:8px 12px;">Overview</button>
@@ -7454,7 +7454,7 @@ async function loadSuperadminView() {
           <button id="adminSuperadminAddBtn" class="btn-primary" onclick="addSuperadminFromInput()" style="padding:10px 16px;">Add</button>
         </div>
 
-        <div id="superadminSection-superadmins" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+        <div id="superadminSection-superadmins" class="sa-card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
             <h4 style="margin:0; color:#c9d6ff;">Current superadmins <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
             <span style="color:var(--text-secondary); font-size:0.85em;">Env roots cannot be removed</span>
@@ -7464,7 +7464,7 @@ async function loadSuperadminView() {
           </div>
         </div>
 
-        <div id="superadminSection-chainEmojis" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+        <div id="superadminSection-chainEmojis" class="sa-card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
             <h4 style="margin:0; color:#c9d6ff;">Chain Emoji Map <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
             <span style="color:var(--text-secondary); font-size:0.85em;">Used by NFT tracker price display</span>
@@ -7491,7 +7491,7 @@ async function loadSuperadminView() {
           </div>
         </div>
 
-        <div id="superadminSection-microVerify" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+        <div id="superadminSection-microVerify" class="sa-card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
             <h4 style="margin:0; color:#c9d6ff;">💸 Micro-Transaction Verification <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
             <span style="color:var(--text-secondary); font-size:0.85em;">Wallet-extension-free verification</span>
@@ -7535,7 +7535,7 @@ async function loadSuperadminView() {
           </div>
         </div>
 
-        <div id="superadminSection-aiProviders" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+        <div id="superadminSection-aiProviders" class="sa-card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
             <h4 style="margin:0; color:#c9d6ff;">🤖 AI Providers <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
             <span style="color:var(--text-secondary); font-size:0.85em;">Provider keys and default model routing</span>
@@ -7602,7 +7602,7 @@ async function loadSuperadminView() {
           </div>
         </div>
 
-        <div id="superadminSection-xProvider" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+        <div id="superadminSection-xProvider" class="sa-card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
             <h4 style="margin:0; color:#c9d6ff;">𝕏 Provider <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
             <span style="color:var(--text-secondary); font-size:0.85em;">One shared X app for all tenants, with per-user linked accounts and per-guild rules</span>
@@ -7656,7 +7656,7 @@ async function loadSuperadminView() {
           </div>
         </div>
 
-        <div id="superadminSection-monitoring" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45); display:none;">
+        <div id="superadminSection-monitoring" class="sa-card" style="display:none;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
             <h4 style="margin:0; color:#c9d6ff;">Platform Monitoring <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
             <button class="btn-secondary" onclick="loadSystemStatus('superadminSystemStatusContent')" style="padding:8px 12px;">Refresh</button>
@@ -7666,7 +7666,7 @@ async function loadSuperadminView() {
           </div>
         </div>
 
-        <div id="superadminSection-identity" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+        <div id="superadminSection-identity" class="sa-card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px; flex-wrap:wrap;">
             <h4 style="margin:0; color:#c9d6ff;">Identity Overrides <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global</span></h4>
             <button class="btn-secondary" onclick="loadSuperadminIdentityView()" style="padding:8px 12px;">Refresh</button>
@@ -7708,7 +7708,7 @@ async function loadSuperadminView() {
           </div>
         </div>
 
-        <div id="superadminSection-tenants" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+        <div id="superadminSection-tenants" class="sa-card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
             <h4 style="margin:0; color:#c9d6ff;">Tenant Management <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(99,102,241,0.2);font-size:0.72em;vertical-align:middle;">Tenant Scoped</span></h4>
             <div style="display:flex;gap:8px;">
@@ -7741,7 +7741,7 @@ async function loadSuperadminView() {
           </div>
         </div>
 
-        <div id="superadminSection-detail" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+        <div id="superadminSection-detail" class="sa-card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
             <h4 style="margin:0; color:#c9d6ff;">Tenant Detail <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(99,102,241,0.2);font-size:0.72em;vertical-align:middle;">Tenant Scoped</span></h4>
             <span style="color:var(--text-secondary); font-size:0.85em;">Select a guild to edit plan, modules, branding, and status</span>
@@ -7749,7 +7749,7 @@ async function loadSuperadminView() {
           <div id="adminTenantDetailContent">${renderTenantDetailPanel(null)}</div>
         </div>
 
-        <div id="superadminSection-eras" style="padding:14px; border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.45);">
+        <div id="superadminSection-eras" class="sa-card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:12px;">
             <h4 style="margin:0; color:#c9d6ff;">Era Assignments <span style="margin-left:8px;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.18);font-size:0.72em;vertical-align:middle;">Global Control</span></h4>
             <button class="btn-secondary" onclick="loadEraAssignments()" style="padding:8px 12px;">Refresh</button>
@@ -18928,4 +18928,5 @@ async function loadEngagementRedemptions() {
     el.innerHTML = '<p style="color:var(--error);">Failed to load redemptions.</p>';
   }
 }
+
 

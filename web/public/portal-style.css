@@ -6524,6 +6524,44 @@ body {
   margin: 0 !important;
 }
 
+/* ==================== Sidebar Overflow Guard ==================== */
+.sidebar,
+.sidebar-nav-items,
+.sidebar-server-context {
+  overflow-x: hidden !important;
+}
+
+.sidebar-server-card,
+.sidebar-see-all,
+.sidebar-search input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* ==================== Accent Color Cleanup ==================== */
+:root {
+  --gold-dark: #9fb2ff;
+}
+
+.sidebar-see-all {
+  color: #a8b9ff !important;
+}
+
+.sidebar-see-all:hover {
+  color: #c6d2ff !important;
+}
+
+footer a[href="/privacy-policy"],
+footer a[href="/terms-of-service"] {
+  color: #9fb2ff !important;
+}
+
+footer a[href="/privacy-policy"]:hover,
+footer a[href="/terms-of-service"]:hover {
+  color: #c6d2ff !important;
+}
+
 /* ==================== Topbar Height Harmonization ==================== */
 .top-nav {
   min-height: 76px !important;

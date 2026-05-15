@@ -2298,7 +2298,9 @@ async function loadPortal() {
     // Try to load user data (credentials CRITICAL for session cookies).
     // After OAuth redirect, give the session store a short warm-up window.
     const fetchUserData = async () => {
-      const response = await fetch('/api/user/me', { credentials: 'include' });
+      // Use originalFetch here so auth bootstrap does not inherit tenant-scoped headers
+      // from stale localStorage guild context.
+      const response = await originalFetch('/api/user/me', { credentials: 'include' });
       const data = await response.json().catch(() => ({ success: false }));
       return { response, data };
     };
@@ -2329,8 +2331,35 @@ async function loadPortal() {
         await syncTenantModuleNavVisibility();
         loadDashboardData();
       }
-    } else {
+    } else if (response.status === 401) {
       showUnauthenticatedState();
+    } else {
+      // Non-401 failures can happen with stale tenant context or transient API errors.
+      // Verify session via a lightweight endpoint before forcing logged-out UI.
+      const authProbe = await originalFetch('/api/user/is-admin', { credentials: 'include' }).catch(() => null);
+      if (authProbe && authProbe.status !== 401) {
+        userData = {
+          success: true,
+          user: {
+            discordId: '',
+            username: 'Guild Admin',
+            avatar: '',
+            tier: 'None',
+            totalNFTs: 0,
+            totalPoints: 0
+          },
+          wallets: [],
+          proposals: [],
+          missions: []
+        };
+        showAuthenticatedState();
+        await loadServerAccess();
+        applyPreSelectionVisibility();
+        await checkSuperadminStatus();
+        await checkAdminStatus();
+      } else {
+        showUnauthenticatedState();
+      }
     }
 
     // Navigate to section from URL after admin check is complete

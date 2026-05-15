@@ -2269,7 +2269,8 @@ async function loadServerAccess() {
     let nextServerAccessData = mapServerAccessPayload(data);
 
     const hasAnyServers = nextServerAccessData.managedServers.length > 0 || nextServerAccessData.unmanagedServers.length > 0;
-    const shouldRetryWithOriginalFetch = response.status === 401 || response.status === 403 || (!hasAnyServers && !!userData?.id);
+    const hasAuthenticatedUser = !!(userData?.id || userData?.user?.discordId || userData?.discordId || userData?.username || userData?.user?.username);
+    const shouldRetryWithOriginalFetch = response.status === 401 || response.status === 403 || (!hasAnyServers && hasAuthenticatedUser);
     if (shouldRetryWithOriginalFetch) {
       const retryResponse = await originalFetch('/api/servers/me', { credentials: 'include' });
       const retryData = await retryResponse.json().catch(() => ({}));
@@ -2285,6 +2286,38 @@ async function loadServerAccess() {
     }
 
     serverAccessData = nextServerAccessData;
+
+    // Superadmin fallback: if server discovery is empty (OAuth/member lookup gaps),
+    // hydrate from tenant catalog so command-center navigation remains available.
+    if (
+      isSuperadmin &&
+      serverAccessData.managedServers.length === 0 &&
+      serverAccessData.unmanagedServers.length === 0
+    ) {
+      try {
+        const tenantsRes = await fetch('/api/superadmin/tenants?page=1&pageSize=1000', {
+          credentials: 'include',
+          headers: buildTenantRequestHeaders()
+        });
+        const tenantsData = await tenantsRes.json().catch(() => ({}));
+        const tenantRows = Array.isArray(tenantsData?.tenants)
+          ? tenantsData.tenants
+          : (Array.isArray(tenantsData?.data?.tenants) ? tenantsData.data.tenants : []);
+        if (tenantRows.length > 0) {
+          serverAccessData.managedServers = tenantRows
+            .map((tenant) => ({
+              guildId: normalizeGuildId(tenant?.guildId || tenant?.guild_id || ''),
+              name: String(tenant?.guildName || tenant?.guild_name || tenant?.guildId || tenant?.guild_id || 'Server').trim(),
+              icon: tenant?.icon || null,
+              permissions: '8',
+              source: 'tenant-fallback'
+            }))
+            .filter((server) => !!server.guildId);
+        }
+      } catch (_fallbackError) {
+        // Keep primary server access payload; fallback is best-effort only.
+      }
+    }
 
     const knownIds = new Set([
       ...serverAccessData.managedServers.map(server => server.guildId),
@@ -2417,9 +2450,9 @@ async function loadPortal() {
       userData = data;
       showAuthenticatedState();
       try {
+        await checkSuperadminStatus();
         await loadServerAccess();
         applyPreSelectionVisibility();
-        await checkSuperadminStatus();
         await checkAdminStatus();
 
         const canProceed = enforceInitialServerSelection();

@@ -1,7 +1,10 @@
 const db = require('../database/db');
 
 function normalizeDiscordId(userId) {
-  return typeof userId === 'string' ? userId.trim() : '';
+  const raw = typeof userId === 'string' ? userId.trim() : '';
+  if (!raw) return '';
+  const numeric = raw.match(/\d{17,20}/);
+  return numeric ? numeric[0] : raw;
 }
 
 function parseEnvIds(value) {

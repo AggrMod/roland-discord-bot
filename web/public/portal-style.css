@@ -6491,3 +6491,18 @@ body {
   background: linear-gradient(135deg, #7f72ff 0%, #5a52ef 100%) !important;
   box-shadow: 0 12px 24px rgba(79, 70, 229, 0.4) !important;
 }
+
+/* ==================== Topbar Outline Softening ==================== */
+.top-nav {
+  border-bottom: 1px solid rgba(99, 102, 241, 0.18) !important;
+  box-shadow: inset 0 -1px 0 rgba(79, 70, 229, 0.12) !important;
+}
+
+.top-nav::before,
+.top-nav::after {
+  display: none !important;
+}
+
+.command-server-switcher {
+  box-shadow: none !important;
+}

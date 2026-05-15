@@ -6508,3 +6508,18 @@ body {
 .command-server-switcher {
   box-shadow: none !important;
 }
+
+/* ==================== Full-Width Shell Alignment ==================== */
+.portal-layout {
+  max-width: none !important;
+  width: 100% !important;
+  margin: 0 !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-radius: 0 !important;
+}
+
+.content-area {
+  max-width: none !important;
+  margin: 0 !important;
+}

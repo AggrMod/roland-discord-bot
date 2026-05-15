@@ -1166,7 +1166,10 @@ function createAuthUserRouter({
         const qs = new URLSearchParams();
         if (req.query.guild) qs.set('guild', req.query.guild);
         if (req.query.section) qs.set('section', req.query.section);
-        req.session.returnTo = '/?' + qs.toString();
+        req.session.returnTo = '/app?' + qs.toString();
+      } else {
+        // Default authenticated destination should be the app shell, not public marketing landing.
+        req.session.returnTo = '/app';
       }
 
       const clientId = process.env.CLIENT_ID;
@@ -1183,17 +1186,17 @@ function createAuthUserRouter({
       return res.redirect(authUrl);
     })().catch((routeError) => {
       logger.error('OAuth login start error:', routeError);
-      return res.redirect('/dashboard?error=oauth_login_start_failed');
+      return res.redirect('/app?error=oauth_login_start_failed');
     });
   });
 
   router.get('/auth/discord/callback', async (req, res) => {
     const { code, state } = req.query;
-    if (!code) return res.redirect('/dashboard?error=no_code');
+    if (!code) return res.redirect('/app?error=no_code');
     const expectedState = String(req.session?.oauthState || '');
     if (!state || String(state) !== expectedState) {
       if (req.session?.oauthState) delete req.session.oauthState;
-      return res.redirect('/dashboard?error=invalid_state');
+      return res.redirect('/app?error=invalid_state');
     }
 
     try {
@@ -1214,7 +1217,7 @@ function createAuthUserRouter({
       });
 
       const tokenData = await tokenResponse.json();
-      if (!tokenData.access_token) return res.redirect('/dashboard?error=no_token');
+      if (!tokenData.access_token) return res.redirect('/app?error=no_token');
 
       const userResponse = await fetch('https://discord.com/api/users/@me', {
         headers: { Authorization: `Bearer ${tokenData.access_token}` }
@@ -1234,14 +1237,14 @@ function createAuthUserRouter({
       const returnTo = req.session.returnTo;
       delete req.session.returnTo;
       await saveSession(req);
-      const safeReturn = returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/';
+      const safeReturn = returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/app';
       const loginReadyRedirect = safeReturn.includes('?')
         ? `${safeReturn}&auth=ready`
         : `${safeReturn}?auth=ready`;
       return res.redirect(loginReadyRedirect);
     } catch (routeError) {
       logger.error('OAuth callback error:', routeError);
-      return res.redirect('/dashboard?error=auth_failed');
+      return res.redirect('/app?error=auth_failed');
     }
   });
 

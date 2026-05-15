@@ -2,6 +2,7 @@
 let userData = null;
 let isAdmin = false;
 let isSuperadmin = false;
+let moduleAdminWorkspaceMode = false;
 let heistEnabled = true;
 let heistEditingTemplateId = null;
 let heistEditingVaultItemId = null;
@@ -5673,7 +5674,7 @@ async function cancelHeistMission(missionId) {
 async function loadHeistSection() {
   renderMissions();
   await loadAvailableMissions();
-  if (isAdmin || isSuperadmin) {
+  if ((isAdmin || isSuperadmin) && moduleAdminWorkspaceMode) {
     await loadHeistAdminPanel();
   } else {
     const panel = document.getElementById('heistAdminPanel');
@@ -5698,6 +5699,7 @@ function openAdminSettingsEntry() {
     switchSection('servers');
     return;
   }
+  moduleAdminWorkspaceMode = true;
   switchSection('module-hub');
 }
 
@@ -5712,6 +5714,32 @@ function switchSection(sectionName, options = {}) {
   const currentSection = getStoredPortalSection();
   if (sectionName === currentSection && !options.force) {
     return;
+  }
+
+  const adminManagedModuleSections = new Set([
+    'governance',
+    'wallets',
+    'invites',
+    'aiassistant',
+    'treasury',
+    'nft-activity',
+    'token-activity',
+    'heist',
+    'battle',
+    'engagement',
+    'self-serve-roles',
+    'ticketing'
+  ]);
+  const workspaceSections = new Set(['module-hub', 'settings', 'vault']);
+  if (workspaceSections.has(sectionName)) {
+    moduleAdminWorkspaceMode = true;
+  } else if (adminManagedModuleSections.has(sectionName)) {
+    const fromWorkspace = options.fromModules === true || workspaceSections.has(currentSection);
+    if (!fromWorkspace) {
+      moduleAdminWorkspaceMode = false;
+    }
+  } else {
+    moduleAdminWorkspaceMode = false;
   }
 
   if (!isPublicPortalSection(sectionName) && !userData) {
@@ -5857,7 +5885,7 @@ function switchSection(sectionName, options = {}) {
     renderWallets();
     const verificationSettingsCard = document.getElementById('verificationModuleSettingsCard');
     if (verificationSettingsCard) {
-      const canManageVerification = !!(activeGuildId && (isAdmin || isSuperadmin));
+      const canManageVerification = !!(activeGuildId && (isAdmin || isSuperadmin) && moduleAdminWorkspaceMode);
       verificationSettingsCard.style.display = canManageVerification ? '' : 'none';
       if (canManageVerification && typeof loadAdminRoles === 'function') {
         loadAdminRoles('verificationModuleSettingsContent');
@@ -5873,12 +5901,12 @@ function switchSection(sectionName, options = {}) {
     loadTreasuryWalletTable();
   } else if (sectionName === 'nft-activity') {
     loadNFTActivityView();
-    if (isAdmin) loadNFTActivityAdminView();
+    if (isAdmin && moduleAdminWorkspaceMode) loadNFTActivityAdminView();
   } else if (sectionName === 'token-activity') {
     loadTokenActivityView();
   } else if (sectionName === 'battle') {
     const battleModuleSettingsCard = document.getElementById('battleModuleSettingsCard');
-    const canManageBattle = !!(isAdmin || isSuperadmin);
+    const canManageBattle = !!((isAdmin || isSuperadmin) && moduleAdminWorkspaceMode);
     if (battleModuleSettingsCard) {
       battleModuleSettingsCard.style.display = canManageBattle ? '' : 'none';
     }
@@ -5899,14 +5927,14 @@ function switchSection(sectionName, options = {}) {
     loadHeistSection();
   } else if (sectionName === 'self-serve-roles') {
     loadSelfServeRolesPublic();
-    const canManageSelfServe = !!(activeGuildId && (isAdmin || isSuperadmin));
+    const canManageSelfServe = !!(activeGuildId && (isAdmin || isSuperadmin) && moduleAdminWorkspaceMode);
     const adminCard = document.getElementById('selfServeRolesModuleSettingsCard');
     if (adminCard) adminCard.style.display = canManageSelfServe ? '' : 'none';
     if (canManageSelfServe) {
       loadSelfServeRolesView('selfServeRolesModuleSettingsPanel');
     }
   } else if (sectionName === 'ticketing') {
-    const canManageTicketing = !!(activeGuildId && (isAdmin || isSuperadmin));
+    const canManageTicketing = !!(activeGuildId && (isAdmin || isSuperadmin) && moduleAdminWorkspaceMode);
     const userCard = document.getElementById('ticketingUserOverviewCard');
     const adminCard = document.getElementById('ticketingModuleSettingsCard');
     if (userCard) userCard.style.display = canManageTicketing ? 'none' : '';
@@ -12455,7 +12483,7 @@ function syncGovernanceModuleSettingsCard() {
   const governanceSettingsCard = document.getElementById('governanceModuleSettingsCard');
   if (!governanceSettingsCard) return;
 
-  const canManageGovernance = !!(activeGuildId && (isAdmin || isSuperadmin));
+  const canManageGovernance = !!(activeGuildId && (isAdmin || isSuperadmin) && moduleAdminWorkspaceMode);
   governanceSettingsCard.style.display = canManageGovernance ? '' : 'none';
   if (!canManageGovernance) return;
 
@@ -18918,7 +18946,8 @@ async function saveEngagementConfigFromSettings() {
 }
 
 function canAdminEngagementPortal() {
-  return !!(typeof isAdmin !== 'undefined' && isAdmin) || !!(typeof isSuperadmin !== 'undefined' && isSuperadmin);
+  return (!!(typeof isAdmin !== 'undefined' && isAdmin) || !!(typeof isSuperadmin !== 'undefined' && isSuperadmin))
+    && !!moduleAdminWorkspaceMode;
 }
 
 function setEngagementPortalMode(canAdmin) {

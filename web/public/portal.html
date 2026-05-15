@@ -7,6 +7,7 @@
   <meta name="robots" content="noindex, nofollow">
   <title>GuildPilot Portal</title>
   <link rel="icon" type="image/jpeg" href="/assets/branding/guildpilot-logo.png">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
   <link rel="stylesheet" href="/portal-style.css">
 </head>
 <body>
@@ -135,70 +136,70 @@
         </div>
         <div class="sidebar-nav-items">
           <button class="nav-item active" data-section="landing" onclick="goHomePage()">
-            <span class="nav-icon" aria-hidden="true">🏠</span>
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-house"></i></span>
             <span class="nav-label">Hub</span>
           </button>
           <div class="sidebar-section-divider"></div>
           <button class="nav-item" data-section="governance" data-module="governance" onclick="switchSection('governance')" id="sidebarNavGovernance" style="display:none;">
-            <span class="nav-icon" aria-hidden="true">📜</span>
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-landmark"></i></span>
             <span class="nav-label">Governance</span>
           </button>
           <button class="nav-item" data-section="wallets" data-module="verification" onclick="switchSection('wallets')" id="sidebarNavWallets" style="display:none;">
-            <span class="nav-icon" aria-hidden="true">💼</span>
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-shield-halved"></i></span>
             <span class="nav-label">Verification</span>
           </button>
           <button class="nav-item" data-section="battle" data-module="battle" onclick="switchSection('battle')" id="sidebarNavBattle" style="display:none;">
-            <span class="nav-icon" aria-hidden="true">⚔️</span>
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-gamepad"></i></span>
             <span class="nav-label">Minigames</span>
           </button>
           <button class="nav-item" data-section="treasury" data-module="treasury" onclick="switchSection('treasury')" id="sidebarNavTreasury" style="display:none;">
-            <span class="nav-icon" aria-hidden="true">💰</span>
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-wallet"></i></span>
             <span class="nav-label">Wallet Tracker</span>
           </button>
           <button class="nav-item" data-section="nft-activity" data-module="nfttracker" onclick="switchSection('nft-activity')" id="sidebarNavNftActivity" style="display:none;">
-            <span class="nav-icon" aria-hidden="true">🎨</span>
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-palette"></i></span>
             <span class="nav-label">NFT Tracker</span>
           </button>
           <button class="nav-item" data-section="token-activity" data-module="tokentracker" onclick="switchSection('token-activity')" id="sidebarNavTokenActivity" style="display:none;">
-            <span class="nav-icon" aria-hidden="true">&#x1FA99;</span>
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-coins"></i></span>
             <span class="nav-label">Token Tracker</span>
           </button>
           <button class="nav-item" data-section="self-serve-roles" data-module="selfserveroles" onclick="switchSection('self-serve-roles')" id="sidebarNavSelfServe" style="display:none;">
-            <span class="nav-icon" aria-hidden="true">🎭</span>
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-user-tag"></i></span>
             <span class="nav-label">Self-Serve Roles</span>
           </button>
           <button class="nav-item" data-section="ticketing" data-module="ticketing" onclick="switchSection('ticketing')" id="sidebarNavTicketing" style="display:none;">
-            <span class="nav-icon" aria-hidden="true">🎫</span>
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-ticket"></i></span>
             <span class="nav-label">Ticketing</span>
           </button>
           <button class="nav-item" data-section="engagement" data-module="engagement" onclick="switchSection('engagement')" id="sidebarNavEngagement" style="display:none;">
-            <span class="nav-icon" aria-hidden="true">🏅</span>
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-chart-line"></i></span>
             <span class="nav-label">Engagement</span>
           </button>
           <button class="nav-item" data-section="heist" data-module="heist" onclick="switchSection('heist')" id="sidebarNavHeist" style="display:none;">
-            <span class="nav-icon" aria-hidden="true">🎯</span>
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-rocket"></i></span>
             <span class="nav-label">Missions</span>
           </button>
           <button class="nav-item" data-section="plans" onclick="switchSection('plans')" id="sidebarNavPlans" style="display:none;">
-            <span class="nav-icon" aria-hidden="true">💎</span>
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-gem"></i></span>
             <span class="nav-label">Plans</span>
           </button>
           <div class="sidebar-section-divider"></div>
           <button class="nav-item" data-section="settings" onclick="switchSection('settings')" id="sidebarNavSettings" style="display:none;">
-            <span class="nav-icon" aria-hidden="true">⚙️</span>
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-gear"></i></span>
             <span class="nav-label">Settings</span>
           </button>
           <button class="nav-item" data-section="help" onclick="switchSection('help')">
-            <span class="nav-icon" aria-hidden="true">❓</span>
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-circle-question"></i></span>
             <span class="nav-label">Help</span>
           </button>
           <div class="sidebar-footer" id="adminSuperadminSidebarGroup" style="display:none;">
             <button class="nav-item" data-section="admin" onclick="switchSection('admin'); showAdminView('superadmin')" id="adminSuperadminNav">
-              <span class="nav-icon" aria-hidden="true">🛡️</span>
+              <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-shield"></i></span>
               <span class="nav-label">Superadmin</span>
             </button>
             <button class="nav-item" data-section="admin" onclick="switchSection('admin'); showAdminView('monitor')">
-              <span class="nav-icon" aria-hidden="true">🖥️</span>
+              <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-display"></i></span>
               <span class="nav-label">Monitor</span>
             </button>
           </div>
@@ -221,7 +222,7 @@
         <div id="breadcrumb-wrap" class="breadcrumb-container" style="display:none;"></div>
 
         <!-- Landing / General Section -->
-        <section id="section-landing" class="content-section active">
+        <section id="section-landing" class="content-section app-surface active">
           <div id="generalPreSelection" class="home-page home-page--fresh">
             <header class="functional-hub__header" style="margin-bottom: var(--space-8);">
               <p class="gpf-kicker">Unified App Hub</p>
@@ -240,7 +241,7 @@
         </section>
 
         <!-- Profile Section -->
-        <section id="section-profile" class="content-section">
+        <section id="section-profile" class="content-section app-surface">
           <header class="section-header">
             <h2>My Profile</h2>
             <p class="section-subtitle">Manage your account identity, linked wallets, and privacy settings</p>
@@ -272,7 +273,7 @@
         </section>
 
         <!-- Dashboard Section -->
-        <section id="section-dashboard" class="content-section">
+        <section id="section-dashboard" class="content-section app-surface">
           <header class="section-header dashboard-header">
             <div class="dashboard-header-main">
               <h2 id="dashboardWelcomeTitle">Welcome, Guild Admin</h2>
@@ -335,7 +336,7 @@
         </section>
 
         <!-- Module Hub / Dashboard -->
-        <section id="section-module-hub" class="content-section">
+        <section id="section-module-hub" class="content-section app-surface">
           <header class="section-header" style="margin-bottom: var(--space-8);">
             <div id="moduleHubServerInfo"></div>
             <p class="section-subtitle">Select a module to manage settings or view community data.</p>
@@ -347,14 +348,14 @@
         </section>
 
         <!-- Module Detail Wrapper (Standardized View) -->
-        <section id="section-module-detail" class="content-section">
+        <section id="section-module-detail" class="content-section app-surface">
           <div id="module-detail-container" class="module-detail">
             <!-- Content injected dynamically by portal.js -->
           </div>
         </section>
 
         <!-- Governance Section -->
-        <section id="section-governance" class="content-section">
+        <section id="section-governance" class="content-section app-surface">
           <header class="section-header">
             <h2>Governance</h2>
             <p class="section-subtitle">Participate in DAO decision-making and proposal voting</p>
@@ -397,7 +398,7 @@
         </section>
 
         <!-- Wallets Section -->
-                <section id="section-wallets" class="content-section">
+                <section id="section-wallets" class="content-section app-surface">
           <header class="section-header">
             <h2>Wallet Verification</h2>
             <p class="section-subtitle">Start instantly, verify ownership, and keep one identity across servers</p>
@@ -471,7 +472,7 @@
         </section>
 
         <!-- Missions Section -->
-        <section id="section-heist" class="content-section">
+        <section id="section-heist" class="content-section app-surface">
           <header class="section-header">
             <h2>Missions</h2>
             <p class="section-subtitle">Join strategic missions and earn exclusive rewards</p>
@@ -1231,7 +1232,7 @@
         </section>
 
         <!-- Help Section -->
-        <section id="section-help" class="content-section">
+        <section id="section-help" class="content-section app-surface">
           <header class="section-header">
             <h2>Help Center</h2>
             <p class="section-subtitle">Comprehensive guides and troubleshooting resources</p>
@@ -2280,7 +2281,27 @@
         </section>
 
         <!-- Admin Section -->
-        <section id="section-admin" class="content-section">
+        <section id="section-admin" class="content-section app-surface">
+          <header class="section-header">
+            <h2>Admin Command Center</h2>
+            <p class="section-subtitle">Pick a workspace tile to open the exact admin panel you need.</p>
+          </header>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;">
+            <div style="color:var(--text-secondary);font-size:0.86em;">Choose an admin workspace tile.</div>
+            <button type="button" class="btn-secondary" id="adminFocusResetBtn" onclick="resetAdminFocusMode()" style="display:none;">Show All Admin Tiles</button>
+          </div>
+          <div class="command-tile-grid" id="adminCommandTiles">
+            <button class="command-tile" data-admin-tile="stats" onclick="showAdminView('stats')"><strong>Overview</strong><span>Server health and totals</span></button>
+            <button class="command-tile" data-admin-tile="settings" onclick="showAdminView('settings')"><strong>System Settings</strong><span>Core tenant configuration</span></button>
+            <button class="command-tile" data-admin-tile="users" onclick="showAdminView('users')"><strong>User Management</strong><span>Users, tiers, and filters</span></button>
+            <button class="command-tile" data-admin-tile="roles" onclick="showAdminView('roles')"><strong>Verification Roles</strong><span>Role mapping and rules</span></button>
+            <button class="command-tile" data-admin-tile="votingpower" onclick="showAdminView('votingpower')"><strong>Voting Power</strong><span>Governance weighting</span></button>
+            <button class="command-tile" data-admin-tile="ticketing" onclick="showAdminView('ticketing')"><strong>Ticketing</strong><span>Support desk setup</span></button>
+            <button class="command-tile" data-admin-tile="nfttracker" onclick="showAdminView('nfttracker')"><strong>NFT Tracker</strong><span>Collections and alerts</span></button>
+            <button class="command-tile" data-admin-tile="invites" onclick="showAdminView('invites')"><strong>Invite Tracker</strong><span>Referral performance</span></button>
+            <button class="command-tile" data-admin-tile="monitor" onclick="showAdminView('monitor')"><strong>Monitoring</strong><span>System diagnostics</span></button>
+            <button class="command-tile" data-admin-tile="superadmin" onclick="showAdminView('superadmin')"><strong>Superadmin</strong><span>Global platform control</span></button>
+          </div>
           <div id="adminEnvStatusBar" style="margin-bottom: var(--space-4);"></div>
 
           <!-- Dashboard Stats -->
@@ -2446,7 +2467,7 @@
         </section>
 
         <!-- Plans Section -->
-        <section id="section-plans" class="content-section">
+        <section id="section-plans" class="content-section app-surface">
           <header class="section-header">
             <h2>Plans</h2>
             <p class="section-subtitle">Choose the right plan for your community</p>
@@ -2490,12 +2511,12 @@
         </section>
 
         <!-- Settings Section (admin-only, tabbed) -->
-        <section id="section-settings" class="content-section">
+        <section id="section-settings" class="content-section app-surface">
           <header class="section-header">
             <h2>Server Settings</h2>
             <p class="section-subtitle">Configure modules and behavior for this server</p>
           </header>
-          <div class="card" style="margin-bottom:16px;">
+          <div class="card" id="settingsSetupCard" style="margin-bottom:16px;">
             <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;">
               <div>
                 <div style="font-weight:700;color:var(--text-primary);margin-bottom:4px;">Quick Setup</div>
@@ -2522,7 +2543,7 @@
               <button id="settingsModeAccordionBtn" class="btn-secondary" type="button">Accordion</button>
             </div>
           </div>
-          <div class="settings-tabs">
+          <div class="settings-tabs" id="settingsTabsStrip">
             <button class="settings-tab active" data-tab="general" onclick="switchSettingsTab('general')">General Setup</button>
             <button class="settings-tab" data-tab="governance" onclick="switchSettingsTab('governance')">Governance & Voting</button>
             <button class="settings-tab" data-tab="verification" onclick="switchSettingsTab('verification')">Verification & Roles</button>
@@ -2537,6 +2558,18 @@
             <button class="settings-tab" data-tab="selfserve" onclick="switchSettingsTab('selfserve')">Self-Serve Roles</button>
             <button class="settings-tab" data-tab="ticketing" onclick="switchSettingsTab('ticketing')">Ticketing</button>
             <button class="settings-tab" data-tab="engagement" onclick="switchSettingsTab('engagement')">Engagement</button>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;">
+            <div style="color:var(--text-secondary);font-size:0.86em;">Choose a settings workspace tile.</div>
+            <button type="button" class="btn-secondary" id="settingsFocusResetBtn" onclick="resetSettingsFocusMode()" style="display:none;">Show All Controls</button>
+          </div>
+          <div class="command-tile-grid command-tile-grid--settings" id="settingsCommandTiles">
+            <button class="command-tile" data-settings-tile="general" onclick="switchSettingsTab('general')"><strong>General</strong><span>Server core setup</span></button>
+            <button class="command-tile" data-settings-tile="verification" onclick="switchSettingsTab('verification')"><strong>Verification</strong><span>Wallet and role rules</span></button>
+            <button class="command-tile" data-settings-tile="governance" onclick="switchSettingsTab('governance')"><strong>Governance</strong><span>Voting and proposals</span></button>
+            <button class="command-tile" data-settings-tile="ticketing" onclick="switchSettingsTab('ticketing')"><strong>Ticketing</strong><span>Support channels and forms</span></button>
+            <button class="command-tile" data-settings-tile="branding" onclick="switchSettingsTab('branding')"><strong>Branding</strong><span>Identity and visuals</span></button>
+            <button class="command-tile" data-settings-tile="aiassistant" onclick="switchSettingsTab('aiassistant')"><strong>AI Assistant</strong><span>Prompt and safety</span></button>
           </div>
           <div id="settingsAccordionNav" class="card" style="display:none;margin-top:10px;margin-bottom:12px;"></div>
           <div id="settingsTabContent" style="margin-top:24px;">

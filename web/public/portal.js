@@ -183,7 +183,7 @@ function isPublicPortalSection(sectionName) {
 
 function getRoleDefaultSection() {
   if (!userData) return 'landing';
-  return 'dashboard';
+  return 'landing';
 }
 
 function isTenantSensitiveRequest(input) {
@@ -1655,8 +1655,8 @@ async function renderGeneralSection() {
 
   if (userData && greeting) {
     greeting.textContent = `Welcome back, ${user.username || 'Guild Admin'}.`;
-
   }
+
   if (!userData) {
     hub.innerHTML = `
       <div class="bento-panel panel-overview">
@@ -1670,109 +1670,73 @@ async function renderGeneralSection() {
     return;
   }
 
-  // Identity Panel (Bento style)
-  const identityHtml = `
-    <div class="bento-panel panel-overview">
+  const isAdminLike = !!(isAdmin || isSuperadmin);
+  const managedCount = (serverAccessData.managedServers || []).length;
+  const joinedCount = (serverAccessData.unmanagedServers || []).length;
+  const adminTitle = isSuperadmin ? 'Go to Superadmin' : 'Go to Admin';
+  const adminAction = isSuperadmin
+    ? "switchSection('admin'); showAdminView('superadmin');"
+    : "switchSection('module-hub');";
+
+  const adminCard = isAdminLike
+    ? `
+      <div class="module-bento-tile" onclick="${adminAction}">
+        <div class="module-bento-top">
+          <div class="module-bento-info">
+            <div class="module-bento-title">${adminTitle}</div>
+            <div class="module-bento-status">${isSuperadmin ? 'Platform controls and tenant ops' : 'Module workspace and server settings'}</div>
+          </div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+          <div class="module-bento-metric">${isSuperadmin ? 'Global Control' : 'Server Admin'}</div>
+          <div class="module-bento-icon-wrapper"><i class="fas fa-shield-alt"></i></div>
+        </div>
+      </div>
+    `
+    : '';
+
+  hub.innerHTML = `
+    <div class="bento-panel panel-overview" style="grid-column:1 / -1;">
       <div class="bento-panel-header">
         <div class="bento-panel-title">
           <img src="${user.avatar ? `https://cdn.discordapp.com/avatars/${user.discordId || ''}/${user.avatar}.png` : '/assets/default-avatar.png'}" class="bento-icon" style="object-fit:cover; border-radius:50%;" onerror="this.src='/assets/default-avatar.png'">
           ${user.username || 'Guild Admin'}
         </div>
-        <button class="btn btn-secondary btn-sm" onclick="switchSection('profile')">Edit Profile</button>
       </div>
       <div class="overview-metrics-grid">
-        <div class="overview-metric">
-          <div class="overview-metric-val">Member</div>
-          <div class="overview-metric-label">Global Rank</div>
-        </div>
-        <div class="overview-metric">
-          <div class="overview-metric-val">${(serverAccessData.managedServers || []).length}</div>
-          <div class="overview-metric-label">Managed</div>
-        </div>
-        <div class="overview-metric">
-          <div class="overview-metric-val">${(serverAccessData.unmanagedServers || []).length}</div>
-          <div class="overview-metric-label">Joined</div>
-        </div>
+        <div class="overview-metric"><div class="overview-metric-val">${managedCount}</div><div class="overview-metric-label">Managed Servers</div></div>
+        <div class="overview-metric"><div class="overview-metric-val">${joinedCount}</div><div class="overview-metric-label">Joined Servers</div></div>
+        <div class="overview-metric"><div class="overview-metric-val">${isAdminLike ? 'Admin' : 'Member'}</div><div class="overview-metric-label">Access Level</div></div>
       </div>
     </div>
-  `;
-  // Server Matrix (Bento style)
-  let serverHtml = `<div class="bento-panel panel-wallets" style="grid-row: 1 / 3;">
-    <div class="bento-panel-header">
-      <div class="bento-panel-title">Communities</div>
-      <button class="btn btn-secondary btn-sm" onclick="switchSection('servers')">View All</button>
-    </div>
-    <div class="wallet-list">`;
-
-  const allServers = [...(serverAccessData.managedServers || []), ...(serverAccessData.unmanagedServers || [])].slice(0, 5);
-  if (allServers.length === 0) {
-    serverHtml += `<p style="color:var(--text-muted); padding:20px; text-align:center;">No communities found. Join a server to get started.</p>`;
-  } else {
-    allServers.forEach(srv => {
-      const guildId = String(srv.guildId || '').trim();
-      const isManaged = (serverAccessData.managedServers || []).some(m => String(m.guildId || '').trim() === guildId);
-      const iconUrl = srv.icon || srv.iconUrl || '';
-      serverHtml += `
-        <div class="wallet-list-item" onclick="selectAndGoToServer('${escapeJsString(guildId)}')">
-          <div class="wallet-identity">
-            <img src="${iconUrl || '/assets/default-server.png'}" class="wallet-avatar" onerror="this.src='/assets/default-server.png'">
-            <div>
-              <div class="wallet-address">${srv.name || guildId}</div>
-              <div class="module-bento-status" style="font-size:0.75rem">${isManaged ? 'Administrator' : 'Member'}</div>
-            </div>
-          </div>
-          <div class="module-bento-badge ${isManaged ? '' : 'inactive'}" style="font-size:0.65rem">${isManaged ? 'Manage' : 'Open'}</div>
-        </div>
-      `;
-    });
-  }
-  serverHtml += `</div></div>`;
-  // Action Panels (Bento style)
-  const actionHtml = `
-    <div class="panel-modules-grid">
-      <div class="module-bento-tile" onclick="switchSection('help')">
+    <div class="panel-modules-grid" style="grid-column:1 / -1;">
+      <div class="module-bento-tile" onclick="switchSection('profile')">
         <div class="module-bento-top">
           <div class="module-bento-info">
-            <div class="module-bento-title">Support Desk</div>
-            <div class="module-bento-status">Help & Documentation</div>
+            <div class="module-bento-title">Go to User Profile</div>
+            <div class="module-bento-status">Identity, wallets, and account settings</div>
           </div>
         </div>
         <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-          <div class="module-bento-metric">Search Guides</div>
-          <div class="module-bento-icon-wrapper"><i class="fas fa-question-circle"></i></div>
+          <div class="module-bento-metric">Member Hub</div>
+          <div class="module-bento-icon-wrapper"><i class="fas fa-user"></i></div>
         </div>
       </div>
-      
-      <div class="module-bento-tile" onclick="switchSection('plans')">
+      <div class="module-bento-tile" onclick="smartRouteToServerDashboard()">
         <div class="module-bento-top">
           <div class="module-bento-info">
-            <div class="module-bento-title">Pricing & Plans</div>
-            <div class="module-bento-status">Upgrade Community</div>
+            <div class="module-bento-title">Go to Server</div>
+            <div class="module-bento-status">Select community and open dashboard</div>
           </div>
         </div>
         <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-          <div class="module-bento-metric">Premium Features</div>
-          <div class="module-bento-icon-wrapper" style="color:#fcd34d;"><i class="fas fa-crown"></i></div>
+          <div class="module-bento-metric">Server Workspace</div>
+          <div class="module-bento-icon-wrapper"><i class="fas fa-server"></i></div>
         </div>
       </div>
+      ${adminCard}
     </div>
   `;
-
-  // Superadmin Gateway
-  let superHtml = '';
-  if (isSuperadmin) {
-    superHtml = `
-      <div class="bento-panel panel-governance" style="grid-column: 1 / 3;">
-        <div class="bento-panel-header">
-          <div class="bento-panel-title">🛡️ Platform Administration</div>
-          <button class="btn btn-primary btn-sm" onclick="switchSection('admin'); showAdminView('superadmin');">Open Console</button>
-        </div>
-        <p style="color:var(--text-secondary); font-size:0.9rem; margin-top:8px;">You have global oversight. Monitor system health, manage billing cycles, and oversee all community tenants from the command center.</p>
-      </div>
-    `;
-  }
-
-  hub.innerHTML = identityHtml + serverHtml + actionHtml + superHtml;
 }
 
 function selectAndGoToServer(guildId) {
@@ -1781,8 +1745,21 @@ function selectAndGoToServer(guildId) {
   switchSection('dashboard');
 }
 
-
-
+function smartRouteToServerDashboard() {
+  const managed = Array.isArray(serverAccessData?.managedServers) ? serverAccessData.managedServers : [];
+  if (managed.length === 1) {
+    const oneGuildId = String(managed[0]?.guildId || '').trim();
+    if (oneGuildId) {
+      selectAndGoToServer(oneGuildId);
+      return;
+    }
+  }
+  if (activeGuildId) {
+    switchSection('dashboard');
+    return;
+  }
+  switchSection('servers');
+}
 function switchSettingsTab(tab) {
   const moduleTabRedirects = {
     aiassistant: 'aiassistant',
@@ -1803,11 +1780,24 @@ function switchSettingsTab(tab) {
   document.querySelectorAll('.settings-tab[data-tab]').forEach(t => {
     t.classList.toggle('active', t.dataset.tab === tab);
   });
+  document.querySelectorAll('[data-settings-tile]').forEach(tile => {
+    const isActive = tile.getAttribute('data-settings-tile') === tab;
+    tile.classList.toggle('active', isActive);
+    tile.classList.remove('is-activating');
+    if (isActive) {
+      void tile.offsetWidth;
+      tile.classList.add('is-activating');
+    }
+  });
   document.querySelectorAll('.settings-tab-pane').forEach(p => {
     p.style.display = 'none';
   });
   const pane = document.getElementById('settingsTab-' + tab);
   if (pane) pane.style.display = '';
+  const settingsSection = document.getElementById('section-settings');
+  if (settingsSection) settingsSection.classList.add('settings-focused-mode');
+  const focusResetBtn = document.getElementById('settingsFocusResetBtn');
+  if (focusResetBtn) focusResetBtn.style.display = '';
 
   // Load the appropriate admin card content into the pane
   const tabCardMap = {
@@ -1861,7 +1851,20 @@ function switchSettingsTab(tab) {
   };
   const loader = tabLoaders[tab];
   if (loader) loader();
+  if (pane) {
+    pane.classList.remove('is-focus-entering');
+    void pane.offsetWidth;
+    pane.classList.add('is-focus-entering');
+    setTimeout(() => pane.classList.remove('is-focus-entering'), 320);
+  }
   refreshSettingsAccordionNav();
+}
+
+function resetSettingsFocusMode() {
+  const settingsSection = document.getElementById('section-settings');
+  if (settingsSection) settingsSection.classList.remove('settings-focused-mode');
+  const focusResetBtn = document.getElementById('settingsFocusResetBtn');
+  if (focusResetBtn) focusResetBtn.style.display = 'none';
 }
 
 function getSettingsNavMode() {
@@ -2564,6 +2567,17 @@ function refreshAdminEntryVisibility() {
   if (topNavAdminSettings) {
     topNavAdminSettings.style.display = canShowAdminSettingsEntry ? '' : 'none';
     topNavAdminSettings.textContent = hasServerContext ? 'Modules' : 'Select Server';
+  }
+  const adminCommandTiles = document.getElementById('adminCommandTiles');
+  if (adminCommandTiles) {
+    adminCommandTiles.querySelectorAll('[data-admin-tile]').forEach((tile) => {
+      const key = String(tile.getAttribute('data-admin-tile') || '').trim();
+      if (key === 'superadmin') {
+        tile.style.display = canShowSuperadminEntry ? '' : 'none';
+      } else {
+        tile.style.display = canShowAdminSettingsEntry ? '' : 'none';
+      }
+    });
   }
 
   updateHelpCenterRoleVisibility();
@@ -5625,10 +5639,6 @@ function openAdminSettingsEntry() {
 }
 
 function goHomePage() {
-  if (userData && (isAdmin || isSuperadmin)) {
-    switchSection('servers', { updateUrl: false });
-    return;
-  }
   switchSection('landing', { updateUrl: false });
 }
 
@@ -5714,6 +5724,12 @@ function switchSection(sectionName, options = {}) {
   }
 
   const resolvedSectionName = sectionName;
+  if (resolvedSectionName !== 'admin') {
+    resetAdminFocusMode();
+  }
+  if (resolvedSectionName !== 'settings') {
+    resetSettingsFocusMode();
+  }
 
   // Update nav items (both sidebar and mobile)
   document.querySelectorAll('.nav-item').forEach(item => {
@@ -7026,8 +7042,22 @@ function showAdminView(view) {
   };
 
   const target = map[view] || map.settings;
+  const resolvedView = map[view] ? view : 'settings';
   const card = document.getElementById(target.card);
   if (card) card.style.display = 'block';
+  const adminSection = document.getElementById('section-admin');
+  if (adminSection) adminSection.classList.add('admin-focused-mode');
+  const adminFocusResetBtn = document.getElementById('adminFocusResetBtn');
+  if (adminFocusResetBtn) adminFocusResetBtn.style.display = '';
+  document.querySelectorAll('[data-admin-tile]').forEach(tile => {
+    const isActive = tile.getAttribute('data-admin-tile') === resolvedView;
+    tile.classList.toggle('active', isActive);
+    tile.classList.remove('is-activating');
+    if (isActive) {
+      void tile.offsetWidth;
+      tile.classList.add('is-activating');
+    }
+  });
 
   if (isTenantSensitiveAdminView(view) && !activeGuildId) {
     if (card) {
@@ -7070,7 +7100,22 @@ function showAdminView(view) {
     loadEnvStatusBar();
   }
 
+  if (card) {
+    card.classList.remove('is-focus-entering');
+    void card.offsetWidth;
+    card.classList.add('is-focus-entering');
+    setTimeout(() => card.classList.remove('is-focus-entering'), 320);
+  }
+
   setTimeout(() => card?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+}
+
+function resetAdminFocusMode() {
+  const adminSection = document.getElementById('section-admin');
+  if (adminSection) adminSection.classList.remove('admin-focused-mode');
+  const adminFocusResetBtn = document.getElementById('adminFocusResetBtn');
+  if (adminFocusResetBtn) adminFocusResetBtn.style.display = 'none';
+  document.querySelectorAll('[data-admin-tile]').forEach(tile => tile.classList.remove('active'));
 }
 
 

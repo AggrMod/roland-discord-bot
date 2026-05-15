@@ -2551,6 +2551,9 @@ function showAuthenticatedState() {
   }
   if (memberIdentityTile) memberIdentityTile.style.display = 'inline-flex';
   if (topNavProfile) topNavProfile.style.display = '';
+  if (topNavModules) topNavModules.style.display = '';
+  const commandServerSwitcher = document.getElementById('commandServerSwitcher');
+  if (commandServerSwitcher) commandServerSwitcher.style.display = '';
   if (navAuthBtn) {
     navAuthBtn.style.display = 'none';
     navAuthBtn.setAttribute('aria-hidden', 'true');
@@ -2562,8 +2565,10 @@ function showAuthenticatedState() {
   updateActiveGuildBadge();
 
   // Show dashboard content
-  document.getElementById('loginPrompt').style.display = 'none';
-  document.getElementById('dashboardContent').style.display = 'block';
+  const loginPrompt = document.getElementById('loginPrompt');
+  if (loginPrompt) loginPrompt.style.display = 'none';
+  const dashboardContent = document.getElementById('dashboardContent');
+  if (dashboardContent) dashboardContent.style.display = 'block';
 }
 
 function showUnauthenticatedState() {

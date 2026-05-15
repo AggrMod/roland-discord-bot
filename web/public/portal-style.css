@@ -6523,3 +6523,69 @@ body {
   max-width: none !important;
   margin: 0 !important;
 }
+
+/* ==================== Topbar Height Harmonization ==================== */
+.top-nav {
+  min-height: 84px !important;
+  display: grid !important;
+  grid-template-columns: auto 1fr auto !important;
+  align-items: center !important;
+}
+
+.nav-brand {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+}
+
+.nav-brand h1 {
+  min-height: 52px;
+  display: inline-flex !important;
+  align-items: center;
+  margin: 0;
+  line-height: 1;
+}
+
+.nav-brand h1 img {
+  width: 34px !important;
+  height: 34px !important;
+  margin-right: 10px !important;
+}
+
+.nav-user {
+  min-height: 52px;
+  align-items: center !important;
+}
+
+.command-server-switcher {
+  min-height: 52px !important;
+  display: flex;
+  align-items: center;
+  position: relative;
+  padding-top: 16px !important;
+}
+
+.command-server-switcher > label {
+  position: absolute;
+  top: 4px;
+  left: 10px;
+  margin: 0;
+  line-height: 1;
+}
+
+.command-server-switcher__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.command-server-switcher__row select,
+.command-server-switcher__row .btn-secondary {
+  height: 42px !important;
+}
+
+.member-identity-tile {
+  min-height: 52px !important;
+  display: inline-flex;
+  align-items: center;
+}

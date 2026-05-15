@@ -2486,8 +2486,9 @@ async function loadPortal() {
 // ==================== AUTHENTICATION STATE ====================
 function showAuthenticatedState() {
   // Update nav bar
-  const avatarUrl = userData.user.avatar 
-    ? `https://cdn.discordapp.com/avatars/${userData.user.discordId}/${userData.user.avatar}.png`
+  const resolvedUser = userData?.user || userData || {};
+  const avatarUrl = resolvedUser.avatar 
+    ? `https://cdn.discordapp.com/avatars/${resolvedUser.discordId}/${resolvedUser.avatar}.png`
     : 'https://cdn.discordapp.com/embed/avatars/0.png';
   
   const navAvatar = document.getElementById('navAvatar');
@@ -2498,16 +2499,23 @@ function showAuthenticatedState() {
   const topNavModules = document.getElementById('topNavModules');
   const mobileNavProfile = document.getElementById('mobileNavProfile');
   
-  navAvatar.src = avatarUrl;
-  navAvatar.style.display = 'block';
-  navUsername.textContent = userData.user.username;
+  if (navAvatar) {
+    navAvatar.src = avatarUrl;
+    navAvatar.style.display = 'block';
+  }
+  if (navUsername) navUsername.textContent = resolvedUser.username || 'Member';
   const dashboardWelcomeTitle = document.getElementById('dashboardWelcomeTitle');
   if (dashboardWelcomeTitle) {
-    dashboardWelcomeTitle.textContent = `Welcome, ${userData.user.username || 'Guild Admin'}`;
+    dashboardWelcomeTitle.textContent = `Welcome, ${resolvedUser.username || 'Guild Admin'}`;
   }
   if (memberIdentityTile) memberIdentityTile.style.display = 'inline-flex';
   if (topNavProfile) topNavProfile.style.display = '';
-  if (navAuthBtn) navAuthBtn.style.display = 'none';
+  if (navAuthBtn) {
+    navAuthBtn.style.display = 'none';
+    navAuthBtn.setAttribute('aria-hidden', 'true');
+    navAuthBtn.classList.remove('btn-primary');
+    navAuthBtn.classList.add('btn-secondary');
+  }
   if (mobileNavProfile) mobileNavProfile.style.display = '';
 
   updateActiveGuildBadge();
@@ -2526,8 +2534,8 @@ function showUnauthenticatedState() {
   const topNavModules = document.getElementById('topNavModules');
   const mobileNavProfile = document.getElementById('mobileNavProfile');
   
-  navAvatar.style.display = 'none';
-  navUsername.textContent = '';
+  if (navAvatar) navAvatar.style.display = 'none';
+  if (navUsername) navUsername.textContent = '';
   if (memberIdentityTile) memberIdentityTile.style.display = 'none';
   if (topNavProfile) topNavProfile.style.display = 'none';
   if (topNavModules) topNavModules.style.display = 'none';
@@ -2535,6 +2543,7 @@ function showUnauthenticatedState() {
   if (commandServerSwitcher) commandServerSwitcher.style.display = 'none';
   if (navAuthBtn) {
     navAuthBtn.style.display = '';
+    navAuthBtn.removeAttribute('aria-hidden');
     navAuthBtn.textContent = 'Login';
     navAuthBtn.onclick = login;
     navAuthBtn.classList.remove('btn-secondary');

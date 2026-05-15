@@ -6478,3 +6478,16 @@ body {
 #section-landing .btn-primary[onclick*="login"]:hover {
   background: linear-gradient(135deg, #7f72ff 0%, #5a52ef 100%) !important;
 }
+
+/* ==================== Final Primary Button Override ==================== */
+.btn-primary {
+  background: linear-gradient(135deg, #6d5cff 0%, #4f46e5 100%) !important;
+  border: 1px solid rgba(145, 133, 255, 0.55) !important;
+  color: #f4f7ff !important;
+  box-shadow: 0 10px 20px rgba(79, 70, 229, 0.34) !important;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #7f72ff 0%, #5a52ef 100%) !important;
+  box-shadow: 0 12px 24px rgba(79, 70, 229, 0.4) !important;
+}

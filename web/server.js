@@ -748,7 +748,7 @@ class WebServer {
         appendQueryParam(qs, key, value);
       });
 
-      const dest = '/?' + qs.toString();
+      const dest = '/app?' + qs.toString();
       if (requireAuth && !req.session.discordUser) {
         req.session.returnTo = dest;
         return res.redirect('/auth/discord/login');
@@ -756,8 +756,47 @@ class WebServer {
       return res.redirect(dest);
     };
 
+    // Cache the public marketing homepage with CLIENT_ID injected
+    const indexHtmlPath = path.join(__dirname, 'public', 'index.html');
+    let cachedIndexHtml = '';
+    try {
+      cachedIndexHtml = fs.readFileSync(indexHtmlPath, 'utf8');
+      const clientId = String(process.env.CLIENT_ID || '').trim();
+      if (clientId) {
+        cachedIndexHtml = cachedIndexHtml.replace('</head>', `  <meta name="bot-client-id" content="${clientId}">\n</head>`);
+      }
+    } catch (err) {
+      console.warn('Could not cache index.html', err);
+    }
+
+    // Public marketing homepage (logged-out landing page)
     this.app.get('/', (req, res) => {
+      if (cachedIndexHtml) {
+        res.type('html').send(cachedIndexHtml);
+      } else {
+        res.sendFile(indexHtmlPath);
+      }
+    });
+
+    // Authenticated app dashboard (existing portal)
+    this.app.get('/app', (req, res) => {
       res.sendFile(path.join(__dirname, 'public', 'portal.html'));
+    });
+
+    // Additional public marketing pages
+    this.app.get('/pricing', (req, res) => {
+      res.sendFile(path.join(__dirname, 'public', 'pricing.html'));
+    });
+    this.app.get('/features', (req, res) => {
+      res.sendFile(path.join(__dirname, 'public', 'features.html'));
+    });
+    this.app.get('/use-cases', (req, res) => {
+      res.sendFile(path.join(__dirname, 'public', 'use-cases.html'));
+    });
+
+    // Public documentation route
+    this.app.get('/docs', (req, res) => {
+      return redirectToPortalSection(req, res, 'help');
     });
 
     this.app.get('/verify', (req, res) => {

@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GuildPilot | Web3 Discord Bot for Wallet Verification, DAO Voting &amp; Community Operations</title>
+  <meta name="description" content="GuildPilot is an all-in-one Discord command center for Web3 communities. Verify wallets, assign NFT roles, run DAO votes, track wallets, manage tickets, launch missions, and reward members from one dashboard.">
+  <meta name="keywords" content="Web3 Discord bot, NFT Discord bot, Solana Discord bot, wallet verification, NFT holder verification, DAO voting, Discord token gating, community management">
+  <meta property="og:title" content="GuildPilot &#8212; The all-in-one command center for Web3 Discord communities">
+  <meta property="og:description" content="Verify wallets, assign NFT roles, run DAO votes, track wallets, manage tickets, launch missions, and reward your community &#8212; from one dashboard.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://guildpilot.app">
+  <meta property="og:image" content="/assets/dashboard-mockup.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="GuildPilot &#8212; Web3 Discord Community Command Center">
+  <meta name="twitter:description" content="One bot. One dashboard. Everything your Web3 Discord community needs.">
+  <link rel="icon" type="image/png" href="/assets/branding/guildpilot-logo.png">
+  <link rel="stylesheet" href="/landing.css">
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="pub-nav" id="publicNav">
+  <div class="container">
+    <a href="/" class="nav-brand">
+      <img src="/assets/branding/guildpilot-logo.png" alt="GuildPilot" width="32" height="32">
+      GuildPilot
+    </a>
+    <div class="nav-links">
+      <a href="#features">Product</a>
+      <a href="#usecases">Use Cases</a>
+      <a href="/pricing">Pricing</a>
+      <a href="#trust">Security</a>
+      <a href="/docs">Docs</a>
+    </div>
+    <div class="nav-cta">
+      <a href="/auth/discord/login" class="btn btn-ghost btn-sm">Login</a>
+      <a id="navInviteBtn" href="#" class="btn btn-primary btn-sm" onclick="return false;">Invite Bot</a>
+      <button class="mobile-toggle" onclick="toggleMobileMenu()" aria-label="Menu">&#9776;</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile Menu -->
+<div class="mobile-menu" id="mobileMenu">
+  <button class="mobile-close" onclick="toggleMobileMenu()">&#10005;</button>
+  <a href="#features" onclick="toggleMobileMenu()">Product</a>
+  <a href="#usecases" onclick="toggleMobileMenu()">Use Cases</a>
+  <a href="/pricing" onclick="toggleMobileMenu()">Pricing</a>
+  <a href="#trust" onclick="toggleMobileMenu()">Security</a>
+  <a href="/docs" onclick="toggleMobileMenu()">Docs</a>
+  <a href="/auth/discord/login" onclick="toggleMobileMenu()">Login</a>
+  <button class="btn btn-primary" style="margin-top:16px;" id="mobileInviteBtn">Invite Bot</button>
+</div>
+
+<!-- Hero -->
+<section class="hero section" id="hero">
+  <div class="container">
+    <div class="hero-content">
+      <div class="hero-badge">
+        <span class="pulse"></span>
+        Discord-native Web3 platform
+      </div>
+      <h1 class="hero-title">
+        The all-in-one<br><span class="gradient-text">command center</span><br>for Web3 Discord.
+      </h1>
+      <p class="hero-desc">
+        Verify wallets, assign NFT roles, run DAO votes, track wallets, manage tickets, launch missions, and reward your community &#8212; from one dashboard.
+      </p>
+      <div class="hero-actions">
+        <a id="heroInviteBtn" href="#" class="btn btn-primary">Invite Bot</a>
+        <a id="heroDemoBtn" href="#" class="btn btn-secondary" onclick="return false;">View Demo</a>
+        <a href="/pricing" class="btn btn-ghost">Compare Plans &#8594;</a>
+      </div>
+      <div class="hero-proof">
+        <span>&#128279; Solana-native</span>
+        <span>&#128737;&#65039; No fund custody</span>
+        <span>&#9889; Instant setup</span>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <div class="hero-mockup">
+        <img src="/assets/dashboard-mockup.png" alt="GuildPilot Dashboard" width="800" height="450" loading="eager">
+      </div>
+      <div class="hero-glow"></div>
+    </div>
+  </div>
+</section>
+
+<!-- Problem -->
+<section class="section" id="problem">
+  <div class="container">
+    <div class="section-header reveal">
+      <span class="section-kicker">The Problem</span>
+      <h2 class="section-title">Stop stacking bots.</h2>
+      <p class="section-subtitle">Most Web3 communities use separate tools for wallet verification, role sync, governance, ticketing, wallet alerts, missions, rewards, and games. That means more subscriptions, more setup, and more things that break.</p>
+    </div>
+    <div class="problem-grid">
+      <div class="problem-before reveal">
+        <div class="problem-label">Before GuildPilot</div>
+        <ul class="problem-items">
+          <li><span class="icon">&#10060;</span> Verification bot</li>
+          <li><span class="icon">&#10060;</span> Ticket bot</li>
+          <li><span class="icon">&#10060;</span> Governance bot</li>
+          <li><span class="icon">&#10060;</span> Invite tracking bot</li>
+          <li><span class="icon">&#10060;</span> Game / battle bot</li>
+          <li><span class="icon">&#10060;</span> Wallet tracking tool</li>
+          <li><span class="icon">&#10060;</span> NFT tracking tool</li>
+          <li><span class="icon">&#10060;</span> Multiple dashboards</li>
+        </ul>
+      </div>
+      <div class="problem-after reveal reveal-delay-1">
+        <div class="problem-label">After GuildPilot</div>
+        <ul class="problem-items">
+          <li><span class="icon">&#9989;</span> One bot</li>
+          <li><span class="icon">&#9989;</span> One dashboard</li>
+          <li><span class="icon">&#9989;</span> One subscription</li>
+          <li><span class="icon">&#9989;</span> Every module integrated</li>
+          <li><span class="icon">&#9989;</span> Instant setup</li>
+          <li><span class="icon">&#9989;</span> Consistent experience</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Solution -->
+<section class="section section-sm" id="solution">
+  <div class="container">
+    <div class="section-header reveal">
+      <span class="section-kicker">The Solution</span>
+      <h2 class="section-title">Everything your community needs to operate.</h2>
+      <p class="section-subtitle">GuildPilot brings your community operations into one Discord-native platform. Configure holder roles, gate channels, run DAO votes, track ecosystems, launch missions, manage tickets, and reward members &#8212; without jumping between tools.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="section" id="features">
+  <div class="container">
+    <div class="section-header reveal">
+      <span class="section-kicker">Core Modules</span>
+      <h2 class="section-title">Built for real community operations.</h2>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card reveal">
+        <div class="feature-icon">&#128272;</div>
+        <h3>Verification &amp; Roles</h3>
+        <p>Let members verify wallets and receive Discord roles based on NFTs, tokens, holder tiers, or custom rules.</p>
+        <ul class="feature-bullets">
+          <li>Wallet verification</li><li>NFT holder roles</li><li>Token-based roles</li>
+          <li>OG/WL access</li><li>Holder tier sync</li><li>Channel gating</li>
+        </ul>
+      </div>
+      <div class="feature-card reveal reveal-delay-1">
+        <div class="feature-icon">&#128220;</div>
+        <h3>DAO Governance</h3>
+        <p>Create proposals, require community support, run votes, assign voting power, and publish outcomes.</p>
+        <ul class="feature-bullets">
+          <li>Proposals</li><li>Support phase</li><li>Voting phase</li>
+          <li>Voting power</li><li>Quorum rules</li><li>Thresholds</li>
+        </ul>
+      </div>
+      <div class="feature-card reveal reveal-delay-2">
+        <div class="feature-icon">&#128225;</div>
+        <h3>Wallet &amp; NFT Tracking</h3>
+        <p>Track wallets, collections, tokens, treasury activity, and ecosystem movement from one dashboard.</p>
+        <ul class="feature-bullets">
+          <li>Wallet tracker</li><li>NFT tracker</li><li>Token tracker</li>
+          <li>Treasury monitor</li><li>Alerts</li><li>Activity logs</li>
+        </ul>
+      </div>
+      <div class="feature-card reveal">
+        <div class="feature-icon">&#127919;</div>
+        <h3>Missions &amp; Rewards</h3>
+        <p>Launch missions, run invite contests, track activity, and reward the members who bring value.</p>
+        <ul class="feature-bullets">
+          <li>Missions</li><li>Points</li><li>Leaderboards</li>
+          <li>Invite contests</li><li>Holder rewards</li><li>Vault store</li>
+        </ul>
+      </div>
+      <div class="feature-card reveal reveal-delay-1">
+        <div class="feature-icon">&#127915;</div>
+        <h3>Ticketing &amp; Support</h3>
+        <p>Organize support, verification issues, partner requests, and community workflows without losing context.</p>
+        <ul class="feature-bullets">
+          <li>Ticket creation</li><li>Admin assignment</li><li>Private channels</li>
+          <li>Ticket logs</li><li>Mod workflows</li><li>Help center</li>
+        </ul>
+      </div>
+      <div class="feature-card reveal reveal-delay-2">
+        <div class="feature-icon">&#9876;&#65039;</div>
+        <h3>Minigames</h3>
+        <p>Create holder-only games, competitions, and reward loops that keep your server active and engaged.</p>
+        <ul class="feature-bullets">
+          <li>Battle games</li><li>Reward pools</li><li>Custom themes</li>
+          <li>Server settings</li><li>Holder-only</li><li>Events</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Use Cases -->
+<section class="section" id="usecases">
+  <div class="container">
+    <div class="section-header reveal">
+      <span class="section-kicker">Built For</span>
+      <h2 class="section-title">Built for Web3 communities.</h2>
+    </div>
+    <div class="usecases-grid">
+      <div class="usecase-card reveal">
+        <h3>NFT Projects</h3>
+        <p>Verify holders, assign role tiers, gate private channels, track collection activity, and reward loyal members.</p>
+        <ul class="usecase-bullets">
+          <li>Holder verification</li><li>Trait-based roles</li><li>Private channels</li>
+          <li>Mint campaigns</li><li>Holder engagement</li><li>NFT tracking</li>
+        </ul>
+      </div>
+      <div class="usecase-card reveal reveal-delay-1">
+        <h3>DAOs</h3>
+        <p>Run structured governance with proposal support, voting power, quorum rules, and transparent outcomes.</p>
+        <ul class="usecase-bullets">
+          <li>Proposal flow</li><li>Voting power</li><li>Role-based governance</li>
+          <li>Support thresholds</li><li>Vote results</li><li>Transparency</li>
+        </ul>
+      </div>
+      <div class="usecase-card reveal">
+        <h3>Token Communities</h3>
+        <p>Assign roles based on token balances, monitor wallets, create gated areas, and reward long-term believers.</p>
+        <ul class="usecase-bullets">
+          <li>Token role checks</li><li>Balance access</li><li>Whale tiers</li>
+          <li>Wallet alerts</li><li>Treasury tracking</li><li>Loyalty rewards</li>
+        </ul>
+      </div>
+      <div class="usecase-card reveal reveal-delay-1">
+        <h3>Founders &amp; Moderators</h3>
+        <p>Spend less time manually checking wallets, assigning roles, handling repetitive questions, and managing scattered tools.</p>
+        <ul class="usecase-bullets">
+          <li>Less manual work</li><li>Cleaner admin</li><li>Better moderation</li>
+          <li>One dashboard</li><li>Fewer subscriptions</li><li>Faster onboarding</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Comparison -->
+<section class="section" id="compare">
+  <div class="container">
+    <div class="section-header reveal">
+      <span class="section-kicker">Value</span>
+      <h2 class="section-title">One platform instead of five bots.</h2>
+    </div>
+    <div class="compare-table-wrap reveal">
+      <table class="compare-table">
+        <thead>
+          <tr><th>Feature</th><th>Separate Bots</th><th>GuildPilot</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Wallet verification</td><td class="tag-extra">Extra tool</td><td class="tag-included">&#10003; Included</td></tr>
+          <tr><td>NFT role sync</td><td class="tag-extra">Extra tool</td><td class="tag-included">&#10003; Included</td></tr>
+          <tr><td>Token roles</td><td class="tag-extra">Extra tool</td><td class="tag-included">&#10003; Included</td></tr>
+          <tr><td>DAO voting</td><td class="tag-extra">Extra tool</td><td class="tag-included">&#10003; Included</td></tr>
+          <tr><td>Ticketing</td><td class="tag-extra">Extra tool</td><td class="tag-included">&#10003; Included</td></tr>
+          <tr><td>Missions &amp; rewards</td><td class="tag-extra">Extra tool</td><td class="tag-included">&#10003; Included</td></tr>
+          <tr><td>Wallet tracking</td><td class="tag-extra">Extra tool</td><td class="tag-included">&#10003; Included</td></tr>
+          <tr><td>NFT tracking</td><td class="tag-extra">Extra tool</td><td class="tag-included">&#10003; Included</td></tr>
+          <tr><td>Minigames</td><td class="tag-extra">Extra tool</td><td class="tag-included">&#10003; Included</td></tr>
+          <tr><td>One dashboard</td><td class="tag-extra">No</td><td class="tag-included">&#10003; Yes</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- Trust -->
+<section class="section" id="trust">
+  <div class="container">
+    <div class="section-header reveal">
+      <span class="section-kicker">Security</span>
+      <h2 class="section-title">Built for serious community operations.</h2>
+      <p class="section-subtitle">GuildPilot is designed for Discord-native Web3 communities that need secure verification, role-based access, admin controls, and transparent workflows.</p>
+    </div>
+    <div class="trust-badges reveal">
+      <div class="trust-badge"><span class="icon">&#128271;</span> Wallet signature verification</div>
+      <div class="trust-badge"><span class="icon">&#128683;</span> No custody of funds</div>
+      <div class="trust-badge"><span class="icon">&#128737;&#65039;</span> Role-based permissions</div>
+      <div class="trust-badge"><span class="icon">&#9881;&#65039;</span> Server-specific config</div>
+      <div class="trust-badge"><span class="icon">&#128203;</span> Activity logs</div>
+      <div class="trust-badge"><span class="icon">&#128172;</span> Discord-native flows</div>
+      <div class="trust-badge"><span class="icon">&#9728;&#65039;</span> Solana-ready</div>
+    </div>
+  </div>
+</section>
+
+<!-- Pricing Preview -->
+<section class="section section-sm" id="pricing-preview">
+  <div class="container">
+    <div class="section-header reveal">
+      <span class="section-kicker">Pricing</span>
+      <h2 class="section-title">One bot. One dashboard. No stack of subscriptions.</h2>
+      <p class="section-subtitle">Most Web3 communities pay separately for wallet verification, ticketing, NFT alerts, governance, engagement tools, and mini-games. GuildPilot combines the core operations stack into one platform.</p>
+    </div>
+    <div style="text-align:center;" class="reveal">
+      <a href="/pricing" class="btn btn-primary">View Pricing</a>
+    </div>
+  </div>
+</section>
+
+<!-- Final CTA -->
+<section class="cta-section" id="cta">
+  <div class="container">
+    <h2 class="reveal">Ready to run your Web3 community from one dashboard?</h2>
+    <p class="reveal">Invite GuildPilot and start building a cleaner, smarter Discord operation.</p>
+    <div class="cta-actions reveal">
+      <a id="ctaInviteBtn" href="#" class="btn btn-primary">Invite Bot</a>
+      <a href="/pricing" class="btn btn-secondary">View Pricing</a>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="pub-footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="/" class="nav-brand">
+          <img src="/assets/branding/guildpilot-logo.png" alt="GuildPilot" width="28" height="28">
+          GuildPilot
+        </a>
+        <p>The all-in-one command center for Web3 Discord communities. Verify, govern, track, and reward &#8212; from one dashboard.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <a href="/features">Features</a>
+        <a href="/use-cases">Use Cases</a>
+        <a href="/pricing">Pricing</a>
+        <a href="/docs">Documentation</a>
+      </div>
+      <div class="footer-col">
+        <h4>Community</h4>
+        <a href="#" id="footerInviteBtn">Invite Bot</a>
+        <a href="#" id="footerDemoBtn" onclick="return false;">Join Demo Server</a>
+        <a href="#trust">Security</a>
+      </div>
+      <div class="footer-col">
+        <h4>Legal</h4>
+        <a href="/privacy-policy">Privacy Policy</a>
+        <a href="/terms-of-service">Terms of Service</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>&copy; 2026 GuildPilot. All rights reserved.</span>
+      <span>Built for Solana communities</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  (function() {
+    var clientId = '';
+    var meta = document.querySelector('meta[name="bot-client-id"]');
+    if (meta) clientId = meta.getAttribute('content');
+    var inviteUrl = clientId
+      ? 'https://discord.com/oauth2/authorize?client_id=' + clientId + '&permissions=8&scope=bot%20applications.commands'
+      : '/auth/discord/login';
+    var demoUrl = '#';
+    ['navInviteBtn','mobileInviteBtn','heroInviteBtn','ctaInviteBtn','footerInviteBtn'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) { el.href = inviteUrl; el.onclick = null; }
+    });
+    ['heroDemoBtn','footerDemoBtn'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) { el.href = demoUrl; el.onclick = null; }
+    });
+  })();
+</script>
+<script src="/landing.js"></script>
+</body>
+</html>

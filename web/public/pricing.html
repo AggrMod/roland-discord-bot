@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pricing | GuildPilot &#8212; Web3 Discord Community Platform</title>
+  <meta name="description" content="Simple pricing for serious Discord communities. Replace multiple bots with one Web3 community operations platform. Free starter plan available.">
+  <meta property="og:title" content="GuildPilot Pricing &#8212; One platform, no stack of subscriptions">
+  <meta property="og:description" content="Starter (Free), Growth ($19.99/mo), Pro ($49.99/mo), Enterprise (Custom). All modules included based on your plan.">
+  <link rel="icon" type="image/png" href="/assets/branding/guildpilot-logo.png">
+  <link rel="stylesheet" href="/landing.css">
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="pub-nav"><div class="container">
+  <a href="/" class="nav-brand"><img src="/assets/branding/guildpilot-logo.png" alt="GuildPilot" width="32" height="32"> GuildPilot</a>
+  <div class="nav-links">
+    <a href="/#features">Product</a><a href="/#usecases">Use Cases</a>
+    <a href="/pricing" style="color:var(--text-primary);">Pricing</a><a href="/docs">Docs</a>
+  </div>
+  <div class="nav-cta">
+    <a href="/auth/discord/login" class="btn btn-ghost btn-sm">Login</a>
+    <a href="/auth/discord/login" class="btn btn-primary btn-sm">Invite Bot</a>
+    <button class="mobile-toggle" onclick="toggleMobileMenu()" aria-label="Menu">&#9776;</button>
+  </div>
+</div></nav>
+
+<div class="mobile-menu" id="mobileMenu">
+  <button class="mobile-close" onclick="toggleMobileMenu()">&#10005;</button>
+  <a href="/#features">Product</a><a href="/#usecases">Use Cases</a>
+  <a href="/pricing">Pricing</a><a href="/docs">Docs</a>
+  <a href="/auth/discord/login">Login</a>
+</div>
+
+<!-- Pricing Hero -->
+<section class="section" style="padding-top:calc(var(--nav-h) + 60px);">
+  <div class="container">
+    <div class="section-header">
+      <span class="section-kicker">Pricing</span>
+      <h1 class="section-title">Simple pricing for serious Discord communities.</h1>
+      <p class="section-subtitle">Replace multiple bots with one Web3 community operations platform.</p>
+    </div>
+
+    <!-- Billing Toggle -->
+    <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:40px;font-size:0.9rem;color:var(--text-secondary);">
+      <span>Monthly</span>
+      <label style="position:relative;display:inline-block;width:48px;height:26px;cursor:pointer;">
+        <input type="checkbox" id="billingToggle" onchange="togglePricingPeriod(this)" style="display:none;">
+        <span style="position:absolute;inset:0;background:var(--border);border-radius:26px;transition:background 0.3s;"></span>
+        <span id="toggleDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;background:#fff;border-radius:50%;transition:transform 0.3s;"></span>
+      </label>
+      <span>Annually <span style="background:rgba(74,222,128,0.15);color:#4ade80;padding:2px 8px;border-radius:10px;font-size:0.8em;font-weight:600;">Save 15%</span></span>
+    </div>
+
+    <!-- Plan Cards -->
+    <div class="pricing-grid">
+      <!-- Starter -->
+      <div class="pricing-card">
+        <h3>Starter</h3>
+        <p class="plan-desc">Foundational bundle for verification, governance, and support.</p>
+        <div class="price"><span data-monthly="0">Free</span></div>
+        <p class="price-note">Free forever</p>
+        <ul class="plan-features">
+          <li>Up to 4 modules</li>
+          <li>Wallet verification (3 rules)</li>
+          <li>Governance (3 active proposals)</li>
+          <li>Ticketing (3 categories)</li>
+          <li>1 treasury wallet</li>
+          <li>1 NFT collection tracker</li>
+          <li>1 token tracker</li>
+          <li>Invite tracking (30 days)</li>
+          <li>1 branding profile</li>
+        </ul>
+        <a href="/auth/discord/login" class="btn btn-secondary" style="width:100%;justify-content:center;">Get Started</a>
+      </div>
+
+      <!-- Growth -->
+      <div class="pricing-card">
+        <h3>Growth</h3>
+        <p class="plan-desc">For active NFT and token projects that need treasury, tracking, and engagement.</p>
+        <div class="price"><span data-monthly="19.99">$19.99</span><span class="period">/mo</span></div>
+        <p class="price-note">Billed monthly or annually</p>
+        <ul class="plan-features">
+          <li>Up to 6 modules</li>
+          <li>12 verification rules</li>
+          <li>25 active proposals</li>
+          <li>12 ticket categories</li>
+          <li>10 treasury wallets</li>
+          <li>25 tracked wallets</li>
+          <li>8 NFT collections</li>
+          <li>8 token trackers</li>
+          <li>Minigames enabled</li>
+          <li>Engagement &amp; points</li>
+          <li>Vault store (100 rewards)</li>
+          <li>Invite tracking (180 days + export)</li>
+        </ul>
+        <a href="/auth/discord/login" class="btn btn-secondary" style="width:100%;justify-content:center;">Start Growth</a>
+      </div>
+
+      <!-- Pro (Featured) -->
+      <div class="pricing-card featured">
+        <h3>Pro</h3>
+        <p class="plan-desc">Full-featured operational bundle with all competitive modules enabled.</p>
+        <div class="price"><span data-monthly="49.99">$49.99</span><span class="period">/mo</span></div>
+        <p class="price-note">Billed monthly or annually</p>
+        <ul class="plan-features">
+          <li>Up to 8 modules</li>
+          <li>50 verification rules</li>
+          <li>100 active proposals</li>
+          <li>40 ticket categories</li>
+          <li>50 treasury wallets</li>
+          <li>200 tracked wallets</li>
+          <li>40 NFT collections</li>
+          <li>40 token trackers</li>
+          <li>50 active missions</li>
+          <li>Vault store (500 rewards)</li>
+          <li>AI Assistant (1000 req/day)</li>
+          <li>Unlimited invite history</li>
+          <li>2 branding profiles</li>
+        </ul>
+        <a href="/auth/discord/login" class="btn btn-primary" style="width:100%;justify-content:center;">Start Pro</a>
+      </div>
+
+      <!-- Enterprise -->
+      <div class="pricing-card">
+        <h3>Enterprise</h3>
+        <p class="plan-desc">Maximum flexibility for custom tenant operations and support bundles.</p>
+        <div class="price"><span data-monthly="NaN">Custom</span></div>
+        <p class="price-note">Contact for pricing</p>
+        <ul class="plan-features">
+          <li>Unlimited modules</li>
+          <li>Unlimited verification rules</li>
+          <li>Unlimited proposals</li>
+          <li>Unlimited ticket categories</li>
+          <li>Unlimited treasury wallets</li>
+          <li>Unlimited tracked wallets</li>
+          <li>Unlimited trackers</li>
+          <li>Unlimited missions</li>
+          <li>Unlimited vault rewards</li>
+          <li>Unlimited AI requests</li>
+          <li>Unlimited branding profiles</li>
+          <li>Priority support</li>
+        </ul>
+        <a href="#" class="btn btn-secondary" style="width:100%;justify-content:center;" onclick="return false;">Contact Us</a>
+      </div>
+    </div>
+
+    <!-- Competitor Comparison -->
+    <div class="section-header reveal" style="margin-top:80px;">
+      <span class="section-kicker">Comparison</span>
+      <h2 class="section-title">Everything in one plan. No add-ons.</h2>
+      <p class="section-subtitle">Competitors charge separately for role verification, NFT tracking, stats, and mini-games &#8212; adding up to $30+/mo for the full stack.</p>
+    </div>
+    <div class="compare-table-wrap reveal">
+      <table class="compare-table">
+        <thead><tr><th>Feature</th><th>Separate Bots</th><th>GuildPilot</th></tr></thead>
+        <tbody>
+          <tr><td>Wallet verification</td><td class="tag-extra">$5-10/mo</td><td class="tag-included">&#10003; Included</td></tr>
+          <tr><td>NFT role sync</td><td class="tag-extra">$5-10/mo</td><td class="tag-included">&#10003; Included</td></tr>
+          <tr><td>DAO voting</td><td class="tag-extra">$10-15/mo</td><td class="tag-included">&#10003; Included</td></tr>
+          <tr><td>Ticketing</td><td class="tag-extra">$5-10/mo</td><td class="tag-included">&#10003; Included</td></tr>
+          <tr><td>Wallet tracking</td><td class="tag-extra">$5-15/mo</td><td class="tag-included">&#10003; Included</td></tr>
+          <tr><td>NFT tracking</td><td class="tag-extra">$5-10/mo</td><td class="tag-included">&#10003; Included</td></tr>
+          <tr><td>Missions &amp; rewards</td><td class="tag-extra">$5-10/mo</td><td class="tag-included">&#10003; Included</td></tr>
+          <tr><td>Minigames</td><td class="tag-extra">$5-10/mo</td><td class="tag-included">&#10003; Included</td></tr>
+          <tr><td>One dashboard</td><td class="tag-extra">No</td><td class="tag-included">&#10003; Yes</td></tr>
+          <tr><td><strong>Total (full stack)</strong></td><td class="tag-extra"><strong>$40-90/mo</strong></td><td class="tag-included"><strong>From $0/mo</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- FAQ -->
+    <div class="section-header reveal" style="margin-top:80px;">
+      <span class="section-kicker">FAQ</span>
+      <h2 class="section-title">Frequently asked questions</h2>
+    </div>
+    <div class="faq-list reveal">
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">Does GuildPilot support Solana?<span class="arrow">&#9660;</span></button>
+        <div class="faq-answer"><p>Yes. GuildPilot is built for Solana-native communities with full support for SPL tokens, NFT collections, and Solana wallet verification.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">Do users need to give wallet permissions?<span class="arrow">&#9660;</span></button>
+        <div class="faq-answer"><p>No. GuildPilot uses read-only wallet signature verification. Users sign a message to prove ownership &#8212; no transaction approvals or fund access needed.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">Does GuildPilot custody funds?<span class="arrow">&#9660;</span></button>
+        <div class="faq-answer"><p>No. GuildPilot never has access to or custody of user funds. Verification is signature-based only.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">Can I use GuildPilot on multiple servers?<span class="arrow">&#9660;</span></button>
+        <div class="faq-answer"><p>Yes. GuildPilot is multi-tenant by design. You can manage multiple Discord servers from a single dashboard with server-specific configurations.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">Can I choose which modules to enable?<span class="arrow">&#9660;</span></button>
+        <div class="faq-answer"><p>Yes. Each plan includes a set of available modules. You can enable or disable individual modules per server from the dashboard.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">Can I run holder-only voting?<span class="arrow">&#9660;</span></button>
+        <div class="faq-answer"><p>Yes. Governance supports NFT-weighted and token-weighted voting power, holder-only access, quorum rules, and support thresholds.</p></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-question" onclick="toggleFaq(this)">Can I cancel anytime?<span class="arrow">&#9660;</span></button>
+        <div class="faq-answer"><p>Yes. All plans are month-to-month or annual. You can cancel or downgrade anytime from your dashboard.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="container">
+    <h2 class="reveal">Start operating your community from one dashboard.</h2>
+    <p class="reveal">Invite GuildPilot to your server and activate the modules you need.</p>
+    <div class="cta-actions reveal">
+      <a href="/auth/discord/login" class="btn btn-primary">Invite Bot</a>
+      <a href="/" class="btn btn-secondary">Learn More</a>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="pub-footer"><div class="container">
+  <div class="footer-grid">
+    <div class="footer-brand">
+      <a href="/" class="nav-brand"><img src="/assets/branding/guildpilot-logo.png" alt="GuildPilot" width="28" height="28"> GuildPilot</a>
+      <p>The all-in-one command center for Web3 Discord communities.</p>
+    </div>
+    <div class="footer-col"><h4>Product</h4><a href="/features">Features</a><a href="/use-cases">Use Cases</a><a href="/pricing">Pricing</a></div>
+    <div class="footer-col"><h4>Resources</h4><a href="/docs">Docs</a><a href="/#trust">Security</a></div>
+    <div class="footer-col"><h4>Legal</h4><a href="/privacy-policy">Privacy</a><a href="/terms-of-service">Terms</a></div>
+  </div>
+  <div class="footer-bottom"><span>&copy; 2026 GuildPilot.</span><span>Built for Solana communities</span></div>
+</div></footer>
+
+<script>
+  // Fix toggle visual
+  var toggle = document.getElementById('billingToggle');
+  var dot = document.getElementById('toggleDot');
+  if (toggle && dot) {
+    toggle.addEventListener('change', function() {
+      dot.style.transform = this.checked ? 'translateX(22px)' : 'translateX(0)';
+    });
+  }
+</script>
+<script src="/landing.js"></script>
+</body>
+</html>

@@ -7340,6 +7340,18 @@ async function loadSuperadminView() {
   const content = document.getElementById('adminSuperadminContent');
   if (!content) return;
 
+  try {
+    const qs = new URLSearchParams(window.location.search);
+    const qsTab = String(qs.get('saTab') || '').trim();
+    const qsGlobalOps = String(qs.get('saGlobalOps') || '').trim();
+    const qsTenants = String(qs.get('saTenants') || '').trim();
+    const qsTenantDetail = String(qs.get('saTenantDetail') || '').trim();
+    if (qsTab) superadminActiveTab = qsTab;
+    if (qsGlobalOps) superadminGlobalOpsPanel = qsGlobalOps;
+    if (qsTenants) superadminTenantsPanel = qsTenants;
+    if (qsTenantDetail) tenantDetailActiveTab = qsTenantDetail;
+  } catch {}
+
   content.innerHTML = `<div style="text-align:center; padding:20px;"><div class="spinner"></div><p style="margin-top:10px;">Loading superadmin tenant controls...</p></div>`;
 
   try {
@@ -7435,22 +7447,22 @@ async function loadSuperadminView() {
           <div style="color:#cbd5e1;font-size:0.82em;max-width:520px;">Tenant-scoped actions below (plan/modules/branding/status) apply to this server. Superadmin list + era catalog are global controls.</div>
         </div>
         <div class="sa-menu-grid">
-          <button data-superadmin-tab-btn="tenants" class="module-tile sa-menu-card active" onclick="showSuperadminTab('tenants')">
+          <button data-superadmin-tab-btn="tenants" class="module-tile sa-menu-card active" onclick="navigateSuperadmin('tenants')">
             <div class="module-tile__header"><div class="module-tile__icon">🏢</div><div class="module-tile__status status-active">Workspace</div></div>
             <div class="module-tile__body"><h3 class="module-tile__title">Tenants</h3><p class="module-tile__desc">Directory, plans, branding, modules</p></div>
             <div class="module-tile__footer"><span style="font-size:0.8rem; color:var(--text-muted);">Open Section →</span></div>
           </button>
-          <button data-superadmin-tab-btn="identity" class="module-tile sa-menu-card" onclick="showSuperadminTab('identity')">
+          <button data-superadmin-tab-btn="identity" class="module-tile sa-menu-card" onclick="navigateSuperadmin('identity')">
             <div class="module-tile__header"><div class="module-tile__icon">🪪</div><div class="module-tile__status status-active">Global</div></div>
             <div class="module-tile__body"><h3 class="module-tile__title">Identity</h3><p class="module-tile__desc">Wallet links, flags, audit trail</p></div>
             <div class="module-tile__footer"><span style="font-size:0.8rem; color:var(--text-muted);">Open Section →</span></div>
           </button>
-          <button data-superadmin-tab-btn="globalops" class="module-tile sa-menu-card" onclick="showSuperadminTab('globalops')">
+          <button data-superadmin-tab-btn="globalops" class="module-tile sa-menu-card" onclick="navigateSuperadmin('globalops')">
             <div class="module-tile__header"><div class="module-tile__icon">⚙️</div><div class="module-tile__status status-active">Platform</div></div>
             <div class="module-tile__body"><h3 class="module-tile__title">Global Ops</h3><p class="module-tile__desc">Integrations and platform settings</p></div>
             <div class="module-tile__footer"><span style="font-size:0.8rem; color:var(--text-muted);">Open Section →</span></div>
           </button>
-          <button data-superadmin-tab-btn="monitoring" class="module-tile sa-menu-card" onclick="showSuperadminTab('monitoring')">
+          <button data-superadmin-tab-btn="monitoring" class="module-tile sa-menu-card" onclick="navigateSuperadmin('monitoring')">
             <div class="module-tile__header"><div class="module-tile__icon">📈</div><div class="module-tile__status status-active">System</div></div>
             <div class="module-tile__body"><h3 class="module-tile__title">Monitoring</h3><p class="module-tile__desc">System diagnostics and process health</p></div>
             <div class="module-tile__footer"><span style="font-size:0.8rem; color:var(--text-muted);">Open Section →</span></div>
@@ -7458,25 +7470,25 @@ async function loadSuperadminView() {
         </div>
 
         <div id="superadminTenantDetailTabGroup" class="sa-menu-grid sa-menu-grid--compact">
-          <button data-tenant-detail-tab="overview" class="module-tile sa-menu-card active" onclick="showTenantDetailTab('overview')"><div class="module-tile__header"><div class="module-tile__icon">🧭</div></div><div class="module-tile__body"><h3 class="module-tile__title">Overview</h3></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open →</span></div></button>
-          <button data-tenant-detail-tab="controls" class="module-tile sa-menu-card" onclick="showTenantDetailTab('controls')"><div class="module-tile__header"><div class="module-tile__icon">📋</div></div><div class="module-tile__body"><h3 class="module-tile__title">Plan & Status</h3></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open →</span></div></button>
-          <button data-tenant-detail-tab="branding" class="module-tile sa-menu-card" onclick="showTenantDetailTab('branding')"><div class="module-tile__header"><div class="module-tile__icon">🎨</div></div><div class="module-tile__body"><h3 class="module-tile__title">Branding</h3></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open →</span></div></button>
-          <button data-tenant-detail-tab="modules" class="module-tile sa-menu-card" onclick="showTenantDetailTab('modules')"><div class="module-tile__header"><div class="module-tile__icon">🧩</div></div><div class="module-tile__body"><h3 class="module-tile__title">Modules</h3></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open →</span></div></button>
-          <button data-tenant-detail-tab="eras" class="module-tile sa-menu-card" onclick="showTenantDetailTab('eras')"><div class="module-tile__header"><div class="module-tile__icon">🗓️</div></div><div class="module-tile__body"><h3 class="module-tile__title">Era Assignments</h3></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open →</span></div></button>
+          <button data-tenant-detail-tab="overview" class="module-tile sa-menu-card active" onclick="navigateSuperadmin('tenants', { tenantDetail: 'overview', tenants: 'detail' })"><div class="module-tile__header"><div class="module-tile__icon">🧭</div></div><div class="module-tile__body"><h3 class="module-tile__title">Overview</h3></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open →</span></div></button>
+          <button data-tenant-detail-tab="controls" class="module-tile sa-menu-card" onclick="navigateSuperadmin('tenants', { tenantDetail: 'controls', tenants: 'detail' })"><div class="module-tile__header"><div class="module-tile__icon">📋</div></div><div class="module-tile__body"><h3 class="module-tile__title">Plan & Status</h3></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open →</span></div></button>
+          <button data-tenant-detail-tab="branding" class="module-tile sa-menu-card" onclick="navigateSuperadmin('tenants', { tenantDetail: 'branding', tenants: 'detail' })"><div class="module-tile__header"><div class="module-tile__icon">🎨</div></div><div class="module-tile__body"><h3 class="module-tile__title">Branding</h3></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open →</span></div></button>
+          <button data-tenant-detail-tab="modules" class="module-tile sa-menu-card" onclick="navigateSuperadmin('tenants', { tenantDetail: 'modules', tenants: 'detail' })"><div class="module-tile__header"><div class="module-tile__icon">🧩</div></div><div class="module-tile__body"><h3 class="module-tile__title">Modules</h3></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open →</span></div></button>
+          <button data-tenant-detail-tab="eras" class="module-tile sa-menu-card" onclick="navigateSuperadmin('tenants', { tenantDetail: 'eras', tenants: 'detail' })"><div class="module-tile__header"><div class="module-tile__icon">🗓️</div></div><div class="module-tile__body"><h3 class="module-tile__title">Era Assignments</h3></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open →</span></div></button>
         </div>
 
         <div id="superadminSection-globalopsNav" class="sa-menu-grid" style="display:none;">
-          <button class="module-tile sa-menu-card active" data-sa-ops-panel="superadmins" onclick="showSuperadminGlobalOpsPanel('superadmins')"><div class="module-tile__header"><div class="module-tile__icon">🛡️</div></div><div class="module-tile__body"><h3 class="module-tile__title">Superadmins</h3><p class="module-tile__desc">Manage root/global admin access</p></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open Panel →</span></div></button>
-          <button class="module-tile sa-menu-card" data-sa-ops-panel="chainEmojis" onclick="showSuperadminGlobalOpsPanel('chainEmojis')"><div class="module-tile__header"><div class="module-tile__icon">⛓️</div></div><div class="module-tile__body"><h3 class="module-tile__title">Chain Emojis</h3><p class="module-tile__desc">Global chain icon mapping and replay</p></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open Panel →</span></div></button>
-          <button class="module-tile sa-menu-card" data-sa-ops-panel="microVerify" onclick="showSuperadminGlobalOpsPanel('microVerify')"><div class="module-tile__header"><div class="module-tile__icon">💸</div></div><div class="module-tile__body"><h3 class="module-tile__title">Micro Verify</h3><p class="module-tile__desc">Ownership verification and wallet controls</p></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open Panel →</span></div></button>
-          <button class="module-tile sa-menu-card" data-sa-ops-panel="aiProviders" onclick="showSuperadminGlobalOpsPanel('aiProviders')"><div class="module-tile__header"><div class="module-tile__icon">🤖</div></div><div class="module-tile__body"><h3 class="module-tile__title">AI Settings</h3><p class="module-tile__desc">Keys, models, provider routing</p></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open Panel →</span></div></button>
-          <button class="module-tile sa-menu-card" data-sa-ops-panel="xProvider" onclick="showSuperadminGlobalOpsPanel('xProvider')"><div class="module-tile__header"><div class="module-tile__icon">✖️</div></div><div class="module-tile__body"><h3 class="module-tile__title">X Settings</h3><p class="module-tile__desc">OAuth, polling, provider credentials</p></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open Panel →</span></div></button>
+          <button class="module-tile sa-menu-card active" data-sa-ops-panel="superadmins" onclick="navigateSuperadmin('globalops', { globalOps: 'superadmins' })"><div class="module-tile__header"><div class="module-tile__icon">🛡️</div></div><div class="module-tile__body"><h3 class="module-tile__title">Superadmins</h3><p class="module-tile__desc">Manage root/global admin access</p></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open Panel →</span></div></button>
+          <button class="module-tile sa-menu-card" data-sa-ops-panel="chainEmojis" onclick="navigateSuperadmin('globalops', { globalOps: 'chainEmojis' })"><div class="module-tile__header"><div class="module-tile__icon">⛓️</div></div><div class="module-tile__body"><h3 class="module-tile__title">Chain Emojis</h3><p class="module-tile__desc">Global chain icon mapping and replay</p></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open Panel →</span></div></button>
+          <button class="module-tile sa-menu-card" data-sa-ops-panel="microVerify" onclick="navigateSuperadmin('globalops', { globalOps: 'microVerify' })"><div class="module-tile__header"><div class="module-tile__icon">💸</div></div><div class="module-tile__body"><h3 class="module-tile__title">Micro Verify</h3><p class="module-tile__desc">Ownership verification and wallet controls</p></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open Panel →</span></div></button>
+          <button class="module-tile sa-menu-card" data-sa-ops-panel="aiProviders" onclick="navigateSuperadmin('globalops', { globalOps: 'aiProviders' })"><div class="module-tile__header"><div class="module-tile__icon">🤖</div></div><div class="module-tile__body"><h3 class="module-tile__title">AI Settings</h3><p class="module-tile__desc">Keys, models, provider routing</p></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open Panel →</span></div></button>
+          <button class="module-tile sa-menu-card" data-sa-ops-panel="xProvider" onclick="navigateSuperadmin('globalops', { globalOps: 'xProvider' })"><div class="module-tile__header"><div class="module-tile__icon">✖️</div></div><div class="module-tile__body"><h3 class="module-tile__title">X Settings</h3><p class="module-tile__desc">OAuth, polling, provider credentials</p></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open Panel →</span></div></button>
         </div>
 
         <div id="superadminSection-tenantsNav" class="sa-menu-grid" style="display:none;">
-          <button class="module-tile sa-menu-card active" data-sa-tenants-panel="directory" onclick="showSuperadminTenantsPanel('directory')"><div class="module-tile__header"><div class="module-tile__icon">🗂️</div></div><div class="module-tile__body"><h3 class="module-tile__title">Tenant Directory</h3><p class="module-tile__desc">Search and select guilds</p></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open Panel →</span></div></button>
-          <button class="module-tile sa-menu-card" data-sa-tenants-panel="detail" onclick="showSuperadminTenantsPanel('detail')"><div class="module-tile__header"><div class="module-tile__icon">🏷️</div></div><div class="module-tile__body"><h3 class="module-tile__title">Tenant Detail</h3><p class="module-tile__desc">Plan, branding, modules and controls</p></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open Panel →</span></div></button>
-          <button class="module-tile sa-menu-card" data-sa-tenants-panel="eras" onclick="showSuperadminTenantsPanel('eras')"><div class="module-tile__header"><div class="module-tile__icon">🗓️</div></div><div class="module-tile__body"><h3 class="module-tile__title">Era Assignments</h3><p class="module-tile__desc">Global era binding for selected tenant</p></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open Panel →</span></div></button>
+          <button class="module-tile sa-menu-card active" data-sa-tenants-panel="directory" onclick="navigateSuperadmin('tenants', { tenants: 'directory' })"><div class="module-tile__header"><div class="module-tile__icon">🗂️</div></div><div class="module-tile__body"><h3 class="module-tile__title">Tenant Directory</h3><p class="module-tile__desc">Search and select guilds</p></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open Panel →</span></div></button>
+          <button class="module-tile sa-menu-card" data-sa-tenants-panel="detail" onclick="navigateSuperadmin('tenants', { tenants: 'detail' })"><div class="module-tile__header"><div class="module-tile__icon">🏷️</div></div><div class="module-tile__body"><h3 class="module-tile__title">Tenant Detail</h3><p class="module-tile__desc">Plan, branding, modules and controls</p></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open Panel →</span></div></button>
+          <button class="module-tile sa-menu-card" data-sa-tenants-panel="eras" onclick="navigateSuperadmin('tenants', { tenants: 'eras' })"><div class="module-tile__header"><div class="module-tile__icon">🗓️</div></div><div class="module-tile__body"><h3 class="module-tile__title">Era Assignments</h3><p class="module-tile__desc">Global era binding for selected tenant</p></div><div class="module-tile__footer"><span style="font-size:0.78rem; color:var(--text-muted);">Open Panel →</span></div></button>
         </div>
 
         <div id="superadminSection-superadminsInput" style="display:grid; gap:12px; grid-template-columns:minmax(0,1fr) auto;">
@@ -8347,6 +8359,7 @@ function removeSuperadminIdentityWallet(discordId, walletAddress) {
 
 function showSuperadminTab(tab) {
   superadminActiveTab = tab;
+  syncSuperadminRouteState();
   const sections = {
     globalops: ['superadminSection-globalopsNav', 'superadminSection-superadminsInput', 'superadminSection-superadmins', 'superadminSection-chainEmojis', 'superadminSection-microVerify', 'superadminSection-aiProviders', 'superadminSection-xProvider'],
     identity: ['superadminSection-identity'],
@@ -8373,6 +8386,30 @@ function showSuperadminTab(tab) {
   } else if (tab === 'monitoring') {
     loadSystemStatus('superadminSystemStatusContent');
   }
+}
+
+function syncSuperadminRouteState() {
+  try {
+    const qs = new URLSearchParams(window.location.search);
+    qs.set('section', 'admin');
+    qs.set('saTab', String(superadminActiveTab || 'tenants'));
+    qs.set('saGlobalOps', String(superadminGlobalOpsPanel || 'superadmins'));
+    qs.set('saTenants', String(superadminTenantsPanel || 'directory'));
+    qs.set('saTenantDetail', String(tenantDetailActiveTab || 'overview'));
+    const newUrl = `${window.location.pathname}?${qs.toString()}`;
+    window.history.replaceState({}, '', newUrl);
+  } catch {}
+}
+
+function navigateSuperadmin(tab, options = {}) {
+  if (tab) superadminActiveTab = String(tab);
+  if (options && typeof options === 'object') {
+    if (options.globalOps) superadminGlobalOpsPanel = String(options.globalOps);
+    if (options.tenants) superadminTenantsPanel = String(options.tenants);
+    if (options.tenantDetail) tenantDetailActiveTab = String(options.tenantDetail);
+  }
+  syncSuperadminRouteState();
+  loadSuperadminView();
 }
 
 function showSuperadminGlobalOpsPanel(panel) {
@@ -8405,6 +8442,7 @@ function showSuperadminGlobalOpsPanel(panel) {
   document.querySelectorAll('[data-sa-ops-panel]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.saOpsPanel === normalized);
   });
+  syncSuperadminRouteState();
 }
 
 function showSuperadminTenantsPanel(panel) {
@@ -8435,6 +8473,7 @@ function showSuperadminTenantsPanel(panel) {
   if (normalized === 'detail') {
     showTenantDetailTab(tenantDetailActiveTab || 'overview');
   }
+  syncSuperadminRouteState();
 }
 
 function selectTenantGuild(guildId) {
@@ -8490,6 +8529,7 @@ function showTenantDetailTab(tab) {
   document.querySelectorAll('[data-tenant-detail-tab]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tenantDetailTab === tab);
   });
+  syncSuperadminRouteState();
 }
 
 function updateTenantTemplateDescription() {

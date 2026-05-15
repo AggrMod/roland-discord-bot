@@ -489,6 +489,10 @@ function initializePortalPages() {
     const sectionId = `section-${section}`;
     const sectionEl = document.getElementById(sectionId);
     if (!sectionEl) {
+      if (sectionId === 'section-servers') {
+        // Optional in the current app-shell variant.
+        return;
+      }
       missing.push(sectionId);
       return;
     }

@@ -29,6 +29,7 @@ let _portalMultiSelectPickerState = null;
 let vaultSettingsCache = null;
 let vaultConfigModalState = { type: '', index: -1 };
 const VAULT_UI_MODE_STORAGE_KEY = 'vaultUiMode';
+let quickSwitchActiveIndex = 0;
 
 function vaultGetUiMode() {
   const raw = String(localStorage.getItem(VAULT_UI_MODE_STORAGE_KEY) || '').trim().toLowerCase();
@@ -601,6 +602,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Keyboard navigation
   document.addEventListener('keydown', (e) => {
+    const quickSwitchOpen = document.getElementById('quickSwitchOverlay')?.style.display !== 'none';
+    if (quickSwitchOpen) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        moveQuickSwitchSelection(1);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        moveQuickSwitchSelection(-1);
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        runQuickSwitchResult(quickSwitchActiveIndex);
+        return;
+      }
+    }
+
+    if ((e.ctrlKey || e.metaKey) && String(e.key || '').toLowerCase() === 'k') {
+      e.preventDefault();
+      openQuickSwitch();
+      return;
+    }
+
     if (e.key === 'Escape') {
       if (_portalMultiSelectPickerState) {
         closePortalMultiSelectPicker(false);
@@ -613,8 +639,8 @@ document.addEventListener('DOMContentLoaded', () => {
       
       if (mobileMenu && mobileMenu.style.display === 'block') {
         toggleMobileMenu();
-      } else if (document.getElementById('navUserDropdown')?.style.display !== 'none') {
-        closeUserMenu();
+      } else if (document.getElementById('quickSwitchOverlay')?.style.display !== 'none') {
+        closeQuickSwitch();
       } else if (confirmModal && confirmModal.style.display !== 'none') {
         closeConfirmModal();
       } else if (walletVerifyModal && walletVerifyModal.style.display !== 'none') {
@@ -1258,25 +1284,35 @@ function setNavBrandTitle(brandTitle, iconUrl, label) {
 }
 
 function updateActiveGuildBadge() {
-  const badge = document.getElementById('activeGuildBadge');
+  const switcher = document.getElementById('commandServerSwitcher');
+  const switcherInput = document.getElementById('serverSwitcherInput');
+  const switcherList = document.getElementById('serverSwitcherList');
   const brandTitle = document.getElementById('navBrandTitle');
   const topNavModules = document.getElementById('topNavModules');
-  if (!badge) return;
+  if (!switcher || !switcherInput || !switcherList) return;
+
+  const options = (serverAccessData?.managedServers || []).concat(serverAccessData?.unmanagedServers || []);
+  switcherList.innerHTML = options.map((record) => {
+    const name = String(record?.name || record?.guildName || '').trim() || String(record?.guildId || '');
+    const guildId = String(record?.guildId || '').trim();
+    return `<option value="${escapeHtml(name)}" data-guild-id="${escapeHtml(guildId)}">${escapeHtml(guildId)}</option>`;
+  }).join('');
+
+  switcher.style.display = userData ? '' : 'none';
 
   if (activeGuildId) {
     const record = getServerRecord(activeGuildId);
-    badge.style.display = 'inline-flex';
-    badge.textContent = record?.name ? `Active: ${record.name}` : `Active: ${activeGuildId}`;
-    badge.title = activeGuildId;
+    switcherInput.value = record?.name || activeGuildId;
+    switcherInput.title = activeGuildId;
     if (brandTitle) {
       const iconUrl = sanitizeImageUrl(getActiveBrandLogoUrl(record));
       setNavBrandTitle(brandTitle, iconUrl, record?.name || 'Portal');
     }
     if (topNavModules) topNavModules.style.display = '';
   } else {
-    badge.style.display = 'inline-flex';
-    badge.textContent = 'Select server';
-    badge.title = 'No active server selected';
+    switcherInput.value = '';
+    switcherInput.title = 'No active server selected';
+    switcherInput.placeholder = 'Search server...';
     setNavBrandTitle(brandTitle, '/assets/branding/guildpilot-logo.png', 'GuildPilot');
     if (topNavModules) topNavModules.style.display = 'none';
   }
@@ -1284,6 +1320,28 @@ function updateActiveGuildBadge() {
   applyPreSelectionVisibility();
   refreshAdminEntryVisibility();
   updateSidebarServerContext();
+}
+
+function focusServerSwitcher() {
+  const input = document.getElementById('serverSwitcherInput');
+  if (!input) return;
+  input.focus();
+}
+
+function onServerSwitcherInput(rawValue) {
+  const value = String(rawValue || '').trim().toLowerCase();
+  if (!value) return;
+  const options = (serverAccessData?.managedServers || []).concat(serverAccessData?.unmanagedServers || []);
+  const match = options.find((record) => {
+    const guildId = String(record?.guildId || '').trim().toLowerCase();
+    const name = String(record?.name || record?.guildName || '').trim().toLowerCase();
+    return guildId === value || name === value;
+  });
+  if (!match) return;
+  const guildId = String(match.guildId || '').trim();
+  if (!guildId || guildId === activeGuildId) return;
+  setActiveGuild(guildId, { persist: true, announce: false });
+  switchSection('module-hub');
 }
 
 function updateSidebarServerContext() {
@@ -1614,29 +1672,23 @@ function renderGeneralSection() {
   postEl.style.display = 'none';
   updateBreadcrumbs([]);
 
-  const primaryCta = document.getElementById('homePrimaryCta');
-  if (primaryCta) {
+  const memberHubBtn = document.getElementById('homeMemberHubBtn');
+  const serverSelectorBtn = document.getElementById('homeServerSelectorBtn');
+  const supportDeskBtn = document.getElementById('homeSupportDeskBtn');
+  if (memberHubBtn) memberHubBtn.onclick = () => (!userData ? login() : switchSection('profile'));
+  if (serverSelectorBtn) {
     if (!userData) {
-      primaryCta.textContent = 'Login with Discord';
-      primaryCta.onclick = () => login();
-    } else if (activeGuildId && canManage) {
-      primaryCta.textContent = 'Open Module Workspace';
-      primaryCta.onclick = () => switchSection('module-hub');
-    } else if (canManage && hasServers) {
-      primaryCta.textContent = 'Select Server';
-      primaryCta.onclick = () => switchSection('servers');
+      serverSelectorBtn.textContent = 'Login to Continue';
+      serverSelectorBtn.onclick = () => login();
     } else if (activeGuildId) {
-      const record = getServerRecord(activeGuildId);
-      primaryCta.textContent = record?.name ? `Open ${record.name} Modules` : 'Open Module Workspace';
-      primaryCta.onclick = () => switchSection('module-hub');
-    } else if (isSuperadmin) {
-      primaryCta.textContent = 'Open Superadmin';
-      primaryCta.onclick = () => showAdminView('superadmin');
+      serverSelectorBtn.textContent = 'Open Module Workspace';
+      serverSelectorBtn.onclick = () => switchSection('module-hub');
     } else {
-      primaryCta.textContent = 'Open Profile';
-      primaryCta.onclick = () => switchSection('profile');
+      serverSelectorBtn.textContent = 'Open Server Selector';
+      serverSelectorBtn.onclick = () => switchSection('servers');
     }
   }
+  if (supportDeskBtn) supportDeskBtn.onclick = () => switchSection('help');
 
   const homeContext = document.getElementById('homeActiveContext');
   if (homeContext) {
@@ -1671,64 +1723,6 @@ function renderGeneralSection() {
     }
   }
 
-  const userQuickCard = document.getElementById('homeUserQuicklinkCard');
-  const userQuickBtn = document.getElementById('homeUserQuicklinkBtn');
-  if (userQuickCard) userQuickCard.style.display = '';
-  if (userQuickBtn) {
-    if (!userData) {
-      userQuickBtn.textContent = 'Login';
-      userQuickBtn.onclick = () => login();
-    } else {
-      userQuickBtn.textContent = 'Open Profile';
-      userQuickBtn.onclick = () => switchSection('profile');
-    }
-  }
-
-  const adminQuickCard = document.getElementById('homeAdminQuicklinkCard');
-  const adminQuickBtn = document.getElementById('homeAdminQuicklinkBtn');
-  if (adminQuickCard) adminQuickCard.style.display = canManage ? '' : 'none';
-  if (adminQuickBtn) {
-    if (activeGuildId) {
-      adminQuickBtn.textContent = 'Open Module Workspace';
-      adminQuickBtn.onclick = () => switchSection('module-hub');
-    } else {
-      adminQuickBtn.textContent = 'Open Server Selector';
-      adminQuickBtn.onclick = () => switchSection('servers');
-    }
-  }
-
-  const memberFlowBtn = document.getElementById('landingMemberFlowBtn');
-  if (memberFlowBtn) {
-    if (!userData) {
-      memberFlowBtn.textContent = 'Login to Start';
-      memberFlowBtn.onclick = () => login();
-    } else if (activeGuildId) {
-      memberFlowBtn.textContent = 'Open Modules';
-      memberFlowBtn.onclick = () => switchSection('module-hub');
-    } else if (hasServers) {
-      memberFlowBtn.textContent = 'Select Server';
-      memberFlowBtn.onclick = () => switchSection('servers');
-    } else {
-      memberFlowBtn.textContent = 'Open Profile';
-      memberFlowBtn.onclick = () => switchSection('profile');
-    }
-  }
-
-  const adminFlowBtn = document.getElementById('landingAdminFlowBtn');
-  if (adminFlowBtn) {
-    if (!canManage) {
-      adminFlowBtn.style.display = 'none';
-    } else {
-      adminFlowBtn.style.display = '';
-      if (activeGuildId) {
-        adminFlowBtn.textContent = 'Open Module Workspace';
-        adminFlowBtn.onclick = () => switchSection('module-hub');
-      } else {
-        adminFlowBtn.textContent = 'Open Server Selector';
-        adminFlowBtn.onclick = () => switchSection('servers');
-      }
-    }
-  }
 }
 
 function switchSettingsTab(tab) {
@@ -2398,7 +2392,7 @@ function showAuthenticatedState() {
   const navAvatar = document.getElementById('navAvatar');
   const navUsername = document.getElementById('navUsername');
   const navAuthBtn = document.getElementById('navAuthBtn');
-  const navUserMenuTrigger = document.getElementById('navUserMenuTrigger');
+  const memberIdentityTile = document.getElementById('memberIdentityTile');
   const topNavProfile = document.getElementById('topNavProfile');
   const topNavModules = document.getElementById('topNavModules');
   const mobileNavProfile = document.getElementById('mobileNavProfile');
@@ -2406,7 +2400,7 @@ function showAuthenticatedState() {
   navAvatar.src = avatarUrl;
   navAvatar.style.display = 'block';
   navUsername.textContent = userData.user.username;
-  if (navUserMenuTrigger) navUserMenuTrigger.style.display = 'inline-flex';
+  if (memberIdentityTile) memberIdentityTile.style.display = 'inline-flex';
   if (topNavProfile) topNavProfile.style.display = '';
   if (navAuthBtn) navAuthBtn.style.display = 'none';
   if (mobileNavProfile) mobileNavProfile.style.display = '';
@@ -2422,19 +2416,18 @@ function showUnauthenticatedState() {
   const navAvatar = document.getElementById('navAvatar');
   const navUsername = document.getElementById('navUsername');
   const navAuthBtn = document.getElementById('navAuthBtn');
-  const navUserMenuTrigger = document.getElementById('navUserMenuTrigger');
+  const memberIdentityTile = document.getElementById('memberIdentityTile');
   const topNavProfile = document.getElementById('topNavProfile');
   const topNavModules = document.getElementById('topNavModules');
   const mobileNavProfile = document.getElementById('mobileNavProfile');
   
   navAvatar.style.display = 'none';
   navUsername.textContent = '';
-  if (navUserMenuTrigger) navUserMenuTrigger.style.display = 'none';
+  if (memberIdentityTile) memberIdentityTile.style.display = 'none';
   if (topNavProfile) topNavProfile.style.display = 'none';
   if (topNavModules) topNavModules.style.display = 'none';
-  closeUserMenu();
-  const activeGuildBadge = document.getElementById('activeGuildBadge');
-  if (activeGuildBadge) activeGuildBadge.style.display = 'none';
+  const commandServerSwitcher = document.getElementById('commandServerSwitcher');
+  if (commandServerSwitcher) commandServerSwitcher.style.display = 'none';
   if (navAuthBtn) {
     navAuthBtn.style.display = '';
     navAuthBtn.textContent = 'Login';
@@ -6240,6 +6233,99 @@ function exportTreasuryCSV() {
   a.href = URL.createObjectURL(blob);
   a.download = 'treasury-wallets.csv';
   a.click();
+}
+
+function getQuickSwitchEntries() {
+  const entries = [];
+  const push = (group, label, keywords, action) => entries.push({ group, label, keywords, action });
+  push('Core', 'Member Hub', 'profile member identity wallets tiers', () => switchSection('profile'));
+  push('Core', 'Server Selector', 'servers guild selector context', () => switchSection('servers'));
+  push('Core', 'Support Desk', 'help support ticketing', () => switchSection('help'));
+  push('Core', 'Module Hub', 'modules workspace settings', () => switchSection('module-hub'));
+  if (isSuperadmin) push('Admin', 'Superadmin', 'superadmin tenant platform admin', () => { switchSection('admin'); showAdminView('superadmin'); });
+
+  document.querySelectorAll('.sidebar .nav-item[data-section]').forEach((node) => {
+    if (node.style.display === 'none') return;
+    const section = String(node.dataset.section || '').trim();
+    const label = String(node.querySelector('.nav-label')?.textContent || '').trim();
+    if (!section || !label) return;
+    push('Modules', label, `${label.toLowerCase()} ${section}`, () => switchSection(section));
+  });
+  return entries;
+}
+
+function renderQuickSwitchResults(query = '') {
+  const resultsEl = document.getElementById('quickSwitchResults');
+  if (!resultsEl) return;
+  const q = String(query || '').trim().toLowerCase();
+  const matches = getQuickSwitchEntries().filter((item) => {
+    if (!q) return true;
+    return item.label.toLowerCase().includes(q) || item.keywords.includes(q);
+  }).slice(0, 14);
+  quickSwitchActiveIndex = matches.length ? 0 : -1;
+
+  const grouped = matches.reduce((acc, item, index) => {
+    const key = item.group || 'Other';
+    if (!acc[key]) acc[key] = [];
+    acc[key].push({ item, index });
+    return acc;
+  }, {});
+
+  const order = ['Core', 'Modules', 'Admin', 'Other'];
+  const sections = order
+    .filter((key) => Array.isArray(grouped[key]) && grouped[key].length)
+    .map((key) => {
+      const rows = grouped[key].map(({ item, index }) => `
+        <button class="quick-switch-item ${index === quickSwitchActiveIndex ? 'is-active' : ''}" data-qs-index="${index}" onclick="runQuickSwitchResult(${index})">
+          <span>${escapeHtml(item.label)}</span>
+        </button>
+      `).join('');
+      return `<div class="quick-switch-group"><div class="quick-switch-group__title">${escapeHtml(key)}</div>${rows}</div>`;
+    })
+    .join('');
+
+  resultsEl.innerHTML = sections || '<div class="quick-switch-empty">No matches found.</div>';
+  window.__quickSwitchEntries = matches;
+}
+
+function runQuickSwitchResult(index) {
+  const items = Array.isArray(window.__quickSwitchEntries) ? window.__quickSwitchEntries : [];
+  const entry = items[index];
+  if (!entry) return;
+  closeQuickSwitch();
+  entry.action();
+}
+
+function moveQuickSwitchSelection(direction = 1) {
+  const items = Array.isArray(window.__quickSwitchEntries) ? window.__quickSwitchEntries : [];
+  if (!items.length) return;
+  quickSwitchActiveIndex = Math.max(0, Math.min(items.length - 1, quickSwitchActiveIndex + direction));
+  const buttons = Array.from(document.querySelectorAll('.quick-switch-item[data-qs-index]'));
+  buttons.forEach((btn) => {
+    const index = Number(btn.getAttribute('data-qs-index'));
+    btn.classList.toggle('is-active', index === quickSwitchActiveIndex);
+  });
+  const activeButton = buttons.find((btn) => Number(btn.getAttribute('data-qs-index')) === quickSwitchActiveIndex);
+  if (activeButton) activeButton.scrollIntoView({ block: 'nearest' });
+}
+
+function openQuickSwitch() {
+  const overlay = document.getElementById('quickSwitchOverlay');
+  const input = document.getElementById('quickSwitchInput');
+  if (!overlay || !input) return;
+  overlay.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  input.value = '';
+  renderQuickSwitchResults('');
+  input.focus();
+}
+
+function closeQuickSwitch(event) {
+  if (event && event.target && event.target.id !== 'quickSwitchOverlay') return;
+  const overlay = document.getElementById('quickSwitchOverlay');
+  if (!overlay) return;
+  overlay.style.display = 'none';
+  document.body.style.overflow = '';
 }
 
 function toggleMobileMenu() {

@@ -28,20 +28,25 @@
         <button class="top-link" id="topNavSuperadmin" onclick="switchSection('admin'); showAdminView('superadmin');" style="display:none;">Superadmin</button>
       </div>
       <div class="nav-user">
-        <div class="nav-user-menu-wrap">
-          <button id="navUserMenuTrigger" class="nav-user-menu-trigger" onclick="toggleUserMenu()" style="display:none;">
-            <img id="navAvatar" class="nav-avatar" src="" alt="User avatar" style="display:none;">
-            <span id="navUsername" class="nav-username"></span>
-            <span class="nav-user-caret">▾</span>
-          </button>
-          <div id="navUserDropdown" class="nav-user-dropdown" style="display:none;">
-            <button class="nav-user-dropdown__item" onclick="openUserMenuProfile()">Profile</button>
-            <button class="nav-user-dropdown__item" onclick="openUserMenuWallets()">Wallet Verification</button>
-            <button class="nav-user-dropdown__item" onclick="openUserMenuPrivacy()">Privacy Settings</button>
-            <button class="nav-user-dropdown__item nav-user-dropdown__item--danger" onclick="logout()">Logout</button>
+        <div id="commandServerSwitcher" class="command-server-switcher" style="display:none;">
+          <label for="serverSwitcherInput">Server</label>
+          <div class="command-server-switcher__row">
+            <input id="serverSwitcherInput" type="text" list="serverSwitcherList" placeholder="Search server..." autocomplete="off" oninput="onServerSwitcherInput(this.value)" onchange="onServerSwitcherInput(this.value)">
+            <datalist id="serverSwitcherList"></datalist>
+            <button class="btn-secondary" onclick="focusServerSwitcher()">Switch</button>
           </div>
         </div>
-        <span id="activeGuildBadge" class="active-guild-badge" style="display:none;"></span>
+        <div id="memberIdentityTile" class="member-identity-tile" style="display:none;">
+          <img id="navAvatar" class="nav-avatar" src="" alt="User avatar" style="display:none;">
+          <div class="member-identity-tile__content">
+            <span class="member-identity-tile__kicker">Member Identity</span>
+            <span id="navUsername" class="nav-username"></span>
+          </div>
+          <div class="member-identity-tile__actions">
+            <button class="btn-secondary" onclick="openUserMenuProfile()">Profile</button>
+            <button class="btn-secondary" onclick="logout()">Logout</button>
+          </div>
+        </div>
         <button id="navAuthBtn" class="btn-secondary" onclick="handleAuth()">Login</button>
       </div>
     </nav>
@@ -212,127 +217,30 @@
 
         <!-- Landing / General Section -->
         <section id="section-landing" class="content-section active">
-          <!-- Pre-selection: Marketing / Landing page -->
-                    <div id="generalPreSelection" class="home-page home-page--fresh">
-            <section class="gpf-hero">
-              <div class="gpf-hero-main">
-                <p class="gpf-kicker">GuildPilot Platform</p>
-                <h1>Manage members, admins, and tenants from one professional workspace.</h1>
-                <p class="gpf-subtitle">GuildPilot brings verification, support, governance, and activity tracking into one clean control center so your community team can operate faster with less friction.</p>
-                <div class="gpf-actions">
-                  <button class="btn-primary" id="homePrimaryCta" onclick="switchSection('servers')">Select Server</button>
-                  <button class="btn-secondary" onclick="switchSection('profile')">User Panel</button>
-                  <button class="btn-secondary" onclick="switchSection('wallets')">Start Wallet Verification</button>
-                  <button class="btn-secondary" onclick="switchSection('plans')">View Pricing</button>
-                  <button class="btn-secondary" onclick="switchSection('help')">Documentation</button>
-                </div>
-                <div class="gpf-proof-row">
-                  <span>Tenant-safe configuration</span>
-                  <span>Role automation</span>
-                  <span>Real-time trackers</span>
-                  <span>Operational consistency</span>
-                </div>
+          <!-- Functional hub -->
+          <div id="generalPreSelection" class="home-page home-page--fresh">
+            <section class="functional-hub">
+              <header class="functional-hub__header">
+                <p class="gpf-kicker">Command Center</p>
+                <h1>Welcome to your operational hub.</h1>
+                <p class="gpf-subtitle">Jump directly into your member setup, server workspace, or support desk.</p>
                 <div id="homeActiveContext" class="home-active-context" style="display:none;"></div>
-                <div class="home-quicklinks-grid">
-                  <article class="home-quicklink-card" id="homeUserQuicklinkCard">
-                    <h4>User Panel</h4>
-                    <p>Manage your linked wallets, identity privacy, and account profile.</p>
-                    <button id="homeUserQuicklinkBtn" class="btn-secondary" onclick="switchSection('profile')">Open Profile</button>
-                  </article>
-                  <article class="home-quicklink-card" id="homeAdminQuicklinkCard">
-                    <h4>Admin Settings</h4>
-                    <p>Pick a server and open tenant module settings in one guided flow.</p>
-                    <button id="homeAdminQuicklinkBtn" class="btn-secondary" onclick="switchSection('servers')">Open Server Selector</button>
-                  </article>
-                  <article class="home-quicklink-card" id="homeSuperadminQuicklinkCard" style="display:none;">
-                    <h4>Superadmin</h4>
-                    <p>Access tenant controls, identity overrides, global operations, and monitoring.</p>
-                    <button class="btn-secondary" onclick="switchSection('admin'); showAdminView('superadmin')">Open Superadmin</button>
-                  </article>
-                </div>
-              </div>
-              <aside class="gpf-role-panel">
-                <h3>Choose your path</h3>
-                <div class="gpf-role-list">
-                  <article class="gpf-role-item">
-                    <h4>Member Flow</h4>
-                    <p>Connect and verify your wallet in one guided flow.</p>
-                    <button id="landingMemberFlowBtn" class="btn-primary" onclick="switchSection('wallets')">Verify Now</button>
-                  </article>
-                  <article class="gpf-role-item">
-                    <h4>Admin Flow</h4>
-                    <p>Select a server and configure all module settings quickly.</p>
-                    <button id="landingAdminFlowBtn" class="btn-secondary" onclick="switchSection('servers')">Open Server Selector</button>
-                  </article>
-                  <article class="gpf-role-item">
-                    <h4>Superadmin Flow</h4>
-                    <p>Manage tenant access and global platform controls.</p>
-                    <button id="landingSuperadminBtn" class="btn-secondary" onclick="switchSection('admin'); showAdminView('superadmin')" style="display:none;">Open Superadmin</button>
-                    <span id="landingSuperadminHint" class="gpf-role-hint">Available for superadmin accounts only</span>
-                  </article>
-                </div>
-              </aside>
-            </section>
-
-            <section class="gpf-section">
-              <div class="gpf-section-head">
-                <h2>What you can run in GuildPilot</h2>
-                <p>A unified operating layer for both member experience and server operations.</p>
-              </div>
-              <div class="gpf-feature-grid">
-                <article class="gpf-feature-card">
-                  <span class="gpf-feature-tag">Identity</span>
-                  <h3>Wallet Verification</h3>
-                  <p>One user profile reused across communities, with tenant-specific role outcomes.</p>
+              </header>
+              <div class="functional-hub__grid">
+                <article class="functional-hub__tile" id="homeMemberHubTile">
+                  <h3>Member Hub</h3>
+                  <p>Profile, wallets, and membership tiers in one place.</p>
+                  <button id="homeMemberHubBtn" class="btn-primary" onclick="switchSection('profile')">Open Member Hub</button>
                 </article>
-                <article class="gpf-feature-card">
-                  <span class="gpf-feature-tag">Operations</span>
-                  <h3>Support + Ticketing</h3>
-                  <p>Category-driven support routing with configurable team assignments.</p>
+                <article class="functional-hub__tile" id="homeServerSelectorTile">
+                  <h3>Server Selector</h3>
+                  <p>Choose the community you want to manage now.</p>
+                  <button id="homeServerSelectorBtn" class="btn-secondary" onclick="switchSection('servers')">Open Server Selector</button>
                 </article>
-                <article class="gpf-feature-card">
-                  <span class="gpf-feature-tag">Visibility</span>
-                  <h3>Wallet / NFT / Token Tracking</h3>
-                  <p>Independent tracker modules with consistent UI and clear channel routing.</p>
-                </article>
-                <article class="gpf-feature-card">
-                  <span class="gpf-feature-tag">Governance</span>
-                  <h3>Proposals and Voting</h3>
-                  <p>Operate proposal flows with module-aware visibility and permissions.</p>
-                </article>
-                <article class="gpf-feature-card">
-                  <span class="gpf-feature-tag">Engagement</span>
-                  <h3>Minigames and Battle</h3>
-                  <p>Keep communities active with era-driven battles and optional minigames.</p>
-                </article>
-                <article class="gpf-feature-card">
-                  <span class="gpf-feature-tag">Scale</span>
-                  <h3>Reliable Operations</h3>
-                  <p>Keep community workflows stable with clear permissions, consistent settings, and predictable behavior.</p>
-                </article>
-              </div>
-            </section>
-
-            <section class="gpf-section">
-              <div class="gpf-section-head">
-                <h2>How teams get live</h2>
-                <p>A straightforward 3-step rollout.</p>
-              </div>
-              <div class="gpf-flow-grid">
-                <article class="gpf-flow-step">
-                  <span>1</span>
-                  <h3>Connect</h3>
-                  <p>Log in with Discord and pick the server context you want to manage.</p>
-                </article>
-                <article class="gpf-flow-step">
-                  <span>2</span>
-                  <h3>Configure</h3>
-                  <p>Enable modules, set verification rules, channels, and routing behavior.</p>
-                </article>
-                <article class="gpf-flow-step">
-                  <span>3</span>
-                  <h3>Operate</h3>
-                  <p>Run daily support, verification, governance, and tracking from one portal.</p>
+                <article class="functional-hub__tile" id="homeSupportDeskTile">
+                  <h3>Support Desk</h3>
+                  <p>Help center and ticketing tools for your team.</p>
+                  <button id="homeSupportDeskBtn" class="btn-secondary" onclick="switchSection('help')">Open Support Desk</button>
                 </article>
               </div>
             </section>
@@ -3013,6 +2921,17 @@
         <button class="btn-secondary" onclick="closeAddTokenModal()">Cancel</button>
         <button class="btn-primary" id="tokenSaveBtn" onclick="saveToken()">Save Token</button>
       </div>
+    </div>
+  </div>
+
+  <div id="quickSwitchOverlay" class="quick-switch-overlay" style="display:none;" onclick="closeQuickSwitch(event)">
+    <div class="quick-switch-panel" onclick="event.stopPropagation()">
+      <div class="quick-switch-panel__head">
+        <h3>Command Center</h3>
+        <span>Ctrl+K</span>
+      </div>
+      <input id="quickSwitchInput" class="quick-switch-input" type="text" placeholder="Jump to module or setting..." oninput="renderQuickSwitchResults(this.value)" autocomplete="off">
+      <div id="quickSwitchResults" class="quick-switch-results"></div>
     </div>
   </div>
 

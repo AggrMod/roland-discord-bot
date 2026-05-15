@@ -18,6 +18,17 @@
         <button class="mobile-menu-btn" onclick="toggleMobileMenu()" aria-label="Open menu">☰</button>
         <h1 id="navBrandTitle"><img src="/assets/branding/guildpilot-logo.png" alt="" style="width:22px;height:22px;border-radius:50%;vertical-align:middle;margin-right:8px;object-fit:cover;">GuildPilot</h1>
       </div>
+      <div class="top-nav-center">
+        <div id="commandServerSwitcher" class="command-server-switcher" style="display:none;">
+          <label for="serverSwitcherSelect">Server</label>
+          <div class="command-server-switcher__row">
+            <select id="serverSwitcherSelect" onchange="onServerSwitcherSelect(this.value)">
+              <option value="">Select server...</option>
+            </select>
+            <button class="btn-secondary" onclick="focusServerSwitcher()">Open</button>
+          </div>
+        </div>
+      </div>
       <div class="top-links" aria-label="Top links">
         <button class="top-link" onclick="goHomePage()">Home</button>
         <button class="top-link" onclick="switchSection('profile')" id="topNavProfile" style="display:none;">Profile</button>
@@ -29,15 +40,6 @@
         <button class="top-link" id="topNavSuperadmin" onclick="switchSection('admin'); showAdminView('superadmin');" style="display:none;">Superadmin</button>
       </div>
       <div class="nav-user">
-        <div id="commandServerSwitcher" class="command-server-switcher" style="display:none;">
-          <label for="serverSwitcherSelect">Server</label>
-          <div class="command-server-switcher__row">
-            <select id="serverSwitcherSelect" onchange="onServerSwitcherSelect(this.value)">
-              <option value="">Select server...</option>
-            </select>
-            <button class="btn-secondary" onclick="focusServerSwitcher()">Open</button>
-          </div>
-        </div>
         <div id="memberIdentityTile" class="member-identity-tile" style="display:none;">
           <img id="navAvatar" class="nav-avatar" src="" alt="User avatar" style="display:none;">
           <div class="member-identity-tile__content">

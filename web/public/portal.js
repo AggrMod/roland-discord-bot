@@ -6828,6 +6828,11 @@ function showAdminView(view) {
 
   if (typeof target.load === 'function') target.load();
 
+  const envBar = document.getElementById('adminEnvStatusBar');
+  const superadminCard = document.getElementById('adminSuperadminCard');
+  if (superadminCard) superadminCard.classList.toggle('superadmin-workspace-mode', view === 'superadmin');
+  if (envBar) envBar.style.display = (view === 'superadmin') ? 'none' : '';
+
   // Highlight active admin sub-item in sidebar
   document.querySelectorAll('.admin-sub-item').forEach(btn => {
     btn.classList.remove('active');
@@ -6847,7 +6852,9 @@ function showAdminView(view) {
     if (chevron) chevron.textContent = '▼';
   }
 
-  loadEnvStatusBar();
+  if (view !== 'superadmin') {
+    loadEnvStatusBar();
+  }
 
   setTimeout(() => card?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
 }
@@ -7336,6 +7343,9 @@ function renderTenantDetailPanel(tenant, tenantLimits = null) {
 
 async function loadSuperadminView() {
   if (!isSuperadmin) return;
+
+  const card = document.getElementById('adminSuperadminCard');
+  if (card) card.classList.add('superadmin-workspace-mode');
 
   const content = document.getElementById('adminSuperadminContent');
   if (!content) return;

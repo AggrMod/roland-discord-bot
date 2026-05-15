@@ -1285,34 +1285,32 @@ function setNavBrandTitle(brandTitle, iconUrl, label) {
 
 function updateActiveGuildBadge() {
   const switcher = document.getElementById('commandServerSwitcher');
-  const switcherInput = document.getElementById('serverSwitcherInput');
-  const switcherList = document.getElementById('serverSwitcherList');
+  const switcherSelect = document.getElementById('serverSwitcherSelect');
   const brandTitle = document.getElementById('navBrandTitle');
   const topNavModules = document.getElementById('topNavModules');
-  if (!switcher || !switcherInput || !switcherList) return;
+  if (!switcher || !switcherSelect) return;
 
   const options = (serverAccessData?.managedServers || []).concat(serverAccessData?.unmanagedServers || []);
-  switcherList.innerHTML = options.map((record) => {
+  switcherSelect.innerHTML = `<option value="">Select server...</option>` + options.map((record) => {
     const name = String(record?.name || record?.guildName || '').trim() || String(record?.guildId || '');
     const guildId = String(record?.guildId || '').trim();
-    return `<option value="${escapeHtml(name)}" data-guild-id="${escapeHtml(guildId)}">${escapeHtml(guildId)}</option>`;
+    return `<option value="${escapeHtml(guildId)}">${escapeHtml(name)}</option>`;
   }).join('');
 
   switcher.style.display = userData ? '' : 'none';
 
   if (activeGuildId) {
     const record = getServerRecord(activeGuildId);
-    switcherInput.value = record?.name || activeGuildId;
-    switcherInput.title = activeGuildId;
+    switcherSelect.value = activeGuildId;
+    switcherSelect.title = activeGuildId;
     if (brandTitle) {
       const iconUrl = sanitizeImageUrl(getActiveBrandLogoUrl(record));
       setNavBrandTitle(brandTitle, iconUrl, record?.name || 'Portal');
     }
     if (topNavModules) topNavModules.style.display = '';
   } else {
-    switcherInput.value = '';
-    switcherInput.title = 'No active server selected';
-    switcherInput.placeholder = 'Search server...';
+    switcherSelect.value = '';
+    switcherSelect.title = 'No active server selected';
     setNavBrandTitle(brandTitle, '/assets/branding/guildpilot-logo.png', 'GuildPilot');
     if (topNavModules) topNavModules.style.display = 'none';
   }
@@ -1323,22 +1321,13 @@ function updateActiveGuildBadge() {
 }
 
 function focusServerSwitcher() {
-  const input = document.getElementById('serverSwitcherInput');
-  if (!input) return;
-  input.focus();
+  const select = document.getElementById('serverSwitcherSelect');
+  if (!select) return;
+  select.focus();
 }
 
-function onServerSwitcherInput(rawValue) {
-  const value = String(rawValue || '').trim().toLowerCase();
-  if (!value) return;
-  const options = (serverAccessData?.managedServers || []).concat(serverAccessData?.unmanagedServers || []);
-  const match = options.find((record) => {
-    const guildId = String(record?.guildId || '').trim().toLowerCase();
-    const name = String(record?.name || record?.guildName || '').trim().toLowerCase();
-    return guildId === value || name === value;
-  });
-  if (!match) return;
-  const guildId = String(match.guildId || '').trim();
+function onServerSwitcherSelect(rawValue) {
+  const guildId = String(rawValue || '').trim();
   if (!guildId || guildId === activeGuildId) return;
   setActiveGuild(guildId, { persist: true, announce: false });
   switchSection('module-hub');

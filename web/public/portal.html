@@ -29,11 +29,12 @@
       </div>
       <div class="nav-user">
         <div id="commandServerSwitcher" class="command-server-switcher" style="display:none;">
-          <label for="serverSwitcherInput">Server</label>
+          <label for="serverSwitcherSelect">Server</label>
           <div class="command-server-switcher__row">
-            <input id="serverSwitcherInput" type="text" list="serverSwitcherList" placeholder="Search server..." autocomplete="off" oninput="onServerSwitcherInput(this.value)" onchange="onServerSwitcherInput(this.value)">
-            <datalist id="serverSwitcherList"></datalist>
-            <button class="btn-secondary" onclick="focusServerSwitcher()">Switch</button>
+            <select id="serverSwitcherSelect" onchange="onServerSwitcherSelect(this.value)">
+              <option value="">Select server...</option>
+            </select>
+            <button class="btn-secondary" onclick="focusServerSwitcher()">Open</button>
           </div>
         </div>
         <div id="memberIdentityTile" class="member-identity-tile" style="display:none;">

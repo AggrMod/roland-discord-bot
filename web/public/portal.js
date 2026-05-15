@@ -2395,16 +2395,21 @@ async function loadPortal() {
     if (data.success) {
       userData = data;
       showAuthenticatedState();
-      await loadServerAccess();
-      applyPreSelectionVisibility();
-      await checkSuperadminStatus();
-      await checkAdminStatus();
+      try {
+        await loadServerAccess();
+        applyPreSelectionVisibility();
+        await checkSuperadminStatus();
+        await checkAdminStatus();
 
-      const canProceed = enforceInitialServerSelection();
+        const canProceed = enforceInitialServerSelection();
 
-      if (canProceed) {
-        await syncTenantModuleNavVisibility();
-        loadDashboardData();
+        if (canProceed) {
+          await syncTenantModuleNavVisibility();
+          loadDashboardData();
+        }
+      } catch (postAuthError) {
+        console.error('Post-auth portal initialization warning:', postAuthError);
+        // Keep authenticated shell visible; avoid false logged-out state.
       }
     } else if (response.status === 401) {
       // OAuth just completed but session still missing: retry login once to recover
@@ -2420,31 +2425,8 @@ async function loadPortal() {
       showUnauthenticatedState();
     } else {
       // Non-401 failures can happen with stale tenant context or transient API errors.
-      // Verify session via a lightweight endpoint before forcing logged-out UI.
-      const authProbe = await originalFetch('/api/user/is-admin', { credentials: 'include' }).catch(() => null);
-      if (authProbe && authProbe.status !== 401) {
-        userData = {
-          success: true,
-          user: {
-            discordId: '',
-            username: 'Guild Admin',
-            avatar: '',
-            tier: 'None',
-            totalNFTs: 0,
-            totalPoints: 0
-          },
-          wallets: [],
-          proposals: [],
-          missions: []
-        };
-        showAuthenticatedState();
-        await loadServerAccess();
-        applyPreSelectionVisibility();
-        await checkSuperadminStatus();
-        await checkAdminStatus();
-      } else {
-        showUnauthenticatedState();
-      }
+      // Do not construct synthetic users; keep auth state strict.
+      showUnauthenticatedState();
     }
 
     // Navigate to section from URL after admin check is complete
@@ -2479,7 +2461,12 @@ async function loadPortal() {
     }
   } catch (error) {
     console.error('Error loading portal:', error);
-    showUnauthenticatedState();
+    // If session was already established, keep authenticated UI and avoid false logout.
+    if (userData && (userData.user || userData.username)) {
+      showAuthenticatedState();
+    } else {
+      showUnauthenticatedState();
+    }
   }
 }
 
@@ -2551,6 +2538,10 @@ function showUnauthenticatedState() {
   }
   if (mobileNavProfile) mobileNavProfile.style.display = 'none';
   updateHelpCenterRoleVisibility();
+  const dashboardWelcomeTitle = document.getElementById('dashboardWelcomeTitle');
+  if (dashboardWelcomeTitle) {
+    dashboardWelcomeTitle.textContent = 'Welcome, Guild Admin';
+  }
 
   document.getElementById('loginPrompt').style.display = 'block';
   document.getElementById('dashboardContent').style.display = 'none';

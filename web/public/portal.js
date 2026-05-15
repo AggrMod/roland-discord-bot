@@ -2294,6 +2294,7 @@ async function loadPortal() {
 
     const urlParams = new URLSearchParams(window.location.search);
     const justCompletedAuth = String(urlParams.get('auth') || '').trim().toLowerCase() === 'ready';
+    const authRetryAttempted = String(urlParams.get('authRetry') || '').trim() === '1';
 
     // Try to load user data (credentials CRITICAL for session cookies).
     // After OAuth redirect, give the session store a short warm-up window.
@@ -2332,6 +2333,16 @@ async function loadPortal() {
         loadDashboardData();
       }
     } else if (response.status === 401) {
+      // OAuth just completed but session still missing: retry login once to recover
+      // from edge cases like proxy/cookie race or host mismatch during callback.
+      if (justCompletedAuth && !authRetryAttempted) {
+        const retryUrl = new URL(window.location.href);
+        retryUrl.searchParams.delete('auth');
+        retryUrl.searchParams.set('authRetry', '1');
+        const returnTo = `${retryUrl.pathname}${retryUrl.search}`;
+        window.location.href = `/auth/discord/login?returnTo=${encodeURIComponent(returnTo)}`;
+        return;
+      }
       showUnauthenticatedState();
     } else {
       // Non-401 failures can happen with stale tenant context or transient API errors.

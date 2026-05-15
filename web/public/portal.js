@@ -2252,18 +2252,39 @@ async function refreshServerAccess() {
 }
 
 async function loadServerAccess() {
+  const mapServerAccessPayload = (payload) => {
+    const source = (payload && typeof payload === 'object' && payload.data && typeof payload.data === 'object')
+      ? payload.data
+      : payload;
+    return {
+      isSuperadmin: !!source?.isSuperadmin,
+      managedServers: Array.isArray(source?.managedServers) ? source.managedServers : [],
+      unmanagedServers: Array.isArray(source?.unmanagedServers) ? source.unmanagedServers : []
+    };
+  };
+
   try {
-    const response = await fetch('/api/servers/me', { credentials: 'include' });
-    const data = await response.json();
-    if (!data.success) {
+    let response = await fetch('/api/servers/me', { credentials: 'include' });
+    let data = await response.json().catch(() => ({}));
+    let nextServerAccessData = mapServerAccessPayload(data);
+
+    const hasAnyServers = nextServerAccessData.managedServers.length > 0 || nextServerAccessData.unmanagedServers.length > 0;
+    const shouldRetryWithOriginalFetch = response.status === 401 || response.status === 403 || (!hasAnyServers && !!userData?.id);
+    if (shouldRetryWithOriginalFetch) {
+      const retryResponse = await originalFetch('/api/servers/me', { credentials: 'include' });
+      const retryData = await retryResponse.json().catch(() => ({}));
+      if (retryData?.success || retryResponse.ok) {
+        response = retryResponse;
+        data = retryData;
+        nextServerAccessData = mapServerAccessPayload(retryData);
+      }
+    }
+
+    if (!data.success && !response.ok) {
       throw new Error(data.message || 'Unable to load server access');
     }
 
-    serverAccessData = {
-      isSuperadmin: !!data.isSuperadmin,
-      managedServers: Array.isArray(data.managedServers) ? data.managedServers : [],
-      unmanagedServers: Array.isArray(data.unmanagedServers) ? data.unmanagedServers : []
-    };
+    serverAccessData = nextServerAccessData;
 
     const knownIds = new Set([
       ...serverAccessData.managedServers.map(server => server.guildId),

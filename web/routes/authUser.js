@@ -1871,17 +1871,39 @@ function createAuthUserRouter({
       }
 
       if (discordGuilds.length === 0) {
-        const fallback = fallbackGuildId();
-        if (fallback) {
-          const guild = await fetchGuildById(fallback);
-          const member = guild ? await guild.members.fetch(userId).catch(() => null) : null;
-          if (guild && member?.permissions && (member.permissions.has('Administrator') || member.permissions.has('ManageGuild')) && botGuildIds.has(guild.id)) {
-            managedServers.push({
-              guildId: guild.id,
-              name: guild.name,
-              icon: guild.icon,
-              permissions: member.permissions.bitfield?.toString?.() || '0'
-            });
+        const managedSeen = new Set();
+        for (const guildId of botGuildIds) {
+          const guild = await fetchGuildById(guildId).catch(() => null);
+          if (!guild) continue;
+          const member = await guild.members.fetch(userId).catch(() => null);
+          if (!member?.permissions) continue;
+          const canManage = member.permissions.has('Administrator') || member.permissions.has('ManageGuild');
+          if (!canManage) continue;
+          if (managedSeen.has(guild.id)) continue;
+          managedSeen.add(guild.id);
+          managedServers.push({
+            guildId: guild.id,
+            name: guild.name,
+            icon: guild.icon,
+            permissions: member.permissions.bitfield?.toString?.() || '0'
+          });
+        }
+
+        // Preserve single fallback guild behavior for edge cases where bot guild
+        // cache might not be warmed yet but a fallback guild is configured.
+        if (managedServers.length === 0) {
+          const fallback = fallbackGuildId();
+          if (fallback) {
+            const guild = await fetchGuildById(fallback).catch(() => null);
+            const member = guild ? await guild.members.fetch(userId).catch(() => null) : null;
+            if (guild && member?.permissions && (member.permissions.has('Administrator') || member.permissions.has('ManageGuild'))) {
+              managedServers.push({
+                guildId: guild.id,
+                name: guild.name,
+                icon: guild.icon,
+                permissions: member.permissions.bitfield?.toString?.() || '0'
+              });
+            }
           }
         }
       }

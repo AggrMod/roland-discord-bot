@@ -6396,10 +6396,10 @@ body {
 }
 
 .command-server-switcher {
-  padding: 8px 10px !important;
+  padding: 6px 8px !important;
   border-radius: 12px !important;
-  border: 1px solid rgba(118, 136, 255, 0.28) !important;
-  background: rgba(14, 23, 43, 0.72) !important;
+  border: 1px solid rgba(86, 108, 220, 0.24) !important;
+  background: rgba(10, 20, 41, 0.76) !important;
 }
 
 .command-server-switcher > label {
@@ -6412,17 +6412,19 @@ body {
 .command-server-switcher__row select {
   height: 34px;
   border-radius: 9px !important;
-  background: rgba(24, 35, 62, 0.86) !important;
-  border: 1px solid rgba(118, 136, 255, 0.28) !important;
+  background: rgba(24, 35, 62, 0.92) !important;
+  border: 1px solid rgba(108, 125, 238, 0.5) !important;
   color: #e3ebff !important;
+  box-shadow: none !important;
 }
 
 .member-identity-tile {
   border-radius: 14px !important;
-  border: 1px solid rgba(123, 139, 255, 0.28) !important;
+  border: 1px solid rgba(86, 108, 220, 0.24) !important;
   background: linear-gradient(145deg, rgba(18, 29, 53, 0.88), rgba(15, 24, 45, 0.78)) !important;
   padding: 6px 8px 6px 6px !important;
   min-height: 44px;
+  box-shadow: none !important;
 }
 
 #navAvatar {

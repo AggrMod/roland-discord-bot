@@ -74,7 +74,12 @@ function hasDiscordAdminPermission(guildSummary) {
     return false;
   }
 
-  const perms = parseGuildPermissionBits(guildSummary.permissions);
+  if (guildSummary.owner === true) {
+    return true;
+  }
+
+  const rawPerms = guildSummary.permissions_new ?? guildSummary.permissions;
+  const perms = parseGuildPermissionBits(rawPerms);
   const isAdmin = (perms & DISCORD_ADMIN_PERMISSION) === DISCORD_ADMIN_PERMISSION;
   const canManageGuild = (perms & DISCORD_MANAGE_GUILD_PERMISSION) === DISCORD_MANAGE_GUILD_PERMISSION;
   return isAdmin || canManageGuild;

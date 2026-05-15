@@ -129,10 +129,14 @@
     <div class="portal-layout">
       <!-- Sidebar Navigation -->
       <aside class="sidebar" role="navigation" aria-label="Section navigation">
+        <div class="sidebar-search">
+          <input type="text" id="sidebarSearchInput" placeholder="Search modules..." onkeyup="onSidebarSearch(this.value)">
+          <span class="search-icon">🔍</span>
+        </div>
         <div class="sidebar-nav-items">
           <button class="nav-item active" data-section="landing" onclick="goHomePage()">
             <span class="nav-icon" aria-hidden="true">🏠</span>
-            <span class="nav-label">Home</span>
+            <span class="nav-label">Hub</span>
           </button>
           <div class="sidebar-section-divider"></div>
           <button class="nav-item" data-section="governance" data-module="governance" onclick="switchSection('governance')" id="sidebarNavGovernance" style="display:none;">
@@ -218,7 +222,6 @@
 
         <!-- Landing / General Section -->
         <section id="section-landing" class="content-section active">
-          <!-- Functional hub -->
           <div id="generalPreSelection" class="home-page home-page--fresh">
             <section class="functional-hub">
               <header class="functional-hub__header">
@@ -246,24 +249,9 @@
               </div>
             </section>
           </div>
-          <!-- Post-selection: General hub with server info + quick actions -->
-          <div id="generalPostSelection" style="display:none;">
-            <header class="section-header">
-              <h2>General</h2>
-              <p class="section-subtitle">Your server hub — quick access to all enabled modules</p>
-            </header>
-            <div class="card" style="margin-bottom:24px;">
-              <div id="generalServerInfo">
-                <!-- Rendered dynamically by renderGeneralSection() -->
-              </div>
-            </div>
-            <h3 style="margin-bottom:4px; color:#e0e7ff;">Quick Actions</h3>
-            <div class="quick-actions-grid" id="generalQuickActions">
-              <!-- Rendered dynamically by renderGeneralSection() -->
-            </div>
-          </div>
         </section>
 
+        <!-- Profile Section -->
         <section id="section-profile" class="content-section">
           <header class="section-header">
             <h2>My Profile</h2>
@@ -297,9 +285,19 @@
 
         <!-- Dashboard Section -->
         <section id="section-dashboard" class="content-section">
-          <header class="section-header">
-            <h2>Dashboard</h2>
-            <p class="section-subtitle">Overview of your community activity and participation</p>
+          <header class="section-header dashboard-header">
+            <div class="dashboard-header-main">
+              <h2 id="dashboardWelcomeTitle">Welcome, Guild Admin</h2>
+              <p class="section-subtitle">Server overview for <span id="dashboardServerNameDisplay">...</span></p>
+            </div>
+            <div class="dashboard-view-toggle" id="adminViewToggleContainer" style="display:none;">
+              <span class="toggle-label">Admin View</span>
+              <label class="switch">
+                <input type="checkbox" id="dashboardViewModeToggle" onchange="toggleDashboardViewMode()">
+                <span class="slider round"></span>
+              </label>
+              <span class="toggle-label">User View</span>
+            </div>
           </header>
 
           <div id="loginPrompt" class="card login-card">
@@ -311,7 +309,15 @@
             </button>
           </div>
 
-          <div id="dashboardContent" style="display:none;">
+          <!-- Admin Dashboard View -->
+          <div id="adminDashboardView" style="display:none;">
+            <div class="dashboard-grid" id="adminDashboardGrid">
+              <!-- Dynamically rendered admin tiles -->
+            </div>
+          </div>
+
+          <!-- User Dashboard View -->
+          <div id="userDashboardView" style="display:none;">
             <h3 style="margin-bottom:16px; color:#e0e7ff;">👤 Your Profile</h3>
             <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; margin-bottom:32px;">
               <div id="tierStatCard" style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
@@ -356,49 +362,6 @@
         <section id="section-module-detail" class="content-section">
           <div id="module-detail-container" class="module-detail">
             <!-- Content injected dynamically by portal.js -->
-          </div>
-        </section>
-
-
-        <!-- Servers Section -->
-        <section id="section-servers" class="content-section servers-page servers-page--fresh">
-          <header class="section-header servers-header">
-            <p class="gpf-kicker">Guild Context</p>
-            <h2>Server Selector</h2>
-            <p class="section-subtitle">Choose the guild context for admin and tenant-aware actions</p>
-            <div style="margin-top:10px;display:flex;justify-content:flex-end;">
-              <button id="serversSuperadminBtn" class="btn-secondary btn-sm" onclick="switchSection('admin'); showAdminView('superadmin');" style="display:none;">Open Superadmin</button>
-            </div>
-          </header>
-
-          <div class="card servers-panel servers-panel--active" style="margin-bottom:24px;">
-            <div class="card-header">
-              <h3>Active Server</h3>
-              <button class="btn-secondary" onclick="refreshServerAccess()">
-                <span>🔄</span>
-                <span>Refresh</span>
-              </button>
-            </div>
-            <div id="activeServerStatus" style="margin-top: var(--space-4);"></div>
-          </div>
-
-          <div class="card servers-panel">
-            <div class="card-header">
-              <h3>Managed Servers</h3>
-              <span class="servers-panel__hint">Admin access and bot installed</span>
-            </div>
-            <div id="managedServersList" class="server-grid" style="margin-top: var(--space-4);"></div>
-          </div>
-
-          <div class="card servers-panel">
-            <div class="card-header">
-              <h3>Unmanaged Servers</h3>
-              <div style="display:flex; align-items:center; gap:10px;">
-                <span class="servers-panel__hint">Admin access, bot not installed yet</span>
-                <button class="btn-secondary btn-sm" onclick="openGuildInvite()">Invite Bot</button>
-              </div>
-            </div>
-            <div id="unmanagedServersList" class="server-grid" style="margin-top: var(--space-4);"></div>
           </div>
         </section>
 
@@ -1205,6 +1168,7 @@
             <div id="selfServeRolesModuleSettingsPanel" style="color: var(--text-secondary);">Loading...</div>
           </div>
         </section>
+
         <!-- Ticketing Section -->
         <section id="section-ticketing" class="content-section">
           <header class="section-header">

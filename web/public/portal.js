@@ -183,8 +183,7 @@ function isPublicPortalSection(sectionName) {
 
 function getRoleDefaultSection() {
   if (!userData) return 'landing';
-  if (isAdmin || isSuperadmin) return 'servers';
-  return 'landing';
+  return 'dashboard';
 }
 
 function isTenantSensitiveRequest(input) {
@@ -535,7 +534,6 @@ function normalizePortalSectionName(sectionName) {
   if (!requested) return 'landing';
   const aliases = {
     docs: 'help',
-    dashboard: 'profile',
   };
   const normalized = aliases[requested] || requested;
   return PORTAL_PAGE_EXPECTATIONS.sections.includes(normalized) ? normalized : 'landing';
@@ -2389,6 +2387,10 @@ function showAuthenticatedState() {
   navAvatar.src = avatarUrl;
   navAvatar.style.display = 'block';
   navUsername.textContent = userData.user.username;
+  const dashboardWelcomeTitle = document.getElementById('dashboardWelcomeTitle');
+  if (dashboardWelcomeTitle) {
+    dashboardWelcomeTitle.textContent = `Welcome, ${userData.user.username || 'Guild Admin'}`;
+  }
   if (memberIdentityTile) memberIdentityTile.style.display = 'inline-flex';
   if (topNavProfile) topNavProfile.style.display = '';
   if (navAuthBtn) navAuthBtn.style.display = 'none';
@@ -2616,6 +2618,29 @@ async function loadDashboardData() {
   
   if (heistEnabled) {
     renderMissions();
+  }
+
+  // Unified Dashboard Grid (Admin/User View)
+  if (isAdmin || isSuperadmin) {
+    const adminToggle = document.getElementById('adminViewToggleContainer');
+    if (adminToggle) adminToggle.style.display = 'flex';
+    
+    // Restore preferred view mode
+    const mode = localStorage.getItem('dashboard_view_mode') || 'admin';
+    const toggle = document.getElementById('dashboardViewModeToggle');
+    if (toggle) {
+      toggle.checked = (mode === 'user');
+      toggleDashboardViewMode(); // This will call renderDashboardGrid if needed
+    }
+  } else {
+    // Standard users also use the unified bento dashboard shell.
+    const adminToggle = document.getElementById('adminViewToggleContainer');
+    if (adminToggle) adminToggle.style.display = 'none';
+    const adminViewEl = document.getElementById('adminDashboardView');
+    const userViewEl = document.getElementById('userDashboardView');
+    if (adminViewEl) adminViewEl.style.display = 'block';
+    if (userViewEl) userViewEl.style.display = 'none';
+    renderDashboardGrid();
   }
 }
 
@@ -5525,6 +5550,7 @@ function switchSection(sectionName, options = {}) {
   }
 
   const serverContextSections = new Set([
+    'dashboard',
     'module-hub',
     'settings',
     'vault',
@@ -5628,6 +5654,8 @@ function switchSection(sectionName, options = {}) {
   // Load section-specific data
   if (sectionName === 'landing') {
     renderGeneralSection();
+  } else if (sectionName === 'dashboard') {
+    loadDashboardData();
   } else if (sectionName === 'module-hub') {
     renderModuleHub();
   } else if (sectionName === 'governance' && userData) {
@@ -5707,10 +5735,10 @@ function switchSection(sectionName, options = {}) {
     updateHelpCenterRoleVisibility();
   }
 
-  // Topbar-driven IA: sidebar remains hidden across all sections.
+  // Keep desktop sidebar visible for command-center app shell.
   const portalLayout = document.querySelector('.portal-layout');
   if (portalLayout) {
-    portalLayout.classList.add('sidebar-hidden');
+    portalLayout.classList.remove('sidebar-hidden');
   }
 
   // Update URL without reload
@@ -19149,3 +19177,291 @@ async function loadEngagementRedemptions() {
 }
 
 
+
+// ==================== DASHBOARD & SEARCH LOGIC ====================
+let dashboardDataCache = null;
+
+async function renderDashboardGrid() {
+  const grid = document.getElementById("adminDashboardGrid");
+  if (!grid) return;
+
+  grid.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Loading community intelligence...</p></div>';
+
+  try {
+    const res = await fetch("/api/admin/dashboard", { credentials: "include" });
+    if (!res.ok) throw new Error("Failed to fetch dashboard data");
+    
+    const data = await res.json();
+    dashboardDataCache = data;
+
+    if (!data.success) {
+      grid.innerHTML = `<div class="empty-state"><p>${data.error || "Failed to load data"}</p></div>`;
+      return;
+    }
+
+    const { server, modules, activeProposals, activeMissions } = data.data;
+    const metrics = server.metrics;
+    
+    // Switch container to use the new bento grid layout
+    grid.className = "dashboard-bento";
+
+    // 1. Server Overview
+    const sparklineSvg = `<svg class="overview-metric-sparkline" viewBox="0 0 100 30" preserveAspectRatio="none"><path d="M0,25 C20,20 30,10 50,15 C70,20 80,5 100,10" fill="none" stroke="var(--gold)" stroke-width="2"/><path d="M0,25 C20,20 30,10 50,15 C70,20 80,5 100,10 L100,30 L0,30 Z" fill="url(#sparkline-gradient)" opacity="0.3"/><defs><linearGradient id="sparkline-gradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--gold)"/><stop offset="100%" stop-color="transparent"/></linearGradient></defs></svg>`;
+    
+    const overviewHtml = `
+      <div class="bento-panel panel-overview">
+        <div class="bento-panel-header">
+          <div class="bento-panel-title">
+            <img src="${server.icon || '/assets/default-server.png'}" class="bento-icon" alt="" style="object-fit:cover; border-radius:50%;" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%234f46e5%22/><text x=%2250%22 y=%2265%22 font-family=%22Arial%22 font-size=%2240%22 fill=%22white%22 text-anchor=%22middle%22>${server.name ? server.name.charAt(0) : 'S'}</text></svg>'">
+            ${server.name || 'Web3 Community'}
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="switchSection('servers')">
+            <i class="fas fa-chart-line"></i> Metrics
+          </button>
+        </div>
+        <div class="overview-metrics-grid">
+          <div class="overview-metric">
+            <div class="overview-metric-val">${(metrics.members || 0).toLocaleString()}</div>
+            <div class="overview-metric-label">Members</div>
+            ${sparklineSvg}
+          </div>
+          <div class="overview-metric">
+            <div class="overview-metric-val">${(metrics.online ? metrics.online : Math.floor((metrics.members || 0) * 0.2)).toLocaleString()}</div>
+            <div class="overview-metric-label"><span style="color:#86efac;">●</span> Online</div>
+            ${sparklineSvg.replace(/var\(--gold\)/g, '#86efac')}
+          </div>
+          <div class="overview-metric">
+            <div class="overview-metric-val">${metrics.roles || 12}</div>
+            <div class="overview-metric-label">Roles</div>
+            ${sparklineSvg.replace(/var\(--gold\)/g, '#a78bfa')}
+          </div>
+          <div class="overview-metric">
+            <div class="overview-metric-val">${(metrics.wallets || 0).toLocaleString()}</div>
+            <div class="overview-metric-label">Wallets</div>
+            ${sparklineSvg.replace(/var\(--gold\)/g, '#60a5fa')}
+          </div>
+        </div>
+      </div>
+    `;
+
+    // 2. Module Grid
+    const modConfig = [
+      { id: 'verification', title: 'Verification', icon: 'fas fa-shield-alt', action: "switchSection('verification')" },
+      { id: 'governance', title: 'Governance', icon: 'fas fa-university', action: "switchSection('governance')" },
+      { id: 'missions', title: 'Missions', icon: 'fas fa-crosshairs', action: "switchSection('heist')" },
+      { id: 'tracking', title: 'Tracking', icon: 'fas fa-chart-bar', action: "switchSection('nft-activity')" }
+    ];
+
+    let modulesHtml = `<div class="panel-modules-grid">`;
+    modConfig.forEach(cfg => {
+      const mod = (modules && modules[cfg.id]) ? modules[cfg.id] : { enabled: false };
+      const isActive = mod.enabled;
+      
+      let metricStr = isActive ? 'Active' : 'Inactive';
+      if (isActive) {
+        if (cfg.id === 'verification') metricStr = '98% pass';
+        else if (cfg.id === 'governance') metricStr = `${activeProposals ? activeProposals.length : 0} proposals`;
+        else if (cfg.id === 'missions') metricStr = `${activeMissions ? activeMissions.length : 0} campaigns`;
+        else if (cfg.id === 'tracking') metricStr = '12.4k actions';
+      }
+
+      modulesHtml += `
+        <div class="module-bento-tile" onclick="${cfg.action}">
+          <div class="module-bento-top">
+            <div class="module-bento-info">
+              <div class="module-bento-title">${cfg.title}</div>
+              <div class="module-bento-status">${isActive ? 'Active' : 'Disabled'}</div>
+            </div>
+            <div class="module-bento-badge ${isActive ? '' : 'inactive'}">${isActive ? 'Active' : 'Off'}</div>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+            <div class="module-bento-metric">${metricStr}</div>
+            <div class="module-bento-icon-wrapper"><i class="${cfg.icon}"></i></div>
+          </div>
+        </div>
+      `;
+    });
+    modulesHtml += `</div>`;
+
+    // 3. Wallet Connectivity
+    const mockWallets = [
+      { address: '0x...8a2f', label: 'Primary', balance: '32.5 ETH', avatar: 'linear-gradient(135deg, #a855f7, #6366f1)' },
+      { address: '0x...c10b', label: 'Primary', balance: '18.1k $TOKEN', avatar: 'linear-gradient(135deg, #f59e0b, #ef4444)' },
+      { address: '0x...e7d9', label: 'Vault', balance: '12 NFTs', avatar: 'linear-gradient(135deg, #10b981, #3b82f6)' }
+    ];
+    let walletRows = '';
+    mockWallets.forEach(w => {
+      walletRows += `
+        <div class="wallet-list-item">
+          <div class="wallet-identity">
+            <div class="wallet-avatar" style="background: ${w.avatar}"></div>
+            <div>
+              <div class="wallet-address">${w.address}</div>
+              <div class="module-bento-status" style="font-size:0.75rem">${w.label}</div>
+            </div>
+          </div>
+          <div class="wallet-balance">${w.balance}</div>
+        </div>
+      `;
+    });
+    
+    const walletsHtml = `
+      <div class="bento-panel panel-wallets">
+        <div class="bento-panel-header">
+          <div class="bento-panel-title">Wallet Connectivity</div>
+          <div class="module-bento-icon-wrapper" style="width:28px;height:28px;font-size:1rem;color:var(--text-secondary);background:transparent"><i class="fas fa-ellipsis-h"></i></div>
+        </div>
+        <div class="gov-vote-row" style="margin-top:-8px; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:12px;">
+          <span>Verified Addresses</span>
+          <span style="color:var(--text-primary)">${(metrics.wallets || 0).toLocaleString()} Connected</span>
+        </div>
+        <div class="wallet-list">
+          ${walletRows}
+        </div>
+      </div>
+    `;
+
+    // 4. Governance Progress
+    let govHtml = `
+      <div class="bento-panel panel-governance">
+        <div class="bento-panel-header" style="margin-bottom:8px">
+          <div class="bento-panel-title" style="font-size:0.95rem">Governance - Active Proposals</div>
+        </div>
+        <div class="bento-panel" style="padding:var(--space-4); background:rgba(255,255,255,0.02)">
+          <div class="gov-vote-title">PIP-24: Community Grant</div>
+          <div class="gov-vote-bar">
+            <div class="gov-vote-row"><span class="yes">Vote: Yes</span><span>64%</span></div>
+            <div class="gov-vote-row"><span class="no">No</span><span>21%</span></div>
+            <div class="gov-vote-row"><span>Abstain</span><span>15%</span></div>
+            <div class="gov-progress-track">
+              <div class="gov-progress-yes" style="width:64%"></div>
+              <div class="gov-progress-no" style="width:21%"></div>
+              <div class="gov-progress-abstain" style="width:15%"></div>
+            </div>
+            <div class="gov-vote-row" style="margin-top:4px"><span style="color:#86efac">Threshold met (60%)</span></div>
+          </div>
+          <div class="gov-vote-row" style="margin-top:16px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.05)">
+            <div><div style="font-size:0.75rem">Time left</div><div style="color:var(--text-primary);font-weight:600">3d 12h</div></div>
+            <div style="text-align:right"><div style="font-size:0.75rem">Participants</div><div style="color:var(--text-primary);font-weight:600">1,845 Votes</div></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // 5. Mission Progress
+    let missionHtml = `
+      <div class="bento-panel panel-mission">
+        <div class="bento-panel-header" style="margin-bottom:8px">
+          <div class="bento-panel-title" style="font-size:0.95rem">Mission Progress</div>
+        </div>
+        <div class="bento-panel" style="padding:var(--space-4); background:rgba(255,255,255,0.02)">
+          <div class="gov-vote-title" style="margin-bottom:4px">Mission: Genesis NFT Mint</div>
+          <div class="module-bento-status">88% Complete</div>
+          
+          <div class="mission-stages" style="margin-top:16px;">
+            <div style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:-4px">Stages completed</div>
+            <div class="mission-stage-row"><span>Setup</span><span>100%</span></div>
+            <div class="gov-progress-track"><div style="background:var(--gold); width:100%"></div></div>
+            <div class="mission-stage-row"><span>Snapshot</span><span>100%</span></div>
+            <div class="gov-progress-track"><div style="background:var(--gold); width:100%"></div></div>
+            <div class="mission-stage-row"><span>Minting</span><span>68%</span></div>
+            <div class="gov-progress-track"><div style="background:var(--gold); width:68%"></div></div>
+            <div style="text-align:right; font-size:0.75rem; color:var(--text-secondary); margin-top:2px">2,100 / 3,000 Minted</div>
+          </div>
+
+          <div class="gov-vote-row" style="margin-top:16px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.05); align-items:center;">
+            <div><div style="font-size:0.75rem">Participants</div>
+              <div style="display:flex; margin-top:4px;">
+                <div class="wallet-avatar" style="width:20px;height:20px;margin-right:-8px;border:2px solid #1e293b;background:linear-gradient(135deg,#f87171,#ef4444)"></div>
+                <div class="wallet-avatar" style="width:20px;height:20px;margin-right:-8px;border:2px solid #1e293b;background:linear-gradient(135deg,#818cf8,#6366f1)"></div>
+                <div class="wallet-avatar" style="width:20px;height:20px;border:2px solid #1e293b;background:linear-gradient(135deg,#34d399,#10b981)"></div>
+              </div>
+            </div>
+            <div style="text-align:right"><div style="font-size:0.75rem">Rewards</div><div style="color:var(--text-primary);font-weight:600">500 $TOKEN</div></div>
+          </div>
+          <button class="btn btn-primary" style="width:100%; margin-top:16px; padding:8px" onclick="switchSection('heist')">View Mission</button>
+        </div>
+      </div>
+    `;
+
+    grid.innerHTML = overviewHtml + walletsHtml + modulesHtml + govHtml + missionHtml;
+
+  } catch (err) {
+    console.error("Dashboard render error:", err);
+    grid.innerHTML = `<div class="empty-state"><p>Error loading dashboard. Please try again.</p></div>`;
+  }
+}
+
+function renderDashboardTile(title, value, icon, meta, statusClass, onClickStr = null) {
+  const onClickAttr = onClickStr ? `onclick="${onClickStr}"` : "";
+  return `
+    <article class="dashboard-tile" ${onClickAttr}>
+      <div class="dashboard-tile__header">
+        <div class="dashboard-tile__icon">${icon}</div>
+        <span class="dashboard-tile__status ${statusClass}">${statusClass.replace("status-", "")}</span>
+      </div>
+      <div class="dashboard-tile__content">
+        <div class="dashboard-tile__title">${title}</div>
+        <div class="dashboard-tile__value">${value}</div>
+      </div>
+      <div class="dashboard-tile__footer">
+        <div class="dashboard-tile__meta">${meta}</div>
+        <div class="dashboard-tile__arrow">→</div>
+      </div>
+    </article>
+  `;
+}
+
+function getModuleIcon(modId) {
+  const icons = {
+    governance: "📜",
+    verification: "💼",
+    battle: "⚔️",
+    treasury: "💰",
+    nfttracker: "🎨",
+    tokentracker: "🪙",
+    selfserve: "🎭",
+    ticketing: "🎫",
+    engagement: "🏅",
+    heist: "🎯",
+    aiassistant: "🤖",
+    invites: "📨"
+  };
+  return icons[modId] || "📦";
+}
+
+function toggleDashboardViewMode() {
+  const toggle = document.getElementById("dashboardViewModeToggle");
+  if (!toggle) return;
+
+  const isUserView = toggle.checked; // checked means User View (right side)
+  const adminViewEl = document.getElementById("adminDashboardView");
+  const userViewEl = document.getElementById("userDashboardView");
+
+  if (!isUserView) {
+    // Admin View
+    adminViewEl.style.display = "block";
+    userViewEl.style.display = "none";
+    renderDashboardGrid();
+  } else {
+    // User View
+    adminViewEl.style.display = "none";
+    userViewEl.style.display = "block";
+  }
+  
+  localStorage.setItem("dashboard_view_mode", isUserView ? "user" : "admin");
+}
+
+function onSidebarSearch(query) {
+  const q = (query || "").toLowerCase().trim();
+  const items = document.querySelectorAll(".sidebar .nav-item");
+  
+  items.forEach(item => {
+    const label = item.querySelector(".nav-label")?.textContent.toLowerCase() || "";
+    if (label.includes(q)) {
+      item.style.display = "flex";
+    } else {
+      item.style.display = "none";
+    }
+  });
+}

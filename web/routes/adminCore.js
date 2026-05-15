@@ -14,6 +14,10 @@ function createAdminCoreRouter({
   getClient = null,
   getGuildBotProfileSnapshot = async () => null,
   applyGuildBotProfileBranding = async () => ({ success: false, skipped: true }),
+  db,
+  proposalService,
+  heistService,
+  walletService,
 }) {
   const router = express.Router();
 
@@ -25,6 +29,89 @@ function createAdminCoreRouter({
       nodeEnv: process.env.NODE_ENV || 'development',
       webhookSecretConfigured: !!getActivityWebhookSecret(),
     }));
+  });
+
+  router.get('/dashboard', adminAuthMiddleware, async (req, res) => {
+    try {
+      const guildId = req.guildId;
+      const client = typeof getClient === 'function' ? getClient() : null;
+      const guild = req.guild || await fetchGuildById(guildId);
+      
+      // 1. Server Metrics
+      const memberCount = guild?.memberCount || 0;
+      const onlineCount = guild?.approximatePresenceCount || 0; 
+      const verifiedWalletsCount = Number(db.prepare('SELECT COUNT(DISTINCT wallet_address) AS cnt FROM wallets').get()?.cnt || 0);
+      
+      // 2. Module Status
+      const moduleState = tenantService.getTenantContext(guildId)?.modules || {};
+      const modules = {
+        verification: { enabled: !!moduleState.verification, stats: { verifiedUsers: Number(db.prepare('SELECT COUNT(DISTINCT discord_id) AS cnt FROM wallets').get()?.cnt || 0) } },
+        governance: { enabled: !!moduleState.governance, stats: { activeProposals: Number(db.prepare('SELECT COUNT(*) AS cnt FROM proposals WHERE guild_id = ? AND status IN ("supporting", "voting")').get(guildId)?.cnt || 0) } },
+        missions: { enabled: !!moduleState.heist, stats: { activeMissions: Number(db.prepare('SELECT COUNT(*) AS cnt FROM heist_missions WHERE guild_id = ? AND status IN ("recruiting", "active")').get(guildId)?.cnt || 0) } },
+        tracking: { enabled: !!(moduleState.nfttracker || moduleState.tokentracker), stats: { actions: 0 } }
+      };
+
+      // 3. Active Governance Proposals (Top 3)
+      const activeProposals = db.prepare(`
+        SELECT proposal_id, title, status, category, end_time, quorum_required, 
+               (SELECT SUM(voting_power) FROM votes WHERE proposal_id = proposals.proposal_id AND vote_choice = 'yes') as yes_votes,
+               (SELECT SUM(voting_power) FROM votes WHERE proposal_id = proposals.proposal_id AND vote_choice = 'no') as no_votes,
+               (SELECT SUM(voting_power) FROM votes WHERE proposal_id = proposals.proposal_id AND vote_choice = 'abstain') as abstain_votes,
+               total_vp
+        FROM proposals 
+        WHERE guild_id = ? AND status IN ("supporting", "voting")
+        ORDER BY created_at DESC LIMIT 3
+      `).all(guildId).map(p => ({
+        id: p.proposal_id,
+        title: p.title,
+        status: p.status,
+        category: p.category,
+        endTime: p.end_time,
+        quorumRequired: p.quorum_required,
+        totalVP: p.total_vp || 0,
+        votes: {
+          yes: p.yes_votes || 0,
+          no: p.no_votes || 0,
+          abstain: p.abstain_votes || 0
+        }
+      }));
+
+      // 4. Active Missions (Top 3)
+      const activeMissions = db.prepare(`
+        SELECT mission_id, title, status, mode, filled_slots, total_slots, ends_at
+        FROM heist_missions
+        WHERE guild_id = ? AND status IN ("recruiting", "active")
+        ORDER BY created_at DESC LIMIT 3
+      `).all(guildId).map(m => ({
+        id: m.mission_id,
+        title: m.title,
+        status: m.status,
+        mode: m.mode,
+        filledSlots: m.filled_slots,
+        totalSlots: m.total_slots,
+        endsAt: m.ends_at
+      }));
+      
+      res.json(toSuccessResponse({
+        server: {
+          id: guildId,
+          name: guild?.name || 'Unknown Server',
+          icon: guildIconUrl(guild),
+          metrics: {
+            members: memberCount,
+            online: onlineCount,
+            guilds: 1, 
+            wallets: verifiedWalletsCount
+          }
+        },
+        modules,
+        activeProposals,
+        activeMissions
+      }));
+    } catch (error) {
+      logger.error('Error fetching dashboard data:', error);
+      res.status(500).json(toErrorResponse('Internal server error'));
+    }
   });
 
   router.get('/branding', adminAuthMiddleware, async (req, res) => {

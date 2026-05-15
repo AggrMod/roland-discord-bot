@@ -986,6 +986,10 @@ class WebServer {
       getClient: () => this.client,
       getGuildBotProfileSnapshot,
       applyGuildBotProfileBranding,
+      db,
+      proposalService,
+      heistService,
+      walletService,
     }));
 
     const createAdminSettingsRouter = require('./routes/adminSettings');

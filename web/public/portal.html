@@ -223,31 +223,19 @@
         <!-- Landing / General Section -->
         <section id="section-landing" class="content-section active">
           <div id="generalPreSelection" class="home-page home-page--fresh">
-            <section class="functional-hub">
-              <header class="functional-hub__header">
-                <p class="gpf-kicker">Command Center</p>
-                <h1>Welcome to your operational hub.</h1>
-                <p class="gpf-subtitle">Jump directly into your member setup, server workspace, or support desk.</p>
-                <div id="homeActiveContext" class="home-active-context" style="display:none;"></div>
-              </header>
-              <div class="functional-hub__grid">
-                <article class="functional-hub__tile" id="homeMemberHubTile">
-                  <h3>Member Hub</h3>
-                  <p>Profile, wallets, and membership tiers in one place.</p>
-                  <button id="homeMemberHubBtn" class="btn-primary" onclick="switchSection('profile')">Open Member Hub</button>
-                </article>
-                <article class="functional-hub__tile" id="homeServerSelectorTile">
-                  <h3>Server Selector</h3>
-                  <p>Choose the community you want to manage now.</p>
-                  <button id="homeServerSelectorBtn" class="btn-secondary" onclick="switchSection('servers')">Open Server Selector</button>
-                </article>
-                <article class="functional-hub__tile" id="homeSupportDeskTile">
-                  <h3>Support Desk</h3>
-                  <p>Help center and ticketing tools for your team.</p>
-                  <button id="homeSupportDeskBtn" class="btn-secondary" onclick="switchSection('help')">Open Support Desk</button>
-                </article>
+            <header class="functional-hub__header" style="margin-bottom: var(--space-8);">
+              <p class="gpf-kicker">Unified App Hub</p>
+              <h1 id="appHubGreeting">Welcome to GuildPilot.</h1>
+              <p class="gpf-subtitle">Manage your profile, discover communities, or access administrative workspaces.</p>
+            </header>
+            
+            <div id="appHubBento" class="dashboard-bento">
+              <!-- Dynamically populated by renderGeneralSection() -->
+              <div class="loading-state">
+                <div class="loading-spinner"></div>
+                <p>Configuring your workspace...</p>
               </div>
-            </section>
+            </div>
           </div>
         </section>
 

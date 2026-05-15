@@ -1647,70 +1647,141 @@ function renderModuleHub() {
 // ==================== GENERAL HUB & SETTINGS ====================
 
 
-function renderGeneralSection() {
-  const preEl = document.getElementById('generalPreSelection');
-  const postEl = document.getElementById('generalPostSelection');
-  if (!preEl || !postEl) return;
+async function renderGeneralSection() {
+  const hub = document.getElementById('appHubBento');
+  const greeting = document.getElementById('appHubGreeting');
+  if (!hub) return;
+  const user = userData?.user || userData || {};
 
-  const canManage = isAdmin || isSuperadmin;
-  const hasServers = hasServerChoices();
+  if (userData && greeting) {
+    greeting.textContent = `Welcome back, ${user.username || 'Guild Admin'}.`;
 
-  preEl.style.display = '';
-  postEl.style.display = 'none';
-  updateBreadcrumbs([]);
-
-  const memberHubBtn = document.getElementById('homeMemberHubBtn');
-  const serverSelectorBtn = document.getElementById('homeServerSelectorBtn');
-  const supportDeskBtn = document.getElementById('homeSupportDeskBtn');
-  if (memberHubBtn) memberHubBtn.onclick = () => (!userData ? login() : switchSection('profile'));
-  if (serverSelectorBtn) {
-    if (!userData) {
-      serverSelectorBtn.textContent = 'Login to Continue';
-      serverSelectorBtn.onclick = () => login();
-    } else if (activeGuildId) {
-      serverSelectorBtn.textContent = 'Open Module Workspace';
-      serverSelectorBtn.onclick = () => switchSection('module-hub');
-    } else {
-      serverSelectorBtn.textContent = 'Open Server Selector';
-      serverSelectorBtn.onclick = () => switchSection('servers');
-    }
   }
-  if (supportDeskBtn) supportDeskBtn.onclick = () => switchSection('help');
-
-  const homeContext = document.getElementById('homeActiveContext');
-  if (homeContext) {
-    if (!userData) {
-      homeContext.style.display = 'none';
-      homeContext.innerHTML = '';
-    } else if (activeGuildId) {
-      const activeRecord = getServerRecord(activeGuildId);
-      const activeName = activeRecord?.name || activeGuildId;
-      homeContext.style.display = '';
-      homeContext.innerHTML = `
-        Active server context: <strong>${escapeHtml(activeName)}</strong>.
-        ${(canManage)
-          ? `<button class="btn-secondary" style="margin-left:10px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="switchSection('module-hub')">Open Module Workspace</button>`
-          : `<button class="btn-secondary" style="margin-left:10px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="switchSection('module-hub')">Open Modules</button>`}
-        ${isSuperadmin ? `<button class="btn-secondary" style="margin-left:6px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="showAdminView('superadmin')">Superadmin</button>` : ''}
-        <button class="btn-secondary" style="margin-left:10px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="switchSection('servers')">Switch</button>
-      `;
-    } else if (hasServers) {
-      homeContext.style.display = '';
-      homeContext.innerHTML = `
-        Select a server to unlock module workspace and tenant-aware settings.
-        <button class="btn-secondary" style="margin-left:10px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="switchSection('servers')">Open Server Selector</button>
-        ${isSuperadmin ? `<button class="btn-secondary" style="margin-left:6px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="showAdminView('superadmin')">Superadmin</button>` : ''}
-      `;
-    } else {
-      homeContext.style.display = '';
-      homeContext.innerHTML = `
-        Your account has no managed servers yet.
-        <button class="btn-secondary" style="margin-left:10px;padding:6px 12px;font-size:0.8em;min-height:32px;" onclick="switchSection('profile')">Open Profile</button>
-      `;
-    }
+  if (!userData) {
+    hub.innerHTML = `
+      <div class="bento-panel panel-overview">
+        <div class="bento-panel-header">
+          <div class="bento-panel-title">Authentication Required</div>
+        </div>
+        <p style="color:var(--text-secondary); margin-bottom:var(--space-6);">Connect your Discord account to access your personal workspace and managed communities.</p>
+        <button class="btn btn-primary" style="width:100%;" onclick="login()">Login with Discord</button>
+      </div>
+    `;
+    return;
   }
 
+  // Identity Panel (Bento style)
+  const identityHtml = `
+    <div class="bento-panel panel-overview">
+      <div class="bento-panel-header">
+        <div class="bento-panel-title">
+          <img src="${user.avatar ? `https://cdn.discordapp.com/avatars/${user.discordId || ''}/${user.avatar}.png` : '/assets/default-avatar.png'}" class="bento-icon" style="object-fit:cover; border-radius:50%;" onerror="this.src='/assets/default-avatar.png'">
+          ${user.username || 'Guild Admin'}
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="switchSection('profile')">Edit Profile</button>
+      </div>
+      <div class="overview-metrics-grid">
+        <div class="overview-metric">
+          <div class="overview-metric-val">Member</div>
+          <div class="overview-metric-label">Global Rank</div>
+        </div>
+        <div class="overview-metric">
+          <div class="overview-metric-val">${(serverAccessData.managedServers || []).length}</div>
+          <div class="overview-metric-label">Managed</div>
+        </div>
+        <div class="overview-metric">
+          <div class="overview-metric-val">${(serverAccessData.unmanagedServers || []).length}</div>
+          <div class="overview-metric-label">Joined</div>
+        </div>
+      </div>
+    </div>
+  `;
+  // Server Matrix (Bento style)
+  let serverHtml = `<div class="bento-panel panel-wallets" style="grid-row: 1 / 3;">
+    <div class="bento-panel-header">
+      <div class="bento-panel-title">Communities</div>
+      <button class="btn btn-secondary btn-sm" onclick="switchSection('servers')">View All</button>
+    </div>
+    <div class="wallet-list">`;
+
+  const allServers = [...(serverAccessData.managedServers || []), ...(serverAccessData.unmanagedServers || [])].slice(0, 5);
+  if (allServers.length === 0) {
+    serverHtml += `<p style="color:var(--text-muted); padding:20px; text-align:center;">No communities found. Join a server to get started.</p>`;
+  } else {
+    allServers.forEach(srv => {
+      const guildId = String(srv.guildId || '').trim();
+      const isManaged = (serverAccessData.managedServers || []).some(m => String(m.guildId || '').trim() === guildId);
+      const iconUrl = srv.icon || srv.iconUrl || '';
+      serverHtml += `
+        <div class="wallet-list-item" onclick="selectAndGoToServer('${escapeJsString(guildId)}')">
+          <div class="wallet-identity">
+            <img src="${iconUrl || '/assets/default-server.png'}" class="wallet-avatar" onerror="this.src='/assets/default-server.png'">
+            <div>
+              <div class="wallet-address">${srv.name || guildId}</div>
+              <div class="module-bento-status" style="font-size:0.75rem">${isManaged ? 'Administrator' : 'Member'}</div>
+            </div>
+          </div>
+          <div class="module-bento-badge ${isManaged ? '' : 'inactive'}" style="font-size:0.65rem">${isManaged ? 'Manage' : 'Open'}</div>
+        </div>
+      `;
+    });
+  }
+  serverHtml += `</div></div>`;
+  // Action Panels (Bento style)
+  const actionHtml = `
+    <div class="panel-modules-grid">
+      <div class="module-bento-tile" onclick="switchSection('help')">
+        <div class="module-bento-top">
+          <div class="module-bento-info">
+            <div class="module-bento-title">Support Desk</div>
+            <div class="module-bento-status">Help & Documentation</div>
+          </div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+          <div class="module-bento-metric">Search Guides</div>
+          <div class="module-bento-icon-wrapper"><i class="fas fa-question-circle"></i></div>
+        </div>
+      </div>
+      
+      <div class="module-bento-tile" onclick="switchSection('plans')">
+        <div class="module-bento-top">
+          <div class="module-bento-info">
+            <div class="module-bento-title">Pricing & Plans</div>
+            <div class="module-bento-status">Upgrade Community</div>
+          </div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+          <div class="module-bento-metric">Premium Features</div>
+          <div class="module-bento-icon-wrapper" style="color:#fcd34d;"><i class="fas fa-crown"></i></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Superadmin Gateway
+  let superHtml = '';
+  if (isSuperadmin) {
+    superHtml = `
+      <div class="bento-panel panel-governance" style="grid-column: 1 / 3;">
+        <div class="bento-panel-header">
+          <div class="bento-panel-title">🛡️ Platform Administration</div>
+          <button class="btn btn-primary btn-sm" onclick="switchSection('admin'); showAdminView('superadmin');">Open Console</button>
+        </div>
+        <p style="color:var(--text-secondary); font-size:0.9rem; margin-top:8px;">You have global oversight. Monitor system health, manage billing cycles, and oversee all community tenants from the command center.</p>
+      </div>
+    `;
+  }
+
+  hub.innerHTML = identityHtml + serverHtml + actionHtml + superHtml;
 }
+
+function selectAndGoToServer(guildId) {
+  activeGuildId = guildId;
+  localStorage.setItem('activeGuildId', guildId);
+  switchSection('dashboard');
+}
+
+
 
 function switchSettingsTab(tab) {
   const moduleTabRedirects = {

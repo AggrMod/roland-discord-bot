@@ -890,7 +890,10 @@ class WebServer {
           status.className = 'meta';
           const res = await fetch('/api/public/v1/welcome/captcha/verify', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Requested-With': 'XMLHttpRequest',
+            },
             body: JSON.stringify({ challengeToken, captchaToken, guildId }),
           });
           const json = await res.json().catch(() => ({}));

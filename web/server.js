@@ -290,7 +290,7 @@ class WebServer {
     }));
 
     this.app.use(require('cookie-parser')());
-    this.app.use(express.json({ limit: process.env.WEBHOOK_BODY_LIMIT || '2mb' }));
+    this.app.use(express.json({ limit: process.env.WEBHOOK_BODY_LIMIT || '6mb' }));
     this.app.use(helmet({
       // Portal currently relies on inline handlers/styles; keep CSP rollout separate.
       contentSecurityPolicy: false,

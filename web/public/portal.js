@@ -19986,6 +19986,11 @@ async function uploadWelcomeImage() {
       showError('Pick an image file first.');
       return;
     }
+    const maxRawBytesForDataUrl = 1400000; // keeps base64 payload under ~2MB+JSON overhead
+    if (Number(file.size || 0) > maxRawBytesForDataUrl) {
+      showError('Image is too large. Please use an image under 1.4 MB.');
+      return;
+    }
     const dataUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result || ''));
@@ -20001,7 +20006,14 @@ async function uploadWelcomeImage() {
         dataUrl,
       }),
     });
-    const json = await res.json();
+    const raw = await res.text();
+    let json = {};
+    try {
+      json = raw ? JSON.parse(raw) : {};
+    } catch (_error) {
+      const textSnippet = String(raw || '').replace(/\s+/g, ' ').trim().slice(0, 180);
+      throw new Error(textSnippet || `Upload failed (HTTP ${res.status})`);
+    }
     if (!res.ok || json.success === false) throw new Error(json?.error?.message || json?.message || 'Upload failed');
     showSuccess('Image uploaded. Select it in "Uploaded image asset" and save settings.');
     await loadWelcomeSettingsSection();

@@ -232,6 +232,52 @@ class WelcomeService {
     return buildChallengeToken(payload);
   }
 
+  async sendCaptchaPrompt(member, { guildId, channelSource, channel }) {
+    const challengeToken = this.createChallenge(guildId, member.id);
+    const verifyUrl = `${VERIFY_BASE_URL}/verify?guild=${encodeURIComponent(guildId)}&captcha=${encodeURIComponent(challengeToken)}`;
+    const guildName = String(member?.guild?.name || 'your server');
+    const embed = {
+      color: 0xf8b64c,
+      title: 'Security Check Required',
+      description: `Welcome to **${guildName}**. Complete a quick verification to unlock full access.`,
+      fields: [
+        {
+          name: 'Why this is needed',
+          value: 'This protects the community from raid and bot accounts.',
+          inline: false,
+        },
+      ],
+      footer: {
+        text: 'GuildPilot Verification',
+      },
+    };
+    const components = [{
+      type: 1,
+      components: [{
+        type: 2,
+        style: 5,
+        label: 'Complete Verification',
+        url: verifyUrl,
+      }],
+    }];
+
+    const dmSent = await member.send({
+      content: 'Verification required before full access.',
+      embeds: [embed],
+      components,
+    }).then(() => true).catch(() => false);
+
+    if (dmSent) return { success: true, mode: 'dm' };
+    if (!channel || typeof channel.send !== 'function') return { success: false, mode: 'none' };
+
+    await channel.send({
+      content: `<@${member.id}> please complete verification to unlock full access.`,
+      embeds: [embed],
+      components,
+    }).catch(() => {});
+    return { success: true, mode: 'channel' };
+  }
+
   async handleMemberJoin(member) {
     try {
       const guildId = String(member?.guild?.id || '').trim();
@@ -314,11 +360,7 @@ class WelcomeService {
       }
 
       if (settings.captchaEnabled) {
-        const challengeToken = this.createChallenge(guildId, member.id);
-        const verifyUrl = `${VERIFY_BASE_URL}/verify?guild=${encodeURIComponent(guildId)}&captcha=${encodeURIComponent(challengeToken)}`;
-        await member.send({
-          content: `Before full access, complete verification here: ${verifyUrl}`
-        }).catch(() => {});
+        await this.sendCaptchaPrompt(member, { guildId, channelSource, channel });
       }
       return { success: true, delivered };
     } catch (error) {

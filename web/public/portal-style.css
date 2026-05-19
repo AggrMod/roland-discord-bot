@@ -382,6 +382,36 @@ h4,
   background: rgba(30, 41, 59, 0.8);
   color: #e0e7ff;
 }
+.sa-v2-panel input[type="text"],
+.sa-v2-panel input[type="number"],
+.sa-v2-panel input[type="email"],
+.sa-v2-panel input[type="password"],
+.sa-v2-panel select,
+.sa-v2-panel textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  background: rgba(30, 41, 59, 0.8);
+  color: #e0e7ff;
+  outline: none;
+}
+.sa-v2-panel textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+.sa-v2-panel input::placeholder,
+.sa-v2-panel textarea::placeholder {
+  color: rgba(201, 214, 255, 0.62);
+}
+.sa-v2-panel input:focus,
+.sa-v2-panel select:focus,
+.sa-v2-panel textarea:focus {
+  border-color: rgba(129, 140, 248, 0.72);
+  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.22);
+}
 .sa-v2-split {
   display: grid;
   gap: 12px;

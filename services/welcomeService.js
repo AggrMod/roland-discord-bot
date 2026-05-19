@@ -10,6 +10,10 @@ const MAX_IMAGE_BYTES = Math.max(200000, Number(process.env.WELCOME_IMAGE_MAX_BY
 const CHALLENGE_TTL_MS = Math.max(5, Number(process.env.WELCOME_CAPTCHA_TTL_MINUTES || 20)) * 60 * 1000;
 const VERIFY_BASE_URL = String(process.env.WEB_URL || 'http://localhost:3000').replace(/\/+$/, '');
 const CHALLENGE_SIGNING_SECRET = String(process.env.WELCOME_CAPTCHA_SECRET || process.env.SESSION_SECRET || 'welcome-captcha-secret');
+const CAPTCHA_PROMPT_MODES = Object.freeze({
+  DM: 'dm',
+  CHANNEL_BUTTON: 'channel_button',
+});
 
 function safeJsonParse(raw, fallback) {
   try {
@@ -28,6 +32,12 @@ function normalizeRoleIds(roleIds) {
         .filter(value => /^\d{17,20}$/.test(value))
     )
   );
+}
+
+function normalizePromptMode(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === CAPTCHA_PROMPT_MODES.CHANNEL_BUTTON) return CAPTCHA_PROMPT_MODES.CHANNEL_BUTTON;
+  return CAPTCHA_PROMPT_MODES.DM;
 }
 
 function normalizeTemplate(value, fallback) {
@@ -119,6 +129,8 @@ class WelcomeService {
       autoRoleIds: normalizeRoleIds(row?.auto_role_ids || '[]'),
       captchaEnabled: row ? row.captcha_enabled === 1 : false,
       captchaRoleId: row?.captcha_role_id || null,
+      captchaRemoveRoleId: row?.captcha_remove_role_id || null,
+      captchaPromptMode: normalizePromptMode(row?.captcha_prompt_mode || CAPTCHA_PROMPT_MODES.DM),
       updatedAt: row?.updated_at || null,
     };
 
@@ -155,15 +167,17 @@ class WelcomeService {
       autoRoleIds: patch.autoRoleIds !== undefined ? normalizeRoleIds(patch.autoRoleIds) : now.autoRoleIds,
       captchaEnabled: patch.captchaEnabled !== undefined ? !!patch.captchaEnabled : now.captchaEnabled,
       captchaRoleId: patch.captchaRoleId !== undefined ? String(patch.captchaRoleId || '').trim() || null : now.captchaRoleId,
+      captchaRemoveRoleId: patch.captchaRemoveRoleId !== undefined ? String(patch.captchaRemoveRoleId || '').trim() || null : now.captchaRemoveRoleId,
+      captchaPromptMode: patch.captchaPromptMode !== undefined ? normalizePromptMode(patch.captchaPromptMode) : now.captchaPromptMode,
     };
 
     db.prepare(`
       INSERT INTO tenant_welcome_settings (
         guild_id, enabled, welcome_channel_id, welcome_message_template, welcome_embed_json,
         welcome_image_url, welcome_image_asset_id, dynamic_avatar_card, dm_enabled, dm_message_template, auto_role_ids,
-        captcha_enabled, captcha_role_id, created_at, updated_at
+        captcha_enabled, captcha_role_id, captcha_remove_role_id, captcha_prompt_mode, created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON CONFLICT(guild_id) DO UPDATE SET
         enabled = excluded.enabled,
         welcome_channel_id = excluded.welcome_channel_id,
@@ -177,6 +191,8 @@ class WelcomeService {
         auto_role_ids = excluded.auto_role_ids,
         captcha_enabled = excluded.captcha_enabled,
         captcha_role_id = excluded.captcha_role_id,
+        captcha_remove_role_id = excluded.captcha_remove_role_id,
+        captcha_prompt_mode = excluded.captcha_prompt_mode,
         updated_at = CURRENT_TIMESTAMP
     `).run(
       normalizedGuildId,
@@ -191,7 +207,9 @@ class WelcomeService {
       next.dmMessageTemplate,
       JSON.stringify(next.autoRoleIds),
       next.captchaEnabled ? 1 : 0,
-      next.captchaRoleId
+      next.captchaRoleId,
+      next.captchaRemoveRoleId,
+      next.captchaPromptMode
     );
 
     return this.getSettings(normalizedGuildId);
@@ -232,10 +250,41 @@ class WelcomeService {
     return buildChallengeToken(payload);
   }
 
-  async sendCaptchaPrompt(member, { guildId, channelSource, channel }) {
-    const challengeToken = this.createChallenge(guildId, member.id);
-    const verifyUrl = `${VERIFY_BASE_URL}/verify?guild=${encodeURIComponent(guildId)}&captcha=${encodeURIComponent(challengeToken)}`;
+  buildCaptchaVerifyUrl(guildId, userId) {
+    const challengeToken = this.createChallenge(guildId, userId);
+    return `${VERIFY_BASE_URL}/verify?guild=${encodeURIComponent(guildId)}&captcha=${encodeURIComponent(challengeToken)}`;
+  }
+
+  async sendCaptchaPrompt(member, { guildId, channel, promptMode }) {
+    const normalizedMode = normalizePromptMode(promptMode);
+    const verifyUrl = this.buildCaptchaVerifyUrl(guildId, member.id);
     const guildName = String(member?.guild?.name || 'your server');
+    if (normalizedMode === CAPTCHA_PROMPT_MODES.CHANNEL_BUTTON) {
+      const channelEmbed = {
+        color: 0xf8b64c,
+        title: 'New Member Verification',
+        description: `<@${member.id}> click below to begin human verification.`,
+        footer: { text: 'GuildPilot Verification' },
+      };
+      const channelComponents = [{
+        type: 1,
+        components: [{
+          type: 2,
+          style: 1,
+          custom_id: `welcome_captcha_start:${member.id}`,
+          label: '✅ Start Verification',
+        }],
+      }];
+      if (channel && typeof channel.send === 'function') {
+        await channel.send({
+          content: `<@${member.id}>`,
+          embeds: [channelEmbed],
+          components: channelComponents,
+        }).catch(() => {});
+        return { success: true, mode: CAPTCHA_PROMPT_MODES.CHANNEL_BUTTON };
+      }
+    }
+
     const embed = {
       color: 0xf8b64c,
       title: 'Security Check Required',
@@ -276,6 +325,34 @@ class WelcomeService {
       components,
     }).catch(() => {});
     return { success: true, mode: 'channel' };
+  }
+
+  async handleCaptchaStartButton(interaction) {
+    const customId = String(interaction?.customId || '').trim();
+    if (!customId.startsWith('welcome_captcha_start:')) return false;
+    const targetUserId = customId.split(':')[1] || '';
+    if (String(targetUserId) !== String(interaction?.user?.id || '')) {
+      await interaction.reply({ content: 'This verification button is not assigned to you.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+    const verifyUrl = this.buildCaptchaVerifyUrl(interaction.guildId, interaction.user.id);
+    const embed = {
+      color: 0xf8b64c,
+      title: 'Verification Ready',
+      description: 'Open the secure verification page below to complete CAPTCHA.',
+      footer: { text: 'GuildPilot Verification' },
+    };
+    const components = [{
+      type: 1,
+      components: [{
+        type: 2,
+        style: 5,
+        label: 'Complete Verification',
+        url: verifyUrl,
+      }],
+    }];
+    await interaction.reply({ ephemeral: true, embeds: [embed], components }).catch(() => {});
+    return true;
   }
 
   async handleMemberJoin(member) {
@@ -360,7 +437,11 @@ class WelcomeService {
       }
 
       if (settings.captchaEnabled) {
-        await this.sendCaptchaPrompt(member, { guildId, channelSource, channel });
+        await this.sendCaptchaPrompt(member, {
+          guildId,
+          channel,
+          promptMode: settings.captchaPromptMode,
+        });
       }
       return { success: true, delivered };
     } catch (error) {
@@ -413,6 +494,9 @@ class WelcomeService {
       const member = await guild.members.fetch(payload.userId).catch(() => null);
       if (!member) return { success: false, message: 'Member not found' };
       await member.roles.add(settings.captchaRoleId);
+      if (settings.captchaRemoveRoleId && settings.captchaRemoveRoleId !== settings.captchaRoleId) {
+        await member.roles.remove(settings.captchaRemoveRoleId).catch(() => {});
+      }
       return { success: true, guildId: payload.guildId, userId: payload.userId };
     } catch (error) {
       logger.error('[welcome] verifyCaptcha role grant failed:', error);

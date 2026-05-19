@@ -127,6 +127,8 @@ function createAdminWelcomeRouter({
         autoRoleIds: body.autoRoleIds,
         captchaEnabled: body.captchaEnabled,
         captchaRoleId: body.captchaRoleId,
+        captchaRemoveRoleId: body.captchaRemoveRoleId,
+        captchaPromptMode: body.captchaPromptMode,
       });
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to save welcome settings', 'VALIDATION_ERROR', null, result));

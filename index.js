@@ -541,6 +541,10 @@ client.on(Events.InteractionCreate, async interaction => {
     if (customId.startsWith('veto_')) { await handleVetoButton(interaction); return; }
     if (customId === 'micro_verify_check_status') { await handleMicroVerifyCheckStatus(interaction); return; }
     if (customId === 'micro_verify_copy_amount') { await handleMicroVerifyCopyAmount(interaction); return; }
+    if (customId.startsWith('welcome_captcha_start:')) {
+      const handled = await welcomeService.handleCaptchaStartButton(interaction);
+      if (handled) return;
+    }
     if (customId.startsWith('role_claim_') || customId.startsWith('claim_role_')) { await handleRoleClaimButton(interaction); return; }
     if (customId.startsWith('ticket_open_')) { await handleTicketOpenButton(interaction); return; }
     if (customId === 'ticket_assign_me' || customId === 'ticket_claim') { await handleTicketClaimButton(interaction); return; }

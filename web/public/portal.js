@@ -19855,9 +19855,20 @@ async function loadWelcomeSettingsSection() {
           </select>
         </label>
         <label style="display:flex;align-items:center;gap:8px;"><input id="welcome_captcha_enabled" type="checkbox" ${s.captchaEnabled ? 'checked' : ''}> Enable captcha role gate</label>
+        <label>Captcha prompt delivery
+          <select id="welcome_captcha_prompt_mode" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+            <option value="dm" ${String(s.captchaPromptMode || 'dm') === 'dm' ? 'selected' : ''}>Direct Message</option>
+            <option value="channel_button" ${String(s.captchaPromptMode || 'dm') === 'channel_button' ? 'selected' : ''}>Welcome Channel Button</option>
+          </select>
+        </label>
         <label>Captcha role
           <select id="welcome_captcha_role" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
             ${captchaRoleOptions}
+          </select>
+        </label>
+        <label>Role to remove after CAPTCHA success (optional)
+          <select id="welcome_captcha_remove_role" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+            ${captchaRoleOptions.replace(/ selected/g, '')}
           </select>
         </label>
         <div style="display:flex;gap:8px;">
@@ -19869,6 +19880,10 @@ async function loadWelcomeSettingsSection() {
         ${canEditBrandingFields ? '' : '<small style="color:#fcd34d;">Embed color/footer are part of Branding controls and require a paid plan.</small>'}
       </div>
     `;
+    const captchaRemoveRoleEl = document.getElementById('welcome_captcha_remove_role');
+    if (captchaRemoveRoleEl && s.captchaRemoveRoleId) {
+      captchaRemoveRoleEl.value = String(s.captchaRemoveRoleId);
+    }
     const existingFields = Array.isArray(s?.welcomeEmbed?.fields) ? s.welcomeEmbed.fields : [];
     if (existingFields.length > 0) {
       existingFields.forEach(field => addWelcomeStepField(field));
@@ -19911,6 +19926,8 @@ async function saveWelcomeSettings() {
       autoRoleIds: roleIds,
       captchaEnabled: !!document.getElementById('welcome_captcha_enabled')?.checked,
       captchaRoleId: document.getElementById('welcome_captcha_role')?.value || null,
+      captchaRemoveRoleId: document.getElementById('welcome_captcha_remove_role')?.value || null,
+      captchaPromptMode: document.getElementById('welcome_captcha_prompt_mode')?.value || 'dm',
     };
     const res = await fetch('/api/admin/welcome/settings', {
       method: 'PUT',

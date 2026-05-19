@@ -809,7 +809,93 @@ class WebServer {
     });
 
     this.app.get('/verify', (req, res) => {
-      // Unified UI: send verification flow to portal wallets section
+      const challengeToken = String(req.query?.captcha || '').trim();
+      const guildId = String(req.query?.guild || '').trim();
+
+      // Captcha verification flow is separate from wallet verification.
+      if (challengeToken) {
+        const turnstileSiteKey = String(process.env.TURNSTILE_SITE_KEY || '').trim();
+        const safeToken = JSON.stringify(challengeToken);
+        const safeGuild = JSON.stringify(guildId);
+        const safeSiteKey = JSON.stringify(turnstileSiteKey);
+        const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Guild Verification</title>
+  <style>
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:linear-gradient(135deg,#020617,#0b1c44);color:#e2e8f0;min-height:100vh;display:grid;place-items:center;padding:20px}
+    .card{max-width:520px;width:100%;background:rgba(15,23,42,.86);border:1px solid rgba(99,102,241,.25);border-radius:14px;padding:20px;box-shadow:0 16px 40px rgba(0,0,0,.35)}
+    h1{font-size:1.25rem;margin:0 0 10px}
+    p{color:#cbd5e1;line-height:1.5;margin:.2rem 0 1rem}
+    .btn{width:100%;padding:11px 14px;border-radius:10px;border:1px solid rgba(99,102,241,.35);background:#4f46e5;color:#fff;font-weight:600;cursor:pointer}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .ok{color:#86efac}.err{color:#fca5a5}.meta{font-size:.85rem;color:#94a3b8}
+  </style>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</head>
+<body>
+  <div class="card">
+    <h1>Complete Verification</h1>
+    <p>This quick check protects the Discord community from raid and bot accounts.</p>
+    <div id="turnstileWrap" style="margin:8px 0 12px;"></div>
+    <button id="verifyBtn" class="btn" type="button">Verify and Unlock Access</button>
+    <p id="status" class="meta"></p>
+    <p class="meta">After success, return to Discord.</p>
+  </div>
+  <script>
+    (function () {
+      const challengeToken = ${safeToken};
+      const guildId = ${safeGuild};
+      const siteKey = ${safeSiteKey};
+      const btn = document.getElementById('verifyBtn');
+      const status = document.getElementById('status');
+      let captchaToken = '';
+
+      if (siteKey) {
+        const wrap = document.getElementById('turnstileWrap');
+        if (wrap && window.turnstile) {
+          window.turnstile.render(wrap, {
+            sitekey: siteKey,
+            callback: (token) => { captchaToken = String(token || ''); },
+          });
+        } else {
+          status.textContent = 'Captcha widget could not load. Refresh and try again.';
+          status.className = 'err';
+        }
+      }
+
+      btn.addEventListener('click', async () => {
+        try {
+          btn.disabled = true;
+          status.textContent = 'Verifying...';
+          status.className = 'meta';
+          const res = await fetch('/api/public/v1/welcome/captcha/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ challengeToken, captchaToken, guildId }),
+          });
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok || json.success === false) {
+            throw new Error(json?.error?.message || json?.message || 'Verification failed');
+          }
+          status.textContent = 'Success. Access unlocked. You can return to Discord.';
+          status.className = 'ok';
+        } catch (error) {
+          status.textContent = error?.message || 'Verification failed';
+          status.className = 'err';
+          btn.disabled = false;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>`;
+        return res.type('html').send(html);
+      }
+
+      // Wallet verification flow remains in the authenticated portal.
       return redirectToPortalSection(req, res, 'wallets', { requireAuth: true });
     });
 

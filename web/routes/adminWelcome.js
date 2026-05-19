@@ -117,6 +117,7 @@ function createAdminWelcomeRouter({
       const result = welcomeService.updateSettings(req.guildId, {
         enabled: body.enabled,
         welcomeChannelId: body.welcomeChannelId,
+        verificationChannelId: body.verificationChannelId,
         welcomeMessageTemplate: body.welcomeMessageTemplate,
         welcomeEmbed: normalizedEmbed,
         welcomeImageUrl: body.welcomeImageUrl,
@@ -166,7 +167,7 @@ function createAdminWelcomeRouter({
       if (!settingsResult.success) {
         return res.status(400).json(toErrorResponse(settingsResult.message || 'Failed to load welcome settings', 'VALIDATION_ERROR'));
       }
-      const configuredChannel = settingsResult.settings?.welcomeChannelId || null;
+      const configuredChannel = settingsResult.settings?.verificationChannelId || settingsResult.settings?.welcomeChannelId || null;
       const channelId = String(req.body?.channelId || configuredChannel || '').trim();
       const result = await welcomeService.postCaptchaPanel(guild, channelId);
       if (!result.success) {

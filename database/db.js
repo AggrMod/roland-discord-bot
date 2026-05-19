@@ -105,7 +105,7 @@ const REQUIRED_SCHEMA = Object.freeze({
   invite_tracker_settings: ['guild_id', 'required_join_role_id', 'panel_channel_id', 'panel_message_id', 'panel_period_days', 'panel_limit', 'panel_enable_create_link', 'include_verification_stats', 'excluded_codes', 'panel_sort_by'],
   invite_tracker_user_codes: ['guild_id', 'invite_code', 'owner_user_id', 'owner_username', 'channel_id', 'active', 'created_at', 'updated_at'],
   invite_events: ['guild_id', 'joined_user_id', 'inviter_user_id', 'invite_code', 'source', 'joined_at'],
-  tenant_welcome_settings: ['guild_id', 'enabled', 'welcome_channel_id', 'welcome_message_template', 'welcome_embed_json', 'welcome_image_url', 'dynamic_avatar_card', 'dm_enabled', 'dm_message_template', 'auto_role_ids', 'captcha_enabled', 'captcha_role_id', 'captcha_remove_role_id', 'captcha_prompt_mode'],
+  tenant_welcome_settings: ['guild_id', 'enabled', 'welcome_channel_id', 'verification_channel_id', 'welcome_message_template', 'welcome_embed_json', 'welcome_image_url', 'dynamic_avatar_card', 'dm_enabled', 'dm_message_template', 'auto_role_ids', 'captcha_enabled', 'captcha_role_id', 'captcha_remove_role_id', 'captcha_prompt_mode'],
   tenant_welcome_assets: ['id', 'guild_id', 'file_name', 'mime_type', 'image_blob', 'byte_size', 'created_at', 'updated_at'],
   tracked_token_webhook_retry_queue: ['signature', 'attempt_count', 'next_attempt_at', 'last_reason', 'last_error'],
   nft_activity_alert_configs: ['guild_id', 'enabled', 'event_types', 'min_sol'],
@@ -1608,6 +1608,7 @@ function initDatabase() {
       guild_id TEXT PRIMARY KEY,
       enabled INTEGER DEFAULT 0,
       welcome_channel_id TEXT DEFAULT NULL,
+      verification_channel_id TEXT DEFAULT NULL,
       welcome_message_template TEXT DEFAULT 'Welcome {user_mention} to {server_name}! You are member #{member_count}.',
       welcome_embed_json TEXT DEFAULT '{}',
       welcome_image_url TEXT DEFAULT NULL,
@@ -1625,6 +1626,7 @@ function initDatabase() {
     )
   `);
   try { db.exec('ALTER TABLE tenant_welcome_settings ADD COLUMN welcome_image_asset_id INTEGER DEFAULT NULL'); } catch (_) {}
+  try { db.exec('ALTER TABLE tenant_welcome_settings ADD COLUMN verification_channel_id TEXT DEFAULT NULL'); } catch (_) {}
   try { db.exec("ALTER TABLE tenant_welcome_settings ADD COLUMN captcha_remove_role_id TEXT DEFAULT NULL"); } catch (_) {}
   try { db.exec("ALTER TABLE tenant_welcome_settings ADD COLUMN captcha_prompt_mode TEXT DEFAULT 'dm'"); } catch (_) {}
 

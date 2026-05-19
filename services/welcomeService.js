@@ -119,6 +119,7 @@ class WelcomeService {
       guildId: normalizedGuildId,
       enabled: row ? row.enabled === 1 : false,
       welcomeChannelId: row?.welcome_channel_id || null,
+      verificationChannelId: row?.verification_channel_id || null,
       welcomeMessageTemplate: row?.welcome_message_template || DEFAULT_TEMPLATE,
       welcomeEmbed: safeJsonParse(row?.welcome_embed_json || '{}', {}),
       welcomeImageUrl: row?.welcome_image_url || null,
@@ -148,6 +149,7 @@ class WelcomeService {
     const next = {
       enabled: patch.enabled !== undefined ? !!patch.enabled : now.enabled,
       welcomeChannelId: patch.welcomeChannelId !== undefined ? String(patch.welcomeChannelId || '').trim() || null : now.welcomeChannelId,
+      verificationChannelId: patch.verificationChannelId !== undefined ? String(patch.verificationChannelId || '').trim() || null : now.verificationChannelId,
       welcomeMessageTemplate: patch.welcomeMessageTemplate !== undefined
         ? normalizeTemplate(patch.welcomeMessageTemplate, DEFAULT_TEMPLATE)
         : now.welcomeMessageTemplate,
@@ -173,14 +175,15 @@ class WelcomeService {
 
     db.prepare(`
       INSERT INTO tenant_welcome_settings (
-        guild_id, enabled, welcome_channel_id, welcome_message_template, welcome_embed_json,
+        guild_id, enabled, welcome_channel_id, verification_channel_id, welcome_message_template, welcome_embed_json,
         welcome_image_url, welcome_image_asset_id, dynamic_avatar_card, dm_enabled, dm_message_template, auto_role_ids,
         captcha_enabled, captcha_role_id, captcha_remove_role_id, captcha_prompt_mode, created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON CONFLICT(guild_id) DO UPDATE SET
         enabled = excluded.enabled,
         welcome_channel_id = excluded.welcome_channel_id,
+        verification_channel_id = excluded.verification_channel_id,
         welcome_message_template = excluded.welcome_message_template,
         welcome_embed_json = excluded.welcome_embed_json,
         welcome_image_url = excluded.welcome_image_url,
@@ -198,6 +201,7 @@ class WelcomeService {
       normalizedGuildId,
       next.enabled ? 1 : 0,
       next.welcomeChannelId,
+      next.verificationChannelId,
       next.welcomeMessageTemplate,
       JSON.stringify(next.welcomeEmbed || {}),
       next.welcomeImageUrl,
@@ -429,9 +433,14 @@ class WelcomeService {
         await member.roles.add(settings.autoRoleIds).catch(() => {});
       }
 
-      const channelId = settings.welcomeChannelId;
-      if (!channelId) {
+      const welcomeChannelId = settings.welcomeChannelId;
+      const verificationChannelId = settings.verificationChannelId || settings.welcomeChannelId;
+      const requiresWelcomeChannel = !(settings.captchaEnabled && settings.captchaPromptMode === CAPTCHA_PROMPT_MODES.CHANNEL_BUTTON);
+      if (requiresWelcomeChannel && !welcomeChannelId) {
         return { success: false, delivered: false, message: 'No welcome channel configured.' };
+      }
+      if (!verificationChannelId && settings.captchaEnabled) {
+        return { success: false, delivered: false, message: 'No verification channel configured.' };
       }
       let fetchedChannels = null;
       try {
@@ -440,9 +449,13 @@ class WelcomeService {
         fetchedChannels = null;
       }
       const channelSource = fetchedChannels || member.guild.channels.cache;
-      const channel = channelId ? channelSource.get(channelId) : null;
-      if (!channel) {
-        return { success: false, delivered: false, message: `Welcome channel not found: ${channelId}` };
+      const welcomeChannel = welcomeChannelId ? channelSource.get(welcomeChannelId) : null;
+      const verificationChannel = verificationChannelId ? channelSource.get(verificationChannelId) : null;
+      if (requiresWelcomeChannel && !welcomeChannel) {
+        return { success: false, delivered: false, message: `Welcome channel not found: ${welcomeChannelId}` };
+      }
+      if (settings.captchaEnabled && !verificationChannel) {
+        return { success: false, delivered: false, message: `Verification channel not found: ${verificationChannelId}` };
       }
       const deferWelcomeUntilCaptcha =
         !!settings.captchaEnabled && settings.captchaPromptMode === CAPTCHA_PROMPT_MODES.CHANNEL_BUTTON;
@@ -459,7 +472,7 @@ class WelcomeService {
       if (settings.captchaEnabled) {
         await this.sendCaptchaPrompt(member, {
           guildId,
-          channel,
+          channel: verificationChannel,
           promptMode: settings.captchaPromptMode,
         });
       }

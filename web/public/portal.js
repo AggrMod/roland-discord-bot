@@ -19761,14 +19761,20 @@ async function loadWelcomeSettingsSection() {
     const assets = Array.isArray(assetsJson?.data?.assets) ? assetsJson.data.assets : [];
 
     let channelOptions = `<option value="">-- Select channel --</option>`;
+    let verificationChannelOptions = `<option value="">-- Select channel --</option>`;
     channels.forEach((ch) => {
       const id = String(ch.id || '');
       const name = String(ch.name || id);
       const selected = s.welcomeChannelId && s.welcomeChannelId === id ? ' selected' : '';
+      const selectedVerification = s.verificationChannelId && s.verificationChannelId === id ? ' selected' : '';
       channelOptions += `<option value="${escapeHtml(id)}"${selected}>#${escapeHtml(name)}</option>`;
+      verificationChannelOptions += `<option value="${escapeHtml(id)}"${selectedVerification}>#${escapeHtml(name)}</option>`;
     });
     if (s.welcomeChannelId && !channels.some(ch => String(ch.id) === String(s.welcomeChannelId))) {
       channelOptions += `<option value="${escapeHtml(s.welcomeChannelId)}" selected>Unknown (${escapeHtml(s.welcomeChannelId)})</option>`;
+    }
+    if (s.verificationChannelId && !channels.some(ch => String(ch.id) === String(s.verificationChannelId))) {
+      verificationChannelOptions += `<option value="${escapeHtml(s.verificationChannelId)}" selected>Unknown (${escapeHtml(s.verificationChannelId)})</option>`;
     }
 
     let captchaRoleOptions = `<option value="">-- Select role --</option>`;
@@ -19825,6 +19831,11 @@ async function loadWelcomeSettingsSection() {
         <label>Welcome channel
           <select id="welcome_channel_id" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
             ${channelOptions}
+          </select>
+        </label>
+        <label>Verification channel
+          <select id="welcome_verification_channel_id" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+            ${verificationChannelOptions}
           </select>
         </label>
         <label>Embed footer
@@ -19911,6 +19922,7 @@ async function saveWelcomeSettings() {
     const payload = {
       enabled: !!document.getElementById('welcome_enabled')?.checked,
       welcomeChannelId: document.getElementById('welcome_channel_id')?.value || null,
+      verificationChannelId: document.getElementById('welcome_verification_channel_id')?.value || null,
       welcomeMessageTemplate: document.getElementById('welcome_message_template')?.value || '',
       welcomeEmbed: {
         color: document.getElementById('welcome_embed_color')?.value || '#f8b64c',
@@ -20020,7 +20032,7 @@ async function sendWelcomeTest() {
 
 async function postWelcomeCaptchaPanel() {
   try {
-    const channelId = document.getElementById('welcome_channel_id')?.value || null;
+    const channelId = document.getElementById('welcome_verification_channel_id')?.value || null;
     const res = await fetch('/api/admin/welcome/captcha-panel', {
       method: 'POST',
       credentials: 'include',

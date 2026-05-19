@@ -70,6 +70,7 @@ const PORTAL_PAGE_EXPECTATIONS = Object.freeze({
     'token-activity',
     'battle',
     'engagement',
+    'welcome',
     'vault',
     'self-serve-roles',
     'ticketing',
@@ -5736,6 +5737,7 @@ function switchSection(sectionName, options = {}) {
     'heist',
     'battle',
     'engagement',
+    'welcome',
     'self-serve-roles',
     'ticketing'
   ]);
@@ -5784,6 +5786,7 @@ function switchSection(sectionName, options = {}) {
     'heist',
     'battle',
     'engagement',
+    'welcome',
     'self-serve-roles',
     'ticketing'
   ]);
@@ -5807,6 +5810,7 @@ function switchSection(sectionName, options = {}) {
     'token-activity': 'tokentracker',
     heist: 'heist',
     battle: 'minigames',
+    welcome: 'welcome',
     vault: 'vault',
     'self-serve-roles': 'selfserveroles',
     ticketing: 'ticketing',

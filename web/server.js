@@ -1328,6 +1328,7 @@ class WebServer {
       ensureWelcomeModule,
       welcomeService,
       fetchGuildById,
+      entitlementService,
     }));
     const createAdminVaultRouter = require('./routes/adminVault');
     this.app.use('/', createAdminVaultRouter({

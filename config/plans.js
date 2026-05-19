@@ -67,7 +67,10 @@ const PLAN_PRESETS = Object.freeze({
         max_rewards: 25
       },
       welcome: {
-        max_auto_roles: 2
+        max_auto_roles: 2,
+        max_channel_tokens: 1,
+        max_step_fields: 2,
+        allow_image_assets: 0
       },
       ticketing: {
         max_categories: 3
@@ -160,7 +163,10 @@ const PLAN_PRESETS = Object.freeze({
         max_rewards: 100
       },
       welcome: {
-        max_auto_roles: 5
+        max_auto_roles: 5,
+        max_channel_tokens: 5,
+        max_step_fields: 5,
+        allow_image_assets: 1
       },
       ticketing: {
         max_categories: 12
@@ -253,7 +259,10 @@ const PLAN_PRESETS = Object.freeze({
         max_rewards: 500
       },
       welcome: {
-        max_auto_roles: 20
+        max_auto_roles: 20,
+        max_channel_tokens: null,
+        max_step_fields: 8,
+        allow_image_assets: 1
       },
       ticketing: {
         max_categories: 40
@@ -346,7 +355,10 @@ const PLAN_PRESETS = Object.freeze({
         max_rewards: null
       },
       welcome: {
-        max_auto_roles: null
+        max_auto_roles: null,
+        max_channel_tokens: null,
+        max_step_fields: null,
+        allow_image_assets: 1
       },
       ticketing: {
         max_categories: null

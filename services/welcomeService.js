@@ -36,6 +36,17 @@ function normalizeTemplate(value, fallback) {
   return text.slice(0, 3000);
 }
 
+function normalizeStepFields(fields) {
+  if (!Array.isArray(fields)) return [];
+  return fields
+    .map((field) => ({
+      name: String(field?.name || '').trim().slice(0, 120),
+      value: String(field?.value || '').trim().slice(0, 1000),
+      inline: !!field?.inline,
+    }))
+    .filter(field => field.name && field.value);
+}
+
 function slugifyChannelName(name) {
   return String(name || '')
     .toLowerCase()
@@ -111,7 +122,10 @@ class WelcomeService {
         ? normalizeTemplate(patch.welcomeMessageTemplate, DEFAULT_TEMPLATE)
         : now.welcomeMessageTemplate,
       welcomeEmbed: patch.welcomeEmbed !== undefined && patch.welcomeEmbed && typeof patch.welcomeEmbed === 'object'
-        ? patch.welcomeEmbed
+        ? {
+          ...patch.welcomeEmbed,
+          fields: normalizeStepFields(patch.welcomeEmbed.fields),
+        }
         : now.welcomeEmbed,
       welcomeImageUrl: patch.welcomeImageUrl !== undefined ? String(patch.welcomeImageUrl || '').trim() || null : now.welcomeImageUrl,
       welcomeImageAssetId: patch.welcomeImageAssetId !== undefined ? (Number(patch.welcomeImageAssetId) || null) : now.welcomeImageAssetId,
@@ -213,13 +227,22 @@ class WelcomeService {
       if (channel && typeof channel.send === 'function') {
         const content = this.parseVariables(settings.welcomeMessageTemplate, member);
         const embedPayload = settings.welcomeEmbed && typeof settings.welcomeEmbed === 'object' ? settings.welcomeEmbed : {};
+        const parsedFields = normalizeStepFields(embedPayload.fields).map((field) => ({
+          name: this.parseVariables(field.name, member),
+          value: this.parseVariables(field.value, member),
+          inline: !!field.inline,
+        }));
+        const footerText = typeof embedPayload.footer === 'string'
+          ? embedPayload.footer
+          : (embedPayload.footer && typeof embedPayload.footer.text === 'string' ? embedPayload.footer.text : '');
         const embed = {
-          title: embedPayload.title || null,
+          title: embedPayload.title ? this.parseVariables(embedPayload.title, member) : null,
           description: embedPayload.description ? this.parseVariables(embedPayload.description, member) : null,
           color: embedPayload.color || null,
-          footer: embedPayload.footer ? { text: this.parseVariables(embedPayload.footer, member) } : undefined,
+          footer: footerText ? { text: this.parseVariables(footerText, member) } : undefined,
           image: settings.welcomeImageUrl ? { url: settings.welcomeImageUrl } : undefined,
-          thumbnail: settings.dynamicAvatarCard ? { url: member.user?.displayAvatarURL?.({ extension: 'png', size: 256 }) } : undefined
+          thumbnail: settings.dynamicAvatarCard ? { url: member.user?.displayAvatarURL?.({ extension: 'png', size: 256 }) } : undefined,
+          fields: parsedFields.length > 0 ? parsedFields : undefined,
         };
         const files = [];
         if (settings.welcomeImageAssetId) {

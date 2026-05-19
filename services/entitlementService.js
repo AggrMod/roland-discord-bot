@@ -39,6 +39,12 @@ const LIMIT_DEFINITIONS = Object.freeze({
   vault: {
     max_rewards: { label: 'Max Vault Rewards' },
   },
+  welcome: {
+    max_auto_roles: { label: 'Max Welcome Auto Roles' },
+    max_channel_tokens: { label: 'Max Welcome Channel Link Tokens' },
+    max_step_fields: { label: 'Max Welcome Step Fields' },
+    allow_image_assets: { label: 'Welcome Image Assets Enabled (0/1)' },
+  },
   ticketing: {
     max_categories: { label: 'Max Ticket Categories' },
   },

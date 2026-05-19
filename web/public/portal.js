@@ -19750,6 +19750,7 @@ async function loadWelcomeSettingsSection() {
     ]);
     if (!settingsRes.ok || settingsJson.success === false) throw new Error(settingsJson?.error?.message || settingsJson?.message || 'Failed to load welcome settings');
     const s = settingsJson?.data?.settings || settingsJson?.settings || {};
+    const limits = settingsJson?.data?.limits || settingsJson?.limits || {};
     const channels = Array.isArray(channelsJson?.channels) ? channelsJson.channels : [];
     const roles = Array.isArray(rolesJson?.roles) ? rolesJson.roles : [];
     const assets = Array.isArray(assetsJson?.data?.assets) ? assetsJson.data.assets : [];
@@ -19793,15 +19794,38 @@ async function loadWelcomeSettingsSection() {
 
     wrap.innerHTML = `
       <div style="display:grid;gap:12px;">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <label style="margin:0;">Preset</label>
+          <select id="welcome_preset_key" style="padding:8px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+            <option value="">-- Select preset --</option>
+            <option value="minimal">Minimal</option>
+            <option value="family_initiation">Family Initiation</option>
+          </select>
+          <button class="btn-secondary btn-sm" onclick="applyWelcomePreset()">Apply Preset</button>
+        </div>
         <label style="display:flex;align-items:center;gap:8px;"><input id="welcome_enabled" type="checkbox" ${s.enabled ? 'checked' : ''}> Enable welcome module</label>
+        <label>Message body
+          <textarea id="welcome_message_template" rows="2" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">${escapeHtml(s.welcomeMessageTemplate || '')}</textarea>
+        </label>
+        <label>Embed color
+          <input id="welcome_embed_color" type="text" value="${escapeHtml(s?.welcomeEmbed?.color || '#f8b64c')}" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+        </label>
+        <label>Embed title
+          <input id="welcome_embed_title" type="text" value="${escapeHtml(s?.welcomeEmbed?.title || '')}" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+        </label>
+        <label>Embed description
+          <textarea id="welcome_embed_description" rows="3" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">${escapeHtml(s?.welcomeEmbed?.description || '')}</textarea>
+        </label>
         <label>Welcome channel
           <select id="welcome_channel_id" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
             ${channelOptions}
           </select>
         </label>
-        <label>Welcome message template
-          <textarea id="welcome_message_template" rows="3" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">${escapeHtml(s.welcomeMessageTemplate || '')}</textarea>
+        <label>Embed footer
+          <input id="welcome_embed_footer" type="text" value="${escapeHtml(s?.welcomeEmbed?.footer || '')}" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
         </label>
+        <div id="welcome_step_fields_wrap" style="display:grid;gap:8px;"></div>
+        <button class="btn-secondary btn-sm" onclick="addWelcomeStepField()">+ Add Step Field</button>
         <label>Welcome image URL
           <input id="welcome_image_url" type="text" value="${escapeHtml(s.welcomeImageUrl || '')}" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
         </label>
@@ -19835,8 +19859,15 @@ async function loadWelcomeSettingsSection() {
           <button class="btn-secondary btn-sm" onclick="sendWelcomeTest()">Send Test Welcome</button>
         </div>
         <small style="color:var(--text-secondary);">Variables: {user_mention}, {username}, {server_name}, {member_count}, {channel:verify}. Tip: Ctrl/Cmd-click to select multiple auto roles.</small>
+        <small style="color:var(--text-secondary);">Plan limits: channel tokens ${limits.maxChannelTokens == null ? '∞' : limits.maxChannelTokens}, step fields ${limits.maxStepFields == null ? '∞' : limits.maxStepFields}, uploaded assets ${limits.allowImageAssets ? 'enabled' : 'disabled'}.</small>
       </div>
     `;
+    const existingFields = Array.isArray(s?.welcomeEmbed?.fields) ? s.welcomeEmbed.fields : [];
+    if (existingFields.length > 0) {
+      existingFields.forEach(field => addWelcomeStepField(field));
+    } else {
+      addWelcomeStepField({ name: 'Step 1', value: 'Go to {channel:verify} and complete verification.', inline: false });
+    }
   } catch (error) {
     wrap.innerHTML = `<div style="color:#fca5a5;">${escapeHtml(error?.message || 'Failed to load welcome settings')}</div>`;
   }
@@ -19848,10 +19879,23 @@ async function saveWelcomeSettings() {
     const roleIds = roleSelect
       ? Array.from(roleSelect.selectedOptions || []).map(opt => String(opt.value || '').trim()).filter(Boolean)
       : [];
+    const stepFields = Array.from(document.querySelectorAll('.welcome-step-field-row')).map((row) => {
+      const name = row.querySelector('.welcome-step-name')?.value || '';
+      const value = row.querySelector('.welcome-step-value')?.value || '';
+      const inline = !!row.querySelector('.welcome-step-inline')?.checked;
+      return { name, value, inline };
+    }).filter(field => String(field.name || '').trim() && String(field.value || '').trim());
     const payload = {
       enabled: !!document.getElementById('welcome_enabled')?.checked,
       welcomeChannelId: document.getElementById('welcome_channel_id')?.value || null,
       welcomeMessageTemplate: document.getElementById('welcome_message_template')?.value || '',
+      welcomeEmbed: {
+        color: document.getElementById('welcome_embed_color')?.value || '#f8b64c',
+        title: document.getElementById('welcome_embed_title')?.value || '',
+        description: document.getElementById('welcome_embed_description')?.value || '',
+        footer: document.getElementById('welcome_embed_footer')?.value || '',
+        fields: stepFields,
+      },
       welcomeImageUrl: document.getElementById('welcome_image_url')?.value || null,
       welcomeImageAssetId: Number(document.getElementById('welcome_image_asset_id')?.value || 0) || null,
       dynamicAvatarCard: !!document.getElementById('welcome_dynamic_avatar_card')?.checked,
@@ -19873,6 +19917,46 @@ async function saveWelcomeSettings() {
     await loadWelcomeSettingsSection();
   } catch (error) {
     showError(error?.message || 'Failed to save welcome settings');
+  }
+}
+
+function addWelcomeStepField(field = {}) {
+  const wrap = document.getElementById('welcome_step_fields_wrap');
+  if (!wrap) return;
+  const row = document.createElement('div');
+  row.className = 'welcome-step-field-row';
+  row.style.cssText = 'display:grid;gap:6px;padding:8px;border:1px solid var(--border-color);border-radius:8px;background:rgba(15,23,42,0.35);';
+  row.innerHTML = `
+    <input class="welcome-step-name" type="text" placeholder="Step title" value="${escapeHtml(field?.name || '')}" style="padding:8px;border-radius:6px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+    <textarea class="welcome-step-value" rows="2" placeholder="Step description" style="padding:8px;border-radius:6px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">${escapeHtml(field?.value || '')}</textarea>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <label style="display:flex;align-items:center;gap:6px;"><input class="welcome-step-inline" type="checkbox" ${field?.inline ? 'checked' : ''}> Inline</label>
+      <button class="btn-secondary btn-sm" type="button">Remove</button>
+    </div>
+  `;
+  row.querySelector('button')?.addEventListener('click', () => row.remove());
+  wrap.appendChild(row);
+}
+
+async function applyWelcomePreset() {
+  try {
+    const presetKey = String(document.getElementById('welcome_preset_key')?.value || '').trim();
+    if (!presetKey) {
+      showInfo('Select a preset first.');
+      return;
+    }
+    const res = await fetch('/api/admin/welcome/preset', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({ presetKey }),
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) throw new Error(json?.error?.message || json?.message || 'Failed to apply preset');
+    showSuccess('Welcome preset applied.');
+    await loadWelcomeSettingsSection();
+  } catch (error) {
+    showError(error?.message || 'Failed to apply preset');
   }
 }
 

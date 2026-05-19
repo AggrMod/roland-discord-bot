@@ -855,14 +855,31 @@ class WebServer {
 
       if (siteKey) {
         const wrap = document.getElementById('turnstileWrap');
-        if (wrap && window.turnstile) {
-          window.turnstile.render(wrap, {
-            sitekey: siteKey,
-            callback: (token) => { captchaToken = String(token || ''); },
-          });
-        } else {
-          status.textContent = 'Captcha widget could not load. Refresh and try again.';
-          status.className = 'err';
+        const mountTurnstile = () => {
+          if (!wrap || !window.turnstile) return false;
+          try {
+            window.turnstile.render(wrap, {
+              sitekey: siteKey,
+              callback: (token) => { captchaToken = String(token || ''); },
+            });
+            return true;
+          } catch (_error) {
+            return false;
+          }
+        };
+        if (!mountTurnstile()) {
+          const startedAt = Date.now();
+          const timer = setInterval(() => {
+            if (mountTurnstile()) {
+              clearInterval(timer);
+              return;
+            }
+            if (Date.now() - startedAt > 7000) {
+              clearInterval(timer);
+              status.textContent = 'Captcha widget could not load. Refresh and try again.';
+              status.className = 'err';
+            }
+          }, 150);
         }
       }
 

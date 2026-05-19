@@ -1,5 +1,6 @@
 const express = require('express');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
+const db = require('../../database/db');
 
 function createSuperadminTenantOpsRouter({
   superadminGuard,
@@ -124,6 +125,149 @@ function createSuperadminTenantOpsRouter({
       }));
     } catch (error) {
       logger.error('Error fetching tenants:', error);
+      res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/workspace/tenants', superadminGuard, async (req, res) => {
+    try {
+      await syncTenantScaffoldFromClientGuilds();
+      const result = tenantService.listTenants({
+        q: req.query.q,
+        status: req.query.status,
+        page: req.query.page,
+        pageSize: req.query.pageSize,
+      });
+      const hydratedTenants = await hydrateTenantGuildNames(result.tenants || []);
+      const normalized = hydratedTenants.map((tenant) => {
+        const billing = tenant?.billing || null;
+        return {
+          guildId: tenant.guildId,
+          guildName: tenant.guildName || tenant.guildId,
+          status: String(tenant.status || 'active'),
+          planKey: String(tenant.planKey || 'starter'),
+          enabledModulesCount: Number(tenant.enabledModulesCount || 0),
+          totalModulesCount: Number(tenant.totalModulesCount || 0),
+          updatedAt: tenant.updatedAt || null,
+          summary: {
+            planLabel: String(tenant.planLabel || tenant.planKey || 'starter'),
+            moduleCoverage: `${Number(tenant.enabledModulesCount || 0)}/${Number(tenant.totalModulesCount || 0)}`,
+            billingStatus: String(billing?.subscriptionStatus || 'unknown'),
+          },
+          billing: billing ? {
+            provider: billing.provider || null,
+            subscriptionStatus: billing.subscriptionStatus || null,
+            billingInterval: billing.billingInterval || null,
+            currentPeriodEnd: billing.currentPeriodEnd || null,
+            lastPaymentAt: billing.lastPaymentAt || null,
+            lastPaymentStatus: billing.lastPaymentStatus || null,
+          } : null,
+        };
+      });
+
+      res.json(toSuccessResponse({
+        tenants: normalized,
+        pagination: result.pagination,
+      }));
+    } catch (error) {
+      logger.error('Error fetching workspace tenants:', error);
+      res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/workspace/billing', superadminGuard, async (req, res) => {
+    try {
+      const page = Math.max(parseInt(req.query.page || '1', 10), 1);
+      const pageSize = Math.min(Math.max(parseInt(req.query.pageSize || '25', 10), 1), 100);
+      const status = String(req.query.status || '').trim().toLowerCase();
+      const q = String(req.query.q || '').trim().toLowerCase();
+
+      let rows = db.prepare(`
+        SELECT
+          t.guild_id AS guildId,
+          t.guild_name AS guildName,
+          tb.provider AS provider,
+          tb.subscription_status AS subscriptionStatus,
+          tb.billing_interval AS billingInterval,
+          tb.current_period_end AS currentPeriodEnd,
+          tb.last_payment_at AS lastPaymentAt,
+          tb.last_payment_status AS lastPaymentStatus,
+          tb.updated_at AS updatedAt
+        FROM tenant_billing tb
+        INNER JOIN tenants t ON t.id = tb.tenant_id
+        ORDER BY COALESCE(tb.updated_at, tb.created_at) DESC, tb.id DESC
+      `).all();
+
+      if (status) {
+        rows = rows.filter((row) => String(row?.subscriptionStatus || '').toLowerCase() === status);
+      }
+      if (q) {
+        rows = rows.filter((row) => {
+          const guildName = String(row?.guildName || '').toLowerCase();
+          const guildId = String(row?.guildId || '').toLowerCase();
+          const provider = String(row?.provider || '').toLowerCase();
+          const subStatus = String(row?.subscriptionStatus || '').toLowerCase();
+          return guildName.includes(q) || guildId.includes(q) || provider.includes(q) || subStatus.includes(q);
+        });
+      }
+
+      const total = rows.length;
+      const totalPages = Math.max(Math.ceil(total / pageSize), 1);
+      const normalizedPage = Math.min(page, totalPages);
+      const start = (normalizedPage - 1) * pageSize;
+      const sliced = rows.slice(start, start + pageSize).map((row) => ({
+        guildId: row.guildId,
+        guildName: row.guildName || row.guildId,
+        provider: row.provider || null,
+        subscriptionStatus: row.subscriptionStatus || 'unknown',
+        billingInterval: row.billingInterval || null,
+        currentPeriodEnd: row.currentPeriodEnd || null,
+        lastPaymentAt: row.lastPaymentAt || null,
+        lastPaymentStatus: row.lastPaymentStatus || null,
+        updatedAt: row.updatedAt || null,
+        verificationStatus: ['active', 'trialing', 'paid', 'approved', 'success'].includes(String(row.subscriptionStatus || '').toLowerCase())
+          ? 'verified'
+          : (String(row.subscriptionStatus || '').trim() ? 'pending' : 'unverified'),
+      }));
+
+      res.json(toSuccessResponse({
+        entries: sliced,
+        pagination: {
+          page: normalizedPage,
+          pageSize,
+          total,
+          totalPages,
+        },
+      }));
+    } catch (error) {
+      logger.error('Error fetching workspace billing ledger:', error);
+      res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/workspace/activity', superadminGuard, async (req, res) => {
+    try {
+      const limit = Math.min(Math.max(parseInt(req.query.limit || '25', 10), 1), 100);
+      const rows = db.prepare(`
+        SELECT id, guild_id, actor_id, action, created_at
+        FROM tenant_audit_logs
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?
+      `).all(limit);
+      const actorDisplayMap = await resolveDiscordDisplayMap(rows.map((row) => row.actor_id).filter(Boolean));
+
+      res.json(toSuccessResponse({
+        items: rows.map((row) => ({
+          id: row.id,
+          guildId: row.guild_id,
+          actorId: row.actor_id || null,
+          actorDisplayName: actorDisplayMap.get(String(row.actor_id || '').trim()) || null,
+          action: row.action || 'unknown',
+          createdAt: row.created_at || null,
+        })),
+      }));
+    } catch (error) {
+      logger.error('Error fetching workspace activity stream:', error);
       res.status(500).json(toErrorResponse('Internal server error'));
     }
   });

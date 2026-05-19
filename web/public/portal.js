@@ -7253,6 +7253,12 @@ let superadminIdentitySearchTimer = null;
 let superadminIdentityCache = [];
 let superadminIdentitySelectedUserId = '';
 let superadminIdentityAuditCache = [];
+let superadminWorkspaceV2 = 'overview';
+let superadminWorkspaceTenantTab = 'plan';
+let superadminWorkspaceSearch = '';
+let superadminWorkspaceBillingSearch = '';
+let superadminWorkspaceBillingStatus = 'all';
+let superadminWorkspaceActivityCache = [];
 
 const TENANT_PLAN_LABELS = {
   starter: 'Starter',
@@ -7710,7 +7716,339 @@ function renderTenantDetailPanel(tenant, tenantLimits = null) {
   `;
 }
 
+function getWorkspaceCapabilityMatrix() {
+  return {
+    overview: true,
+    tenants: !!isSuperadmin,
+    billing: !!isSuperadmin,
+    security: !!isSuperadmin,
+    integrations: !!isSuperadmin,
+  };
+}
+
+function renderWorkspaceLockedState(label) {
+  return `
+    <div class="sa-v2-empty">
+      <strong>${escapeHtml(label)} is locked</strong>
+      <p>This workspace is available for Superadmins only.</p>
+    </div>
+  `;
+}
+
+function renderWorkspaceActivityItems(items = []) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return '<div class="sa-v2-empty">No recent platform activity.</div>';
+  }
+  return items.map((item) => {
+    const actor = formatDiscordIdentityLabel(item.actorId || 'system', item.actorDisplayName || null);
+    return `
+      <div class="sa-v2-activity-item">
+        <div class="sa-v2-activity-main">${escapeHtml(item.action || 'unknown')}</div>
+        <div class="sa-v2-activity-meta">${escapeHtml(actor)} • ${escapeHtml(item.guildId || 'n/a')} • ${escapeHtml(item.createdAt ? new Date(item.createdAt).toLocaleString() : 'Unknown')}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderWorkspaceOverview(tenants = [], billingEntries = []) {
+  const total = tenants.length;
+  const active = tenants.filter((tenant) => String(tenant.status || '').toLowerCase() === 'active').length;
+  const suspended = tenants.filter((tenant) => String(tenant.status || '').toLowerCase() === 'suspended').length;
+  const paid = billingEntries.filter((entry) => ['active', 'trialing', 'paid', 'approved', 'success'].includes(String(entry.subscriptionStatus || '').toLowerCase())).length;
+  return `
+    <div class="sa-v2-grid">
+      <article class="sa-v2-card"><h4>Tenants</h4><div class="sa-v2-kpi">${escapeHtml(String(total))}</div><p>Total onboarded servers</p></article>
+      <article class="sa-v2-card"><h4>Active</h4><div class="sa-v2-kpi">${escapeHtml(String(active))}</div><p>Currently active tenants</p></article>
+      <article class="sa-v2-card"><h4>Suspended</h4><div class="sa-v2-kpi">${escapeHtml(String(suspended))}</div><p>Needs follow-up</p></article>
+      <article class="sa-v2-card"><h4>Paid Billing</h4><div class="sa-v2-kpi">${escapeHtml(String(paid))}</div><p>Verified paid states</p></article>
+    </div>
+  `;
+}
+
+function renderWorkspaceTenantDetail(tenant, detail, auditLogs) {
+  if (!tenant || !detail) {
+    return '<div class="sa-v2-empty">Select a tenant from the left list to open details.</div>';
+  }
+
+  const currentTab = String(superadminWorkspaceTenantTab || 'plan');
+  const tabBtn = (tab, label) => `<button class="sa-v2-pill ${currentTab === tab ? 'active' : ''}" onclick="setSuperadminWorkspaceTenantTab('${tab}')">${label}</button>`;
+  if (currentTab === 'audit') {
+    return `
+      <div class="sa-v2-detail-header">
+        <h4>${escapeHtml(tenant.guildName || tenant.guildId)}</h4>
+        <div>${getTenantStatusBadge(tenant.status)}</div>
+      </div>
+      <div class="sa-v2-pill-row">${tabBtn('plan', 'Plan & Billing')}${tabBtn('modules', 'Modules')}${tabBtn('branding', 'Branding')}${tabBtn('audit', 'Audit')}</div>
+      <div class="sa-v2-scroll">${renderTenantAuditLog(auditLogs || [])}</div>
+    `;
+  }
+
+  if (currentTab === 'modules') {
+    return `
+      <div class="sa-v2-detail-header">
+        <h4>${escapeHtml(tenant.guildName || tenant.guildId)}</h4>
+        <div>${getTenantStatusBadge(tenant.status)}</div>
+      </div>
+      <div class="sa-v2-pill-row">${tabBtn('plan', 'Plan & Billing')}${tabBtn('modules', 'Modules')}${tabBtn('branding', 'Branding')}${tabBtn('audit', 'Audit')}</div>
+      <div>${renderTenantDetailPanel(detail, null)}</div>
+    `;
+  }
+
+  if (currentTab === 'branding') {
+    return `
+      <div class="sa-v2-detail-header">
+        <h4>${escapeHtml(tenant.guildName || tenant.guildId)}</h4>
+        <div>${getTenantStatusBadge(tenant.status)}</div>
+      </div>
+      <div class="sa-v2-pill-row">${tabBtn('plan', 'Plan & Billing')}${tabBtn('modules', 'Modules')}${tabBtn('branding', 'Branding')}${tabBtn('audit', 'Audit')}</div>
+      <div>${renderTenantDetailPanel(detail, null)}</div>
+    `;
+  }
+
+  return `
+    <div class="sa-v2-detail-header">
+      <h4>${escapeHtml(tenant.guildName || tenant.guildId)}</h4>
+      <div>${getTenantStatusBadge(tenant.status)}</div>
+    </div>
+    <div class="sa-v2-pill-row">${tabBtn('plan', 'Plan & Billing')}${tabBtn('modules', 'Modules')}${tabBtn('branding', 'Branding')}${tabBtn('audit', 'Audit')}</div>
+    <div>${renderTenantDetailPanel(detail, null)}</div>
+  `;
+}
+
+function setSuperadminWorkspaceTab(tab) {
+  superadminWorkspaceV2 = String(tab || 'overview');
+  const url = new URL(window.location);
+  url.searchParams.set('saWs', superadminWorkspaceV2);
+  window.history.replaceState({}, '', url);
+  loadSuperadminView();
+}
+
+function setSuperadminWorkspaceTenantTab(tab) {
+  superadminWorkspaceTenantTab = String(tab || 'plan');
+  const url = new URL(window.location);
+  url.searchParams.set('saTenantTab', superadminWorkspaceTenantTab);
+  window.history.replaceState({}, '', url);
+  loadSuperadminView();
+}
+
+function setSuperadminWorkspaceTenantSearch(value) {
+  superadminWorkspaceSearch = String(value || '');
+}
+
+function setSuperadminWorkspaceBillingSearch(value) {
+  superadminWorkspaceBillingSearch = String(value || '');
+}
+
+function setSuperadminWorkspaceBillingStatus(value) {
+  superadminWorkspaceBillingStatus = String(value || 'all');
+}
+
+async function loadSuperadminWorkspaceHubV2() {
+  const content = document.getElementById('adminSuperadminContent');
+  if (!content) return;
+  const startMs = Date.now();
+
+  const capabilities = getWorkspaceCapabilityMatrix();
+  const workspace = String(superadminWorkspaceV2 || 'overview');
+  const url = new URL(window.location);
+  const qsWs = String(url.searchParams.get('saWs') || '').trim();
+  const qsTenantTab = String(url.searchParams.get('saTenantTab') || '').trim();
+  const qsTenantId = normalizeGuildId(String(url.searchParams.get('saTenantId') || '').trim());
+  if (qsWs) superadminWorkspaceV2 = qsWs;
+  if (qsTenantTab) superadminWorkspaceTenantTab = qsTenantTab;
+  if (qsTenantId) selectedTenantGuildId = qsTenantId;
+
+  content.innerHTML = '<div style="padding:20px;text-align:center;"><div class="spinner"></div><p style="margin-top:8px;">Loading admin workspace...</p></div>';
+
+  try {
+    const headers = buildTenantRequestHeaders();
+    const tenantsQs = new URLSearchParams();
+    if (superadminWorkspaceSearch.trim()) tenantsQs.set('q', superadminWorkspaceSearch.trim());
+    tenantsQs.set('page', String(superadminTenantPage || 1));
+    tenantsQs.set('pageSize', String(superadminTenantPageSize || 25));
+
+    const billingQs = new URLSearchParams();
+    if (superadminWorkspaceBillingSearch.trim()) billingQs.set('q', superadminWorkspaceBillingSearch.trim());
+    if (superadminWorkspaceBillingStatus && superadminWorkspaceBillingStatus !== 'all') billingQs.set('status', superadminWorkspaceBillingStatus);
+    billingQs.set('page', '1');
+    billingQs.set('pageSize', '100');
+
+    const [tenantsRes, activityRes, billingRes] = await Promise.all([
+      fetch(`/api/superadmin/workspace/tenants?${tenantsQs.toString()}`, { credentials: 'include', headers }),
+      fetch('/api/superadmin/workspace/activity?limit=25', { credentials: 'include' }),
+      fetch(`/api/superadmin/workspace/billing?${billingQs.toString()}`, { credentials: 'include' }),
+    ]);
+
+    const tenantsJson = await tenantsRes.json().catch(() => ({}));
+    const activityJson = await activityRes.json().catch(() => ({}));
+    const billingJson = await billingRes.json().catch(() => ({}));
+    if (!tenantsRes.ok || tenantsJson?.success === false) {
+      throw new Error(tenantsJson?.message || 'Failed to load tenant workspace');
+    }
+
+    const tenants = Array.isArray(tenantsJson?.tenants) ? tenantsJson.tenants : [];
+    const billingEntries = Array.isArray(billingJson?.entries) ? billingJson.entries : [];
+    const activityItems = Array.isArray(activityJson?.items) ? activityJson.items : [];
+    superadminWorkspaceActivityCache = activityItems;
+
+    if (!selectedTenantGuildId && tenants.length > 0) {
+      selectedTenantGuildId = tenants[0].guildId;
+    }
+
+    const selectedTenantSummary = tenants.find((tenant) => tenant.guildId === selectedTenantGuildId) || null;
+    if (selectedTenantSummary && capabilities.tenants) {
+      const [detailRes, auditRes] = await Promise.all([
+        fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantSummary.guildId)}`, { credentials: 'include' }),
+        fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantSummary.guildId)}/audit?limit=25`, { credentials: 'include' }),
+      ]);
+      const detailJson = await detailRes.json().catch(() => ({}));
+      const auditJson = await auditRes.json().catch(() => ({}));
+      selectedTenantDetailCache = detailJson?.success ? detailJson.tenant : null;
+      selectedTenantAuditCache = auditJson?.success ? (auditJson.auditLogs || []) : [];
+    }
+
+    const tabButton = (key, label) => {
+      const enabled = !!capabilities[key];
+      return `<button class="sa-v2-tab ${workspace === key ? 'active' : ''}" ${enabled ? `onclick="setSuperadminWorkspaceTab('${key}')"` : ''} ${enabled ? '' : 'disabled'}>${label}</button>`;
+    };
+
+    let workspaceBody = '';
+    if (workspace === 'overview') {
+      workspaceBody = renderWorkspaceOverview(tenants, billingEntries);
+    } else if (workspace === 'tenants') {
+      workspaceBody = capabilities.tenants
+        ? `
+          <div class="sa-v2-split">
+            <div class="sa-v2-panel">
+              <div class="sa-v2-toolbar">
+                <input type="text" value="${escapeHtml(superadminWorkspaceSearch)}" placeholder="Search tenant by name, id, or plan..." oninput="setSuperadminWorkspaceTenantSearch(this.value)">
+                <button class="btn-secondary" onclick="loadSuperadminView()">Search</button>
+              </div>
+              <div class="sa-v2-list">
+                ${(tenants.length ? tenants.map((tenant) => renderTenantRow(tenant)).join('') : '<div class="sa-v2-empty">No tenants found for this filter.</div>')}
+              </div>
+            </div>
+            <div class="sa-v2-panel">
+              ${renderWorkspaceTenantDetail(selectedTenantSummary, selectedTenantDetailCache, selectedTenantAuditCache)}
+            </div>
+          </div>
+        `
+        : renderWorkspaceLockedState('Tenants workspace');
+    } else if (workspace === 'billing') {
+      workspaceBody = capabilities.billing
+        ? `
+          <div class="sa-v2-panel">
+            <div class="sa-v2-toolbar">
+              <input type="text" value="${escapeHtml(superadminWorkspaceBillingSearch)}" placeholder="Search by guild, status, provider..." oninput="setSuperadminWorkspaceBillingSearch(this.value)">
+              <select onchange="setSuperadminWorkspaceBillingStatus(this.value)">
+                <option value="all"${superadminWorkspaceBillingStatus === 'all' ? ' selected' : ''}>All statuses</option>
+                <option value="active"${superadminWorkspaceBillingStatus === 'active' ? ' selected' : ''}>Active</option>
+                <option value="suspended"${superadminWorkspaceBillingStatus === 'suspended' ? ' selected' : ''}>Suspended</option>
+                <option value="paid"${superadminWorkspaceBillingStatus === 'paid' ? ' selected' : ''}>Paid</option>
+                <option value="trialing"${superadminWorkspaceBillingStatus === 'trialing' ? ' selected' : ''}>Trialing</option>
+              </select>
+              <button class="btn-secondary" onclick="loadSuperadminView()">Apply</button>
+            </div>
+            <div class="sa-v2-table-wrap">
+              <table class="sa-v2-table">
+                <thead><tr><th>Tenant</th><th>Status</th><th>Provider</th><th>Interval</th><th>Last Payment</th><th>Period End</th><th>Queue</th></tr></thead>
+                <tbody>
+                  ${billingEntries.length ? billingEntries.map((entry) => `
+                    <tr>
+                      <td><strong>${escapeHtml(entry.guildName || entry.guildId)}</strong><div class="muted" style="font-size:0.76em;">${escapeHtml(entry.guildId || '')}</div></td>
+                      <td>${escapeHtml(entry.subscriptionStatus || 'unknown')}</td>
+                      <td>${escapeHtml(entry.provider || 'n/a')}</td>
+                      <td>${escapeHtml(entry.billingInterval || 'n/a')}</td>
+                      <td>${escapeHtml(entry.lastPaymentAt ? new Date(entry.lastPaymentAt).toLocaleString() : '—')}</td>
+                      <td>${escapeHtml(entry.currentPeriodEnd ? new Date(entry.currentPeriodEnd).toLocaleString() : '—')}</td>
+                      <td>${escapeHtml(entry.verificationStatus || 'pending')}</td>
+                    </tr>
+                  `).join('') : '<tr><td colspan="7">No billing records found.</td></tr>'}
+                </tbody>
+              </table>
+            </div>
+            <div class="sa-v2-inline-note">Manual approve/reject/override will be wired to payment actions in the next pass; this V1 ships the dedicated ledger and verification queue visibility.</div>
+          </div>
+        `
+        : renderWorkspaceLockedState('Billing workspace');
+    } else if (workspace === 'security') {
+      workspaceBody = capabilities.security
+        ? `
+          <div class="sa-v2-grid">
+            <article class="sa-v2-card">
+              <h4>Superadmin Access</h4>
+              <p>Global role and sensitive settings management stays available in legacy controls during V1.</p>
+            </article>
+            <article class="sa-v2-card">
+              <h4>Identity Controls</h4>
+              <p>Wallet linking, trust flags, and identity audit remain unchanged and available in legacy controls.</p>
+            </article>
+          </div>
+        `
+        : renderWorkspaceLockedState('Security & Access');
+    } else {
+      workspaceBody = capabilities.integrations
+        ? `
+          <div class="sa-v2-grid">
+            <article class="sa-v2-card"><h4>AI Provider Routing</h4><p>Provider routing remains available and unchanged in legacy controls during this V1 rebuild.</p></article>
+            <article class="sa-v2-card"><h4>X Provider</h4><p>OAuth and polling settings remain available in legacy controls.</p></article>
+            <article class="sa-v2-card"><h4>Chain Emojis & Replay</h4><p>Global chain map and replay tools remain available in legacy controls.</p></article>
+          </div>
+        `
+        : renderWorkspaceLockedState('Integrations & System');
+    }
+
+    content.innerHTML = `
+      <div class="sa-v2-shell">
+        <div class="sa-v2-header">
+          <div>
+            <h3>Admin Workspace Hub</h3>
+            <p>Role-aware operational panel with tenant split view and billing ledger.</p>
+          </div>
+          <div class="sa-v2-chip-row">
+            <span class="sa-v2-chip">Role: ${escapeHtml(isSuperadmin ? 'Superadmin' : 'Tenant Admin')}</span>
+            <span class="sa-v2-chip">Active Guild: ${escapeHtml(activeGuildId || 'none')}</span>
+            <span class="sa-v2-chip">UI: Superadmin V2</span>
+          </div>
+        </div>
+        <div class="sa-v2-tabs">
+          ${tabButton('overview', 'Overview')}
+          ${tabButton('tenants', 'Tenants')}
+          ${tabButton('billing', 'Billing')}
+          ${tabButton('security', 'Security & Access')}
+          ${tabButton('integrations', 'Integrations & System')}
+        </div>
+        <div class="sa-v2-main">
+          <div class="sa-v2-body">${workspaceBody}</div>
+          <aside class="sa-v2-rail">
+            <div class="sa-v2-rail-card">
+              <h4>Quick Actions</h4>
+              <div class="sa-v2-quick-actions">
+                <button class="btn-secondary" onclick="loadSuperadminView()">Refresh Workspace</button>
+                <button class="btn-secondary" onclick="setSuperadminWorkspaceTab('tenants')">Open Tenants</button>
+                <button class="btn-secondary" onclick="setSuperadminWorkspaceTab('billing')">Open Billing</button>
+              </div>
+            </div>
+            <div class="sa-v2-rail-card">
+              <h4>Recent Activity</h4>
+              <div class="sa-v2-activity-list">${renderWorkspaceActivityItems(superadminWorkspaceActivityCache)}</div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    `;
+    console.info('[admin-ui-v2][tffmr_ms]', Date.now() - startMs, { workspace });
+  } catch (error) {
+    console.error('[admin-ui-v2][workspace_load_failure]', { workspace, error: error?.message || String(error) });
+    content.innerHTML = `<div class="sa-v2-empty">Failed to load workspace hub: ${escapeHtml(error.message || 'Unknown error')}</div>`;
+  }
+}
+
 async function loadSuperadminView() {
+  return loadSuperadminWorkspaceHubV2();
+}
+
+async function loadSuperadminLegacyView() {
   if (!isSuperadmin) return;
 
   const card = document.getElementById('adminSuperadminCard');
@@ -8857,6 +9195,11 @@ function showSuperadminTenantsPanel(panel) {
 
 function selectTenantGuild(guildId) {
   selectedTenantGuildId = guildId;
+  const url = new URL(window.location);
+  const normalized = normalizeGuildId(String(guildId || ''));
+  if (normalized) url.searchParams.set('saTenantId', normalized);
+  else url.searchParams.delete('saTenantId');
+  window.history.replaceState({}, '', url);
   loadSuperadminView();
 }
 

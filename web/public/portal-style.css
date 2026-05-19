@@ -260,6 +260,224 @@ h4,
   gap: 18px;
 }
 
+/* Superadmin V2 Workspace Hub */
+.sa-v2-shell {
+  display: grid;
+  gap: 14px;
+}
+.sa-v2-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 12px;
+  padding: 14px;
+  background: rgba(8, 16, 34, 0.5);
+}
+.sa-v2-header h3 {
+  margin: 0;
+  color: #e0e7ff;
+}
+.sa-v2-header p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+.sa-v2-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sa-v2-chip {
+  border-radius: 999px;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  background: rgba(30, 41, 59, 0.6);
+  padding: 5px 10px;
+  color: #c9d6ff;
+  font-size: 0.78rem;
+}
+.sa-v2-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sa-v2-tab {
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  background: rgba(16, 24, 42, 0.8);
+  color: #c9d6ff;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.sa-v2-tab.active {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.36), rgba(59, 130, 246, 0.28));
+  color: #fff;
+}
+.sa-v2-tab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.sa-v2-main {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.8fr);
+}
+.sa-v2-body,
+.sa-v2-rail-card,
+.sa-v2-panel {
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  border-radius: 12px;
+  background: rgba(8, 16, 34, 0.45);
+  padding: 12px;
+}
+.sa-v2-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+.sa-v2-card {
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(12, 21, 38, 0.7);
+}
+.sa-v2-card h4 {
+  margin: 0 0 8px;
+  color: #dbe7ff;
+}
+.sa-v2-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+.sa-v2-kpi {
+  font-size: 1.9rem;
+  font-weight: 700;
+  color: #c9d6ff;
+  margin-bottom: 4px;
+}
+.sa-v2-toolbar {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  margin-bottom: 10px;
+}
+.sa-v2-toolbar input,
+.sa-v2-toolbar select {
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  background: rgba(30, 41, 59, 0.8);
+  color: #e0e7ff;
+}
+.sa-v2-split {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(260px, 0.72fr) minmax(0, 1.28fr);
+}
+.sa-v2-list {
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  border-radius: 10px;
+  overflow: auto;
+  max-height: 620px;
+}
+.sa-v2-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.sa-v2-detail-header h4 {
+  margin: 0;
+  color: #e0e7ff;
+}
+.sa-v2-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.sa-v2-pill {
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(30, 41, 59, 0.6);
+  color: #c9d6ff;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.sa-v2-pill.active {
+  background: rgba(99, 102, 241, 0.35);
+  color: #fff;
+}
+.sa-v2-scroll {
+  max-height: 580px;
+  overflow: auto;
+}
+.sa-v2-table-wrap {
+  overflow: auto;
+}
+.sa-v2-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.sa-v2-table th,
+.sa-v2-table td {
+  border-bottom: 1px solid rgba(99, 102, 241, 0.15);
+  padding: 8px;
+  text-align: left;
+  vertical-align: top;
+  color: #dbe7ff;
+  font-size: 0.84rem;
+}
+.sa-v2-inline-note {
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+.sa-v2-quick-actions {
+  display: grid;
+  gap: 8px;
+}
+.sa-v2-activity-list {
+  display: grid;
+  gap: 8px;
+  max-height: 420px;
+  overflow: auto;
+}
+.sa-v2-activity-item {
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  border-radius: 10px;
+  background: rgba(12, 21, 38, 0.65);
+  padding: 8px 10px;
+}
+.sa-v2-activity-main {
+  color: #e0e7ff;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+.sa-v2-activity-meta {
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+}
+.sa-v2-empty {
+  border: 1px dashed rgba(99, 102, 241, 0.22);
+  border-radius: 12px;
+  background: rgba(12, 21, 38, 0.45);
+  padding: 16px;
+  color: var(--text-secondary);
+}
+@media (max-width: 1100px) {
+  .sa-v2-main,
+  .sa-v2-split {
+    grid-template-columns: 1fr;
+  }
+}
+
 .servers-header {
   border-bottom-color: rgba(248, 182, 76, 0.2);
 }

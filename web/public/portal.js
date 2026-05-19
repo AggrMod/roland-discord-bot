@@ -19986,24 +19986,18 @@ async function uploadWelcomeImage() {
       showError('Pick an image file first.');
       return;
     }
-    const maxRawBytesForDataUrl = 1400000; // keeps base64 payload under ~2MB+JSON overhead
-    if (Number(file.size || 0) > maxRawBytesForDataUrl) {
-      showError('Image is too large. Please use an image under 1.4 MB.');
+    const uploadPayload = await buildWelcomeUploadPayload(file);
+    if (!uploadPayload?.dataUrl) {
+      showError('Could not process image file.');
       return;
     }
-    const dataUrl = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ''));
-      reader.onerror = () => reject(new Error('Failed to read file'));
-      reader.readAsDataURL(file);
-    });
     const res = await fetch('/api/admin/welcome/upload-image', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
       body: JSON.stringify({
-        fileName: file.name,
-        dataUrl,
+        fileName: uploadPayload.fileName || file.name,
+        dataUrl: uploadPayload.dataUrl,
       }),
     });
     const raw = await res.text();
@@ -20015,9 +20009,66 @@ async function uploadWelcomeImage() {
       throw new Error(textSnippet || `Upload failed (HTTP ${res.status})`);
     }
     if (!res.ok || json.success === false) throw new Error(json?.error?.message || json?.message || 'Upload failed');
-    showSuccess('Image uploaded. Select it in "Uploaded image asset" and save settings.');
+    if (uploadPayload.transformed) {
+      showSuccess('Image optimized and uploaded. Select it in "Uploaded image asset" and save settings.');
+    } else {
+      showSuccess('Image uploaded. Select it in "Uploaded image asset" and save settings.');
+    }
     await loadWelcomeSettingsSection();
   } catch (error) {
     showError(error?.message || 'Failed to upload image');
   }
+}
+
+async function buildWelcomeUploadPayload(file) {
+  const maxBinaryBytes = 2 * 1024 * 1024;
+  const readAsDataUrl = (blob) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(blob);
+  });
+
+  if (Number(file?.size || 0) <= maxBinaryBytes) {
+    return { fileName: file.name, dataUrl: await readAsDataUrl(file), transformed: false };
+  }
+
+  const makeBitmap = async (blob) => {
+    if (typeof createImageBitmap === 'function') return createImageBitmap(blob);
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Invalid image file'));
+      img.src = URL.createObjectURL(blob);
+    });
+  };
+
+  const bitmap = await makeBitmap(file);
+  const baseW = Math.max(1, Number(bitmap.width) || 1);
+  const baseH = Math.max(1, Number(bitmap.height) || 1);
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas is not available in this browser.');
+  const steps = [1, 0.85, 0.72, 0.6, 0.5, 0.4, 0.3];
+  const qualities = [0.92, 0.85, 0.78, 0.7, 0.62, 0.54];
+
+  for (const scale of steps) {
+    const w = Math.max(1, Math.round(baseW * scale));
+    const h = Math.max(1, Math.round(baseH * scale));
+    canvas.width = w;
+    canvas.height = h;
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    for (const quality of qualities) {
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', quality));
+      if (!blob) continue;
+      if (blob.size <= maxBinaryBytes) {
+        const dataUrl = await readAsDataUrl(blob);
+        const baseName = String(file.name || 'welcome-image').replace(/\.[^.]+$/, '');
+        return { fileName: `${baseName}.webp`, dataUrl, transformed: true };
+      }
+    }
+  }
+
+  throw new Error('Image is too large. Try a smaller image or lower resolution.');
 }

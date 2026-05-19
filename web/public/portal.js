@@ -19735,15 +19735,59 @@ async function loadWelcomeSettingsSection() {
   if (!wrap) return;
   wrap.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading welcome settings...</p></div>';
   try {
-    const res = await fetch('/api/admin/welcome/settings', { credentials: 'include', headers: buildTenantRequestHeaders() });
-    const json = await res.json();
-    if (!res.ok || json.success === false) throw new Error(json?.error?.message || json?.message || 'Failed to load welcome settings');
-    const s = json?.data?.settings || json?.settings || {};
+    const headers = buildTenantRequestHeaders();
+    const [settingsRes, channelsRes, rolesRes] = await Promise.all([
+      fetch('/api/admin/welcome/settings', { credentials: 'include', headers }),
+      fetch('/api/admin/discord/channels', { credentials: 'include', headers }),
+      fetch('/api/admin/discord/roles', { credentials: 'include', headers }),
+    ]);
+    const [settingsJson, channelsJson, rolesJson] = await Promise.all([
+      settingsRes.json(),
+      channelsRes.json(),
+      rolesRes.json(),
+    ]);
+    if (!settingsRes.ok || settingsJson.success === false) throw new Error(settingsJson?.error?.message || settingsJson?.message || 'Failed to load welcome settings');
+    const s = settingsJson?.data?.settings || settingsJson?.settings || {};
+    const channels = Array.isArray(channelsJson?.channels) ? channelsJson.channels : [];
+    const roles = Array.isArray(rolesJson?.roles) ? rolesJson.roles : [];
+
+    let channelOptions = `<option value="">-- Select channel --</option>`;
+    channels.forEach((ch) => {
+      const id = String(ch.id || '');
+      const name = String(ch.name || id);
+      const selected = s.welcomeChannelId && s.welcomeChannelId === id ? ' selected' : '';
+      channelOptions += `<option value="${escapeHtml(id)}"${selected}>#${escapeHtml(name)}</option>`;
+    });
+    if (s.welcomeChannelId && !channels.some(ch => String(ch.id) === String(s.welcomeChannelId))) {
+      channelOptions += `<option value="${escapeHtml(s.welcomeChannelId)}" selected>Unknown (${escapeHtml(s.welcomeChannelId)})</option>`;
+    }
+
+    let captchaRoleOptions = `<option value="">-- Select role --</option>`;
+    let autoRoleOptions = '';
+    roles.forEach((role) => {
+      const id = String(role.id || '');
+      const name = String(role.name || id);
+      const selectedCaptcha = s.captchaRoleId && s.captchaRoleId === id ? ' selected' : '';
+      const selectedAuto = Array.isArray(s.autoRoleIds) && s.autoRoleIds.includes(id) ? ' selected' : '';
+      captchaRoleOptions += `<option value="${escapeHtml(id)}"${selectedCaptcha}>${escapeHtml(name)}</option>`;
+      autoRoleOptions += `<option value="${escapeHtml(id)}"${selectedAuto}>${escapeHtml(name)}</option>`;
+    });
+    (Array.isArray(s.autoRoleIds) ? s.autoRoleIds : []).forEach((roleId) => {
+      if (!roles.some(role => String(role.id) === String(roleId))) {
+        autoRoleOptions += `<option value="${escapeHtml(roleId)}" selected>Unknown (${escapeHtml(roleId)})</option>`;
+      }
+    });
+    if (s.captchaRoleId && !roles.some(role => String(role.id) === String(s.captchaRoleId))) {
+      captchaRoleOptions += `<option value="${escapeHtml(s.captchaRoleId)}" selected>Unknown (${escapeHtml(s.captchaRoleId)})</option>`;
+    }
+
     wrap.innerHTML = `
       <div style="display:grid;gap:12px;">
         <label style="display:flex;align-items:center;gap:8px;"><input id="welcome_enabled" type="checkbox" ${s.enabled ? 'checked' : ''}> Enable welcome module</label>
-        <label>Welcome channel ID
-          <input id="welcome_channel_id" type="text" value="${escapeHtml(s.welcomeChannelId || '')}" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+        <label>Welcome channel
+          <select id="welcome_channel_id" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+            ${channelOptions}
+          </select>
         </label>
         <label>Welcome message template
           <textarea id="welcome_message_template" rows="3" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">${escapeHtml(s.welcomeMessageTemplate || '')}</textarea>
@@ -19756,18 +19800,22 @@ async function loadWelcomeSettingsSection() {
         <label>DM template
           <textarea id="welcome_dm_template" rows="2" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">${escapeHtml(s.dmMessageTemplate || '')}</textarea>
         </label>
-        <label>Auto role IDs (comma separated)
-          <input id="welcome_auto_roles" type="text" value="${escapeHtml((s.autoRoleIds || []).join(', '))}" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+        <label>Auto roles
+          <select id="welcome_auto_roles" multiple size="6" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+            ${autoRoleOptions}
+          </select>
         </label>
         <label style="display:flex;align-items:center;gap:8px;"><input id="welcome_captcha_enabled" type="checkbox" ${s.captchaEnabled ? 'checked' : ''}> Enable captcha role gate</label>
-        <label>Captcha role ID
-          <input id="welcome_captcha_role" type="text" value="${escapeHtml(s.captchaRoleId || '')}" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+        <label>Captcha role
+          <select id="welcome_captcha_role" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+            ${captchaRoleOptions}
+          </select>
         </label>
         <div style="display:flex;gap:8px;">
           <button class="btn-primary btn-sm" onclick="saveWelcomeSettings()">Save Welcome Settings</button>
           <button class="btn-secondary btn-sm" onclick="sendWelcomeTest()">Send Test Welcome</button>
         </div>
-        <small style="color:var(--text-secondary);">Variables: {user_mention}, {username}, {server_name}, {member_count}, {channel:verify}</small>
+        <small style="color:var(--text-secondary);">Variables: {user_mention}, {username}, {server_name}, {member_count}, {channel:verify}. Tip: Ctrl/Cmd-click to select multiple auto roles.</small>
       </div>
     `;
   } catch (error) {
@@ -19777,10 +19825,10 @@ async function loadWelcomeSettingsSection() {
 
 async function saveWelcomeSettings() {
   try {
-    const roleIds = String(document.getElementById('welcome_auto_roles')?.value || '')
-      .split(',')
-      .map(v => v.trim())
-      .filter(Boolean);
+    const roleSelect = document.getElementById('welcome_auto_roles');
+    const roleIds = roleSelect
+      ? Array.from(roleSelect.selectedOptions || []).map(opt => String(opt.value || '').trim()).filter(Boolean)
+      : [];
     const payload = {
       enabled: !!document.getElementById('welcome_enabled')?.checked,
       welcomeChannelId: document.getElementById('welcome_channel_id')?.value || null,

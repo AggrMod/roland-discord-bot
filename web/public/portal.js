@@ -7259,6 +7259,7 @@ let superadminWorkspaceSearch = '';
 let superadminWorkspaceBillingSearch = '';
 let superadminWorkspaceBillingStatus = 'all';
 let superadminWorkspaceActivityCache = [];
+let superadminWorkspaceFocus = '';
 
 const TENANT_PLAN_LABELS = {
   starter: 'Starter',
@@ -7817,8 +7818,10 @@ function renderWorkspaceTenantDetail(tenant, detail, auditLogs) {
 
 function setSuperadminWorkspaceTab(tab) {
   superadminWorkspaceV2 = String(tab || 'overview');
+  superadminWorkspaceFocus = '';
   const url = new URL(window.location);
   url.searchParams.set('saWs', superadminWorkspaceV2);
+  url.searchParams.delete('saFocus');
   window.history.replaceState({}, '', url);
   loadSuperadminView();
 }
@@ -7843,22 +7846,13 @@ function setSuperadminWorkspaceBillingStatus(value) {
   superadminWorkspaceBillingStatus = String(value || 'all');
 }
 
-async function openSuperadminLegacyArea(tab = 'globalops', panel = '') {
-  superadminActiveTab = String(tab || 'globalops');
-  if (panel && superadminActiveTab === 'globalops') {
-    superadminGlobalOpsPanel = String(panel);
-  }
-  if (panel && superadminActiveTab === 'tenants') {
-    superadminTenantsPanel = String(panel);
-  }
-  await loadSuperadminLegacyView();
-  showSuperadminTab(superadminActiveTab);
-  if (superadminActiveTab === 'globalops' && panel) {
-    showSuperadminGlobalOpsPanel(panel);
-  }
-  if (superadminActiveTab === 'tenants' && panel) {
-    showSuperadminTenantsPanel(panel);
-  }
+function setSuperadminWorkspaceFocus(focus = '') {
+  superadminWorkspaceFocus = String(focus || '').trim();
+  const url = new URL(window.location);
+  if (superadminWorkspaceFocus) url.searchParams.set('saFocus', superadminWorkspaceFocus);
+  else url.searchParams.delete('saFocus');
+  window.history.replaceState({}, '', url);
+  loadSuperadminView();
 }
 
 async function loadSuperadminWorkspaceHubV2() {
@@ -7872,9 +7866,11 @@ async function loadSuperadminWorkspaceHubV2() {
   const qsWs = String(url.searchParams.get('saWs') || '').trim();
   const qsTenantTab = String(url.searchParams.get('saTenantTab') || '').trim();
   const qsTenantId = normalizeGuildId(String(url.searchParams.get('saTenantId') || '').trim());
+  const qsFocus = String(url.searchParams.get('saFocus') || '').trim();
   if (qsWs) superadminWorkspaceV2 = qsWs;
   if (qsTenantTab) superadminWorkspaceTenantTab = qsTenantTab;
   if (qsTenantId) selectedTenantGuildId = qsTenantId;
+  superadminWorkspaceFocus = qsFocus;
 
   content.innerHTML = '<div style="padding:20px;text-align:center;"><div class="spinner"></div><p style="margin-top:8px;">Loading admin workspace...</p></div>';
 
@@ -7891,15 +7887,19 @@ async function loadSuperadminWorkspaceHubV2() {
     billingQs.set('page', '1');
     billingQs.set('pageSize', '100');
 
-    const [tenantsRes, activityRes, billingRes] = await Promise.all([
+    const [tenantsRes, activityRes, billingRes, adminsRes, globalSettingsRes] = await Promise.all([
       fetch(`/api/superadmin/workspace/tenants?${tenantsQs.toString()}`, { credentials: 'include', headers }),
       fetch('/api/superadmin/workspace/activity?limit=25', { credentials: 'include' }),
       fetch(`/api/superadmin/workspace/billing?${billingQs.toString()}`, { credentials: 'include' }),
+      fetch('/api/superadmin/admins', { credentials: 'include' }),
+      fetch('/api/superadmin/global-settings', { credentials: 'include' }),
     ]);
 
     const tenantsJson = await tenantsRes.json().catch(() => ({}));
     const activityJson = await activityRes.json().catch(() => ({}));
     const billingJson = await billingRes.json().catch(() => ({}));
+    const adminsJson = await adminsRes.json().catch(() => ({}));
+    const globalSettingsJson = await globalSettingsRes.json().catch(() => ({}));
     if (!tenantsRes.ok || tenantsJson?.success === false) {
       throw new Error(tenantsJson?.message || 'Failed to load tenant workspace');
     }
@@ -7907,6 +7907,8 @@ async function loadSuperadminWorkspaceHubV2() {
     const tenants = Array.isArray(tenantsJson?.tenants) ? tenantsJson.tenants : [];
     const billingEntries = Array.isArray(billingJson?.entries) ? billingJson.entries : [];
     const activityItems = Array.isArray(activityJson?.items) ? activityJson.items : [];
+    const superadmins = Array.isArray(adminsJson?.superadmins) ? adminsJson.superadmins : [];
+    const globalSettings = globalSettingsJson?.settings || {};
     superadminWorkspaceActivityCache = activityItems;
 
     if (!selectedTenantGuildId && tenants.length > 0) {
@@ -7990,32 +7992,105 @@ async function loadSuperadminWorkspaceHubV2() {
         `
         : renderWorkspaceLockedState('Billing workspace');
     } else if (workspace === 'security') {
-      workspaceBody = capabilities.security
-        ? `
+      if (!capabilities.security) {
+        workspaceBody = renderWorkspaceLockedState('Security & Access');
+      } else if (superadminWorkspaceFocus === 'superadmins') {
+        const rows = superadmins.length
+          ? superadmins.map((entry) => {
+              const removable = entry.source !== 'env';
+              const sourceLabel = entry.source === 'env' ? 'Root env' : 'DB';
+              return `
+                <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; padding:10px 12px; border-bottom:1px solid rgba(99,102,241,0.15);">
+                  <div style="min-width:0;">
+                    <div style="color:#e0e7ff; font-weight:600; font-family:monospace; word-break:break-all;">${escapeHtml(entry.userId)}</div>
+                    <div style="color:var(--text-secondary); font-size:0.82em; margin-top:4px;">${escapeHtml(sourceLabel)}</div>
+                  </div>
+                  <button class="btn-secondary" ${removable ? `onclick="removeSuperadmin('${escapeJsString(entry.userId)}')"` : 'disabled'}>${removable ? 'Remove' : 'Protected'}</button>
+                </div>
+              `;
+            }).join('')
+          : '<div class="sa-v2-empty">No superadmins configured.</div>';
+        workspaceBody = `
+          <div class="sa-v2-panel">
+            <div class="sa-v2-toolbar" style="grid-template-columns:minmax(0,1fr) auto auto;">
+              <input id="adminSuperadminUserIdInput" type="text" placeholder="Discord ID">
+              <button class="btn-primary" onclick="addSuperadminFromInput()">Add Superadmin</button>
+              <button class="btn-secondary" onclick="setSuperadminWorkspaceFocus('')">Back</button>
+            </div>
+            <div class="sa-v2-list">${rows}</div>
+          </div>
+        `;
+      } else if (superadminWorkspaceFocus === 'identity') {
+        workspaceBody = `
+          <div class="sa-v2-panel">
+            <div class="sa-v2-detail-header"><h4>Identity Controls</h4><button class="btn-secondary" onclick="setSuperadminWorkspaceFocus('')">Back</button></div>
+            <div class="sa-v2-inline-note">Use trusted/manual flags and wallet linking in the dedicated Identity workflow panel (next V2 pass). For now this replaces the legacy jump to keep the workspace clean.</div>
+          </div>
+        `;
+      } else {
+        workspaceBody = `
           <div class="sa-v2-grid">
-            <article class="sa-v2-card sa-v2-card--action" onclick="openSuperadminLegacyArea('globalops','superadmins')">
+            <article class="sa-v2-card sa-v2-card--action" onclick="setSuperadminWorkspaceFocus('superadmins')">
               <h4>Superadmin Access</h4>
-              <p>Global role and sensitive settings management stays available in legacy controls during V1.</p>
-              <button class="btn-secondary" onclick="event.stopPropagation(); openSuperadminLegacyArea('globalops','superadmins')">Open Superadmins</button>
+              <p>Manage root/global superadmin access list.</p>
+              <button class="btn-secondary" onclick="event.stopPropagation(); setSuperadminWorkspaceFocus('superadmins')">Open Superadmins</button>
             </article>
-            <article class="sa-v2-card sa-v2-card--action" onclick="openSuperadminLegacyArea('identity')">
+            <article class="sa-v2-card sa-v2-card--action" onclick="setSuperadminWorkspaceFocus('identity')">
               <h4>Identity Controls</h4>
-              <p>Wallet linking, trust flags, and identity audit remain unchanged and available in legacy controls.</p>
-              <button class="btn-secondary" onclick="event.stopPropagation(); openSuperadminLegacyArea('identity')">Open Identity</button>
+              <p>Trusted/manual identity controls and wallet linking tools.</p>
+              <button class="btn-secondary" onclick="event.stopPropagation(); setSuperadminWorkspaceFocus('identity')">Open Identity</button>
             </article>
           </div>
-        `
-        : renderWorkspaceLockedState('Security & Access');
+        `;
+      }
     } else {
-      workspaceBody = capabilities.integrations
-        ? `
-          <div class="sa-v2-grid">
-            <article class="sa-v2-card sa-v2-card--action" onclick="openSuperadminLegacyArea('globalops','aiProviders')"><h4>AI Provider Routing</h4><p>Provider routing remains available and unchanged in legacy controls during this V1 rebuild.</p><button class="btn-secondary" onclick="event.stopPropagation(); openSuperadminLegacyArea('globalops','aiProviders')">Open AI Settings</button></article>
-            <article class="sa-v2-card sa-v2-card--action" onclick="openSuperadminLegacyArea('globalops','xProvider')"><h4>X Provider</h4><p>OAuth and polling settings remain available in legacy controls.</p><button class="btn-secondary" onclick="event.stopPropagation(); openSuperadminLegacyArea('globalops','xProvider')">Open X Settings</button></article>
-            <article class="sa-v2-card sa-v2-card--action" onclick="openSuperadminLegacyArea('globalops','chainEmojis')"><h4>Chain Emojis & Replay</h4><p>Global chain map and replay tools remain available in legacy controls.</p><button class="btn-secondary" onclick="event.stopPropagation(); openSuperadminLegacyArea('globalops','chainEmojis')">Open Chain Controls</button></article>
+      if (!capabilities.integrations) {
+        workspaceBody = renderWorkspaceLockedState('Integrations & System');
+      } else if (superadminWorkspaceFocus === 'aiProviders') {
+        workspaceBody = `
+          <div class="sa-v2-panel">
+            <div class="sa-v2-detail-header"><h4>AI Provider Routing</h4><button class="btn-secondary" onclick="setSuperadminWorkspaceFocus('')">Back</button></div>
+            <div style="display:grid; grid-template-columns:repeat(4,minmax(120px,1fr)); gap:10px;">
+              <label style="display:grid; gap:6px;"><span style="font-size:0.8em; color:var(--text-secondary);">Default Provider</span><select id="sa_aiProviderDefault"><option value="openai" ${(globalSettings.aiAssistantDefaultProvider || 'openai') === 'openai' ? 'selected' : ''}>OpenAI</option><option value="gemini" ${(globalSettings.aiAssistantDefaultProvider || 'openai') === 'gemini' ? 'selected' : ''}>Gemini</option></select></label>
+              <label style="display:grid; gap:6px;"><span style="font-size:0.8em; color:var(--text-secondary);">Fallback Provider</span><select id="sa_aiProviderFallback"><option value="" ${(globalSettings.aiAssistantFallbackProvider || '') === '' ? 'selected' : ''}>None</option><option value="openai" ${(globalSettings.aiAssistantFallbackProvider || '') === 'openai' ? 'selected' : ''}>OpenAI</option><option value="gemini" ${(globalSettings.aiAssistantFallbackProvider || '') === 'gemini' ? 'selected' : ''}>Gemini</option></select></label>
+              <label style="display:grid; gap:6px;"><span style="font-size:0.8em; color:var(--text-secondary);">OpenAI Model</span><input id="sa_aiModelOpenai" type="text" value="${escapeHtml(globalSettings.aiAssistantDefaultModelOpenai || 'gpt-5.4')}"></label>
+              <label style="display:grid; gap:6px;"><span style="font-size:0.8em; color:var(--text-secondary);">Gemini Model</span><input id="sa_aiModelGemini" type="text" value="${escapeHtml(globalSettings.aiAssistantDefaultModelGemini || 'gemini-2.0-flash')}"></label>
+            </div>
+            <div class="gp-actions-row"><button class="btn-primary" onclick="saveAiProviderSettings()">Save AI Settings</button></div>
           </div>
-        `
-        : renderWorkspaceLockedState('Integrations & System');
+        `;
+      } else if (superadminWorkspaceFocus === 'xProvider') {
+        workspaceBody = `
+          <div class="sa-v2-panel">
+            <div class="sa-v2-detail-header"><h4>X Provider</h4><button class="btn-secondary" onclick="setSuperadminWorkspaceFocus('')">Back</button></div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <label style="display:grid; gap:6px;"><span style="font-size:0.82em; color:var(--text-secondary);">X Client ID</span><input id="sa_xClientId" type="text" value="${escapeHtml(globalSettings.xClientId || '')}"></label>
+              <label style="display:grid; gap:6px;"><span style="font-size:0.82em; color:var(--text-secondary);">Polling Interval (sec)</span><input id="sa_xPollingInterval" type="number" min="30" max="3600" value="${escapeHtml(String(globalSettings.xPollingIntervalSeconds || 300))}"></label>
+            </div>
+            <label style="display:flex; align-items:center; gap:10px; margin-top:10px;"><input id="sa_xPollingEnabled" type="checkbox" ${globalSettings.xPollingEnabled ? 'checked' : ''}>Enable X polling</label>
+            <div class="gp-actions-row"><button class="btn-primary" onclick="saveXProviderSettings()">Save X Settings</button></div>
+          </div>
+        `;
+      } else if (superadminWorkspaceFocus === 'chainEmojis') {
+        const chainEmojiMap = globalSettings.chainEmojiMap || {};
+        workspaceBody = `
+          <div class="sa-v2-panel">
+            <div class="sa-v2-detail-header"><h4>Chain Emojis & Replay</h4><button class="btn-secondary" onclick="setSuperadminWorkspaceFocus('')">Back</button></div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+              ${['solana','usdc','ethereum','base','polygon','arbitrum','optimism','bsc','avalanche'].map(chain => `<label style="display:grid;gap:6px;"><span style="font-size:0.82em;color:var(--text-secondary);text-transform:capitalize;">${chain}</span><input id="sa_chainEmoji_${chain}" type="text" value="${escapeHtml(chainEmojiMap[chain] || '')}" placeholder="<:emoji:123...> or unicode"></label>`).join('')}
+            </div>
+            <div class="gp-actions-row"><button class="btn-primary" onclick="saveChainEmojiMap()">Save Chain Emojis</button></div>
+          </div>
+        `;
+      } else {
+        workspaceBody = `
+          <div class="sa-v2-grid">
+            <article class="sa-v2-card sa-v2-card--action" onclick="setSuperadminWorkspaceFocus('aiProviders')"><h4>AI Provider Routing</h4><p>Provider defaults and model routing.</p><button class="btn-secondary" onclick="event.stopPropagation(); setSuperadminWorkspaceFocus('aiProviders')">Open AI Settings</button></article>
+            <article class="sa-v2-card sa-v2-card--action" onclick="setSuperadminWorkspaceFocus('xProvider')"><h4>X Provider</h4><p>OAuth and polling settings.</p><button class="btn-secondary" onclick="event.stopPropagation(); setSuperadminWorkspaceFocus('xProvider')">Open X Settings</button></article>
+            <article class="sa-v2-card sa-v2-card--action" onclick="setSuperadminWorkspaceFocus('chainEmojis')"><h4>Chain Emojis & Replay</h4><p>Global chain map and replay tools.</p><button class="btn-secondary" onclick="event.stopPropagation(); setSuperadminWorkspaceFocus('chainEmojis')">Open Chain Controls</button></article>
+          </div>
+        `;
+      }
     }
 
     content.innerHTML = `

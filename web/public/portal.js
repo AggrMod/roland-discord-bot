@@ -19849,7 +19849,7 @@ async function saveWelcomeSettings() {
     });
     const json = await res.json();
     if (!res.ok || json.success === false) throw new Error(json?.error?.message || json?.message || 'Failed to save settings');
-    showToast('Welcome settings saved.');
+    showSuccess('Welcome settings saved.');
     await loadWelcomeSettingsSection();
   } catch (error) {
     showError(error?.message || 'Failed to save welcome settings');
@@ -19866,7 +19866,7 @@ async function sendWelcomeTest() {
     });
     const json = await res.json();
     if (!res.ok || json.success === false) throw new Error(json?.error?.message || json?.message || 'Failed to send test welcome');
-    showToast('Test welcome triggered.');
+    showSuccess('Test welcome triggered.');
   } catch (error) {
     showError(error?.message || 'Failed to send test welcome');
   }

@@ -260,29 +260,7 @@ class WelcomeService {
     const verifyUrl = this.buildCaptchaVerifyUrl(guildId, member.id);
     const guildName = String(member?.guild?.name || 'your server');
     if (normalizedMode === CAPTCHA_PROMPT_MODES.CHANNEL_BUTTON) {
-      const channelEmbed = {
-        color: 0xf8b64c,
-        title: 'New Member Verification',
-        description: `<@${member.id}> click below to begin human verification.`,
-        footer: { text: 'GuildPilot Verification' },
-      };
-      const channelComponents = [{
-        type: 1,
-        components: [{
-          type: 2,
-          style: 1,
-          custom_id: `welcome_captcha_start:${member.id}`,
-          label: '✅ Start Verification',
-        }],
-      }];
-      if (channel && typeof channel.send === 'function') {
-        await channel.send({
-          content: `<@${member.id}>`,
-          embeds: [channelEmbed],
-          components: channelComponents,
-        }).catch(() => {});
-        return { success: true, mode: CAPTCHA_PROMPT_MODES.CHANNEL_BUTTON };
-      }
+      return { success: true, mode: CAPTCHA_PROMPT_MODES.CHANNEL_BUTTON };
     }
 
     const embed = {
@@ -327,11 +305,89 @@ class WelcomeService {
     return { success: true, mode: 'channel' };
   }
 
+  async postCaptchaPanel(guild, channelId) {
+    if (!guild) return { success: false, message: 'Guild is required' };
+    const targetChannelId = String(channelId || '').trim();
+    if (!targetChannelId) return { success: false, message: 'Channel is required' };
+    const channel = guild.channels?.cache?.get(targetChannelId) || await guild.channels.fetch(targetChannelId).catch(() => null);
+    if (!channel || typeof channel.send !== 'function') {
+      return { success: false, message: `Channel unavailable (${targetChannelId})` };
+    }
+    const embed = {
+      color: 0xf8b64c,
+      title: 'Human Verification',
+      description: 'Click the button below to verify and unlock full server access.',
+      footer: { text: 'GuildPilot Verification' },
+    };
+    const components = [{
+      type: 1,
+      components: [{
+        type: 2,
+        style: 1,
+        custom_id: 'welcome_captcha_start',
+        label: '✅ Verify Me',
+      }],
+    }];
+    const message = await channel.send({ embeds: [embed], components });
+    return { success: true, channelId: targetChannelId, messageId: message?.id || null };
+  }
+
+  async sendWelcomeAnnouncement(member, settings, channelSource = null) {
+    const guildId = String(member?.guild?.id || '').trim();
+    const channelId = settings?.welcomeChannelId;
+    if (!channelId) return { success: false, delivered: false, message: 'No welcome channel configured.' };
+    const source = channelSource || member.guild.channels.cache;
+    const channel = source.get(channelId);
+    if (!channel || typeof channel.send !== 'function') {
+      return { success: false, delivered: false, message: `Welcome channel not found: ${channelId}` };
+    }
+
+    const content = this.parseVariables(settings.welcomeMessageTemplate, member, source);
+    const embedPayload = settings.welcomeEmbed && typeof settings.welcomeEmbed === 'object' ? settings.welcomeEmbed : {};
+    const parsedFields = normalizeStepFields(embedPayload.fields).map((field) => ({
+      name: this.parseVariables(field.name, member, source),
+      value: this.parseVariables(field.value, member, source),
+      inline: !!field.inline,
+    }));
+    const footerText = typeof embedPayload.footer === 'string'
+      ? embedPayload.footer
+      : (embedPayload.footer && typeof embedPayload.footer.text === 'string' ? embedPayload.footer.text : '');
+    const embed = {
+      title: embedPayload.title ? this.parseVariables(embedPayload.title, member, source) : null,
+      description: embedPayload.description ? this.parseVariables(embedPayload.description, member, source) : null,
+      color: normalizeEmbedColor(embedPayload.color),
+      footer: footerText ? { text: this.parseVariables(footerText, member, source) } : undefined,
+      image: settings.welcomeImageUrl ? { url: settings.welcomeImageUrl } : undefined,
+      thumbnail: settings.dynamicAvatarCard ? { url: member.user?.displayAvatarURL?.({ extension: 'png', size: 256 }) } : undefined,
+      fields: parsedFields.length > 0 ? parsedFields : undefined,
+    };
+    const files = [];
+    if (settings.welcomeImageAssetId) {
+      const asset = db.prepare(`
+        SELECT id, file_name, mime_type, image_blob
+        FROM tenant_welcome_assets
+        WHERE id = ? AND guild_id = ?
+      `).get(settings.welcomeImageAssetId, guildId);
+      if (asset?.image_blob) {
+        const fileName = String(asset.file_name || `welcome-${asset.id}.png`);
+        files.push({ attachment: Buffer.from(asset.image_blob), name: fileName });
+        embed.image = { url: `attachment://${fileName}` };
+      }
+    }
+    const hasEmbed = !!(embed.title || embed.description || embed.color || embed.footer || embed.image || embed.thumbnail);
+    await channel.send({
+      content,
+      embeds: hasEmbed ? [embed] : [],
+      files
+    });
+    return { success: true, delivered: true };
+  }
+
   async handleCaptchaStartButton(interaction) {
     const customId = String(interaction?.customId || '').trim();
     if (!customId.startsWith('welcome_captcha_start:')) return false;
-    const targetUserId = customId.split(':')[1] || '';
-    if (String(targetUserId) !== String(interaction?.user?.id || '')) {
+    const targetUserId = customId.includes(':') ? (customId.split(':')[1] || '') : '';
+    if (targetUserId && String(targetUserId) !== String(interaction?.user?.id || '')) {
       await interaction.reply({ content: 'This verification button is not assigned to you.', ephemeral: true }).catch(() => {});
       return true;
     }
@@ -388,47 +444,11 @@ class WelcomeService {
       if (!channel) {
         return { success: false, delivered: false, message: `Welcome channel not found: ${channelId}` };
       }
-      if (channel && typeof channel.send === 'function') {
-        const content = this.parseVariables(settings.welcomeMessageTemplate, member, channelSource);
-        const embedPayload = settings.welcomeEmbed && typeof settings.welcomeEmbed === 'object' ? settings.welcomeEmbed : {};
-        const parsedFields = normalizeStepFields(embedPayload.fields).map((field) => ({
-          name: this.parseVariables(field.name, member, channelSource),
-          value: this.parseVariables(field.value, member, channelSource),
-          inline: !!field.inline,
-        }));
-        const footerText = typeof embedPayload.footer === 'string'
-          ? embedPayload.footer
-          : (embedPayload.footer && typeof embedPayload.footer.text === 'string' ? embedPayload.footer.text : '');
-        const embed = {
-          title: embedPayload.title ? this.parseVariables(embedPayload.title, member, channelSource) : null,
-          description: embedPayload.description ? this.parseVariables(embedPayload.description, member, channelSource) : null,
-          color: normalizeEmbedColor(embedPayload.color),
-          footer: footerText ? { text: this.parseVariables(footerText, member, channelSource) } : undefined,
-          image: settings.welcomeImageUrl ? { url: settings.welcomeImageUrl } : undefined,
-          thumbnail: settings.dynamicAvatarCard ? { url: member.user?.displayAvatarURL?.({ extension: 'png', size: 256 }) } : undefined,
-          fields: parsedFields.length > 0 ? parsedFields : undefined,
-        };
-        const files = [];
-        if (settings.welcomeImageAssetId) {
-          const asset = db.prepare(`
-            SELECT id, file_name, mime_type, image_blob
-            FROM tenant_welcome_assets
-            WHERE id = ? AND guild_id = ?
-          `).get(settings.welcomeImageAssetId, guildId);
-          if (asset?.image_blob) {
-            const fileName = String(asset.file_name || `welcome-${asset.id}.png`);
-            files.push({ attachment: Buffer.from(asset.image_blob), name: fileName });
-            embed.image = { url: `attachment://${fileName}` };
-          }
-        }
-
-        const hasEmbed = !!(embed.title || embed.description || embed.color || embed.footer || embed.image || embed.thumbnail);
-        await channel.send({
-          content,
-          embeds: hasEmbed ? [embed] : [],
-          files
-        });
-        delivered = true;
+      const deferWelcomeUntilCaptcha =
+        !!settings.captchaEnabled && settings.captchaPromptMode === CAPTCHA_PROMPT_MODES.CHANNEL_BUTTON;
+      if (!deferWelcomeUntilCaptcha) {
+        const sent = await this.sendWelcomeAnnouncement(member, settings, channelSource);
+        delivered = !!sent?.delivered;
       }
 
       if (settings.dmEnabled) {
@@ -497,6 +517,15 @@ class WelcomeService {
       if (settings.captchaRemoveRoleId && settings.captchaRemoveRoleId !== settings.captchaRoleId) {
         await member.roles.remove(settings.captchaRemoveRoleId).catch(() => {});
       }
+      if (settings.captchaPromptMode === CAPTCHA_PROMPT_MODES.CHANNEL_BUTTON) {
+        let fetchedChannels = null;
+        try {
+          fetchedChannels = await guild.channels.fetch();
+        } catch (_error) {
+          fetchedChannels = null;
+        }
+        await this.sendWelcomeAnnouncement(member, settings, fetchedChannels || guild.channels.cache).catch(() => {});
+      }
       return { success: true, guildId: payload.guildId, userId: payload.userId };
     } catch (error) {
       logger.error('[welcome] verifyCaptcha role grant failed:', error);
@@ -520,6 +549,17 @@ class WelcomeService {
     }
 
     const originalEnabled = settings.enabled;
+    if (settings.captchaEnabled && settings.captchaPromptMode === CAPTCHA_PROMPT_MODES.CHANNEL_BUTTON) {
+      let fetchedChannels = null;
+      try {
+        fetchedChannels = await guild.channels.fetch();
+      } catch (_error) {
+        fetchedChannels = null;
+      }
+      const sent = await this.sendWelcomeAnnouncement(member, settings, fetchedChannels || guild.channels.cache);
+      if (!sent?.success) return { success: false, message: sent?.message || 'Welcome message was not delivered.' };
+      return { success: true, message: 'Test welcome sent successfully.' };
+    }
     if (!originalEnabled) {
       this.updateSettings(guild.id, { enabled: true });
     }

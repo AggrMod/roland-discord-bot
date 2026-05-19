@@ -19858,7 +19858,7 @@ async function loadWelcomeSettingsSection() {
         <label>Captcha prompt delivery
           <select id="welcome_captcha_prompt_mode" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
             <option value="dm" ${String(s.captchaPromptMode || 'dm') === 'dm' ? 'selected' : ''}>Direct Message</option>
-            <option value="channel_button" ${String(s.captchaPromptMode || 'dm') === 'channel_button' ? 'selected' : ''}>Welcome Channel Button</option>
+            <option value="channel_button" ${String(s.captchaPromptMode || 'dm') === 'channel_button' ? 'selected' : ''}>Verification Panel in Channel</option>
           </select>
         </label>
         <label>Captcha role
@@ -19874,6 +19874,7 @@ async function loadWelcomeSettingsSection() {
         <div style="display:flex;gap:8px;">
           <button class="btn-primary btn-sm" onclick="saveWelcomeSettings()">Save Welcome Settings</button>
           <button class="btn-secondary btn-sm" onclick="sendWelcomeTest()">Send Test Welcome</button>
+          <button class="btn-secondary btn-sm" onclick="postWelcomeCaptchaPanel()">Post Verify Panel</button>
         </div>
         <small style="color:var(--text-secondary);">Variables: {user_mention}, {username}, {server_name}, {member_count}, {channel:verify}. Tip: Ctrl/Cmd-click to select multiple auto roles.</small>
         <small style="color:var(--text-secondary);">Plan limits: channel tokens ${limits.maxChannelTokens == null ? '∞' : limits.maxChannelTokens}, step fields ${limits.maxStepFields == null ? '∞' : limits.maxStepFields}, uploaded assets ${limits.allowImageAssets ? 'enabled' : 'disabled'}.</small>
@@ -20014,6 +20015,23 @@ async function sendWelcomeTest() {
     showSuccess('Test welcome triggered.');
   } catch (error) {
     showError(error?.message || 'Failed to send test welcome');
+  }
+}
+
+async function postWelcomeCaptchaPanel() {
+  try {
+    const channelId = document.getElementById('welcome_channel_id')?.value || null;
+    const res = await fetch('/api/admin/welcome/captcha-panel', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({ channelId }),
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) throw new Error(json?.error?.message || json?.message || 'Failed to post verification panel');
+    showSuccess('Verification panel posted.');
+  } catch (error) {
+    showError(error?.message || 'Failed to post verification panel');
   }
 }
 

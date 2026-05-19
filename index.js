@@ -541,7 +541,7 @@ client.on(Events.InteractionCreate, async interaction => {
     if (customId.startsWith('veto_')) { await handleVetoButton(interaction); return; }
     if (customId === 'micro_verify_check_status') { await handleMicroVerifyCheckStatus(interaction); return; }
     if (customId === 'micro_verify_copy_amount') { await handleMicroVerifyCopyAmount(interaction); return; }
-    if (customId.startsWith('welcome_captcha_start:')) {
+    if (customId.startsWith('welcome_captcha_start')) {
       const handled = await welcomeService.handleCaptchaStartButton(interaction);
       if (handled) return;
     }

@@ -157,6 +157,28 @@ function createAdminWelcomeRouter({
     }
   });
 
+  router.post('/api/admin/welcome/captcha-panel', adminAuthMiddleware, async (req, res) => {
+    if (!ensureWelcomeModule(req, res)) return;
+    try {
+      const guild = req.guild || await fetchGuildById(req.guildId);
+      if (!guild) return res.status(404).json(toErrorResponse('Guild not found', 'NOT_FOUND'));
+      const settingsResult = welcomeService.getSettings(req.guildId);
+      if (!settingsResult.success) {
+        return res.status(400).json(toErrorResponse(settingsResult.message || 'Failed to load welcome settings', 'VALIDATION_ERROR'));
+      }
+      const configuredChannel = settingsResult.settings?.welcomeChannelId || null;
+      const channelId = String(req.body?.channelId || configuredChannel || '').trim();
+      const result = await welcomeService.postCaptchaPanel(guild, channelId);
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to post captcha panel', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (error) {
+      logger.error('Error posting welcome captcha panel:', error);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.get('/api/admin/welcome/assets', adminAuthMiddleware, (req, res) => {
     if (!ensureWelcomeModule(req, res)) return;
     try {

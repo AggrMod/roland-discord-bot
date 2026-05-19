@@ -1931,7 +1931,9 @@ function createAuthUserRouter({
 
   router.get('/api/servers/invite-link', async (req, res) => {
     if (!req.session.discordUser) {
-      return res.status(401).json(toErrorResponse('Not authenticated', 'UNAUTHORIZED'));
+      const returnPath = req.originalUrl || '/api/servers/invite-link';
+      const loginUrl = `/auth/discord/login?returnTo=${encodeURIComponent(returnPath)}`;
+      return res.redirect(loginUrl);
     }
 
     try {

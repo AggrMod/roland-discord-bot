@@ -19736,20 +19736,23 @@ async function loadWelcomeSettingsSection() {
   wrap.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading welcome settings...</p></div>';
   try {
     const headers = buildTenantRequestHeaders();
-    const [settingsRes, channelsRes, rolesRes] = await Promise.all([
+    const [settingsRes, channelsRes, rolesRes, assetsRes] = await Promise.all([
       fetch('/api/admin/welcome/settings', { credentials: 'include', headers }),
       fetch('/api/admin/discord/channels', { credentials: 'include', headers }),
       fetch('/api/admin/discord/roles', { credentials: 'include', headers }),
+      fetch('/api/admin/welcome/assets', { credentials: 'include', headers }),
     ]);
-    const [settingsJson, channelsJson, rolesJson] = await Promise.all([
+    const [settingsJson, channelsJson, rolesJson, assetsJson] = await Promise.all([
       settingsRes.json(),
       channelsRes.json(),
       rolesRes.json(),
+      assetsRes.json(),
     ]);
     if (!settingsRes.ok || settingsJson.success === false) throw new Error(settingsJson?.error?.message || settingsJson?.message || 'Failed to load welcome settings');
     const s = settingsJson?.data?.settings || settingsJson?.settings || {};
     const channels = Array.isArray(channelsJson?.channels) ? channelsJson.channels : [];
     const roles = Array.isArray(rolesJson?.roles) ? rolesJson.roles : [];
+    const assets = Array.isArray(assetsJson?.data?.assets) ? assetsJson.data.assets : [];
 
     let channelOptions = `<option value="">-- Select channel --</option>`;
     channels.forEach((ch) => {
@@ -19780,6 +19783,13 @@ async function loadWelcomeSettingsSection() {
     if (s.captchaRoleId && !roles.some(role => String(role.id) === String(s.captchaRoleId))) {
       captchaRoleOptions += `<option value="${escapeHtml(s.captchaRoleId)}" selected>Unknown (${escapeHtml(s.captchaRoleId)})</option>`;
     }
+    let assetOptions = '<option value="">-- None (use image URL or no image) --</option>';
+    assets.forEach((asset) => {
+      const id = Number(asset.id || 0);
+      const selected = Number(s.welcomeImageAssetId || 0) === id ? ' selected' : '';
+      const label = `${asset.fileName || `asset-${id}`} (${Math.round((Number(asset.byteSize || 0) / 1024) * 10) / 10} KB)`;
+      assetOptions += `<option value="${id}"${selected}>${escapeHtml(label)}</option>`;
+    });
 
     wrap.innerHTML = `
       <div style="display:grid;gap:12px;">
@@ -19795,6 +19805,15 @@ async function loadWelcomeSettingsSection() {
         <label>Welcome image URL
           <input id="welcome_image_url" type="text" value="${escapeHtml(s.welcomeImageUrl || '')}" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
         </label>
+        <label>Uploaded image asset
+          <select id="welcome_image_asset_id" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+            ${assetOptions}
+          </select>
+        </label>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input id="welcome_image_file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="color:var(--text-secondary);">
+          <button class="btn-secondary btn-sm" onclick="uploadWelcomeImage()">Upload Image</button>
+        </div>
         <label style="display:flex;align-items:center;gap:8px;"><input id="welcome_dynamic_avatar_card" type="checkbox" ${s.dynamicAvatarCard ? 'checked' : ''}> Dynamic avatar card</label>
         <label style="display:flex;align-items:center;gap:8px;"><input id="welcome_dm_enabled" type="checkbox" ${s.dmEnabled ? 'checked' : ''}> Send onboarding DM</label>
         <label>DM template
@@ -19834,6 +19853,7 @@ async function saveWelcomeSettings() {
       welcomeChannelId: document.getElementById('welcome_channel_id')?.value || null,
       welcomeMessageTemplate: document.getElementById('welcome_message_template')?.value || '',
       welcomeImageUrl: document.getElementById('welcome_image_url')?.value || null,
+      welcomeImageAssetId: Number(document.getElementById('welcome_image_asset_id')?.value || 0) || null,
       dynamicAvatarCard: !!document.getElementById('welcome_dynamic_avatar_card')?.checked,
       dmEnabled: !!document.getElementById('welcome_dm_enabled')?.checked,
       dmMessageTemplate: document.getElementById('welcome_dm_template')?.value || '',
@@ -19869,5 +19889,37 @@ async function sendWelcomeTest() {
     showSuccess('Test welcome triggered.');
   } catch (error) {
     showError(error?.message || 'Failed to send test welcome');
+  }
+}
+
+async function uploadWelcomeImage() {
+  try {
+    const input = document.getElementById('welcome_image_file');
+    const file = input?.files?.[0];
+    if (!file) {
+      showError('Pick an image file first.');
+      return;
+    }
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
+    const res = await fetch('/api/admin/welcome/upload-image', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({
+        fileName: file.name,
+        dataUrl,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) throw new Error(json?.error?.message || json?.message || 'Upload failed');
+    showSuccess('Image uploaded. Select it in "Uploaded image asset" and save settings.');
+    await loadWelcomeSettingsSection();
+  } catch (error) {
+    showError(error?.message || 'Failed to upload image');
   }
 }

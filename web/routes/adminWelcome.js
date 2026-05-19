@@ -68,6 +68,59 @@ function createAdminWelcomeRouter({
     }
   });
 
+  router.get('/api/admin/welcome/assets', adminAuthMiddleware, (req, res) => {
+    if (!ensureWelcomeModule(req, res)) return;
+    try {
+      const rows = require('../../database/db').prepare(`
+        SELECT id, file_name, mime_type, byte_size, created_at
+        FROM tenant_welcome_assets
+        WHERE guild_id = ?
+        ORDER BY id DESC
+        LIMIT 50
+      `).all(req.guildId);
+      return res.json(toSuccessResponse({ assets: rows.map(row => ({
+        id: Number(row.id),
+        fileName: row.file_name,
+        mimeType: row.mime_type,
+        byteSize: Number(row.byte_size || 0),
+        createdAt: row.created_at,
+      })) }));
+    } catch (error) {
+      logger.error('Error loading welcome assets:', error);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/api/admin/welcome/upload-image', adminAuthMiddleware, (req, res) => {
+    if (!ensureWelcomeModule(req, res)) return;
+    try {
+      const raw = String(req.body?.dataUrl || '').trim();
+      if (!raw.startsWith('data:image/')) {
+        return res.status(400).json(toErrorResponse('dataUrl image is required', 'VALIDATION_ERROR'));
+      }
+      const match = raw.match(/^data:([^;]+);base64,(.+)$/);
+      if (!match) {
+        return res.status(400).json(toErrorResponse('Invalid dataUrl payload', 'VALIDATION_ERROR'));
+      }
+      const mimeType = String(match[1] || '').trim().toLowerCase();
+      const base64 = String(match[2] || '').trim();
+      const buffer = Buffer.from(base64, 'base64');
+      const result = welcomeService.saveUploadedImage({
+        guildId: req.guildId,
+        fileName: req.body?.fileName || `welcome-${Date.now()}`,
+        mimeType,
+        buffer,
+      });
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to upload image', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (error) {
+      logger.error('Error uploading welcome image:', error);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.post('/api/public/v1/welcome/captcha/verify', async (req, res) => {
     try {
       const result = await welcomeService.verifyCaptcha({

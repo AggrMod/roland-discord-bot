@@ -5,6 +5,7 @@ const tenantService = require('./tenantService');
 
 const DEFAULT_TEMPLATE = 'Welcome {user_mention} to {server_name}! You are member #{member_count}.';
 const DEFAULT_DM_TEMPLATE = 'Welcome to {server_name}, {username}! Check out {channel:verify} to get started.';
+const MAX_IMAGE_BYTES = Math.max(200000, Number(process.env.WELCOME_IMAGE_MAX_BYTES || 2 * 1024 * 1024));
 
 const CHALLENGE_TTL_MS = Math.max(5, Number(process.env.WELCOME_CAPTCHA_TTL_MINUTES || 20)) * 60 * 1000;
 const VERIFY_BASE_URL = String(process.env.WEB_URL || 'http://localhost:3000').replace(/\/+$/, '');
@@ -82,6 +83,7 @@ class WelcomeService {
       welcomeMessageTemplate: row?.welcome_message_template || DEFAULT_TEMPLATE,
       welcomeEmbed: safeJsonParse(row?.welcome_embed_json || '{}', {}),
       welcomeImageUrl: row?.welcome_image_url || null,
+      welcomeImageAssetId: Number(row?.welcome_image_asset_id || 0) || null,
       dynamicAvatarCard: row ? row.dynamic_avatar_card === 1 : false,
       dmEnabled: row ? row.dm_enabled === 1 : false,
       dmMessageTemplate: row?.dm_message_template || DEFAULT_DM_TEMPLATE,
@@ -112,6 +114,7 @@ class WelcomeService {
         ? patch.welcomeEmbed
         : now.welcomeEmbed,
       welcomeImageUrl: patch.welcomeImageUrl !== undefined ? String(patch.welcomeImageUrl || '').trim() || null : now.welcomeImageUrl,
+      welcomeImageAssetId: patch.welcomeImageAssetId !== undefined ? (Number(patch.welcomeImageAssetId) || null) : now.welcomeImageAssetId,
       dynamicAvatarCard: patch.dynamicAvatarCard !== undefined ? !!patch.dynamicAvatarCard : now.dynamicAvatarCard,
       dmEnabled: patch.dmEnabled !== undefined ? !!patch.dmEnabled : now.dmEnabled,
       dmMessageTemplate: patch.dmMessageTemplate !== undefined
@@ -125,16 +128,17 @@ class WelcomeService {
     db.prepare(`
       INSERT INTO tenant_welcome_settings (
         guild_id, enabled, welcome_channel_id, welcome_message_template, welcome_embed_json,
-        welcome_image_url, dynamic_avatar_card, dm_enabled, dm_message_template, auto_role_ids,
+        welcome_image_url, welcome_image_asset_id, dynamic_avatar_card, dm_enabled, dm_message_template, auto_role_ids,
         captcha_enabled, captcha_role_id, created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON CONFLICT(guild_id) DO UPDATE SET
         enabled = excluded.enabled,
         welcome_channel_id = excluded.welcome_channel_id,
         welcome_message_template = excluded.welcome_message_template,
         welcome_embed_json = excluded.welcome_embed_json,
         welcome_image_url = excluded.welcome_image_url,
+        welcome_image_asset_id = excluded.welcome_image_asset_id,
         dynamic_avatar_card = excluded.dynamic_avatar_card,
         dm_enabled = excluded.dm_enabled,
         dm_message_template = excluded.dm_message_template,
@@ -149,6 +153,7 @@ class WelcomeService {
       next.welcomeMessageTemplate,
       JSON.stringify(next.welcomeEmbed || {}),
       next.welcomeImageUrl,
+      next.welcomeImageAssetId,
       next.dynamicAvatarCard ? 1 : 0,
       next.dmEnabled ? 1 : 0,
       next.dmMessageTemplate,
@@ -216,11 +221,25 @@ class WelcomeService {
           image: settings.welcomeImageUrl ? { url: settings.welcomeImageUrl } : undefined,
           thumbnail: settings.dynamicAvatarCard ? { url: member.user?.displayAvatarURL?.({ extension: 'png', size: 256 }) } : undefined
         };
+        const files = [];
+        if (settings.welcomeImageAssetId) {
+          const asset = db.prepare(`
+            SELECT id, file_name, mime_type, image_blob
+            FROM tenant_welcome_assets
+            WHERE id = ? AND guild_id = ?
+          `).get(settings.welcomeImageAssetId, guildId);
+          if (asset?.image_blob) {
+            const fileName = String(asset.file_name || `welcome-${asset.id}.png`);
+            files.push({ attachment: Buffer.from(asset.image_blob), name: fileName });
+            embed.image = { url: `attachment://${fileName}` };
+          }
+        }
 
         const hasEmbed = !!(embed.title || embed.description || embed.color || embed.footer || embed.image || embed.thumbnail);
         await channel.send({
           content,
-          embeds: hasEmbed ? [embed] : []
+          embeds: hasEmbed ? [embed] : [],
+          files
         }).catch(() => {});
       }
 
@@ -298,6 +317,33 @@ class WelcomeService {
     if (!member) return { success: false, message: 'Could not resolve test member' };
     await this.handleMemberJoin(member);
     return { success: true };
+  }
+
+  saveUploadedImage({ guildId, fileName, mimeType, buffer }) {
+    const normalizedGuildId = String(guildId || '').trim();
+    if (!normalizedGuildId) return { success: false, message: 'guildId is required' };
+    if (!buffer || !Buffer.isBuffer(buffer) || buffer.length === 0) return { success: false, message: 'Image buffer is required' };
+    if (buffer.length > MAX_IMAGE_BYTES) return { success: false, message: `Image exceeds max size (${MAX_IMAGE_BYTES} bytes)` };
+    const safeMime = String(mimeType || '').trim().toLowerCase();
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(safeMime)) {
+      return { success: false, message: 'Unsupported image type. Use PNG/JPG/WEBP/GIF.' };
+    }
+    const safeName = String(fileName || 'welcome-image').replace(/[^\w.\-]+/g, '_').slice(0, 120) || 'welcome-image';
+
+    const result = db.prepare(`
+      INSERT INTO tenant_welcome_assets (guild_id, file_name, mime_type, image_blob, byte_size, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(normalizedGuildId, safeName, safeMime, buffer, buffer.length);
+
+    return {
+      success: true,
+      asset: {
+        id: Number(result.lastInsertRowid),
+        fileName: safeName,
+        mimeType: safeMime,
+        byteSize: buffer.length,
+      }
+    };
   }
 }
 

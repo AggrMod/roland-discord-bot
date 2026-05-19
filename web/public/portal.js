@@ -19807,6 +19807,7 @@ async function loadWelcomeSettingsSection() {
             <option value="family_initiation">Family Initiation</option>
           </select>
           <button class="btn-secondary btn-sm" onclick="applyWelcomePreset()">Apply Preset</button>
+          <button class="btn-secondary btn-sm" onclick="restoreDefaultWelcomePreset()">Restore Default</button>
         </div>
         <label style="display:flex;align-items:center;gap:8px;"><input id="welcome_enabled" type="checkbox" ${s.enabled ? 'checked' : ''}> Enable welcome module</label>
         <label>Message body
@@ -19963,6 +19964,23 @@ async function applyWelcomePreset() {
     await loadWelcomeSettingsSection();
   } catch (error) {
     showError(error?.message || 'Failed to apply preset');
+  }
+}
+
+async function restoreDefaultWelcomePreset() {
+  try {
+    const res = await fetch('/api/admin/welcome/preset', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({ presetKey: 'minimal' }),
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) throw new Error(json?.error?.message || json?.message || 'Failed to restore default preset');
+    showSuccess('Default welcome preset restored.');
+    await loadWelcomeSettingsSection();
+  } catch (error) {
+    showError(error?.message || 'Failed to restore default preset');
   }
 }
 

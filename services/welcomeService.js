@@ -70,6 +70,10 @@ function slugifyChannelName(name) {
     .replace(/^-|-$/g, '');
 }
 
+function compactSlug(value) {
+  return String(value || '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+}
+
 function buildChallengeToken(payload) {
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const signature = crypto.createHmac('sha256', CHALLENGE_SIGNING_SECRET).update(encodedPayload).digest('base64url');
@@ -193,7 +197,7 @@ class WelcomeService {
     return this.getSettings(normalizedGuildId);
   }
 
-  parseVariables(text, member) {
+  parseVariables(text, member, channelCollection = null) {
     const template = String(text || '');
     const guild = member?.guild;
     const username = member?.user?.username || member?.displayName || 'Member';
@@ -205,10 +209,14 @@ class WelcomeService {
 
     return withBasics.replace(/\{channel:([^}]+)\}/gi, (_match, slugInput) => {
       const slug = slugifyChannelName(slugInput);
-      if (!slug || !guild?.channels?.cache) return `#${slugInput}`;
-      const channel = guild.channels.cache.find(c => {
+      const compact = compactSlug(slug);
+      const source = channelCollection || guild?.channels?.cache;
+      if (!slug || !source) return `#${slugInput}`;
+      const channel = source.find(c => {
         if (!c || typeof c.name !== 'string') return false;
-        return slugifyChannelName(c.name) === slug;
+        const channelSlug = slugifyChannelName(c.name);
+        const channelCompact = compactSlug(channelSlug);
+        return channelSlug === slug || (compact && channelCompact === compact);
       });
       return channel?.id ? `<#${channel.id}>` : `#${slug}`;
     });
@@ -246,26 +254,33 @@ class WelcomeService {
       if (!channelId) {
         return { success: false, delivered: false, message: 'No welcome channel configured.' };
       }
-      const channel = channelId ? member.guild.channels.cache.get(channelId) : null;
+      let fetchedChannels = null;
+      try {
+        fetchedChannels = await member.guild.channels.fetch();
+      } catch (_error) {
+        fetchedChannels = null;
+      }
+      const channelSource = fetchedChannels || member.guild.channels.cache;
+      const channel = channelId ? channelSource.get(channelId) : null;
       if (!channel) {
         return { success: false, delivered: false, message: `Welcome channel not found: ${channelId}` };
       }
       if (channel && typeof channel.send === 'function') {
-        const content = this.parseVariables(settings.welcomeMessageTemplate, member);
+        const content = this.parseVariables(settings.welcomeMessageTemplate, member, channelSource);
         const embedPayload = settings.welcomeEmbed && typeof settings.welcomeEmbed === 'object' ? settings.welcomeEmbed : {};
         const parsedFields = normalizeStepFields(embedPayload.fields).map((field) => ({
-          name: this.parseVariables(field.name, member),
-          value: this.parseVariables(field.value, member),
+          name: this.parseVariables(field.name, member, channelSource),
+          value: this.parseVariables(field.value, member, channelSource),
           inline: !!field.inline,
         }));
         const footerText = typeof embedPayload.footer === 'string'
           ? embedPayload.footer
           : (embedPayload.footer && typeof embedPayload.footer.text === 'string' ? embedPayload.footer.text : '');
         const embed = {
-          title: embedPayload.title ? this.parseVariables(embedPayload.title, member) : null,
-          description: embedPayload.description ? this.parseVariables(embedPayload.description, member) : null,
+          title: embedPayload.title ? this.parseVariables(embedPayload.title, member, channelSource) : null,
+          description: embedPayload.description ? this.parseVariables(embedPayload.description, member, channelSource) : null,
           color: normalizeEmbedColor(embedPayload.color),
-          footer: footerText ? { text: this.parseVariables(footerText, member) } : undefined,
+          footer: footerText ? { text: this.parseVariables(footerText, member, channelSource) } : undefined,
           image: settings.welcomeImageUrl ? { url: settings.welcomeImageUrl } : undefined,
           thumbnail: settings.dynamicAvatarCard ? { url: member.user?.displayAvatarURL?.({ extension: 'png', size: 256 }) } : undefined,
           fields: parsedFields.length > 0 ? parsedFields : undefined,
@@ -294,7 +309,7 @@ class WelcomeService {
       }
 
       if (settings.dmEnabled) {
-        const dmText = this.parseVariables(settings.dmMessageTemplate, member);
+        const dmText = this.parseVariables(settings.dmMessageTemplate, member, channelSource);
         await member.send({ content: dmText }).catch(() => {});
       }
 

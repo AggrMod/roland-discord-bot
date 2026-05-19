@@ -2368,7 +2368,10 @@ function renderServerAccessView(errorMessage = '') {
     } else if (!activeGuildId) {
       activeStatus.innerHTML = `
         <div class="server-alert">
-          Select a managed server to continue with tenant-aware actions.
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+            <span>Select a managed server to continue with tenant-aware actions.</span>
+            <button class="btn-secondary" onclick="openGuildInvite('')">Invite Bot</button>
+          </div>
         </div>
       `;
     } else {
@@ -2381,6 +2384,7 @@ function renderServerAccessView(errorMessage = '') {
           </div>
           <div class="server-card__actions">
             <span class="server-status-badge active">Active</span>
+            <button class="btn-secondary" onclick="openGuildInvite('')">Invite Bot</button>
             <button class="btn-secondary" onclick="setActiveGuild('', { announce: false })">Clear</button>
           </div>
         </div>

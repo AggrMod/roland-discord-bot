@@ -352,6 +352,16 @@ h4,
   color: var(--text-secondary);
   font-size: 0.85rem;
 }
+.sa-v2-card--action {
+  cursor: pointer;
+}
+.sa-v2-card--action:hover {
+  border-color: rgba(129, 140, 248, 0.45);
+  box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.18) inset;
+}
+.sa-v2-card--action .btn-secondary {
+  margin-top: 10px;
+}
 .sa-v2-kpi {
   font-size: 1.9rem;
   font-weight: 700;

@@ -7843,6 +7843,24 @@ function setSuperadminWorkspaceBillingStatus(value) {
   superadminWorkspaceBillingStatus = String(value || 'all');
 }
 
+async function openSuperadminLegacyArea(tab = 'globalops', panel = '') {
+  superadminActiveTab = String(tab || 'globalops');
+  if (panel && superadminActiveTab === 'globalops') {
+    superadminGlobalOpsPanel = String(panel);
+  }
+  if (panel && superadminActiveTab === 'tenants') {
+    superadminTenantsPanel = String(panel);
+  }
+  await loadSuperadminLegacyView();
+  showSuperadminTab(superadminActiveTab);
+  if (superadminActiveTab === 'globalops' && panel) {
+    showSuperadminGlobalOpsPanel(panel);
+  }
+  if (superadminActiveTab === 'tenants' && panel) {
+    showSuperadminTenantsPanel(panel);
+  }
+}
+
 async function loadSuperadminWorkspaceHubV2() {
   const content = document.getElementById('adminSuperadminContent');
   if (!content) return;
@@ -7975,13 +7993,15 @@ async function loadSuperadminWorkspaceHubV2() {
       workspaceBody = capabilities.security
         ? `
           <div class="sa-v2-grid">
-            <article class="sa-v2-card">
+            <article class="sa-v2-card sa-v2-card--action" onclick="openSuperadminLegacyArea('globalops','superadmins')">
               <h4>Superadmin Access</h4>
               <p>Global role and sensitive settings management stays available in legacy controls during V1.</p>
+              <button class="btn-secondary" onclick="event.stopPropagation(); openSuperadminLegacyArea('globalops','superadmins')">Open Superadmins</button>
             </article>
-            <article class="sa-v2-card">
+            <article class="sa-v2-card sa-v2-card--action" onclick="openSuperadminLegacyArea('identity')">
               <h4>Identity Controls</h4>
               <p>Wallet linking, trust flags, and identity audit remain unchanged and available in legacy controls.</p>
+              <button class="btn-secondary" onclick="event.stopPropagation(); openSuperadminLegacyArea('identity')">Open Identity</button>
             </article>
           </div>
         `
@@ -7990,9 +8010,9 @@ async function loadSuperadminWorkspaceHubV2() {
       workspaceBody = capabilities.integrations
         ? `
           <div class="sa-v2-grid">
-            <article class="sa-v2-card"><h4>AI Provider Routing</h4><p>Provider routing remains available and unchanged in legacy controls during this V1 rebuild.</p></article>
-            <article class="sa-v2-card"><h4>X Provider</h4><p>OAuth and polling settings remain available in legacy controls.</p></article>
-            <article class="sa-v2-card"><h4>Chain Emojis & Replay</h4><p>Global chain map and replay tools remain available in legacy controls.</p></article>
+            <article class="sa-v2-card sa-v2-card--action" onclick="openSuperadminLegacyArea('globalops','aiProviders')"><h4>AI Provider Routing</h4><p>Provider routing remains available and unchanged in legacy controls during this V1 rebuild.</p><button class="btn-secondary" onclick="event.stopPropagation(); openSuperadminLegacyArea('globalops','aiProviders')">Open AI Settings</button></article>
+            <article class="sa-v2-card sa-v2-card--action" onclick="openSuperadminLegacyArea('globalops','xProvider')"><h4>X Provider</h4><p>OAuth and polling settings remain available in legacy controls.</p><button class="btn-secondary" onclick="event.stopPropagation(); openSuperadminLegacyArea('globalops','xProvider')">Open X Settings</button></article>
+            <article class="sa-v2-card sa-v2-card--action" onclick="openSuperadminLegacyArea('globalops','chainEmojis')"><h4>Chain Emojis & Replay</h4><p>Global chain map and replay tools remain available in legacy controls.</p><button class="btn-secondary" onclick="event.stopPropagation(); openSuperadminLegacyArea('globalops','chainEmojis')">Open Chain Controls</button></article>
           </div>
         `
         : renderWorkspaceLockedState('Integrations & System');

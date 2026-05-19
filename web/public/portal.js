@@ -19751,6 +19751,7 @@ async function loadWelcomeSettingsSection() {
     if (!settingsRes.ok || settingsJson.success === false) throw new Error(settingsJson?.error?.message || settingsJson?.message || 'Failed to load welcome settings');
     const s = settingsJson?.data?.settings || settingsJson?.settings || {};
     const limits = settingsJson?.data?.limits || settingsJson?.limits || {};
+    const canEditBrandingFields = limits.canEditBrandingFields !== false;
     const channels = Array.isArray(channelsJson?.channels) ? channelsJson.channels : [];
     const roles = Array.isArray(rolesJson?.roles) ? rolesJson.roles : [];
     const assets = Array.isArray(assetsJson?.data?.assets) ? assetsJson.data.assets : [];
@@ -19808,7 +19809,7 @@ async function loadWelcomeSettingsSection() {
           <textarea id="welcome_message_template" rows="2" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">${escapeHtml(s.welcomeMessageTemplate || '')}</textarea>
         </label>
         <label>Embed color
-          <input id="welcome_embed_color" type="text" value="${escapeHtml(s?.welcomeEmbed?.color || '#f8b64c')}" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+          <input id="welcome_embed_color" type="text" value="${escapeHtml(s?.welcomeEmbed?.color || '#f8b64c')}" ${canEditBrandingFields ? '' : 'disabled'} style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);${canEditBrandingFields ? '' : 'opacity:0.7;cursor:not-allowed;'}">
         </label>
         <label>Embed title
           <input id="welcome_embed_title" type="text" value="${escapeHtml(s?.welcomeEmbed?.title || '')}" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
@@ -19822,7 +19823,7 @@ async function loadWelcomeSettingsSection() {
           </select>
         </label>
         <label>Embed footer
-          <input id="welcome_embed_footer" type="text" value="${escapeHtml(s?.welcomeEmbed?.footer || '')}" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+          <input id="welcome_embed_footer" type="text" value="${escapeHtml(s?.welcomeEmbed?.footer || '')}" ${canEditBrandingFields ? '' : 'disabled'} style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);${canEditBrandingFields ? '' : 'opacity:0.7;cursor:not-allowed;'}">
         </label>
         <div id="welcome_step_fields_wrap" style="display:grid;gap:8px;"></div>
         <button class="btn-secondary btn-sm" onclick="addWelcomeStepField()">+ Add Step Field</button>
@@ -19860,6 +19861,7 @@ async function loadWelcomeSettingsSection() {
         </div>
         <small style="color:var(--text-secondary);">Variables: {user_mention}, {username}, {server_name}, {member_count}, {channel:verify}. Tip: Ctrl/Cmd-click to select multiple auto roles.</small>
         <small style="color:var(--text-secondary);">Plan limits: channel tokens ${limits.maxChannelTokens == null ? '∞' : limits.maxChannelTokens}, step fields ${limits.maxStepFields == null ? '∞' : limits.maxStepFields}, uploaded assets ${limits.allowImageAssets ? 'enabled' : 'disabled'}.</small>
+        ${canEditBrandingFields ? '' : '<small style="color:#fcd34d;">Embed color/footer are part of Branding controls and require a paid plan.</small>'}
       </div>
     `;
     const existingFields = Array.isArray(s?.welcomeEmbed?.fields) ? s.welcomeEmbed.fields : [];

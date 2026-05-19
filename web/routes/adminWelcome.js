@@ -8,6 +8,7 @@ function createAdminWelcomeRouter({
   welcomeService,
   fetchGuildById,
   entitlementService,
+  tenantService,
 }) {
   const router = express.Router();
   const countChannelTokens = (text) => {
@@ -53,12 +54,16 @@ function createAdminWelcomeRouter({
       const channelTokenLimit = entitlementService?.getEffectiveLimit?.(req.guildId, 'welcome', 'max_channel_tokens');
       const stepFieldLimit = entitlementService?.getEffectiveLimit?.(req.guildId, 'welcome', 'max_step_fields');
       const imageAssetsEnabled = entitlementService?.getEffectiveLimit?.(req.guildId, 'welcome', 'allow_image_assets');
+      const planKey = String(tenantService?.getTenantContext?.(req.guildId)?.planKey || 'starter').toLowerCase();
+      const canEditBrandingFields = planKey !== 'starter';
       return res.json(toSuccessResponse({
         ...result,
         limits: {
           maxChannelTokens: channelTokenLimit,
           maxStepFields: stepFieldLimit,
-          allowImageAssets: imageAssetsEnabled === null ? true : Number(imageAssetsEnabled) > 0
+          allowImageAssets: imageAssetsEnabled === null ? true : Number(imageAssetsEnabled) > 0,
+          canEditBrandingFields,
+          planKey,
         }
       }));
     } catch (error) {
@@ -71,6 +76,8 @@ function createAdminWelcomeRouter({
     if (!ensureWelcomeModule(req, res)) return;
     try {
       const body = req.body || {};
+      const planKey = String(tenantService?.getTenantContext?.(req.guildId)?.planKey || 'starter').toLowerCase();
+      const canEditBrandingFields = planKey !== 'starter';
       const fields = Array.isArray(body?.welcomeEmbed?.fields) ? body.welcomeEmbed.fields : [];
       const channelTokenLimit = entitlementService?.getEffectiveLimit?.(req.guildId, 'welcome', 'max_channel_tokens');
       const stepFieldLimit = entitlementService?.getEffectiveLimit?.(req.guildId, 'welcome', 'max_step_fields');
@@ -96,11 +103,22 @@ function createAdminWelcomeRouter({
       if ((Number(imageAssetsEnabled || 0) <= 0) && body.welcomeImageAssetId) {
         return res.status(403).json(toErrorResponse('Uploaded image assets are not available on your current plan.', 'FORBIDDEN'));
       }
+
+      let normalizedEmbed = body.welcomeEmbed;
+      if (!canEditBrandingFields) {
+        const current = welcomeService.getSettings(req.guildId);
+        const currentEmbed = current?.success ? (current.settings?.welcomeEmbed || {}) : {};
+        normalizedEmbed = {
+          ...(body.welcomeEmbed || {}),
+          color: currentEmbed?.color || null,
+          footer: currentEmbed?.footer || '',
+        };
+      }
       const result = welcomeService.updateSettings(req.guildId, {
         enabled: body.enabled,
         welcomeChannelId: body.welcomeChannelId,
         welcomeMessageTemplate: body.welcomeMessageTemplate,
-        welcomeEmbed: body.welcomeEmbed,
+        welcomeEmbed: normalizedEmbed,
         welcomeImageUrl: body.welcomeImageUrl,
         welcomeImageAssetId: body.welcomeImageAssetId,
         dynamicAvatarCard: body.dynamicAvatarCard,

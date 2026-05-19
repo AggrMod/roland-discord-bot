@@ -62,6 +62,7 @@ function createAdminCoreRouter({
         verification: { enabled: !!moduleState.verification, stats: { verifiedUsers: Number(safeGet('SELECT COUNT(DISTINCT discord_id) AS cnt FROM wallets', [], { cnt: 0 })?.cnt || 0) } },
         governance: { enabled: !!moduleState.governance, stats: { activeProposals: Number(safeGet('SELECT COUNT(*) AS cnt FROM proposals WHERE guild_id = ? AND status IN ("supporting", "voting")', [guildId], { cnt: 0 })?.cnt || 0) } },
         missions: { enabled: !!moduleState.heist, stats: { activeMissions: Number(safeGet('SELECT COUNT(*) AS cnt FROM heist_missions WHERE guild_id = ? AND status IN ("recruiting", "active")', [guildId], { cnt: 0 })?.cnt || 0) } },
+        welcome: { enabled: !!moduleState.welcome, stats: { configured: Number(safeGet('SELECT COUNT(*) AS cnt FROM tenant_welcome_settings WHERE guild_id = ? AND enabled = 1', [guildId], { cnt: 0 })?.cnt || 0) } },
         tracking: { enabled: !!(moduleState.nfttracker || moduleState.tokentracker), stats: { actions: 0 } }
       };
 

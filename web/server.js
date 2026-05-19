@@ -31,6 +31,7 @@ const trackedWalletsService = require('../services/trackedWalletsService');
 const inviteTrackerService = require('../services/inviteTrackerService');
 const aiAssistantService = require('../services/aiAssistantService');
 const ticketService = require('../services/ticketService');
+const welcomeService = require('../services/welcomeService');
 const entitlementService = require('../services/entitlementService');
 const billingService = require('../services/billingService');
 const monetizationTemplateService = require('../services/monetizationTemplateService');
@@ -709,6 +710,9 @@ class WebServer {
     function ensureTicketingModule(req, res) {
       return ensureTenantModuleEnabled(req, res, 'ticketing', 'Ticketing');
     }
+    function ensureWelcomeModule(req, res) {
+      return ensureTenantModuleEnabled(req, res, 'welcome', 'Welcome & Onboarding');
+    }
 
     // ==================== API V1 (VERSIONED PUBLIC API) ====================
 
@@ -822,6 +826,7 @@ class WebServer {
       '/engagement': 'engagement',
       '/self-serve-roles': 'self-serve-roles',
       '/ticketing': 'ticketing',
+      '/welcome': 'welcome',
       '/treasury': 'treasury',
       '/help': 'help',
       '/plans': 'plans',
@@ -1315,6 +1320,14 @@ class WebServer {
       adminAuthMiddleware,
       ensureTicketingModule,
       ticketService,
+    }));
+    const createAdminWelcomeRouter = require('./routes/adminWelcome');
+    this.app.use('/', createAdminWelcomeRouter({
+      logger,
+      adminAuthMiddleware,
+      ensureWelcomeModule,
+      welcomeService,
+      fetchGuildById,
     }));
     const createAdminVaultRouter = require('./routes/adminVault');
     this.app.use('/', createAdminVaultRouter({

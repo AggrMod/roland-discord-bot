@@ -54,6 +54,7 @@ function createAdminSettingsRouter({
         effectiveSettings.moduleVerificationEnabled = !!tenantContext.modules.verification;
         effectiveSettings.moduleMissionsEnabled = !!tenantContext.modules.heist;
         effectiveSettings.moduleVaultEnabled = !!tenantContext.modules.vault;
+        effectiveSettings.moduleWelcomeEnabled = !!tenantContext.modules.welcome;
         effectiveSettings.moduleTreasuryEnabled = !!tenantContext.modules.treasury;
         effectiveSettings.moduleWalletTrackerEnabled = tenantContext.modules.wallettracker === undefined
           ? !!tenantContext.modules.treasury
@@ -124,7 +125,7 @@ function createAdminSettingsRouter({
         'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleTreasuryEnabled', 'moduleWalletTrackerEnabled',
         'moduleInviteTrackerEnabled',
         'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleBrandingEnabled', 'moduleMissionsEnabled', 'moduleVaultEnabled', 'moduleBattleEnabled', 'moduleMinigamesEnabled',
-        'moduleTicketingEnabled', 'moduleRoleClaimEnabled', 'moduleEngagementEnabled', 'moduleAiAssistantEnabled',
+        'moduleWelcomeEnabled', 'moduleTicketingEnabled', 'moduleRoleClaimEnabled', 'moduleEngagementEnabled', 'moduleAiAssistantEnabled',
         'battleRoundPauseMinSec', 'battleRoundPauseMaxSec', 'battleElitePrepSec', 'battleForcedEliminationIntervalRounds', 'battleDefaultEra',
         'baseVerifiedRoleId', 'autoResyncEnabled', 'ogRoleId', 'ogRoleLimit',
         'treasuryWalletAddress', 'treasuryRefreshInterval', 'txAlertChannelId',
@@ -186,6 +187,7 @@ function createAdminSettingsRouter({
             moduleVerificationEnabled: 'verification',
             moduleMissionsEnabled: 'heist',
             moduleVaultEnabled: 'vault',
+            moduleWelcomeEnabled: 'welcome',
             moduleTreasuryEnabled: 'treasury',
             moduleWalletTrackerEnabled: 'wallettracker',
             moduleInviteTrackerEnabled: 'invites',

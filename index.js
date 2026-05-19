@@ -330,6 +330,7 @@ const ticketService = require('./services/ticketService');
 const nftActivityService = require('./services/nftActivityService');
 const inviteTrackerService = require('./services/inviteTrackerService');
 const heistService = require('./services/heistService');
+const welcomeService = require('./services/welcomeService');
 
 const intervals = [];
 
@@ -565,7 +566,19 @@ client.on(Events.InteractionCreate, async interaction => {
 
 client.on(Events.InviteCreate, invite => inviteTrackerService.handleInviteCreate(invite));
 client.on(Events.InviteDelete, invite => inviteTrackerService.handleInviteDelete(invite));
-client.on(Events.GuildMemberAdd, member => inviteTrackerService.trackMemberJoin(member));
+client.on(Events.GuildMemberAdd, async member => {
+  try {
+    await inviteTrackerService.trackMemberJoin(member);
+  } catch (error) {
+    logger.warn(`[invite-tracker] trackMemberJoin failed for guild=${member?.guild?.id || 'unknown'} user=${member?.id || 'unknown'}: ${error?.message || error}`);
+  }
+
+  try {
+    await welcomeService.handleMemberJoin(member);
+  } catch (error) {
+    logger.warn(`[welcome] handleMemberJoin failed for guild=${member?.guild?.id || 'unknown'} user=${member?.id || 'unknown'}: ${error?.message || error}`);
+  }
+});
 client.on(Events.GuildMemberUpdate, (o, n) => inviteTrackerService.handleMemberRoleUpdate(o, n));
 
 async function handlePanelVerifyButton(interaction) {

@@ -1400,12 +1400,14 @@ function updateModuleVisibility() {
     { id: 'sidebarNavTokenActivity', key: 'tokentracker' },
     { id: 'sidebarNavSelfServe', key: 'selfserveroles' },
     { id: 'sidebarNavTicketing', key: 'ticketing' },
+    { id: 'sidebarNavWelcome', key: 'welcome' },
     { id: 'sidebarNavEngagement', key: 'engagement' },
     { id: 'sidebarNavHeist', key: 'heist' },
     { id: 'mobileNavTreasury', key: 'wallettracker' },
     { id: 'mobileNavTokenActivity', key: 'tokentracker' },
     { id: 'mobileNavSelfServe', key: 'selfserveroles' },
     { id: 'mobileNavTicketing', key: 'ticketing' },
+    { id: 'mobileNavWelcome', key: 'welcome' },
     { id: 'mobileNavEngagement', key: 'engagement' },
     { id: 'mobileNavHeist', key: 'heist' },
   ];
@@ -1432,6 +1434,7 @@ const MODULE_REGISTRY = [
   { key: 'minigames', label: 'Minigames', icon: '⚔️', section: 'battle', desc: 'Arcade module including Battle Arena sessions, lobbies, and game events.' },
   { key: 'heist', label: 'Missions', icon: '🎯', section: 'heist', desc: 'Role-based missions and strategic community goals.' },
   { key: 'vault', label: 'Vault', icon: '🔐', section: 'vault', desc: 'Key rewards, mint sync rules, seasons, and vault operations.' },
+  { key: 'welcome', label: 'Welcome & Onboarding', icon: '👋', section: 'welcome', desc: 'Join messages, auto-roles, onboarding DM, and captcha checks.' },
   { key: 'selfserveroles', label: 'Self-Serve Roles', icon: '🎭', section: 'self-serve-roles', desc: 'Claim optional roles assigned by administrators.' },
   { key: 'help', label: 'Help Center', icon: '❓', section: 'help', desc: 'Guides, command references, and troubleshooting across all modules.' }
 ];
@@ -1449,6 +1452,7 @@ const MODULE_TOGGLE_SETTING_FIELD_MAP = Object.freeze({
   minigames: ['moduleMinigamesEnabled', 'moduleBattleEnabled'],
   heist: ['moduleMissionsEnabled'],
   vault: ['moduleVaultEnabled'],
+  welcome: ['moduleWelcomeEnabled'],
   selfserveroles: ['moduleRoleClaimEnabled'],
 });
 
@@ -2021,6 +2025,8 @@ function updateSidebarModuleNav() {
     { id: 'mobileNavTokenActivity', module: 'tokentracker' },
     { id: 'sidebarNavHeist', module: 'heist' },
     { id: 'mobileNavHeist', module: 'heist' },
+    { id: 'sidebarNavWelcome', module: 'welcome' },
+    { id: 'mobileNavWelcome', module: 'welcome' },
     { id: 'sidebarNavEngagement', module: 'engagement' },
     // Plans nav handled separately (superadmin-only)
   ];
@@ -2087,6 +2093,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     aiassistant: !!settings.moduleAiAssistantEnabled,
     heist: !!settings.moduleMissionsEnabled,
     vault: !!settings.moduleVaultEnabled,
+    welcome: !!settings.moduleWelcomeEnabled,
     ticketing: !!settings.moduleTicketingEnabled,
     engagement: !!settings.moduleEngagementEnabled,
     roleclaim: !!settings.moduleRoleClaimEnabled,
@@ -2131,6 +2138,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     'section-nft-activity': !moduleState.nfttracker,
     'section-token-activity': !moduleState.tokentracker,
     'section-heist': !moduleState.heist,
+    'section-welcome': !moduleState.welcome,
     'section-battle': !moduleState.minigames
   };
   if (activeSection && disabledActive[activeSection]) {
@@ -2178,6 +2186,7 @@ function applySettingsTabVisibility(settings = {}) {
     minigames: minigamesEnabled,
     heist: !!settings.moduleMissionsEnabled,
     vault: !!settings.moduleVaultEnabled,
+    welcome: !!settings.moduleWelcomeEnabled,
     selfserveroles: !!settings.moduleRoleClaimEnabled,
     ticketing: !!settings.moduleTicketingEnabled,
     engagement: !!settings.moduleEngagementEnabled,
@@ -5944,6 +5953,8 @@ function switchSection(sectionName, options = {}) {
     } else {
       loadUserTicketOverview();
     }
+  } else if (sectionName === 'welcome') {
+    loadWelcomeSettingsSection();
   } else if (sectionName === 'engagement') {
     loadEngagementSection();
   } else if (sectionName === 'plans') {
@@ -10029,6 +10040,7 @@ async function loadAdminSettingsView() {
       { id: 'moduleBrandingEnabled',     label: 'Branding',        icon: 'BR', moduleKey: 'branding'      },
       { id: 'moduleMissionsEnabled',     label: 'Missions',        icon: 'H',  moduleKey: 'heist'         },
       { id: 'moduleVaultEnabled',        label: 'Vault',           icon: '🔐', moduleKey: 'vault'         },
+      { id: 'moduleWelcomeEnabled',      label: 'Welcome',         icon: '👋', moduleKey: 'welcome'       },
       { id: 'moduleWalletTrackerEnabled',label: 'Wallet Tracker',  icon: 'W',  moduleKey: 'wallettracker' },
       { id: 'moduleAiAssistantEnabled',  label: 'AI Assistant',    icon: 'AI', moduleKey: 'aiassistant'  },
       { id: 'moduleInviteTrackerEnabled',label: 'Invite Tracker',  icon: '📧', moduleKey: 'invites'       },
@@ -10144,7 +10156,7 @@ async function savePortalSettings() {
   // Only save module toggles that are actually rendered (handles assigned-module filtering)
   const moduleIds = [
     'moduleMinigamesEnabled', 'moduleBattleEnabled', 'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleBrandingEnabled',
-    'moduleMissionsEnabled', 'moduleVaultEnabled', 'moduleWalletTrackerEnabled', 'moduleTreasuryEnabled', 'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleAiAssistantEnabled',
+    'moduleMissionsEnabled', 'moduleVaultEnabled', 'moduleWelcomeEnabled', 'moduleWalletTrackerEnabled', 'moduleTreasuryEnabled', 'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleAiAssistantEnabled',
     'moduleRoleClaimEnabled', 'moduleTicketingEnabled', 'moduleEngagementEnabled',
   ];
   const newSettings = {};
@@ -19712,4 +19724,98 @@ function onSidebarSearch(query) {
       item.style.display = "none";
     }
   });
+}
+
+async function loadWelcomeSettingsSection() {
+  const wrap = document.getElementById('welcomeSettingsPanel');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading welcome settings...</p></div>';
+  try {
+    const res = await fetch('/api/admin/welcome/settings', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const json = await res.json();
+    if (!res.ok || json.success === false) throw new Error(json?.error?.message || json?.message || 'Failed to load welcome settings');
+    const s = json?.data?.settings || json?.settings || {};
+    wrap.innerHTML = `
+      <div style="display:grid;gap:12px;">
+        <label style="display:flex;align-items:center;gap:8px;"><input id="welcome_enabled" type="checkbox" ${s.enabled ? 'checked' : ''}> Enable welcome module</label>
+        <label>Welcome channel ID
+          <input id="welcome_channel_id" type="text" value="${escapeHtml(s.welcomeChannelId || '')}" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+        </label>
+        <label>Welcome message template
+          <textarea id="welcome_message_template" rows="3" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">${escapeHtml(s.welcomeMessageTemplate || '')}</textarea>
+        </label>
+        <label>Welcome image URL
+          <input id="welcome_image_url" type="text" value="${escapeHtml(s.welcomeImageUrl || '')}" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;"><input id="welcome_dynamic_avatar_card" type="checkbox" ${s.dynamicAvatarCard ? 'checked' : ''}> Dynamic avatar card</label>
+        <label style="display:flex;align-items:center;gap:8px;"><input id="welcome_dm_enabled" type="checkbox" ${s.dmEnabled ? 'checked' : ''}> Send onboarding DM</label>
+        <label>DM template
+          <textarea id="welcome_dm_template" rows="2" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">${escapeHtml(s.dmMessageTemplate || '')}</textarea>
+        </label>
+        <label>Auto role IDs (comma separated)
+          <input id="welcome_auto_roles" type="text" value="${escapeHtml((s.autoRoleIds || []).join(', '))}" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;"><input id="welcome_captcha_enabled" type="checkbox" ${s.captchaEnabled ? 'checked' : ''}> Enable captcha role gate</label>
+        <label>Captcha role ID
+          <input id="welcome_captcha_role" type="text" value="${escapeHtml(s.captchaRoleId || '')}" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+        </label>
+        <div style="display:flex;gap:8px;">
+          <button class="btn-primary btn-sm" onclick="saveWelcomeSettings()">Save Welcome Settings</button>
+          <button class="btn-secondary btn-sm" onclick="sendWelcomeTest()">Send Test Welcome</button>
+        </div>
+        <small style="color:var(--text-secondary);">Variables: {user_mention}, {username}, {server_name}, {member_count}, {channel:verify}</small>
+      </div>
+    `;
+  } catch (error) {
+    wrap.innerHTML = `<div style="color:#fca5a5;">${escapeHtml(error?.message || 'Failed to load welcome settings')}</div>`;
+  }
+}
+
+async function saveWelcomeSettings() {
+  try {
+    const roleIds = String(document.getElementById('welcome_auto_roles')?.value || '')
+      .split(',')
+      .map(v => v.trim())
+      .filter(Boolean);
+    const payload = {
+      enabled: !!document.getElementById('welcome_enabled')?.checked,
+      welcomeChannelId: document.getElementById('welcome_channel_id')?.value || null,
+      welcomeMessageTemplate: document.getElementById('welcome_message_template')?.value || '',
+      welcomeImageUrl: document.getElementById('welcome_image_url')?.value || null,
+      dynamicAvatarCard: !!document.getElementById('welcome_dynamic_avatar_card')?.checked,
+      dmEnabled: !!document.getElementById('welcome_dm_enabled')?.checked,
+      dmMessageTemplate: document.getElementById('welcome_dm_template')?.value || '',
+      autoRoleIds: roleIds,
+      captchaEnabled: !!document.getElementById('welcome_captcha_enabled')?.checked,
+      captchaRoleId: document.getElementById('welcome_captcha_role')?.value || null,
+    };
+    const res = await fetch('/api/admin/welcome/settings', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) throw new Error(json?.error?.message || json?.message || 'Failed to save settings');
+    showToast('Welcome settings saved.');
+    await loadWelcomeSettingsSection();
+  } catch (error) {
+    showError(error?.message || 'Failed to save welcome settings');
+  }
+}
+
+async function sendWelcomeTest() {
+  try {
+    const res = await fetch('/api/admin/welcome/test', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({}),
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) throw new Error(json?.error?.message || json?.message || 'Failed to send test welcome');
+    showToast('Test welcome triggered.');
+  } catch (error) {
+    showError(error?.message || 'Failed to send test welcome');
+  }
 }

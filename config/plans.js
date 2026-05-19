@@ -7,6 +7,7 @@ const MODULE_KEYS = Object.freeze([
   'minigames',
   'heist',
   'vault',
+  'welcome',
   'ticketing',
   'nfttracker',
   'tokentracker',
@@ -65,6 +66,9 @@ const PLAN_PRESETS = Object.freeze({
       vault: {
         max_rewards: 25
       },
+      welcome: {
+        max_auto_roles: 2
+      },
       ticketing: {
         max_categories: 3
       },
@@ -97,6 +101,7 @@ const PLAN_PRESETS = Object.freeze({
       minigames: false,
       heist: false,
       vault: false,
+      welcome: true,
       ticketing: true,
       nfttracker: true,
       tokentracker: true,
@@ -154,6 +159,9 @@ const PLAN_PRESETS = Object.freeze({
       vault: {
         max_rewards: 100
       },
+      welcome: {
+        max_auto_roles: 5
+      },
       ticketing: {
         max_categories: 12
       },
@@ -186,6 +194,7 @@ const PLAN_PRESETS = Object.freeze({
       minigames: true,
       heist: false,
       vault: true,
+      welcome: true,
       ticketing: true,
       nfttracker: true,
       tokentracker: true,
@@ -243,6 +252,9 @@ const PLAN_PRESETS = Object.freeze({
       vault: {
         max_rewards: 500
       },
+      welcome: {
+        max_auto_roles: 20
+      },
       ticketing: {
         max_categories: 40
       },
@@ -275,6 +287,7 @@ const PLAN_PRESETS = Object.freeze({
       minigames: true,
       heist: true,
       vault: true,
+      welcome: true,
       ticketing: true,
       nfttracker: true,
       tokentracker: true,
@@ -332,6 +345,9 @@ const PLAN_PRESETS = Object.freeze({
       vault: {
         max_rewards: null
       },
+      welcome: {
+        max_auto_roles: null
+      },
       ticketing: {
         max_categories: null
       },
@@ -364,6 +380,7 @@ const PLAN_PRESETS = Object.freeze({
       minigames: true,
       heist: true,
       vault: true,
+      welcome: true,
       ticketing: true,
       nfttracker: true,
       tokentracker: true,

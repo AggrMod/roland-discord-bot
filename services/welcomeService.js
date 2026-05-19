@@ -47,6 +47,20 @@ function normalizeStepFields(fields) {
     .filter(field => field.name && field.value);
 }
 
+function normalizeEmbedColor(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const n = Math.trunc(value);
+    return n >= 0 && n <= 0xFFFFFF ? n : null;
+  }
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const hex = raw.startsWith('#') ? raw.slice(1) : raw;
+  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return null;
+  const parsed = Number.parseInt(hex, 16);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function slugifyChannelName(name) {
   return String(name || '')
     .toLowerCase()
@@ -250,7 +264,7 @@ class WelcomeService {
         const embed = {
           title: embedPayload.title ? this.parseVariables(embedPayload.title, member) : null,
           description: embedPayload.description ? this.parseVariables(embedPayload.description, member) : null,
-          color: embedPayload.color || null,
+          color: normalizeEmbedColor(embedPayload.color),
           footer: footerText ? { text: this.parseVariables(footerText, member) } : undefined,
           image: settings.welcomeImageUrl ? { url: settings.welcomeImageUrl } : undefined,
           thumbnail: settings.dynamicAvatarCard ? { url: member.user?.displayAvatarURL?.({ extension: 'png', size: 256 }) } : undefined,

@@ -213,17 +213,29 @@ class WelcomeService {
   async handleMemberJoin(member) {
     try {
       const guildId = String(member?.guild?.id || '').trim();
-      if (!guildId || !tenantService.isModuleEnabled(guildId, 'welcome')) return;
+      if (!guildId || !tenantService.isModuleEnabled(guildId, 'welcome')) {
+        return { success: false, delivered: false, message: 'Welcome module is disabled for this server.' };
+      }
       const settingsResult = this.getSettings(guildId);
-      if (!settingsResult.success || !settingsResult.settings.enabled) return;
+      if (!settingsResult.success) return settingsResult;
+      if (!settingsResult.settings.enabled) {
+        return { success: false, delivered: false, message: 'Welcome settings are disabled.' };
+      }
       const settings = settingsResult.settings;
+      let delivered = false;
 
       if (settings.autoRoleIds.length > 0) {
         await member.roles.add(settings.autoRoleIds).catch(() => {});
       }
 
       const channelId = settings.welcomeChannelId;
+      if (!channelId) {
+        return { success: false, delivered: false, message: 'No welcome channel configured.' };
+      }
       const channel = channelId ? member.guild.channels.cache.get(channelId) : null;
+      if (!channel) {
+        return { success: false, delivered: false, message: `Welcome channel not found: ${channelId}` };
+      }
       if (channel && typeof channel.send === 'function') {
         const content = this.parseVariables(settings.welcomeMessageTemplate, member);
         const embedPayload = settings.welcomeEmbed && typeof settings.welcomeEmbed === 'object' ? settings.welcomeEmbed : {};
@@ -263,7 +275,8 @@ class WelcomeService {
           content,
           embeds: hasEmbed ? [embed] : [],
           files
-        }).catch(() => {});
+        });
+        delivered = true;
       }
 
       if (settings.dmEnabled) {
@@ -278,8 +291,10 @@ class WelcomeService {
           content: `Before full access, complete verification here: ${verifyUrl}`
         }).catch(() => {});
       }
+      return { success: true, delivered };
     } catch (error) {
       logger.error('[welcome] handleMemberJoin failed:', error);
+      return { success: false, delivered: false, message: error?.message || 'Failed to process welcome flow.' };
     }
   }
 
@@ -338,8 +353,29 @@ class WelcomeService {
     if (!guild || !actorUser) return { success: false, message: 'Guild and user are required' };
     const member = await guild.members.fetch(actorUser.id).catch(() => null);
     if (!member) return { success: false, message: 'Could not resolve test member' };
-    await this.handleMemberJoin(member);
-    return { success: true };
+    const settingsResult = this.getSettings(guild.id);
+    if (!settingsResult.success) return settingsResult;
+    const settings = settingsResult.settings;
+
+    const channelId = settings.welcomeChannelId;
+    if (!channelId) return { success: false, message: 'No welcome channel configured. Select a channel first.' };
+    const channel = guild.channels?.cache?.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
+    if (!channel || typeof channel.send !== 'function') {
+      return { success: false, message: `Configured welcome channel is unavailable (${channelId}).` };
+    }
+
+    const originalEnabled = settings.enabled;
+    if (!originalEnabled) {
+      this.updateSettings(guild.id, { enabled: true });
+    }
+    const result = await this.handleMemberJoin(member);
+    if (!originalEnabled) {
+      this.updateSettings(guild.id, { enabled: false });
+    }
+    if (!result?.success || !result?.delivered) {
+      return { success: false, message: result?.message || 'Welcome message was not delivered.' };
+    }
+    return { success: true, message: 'Test welcome sent successfully.' };
   }
 
   saveUploadedImage({ guildId, fileName, mimeType, buffer }) {

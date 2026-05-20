@@ -37,6 +37,16 @@ function normalizeTokenSymbol(value) {
   return null;
 }
 
+function isLikelySolanaAddress(value) {
+  const text = String(value || '').trim();
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(text);
+}
+
+function isLikelySolanaSignature(value) {
+  const text = String(value || '').trim();
+  return /^[1-9A-HJ-NP-Za-km-z]{64,128}$/.test(text);
+}
+
 function toIsoDate(value) {
   if (value === undefined || value === null || value === '') return null;
 
@@ -129,6 +139,14 @@ class BillingService {
     if (!planKey || planKey === 'starter' || planKey === 'enterprise') return { success: false, message: 'planKey must be a paid self-serve plan' };
     if (!billingInterval) return { success: false, message: 'billingInterval must be monthly or yearly' };
     if (!Number.isFinite(amount) || amount <= 0) return { success: false, message: 'amount must be greater than 0' };
+    if (!isLikelySolanaSignature(txSignature)) return { success: false, message: 'txSignature format is invalid' };
+    if (!isLikelySolanaAddress(senderWallet)) return { success: false, message: 'senderWallet format is invalid' };
+    if (amount > 1000000) return { success: false, message: 'amount is outside allowed range' };
+
+    const preset = getPlanPreset(planKey);
+    if (!preset || !Number.isFinite(Number(preset?.billing?.monthlyUsd || 0)) || Number(preset.billing.monthlyUsd) <= 0) {
+      return { success: false, message: 'planKey does not support self-serve crypto billing' };
+    }
 
     try {
       db.prepare(`
@@ -151,6 +169,20 @@ class BillingService {
       }
       return { success: false, message: 'Failed to submit payment receipt' };
     }
+  }
+
+  getExpectedPlanUsd(planKey, billingInterval = 'monthly') {
+    const normalizedPlan = normalizePlanKey(planKey);
+    const normalizedInterval = normalizeInterval(billingInterval) || 'monthly';
+    const preset = getPlanPreset(normalizedPlan);
+    const monthly = Number(preset?.billing?.monthlyUsd || 0);
+    if (!preset || !Number.isFinite(monthly) || monthly <= 0) return null;
+    if (normalizedInterval === 'yearly') {
+      const discountPct = Number(preset?.billing?.annualDiscountPct || 0);
+      const yearly = monthly * 12 * (1 - (Math.max(0, Math.min(100, discountPct)) / 100));
+      return Number(yearly.toFixed(2));
+    }
+    return Number(monthly.toFixed(2));
   }
 
   listCryptoReceiptsByGuild(guildId, { limit = 20 } = {}) {

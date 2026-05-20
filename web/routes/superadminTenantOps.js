@@ -413,6 +413,29 @@ function createSuperadminTenantOpsRouter({
       }
 
       if (patch.receiptId) {
+        const receiptRow = db.prepare('SELECT * FROM crypto_payment_receipts WHERE id = ? LIMIT 1').get(patch.receiptId);
+        if (!receiptRow) {
+          return res.status(400).json(toErrorResponse('Payment receipt not found', 'VALIDATION_ERROR'));
+        }
+        if (String(receiptRow.guild_id || '') !== guildId) {
+          return res.status(400).json(toErrorResponse('Payment receipt does not belong to this tenant', 'VALIDATION_ERROR'));
+        }
+        if (patch.planKey && String(receiptRow.plan_key || '').toLowerCase() !== patch.planKey) {
+          return res.status(400).json(toErrorResponse('Receipt plan does not match selected plan', 'VALIDATION_ERROR'));
+        }
+        if (patch.billingInterval && String(receiptRow.billing_interval || '').toLowerCase() !== patch.billingInterval) {
+          return res.status(400).json(toErrorResponse('Receipt interval does not match selected interval', 'VALIDATION_ERROR'));
+        }
+        if (!patch.planKey) patch.planKey = String(receiptRow.plan_key || '').toLowerCase() || null;
+        if (!patch.billingInterval) patch.billingInterval = String(receiptRow.billing_interval || '').toLowerCase() || null;
+
+        if (action === 'approve') {
+          const expectedUsd = billingService.getExpectedPlanUsd(patch.planKey, patch.billingInterval);
+          if (!Number.isFinite(expectedUsd) || expectedUsd <= 0) {
+            return res.status(400).json(toErrorResponse('Cannot approve receipt: plan pricing is not eligible for self-serve billing', 'VALIDATION_ERROR'));
+          }
+        }
+
         const receiptStatus = action === 'reject' ? 'rejected' : 'approved';
         const receiptResult = billingService.setCryptoReceiptStatus({
           id: patch.receiptId,

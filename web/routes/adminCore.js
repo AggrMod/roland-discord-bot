@@ -240,6 +240,7 @@ function createAdminCoreRouter({
     try {
       const result = billingService.listCryptoReceiptsByGuild(req.guildId, {
         limit: Number(req.query.limit || 20),
+        status: req.query.status,
       });
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to load crypto receipts', 'VALIDATION_ERROR'));

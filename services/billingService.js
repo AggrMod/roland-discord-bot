@@ -185,17 +185,29 @@ class BillingService {
     return Number(monthly.toFixed(2));
   }
 
-  listCryptoReceiptsByGuild(guildId, { limit = 20 } = {}) {
+  listCryptoReceiptsByGuild(guildId, { limit = 20, status = '' } = {}) {
     const normalizedGuildId = normalizeString(guildId);
     if (!normalizedGuildId) return { success: false, message: 'guildId is required' };
     const safeLimit = Math.max(1, Math.min(100, Number(limit) || 20));
-    const rows = db.prepare(`
-      SELECT id, guild_id, tx_signature, amount, token_symbol, sender_wallet, plan_key, billing_interval, status, verification_error, verified_at, created_at
-      FROM crypto_payment_receipts
-      WHERE guild_id = ?
-      ORDER BY created_at DESC, id DESC
-      LIMIT ?
-    `).all(normalizedGuildId, safeLimit);
+    const normalizedStatus = normalizeLower(status);
+    const allowedStatuses = new Set(['pending', 'approved', 'rejected']);
+    const hasStatusFilter = allowedStatuses.has(normalizedStatus);
+    const rows = hasStatusFilter
+      ? db.prepare(`
+        SELECT id, guild_id, tx_signature, amount, token_symbol, sender_wallet, plan_key, billing_interval, status, verification_error, verified_at, created_at
+        FROM crypto_payment_receipts
+        WHERE guild_id = ?
+          AND LOWER(COALESCE(status, 'pending')) = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?
+      `).all(normalizedGuildId, normalizedStatus, safeLimit)
+      : db.prepare(`
+        SELECT id, guild_id, tx_signature, amount, token_symbol, sender_wallet, plan_key, billing_interval, status, verification_error, verified_at, created_at
+        FROM crypto_payment_receipts
+        WHERE guild_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?
+      `).all(normalizedGuildId, safeLimit);
     return { success: true, receipts: rows };
   }
 

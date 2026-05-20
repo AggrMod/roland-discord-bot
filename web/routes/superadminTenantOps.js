@@ -505,13 +505,25 @@ function createSuperadminTenantOpsRouter({
         return res.status(400).json(toErrorResponse('Valid guildId is required', 'VALIDATION_ERROR'));
       }
       const limit = Math.min(Math.max(parseInt(req.query.limit || '25', 10), 1), 100);
+      const normalizedStatus = String(req.query.status || '').trim().toLowerCase();
+      const hasStatusFilter = ['pending', 'approved', 'rejected'].includes(normalizedStatus);
       const rows = db.prepare(`
         SELECT id, guild_id, tx_signature, amount, token_symbol, sender_wallet, plan_key, billing_interval, status, verification_error, verified_at, created_at
         FROM crypto_payment_receipts
         WHERE guild_id = ?
+          ${hasStatusFilter ? "AND LOWER(COALESCE(status, 'pending')) = ?" : ''}
         ORDER BY created_at DESC, id DESC
         LIMIT ?
-      `).all(guildId, limit);
+      `).all(...(hasStatusFilter ? [guildId, normalizedStatus, limit] : [guildId, limit]));
+
+      const actionRows = db.prepare(`
+        SELECT id, actor_id, action, after_json, created_at
+        FROM tenant_audit_logs
+        WHERE guild_id = ?
+          AND action LIKE 'billing_%'
+        ORDER BY created_at DESC, id DESC
+        LIMIT 25
+      `).all(guildId);
 
       res.json(toSuccessResponse({
         guildId,
@@ -529,6 +541,23 @@ function createSuperadminTenantOpsRouter({
           verifiedAt: row.verified_at || null,
           createdAt: row.created_at || null,
         })),
+        actions: actionRows.map((row) => {
+          let note = null;
+          try {
+            const afterJson = row.after_json ? JSON.parse(row.after_json) : null;
+            const metadata = afterJson?.metadata_json ? JSON.parse(afterJson.metadata_json) : null;
+            note = metadata?.note ? String(metadata.note) : null;
+          } catch (_error) {
+            note = null;
+          }
+          return {
+            id: Number(row.id),
+            actorId: row.actor_id || null,
+            action: row.action || null,
+            note,
+            createdAt: row.created_at || null,
+          };
+        }),
       }));
     } catch (error) {
       logger.error('Error loading workspace billing receipts:', error);

@@ -8057,13 +8057,17 @@ function openSuperadminBillingReceiptReview(guildId) {
   const btn = document.getElementById('confirmButton');
   if (btn) btn.textContent = 'Approve';
 
-  (async () => {
+  const renderReceiptModal = async (statusFilter = 'all') => {
     try {
-      const res = await fetch(`/api/superadmin/workspace/billing/${encodeURIComponent(normalizedGuildId)}/receipts?limit=25`, {
+      const qs = new URLSearchParams();
+      qs.set('limit', '25');
+      if (statusFilter && statusFilter !== 'all') qs.set('status', statusFilter);
+      const res = await fetch(`/api/superadmin/workspace/billing/${encodeURIComponent(normalizedGuildId)}/receipts?${qs.toString()}`, {
         credentials: 'include',
       });
       const json = await res.json().catch(() => ({}));
       const receipts = (res.ok && json?.success !== false && Array.isArray(json?.receipts)) ? json.receipts : [];
+      const actions = (res.ok && json?.success !== false && Array.isArray(json?.actions)) ? json.actions : [];
       const receiptRows = receipts.length
         ? receipts.map((item) => `
           <div style="padding:10px;border:1px solid rgba(99,102,241,0.18);border-radius:8px;background:rgba(15,23,42,0.4);display:grid;gap:6px;">
@@ -8081,6 +8085,15 @@ function openSuperadminBillingReceiptReview(guildId) {
           </div>
         `).join('')
         : '<div style="color:var(--text-secondary);">No receipts found for this tenant.</div>';
+      const actionRows = actions.length
+        ? actions.map((row) => `
+          <div style="padding:8px 10px;border:1px solid rgba(99,102,241,0.16);border-radius:8px;background:rgba(15,23,42,0.35);">
+            <div style="font-size:0.8em;color:#c9d6ff;"><strong>${escapeHtml(row.action || 'billing_action')}</strong> · ${escapeHtml(row.createdAt ? new Date(row.createdAt).toLocaleString() : '')}</div>
+            <div style="font-size:0.78em;color:var(--text-secondary);">Actor: ${escapeHtml(row.actorId || 'unknown')}</div>
+            ${row.note ? `<div style="font-size:0.8em;color:#e0e7ff;margin-top:4px;"><strong>Note:</strong> ${escapeHtml(row.note)}</div>` : ''}
+          </div>
+        `).join('')
+        : '<div style="color:var(--text-secondary);">No billing action history yet.</div>';
 
       if (body) {
         body.innerHTML = `
@@ -8092,14 +8105,34 @@ function openSuperadminBillingReceiptReview(guildId) {
               <div><strong>Provider:</strong> ${escapeHtml(entry.provider || 'n/a')}</div>
               <div><strong>Queue:</strong> ${escapeHtml(entry.verificationStatus || 'pending')}</div>
             </div>
-            <div style="display:grid;gap:8px;max-height:360px;overflow:auto;">${receiptRows}</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+              <div style="font-size:0.82em;color:var(--text-secondary);">Receipts</div>
+              <select id="superadminReceiptStatusFilter" style="padding:6px 8px;">
+                <option value="all"${statusFilter === 'all' ? ' selected' : ''}>All</option>
+                <option value="pending"${statusFilter === 'pending' ? ' selected' : ''}>Pending</option>
+                <option value="approved"${statusFilter === 'approved' ? ' selected' : ''}>Approved</option>
+                <option value="rejected"${statusFilter === 'rejected' ? ' selected' : ''}>Rejected</option>
+              </select>
+            </div>
+            <div style="display:grid;gap:8px;max-height:280px;overflow:auto;">${receiptRows}</div>
+            <div style="font-size:0.82em;color:var(--text-secondary);">Operator Notes History</div>
+            <div style="display:grid;gap:8px;max-height:180px;overflow:auto;">${actionRows}</div>
           </div>
         `;
+        const filterEl = document.getElementById('superadminReceiptStatusFilter');
+        if (filterEl) {
+          filterEl.onchange = () => {
+            const nextStatus = String(filterEl.value || 'all');
+            renderReceiptModal(nextStatus).catch(() => {});
+          };
+        }
       }
     } catch (_error) {
       if (body) body.innerHTML = '<div style="color:#fca5a5;">Failed to load receipt history.</div>';
     }
-  })();
+  };
+
+  renderReceiptModal('all').catch(() => {});
 }
 
 function superadminBillingApproveReceipt(guildId, receiptId, planKey = '', billingInterval = '') {
@@ -18069,6 +18102,20 @@ async function submitCryptoPaymentReceipt() {
     if (!txSignature) return showError('Transaction signature is required.');
     if (!senderWallet) return showError('Sender wallet is required.');
     if (!Number.isFinite(amount) || amount <= 0) return showError('Amount must be greater than 0.');
+
+    const existingRes = await fetch('/api/admin/billing/crypto-receipts?limit=100', {
+      credentials: 'include',
+      headers: buildTenantRequestHeaders(),
+    });
+    const existingJson = await existingRes.json().catch(() => ({}));
+    const existingReceipts = (existingRes.ok && existingJson?.success !== false && Array.isArray(existingJson?.receipts))
+      ? existingJson.receipts
+      : [];
+    const duplicate = existingReceipts.some((row) => String(row?.tx_signature || row?.txSignature || '').trim() === txSignature);
+    if (duplicate) {
+      showError('This transaction signature was already submitted.');
+      return;
+    }
 
     const res = await fetch('/api/admin/billing/crypto-receipts', {
       method: 'POST',

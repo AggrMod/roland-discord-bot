@@ -7254,8 +7254,31 @@ let superadminWorkspaceBillingPageSize = 25;
 let superadminWorkspaceBillingSortBy = 'updatedAt';
 let superadminWorkspaceBillingSortDir = 'desc';
 let superadminWorkspaceActivityCache = [];
+let superadminWorkspacePlansCache = [];
 let superadminWorkspaceFocus = '';
 const SUPERADMIN_WORKSPACES = new Set(['overview', 'tenants', 'billing', 'security', 'integrations']);
+
+function reportAdminUiTelemetry(event, payload = {}) {
+  try {
+    const normalizedEvent = String(event || '').trim();
+    if (!normalizedEvent) return;
+    console.info(`[admin-ui-v2][${normalizedEvent}]`, payload || {});
+    fetch('/api/superadmin/workspace/telemetry', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: normalizedEvent, payload }),
+    }).catch(() => {});
+  } catch (_error) {}
+}
+
+function reportAdminUiSaveFailure(action, error, extra = {}) {
+  reportAdminUiTelemetry('workspace_save_failure', {
+    action: String(action || 'unknown'),
+    message: error?.message || String(error || 'Unknown error'),
+    ...extra,
+  });
+}
 
 const TENANT_PLAN_LABELS = {
   starter: 'Starter',
@@ -7284,11 +7307,22 @@ const TENANT_MODULE_LABELS = {
 };
 
 function getTenantPlanLabel(planKey) {
+  const normalized = String(planKey || '').toLowerCase();
+  const fromCatalog = (Array.isArray(superadminWorkspacePlansCache) ? superadminWorkspacePlansCache : [])
+    .find(plan => String(plan?.key || '').toLowerCase() === normalized);
+  if (fromCatalog?.label) return String(fromCatalog.label);
   return TENANT_PLAN_LABELS[planKey] || planKey || 'Unknown';
 }
 
 function getTenantPlanRank(planKey) {
   const normalized = String(planKey || '').toLowerCase();
+  const catalogOrder = (Array.isArray(superadminWorkspacePlansCache) ? superadminWorkspacePlansCache : [])
+    .map(plan => String(plan?.key || '').toLowerCase())
+    .filter(Boolean);
+  if (catalogOrder.length) {
+    const idx = catalogOrder.indexOf(normalized);
+    if (idx !== -1) return idx;
+  }
   const idx = TENANT_PLAN_ORDER.indexOf(normalized);
   return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
 }
@@ -7475,7 +7509,13 @@ function renderTenantDetailPanel(tenant, tenantLimits = null, workspaceTenantTab
   const billingProvider = billing?.provider ? String(billing.provider).toUpperCase() : 'N/A';
   const billingEnd = billing?.currentPeriodEnd ? new Date(billing.currentPeriodEnd).toLocaleString() : 'Not set';
 
-  const planOptions = Object.entries(TENANT_PLAN_LABELS).map(([key, label]) => `
+  const resolvedPlans = (Array.isArray(superadminWorkspacePlansCache) && superadminWorkspacePlansCache.length)
+    ? superadminWorkspacePlansCache.map(plan => ({
+        key: String(plan?.key || '').toLowerCase(),
+        label: String(plan?.label || plan?.key || '').trim(),
+      })).filter(plan => plan.key && plan.label)
+    : Object.entries(TENANT_PLAN_LABELS).map(([key, label]) => ({ key, label }));
+  const planOptions = resolvedPlans.map(({ key, label }) => `
     <option value="${escapeHtml(key)}"${tenant.planKey === key ? ' selected' : ''}>${escapeHtml(label)}</option>
   `).join('');
 
@@ -7976,14 +8016,14 @@ function superadminBillingAction(guildId, action, extraPayload = null) {
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok || data?.success === false) {
-          console.error('[admin-ui-v2][save_failure]', { action: 'superadminBillingAction', billingAction: normalizedAction, error: data?.message || `HTTP ${response.status}` });
+          reportAdminUiSaveFailure('superadminBillingAction', new Error(data?.message || `HTTP ${response.status}`), { billingAction: normalizedAction, guildId: normalizedGuildId });
           showError(data?.message || `Failed to ${normalizedAction} billing`);
           return;
         }
         showSuccess(`Billing action applied: ${normalizedAction}`);
         loadSuperadminView();
       } catch (error) {
-        console.error('[admin-ui-v2][save_failure]', { action: 'superadminBillingAction', billingAction: normalizedAction, error: error?.message || String(error) });
+        reportAdminUiSaveFailure('superadminBillingAction', error, { billingAction: normalizedAction, guildId: normalizedGuildId });
         showError(formatAdminWorkspaceError(`Failed to ${normalizedAction} billing`, error));
       }
     },
@@ -8036,12 +8076,13 @@ async function loadSuperadminWorkspaceHubV2() {
     billingQs.set('sortBy', String(superadminWorkspaceBillingSortBy || 'updatedAt'));
     billingQs.set('sortDir', String(superadminWorkspaceBillingSortDir || 'desc'));
 
-    const [tenantsRes, activityRes, billingRes, adminsRes, globalSettingsRes] = await Promise.all([
+    const [tenantsRes, activityRes, billingRes, adminsRes, globalSettingsRes, plansRes] = await Promise.all([
       fetch(`/api/superadmin/workspace/tenants?${tenantsQs.toString()}`, { credentials: 'include', headers }),
       fetch('/api/superadmin/workspace/activity?limit=25', { credentials: 'include' }),
       fetch(`/api/superadmin/workspace/billing?${billingQs.toString()}`, { credentials: 'include' }),
       fetch('/api/superadmin/admins', { credentials: 'include' }),
       fetch('/api/superadmin/global-settings', { credentials: 'include' }),
+      fetch('/api/superadmin/workspace/plans', { credentials: 'include' }),
     ]);
 
     const tenantsJson = await tenantsRes.json().catch(() => ({}));
@@ -8049,6 +8090,7 @@ async function loadSuperadminWorkspaceHubV2() {
     const billingJson = await billingRes.json().catch(() => ({}));
     const adminsJson = await adminsRes.json().catch(() => ({}));
     const globalSettingsJson = await globalSettingsRes.json().catch(() => ({}));
+    const plansJson = await plansRes.json().catch(() => ({}));
     if (!tenantsRes.ok || tenantsJson?.success === false) {
       throw new Error(tenantsJson?.message || 'Failed to load tenant workspace');
     }
@@ -8064,6 +8106,9 @@ async function loadSuperadminWorkspaceHubV2() {
     if (!globalSettingsRes.ok || globalSettingsJson?.success === false) {
       workspaceWarnings.push('Global integration settings are temporarily unavailable.');
     }
+    if (!plansRes.ok || plansJson?.success === false) {
+      workspaceWarnings.push('Plan catalog is temporarily unavailable; using local fallback labels.');
+    }
 
     const tenants = Array.isArray(tenantsJson?.tenants) ? tenantsJson.tenants : [];
     const billingEntries = (billingRes.ok && billingJson?.success !== false && Array.isArray(billingJson?.entries)) ? billingJson.entries : [];
@@ -8076,6 +8121,9 @@ async function loadSuperadminWorkspaceHubV2() {
     const activityItems = (activityRes.ok && activityJson?.success !== false && Array.isArray(activityJson?.items)) ? activityJson.items : [];
     const superadmins = (adminsRes.ok && adminsJson?.success !== false && Array.isArray(adminsJson?.superadmins)) ? adminsJson.superadmins : [];
     const globalSettings = globalSettingsJson?.settings || {};
+    superadminWorkspacePlansCache = (plansRes.ok && plansJson?.success !== false && Array.isArray(plansJson?.plans))
+      ? plansJson.plans
+      : [];
     superadminWorkspaceActivityCache = activityItems;
 
     if (!selectedTenantGuildId && tenants.length > 0) {
@@ -8393,11 +8441,11 @@ async function loadSuperadminWorkspaceHubV2() {
       setTimeout(() => loadSuperadminIdentityView(), 0);
     }
     if (workspaceWarnings.length) {
-      console.warn('[admin-ui-v2][workspace_partial_failure]', { workspace, warnings: workspaceWarnings });
+      reportAdminUiTelemetry('workspace_partial_failure', { workspace, warnings: workspaceWarnings });
     }
-    console.info('[admin-ui-v2][tffmr_ms]', Date.now() - startMs, { workspace });
+    reportAdminUiTelemetry('ttfmr_ms', { workspace, ms: Date.now() - startMs });
   } catch (error) {
-    console.error('[admin-ui-v2][workspace_load_failure]', { workspace, error: error?.message || String(error) });
+    reportAdminUiTelemetry('workspace_load_failure', { workspace, message: error?.message || String(error) });
     content.innerHTML = `<div class="sa-v2-empty">${escapeHtml(formatAdminWorkspaceError('Failed to load workspace hub', error))}</div>`;
   }
 }
@@ -8979,11 +9027,11 @@ async function applyTenantPlan() {
         showSuccess('Tenant plan updated');
         await loadSuperadminView();
       } else {
-        console.error('[admin-ui-v2][save_failure]', { action: 'applyTenantPlan', error: data.message || 'Failed to update tenant plan' });
+        reportAdminUiSaveFailure('applyTenantPlan', new Error(data.message || 'Failed to update tenant plan'), { guildId: selectedTenantGuildId, nextPlan });
         showError(data.message || 'Failed to update tenant plan');
       }
     } catch (error) {
-      console.error('[admin-ui-v2][save_failure]', { action: 'applyTenantPlan', error: error?.message || String(error) });
+      reportAdminUiSaveFailure('applyTenantPlan', error, { guildId: selectedTenantGuildId, nextPlan });
       showError(formatAdminWorkspaceError('Failed to update tenant plan', error));
     } finally {
       btn.disabled = false;
@@ -9029,11 +9077,13 @@ async function toggleTenantModule(moduleKey, checkbox) {
         showSuccess(`${getTenantModuleLabel(moduleKey)} updated`);
         await loadSuperadminView();
       } else {
+        reportAdminUiSaveFailure('toggleTenantModule', new Error(data.message || 'Failed to update module'), { guildId: selectedTenantGuildId, moduleKey, desiredEnabled });
         checkbox.checked = previousValue;
         syncToggleVisual(previousValue);
         showError(`Failed to update module (${response.status}): ${data.message || data.error?.message || JSON.stringify(data)}`);
       }
     } catch (error) {
+      reportAdminUiSaveFailure('toggleTenantModule', error, { guildId: selectedTenantGuildId, moduleKey, desiredEnabled });
       checkbox.checked = previousValue;
       syncToggleVisual(previousValue);
       showError(`Failed to update tenant module: ${error.message}`);
@@ -9081,9 +9131,11 @@ async function saveTenantStatus() {
         showSuccess('Tenant status updated');
         await loadSuperadminView();
       } else {
+        reportAdminUiSaveFailure('saveTenantStatus', new Error(data.message || 'Failed to update tenant status'), { guildId: selectedTenantGuildId, nextStatus });
         showError(data.message || 'Failed to update tenant status');
       }
     } catch (error) {
+      reportAdminUiSaveFailure('saveTenantStatus', error, { guildId: selectedTenantGuildId, nextStatus });
       showError(`Failed to update tenant status: ${error.message}`);
     } finally {
       btn.disabled = false;
@@ -9125,11 +9177,11 @@ async function saveTenantMockData() {
       showSuccess(`Mock data ${input.checked ? 'enabled' : 'disabled'} for tenant`);
       await loadSuperadminView();
     } else {
-      console.error('[admin-ui-v2][save_failure]', { action: 'saveTenantMockData', error: data.message || 'Failed to update mock data setting' });
+      reportAdminUiSaveFailure('saveTenantMockData', new Error(data.message || 'Failed to update mock data setting'), { guildId: selectedTenantGuildId, enabled: !!input.checked });
       showError(data.message || 'Failed to update mock data setting');
     }
   } catch (error) {
-    console.error('[admin-ui-v2][save_failure]', { action: 'saveTenantMockData', error: error?.message || String(error) });
+    reportAdminUiSaveFailure('saveTenantMockData', error, { guildId: selectedTenantGuildId, enabled: !!input.checked });
     showError(formatAdminWorkspaceError('Failed to update mock data setting', error));
   } finally {
     btn.disabled = false;
@@ -16065,71 +16117,42 @@ async function loadAdminActivity() {
   const content = document.getElementById('adminActivityContent');
   if (!content) return;
 
-  content.innerHTML = `<div style="text-align:center; padding: var(--space-5); color: var(--text-secondary);"><div class="spinner"></div><p>Loading activity...</p></div>`;
+  content.innerHTML = `<div style="text-align:center; padding: var(--space-5); color: var(--text-secondary);"><div class="spinner"></div><p>Loading audit activity...</p></div>`;
 
   try {
-    // Build activity from real data (proposals + users)
-    const [usersRes, proposalsRes] = await Promise.all([
-      fetch('/api/admin/users', { credentials: 'include' }),
-      fetch('/api/admin/proposals', { credentials: 'include' })
-    ]);
-    const usersData = await usersRes.json();
-    const proposalsData = await proposalsRes.json();
-
-    const activities = [];
-    
-    // Recent proposals
-    (proposalsData.proposals || []).slice(0, 10).forEach(p => {
-      activities.push({
-        action: `Proposal ${p.status === 'voting' ? 'active' : p.status}: ${p.title || 'Untitled'}`,
-        user: p.creator_id || 'Unknown',
-        time: p.created_at ? formatDate(new Date(p.created_at)) : 'Unknown',
-        type: 'proposal',
-        date: new Date(p.created_at || 0)
-      });
-    });
-
-    // Recent users (by wallet count as proxy for activity)
-    (usersData.users || []).filter(u => u.total_nfts > 0).slice(0, 5).forEach(u => {
-      activities.push({
-        action: `Verified: ${u.username || 'User'} (${u.total_nfts} NFTs, ${u.tier || 'none'})`,
-        user: u.discord_id || '',
-        time: 'Active member',
-        type: 'verify',
-        date: new Date(0)
-      });
-    });
-
-    activities.sort((a, b) => b.date - a.date);
-
-    if (!activities.length) {
-      content.innerHTML = `<div class="empty-state"><div class="empty-state-title">No activity yet</div></div>`;
+    const res = await fetch('/api/admin/activity?limit=50', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.success === false) {
+      throw new Error(data?.message || 'Failed to load activity feed.');
+    }
+    const activity = Array.isArray(data?.activity) ? data.activity : [];
+    if (!activity.length) {
+      content.innerHTML = `<div class="empty-state"><div class="empty-state-title">No audit activity yet</div></div>`;
       return;
     }
 
-    const rows = activities.slice(0, 15).map(a => `
-      <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid rgba(99,102,241,0.15); gap:12px;">
-        <div style="display:flex; align-items:center; gap:12px; flex:1;">
-          <div style="font-size:1.2em;">
-            ${a.type === 'verify' ? '✓' : a.type === 'sync' ? '🔔„' : a.type === 'proposal' ? '📜' : a.type === 'treasury' ? '💰' : '👤'}
+    const rows = activity.map((item) => {
+      const when = item.createdAt ? formatDate(new Date(item.createdAt)) : 'Unknown time';
+      return `
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; padding:12px; border-bottom:1px solid rgba(99,102,241,0.15); gap:12px;">
+          <div style="display:grid; gap:4px; min-width:0;">
+            <div style="color:#e0e7ff; font-weight:700; word-break:break-word;">${escapeHtml(item.action || 'unknown')}</div>
+            <div style="color:var(--text-secondary); font-size:0.82em; font-family:monospace; word-break:break-all;">actor: ${escapeHtml(item.actorId || 'unknown')}</div>
+            <div style="color:var(--text-secondary); font-size:0.8em;">audit #${escapeHtml(String(item.id || 'n/a'))}</div>
           </div>
-          <div>
-            <div style="color:#e0e7ff; font-weight:600;">${escapeHtml(a.action)}</div>
-            <div style="color:var(--text-secondary); font-size:0.85em;">${escapeHtml(a.user)}</div>
-          </div>
+          <div style="color:var(--text-secondary); font-size:0.82em; white-space:nowrap;">${escapeHtml(when)}</div>
         </div>
-        <div style="color:var(--text-secondary); font-size:0.85em; white-space:nowrap;">${a.time}</div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
 
     content.innerHTML = `
       <div style="border:1px solid rgba(99,102,241,0.22); border-radius:10px; background:rgba(14,23,44,0.5); overflow:hidden;">
         ${rows}
       </div>
-      <div style="margin-top:12px; color:var(--text-secondary); font-size:0.9em;">Activity derived from proposals and verified users</div>
+      <div style="margin-top:12px; color:var(--text-secondary); font-size:0.9em;">Live tenant audit log from <code>tenant_audit_logs</code>.</div>
     `;
   } catch (e) {
-    content.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;
+    content.innerHTML = `<div class="error-state"><div class="error-message">${escapeHtml(e.message || 'Failed to load activity')}</div></div>`;
   }
 }
 async function loadNFTActivityAdminView(preloadedCollections = null) {
@@ -19722,17 +19745,19 @@ async function loadWelcomeSettingsSection() {
   wrap.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading welcome settings...</p></div>';
   try {
     const headers = buildTenantRequestHeaders();
-    const [settingsRes, channelsRes, rolesRes, assetsRes] = await Promise.all([
+    const [settingsRes, channelsRes, rolesRes, assetsRes, analyticsRes] = await Promise.all([
       fetch('/api/admin/welcome/settings', { credentials: 'include', headers }),
       fetch('/api/admin/discord/channels', { credentials: 'include', headers }),
       fetch('/api/admin/discord/roles', { credentials: 'include', headers }),
       fetch('/api/admin/welcome/assets', { credentials: 'include', headers }),
+      fetch('/api/admin/welcome/analytics?days=30', { credentials: 'include', headers }),
     ]);
-    const [settingsJson, channelsJson, rolesJson, assetsJson] = await Promise.all([
+    const [settingsJson, channelsJson, rolesJson, assetsJson, analyticsJson] = await Promise.all([
       settingsRes.json(),
       channelsRes.json(),
       rolesRes.json(),
       assetsRes.json(),
+      analyticsRes.json().catch(() => ({ success: false })),
     ]);
     if (!settingsRes.ok || settingsJson.success === false) throw new Error(settingsJson?.error?.message || settingsJson?.message || 'Failed to load welcome settings');
     const s = settingsJson?.data?.settings || settingsJson?.settings || {};
@@ -19741,6 +19766,7 @@ async function loadWelcomeSettingsSection() {
     const channels = Array.isArray(channelsJson?.channels) ? channelsJson.channels : [];
     const roles = Array.isArray(rolesJson?.roles) ? rolesJson.roles : [];
     const assets = Array.isArray(assetsJson?.data?.assets) ? assetsJson.data.assets : [];
+    const analytics = analyticsJson?.success === false ? null : (analyticsJson?.data?.totals || analyticsJson?.totals || null);
 
     let channelOptions = `<option value="">-- Select channel --</option>`;
     let verificationChannelOptions = `<option value="">-- Select channel --</option>`;
@@ -19798,6 +19824,14 @@ async function loadWelcomeSettingsSection() {
           <button class="btn-secondary btn-sm" onclick="restoreDefaultWelcomePreset()">Restore Default</button>
         </div>
         <label style="display:flex;align-items:center;gap:8px;"><input id="welcome_enabled" type="checkbox" ${s.enabled ? 'checked' : ''}> Enable welcome module</label>
+        ${analytics ? `
+          <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:10px;border:1px solid var(--border-color);border-radius:8px;background:rgba(15,23,42,0.35);">
+            <div><div style="font-size:0.76em;color:var(--text-secondary);">Joins (30d)</div><div style="font-weight:700;color:#e0e7ff;">${escapeHtml(String(analytics.joinsTotal || 0))}</div></div>
+            <div><div style="font-size:0.76em;color:var(--text-secondary);">Welcomes Sent</div><div style="font-weight:700;color:#86efac;">${escapeHtml(String(analytics.welcomeSent || 0))}</div></div>
+            <div><div style="font-size:0.76em;color:var(--text-secondary);">Captcha Passed</div><div style="font-weight:700;color:#c4b5fd;">${escapeHtml(String(analytics.captchaPassed || 0))}</div></div>
+            <div><div style="font-size:0.76em;color:var(--text-secondary);">DM Delivered</div><div style="font-weight:700;color:#7dd3fc;">${escapeHtml(String(analytics.dmSent || 0))}</div></div>
+          </div>
+        ` : ''}
         <label>Message body
           <textarea id="welcome_message_template" rows="2" style="width:100%;padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">${escapeHtml(s.welcomeMessageTemplate || '')}</textarea>
         </label>
@@ -19835,8 +19869,10 @@ async function loadWelcomeSettingsSection() {
         </label>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <input id="welcome_image_file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="color:var(--text-secondary);">
-          <button class="btn-secondary btn-sm" onclick="uploadWelcomeImage()">Upload Image</button>
+          <button class="btn-secondary btn-sm" id="welcome_image_upload_btn" onclick="uploadWelcomeImage()">Upload Image</button>
         </div>
+        <small id="welcome_image_upload_hint" style="color:var(--text-secondary);">Accepted: PNG, JPG, WEBP, GIF. Files above 2 MB are auto-optimized before upload.</small>
+        <small id="welcome_image_upload_status" style="color:var(--text-secondary);display:none;"></small>
         <label style="display:flex;align-items:center;gap:8px;"><input id="welcome_dynamic_avatar_card" type="checkbox" ${s.dynamicAvatarCard ? 'checked' : ''}> Dynamic avatar card</label>
         <label style="display:flex;align-items:center;gap:8px;"><input id="welcome_dm_enabled" type="checkbox" ${s.dmEnabled ? 'checked' : ''}> Send onboarding DM</label>
         <label>DM template
@@ -20030,18 +20066,38 @@ async function postWelcomeCaptchaPanel() {
 }
 
 async function uploadWelcomeImage() {
+  const statusEl = document.getElementById('welcome_image_upload_status');
+  const btn = document.getElementById('welcome_image_upload_btn');
+  const setStatus = (text = '', tone = 'muted') => {
+    if (!statusEl) return;
+    const color = tone === 'error'
+      ? '#fca5a5'
+      : (tone === 'success' ? '#86efac' : 'var(--text-secondary)');
+    statusEl.textContent = String(text || '').trim();
+    statusEl.style.color = color;
+    statusEl.style.display = statusEl.textContent ? 'block' : 'none';
+  };
+
   try {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Uploading...';
+    }
     const input = document.getElementById('welcome_image_file');
     const file = input?.files?.[0];
     if (!file) {
       showError('Pick an image file first.');
+      setStatus('Pick an image file first.', 'error');
       return;
     }
+    setStatus('Preparing image...');
     const uploadPayload = await buildWelcomeUploadPayload(file);
     if (!uploadPayload?.dataUrl) {
       showError('Could not process image file.');
+      setStatus('Could not process image file.', 'error');
       return;
     }
+    setStatus(uploadPayload.transformed ? 'Optimized image ready. Uploading...' : 'Uploading image...');
     const res = await fetch('/api/admin/welcome/upload-image', {
       method: 'POST',
       credentials: 'include',
@@ -20062,12 +20118,20 @@ async function uploadWelcomeImage() {
     if (!res.ok || json.success === false) throw new Error(json?.error?.message || json?.message || 'Upload failed');
     if (uploadPayload.transformed) {
       showSuccess('Image optimized and uploaded. Select it in "Uploaded image asset" and save settings.');
+      setStatus('Upload complete. Optimized image saved as asset.', 'success');
     } else {
       showSuccess('Image uploaded. Select it in "Uploaded image asset" and save settings.');
+      setStatus('Upload complete. Image saved as asset.', 'success');
     }
     await loadWelcomeSettingsSection();
   } catch (error) {
     showError(error?.message || 'Failed to upload image');
+    setStatus(error?.message || 'Failed to upload image', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Upload Image';
+    }
   }
 }
 
@@ -20123,4 +20187,6 @@ async function buildWelcomeUploadPayload(file) {
 
   throw new Error('Image is too large. Try a smaller image or lower resolution.');
 }
+
+
 

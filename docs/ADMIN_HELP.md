@@ -3,7 +3,7 @@
 This file is the source-of-truth command reference for the current production command surface.
 
 ## Command Taxonomy
-- Canonical module commands: `/verification`, `/governance`, `/treasury`, `/wallet-tracker`, `/invites`, `/nft-tracker`, `/token-tracker`, `/aiassistant`, `/minigames`, `/points`, `/heist`, `/config`.
+- Canonical module commands: `/verification`, `/governance`, `/treasury`, `/wallet-tracker`, `/invites`, `/nft-tracker`, `/token-tracker`, `/aiassistant`, `/minigames`, `/points`, `/heist`, `/config`, `/moderation`.
 - Minigames currently run through dedicated commands (`/battle`, `/higherlower`, `/diceduel`, `/reactionrace`, `/numberguess`, `/slots`, `/trivia`, `/wordscramble`, `/rps`, `/blackjack`, `/gamenight`) and are mapped to the `minigames` module entitlement.
 
 ## Verification
@@ -93,6 +93,18 @@ This file is the source-of-truth command reference for the current production co
 - `/vault upgrade`
 - Admin: `/vault admin panel|setup|setstatus|config-view|config-set|addkeys|removekeys|backfill|rewards-list|rewards-add|rewards-update|rewards-remove`
 
+## Moderation
+- `/moderation kick`
+- `/moderation ban`
+- `/moderation timeout`
+- `/moderation purge`
+- `/moderation settings-view`
+- `/moderation settings-raid`
+- `/moderation settings-keywords`
+- `/moderation keyword-add`
+- `/moderation keyword-remove`
+- `/moderation keyword-list`
+
 ## Config
 - `/config modules`
 - `/config toggle`
@@ -120,3 +132,4 @@ These are intentionally managed in the portal (`/admin`, `/?section=settings`, `
 - Runtime guardrails:
   - command cooldowns are enabled on high-cost command paths (`/verification quick|refresh`, `/battle create|start`, `/minigames run`, tracker feeds).
   - battle lobby creation/start now uses transactional checks to prevent race-condition double-creates/double-starts.
+

@@ -16,6 +16,7 @@ const checks = [
   { name: 'module-refactor', cmd: process.execPath, args: ['tests/test-module-refactor.js'] },
   { name: 'micro-verify', cmd: process.execPath, args: ['tests/test-micro-verify.js'] },
   { name: 'missions-v1-flow', cmd: process.execPath, args: ['tests/test-heist-v1-flow.js'] },
+  { name: 'welcome-onboarding-smoke', cmd: process.execPath, args: ['tests/test-welcome-onboarding-smoke.js'] },
   { name: 'ai-assistant-smoke', cmd: process.execPath, args: ['scripts/ai-assistant-smoke.js'] },
 ];
 

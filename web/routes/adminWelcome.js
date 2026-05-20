@@ -203,6 +203,21 @@ function createAdminWelcomeRouter({
     }
   });
 
+  router.get('/api/admin/welcome/analytics', adminAuthMiddleware, (req, res) => {
+    if (!ensureWelcomeModule(req, res)) return;
+    try {
+      const days = Number(req.query?.days || 30);
+      const result = welcomeService.getAnalyticsSummary(req.guildId, days);
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to load analytics', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (error) {
+      logger.error('Error loading welcome analytics:', error);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.post('/api/admin/welcome/upload-image', adminAuthMiddleware, (req, res) => {
     if (!ensureWelcomeModule(req, res)) return;
     try {

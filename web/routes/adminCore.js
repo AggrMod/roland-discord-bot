@@ -236,6 +236,27 @@ function createAdminCoreRouter({
     }
   });
 
+  router.get('/activity', adminAuthMiddleware, async (req, res) => {
+    try {
+      const limit = Math.min(Math.max(parseInt(req.query.limit || '50', 10), 1), 200);
+      const logs = tenantService.getTenantAuditLogs(req.guildId, limit);
+      res.json(toSuccessResponse({
+        activity: (logs || []).map((log) => ({
+          id: log.id,
+          guildId: log.guild_id,
+          actorId: log.actor_id || 'unknown',
+          action: log.action || 'unknown',
+          beforeJson: log.before_json || null,
+          afterJson: log.after_json || null,
+          createdAt: log.created_at || null,
+        })),
+      }));
+    } catch (error) {
+      logger.error('Error fetching admin activity feed:', error);
+      res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   return router;
 }
 

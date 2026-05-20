@@ -331,6 +331,7 @@ const nftActivityService = require('./services/nftActivityService');
 const inviteTrackerService = require('./services/inviteTrackerService');
 const heistService = require('./services/heistService');
 const welcomeService = require('./services/welcomeService');
+const moderationService = require('./services/moderationService');
 
 const intervals = [];
 
@@ -581,6 +582,12 @@ client.on(Events.GuildMemberAdd, async member => {
     await welcomeService.handleMemberJoin(member);
   } catch (error) {
     logger.warn(`[welcome] handleMemberJoin failed for guild=${member?.guild?.id || 'unknown'} user=${member?.id || 'unknown'}: ${error?.message || error}`);
+  }
+
+  try {
+    await moderationService.processJoin(member);
+  } catch (error) {
+    logger.warn(`[moderation] processJoin failed for guild=${member?.guild?.id || 'unknown'} user=${member?.id || 'unknown'}: ${error?.message || error}`);
   }
 });
 client.on(Events.GuildMemberUpdate, (o, n) => inviteTrackerService.handleMemberRoleUpdate(o, n));
@@ -1482,6 +1489,23 @@ async function handleAiAssistantPassiveMessage(message) {
 
 client.on(Events.MessageCreate, async message => {
   if (message.author.bot || !message.guild) return;
+  try {
+    const keywordScan = moderationService.checkMessageForKeywords(message.guildId, message.content);
+    if (keywordScan?.matched) {
+      if (keywordScan.settings.keywordFilterDelete) {
+        await message.delete().catch(() => {});
+      }
+      if (keywordScan.settings.keywordFilterWarn) {
+        await message.channel.send({
+          content: `⚠️ <@${message.author.id}> your message was blocked by moderation policy.`,
+          allowedMentions: { users: [message.author.id] }
+        }).catch(() => {});
+      }
+      return;
+    }
+  } catch (error) {
+    logger.warn(`[moderation] keyword scan failed guild=${message.guildId} user=${message.author.id}: ${error?.message || error}`);
+  }
   try { ticketService.markTicketActivity(message.channelId); } catch (_) {}
   try {
     const eng = require('./services/engagementService');

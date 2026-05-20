@@ -105,6 +105,82 @@ function readChallengeToken(token) {
 }
 
 class WelcomeService {
+  recordAnalytics(guildId, counterKey, delta = 1) {
+    const gid = String(guildId || '').trim();
+    const key = String(counterKey || '').trim();
+    const amount = Number(delta || 0);
+    if (!gid || !key || !Number.isFinite(amount) || amount === 0) return;
+    const allowed = new Set([
+      'joins_total',
+      'welcome_sent',
+      'welcome_failed',
+      'dm_sent',
+      'captcha_passed',
+      'captcha_failed',
+      'test_sent',
+      'panel_posted',
+    ]);
+    if (!allowed.has(key)) return;
+
+    const dayKey = new Date().toISOString().slice(0, 10);
+    db.prepare(`
+      INSERT INTO tenant_welcome_analytics_daily (guild_id, day_key, ${key}, created_at, updated_at)
+      VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(guild_id, day_key) DO UPDATE SET
+        ${key} = ${key} + excluded.${key},
+        updated_at = CURRENT_TIMESTAMP
+    `).run(gid, dayKey, amount);
+  }
+
+  getAnalyticsSummary(guildId, days = 30) {
+    const gid = String(guildId || '').trim();
+    if (!gid) return { success: false, message: 'guildId is required' };
+    const safeDays = Math.max(1, Math.min(365, Number(days || 30) || 30));
+    const rows = db.prepare(`
+      SELECT *
+      FROM tenant_welcome_analytics_daily
+      WHERE guild_id = ?
+        AND day_key >= date('now', ?)
+      ORDER BY day_key DESC
+    `).all(gid, `-${safeDays - 1} day`);
+    const totals = {
+      joinsTotal: 0,
+      welcomeSent: 0,
+      welcomeFailed: 0,
+      dmSent: 0,
+      captchaPassed: 0,
+      captchaFailed: 0,
+      testSent: 0,
+      panelPosted: 0,
+    };
+    for (const row of rows) {
+      totals.joinsTotal += Number(row.joins_total || 0);
+      totals.welcomeSent += Number(row.welcome_sent || 0);
+      totals.welcomeFailed += Number(row.welcome_failed || 0);
+      totals.dmSent += Number(row.dm_sent || 0);
+      totals.captchaPassed += Number(row.captcha_passed || 0);
+      totals.captchaFailed += Number(row.captcha_failed || 0);
+      totals.testSent += Number(row.test_sent || 0);
+      totals.panelPosted += Number(row.panel_posted || 0);
+    }
+    return {
+      success: true,
+      days: safeDays,
+      totals,
+      daily: rows.map(row => ({
+        day: row.day_key,
+        joinsTotal: Number(row.joins_total || 0),
+        welcomeSent: Number(row.welcome_sent || 0),
+        welcomeFailed: Number(row.welcome_failed || 0),
+        dmSent: Number(row.dm_sent || 0),
+        captchaPassed: Number(row.captcha_passed || 0),
+        captchaFailed: Number(row.captcha_failed || 0),
+        testSent: Number(row.test_sent || 0),
+        panelPosted: Number(row.panel_posted || 0),
+      })),
+    };
+  }
+
   getSettings(guildId) {
     const normalizedGuildId = String(guildId || '').trim();
     if (!normalizedGuildId) return { success: false, message: 'guildId is required' };
@@ -333,6 +409,7 @@ class WelcomeService {
       }],
     }];
     const message = await channel.send({ embeds: [embed], components });
+    this.recordAnalytics(guild?.id, 'panel_posted', 1);
     return { success: true, channelId: targetChannelId, messageId: message?.id || null };
   }
 
@@ -427,6 +504,7 @@ class WelcomeService {
         return { success: false, delivered: false, message: 'Welcome settings are disabled.' };
       }
       const settings = settingsResult.settings;
+      this.recordAnalytics(guildId, 'joins_total', 1);
       let delivered = false;
 
       if (settings.autoRoleIds.length > 0) {
@@ -462,11 +540,14 @@ class WelcomeService {
       if (!deferWelcomeUntilCaptcha) {
         const sent = await this.sendWelcomeAnnouncement(member, settings, channelSource);
         delivered = !!sent?.delivered;
+        if (delivered) this.recordAnalytics(guildId, 'welcome_sent', 1);
+        else this.recordAnalytics(guildId, 'welcome_failed', 1);
       }
 
       if (settings.dmEnabled) {
         const dmText = this.parseVariables(settings.dmMessageTemplate, member, channelSource);
-        await member.send({ content: dmText }).catch(() => {});
+        const dmSent = await member.send({ content: dmText }).then(() => true).catch(() => false);
+        if (dmSent) this.recordAnalytics(guildId, 'dm_sent', 1);
       }
 
       if (settings.captchaEnabled) {
@@ -479,6 +560,8 @@ class WelcomeService {
       return { success: true, delivered };
     } catch (error) {
       logger.error('[welcome] handleMemberJoin failed:', error);
+      const guildId = String(member?.guild?.id || '').trim();
+      if (guildId) this.recordAnalytics(guildId, 'welcome_failed', 1);
       return { success: false, delivered: false, message: error?.message || 'Failed to process welcome flow.' };
     }
   }
@@ -489,6 +572,7 @@ class WelcomeService {
       return { success: false, message: 'Invalid challenge token' };
     }
     if (Number(payload.exp || 0) < Date.now()) {
+      this.recordAnalytics(payload.guildId, 'captcha_failed', 1);
       return { success: false, message: 'Challenge has expired' };
     }
 
@@ -496,6 +580,7 @@ class WelcomeService {
     if (!settingsResult.success) return settingsResult;
     const settings = settingsResult.settings;
     if (!settings.captchaEnabled || !settings.captchaRoleId) {
+      this.recordAnalytics(payload.guildId, 'captcha_failed', 1);
       return { success: false, message: 'Captcha is not enabled for this server' };
     }
 
@@ -512,10 +597,12 @@ class WelcomeService {
         });
         const json = await res.json();
         if (!json?.success) {
+          this.recordAnalytics(payload.guildId, 'captcha_failed', 1);
           return { success: false, message: 'CAPTCHA verification failed' };
         }
       } catch (error) {
         logger.error('[welcome] captcha provider validation failed:', error);
+        this.recordAnalytics(payload.guildId, 'captcha_failed', 1);
         return { success: false, message: 'CAPTCHA provider unavailable' };
       }
     }
@@ -523,9 +610,15 @@ class WelcomeService {
     try {
       const client = require('../utils/clientProvider').getClient();
       const guild = await client?.guilds?.fetch(payload.guildId).catch(() => null);
-      if (!guild) return { success: false, message: 'Guild not found' };
+      if (!guild) {
+        this.recordAnalytics(payload.guildId, 'captcha_failed', 1);
+        return { success: false, message: 'Guild not found' };
+      }
       const member = await guild.members.fetch(payload.userId).catch(() => null);
-      if (!member) return { success: false, message: 'Member not found' };
+      if (!member) {
+        this.recordAnalytics(payload.guildId, 'captcha_failed', 1);
+        return { success: false, message: 'Member not found' };
+      }
       await member.roles.add(settings.captchaRoleId);
       if (settings.captchaRemoveRoleId && settings.captchaRemoveRoleId !== settings.captchaRoleId) {
         await member.roles.remove(settings.captchaRemoveRoleId).catch(() => {});
@@ -538,10 +631,13 @@ class WelcomeService {
           fetchedChannels = null;
         }
         await this.sendWelcomeAnnouncement(member, settings, fetchedChannels || guild.channels.cache).catch(() => {});
+        this.recordAnalytics(payload.guildId, 'welcome_sent', 1);
       }
+      this.recordAnalytics(payload.guildId, 'captcha_passed', 1);
       return { success: true, guildId: payload.guildId, userId: payload.userId };
     } catch (error) {
       logger.error('[welcome] verifyCaptcha role grant failed:', error);
+      this.recordAnalytics(payload.guildId, 'captcha_failed', 1);
       return { success: false, message: 'Failed to grant captcha role' };
     }
   }
@@ -571,6 +667,7 @@ class WelcomeService {
       }
       const sent = await this.sendWelcomeAnnouncement(member, settings, fetchedChannels || guild.channels.cache);
       if (!sent?.success) return { success: false, message: sent?.message || 'Welcome message was not delivered.' };
+      this.recordAnalytics(guild.id, 'test_sent', 1);
       return { success: true, message: 'Test welcome sent successfully.' };
     }
     if (!originalEnabled) {
@@ -583,6 +680,7 @@ class WelcomeService {
     if (!result?.success || !result?.delivered) {
       return { success: false, message: result?.message || 'Welcome message was not delivered.' };
     }
+    this.recordAnalytics(guild.id, 'test_sent', 1);
     return { success: true, message: 'Test welcome sent successfully.' };
   }
 

@@ -413,6 +413,22 @@ function createSuperadminTenantOpsRouter({
     }
   });
 
+  router.post('/workspace/telemetry', superadminGuard, (req, res) => {
+    try {
+      const actorId = req.session?.discordUser?.id || 'unknown';
+      const event = String(req.body?.event || '').trim();
+      const payload = req.body?.payload && typeof req.body.payload === 'object' ? req.body.payload : {};
+      if (!event) {
+        return res.status(400).json(toErrorResponse('event is required', 'VALIDATION_ERROR'));
+      }
+      logger.info('[superadmin-telemetry]', { actorId, event, payload });
+      res.json(toSuccessResponse({ recorded: true }));
+    } catch (error) {
+      logger.error('Error recording superadmin telemetry:', error);
+      res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.get('/tenants/:guildId/audit', superadminGuard, logSuperadminTenantAction, async (req, res) => {
     try {
       const limit = Math.min(Math.max(parseInt(req.query.limit || '10', 10), 1), 100);

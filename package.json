@@ -9,6 +9,7 @@
     "dev": "node --watch index.js",
     "lint": "eslint --config eslint.config.cjs .",
     "audit": "npm audit --production",
+    "test": "node scripts/release-gate.js",
     "check:help-parity": "node scripts/check-help-parity.js",
     "check:release-gate": "node scripts/release-gate.js",
     "check:missions-smoke": "node tests/test-heist-v1-flow.js"

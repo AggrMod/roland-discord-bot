@@ -7268,6 +7268,7 @@ const TENANT_PLAN_LABELS = {
   pro: 'Pro',
   enterprise: 'Enterprise'
 };
+const TENANT_PLAN_ORDER = ['starter', 'growth', 'pro', 'enterprise'];
 
 const TENANT_MODULE_LABELS = {
   verification: 'Verification',
@@ -7289,6 +7290,12 @@ const TENANT_MODULE_LABELS = {
 
 function getTenantPlanLabel(planKey) {
   return TENANT_PLAN_LABELS[planKey] || planKey || 'Unknown';
+}
+
+function getTenantPlanRank(planKey) {
+  const normalized = String(planKey || '').toLowerCase();
+  const idx = TENANT_PLAN_ORDER.indexOf(normalized);
+  return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
 }
 
 function getTenantStatusBadge(status) {
@@ -9089,31 +9096,48 @@ async function applyTenantPlan() {
   const select = document.getElementById('tenantPlanSelect');
   const btn = document.getElementById('tenantPlanApplyBtn');
   if (!select || !btn) return;
+  const nextPlan = String(select.value || '').toLowerCase();
+  const currentPlan = String(selectedTenantDetailCache?.planKey || '').toLowerCase();
 
-  btn.disabled = true;
-  btn.textContent = 'Applying...';
+  const runApply = async () => {
+    btn.disabled = true;
+    btn.textContent = 'Applying...';
+    try {
+      const response = await fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/plan`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ plan: select.value })
+      });
+      const data = await response.json();
 
-  try {
-    const response = await fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/plan`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ plan: select.value })
-    });
-    const data = await response.json();
-
-    if (data.success) {
-      showSuccess('Tenant plan updated');
-      await loadSuperadminView();
-    } else {
-      showError(data.message || 'Failed to update tenant plan');
+      if (data.success) {
+        showSuccess('Tenant plan updated');
+        await loadSuperadminView();
+      } else {
+        console.error('[admin-ui-v2][save_failure]', { action: 'applyTenantPlan', error: data.message || 'Failed to update tenant plan' });
+        showError(data.message || 'Failed to update tenant plan');
+      }
+    } catch (error) {
+      console.error('[admin-ui-v2][save_failure]', { action: 'applyTenantPlan', error: error?.message || String(error) });
+      showError(formatAdminWorkspaceError('Failed to update tenant plan', error));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Apply';
     }
-  } catch (error) {
-    showError(`Failed to update tenant plan: ${error.message}`);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Apply';
+  };
+
+  if (getTenantPlanRank(nextPlan) < getTenantPlanRank(currentPlan)) {
+    showConfirmModal(
+      'Downgrade Tenant Plan?',
+      `This changes the tenant from ${getTenantPlanLabel(currentPlan)} to ${getTenantPlanLabel(nextPlan)} and can reduce module limits or disable paid capabilities. Continue?`,
+      runApply,
+      'Downgrade'
+    );
+    return;
   }
+
+  await runApply();
 }
 
 async function toggleTenantModule(moduleKey, checkbox) {
@@ -9237,10 +9261,12 @@ async function saveTenantMockData() {
       showSuccess(`Mock data ${input.checked ? 'enabled' : 'disabled'} for tenant`);
       await loadSuperadminView();
     } else {
+      console.error('[admin-ui-v2][save_failure]', { action: 'saveTenantMockData', error: data.message || 'Failed to update mock data setting' });
       showError(data.message || 'Failed to update mock data setting');
     }
   } catch (error) {
-    showError(`Failed to update mock data setting: ${error.message}`);
+    console.error('[admin-ui-v2][save_failure]', { action: 'saveTenantMockData', error: error?.message || String(error) });
+    showError(formatAdminWorkspaceError('Failed to update mock data setting', error));
   } finally {
     btn.disabled = false;
     btn.textContent = 'Save Mock Data';
@@ -9293,10 +9319,12 @@ async function saveTenantModuleLimits() {
       await loadSelectedTenantDetail();
       showTenantDetailTab('controls');
     } else {
+      console.error('[admin-ui-v2][save_failure]', { action: 'saveTenantModuleLimits', error: data.message || 'Failed to save module limits' });
       showError(data.message || 'Failed to save module limits');
     }
   } catch (error) {
-    showError(`Failed to save module limits: ${error.message}`);
+    console.error('[admin-ui-v2][save_failure]', { action: 'saveTenantModuleLimits', error: error?.message || String(error) });
+    showError(formatAdminWorkspaceError('Failed to save module limits', error));
   } finally {
     btn.disabled = false;
     btn.textContent = 'Save Limits';
@@ -9342,10 +9370,12 @@ async function uploadTenantLogo() {
       showSuccess('Logo uploaded');
       await loadSuperadminView();
     } else {
+      console.error('[admin-ui-v2][save_failure]', { action: 'uploadTenantLogo', error: data.message || 'Failed to upload logo' });
       showError(data.message || 'Failed to upload logo');
     }
   } catch (error) {
-    showError(`Failed to upload logo: ${error.message}`);
+    console.error('[admin-ui-v2][save_failure]', { action: 'uploadTenantLogo', error: error?.message || String(error) });
+    showError(formatAdminWorkspaceError('Failed to upload logo', error));
   } finally {
     btn.disabled = false;
     btn.textContent = 'Upload Logo';
@@ -9385,10 +9415,12 @@ async function saveTenantBranding() {
       showSuccess('Tenant branding saved');
       await loadSuperadminView();
     } else {
+      console.error('[admin-ui-v2][save_failure]', { action: 'saveTenantBranding', error: data.message || 'Failed to save tenant branding' });
       showError(data.message || 'Failed to save tenant branding');
     }
   } catch (error) {
-    showError(`Failed to save tenant branding: ${error.message}`);
+    console.error('[admin-ui-v2][save_failure]', { action: 'saveTenantBranding', error: error?.message || String(error) });
+    showError(formatAdminWorkspaceError('Failed to save tenant branding', error));
   } finally {
     btn.disabled = false;
     btn.textContent = 'Save';

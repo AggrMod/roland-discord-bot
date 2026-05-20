@@ -7253,6 +7253,7 @@ let superadminWorkspaceBillingPage = 1;
 let superadminWorkspaceBillingPageSize = 25;
 let superadminWorkspaceBillingSortBy = 'updatedAt';
 let superadminWorkspaceBillingSortDir = 'desc';
+let superadminWorkspaceBillingEntriesCache = [];
 let superadminWorkspaceActivityCache = [];
 let superadminWorkspacePlansCache = [];
 let superadminWorkspaceFocus = '';
@@ -8039,6 +8040,51 @@ function superadminRejectBillingReceipt(guildId, receiptId = null) {
   });
 }
 
+function openSuperadminBillingReceiptReview(guildId) {
+  const normalizedGuildId = String(guildId || '').trim();
+  if (!normalizedGuildId) return;
+  const entry = (Array.isArray(superadminWorkspaceBillingEntriesCache) ? superadminWorkspaceBillingEntriesCache : [])
+    .find(item => String(item?.guildId || '') === normalizedGuildId);
+  if (!entry) {
+    showError('Could not find billing record in current workspace.');
+    return;
+  }
+  const receipt = entry.latestReceipt || null;
+  showConfirmModal(`Billing Review: ${entry.guildName || entry.guildId}`, '', null, 'Approve');
+  const body = document.getElementById('confirmMessage');
+  if (body) {
+    body.innerHTML = `
+      <div style="display:grid;gap:10px;">
+        <div style="font-size:0.9em;color:var(--text-secondary);">Review this tenant's latest payment context before applying actions.</div>
+        <div style="padding:10px;border:1px solid rgba(99,102,241,0.18);border-radius:8px;background:rgba(15,23,42,0.4);">
+          <div><strong>Tenant:</strong> ${escapeHtml(entry.guildName || entry.guildId)}</div>
+          <div><strong>Status:</strong> ${escapeHtml(entry.subscriptionStatus || 'unknown')}</div>
+          <div><strong>Provider:</strong> ${escapeHtml(entry.provider || 'n/a')}</div>
+          <div><strong>Queue:</strong> ${escapeHtml(entry.verificationStatus || 'pending')}</div>
+        </div>
+        <div style="padding:10px;border:1px solid rgba(99,102,241,0.18);border-radius:8px;background:rgba(15,23,42,0.4);">
+          <div><strong>Latest Receipt:</strong> ${receipt ? `#${escapeHtml(String(receipt.id || ''))}` : 'None'}</div>
+          <div><strong>TX:</strong> ${escapeHtml(receipt?.txSignature || 'n/a')}</div>
+          <div><strong>Token/Amount:</strong> ${escapeHtml(receipt?.tokenSymbol || 'n/a')} ${receipt?.amount !== null && receipt?.amount !== undefined ? escapeHtml(String(receipt.amount)) : 'n/a'}</div>
+          <div><strong>Plan/Interval:</strong> ${escapeHtml(receipt?.planKey || 'n/a')} / ${escapeHtml(receipt?.billingInterval || 'n/a')}</div>
+          <div><strong>Submitted:</strong> ${escapeHtml(receipt?.createdAt ? new Date(receipt.createdAt).toLocaleString() : 'n/a')}</div>
+        </div>
+      </div>
+    `;
+  }
+  confirmCallback = async () => {
+    closeConfirmModal();
+    superadminBillingAction(normalizedGuildId, 'approve', receipt?.id ? {
+      receiptId: Number(receipt.id),
+      planKey: String(receipt.planKey || '').trim().toLowerCase() || null,
+      billingInterval: String(receipt.billingInterval || '').trim().toLowerCase() || null,
+    } : null);
+    return false;
+  };
+  const btn = document.getElementById('confirmButton');
+  if (btn) btn.textContent = 'Approve';
+}
+
 function superadminBillingAction(guildId, action, extraPayload = null) {
   const normalizedGuildId = String(guildId || '').trim();
   const normalizedAction = String(action || '').trim().toLowerCase();
@@ -8169,6 +8215,7 @@ async function loadSuperadminWorkspaceHubV2() {
 
     const tenants = Array.isArray(tenantsJson?.tenants) ? tenantsJson.tenants : [];
     const billingEntries = (billingRes.ok && billingJson?.success !== false && Array.isArray(billingJson?.entries)) ? billingJson.entries : [];
+    superadminWorkspaceBillingEntriesCache = Array.isArray(billingEntries) ? billingEntries : [];
     const billingPagination = billingJson?.pagination || { page: 1, pageSize: superadminWorkspaceBillingPageSize || 25, total: billingEntries.length, totalPages: 1 };
     const billingSorting = billingJson?.sorting || { sortBy: superadminWorkspaceBillingSortBy || 'updatedAt', sortDir: superadminWorkspaceBillingSortDir || 'desc' };
     superadminWorkspaceBillingPage = Number(billingPagination.page || 1);
@@ -8286,6 +8333,7 @@ async function loadSuperadminWorkspaceHubV2() {
                       </td>
                       <td>
                         <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                          <button class="btn-secondary" style="padding:4px 8px;" onclick="openSuperadminBillingReceiptReview('${escapeJsString(entry.guildId || '')}')">Review</button>
                           <button class="btn-secondary" style="padding:4px 8px;" onclick="superadminBillingAction('${escapeJsString(entry.guildId || '')}', 'approve', ${entry.latestReceipt?.id ? `{ receiptId: ${Number(entry.latestReceipt.id)}, planKey: '${escapeJsString(entry.latestReceipt.planKey || '')}', billingInterval: '${escapeJsString(entry.latestReceipt.billingInterval || '')}' }` : 'null'})">Approve</button>
                           <button class="btn-secondary" style="padding:4px 8px;" onclick="superadminRejectBillingReceipt('${escapeJsString(entry.guildId || '')}', ${entry.latestReceipt?.id ? Number(entry.latestReceipt.id) : 'null'})">Reject</button>
                           <button class="btn-secondary" style="padding:4px 8px;" onclick="superadminWorkspaceBillingOverride('${escapeJsString(entry.guildId || '')}', '${escapeJsString(entry.subscriptionStatus || '')}', '${escapeJsString(entry.billingInterval || '')}')">Override</button>

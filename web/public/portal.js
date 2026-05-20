@@ -8085,6 +8085,20 @@ async function loadSuperadminWorkspaceHubV2() {
               <label style="display:grid; gap:6px;"><span style="font-size:0.8em; color:var(--text-secondary);">OpenAI Model</span><input id="sa_aiModelOpenai" type="text" value="${escapeHtml(globalSettings.aiAssistantDefaultModelOpenai || 'gpt-5.4')}"></label>
               <label style="display:grid; gap:6px;"><span style="font-size:0.8em; color:var(--text-secondary);">Gemini Model</span><input id="sa_aiModelGemini" type="text" value="${escapeHtml(globalSettings.aiAssistantDefaultModelGemini || 'gemini-2.0-flash')}"></label>
             </div>
+            <div style="display:grid; grid-template-columns:repeat(2,minmax(220px,1fr)); gap:10px; margin-top:10px;">
+              <label style="display:grid; gap:6px;">
+                <span style="font-size:0.8em; color:var(--text-secondary);">OpenAI API Key (optional update)</span>
+                <input id="sa_openaiApiKey" type="password" value="" placeholder="sk-...">
+              </label>
+              <label style="display:grid; gap:6px;">
+                <span style="font-size:0.8em; color:var(--text-secondary);">Gemini API Key (optional update)</span>
+                <input id="sa_geminiApiKey" type="password" value="" placeholder="AIza...">
+              </label>
+            </div>
+            <div style="display:flex; gap:14px; flex-wrap:wrap; margin-top:10px;">
+              <label style="display:flex; align-items:center; gap:8px;"><input id="sa_openaiApiKeyClear" type="checkbox">Clear stored OpenAI key</label>
+              <label style="display:flex; align-items:center; gap:8px;"><input id="sa_geminiApiKeyClear" type="checkbox">Clear stored Gemini key</label>
+            </div>
             <div class="gp-actions-row"><button class="btn-primary" onclick="saveAiProviderSettings()">Save AI Settings</button></div>
           </div>
         `;
@@ -8095,6 +8109,14 @@ async function loadSuperadminWorkspaceHubV2() {
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
               <label style="display:grid; gap:6px;"><span style="font-size:0.82em; color:var(--text-secondary);">X Client ID</span><input id="sa_xClientId" type="text" value="${escapeHtml(globalSettings.xClientId || '')}"></label>
               <label style="display:grid; gap:6px;"><span style="font-size:0.82em; color:var(--text-secondary);">Polling Interval (sec)</span><input id="sa_xPollingInterval" type="number" min="30" max="3600" value="${escapeHtml(String(globalSettings.xPollingIntervalSeconds || 300))}"></label>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;">
+              <label style="display:grid; gap:6px;"><span style="font-size:0.82em; color:var(--text-secondary);">X Client Secret (optional update)</span><input id="sa_xClientSecret" type="password" value=""></label>
+              <label style="display:grid; gap:6px;"><span style="font-size:0.82em; color:var(--text-secondary);">X Bearer Token (optional update)</span><input id="sa_xBearerToken" type="password" value=""></label>
+            </div>
+            <div style="display:flex; gap:14px; flex-wrap:wrap; margin-top:10px;">
+              <label style="display:flex; align-items:center; gap:8px;"><input id="sa_xClientSecretClear" type="checkbox">Clear stored X client secret</label>
+              <label style="display:flex; align-items:center; gap:8px;"><input id="sa_xBearerTokenClear" type="checkbox">Clear stored X bearer token</label>
             </div>
             <label style="display:flex; align-items:center; gap:10px; margin-top:10px;"><input id="sa_xPollingEnabled" type="checkbox" ${globalSettings.xPollingEnabled ? 'checked' : ''}>Enable X polling</label>
             <div class="gp-actions-row"><button class="btn-primary" onclick="saveXProviderSettings()">Save X Settings</button></div>
@@ -8107,6 +8129,10 @@ async function loadSuperadminWorkspaceHubV2() {
             <div class="sa-v2-detail-header"><h4>Chain Emojis & Replay</h4><button class="btn-secondary" onclick="setSuperadminWorkspaceFocus('')">Back</button></div>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
               ${['solana','usdc','ethereum','base','polygon','arbitrum','optimism','bsc','avalanche'].map(chain => `<label style="display:grid;gap:6px;"><span style="font-size:0.82em;color:var(--text-secondary);text-transform:capitalize;">${chain}</span><input id="sa_chainEmoji_${chain}" type="text" value="${escapeHtml(chainEmojiMap[chain] || '')}" placeholder="<:emoji:123...> or unicode"></label>`).join('')}
+            </div>
+            <div style="display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; margin-top:10px;">
+              <input id="sa_nftReplayTx" type="text" placeholder="Paste NFT tx signature to replay activity parsing">
+              <button class="btn-secondary" onclick="replayNftActivityTx()">Replay Tx</button>
             </div>
             <div class="gp-actions-row"><button class="btn-primary" onclick="saveChainEmojiMap()">Save Chain Emojis</button></div>
           </div>

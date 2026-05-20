@@ -7594,13 +7594,13 @@ function renderTenantDetailPanel(tenant, tenantLimits = null, workspaceTenantTab
       </div>
 
       <div id="tenantDetail-controls" style="display:${showControlsSection ? 'grid' : 'none'};gap:16px; grid-template-columns:minmax(0,0.8fr) minmax(0,1.2fr);">
-        <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
+        <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35); min-width:0;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap;">
             <h4 style="margin:0; color:#c9d6ff;">Monetization Template</h4>
-            <div style="display:flex; gap:8px; align-items:center;">
-              <button class="btn-secondary" id="tenantTemplatePreviewBtn" onclick="previewTenantTemplate()" style="padding:8px 14px;">Preview</button>
-              <button class="btn-secondary" id="tenantTemplateRollbackBtn" onclick="rollbackTenantTemplate()" style="padding:8px 14px;">Rollback Last</button>
-              <button class="btn-primary" id="tenantTemplateApplyBtn" onclick="applyTenantTemplate()" style="padding:8px 14px;">Apply Template</button>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end; margin-left:auto; max-width:100%;">
+              <button class="btn-secondary" id="tenantTemplatePreviewBtn" onclick="previewTenantTemplate()" style="padding:8px 14px; white-space:nowrap;">Preview</button>
+              <button class="btn-secondary" id="tenantTemplateRollbackBtn" onclick="rollbackTenantTemplate()" style="padding:8px 14px; white-space:nowrap;">Rollback Last</button>
+              <button class="btn-primary" id="tenantTemplateApplyBtn" onclick="applyTenantTemplate()" style="padding:8px 14px; white-space:nowrap;">Apply Template</button>
             </div>
           </div>
           <label style="display:grid; gap:8px; color:#e0e7ff; font-size:0.9em;">
@@ -7617,10 +7617,10 @@ function renderTenantDetailPanel(tenant, tenantLimits = null, workspaceTenantTab
           </div>
         </div>
 
-        <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
+        <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35); min-width:0;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap;">
             <h4 style="margin:0; color:#c9d6ff;">Plan Assignment</h4>
-            <button class="btn-primary" id="tenantPlanApplyBtn" onclick="applyTenantPlan()" style="padding:8px 14px;">Apply</button>
+            <button class="btn-primary" id="tenantPlanApplyBtn" onclick="applyTenantPlan()" style="padding:8px 14px; white-space:nowrap; margin-left:auto;">Apply</button>
           </div>
           <label style="display:grid; gap:8px; color:#e0e7ff; font-size:0.9em;">
             <span>Plan</span>

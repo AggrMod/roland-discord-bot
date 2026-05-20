@@ -8052,37 +8052,66 @@ function openSuperadminBillingReceiptReview(guildId) {
   const receipt = entry.latestReceipt || null;
   showConfirmModal(`Billing Review: ${entry.guildName || entry.guildId}`, '', null, 'Approve');
   const body = document.getElementById('confirmMessage');
-  if (body) {
-    body.innerHTML = `
-      <div style="display:grid;gap:10px;">
-        <div style="font-size:0.9em;color:var(--text-secondary);">Review this tenant's latest payment context before applying actions.</div>
-        <div style="padding:10px;border:1px solid rgba(99,102,241,0.18);border-radius:8px;background:rgba(15,23,42,0.4);">
-          <div><strong>Tenant:</strong> ${escapeHtml(entry.guildName || entry.guildId)}</div>
-          <div><strong>Status:</strong> ${escapeHtml(entry.subscriptionStatus || 'unknown')}</div>
-          <div><strong>Provider:</strong> ${escapeHtml(entry.provider || 'n/a')}</div>
-          <div><strong>Queue:</strong> ${escapeHtml(entry.verificationStatus || 'pending')}</div>
-        </div>
-        <div style="padding:10px;border:1px solid rgba(99,102,241,0.18);border-radius:8px;background:rgba(15,23,42,0.4);">
-          <div><strong>Latest Receipt:</strong> ${receipt ? `#${escapeHtml(String(receipt.id || ''))}` : 'None'}</div>
-          <div><strong>TX:</strong> ${escapeHtml(receipt?.txSignature || 'n/a')}</div>
-          <div><strong>Token/Amount:</strong> ${escapeHtml(receipt?.tokenSymbol || 'n/a')} ${receipt?.amount !== null && receipt?.amount !== undefined ? escapeHtml(String(receipt.amount)) : 'n/a'}</div>
-          <div><strong>Plan/Interval:</strong> ${escapeHtml(receipt?.planKey || 'n/a')} / ${escapeHtml(receipt?.billingInterval || 'n/a')}</div>
-          <div><strong>Submitted:</strong> ${escapeHtml(receipt?.createdAt ? new Date(receipt.createdAt).toLocaleString() : 'n/a')}</div>
-        </div>
-      </div>
-    `;
-  }
-  confirmCallback = async () => {
-    closeConfirmModal();
-    superadminBillingAction(normalizedGuildId, 'approve', receipt?.id ? {
-      receiptId: Number(receipt.id),
-      planKey: String(receipt.planKey || '').trim().toLowerCase() || null,
-      billingInterval: String(receipt.billingInterval || '').trim().toLowerCase() || null,
-    } : null);
-    return false;
-  };
+  if (body) body.innerHTML = '<div style="color:var(--text-secondary);">Loading receipt history...</div>';
+  confirmCallback = async () => false;
   const btn = document.getElementById('confirmButton');
   if (btn) btn.textContent = 'Approve';
+
+  (async () => {
+    try {
+      const res = await fetch(`/api/superadmin/workspace/billing/${encodeURIComponent(normalizedGuildId)}/receipts?limit=25`, {
+        credentials: 'include',
+      });
+      const json = await res.json().catch(() => ({}));
+      const receipts = (res.ok && json?.success !== false && Array.isArray(json?.receipts)) ? json.receipts : [];
+      const receiptRows = receipts.length
+        ? receipts.map((item) => `
+          <div style="padding:10px;border:1px solid rgba(99,102,241,0.18);border-radius:8px;background:rgba(15,23,42,0.4);display:grid;gap:6px;">
+            <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+              <div><strong>#${escapeHtml(String(item.id || ''))}</strong> · ${escapeHtml(item.status || 'pending')}</div>
+              <div style="font-size:0.78em;color:var(--text-secondary);">${escapeHtml(item.createdAt ? new Date(item.createdAt).toLocaleString() : '')}</div>
+            </div>
+            <div style="font-size:0.84em;"><strong>TX:</strong> ${escapeHtml(item.txSignature || 'n/a')}</div>
+            <div style="font-size:0.84em;"><strong>Token/Amount:</strong> ${escapeHtml(item.tokenSymbol || 'n/a')} ${item.amount !== null && item.amount !== undefined ? escapeHtml(String(item.amount)) : 'n/a'}</div>
+            <div style="font-size:0.84em;"><strong>Plan/Interval:</strong> ${escapeHtml(item.planKey || 'n/a')} / ${escapeHtml(item.billingInterval || 'n/a')}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button class="btn-secondary" style="padding:4px 8px;" onclick="superadminBillingApproveReceipt('${escapeJsString(normalizedGuildId)}', ${Number(item.id || 0)}, '${escapeJsString(String(item.planKey || ''))}', '${escapeJsString(String(item.billingInterval || ''))}')">Approve Receipt</button>
+              <button class="btn-secondary" style="padding:4px 8px;" onclick="superadminRejectBillingReceipt('${escapeJsString(normalizedGuildId)}', ${Number(item.id || 0)})">Reject Receipt</button>
+            </div>
+          </div>
+        `).join('')
+        : '<div style="color:var(--text-secondary);">No receipts found for this tenant.</div>';
+
+      if (body) {
+        body.innerHTML = `
+          <div style="display:grid;gap:10px;">
+            <div style="font-size:0.9em;color:var(--text-secondary);">Review and process payment receipts for this tenant.</div>
+            <div style="padding:10px;border:1px solid rgba(99,102,241,0.18);border-radius:8px;background:rgba(15,23,42,0.4);">
+              <div><strong>Tenant:</strong> ${escapeHtml(entry.guildName || entry.guildId)}</div>
+              <div><strong>Status:</strong> ${escapeHtml(entry.subscriptionStatus || 'unknown')}</div>
+              <div><strong>Provider:</strong> ${escapeHtml(entry.provider || 'n/a')}</div>
+              <div><strong>Queue:</strong> ${escapeHtml(entry.verificationStatus || 'pending')}</div>
+            </div>
+            <div style="display:grid;gap:8px;max-height:360px;overflow:auto;">${receiptRows}</div>
+          </div>
+        `;
+      }
+    } catch (_error) {
+      if (body) body.innerHTML = '<div style="color:#fca5a5;">Failed to load receipt history.</div>';
+    }
+  })();
+}
+
+function superadminBillingApproveReceipt(guildId, receiptId, planKey = '', billingInterval = '') {
+  const normalizedGuildId = String(guildId || '').trim();
+  const normalizedReceiptId = Number(receiptId || 0);
+  if (!normalizedGuildId || !Number.isFinite(normalizedReceiptId) || normalizedReceiptId <= 0) return;
+  closeConfirmModal();
+  superadminBillingAction(normalizedGuildId, 'approve', {
+    receiptId: normalizedReceiptId,
+    planKey: String(planKey || '').trim().toLowerCase() || null,
+    billingInterval: String(billingInterval || '').trim().toLowerCase() || null,
+  });
 }
 
 function superadminBillingAction(guildId, action, extraPayload = null) {

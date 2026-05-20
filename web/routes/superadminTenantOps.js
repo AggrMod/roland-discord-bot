@@ -498,6 +498,44 @@ function createSuperadminTenantOpsRouter({
     }
   });
 
+  router.get('/workspace/billing/:guildId/receipts', superadminGuard, (req, res) => {
+    try {
+      const guildId = normalizeGuildId(req.params.guildId);
+      if (!guildId) {
+        return res.status(400).json(toErrorResponse('Valid guildId is required', 'VALIDATION_ERROR'));
+      }
+      const limit = Math.min(Math.max(parseInt(req.query.limit || '25', 10), 1), 100);
+      const rows = db.prepare(`
+        SELECT id, guild_id, tx_signature, amount, token_symbol, sender_wallet, plan_key, billing_interval, status, verification_error, verified_at, created_at
+        FROM crypto_payment_receipts
+        WHERE guild_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?
+      `).all(guildId, limit);
+
+      res.json(toSuccessResponse({
+        guildId,
+        receipts: rows.map((row) => ({
+          id: Number(row.id),
+          guildId: row.guild_id,
+          txSignature: row.tx_signature || null,
+          amount: row.amount !== null && row.amount !== undefined ? Number(row.amount) : null,
+          tokenSymbol: row.token_symbol || null,
+          senderWallet: row.sender_wallet || null,
+          planKey: row.plan_key || null,
+          billingInterval: row.billing_interval || null,
+          status: row.status || 'pending',
+          verificationError: row.verification_error || null,
+          verifiedAt: row.verified_at || null,
+          createdAt: row.created_at || null,
+        })),
+      }));
+    } catch (error) {
+      logger.error('Error loading workspace billing receipts:', error);
+      res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.get('/workspace/activity', superadminGuard, async (req, res) => {
     try {
       const limit = Math.min(Math.max(parseInt(req.query.limit || '25', 10), 1), 100);

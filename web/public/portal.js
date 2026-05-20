@@ -7470,7 +7470,8 @@ function renderTenantDetailPanel(tenant, tenantLimits = null, workspaceTenantTab
   const forceModulesControls = workspaceTab === 'modules';
   const forceBranding = workspaceTab === 'branding';
   const showOverviewSection = !forcePlanControls && !forceModulesControls && !forceBranding;
-  const showControlsSection = forcePlanControls || forceModulesControls;
+  const showControlsSection = forcePlanControls;
+  const showModulesSection = forceModulesControls;
   const showBrandingSection = forceBranding;
 
   const billing = tenant.billing || null;
@@ -7667,16 +7668,6 @@ function renderTenantDetailPanel(tenant, tenantLimits = null, workspaceTenantTab
           </div>
         </div>
 
-        <div style="grid-column:1 / -1; padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap;">
-            <h4 style="margin:0; color:#c9d6ff;">Module Limits</h4>
-            <button class="btn-primary" id="tenantModuleLimitsSaveBtn" onclick="saveTenantModuleLimits()" style="padding:8px 14px;">Save Limits</button>
-          </div>
-          <div style="margin-bottom:10px; color:var(--text-secondary); font-size:0.82em;">Set tenant-specific overrides per module. Leave a value empty to use the plan default.</div>
-          <div style="display:grid; gap:8px;">
-            ${moduleLimitRows}
-          </div>
-        </div>
       </div>
 
       <div id="tenantDetail-branding" style="display:${showBrandingSection ? 'block' : 'none'};">
@@ -7726,11 +7717,21 @@ function renderTenantDetailPanel(tenant, tenantLimits = null, workspaceTenantTab
         </div>
       </div>
 
-      <div id="tenantDetail-modules" style="display:none;">
+      <div id="tenantDetail-modules" style="display:${showModulesSection ? 'block' : 'none'};">
         <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
           <h4 style="margin:0 0 12px; color:#c9d6ff;">Module Bundle</h4>
           <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
             ${moduleToggles}
+          </div>
+        </div>
+        <div style="margin-top:14px; padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; flex-wrap:wrap;">
+            <h4 style="margin:0; color:#c9d6ff;">Module Limits</h4>
+            <button class="btn-primary" id="tenantModuleLimitsSaveBtn" onclick="saveTenantModuleLimits()" style="padding:8px 14px;">Save Limits</button>
+          </div>
+          <div style="margin-bottom:10px; color:var(--text-secondary); font-size:0.82em;">Set tenant-specific overrides per module. Leave a value empty to use the plan default.</div>
+          <div style="display:grid; gap:8px;">
+            ${moduleLimitRows}
           </div>
         </div>
       </div>

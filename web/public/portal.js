@@ -7883,6 +7883,7 @@ async function loadSuperadminWorkspaceHubV2() {
   content.innerHTML = '<div style="padding:20px;text-align:center;"><div class="spinner"></div><p style="margin-top:8px;">Loading admin workspace...</p></div>';
 
   try {
+    const workspaceWarnings = [];
     const headers = buildTenantRequestHeaders();
     const tenantsQs = new URLSearchParams();
     if (superadminWorkspaceSearch.trim()) tenantsQs.set('q', superadminWorkspaceSearch.trim());
@@ -7911,11 +7912,23 @@ async function loadSuperadminWorkspaceHubV2() {
     if (!tenantsRes.ok || tenantsJson?.success === false) {
       throw new Error(tenantsJson?.message || 'Failed to load tenant workspace');
     }
+    if (!activityRes.ok || activityJson?.success === false) {
+      workspaceWarnings.push('Recent activity feed is temporarily unavailable.');
+    }
+    if (!billingRes.ok || billingJson?.success === false) {
+      workspaceWarnings.push('Billing ledger data is temporarily unavailable.');
+    }
+    if (!adminsRes.ok || adminsJson?.success === false) {
+      workspaceWarnings.push('Superadmin access list is temporarily unavailable.');
+    }
+    if (!globalSettingsRes.ok || globalSettingsJson?.success === false) {
+      workspaceWarnings.push('Global integration settings are temporarily unavailable.');
+    }
 
     const tenants = Array.isArray(tenantsJson?.tenants) ? tenantsJson.tenants : [];
-    const billingEntries = Array.isArray(billingJson?.entries) ? billingJson.entries : [];
-    const activityItems = Array.isArray(activityJson?.items) ? activityJson.items : [];
-    const superadmins = Array.isArray(adminsJson?.superadmins) ? adminsJson.superadmins : [];
+    const billingEntries = (billingRes.ok && billingJson?.success !== false && Array.isArray(billingJson?.entries)) ? billingJson.entries : [];
+    const activityItems = (activityRes.ok && activityJson?.success !== false && Array.isArray(activityJson?.items)) ? activityJson.items : [];
+    const superadmins = (adminsRes.ok && adminsJson?.success !== false && Array.isArray(adminsJson?.superadmins)) ? adminsJson.superadmins : [];
     const globalSettings = globalSettingsJson?.settings || {};
     superadminWorkspaceActivityCache = activityItems;
 
@@ -7938,6 +7951,12 @@ async function loadSuperadminWorkspaceHubV2() {
       ]);
       const detailJson = await detailRes.json().catch(() => ({}));
       const auditJson = await auditRes.json().catch(() => ({}));
+      if (!detailRes.ok || detailJson?.success === false) {
+        workspaceWarnings.push(`Tenant detail failed to load for ${selectedTenantSummary.guildName || selectedTenantSummary.guildId}.`);
+      }
+      if (!auditRes.ok || auditJson?.success === false) {
+        workspaceWarnings.push(`Tenant audit failed to load for ${selectedTenantSummary.guildName || selectedTenantSummary.guildId}.`);
+      }
       selectedTenantDetailCache = detailJson?.success ? detailJson.tenant : null;
       selectedTenantAuditCache = auditJson?.success ? (auditJson.auditLogs || []) : [];
     }
@@ -8177,6 +8196,7 @@ async function loadSuperadminWorkspaceHubV2() {
           ${tabButton('security', 'Security & Access')}
           ${tabButton('integrations', 'Integrations & System')}
         </div>
+        ${workspaceWarnings.length ? `<div class="sa-v2-inline-note" style="margin:8px 0 12px; border-color:rgba(245,158,11,0.35); color:#fde68a;">${workspaceWarnings.map((item) => escapeHtml(item)).join(' ')}</div>` : ''}
         <div class="sa-v2-main">
           <div class="sa-v2-body">${workspaceBody}</div>
           <aside class="sa-v2-rail">
@@ -8198,6 +8218,9 @@ async function loadSuperadminWorkspaceHubV2() {
     `;
     if (workspace === 'security' && superadminWorkspaceFocus === 'identity') {
       setTimeout(() => loadSuperadminIdentityView(), 0);
+    }
+    if (workspaceWarnings.length) {
+      console.warn('[admin-ui-v2][workspace_partial_failure]', { workspace, warnings: workspaceWarnings });
     }
     console.info('[admin-ui-v2][tffmr_ms]', Date.now() - startMs, { workspace });
   } catch (error) {

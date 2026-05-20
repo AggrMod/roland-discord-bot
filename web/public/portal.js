@@ -19784,229 +19784,23 @@ async function renderDashboardGrid() {
       return;
     }
 
-    const { server, modules, moduleAnalytics = {}, walletPreview = [], activeProposals, activeMissions, analyticsRange = dashboardAnalyticsRange } = data.data;
+    const {
+      server,
+      modules,
+      moduleAnalytics = {},
+      analyticsRange = dashboardAnalyticsRange,
+    } = data.data;
     dashboardAnalyticsRange = ['24h', '7d', '30d'].includes(String(analyticsRange)) ? String(analyticsRange) : dashboardAnalyticsRange;
     const metrics = server.metrics || {};
     grid.className = "dashboard-bento";
 
-    const sparklineSvg = `<svg class="overview-metric-sparkline" viewBox="0 0 100 30" preserveAspectRatio="none"><path d="M0,25 C20,20 30,10 50,15 C70,20 80,5 100,10" fill="none" stroke="var(--gold)" stroke-width="2"/><path d="M0,25 C20,20 30,10 50,15 C70,20 80,5 100,10 L100,30 L0,30 Z" fill="url(#sparkline-gradient)" opacity="0.3"/><defs><linearGradient id="sparkline-gradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--gold)"/><stop offset="100%" stop-color="transparent"/></linearGradient></defs></svg>`;
-
     const overviewHtml = `
-      <div class="bento-panel panel-overview">
+      <div class="bento-panel panel-overview" style="grid-column:1 / -1;">
         <div class="bento-panel-header">
           <div class="bento-panel-title">
             <img src="${server.icon || '/assets/default-server.png'}" class="bento-icon" alt="" style="object-fit:cover; border-radius:50%;" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%234f46e5%22/><text x=%2250%22 y=%2265%22 font-family=%22Arial%22 font-size=%2240%22 fill=%22white%22 text-anchor=%22middle%22>${server.name ? server.name.charAt(0) : 'S'}</text></svg>'">
             ${server.name || 'Web3 Community'}
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="switchSection('servers')">
-            <i class="fas fa-chart-line"></i> Metrics
-          </button>
-        </div>
-        <div class="overview-metrics-grid">
-          <div class="overview-metric">
-            <div class="overview-metric-val">${Number(metrics.members || 0).toLocaleString()}</div>
-            <div class="overview-metric-label">Members</div>
-            ${sparklineSvg}
-          </div>
-          <div class="overview-metric">
-            <div class="overview-metric-val">${Number(metrics.online || 0).toLocaleString()}</div>
-            <div class="overview-metric-label"><span style="color:#86efac;">●</span> Online</div>
-            ${sparklineSvg.replace(/var\(--gold\)/g, '#86efac')}
-          </div>
-          <div class="overview-metric">
-            <div class="overview-metric-val">${Number(metrics.roles || 0).toLocaleString()}</div>
-            <div class="overview-metric-label">Roles</div>
-            ${sparklineSvg.replace(/var\(--gold\)/g, '#a78bfa')}
-          </div>
-          <div class="overview-metric">
-            <div class="overview-metric-val">${Number(metrics.wallets || 0).toLocaleString()}</div>
-            <div class="overview-metric-label">Wallets</div>
-            ${sparklineSvg.replace(/var\(--gold\)/g, '#60a5fa')}
-          </div>
-        </div>
-      </div>
-    `;
-
-    const modConfig = [
-      { id: 'verification', title: 'Verification', icon: 'fas fa-shield-alt', action: "switchSection('verification')" },
-      { id: 'governance', title: 'Governance', icon: 'fas fa-university', action: "switchSection('governance')" },
-      { id: 'missions', title: 'Missions', icon: 'fas fa-crosshairs', action: "switchSection('heist')" },
-      { id: 'tracking', title: 'Tracking', icon: 'fas fa-chart-bar', action: "switchSection('nft-activity')" }
-    ];
-
-    let modulesHtml = '<div class="panel-modules-grid">';
-    modConfig.forEach(cfg => {
-      const mod = (modules && modules[cfg.id]) ? modules[cfg.id] : { enabled: false };
-      const isActive = !!mod.enabled;
-      let metricStr = isActive ? 'Active' : 'Inactive';
-      if (isActive) {
-        if (cfg.id === 'verification') metricStr = `${Number(moduleAnalytics?.verification?.linkedWallets || mod?.stats?.verifiedUsers || 0).toLocaleString()} wallets`;
-        else if (cfg.id === 'governance') metricStr = `${Number(moduleAnalytics?.governance?.activeProposals || activeProposals?.length || 0).toLocaleString()} active`;
-        else if (cfg.id === 'missions') metricStr = `${Number(moduleAnalytics?.missions?.activeMissions || activeMissions?.length || 0).toLocaleString()} active`;
-        else if (cfg.id === 'tracking') {
-          const nftEvents = Number(moduleAnalytics?.nfttracker?.events || 0);
-          const inviteEvents = Number(moduleAnalytics?.invites?.joins || 0);
-          metricStr = `${(nftEvents + inviteEvents).toLocaleString()} events (${dashboardAnalyticsRange})`;
-        }
-      }
-
-      modulesHtml += `
-        <div class="module-bento-tile" onclick="${cfg.action}">
-          <div class="module-bento-top">
-            <div class="module-bento-info">
-              <div class="module-bento-title">${cfg.title}</div>
-              <div class="module-bento-status">${isActive ? 'Active' : 'Disabled'}</div>
-            </div>
-            <div class="module-bento-badge ${isActive ? '' : 'inactive'}">${isActive ? 'Active' : 'Off'}</div>
-          </div>
-          <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-            <div class="module-bento-metric">${metricStr}</div>
-            <div class="module-bento-icon-wrapper"><i class="${cfg.icon}"></i></div>
-          </div>
-        </div>
-      `;
-    });
-    modulesHtml += '</div>';
-
-    const previewWallets = Array.isArray(walletPreview) ? walletPreview : [];
-    const palette = [
-      'linear-gradient(135deg, #a855f7, #6366f1)',
-      'linear-gradient(135deg, #f59e0b, #ef4444)',
-      'linear-gradient(135deg, #10b981, #3b82f6)'
-    ];
-    let walletRows = '';
-    previewWallets.forEach((w, idx) => {
-      const walletAddress = String(w.walletAddress || '');
-      const masked = walletAddress.length > 10 ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : (walletAddress || 'Unknown');
-      const label = String(w.label || 'Linked');
-      const nftCount = Number(w.totalNfts || 0);
-      walletRows += `
-        <div class="wallet-list-item">
-          <div class="wallet-identity">
-            <div class="wallet-avatar" style="background: ${palette[idx % palette.length]}"></div>
-            <div>
-              <div class="wallet-address">${escapeHtml(masked)}</div>
-              <div class="module-bento-status" style="font-size:0.75rem">${escapeHtml(label)}</div>
-            </div>
-          </div>
-          <div class="wallet-balance">${nftCount.toLocaleString()} NFTs</div>
-        </div>
-      `;
-    });
-    if (!walletRows) walletRows = '<div class="empty-state-message" style="padding:10px 0;">No linked wallets found yet.</div>';
-
-    const walletsHtml = `
-      <div class="bento-panel panel-wallets">
-        <div class="bento-panel-header">
-          <div class="bento-panel-title">Wallet Connectivity</div>
-          <div class="module-bento-icon-wrapper" style="width:28px;height:28px;font-size:1rem;color:var(--text-secondary);background:transparent"><i class="fas fa-ellipsis-h"></i></div>
-        </div>
-        <div class="gov-vote-row" style="margin-top:-8px; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:12px;">
-          <span>Verified Addresses</span>
-          <span style="color:var(--text-primary)">${Number(metrics.wallets || 0).toLocaleString()} Connected</span>
-        </div>
-        <div class="wallet-list">
-          ${walletRows}
-        </div>
-      </div>
-    `;
-
-    const topProposal = Array.isArray(activeProposals) && activeProposals.length ? activeProposals[0] : null;
-    const govBody = (() => {
-      if (!topProposal) return '<div class="empty-state-message">No active proposals right now.</div>';
-      const yes = Number(topProposal?.votes?.yes || 0);
-      const no = Number(topProposal?.votes?.no || 0);
-      const abstain = Number(topProposal?.votes?.abstain || 0);
-      const totalVotes = yes + no + abstain;
-      const yesPct = totalVotes > 0 ? Math.round((yes / totalVotes) * 100) : 0;
-      const noPct = totalVotes > 0 ? Math.round((no / totalVotes) * 100) : 0;
-      const abstainPct = Math.max(0, 100 - yesPct - noPct);
-      const endAt = topProposal?.endTime ? new Date(topProposal.endTime) : null;
-      const msLeft = endAt ? (endAt.getTime() - Date.now()) : 0;
-      const timeLeft = msLeft > 0 ? `${Math.floor(msLeft / 86400000)}d ${Math.floor((msLeft % 86400000) / 3600000)}h` : 'Ending soon';
-      return `
-        <div class="gov-vote-title">${escapeHtml(String(topProposal.title || 'Untitled proposal'))}</div>
-        <div class="gov-vote-bar">
-          <div class="gov-vote-row"><span class="yes">Vote: Yes</span><span>${yesPct}%</span></div>
-          <div class="gov-vote-row"><span class="no">No</span><span>${noPct}%</span></div>
-          <div class="gov-vote-row"><span>Abstain</span><span>${abstainPct}%</span></div>
-          <div class="gov-progress-track">
-            <div class="gov-progress-yes" style="width:${yesPct}%"></div>
-            <div class="gov-progress-no" style="width:${noPct}%"></div>
-            <div class="gov-progress-abstain" style="width:${abstainPct}%"></div>
-          </div>
-          <div class="gov-vote-row" style="margin-top:4px"><span style="color:#86efac">${yesPct >= 60 ? 'Threshold met (60%)' : 'Threshold pending (60%)'}</span></div>
-        </div>
-        <div class="gov-vote-row" style="margin-top:16px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.05)">
-          <div><div style="font-size:0.75rem">Time left</div><div style="color:var(--text-primary);font-weight:600">${escapeHtml(timeLeft)}</div></div>
-          <div style="text-align:right"><div style="font-size:0.75rem">Participants</div><div style="color:var(--text-primary);font-weight:600">${totalVotes.toLocaleString()} Votes</div></div>
-        </div>
-      `;
-    })();
-
-    const govHtml = `
-      <div class="bento-panel panel-governance">
-        <div class="bento-panel-header" style="margin-bottom:8px">
-          <div class="bento-panel-title" style="font-size:0.95rem">Governance - Active Proposals</div>
-        </div>
-        <div class="bento-panel" style="padding:var(--space-4); background:rgba(255,255,255,0.02)">
-          ${govBody}
-        </div>
-      </div>
-    `;
-
-    const topMission = Array.isArray(activeMissions) && activeMissions.length ? activeMissions[0] : null;
-    const missionBody = (() => {
-      if (!topMission) return '<div class="empty-state-message">No active missions right now.</div>';
-      const filled = Number(topMission.filledSlots || 0);
-      const total = Math.max(Number(topMission.totalSlots || 0), 1);
-      const pct = Math.round((filled / total) * 100);
-      const statusLabel = String(topMission.status || 'active');
-      return `
-        <div class="gov-vote-title" style="margin-bottom:4px">Mission: ${escapeHtml(String(topMission.title || 'Untitled mission'))}</div>
-        <div class="module-bento-status">${escapeHtml(statusLabel)} • ${pct}% Filled</div>
-        <div class="mission-stages" style="margin-top:16px;">
-          <div style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:-4px">Slot fill progress</div>
-          <div class="mission-stage-row"><span>Filled Slots</span><span>${filled.toLocaleString()} / ${total.toLocaleString()}</span></div>
-          <div class="gov-progress-track"><div style="background:var(--gold); width:${pct}%"></div></div>
-        </div>
-        <div class="gov-vote-row" style="margin-top:16px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.05); align-items:center;">
-          <div><div style="font-size:0.75rem">Mode</div><div style="color:var(--text-primary);font-weight:600">${escapeHtml(String(topMission.mode || 'standard'))}</div></div>
-          <div style="text-align:right"><div style="font-size:0.75rem">Ends</div><div style="color:var(--text-primary);font-weight:600">${escapeHtml(topMission.endsAt ? new Date(topMission.endsAt).toLocaleString() : 'n/a')}</div></div>
-        </div>
-      `;
-    })();
-
-    const missionHtml = `
-      <div class="bento-panel panel-mission">
-        <div class="bento-panel-header" style="margin-bottom:8px">
-          <div class="bento-panel-title" style="font-size:0.95rem">Mission Progress</div>
-        </div>
-        <div class="bento-panel" style="padding:var(--space-4); background:rgba(255,255,255,0.02)">
-          ${missionBody}
-          <button class="btn btn-primary" style="width:100%; margin-top:16px; padding:8px" onclick="switchSection('heist')">View Mission</button>
-        </div>
-      </div>
-    `;
-
-    const moduleWidgetConfig = [
-      { label: 'Verification', metric: `${Number(moduleAnalytics?.verification?.linkedWallets || 0).toLocaleString()} wallets`, sub: `${Number(moduleAnalytics?.verification?.uniqueUsers || 0).toLocaleString()} users` },
-      { label: 'Governance', metric: `${Number(moduleAnalytics?.governance?.activeProposals || 0).toLocaleString()} active`, sub: `${Number(moduleAnalytics?.governance?.totalVotesCast || 0).toLocaleString()} votes` },
-      { label: 'Missions', metric: `${Number(moduleAnalytics?.missions?.activeMissions || 0).toLocaleString()} active`, sub: `${Number(moduleAnalytics?.missions?.participantsActive || 0).toLocaleString()} participants` },
-      { label: 'Welcome', metric: `${Number(moduleAnalytics?.welcome?.joins || 0).toLocaleString()} joins (${dashboardAnalyticsRange})`, sub: `${Number(moduleAnalytics?.welcome?.welcomesSent || 0).toLocaleString()} welcomes sent` },
-      { label: 'Invites', metric: `${Number(moduleAnalytics?.invites?.joins || 0).toLocaleString()} joins (${dashboardAnalyticsRange})`, sub: 'Invite tracker events' },
-      { label: 'NFT Tracker', metric: `${Number(moduleAnalytics?.nfttracker?.events || 0).toLocaleString()} events (${dashboardAnalyticsRange})`, sub: `${Number(moduleAnalytics?.nfttracker?.trackedCollections || 0).toLocaleString()} collections` },
-      { label: 'Token Tracker', metric: `${Number(moduleAnalytics?.tokentracker?.activeRules || 0).toLocaleString()} active rules`, sub: 'Token role gating' },
-      { label: 'Engagement', metric: `${Number(moduleAnalytics?.engagement?.points || 0).toLocaleString()} points (${dashboardAnalyticsRange})`, sub: `${Number(moduleAnalytics?.engagement?.activeUsers || 0).toLocaleString()} active users` },
-      { label: 'Ticketing', metric: `${Number(moduleAnalytics?.ticketing?.openTickets || 0).toLocaleString()} open`, sub: 'Open support tickets' },
-      { label: 'Self-Serve Roles', metric: `${Number(moduleAnalytics?.selfserveroles?.activePanels || 0).toLocaleString()} panels`, sub: 'Role panels enabled' },
-      { label: 'Vault', metric: `${Number(moduleAnalytics?.vault?.activeItems || 0).toLocaleString()} items`, sub: `${Number(moduleAnalytics?.vault?.pendingClaims || 0).toLocaleString()} pending claims` },
-    ];
-
-    const widgetsHtml = `
-      <div class="bento-panel panel-overview" style="grid-column:1 / -1;">
-        <div class="bento-panel-header">
-          <div class="bento-panel-title">Module Analytics</div>
           <div style="display:flex; gap:6px; flex-wrap:wrap;">
             <button class="btn btn-secondary btn-sm" onclick="setDashboardAnalyticsRange('24h')" ${dashboardAnalyticsRange === '24h' ? 'disabled' : ''}>24h</button>
             <button class="btn btn-secondary btn-sm" onclick="setDashboardAnalyticsRange('7d')" ${dashboardAnalyticsRange === '7d' ? 'disabled' : ''}>7d</button>
@@ -20014,19 +19808,48 @@ async function renderDashboardGrid() {
           </div>
         </div>
         <div class="overview-metrics-grid">
-          ${moduleWidgetConfig.map((w) => `
-            <div class="overview-metric">
-              <div class="overview-metric-val" style="font-size:1.1rem;">${escapeHtml(w.metric)}</div>
-              <div class="overview-metric-label">${escapeHtml(w.label)}</div>
-              <div style="font-size:0.72rem;color:var(--text-secondary);margin-top:4px;">${escapeHtml(w.sub)}</div>
-            </div>
-          `).join('')}
+          <div class="overview-metric"><div class="overview-metric-val">${Number(metrics.members || 0).toLocaleString()}</div><div class="overview-metric-label">Members</div></div>
+          <div class="overview-metric"><div class="overview-metric-val">${Number(metrics.online || 0).toLocaleString()}</div><div class="overview-metric-label">Online</div></div>
+          <div class="overview-metric"><div class="overview-metric-val">${Number(metrics.roles || 0).toLocaleString()}</div><div class="overview-metric-label">Roles</div></div>
+          <div class="overview-metric"><div class="overview-metric-val">${Number(metrics.wallets || 0).toLocaleString()}</div><div class="overview-metric-label">Wallets</div></div>
         </div>
       </div>
     `;
 
-    grid.innerHTML = overviewHtml + walletsHtml + modulesHtml + govHtml + missionHtml + widgetsHtml;
+    const tileConfig = [
+      { key: 'verification', section: 'verification', title: 'Verification', icon: 'fas fa-shield-alt', metric: `${Number(moduleAnalytics?.verification?.linkedWallets || 0).toLocaleString()} wallets`, sub: `${Number(moduleAnalytics?.verification?.uniqueUsers || 0).toLocaleString()} users`, enabled: !!modules?.verification?.enabled },
+      { key: 'governance', section: 'governance', title: 'Governance', icon: 'fas fa-university', metric: `${Number(moduleAnalytics?.governance?.activeProposals || 0).toLocaleString()} active`, sub: `${Number(moduleAnalytics?.governance?.totalVotesCast || 0).toLocaleString()} votes`, enabled: !!modules?.governance?.enabled },
+      { key: 'missions', section: 'heist', title: 'Missions', icon: 'fas fa-crosshairs', metric: `${Number(moduleAnalytics?.missions?.activeMissions || 0).toLocaleString()} active`, sub: `${Number(moduleAnalytics?.missions?.participantsActive || 0).toLocaleString()} participants`, enabled: !!modules?.missions?.enabled },
+      { key: 'welcome', section: 'welcome', title: 'Welcome', icon: 'fas fa-hand-paper', metric: `${Number(moduleAnalytics?.welcome?.joins || 0).toLocaleString()} joins (${dashboardAnalyticsRange})`, sub: `${Number(moduleAnalytics?.welcome?.welcomesSent || 0).toLocaleString()} welcomes`, enabled: !!modules?.welcome?.enabled },
+      { key: 'invites', section: 'invites', title: 'Invite Tracker', icon: 'fas fa-user-plus', metric: `${Number(moduleAnalytics?.invites?.joins || 0).toLocaleString()} joins (${dashboardAnalyticsRange})`, sub: 'Invite events', enabled: true },
+      { key: 'nfttracker', section: 'nft-activity', title: 'NFT Tracker', icon: 'fas fa-palette', metric: `${Number(moduleAnalytics?.nfttracker?.events || 0).toLocaleString()} events (${dashboardAnalyticsRange})`, sub: `${Number(moduleAnalytics?.nfttracker?.trackedCollections || 0).toLocaleString()} collections`, enabled: !!modules?.tracking?.enabled },
+      { key: 'tokentracker', section: 'token-activity', title: 'Token Tracker', icon: 'fas fa-coins', metric: `${Number(moduleAnalytics?.tokentracker?.activeRules || 0).toLocaleString()} active rules`, sub: 'Role-gating rules', enabled: !!modules?.tracking?.enabled },
+      { key: 'engagement', section: 'engagement', title: 'Engagement', icon: 'fas fa-trophy', metric: `${Number(moduleAnalytics?.engagement?.points || 0).toLocaleString()} points (${dashboardAnalyticsRange})`, sub: `${Number(moduleAnalytics?.engagement?.activeUsers || 0).toLocaleString()} active users`, enabled: true },
+      { key: 'ticketing', section: 'ticketing', title: 'Ticketing', icon: 'fas fa-ticket-alt', metric: `${Number(moduleAnalytics?.ticketing?.openTickets || 0).toLocaleString()} open`, sub: 'Open support tickets', enabled: true },
+      { key: 'selfserveroles', section: 'self-serve-roles', title: 'Self-Serve Roles', icon: 'fas fa-user-tag', metric: `${Number(moduleAnalytics?.selfserveroles?.activePanels || 0).toLocaleString()} panels`, sub: 'Role panels enabled', enabled: true },
+      { key: 'vault', section: 'vault', title: 'Vault', icon: 'fas fa-lock', metric: `${Number(moduleAnalytics?.vault?.activeItems || 0).toLocaleString()} items`, sub: `${Number(moduleAnalytics?.vault?.pendingClaims || 0).toLocaleString()} pending claims`, enabled: true },
+    ];
 
+    const tilesHtml = `<div class="panel-modules-grid" style="grid-column:1 / -1;">${tileConfig.map((tile) => `
+      <div class="module-bento-tile" onclick="switchSection('${escapeJsString(tile.section)}')">
+        <div class="module-bento-top">
+          <div class="module-bento-info">
+            <div class="module-bento-title">${escapeHtml(tile.title)}</div>
+            <div class="module-bento-status">${tile.enabled ? 'Active' : 'Disabled'}</div>
+          </div>
+          <div class="module-bento-badge ${tile.enabled ? '' : 'inactive'}">${tile.enabled ? 'Active' : 'Off'}</div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:flex-end; gap:8px;">
+          <div>
+            <div class="module-bento-metric">${escapeHtml(tile.metric)}</div>
+            <div class="module-bento-status" style="margin-top:4px; font-size:0.78rem;">${escapeHtml(tile.sub)}</div>
+          </div>
+          <div class="module-bento-icon-wrapper"><i class="${tile.icon}"></i></div>
+        </div>
+      </div>
+    `).join('')}</div>`;
+
+    grid.innerHTML = overviewHtml + tilesHtml;
   } catch (err) {
     console.error("Dashboard render error:", err);
     grid.innerHTML = `<div class="empty-state"><p>Error loading dashboard. Please try again.</p></div>`;
@@ -20561,6 +20384,7 @@ async function buildWelcomeUploadPayload(file) {
 
   throw new Error('Image is too large. Try a smaller image or lower resolution.');
 }
+
 
 
 

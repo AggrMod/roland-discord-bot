@@ -6,6 +6,7 @@ function createSuperadminTenantOpsRouter({
   superadminGuard,
   tenantService,
   entitlementService,
+  billingService,
   monetizationTemplateService,
   getPlanKeys,
   getPlanPreset,
@@ -194,7 +195,69 @@ function createSuperadminTenantOpsRouter({
           tb.current_period_end AS currentPeriodEnd,
           tb.last_payment_at AS lastPaymentAt,
           tb.last_payment_status AS lastPaymentStatus,
-          tb.updated_at AS updatedAt
+          tb.updated_at AS updatedAt,
+          (
+            SELECT COUNT(*)
+            FROM crypto_payment_receipts cpr
+            WHERE cpr.guild_id = t.guild_id
+              AND LOWER(COALESCE(cpr.status, 'pending')) = 'pending'
+          ) AS pendingReceiptsCount,
+          (
+            SELECT cpr.id
+            FROM crypto_payment_receipts cpr
+            WHERE cpr.guild_id = t.guild_id
+            ORDER BY cpr.created_at DESC, cpr.id DESC
+            LIMIT 1
+          ) AS latestReceiptId,
+          (
+            SELECT cpr.status
+            FROM crypto_payment_receipts cpr
+            WHERE cpr.guild_id = t.guild_id
+            ORDER BY cpr.created_at DESC, cpr.id DESC
+            LIMIT 1
+          ) AS latestReceiptStatus,
+          (
+            SELECT cpr.tx_signature
+            FROM crypto_payment_receipts cpr
+            WHERE cpr.guild_id = t.guild_id
+            ORDER BY cpr.created_at DESC, cpr.id DESC
+            LIMIT 1
+          ) AS latestReceiptTxSignature,
+          (
+            SELECT cpr.token_symbol
+            FROM crypto_payment_receipts cpr
+            WHERE cpr.guild_id = t.guild_id
+            ORDER BY cpr.created_at DESC, cpr.id DESC
+            LIMIT 1
+          ) AS latestReceiptTokenSymbol,
+          (
+            SELECT cpr.amount
+            FROM crypto_payment_receipts cpr
+            WHERE cpr.guild_id = t.guild_id
+            ORDER BY cpr.created_at DESC, cpr.id DESC
+            LIMIT 1
+          ) AS latestReceiptAmount,
+          (
+            SELECT cpr.plan_key
+            FROM crypto_payment_receipts cpr
+            WHERE cpr.guild_id = t.guild_id
+            ORDER BY cpr.created_at DESC, cpr.id DESC
+            LIMIT 1
+          ) AS latestReceiptPlanKey,
+          (
+            SELECT cpr.billing_interval
+            FROM crypto_payment_receipts cpr
+            WHERE cpr.guild_id = t.guild_id
+            ORDER BY cpr.created_at DESC, cpr.id DESC
+            LIMIT 1
+          ) AS latestReceiptBillingInterval,
+          (
+            SELECT cpr.created_at
+            FROM crypto_payment_receipts cpr
+            WHERE cpr.guild_id = t.guild_id
+            ORDER BY cpr.created_at DESC, cpr.id DESC
+            LIMIT 1
+          ) AS latestReceiptCreatedAt
         FROM tenant_billing tb
         INNER JOIN tenants t ON t.id = tb.tenant_id
         ORDER BY COALESCE(tb.updated_at, tb.created_at) DESC, tb.id DESC
@@ -244,9 +307,22 @@ function createSuperadminTenantOpsRouter({
         lastPaymentAt: row.lastPaymentAt || null,
         lastPaymentStatus: row.lastPaymentStatus || null,
         updatedAt: row.updatedAt || null,
-        verificationStatus: ['active', 'trialing', 'paid', 'approved', 'success'].includes(String(row.subscriptionStatus || '').toLowerCase())
+        verificationStatus: Number(row.pendingReceiptsCount || 0) > 0
+          ? 'pending_review'
+          : (['active', 'trialing', 'paid', 'approved', 'success'].includes(String(row.subscriptionStatus || '').toLowerCase())
           ? 'verified'
-          : (String(row.subscriptionStatus || '').trim() ? 'pending' : 'unverified'),
+          : (String(row.subscriptionStatus || '').trim() ? 'pending' : 'unverified')),
+        pendingReceiptsCount: Number(row.pendingReceiptsCount || 0),
+        latestReceipt: row.latestReceiptId ? {
+          id: Number(row.latestReceiptId),
+          status: row.latestReceiptStatus || 'pending',
+          txSignature: row.latestReceiptTxSignature || null,
+          tokenSymbol: row.latestReceiptTokenSymbol || null,
+          amount: row.latestReceiptAmount !== null && row.latestReceiptAmount !== undefined ? Number(row.latestReceiptAmount) : null,
+          planKey: row.latestReceiptPlanKey || null,
+          billingInterval: row.latestReceiptBillingInterval || null,
+          createdAt: row.latestReceiptCreatedAt || null,
+        } : null,
       }));
 
       res.json(toSuccessResponse({
@@ -295,6 +371,7 @@ function createSuperadminTenantOpsRouter({
         note: String(req.body?.note || '').trim(),
         planKey: String(req.body?.planKey || '').trim().toLowerCase() || null,
         tenantStatus: String(req.body?.tenantStatus || '').trim().toLowerCase() || null,
+        receiptId: Number(req.body?.receiptId || 0) || null,
       };
 
       if (action === 'approve') {
@@ -332,6 +409,18 @@ function createSuperadminTenantOpsRouter({
         const statusResult = tenantService.setTenantStatus(guildId, patch.tenantStatus, actorId);
         if (!statusResult?.success) {
           return res.status(400).json(toErrorResponse(statusResult?.message || 'Failed to update tenant status', 'VALIDATION_ERROR', null, statusResult));
+        }
+      }
+
+      if (patch.receiptId) {
+        const receiptStatus = action === 'reject' ? 'rejected' : 'approved';
+        const receiptResult = billingService.setCryptoReceiptStatus({
+          id: patch.receiptId,
+          status: receiptStatus,
+          verificationError: action === 'reject' ? (patch.note || 'Rejected by superadmin') : null,
+        });
+        if (!receiptResult.success) {
+          return res.status(400).json(toErrorResponse(receiptResult.message || 'Failed to update receipt status', 'VALIDATION_ERROR'));
         }
       }
 

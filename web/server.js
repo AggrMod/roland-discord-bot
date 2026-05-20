@@ -1042,6 +1042,7 @@ class WebServer {
       superadminGuard,
       tenantService,
       entitlementService,
+      billingService,
       monetizationTemplateService,
       getPlanKeys,
       getPlanPreset,

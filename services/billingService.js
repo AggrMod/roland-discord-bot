@@ -29,6 +29,14 @@ function normalizeInterval(value) {
   return null;
 }
 
+function normalizeTokenSymbol(value) {
+  const normalized = normalizeLower(value);
+  if (!normalized) return null;
+  if (normalized === 'sol') return 'SOL';
+  if (normalized === 'usdc') return 'USDC';
+  return null;
+}
+
 function toIsoDate(value) {
   if (value === undefined || value === null || value === '') return null;
 
@@ -104,6 +112,88 @@ function applyTemplate(url, params = {}) {
 }
 
 class BillingService {
+  submitCryptoReceipt(guildId, payload = {}) {
+    const normalizedGuildId = normalizeString(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'guildId is required' };
+
+    const txSignature = normalizeString(payload.txSignature || payload.tx_signature);
+    const senderWallet = normalizeString(payload.senderWallet || payload.sender_wallet);
+    const tokenSymbol = normalizeTokenSymbol(payload.tokenSymbol || payload.token_symbol);
+    const planKey = normalizePlanKey(payload.planKey || payload.plan_key);
+    const billingInterval = normalizeInterval(payload.billingInterval || payload.billing_interval);
+    const amount = Number(payload.amount);
+
+    if (!txSignature) return { success: false, message: 'txSignature is required' };
+    if (!senderWallet) return { success: false, message: 'senderWallet is required' };
+    if (!tokenSymbol) return { success: false, message: 'tokenSymbol must be SOL or USDC' };
+    if (!planKey || planKey === 'starter' || planKey === 'enterprise') return { success: false, message: 'planKey must be a paid self-serve plan' };
+    if (!billingInterval) return { success: false, message: 'billingInterval must be monthly or yearly' };
+    if (!Number.isFinite(amount) || amount <= 0) return { success: false, message: 'amount must be greater than 0' };
+
+    try {
+      db.prepare(`
+        INSERT INTO crypto_payment_receipts (
+          guild_id, tx_signature, amount, token_symbol, sender_wallet, plan_key, billing_interval, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+      `).run(
+        normalizedGuildId,
+        txSignature,
+        amount,
+        tokenSymbol,
+        senderWallet,
+        planKey,
+        billingInterval
+      );
+      return { success: true };
+    } catch (error) {
+      if (String(error?.message || '').toLowerCase().includes('unique')) {
+        return { success: false, message: 'This transaction signature was already submitted.' };
+      }
+      return { success: false, message: 'Failed to submit payment receipt' };
+    }
+  }
+
+  listCryptoReceiptsByGuild(guildId, { limit = 20 } = {}) {
+    const normalizedGuildId = normalizeString(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'guildId is required' };
+    const safeLimit = Math.max(1, Math.min(100, Number(limit) || 20));
+    const rows = db.prepare(`
+      SELECT id, guild_id, tx_signature, amount, token_symbol, sender_wallet, plan_key, billing_interval, status, verification_error, verified_at, created_at
+      FROM crypto_payment_receipts
+      WHERE guild_id = ?
+      ORDER BY created_at DESC, id DESC
+      LIMIT ?
+    `).all(normalizedGuildId, safeLimit);
+    return { success: true, receipts: rows };
+  }
+
+  setCryptoReceiptStatus({ id, status, verificationError = null }) {
+    const receiptId = Number(id);
+    const normalizedStatus = normalizeLower(status);
+    if (!Number.isFinite(receiptId) || receiptId <= 0) return { success: false, message: 'receipt id is required' };
+    if (!['pending', 'approved', 'rejected'].includes(normalizedStatus)) {
+      return { success: false, message: 'status must be pending, approved, or rejected' };
+    }
+    const row = db.prepare('SELECT * FROM crypto_payment_receipts WHERE id = ? LIMIT 1').get(receiptId);
+    if (!row) return { success: false, message: 'receipt not found' };
+
+    db.prepare(`
+      UPDATE crypto_payment_receipts
+      SET status = ?,
+          verification_error = ?,
+          verified_at = CASE WHEN ? = 'approved' THEN CURRENT_TIMESTAMP ELSE NULL END
+      WHERE id = ?
+    `).run(
+      normalizedStatus,
+      normalizedStatus === 'rejected' ? (normalizeString(verificationError) || 'Rejected by superadmin') : null,
+      normalizedStatus,
+      receiptId
+    );
+
+    const updated = db.prepare('SELECT * FROM crypto_payment_receipts WHERE id = ? LIMIT 1').get(receiptId);
+    return { success: true, receipt: updated };
+  }
+
   getTenantBilling(guildId) {
     const context = tenantService.getTenantContext(guildId);
     const tenantId = context?.tenant?.id;

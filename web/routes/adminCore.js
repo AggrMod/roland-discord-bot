@@ -236,6 +236,42 @@ function createAdminCoreRouter({
     }
   });
 
+  router.get('/billing/crypto-receipts', adminAuthMiddleware, (req, res) => {
+    try {
+      const result = billingService.listCryptoReceiptsByGuild(req.guildId, {
+        limit: Number(req.query.limit || 20),
+      });
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to load crypto receipts', 'VALIDATION_ERROR'));
+      }
+      res.json(toSuccessResponse(result));
+    } catch (error) {
+      logger.error('Error loading billing crypto receipts:', error);
+      res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/billing/crypto-receipts', adminAuthMiddleware, (req, res) => {
+    try {
+      const body = req.body || {};
+      const result = billingService.submitCryptoReceipt(req.guildId, {
+        txSignature: body.txSignature,
+        amount: body.amount,
+        tokenSymbol: body.tokenSymbol,
+        senderWallet: body.senderWallet,
+        planKey: body.planKey,
+        billingInterval: body.billingInterval,
+      });
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to submit payment receipt', 'VALIDATION_ERROR'));
+      }
+      res.json(toSuccessResponse(result));
+    } catch (error) {
+      logger.error('Error submitting billing crypto receipt:', error);
+      res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.get('/activity', adminAuthMiddleware, async (req, res) => {
     try {
       const limit = Math.min(Math.max(parseInt(req.query.limit || '50', 10), 1), 200);

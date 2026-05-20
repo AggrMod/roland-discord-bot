@@ -105,6 +105,7 @@ const REQUIRED_SCHEMA = Object.freeze({
   invite_tracker_settings: ['guild_id', 'required_join_role_id', 'panel_channel_id', 'panel_message_id', 'panel_period_days', 'panel_limit', 'panel_enable_create_link', 'include_verification_stats', 'excluded_codes', 'panel_sort_by', 'inviter_account_age_filter_enabled', 'inviter_min_account_age_hours'],
   invite_tracker_user_codes: ['guild_id', 'invite_code', 'owner_user_id', 'owner_username', 'channel_id', 'active', 'created_at', 'updated_at'],
   invite_events: ['guild_id', 'joined_user_id', 'inviter_user_id', 'invite_code', 'source', 'joined_at'],
+  crypto_payment_receipts: ['guild_id', 'tx_signature', 'amount', 'token_symbol', 'sender_wallet', 'plan_key', 'billing_interval', 'status', 'verification_error', 'verified_at', 'created_at'],
   tenant_welcome_settings: ['guild_id', 'enabled', 'welcome_channel_id', 'verification_channel_id', 'welcome_message_template', 'welcome_embed_json', 'welcome_image_url', 'dynamic_avatar_card', 'dm_enabled', 'dm_message_template', 'auto_role_ids', 'captcha_enabled', 'captcha_role_id', 'captcha_remove_role_id', 'captcha_prompt_mode'],
   tenant_welcome_assets: ['id', 'guild_id', 'file_name', 'mime_type', 'image_blob', 'byte_size', 'created_at', 'updated_at'],
   tracked_token_webhook_retry_queue: ['signature', 'attempt_count', 'next_attempt_at', 'last_reason', 'last_error'],
@@ -1603,6 +1604,25 @@ function initDatabase() {
       joined_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS crypto_payment_receipts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      tx_signature TEXT NOT NULL UNIQUE,
+      amount REAL NOT NULL,
+      token_symbol TEXT NOT NULL,
+      sender_wallet TEXT NOT NULL,
+      plan_key TEXT NOT NULL,
+      billing_interval TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      verification_error TEXT DEFAULT NULL,
+      verified_at DATETIME DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  ignoreDuplicateMigration(() => db.exec('CREATE INDEX IF NOT EXISTS idx_crypto_payment_receipts_guild ON crypto_payment_receipts(guild_id)'));
+  ignoreDuplicateMigration(() => db.exec('CREATE INDEX IF NOT EXISTS idx_crypto_payment_receipts_status ON crypto_payment_receipts(status)'));
 
   // Welcome & Onboarding (tenant-scoped)
   db.exec(`

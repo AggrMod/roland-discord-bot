@@ -8028,6 +8028,17 @@ function superadminWorkspaceBillingOverride(guildId, currentStatus = '', current
   });
 }
 
+function superadminRejectBillingReceipt(guildId, receiptId = null) {
+  const normalizedGuildId = String(guildId || '').trim();
+  if (!normalizedGuildId) return;
+  const noteInput = prompt('Optional rejection note for this payment receipt:', '');
+  if (noteInput === null) return;
+  superadminBillingAction(normalizedGuildId, 'reject', {
+    receiptId: Number(receiptId || 0) || null,
+    note: String(noteInput || '').trim() || null,
+  });
+}
+
 function superadminBillingAction(guildId, action, extraPayload = null) {
   const normalizedGuildId = String(guildId || '').trim();
   const normalizedAction = String(action || '').trim().toLowerCase();
@@ -8268,11 +8279,15 @@ async function loadSuperadminWorkspaceHubV2() {
                       <td>${escapeHtml(entry.billingInterval || 'n/a')}</td>
                       <td>${escapeHtml(entry.lastPaymentAt ? new Date(entry.lastPaymentAt).toLocaleString() : '—')}</td>
                       <td>${escapeHtml(entry.currentPeriodEnd ? new Date(entry.currentPeriodEnd).toLocaleString() : '—')}</td>
-                      <td>${escapeHtml(entry.verificationStatus || 'pending')}</td>
+                      <td>
+                        ${escapeHtml(entry.verificationStatus || 'pending')}
+                        ${Number(entry.pendingReceiptsCount || 0) > 0 ? `<div class="muted" style="font-size:0.74em;margin-top:3px;">${escapeHtml(String(entry.pendingReceiptsCount))} receipt(s) pending</div>` : ''}
+                        ${entry.latestReceipt?.txSignature ? `<div class="muted" style="font-size:0.72em;margin-top:3px;">TX: ${escapeHtml(String(entry.latestReceipt.txSignature).slice(0, 14))}...</div>` : ''}
+                      </td>
                       <td>
                         <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                          <button class="btn-secondary" style="padding:4px 8px;" onclick="superadminBillingAction('${escapeJsString(entry.guildId || '')}', 'approve')">Approve</button>
-                          <button class="btn-secondary" style="padding:4px 8px;" onclick="superadminBillingAction('${escapeJsString(entry.guildId || '')}', 'reject')">Reject</button>
+                          <button class="btn-secondary" style="padding:4px 8px;" onclick="superadminBillingAction('${escapeJsString(entry.guildId || '')}', 'approve', ${entry.latestReceipt?.id ? `{ receiptId: ${Number(entry.latestReceipt.id)}, planKey: '${escapeJsString(entry.latestReceipt.planKey || '')}', billingInterval: '${escapeJsString(entry.latestReceipt.billingInterval || '')}' }` : 'null'})">Approve</button>
+                          <button class="btn-secondary" style="padding:4px 8px;" onclick="superadminRejectBillingReceipt('${escapeJsString(entry.guildId || '')}', ${entry.latestReceipt?.id ? Number(entry.latestReceipt.id) : 'null'})">Reject</button>
                           <button class="btn-secondary" style="padding:4px 8px;" onclick="superadminWorkspaceBillingOverride('${escapeJsString(entry.guildId || '')}', '${escapeJsString(entry.subscriptionStatus || '')}', '${escapeJsString(entry.billingInterval || '')}')">Override</button>
                         </div>
                       </td>
@@ -17965,6 +17980,49 @@ function openExternalPlanUrl(encodedUrl) {
   }
 }
 
+async function submitCryptoPaymentReceipt() {
+  try {
+    const txSignature = String(document.getElementById('billingCryptoTxSignature')?.value || '').trim();
+    const tokenSymbol = String(document.getElementById('billingCryptoToken')?.value || 'SOL').trim().toUpperCase();
+    const amount = Number(document.getElementById('billingCryptoAmount')?.value || 0);
+    const senderWallet = String(document.getElementById('billingCryptoSenderWallet')?.value || '').trim();
+    const planKey = String(document.getElementById('billingCryptoPlan')?.value || '').trim().toLowerCase();
+    const billingInterval = document.getElementById('billingAnnualToggle')?.checked ? 'yearly' : 'monthly';
+
+    if (!txSignature) return showError('Transaction signature is required.');
+    if (!senderWallet) return showError('Sender wallet is required.');
+    if (!Number.isFinite(amount) || amount <= 0) return showError('Amount must be greater than 0.');
+
+    const res = await fetch('/api/admin/billing/crypto-receipts', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({
+        txSignature,
+        tokenSymbol,
+        amount,
+        senderWallet,
+        planKey,
+        billingInterval,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.success === false) {
+      throw new Error(data?.message || data?.error?.message || `HTTP ${res.status}`);
+    }
+
+    showSuccess('Crypto receipt submitted. Superadmin will review it shortly.');
+    const txInput = document.getElementById('billingCryptoTxSignature');
+    const amountInput = document.getElementById('billingCryptoAmount');
+    const walletInput = document.getElementById('billingCryptoSenderWallet');
+    if (txInput) txInput.value = '';
+    if (amountInput) amountInput.value = '';
+    if (walletInput) walletInput.value = '';
+  } catch (error) {
+    showError(`Failed to submit receipt: ${error?.message || 'unknown error'}`);
+  }
+}
+
 async function loadCurrentPlan() {
   try {
     const res = await fetch('/api/admin/plan', { credentials: 'include', headers: buildTenantRequestHeaders() });
@@ -18014,6 +18072,18 @@ async function loadCurrentPlan() {
         <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;">
           ${actionButtons.join('')}
         </div>
+      </div>
+      <div style="margin-top:14px;padding:12px;border:1px solid rgba(99,102,241,0.2);border-radius:10px;background:rgba(15,23,42,0.45);">
+        <div style="font-weight:600;color:#e0e7ff;margin-bottom:8px;">Pay with SOL/USDC (Manual Review)</div>
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) 110px 130px minmax(0,1fr) 120px auto;gap:8px;align-items:end;">
+          <div><div style="font-size:0.78em;color:var(--text-secondary);margin-bottom:4px;">TX Signature</div><input id="billingCryptoTxSignature" type="text" placeholder="Transaction signature" style="width:100%;"></div>
+          <div><div style="font-size:0.78em;color:var(--text-secondary);margin-bottom:4px;">Token</div><select id="billingCryptoToken"><option value="SOL">SOL</option><option value="USDC">USDC</option></select></div>
+          <div><div style="font-size:0.78em;color:var(--text-secondary);margin-bottom:4px;">Amount</div><input id="billingCryptoAmount" type="number" min="0" step="0.000001" placeholder="0.00" style="width:100%;"></div>
+          <div><div style="font-size:0.78em;color:var(--text-secondary);margin-bottom:4px;">Sender Wallet</div><input id="billingCryptoSenderWallet" type="text" placeholder="Wallet address" style="width:100%;"></div>
+          <div><div style="font-size:0.78em;color:var(--text-secondary);margin-bottom:4px;">Plan</div><select id="billingCryptoPlan"><option value="growth">Growth</option><option value="pro">Pro</option></select></div>
+          <button class="btn-primary" onclick="submitCryptoPaymentReceipt()">Submit</button>
+        </div>
+        <div style="margin-top:8px;font-size:0.78em;color:var(--text-secondary);">After submission, receipt goes to Superadmin Billing queue for approval/rejection.</div>
       </div>
     `;
     card.style.display = 'block';

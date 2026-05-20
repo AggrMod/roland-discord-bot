@@ -41,7 +41,7 @@ const superadminGuard = require('../middleware/superadminGuard');
 const { BATTLE_ERAS } = require('../config/battleEras');
 const battleService = require('../services/battleService');
 const { getBranding } = require('../services/embedBranding');
-const { getPlanKeys, getPlanPreset } = require('../config/plans');
+const { getPlanKeys, getPlanPreset, getPlanCatalog } = require('../config/plans');
 const {
   getGuildBotProfileSnapshot,
   applyGuildBotProfileBranding,
@@ -992,6 +992,7 @@ class WebServer {
       superadminService,
       normalizeGuildId,
       fallbackGuildId,
+      getPlanCatalog,
       getClient: () => this.client,
     }));
     const createGovernanceUserRouter = require('./routes/governanceUser');
@@ -1046,6 +1047,7 @@ class WebServer {
       monetizationTemplateService,
       getPlanKeys,
       getPlanPreset,
+      getPlanCatalog,
       fetchGuildById,
       guildIconUrl,
       normalizeGuildId,

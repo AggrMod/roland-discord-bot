@@ -18,10 +18,85 @@ const MODULE_KEYS = Object.freeze([
   'aiassistant'
 ]);
 
+const PLAN_MARKETING = Object.freeze({
+  starter: {
+    displayLabel: 'Free',
+    tagline: 'For new communities getting started',
+    color: '#64748b',
+    cta: 'Get Started Free',
+    ctaAction: 'signup_free',
+    features: [
+      { label: 'Up to 4 enabled modules', included: true },
+      { label: '3 verification rules', included: true },
+      { label: '3 active governance proposals', included: true },
+      { label: '3 ticket categories', included: true },
+      { label: 'Invite tracking (30 days)', included: true },
+      { label: 'Welcome flow (basic)', included: true },
+      { label: 'Vault module', included: false },
+      { label: 'Engagement module', included: false },
+      { label: 'AI assistant module', included: false },
+      { label: 'Welcome image uploads', included: false },
+      { label: 'Branding customization', included: false },
+    ],
+  },
+  growth: {
+    displayLabel: 'Growth',
+    tagline: 'For active projects scaling operations',
+    color: '#6366f1',
+    popular: true,
+    cta: 'Start Growth',
+    ctaAction: 'upgrade_growth',
+    features: [
+      { label: 'Up to 6 enabled modules', included: true },
+      { label: '12 verification rules', included: true },
+      { label: '25 active governance proposals', included: true },
+      { label: '12 ticket categories', included: true },
+      { label: 'Invite tracking (180 days + export)', included: true },
+      { label: 'Welcome image uploads', included: true },
+      { label: 'Vault module (100 rewards)', included: true },
+      { label: 'Engagement module', included: true },
+      { label: 'AI assistant module', included: false },
+      { label: 'Advanced branding customization', included: false },
+    ],
+  },
+  pro: {
+    displayLabel: 'Pro',
+    tagline: 'For communities running full-stack automation',
+    color: '#f59e0b',
+    cta: 'Start Pro',
+    ctaAction: 'upgrade_pro',
+    features: [
+      { label: 'Up to 8 enabled modules', included: true },
+      { label: '50 verification rules', included: true },
+      { label: '100 active governance proposals', included: true },
+      { label: '40 ticket categories', included: true },
+      { label: 'Unlimited invite history + export', included: true },
+      { label: 'Vault module (500 rewards)', included: true },
+      { label: 'Engagement module', included: true },
+      { label: 'AI assistant (1000 req/day)', included: true },
+      { label: 'Advanced branding customization', included: true },
+      { label: 'Priority operational support', included: true },
+    ],
+  },
+  enterprise: {
+    displayLabel: 'Enterprise',
+    tagline: 'Custom rollout and support bundles',
+    color: '#10b981',
+    cta: 'Contact Team',
+    ctaAction: 'contact_enterprise',
+    features: [
+      { label: 'Unlimited module capacity', included: true },
+      { label: 'Custom module limits', included: true },
+      { label: 'Custom commercial terms', included: true },
+      { label: 'Dedicated onboarding support', included: true },
+    ],
+  },
+});
+
 const PLAN_PRESETS = Object.freeze({
   starter: {
     key: 'starter',
-    label: 'Starter',
+    label: 'Free',
     description: 'Foundational tenant bundle for verification, governance, and support.',
     billing: {
       monthlyUsd: 0,
@@ -430,10 +505,35 @@ function getPlanModuleLimitDefaults(planKey) {
   return preset?.moduleLimits ? JSON.parse(JSON.stringify(preset.moduleLimits)) : {};
 }
 
+function getPlanCatalog() {
+  return getPlanKeys().map((planKey) => {
+    const preset = getPlanPreset(planKey);
+    const marketing = PLAN_MARKETING[planKey] || {};
+    return {
+      key: planKey,
+      label: marketing.displayLabel || preset?.label || planKey,
+      internalLabel: preset?.label || planKey,
+      description: preset?.description || '',
+      billing: preset?.billing || null,
+      tagline: marketing.tagline || '',
+      color: marketing.color || '#6366f1',
+      popular: !!marketing.popular,
+      cta: marketing.cta || 'Choose Plan',
+      ctaAction: marketing.ctaAction || '',
+      features: Array.isArray(marketing.features) ? marketing.features.map((feature) => ({
+        label: String(feature?.label || ''),
+        included: feature?.included !== false,
+      })) : [],
+    };
+  });
+}
+
 module.exports = {
+  PLAN_MARKETING,
   PLAN_PRESETS,
   MODULE_KEYS,
   getDefaultPlanKey,
+  getPlanCatalog,
   getModuleKeys,
   getPlanModuleLimitDefaults,
   getPlanKeys,

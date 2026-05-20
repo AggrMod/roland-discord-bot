@@ -25,6 +25,7 @@ function createAuthUserRouter({
   superadminService,
   normalizeGuildId,
   fallbackGuildId,
+  getPlanCatalog,
   getClient,
 }) {
   const router = express.Router();
@@ -348,6 +349,16 @@ function createAuthUserRouter({
     } catch (routeError) {
       logger.error('Error fetching feature flags:', routeError);
       return res.json(toSuccessResponse({ heistEnabled: true }));
+    }
+  });
+
+  router.get('/api/plans/catalog', publicApiLimiter, (_req, res) => {
+    try {
+      const plans = typeof getPlanCatalog === 'function' ? getPlanCatalog() : [];
+      return res.json(toSuccessResponse({ plans }));
+    } catch (routeError) {
+      logger.error('Error fetching plan catalog:', routeError);
+      return res.status(500).json(toErrorResponse('Failed to load plan catalog', 'INTERNAL_ERROR'));
     }
   });
 

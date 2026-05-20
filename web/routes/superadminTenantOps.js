@@ -10,6 +10,7 @@ function createSuperadminTenantOpsRouter({
   monetizationTemplateService,
   getPlanKeys,
   getPlanPreset,
+  getPlanCatalog,
   fetchGuildById,
   guildIconUrl,
   normalizeGuildId,
@@ -624,15 +625,17 @@ function createSuperadminTenantOpsRouter({
 
   router.get('/workspace/plans', superadminGuard, (_req, res) => {
     try {
-      const plans = getPlanKeys().map((planKey) => {
-        const preset = getPlanPreset(planKey);
-        return {
-          key: planKey,
-          label: preset?.label || planKey,
-          description: preset?.description || '',
-          billing: preset?.billing || null,
-        };
-      });
+      const plans = typeof getPlanCatalog === 'function'
+        ? getPlanCatalog()
+        : getPlanKeys().map((planKey) => {
+            const preset = getPlanPreset(planKey);
+            return {
+              key: planKey,
+              label: preset?.label || planKey,
+              description: preset?.description || '',
+              billing: preset?.billing || null,
+            };
+          });
       res.json(toSuccessResponse({ plans }));
     } catch (error) {
       logger.error('Error fetching workspace plans:', error);

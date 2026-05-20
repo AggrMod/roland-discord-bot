@@ -7282,12 +7282,13 @@ function reportAdminUiSaveFailure(action, error, extra = {}) {
 }
 
 const TENANT_PLAN_LABELS = {
-  starter: 'Starter',
+  starter: 'Free',
   growth: 'Growth',
   pro: 'Pro',
   enterprise: 'Enterprise'
 };
 const TENANT_PLAN_ORDER = ['starter', 'growth', 'pro', 'enterprise'];
+let portalPlanCatalogCache = [];
 
 const TENANT_MODULE_LABELS = {
   verification: 'Verification',
@@ -7312,7 +7313,7 @@ function getTenantPlanLabel(planKey) {
   const fromCatalog = (Array.isArray(superadminWorkspacePlansCache) ? superadminWorkspacePlansCache : [])
     .find(plan => String(plan?.key || '').toLowerCase() === normalized);
   if (fromCatalog?.label) return String(fromCatalog.label);
-  return TENANT_PLAN_LABELS[planKey] || planKey || 'Unknown';
+  return TENANT_PLAN_LABELS[normalized] || planKey || 'Unknown';
 }
 
 function getTenantPlanRank(planKey) {
@@ -17924,119 +17925,51 @@ function safeJsonArray(value) {
   }
 }
 
-// â”€â”€ Plans â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// feature: { label, included: true/false/'partial', note? }
-const PLAN_CATALOG = [
-  {
-    id: "starter",
-    name: "Starter",
-    tagline: "Perfect for small communities getting started",
-    monthlyPrice: 0,
-    color: "#64748b",
-    features: [
-      { label: "1 Discord server", included: true },
-      { label: "Solana wallet verification", included: true },
-      { label: "Up to 5 verification roles", included: true },
-      { label: "Up to 3 treasury wallets", included: true },
-      { label: "Governance & proposals", included: true },
-      { label: "9 mini-games (Battle, H/L, Dice, Trivia, Slotsâ€¦)", included: true },
-      { label: "NFT activity feed", included: true },
-      { label: "ðŸŽ® Game Night orchestration", included: false },
-      { label: "Trait-based roles", included: false },
-      { label: "Custom branding", included: false },
-      { label: "Multi-server (multi-tenant)", included: false },
-      { label: "Engagement & points system", included: false },
-    ],
-    cta: "Get Started Free",
-    ctaAction: "signup_free",
-  },
-  {
-    id: "growth",
-    name: "Growth",
-    tagline: "Everything you need to run a thriving community",
-    monthlyPrice: 19.99,
-    popular: true,
-    color: "#6366f1",
-    features: [
-      { label: "1 Discord server", included: true },
-      { label: "Solana wallet verification", included: true },
-      { label: "Unlimited verification roles", included: true },
-      { label: "Up to 25 treasury wallets", included: true },
-      { label: "Governance & proposals", included: true },
-      { label: "9 mini-games (all standalone games)", included: true },
-      { label: "ðŸŽ® Game Night orchestration", included: true },
-      { label: "NFT activity feed + Helius webhooks", included: true },
-      { label: "Trait-based roles", included: true },
-      { label: "Custom branding (logo, colors)", included: true },
-      { label: "Self-serve roles & ticketing", included: true },
-      { label: "Multi-server (multi-tenant)", included: false },
-      { label: "Engagement & points system", included: false },
-    ],
-    cta: "Upgrade to Growth",
-    ctaAction: "upgrade_growth",
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    tagline: "For serious projects that need the full stack",
-    monthlyPrice: 49.99,
-    color: "#f59e0b",
-    features: [
-      { label: "Up to 5 Discord servers", included: true },
-      { label: "Solana + EVM wallet verification", included: true },
-      { label: "Unlimited verification roles", included: true },
-      { label: "Unlimited treasury wallets", included: true },
-      { label: "Governance & proposals", included: true },
-      { label: "9 mini-games (all standalone games)", included: true },
-      { label: "ðŸŽ® Game Night orchestration", included: true },
-      { label: "NFT activity feed + Helius webhooks", included: true },
-      { label: "Trait-based roles", included: true },
-      { label: "Custom branding (logo, colors)", included: true },
-      { label: "Self-serve roles & ticketing", included: true },
-      { label: "Multi-server (multi-tenant)", included: true },
-      { label: "Engagement & points system", included: true },
-    ],
-    cta: "Upgrade to Pro",
-    ctaAction: "upgrade_pro",
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    tagline: "Custom rollout, multi-server support, and white-glove setup",
-    monthlyPrice: null,
-    color: "#10b981",
-    features: [
-      { label: "Multi-server bundle", included: true },
-      { label: "Custom per-module limits", included: true },
-      { label: "Custom era/module assignments", included: true },
-      { label: "Priority support & onboarding", included: true },
-      { label: "Dedicated monetization templates", included: true },
-    ],
-    cta: "Contact Team",
-    ctaAction: "contact_enterprise",
-  },
-];
+// Plans use backend catalog to keep pricing + entitlements consistent.
+async function loadPortalPlanCatalog(force = false) {
+  if (!force && Array.isArray(portalPlanCatalogCache) && portalPlanCatalogCache.length) {
+    return portalPlanCatalogCache;
+  }
+  try {
+    const response = await fetch('/api/plans/catalog', { credentials: 'include' });
+    const data = await response.json();
+    if (!data?.success || !Array.isArray(data?.plans) || !data.plans.length) {
+      throw new Error(data?.message || 'Catalog unavailable');
+    }
+    portalPlanCatalogCache = data.plans;
+  } catch (_error) {
+    portalPlanCatalogCache = [
+      { key: 'starter', label: 'Free', tagline: 'For new communities getting started', billing: { monthlyUsd: 0 }, color: '#64748b', cta: 'Get Started Free', ctaAction: 'signup_free', features: [] },
+      { key: 'growth', label: 'Growth', tagline: 'For active projects scaling operations', billing: { monthlyUsd: 19.99 }, color: '#6366f1', popular: true, cta: 'Start Growth', ctaAction: 'upgrade_growth', features: [] },
+      { key: 'pro', label: 'Pro', tagline: 'For communities running full-stack automation', billing: { monthlyUsd: 49.99 }, color: '#f59e0b', cta: 'Start Pro', ctaAction: 'upgrade_pro', features: [] },
+      { key: 'enterprise', label: 'Enterprise', tagline: 'Custom rollout and support bundles', billing: { monthlyUsd: null, enterprise: true }, color: '#10b981', cta: 'Contact Team', ctaAction: 'contact_enterprise', features: [] },
+    ];
+  }
+  return portalPlanCatalogCache;
+}
 
-function updatePlanPrices() {
+async function updatePlanPrices() {
   const annual = document.getElementById('billingAnnualToggle')?.checked;
   const grid = document.getElementById('plansGrid');
   if (!grid) return;
+  const planCatalog = await loadPortalPlanCatalog();
 
-  grid.innerHTML = PLAN_CATALOG.map(plan => {
-    const isContactPlan = plan.monthlyPrice === null || plan.monthlyPrice === undefined;
-    const discountedMonthly = (!isContactPlan && Number(plan.monthlyPrice) > 0 && annual)
-      ? Number(plan.monthlyPrice) * 0.85
-      : Number(plan.monthlyPrice || 0);
+  grid.innerHTML = planCatalog.map(plan => {
+    const monthlyPrice = plan?.billing?.monthlyUsd;
+    const isContactPlan = monthlyPrice === null || monthlyPrice === undefined;
+    const discountedMonthly = (!isContactPlan && Number(monthlyPrice) > 0 && annual)
+      ? Number(monthlyPrice) * 0.85
+      : Number(monthlyPrice || 0);
     const priceText = isContactPlan
       ? 'Contact'
-      : (Number(plan.monthlyPrice || 0) === 0 ? '0' : discountedMonthly.toFixed(2));
-    const annualTotal = (!isContactPlan && annual && Number(plan.monthlyPrice) > 0)
-      ? `$${(Number(plan.monthlyPrice) * 0.85 * 12).toFixed(2)}/yr`
+      : (Number(monthlyPrice || 0) === 0 ? '0' : discountedMonthly.toFixed(2));
+    const annualTotal = (!isContactPlan && annual && Number(monthlyPrice) > 0)
+      ? `$${(Number(monthlyPrice) * 0.85 * 12).toFixed(2)}/yr`
       : '';
-    const period = isContactPlan || Number(plan.monthlyPrice || 0) === 0 ? '' : annual ? '/mo' : '/month';
+    const period = isContactPlan || Number(monthlyPrice || 0) === 0 ? '' : annual ? '/mo' : '/month';
     const accentColor = plan.color || '#6366f1';
 
-    const featureRows = plan.features.map(f => {
+    const featureRows = (Array.isArray(plan.features) ? plan.features : []).map(f => {
       const included = f.included === true;
       const icon = included
         ? `<span style="color:#4ade80;font-size:1em;line-height:1;flex-shrink:0;">âœ“</span>`
@@ -18047,7 +17980,7 @@ function updatePlanPrices() {
     return `
       <div class="plan-card ${plan.popular ? 'popular' : ''}" style="--plan-accent:${accentColor};">
         <div class="plan-header">
-          <div class="plan-name" style="color:${accentColor};">${escapeHtml(plan.name)}</div>
+          <div class="plan-name" style="color:${accentColor};">${escapeHtml(plan.label || plan.key || 'Plan')}</div>
           <div class="plan-tagline">${escapeHtml(plan.tagline)}</div>
           <div class="plan-price">
             <span class="plan-price-amount">${isContactPlan ? '' : '$'}${priceText}</span>
@@ -20103,7 +20036,7 @@ async function loadWelcomeSettingsSection() {
           <button class="btn-secondary btn-sm" onclick="postWelcomeCaptchaPanel()">Post Verify Panel</button>
         </div>
         <small style="color:var(--text-secondary);">Variables: {user_mention}, {username}, {server_name}, {member_count}, {channel:verify}. Tip: Ctrl/Cmd-click to select multiple auto roles.</small>
-        <small style="color:var(--text-secondary);">Plan limits: channel tokens ${limits.maxChannelTokens == null ? 'âˆž' : limits.maxChannelTokens}, step fields ${limits.maxStepFields == null ? 'âˆž' : limits.maxStepFields}, uploaded assets ${limits.allowImageAssets ? 'enabled' : 'disabled'}.</small>
+        <small style="color:var(--text-secondary);">Plan limits: channel tokens ${limits.maxChannelTokens === null || limits.maxChannelTokens === undefined ? 'âˆž' : limits.maxChannelTokens}, step fields ${limits.maxStepFields === null || limits.maxStepFields === undefined ? 'âˆž' : limits.maxStepFields}, uploaded assets ${limits.allowImageAssets ? 'enabled' : 'disabled'}.</small>
         ${canEditBrandingFields ? '' : '<small style="color:#fcd34d;">Embed color/footer are part of Branding controls and require a paid plan.</small>'}
       </div>
     `;

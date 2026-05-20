@@ -9119,28 +9119,53 @@ async function applyTenantPlan() {
 async function toggleTenantModule(moduleKey, checkbox) {
   if (!selectedTenantGuildId || !checkbox) return;
 
-  const previousValue = !checkbox.checked;
+  const desiredEnabled = !!checkbox.checked;
+  const previousValue = !desiredEnabled;
+  const syncToggleVisual = (isEnabled) => {
+    const track = checkbox.parentElement?.querySelector?.('.tenant-toggle-track');
+    const knob = checkbox.parentElement?.querySelector?.('.tenant-toggle-knob');
+    if (track) track.style.background = isEnabled ? 'var(--gold)' : '#555';
+    if (knob) knob.style.left = isEnabled ? '22px' : '3px';
+  };
+  const persistToggle = async () => {
+    try {
+      const response = await fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/modules`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ moduleKey, enabled: desiredEnabled })
+      });
+      const data = await response.json();
 
-  try {
-    const response = await fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/modules`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ moduleKey, enabled: checkbox.checked })
-    });
-    const data = await response.json();
-
-    if (data.success) {
-      showSuccess(`${getTenantModuleLabel(moduleKey)} updated`);
-      await loadSuperadminView();
-    } else {
+      if (data.success) {
+        showSuccess(`${getTenantModuleLabel(moduleKey)} updated`);
+        await loadSuperadminView();
+      } else {
+        checkbox.checked = previousValue;
+        syncToggleVisual(previousValue);
+        showError(`Failed to update module (${response.status}): ${data.message || data.error?.message || JSON.stringify(data)}`);
+      }
+    } catch (error) {
       checkbox.checked = previousValue;
-      showError(`Failed to update module (${response.status}): ${data.message || data.error?.message || JSON.stringify(data)}`);
+      syncToggleVisual(previousValue);
+      showError(`Failed to update tenant module: ${error.message}`);
     }
-  } catch (error) {
+  };
+
+  if (!desiredEnabled) {
+    const moduleLabel = getTenantModuleLabel(moduleKey);
+    showConfirmModal(
+      'Disable Module?',
+      `This will disable "${moduleLabel}" for the tenant and may interrupt live automations. Continue?`,
+      persistToggle,
+      'Disable'
+    );
     checkbox.checked = previousValue;
-    showError(`Failed to update tenant module: ${error.message}`);
+    syncToggleVisual(previousValue);
+    return;
   }
+
+  await persistToggle();
 }
 
 async function saveTenantStatus() {
@@ -9149,31 +9174,46 @@ async function saveTenantStatus() {
   const select = document.getElementById('tenantStatusSelect');
   const btn = document.getElementById('tenantStatusSaveBtn');
   if (!select || !btn) return;
+  const nextStatus = String(select.value || '').toLowerCase();
+  const currentStatus = String(selectedTenantDetailCache?.status || selectedTenantDetailCache?.tenantStatus || '').toLowerCase();
 
-  btn.disabled = true;
-  btn.textContent = 'Saving...';
+  const runSave = async () => {
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    try {
+      const response = await fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status: select.value })
+      });
+      const data = await response.json();
 
-  try {
-    const response = await fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/status`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ status: select.value })
-    });
-    const data = await response.json();
-
-    if (data.success) {
-      showSuccess('Tenant status updated');
-      await loadSuperadminView();
-    } else {
-      showError(data.message || 'Failed to update tenant status');
+      if (data.success) {
+        showSuccess('Tenant status updated');
+        await loadSuperadminView();
+      } else {
+        showError(data.message || 'Failed to update tenant status');
+      }
+    } catch (error) {
+      showError(`Failed to update tenant status: ${error.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Save';
     }
-  } catch (error) {
-    showError(`Failed to update tenant status: ${error.message}`);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Save';
+  };
+
+  if (currentStatus !== 'suspended' && nextStatus === 'suspended') {
+    showConfirmModal(
+      'Suspend Tenant?',
+      'This will disable access for this tenant until re-activated. Continue with suspension?',
+      runSave,
+      'Suspend'
+    );
+    return;
   }
+
+  await runSave();
 }
 
 async function saveTenantMockData() {

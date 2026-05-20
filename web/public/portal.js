@@ -7848,6 +7848,15 @@ function renderWorkspaceOverview(tenants = [], billingEntries = []) {
   `;
 }
 
+function renderWorkspaceScopedError(message, retryLabel = 'Retry', retryAction = 'loadSuperadminView()') {
+  return `
+    <div class="sa-v2-empty" style="text-align:left;">
+      <div style="color:#fca5a5; margin-bottom:10px;">${escapeHtml(message || 'This section failed to load.')}</div>
+      <button class="btn-secondary" onclick="${retryAction}">${escapeHtml(retryLabel)}</button>
+    </div>
+  `;
+}
+
 function getSuperadminV1SignoffState() {
   try {
     const raw = localStorage.getItem('superadmin_v1_signoff_state');
@@ -8255,6 +8264,15 @@ async function loadSuperadminWorkspaceHubV2() {
 
   try {
     const workspaceWarnings = [];
+    const workspaceLoadState = {
+      activityFailed: false,
+      billingFailed: false,
+      adminsFailed: false,
+      globalFailed: false,
+      plansFailed: false,
+      tenantDetailFailed: false,
+      tenantAuditFailed: false,
+    };
     const headers = buildTenantRequestHeaders();
     const tenantsQs = new URLSearchParams();
     if (superadminWorkspaceSearch.trim()) tenantsQs.set('q', superadminWorkspaceSearch.trim());
@@ -8288,18 +8306,23 @@ async function loadSuperadminWorkspaceHubV2() {
       throw new Error(tenantsJson?.message || 'Failed to load tenant workspace');
     }
     if (!activityRes.ok || activityJson?.success === false) {
+      workspaceLoadState.activityFailed = true;
       workspaceWarnings.push('Recent activity feed is temporarily unavailable.');
     }
     if (!billingRes.ok || billingJson?.success === false) {
+      workspaceLoadState.billingFailed = true;
       workspaceWarnings.push('Billing ledger data is temporarily unavailable.');
     }
     if (!adminsRes.ok || adminsJson?.success === false) {
+      workspaceLoadState.adminsFailed = true;
       workspaceWarnings.push('Superadmin access list is temporarily unavailable.');
     }
     if (!globalSettingsRes.ok || globalSettingsJson?.success === false) {
+      workspaceLoadState.globalFailed = true;
       workspaceWarnings.push('Global integration settings are temporarily unavailable.');
     }
     if (!plansRes.ok || plansJson?.success === false) {
+      workspaceLoadState.plansFailed = true;
       workspaceWarnings.push('Plan catalog is temporarily unavailable; using local fallback labels.');
     }
 
@@ -8340,9 +8363,11 @@ async function loadSuperadminWorkspaceHubV2() {
       const detailJson = await detailRes.json().catch(() => ({}));
       const auditJson = await auditRes.json().catch(() => ({}));
       if (!detailRes.ok || detailJson?.success === false) {
+        workspaceLoadState.tenantDetailFailed = true;
         workspaceWarnings.push(`Tenant detail failed to load for ${selectedTenantSummary.guildName || selectedTenantSummary.guildId}.`);
       }
       if (!auditRes.ok || auditJson?.success === false) {
+        workspaceLoadState.tenantAuditFailed = true;
         workspaceWarnings.push(`Tenant audit failed to load for ${selectedTenantSummary.guildName || selectedTenantSummary.guildId}.`);
       }
       selectedTenantDetailCache = detailJson?.success ? detailJson.tenant : null;
@@ -8372,7 +8397,11 @@ async function loadSuperadminWorkspaceHubV2() {
               </div>
             </div>
             <div class="sa-v2-panel">
-              ${renderWorkspaceTenantDetail(selectedTenantSummary, selectedTenantDetailCache, selectedTenantAuditCache)}
+              ${
+                (workspaceLoadState.tenantDetailFailed || workspaceLoadState.tenantAuditFailed)
+                  ? renderWorkspaceScopedError('Tenant detail is partially unavailable. You can retry this panel.', 'Retry Tenant Detail', 'loadSuperadminView()')
+                  : renderWorkspaceTenantDetail(selectedTenantSummary, selectedTenantDetailCache, selectedTenantAuditCache)
+              }
             </div>
           </div>
         `
@@ -8404,6 +8433,10 @@ async function loadSuperadminWorkspaceHubV2() {
               <button class="btn-secondary" onclick="loadSuperadminView()">Apply</button>
               <button class="btn-secondary" onclick="resetSuperadminWorkspaceBillingFilters()">Clear</button>
             </div>
+            ${
+              workspaceLoadState.billingFailed
+                ? renderWorkspaceScopedError('Billing ledger failed to load for this workspace view.', 'Retry Billing', 'loadSuperadminView()')
+                : `
             <div class="sa-v2-table-wrap">
               <table class="sa-v2-table">
                 <thead><tr><th>Tenant</th><th>Status</th><th>Provider</th><th>Interval</th><th>Last Payment</th><th>Period End</th><th>Queue</th><th>Actions</th></tr></thead>
@@ -8442,6 +8475,8 @@ async function loadSuperadminWorkspaceHubV2() {
               </div>
             </div>
             <div class="sa-v2-inline-note">Use Approve/Reject/Override to manage billing verification lifecycle directly from this queue.</div>
+            `
+            }
           </div>
         `
         : renderWorkspaceLockedState('Billing workspace');
@@ -8630,7 +8665,13 @@ async function loadSuperadminWorkspaceHubV2() {
             </div>
             <div class="sa-v2-rail-card">
               <h4>Recent Activity</h4>
-              <div class="sa-v2-activity-list">${renderWorkspaceActivityItems(superadminWorkspaceActivityCache)}</div>
+              <div class="sa-v2-activity-list">
+                ${
+                  workspaceLoadState.activityFailed
+                    ? renderWorkspaceScopedError('Recent activity feed failed to load.', 'Retry Activity', 'loadSuperadminView()')
+                    : renderWorkspaceActivityItems(superadminWorkspaceActivityCache)
+                }
+              </div>
             </div>
           </aside>
         </div>

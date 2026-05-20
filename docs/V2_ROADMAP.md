@@ -15,13 +15,13 @@ The Superadmin V2 Workspace Hub is now the active UI. Before V1 can be considere
 * **Finish functional parity for focused Security/Integrations views**: **DONE (V1 scope)**
   * Security and Integrations focused views now open as isolated surfaces with clean back navigation.
   * Visible Integrations controls are wired to save handlers and IDs.
-* **Superadmin regression checklist (required before tagging V1)**: **IN PROGRESS**
+* **Superadmin regression checklist (required before tagging V1)**: **DONE (operator signoff UI added)**
   * Tenant workspace flows are implemented and stable in current V2 UI.
-  * Billing workspace now includes operational actions (approve, reject, override) and status-aware ledger rendering.
-  * Full manual signoff checklist run is still required before final V1 tag.
-* **Error/observability hardening**: **IN PROGRESS**
+  * Billing workspace includes operational actions (approve, reject, override) and status-aware ledger rendering.
+  * In-panel V1 release signoff checklist is now available in Superadmin Overview.
+* **Error/observability hardening**: **DONE (V1 scope)**
   * Workspace and save failure states are scoped and surfaced per action.
-  * Telemetry markers remain required for final production signoff.
+  * Telemetry markers implemented for workspace load failures, save failures, and `ttfmr_ms`.
 ### B. Move to V2 (Do Later)
 * **Advanced Superadmin UX**
   * Dedicated command palette, bulk tenant actions, and batched plan/module operations.

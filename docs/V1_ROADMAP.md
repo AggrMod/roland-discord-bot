@@ -10,7 +10,7 @@ This roadmap bridges live codebase verification with external audit recommendati
 | :--- | :---: | :--- |
 | **Vault Parity Drift** (Failing Release Gate) | **FIXED** | `/vault` subcommands were synchronized across `docs/ADMIN_HELP.md`, `admin-help.html`, and `portal.html`. Release gate checks are green. |
 | **No Unified Test Script** (`npm test` missing) | **FIXED** | Added `"test": "node scripts/release-gate.js"` to `package.json` for local and CI runs. |
-| **Missions/Heist rollout state** (Disabled by default) | **DECISION REQUIRED** | `heistService` is functional and has a smoke test (`check:missions-smoke`), but remains disabled by default. Recommendation: ship as **Public Beta** for V1. |
+| **Missions/Heist rollout state** (Disabled by default) | **FIXED (PUBLIC BETA)** | `heistService` remains tenant-controlled, but baseline module defaults are now enabled for Public Beta rollout in V1. |
 | **Stale Public API Docs** (`API_PUBLIC_V1.md`) | **VERIFIED** | Public routes in `web/routes/v1.js` match the documented payload shapes. |
 
 ---
@@ -65,12 +65,21 @@ To ensure GuildPilot can fully replace competitor stacks out-of-the-box, these m
   - `/kick`, `/ban`, `/timeout`, `/purge`
   - Join throttling for raid spikes
   - Basic keyword auto-censor filter
+- **Status (2026-05-20)**: **IMPLEMENTED**
+  - Delivered as `/moderation` namespace with:
+    - `/moderation kick|ban|timeout|purge`
+    - `/moderation settings-view|settings-raid|settings-keywords|keyword-add|keyword-remove|keyword-list`
+  - Join-throttle anti-raid action pipeline is active on `GuildMemberAdd`.
+  - Keyword filter auto-delete/warn pipeline is active on `MessageCreate`.
 
 ### C. Web Portal Audit Log UI
 - **Goal**: Let admins view who changed what.
 - **V1 Features**:
   - Backend already writes to `tenant_audit_logs` via `tenantService.js`.
   - Portal needs a dedicated "Audit Log" tile with chronological change feed.
+- **Status (2026-05-20)**: **IMPLEMENTED**
+  - Admin activity view now reads from live tenant audit logs via `/api/admin/activity`.
+  - Superadmin workspace telemetry endpoint added for load/save failure observability.
 
 ---
 
@@ -106,5 +115,8 @@ To ensure GuildPilot can fully replace competitor stacks out-of-the-box, these m
 ## Next Steps
 1. Welcome hardening: E2E smoke test + analytics counters + upload UX polish.
 2. Vault must-launch focus: final readiness pass for permissions, edge cases, and operations.
-3. Audit Log UI: expose tenant audit history in a dedicated admin tile.
-4. Missions/Heist decision: Public Beta for V1 or postpone from primary nav.
+3. Missions/Heist Public Beta monitor: review adoption, error rates, and operator feedback after launch week.
+
+### Vault Readiness Update (2026-05-20)
+- Vault key-tier behavior test (`tests/test-vault-key-tiers.js`) is now enforced in the release gate (`scripts/release-gate.js`).
+- This promotes Vault key distribution logic to a required V1 pre-release check instead of optional local validation.

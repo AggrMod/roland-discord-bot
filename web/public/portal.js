@@ -7257,6 +7257,15 @@ let superadminWorkspaceActivityCache = [];
 let superadminWorkspacePlansCache = [];
 let superadminWorkspaceFocus = '';
 const SUPERADMIN_WORKSPACES = new Set(['overview', 'tenants', 'billing', 'security', 'integrations']);
+const SUPERADMIN_V1_SIGNOFF_ITEMS = [
+  { key: 'tenants_flows', label: 'Tenant workspace flows validated (plan/modules/branding/audit)' },
+  { key: 'billing_ops', label: 'Billing queue actions validated (approve/reject/override)' },
+  { key: 'role_split', label: 'Role split verified (Tenant Admin vs Superadmin gating)' },
+  { key: 'activity_feed', label: 'Activity and tenant audit feeds validated' },
+  { key: 'welcome_flow', label: 'Welcome onboarding flow validated (test + captcha + roles)' },
+  { key: 'moderation_basics', label: 'Moderation baseline validated (/moderation + anti-raid + keyword filter)' },
+  { key: 'release_gate', label: 'Release gate green (npm test)' },
+];
 
 function reportAdminUiTelemetry(event, payload = {}) {
   try {
@@ -7813,6 +7822,14 @@ function renderWorkspaceOverview(tenants = [], billingEntries = []) {
   const active = tenants.filter((tenant) => String(tenant.status || '').toLowerCase() === 'active').length;
   const suspended = tenants.filter((tenant) => String(tenant.status || '').toLowerCase() === 'suspended').length;
   const paid = billingEntries.filter((entry) => ['active', 'trialing', 'paid', 'approved', 'success'].includes(String(entry.subscriptionStatus || '').toLowerCase())).length;
+  const checklistState = getSuperadminV1SignoffState();
+  const completed = SUPERADMIN_V1_SIGNOFF_ITEMS.filter((item) => checklistState[item.key]).length;
+  const checklistRows = SUPERADMIN_V1_SIGNOFF_ITEMS.map((item) => `
+    <label style="display:flex; align-items:flex-start; gap:10px; padding:8px 0; border-bottom:1px solid rgba(99,102,241,0.12);">
+      <input type="checkbox" ${checklistState[item.key] ? 'checked' : ''} onchange="toggleSuperadminV1SignoffItem('${escapeHtml(item.key)}', this.checked)">
+      <span style="color:#dbe7ff; font-size:0.9em;">${escapeHtml(item.label)}</span>
+    </label>
+  `).join('');
   return `
     <div class="sa-v2-grid">
       <article class="sa-v2-card"><h4>Tenants</h4><div class="sa-v2-kpi">${escapeHtml(String(total))}</div><p>Total onboarded servers</p></article>
@@ -7820,7 +7837,36 @@ function renderWorkspaceOverview(tenants = [], billingEntries = []) {
       <article class="sa-v2-card"><h4>Suspended</h4><div class="sa-v2-kpi">${escapeHtml(String(suspended))}</div><p>Needs follow-up</p></article>
       <article class="sa-v2-card"><h4>Paid Billing</h4><div class="sa-v2-kpi">${escapeHtml(String(paid))}</div><p>Verified paid states</p></article>
     </div>
+    <div class="sa-v2-panel" style="margin-top:12px;">
+      <div class="sa-v2-detail-header">
+        <h4>V1 Release Signoff Checklist</h4>
+        <div class="sa-v2-chip">${escapeHtml(String(completed))}/${escapeHtml(String(SUPERADMIN_V1_SIGNOFF_ITEMS.length))} complete</div>
+      </div>
+      <div>${checklistRows}</div>
+    </div>
   `;
+}
+
+function getSuperadminV1SignoffState() {
+  try {
+    const raw = localStorage.getItem('superadmin_v1_signoff_state');
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (!parsed || typeof parsed !== 'object') return {};
+    return parsed;
+  } catch (_error) {
+    return {};
+  }
+}
+
+function toggleSuperadminV1SignoffItem(itemKey, checked) {
+  const key = String(itemKey || '').trim();
+  if (!key) return;
+  const state = getSuperadminV1SignoffState();
+  state[key] = !!checked;
+  try {
+    localStorage.setItem('superadmin_v1_signoff_state', JSON.stringify(state));
+  } catch (_error) {}
+  loadSuperadminView();
 }
 
 function renderWorkspaceTenantDetail(tenant, detail, auditLogs) {

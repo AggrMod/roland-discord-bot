@@ -2175,8 +2175,8 @@ function applySettingsTabVisibility(settings = {}) {
   const enabledByModule = {
     governance: !!settings.moduleGovernanceEnabled,
     verification: !!settings.moduleVerificationEnabled,
-    // default visible unless explicitly disabled
-    branding: settings.moduleBrandingEnabled !== false,
+    // Branding is premium-gated: only visible when explicitly enabled for the tenant plan.
+    branding: !!settings.moduleBrandingEnabled,
     wallettracker: settings.moduleWalletTrackerEnabled !== undefined
       ? !!settings.moduleWalletTrackerEnabled
       : !!settings.moduleTreasuryEnabled,
@@ -2198,11 +2198,6 @@ function applySettingsTabVisibility(settings = {}) {
     const tab = btn.dataset.tab;
     if (sectionIntegratedTabs.has(tab)) {
       btn.style.display = 'none';
-      return;
-    }
-    if (tab === 'branding') {
-      // Branding should always remain reachable for tenant admins.
-      btn.style.display = '';
       return;
     }
     const moduleKey = SETTINGS_TAB_MODULE_MAP[tab];

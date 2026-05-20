@@ -7260,6 +7260,7 @@ let superadminWorkspaceBillingSearch = '';
 let superadminWorkspaceBillingStatus = 'all';
 let superadminWorkspaceActivityCache = [];
 let superadminWorkspaceFocus = '';
+const SUPERADMIN_WORKSPACES = new Set(['overview', 'tenants', 'billing', 'security', 'integrations']);
 
 const TENANT_PLAN_LABELS = {
   starter: 'Starter',
@@ -7867,16 +7868,17 @@ async function loadSuperadminWorkspaceHubV2() {
   const startMs = Date.now();
 
   const capabilities = getWorkspaceCapabilityMatrix();
-  const workspace = String(superadminWorkspaceV2 || 'overview');
   const url = new URL(window.location);
   const qsWs = String(url.searchParams.get('saWs') || '').trim();
   const qsTenantTab = String(url.searchParams.get('saTenantTab') || '').trim();
   const qsTenantId = normalizeGuildId(String(url.searchParams.get('saTenantId') || '').trim());
   const qsFocus = String(url.searchParams.get('saFocus') || '').trim();
-  if (qsWs) superadminWorkspaceV2 = qsWs;
+  if (qsWs && SUPERADMIN_WORKSPACES.has(qsWs)) superadminWorkspaceV2 = qsWs;
+  if (!SUPERADMIN_WORKSPACES.has(String(superadminWorkspaceV2 || ''))) superadminWorkspaceV2 = 'overview';
   if (qsTenantTab) superadminWorkspaceTenantTab = qsTenantTab;
   if (qsTenantId) selectedTenantGuildId = qsTenantId;
   superadminWorkspaceFocus = qsFocus;
+  const workspace = String(superadminWorkspaceV2 || 'overview');
 
   content.innerHTML = '<div style="padding:20px;text-align:center;"><div class="spinner"></div><p style="margin-top:8px;">Loading admin workspace...</p></div>';
 
@@ -7919,6 +7921,13 @@ async function loadSuperadminWorkspaceHubV2() {
 
     if (!selectedTenantGuildId && tenants.length > 0) {
       selectedTenantGuildId = tenants[0].guildId;
+    } else if (selectedTenantGuildId && !tenants.some((tenant) => tenant.guildId === selectedTenantGuildId)) {
+      // Recover from stale URL/query selection when a filtered tenant is no longer visible.
+      selectedTenantGuildId = tenants[0]?.guildId || null;
+      const nextUrl = new URL(window.location);
+      if (selectedTenantGuildId) nextUrl.searchParams.set('saTenantId', selectedTenantGuildId);
+      else nextUrl.searchParams.delete('saTenantId');
+      window.history.replaceState({}, '', nextUrl);
     }
 
     const selectedTenantSummary = tenants.find((tenant) => tenant.guildId === selectedTenantGuildId) || null;

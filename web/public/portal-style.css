@@ -322,7 +322,8 @@ h4,
 .sa-v2-main {
   display: grid;
   gap: 12px;
-  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.8fr);
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
 }
 .sa-v2-body,
 .sa-v2-rail-card,
@@ -331,6 +332,15 @@ h4,
   border-radius: 12px;
   background: rgba(8, 16, 34, 0.45);
   padding: 12px;
+}
+.sa-v2-body {
+  min-width: 0;
+}
+.sa-v2-rail {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  min-width: 0;
 }
 .sa-v2-grid {
   display: grid;
@@ -515,6 +525,9 @@ h4,
   .sa-v2-main,
   .sa-v2-split {
     grid-template-columns: 1fr;
+  }
+  .sa-v2-rail {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   }
 }
 

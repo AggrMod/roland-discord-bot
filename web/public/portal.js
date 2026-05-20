@@ -7461,10 +7461,17 @@ function renderTenantTemplatePreview(previewPayload) {
   `;
 }
 
-function renderTenantDetailPanel(tenant, tenantLimits = null) {
+function renderTenantDetailPanel(tenant, tenantLimits = null, workspaceTenantTab = '') {
   if (!tenant) {
     return `<div style="padding:18px; text-align:center; color:var(--text-secondary);">Select a tenant to manage plan, modules, branding, and status.</div>`;
   }
+  const workspaceTab = String(workspaceTenantTab || '').toLowerCase();
+  const forcePlanControls = workspaceTab === 'plan';
+  const forceModulesControls = workspaceTab === 'modules';
+  const forceBranding = workspaceTab === 'branding';
+  const showOverviewSection = !forcePlanControls && !forceModulesControls && !forceBranding;
+  const showControlsSection = forcePlanControls || forceModulesControls;
+  const showBrandingSection = forceBranding;
 
   const billing = tenant.billing || null;
   const billingStatus = String(billing?.subscriptionStatus || 'unknown').toLowerCase();
@@ -7556,7 +7563,7 @@ function renderTenantDetailPanel(tenant, tenantLimits = null) {
         <strong style="color:#e2e8f0;">You are editing tenant:</strong> ${escapeHtml(tenant.guildName || tenant.guildId)} <span style="font-family:monospace;opacity:.85;">(${escapeHtml(tenant.guildId)})</span>
       </div>
 
-      <div id="tenantDetail-overview" style="display:grid; gap:14px; grid-template-columns:minmax(0,1.2fr) minmax(0,0.8fr);">
+      <div id="tenantDetail-overview" style="display:${showOverviewSection ? 'grid' : 'none'}; gap:14px; grid-template-columns:minmax(0,1.2fr) minmax(0,0.8fr);">
         <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
             <div>
@@ -7586,7 +7593,7 @@ function renderTenantDetailPanel(tenant, tenantLimits = null) {
         </div>
       </div>
 
-      <div id="tenantDetail-controls" style="display:none;gap:16px; grid-template-columns:minmax(0,0.8fr) minmax(0,1.2fr);">
+      <div id="tenantDetail-controls" style="display:${showControlsSection ? 'grid' : 'none'};gap:16px; grid-template-columns:minmax(0,0.8fr) minmax(0,1.2fr);">
         <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
             <h4 style="margin:0; color:#c9d6ff;">Monetization Template</h4>
@@ -7672,7 +7679,7 @@ function renderTenantDetailPanel(tenant, tenantLimits = null) {
         </div>
       </div>
 
-      <div id="tenantDetail-branding" style="display:none;">
+      <div id="tenantDetail-branding" style="display:${showBrandingSection ? 'block' : 'none'};">
         <div style="padding:14px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(10,16,30,0.35);">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px;">
             <h4 style="margin:0; color:#c9d6ff;">Branding</h4>
@@ -7805,7 +7812,7 @@ function renderWorkspaceTenantDetail(tenant, detail, auditLogs) {
         <div>${getTenantStatusBadge(tenant.status)}</div>
       </div>
       <div class="sa-v2-pill-row">${tabBtn('plan', 'Plan & Billing')}${tabBtn('modules', 'Modules')}${tabBtn('branding', 'Branding')}${tabBtn('audit', 'Audit')}</div>
-      <div>${renderTenantDetailPanel(detail, null)}</div>
+      <div>${renderTenantDetailPanel(detail, null, currentTab)}</div>
     `;
   }
 
@@ -7816,7 +7823,7 @@ function renderWorkspaceTenantDetail(tenant, detail, auditLogs) {
         <div>${getTenantStatusBadge(tenant.status)}</div>
       </div>
       <div class="sa-v2-pill-row">${tabBtn('plan', 'Plan & Billing')}${tabBtn('modules', 'Modules')}${tabBtn('branding', 'Branding')}${tabBtn('audit', 'Audit')}</div>
-      <div>${renderTenantDetailPanel(detail, null)}</div>
+      <div>${renderTenantDetailPanel(detail, null, currentTab)}</div>
     `;
   }
 
@@ -7826,7 +7833,7 @@ function renderWorkspaceTenantDetail(tenant, detail, auditLogs) {
       <div>${getTenantStatusBadge(tenant.status)}</div>
     </div>
     <div class="sa-v2-pill-row">${tabBtn('plan', 'Plan & Billing')}${tabBtn('modules', 'Modules')}${tabBtn('branding', 'Branding')}${tabBtn('audit', 'Audit')}</div>
-    <div>${renderTenantDetailPanel(detail, null)}</div>
+    <div>${renderTenantDetailPanel(detail, null, currentTab)}</div>
   `;
 }
 

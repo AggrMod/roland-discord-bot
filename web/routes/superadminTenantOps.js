@@ -525,6 +525,24 @@ function createSuperadminTenantOpsRouter({
     }
   });
 
+  router.get('/workspace/plans', superadminGuard, (_req, res) => {
+    try {
+      const plans = getPlanKeys().map((planKey) => {
+        const preset = getPlanPreset(planKey);
+        return {
+          key: planKey,
+          label: preset?.label || planKey,
+          description: preset?.description || '',
+          billing: preset?.billing || null,
+        };
+      });
+      res.json(toSuccessResponse({ plans }));
+    } catch (error) {
+      logger.error('Error fetching workspace plans:', error);
+      res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.post('/workspace/telemetry', superadminGuard, (req, res) => {
     try {
       const actorId = req.session?.discordUser?.id || 'unknown';

@@ -8054,8 +8054,8 @@ async function loadSuperadminWorkspaceHubV2() {
         workspaceBody = `
           <div class="sa-v2-panel">
             <div class="sa-v2-toolbar" style="grid-template-columns:minmax(0,1fr) auto auto;">
-              <input id="adminSuperadminUserIdInput" type="text" placeholder="Discord ID">
-              <button class="btn-primary" onclick="addSuperadminFromInput()">Add Superadmin</button>
+              <input id="adminSuperadminUserIdInput" type="text" placeholder="Discord ID" onkeydown="if(event.key==='Enter'){event.preventDefault(); addSuperadminFromInput();}">
+              <button id="adminSuperadminAddBtn" class="btn-primary" onclick="addSuperadminFromInput()">Add Superadmin</button>
               <button class="btn-secondary" onclick="setSuperadminWorkspaceFocus('')">Back</button>
             </div>
             <div class="sa-v2-list">${rows}</div>
@@ -9430,7 +9430,7 @@ async function saveTenantBranding() {
 async function addSuperadminFromInput() {
   const input = document.getElementById('adminSuperadminUserIdInput');
   const btn = document.getElementById('adminSuperadminAddBtn');
-  if (!input || !btn) return;
+  if (!input) return;
 
   const userId = input.value.trim();
   if (!userId) {
@@ -9438,8 +9438,10 @@ async function addSuperadminFromInput() {
     return;
   }
 
-  btn.disabled = true;
-  btn.textContent = 'Adding...';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Adding...';
+  }
 
   try {
     const response = await fetch('/api/superadmin/admins', {
@@ -9455,13 +9457,17 @@ async function addSuperadminFromInput() {
       showSuccess('Superadmin added');
       await loadSuperadminView();
     } else {
+      console.error('[admin-ui-v2][save_failure]', { action: 'addSuperadminFromInput', error: data.message || 'Failed to add superadmin' });
       showError(data.message || 'Failed to add superadmin');
     }
   } catch (error) {
-    showError(`Failed to add superadmin: ${error.message}`);
+    console.error('[admin-ui-v2][save_failure]', { action: 'addSuperadminFromInput', error: error?.message || String(error) });
+    showError(formatAdminWorkspaceError('Failed to add superadmin', error));
   } finally {
-    btn.disabled = false;
-    btn.textContent = 'Add';
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Add Superadmin';
+    }
   }
 }
 
@@ -9481,10 +9487,12 @@ function removeSuperadmin(userId) {
           showSuccess('Superadmin removed');
           await loadSuperadminView();
         } else {
+          console.error('[admin-ui-v2][save_failure]', { action: 'removeSuperadmin', error: data.message || 'Failed to remove superadmin' });
           showError(data.message || 'Failed to remove superadmin');
         }
       } catch (error) {
-        showError(`Failed to remove superadmin: ${error.message}`);
+        console.error('[admin-ui-v2][save_failure]', { action: 'removeSuperadmin', error: error?.message || String(error) });
+        showError(formatAdminWorkspaceError('Failed to remove superadmin', error));
       }
     },
     'Remove'

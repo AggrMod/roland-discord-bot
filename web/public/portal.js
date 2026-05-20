@@ -1,4 +1,4 @@
-// ==================== PORTAL STATE MANAGEMENT ====================
+﻿// ==================== PORTAL STATE MANAGEMENT ====================
 let userData = null;
 let isAdmin = false;
 let isSuperadmin = false;
@@ -154,7 +154,7 @@ if (!activeGuildId) {
   localStorage.removeItem('activeGuildId');
 }
 
-// ── Auto-select guild from URL param (?guild=GUILDID) ──────────────────
+// â”€â”€ Auto-select guild from URL param (?guild=GUILDID) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Lets Discord bot post links like /?guild=123&section=dashboard
 // and the user lands with the right server already selected.
 (function applyUrlGuildContext() {
@@ -339,7 +339,7 @@ function openPortalMultiSelectPicker(selectId) {
     <div class="gp-ms-modal" role="dialog" aria-modal="true">
       <div class="gp-ms-header">
         <h3 class="gp-ms-title">${escapeHtml(getPortalMultiSelectTitle(select))}</h3>
-        <button type="button" class="gp-ms-close" aria-label="Close">×</button>
+        <button type="button" class="gp-ms-close" aria-label="Close">Ã—</button>
       </div>
       <div class="gp-ms-toolbar">
         <input type="text" class="gp-ms-search" placeholder="Search..." />
@@ -667,13 +667,13 @@ function showWalletAddForm() {
   const signBtn = document.getElementById('signVerifyBtn');
   if (signBtn) {
     signBtn.disabled = false;
-    signBtn.innerHTML = '✓ Connect & Sign';
+    signBtn.innerHTML = 'âœ“ Connect & Sign';
   }
 
   const microBtn = document.getElementById('microVerifyBtn');
   if (microBtn) {
     microBtn.disabled = false;
-    microBtn.innerHTML = '🔔 🎫 Generate Proof Address';
+    microBtn.innerHTML = 'ðŸ”” ðŸŽ« Generate Proof Address';
   }
 
   const statusEl = document.getElementById('verifyStatus');
@@ -730,8 +730,8 @@ async function autoShowPendingMicroVerify() {
 
     statusEl.innerHTML = `
       <div style="margin-top:20px; padding:24px; background:rgba(99,102,241,0.08); border:2px solid rgba(99,102,241,0.35); border-radius:14px;">
-        <h4 style="color:#e0e7ff; margin:0 0 4px 0; font-size:1.05em;">🔔 NFT Ownership Proof — Awaiting On-Chain Confirmation</h4>
-        <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 14px 0;">Your unique proof amount has been generated. Complete the on-chain confirmation to verify NFT membership. We confirm wallet ownership only — no passwords or personal data collected. <a href="/privacy-policy" target="_blank" style="color:#a5b4fc;">Privacy Policy</a></p>
+        <h4 style="color:#e0e7ff; margin:0 0 4px 0; font-size:1.05em;">ðŸ”” NFT Ownership Proof â€” Awaiting On-Chain Confirmation</h4>
+        <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 14px 0;">Your unique proof amount has been generated. Complete the on-chain confirmation to verify NFT membership. We confirm wallet ownership only â€” no passwords or personal data collected. <a href="/privacy-policy" target="_blank" style="color:#a5b4fc;">Privacy Policy</a></p>
 
         <div style="margin-bottom:14px;">
           <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 6px 0; text-transform:uppercase; letter-spacing:0.05em;">Amount (exact)</p>
@@ -750,7 +750,7 @@ async function autoShowPendingMicroVerify() {
         </div>
 
         <div style="background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:12px 14px; margin-bottom:20px;">
-          <p style="color:#c7d2fe; font-size:0.85em; margin:0;">ℹ️ Use the <strong>exact proof amount</strong> above — it's your unique membership identifier. Compatible with any Solana wallet. Proof expires at <strong>${expiryDisplay}</strong>.</p>
+          <p style="color:#c7d2fe; font-size:0.85em; margin:0;">â„¹ï¸ Use the <strong>exact proof amount</strong> above â€” it's your unique membership identifier. Compatible with any Solana wallet. Proof expires at <strong>${expiryDisplay}</strong>.</p>
         </div>
 
         <div style="text-align:center;">
@@ -758,12 +758,12 @@ async function autoShowPendingMicroVerify() {
             <div class="spinner" style="width:18px; height:18px;"></div>
             <span style="font-size:0.9em;">Awaiting on-chain confirmation...</span>
           </div>
-          <button onclick="manualCheckMicroVerify(document.getElementById('verifyStatus'))" style="background:none; border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 14px; cursor:pointer; font-size:0.82em;">↻ Check status</button>
+          <button onclick="manualCheckMicroVerify(document.getElementById('verifyStatus'))" style="background:none; border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 14px; cursor:pointer; font-size:0.82em;">â†» Check status</button>
         </div>
       </div>`;
 
     pollMicroVerifyStatus(statusEl);
-  } catch (e) { /* silent — user just won't see auto-loaded panel */ }
+  } catch (e) { /* silent â€” user just won't see auto-loaded panel */ }
 }
 
 // Detect available Solana wallet provider
@@ -908,7 +908,7 @@ async function verifyBySignature() {
 
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '⏳ Connecting wallet...';
+    btn.innerHTML = 'â³ Connecting wallet...';
   }
 
   try {
@@ -918,24 +918,24 @@ async function verifyBySignature() {
     if (!walletAddress) {
       throw new Error('Connected wallet but could not read public address. Please unlock wallet and try again.');
     }
-    if (btn) btn.innerHTML = '⏳ Requesting challenge...';
+    if (btn) btn.innerHTML = 'â³ Requesting challenge...';
 
     // 2. Get challenge from server
     const challengeRes = await fetch('/api/verify/challenge', { method: 'POST', credentials: 'include' });
     const challengeData = await challengeRes.json();
     if (!challengeData.success) throw new Error(challengeData.message || 'Failed to get challenge');
 
-    if (btn) btn.innerHTML = '⏳ Sign the message in your wallet...';
+    if (btn) btn.innerHTML = 'â³ Sign the message in your wallet...';
 
     // 3. Sign the challenge message
     const encodedMessage = new TextEncoder().encode(challengeData.message);
     const signedMessage = await provider.signMessage(encodedMessage, 'utf8');
     
-    // Extract signature bytes → base58
+    // Extract signature bytes â†’ base58
     const signatureBytes = signedMessage.signature || signedMessage;
     const sig58 = uint8ToBase58(new Uint8Array(signatureBytes));
 
-    if (btn) btn.innerHTML = '⏳ Verifying on server...';
+    if (btn) btn.innerHTML = 'â³ Verifying on server...';
 
     // 4. Submit to server
     const verifyRes = await fetch('/api/verify/signature', {
@@ -962,7 +962,7 @@ async function verifyBySignature() {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = '✓ Connect & Sign';
+      btn.innerHTML = 'âœ“ Connect & Sign';
     }
     renderMobileWalletLaunchPanel();
   }
@@ -974,11 +974,11 @@ async function verifyByMicroTx() {
 
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '⏳ Generating proof address...';
+    btn.innerHTML = 'â³ Generating proof address...';
   }
 
   try {
-    // 1. Create micro-verify request on server — no wallet connection needed
+    // 1. Create micro-verify request on server â€” no wallet connection needed
     const reqRes = await fetch('/api/micro-verify/request', { method: 'POST', credentials: 'include' });
     const reqData = await reqRes.json();
     if (!reqData.success) throw new Error(reqData.message || 'Failed to create verification request');
@@ -986,11 +986,11 @@ async function verifyByMicroTx() {
     const { amount, destinationWallet, expiresAt, ttlMinutes } = reqData.request || reqData;
     const expiryDisplay = expiresAt ? new Date(expiresAt).toLocaleTimeString() : `~${ttlMinutes || 15} min`;
 
-    // 2. Show the on-chain proof instruction UI — no wallet extension involved
+    // 2. Show the on-chain proof instruction UI â€” no wallet extension involved
     if (statusEl) {
       statusEl.innerHTML = `
         <div style="margin-top:20px; padding:24px; background:rgba(99,102,241,0.08); border:2px solid rgba(99,102,241,0.35); border-radius:14px;">
-          <h4 style="color:#e0e7ff; margin:0 0 6px 0; font-size:1.05em;">🔔 NFT Ownership Proof — On-Chain Confirmation</h4>
+          <h4 style="color:#e0e7ff; margin:0 0 6px 0; font-size:1.05em;">ðŸ”” NFT Ownership Proof â€” On-Chain Confirmation</h4>
           <p style="color:var(--text-secondary); font-size:0.82em; margin:0 0 16px 0; line-height:1.5;">This is a wallet ownership proof tool for NFT community membership. It does <strong>not</strong> collect passwords, seed phrases, or personal data. We only confirm that you control the wallet. <a href="/privacy-policy" target="_blank" style="color:#a5b4fc;">Privacy Policy</a></p>
 
           <div style="margin-bottom:14px;">
@@ -1011,7 +1011,7 @@ async function verifyByMicroTx() {
 
           <div style="background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:12px 14px; margin-bottom:20px;">
             <p style="color:#c7d2fe; font-size:0.85em; margin:0; line-height:1.5;">
-              ℹ️ Use the <strong>exact proof amount</strong> above — it's your unique wallet identifier used only for membership confirmation.<br>
+              â„¹ï¸ Use the <strong>exact proof amount</strong> above â€” it's your unique wallet identifier used only for membership confirmation.<br>
               Compatible with any Solana wallet (Phantom, mobile, hardware wallet, etc.).<br>
               Proof expires at <strong>${expiryDisplay}</strong>.
             </p>
@@ -1022,13 +1022,13 @@ async function verifyByMicroTx() {
               <div class="spinner" style="width:18px; height:18px;"></div>
               <span style="font-size:0.9em;">Awaiting on-chain confirmation...</span>
             </div>
-            <button onclick="manualCheckMicroVerify(document.getElementById('verifyStatus'))" style="background:none; border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 14px; cursor:pointer; font-size:0.82em;">↻ Check status</button>
+            <button onclick="manualCheckMicroVerify(document.getElementById('verifyStatus'))" style="background:none; border:1px solid rgba(99,102,241,0.3); border-radius:6px; color:#a5b4fc; padding:6px 14px; cursor:pointer; font-size:0.82em;">â†» Check status</button>
           </div>
         </div>
       `;
     }
 
-    // 3. Start polling — server detects the transfer on-chain automatically
+    // 3. Start polling â€” server detects the transfer on-chain automatically
     pollMicroVerifyStatus(statusEl);
 
   } catch (error) {
@@ -1037,14 +1037,14 @@ async function verifyByMicroTx() {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = '🔔 🎫 Generate Proof Address';
+      btn.innerHTML = 'ðŸ”” ðŸŽ« Generate Proof Address';
     }
   }
 }
 
 async function pollMicroVerifyStatus(statusEl, attempts = 0) {
   if (attempts > 30) {
-    if (statusEl) statusEl.innerHTML = `<div style="padding:12px; background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); border-radius:10px; text-align:center; color:#fcd34d;">Still processing. Click <strong>↻ Check status</strong> to scan the chain manually, or refresh the page.</div>`;
+    if (statusEl) statusEl.innerHTML = `<div style="padding:12px; background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.3); border-radius:10px; text-align:center; color:#fcd34d;">Still processing. Click <strong>â†» Check status</strong> to scan the chain manually, or refresh the page.</div>`;
     return;
   }
   try {
@@ -1072,7 +1072,7 @@ async function manualCheckMicroVerify(statusEl) {
     });
     const ct = res.headers.get('content-type') || '';
     if (!ct.includes('application/json')) {
-      throw new Error(`Server returned ${res.status} (not JSON) — try restarting the bot`);
+      throw new Error(`Server returned ${res.status} (not JSON) â€” try restarting the bot`);
     }
     const data = await res.json();
     if (!data?.success) {
@@ -1083,12 +1083,12 @@ async function manualCheckMicroVerify(statusEl) {
       closeWalletVerifyModal();
       await loadPortal();
     } else if (statusEl) {
-      statusEl.innerHTML += `<div style="padding:8px 12px;background:rgba(245,158,11,0.1);border-radius:8px;color:#fcd34d;font-size:0.85em;margin-top:8px;">Transaction not yet detected on-chain. Sent the exact amount? It may take 10–30s to confirm — try again shortly.</div>`;
+      statusEl.innerHTML += `<div style="padding:8px 12px;background:rgba(245,158,11,0.1);border-radius:8px;color:#fcd34d;font-size:0.85em;margin-top:8px;">Transaction not yet detected on-chain. Sent the exact amount? It may take 10â€“30s to confirm â€” try again shortly.</div>`;
     }
   } catch (e) {
     if (statusEl) statusEl.innerHTML += `<div style="color:#fca5a5;font-size:0.85em;margin-top:8px;">Check failed: ${escapeHtml(e.message)}</div>`;
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '↻ Check status'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'â†» Check status'; }
   }
 }
 
@@ -1423,21 +1423,21 @@ function updateModuleVisibility() {
 // ==================== MODULE REGISTRY & HUB ====================
 
 const MODULE_REGISTRY = [
-  { key: 'verification', label: 'Identity / Verification', icon: '💼', section: 'wallets', desc: 'Securely verify wallet ownership and manage roles.' },
-  { key: 'governance', label: 'Governance / Voting', icon: '📜', section: 'governance', desc: 'Participate in DAO decision-making and proposals.' },
-  { key: 'wallettracker', label: 'Wallet Tracker', icon: '💰', section: 'treasury', desc: 'Monitor community floor price and tracked wallets.' },
-  { key: 'nfttracker', label: 'NFT Activity', icon: '🎨', section: 'nft-activity', desc: 'Real-time sales and listings feed for collections.' },
-  { key: 'tokentracker', label: 'Token Tracker', icon: '🪙', section: 'token-activity', desc: 'Monitor token transactions and swap activity.' },
-  { key: 'invites', label: 'Invite Tracker', icon: '📧', section: 'invites', adminOnly: true, desc: 'Measure invite performance, leaderboard trends, and referral activity.' },
-  { key: 'aiassistant', label: 'AI Assistant', icon: '🤖', section: 'aiassistant', adminOnly: true, desc: 'Tune prompts, safety controls, and assistant behavior for your server.' },
-  { key: 'ticketing', label: 'Support Tickets', icon: '🎫', section: 'ticketing', desc: 'Integrated support desk and category routing.' },
-  { key: 'engagement', label: 'Engagement Hub', icon: '🏆', section: 'engagement', desc: 'Activity points, reward shop, and leaderboards.' },
-  { key: 'minigames', label: 'Minigames', icon: '⚔️', section: 'battle', desc: 'Arcade module including Battle Arena sessions, lobbies, and game events.' },
-  { key: 'heist', label: 'Missions', icon: '🎯', section: 'heist', desc: 'Role-based missions and strategic community goals.' },
-  { key: 'vault', label: 'Vault', icon: '🔐', section: 'vault', desc: 'Key rewards, mint sync rules, seasons, and vault operations.' },
-  { key: 'welcome', label: 'Welcome & Onboarding', icon: '👋', section: 'welcome', desc: 'Join messages, auto-roles, onboarding DM, and captcha checks.' },
-  { key: 'selfserveroles', label: 'Self-Serve Roles', icon: '🎭', section: 'self-serve-roles', desc: 'Claim optional roles assigned by administrators.' },
-  { key: 'help', label: 'Help Center', icon: '❓', section: 'help', desc: 'Guides, command references, and troubleshooting across all modules.' }
+  { key: 'verification', label: 'Identity / Verification', icon: 'ðŸ’¼', section: 'wallets', desc: 'Securely verify wallet ownership and manage roles.' },
+  { key: 'governance', label: 'Governance / Voting', icon: 'ðŸ“œ', section: 'governance', desc: 'Participate in DAO decision-making and proposals.' },
+  { key: 'wallettracker', label: 'Wallet Tracker', icon: 'ðŸ’°', section: 'treasury', desc: 'Monitor community floor price and tracked wallets.' },
+  { key: 'nfttracker', label: 'NFT Activity', icon: 'ðŸŽ¨', section: 'nft-activity', desc: 'Real-time sales and listings feed for collections.' },
+  { key: 'tokentracker', label: 'Token Tracker', icon: 'ðŸª™', section: 'token-activity', desc: 'Monitor token transactions and swap activity.' },
+  { key: 'invites', label: 'Invite Tracker', icon: 'ðŸ“§', section: 'invites', adminOnly: true, desc: 'Measure invite performance, leaderboard trends, and referral activity.' },
+  { key: 'aiassistant', label: 'AI Assistant', icon: 'ðŸ¤–', section: 'aiassistant', adminOnly: true, desc: 'Tune prompts, safety controls, and assistant behavior for your server.' },
+  { key: 'ticketing', label: 'Support Tickets', icon: 'ðŸŽ«', section: 'ticketing', desc: 'Integrated support desk and category routing.' },
+  { key: 'engagement', label: 'Engagement Hub', icon: 'ðŸ†', section: 'engagement', desc: 'Activity points, reward shop, and leaderboards.' },
+  { key: 'minigames', label: 'Minigames', icon: 'âš”ï¸', section: 'battle', desc: 'Arcade module including Battle Arena sessions, lobbies, and game events.' },
+  { key: 'heist', label: 'Missions', icon: 'ðŸŽ¯', section: 'heist', desc: 'Role-based missions and strategic community goals.' },
+  { key: 'vault', label: 'Vault', icon: 'ðŸ”', section: 'vault', desc: 'Key rewards, mint sync rules, seasons, and vault operations.' },
+  { key: 'welcome', label: 'Welcome & Onboarding', icon: 'ðŸ‘‹', section: 'welcome', desc: 'Join messages, auto-roles, onboarding DM, and captcha checks.' },
+  { key: 'selfserveroles', label: 'Self-Serve Roles', icon: 'ðŸŽ­', section: 'self-serve-roles', desc: 'Claim optional roles assigned by administrators.' },
+  { key: 'help', label: 'Help Center', icon: 'â“', section: 'help', desc: 'Guides, command references, and troubleshooting across all modules.' }
 ];
 
 const MODULE_TOGGLE_SETTING_FIELD_MAP = Object.freeze({
@@ -1571,7 +1571,7 @@ function renderModuleHub() {
     html += `
       <div class="module-tile module-tile--admin" onclick="switchSection('settings')">
         <div class="module-tile__header">
-          <div class="module-tile__icon">⚙️</div>
+          <div class="module-tile__icon">âš™ï¸</div>
           <div class="module-tile__status status-active">Admin</div>
         </div>
         <div class="module-tile__body">
@@ -1590,7 +1590,7 @@ function renderModuleHub() {
     html += `
       <div class="module-tile" onclick="switchSection('admin'); showAdminView('superadmin'); setTimeout(() => setSuperadminWorkspaceTab('overview'), 120);">
         <div class="module-tile__header">
-          <div class="module-tile__icon">🖥️</div>
+          <div class="module-tile__icon">ðŸ–¥ï¸</div>
           <div class="module-tile__status status-active">System</div>
         </div>
         <div class="module-tile__body">
@@ -1643,7 +1643,7 @@ function renderModuleHub() {
           <p class="module-tile__desc">${escapeHtml(mod.desc)}</p>
         </div>
         <div class="module-tile__footer">
-          ${isServerAdmin ? '<span class="nav-icon" style="font-size:1.1rem; opacity:0.6;">⚙️</span>' : ''}
+          ${isServerAdmin ? '<span class="nav-icon" style="font-size:1.1rem; opacity:0.6;">âš™ï¸</span>' : ''}
           <span style="font-size:0.8rem; color:var(--text-muted); margin-left:8px;">${isEnabled ? 'Enter Module &rarr;' : 'Module Disabled'}</span>
           ${toggleHtml}
         </div>
@@ -2201,7 +2201,7 @@ function applySettingsTabVisibility(settings = {}) {
       return;
     }
     const moduleKey = SETTINGS_TAB_MODULE_MAP[tab];
-    if (!moduleKey) return; // 'general' has no module key — always visible
+    if (!moduleKey) return; // 'general' has no module key â€” always visible
 
     const assignedOk = (assigned === null) ? true : assigned.includes(moduleKey);
     const enabledOk = enabledByModule[moduleKey] !== false;
@@ -2883,7 +2883,7 @@ function renderRecentActivity() {
   if (activities.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
-        <div class="empty-state-icon">📊</div>
+        <div class="empty-state-icon">ðŸ“Š</div>
         <h4 class="empty-state-title">No Recent Activity</h4>
         <p class="empty-state-message">Your governance participation and mission activity will appear here.</p>
       </div>
@@ -2895,12 +2895,12 @@ function renderRecentActivity() {
     <div class="${activity.type}-item">
       <div class="${activity.type}-header">
         <div class="${activity.type}-title">
-          ${activity.type === 'proposal' ? '📜' : '🎯'} ${escapeHtml(activity.title)}
+          ${activity.type === 'proposal' ? 'ðŸ“œ' : 'ðŸŽ¯'} ${escapeHtml(activity.title)}
         </div>
         <span class="status-badge status-${activity.status}">${activity.status}</span>
       </div>
       <div class="${activity.type}-meta">
-        ${activity.type === 'proposal' ? 'Proposal' : 'Mission'} #${activity.id} • ${formatDate(activity.date)}
+        ${activity.type === 'proposal' ? 'Proposal' : 'Mission'} #${activity.id} â€¢ ${formatDate(activity.date)}
       </div>
     </div>
   `).join('') + '</div>';
@@ -2919,12 +2919,12 @@ function renderProposals() {
   if (!proposalRows.length) {
     container.innerHTML = `
       <div class="empty-state">
-        <div class="empty-state-icon">📜</div>
+        <div class="empty-state-icon">ðŸ“œ</div>
         <h4 class="empty-state-title">No Proposals Yet</h4>
         <p class="empty-state-message">You haven't created any proposals yet. Start one now from web or Discord.</p>
         <div class="empty-state-action">
           <button class="btn-primary" onclick="showCreateProposalForm()">
-            <span>➕</span>
+            <span>âž•</span>
             <span>Create Proposal</span>
           </button>
         </div>
@@ -2943,8 +2943,8 @@ function renderProposals() {
         </div>
       </div>
       <div class="proposal-meta">
-        Proposal #${proposal.proposal_id} • Created ${formatDate(new Date(proposal.created_at))}
-        ${proposal.cost_indication ? ` • Cost: ${escapeHtml(proposal.cost_indication)}` : ''}
+        Proposal #${proposal.proposal_id} â€¢ Created ${formatDate(new Date(proposal.created_at))}
+        ${proposal.cost_indication ? ` â€¢ Cost: ${escapeHtml(proposal.cost_indication)}` : ''}
       </div>
       ${proposal.goal ? `<p style="color: var(--text-primary); margin-top: var(--space-2);"><strong>Goal:</strong> ${escapeHtml(proposal.goal)}</p>` : ''}
       ${proposal.description ? `<p style="color: var(--text-secondary); margin-top: var(--space-3); line-height: 1.6;">${escapeHtml(proposal.description)}</p>` : ''}
@@ -3002,7 +3002,7 @@ async function loadActiveVotes() {
   if (!activeGuildId) {
     container.innerHTML = `
       <div class="empty-state">
-        <div class="empty-state-icon">🗳️</div>
+        <div class="empty-state-icon">ðŸ—³ï¸</div>
         <h4 class="empty-state-title">Select a Server</h4>
         <p class="empty-state-message">Choose a server first to load active proposals for that community.</p>
       </div>
@@ -3015,7 +3015,7 @@ async function loadActiveVotes() {
     if (!endpoint) {
       container.innerHTML = `
         <div class="empty-state">
-          <div class="empty-state-icon">🗳️</div>
+          <div class="empty-state-icon">ðŸ—³ï¸</div>
           <h4 class="empty-state-title">Select a Server</h4>
           <p class="empty-state-message">Choose a server first to load active proposals for that community.</p>
         </div>
@@ -3029,7 +3029,7 @@ async function loadActiveVotes() {
     if (!data.success || proposals.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
-          <div class="empty-state-icon">🗳️</div>
+          <div class="empty-state-icon">ðŸ—³ï¸</div>
           <h4 class="empty-state-title">No Active Proposals</h4>
           <p class="empty-state-message">There are no proposals currently open for voting. Check back soon or create your own!</p>
         </div>
@@ -3077,9 +3077,9 @@ async function loadActiveVotes() {
             <span class="status-badge status-${proposal.status}">${proposal.status}</span>
           </div>
           <div class="proposal-meta" style="margin-bottom: var(--space-4);">
-            Proposal #${proposalId} • Created by ${escapeHtml(creator)}
-            ${(proposal.costIndication || proposal.cost_indication) ? ` • Cost: ${escapeHtml(proposal.costIndication || proposal.cost_indication)}` : ''}
-            ${status === 'supporting' ? ` • Supporters: ${supportCount}/${supportRequired || '?'}` : ''}
+            Proposal #${proposalId} â€¢ Created by ${escapeHtml(creator)}
+            ${(proposal.costIndication || proposal.cost_indication) ? ` â€¢ Cost: ${escapeHtml(proposal.costIndication || proposal.cost_indication)}` : ''}
+            ${status === 'supporting' ? ` â€¢ Supporters: ${supportCount}/${supportRequired || '?'}` : ''}
           </div>
           ${proposal.goal ? `<p style="color: var(--text-primary); margin-bottom: var(--space-2);"><strong>Goal:</strong> ${escapeHtml(proposal.goal)}</p>` : ''}
           ${proposal.description ? `<p style="color: var(--text-secondary); margin-bottom: var(--space-4); line-height: 1.6;">${escapeHtml(proposal.description)}</p>` : ''}
@@ -3088,12 +3088,12 @@ async function loadActiveVotes() {
             <div class="vote-stat">
               <div class="vote-stat-label">${status === 'supporting' ? 'Supporters' : 'Yes Votes'}</div>
               <div class="vote-stat-value">${status === 'supporting' ? supportCount : (proposal.votes?.yes?.vp || 0)}</div>
-              <div class="vote-stat-secondary">${status === 'supporting' ? `Needed: ${supportRequired || '?'}` : `${proposal.votes?.yes?.count || 0} votes • ${yesPercent}%`}</div>
+              <div class="vote-stat-secondary">${status === 'supporting' ? `Needed: ${supportRequired || '?'}` : `${proposal.votes?.yes?.count || 0} votes â€¢ ${yesPercent}%`}</div>
             </div>
             <div class="vote-stat">
               <div class="vote-stat-label">No Votes</div>
               <div class="vote-stat-value">${proposal.votes?.no?.vp || 0}</div>
-              <div class="vote-stat-secondary">${proposal.votes?.no?.count || 0} votes • ${noPercent}%</div>
+              <div class="vote-stat-secondary">${proposal.votes?.no?.count || 0} votes â€¢ ${noPercent}%</div>
             </div>
             <div class="vote-stat">
               <div class="vote-stat-label">Abstain</div>
@@ -3112,7 +3112,7 @@ async function loadActiveVotes() {
           </div>
           <div class="quorum-indicator">
             <span>${status === 'supporting' ? 'Support Progress' : 'Participation Progress'}</span>
-            <span style="color: ${status === 'supporting' ? 'var(--text-secondary)' : (quorumMet ? 'var(--success)' : 'var(--text-muted)')};">${status === 'supporting' ? `${supportCount}/${supportRequired || '?'} supporters` : (quorumMet ? '✓ Quorum Met' : 'Quorum Pending')}</span>
+            <span style="color: ${status === 'supporting' ? 'var(--text-secondary)' : (quorumMet ? 'var(--success)' : 'var(--text-muted)')};">${status === 'supporting' ? `${supportCount}/${supportRequired || '?'} supporters` : (quorumMet ? 'âœ“ Quorum Met' : 'Quorum Pending')}</span>
           </div>
           ${actionButtons}
         </div>
@@ -3123,7 +3123,7 @@ async function loadActiveVotes() {
     container.innerHTML = `
       <div class="error-state">
         <div class="error-title">
-          <span>⚠️</span>
+          <span>âš ï¸</span>
           <span>Failed to Load Proposals</span>
         </div>
         <div class="error-message">Unable to fetch active proposals. Please try refreshing the page.</div>
@@ -6062,15 +6062,15 @@ async function loadTreasuryPublicView() {
         <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
           <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
             <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:8px;">SOL Balance</div>
-            <div style="font-size:2em; font-weight:700; color:#93c5fd;">${t.sol ?? t.sol_balance ?? '—'}</div>
+            <div style="font-size:2em; font-weight:700; color:#93c5fd;">${t.sol ?? t.sol_balance ?? 'â€”'}</div>
           </div>
           <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
             <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:8px;">USDC Balance</div>
-            <div style="font-size:2em; font-weight:700; color:#86efac;">${t.usdc ?? t.usdc_balance ?? '—'}</div>
+            <div style="font-size:2em; font-weight:700; color:#86efac;">${t.usdc ?? t.usdc_balance ?? 'â€”'}</div>
           </div>
           <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
             <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:8px;">Last Updated</div>
-            <div style="font-size:1.1em; font-weight:600; color:#e0e7ff;">${t.lastUpdated || t.last_updated ? new Date(t.lastUpdated || t.last_updated).toLocaleString() : '—'}</div>
+            <div style="font-size:1.1em; font-weight:600; color:#e0e7ff;">${t.lastUpdated || t.last_updated ? new Date(t.lastUpdated || t.last_updated).toLocaleString() : 'â€”'}</div>
           </div>
         </div>
         ${source === 'wallet-tracker'
@@ -6100,8 +6100,8 @@ async function loadTreasuryTransactions() {
     if (data.success && transactions.length > 0) {
       const rows = transactions.map(tx => {
         const direction = tx.direction || (tx.type === 'in' ? 'in' : 'out');
-        const label = direction === 'in' || direction === 'incoming' ? '➕ Incoming' : '➖ Outgoing';
-        const amount = tx.deltaSol ?? tx.amount ?? '—';
+        const label = direction === 'in' || direction === 'incoming' ? 'âž• Incoming' : 'âž– Outgoing';
+        const amount = tx.deltaSol ?? tx.amount ?? 'â€”';
         const hash = tx.signature || tx.tx_hash || '';
         const timestamp = tx.blockTime
           ? new Date(tx.blockTime * 1000)
@@ -6111,11 +6111,11 @@ async function loadTreasuryTransactions() {
         <div style="padding:12px; border-bottom:1px solid rgba(99,102,241,0.15); display:flex; justify-content:space-between; align-items:center;">
           <div style="flex:1;">
             <div style="color:#e0e7ff; font-weight:600;">${label}</div>
-            <div style="color:var(--text-secondary); font-size:0.85em; font-family:monospace;">${hash ? `${hash.slice(0, 16)}...` : '—'}</div>
+            <div style="color:var(--text-secondary); font-size:0.85em; font-family:monospace;">${hash ? `${hash.slice(0, 16)}...` : 'â€”'}</div>
           </div>
           <div style="text-align:right;">
             <div style="color:#e0e7ff; font-weight:600;">${amount} SOL</div>
-            <div style="color:var(--text-secondary); font-size:0.85em;">${timestamp ? timestamp.toLocaleDateString() : '—'}</div>
+            <div style="color:var(--text-secondary); font-size:0.85em;">${timestamp ? timestamp.toLocaleDateString() : 'â€”'}</div>
           </div>
         </div>
       `}).join('');
@@ -6180,15 +6180,15 @@ async function loadTrackedWalletList() {
 
     const rows = wallets.map(w => {
       const addr = `${w.wallet_address.slice(0,6)}...${w.wallet_address.slice(-4)}`;
-      const lbl = escapeHtml(w.label || '—');
-      const alertCh = w.alert_channel_id ? `<code>#${w.alert_channel_id}</code>` : '<span style="color:var(--text-secondary);">—</span>';
-      const panelCh = w.panel_channel_id ? `<code>#${w.panel_channel_id}</code>` : '<span style="color:var(--text-secondary);">—</span>';
+      const lbl = escapeHtml(w.label || 'â€”');
+      const alertCh = w.alert_channel_id ? `<code>#${w.alert_channel_id}</code>` : '<span style="color:var(--text-secondary);">â€”</span>';
+      const panelCh = w.panel_channel_id ? `<code>#${w.panel_channel_id}</code>` : '<span style="color:var(--text-secondary);">â€”</span>';
       const status = w.enabled ? '<span class="badge badge-active">Active</span>' : '<span class="badge badge-paused">Paused</span>';
       return `
         <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
           <td style="padding:10px 12px;">
             <span style="font-family:monospace;font-size:0.85em;" title="${escapeHtml(w.wallet_address)}">${addr}</span>
-            <button class="tw-copy-btn" data-addr="${escapeHtml(w.wallet_address)}" title="Copy address" style="margin-left:4px;background:none;border:none;cursor:pointer;font-size:0.85em;">📋</button>
+            <button class="tw-copy-btn" data-addr="${escapeHtml(w.wallet_address)}" title="Copy address" style="margin-left:4px;background:none;border:none;cursor:pointer;font-size:0.85em;">ðŸ“‹</button>
           </td>
           <td style="padding:10px 12px;color:#c9d6ff;">${lbl}</td>
           <td style="padding:10px 12px;">${alertCh}</td>
@@ -6196,9 +6196,9 @@ async function loadTrackedWalletList() {
           <td style="padding:10px 12px;">${status}</td>
           <td style="padding:10px 12px;">
             <div style="display:flex;gap:6px;">
-              <button class="tw-panel-btn" data-id="${w.id}" title="Refresh Holdings Panel" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">📋 Panel</button>
-              <button class="tw-edit-btn" data-id="${w.id}" data-addr="${escapeHtml(w.wallet_address)}" data-label="${escapeHtml(w.label||'')}" data-alertch="${w.alert_channel_id||''}" data-panelch="${w.panel_channel_id||''}" title="Edit" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️</button>
-              <button class="tw-remove-btn" data-id="${w.id}" title="Remove" style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
+              <button class="tw-panel-btn" data-id="${w.id}" title="Refresh Holdings Panel" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">ðŸ“‹ Panel</button>
+              <button class="tw-edit-btn" data-id="${w.id}" data-addr="${escapeHtml(w.wallet_address)}" data-label="${escapeHtml(w.label||'')}" data-alertch="${w.alert_channel_id||''}" data-panelch="${w.panel_channel_id||''}" title="Edit" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">âœï¸</button>
+              <button class="tw-remove-btn" data-id="${w.id}" title="Remove" style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">ðŸ—‘ï¸</button>
             </div>
           </td>
         </tr>`;
@@ -6278,8 +6278,8 @@ function attachTrackedWalletListeners(container) {
   container.querySelectorAll('.tw-copy-btn').forEach(btn => {
     btn.addEventListener('click', function() {
       navigator.clipboard.writeText(this.dataset.addr);
-      this.textContent = '✓';
-      setTimeout(() => this.textContent = '📋', 1200);
+      this.textContent = 'âœ“';
+      setTimeout(() => this.textContent = 'ðŸ“‹', 1200);
     });
   });
 }
@@ -6426,7 +6426,7 @@ async function loadTreasuryAlertsConfig() {
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
           <input id="alertsCfgIncoming" type="checkbox" ${c.txAlertIncomingOnly ? 'checked' : ''} style="width:18px; height:18px;">
-          <label style="color:#e0e7ff; font-size:0.9em;">Incoming only — only alert on received SOL</label>
+          <label style="color:#e0e7ff; font-size:0.9em;">Incoming only â€” only alert on received SOL</label>
         </div>
         <div>
           <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Minimum SOL Amount</label>
@@ -6462,7 +6462,7 @@ async function saveTreasuryAlertsCfg() {
     });
     const result = await res.json();
     feedback.style.color = result.success ? '#4ade80' : '#ef4444';
-    feedback.textContent = result.success ? '✓ Saved!' : (result.message || 'Save failed');
+    feedback.textContent = result.success ? 'âœ“ Saved!' : (result.message || 'Save failed');
     setTimeout(() => { feedback.textContent = ''; }, 3000);
   } catch (err) {
     feedback.style.color = '#ef4444';
@@ -6693,7 +6693,7 @@ function showNotification(message, type = 'info') {
   const toast = document.createElement('div');
   toast.className = 'toast-notification';
   const colors = { success: '#10b981', error: '#ef4444', info: '#3b82f6', warning: '#f59e0b' };
-  const icons = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
+  const icons = { success: 'âœ“', error: 'âœ•', info: 'â„¹', warning: 'âš ' };
   toast.style.cssText = `
     position:fixed; top:24px; right:24px; z-index:9999;
     padding:14px 20px; border-radius:10px; max-width:400px;
@@ -6875,7 +6875,7 @@ function showCreateProposalForm() {
   const body = document.getElementById('confirmMessage');
   const btn = document.getElementById('confirmButton');
   const title = document.getElementById('confirmTitle');
-  title.textContent = '📜 Create New Proposal';
+  title.textContent = 'ðŸ“œ Create New Proposal';
   btn.textContent = 'Submit Proposal';
   btn.classList.remove('btn-danger');
   btn.classList.add('btn-primary');
@@ -7089,9 +7089,9 @@ async function loadEnvStatusBar() {
 function renderEnvStatusBar(bar, d) {
   const pill = (label, color) => `<span style="display:inline-block;background:${color};color:#fff;border-radius:20px;padding:4px 12px;font-size:0.75em;font-weight:600;margin:0 4px 4px 0;">${label}</span>`;
   bar.innerHTML = `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;">`
-    + (d.mockMode ? pill('🟡 MOCK MODE', '#b8860b') : pill('🟢 LIVE MODE', '#2e7d32'))
-    + (d.heliusConfigured ? pill('Helius ✓', '#2e7d32') : pill('Helius ✗', '#c62828'))
-    + (d.webhookSecretConfigured ? pill('Webhook ✓', '#2e7d32') : pill('Webhook —', '#616161'))
+    + (d.mockMode ? pill('ðŸŸ¡ MOCK MODE', '#b8860b') : pill('ðŸŸ¢ LIVE MODE', '#2e7d32'))
+    + (d.heliusConfigured ? pill('Helius âœ“', '#2e7d32') : pill('Helius âœ—', '#c62828'))
+    + (d.webhookSecretConfigured ? pill('Webhook âœ“', '#2e7d32') : pill('Webhook â€”', '#616161'))
     + pill('NODE_ENV: ' + (d.nodeEnv || 'development'), d.nodeEnv === 'production' ? '#1565c0' : '#616161')
     + `</div>`;
 }
@@ -7115,7 +7115,7 @@ function isTenantSensitiveAdminView(view) {
 }
 
 function showAdminView(view) {
-  // Admin sidebar is only shown to admins — no need to re-check here
+  // Admin sidebar is only shown to admins â€” no need to re-check here
   // (prevents timing issues where isAdmin hasn't been set yet)
 
   if (requiresServerSelectionGate() && !(isSuperadmin && (view === 'superadmin' || view === 'monitor'))) {
@@ -7200,10 +7200,10 @@ function showAdminView(view) {
   const chevron = document.getElementById('adminChevron');
   if (view === 'superadmin' || view === 'monitor') {
     if (submenu) submenu.style.display = 'none';
-    if (chevron) chevron.textContent = '▶';
+    if (chevron) chevron.textContent = 'â–¶';
   } else {
     if (submenu) submenu.style.display = 'flex';
-    if (chevron) chevron.textContent = '▼';
+    if (chevron) chevron.textContent = 'â–¼';
   }
 
   if (view !== 'superadmin') {
@@ -7389,7 +7389,7 @@ function renderSuperadminIdentityAudit(logs = []) {
   }
 
   return logs.map(log => {
-    const walletText = log.walletAddress ? ` • ${escapeHtml(log.walletAddress.slice(0, 6))}...${escapeHtml(log.walletAddress.slice(-4))}` : '';
+    const walletText = log.walletAddress ? ` â€¢ ${escapeHtml(log.walletAddress.slice(0, 6))}...${escapeHtml(log.walletAddress.slice(-4))}` : '';
     const createdText = log?.createdAt ? new Date(log.createdAt).toLocaleString() : 'Unknown time';
     const actorText = formatDiscordIdentityLabel(log.actorId || 'system', log.actorDisplayName || null);
     return `
@@ -7461,13 +7461,13 @@ function renderTenantTemplatePreview(previewPayload) {
   const moduleChanges = Array.isArray(diff.modules) ? diff.modules : [];
   const effectiveChanges = Array.isArray(diff.effective) ? diff.effective : [];
   const planText = diff.planChanged
-    ? `${escapeHtml(getTenantPlanLabel(diff.plan?.before))} → ${escapeHtml(getTenantPlanLabel(diff.plan?.after))}`
+    ? `${escapeHtml(getTenantPlanLabel(diff.plan?.before))} â†’ ${escapeHtml(getTenantPlanLabel(diff.plan?.after))}`
     : escapeHtml(getTenantPlanLabel(diff.plan?.after));
 
   const moduleRows = moduleChanges.length
     ? moduleChanges.slice(0, 8).map(change => {
         const state = change.after ? 'enabled' : 'disabled';
-        return `<div><code>${escapeHtml(change.moduleKey)}</code> → <strong>${state}</strong></div>`;
+        return `<div><code>${escapeHtml(change.moduleKey)}</code> â†’ <strong>${state}</strong></div>`;
       }).join('')
     : '<div style="color:var(--text-secondary);">No module toggle changes.</div>';
 
@@ -7475,7 +7475,7 @@ function renderTenantTemplatePreview(previewPayload) {
     ? effectiveChanges.slice(0, 8).map(change => {
         const beforeText = change.before === null || change.before === undefined ? 'Unlimited' : String(change.before);
         const afterText = change.after === null || change.after === undefined ? 'Unlimited' : String(change.after);
-        return `<div><code>${escapeHtml(change.moduleKey)}.${escapeHtml(change.limitKey)}</code>: ${escapeHtml(beforeText)} → <strong>${escapeHtml(afterText)}</strong></div>`;
+        return `<div><code>${escapeHtml(change.moduleKey)}.${escapeHtml(change.limitKey)}</code>: ${escapeHtml(beforeText)} â†’ <strong>${escapeHtml(afterText)}</strong></div>`;
       }).join('')
     : '<div style="color:var(--text-secondary);">No effective limit changes.</div>';
 
@@ -7803,7 +7803,7 @@ function renderWorkspaceActivityItems(items = []) {
     return `
       <div class="sa-v2-activity-item">
         <div class="sa-v2-activity-main">${escapeHtml(item.action || 'unknown')}</div>
-        <div class="sa-v2-activity-meta">${escapeHtml(actor)} • ${escapeHtml(item.guildId || 'n/a')} • ${escapeHtml(item.createdAt ? new Date(item.createdAt).toLocaleString() : 'Unknown')}</div>
+        <div class="sa-v2-activity-meta">${escapeHtml(actor)} â€¢ ${escapeHtml(item.guildId || 'n/a')} â€¢ ${escapeHtml(item.createdAt ? new Date(item.createdAt).toLocaleString() : 'Unknown')}</div>
       </div>
     `;
   }).join('');
@@ -8057,7 +8057,7 @@ function openSuperadminBillingReceiptReview(guildId) {
         ? receipts.map((item) => `
           <div style="padding:10px;border:1px solid rgba(99,102,241,0.18);border-radius:8px;background:rgba(15,23,42,0.4);display:grid;gap:6px;">
             <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-              <div><strong>#${escapeHtml(String(item.id || ''))}</strong> · ${escapeHtml(item.status || 'pending')}</div>
+              <div><strong>#${escapeHtml(String(item.id || ''))}</strong> Â· ${escapeHtml(item.status || 'pending')}</div>
               <div style="font-size:0.78em;color:var(--text-secondary);">${escapeHtml(item.createdAt ? new Date(item.createdAt).toLocaleString() : '')}</div>
             </div>
             <div style="font-size:0.84em;"><strong>TX:</strong> ${escapeHtml(item.txSignature || 'n/a')}</div>
@@ -8074,7 +8074,7 @@ function openSuperadminBillingReceiptReview(guildId) {
       const actionRows = actions.length
         ? actions.map((row) => `
           <div style="padding:8px 10px;border:1px solid rgba(99,102,241,0.16);border-radius:8px;background:rgba(15,23,42,0.35);">
-            <div style="font-size:0.8em;color:#c9d6ff;"><strong>${escapeHtml(row.action || 'billing_action')}</strong> · ${escapeHtml(row.createdAt ? new Date(row.createdAt).toLocaleString() : '')}</div>
+            <div style="font-size:0.8em;color:#c9d6ff;"><strong>${escapeHtml(row.action || 'billing_action')}</strong> Â· ${escapeHtml(row.createdAt ? new Date(row.createdAt).toLocaleString() : '')}</div>
             <div style="font-size:0.78em;color:var(--text-secondary);">Actor: ${escapeHtml(row.actorId || 'unknown')}</div>
             ${row.note ? `<div style="font-size:0.8em;color:#e0e7ff;margin-top:4px;"><strong>Note:</strong> ${escapeHtml(row.note)}</div>` : ''}
           </div>
@@ -8423,8 +8423,8 @@ async function loadSuperadminWorkspaceHubV2() {
                       <td>${escapeHtml(entry.subscriptionStatus || 'unknown')}</td>
                       <td>${escapeHtml(entry.provider || 'n/a')}</td>
                       <td>${escapeHtml(entry.billingInterval || 'n/a')}</td>
-                      <td>${escapeHtml(entry.lastPaymentAt ? new Date(entry.lastPaymentAt).toLocaleString() : '—')}</td>
-                      <td>${escapeHtml(entry.currentPeriodEnd ? new Date(entry.currentPeriodEnd).toLocaleString() : '—')}</td>
+                      <td>${escapeHtml(entry.lastPaymentAt ? new Date(entry.lastPaymentAt).toLocaleString() : 'â€”')}</td>
+                      <td>${escapeHtml(entry.currentPeriodEnd ? new Date(entry.currentPeriodEnd).toLocaleString() : 'â€”')}</td>
                       <td>
                         ${escapeHtml(entry.verificationStatus || 'pending')}
                         ${Number(entry.pendingReceiptsCount || 0) > 0 ? `<div class="muted" style="font-size:0.74em;margin-top:3px;">${escapeHtml(String(entry.pendingReceiptsCount))} receipt(s) pending</div>` : ''}
@@ -8444,7 +8444,7 @@ async function loadSuperadminWorkspaceHubV2() {
               </table>
             </div>
             <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap;">
-              <div class="sa-v2-inline-note" style="margin:0;">Page ${escapeHtml(String(superadminWorkspaceBillingPage || 1))} of ${escapeHtml(String(Math.max(Number(billingPagination.totalPages || 1), 1)))} • ${escapeHtml(String(billingPagination.total || 0))} records</div>
+              <div class="sa-v2-inline-note" style="margin:0;">Page ${escapeHtml(String(superadminWorkspaceBillingPage || 1))} of ${escapeHtml(String(Math.max(Number(billingPagination.totalPages || 1), 1)))} â€¢ ${escapeHtml(String(billingPagination.total || 0))} records</div>
               <div style="display:flex; gap:8px;">
                 <button class="btn-secondary" onclick="superadminWorkspaceBillingPrevPage()" ${Number(superadminWorkspaceBillingPage || 1) <= 1 ? 'disabled' : ''}>Prev</button>
                 <button class="btn-secondary" onclick="superadminWorkspaceBillingNextPage(${Number(billingPagination.totalPages || 1)})" ${Number(superadminWorkspaceBillingPage || 1) >= Number(billingPagination.totalPages || 1) ? 'disabled' : ''}>Next</button>
@@ -9645,7 +9645,7 @@ async function saveMicroVerifySettings() {
       pollIntervalSeconds: pollInterval,
     };
 
-    // Use the dedicated global-settings endpoint — no guild context required
+    // Use the dedicated global-settings endpoint â€” no guild context required
     const response = await fetch('/api/superadmin/global-settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -9658,7 +9658,7 @@ async function saveMicroVerifySettings() {
       showError(data.message || 'Failed to save micro-verify settings');
       return;
     }
-    showSuccess('Micro-verify settings saved ✅');
+    showSuccess('Micro-verify settings saved âœ…');
     await loadSuperadminView();
   } catch (error) {
     console.error('[admin-ui-v2][save_failure]', { action: 'saveMicroVerifySettings', error: error?.message || String(error) });
@@ -9700,7 +9700,7 @@ async function saveAiProviderSettings() {
       showError(data.message || 'Failed to save AI provider settings');
       return;
     }
-    showSuccess('AI provider settings saved ✅');
+    showSuccess('AI provider settings saved âœ…');
     await loadSuperadminView();
   } catch (error) {
     console.error('[admin-ui-v2][save_failure]', { action: 'saveAiProviderSettings', error: error?.message || String(error) });
@@ -9757,7 +9757,7 @@ async function saveChainEmojiMap() {
   });
 
   try {
-    // chainEmojiMap is a global (superadmin) setting — use the superadmin endpoint
+    // chainEmojiMap is a global (superadmin) setting â€” use the superadmin endpoint
     // which does not require a guild/server to be selected.
     const response = await fetch('/api/superadmin/global-settings', {
       method: 'PUT',
@@ -9816,7 +9816,7 @@ async function loadAdminHelpView() {
       <tr>
         <td style="padding:8px 10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#c7d2fe; font-family:monospace; font-size:0.85em; white-space:nowrap;">${escapeHtml(c.name)}</td>
         <td style="padding:8px 10px; border-bottom:1px solid rgba(99,102,241,0.15); color:var(--text-secondary); font-size:0.9em;">${escapeHtml(c.desc)}</td>
-        <td style="padding:8px 10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#93c5fd; font-size:0.85em;">${escapeHtml(c.options || '—')}</td>
+        <td style="padding:8px 10px; border-bottom:1px solid rgba(99,102,241,0.15); color:#93c5fd; font-size:0.85em;">${escapeHtml(c.options || 'â€”')}</td>
         <td style="padding:8px 10px; border-bottom:1px solid rgba(99,102,241,0.15); color:var(--text-secondary); font-family:monospace; font-size:0.8em;">${escapeHtml(c.example || '')}</td>
       </tr>`).join('');
     return `
@@ -9832,7 +9832,7 @@ async function loadAdminHelpView() {
           <tbody>${rows}</tbody>
         </table>
       </div>
-      ${note ? `<div style="margin:-12px 0 16px;padding:7px 12px;border-radius:0 0 10px 10px;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.12);border-top:none;color:#94a3b8;font-size:0.8em;">ℹ️ ${note}</div>` : ''}`;
+      ${note ? `<div style="margin:-12px 0 16px;padding:7px 12px;border-radius:0 0 10px 10px;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.12);border-top:none;color:#94a3b8;font-size:0.8em;">â„¹ï¸ ${note}</div>` : ''}`;
   };
 
   content.innerHTML = `
@@ -10066,8 +10066,8 @@ async function loadAdminProposals() {
             </div>
           </div>
           <div style="color:var(--text-secondary); font-size:0.85em; margin-top:6px;">
-            ID: ${escapeHtml(p.proposal_id || '')} • Creator: ${escapeHtml(p.creator_id || '')}
-            ${p.cost_indication ? ` • Cost: ${escapeHtml(p.cost_indication)}` : ''}
+            ID: ${escapeHtml(p.proposal_id || '')} â€¢ Creator: ${escapeHtml(p.creator_id || '')}
+            ${p.cost_indication ? ` â€¢ Cost: ${escapeHtml(p.cost_indication)}` : ''}
           </div>
           ${actions}
         </div>`;
@@ -10293,16 +10293,16 @@ async function loadAdminSettingsView() {
 
     // Module toggle mapping: settingsKey -> { label, icon, moduleKey (for assigned check) }
     const MODULE_TOGGLE_DEFS = [
-      { id: 'moduleMinigamesEnabled',    label: 'Minigames',       icon: '🎮', moduleKey: 'minigames'     },
+      { id: 'moduleMinigamesEnabled',    label: 'Minigames',       icon: 'ðŸŽ®', moduleKey: 'minigames'     },
       { id: 'moduleGovernanceEnabled',   label: 'Governance',      icon: 'G',  moduleKey: 'governance'    },
       { id: 'moduleVerificationEnabled', label: 'Verification',    icon: 'V',  moduleKey: 'verification'  },
       { id: 'moduleBrandingEnabled',     label: 'Branding',        icon: 'BR', moduleKey: 'branding'      },
       { id: 'moduleMissionsEnabled',     label: 'Missions',        icon: 'H',  moduleKey: 'heist'         },
-      { id: 'moduleVaultEnabled',        label: 'Vault',           icon: '🔐', moduleKey: 'vault'         },
-      { id: 'moduleWelcomeEnabled',      label: 'Welcome',         icon: '👋', moduleKey: 'welcome'       },
+      { id: 'moduleVaultEnabled',        label: 'Vault',           icon: 'ðŸ”', moduleKey: 'vault'         },
+      { id: 'moduleWelcomeEnabled',      label: 'Welcome',         icon: 'ðŸ‘‹', moduleKey: 'welcome'       },
       { id: 'moduleWalletTrackerEnabled',label: 'Wallet Tracker',  icon: 'W',  moduleKey: 'wallettracker' },
       { id: 'moduleAiAssistantEnabled',  label: 'AI Assistant',    icon: 'AI', moduleKey: 'aiassistant'  },
-      { id: 'moduleInviteTrackerEnabled',label: 'Invite Tracker',  icon: '📧', moduleKey: 'invites'       },
+      { id: 'moduleInviteTrackerEnabled',label: 'Invite Tracker',  icon: 'ðŸ“§', moduleKey: 'invites'       },
       { id: 'moduleTreasuryEnabled',     label: 'Treasury',        icon: '$',  moduleKey: 'treasury'      },
       { id: 'moduleNftTrackerEnabled',   label: 'NFT Tracker',     icon: 'N',  moduleKey: 'nfttracker'    },
       { id: 'moduleTokenTrackerEnabled', label: 'Token Tracker',   icon: '\ud83e\ude99',  moduleKey: 'tokentracker'  },
@@ -10351,16 +10351,16 @@ async function loadAdminSettingsView() {
       <!-- ENV STATUS BAR -->
       <div id="adminEnvStatusBar" style="margin-bottom:var(--space-4);"></div>
 
-      <!-- MODULE CONTROL — always visible -->
+      <!-- MODULE CONTROL â€” always visible -->
       <div style="${cardStyle}">
-        <h3 style="${cardHeader}">🎮 Module Control</h3>
+        <h3 style="${cardHeader}">ðŸŽ® Module Control</h3>
         ${visibleToggles ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--space-3);">${visibleToggles}</div>` : '<p style="color:var(--text-secondary);font-size:0.9em;">No modules assigned. Contact your Superadmin to enable modules for this server.</p>'}
       </div>
 
-      <!-- Action Buttons — always visible -->
+      <!-- Action Buttons â€” always visible -->
       <div style="display:flex;gap:var(--space-3);justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);">
-        <button class="btn-danger" onclick="resetPortalSettings()" style="font-size:0.85em;padding:8px 16px;">🔔„ Reset to Defaults</button>
-        <button class="btn-primary" onclick="savePortalSettings()" style="font-size:0.85em;padding:8px 16px;">💾 Save All Settings</button>
+        <button class="btn-danger" onclick="resetPortalSettings()" style="font-size:0.85em;padding:8px 16px;">ðŸ””â€ž Reset to Defaults</button>
+        <button class="btn-primary" onclick="savePortalSettings()" style="font-size:0.85em;padding:8px 16px;">ðŸ’¾ Save All Settings</button>
       </div>
     `;
 
@@ -10378,7 +10378,7 @@ async function loadAdminSettingsView() {
       if (moduleControlCard) {
         const note = document.createElement('div');
         note.style.cssText = 'margin-top:10px;padding:8px 10px;border-radius:8px;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.35);color:#fde68a;font-size:0.82em;';
-        note.textContent = '🔔’ Module toggles are managed in Superadmin → Tenant Management.';
+        note.textContent = 'ðŸ””â€™ Module toggles are managed in Superadmin â†’ Tenant Management.';
         moduleControlCard.appendChild(note);
       }
     }
@@ -10389,7 +10389,7 @@ async function loadAdminSettingsView() {
     const isAuthErr = e.message === 'Not authenticated' || e.message?.includes('authenticated') || e.message?.includes('Select a server');
     content.innerHTML = isAuthErr
       ? `<div style="text-align:center;padding:var(--space-5);">
-           <p style="color:#fca5a5;font-size:0.9em;margin-bottom:16px;">⚠️ Your session has expired. Please log out and log back in.</p>
+           <p style="color:#fca5a5;font-size:0.9em;margin-bottom:16px;">âš ï¸ Your session has expired. Please log out and log back in.</p>
            <button class="btn-primary" onclick="logout()" style="font-size:0.9em;padding:10px 24px;">Log Out & Re-Login</button>
          </div>`
       : `<div class="error-state"><div class="error-message">${escapeHtml(e.message)}</div></div>`;
@@ -10605,7 +10605,7 @@ function vaultRenderSimpleConfigEditors() {
           <tr data-vault-simple-band-row="${idx}">
             <td><code>${escapeHtml(String(band?.keyTier || band?.key_tier || ''))}</code></td>
             <td>${Number(band?.minLamports ?? band?.min_lamports ?? 0) || 0}</td>
-            <td>${band?.maxLamports === null || band?.max_lamports === null ? '∞' : (Number(band?.maxLamports ?? band?.max_lamports ?? 0) || 0)}</td>
+            <td>${band?.maxLamports === null || band?.max_lamports === null ? 'âˆž' : (Number(band?.maxLamports ?? band?.max_lamports ?? 0) || 0)}</td>
             <td>${Number(band?.paid || 0)}</td>
             <td>${Number(band?.free || 0)}</td>
             <td style="display:flex;gap:6px;">
@@ -11045,7 +11045,7 @@ function vaultRenderAdminPanel() {
       </div>
 
       <h4 style="margin:16px 0 8px 0;">No-JSON Setup (Recommended)</h4>
-      <p style="color:var(--text-secondary);margin:0 0 10px 0;">Use these editors if you don’t want to touch JSON. Click <strong>Apply to JSON</strong> before saving.</p>
+      <p style="color:var(--text-secondary);margin:0 0 10px 0;">Use these editors if you donâ€™t want to touch JSON. Click <strong>Apply to JSON</strong> before saving.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
         <button class="btn-secondary" onclick="vaultSyncSimpleEditorsToJson()">Apply to JSON</button>
         <button class="btn-secondary" onclick="vaultRenderSimpleConfigEditors()">Reload From JSON</button>
@@ -11409,7 +11409,7 @@ function vaultPreviewPaymentBand() {
     return true;
   });
   out.textContent = match
-    ? `Matched tier=${match.keyTier}, paid=${match.paid}, free=${match.free}, range=[${match.minLamports}..${match.maxLamports === null ? '∞' : match.maxLamports}]`
+    ? `Matched tier=${match.keyTier}, paid=${match.paid}, free=${match.free}, range=[${match.minLamports}..${match.maxLamports === null ? 'âˆž' : match.maxLamports}]`
     : 'No matching band for this lamport amount (fallback rules would apply).';
 }
 
@@ -11951,7 +11951,7 @@ async function loadAdminAnalyticsView() {
       </div>`;
 
     // Treasury balance
-    let treasuryBalance = '—';
+    let treasuryBalance = 'â€”';
     if (treasuryData) {
       const treasurySnapshot = treasuryData.data || treasuryData.treasury || treasuryData;
       const bal = treasurySnapshot.balance ?? treasurySnapshot.sol ?? treasurySnapshot.total ?? treasurySnapshot.sol_balance;
@@ -11966,7 +11966,7 @@ async function loadAdminAnalyticsView() {
       const rows = leaders.map((l, i) => {
         const name = escapeHtml(l.displayName || l.username || l.discordId || 'Unknown');
         const points = l.points ?? l.score ?? 0;
-        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`;
+        const medal = i === 0 ? 'ðŸ¥‡' : i === 1 ? 'ðŸ¥ˆ' : i === 2 ? 'ðŸ¥‰' : `#${i+1}`;
         return `<tr style="border-bottom:1px solid rgba(99,102,241,0.1);">
           <td style="padding:8px 10px;font-size:0.9em;">${medal}</td>
           <td style="padding:8px 10px;color:#c7d2fe;font-size:0.9em;">${name}</td>
@@ -11975,7 +11975,7 @@ async function loadAdminAnalyticsView() {
       }).join('');
       leaderboardHTML = `
         <div style="margin-top:20px;">
-          <h4 style="margin-bottom:10px;color:#e0e7ff;">🏆 Top 5 Leaderboard</h4>
+          <h4 style="margin-bottom:10px;color:#e0e7ff;">ðŸ† Top 5 Leaderboard</h4>
           <table style="width:100%;border-collapse:collapse;">
             <thead><tr style="border-bottom:2px solid rgba(99,102,241,0.2);">
               <th style="padding:8px 10px;text-align:left;color:var(--text-secondary);font-size:0.8em;">Rank</th>
@@ -11991,11 +11991,11 @@ async function loadAdminAnalyticsView() {
     const events = [];
     proposals.forEach(p => {
       const ts = p.createdAt || p.timestamp;
-      if (ts) events.push({ time: new Date(ts), text: `Proposal "${escapeHtml(p.title || p.name || 'Untitled')}" — ${p.status || 'unknown'}`, icon: '📜' });
+      if (ts) events.push({ time: new Date(ts), text: `Proposal "${escapeHtml(p.title || p.name || 'Untitled')}" â€” ${p.status || 'unknown'}`, icon: 'ðŸ“œ' });
     });
     missions.forEach(m => {
       const ts = m.completedAt || m.createdAt || m.timestamp;
-      if (ts) events.push({ time: new Date(ts), text: `Mission "${escapeHtml(m.name || m.title || 'Untitled')}" — ${m.status || 'unknown'}`, icon: '🎯' });
+      if (ts) events.push({ time: new Date(ts), text: `Mission "${escapeHtml(m.name || m.title || 'Untitled')}" â€” ${m.status || 'unknown'}`, icon: 'ðŸŽ¯' });
     });
     events.sort((a, b) => b.time - a.time);
     const recentEvents = events.slice(0, 10);
@@ -12010,7 +12010,7 @@ async function loadAdminAnalyticsView() {
         </div>`).join('');
       activityHTML = `
         <div style="margin-top:20px;">
-          <h4 style="margin-bottom:10px;color:#e0e7ff;">📋 Recent Activity</h4>
+          <h4 style="margin-bottom:10px;color:#e0e7ff;">ðŸ“‹ Recent Activity</h4>
           ${rows}
         </div>`;
     }
@@ -12096,7 +12096,7 @@ async function loadNftTrackerView() {
   content.innerHTML = `
     <div style="${cardStyle}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4);padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);">
-        <h3 style="color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0;">🎨 Tracked Collections</h3>
+        <h3 style="color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0;">ðŸŽ¨ Tracked Collections</h3>
         <button class="btn-primary" onclick="openAddCollectionModal()" style="font-size:0.85em;padding:8px 16px;">+ Add Collection</button>
       </div>
       <div id="nftCollectionsTableWrap"></div>
@@ -12222,7 +12222,7 @@ async function saveCollection() {
   }
 }
 
-// Shared render function — used by both main NFT tracker view and settings tab
+// Shared render function â€” used by both main NFT tracker view and settings tab
 async function renderNftCollectionsCard(wrapId) {
   const wrap = document.getElementById(wrapId || 'nftCollectionsTableWrap');
   if (!wrap) return;
@@ -12235,11 +12235,11 @@ async function renderNftCollectionsCard(wrapId) {
     const data = await res.json();
     const collections = data.collections || [];
 
-    const truncAddr = (a) => a && a.length > 12 ? a.slice(0, 6) + '...' + a.slice(-4) : (a || '—');
+    const truncAddr = (a) => a && a.length > 12 ? a.slice(0, 6) + '...' + a.slice(-4) : (a || 'â€”');
     const eventIcons = (c) => [
-      c.track_mint && '🪙', c.track_sale && '💰', c.track_bid && '🤝',
-      c.track_list && '📋', c.track_delist && '❜', c.track_transfer && '🔔„',
-    ].filter(Boolean).join(' ') || '—';
+      c.track_mint && 'ðŸª™', c.track_sale && 'ðŸ’°', c.track_bid && 'ðŸ¤',
+      c.track_list && 'ðŸ“‹', c.track_delist && 'âœ', c.track_transfer && 'ðŸ””â€ž',
+    ].filter(Boolean).join(' ') || 'â€”';
 
     if (!collections.length) {
       wrap.innerHTML = `<div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);">
@@ -12269,9 +12269,9 @@ async function renderNftCollectionsCard(wrapId) {
               data-list="${!!c.track_list}"
               data-delist="${!!c.track_delist}"
               data-transfer="${!!c.track_transfer}"
-              style="font-size:0.8em;padding:4px 10px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️ Edit</button>
+              style="font-size:0.8em;padding:4px 10px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">âœï¸ Edit</button>
             <button class="nc-remove-btn" data-id="${c.id}"
-              style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
+              style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">ðŸ—‘ï¸</button>
           </div>
         </td>
       </tr>`).join('');
@@ -12288,7 +12288,7 @@ async function renderNftCollectionsCard(wrapId) {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
-    // Event delegation — avoids inline onclick + escapeHtml quote issues
+    // Event delegation â€” avoids inline onclick + escapeHtml quote issues
     wrap.querySelectorAll('.nc-edit-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         openAddCollectionModal(btn.dataset.id, {
@@ -12515,7 +12515,7 @@ async function renderNftTrackedTokensCard(wrapId = 'nts_tokensWrap') {
 
     const rows = tokens.map(token => {
       const mint = String(token.token_mint || '');
-      const mintShort = mint ? `${mint.slice(0, 6)}...${mint.slice(-4)}` : '—';
+      const mintShort = mint ? `${mint.slice(0, 6)}...${mint.slice(-4)}` : 'â€”';
       const statusColor = token.enabled !== false ? '#86efac' : '#fca5a5';
       const statusText = token.enabled !== false ? 'On' : 'Off';
       const tokenAlertChannelIds = Array.isArray(token.alert_channel_ids)
@@ -12527,8 +12527,8 @@ async function renderNftTrackedTokensCard(wrapId = 'nts_tokensWrap') {
       return `
         <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
           <td style="padding:8px 10px;color:#cbd5e1;font-family:monospace;font-size:0.82em;" title="${escapeHtml(mint)}">${escapeHtml(mintShort)}</td>
-          <td style="padding:8px 10px;color:#e2e8f0;">${escapeHtml(token.token_symbol || '—')}</td>
-          <td style="padding:8px 10px;color:#cbd5e1;">${escapeHtml(token.token_name || '—')}</td>
+          <td style="padding:8px 10px;color:#e2e8f0;">${escapeHtml(token.token_symbol || 'â€”')}</td>
+          <td style="padding:8px 10px;color:#cbd5e1;">${escapeHtml(token.token_name || 'â€”')}</td>
           <td style="padding:8px 10px;color:#cbd5e1;">${channelDisplay}</td>
           <td style="padding:8px 10px;color:#cbd5e1;">B:${token.alert_buys ? 'on' : 'off'} S:${token.alert_sells ? 'on' : 'off'} T:${token.alert_transfers ? 'on' : 'off'} Min:${Number(token.min_alert_amount || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })}</td>
           <td style="padding:8px 10px;color:${statusColor};">${statusText}</td>
@@ -12545,8 +12545,8 @@ async function renderNftTrackedTokensCard(wrapId = 'nts_tokensWrap') {
               data-alert-transfers="${token.alert_transfers ? 'true' : 'false'}"
               data-min-alert="${Number(token.min_alert_amount || 0)}"
               data-enabled="${token.enabled !== false ? 'true' : 'false'}"
-              style="width:30px;height:30px;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.35);border-radius:6px;cursor:pointer;color:#818cf8;font-size:0.85em;">✏️</button>
-            <button class="nt-remove-btn" data-id="${token.id}" style="width:30px;height:30px;background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.35);border-radius:6px;cursor:pointer;color:#fca5a5;font-size:0.85em;margin-left:4px;">🗑️</button>
+              style="width:30px;height:30px;background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.35);border-radius:6px;cursor:pointer;color:#818cf8;font-size:0.85em;">âœï¸</button>
+            <button class="nt-remove-btn" data-id="${token.id}" style="width:30px;height:30px;background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.35);border-radius:6px;cursor:pointer;color:#fca5a5;font-size:0.85em;margin-left:4px;">ðŸ—‘ï¸</button>
           </td>
         </tr>
       `;
@@ -12613,21 +12613,21 @@ async function renderNftTokenEventsCard(wrapId = 'nts_tokenEventsWrap') {
     }
 
     const iconByType = {
-      buy: '🟢',
-      sell: '🔔´',
-      transfer_in: '📥',
-      transfer_out: '📤',
-      swap_in: '🟣',
-      swap_out: '🟠',
+      buy: 'ðŸŸ¢',
+      sell: 'ðŸ””Â´',
+      transfer_in: 'ðŸ“¥',
+      transfer_out: 'ðŸ“¤',
+      swap_in: 'ðŸŸ£',
+      swap_out: 'ðŸŸ ',
     };
 
     const rows = events.map(evt => {
       const type = String(evt.event_type || 'activity').toLowerCase();
-      const icon = iconByType[type] || '🧩';
+      const icon = iconByType[type] || 'ðŸ§©';
       const tokenName = evt.token_symbol || evt.token_name || (evt.token_mint ? `${String(evt.token_mint).slice(0, 4)}...${String(evt.token_mint).slice(-4)}` : 'Token');
       const amount = Number(evt.amount_delta || 0).toLocaleString(undefined, { maximumFractionDigits: 6 });
       const wallet = String(evt.wallet_address || '');
-      const walletShort = wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : '—';
+      const walletShort = wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : 'â€”';
       const when = evt.event_time ? new Date(evt.event_time).toLocaleString() : 'Unknown';
       const tx = String(evt.tx_signature || '');
       return `
@@ -12638,7 +12638,7 @@ async function renderNftTokenEventsCard(wrapId = 'nts_tokenEventsWrap') {
           <td style="padding:8px 10px;color:#cbd5e1;font-family:monospace;">${escapeHtml(walletShort)}</td>
           <td style="padding:8px 10px;color:#94a3b8;">${escapeHtml(when)}</td>
           <td style="padding:8px 10px;text-align:right;">
-            ${tx ? `<a href="https://solscan.io/tx/${encodeURIComponent(tx)}" target="_blank" rel="noopener" style="color:#93c5fd;font-size:0.82em;">View Tx</a>` : '—'}
+            ${tx ? `<a href="https://solscan.io/tx/${encodeURIComponent(tx)}" target="_blank" rel="noopener" style="color:#93c5fd;font-size:0.82em;">View Tx</a>` : 'â€”'}
           </td>
         </tr>
       `;
@@ -12676,7 +12676,7 @@ function populateChannelSelects(selectIds, channels, settings, settingKeys) {
   selectIds.forEach((selId, i) => {
     const sel = document.getElementById(selId);
     if (!sel) return;
-    sel.innerHTML = '<option value="">— None —</option>';
+    sel.innerHTML = '<option value="">â€” None â€”</option>';
     Object.keys(grouped).sort().forEach(parent => {
       const optgroup = document.createElement('optgroup');
       optgroup.label = parent;
@@ -12850,7 +12850,7 @@ async function loadVerificationSettings() {
         </div>
         <div style="margin-top:var(--space-4);">
           <label style="${fieldLabel}">Panel Title</label>
-          <input type="text" id="ver_panelTitle" value="${escapeHtml(panel.title || '🔔— Verify your wallet!')}" style="${fieldInput}" placeholder="🔔— Verify your wallet!">
+          <input type="text" id="ver_panelTitle" value="${escapeHtml(panel.title || 'ðŸ””â€” Verify your wallet!')}" style="${fieldInput}" placeholder="ðŸ””â€” Verify your wallet!">
         </div>
         <div style="margin-top:var(--space-4);">
           <label style="${fieldLabel}">Panel Description</label>
@@ -13017,7 +13017,7 @@ async function loadBrandingSettingsView() {
 
     pane.innerHTML = `
       <div style="${cardStyle}">
-        <h3 style="${cardHeader}">🎨 Branding Module</h3>
+        <h3 style="${cardHeader}">ðŸŽ¨ Branding Module</h3>
         <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:14px;">Tenant admins can configure how this server's bot/panels look and feel.</p>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -13027,7 +13027,7 @@ async function loadBrandingSettingsView() {
           </div>
           <div>
             ${brandHelp('Brand Emoji', 'Used as visual prefix in embeds/panels where supported.')}
-            <input id="br_brand_emoji" type="text" value="${escapeHtml(b.brand_emoji || '')}" style="${fieldInput}" placeholder="🚀">
+            <input id="br_brand_emoji" type="text" value="${escapeHtml(b.brand_emoji || '')}" style="${fieldInput}" placeholder="ðŸš€">
           </div>
           <div>
             ${brandHelp('Brand Color', 'Primary color used in branded embeds and cards.')}
@@ -13060,8 +13060,8 @@ async function loadBrandingSettingsView() {
             </div>
             <div style="margin-top:8px;color:#94a3b8;font-size:0.78em;">
               Current profile:
-              Nickname <strong style="color:#cbd5e1;">${escapeHtml(profile.nickname || 'default')}</strong> ·
-              Avatar <strong style="color:#cbd5e1;">${profile.avatar_url ? 'custom' : 'default'}</strong> ·
+              Nickname <strong style="color:#cbd5e1;">${escapeHtml(profile.nickname || 'default')}</strong> Â·
+              Avatar <strong style="color:#cbd5e1;">${profile.avatar_url ? 'custom' : 'default'}</strong> Â·
               Banner <strong style="color:#cbd5e1;">${profile.banner_url ? 'custom' : 'default'}</strong>
             </div>
           </div>
@@ -13093,17 +13093,17 @@ async function loadBrandingSettingsView() {
           <div style="color:#c9d6ff;font-weight:600;margin-bottom:8px;">Preview Variants</div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
             <div id="brandingPreviewTicket" style="padding:10px;border-radius:8px;background:rgba(30,41,59,0.55);border-left:4px solid ${escapeHtml(b.ticketing_color || b.brand_color || b.primary_color || '#6366f1')};">
-              <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || '🎟️') + ' Support Tickets')}</div>
+              <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || 'ðŸŽŸï¸') + ' Support Tickets')}</div>
               <div style="color:#94a3b8;font-size:0.8em;margin-top:4px;">Open a support ticket</div>
               <div style="color:#94a3b8;font-size:0.72em;margin-top:6px;">${escapeHtml(b.footer_text || 'Powered by Guild Pilot')}</div>
             </div>
             <div id="brandingPreviewSelfserve" style="padding:10px;border-radius:8px;background:rgba(30,41,59,0.55);border-left:4px solid ${escapeHtml(b.selfserve_color || b.brand_color || b.primary_color || '#6366f1')};">
-              <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || '🎖️') + ' Get Your Roles')}</div>
+              <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || 'ðŸŽ–ï¸') + ' Get Your Roles')}</div>
               <div style="color:#94a3b8;font-size:0.8em;margin-top:4px;">Click to claim roles</div>
               <div style="color:#94a3b8;font-size:0.72em;margin-top:6px;">${escapeHtml(b.footer_text || 'Powered by Guild Pilot')}</div>
             </div>
             <div id="brandingPreviewNft" style="padding:10px;border-radius:8px;background:rgba(30,41,59,0.55);border-left:4px solid ${escapeHtml(b.nfttracker_color || b.brand_color || b.primary_color || '#6366f1')};">
-              <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || '📡') + ' NFT Activity')}</div>
+              <div style="color:#e2e8f0;font-weight:700;">${escapeHtml((b.brand_emoji || 'ðŸ“¡') + ' NFT Activity')}</div>
               <div style="color:#94a3b8;font-size:0.8em;margin-top:4px;">Collection updates</div>
               <div style="color:#94a3b8;font-size:0.72em;margin-top:6px;">${escapeHtml(b.footer_text || 'Powered by Guild Pilot')}</div>
             </div>
@@ -13111,13 +13111,13 @@ async function loadBrandingSettingsView() {
         </div>
 
         <div style="display:flex;justify-content:flex-end;padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);margin-top:var(--space-4);">
-          <button class="btn-primary" onclick="saveBrandingSettingsView()" style="font-size:0.85em;padding:8px 16px;">💾 Save Branding</button>
+          <button class="btn-primary" onclick="saveBrandingSettingsView()" style="font-size:0.85em;padding:8px 16px;">ðŸ’¾ Save Branding</button>
         </div>
       </div>
     `;
 
     const updatePreview = () => {
-      const emoji = document.getElementById('br_brand_emoji')?.value || '✨';
+      const emoji = document.getElementById('br_brand_emoji')?.value || 'âœ¨';
       const gColor = document.getElementById('br_brand_color')?.value || '#6366f1';
       const footer = document.getElementById('br_footer_text')?.value || 'Powered by Guild Pilot';
       const tColor = document.getElementById('br_ticketing_color')?.value || gColor;
@@ -13183,7 +13183,7 @@ async function loadTreasuryModuleSettings() {
   pane.innerHTML = `
     <div style="${cardStyle}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4);padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);">
-        <h3 style="color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0;">💼 Tracked Wallets</h3>
+        <h3 style="color:#c9d6ff;font-size:var(--font-lg);font-weight:700;margin:0;">ðŸ’¼ Tracked Wallets</h3>
         <button class="btn-primary" onclick="openAddWalletModal()" style="font-size:0.85em;padding:8px 16px;">+ Add Wallet</button>
       </div>
       <div id="settings_walletListWrap"><div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);"><div class="spinner"></div><p>Loading wallets...</p></div></div>
@@ -13216,9 +13216,9 @@ async function renderSettingsWalletList() {
 
     const rows = wallets.map(w => {
       const addr = `${w.wallet_address.slice(0,6)}...${w.wallet_address.slice(-4)}`;
-      const lbl = escapeHtml(w.label || '—');
-      const alertCh = w.alert_channel_id ? `<code>#${w.alert_channel_id}</code>` : '<span style="color:var(--text-secondary);">—</span>';
-      const panelCh = w.panel_channel_id ? `<code>#${w.panel_channel_id}</code>` : '<span style="color:var(--text-secondary);">—</span>';
+      const lbl = escapeHtml(w.label || 'â€”');
+      const alertCh = w.alert_channel_id ? `<code>#${w.alert_channel_id}</code>` : '<span style="color:var(--text-secondary);">â€”</span>';
+      const panelCh = w.panel_channel_id ? `<code>#${w.panel_channel_id}</code>` : '<span style="color:var(--text-secondary);">â€”</span>';
       const status = w.enabled ? '<span class="badge badge-active">Active</span>' : '<span class="badge badge-paused">Paused</span>';
       return `<tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
         <td style="padding:10px 12px;"><span style="font-family:monospace;font-size:0.85em;" title="${escapeHtml(w.wallet_address)}">${addr}</span></td>
@@ -13228,9 +13228,9 @@ async function renderSettingsWalletList() {
         <td style="padding:10px 12px;">${status}</td>
         <td style="padding:10px 12px;">
           <div style="display:flex;gap:6px;">
-            <button class="tw-panel-btn" data-id="${w.id}" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">📋</button>
-            <button class="tw-edit-btn" data-id="${w.id}" data-addr="${escapeHtml(w.wallet_address)}" data-label="${escapeHtml(w.label||'')}" data-alertch="${w.alert_channel_id||''}" data-panelch="${w.panel_channel_id||''}" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️</button>
-            <button class="tw-remove-btn" data-id="${w.id}" style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">🗑️</button>
+            <button class="tw-panel-btn" data-id="${w.id}" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">ðŸ“‹</button>
+            <button class="tw-edit-btn" data-id="${w.id}" data-addr="${escapeHtml(w.wallet_address)}" data-label="${escapeHtml(w.label||'')}" data-alertch="${w.alert_channel_id||''}" data-panelch="${w.panel_channel_id||''}" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">âœï¸</button>
+            <button class="tw-remove-btn" data-id="${w.id}" style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;">ðŸ—‘ï¸</button>
           </div>
         </td>
       </tr>`;
@@ -13527,7 +13527,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
     pane.innerHTML = `
       <div style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;">🤖 AI Assistant</h3>
+          <h3 style="margin:0;color:#c9d6ff;">ðŸ¤– AI Assistant</h3>
           <span style="color:var(--text-secondary);font-size:0.82em;">Tenant-scoped runtime settings</span>
         </div>
         <div style="display:grid;gap:12px;">
@@ -13609,7 +13609,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
             <label style="display:grid;gap:6px;">
               <span style="font-size:0.82em;color:var(--text-secondary);">Recap Channel (Family Report)</span>
               <select id="aiassistant_recap_channel" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
-                <option value="">— Disable Recaps —</option>
+                <option value="">â€” Disable Recaps â€”</option>
                 ${channelRows}
               </select>
             </label>
@@ -13675,7 +13675,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
       </div>
       <div style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;">🧭 Channel Modes</h3>
+          <h3 style="margin:0;color:#c9d6ff;">ðŸ§­ Channel Modes</h3>
           <button class="btn-primary" onclick="saveAiAssistantChannelPolicies()">Save Channel Modes</button>
         </div>
         <div style="color:var(--text-secondary);font-size:0.8em;margin-bottom:10px;">
@@ -13698,7 +13698,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
       </div>
       <div style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;">📈 AI Usage Overview (Today)</h3>
+          <h3 style="margin:0;color:#c9d6ff;">ðŸ“ˆ AI Usage Overview (Today)</h3>
           <button class="btn-secondary" onclick="loadAiAssistantSettingsView()">Refresh Metrics</button>
         </div>
         <div style="display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:10px;margin-bottom:12px;">
@@ -13728,7 +13728,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
       </div>
       <div style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;">📚 Knowledge Sources</h3>
+          <h3 style="margin:0;color:#c9d6ff;">ðŸ“š Knowledge Sources</h3>
           <span style="color:var(--text-secondary);font-size:0.82em;">Tenant docs used for grounded AI answers</span>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
@@ -13828,7 +13828,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
     pane.insertAdjacentHTML('beforeend', `
       <div style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;">🎭 Persona Profiles</h3>
+          <h3 style="margin:0;color:#c9d6ff;">ðŸŽ­ Persona Profiles</h3>
           <button class="btn-secondary btn-sm" onclick="loadAiAssistantSettingsView()">Refresh</button>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;margin-bottom:10px;align-items:end;">
@@ -13878,7 +13878,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
       </div>
       <div style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;">🛡️ Role Tier Limits</h3>
+          <h3 style="margin:0;color:#c9d6ff;">ðŸ›¡ï¸ Role Tier Limits</h3>
           <button class="btn-primary btn-sm" onclick="saveAiAssistantRoleLimits()">Save Role Limits</button>
         </div>
         <div style="color:var(--text-secondary);font-size:0.8em;margin-bottom:10px;">Set per-role daily caps. 0 means unlimited. The strictest matching role limit is used per user.</div>
@@ -13897,7 +13897,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
       </div>
       <div style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;">📥 Knowledge Ingestion</h3>
+          <h3 style="margin:0;color:#c9d6ff;">ðŸ“¥ Knowledge Ingestion</h3>
           <button class="btn-secondary btn-sm" onclick="loadAiAssistantSettingsView()">Refresh Jobs</button>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
@@ -13949,7 +13949,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
       </div>
       <div style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;">🧠 Guarded AI Actions</h3>
+          <h3 style="margin:0;color:#c9d6ff;">ðŸ§  Guarded AI Actions</h3>
           <button class="btn-secondary btn-sm" onclick="loadAiAssistantSettingsView()">Refresh</button>
         </div>
         <div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-bottom:10px;align-items:end;">
@@ -13976,7 +13976,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
       </div>
       <div style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;">📊 AI Analytics</h3>
+          <h3 style="margin:0;color:#c9d6ff;">ðŸ“Š AI Analytics</h3>
           <button class="btn-secondary btn-sm" onclick="loadAiAssistantSettingsView()">Refresh Analytics</button>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,minmax(120px,1fr));gap:10px;margin-bottom:12px;">
@@ -14513,7 +14513,7 @@ async function loadInviteTrackerSettingsView(targetPaneId = null) {
   pane.innerHTML = `
     <div style="${cardStyle}">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-        <h3 style="margin:0;color:#c9d6ff;">📧 Invite Tracker</h3>
+        <h3 style="margin:0;color:#c9d6ff;">ðŸ“§ Invite Tracker</h3>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <select id="inviteTrackerPeriodSelect" style="padding:8px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
             <option value="all">All-time</option>
@@ -14835,7 +14835,7 @@ async function refreshInviteTrackerDashboard(forceDays = undefined) {
             const inviter = row.inviterUserId || row.inviterUsername
               ? formatInviteUserLabel(row.inviterUsername, row.inviterUserId)
               : '<span style="color:var(--text-secondary);">Unknown</span>';
-            const code = row.inviteCode ? `<code>${escapeHtml(row.inviteCode)}</code>` : '—';
+            const code = row.inviteCode ? `<code>${escapeHtml(row.inviteCode)}</code>` : 'â€”';
             const when = formatInviteTimestampLocal(row.joinedAt);
             return `<tr><td style="padding:8px;">${joined}</td><td style="padding:8px;">${inviter}</td><td style="padding:8px;">${code}</td><td style="padding:8px;white-space:nowrap;">${escapeHtml(when)}</td></tr>`;
           }).join('')
@@ -14965,7 +14965,7 @@ async function loadVotingPowerView(targetPaneId = null) {
 
       govSettingsHTML = `
         <div style="${govCardStyle}" class="gp-workspace-card">
-          <h3 style="${govCardHeader}">🗳️ Governance Settings</h3>
+          <h3 style="${govCardHeader}">ðŸ—³ï¸ Governance Settings</h3>
           <div style="${govGridRow}">
             <div>
               <label style="${govFieldLabel}">Quorum Percentage (%)</label>
@@ -14986,7 +14986,7 @@ async function loadVotingPowerView(targetPaneId = null) {
               <input type="number" id="gov_supportWindowHours" min="1" max="720" value="${gs.supportWindowHours ?? 72}" style="${govFieldInput}">
             </div>
           </div>
-          <h4 style="color:#c9d6ff;font-size:0.95em;font-weight:600;margin:var(--space-4) 0 var(--space-3) 0;padding-top:var(--space-3);border-top:1px solid rgba(99,102,241,0.12);">🔔— Channel Overrides</h4>
+          <h4 style="color:#c9d6ff;font-size:0.95em;font-weight:600;margin:var(--space-4) 0 var(--space-3) 0;padding-top:var(--space-3);border-top:1px solid rgba(99,102,241,0.12);">ðŸ””â€” Channel Overrides</h4>
           <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:12px;">Leave empty to use .env defaults.</p>
           <div style="${govGridRow}">
             <div>
@@ -15009,7 +15009,7 @@ async function loadVotingPowerView(targetPaneId = null) {
             </div>
           </div>
           <div class="gp-actions-row" style="padding-top:var(--space-4);border-top:1px solid rgba(99,102,241,0.15);margin-top:var(--space-4);">
-            <button class="btn-primary" onclick="saveGovernanceSettings()" style="font-size:0.85em;padding:8px 16px;">💾 Save Governance Settings</button>
+            <button class="btn-primary" onclick="saveGovernanceSettings()" style="font-size:0.85em;padding:8px 16px;">ðŸ’¾ Save Governance Settings</button>
           </div>
         </div>
       `;
@@ -15038,7 +15038,7 @@ async function loadVotingPowerView(targetPaneId = null) {
       <p style="color:var(--text-secondary);font-size:0.85em;margin-bottom:16px;">Map Discord roles to voting power. Users get the highest VP among all their roles.</p>
       <div id="vpMappingsTableContainer" style="margin-bottom:16px;">${tableHTML}</div>
       <div class="gp-workspace-card" style="margin-top:8px;">
-        <h5 style="color:#c9d6ff;font-size:0.88em;font-weight:600;margin:0 0 12px 0;">➕ Add Mapping</h5>
+        <h5 style="color:#c9d6ff;font-size:0.88em;font-weight:600;margin:0 0 12px 0;">âž• Add Mapping</h5>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);">
           <div>
             <label style="display:block;color:#c9d6ff;font-size:0.9em;font-weight:600;margin-bottom:6px;">Discord Role</label>
@@ -15913,9 +15913,9 @@ async function loadAdminStats() {
     document.getElementById('statLastSync').textContent = now.toLocaleTimeString();
   } catch (e) {
     console.error('Error loading stats:', e);
-    document.getElementById('statTotalUsers').textContent = '—';
-    document.getElementById('statVerified').textContent = '—';
-    document.getElementById('statPending').textContent = '—';
+    document.getElementById('statTotalUsers').textContent = 'â€”';
+    document.getElementById('statVerified').textContent = 'â€”';
+    document.getElementById('statPending').textContent = 'â€”';
   }
 }
 
@@ -15931,7 +15931,7 @@ async function loadAdminUsers() {
   const originalBtn = btn ? btn.innerHTML : null;
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<span>⏳</span><span>Loading...</span>';
+    btn.innerHTML = '<span>â³</span><span>Loading...</span>';
   }
 
   content.innerHTML = `
@@ -15995,7 +15995,7 @@ function renderAdminUsersTable(users) {
     const vp = u.voting_power ?? u.votingPower ?? 0;
     const nfts = u.total_nfts ?? u.totalNFTs ?? 0;
     const name = u.username || u.discord_username || 'Unknown';
-    const did = u.discord_id || u.discordId || '—';
+    const did = u.discord_id || u.discordId || 'â€”';
     const safeDid = String(did || '');
     const safeNameEncoded = encodeURIComponent(String(name || 'Unknown'));
 
@@ -16065,7 +16065,7 @@ async function viewUserDetails(discordId) {
     const votes = data.votes || [];
 
     showConfirmModal('User Details', '', null);
-    document.getElementById('confirmTitle').textContent = `👤 ${u.username || 'User'} (${discordId})`;
+    document.getElementById('confirmTitle').textContent = `ðŸ‘¤ ${u.username || 'User'} (${discordId})`;
     document.getElementById('confirmButton').style.display = 'none';
     document.getElementById('confirmMessage').innerHTML = `
       <div style="display:grid; gap:12px; font-size:0.9em;">
@@ -16142,7 +16142,7 @@ async function loadTreasuryTrackerView() {
         </div>
         <div style="padding:16px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.18); border-radius:10px;">
           <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:6px;">Transaction Alerts</div>
-          <div style="color:${alertsEnabled ? '#10b981' : '#ef4444'}; font-size:1.1em; font-weight:600;">${alertsEnabled ? '✅ Enabled' : '❜ Disabled'}</div>
+          <div style="color:${alertsEnabled ? '#10b981' : '#ef4444'}; font-size:1.1em; font-weight:600;">${alertsEnabled ? 'âœ… Enabled' : 'âœ Disabled'}</div>
           <div style="color:var(--text-secondary); font-size:0.8em; margin-top:4px;">Channel: ${escapeHtml(String(alertChannel))}</div>
         </div>
       </div>
@@ -16151,14 +16151,14 @@ async function loadTreasuryTrackerView() {
     if (isAdmin) {
       html += `
         <div style="margin-top:16px;">
-          <button class="btn-primary" onclick="openTreasuryConfigModal()" style="font-size:0.85em; padding:8px 16px;">⚙️ Edit Tracker Config</button>
+          <button class="btn-primary" onclick="openTreasuryConfigModal()" style="font-size:0.85em; padding:8px 16px;">âš™ï¸ Edit Tracker Config</button>
         </div>
       `;
     }
 
     content.innerHTML = html;
   } catch (e) {
-    content.innerHTML = `<div style="color:var(--text-secondary); text-align:center; padding:20px;">Treasury tracker config unavailable — admin access may be required.</div>`;
+    content.innerHTML = `<div style="color:var(--text-secondary); text-align:center; padding:20px;">Treasury tracker config unavailable â€” admin access may be required.</div>`;
   }
 }
 
@@ -16168,7 +16168,7 @@ async function openTreasuryConfigModal() {
   const title = document.getElementById('confirmTitle');
   const body = document.getElementById('confirmMessage');
   const btn = document.getElementById('confirmButton');
-  title.textContent = '⚙️ Treasury Tracker Configuration';
+  title.textContent = 'âš™ï¸ Treasury Tracker Configuration';
   btn.textContent = 'Save Config';
   btn.classList.remove('btn-danger');
   btn.classList.add('btn-primary');
@@ -16197,7 +16197,7 @@ async function openTreasuryConfigModal() {
       <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Minimum SOL to alert on</label>
         <input id="treasuryMinSolInput" type="number" min="0" step="0.1" placeholder="0" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
     </div>
-    <p style="color:var(--text-secondary); font-size:0.8em; margin-top:12px;">💡 These settings are also configurable via Discord: /treasury admin set-wallet, set-interval, tx-alerts</p>
+    <p style="color:var(--text-secondary); font-size:0.8em; margin-top:12px;">ðŸ’¡ These settings are also configurable via Discord: /treasury admin set-wallet, set-interval, tx-alerts</p>
   `;
   confirmCallback = async () => {
     const wallet = document.getElementById('treasuryWalletInput')?.value.trim();
@@ -16249,7 +16249,7 @@ async function loadNFTActivityView() {
   const container = document.getElementById('nftActivityPublicView');
   if (!container) return;
 
-  // Inject shared settings panel into tracker tab (same as Settings → NFT Tracker)
+  // Inject shared settings panel into tracker tab (same as Settings â†’ NFT Tracker)
   if (isAdmin) {
     const settingsPanel = document.getElementById('nftActivityTrackerSettingsPanel');
     if (settingsPanel) {
@@ -16333,13 +16333,13 @@ async function loadTokenActivityView() {
       const amount = Number(evt.amount_delta || 0).toLocaleString(undefined, { maximumFractionDigits: 6 });
       const when = evt.event_time ? new Date(evt.event_time).toLocaleString() : 'Unknown';
       const wallet = String(evt.wallet_address || '');
-      const walletShort = wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : '—';
+      const walletShort = wallet ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}` : 'â€”';
       return `
         <div style="padding:16px; background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
           <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
             <div>
               <div style="color:#e0e7ff; font-weight:600; margin-bottom:4px;">${escapeHtml(type)} ${escapeHtml(tokenName)}</div>
-              <div style="color:var(--text-secondary); font-size:0.85em;">Amount: ${escapeHtml(amount)} · Wallet: <span style="font-family:monospace;">${escapeHtml(walletShort)}</span></div>
+              <div style="color:var(--text-secondary); font-size:0.85em;">Amount: ${escapeHtml(amount)} Â· Wallet: <span style="font-family:monospace;">${escapeHtml(walletShort)}</span></div>
             </div>
             <div style="color:var(--text-secondary); font-size:0.82em; white-space:nowrap;">${escapeHtml(when)}</div>
           </div>
@@ -16415,7 +16415,7 @@ async function loadNFTActivityAdminView(preloadedCollections = null) {
       <div style="display:grid; gap:12px;">
         <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
           <button class="btn-primary" onclick="openNftActivityAddCollectionModal()" style="justify-content:center;">
-            <span>➕</span>
+            <span>âž•</span>
             <span>Add Collection</span>
           </button>
         </div>
@@ -16440,10 +16440,10 @@ async function loadNFTActivityAdminView(preloadedCollections = null) {
             <div style="color:var(--text-secondary); font-size:0.8em; font-family:monospace;">${escapeHtml(addr)}</div>
           </div>
           <div style="display:flex; align-items:center; gap:10px;">
-            <span style="color:${isEnabled ? '#10b981' : '#ef4444'}; font-size:0.85em;">${isEnabled ? '● Enabled' : '● Disabled'}</span>
-            <button class="nft-activity-edit-btn" data-id="${escapeHtml(String(col.id))}" data-name="${escapeHtml(name)}" data-addr="${escapeHtml(addr)}" data-me="${escapeHtml(col.me_symbol||'')}" data-channel="${escapeHtml(col.channel_id||'')}" style="font-size:0.8em;padding:6px 12px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">✏️ Edit</button>
+            <span style="color:${isEnabled ? '#10b981' : '#ef4444'}; font-size:0.85em;">${isEnabled ? 'â— Enabled' : 'â— Disabled'}</span>
+            <button class="nft-activity-edit-btn" data-id="${escapeHtml(String(col.id))}" data-name="${escapeHtml(name)}" data-addr="${escapeHtml(addr)}" data-me="${escapeHtml(col.me_symbol||'')}" data-channel="${escapeHtml(col.channel_id||'')}" style="font-size:0.8em;padding:6px 12px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">âœï¸ Edit</button>
             <button class="nft-activity-remove-btn btn-danger" data-id="${escapeHtml(String(col.id))}" data-name="${escapeHtml(name)}" style="font-size:0.8em; padding:6px 12px;">
-              <span>🗑️</span><span>Remove</span>
+              <span>ðŸ—‘ï¸</span><span>Remove</span>
             </button>
           </div>
         </div>
@@ -16476,7 +16476,7 @@ async function openEditCollectionModal(id, name, addr, meSymbol, channelId) {
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;';
   overlay.innerHTML = `
     <div style="background:var(--card-bg,#1e293b);border:1px solid rgba(99,102,241,0.3);border-radius:12px;padding:24px;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto;">
-      <h3 style="margin:0 0 16px;color:var(--text-primary,#e0e7ff);">✏️ Edit Collection</h3>
+      <h3 style="margin:0 0 16px;color:var(--text-primary,#e0e7ff);">âœï¸ Edit Collection</h3>
       <div style="display:grid;gap:14px;">
         <div><label style="${lb}">Collection Name</label><input type="text" id="ceNameInput" value="${escapeHtml(name)}" style="${fi}"></div>
         <div><label style="${lb}">Alert Channel</label><select id="ceChannelInput" style="${fi}"><option value="">Loading...</option></select></div>
@@ -16555,19 +16555,19 @@ async function openNftActivityAddCollectionModal() {
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;';
   overlay.innerHTML = `
     <div style="background:var(--card-bg,#1e293b);border:1px solid rgba(99,102,241,0.3);border-radius:12px;padding:24px;width:500px;max-width:95vw;max-height:90vh;overflow-y:auto;">
-      <h3 style="margin:0 0 16px;color:var(--text-primary,#e0e7ff);">➕ Watch New Collection</h3>
+      <h3 style="margin:0 0 16px;color:var(--text-primary,#e0e7ff);">âž• Watch New Collection</h3>
       <div style="display:grid;gap:14px;">
         <div><label style="${lb}">Collection Address *</label><input type="text" id="caAddrInput" placeholder="Solana collection address" style="${fi}font-family:monospace;"></div>
         <div><label style="${lb}">Collection Name *</label><input type="text" id="caNameInput" placeholder="e.g. Vault Runners" style="${fi}"></div>
         <div><label style="${lb}">Alert Channel</label><select id="caChannelInput" style="${fi}"><option value="">Loading...</option></select></div>
         <div><label style="${lb}">Magic Eden Symbol <small style="color:#94a3b8;">(e.g. vault_runners)</small></label><input type="text" id="caMeInput" placeholder="vault_runners" style="${fi}"></div>
         <div style="display:flex;flex-wrap:wrap;gap:12px;">
-          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caMint" checked> 🪙 Mint</label>
-          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caSale" checked> 💰 Sale</label>
-          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caBid" checked> 🤝 Bid</label>
-          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caList" checked> 📋 List</label>
-          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caDelist" checked> ❜ Delist</label>
-          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caTransfer"> 🔔„ Transfer</label>
+          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caMint" checked> ðŸª™ Mint</label>
+          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caSale" checked> ðŸ’° Sale</label>
+          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caBid" checked> ðŸ¤ Bid</label>
+          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caList" checked> ðŸ“‹ List</label>
+          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caDelist" checked> âœ Delist</label>
+          <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caTransfer"> ðŸ””â€ž Transfer</label>
         </div>
       </div>
       <div style="display:flex;gap:10px;align-items:center;margin-top:20px;">
@@ -16684,11 +16684,11 @@ async function loadTreasuryTrackerView() {
           </div>
           <div class="stat-card">
             <div class="stat-label">Refresh Interval</div>
-            <div class="stat-value">${c.refreshHours ?? '—'} hours</div>
+            <div class="stat-value">${c.refreshHours ?? 'â€”'} hours</div>
           </div>
           <div class="stat-card">
             <div class="stat-label">TX Alerts</div>
-            <div class="stat-value">${c.txAlertsEnabled ? '✅ Enabled' : '❜ Disabled'}</div>
+            <div class="stat-value">${c.txAlertsEnabled ? 'âœ… Enabled' : 'âœ Disabled'}</div>
           </div>
           <div class="stat-card">
             <div class="stat-label">Last Sync</div>
@@ -16700,7 +16700,7 @@ async function loadTreasuryTrackerView() {
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
               <span style="color:var(--text-secondary); font-size:0.9em;">Configure treasury settings via Discord: <code style="background:rgba(0,0,0,0.3); padding:4px 8px; border-radius:4px;">/treasury admin ...</code></span>
               <button class="btn-secondary" onclick="loadTreasuryTrackerView()" style="padding:8px 16px;">
-                <span>🔔„</span>
+                <span>ðŸ””â€ž</span>
                 <span>Refresh</span>
               </button>
             </div>
@@ -16770,10 +16770,10 @@ async function loadSelfServeRolesView(targetId = null) {
             </label>
           </td>
           <td style="padding:6px 10px;">
-            <button class="panel-role-remove btn-danger" data-panel="${p.id}" data-role="${escapeHtml(r.role_id)}" style="font-size:0.78em;padding:3px 8px;">🗑️</button>
+            <button class="panel-role-remove btn-danger" data-panel="${p.id}" data-role="${escapeHtml(r.role_id)}" style="font-size:0.78em;padding:3px 8px;">ðŸ—‘ï¸</button>
           </td>
         </tr>
-      `).join('') : `<tr><td colspan="4" style="padding:10px;color:var(--text-secondary);font-size:0.85em;text-align:center;">No roles yet — add one below.</td></tr>`;
+      `).join('') : `<tr><td colspan="4" style="padding:10px;color:var(--text-secondary);font-size:0.85em;text-align:center;">No roles yet â€” add one below.</td></tr>`;
 
       return `
         <div style="${cardStyle}" data-panel-id="${p.id}">
@@ -16786,8 +16786,8 @@ async function loadSelfServeRolesView(targetId = null) {
               </label>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;">
-              <button class="panel-save-meta btn-secondary" data-panel="${p.id}" style="font-size:0.8em;padding:6px 12px;">💾 Save</button>
-              <button class="panel-delete btn-danger" data-panel="${p.id}" style="font-size:0.8em;padding:6px 12px;">🗑️ Delete Panel</button>
+              <button class="panel-save-meta btn-secondary" data-panel="${p.id}" style="font-size:0.8em;padding:6px 12px;">ðŸ’¾ Save</button>
+              <button class="panel-delete btn-danger" data-panel="${p.id}" style="font-size:0.8em;padding:6px 12px;">ðŸ—‘ï¸ Delete Panel</button>
             </div>
           </div>
           <table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
@@ -16815,7 +16815,7 @@ async function loadSelfServeRolesView(targetId = null) {
               <div style="font-size:0.8em;color:#94a3b8;margin-bottom:4px;">Post to Channel</div>
               <select class="panel-channel-select" data-panel="${p.id}" style="${fi}">${chOpts(p.channel_id || '')}</select>
             </div>
-            <button class="panel-post-btn btn-primary" data-panel="${p.id}" style="font-size:0.8em;padding:8px 14px;">📢 ${p.message_id ? 'Update Panel' : 'Post Panel'}</button>
+            <button class="panel-post-btn btn-primary" data-panel="${p.id}" style="font-size:0.8em;padding:8px 14px;">ðŸ“¢ ${p.message_id ? 'Update Panel' : 'Post Panel'}</button>
             <span class="panel-post-status" data-panel="${p.id}" style="font-size:0.82em;font-weight:600;"></span>
           </div>
         </div>
@@ -16824,7 +16824,7 @@ async function loadSelfServeRolesView(targetId = null) {
 
     content.innerHTML = `
       <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
-        <button id="srCreatePanelBtn" class="btn-primary" style="font-size:0.85em;padding:8px 18px;">➕ New Panel</button>
+        <button id="srCreatePanelBtn" class="btn-primary" style="font-size:0.85em;padding:8px 18px;">âž• New Panel</button>
       </div>
       ${panels.length ? panelCards : `<div style="${cardStyle}text-align:center;color:var(--text-secondary);"><p>No panels yet. Create your first panel above.</p></div>`}
     `;
@@ -16936,14 +16936,14 @@ async function loadSelfServeRolesView(targetId = null) {
           });
           const d = await r.json();
           if (d.success) {
-            if (statusEl) { statusEl.style.color = '#22c55e'; statusEl.textContent = `✅ ${d.action === 'updated' ? 'Updated' : 'Posted'}!`; }
+            if (statusEl) { statusEl.style.color = '#22c55e'; statusEl.textContent = `âœ… ${d.action === 'updated' ? 'Updated' : 'Posted'}!`; }
             reloadView();
           } else {
-            if (statusEl) { statusEl.style.color = '#fca5a5'; statusEl.textContent = '❜ ' + (d.message || 'Failed'); }
+            if (statusEl) { statusEl.style.color = '#fca5a5'; statusEl.textContent = 'âœ ' + (d.message || 'Failed'); }
           }
-        } catch { if (statusEl) { statusEl.style.color = '#fca5a5'; statusEl.textContent = '❜ Network error'; } }
+        } catch { if (statusEl) { statusEl.style.color = '#fca5a5'; statusEl.textContent = 'âœ Network error'; } }
         btn.disabled = false;
-        btn.textContent = '📢 Post Panel';
+        btn.textContent = 'ðŸ“¢ Post Panel';
       });
     });
 
@@ -16952,7 +16952,7 @@ async function loadSelfServeRolesView(targetId = null) {
       const r = await fetch('/api/admin/role-panels', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
-        body: JSON.stringify({ title: '🎖️ Get Your Roles', description: 'Click a button below to claim or unclaim a community role.' })
+        body: JSON.stringify({ title: 'ðŸŽ–ï¸ Get Your Roles', description: 'Click a button below to claim or unclaim a community role.' })
       });
       const d = await r.json();
       if (d.success) reloadView();
@@ -16978,8 +16978,8 @@ function loadApiRefView() {
     return `<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.75em;font-weight:700;color:#fff;background:${colors[method] || '#6b7280'};font-family:monospace;">${method}</span>`;
   };
   const authBadge = (pub) => pub
-    ? '<span style="font-size:0.8em;">🔔 🛡️ Public</span>'
-    : '<span style="font-size:0.8em;">🔔 Session required</span>';
+    ? '<span style="font-size:0.8em;">ðŸ”” ðŸ›¡ï¸ Public</span>'
+    : '<span style="font-size:0.8em;">ðŸ”” Session required</span>';
 
   const endpoint = (method, path, desc, auth, example) => `
     <div style="background:var(--bg-secondary);border-radius:8px;padding:var(--space-3) var(--space-4);margin-bottom:var(--space-3);border:1px solid rgba(99,102,241,0.1);">
@@ -17208,7 +17208,7 @@ async function loadUserTicketOverview() {
         <td style="padding:8px;">${escapeHtml(String(t.ticket_number || t.id))}</td>
         <td style="padding:8px;">${escapeHtml(t.status || '')}</td>
         <td style="padding:8px;">${escapeHtml(t.category_name || '')}</td>
-        <td style="padding:8px;">${t.closed_at ? new Date(t.closed_at).toLocaleString() : '—'}</td>
+        <td style="padding:8px;">${t.closed_at ? new Date(t.closed_at).toLocaleString() : 'â€”'}</td>
         <td style="padding:8px;">${new Date(t.created_at).toLocaleString()}</td>
       </tr>
     `).join('');
@@ -17439,9 +17439,9 @@ async function loadTicketCategoriesTab() {
       for (const cat of _ticketCategories) {
         const fields = safeJsonArray(cat.template_fields);
         html += `<tr style="border-bottom:1px solid var(--border-color);">
-          <td style="padding:8px;">${escapeHtml(cat.emoji || '🎫')}</td>
+          <td style="padding:8px;">${escapeHtml(cat.emoji || 'ðŸŽ«')}</td>
           <td style="padding:8px;font-weight:600;">${escapeHtml(cat.name)}</td>
-          <td style="padding:8px;color:var(--text-secondary);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(cat.description || '—')}</td>
+          <td style="padding:8px;color:var(--text-secondary);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(cat.description || 'â€”')}</td>
           <td style="padding:8px;text-align:center;">${fields.length}</td>
           <td style="padding:8px;text-align:center;">
             <label style="cursor:pointer;">
@@ -17492,7 +17492,7 @@ function _showCategoryForm(cat) {
         <label style="font-size:0.8em;display:flex;align-items:center;gap:2px;">
           <input type="checkbox" id="tmplReq_${idx}" ${f.required !== false ? 'checked' : ''} /> Req
         </label>
-        <button onclick="removeTemplateField(${idx})" style="background:none;border:none;color:#ed4245;cursor:pointer;font-size:1em;">✕</button>
+        <button onclick="removeTemplateField(${idx})" style="background:none;border:none;color:#ed4245;cursor:pointer;font-size:1em;">âœ•</button>
       </div>
       <input type="text" id="tmplPlaceholder_${idx}" value="${escapeHtml(f.placeholder || '')}" placeholder="Placeholder text" style="width:100%;padding:4px 8px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:4px;color:var(--text-primary);font-size:0.85em;" />
     </div>`;
@@ -17518,7 +17518,7 @@ function _showCategoryForm(cat) {
         <div style="flex:0 0 140px;">
           <label style="font-size:0.85em;font-weight:600;">Emoji</label>
           <select id="catEmoji" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
-            ${['🎫','🛠️','🏆','🤝','💰','🚨','📦','🧾','❓','📣'].map(e => `<option value="${e}" ${(isEdit ? (cat.emoji || '🎫') : '🎫') === e ? 'selected' : ''}>${e}</option>`).join('')}
+            ${['ðŸŽ«','ðŸ› ï¸','ðŸ†','ðŸ¤','ðŸ’°','ðŸš¨','ðŸ“¦','ðŸ§¾','â“','ðŸ“£'].map(e => `<option value="${e}" ${(isEdit ? (cat.emoji || 'ðŸŽ«') : 'ðŸŽ«') === e ? 'selected' : ''}>${e}</option>`).join('')}
           </select>
         </div>
         <div style="flex:1;">
@@ -17529,14 +17529,14 @@ function _showCategoryForm(cat) {
       <div>
         <label style="font-size:0.85em;font-weight:600;">Open Tickets Category</label>
         <select id="catParentChannel" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
-          <option value="">— None —</option>
+          <option value="">â€” None â€”</option>
           ${_ticketChannelsList.filter(c => c.kind === 'category').map(c => `<option value="${c.id}" ${isEdit && cat.parent_channel_id === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
         </select>
       </div>
       <div>
         <label style="font-size:0.85em;font-weight:600;">Closed Tickets Category</label>
         <select id="catClosedParentChannel" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
-          <option value="">— Keep in same category —</option>
+          <option value="">â€” Keep in same category â€”</option>
           ${_ticketChannelsList.filter(c => c.kind === 'category').map(c => `<option value="${c.id}" ${isEdit && cat.closed_parent_channel_id === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
         </select>
       </div>
@@ -17590,7 +17590,7 @@ window.addTemplateField = function() {
       <label style="font-size:0.8em;display:flex;align-items:center;gap:2px;">
         <input type="checkbox" id="tmplReq_${count}" checked /> Req
       </label>
-      <button onclick="removeTemplateField(${count})" style="background:none;border:none;color:#ed4245;cursor:pointer;font-size:1em;">✕</button>
+      <button onclick="removeTemplateField(${count})" style="background:none;border:none;color:#ed4245;cursor:pointer;font-size:1em;">âœ•</button>
     </div>
     <input type="text" id="tmplPlaceholder_${count}" placeholder="Placeholder text" style="width:100%;padding:4px 8px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:4px;color:var(--text-primary);font-size:0.85em;" />
   `;
@@ -17607,7 +17607,7 @@ async function saveCategoryFromModal() {
   const name = document.getElementById('catName').value.trim();
   if (!name) return showError('Name is required');
 
-  const emoji = document.getElementById('catEmoji').value.trim() || '🎫';
+  const emoji = document.getElementById('catEmoji').value.trim() || 'ðŸŽ«';
   const description = document.getElementById('catDesc').value.trim();
   const parentChannelId = document.getElementById('catParentChannel').value || '';
   const closedParentChannelId = document.getElementById('catClosedParentChannel')?.value || '';
@@ -17698,13 +17698,13 @@ function loadTicketPanelTab() {
       <div>
         <label style="font-size:0.85em;font-weight:600;">Channel</label>
         <select id="ticketPanelChannelId" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
-          <option value="">— Select Channel —</option>
+          <option value="">â€” Select Channel â€”</option>
           ${textChannels.map(c => `<option value="${c.id}">#${escapeHtml(c.name)}</option>`).join('')}
         </select>
       </div>
       <div>
         <label style="font-size:0.85em;font-weight:600;">Panel Title</label>
-        <input type="text" id="ticketPanelTitle" value="🎫 Support" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;" />
+        <input type="text" id="ticketPanelTitle" value="ðŸŽ« Support" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;" />
       </div>
       <div>
         <label style="font-size:0.85em;font-weight:600;">Panel Description</label>
@@ -17720,7 +17720,7 @@ async function postTicketPanel() {
   const channelId = document.getElementById('ticketPanelChannelId').value;
   if (!channelId) return showError('Please select a channel');
 
-  const title = document.getElementById('ticketPanelTitle').value.trim() || '🎫 Support';
+  const title = document.getElementById('ticketPanelTitle').value.trim() || 'ðŸŽ« Support';
   const description = document.getElementById('ticketPanelDesc').value.trim();
   const resultEl = document.getElementById('ticketPanelResult');
   resultEl.innerHTML = 'Posting...';
@@ -17734,12 +17734,12 @@ async function postTicketPanel() {
     });
     const json = await res.json();
     if (json.success) {
-      resultEl.innerHTML = `<span style="color:#57f287;">${json.updated ? '✅ Panel updated!' : '✅ Panel posted!'}</span>`;
+      resultEl.innerHTML = `<span style="color:#57f287;">${json.updated ? 'âœ… Panel updated!' : 'âœ… Panel posted!'}</span>`;
     } else {
-      resultEl.innerHTML = `<span style="color:#ed4245;">❜ ${json.message || 'Failed'}</span>`;
+      resultEl.innerHTML = `<span style="color:#ed4245;">âœ ${json.message || 'Failed'}</span>`;
     }
   } catch (e) {
-    resultEl.innerHTML = '<span style="color:#ed4245;">❜ Error posting panel</span>';
+    resultEl.innerHTML = '<span style="color:#ed4245;">âœ Error posting panel</span>';
   }
 }
 
@@ -17753,7 +17753,7 @@ async function loadTicketOpenTab() {
     if (!json.success) { container.innerHTML = 'Failed to load tickets.'; return; }
 
     const tickets = json.tickets || [];
-    let html = `<div style="margin-bottom:var(--space-3);"><button class="btn-secondary" onclick="loadTicketOpenTab()" style="font-size:0.85em;">🔔„ Refresh</button></div>`;
+    let html = `<div style="margin-bottom:var(--space-3);"><button class="btn-secondary" onclick="loadTicketOpenTab()" style="font-size:0.85em;">ðŸ””â€ž Refresh</button></div>`;
 
     if (tickets.length === 0) {
       html += '<p style="color:var(--text-secondary);">No open tickets.</p>';
@@ -17772,9 +17772,9 @@ async function loadTicketOpenTab() {
         const created = new Date(t.created_at).toLocaleString();
         html += `<tr style="border-bottom:1px solid var(--border-color);">
           <td style="padding:8px;font-weight:600;">${t.ticket_number}</td>
-          <td style="padding:8px;">${escapeHtml(t.category_name || '—')}</td>
+          <td style="padding:8px;">${escapeHtml(t.category_name || 'â€”')}</td>
           <td style="padding:8px;">${escapeHtml(t.opener_name || t.opener_id)}</td>
-          <td style="padding:8px;">${escapeHtml(t.claimed_by || '—')}</td>
+          <td style="padding:8px;">${escapeHtml(t.claimed_by || 'â€”')}</td>
           <td style="padding:8px;color:var(--text-secondary);font-size:0.9em;">${created}</td>
           <td style="padding:8px;text-align:center;">
             <button class="btn-secondary" onclick="viewTicketTranscript(${t.id})" style="font-size:0.8em;padding:4px 8px;">Transcript</button>
@@ -17821,7 +17821,7 @@ async function loadTicketArchiveTab() {
         </select>
         <button class="btn-primary" onclick="runTicketArchiveSearch()" style="font-size:0.85em;">Search</button>
         <button class="btn-secondary" onclick="clearTicketArchiveSearch()" style="font-size:0.85em;">Clear</button>
-        <button class="btn-secondary" onclick="exportTicketArchiveCsv()" style="font-size:0.85em;">📥 Export CSV</button>
+        <button class="btn-secondary" onclick="exportTicketArchiveCsv()" style="font-size:0.85em;">ðŸ“¥ Export CSV</button>
       </div>
     `;
 
@@ -17839,12 +17839,12 @@ async function loadTicketArchiveTab() {
         </tr></thead><tbody>`;
 
       for (const t of tickets) {
-        const closed = t.closed_at ? new Date(t.closed_at).toLocaleString() : '—';
+        const closed = t.closed_at ? new Date(t.closed_at).toLocaleString() : 'â€”';
         html += `<tr style="border-bottom:1px solid var(--border-color);">
           <td style="padding:8px;font-weight:600;">${t.ticket_number || t.id}</td>
-          <td style="padding:8px;">${escapeHtml(t.status || '—')}</td>
-          <td style="padding:8px;">${escapeHtml(t.category_name || '—')}</td>
-          <td style="padding:8px;">${escapeHtml(t.opener_name || t.opener_id || '—')}</td>
+          <td style="padding:8px;">${escapeHtml(t.status || 'â€”')}</td>
+          <td style="padding:8px;">${escapeHtml(t.category_name || 'â€”')}</td>
+          <td style="padding:8px;">${escapeHtml(t.opener_name || t.opener_id || 'â€”')}</td>
           <td style="padding:8px;color:var(--text-secondary);font-size:0.9em;">${closed}</td>
           <td style="padding:8px;text-align:center;">
             <button class="btn-secondary" onclick="viewTicketTranscript(${t.id})" style="font-size:0.8em;padding:4px 8px;">Transcript</button>
@@ -17924,7 +17924,7 @@ function safeJsonArray(value) {
   }
 }
 
-// ── Plans ──────────────────────────────────────────────
+// â”€â”€ Plans â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // feature: { label, included: true/false/'partial', note? }
 const PLAN_CATALOG = [
   {
@@ -17939,9 +17939,9 @@ const PLAN_CATALOG = [
       { label: "Up to 5 verification roles", included: true },
       { label: "Up to 3 treasury wallets", included: true },
       { label: "Governance & proposals", included: true },
-      { label: "9 mini-games (Battle, H/L, Dice, Trivia, Slots…)", included: true },
+      { label: "9 mini-games (Battle, H/L, Dice, Trivia, Slotsâ€¦)", included: true },
       { label: "NFT activity feed", included: true },
-      { label: "🎮 Game Night orchestration", included: false },
+      { label: "ðŸŽ® Game Night orchestration", included: false },
       { label: "Trait-based roles", included: false },
       { label: "Custom branding", included: false },
       { label: "Multi-server (multi-tenant)", included: false },
@@ -17964,7 +17964,7 @@ const PLAN_CATALOG = [
       { label: "Up to 25 treasury wallets", included: true },
       { label: "Governance & proposals", included: true },
       { label: "9 mini-games (all standalone games)", included: true },
-      { label: "🎮 Game Night orchestration", included: true },
+      { label: "ðŸŽ® Game Night orchestration", included: true },
       { label: "NFT activity feed + Helius webhooks", included: true },
       { label: "Trait-based roles", included: true },
       { label: "Custom branding (logo, colors)", included: true },
@@ -17988,7 +17988,7 @@ const PLAN_CATALOG = [
       { label: "Unlimited treasury wallets", included: true },
       { label: "Governance & proposals", included: true },
       { label: "9 mini-games (all standalone games)", included: true },
-      { label: "🎮 Game Night orchestration", included: true },
+      { label: "ðŸŽ® Game Night orchestration", included: true },
       { label: "NFT activity feed + Helius webhooks", included: true },
       { label: "Trait-based roles", included: true },
       { label: "Custom branding (logo, colors)", included: true },
@@ -18039,8 +18039,8 @@ function updatePlanPrices() {
     const featureRows = plan.features.map(f => {
       const included = f.included === true;
       const icon = included
-        ? `<span style="color:#4ade80;font-size:1em;line-height:1;flex-shrink:0;">✓</span>`
-        : `<span style="color:rgba(148,163,184,0.35);font-size:1em;line-height:1;flex-shrink:0;">✕</span>`;
+        ? `<span style="color:#4ade80;font-size:1em;line-height:1;flex-shrink:0;">âœ“</span>`
+        : `<span style="color:rgba(148,163,184,0.35);font-size:1em;line-height:1;flex-shrink:0;">âœ•</span>`;
       return `<li style="opacity:${included ? '1' : '0.5'};">${icon}<span>${escapeHtml(f.label)}</span></li>`;
     }).join('');
 
@@ -18053,7 +18053,7 @@ function updatePlanPrices() {
             <span class="plan-price-amount">${isContactPlan ? '' : '$'}${priceText}</span>
             <span class="plan-price-period">${period}</span>
           </div>
-          ${annualTotal ? `<div class="plan-annual-note">Billed as ${annualTotal} · Save 15%</div>` : ''}
+          ${annualTotal ? `<div class="plan-annual-note">Billed as ${annualTotal} Â· Save 15%</div>` : ''}
         </div>
         <ul class="plan-features">${featureRows}</ul>
         <div class="plan-cta">
@@ -18281,7 +18281,7 @@ async function loadSystemStatus(targetId = 'systemStatusContent') {
       <tr>
         <td><div style="display:flex;align-items:center;"><span class="pulse"></span>${escapeHtml(p.name)}</div></td>
         <td><span class="badge ${p.status==='online'?'badge-active':'badge-paused'}">${p.status}</span></td>
-        <td>${p.uptime ? fmtUptime(p.uptime) : '—'}</td>
+        <td>${p.uptime ? fmtUptime(p.uptime) : 'â€”'}</td>
         <td>${p.restarts}</td>
         <td>${fmtBytes(p.memory)}</td>
         <td><div style="width:100px;background:rgba(255,255,255,0.05);height:4px;border-radius:2px;margin-bottom:4px;"><div style="width:${p.cpu}%;background:var(--gold);height:100%;border-radius:2px;"></div></div>${p.cpu}%</td>
@@ -18301,7 +18301,7 @@ async function loadSystemStatus(targetId = 'systemStatusContent') {
         </div>
         <div class="monitor-stat">
           <div class="monitor-stat__label">Disk Space</div>
-          <div class="monitor-stat__value">${d.disk?.pct || '—'}</div>
+          <div class="monitor-stat__value">${d.disk?.pct || 'â€”'}</div>
           <div style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">${d.disk?.used||''} of ${d.disk?.total||''}</div>
         </div>
         <div class="monitor-stat">
@@ -18335,9 +18335,9 @@ async function loadSystemStatus(targetId = 'systemStatusContent') {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // ENGAGEMENT & POINTS SECTION
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 async function loadEngagementSection() {
   await Promise.all([loadEngagementConfig(), loadEngagementLeaderboard(), loadEngagementShop()]);
@@ -18385,10 +18385,10 @@ async function loadEngagementLeaderboard() {
     const res = await fetch('/api/admin/engagement/leaderboard?limit=25', { credentials: 'include' });
     const data = await res.json();
     if (!data.success || !data.leaderboard?.length) {
-      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🏅</div><h4 class="empty-state-title">No data yet</h4><p class="empty-state-message">Points will appear here once members start chatting.</p></div>';
+      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">ðŸ…</div><h4 class="empty-state-title">No data yet</h4><p class="empty-state-message">Points will appear here once members start chatting.</p></div>';
       return;
     }
-    const medals = ['🥇','🥈','🥉'];
+    const medals = ['ðŸ¥‡','ðŸ¥ˆ','ðŸ¥‰'];
     const rows = data.leaderboard.map((r, i) => `
       <div class="table-row">
         <span style="width:36px;text-align:center;">${medals[i] || (i+1)}</span>
@@ -18407,19 +18407,19 @@ async function loadEngagementShop() {
     const res = await fetch('/api/admin/engagement/shop', { credentials: 'include' });
     const data = await res.json();
     if (!data.success || !data.items?.length) {
-      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🛍️</div><h4 class="empty-state-title">Shop is empty</h4><p class="empty-state-message">Add items to reward your community.</p></div>';
+      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">ðŸ›ï¸</div><h4 class="empty-state-title">Shop is empty</h4><p class="empty-state-message">Add items to reward your community.</p></div>';
       return;
     }
     const rows = data.items.map(item => {
-      const stock = item.quantity_remaining < 0 ? '∞' : item.quantity_remaining;
-      const typeLabel = { role: '🎭 Role', code: '🎟️ Code', custom: '✨ Custom' }[item.type] || item.type;
+      const stock = item.quantity_remaining < 0 ? 'âˆž' : item.quantity_remaining;
+      const typeLabel = { role: 'ðŸŽ­ Role', code: 'ðŸŽŸï¸ Code', custom: 'âœ¨ Custom' }[item.type] || item.type;
       return `
         <div class="table-row" style="align-items:flex-start;">
           <span style="width:36px;font-size:0.8em;color:var(--text-muted);">#${item.id}</span>
           <div style="flex:1;">
             <div style="font-weight:600;">${escapeHtml(item.name)}</div>
             ${item.description ? `<div style="font-size:0.85em;color:var(--text-muted);">${escapeHtml(item.description)}</div>` : ''}
-            <div style="font-size:0.8em;color:var(--text-muted);margin-top:2px;">${typeLabel} · Stock: ${stock}</div>
+            <div style="font-size:0.8em;color:var(--text-muted);margin-top:2px;">${typeLabel} Â· Stock: ${stock}</div>
           </div>
           <span style="color:var(--accent-gold);font-weight:600;white-space:nowrap;">${item.cost.toLocaleString()} pts</span>
           <button class="btn-danger btn-sm" style="margin-left:10px;" onclick="deleteEngShopItem(${item.id})">Remove</button>
@@ -18609,7 +18609,7 @@ async function loadEngagementProviders() {
         ? (provider.configured
             ? 'Members can link X for automatic task verification.'
             : 'Configure the shared X app in Superadmin before linking or syncing.')
-        : `Monitoring: ${provider.supportsSourceMonitoring ? 'yes' : 'no'} · Hashtags: ${provider.supportsHashtagMonitoring ? 'yes' : 'no'} · Linking: ${provider.supportsAccountLinking ? 'yes' : 'no'}`;
+        : `Monitoring: ${provider.supportsSourceMonitoring ? 'yes' : 'no'} Â· Hashtags: ${provider.supportsHashtagMonitoring ? 'yes' : 'no'} Â· Linking: ${provider.supportsAccountLinking ? 'yes' : 'no'}`;
       const actions = (linkingActions || adminActions)
         ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">${linkingActions}${adminActions}</div>`
         : '';
@@ -18788,7 +18788,7 @@ async function loadEngagementProviders() {
         <div style="flex:1;">
           <div style="font-weight:600;">${escapeHtml(provider.label)}</div>
           <div style="font-size:0.82em;color:var(--text-muted);">
-            Monitoring: ${provider.supportsSourceMonitoring ? 'yes' : 'no'} · Hashtags: ${provider.supportsHashtagMonitoring ? 'yes' : 'no'} · Linking: ${provider.supportsAccountLinking ? 'yes' : 'no'}
+            Monitoring: ${provider.supportsSourceMonitoring ? 'yes' : 'no'} Â· Hashtags: ${provider.supportsHashtagMonitoring ? 'yes' : 'no'} Â· Linking: ${provider.supportsAccountLinking ? 'yes' : 'no'}
           </div>
         </div>
         <span class="status-badge ${provider.configured ? 'status-live' : 'status-paused'}">${provider.configured ? 'Configured' : 'Credentials Missing'}</span>
@@ -18807,10 +18807,10 @@ async function loadEngagementLeaderboard() {
     const res = await fetch('/api/admin/engagement/leaderboard?limit=25', { credentials: 'include', headers: buildTenantRequestHeaders() });
     const data = await res.json();
     if (!data.success || !data.leaderboard?.length) {
-      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🏅</div><h4 class="empty-state-title">No data yet</h4><p class="empty-state-message">Points will appear here once members start chatting and completing tasks.</p></div>';
+      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">ðŸ…</div><h4 class="empty-state-title">No data yet</h4><p class="empty-state-message">Points will appear here once members start chatting and completing tasks.</p></div>';
       return;
     }
-    const medals = ['🥇', '🥈', '🥉'];
+    const medals = ['ðŸ¥‡', 'ðŸ¥ˆ', 'ðŸ¥‰'];
     el.innerHTML = data.leaderboard.map((row, index) => `
       <div class="table-row">
         <span style="width:36px;text-align:center;">${medals[index] || (index + 1)}</span>
@@ -18831,18 +18831,18 @@ async function loadEngagementShop() {
     const res = await fetch('/api/admin/engagement/shop', { credentials: 'include', headers: buildTenantRequestHeaders() });
     const data = await res.json();
     if (!data.success || !data.items?.length) {
-      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🛍️</div><h4 class="empty-state-title">Marketplace is empty</h4><p class="empty-state-message">Add items to reward your community.</p></div>';
+      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">ðŸ›ï¸</div><h4 class="empty-state-title">Marketplace is empty</h4><p class="empty-state-message">Add items to reward your community.</p></div>';
       return;
     }
     el.innerHTML = data.items.map(item => {
-      const stock = item.quantity_remaining < 0 ? '∞' : item.quantity_remaining;
+      const stock = item.quantity_remaining < 0 ? 'âˆž' : item.quantity_remaining;
       return `
         <div class="table-row" style="align-items:flex-start;">
           <span style="width:36px;font-size:0.8em;color:var(--text-muted);">#${item.id}</span>
           <div style="flex:1;">
             <div style="font-weight:600;">${escapeHtml(item.name)}</div>
             ${item.description ? `<div style="font-size:0.85em;color:var(--text-muted);">${escapeHtml(item.description)}</div>` : ''}
-            <div style="font-size:0.8em;color:var(--text-muted);margin-top:2px;">${escapeHtml(item.reward_type || item.type)} · ${escapeHtml(item.fulfillment_mode || 'auto')} · Stock: ${stock}</div>
+            <div style="font-size:0.8em;color:var(--text-muted);margin-top:2px;">${escapeHtml(item.reward_type || item.type)} Â· ${escapeHtml(item.fulfillment_mode || 'auto')} Â· Stock: ${stock}</div>
           </div>
           <span style="color:var(--accent-gold);font-weight:600;white-space:nowrap;">${formatEngagementAmount(item.cost)}</span>
           <button class="btn-danger btn-sm" style="margin-left:10px;" onclick="deleteEngShopItem(${item.id})">Remove</button>
@@ -18910,7 +18910,7 @@ async function loadEngagementMonitoredAccounts() {
     el.innerHTML = data.accounts.map(account => `
       <div class="table-row" style="align-items:flex-start;">
         <div style="flex:1;">
-          <div style="font-weight:600;">${escapeHtml(account.provider)} · @${escapeHtml(account.account_handle)}</div>
+          <div style="font-weight:600;">${escapeHtml(account.provider)} Â· @${escapeHtml(account.account_handle)}</div>
           <div style="font-size:0.82em;color:var(--text-muted);">Tasks: ${escapeHtml((account.task_types || []).join(', ') || 'none')}</div>
           <div style="font-size:0.82em;color:var(--text-muted);">Mirror channel: ${escapeHtml(account.mirror_channel_id || 'default')}</div>
         </div>
@@ -18983,7 +18983,7 @@ async function loadEngagementHashtags() {
     el.innerHTML = data.hashtags.map(monitor => `
       <div class="table-row" style="align-items:flex-start;">
         <div style="flex:1;">
-          <div style="font-weight:600;">${escapeHtml(monitor.provider)} · ${escapeHtml(monitor.hashtag)}</div>
+          <div style="font-weight:600;">${escapeHtml(monitor.provider)} Â· ${escapeHtml(monitor.hashtag)}</div>
           <div style="font-size:0.82em;color:var(--text-muted);">Tasks: ${escapeHtml((monitor.task_types || []).join(', ') || 'none')}</div>
           <div style="font-size:0.82em;color:var(--text-muted);">Mirror channel: ${escapeHtml(monitor.mirror_channel_id || 'default')}</div>
         </div>
@@ -19078,7 +19078,7 @@ async function loadEngagementTasks() {
         <div class="table-row" style="align-items:flex-start;">
           <div style="flex:1;">
             <div style="font-weight:600;">${escapeHtml(task.title || `${task.provider} task`)}</div>
-            <div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(task.provider)} · ${escapeHtml(task.trigger_type)} · ${formatEngagementAmount(Object.values(task.reward_config || {}).reduce((sum, value) => sum + Number(value || 0), 0))}</div>
+            <div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(task.provider)} Â· ${escapeHtml(task.trigger_type)} Â· ${formatEngagementAmount(Object.values(task.reward_config || {}).reduce((sum, value) => sum + Number(value || 0), 0))}</div>
             ${task.source_post_url ? `<div style="font-size:0.82em;color:var(--text-muted);word-break:break-all;"><a href="${escapeHtml(task.source_post_url)}" target="_blank" rel="noopener noreferrer" style="color:#93c5fd;">${escapeHtml(task.source_post_url)}</a></div>` : ''}
             ${task.body ? `<div style="font-size:0.84em;color:var(--text-secondary);margin-top:6px;">${escapeHtml(task.body)}</div>` : ''}
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">${actionBadges || '<span style="color:var(--text-muted);font-size:0.82em;">No actions configured</span>'}</div>
@@ -19172,7 +19172,7 @@ async function loadEngagementAchievements() {
       <div class="table-row" style="align-items:flex-start;">
         <div style="flex:1;">
           <div style="font-weight:600;">${escapeHtml(achievement.icon || '')} ${escapeHtml(achievement.name)}</div>
-          <div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(achievement.metric_type)} · threshold ${achievement.threshold} · reward ${formatEngagementAmount(achievement.reward_points || 0)}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(achievement.metric_type)} Â· threshold ${achievement.threshold} Â· reward ${formatEngagementAmount(achievement.reward_points || 0)}</div>
           ${achievement.description ? `<div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(achievement.description)}</div>` : ''}
         </div>
         <button class="btn-danger btn-sm" onclick="deleteEngagementAchievement(${achievement.id})">Delete</button>
@@ -19249,8 +19249,8 @@ async function loadEngagementRedemptions() {
       <div class="table-row" style="align-items:flex-start;">
         <div style="flex:1;">
           <div style="font-weight:600;">${escapeHtml(redemption.item_name || `Item #${redemption.item_id}`)}</div>
-          <div style="font-size:0.82em;color:var(--text-muted);">User: ${escapeHtml(redemption.user_id)} · Cost: ${formatEngagementAmount(redemption.cost)}</div>
-          <div style="font-size:0.82em;color:var(--text-muted);">Mode: ${escapeHtml(redemption.fulfillment_mode || 'auto')} · Status: ${escapeHtml(redemption.fulfillment_status || 'completed')}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">User: ${escapeHtml(redemption.user_id)} Â· Cost: ${formatEngagementAmount(redemption.cost)}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">Mode: ${escapeHtml(redemption.fulfillment_mode || 'auto')} Â· Status: ${escapeHtml(redemption.fulfillment_status || 'completed')}</div>
         </div>
         <span style="font-size:0.8em;color:var(--text-muted);white-space:nowrap;">#${redemption.id}</span>
       </div>
@@ -19615,7 +19615,7 @@ async function loadEngagementProviders() {
         ? (provider.configured
           ? 'Use your linked X account to verify likes, reposts, replies, and hashtag tasks.'
           : 'An admin still needs to configure the shared X app in Superadmin.')
-        : `Monitoring: ${provider.supportsSourceMonitoring ? 'yes' : 'no'} · Hashtags: ${provider.supportsHashtagMonitoring ? 'yes' : 'no'} · Linking: ${provider.supportsAccountLinking ? 'yes' : 'no'}`;
+        : `Monitoring: ${provider.supportsSourceMonitoring ? 'yes' : 'no'} Â· Hashtags: ${provider.supportsHashtagMonitoring ? 'yes' : 'no'} Â· Linking: ${provider.supportsAccountLinking ? 'yes' : 'no'}`;
       return `
         <div class="table-row" style="align-items:flex-start;">
           <div style="flex:1;">
@@ -19644,10 +19644,10 @@ async function loadEngagementLeaderboard() {
     const res = await fetch(endpoint, { credentials: 'include', headers: buildTenantRequestHeaders() });
     const data = await res.json();
     if (!data.success || !data.leaderboard?.length) {
-      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🏅</div><h4 class="empty-state-title">No data yet</h4><p class="empty-state-message">Points will appear here once members start chatting and completing tasks.</p></div>';
+      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">ðŸ…</div><h4 class="empty-state-title">No data yet</h4><p class="empty-state-message">Points will appear here once members start chatting and completing tasks.</p></div>';
       return;
     }
-    const medals = ['🥇', '🥈', '🥉'];
+    const medals = ['ðŸ¥‡', 'ðŸ¥ˆ', 'ðŸ¥‰'];
     el.innerHTML = data.leaderboard.map((row, index) => `
       <div class="table-row">
         <span style="width:36px;text-align:center;">${medals[index] || (index + 1)}</span>
@@ -19671,13 +19671,13 @@ async function loadEngagementShop() {
     const data = await res.json();
     const items = data.items || [];
     if (!data.success || !items.length) {
-      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🛍️</div><h4 class="empty-state-title">Marketplace is empty</h4><p class="empty-state-message">No rewards are available yet.</p></div>';
+      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">ðŸ›ï¸</div><h4 class="empty-state-title">Marketplace is empty</h4><p class="empty-state-message">No rewards are available yet.</p></div>';
       return;
     }
 
     const currentPoints = Number(data.points?.total_points || 0);
     el.innerHTML = items.map(item => {
-      const stock = Number(item.quantity_remaining) < 0 ? '∞' : Number(item.quantity_remaining || 0);
+      const stock = Number(item.quantity_remaining) < 0 ? 'âˆž' : Number(item.quantity_remaining || 0);
       const inStock = Number(item.quantity_remaining) !== 0;
       const canAfford = currentPoints >= Number(item.cost || 0) && inStock;
       const footer = canAdmin
@@ -19689,7 +19689,7 @@ async function loadEngagementShop() {
           <div style="flex:1;">
             <div style="font-weight:600;">${escapeHtml(item.name)}</div>
             ${item.description ? `<div style="font-size:0.85em;color:var(--text-muted);">${escapeHtml(item.description)}</div>` : ''}
-            <div style="font-size:0.8em;color:var(--text-muted);margin-top:2px;">${escapeHtml(item.reward_type || item.type)} · ${escapeHtml(item.fulfillment_mode || 'auto')} · Stock: ${stock}</div>
+            <div style="font-size:0.8em;color:var(--text-muted);margin-top:2px;">${escapeHtml(item.reward_type || item.type)} Â· ${escapeHtml(item.fulfillment_mode || 'auto')} Â· Stock: ${stock}</div>
           </div>
           <span style="color:var(--accent-gold);font-weight:600;white-space:nowrap;">${formatEngagementAmount(item.cost)}</span>
           ${footer}
@@ -19719,7 +19719,7 @@ async function loadEngagementAchievements() {
       <div class="table-row" style="align-items:flex-start;">
         <div style="flex:1;">
           <div style="font-weight:600;">${escapeHtml(achievement.icon || '')} ${escapeHtml(achievement.name || achievement.achievement_name || 'Achievement')}</div>
-          <div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(achievement.metric_type || 'unlock')} ${achievement.threshold ? `· threshold ${achievement.threshold}` : ''} ${achievement.reward_points ? `· reward ${formatEngagementAmount(achievement.reward_points)}` : ''}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(achievement.metric_type || 'unlock')} ${achievement.threshold ? `Â· threshold ${achievement.threshold}` : ''} ${achievement.reward_points ? `Â· reward ${formatEngagementAmount(achievement.reward_points)}` : ''}</div>
           ${achievement.description ? `<div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(achievement.description)}</div>` : ''}
           ${achievement.awarded_at ? `<div style="font-size:0.78em;color:var(--text-muted);margin-top:4px;">Unlocked ${escapeHtml(new Date(achievement.awarded_at).toLocaleString())}</div>` : ''}
         </div>
@@ -19749,8 +19749,8 @@ async function loadEngagementRedemptions() {
       <div class="table-row" style="align-items:flex-start;">
         <div style="flex:1;">
           <div style="font-weight:600;">${escapeHtml(redemption.item_name || `Item #${redemption.item_id}`)}</div>
-          <div style="font-size:0.82em;color:var(--text-muted);">${canAdmin ? `User: ${escapeHtml(redemption.user_id)} · ` : ''}Cost: ${formatEngagementAmount(redemption.cost)}</div>
-          <div style="font-size:0.82em;color:var(--text-muted);">Mode: ${escapeHtml(redemption.fulfillment_mode || 'auto')} · Status: ${escapeHtml(redemption.fulfillment_status || 'completed')}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">${canAdmin ? `User: ${escapeHtml(redemption.user_id)} Â· ` : ''}Cost: ${formatEngagementAmount(redemption.cost)}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">Mode: ${escapeHtml(redemption.fulfillment_mode || 'auto')} Â· Status: ${escapeHtml(redemption.fulfillment_status || 'completed')}</div>
         </div>
         <span style="font-size:0.8em;color:var(--text-muted);white-space:nowrap;">#${redemption.id}</span>
       </div>
@@ -19764,6 +19764,7 @@ async function loadEngagementRedemptions() {
 
 // ==================== DASHBOARD & SEARCH LOGIC ====================
 let dashboardDataCache = null;
+let dashboardAnalyticsRange = '7d';
 
 async function renderDashboardGrid() {
   const grid = document.getElementById("adminDashboardGrid");
@@ -19772,9 +19773,9 @@ async function renderDashboardGrid() {
   grid.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Loading community intelligence...</p></div>';
 
   try {
-    const res = await fetch("/api/admin/dashboard", { credentials: "include" });
+    const res = await fetch(`/api/admin/dashboard?range=${encodeURIComponent(dashboardAnalyticsRange)}`, { credentials: "include" });
     if (!res.ok) throw new Error("Failed to fetch dashboard data");
-    
+
     const data = await res.json();
     dashboardDataCache = data;
 
@@ -19783,15 +19784,13 @@ async function renderDashboardGrid() {
       return;
     }
 
-    const { server, modules, activeProposals, activeMissions } = data.data;
-    const metrics = server.metrics;
-    
-    // Switch container to use the new bento grid layout
+    const { server, modules, moduleAnalytics = {}, walletPreview = [], activeProposals, activeMissions, analyticsRange = dashboardAnalyticsRange } = data.data;
+    dashboardAnalyticsRange = ['24h', '7d', '30d'].includes(String(analyticsRange)) ? String(analyticsRange) : dashboardAnalyticsRange;
+    const metrics = server.metrics || {};
     grid.className = "dashboard-bento";
 
-    // 1. Server Overview
     const sparklineSvg = `<svg class="overview-metric-sparkline" viewBox="0 0 100 30" preserveAspectRatio="none"><path d="M0,25 C20,20 30,10 50,15 C70,20 80,5 100,10" fill="none" stroke="var(--gold)" stroke-width="2"/><path d="M0,25 C20,20 30,10 50,15 C70,20 80,5 100,10 L100,30 L0,30 Z" fill="url(#sparkline-gradient)" opacity="0.3"/><defs><linearGradient id="sparkline-gradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--gold)"/><stop offset="100%" stop-color="transparent"/></linearGradient></defs></svg>`;
-    
+
     const overviewHtml = `
       <div class="bento-panel panel-overview">
         <div class="bento-panel-header">
@@ -19805,22 +19804,22 @@ async function renderDashboardGrid() {
         </div>
         <div class="overview-metrics-grid">
           <div class="overview-metric">
-            <div class="overview-metric-val">${(metrics.members || 0).toLocaleString()}</div>
+            <div class="overview-metric-val">${Number(metrics.members || 0).toLocaleString()}</div>
             <div class="overview-metric-label">Members</div>
             ${sparklineSvg}
           </div>
           <div class="overview-metric">
-            <div class="overview-metric-val">${(metrics.online ? metrics.online : Math.floor((metrics.members || 0) * 0.2)).toLocaleString()}</div>
+            <div class="overview-metric-val">${Number(metrics.online || 0).toLocaleString()}</div>
             <div class="overview-metric-label"><span style="color:#86efac;">●</span> Online</div>
             ${sparklineSvg.replace(/var\(--gold\)/g, '#86efac')}
           </div>
           <div class="overview-metric">
-            <div class="overview-metric-val">${metrics.roles || 12}</div>
+            <div class="overview-metric-val">${Number(metrics.roles || 0).toLocaleString()}</div>
             <div class="overview-metric-label">Roles</div>
             ${sparklineSvg.replace(/var\(--gold\)/g, '#a78bfa')}
           </div>
           <div class="overview-metric">
-            <div class="overview-metric-val">${(metrics.wallets || 0).toLocaleString()}</div>
+            <div class="overview-metric-val">${Number(metrics.wallets || 0).toLocaleString()}</div>
             <div class="overview-metric-label">Wallets</div>
             ${sparklineSvg.replace(/var\(--gold\)/g, '#60a5fa')}
           </div>
@@ -19828,7 +19827,6 @@ async function renderDashboardGrid() {
       </div>
     `;
 
-    // 2. Module Grid
     const modConfig = [
       { id: 'verification', title: 'Verification', icon: 'fas fa-shield-alt', action: "switchSection('verification')" },
       { id: 'governance', title: 'Governance', icon: 'fas fa-university', action: "switchSection('governance')" },
@@ -19836,17 +19834,20 @@ async function renderDashboardGrid() {
       { id: 'tracking', title: 'Tracking', icon: 'fas fa-chart-bar', action: "switchSection('nft-activity')" }
     ];
 
-    let modulesHtml = `<div class="panel-modules-grid">`;
+    let modulesHtml = '<div class="panel-modules-grid">';
     modConfig.forEach(cfg => {
       const mod = (modules && modules[cfg.id]) ? modules[cfg.id] : { enabled: false };
-      const isActive = mod.enabled;
-      
+      const isActive = !!mod.enabled;
       let metricStr = isActive ? 'Active' : 'Inactive';
       if (isActive) {
-        if (cfg.id === 'verification') metricStr = '98% pass';
-        else if (cfg.id === 'governance') metricStr = `${activeProposals ? activeProposals.length : 0} proposals`;
-        else if (cfg.id === 'missions') metricStr = `${activeMissions ? activeMissions.length : 0} campaigns`;
-        else if (cfg.id === 'tracking') metricStr = '12.4k actions';
+        if (cfg.id === 'verification') metricStr = `${Number(moduleAnalytics?.verification?.linkedWallets || mod?.stats?.verifiedUsers || 0).toLocaleString()} wallets`;
+        else if (cfg.id === 'governance') metricStr = `${Number(moduleAnalytics?.governance?.activeProposals || activeProposals?.length || 0).toLocaleString()} active`;
+        else if (cfg.id === 'missions') metricStr = `${Number(moduleAnalytics?.missions?.activeMissions || activeMissions?.length || 0).toLocaleString()} active`;
+        else if (cfg.id === 'tracking') {
+          const nftEvents = Number(moduleAnalytics?.nfttracker?.events || 0);
+          const inviteEvents = Number(moduleAnalytics?.invites?.joins || 0);
+          metricStr = `${(nftEvents + inviteEvents).toLocaleString()} events (${dashboardAnalyticsRange})`;
+        }
       }
 
       modulesHtml += `
@@ -19865,30 +19866,35 @@ async function renderDashboardGrid() {
         </div>
       `;
     });
-    modulesHtml += `</div>`;
+    modulesHtml += '</div>';
 
-    // 3. Wallet Connectivity
-    const mockWallets = [
-      { address: '0x...8a2f', label: 'Primary', balance: '32.5 ETH', avatar: 'linear-gradient(135deg, #a855f7, #6366f1)' },
-      { address: '0x...c10b', label: 'Primary', balance: '18.1k $TOKEN', avatar: 'linear-gradient(135deg, #f59e0b, #ef4444)' },
-      { address: '0x...e7d9', label: 'Vault', balance: '12 NFTs', avatar: 'linear-gradient(135deg, #10b981, #3b82f6)' }
+    const previewWallets = Array.isArray(walletPreview) ? walletPreview : [];
+    const palette = [
+      'linear-gradient(135deg, #a855f7, #6366f1)',
+      'linear-gradient(135deg, #f59e0b, #ef4444)',
+      'linear-gradient(135deg, #10b981, #3b82f6)'
     ];
     let walletRows = '';
-    mockWallets.forEach(w => {
+    previewWallets.forEach((w, idx) => {
+      const walletAddress = String(w.walletAddress || '');
+      const masked = walletAddress.length > 10 ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : (walletAddress || 'Unknown');
+      const label = String(w.label || 'Linked');
+      const nftCount = Number(w.totalNfts || 0);
       walletRows += `
         <div class="wallet-list-item">
           <div class="wallet-identity">
-            <div class="wallet-avatar" style="background: ${w.avatar}"></div>
+            <div class="wallet-avatar" style="background: ${palette[idx % palette.length]}"></div>
             <div>
-              <div class="wallet-address">${w.address}</div>
-              <div class="module-bento-status" style="font-size:0.75rem">${w.label}</div>
+              <div class="wallet-address">${escapeHtml(masked)}</div>
+              <div class="module-bento-status" style="font-size:0.75rem">${escapeHtml(label)}</div>
             </div>
           </div>
-          <div class="wallet-balance">${w.balance}</div>
+          <div class="wallet-balance">${nftCount.toLocaleString()} NFTs</div>
         </div>
       `;
     });
-    
+    if (!walletRows) walletRows = '<div class="empty-state-message" style="padding:10px 0;">No linked wallets found yet.</div>';
+
     const walletsHtml = `
       <div class="bento-panel panel-wallets">
         <div class="bento-panel-header">
@@ -19897,7 +19903,7 @@ async function renderDashboardGrid() {
         </div>
         <div class="gov-vote-row" style="margin-top:-8px; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:12px;">
           <span>Verified Addresses</span>
-          <span style="color:var(--text-primary)">${(metrics.wallets || 0).toLocaleString()} Connected</span>
+          <span style="color:var(--text-primary)">${Number(metrics.wallets || 0).toLocaleString()} Connected</span>
         </div>
         <div class="wallet-list">
           ${walletRows}
@@ -19905,77 +19911,127 @@ async function renderDashboardGrid() {
       </div>
     `;
 
-    // 4. Governance Progress
-    let govHtml = `
+    const topProposal = Array.isArray(activeProposals) && activeProposals.length ? activeProposals[0] : null;
+    const govBody = (() => {
+      if (!topProposal) return '<div class="empty-state-message">No active proposals right now.</div>';
+      const yes = Number(topProposal?.votes?.yes || 0);
+      const no = Number(topProposal?.votes?.no || 0);
+      const abstain = Number(topProposal?.votes?.abstain || 0);
+      const totalVotes = yes + no + abstain;
+      const yesPct = totalVotes > 0 ? Math.round((yes / totalVotes) * 100) : 0;
+      const noPct = totalVotes > 0 ? Math.round((no / totalVotes) * 100) : 0;
+      const abstainPct = Math.max(0, 100 - yesPct - noPct);
+      const endAt = topProposal?.endTime ? new Date(topProposal.endTime) : null;
+      const msLeft = endAt ? (endAt.getTime() - Date.now()) : 0;
+      const timeLeft = msLeft > 0 ? `${Math.floor(msLeft / 86400000)}d ${Math.floor((msLeft % 86400000) / 3600000)}h` : 'Ending soon';
+      return `
+        <div class="gov-vote-title">${escapeHtml(String(topProposal.title || 'Untitled proposal'))}</div>
+        <div class="gov-vote-bar">
+          <div class="gov-vote-row"><span class="yes">Vote: Yes</span><span>${yesPct}%</span></div>
+          <div class="gov-vote-row"><span class="no">No</span><span>${noPct}%</span></div>
+          <div class="gov-vote-row"><span>Abstain</span><span>${abstainPct}%</span></div>
+          <div class="gov-progress-track">
+            <div class="gov-progress-yes" style="width:${yesPct}%"></div>
+            <div class="gov-progress-no" style="width:${noPct}%"></div>
+            <div class="gov-progress-abstain" style="width:${abstainPct}%"></div>
+          </div>
+          <div class="gov-vote-row" style="margin-top:4px"><span style="color:#86efac">${yesPct >= 60 ? 'Threshold met (60%)' : 'Threshold pending (60%)'}</span></div>
+        </div>
+        <div class="gov-vote-row" style="margin-top:16px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.05)">
+          <div><div style="font-size:0.75rem">Time left</div><div style="color:var(--text-primary);font-weight:600">${escapeHtml(timeLeft)}</div></div>
+          <div style="text-align:right"><div style="font-size:0.75rem">Participants</div><div style="color:var(--text-primary);font-weight:600">${totalVotes.toLocaleString()} Votes</div></div>
+        </div>
+      `;
+    })();
+
+    const govHtml = `
       <div class="bento-panel panel-governance">
         <div class="bento-panel-header" style="margin-bottom:8px">
           <div class="bento-panel-title" style="font-size:0.95rem">Governance - Active Proposals</div>
         </div>
         <div class="bento-panel" style="padding:var(--space-4); background:rgba(255,255,255,0.02)">
-          <div class="gov-vote-title">PIP-24: Community Grant</div>
-          <div class="gov-vote-bar">
-            <div class="gov-vote-row"><span class="yes">Vote: Yes</span><span>64%</span></div>
-            <div class="gov-vote-row"><span class="no">No</span><span>21%</span></div>
-            <div class="gov-vote-row"><span>Abstain</span><span>15%</span></div>
-            <div class="gov-progress-track">
-              <div class="gov-progress-yes" style="width:64%"></div>
-              <div class="gov-progress-no" style="width:21%"></div>
-              <div class="gov-progress-abstain" style="width:15%"></div>
-            </div>
-            <div class="gov-vote-row" style="margin-top:4px"><span style="color:#86efac">Threshold met (60%)</span></div>
-          </div>
-          <div class="gov-vote-row" style="margin-top:16px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.05)">
-            <div><div style="font-size:0.75rem">Time left</div><div style="color:var(--text-primary);font-weight:600">3d 12h</div></div>
-            <div style="text-align:right"><div style="font-size:0.75rem">Participants</div><div style="color:var(--text-primary);font-weight:600">1,845 Votes</div></div>
-          </div>
+          ${govBody}
         </div>
       </div>
     `;
 
-    // 5. Mission Progress
-    let missionHtml = `
+    const topMission = Array.isArray(activeMissions) && activeMissions.length ? activeMissions[0] : null;
+    const missionBody = (() => {
+      if (!topMission) return '<div class="empty-state-message">No active missions right now.</div>';
+      const filled = Number(topMission.filledSlots || 0);
+      const total = Math.max(Number(topMission.totalSlots || 0), 1);
+      const pct = Math.round((filled / total) * 100);
+      const statusLabel = String(topMission.status || 'active');
+      return `
+        <div class="gov-vote-title" style="margin-bottom:4px">Mission: ${escapeHtml(String(topMission.title || 'Untitled mission'))}</div>
+        <div class="module-bento-status">${escapeHtml(statusLabel)} • ${pct}% Filled</div>
+        <div class="mission-stages" style="margin-top:16px;">
+          <div style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:-4px">Slot fill progress</div>
+          <div class="mission-stage-row"><span>Filled Slots</span><span>${filled.toLocaleString()} / ${total.toLocaleString()}</span></div>
+          <div class="gov-progress-track"><div style="background:var(--gold); width:${pct}%"></div></div>
+        </div>
+        <div class="gov-vote-row" style="margin-top:16px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.05); align-items:center;">
+          <div><div style="font-size:0.75rem">Mode</div><div style="color:var(--text-primary);font-weight:600">${escapeHtml(String(topMission.mode || 'standard'))}</div></div>
+          <div style="text-align:right"><div style="font-size:0.75rem">Ends</div><div style="color:var(--text-primary);font-weight:600">${escapeHtml(topMission.endsAt ? new Date(topMission.endsAt).toLocaleString() : 'n/a')}</div></div>
+        </div>
+      `;
+    })();
+
+    const missionHtml = `
       <div class="bento-panel panel-mission">
         <div class="bento-panel-header" style="margin-bottom:8px">
           <div class="bento-panel-title" style="font-size:0.95rem">Mission Progress</div>
         </div>
         <div class="bento-panel" style="padding:var(--space-4); background:rgba(255,255,255,0.02)">
-          <div class="gov-vote-title" style="margin-bottom:4px">Mission: Genesis NFT Mint</div>
-          <div class="module-bento-status">88% Complete</div>
-          
-          <div class="mission-stages" style="margin-top:16px;">
-            <div style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:-4px">Stages completed</div>
-            <div class="mission-stage-row"><span>Setup</span><span>100%</span></div>
-            <div class="gov-progress-track"><div style="background:var(--gold); width:100%"></div></div>
-            <div class="mission-stage-row"><span>Snapshot</span><span>100%</span></div>
-            <div class="gov-progress-track"><div style="background:var(--gold); width:100%"></div></div>
-            <div class="mission-stage-row"><span>Minting</span><span>68%</span></div>
-            <div class="gov-progress-track"><div style="background:var(--gold); width:68%"></div></div>
-            <div style="text-align:right; font-size:0.75rem; color:var(--text-secondary); margin-top:2px">2,100 / 3,000 Minted</div>
-          </div>
-
-          <div class="gov-vote-row" style="margin-top:16px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.05); align-items:center;">
-            <div><div style="font-size:0.75rem">Participants</div>
-              <div style="display:flex; margin-top:4px;">
-                <div class="wallet-avatar" style="width:20px;height:20px;margin-right:-8px;border:2px solid #1e293b;background:linear-gradient(135deg,#f87171,#ef4444)"></div>
-                <div class="wallet-avatar" style="width:20px;height:20px;margin-right:-8px;border:2px solid #1e293b;background:linear-gradient(135deg,#818cf8,#6366f1)"></div>
-                <div class="wallet-avatar" style="width:20px;height:20px;border:2px solid #1e293b;background:linear-gradient(135deg,#34d399,#10b981)"></div>
-              </div>
-            </div>
-            <div style="text-align:right"><div style="font-size:0.75rem">Rewards</div><div style="color:var(--text-primary);font-weight:600">500 $TOKEN</div></div>
-          </div>
+          ${missionBody}
           <button class="btn btn-primary" style="width:100%; margin-top:16px; padding:8px" onclick="switchSection('heist')">View Mission</button>
         </div>
       </div>
     `;
 
-    grid.innerHTML = overviewHtml + walletsHtml + modulesHtml + govHtml + missionHtml;
+    const moduleWidgetConfig = [
+      { label: 'Verification', metric: `${Number(moduleAnalytics?.verification?.linkedWallets || 0).toLocaleString()} wallets`, sub: `${Number(moduleAnalytics?.verification?.uniqueUsers || 0).toLocaleString()} users` },
+      { label: 'Governance', metric: `${Number(moduleAnalytics?.governance?.activeProposals || 0).toLocaleString()} active`, sub: `${Number(moduleAnalytics?.governance?.totalVotesCast || 0).toLocaleString()} votes` },
+      { label: 'Missions', metric: `${Number(moduleAnalytics?.missions?.activeMissions || 0).toLocaleString()} active`, sub: `${Number(moduleAnalytics?.missions?.participantsActive || 0).toLocaleString()} participants` },
+      { label: 'Welcome', metric: `${Number(moduleAnalytics?.welcome?.joins || 0).toLocaleString()} joins (${dashboardAnalyticsRange})`, sub: `${Number(moduleAnalytics?.welcome?.welcomesSent || 0).toLocaleString()} welcomes sent` },
+      { label: 'Invites', metric: `${Number(moduleAnalytics?.invites?.joins || 0).toLocaleString()} joins (${dashboardAnalyticsRange})`, sub: 'Invite tracker events' },
+      { label: 'NFT Tracker', metric: `${Number(moduleAnalytics?.nfttracker?.events || 0).toLocaleString()} events (${dashboardAnalyticsRange})`, sub: `${Number(moduleAnalytics?.nfttracker?.trackedCollections || 0).toLocaleString()} collections` },
+      { label: 'Token Tracker', metric: `${Number(moduleAnalytics?.tokentracker?.activeRules || 0).toLocaleString()} active rules`, sub: 'Token role gating' },
+      { label: 'Engagement', metric: `${Number(moduleAnalytics?.engagement?.points || 0).toLocaleString()} points (${dashboardAnalyticsRange})`, sub: `${Number(moduleAnalytics?.engagement?.activeUsers || 0).toLocaleString()} active users` },
+      { label: 'Ticketing', metric: `${Number(moduleAnalytics?.ticketing?.openTickets || 0).toLocaleString()} open`, sub: 'Open support tickets' },
+      { label: 'Self-Serve Roles', metric: `${Number(moduleAnalytics?.selfserveroles?.activePanels || 0).toLocaleString()} panels`, sub: 'Role panels enabled' },
+      { label: 'Vault', metric: `${Number(moduleAnalytics?.vault?.activeItems || 0).toLocaleString()} items`, sub: `${Number(moduleAnalytics?.vault?.pendingClaims || 0).toLocaleString()} pending claims` },
+    ];
+
+    const widgetsHtml = `
+      <div class="bento-panel panel-overview" style="grid-column:1 / -1;">
+        <div class="bento-panel-header">
+          <div class="bento-panel-title">Module Analytics</div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-sm" onclick="setDashboardAnalyticsRange('24h')" ${dashboardAnalyticsRange === '24h' ? 'disabled' : ''}>24h</button>
+            <button class="btn btn-secondary btn-sm" onclick="setDashboardAnalyticsRange('7d')" ${dashboardAnalyticsRange === '7d' ? 'disabled' : ''}>7d</button>
+            <button class="btn btn-secondary btn-sm" onclick="setDashboardAnalyticsRange('30d')" ${dashboardAnalyticsRange === '30d' ? 'disabled' : ''}>30d</button>
+          </div>
+        </div>
+        <div class="overview-metrics-grid">
+          ${moduleWidgetConfig.map((w) => `
+            <div class="overview-metric">
+              <div class="overview-metric-val" style="font-size:1.1rem;">${escapeHtml(w.metric)}</div>
+              <div class="overview-metric-label">${escapeHtml(w.label)}</div>
+              <div style="font-size:0.72rem;color:var(--text-secondary);margin-top:4px;">${escapeHtml(w.sub)}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+
+    grid.innerHTML = overviewHtml + walletsHtml + modulesHtml + govHtml + missionHtml + widgetsHtml;
 
   } catch (err) {
     console.error("Dashboard render error:", err);
     grid.innerHTML = `<div class="empty-state"><p>Error loading dashboard. Please try again.</p></div>`;
   }
 }
-
 function renderDashboardTile(title, value, icon, meta, statusClass, onClickStr = null) {
   const onClickAttr = onClickStr ? `onclick="${onClickStr}"` : "";
   return `
@@ -19990,7 +20046,7 @@ function renderDashboardTile(title, value, icon, meta, statusClass, onClickStr =
       </div>
       <div class="dashboard-tile__footer">
         <div class="dashboard-tile__meta">${meta}</div>
-        <div class="dashboard-tile__arrow">→</div>
+        <div class="dashboard-tile__arrow">â†’</div>
       </div>
     </article>
   `;
@@ -19998,20 +20054,27 @@ function renderDashboardTile(title, value, icon, meta, statusClass, onClickStr =
 
 function getModuleIcon(modId) {
   const icons = {
-    governance: "📜",
-    verification: "💼",
-    battle: "⚔️",
-    treasury: "💰",
-    nfttracker: "🎨",
-    tokentracker: "🪙",
-    selfserve: "🎭",
-    ticketing: "🎫",
-    engagement: "🏅",
-    heist: "🎯",
-    aiassistant: "🤖",
-    invites: "📨"
+    governance: "ðŸ“œ",
+    verification: "ðŸ’¼",
+    battle: "âš”ï¸",
+    treasury: "ðŸ’°",
+    nfttracker: "ðŸŽ¨",
+    tokentracker: "ðŸª™",
+    selfserve: "ðŸŽ­",
+    ticketing: "ðŸŽ«",
+    engagement: "ðŸ…",
+    heist: "ðŸŽ¯",
+    aiassistant: "ðŸ¤–",
+    invites: "ðŸ“¨"
   };
-  return icons[modId] || "📦";
+  return icons[modId] || "ðŸ“¦";
+}
+
+function setDashboardAnalyticsRange(range = '7d') {
+  const normalized = ['24h', '7d', '30d'].includes(String(range).toLowerCase()) ? String(range).toLowerCase() : '7d';
+  if (dashboardAnalyticsRange === normalized) return;
+  dashboardAnalyticsRange = normalized;
+  renderDashboardGrid();
 }
 
 function toggleDashboardViewMode() {
@@ -20217,7 +20280,7 @@ async function loadWelcomeSettingsSection() {
           <button class="btn-secondary btn-sm" onclick="postWelcomeCaptchaPanel()">Post Verify Panel</button>
         </div>
         <small style="color:var(--text-secondary);">Variables: {user_mention}, {username}, {server_name}, {member_count}, {channel:verify}. Tip: Ctrl/Cmd-click to select multiple auto roles.</small>
-        <small style="color:var(--text-secondary);">Plan limits: channel tokens ${limits.maxChannelTokens == null ? '∞' : limits.maxChannelTokens}, step fields ${limits.maxStepFields == null ? '∞' : limits.maxStepFields}, uploaded assets ${limits.allowImageAssets ? 'enabled' : 'disabled'}.</small>
+        <small style="color:var(--text-secondary);">Plan limits: channel tokens ${limits.maxChannelTokens == null ? 'âˆž' : limits.maxChannelTokens}, step fields ${limits.maxStepFields == null ? 'âˆž' : limits.maxStepFields}, uploaded assets ${limits.allowImageAssets ? 'enabled' : 'disabled'}.</small>
         ${canEditBrandingFields ? '' : '<small style="color:#fcd34d;">Embed color/footer are part of Branding controls and require a paid plan.</small>'}
       </div>
     `;
@@ -20498,6 +20561,7 @@ async function buildWelcomeUploadPayload(file) {
 
   throw new Error('Image is too large. Try a smaller image or lower resolution.');
 }
+
 
 
 

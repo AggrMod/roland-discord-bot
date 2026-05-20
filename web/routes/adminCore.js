@@ -34,6 +34,11 @@ function createAdminCoreRouter({
   router.get('/dashboard', adminAuthMiddleware, async (req, res) => {
     try {
       const guildId = req.guildId;
+      const requestedRange = String(req.query.range || '7d').toLowerCase();
+      const normalizedRange = ['24h', '7d', '30d'].includes(requestedRange) ? requestedRange : '7d';
+      const sqliteWindow = normalizedRange === '24h'
+        ? 'now","-24 hour'
+        : (normalizedRange === '30d' ? 'now","-30 day' : 'now","-7 day');
       const client = typeof getClient === 'function' ? getClient() : null;
       const guild = req.guild || await fetchGuildById(guildId);
       const safeGet = (sql, params = [], fallback = {}) => {
@@ -54,6 +59,7 @@ function createAdminCoreRouter({
       // 1. Server Metrics
       const memberCount = guild?.memberCount || 0;
       const onlineCount = guild?.approximatePresenceCount || 0; 
+      const roleCount = guild?.roles?.cache?.size || 0;
       const verifiedWalletsCount = Number(safeGet('SELECT COUNT(DISTINCT wallet_address) AS cnt FROM wallets', [], { cnt: 0 })?.cnt || 0);
       
       // 2. Module Status
@@ -65,6 +71,62 @@ function createAdminCoreRouter({
         welcome: { enabled: !!moduleState.welcome, stats: { configured: Number(safeGet('SELECT COUNT(*) AS cnt FROM tenant_welcome_settings WHERE guild_id = ? AND enabled = 1', [guildId], { cnt: 0 })?.cnt || 0) } },
         tracking: { enabled: !!(moduleState.nfttracker || moduleState.tokentracker), stats: { actions: 0 } }
       };
+
+      const moduleAnalytics = {
+        verification: {
+          linkedWallets: verifiedWalletsCount,
+          uniqueUsers: Number(safeGet('SELECT COUNT(DISTINCT discord_id) AS cnt FROM wallets', [], { cnt: 0 })?.cnt || 0),
+        },
+        governance: {
+          activeProposals: Number(safeGet('SELECT COUNT(*) AS cnt FROM proposals WHERE guild_id = ? AND status IN ("supporting", "voting")', [guildId], { cnt: 0 })?.cnt || 0),
+          totalVotesCast: Number(safeGet('SELECT COUNT(*) AS cnt FROM votes v JOIN proposals p ON p.proposal_id = v.proposal_id WHERE p.guild_id = ?', [guildId], { cnt: 0 })?.cnt || 0),
+        },
+        missions: {
+          activeMissions: Number(safeGet('SELECT COUNT(*) AS cnt FROM heist_missions WHERE guild_id = ? AND status IN ("recruiting", "active")', [guildId], { cnt: 0 })?.cnt || 0),
+          participantsActive: Number(safeGet('SELECT COALESCE(SUM(filled_slots), 0) AS cnt FROM heist_missions WHERE guild_id = ? AND status IN ("recruiting", "active")', [guildId], { cnt: 0 })?.cnt || 0),
+        },
+        welcome: {
+          joins: Number(safeGet(`SELECT COALESCE(SUM(joins_total), 0) AS cnt FROM tenant_welcome_analytics_daily WHERE guild_id = ? AND day >= date("${sqliteWindow}")`, [guildId], { cnt: 0 })?.cnt || 0),
+          welcomesSent: Number(safeGet(`SELECT COALESCE(SUM(welcome_sent), 0) AS cnt FROM tenant_welcome_analytics_daily WHERE guild_id = ? AND day >= date("${sqliteWindow}")`, [guildId], { cnt: 0 })?.cnt || 0),
+        },
+        invites: {
+          joins: Number(safeGet(`SELECT COUNT(*) AS cnt FROM invite_events WHERE guild_id = ? AND joined_at >= datetime("${sqliteWindow}")`, [guildId], { cnt: 0 })?.cnt || 0),
+        },
+        nfttracker: {
+          events: Number(safeGet(`SELECT COUNT(*) AS cnt FROM nft_activity_events WHERE guild_id = ? AND created_at >= datetime("${sqliteWindow}")`, [guildId], { cnt: 0 })?.cnt || 0),
+          trackedCollections: Number(safeGet('SELECT COUNT(*) AS cnt FROM nft_tracked_collections WHERE guild_id = ? AND enabled = 1', [guildId], { cnt: 0 })?.cnt || 0),
+        },
+        tokentracker: {
+          activeRules: Number(safeGet('SELECT COUNT(*) AS cnt FROM token_role_rules WHERE guild_id = ? AND enabled = 1', [guildId], { cnt: 0 })?.cnt || 0),
+        },
+        engagement: {
+          points: Number(safeGet(`SELECT COALESCE(SUM(points), 0) AS cnt FROM points_ledger WHERE guild_id = ? AND created_at >= datetime("${sqliteWindow}")`, [guildId], { cnt: 0 })?.cnt || 0),
+          activeUsers: Number(safeGet(`SELECT COUNT(DISTINCT user_id) AS cnt FROM points_ledger WHERE guild_id = ? AND created_at >= datetime("${sqliteWindow}")`, [guildId], { cnt: 0 })?.cnt || 0),
+        },
+        ticketing: {
+          openTickets: Number(safeGet('SELECT COUNT(*) AS cnt FROM tickets WHERE guild_id = ? AND status = "open"', [guildId], { cnt: 0 })?.cnt || 0),
+        },
+        selfserveroles: {
+          activePanels: Number(safeGet('SELECT COUNT(*) AS cnt FROM role_panels WHERE guild_id = ? AND enabled = 1', [guildId], { cnt: 0 })?.cnt || 0),
+        },
+        vault: {
+          activeItems: Number(safeGet('SELECT COUNT(*) AS cnt FROM heist_vault_items WHERE guild_id = ? AND enabled = 1', [guildId], { cnt: 0 })?.cnt || 0),
+          pendingClaims: Number(safeGet('SELECT COUNT(*) AS cnt FROM heist_vault_redemptions WHERE guild_id = ? AND fulfillment_status = "pending"', [guildId], { cnt: 0 })?.cnt || 0),
+        },
+      };
+
+      const walletPreview = safeAll(`
+        SELECT w.wallet_address, w.primary_wallet, w.is_favorite, w.created_at, u.username, u.total_nfts
+        FROM wallets w
+        LEFT JOIN users u ON u.discord_id = w.discord_id
+        ORDER BY w.primary_wallet DESC, w.is_favorite DESC, w.created_at DESC
+        LIMIT 3
+      `, [], []).map((row) => ({
+        walletAddress: row.wallet_address,
+        label: row.primary_wallet ? 'Primary' : (row.is_favorite ? 'Favorite' : 'Linked'),
+        username: row.username || null,
+        totalNfts: Number(row.total_nfts || 0),
+      }));
 
       // 3. Active Governance Proposals (Top 3)
       const activeProposals = safeAll(`
@@ -115,11 +177,15 @@ function createAdminCoreRouter({
           metrics: {
             members: memberCount,
             online: onlineCount,
-            guilds: 1, 
+            roles: roleCount,
+            guilds: 1,
             wallets: verifiedWalletsCount
           }
         },
         modules,
+        analyticsRange: normalizedRange,
+        moduleAnalytics,
+        walletPreview,
         activeProposals,
         activeMissions
       }));

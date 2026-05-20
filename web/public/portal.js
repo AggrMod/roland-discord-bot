@@ -7868,6 +7868,18 @@ function setSuperadminWorkspaceBillingStatus(value) {
   superadminWorkspaceBillingStatus = String(value || 'all');
 }
 
+function resetSuperadminWorkspaceTenantFilters() {
+  superadminWorkspaceSearch = '';
+  superadminTenantPage = 1;
+  loadSuperadminView();
+}
+
+function resetSuperadminWorkspaceBillingFilters() {
+  superadminWorkspaceBillingSearch = '';
+  superadminWorkspaceBillingStatus = 'all';
+  loadSuperadminView();
+}
+
 function setSuperadminWorkspaceFocus(focus = '') {
   superadminWorkspaceFocus = String(focus || '').trim();
   const url = new URL(window.location);
@@ -7992,6 +8004,7 @@ async function loadSuperadminWorkspaceHubV2() {
               <div class="sa-v2-toolbar">
                 <input type="text" value="${escapeHtml(superadminWorkspaceSearch)}" placeholder="Search tenant by name, id, or plan..." oninput="setSuperadminWorkspaceTenantSearch(this.value)">
                 <button class="btn-secondary" onclick="loadSuperadminView()">Search</button>
+                <button class="btn-secondary" onclick="resetSuperadminWorkspaceTenantFilters()">Clear</button>
               </div>
               <div class="sa-v2-list">
                 ${(tenants.length ? tenants.map((tenant) => renderTenantRow(tenant)).join('') : '<div class="sa-v2-empty">No tenants found for this filter.</div>')}
@@ -8017,6 +8030,7 @@ async function loadSuperadminWorkspaceHubV2() {
                 <option value="trialing"${superadminWorkspaceBillingStatus === 'trialing' ? ' selected' : ''}>Trialing</option>
               </select>
               <button class="btn-secondary" onclick="loadSuperadminView()">Apply</button>
+              <button class="btn-secondary" onclick="resetSuperadminWorkspaceBillingFilters()">Clear</button>
             </div>
             <div class="sa-v2-table-wrap">
               <table class="sa-v2-table">
@@ -8032,7 +8046,7 @@ async function loadSuperadminWorkspaceHubV2() {
                       <td>${escapeHtml(entry.currentPeriodEnd ? new Date(entry.currentPeriodEnd).toLocaleString() : '—')}</td>
                       <td>${escapeHtml(entry.verificationStatus || 'pending')}</td>
                     </tr>
-                  `).join('') : '<tr><td colspan="7">No billing records found.</td></tr>'}
+                  `).join('') : '<tr><td colspan="7">No billing records found for the current filters.</td></tr>'}
                 </tbody>
               </table>
             </div>

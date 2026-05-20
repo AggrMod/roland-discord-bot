@@ -188,6 +188,8 @@ class InviteTrackerService {
       includeVerificationStats: false,
       excludedCodes: [],
       panelSortBy: SORT_BY_INVITES,
+      inviterAccountAgeFilterEnabled: false,
+      inviterMinAccountAgeHours: 48,
     };
   }
 
@@ -205,7 +207,9 @@ class InviteTrackerService {
         panel_enable_create_link,
         include_verification_stats,
         excluded_codes,
-        panel_sort_by
+        panel_sort_by,
+        inviter_account_age_filter_enabled,
+        inviter_min_account_age_hours
       FROM invite_tracker_settings
       WHERE guild_id = ?
       LIMIT 1
@@ -228,6 +232,8 @@ class InviteTrackerService {
         includeVerificationStats: Number(row.include_verification_stats || 0) === 1,
         excludedCodes: parseExcludedCodesInput(row.excluded_codes || '[]'),
         panelSortBy: normalizePanelSortBy(row.panel_sort_by || defaults.panelSortBy),
+        inviterAccountAgeFilterEnabled: Number(row.inviter_account_age_filter_enabled || 0) === 1,
+        inviterMinAccountAgeHours: clampInt(row.inviter_min_account_age_hours, 1, 720, defaults.inviterMinAccountAgeHours),
       },
     };
   }
@@ -268,15 +274,22 @@ class InviteTrackerService {
       panelSortBy: payload.panelSortBy !== undefined
         ? normalizePanelSortBy(payload.panelSortBy)
         : normalizePanelSortBy(existing.panelSortBy),
+      inviterAccountAgeFilterEnabled: payload.inviterAccountAgeFilterEnabled !== undefined
+        ? !!payload.inviterAccountAgeFilterEnabled
+        : !!existing.inviterAccountAgeFilterEnabled,
+      inviterMinAccountAgeHours: payload.inviterMinAccountAgeHours !== undefined
+        ? clampInt(payload.inviterMinAccountAgeHours, 1, 720, existing.inviterMinAccountAgeHours || 48)
+        : clampInt(existing.inviterMinAccountAgeHours, 1, 720, 48),
     };
 
     db.prepare(`
       INSERT INTO invite_tracker_settings (
         guild_id, required_join_role_id, panel_channel_id, panel_message_id,
         panel_period_days, panel_limit, panel_enable_create_link, include_verification_stats, excluded_codes, panel_sort_by,
+        inviter_account_age_filter_enabled, inviter_min_account_age_hours,
         created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON CONFLICT(guild_id) DO UPDATE SET
         required_join_role_id = excluded.required_join_role_id,
         panel_channel_id = excluded.panel_channel_id,
@@ -287,6 +300,8 @@ class InviteTrackerService {
         include_verification_stats = excluded.include_verification_stats,
         excluded_codes = excluded.excluded_codes,
         panel_sort_by = excluded.panel_sort_by,
+        inviter_account_age_filter_enabled = excluded.inviter_account_age_filter_enabled,
+        inviter_min_account_age_hours = excluded.inviter_min_account_age_hours,
         updated_at = CURRENT_TIMESTAMP
     `).run(
       normalizedGuildId,
@@ -298,7 +313,9 @@ class InviteTrackerService {
       merged.panelEnableCreateLink ? 1 : 0,
       merged.includeVerificationStats ? 1 : 0,
       JSON.stringify(merged.excludedCodes || []),
-      merged.panelSortBy
+      merged.panelSortBy,
+      merged.inviterAccountAgeFilterEnabled ? 1 : 0,
+      merged.inviterMinAccountAgeHours
     );
 
     return { success: true, settings: merged };
@@ -548,6 +565,7 @@ class InviteTrackerService {
           code,
           inviterId: normalizeUserId(invite.inviter?.id || ''),
           inviterUsername: invite.inviter?.username || invite.inviter?.globalName || null,
+          inviterCreatedTimestamp: Number(invite.inviter?.createdTimestamp || invite.inviter?.createdAt?.getTime?.() || 0),
           delta,
         };
         if (!matched || candidate.delta > matched.delta) {
@@ -561,9 +579,31 @@ class InviteTrackerService {
     }
 
     const ownedInvite = matched?.code ? this._getOwnedInviteContext(guildId, matched.code) : null;
-    const resolvedInviterUserId = ownedInvite?.ownerUserId || matched?.inviterId || null;
-    const resolvedInviterUsername = ownedInvite?.ownerUsername || matched?.inviterUsername || null;
-    const resolvedSource = ownedInvite?.ownerUserId ? 'user_invite' : (matched?.code ? 'invite' : 'unknown');
+    let resolvedInviterUserId = ownedInvite?.ownerUserId || matched?.inviterId || null;
+    let resolvedInviterUsername = ownedInvite?.ownerUsername || matched?.inviterUsername || null;
+    let resolvedSource = ownedInvite?.ownerUserId ? 'user_invite' : (matched?.code ? 'invite' : 'unknown');
+
+    const settingsResult = this.getSettings(guildId);
+    const settings = settingsResult.success ? settingsResult.settings : this._getDefaultSettings();
+    if (
+      settings.inviterAccountAgeFilterEnabled
+      && matched?.inviterId
+      && !ownedInvite?.ownerUserId
+    ) {
+      const minHours = clampInt(settings.inviterMinAccountAgeHours, 1, 720, 48);
+      const minAgeMs = minHours * 60 * 60 * 1000;
+      let inviterCreatedAtMs = Number(matched?.inviterCreatedTimestamp || 0);
+      if (!Number.isFinite(inviterCreatedAtMs) || inviterCreatedAtMs <= 0) {
+        const inviterUser = matched?.inviterId ? await this.client?.users?.fetch(matched.inviterId).catch(() => null) : null;
+        inviterCreatedAtMs = Number(inviterUser?.createdTimestamp || inviterUser?.createdAt?.getTime?.() || 0);
+      }
+      const inviterAgeMs = Date.now() - inviterCreatedAtMs;
+      if (!inviterCreatedAtMs || inviterAgeMs < minAgeMs) {
+        resolvedInviterUserId = null;
+        resolvedInviterUsername = null;
+        resolvedSource = 'invite_filtered_account_age';
+      }
+    }
 
     const result = this._recordInviteEvent({
       guildId,

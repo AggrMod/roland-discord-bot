@@ -102,7 +102,7 @@ const REQUIRED_SCHEMA = Object.freeze({
   ai_assistant_ingestion_jobs: ['guild_id', 'status', 'source_type', 'source_ref', 'result_doc_id', 'created_at'],
   ai_assistant_action_suggestions: ['guild_id', 'requested_by_user_id', 'action_type', 'status', 'payload_json', 'created_at'],
   ai_assistant_role_limits: ['guild_id', 'role_id', 'daily_requests_per_user', 'daily_tokens_per_user', 'updated_at'],
-  invite_tracker_settings: ['guild_id', 'required_join_role_id', 'panel_channel_id', 'panel_message_id', 'panel_period_days', 'panel_limit', 'panel_enable_create_link', 'include_verification_stats', 'excluded_codes', 'panel_sort_by'],
+  invite_tracker_settings: ['guild_id', 'required_join_role_id', 'panel_channel_id', 'panel_message_id', 'panel_period_days', 'panel_limit', 'panel_enable_create_link', 'include_verification_stats', 'excluded_codes', 'panel_sort_by', 'inviter_account_age_filter_enabled', 'inviter_min_account_age_hours'],
   invite_tracker_user_codes: ['guild_id', 'invite_code', 'owner_user_id', 'owner_username', 'channel_id', 'active', 'created_at', 'updated_at'],
   invite_events: ['guild_id', 'joined_user_id', 'inviter_user_id', 'invite_code', 'source', 'joined_at'],
   tenant_welcome_settings: ['guild_id', 'enabled', 'welcome_channel_id', 'verification_channel_id', 'welcome_message_template', 'welcome_embed_json', 'welcome_image_url', 'dynamic_avatar_card', 'dm_enabled', 'dm_message_template', 'auto_role_ids', 'captcha_enabled', 'captcha_role_id', 'captcha_remove_role_id', 'captcha_prompt_mode'],
@@ -1572,6 +1572,8 @@ function initDatabase() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  try { db.exec('ALTER TABLE invite_tracker_settings ADD COLUMN inviter_account_age_filter_enabled INTEGER DEFAULT 0'); } catch (e) {}
+  try { db.exec('ALTER TABLE invite_tracker_settings ADD COLUMN inviter_min_account_age_hours INTEGER DEFAULT 48'); } catch (e) {}
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS invite_tracker_user_codes (

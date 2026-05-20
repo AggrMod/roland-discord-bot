@@ -14393,6 +14393,16 @@ async function loadInviteTrackerSettingsView(targetPaneId = null) {
           Include verification NFT holdings in leaderboard stats
         </label>
       </div>
+      <div style="display:grid;grid-template-columns:minmax(240px,1fr) minmax(200px,280px);gap:12px;margin-bottom:14px;">
+        <label style="display:flex;align-items:center;gap:8px;color:#cbd5e1;font-size:0.86em;cursor:pointer;">
+          <input id="inviteInviterAgeFilterToggle" type="checkbox">
+          Ignore credits from brand-new inviter accounts
+        </label>
+        <div>
+          <label style="display:block;color:#c9d6ff;font-size:0.86em;font-weight:600;margin-bottom:6px;">Minimum inviter account age (hours)</label>
+          <input id="inviteInviterMinAgeHoursInput" type="number" min="1" max="720" value="48" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
+        </div>
+      </div>
       <div style="margin-bottom:14px;">
         <label style="display:block;color:#c9d6ff;font-size:0.86em;font-weight:600;margin-bottom:6px;">Excluded Invite Codes (Leaderboard)</label>
         <textarea id="inviteExcludedCodesInput" rows="2" placeholder="code1, code2, code3" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.88em;resize:vertical;"></textarea>
@@ -14430,6 +14440,16 @@ async function loadInviteTrackerSettingsView(targetPaneId = null) {
     if (createLinkToggle) createLinkToggle.checked = settings.panelEnableCreateLink !== false;
     const includeVerificationStatsToggle = document.getElementById('inviteIncludeVerificationStatsToggle');
     if (includeVerificationStatsToggle) includeVerificationStatsToggle.checked = !!settings.includeVerificationStats;
+    const inviterAgeFilterToggle = document.getElementById('inviteInviterAgeFilterToggle');
+    if (inviterAgeFilterToggle) inviterAgeFilterToggle.checked = !!settings.inviterAccountAgeFilterEnabled;
+    const inviterMinAgeHoursInput = document.getElementById('inviteInviterMinAgeHoursInput');
+    if (inviterMinAgeHoursInput) inviterMinAgeHoursInput.value = String(Number(settings.inviterMinAccountAgeHours || 48));
+    if (inviterAgeFilterToggle && inviterMinAgeHoursInput) {
+      inviterMinAgeHoursInput.disabled = !inviterAgeFilterToggle.checked;
+      inviterAgeFilterToggle.onchange = () => {
+        inviterMinAgeHoursInput.disabled = !inviterAgeFilterToggle.checked;
+      };
+    }
     const excludedCodesInput = document.getElementById('inviteExcludedCodesInput');
     if (excludedCodesInput) excludedCodesInput.value = Array.isArray(settings.excludedCodes) ? settings.excludedCodes.join(', ') : '';
   } catch (_error) {
@@ -14456,12 +14476,15 @@ function getInviteTrackerSettingsPayload() {
   const panelLimitInput = document.getElementById('invitePanelLimitInput');
   const createLinkToggle = document.getElementById('invitePanelCreateLinkToggle');
   const includeVerificationStatsToggle = document.getElementById('inviteIncludeVerificationStatsToggle');
+  const inviterAgeFilterToggle = document.getElementById('inviteInviterAgeFilterToggle');
+  const inviterMinAgeHoursInput = document.getElementById('inviteInviterMinAgeHoursInput');
   const excludedCodesInput = document.getElementById('inviteExcludedCodesInput');
 
   // Prioritize the Panel Settings dropdown if found, otherwise fallback to Dashboard period
   const selectedPeriod = panelPeriodSelect?.value || trackerPeriodSelect?.value || 'all';
   const panelPeriodDays = inviteTrackerPeriodToDays(selectedPeriod);
   const panelLimit = Number(panelLimitInput?.value || 10);
+  const inviterMinAgeHours = Number(inviterMinAgeHoursInput?.value || 48);
   
   return {
     requiredJoinRoleId: roleSelect?.value || null,
@@ -14470,6 +14493,8 @@ function getInviteTrackerSettingsPayload() {
     panelLimit: Number.isFinite(panelLimit) ? panelLimit : 10,
     panelEnableCreateLink: !!createLinkToggle?.checked,
     includeVerificationStats: !!includeVerificationStatsToggle?.checked,
+    inviterAccountAgeFilterEnabled: !!inviterAgeFilterToggle?.checked,
+    inviterMinAccountAgeHours: Number.isFinite(inviterMinAgeHours) ? inviterMinAgeHours : 48,
     excludedCodes: String(excludedCodesInput?.value || ''),
   };
 }

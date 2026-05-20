@@ -317,6 +317,8 @@ function createAdminTrackersRouter({
         includeVerificationStats: body.includeVerificationStats,
         excludedCodes: body.excludedCodes,
         panelSortBy: body.panelSortBy,
+        inviterAccountAgeFilterEnabled: body.inviterAccountAgeFilterEnabled,
+        inviterMinAccountAgeHours: body.inviterMinAccountAgeHours,
       });
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to save invite tracker settings', 'VALIDATION_ERROR', null, result));

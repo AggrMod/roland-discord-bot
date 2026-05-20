@@ -1007,7 +1007,36 @@ function createSuperadminTenantOpsRouter({
     try {
       const client = typeof getClient === 'function' ? getClient() : null;
       const guildId = req.params.guildId;
-      const ALLOWED_BRANDING_FIELDS = ['displayName', 'description', 'logoUrl', 'primaryColor', 'supportUrl', 'bot_display_name', 'bot_server_avatar_url', 'bot_server_banner_url', 'bot_server_bio', 'brand_emoji', 'brand_color', 'display_name', 'primary_color', 'secondary_color', 'logo_url', 'icon_url', 'support_url', 'missions_label'];
+      const ALLOWED_BRANDING_FIELDS = [
+        'displayName',
+        'description',
+        'logoUrl',
+        'primaryColor',
+        'supportUrl',
+        'bot_display_name',
+        'bot_server_avatar_url',
+        'bot_server_banner_url',
+        'bot_server_bio',
+        'brand_emoji',
+        'brand_color',
+        'display_name',
+        'primary_color',
+        'secondary_color',
+        'logo_url',
+        'icon_url',
+        'support_url',
+        'footer_text',
+        'ticketing_color',
+        'selfserve_color',
+        'nfttracker_color',
+        'ticket_panel_title',
+        'ticket_panel_description',
+        'selfserve_panel_title',
+        'selfserve_panel_description',
+        'nfttracker_panel_title',
+        'nfttracker_panel_description',
+        'missions_label',
+      ];
       const patch = {};
       for (const key of ALLOWED_BRANDING_FIELDS) {
         if ((req.body || {})[key] !== undefined) patch[key] = req.body[key];

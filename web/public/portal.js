@@ -2200,6 +2200,11 @@ function applySettingsTabVisibility(settings = {}) {
       btn.style.display = 'none';
       return;
     }
+    if (tab === 'branding') {
+      // Branding should always remain reachable for tenant admins.
+      btn.style.display = '';
+      return;
+    }
     const moduleKey = SETTINGS_TAB_MODULE_MAP[tab];
     if (!moduleKey) return; // 'general' has no module key â€” always visible
 

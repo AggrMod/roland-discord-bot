@@ -7302,6 +7302,12 @@ function getTenantModuleLabel(moduleKey) {
   return TENANT_MODULE_LABELS[moduleKey] || moduleKey;
 }
 
+function formatAdminWorkspaceError(prefix, error, fallbackMessage = 'Unknown error') {
+  const raw = String(error?.message || error || fallbackMessage).trim();
+  const safeRaw = raw || fallbackMessage;
+  return prefix ? `${prefix}: ${safeRaw}` : safeRaw;
+}
+
 function formatDiscordIdentityLabel(discordId, displayName = null) {
   const normalizedId = String(discordId || '').trim();
   const normalizedDisplay = String(displayName || '').trim();
@@ -8161,7 +8167,7 @@ async function loadSuperadminWorkspaceHubV2() {
     console.info('[admin-ui-v2][tffmr_ms]', Date.now() - startMs, { workspace });
   } catch (error) {
     console.error('[admin-ui-v2][workspace_load_failure]', { workspace, error: error?.message || String(error) });
-    content.innerHTML = `<div class="sa-v2-empty">Failed to load workspace hub: ${escapeHtml(error.message || 'Unknown error')}</div>`;
+    content.innerHTML = `<div class="sa-v2-empty">${escapeHtml(formatAdminWorkspaceError('Failed to load workspace hub', error))}</div>`;
   }
 }
 
@@ -9378,13 +9384,15 @@ async function saveMicroVerifySettings() {
     });
     const data = await response.json();
     if (!data.success) {
+      console.error('[admin-ui-v2][save_failure]', { action: 'saveMicroVerifySettings', error: data.message || 'Failed to save micro-verify settings' });
       showError(data.message || 'Failed to save micro-verify settings');
       return;
     }
     showSuccess('Micro-verify settings saved ✅');
     await loadSuperadminView();
   } catch (error) {
-    showError(`Failed to save micro-verify settings: ${error.message}`);
+    console.error('[admin-ui-v2][save_failure]', { action: 'saveMicroVerifySettings', error: error?.message || String(error) });
+    showError(formatAdminWorkspaceError('Failed to save micro-verify settings', error));
   }
 }
 
@@ -9418,13 +9426,15 @@ async function saveAiProviderSettings() {
     });
     const data = await response.json();
     if (!data.success) {
+      console.error('[admin-ui-v2][save_failure]', { action: 'saveAiProviderSettings', error: data.message || 'Failed to save AI provider settings' });
       showError(data.message || 'Failed to save AI provider settings');
       return;
     }
     showSuccess('AI provider settings saved ✅');
     await loadSuperadminView();
   } catch (error) {
-    showError(`Failed to save AI provider settings: ${error.message}`);
+    console.error('[admin-ui-v2][save_failure]', { action: 'saveAiProviderSettings', error: error?.message || String(error) });
+    showError(formatAdminWorkspaceError('Failed to save AI provider settings', error));
   }
 }
 
@@ -9456,13 +9466,15 @@ async function saveXProviderSettings() {
     });
     const data = await response.json();
     if (!data.success) {
+      console.error('[admin-ui-v2][save_failure]', { action: 'saveXProviderSettings', error: data.message || 'Failed to save X provider settings' });
       showError(data.message || 'Failed to save X provider settings');
       return;
     }
     showSuccess('X provider settings saved');
     await loadSuperadminView();
   } catch (error) {
-    showError(`Failed to save X provider settings: ${error.message}`);
+    console.error('[admin-ui-v2][save_failure]', { action: 'saveXProviderSettings', error: error?.message || String(error) });
+    showError(formatAdminWorkspaceError('Failed to save X provider settings', error));
   }
 }
 
@@ -9485,13 +9497,15 @@ async function saveChainEmojiMap() {
     });
     const data = await response.json();
     if (!data.success) {
+      console.error('[admin-ui-v2][save_failure]', { action: 'saveChainEmojiMap', error: data.message || 'Failed to save chain emoji map' });
       showError(data.message || 'Failed to save chain emoji map');
       return;
     }
     showSuccess('Chain emoji map saved');
     await loadSuperadminView();
   } catch (error) {
-    showError(`Failed to save chain emoji map: ${error.message}`);
+    console.error('[admin-ui-v2][save_failure]', { action: 'saveChainEmojiMap', error: error?.message || String(error) });
+    showError(formatAdminWorkspaceError('Failed to save chain emoji map', error));
   }
 }
 

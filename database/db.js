@@ -1127,29 +1127,29 @@ function initDatabase() {
         AND existing.module_key = 'aiassistant'
     )
   `); } catch (e) {}
-  try { db.exec("ALTER TABLE proposals ADD COLUMN guild_id TEXT DEFAULT ''"); } catch (e) {}
-  try { db.exec("CREATE INDEX IF NOT EXISTS idx_proposals_guild ON proposals(guild_id)"); } catch (e) {}
-  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN customer_id TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN subscription_id TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN provider TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN subscription_status TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN billing_interval TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN current_period_start DATETIME"); } catch (e) {}
-  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN current_period_end DATETIME"); } catch (e) {}
-  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN cancel_at_period_end INTEGER DEFAULT 0"); } catch (e) {}
-  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN canceled_at DATETIME"); } catch (e) {}
-  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN last_payment_at DATETIME"); } catch (e) {}
-  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN last_payment_status TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN metadata_json TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
-  try { db.exec("ALTER TABLE tenant_billing ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"); } catch (e) {}
-  try { db.exec("CREATE INDEX IF NOT EXISTS idx_tenant_billing_tenant ON tenant_billing(tenant_id)"); } catch (e) {}
-  try { db.exec("CREATE INDEX IF NOT EXISTS idx_tenant_billing_customer ON tenant_billing(customer_id)"); } catch (e) {}
-  try { db.exec("CREATE INDEX IF NOT EXISTS idx_tenant_billing_status ON tenant_billing(subscription_status)"); } catch (e) {}
-  try { db.exec("CREATE INDEX IF NOT EXISTS idx_tenant_billing_period_end ON tenant_billing(current_period_end)"); } catch (e) {}
-  try { db.exec("ALTER TABLE nft_tracked_collections ADD COLUMN guild_id TEXT NOT NULL DEFAULT ''"); } catch (e) {}
-  try { db.exec("ALTER TABLE nft_tracked_collections ADD COLUMN me_symbol TEXT DEFAULT ''"); } catch (e) {}
-  try { db.exec('ALTER TABLE nft_tracked_collections ADD COLUMN track_bid INTEGER DEFAULT 0'); } catch (e) {}
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE proposals ADD COLUMN guild_id TEXT DEFAULT ''"));
+  ignoreDuplicateMigration(() => db.exec("CREATE INDEX IF NOT EXISTS idx_proposals_guild ON proposals(guild_id)"));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE tenant_billing ADD COLUMN customer_id TEXT"));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE tenant_billing ADD COLUMN subscription_id TEXT"));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE tenant_billing ADD COLUMN provider TEXT"));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE tenant_billing ADD COLUMN subscription_status TEXT"));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE tenant_billing ADD COLUMN billing_interval TEXT"));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE tenant_billing ADD COLUMN current_period_start DATETIME"));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE tenant_billing ADD COLUMN current_period_end DATETIME"));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE tenant_billing ADD COLUMN cancel_at_period_end INTEGER DEFAULT 0"));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE tenant_billing ADD COLUMN canceled_at DATETIME"));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE tenant_billing ADD COLUMN last_payment_at DATETIME"));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE tenant_billing ADD COLUMN last_payment_status TEXT"));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE tenant_billing ADD COLUMN metadata_json TEXT"));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE tenant_billing ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP"));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE tenant_billing ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP"));
+  ignoreDuplicateMigration(() => db.exec("CREATE INDEX IF NOT EXISTS idx_tenant_billing_tenant ON tenant_billing(tenant_id)"));
+  ignoreDuplicateMigration(() => db.exec("CREATE INDEX IF NOT EXISTS idx_tenant_billing_customer ON tenant_billing(customer_id)"));
+  ignoreDuplicateMigration(() => db.exec("CREATE INDEX IF NOT EXISTS idx_tenant_billing_status ON tenant_billing(subscription_status)"));
+  ignoreDuplicateMigration(() => db.exec("CREATE INDEX IF NOT EXISTS idx_tenant_billing_period_end ON tenant_billing(current_period_end)"));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE nft_tracked_collections ADD COLUMN guild_id TEXT NOT NULL DEFAULT ''"));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE nft_tracked_collections ADD COLUMN me_symbol TEXT DEFAULT ''"));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE nft_tracked_collections ADD COLUMN track_bid INTEGER DEFAULT 0'));
 
   // Ensure nft_tracked_collections supports per-tenant duplicate collection addresses.
   // Legacy deployments may still have a global UNIQUE(collection_address) constraint.
@@ -1625,10 +1625,10 @@ function initDatabase() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  try { db.exec('ALTER TABLE tenant_welcome_settings ADD COLUMN welcome_image_asset_id INTEGER DEFAULT NULL'); } catch (_) {}
-  try { db.exec('ALTER TABLE tenant_welcome_settings ADD COLUMN verification_channel_id TEXT DEFAULT NULL'); } catch (_) {}
-  try { db.exec("ALTER TABLE tenant_welcome_settings ADD COLUMN captcha_remove_role_id TEXT DEFAULT NULL"); } catch (_) {}
-  try { db.exec("ALTER TABLE tenant_welcome_settings ADD COLUMN captcha_prompt_mode TEXT DEFAULT 'dm'"); } catch (_) {}
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE tenant_welcome_settings ADD COLUMN welcome_image_asset_id INTEGER DEFAULT NULL'));
+  ignoreDuplicateMigration(() => db.exec('ALTER TABLE tenant_welcome_settings ADD COLUMN verification_channel_id TEXT DEFAULT NULL'));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE tenant_welcome_settings ADD COLUMN captcha_remove_role_id TEXT DEFAULT NULL"));
+  ignoreDuplicateMigration(() => db.exec("ALTER TABLE tenant_welcome_settings ADD COLUMN captcha_prompt_mode TEXT DEFAULT 'dm'"));
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS tenant_welcome_assets (
@@ -1642,7 +1642,7 @@ function initDatabase() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  try { db.exec('CREATE INDEX IF NOT EXISTS idx_tenant_welcome_assets_guild ON tenant_welcome_assets(guild_id)'); } catch (_) {}
+  ignoreDuplicateMigration(() => db.exec('CREATE INDEX IF NOT EXISTS idx_tenant_welcome_assets_guild ON tenant_welcome_assets(guild_id)'));
 
   // Token verification rules (tenant-scoped)
   db.exec(`

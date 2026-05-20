@@ -7237,17 +7237,8 @@ let selectedTenantAuditCache = [];
 let selectedTenantLimitsCache = null;
 let selectedTenantTemplatePreview = null;
 let superadminTemplateCatalog = [];
-let superadminTenantSearch = '';
-let superadminActiveTab = 'tenants';
-let superadminGlobalOpsPanel = 'superadmins';
-let superadminTenantsPanel = 'directory';
-let tenantDetailActiveTab = 'overview';
-let superadminTenantDirectoryCollapsed = false;
 let superadminTenantPage = 1;
 let superadminTenantPageSize = 25;
-let superadminTenantTotalPages = 1;
-let superadminTenantTotalCount = 0;
-let superadminTenantSearchTimer = null;
 let superadminIdentitySearch = '';
 let superadminIdentitySearchTimer = null;
 let superadminIdentityCache = [];
@@ -7258,6 +7249,10 @@ let superadminWorkspaceTenantTab = 'plan';
 let superadminWorkspaceSearch = '';
 let superadminWorkspaceBillingSearch = '';
 let superadminWorkspaceBillingStatus = 'all';
+let superadminWorkspaceBillingPage = 1;
+let superadminWorkspaceBillingPageSize = 25;
+let superadminWorkspaceBillingSortBy = 'updatedAt';
+let superadminWorkspaceBillingSortDir = 'desc';
 let superadminWorkspaceActivityCache = [];
 let superadminWorkspaceFocus = '';
 const SUPERADMIN_WORKSPACES = new Set(['overview', 'tenants', 'billing', 'security', 'integrations']);
@@ -7794,7 +7789,7 @@ function renderWorkspaceTenantDetail(tenant, detail, auditLogs) {
   }
 
   const currentTab = String(superadminWorkspaceTenantTab || 'plan');
-  const tabBtn = (tab, label) => `<button class="sa-v2-pill ${currentTab === tab ? 'active' : ''}" onclick="setSuperadminWorkspaceTenantTab('${tab}')">${label}</button>`;
+  const tabBtn = (tab, label) => `<button class="sa-v2-pill ${currentTab === tab ? 'active' : ''}" data-sa-tenant-tab="${escapeHtml(tab)}" onclick="onSuperadminTenantTabClick(event)">${label}</button>`;
   if (currentTab === 'audit') {
     return `
       <div class="sa-v2-detail-header">
@@ -7868,6 +7863,26 @@ function setSuperadminWorkspaceBillingStatus(value) {
   superadminWorkspaceBillingStatus = String(value || 'all');
 }
 
+function onSuperadminTenantTabClick(event) {
+  const tab = event?.currentTarget?.dataset?.saTenantTab;
+  if (!tab) return;
+  setSuperadminWorkspaceTenantTab(tab);
+}
+
+function onSuperadminWorkspaceTabClick(event) {
+  const tab = event?.currentTarget?.dataset?.saWorkspaceTab;
+  if (!tab) return;
+  setSuperadminWorkspaceTab(tab);
+}
+
+function setSuperadminWorkspaceBillingSortBy(value) {
+  superadminWorkspaceBillingSortBy = String(value || 'updatedAt');
+}
+
+function setSuperadminWorkspaceBillingSortDir(value) {
+  superadminWorkspaceBillingSortDir = String(value || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+}
+
 function resetSuperadminWorkspaceTenantFilters() {
   superadminWorkspaceSearch = '';
   superadminTenantPage = 1;
@@ -7877,7 +7892,103 @@ function resetSuperadminWorkspaceTenantFilters() {
 function resetSuperadminWorkspaceBillingFilters() {
   superadminWorkspaceBillingSearch = '';
   superadminWorkspaceBillingStatus = 'all';
+  superadminWorkspaceBillingPage = 1;
+  superadminWorkspaceBillingSortBy = 'updatedAt';
+  superadminWorkspaceBillingSortDir = 'desc';
   loadSuperadminView();
+}
+
+function setSuperadminWorkspaceBillingSort(sortBy) {
+  const normalized = String(sortBy || 'updatedAt').trim();
+  if (superadminWorkspaceBillingSortBy === normalized) {
+    superadminWorkspaceBillingSortDir = superadminWorkspaceBillingSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    superadminWorkspaceBillingSortBy = normalized;
+    superadminWorkspaceBillingSortDir = 'desc';
+  }
+  superadminWorkspaceBillingPage = 1;
+  loadSuperadminView();
+}
+
+function superadminWorkspaceBillingPrevPage() {
+  if (superadminWorkspaceBillingPage <= 1) return;
+  superadminWorkspaceBillingPage -= 1;
+  loadSuperadminView();
+}
+
+function superadminWorkspaceBillingNextPage(totalPages = 1) {
+  const maxPages = Math.max(Number(totalPages || 1), 1);
+  if (superadminWorkspaceBillingPage >= maxPages) return;
+  superadminWorkspaceBillingPage += 1;
+  loadSuperadminView();
+}
+
+function superadminWorkspaceBillingOverride(guildId, currentStatus = '', currentInterval = '') {
+  const normalizedGuildId = String(guildId || '').trim();
+  if (!normalizedGuildId) return;
+  const statusInput = prompt('Override subscription status (e.g. approved, active, suspended, rejected):', String(currentStatus || '').trim() || 'approved');
+  if (statusInput === null) return;
+  const normalizedStatus = String(statusInput || '').trim().toLowerCase();
+  if (!normalizedStatus) {
+    showError('Subscription status is required for override.');
+    return;
+  }
+  const intervalInput = prompt('Billing interval (monthly/yearly, optional):', String(currentInterval || '').trim());
+  if (intervalInput === null) return;
+  const normalizedInterval = String(intervalInput || '').trim().toLowerCase();
+  superadminBillingAction(normalizedGuildId, 'override', {
+    subscriptionStatus: normalizedStatus,
+    billingInterval: normalizedInterval || null,
+  });
+}
+
+function superadminBillingAction(guildId, action, extraPayload = null) {
+  const normalizedGuildId = String(guildId || '').trim();
+  const normalizedAction = String(action || '').trim().toLowerCase();
+  if (!normalizedGuildId || !normalizedAction) return;
+
+  const labels = {
+    approve: 'Approve billing',
+    reject: 'Reject billing',
+    override: 'Override billing',
+  };
+  const descriptions = {
+    approve: 'This marks the billing record as approved and sets tenant status to active.',
+    reject: 'This marks the billing record as rejected and sets tenant status to suspended.',
+    override: 'This applies a manual billing override for this tenant.',
+  };
+
+  const payload = {
+    action: normalizedAction,
+    ...(extraPayload && typeof extraPayload === 'object' ? extraPayload : {}),
+  };
+
+  showConfirmModal(
+    `${labels[normalizedAction] || 'Apply billing action'}?`,
+    descriptions[normalizedAction] || 'Apply this billing action?',
+    async () => {
+      try {
+        const response = await fetch(`/api/superadmin/workspace/billing/${encodeURIComponent(normalizedGuildId)}/action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data?.success === false) {
+          console.error('[admin-ui-v2][save_failure]', { action: 'superadminBillingAction', billingAction: normalizedAction, error: data?.message || `HTTP ${response.status}` });
+          showError(data?.message || `Failed to ${normalizedAction} billing`);
+          return;
+        }
+        showSuccess(`Billing action applied: ${normalizedAction}`);
+        loadSuperadminView();
+      } catch (error) {
+        console.error('[admin-ui-v2][save_failure]', { action: 'superadminBillingAction', billingAction: normalizedAction, error: error?.message || String(error) });
+        showError(formatAdminWorkspaceError(`Failed to ${normalizedAction} billing`, error));
+      }
+    },
+    labels[normalizedAction] || 'Confirm'
+  );
 }
 
 function setSuperadminWorkspaceFocus(focus = '') {
@@ -7920,8 +8031,10 @@ async function loadSuperadminWorkspaceHubV2() {
     const billingQs = new URLSearchParams();
     if (superadminWorkspaceBillingSearch.trim()) billingQs.set('q', superadminWorkspaceBillingSearch.trim());
     if (superadminWorkspaceBillingStatus && superadminWorkspaceBillingStatus !== 'all') billingQs.set('status', superadminWorkspaceBillingStatus);
-    billingQs.set('page', '1');
-    billingQs.set('pageSize', '100');
+    billingQs.set('page', String(superadminWorkspaceBillingPage || 1));
+    billingQs.set('pageSize', String(superadminWorkspaceBillingPageSize || 25));
+    billingQs.set('sortBy', String(superadminWorkspaceBillingSortBy || 'updatedAt'));
+    billingQs.set('sortDir', String(superadminWorkspaceBillingSortDir || 'desc'));
 
     const [tenantsRes, activityRes, billingRes, adminsRes, globalSettingsRes] = await Promise.all([
       fetch(`/api/superadmin/workspace/tenants?${tenantsQs.toString()}`, { credentials: 'include', headers }),
@@ -7954,6 +8067,12 @@ async function loadSuperadminWorkspaceHubV2() {
 
     const tenants = Array.isArray(tenantsJson?.tenants) ? tenantsJson.tenants : [];
     const billingEntries = (billingRes.ok && billingJson?.success !== false && Array.isArray(billingJson?.entries)) ? billingJson.entries : [];
+    const billingPagination = billingJson?.pagination || { page: 1, pageSize: superadminWorkspaceBillingPageSize || 25, total: billingEntries.length, totalPages: 1 };
+    const billingSorting = billingJson?.sorting || { sortBy: superadminWorkspaceBillingSortBy || 'updatedAt', sortDir: superadminWorkspaceBillingSortDir || 'desc' };
+    superadminWorkspaceBillingPage = Number(billingPagination.page || 1);
+    superadminWorkspaceBillingPageSize = Number(billingPagination.pageSize || superadminWorkspaceBillingPageSize || 25);
+    superadminWorkspaceBillingSortBy = String(billingSorting.sortBy || superadminWorkspaceBillingSortBy || 'updatedAt');
+    superadminWorkspaceBillingSortDir = String(billingSorting.sortDir || superadminWorkspaceBillingSortDir || 'desc');
     const activityItems = (activityRes.ok && activityJson?.success !== false && Array.isArray(activityJson?.items)) ? activityJson.items : [];
     const superadmins = (adminsRes.ok && adminsJson?.success !== false && Array.isArray(adminsJson?.superadmins)) ? adminsJson.superadmins : [];
     const globalSettings = globalSettingsJson?.settings || {};
@@ -7990,7 +8109,7 @@ async function loadSuperadminWorkspaceHubV2() {
 
     const tabButton = (key, label) => {
       const enabled = !!capabilities[key];
-      return `<button class="sa-v2-tab ${workspace === key ? 'active' : ''}" ${enabled ? `onclick="setSuperadminWorkspaceTab('${key}')"` : ''} ${enabled ? '' : 'disabled'}>${label}</button>`;
+      return `<button class="sa-v2-tab ${workspace === key ? 'active' : ''}" data-sa-workspace-tab="${escapeHtml(key)}" ${enabled ? 'onclick="onSuperadminWorkspaceTabClick(event)"' : ''} ${enabled ? '' : 'disabled'}>${label}</button>`;
     };
 
     let workspaceBody = '';
@@ -8029,12 +8148,23 @@ async function loadSuperadminWorkspaceHubV2() {
                 <option value="paid"${superadminWorkspaceBillingStatus === 'paid' ? ' selected' : ''}>Paid</option>
                 <option value="trialing"${superadminWorkspaceBillingStatus === 'trialing' ? ' selected' : ''}>Trialing</option>
               </select>
+              <select onchange="setSuperadminWorkspaceBillingSortBy(this.value)">
+                <option value="updatedAt"${superadminWorkspaceBillingSortBy === 'updatedAt' ? ' selected' : ''}>Sort: Updated</option>
+                <option value="guildName"${superadminWorkspaceBillingSortBy === 'guildName' ? ' selected' : ''}>Sort: Tenant</option>
+                <option value="subscriptionStatus"${superadminWorkspaceBillingSortBy === 'subscriptionStatus' ? ' selected' : ''}>Sort: Status</option>
+                <option value="provider"${superadminWorkspaceBillingSortBy === 'provider' ? ' selected' : ''}>Sort: Provider</option>
+                <option value="billingInterval"${superadminWorkspaceBillingSortBy === 'billingInterval' ? ' selected' : ''}>Sort: Interval</option>
+              </select>
+              <select onchange="setSuperadminWorkspaceBillingSortDir(this.value)">
+                <option value="desc"${superadminWorkspaceBillingSortDir === 'desc' ? ' selected' : ''}>Desc</option>
+                <option value="asc"${superadminWorkspaceBillingSortDir === 'asc' ? ' selected' : ''}>Asc</option>
+              </select>
               <button class="btn-secondary" onclick="loadSuperadminView()">Apply</button>
               <button class="btn-secondary" onclick="resetSuperadminWorkspaceBillingFilters()">Clear</button>
             </div>
             <div class="sa-v2-table-wrap">
               <table class="sa-v2-table">
-                <thead><tr><th>Tenant</th><th>Status</th><th>Provider</th><th>Interval</th><th>Last Payment</th><th>Period End</th><th>Queue</th></tr></thead>
+                <thead><tr><th>Tenant</th><th>Status</th><th>Provider</th><th>Interval</th><th>Last Payment</th><th>Period End</th><th>Queue</th><th>Actions</th></tr></thead>
                 <tbody>
                   ${billingEntries.length ? billingEntries.map((entry) => `
                     <tr>
@@ -8045,12 +8175,26 @@ async function loadSuperadminWorkspaceHubV2() {
                       <td>${escapeHtml(entry.lastPaymentAt ? new Date(entry.lastPaymentAt).toLocaleString() : '—')}</td>
                       <td>${escapeHtml(entry.currentPeriodEnd ? new Date(entry.currentPeriodEnd).toLocaleString() : '—')}</td>
                       <td>${escapeHtml(entry.verificationStatus || 'pending')}</td>
+                      <td>
+                        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                          <button class="btn-secondary" style="padding:4px 8px;" onclick="superadminBillingAction('${escapeJsString(entry.guildId || '')}', 'approve')">Approve</button>
+                          <button class="btn-secondary" style="padding:4px 8px;" onclick="superadminBillingAction('${escapeJsString(entry.guildId || '')}', 'reject')">Reject</button>
+                          <button class="btn-secondary" style="padding:4px 8px;" onclick="superadminWorkspaceBillingOverride('${escapeJsString(entry.guildId || '')}', '${escapeJsString(entry.subscriptionStatus || '')}', '${escapeJsString(entry.billingInterval || '')}')">Override</button>
+                        </div>
+                      </td>
                     </tr>
-                  `).join('') : '<tr><td colspan="7">No billing records found for the current filters.</td></tr>'}
+                  `).join('') : '<tr><td colspan="8">No billing records found for the current filters.</td></tr>'}
                 </tbody>
               </table>
             </div>
-            <div class="sa-v2-inline-note">Manual approve/reject/override will be wired to payment actions in the next pass; this V1 ships the dedicated ledger and verification queue visibility.</div>
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap;">
+              <div class="sa-v2-inline-note" style="margin:0;">Page ${escapeHtml(String(superadminWorkspaceBillingPage || 1))} of ${escapeHtml(String(Math.max(Number(billingPagination.totalPages || 1), 1)))} • ${escapeHtml(String(billingPagination.total || 0))} records</div>
+              <div style="display:flex; gap:8px;">
+                <button class="btn-secondary" onclick="superadminWorkspaceBillingPrevPage()" ${Number(superadminWorkspaceBillingPage || 1) <= 1 ? 'disabled' : ''}>Prev</button>
+                <button class="btn-secondary" onclick="superadminWorkspaceBillingNextPage(${Number(billingPagination.totalPages || 1)})" ${Number(superadminWorkspaceBillingPage || 1) >= Number(billingPagination.totalPages || 1) ? 'disabled' : ''}>Next</button>
+              </div>
+            </div>
+            <div class="sa-v2-inline-note">Use Approve/Reject/Override to manage billing verification lifecycle directly from this queue.</div>
           </div>
         `
         : renderWorkspaceLockedState('Billing workspace');
@@ -8265,139 +8409,6 @@ async function loadSuperadminView() {
 
 
 
-async function loadSelectedTenantDetail() {
-  const content = document.getElementById('adminTenantDetailContent');
-  if (!content) return;
-
-  if (!selectedTenantGuildId) {
-    selectedTenantLimitsCache = null;
-    selectedTenantTemplatePreview = null;
-    superadminTemplateCatalog = [];
-    content.innerHTML = renderTenantDetailPanel(null);
-    return;
-  }
-
-  content.innerHTML = `<div style="text-align:center; padding:20px;"><div class="spinner"></div><p style="margin-top:10px;">Loading tenant details...</p></div>`;
-
-  try {
-    const [tenantResponse, auditResponse, limitsResponse, templateResponse] = await Promise.all([
-      fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}`, { credentials: 'include' }),
-      fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/audit?limit=10`, { credentials: 'include' }),
-      fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/limits`, { credentials: 'include' }),
-      fetch('/api/superadmin/monetization/templates', { credentials: 'include' })
-    ]);
-
-    const [tenantData, auditData, limitsData, templateData] = await Promise.all([
-      tenantResponse.json(),
-      auditResponse.json(),
-      limitsResponse.json(),
-      templateResponse.json()
-    ]);
-
-    if (!tenantData.success) {
-      content.innerHTML = `<div style="color:#fca5a5; text-align:center; padding:20px;">${escapeHtml(tenantData.message || 'Unable to load tenant')}</div>`;
-      return;
-    }
-
-    if (!auditData.success) {
-      content.innerHTML = `<div style="color:#fca5a5; text-align:center; padding:20px;">${escapeHtml(auditData.message || 'Unable to load audit log')}</div>`;
-      return;
-    }
-
-    selectedTenantDetailCache = tenantData.tenant || null;
-    selectedTenantAuditCache = auditData.auditLogs || [];
-    selectedTenantLimitsCache = limitsData?.success ? limitsData.limits : null;
-    selectedTenantTemplatePreview = null;
-    superadminTemplateCatalog = templateData?.success && Array.isArray(templateData.templates) ? templateData.templates : [];
-    content.innerHTML = renderTenantDetailPanel(selectedTenantDetailCache, selectedTenantLimitsCache);
-    showTenantDetailTab(tenantDetailActiveTab || 'overview');
-    updateTenantTemplateDescription();
-  } catch (error) {
-    content.innerHTML = `<div style="color:#fca5a5; text-align:center; padding:20px;">Error loading tenant details: ${escapeHtml(error.message || 'Unknown error')}</div>`;
-  }
-}
-
-async function loadEraAssignments() {
-  const table = document.getElementById('eraAssignmentsTable');
-  const select = document.getElementById('eraAssignKey');
-  try {
-    const [erasRes, assignRes] = await Promise.all([
-      fetch('/api/superadmin/eras', { credentials: 'include', headers: buildTenantRequestHeaders() }),
-      fetch('/api/superadmin/era-assignments', { credentials: 'include', headers: buildTenantRequestHeaders() })
-    ]);
-    const [erasData, assignData] = await Promise.all([erasRes.json(), assignRes.json()]);
-
-    // Populate era dropdown
-    if (select && erasData.success && erasData.eras) {
-      select.innerHTML = erasData.eras.map(e =>
-        `<option value="${escapeHtml(e.key)}">${escapeHtml(e.name)} — ${escapeHtml(e.description)}</option>`
-      ).join('');
-      if (erasData.eras.length === 0) {
-        select.innerHTML = '<option value="">No assignable eras</option>';
-      }
-    }
-
-    // Populate assignments table
-    if (table && assignData.success) {
-      const rows = (assignData.assignments || []).filter(a => !selectedTenantGuildId || a.guild_id === selectedTenantGuildId);
-      if (rows.length === 0) {
-        table.innerHTML = '<div style="padding:18px; text-align:center; color:var(--text-secondary);">No era assignments yet.</div>';
-      } else {
-        table.innerHTML = `
-          <div style="display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) auto; gap:12px; padding:10px 14px; background:rgba(99,102,241,0.12); color:#c9d6ff; font-weight:600; font-size:0.82em;">
-            <div>Guild</div><div>Era</div><div>Assigned By</div><div></div>
-          </div>
-        ` + rows.map(a => `
-          <div style="display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) auto; gap:12px; padding:10px 14px; border-top:1px solid rgba(99,102,241,0.12); align-items:center;">
-            <div style="color:#e0e7ff; font-family:monospace; font-size:0.88em; word-break:break-all;">${escapeHtml(a.guild_name || a.guild_id)}<br><span style="color:var(--text-secondary); font-size:0.82em;">${escapeHtml(a.guild_id)}</span></div>
-            <div style="color:#c9d6ff;">${escapeHtml(a.era_key)}</div>
-            <div style="color:var(--text-secondary); font-size:0.88em;">${escapeHtml(formatDiscordIdentityLabel(a.assigned_by || '—', a.assigned_by_display_name || null))}</div>
-            <button class="btn-secondary" style="font-size:0.85em; padding:6px 12px;" onclick="revokeEra('${escapeJsString(a.guild_id)}', '${escapeJsString(a.era_key)}')">Revoke</button>
-          </div>
-        `).join('');
-      }
-    }
-  } catch (error) {
-    if (table) table.innerHTML = `<div style="padding:18px; text-align:center; color:#fca5a5;">Error: ${escapeHtml(error.message)}</div>`;
-  }
-}
-
-async function assignEra() {
-  const guildId = String(selectedTenantGuildId || '').trim();
-  const eraKey = document.getElementById('eraAssignKey')?.value;
-  if (!guildId || !eraKey) return alert('Please select an active tenant context and an era.');
-
-  try {
-    const res = await fetch('/api/superadmin/era-assignments', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { ...Object.fromEntries(buildTenantRequestHeaders().entries()), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ guildId, eraKey })
-    });
-    const data = await res.json();
-    if (!data.success) return alert(data.message || 'Failed to assign era');
-    loadEraAssignments();
-  } catch (error) {
-    alert('Error assigning era: ' + error.message);
-  }
-}
-
-async function revokeEra(guildId, eraKey) {
-  if (!confirm(`Revoke era "${eraKey}" from guild ${guildId}?`)) return;
-
-  try {
-    const res = await fetch(`/api/superadmin/era-assignments/${encodeURIComponent(guildId)}/${encodeURIComponent(eraKey)}`, {
-      method: 'DELETE',
-      credentials: 'include',
-      headers: buildTenantRequestHeaders()
-    });
-    const data = await res.json();
-    if (!data.success) return alert(data.message || 'Failed to revoke era');
-    loadEraAssignments();
-  } catch (error) {
-    alert('Error revoking era: ' + error.message);
-  }
-}
 
 function renderSuperadminIdentityDetail(profile) {
   if (!profile?.user) {
@@ -8791,124 +8802,6 @@ function removeSuperadminIdentityWallet(discordId, walletAddress) {
   );
 }
 
-function showSuperadminTab(tab) {
-  superadminActiveTab = tab;
-  syncSuperadminRouteState();
-  const sections = {
-    globalops: ['superadminSection-globalopsNav', 'superadminSection-superadminsInput', 'superadminSection-superadmins', 'superadminSection-chainEmojis', 'superadminSection-microVerify', 'superadminSection-aiProviders', 'superadminSection-xProvider'],
-    identity: ['superadminSection-identity'],
-    tenants: ['superadminSection-tenantsNav', 'superadminSection-tenants', 'superadminSection-detail', 'superadminSection-eras'],
-    monitoring: ['superadminSection-monitoring'],
-  };
-  Object.entries(sections).forEach(([key, ids]) => {
-    ids.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = (key === tab) ? '' : 'none';
-    });
-  });
-  document.querySelectorAll('[data-superadmin-tab-btn]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.superadminTabBtn === tab);
-  });
-  const tenantDetailGroup = document.getElementById('superadminTenantDetailTabGroup');
-  if (tenantDetailGroup) tenantDetailGroup.style.display = 'none';
-  if (tab === 'tenants') {
-    showSuperadminTenantsPanel(superadminTenantsPanel || 'directory');
-  } else if (tab === 'globalops') {
-    showSuperadminGlobalOpsPanel(superadminGlobalOpsPanel || 'superadmins');
-  } else if (tab === 'identity') {
-    loadSuperadminIdentityView();
-  } else if (tab === 'monitoring') {
-    loadSystemStatus('superadminSystemStatusContent');
-  }
-}
-
-function syncSuperadminRouteState() {
-  try {
-    const qs = new URLSearchParams(window.location.search);
-    qs.set('section', 'admin');
-    qs.set('saTab', String(superadminActiveTab || 'tenants'));
-    qs.set('saGlobalOps', String(superadminGlobalOpsPanel || 'superadmins'));
-    qs.set('saTenants', String(superadminTenantsPanel || 'directory'));
-    qs.set('saTenantDetail', String(tenantDetailActiveTab || 'overview'));
-    const newUrl = `${window.location.pathname}?${qs.toString()}`;
-    window.history.replaceState({}, '', newUrl);
-  } catch {}
-}
-
-function navigateSuperadmin(tab, options = {}) {
-  if (tab) superadminActiveTab = String(tab);
-  if (options && typeof options === 'object') {
-    if (options.globalOps) superadminGlobalOpsPanel = String(options.globalOps);
-    if (options.tenants) superadminTenantsPanel = String(options.tenants);
-    if (options.tenantDetail) tenantDetailActiveTab = String(options.tenantDetail);
-  }
-  syncSuperadminRouteState();
-  loadSuperadminView();
-}
-
-function showSuperadminGlobalOpsPanel(panel) {
-  const normalized = String(panel || '').trim() || 'superadmins';
-  superadminGlobalOpsPanel = normalized;
-
-  const mapping = {
-    superadmins: ['superadminSection-superadminsInput', 'superadminSection-superadmins'],
-    chainEmojis: ['superadminSection-chainEmojis'],
-    microVerify: ['superadminSection-microVerify'],
-    aiProviders: ['superadminSection-aiProviders'],
-    xProvider: ['superadminSection-xProvider'],
-  };
-
-  const allIds = [
-    'superadminSection-superadminsInput',
-    'superadminSection-superadmins',
-    'superadminSection-chainEmojis',
-    'superadminSection-microVerify',
-    'superadminSection-aiProviders',
-    'superadminSection-xProvider',
-  ];
-  const visible = new Set(mapping[normalized] || mapping.superadmins);
-
-  allIds.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = visible.has(id) ? '' : 'none';
-  });
-
-  document.querySelectorAll('[data-sa-ops-panel]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.saOpsPanel === normalized);
-  });
-  syncSuperadminRouteState();
-}
-
-function showSuperadminTenantsPanel(panel) {
-  const normalized = String(panel || '').trim() || 'directory';
-  superadminTenantsPanel = normalized;
-
-  const mapping = {
-    directory: ['superadminSection-tenants'],
-    detail: ['superadminSection-detail'],
-    eras: ['superadminSection-eras'],
-  };
-  const allIds = ['superadminSection-tenants', 'superadminSection-detail', 'superadminSection-eras'];
-  const visible = new Set(mapping[normalized] || mapping.directory);
-
-  allIds.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = visible.has(id) ? '' : 'none';
-  });
-
-  document.querySelectorAll('[data-sa-tenants-panel]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.saTenantsPanel === normalized);
-  });
-
-  const tenantDetailGroup = document.getElementById('superadminTenantDetailTabGroup');
-  if (tenantDetailGroup) {
-    tenantDetailGroup.style.display = normalized === 'detail' ? 'flex' : 'none';
-  }
-  if (normalized === 'detail') {
-    showTenantDetailTab(tenantDetailActiveTab || 'overview');
-  }
-  syncSuperadminRouteState();
-}
 
 function selectTenantGuild(guildId) {
   selectedTenantGuildId = guildId;
@@ -8918,57 +8811,6 @@ function selectTenantGuild(guildId) {
   else url.searchParams.delete('saTenantId');
   window.history.replaceState({}, '', url);
   loadSuperadminView();
-}
-
-function applySuperadminTenantFilter(query) {
-  superadminTenantSearch = String(query || '');
-  superadminTenantPage = 1;
-  if (superadminTenantSearch.trim() !== '') superadminTenantDirectoryCollapsed = false;
-  if (superadminTenantSearchTimer) clearTimeout(superadminTenantSearchTimer);
-  superadminTenantSearchTimer = setTimeout(() => {
-    loadSuperadminView();
-  }, 220);
-}
-
-function superadminTenantPrevPage() {
-  if (superadminTenantPage <= 1) return;
-  superadminTenantPage -= 1;
-  loadSuperadminView();
-}
-
-function superadminTenantNextPage() {
-  if (superadminTenantPage >= superadminTenantTotalPages) return;
-  superadminTenantPage += 1;
-  loadSuperadminView();
-}
-
-function toggleSuperadminTenantDirectory() {
-  superadminTenantDirectoryCollapsed = !superadminTenantDirectoryCollapsed;
-  const body = document.getElementById('superadminTenantDirectoryBody');
-  const btn = document.getElementById('superadminTenantDirectoryToggleBtn');
-  if (body) body.style.display = superadminTenantDirectoryCollapsed ? 'none' : '';
-  if (btn) btn.textContent = superadminTenantDirectoryCollapsed ? 'Show Directory' : 'Hide Directory';
-}
-
-function showTenantDetailTab(tab) {
-  tenantDetailActiveTab = tab;
-  const ids = {
-    overview: ['tenantDetail-overview'],
-    controls: ['tenantDetail-controls'],
-    branding: ['tenantDetail-branding'],
-    modules: ['tenantDetail-modules'],
-    eras: ['superadminSection-eras'],
-  };
-  Object.entries(ids).forEach(([key, list]) => {
-    list.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = (key === tab) ? '' : 'none';
-    });
-  });
-  document.querySelectorAll('[data-tenant-detail-tab]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.tenantDetailTab === tab);
-  });
-  syncSuperadminRouteState();
 }
 
 function updateTenantTemplateDescription() {
@@ -9338,8 +9180,7 @@ async function saveTenantModuleLimits() {
     if (data.success) {
       selectedTenantLimitsCache = data.limits || null;
       showSuccess('Tenant module limits saved');
-      await loadSelectedTenantDetail();
-      showTenantDetailTab('controls');
+      await loadSuperadminView();
     } else {
       console.error('[admin-ui-v2][save_failure]', { action: 'saveTenantModuleLimits', error: data.message || 'Failed to save module limits' });
       showError(data.message || 'Failed to save module limits');

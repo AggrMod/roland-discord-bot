@@ -181,6 +181,8 @@ function createSuperadminTenantOpsRouter({
       const pageSize = Math.min(Math.max(parseInt(req.query.pageSize || '25', 10), 1), 100);
       const status = String(req.query.status || '').trim().toLowerCase();
       const q = String(req.query.q || '').trim().toLowerCase();
+      const sortBy = String(req.query.sortBy || 'updatedAt').trim();
+      const sortDir = String(req.query.sortDir || 'desc').trim().toLowerCase() === 'asc' ? 'asc' : 'desc';
 
       let rows = db.prepare(`
         SELECT
@@ -211,6 +213,23 @@ function createSuperadminTenantOpsRouter({
         });
       }
 
+      const comparators = {
+        updatedAt: (a, b) => {
+          const av = new Date(a?.updatedAt || a?.lastPaymentAt || 0).getTime();
+          const bv = new Date(b?.updatedAt || b?.lastPaymentAt || 0).getTime();
+          return av - bv;
+        },
+        guildName: (a, b) => String(a?.guildName || a?.guildId || '').localeCompare(String(b?.guildName || b?.guildId || ''), undefined, { sensitivity: 'base' }),
+        subscriptionStatus: (a, b) => String(a?.subscriptionStatus || '').localeCompare(String(b?.subscriptionStatus || ''), undefined, { sensitivity: 'base' }),
+        provider: (a, b) => String(a?.provider || '').localeCompare(String(b?.provider || ''), undefined, { sensitivity: 'base' }),
+        billingInterval: (a, b) => String(a?.billingInterval || '').localeCompare(String(b?.billingInterval || ''), undefined, { sensitivity: 'base' }),
+      };
+      const comparator = comparators[sortBy] || comparators.updatedAt;
+      rows.sort((a, b) => {
+        const result = comparator(a, b);
+        return sortDir === 'asc' ? result : -result;
+      });
+
       const total = rows.length;
       const totalPages = Math.max(Math.ceil(total / pageSize), 1);
       const normalizedPage = Math.min(page, totalPages);
@@ -238,9 +257,131 @@ function createSuperadminTenantOpsRouter({
           total,
           totalPages,
         },
+        sorting: {
+          sortBy: comparators[sortBy] ? sortBy : 'updatedAt',
+          sortDir,
+        },
       }));
     } catch (error) {
       logger.error('Error fetching workspace billing ledger:', error);
+      res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/workspace/billing/:guildId/action', superadminGuard, async (req, res) => {
+    try {
+      const guildId = normalizeGuildId(req.params.guildId);
+      if (!guildId) {
+        return res.status(400).json(toErrorResponse('Valid guildId is required', 'VALIDATION_ERROR'));
+      }
+
+      const action = String(req.body?.action || '').trim().toLowerCase();
+      if (!['approve', 'reject', 'override'].includes(action)) {
+        return res.status(400).json(toErrorResponse('Invalid action. Use approve, reject, or override.', 'VALIDATION_ERROR'));
+      }
+
+      const tenant = tenantService.getTenant(guildId) || tenantService.ensureTenant(guildId, null) || tenantService.getTenant(guildId);
+      if (!tenant?.id) {
+        return res.status(404).json(toErrorResponse('Tenant not found', 'NOT_FOUND'));
+      }
+
+      const actorId = req.session?.discordUser?.id || 'unknown';
+      const beforeRow = db.prepare('SELECT * FROM tenant_billing WHERE tenant_id = ? LIMIT 1').get(tenant.id) || null;
+
+      const patch = {
+        subscriptionStatus: String(req.body?.subscriptionStatus || '').trim().toLowerCase() || null,
+        billingInterval: String(req.body?.billingInterval || '').trim().toLowerCase() || null,
+        currentPeriodEnd: req.body?.currentPeriodEnd || null,
+        note: String(req.body?.note || '').trim(),
+        planKey: String(req.body?.planKey || '').trim().toLowerCase() || null,
+        tenantStatus: String(req.body?.tenantStatus || '').trim().toLowerCase() || null,
+      };
+
+      if (action === 'approve') {
+        patch.subscriptionStatus = patch.subscriptionStatus || 'approved';
+        patch.tenantStatus = patch.tenantStatus || 'active';
+      } else if (action === 'reject') {
+        patch.subscriptionStatus = patch.subscriptionStatus || 'rejected';
+        patch.tenantStatus = patch.tenantStatus || 'suspended';
+      } else {
+        if (!patch.subscriptionStatus) {
+          return res.status(400).json(toErrorResponse('subscriptionStatus is required for override', 'VALIDATION_ERROR'));
+        }
+      }
+
+      if (patch.billingInterval && !['monthly', 'yearly'].includes(patch.billingInterval)) {
+        return res.status(400).json(toErrorResponse('billingInterval must be monthly or yearly', 'VALIDATION_ERROR'));
+      }
+
+      if (patch.currentPeriodEnd) {
+        const dt = new Date(patch.currentPeriodEnd);
+        if (Number.isNaN(dt.getTime())) {
+          return res.status(400).json(toErrorResponse('currentPeriodEnd must be a valid date', 'VALIDATION_ERROR'));
+        }
+        patch.currentPeriodEnd = dt.toISOString();
+      }
+
+      if (patch.planKey) {
+        const planResult = tenantService.setTenantPlan(guildId, patch.planKey, actorId);
+        if (!planResult?.success) {
+          return res.status(400).json(toErrorResponse(planResult?.message || 'Failed to update tenant plan', 'VALIDATION_ERROR', null, planResult));
+        }
+      }
+
+      if (patch.tenantStatus) {
+        const statusResult = tenantService.setTenantStatus(guildId, patch.tenantStatus, actorId);
+        if (!statusResult?.success) {
+          return res.status(400).json(toErrorResponse(statusResult?.message || 'Failed to update tenant status', 'VALIDATION_ERROR', null, statusResult));
+        }
+      }
+
+      db.prepare(`
+        INSERT INTO tenant_billing (
+          tenant_id, provider, subscription_status, billing_interval, current_period_end, last_payment_at, last_payment_status, metadata_json
+        ) VALUES (?, COALESCE(?, 'manual'), ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(tenant_id) DO UPDATE SET
+          provider = COALESCE(excluded.provider, tenant_billing.provider),
+          subscription_status = COALESCE(excluded.subscription_status, tenant_billing.subscription_status),
+          billing_interval = COALESCE(excluded.billing_interval, tenant_billing.billing_interval),
+          current_period_end = COALESCE(excluded.current_period_end, tenant_billing.current_period_end),
+          last_payment_at = COALESCE(excluded.last_payment_at, tenant_billing.last_payment_at),
+          last_payment_status = COALESCE(excluded.last_payment_status, tenant_billing.last_payment_status),
+          metadata_json = COALESCE(excluded.metadata_json, tenant_billing.metadata_json),
+          updated_at = CURRENT_TIMESTAMP
+      `).run(
+        tenant.id,
+        String(beforeRow?.provider || 'manual'),
+        patch.subscriptionStatus,
+        patch.billingInterval || beforeRow?.billing_interval || null,
+        patch.currentPeriodEnd || beforeRow?.current_period_end || null,
+        new Date().toISOString(),
+        patch.subscriptionStatus,
+        JSON.stringify({
+          source: 'superadmin_workspace',
+          action,
+          note: patch.note || null,
+          actorId,
+          at: new Date().toISOString(),
+        })
+      );
+
+      const afterRow = db.prepare('SELECT * FROM tenant_billing WHERE tenant_id = ? LIMIT 1').get(tenant.id) || null;
+      tenantService.logAudit(guildId, actorId, `billing_${action}`, beforeRow || {}, afterRow || {});
+
+      res.json(toSuccessResponse({
+        guildId,
+        action,
+        billing: {
+          provider: afterRow?.provider || null,
+          subscriptionStatus: afterRow?.subscription_status || null,
+          billingInterval: afterRow?.billing_interval || null,
+          currentPeriodEnd: afterRow?.current_period_end || null,
+          lastPaymentAt: afterRow?.last_payment_at || null,
+          lastPaymentStatus: afterRow?.last_payment_status || null,
+        },
+      }));
+    } catch (error) {
+      logger.error('Error applying workspace billing action:', error);
       res.status(500).json(toErrorResponse('Internal server error'));
     }
   });

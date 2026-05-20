@@ -84,6 +84,15 @@ This file is the source-of-truth command reference for the current production co
 - `/heist leave`
 - Admin: `/heist admin panel|templates|template-create|spawn-now|resolve|cancel`
 
+## Vault
+- `/vault open`
+- `/vault balance`
+- `/vault history`
+- `/vault leaderboard`
+- `/vault rewards`
+- `/vault upgrade`
+- Admin: `/vault admin panel|setup|setstatus|config-view|config-set|addkeys|removekeys|backfill|rewards-list|rewards-add|rewards-update|rewards-remove`
+
 ## Config
 - `/config modules`
 - `/config toggle`

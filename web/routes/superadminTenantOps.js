@@ -565,6 +565,36 @@ function createSuperadminTenantOpsRouter({
     }
   });
 
+  router.post('/workspace/billing/:guildId/verify-receipt', superadminGuard, async (req, res) => {
+    try {
+      const guildId = normalizeGuildId(req.params.guildId);
+      if (!guildId) {
+        return res.status(400).json(toErrorResponse('Valid guildId is required', 'VALIDATION_ERROR'));
+      }
+      const receiptId = Number(req.body?.receiptId || 0);
+      if (!Number.isFinite(receiptId) || receiptId <= 0) {
+        return res.status(400).json(toErrorResponse('Valid receiptId is required', 'VALIDATION_ERROR'));
+      }
+      const row = db.prepare('SELECT id, guild_id FROM crypto_payment_receipts WHERE id = ? LIMIT 1').get(receiptId);
+      if (!row) {
+        return res.status(404).json(toErrorResponse('Receipt not found', 'NOT_FOUND'));
+      }
+      if (String(row.guild_id || '') !== guildId) {
+        return res.status(400).json(toErrorResponse('Receipt does not belong to this tenant', 'VALIDATION_ERROR'));
+      }
+
+      const result = await billingService.verifyCryptoReceiptOnChain({ receiptId });
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to verify receipt on-chain', 'VALIDATION_ERROR', null, result));
+      }
+
+      res.json(toSuccessResponse(result));
+    } catch (error) {
+      logger.error('Error verifying workspace billing receipt on-chain:', error);
+      res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.get('/workspace/activity', superadminGuard, async (req, res) => {
     try {
       const limit = Math.min(Math.max(parseInt(req.query.limit || '25', 10), 1), 100);

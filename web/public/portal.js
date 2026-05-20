@@ -8079,6 +8079,7 @@ function openSuperadminBillingReceiptReview(guildId) {
             <div style="font-size:0.84em;"><strong>Token/Amount:</strong> ${escapeHtml(item.tokenSymbol || 'n/a')} ${item.amount !== null && item.amount !== undefined ? escapeHtml(String(item.amount)) : 'n/a'}</div>
             <div style="font-size:0.84em;"><strong>Plan/Interval:</strong> ${escapeHtml(item.planKey || 'n/a')} / ${escapeHtml(item.billingInterval || 'n/a')}</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button class="btn-secondary" style="padding:4px 8px;" onclick="superadminVerifyBillingReceiptOnChain('${escapeJsString(normalizedGuildId)}', ${Number(item.id || 0)})">Verify On-Chain</button>
               <button class="btn-secondary" style="padding:4px 8px;" onclick="superadminBillingApproveReceipt('${escapeJsString(normalizedGuildId)}', ${Number(item.id || 0)}, '${escapeJsString(String(item.planKey || ''))}', '${escapeJsString(String(item.billingInterval || ''))}')">Approve Receipt</button>
               <button class="btn-secondary" style="padding:4px 8px;" onclick="superadminRejectBillingReceipt('${escapeJsString(normalizedGuildId)}', ${Number(item.id || 0)})">Reject Receipt</button>
             </div>
@@ -8145,6 +8146,33 @@ function superadminBillingApproveReceipt(guildId, receiptId, planKey = '', billi
     planKey: String(planKey || '').trim().toLowerCase() || null,
     billingInterval: String(billingInterval || '').trim().toLowerCase() || null,
   });
+}
+
+async function superadminVerifyBillingReceiptOnChain(guildId, receiptId) {
+  const normalizedGuildId = String(guildId || '').trim();
+  const normalizedReceiptId = Number(receiptId || 0);
+  if (!normalizedGuildId || !Number.isFinite(normalizedReceiptId) || normalizedReceiptId <= 0) return;
+  try {
+    const res = await fetch(`/api/superadmin/workspace/billing/${encodeURIComponent(normalizedGuildId)}/verify-receipt`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ receiptId: normalizedReceiptId }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json?.success === false) {
+      throw new Error(json?.message || json?.error?.message || `HTTP ${res.status}`);
+    }
+    const verified = !!json?.verified;
+    const reason = String(json?.reason || (verified ? 'Verified' : 'Not verified'));
+    if (verified) {
+      showSuccess(`Receipt #${normalizedReceiptId} verified on-chain. ${reason}`);
+    } else {
+      showInfo(`Receipt #${normalizedReceiptId} not verified: ${reason}`);
+    }
+  } catch (error) {
+    showError(`On-chain verification failed: ${error?.message || 'unknown error'}`);
+  }
 }
 
 function superadminBillingAction(guildId, action, extraPayload = null) {

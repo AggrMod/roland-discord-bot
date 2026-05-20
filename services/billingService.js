@@ -1,6 +1,7 @@
 const db = require('../database/db');
 const tenantService = require('./tenantService');
 const { getPlanPreset, normalizePlanKey } = require('../config/plans');
+const { Connection, PublicKey, LAMPORTS_PER_SOL } = require('@solana/web3.js');
 
 function normalizeString(value) {
   if (value === undefined || value === null) return null;
@@ -46,6 +47,8 @@ function isLikelySolanaSignature(value) {
   const text = String(value || '').trim();
   return /^[1-9A-HJ-NP-Za-km-z]{64,128}$/.test(text);
 }
+
+const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
 function toIsoDate(value) {
   if (value === undefined || value === null || value === '') return null;
@@ -122,6 +125,107 @@ function applyTemplate(url, params = {}) {
 }
 
 class BillingService {
+  getBillingReceiveWallet() {
+    const explicit = normalizeString(process.env.BILLING_RECEIVE_WALLET);
+    if (explicit) return explicit;
+    const treasuryConfig = db.prepare('SELECT solana_wallet FROM treasury_config WHERE id = 1').get();
+    const treasuryWallet = normalizeString(treasuryConfig?.solana_wallet);
+    if (treasuryWallet) return treasuryWallet;
+    return normalizeString(process.env.VERIFICATION_RECEIVE_WALLET);
+  }
+
+  async verifyCryptoReceiptOnChain({ receiptId }) {
+    const enabled = String(process.env.BILLING_ONCHAIN_VERIFY_ENABLED || 'false').trim().toLowerCase() === 'true';
+    if (!enabled) {
+      return { success: false, message: 'On-chain receipt verification is disabled (set BILLING_ONCHAIN_VERIFY_ENABLED=true)' };
+    }
+    const id = Number(receiptId);
+    if (!Number.isFinite(id) || id <= 0) return { success: false, message: 'Valid receiptId is required' };
+    const row = db.prepare('SELECT * FROM crypto_payment_receipts WHERE id = ? LIMIT 1').get(id);
+    if (!row) return { success: false, message: 'Receipt not found' };
+
+    const destinationWallet = this.getBillingReceiveWallet();
+    if (!destinationWallet) return { success: false, message: 'Billing destination wallet is not configured' };
+
+    try {
+      const connection = new Connection(process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com', 'confirmed');
+      const parsedTx = await connection.getParsedTransaction(String(row.tx_signature), { maxSupportedTransactionVersion: 0 });
+      if (!parsedTx) return { success: true, verified: false, reason: 'Transaction not found on-chain' };
+      if (parsedTx.meta?.err) return { success: true, verified: false, reason: 'Transaction failed on-chain' };
+
+      const tokenSymbol = String(row.token_symbol || '').trim().toUpperCase();
+      const expectedAmount = Number(row.amount || 0);
+      const minExpected = Math.max(0, expectedAmount - 0.000001);
+      const accountKeys = Array.isArray(parsedTx.transaction?.message?.accountKeys) ? parsedTx.transaction.message.accountKeys : [];
+      const keyAt = (idx) => {
+        const entry = accountKeys[idx];
+        if (!entry) return null;
+        if (typeof entry === 'string') return entry;
+        if (entry.pubkey) return String(entry.pubkey);
+        return null;
+      };
+
+      let matchedAmount = 0;
+      const instructions = parsedTx.transaction?.message?.instructions || [];
+      for (const instruction of instructions) {
+        const parsed = instruction?.parsed;
+        if (!parsed || typeof parsed !== 'object') continue;
+        const type = String(parsed.type || '').toLowerCase();
+        const info = parsed.info || {};
+
+        if (tokenSymbol === 'SOL' && type === 'transfer') {
+          const dest = String(info.destination || '');
+          const lamports = Number(info.lamports || 0);
+          if (dest === destinationWallet && lamports > 0) {
+            matchedAmount += (lamports / LAMPORTS_PER_SOL);
+          }
+        }
+
+        if (tokenSymbol === 'USDC' && (type === 'transferchecked' || type === 'transfer')) {
+          const dest = String(info.destination || '');
+          const mint = String(info.mint || keyAt(instruction?.accounts?.[1]) || '');
+          let tokenAmount = Number(info.tokenAmount?.uiAmount || 0);
+          if (!Number.isFinite(tokenAmount) || tokenAmount <= 0) {
+            const raw = Number(info.tokenAmount?.amount || info.amount || 0);
+            const decimals = Number(info.tokenAmount?.decimals || info.decimals || 6);
+            tokenAmount = raw > 0 ? raw / (10 ** decimals) : 0;
+          }
+          if (dest === destinationWallet && mint === USDC_MINT && tokenAmount > 0) {
+            matchedAmount += tokenAmount;
+          }
+        }
+      }
+
+      if (matchedAmount >= minExpected) {
+        return {
+          success: true,
+          verified: true,
+          reason: 'On-chain transfer matched receipt',
+          details: {
+            tokenSymbol,
+            expectedAmount,
+            matchedAmount: Number(matchedAmount.toFixed(6)),
+            destinationWallet,
+          },
+        };
+      }
+
+      return {
+        success: true,
+        verified: false,
+        reason: 'No matching transfer to billing wallet found for expected token/amount',
+        details: {
+          tokenSymbol,
+          expectedAmount,
+          matchedAmount: Number(matchedAmount.toFixed(6)),
+          destinationWallet,
+        },
+      };
+    } catch (error) {
+      return { success: false, message: `Verification failed: ${error?.message || 'unknown error'}` };
+    }
+  }
+
   submitCryptoReceipt(guildId, payload = {}) {
     const normalizedGuildId = normalizeString(guildId);
     if (!normalizedGuildId) return { success: false, message: 'guildId is required' };

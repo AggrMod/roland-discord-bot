@@ -8024,7 +8024,30 @@ async function loadSuperadminWorkspaceHubV2() {
         workspaceBody = `
           <div class="sa-v2-panel">
             <div class="sa-v2-detail-header"><h4>Identity Controls</h4><button class="btn-secondary" onclick="setSuperadminWorkspaceFocus('')">Back</button></div>
-            <div class="sa-v2-inline-note">Use trusted/manual flags and wallet linking in the dedicated Identity workflow panel (next V2 pass). For now this replaces the legacy jump to keep the workspace clean.</div>
+            <div style="display:grid;grid-template-columns:minmax(260px,0.9fr) minmax(0,1.1fr);gap:12px;">
+              <div style="display:grid; gap:10px;">
+                <div style="display:grid; gap:8px;">
+                  <div style="display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px;">
+                    <input id="superadminIdentitySearchInput" type="text" value="${escapeHtml(superadminIdentitySearch)}" placeholder="Search by Discord ID, username, or wallet..." oninput="applySuperadminIdentityFilter(this.value)">
+                    <button class="btn-secondary" onclick="loadSuperadminIdentityView()">Refresh</button>
+                  </div>
+                  <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px;">
+                    <input id="superadminIdentityNewDiscordId" type="text" placeholder="Discord User ID">
+                    <input id="superadminIdentityNewUsername" type="text" placeholder="Username (optional)">
+                  </div>
+                  <div style="display:grid; grid-template-columns:minmax(0,1fr) auto auto auto; gap:8px; align-items:center;">
+                    <input id="superadminIdentityNewWallet" type="text" placeholder="Wallet address (optional)">
+                    <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.82em;"><input id="superadminIdentityNewPrimary" type="checkbox">Primary</label>
+                    <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.82em;"><input id="superadminIdentityNewFavorite" type="checkbox">Favorite</label>
+                    <button id="superadminIdentityQuickAddBtn" class="btn-primary" onclick="quickAddSuperadminIdentity()">Create / Link</button>
+                  </div>
+                </div>
+                <div id="superadminIdentityList" style="display:grid; gap:8px; max-height:520px; overflow:auto;"></div>
+              </div>
+              <div id="superadminIdentityDetail" style="padding:12px; border:1px solid rgba(99,102,241,0.16); border-radius:10px; background:rgba(10,16,30,0.4); color:var(--text-secondary);">
+                Select a user to manage identity overrides.
+              </div>
+            </div>
           </div>
         `;
       } else {
@@ -8132,6 +8155,9 @@ async function loadSuperadminWorkspaceHubV2() {
         </div>
       </div>
     `;
+    if (workspace === 'security' && superadminWorkspaceFocus === 'identity') {
+      setTimeout(() => loadSuperadminIdentityView(), 0);
+    }
     console.info('[admin-ui-v2][tffmr_ms]', Date.now() - startMs, { workspace });
   } catch (error) {
     console.error('[admin-ui-v2][workspace_load_failure]', { workspace, error: error?.message || String(error) });

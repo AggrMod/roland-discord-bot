@@ -1423,21 +1423,21 @@ function updateModuleVisibility() {
 // ==================== MODULE REGISTRY & HUB ====================
 
 const MODULE_REGISTRY = [
-  { key: 'verification', label: 'Identity / Verification', icon: 'ðŸ’¼', section: 'wallets', desc: 'Securely verify wallet ownership and manage roles.' },
-  { key: 'governance', label: 'Governance / Voting', icon: 'ðŸ“œ', section: 'governance', desc: 'Participate in DAO decision-making and proposals.' },
-  { key: 'wallettracker', label: 'Wallet Tracker', icon: 'ðŸ’°', section: 'treasury', desc: 'Monitor community floor price and tracked wallets.' },
-  { key: 'nfttracker', label: 'NFT Activity', icon: 'ðŸŽ¨', section: 'nft-activity', desc: 'Real-time sales and listings feed for collections.' },
-  { key: 'tokentracker', label: 'Token Tracker', icon: 'ðŸª™', section: 'token-activity', desc: 'Monitor token transactions and swap activity.' },
-  { key: 'invites', label: 'Invite Tracker', icon: 'ðŸ“§', section: 'invites', adminOnly: true, desc: 'Measure invite performance, leaderboard trends, and referral activity.' },
-  { key: 'aiassistant', label: 'AI Assistant', icon: 'ðŸ¤–', section: 'aiassistant', adminOnly: true, desc: 'Tune prompts, safety controls, and assistant behavior for your server.' },
-  { key: 'ticketing', label: 'Support Tickets', icon: 'ðŸŽ«', section: 'ticketing', desc: 'Integrated support desk and category routing.' },
-  { key: 'engagement', label: 'Engagement Hub', icon: 'ðŸ†', section: 'engagement', desc: 'Activity points, reward shop, and leaderboards.' },
-  { key: 'minigames', label: 'Minigames', icon: 'âš”ï¸', section: 'battle', desc: 'Arcade module including Battle Arena sessions, lobbies, and game events.' },
-  { key: 'heist', label: 'Missions', icon: 'ðŸŽ¯', section: 'heist', desc: 'Role-based missions and strategic community goals.' },
-  { key: 'vault', label: 'Vault', icon: 'ðŸ”', section: 'vault', desc: 'Key rewards, mint sync rules, seasons, and vault operations.' },
-  { key: 'welcome', label: 'Welcome & Onboarding', icon: 'ðŸ‘‹', section: 'welcome', desc: 'Join messages, auto-roles, onboarding DM, and captcha checks.' },
-  { key: 'selfserveroles', label: 'Self-Serve Roles', icon: 'ðŸŽ­', section: 'self-serve-roles', desc: 'Claim optional roles assigned by administrators.' },
-  { key: 'help', label: 'Help Center', icon: 'â“', section: 'help', desc: 'Guides, command references, and troubleshooting across all modules.' }
+  { key: 'verification', label: 'Identity / Verification', icon: '\u{1F4BC}', section: 'wallets', desc: 'Securely verify wallet ownership and manage roles.' },
+  { key: 'governance', label: 'Governance / Voting', icon: '\u{1F4DC}', section: 'governance', desc: 'Participate in DAO decision-making and proposals.' },
+  { key: 'wallettracker', label: 'Wallet Tracker', icon: '\u{1F4B0}', section: 'treasury', desc: 'Monitor community floor price and tracked wallets.' },
+  { key: 'nfttracker', label: 'NFT Activity', icon: '\u{1F3A8}', section: 'nft-activity', desc: 'Real-time sales and listings feed for collections.' },
+  { key: 'tokentracker', label: 'Token Tracker', icon: '\u{1FA99}', section: 'token-activity', desc: 'Monitor token transactions and swap activity.' },
+  { key: 'invites', label: 'Invite Tracker', icon: '\u{1F4E7}', section: 'invites', adminOnly: true, desc: 'Measure invite performance, leaderboard trends, and referral activity.' },
+  { key: 'aiassistant', label: 'AI Assistant', icon: '\u{1F916}', section: 'aiassistant', adminOnly: true, desc: 'Tune prompts, safety controls, and assistant behavior for your server.' },
+  { key: 'ticketing', label: 'Support Tickets', icon: '\u{1F3AB}', section: 'ticketing', desc: 'Integrated support desk and category routing.' },
+  { key: 'engagement', label: 'Engagement Hub', icon: '\u{1F3C6}', section: 'engagement', desc: 'Activity points, reward shop, and leaderboards.' },
+  { key: 'minigames', label: 'Minigames', icon: '\u2694\uFE0F', section: 'battle', desc: 'Arcade module including Battle Arena sessions, lobbies, and game events.' },
+  { key: 'heist', label: 'Missions', icon: '\u{1F3AF}', section: 'heist', desc: 'Role-based missions and strategic community goals.' },
+  { key: 'vault', label: 'Vault', icon: '\u{1F510}', section: 'vault', desc: 'Key rewards, mint sync rules, seasons, and vault operations.' },
+  { key: 'welcome', label: 'Welcome & Onboarding', icon: '\u{1F44B}', section: 'welcome', desc: 'Join messages, auto-roles, onboarding DM, and captcha checks.' },
+  { key: 'selfserveroles', label: 'Self-Serve Roles', icon: '\u{1F3AD}', section: 'self-serve-roles', desc: 'Claim optional roles assigned by administrators.' },
+  { key: 'help', label: 'Help Center', icon: '\u2753', section: 'help', desc: 'Guides, command references, and troubleshooting across all modules.' }
 ];
 
 const MODULE_TOGGLE_SETTING_FIELD_MAP = Object.freeze({
@@ -1571,7 +1571,7 @@ function renderModuleHub() {
     html += `
       <div class="module-tile module-tile--admin" onclick="switchSection('settings')">
         <div class="module-tile__header">
-          <div class="module-tile__icon">âš™ï¸</div>
+          <div class="module-tile__icon">\u2699\uFE0F</div>
           <div class="module-tile__status status-active">Admin</div>
         </div>
         <div class="module-tile__body">
@@ -1590,7 +1590,7 @@ function renderModuleHub() {
     html += `
       <div class="module-tile" onclick="switchSection('admin'); showAdminView('superadmin'); setTimeout(() => setSuperadminWorkspaceTab('overview'), 120);">
         <div class="module-tile__header">
-          <div class="module-tile__icon">ðŸ–¥ï¸</div>
+          <div class="module-tile__icon">\u{1F5A5}\uFE0F</div>
           <div class="module-tile__status status-active">System</div>
         </div>
         <div class="module-tile__body">
@@ -1643,7 +1643,7 @@ function renderModuleHub() {
           <p class="module-tile__desc">${escapeHtml(mod.desc)}</p>
         </div>
         <div class="module-tile__footer">
-          ${isServerAdmin ? '<span class="nav-icon" style="font-size:1.1rem; opacity:0.6;">âš™ï¸</span>' : ''}
+          ${isServerAdmin ? '<span class="nav-icon" style="font-size:1.1rem; opacity:0.6;">\u2699\uFE0F</span>' : ''}
           <span style="font-size:0.8rem; color:var(--text-muted); margin-left:8px;">${isEnabled ? 'Enter Module &rarr;' : 'Module Disabled'}</span>
           ${toggleHtml}
         </div>
@@ -20054,20 +20054,20 @@ function renderDashboardTile(title, value, icon, meta, statusClass, onClickStr =
 
 function getModuleIcon(modId) {
   const icons = {
-    governance: "ðŸ“œ",
-    verification: "ðŸ’¼",
-    battle: "âš”ï¸",
-    treasury: "ðŸ’°",
-    nfttracker: "ðŸŽ¨",
-    tokentracker: "ðŸª™",
-    selfserve: "ðŸŽ­",
-    ticketing: "ðŸŽ«",
-    engagement: "ðŸ…",
-    heist: "ðŸŽ¯",
-    aiassistant: "ðŸ¤–",
-    invites: "ðŸ“¨"
+    governance: "\u{1F4DC}",
+    verification: "\u{1F4BC}",
+    battle: "\u2694\uFE0F",
+    treasury: "\u{1F4B0}",
+    nfttracker: "\u{1F3A8}",
+    tokentracker: "\u{1FA99}",
+    selfserve: "\u{1F3AD}",
+    ticketing: "\u{1F3AB}",
+    engagement: "\u{1F3C6}",
+    heist: "\u{1F3AF}",
+    aiassistant: "\u{1F916}",
+    invites: "\u{1F4E8}"
   };
-  return icons[modId] || "ðŸ“¦";
+  return icons[modId] || "\u{1F4E6}";
 }
 
 function setDashboardAnalyticsRange(range = '7d') {

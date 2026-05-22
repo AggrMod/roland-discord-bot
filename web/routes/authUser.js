@@ -1397,6 +1397,7 @@ function createAuthUserRouter({
         ...wallet,
         last_verified_at: effectiveLastVerifiedAt || wallet.created_at || null,
       }));
+      const delegatedWallets = walletService.getDelegatedWallets(discordId, requestedGuildId || '');
 
       const hasMissionsGuildColumn = missionService.hasMissionsGuildColumn?.() === true;
       let proposals = [];
@@ -1464,6 +1465,7 @@ function createAuthUserRouter({
           walletAlertIdentityOptOut: Number(userPrefs.wallet_alert_identity_opt_out || 0) === 1
         },
         wallets: walletsWithVerificationTime,
+        delegatedWallets,
         proposals,
         missions,
         heist: {

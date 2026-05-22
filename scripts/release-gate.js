@@ -13,6 +13,7 @@ const checks = [
   { name: 'og-role-tenant-scoping', cmd: process.execPath, args: ['tests/test-og-role-tenant-scoping.js'] },
   { name: 'ticket-tenant-safety', cmd: process.execPath, args: ['tests/test-ticket-tenant-safety.js'] },
   { name: 'admin-user-tenant-scoping', cmd: process.execPath, args: ['tests/test-admin-user-tenant-scoping.js'] },
+  { name: 'wallet-delegation', cmd: process.execPath, args: ['tests/test-wallet-delegation.js'] },
   { name: 'module-refactor', cmd: process.execPath, args: ['tests/test-module-refactor.js'] },
   { name: 'micro-verify', cmd: process.execPath, args: ['tests/test-micro-verify.js'] },
   { name: 'missions-v1-flow', cmd: process.execPath, args: ['tests/test-heist-v1-flow.js'] },

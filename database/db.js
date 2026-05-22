@@ -72,6 +72,7 @@ const STRUCTURED_MIGRATIONS = Object.freeze([
 const REQUIRED_SCHEMA = Object.freeze({
   users: ['discord_id', 'total_tokens', 'wallet_alert_identity_opt_out'],
   wallets: ['discord_id', 'wallet_address', 'primary_wallet', 'is_favorite'],
+  wallet_delegations: ['discord_id', 'guild_id', 'delegate_wallet_address', 'cold_wallet_address', 'status', 'expires_at'],
   user_tenant_memberships: ['discord_id', 'guild_id', 'source', 'last_verified_at', 'updated_at'],
   micro_verify_requests: ['discord_id', 'guild_id', 'expected_amount', 'destination_wallet', 'status', 'expires_at'],
   tickets: ['guild_id', 'ticket_number', 'last_activity_at', 'inactive_warning_sent_at'],
@@ -342,6 +343,21 @@ function initDatabase() {
       FOREIGN KEY (discord_id) REFERENCES users(discord_id)
     );
 
+    CREATE TABLE IF NOT EXISTS wallet_delegations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      discord_id TEXT NOT NULL,
+      guild_id TEXT NOT NULL DEFAULT '',
+      delegate_wallet_address TEXT NOT NULL,
+      cold_wallet_address TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      expires_at DATETIME DEFAULT NULL,
+      metadata_json TEXT DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (discord_id) REFERENCES users(discord_id),
+      UNIQUE(discord_id, guild_id, cold_wallet_address)
+    );
+
     CREATE TABLE IF NOT EXISTS micro_verify_requests (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       discord_id TEXT NOT NULL,
@@ -479,6 +495,8 @@ function initDatabase() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_wallets_discord_id ON wallets(discord_id);
+    CREATE INDEX IF NOT EXISTS idx_wallet_delegations_user_guild_status ON wallet_delegations(discord_id, guild_id, status);
+    CREATE INDEX IF NOT EXISTS idx_wallet_delegations_delegate_wallet ON wallet_delegations(delegate_wallet_address);
     CREATE INDEX IF NOT EXISTS idx_superadmin_identity_flags_updated ON superadmin_user_identity_flags(updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_superadmin_identity_audit_discord_created ON superadmin_identity_audit_logs(discord_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_superadmin_identity_audit_wallet_created ON superadmin_identity_audit_logs(wallet_address, created_at DESC);

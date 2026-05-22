@@ -3,6 +3,14 @@ const logger = require('../utils/logger');
 const clientProvider = require('../utils/clientProvider');
 
 class WalletService {
+  normalizeWallet(value) {
+    return String(value || '').trim().toLowerCase();
+  }
+
+  normalizeGuild(value) {
+    return String(value || '').trim();
+  }
+
   triggerVaultBackfill(discordId, guildId, walletAddress) {
     try {
       const normalizedGuildId = String(guildId || '').trim();
@@ -153,8 +161,121 @@ class WalletService {
     }
   }
 
-  getAllUserWallets(discordId) {
-    return this.getLinkedWallets(discordId).map(w => w.wallet_address);
+  getDelegatedWallets(discordId, guildId = '', { includeExpired = false } = {}) {
+    try {
+      const normalizedGuildId = this.normalizeGuild(guildId);
+      const rows = db.prepare(`
+        SELECT wd.cold_wallet_address, wd.delegate_wallet_address, wd.guild_id, wd.expires_at
+        FROM wallet_delegations wd
+        WHERE wd.discord_id = ?
+          AND wd.status = 'active'
+          AND (? = '' OR wd.guild_id = ? OR wd.guild_id = '')
+          AND EXISTS (
+            SELECT 1 FROM wallets w
+            WHERE w.discord_id = wd.discord_id
+              AND LOWER(w.wallet_address) = LOWER(wd.delegate_wallet_address)
+          )
+      `).all(discordId, normalizedGuildId, normalizedGuildId);
+      const nowMs = Date.now();
+      return rows
+        .filter((row) => {
+          if (includeExpired) return true;
+          if (!row?.expires_at) return true;
+          const expiresMs = Date.parse(row.expires_at);
+          if (!Number.isFinite(expiresMs)) return true;
+          return expiresMs > nowMs;
+        })
+        .map((row) => ({
+          coldWalletAddress: String(row.cold_wallet_address || ''),
+          delegateWalletAddress: String(row.delegate_wallet_address || ''),
+          guildId: String(row.guild_id || ''),
+          expiresAt: row.expires_at || null,
+        }));
+    } catch (error) {
+      logger.error('Error fetching delegated wallets:', error);
+      return [];
+    }
+  }
+
+  addDelegatedWallet({
+    discordId,
+    guildId = '',
+    delegateWalletAddress,
+    coldWalletAddress,
+    expiresAt = null,
+    metadata = null,
+  }) {
+    try {
+      const normalizedGuildId = this.normalizeGuild(guildId);
+      const delegateWallet = this.normalizeWallet(delegateWalletAddress);
+      const coldWallet = this.normalizeWallet(coldWalletAddress);
+      if (!delegateWallet || !coldWallet) {
+        return { success: false, message: 'delegateWalletAddress and coldWalletAddress are required' };
+      }
+      if (delegateWallet === coldWallet) {
+        return { success: false, message: 'Cold wallet cannot be the same as delegate wallet' };
+      }
+      const ownsDelegateWallet = db.prepare(
+        'SELECT 1 FROM wallets WHERE discord_id = ? AND LOWER(wallet_address) = LOWER(?)'
+      ).get(discordId, delegateWallet);
+      if (!ownsDelegateWallet) {
+        return { success: false, message: 'Delegate wallet must be linked to your account first' };
+      }
+
+      db.prepare(`
+        INSERT INTO wallet_delegations (
+          discord_id, guild_id, delegate_wallet_address, cold_wallet_address, status, expires_at, metadata_json, updated_at
+        ) VALUES (?, ?, ?, ?, 'active', ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(discord_id, guild_id, cold_wallet_address)
+        DO UPDATE SET
+          delegate_wallet_address = excluded.delegate_wallet_address,
+          status = 'active',
+          expires_at = excluded.expires_at,
+          metadata_json = excluded.metadata_json,
+          updated_at = CURRENT_TIMESTAMP
+      `).run(
+        String(discordId || '').trim(),
+        normalizedGuildId,
+        delegateWallet,
+        coldWallet,
+        expiresAt || null,
+        metadata ? JSON.stringify(metadata) : null
+      );
+      logger.log(`Delegated wallet added for ${discordId}: ${coldWallet} via ${delegateWallet}${normalizedGuildId ? ` [guild ${normalizedGuildId}]` : ''}`);
+      return { success: true };
+    } catch (error) {
+      logger.error('Error adding delegated wallet:', error);
+      return { success: false, message: 'Failed to add delegated wallet' };
+    }
+  }
+
+  revokeDelegatedWallet(discordId, coldWalletAddress, guildId = '') {
+    try {
+      const normalizedGuildId = this.normalizeGuild(guildId);
+      const coldWallet = this.normalizeWallet(coldWalletAddress);
+      const result = db.prepare(`
+        UPDATE wallet_delegations
+        SET status = 'revoked', updated_at = CURRENT_TIMESTAMP
+        WHERE discord_id = ?
+          AND LOWER(cold_wallet_address) = LOWER(?)
+          AND (? = '' OR guild_id = ?)
+          AND status = 'active'
+      `).run(String(discordId || '').trim(), coldWallet, normalizedGuildId, normalizedGuildId);
+      if (!result.changes) {
+        return { success: false, message: 'Delegation not found' };
+      }
+      logger.log(`Delegated wallet revoked for ${discordId}: ${coldWallet}${normalizedGuildId ? ` [guild ${normalizedGuildId}]` : ''}`);
+      return { success: true };
+    } catch (error) {
+      logger.error('Error revoking delegated wallet:', error);
+      return { success: false, message: 'Failed to revoke delegated wallet' };
+    }
+  }
+
+  getAllUserWallets(discordId, guildId = '') {
+    const directWallets = this.getLinkedWallets(discordId).map(w => String(w.wallet_address || '').trim()).filter(Boolean);
+    const delegatedWallets = this.getDelegatedWallets(discordId, guildId).map(w => String(w.coldWalletAddress || '').trim()).filter(Boolean);
+    return [...new Set([...directWallets, ...delegatedWallets])];
   }
 
   setFavoriteWallet(discordId, walletAddress) {

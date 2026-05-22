@@ -105,7 +105,7 @@ class RoleService {
 
   async updateUserRoles(discordId, username, guildId = null) {
     try {
-      const wallets = walletService.getAllUserWallets(discordId);
+      const wallets = walletService.getAllUserWallets(discordId, guildId || "");
       
       if (wallets.length === 0) {
         logger.warn(`No wallets linked for user ${discordId}`);
@@ -323,7 +323,7 @@ class RoleService {
       };
       const currentMemberRoleIds = new Set(member.roles.cache.keys());
 
-      const wallets = walletService.getAllUserWallets(discordId);
+      const wallets = walletService.getAllUserWallets(discordId, guildId || "");
       const nftSnapshot = await nftService.getAllNFTsForWalletsWithHealth(wallets, { guildId });
       const allNFTs = Array.isArray(nftSnapshot?.nfts) ? nftSnapshot.nfts : [];
       const nftHealth = nftSnapshot?.health || null;

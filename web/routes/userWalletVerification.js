@@ -247,6 +247,78 @@ function createUserWalletVerificationRouter({
     }
   });
 
+  router.get('/api/wallets/:discordId/delegations', (req, res) => {
+    if (!req.session?.discordUser?.id) {
+      return res.status(401).json(toErrorResponse('Not authenticated', 'UNAUTHORIZED'));
+    }
+    if (req.session.discordUser.id !== req.params.discordId) {
+      return res.status(403).json(toErrorResponse('Forbidden', 'FORBIDDEN'));
+    }
+    try {
+      const { discordId } = req.params;
+      const guildId = String(req.guildId || '').trim();
+      const delegations = walletService.getDelegatedWallets(discordId, guildId);
+      return res.json(toSuccessResponse({ delegations }));
+    } catch (routeError) {
+      logger.error('Error fetching wallet delegations:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/api/wallets/:discordId/delegations', (req, res) => {
+    if (!req.session?.discordUser?.id) {
+      return res.status(401).json(toErrorResponse('Not authenticated', 'UNAUTHORIZED'));
+    }
+    if (req.session.discordUser.id !== req.params.discordId) {
+      return res.status(403).json(toErrorResponse('Forbidden', 'FORBIDDEN'));
+    }
+    try {
+      const { discordId } = req.params;
+      const guildId = String(req.guildId || '').trim();
+      const coldWalletAddress = String(req.body?.coldWalletAddress || '').trim();
+      const delegateWalletAddress = String(req.body?.delegateWalletAddress || '').trim()
+        || String(walletService.getFavoriteWallet(discordId) || '').trim();
+      const expiresAt = req.body?.expiresAt ? String(req.body.expiresAt) : null;
+      const result = walletService.addDelegatedWallet({
+        discordId,
+        guildId,
+        delegateWalletAddress,
+        coldWalletAddress,
+        expiresAt,
+        metadata: { source: 'user_portal' },
+      });
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to add delegated wallet', 'VALIDATION_ERROR'));
+      }
+      return res.json(toSuccessResponse({ message: 'Delegated wallet added' }));
+    } catch (routeError) {
+      logger.error('Error creating wallet delegation:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.delete('/api/wallets/:discordId/delegations/:coldWalletAddress', (req, res) => {
+    if (!req.session?.discordUser?.id) {
+      return res.status(401).json(toErrorResponse('Not authenticated', 'UNAUTHORIZED'));
+    }
+    if (req.session.discordUser.id !== req.params.discordId) {
+      return res.status(403).json(toErrorResponse('Forbidden', 'FORBIDDEN'));
+    }
+    try {
+      const { discordId } = req.params;
+      const guildId = String(req.guildId || '').trim();
+      const coldWalletAddress = decodeURIComponent(String(req.params.coldWalletAddress || '').trim());
+      const result = walletService.revokeDelegatedWallet(discordId, coldWalletAddress, guildId);
+      if (!result.success) {
+        return res.status(404).json(toErrorResponse(result.message || 'Delegation not found', 'NOT_FOUND'));
+      }
+      return res.json(toSuccessResponse({ message: 'Delegation revoked' }));
+    } catch (routeError) {
+      logger.error('Error revoking wallet delegation:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   return router;
 }
 

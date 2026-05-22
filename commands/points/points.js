@@ -14,6 +14,7 @@ module.exports = {
       .addIntegerOption(o => o.setName('limit').setDescription('How many entries (5–25, default 10)').setMinValue(5).setMaxValue(25).setRequired(false)))
     .addSubcommand(s => s.setName('history').setDescription('View your recent points history')
       .addUserOption(o => o.setName('user').setDescription('Check another user\'s history (admin only)').setRequired(false)))
+    .addSubcommand(s => s.setName('daily').setDescription('Claim your daily streak reward'))
     .addSubcommand(s => s.setName('shop').setDescription('Browse the points shop'))
     .addSubcommand(s => s.setName('redeem').setDescription('Redeem a shop item')
       .addIntegerOption(o => o.setName('item_id').setDescription('Item ID from /points shop').setRequired(true)))
@@ -95,6 +96,7 @@ module.exports = {
         const ACTION_LABEL = {
           discord_message: '💬 Message', discord_reply: '↩️ Reply', discord_reaction: '👍 Reaction',
           game_win: '🏆 Game Win', game_place: '🎮 Game Place',
+          daily_streak: '📅 Daily Streak',
           game_night_champion: '🎉 Game Night', admin_grant: '✨ Admin Grant',
           admin_deduct: '➖ Admin Deduct', shop_redeem: '🛍️ Shop Redeem',
           achievement_reward: '🏅 Achievement', social_task_reward: '📣 Social Task',
@@ -110,6 +112,33 @@ module.exports = {
           .setDescription(rows)
           .setTimestamp();
         applyEmbedBranding(e, { guildId, moduleKey: 'engagement', defaultColor: '#6366f1', defaultFooter: 'Last 10 entries · GuildPilot · Points' });
+        return interaction.reply({ embeds: [e], ephemeral: true });
+      }
+
+      // ── /points daily ──────────────────────────────────────────────────────
+      if (sub === 'daily') {
+        const result = eng.claimDailyReward(guildId, user.id, user.username);
+        if (!result.success && result.reason === 'cooldown') {
+          const remaining = Math.max(0, Number(result.retryAfterMs || 0));
+          const hours = Math.floor(remaining / 3600000);
+          const mins = Math.floor((remaining % 3600000) / 60000);
+          return interaction.reply({
+            content: `⏳ Daily already claimed. Try again in about **${hours}h ${mins}m**. Current streak: **${result.streak || 0}**.`,
+            ephemeral: true,
+          });
+        }
+        if (!result.success) {
+          return interaction.reply({ content: '❌ Could not claim daily reward right now.', ephemeral: true });
+        }
+        const e = new EmbedBuilder()
+          .setTitle('📅 Daily Claimed')
+          .setDescription(`You earned **${eng.formatCurrency(guildId, result.points)}**.`)
+          .addFields(
+            { name: 'Streak', value: `${result.streak}`, inline: true },
+            { name: 'Best Streak', value: `${result.bestStreak}`, inline: true }
+          )
+          .setTimestamp();
+        applyEmbedBranding(e, { guildId, moduleKey: 'engagement', defaultColor: '#22c55e', defaultFooter: 'GuildPilot · Daily Streak' });
         return interaction.reply({ embeds: [e], ephemeral: true });
       }
 
@@ -224,21 +253,56 @@ module.exports = {
         }
 
         if (action === 'config') {
+          const configKey = String(interaction.options.getString('reason') || '').trim();
+          const configValueRaw = String(interaction.options.getString('value') || '').trim();
+          if (configKey && configValueRaw) {
+            const editableNumericKeys = new Set([
+              'points_message',
+              'points_reply',
+              'points_reaction',
+              'cooldown_message_mins',
+              'cooldown_reply_mins',
+              'cooldown_reaction_daily',
+              'daily_reward_points',
+              'daily_streak_bonus',
+              'daily_streak_cap',
+              'minigame_reward_first',
+              'minigame_reward_second',
+              'minigame_reward_third',
+            ]);
+            if (!editableNumericKeys.has(configKey)) {
+              return interaction.editReply({ content: `? Unsupported config key. Allowed: ${[...editableNumericKeys].join(', ')}` });
+            }
+            const parsed = Number(configValueRaw);
+            if (!Number.isFinite(parsed)) {
+              return interaction.editReply({ content: '? Config value must be a number.' });
+            }
+            eng.setConfig(guildId, { [configKey]: parsed });
+          }
+
           const cfg = eng.getConfig(guildId);
           const e = new EmbedBuilder()
-            .setTitle('⚙️ Points Configuration')
+            .setTitle('?? Points Configuration')
             .setDescription('Current engagement points settings.')
             .addFields(
-              { name: 'Enabled', value: cfg.enabled ? '✅ Yes' : '❌ No', inline: true },
+              { name: 'Enabled', value: cfg.enabled ? '? Yes' : '? No', inline: true },
               { name: 'Message points', value: eng.formatCurrency(guildId, cfg.points_message), inline: true },
               { name: 'Reply points', value: eng.formatCurrency(guildId, cfg.points_reply || 0), inline: true },
               { name: 'Reaction points', value: eng.formatCurrency(guildId, cfg.points_reaction), inline: true },
               { name: 'Message cooldown', value: `${cfg.cooldown_message_mins} min`, inline: true },
               { name: 'Reply cooldown', value: `${cfg.cooldown_reply_mins || 0} min`, inline: true },
               { name: 'Reaction daily cap', value: `${cfg.cooldown_reaction_daily}/day`, inline: true },
+              { name: 'Daily base reward', value: eng.formatCurrency(guildId, cfg.daily_reward_points || 0), inline: true },
+              { name: 'Daily streak bonus', value: eng.formatCurrency(guildId, cfg.daily_streak_bonus || 0), inline: true },
+              { name: 'Daily streak cap', value: `${cfg.daily_streak_cap || 0}`, inline: true },
+              {
+                name: 'Minigame rewards',
+                value: `1st: ${eng.formatCurrency(guildId, cfg.minigame_reward_first || 0)} | 2nd: ${eng.formatCurrency(guildId, cfg.minigame_reward_second || 0)} | 3rd: ${eng.formatCurrency(guildId, cfg.minigame_reward_third || 0)}`,
+                inline: false
+              },
             )
             .setTimestamp();
-          applyEmbedBranding(e, { guildId, moduleKey: 'engagement', defaultColor: '#6366f1', defaultFooter: 'GuildPilot · Points Config' });
+          applyEmbedBranding(e, { guildId, moduleKey: 'engagement', defaultColor: '#6366f1', defaultFooter: 'GuildPilot ? Points Config' });
           return interaction.editReply({ embeds: [e] });
         }
       }

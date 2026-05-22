@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const bjService = require('../../services/blackjackService');
+const engagementService = require('../../services/engagementService');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
 
@@ -71,6 +72,7 @@ async function runGame(game, lobbyMessage, guildId) {
   const winners = [...results.entries()].filter(([, r]) => r.outcome === 'win').map(([id]) => id);
   if (winners.length > 0) {
     await channel.send({ content: winners.map(id => `<@${id}>`).join(' '), embeds: [bjService.buildWinnerEmbed({ winners, guildId })] });
+    engagementService.awardMinigamePlacements(guildId, winners.slice(0, 3).map(id => ({ userId: id })), 'blackjack');
   } else {
     await channel.send({ embeds: [bjService.buildCancelledEmbed('🃏 Dealer wins! Nobody beat the house this time.', guildId)] });
   }

@@ -30,6 +30,12 @@ const DEFAULTS = Object.freeze({
   cooldown_message_mins: 60,
   cooldown_reply_mins: 30,
   cooldown_reaction_daily: 5,
+  daily_reward_points: 25,
+  daily_streak_bonus: 5,
+  daily_streak_cap: 7,
+  minigame_reward_first: 30,
+  minigame_reward_second: 15,
+  minigame_reward_third: 8,
 });
 
 const PROVIDERS = Object.freeze({
@@ -69,6 +75,7 @@ const ACTION = Object.freeze({
   GAME_WIN: 'game_win',
   GAME_PLACE: 'game_place',
   GAME_NIGHT: 'game_night_champion',
+  DAILY_STREAK: 'daily_streak',
   ADMIN_GRANT: 'admin_grant',
   ADMIN_DEDUCT: 'admin_deduct',
   SHOP_REDEEM: 'shop_redeem',
@@ -210,8 +217,9 @@ function setConfig(guildId, patch = {}) {
       leaderboard_channel, currency_name_singular, currency_name_plural, currency_symbol, currency_icon,
       task_feed_channel_id, social_log_channel_id, purchase_log_channel_id, achievement_channel_id,
       fulfillment_ticket_category_id, discord_messages_enabled, discord_replies_enabled, discord_reactions_enabled,
-      points_reply, cooldown_reply_mins, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      points_reply, cooldown_reply_mins, daily_reward_points, daily_streak_bonus, daily_streak_cap,
+      minigame_reward_first, minigame_reward_second, minigame_reward_third, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(guild_id) DO UPDATE SET
       enabled = excluded.enabled,
       points_message = excluded.points_message,
@@ -233,6 +241,12 @@ function setConfig(guildId, patch = {}) {
       discord_reactions_enabled = excluded.discord_reactions_enabled,
       points_reply = excluded.points_reply,
       cooldown_reply_mins = excluded.cooldown_reply_mins,
+      daily_reward_points = excluded.daily_reward_points,
+      daily_streak_bonus = excluded.daily_streak_bonus,
+      daily_streak_cap = excluded.daily_streak_cap,
+      minigame_reward_first = excluded.minigame_reward_first,
+      minigame_reward_second = excluded.minigame_reward_second,
+      minigame_reward_third = excluded.minigame_reward_third,
       updated_at = CURRENT_TIMESTAMP
   `).run(
     normalizedGuildId,
@@ -255,7 +269,13 @@ function setConfig(guildId, patch = {}) {
     boolToInt(merged.discord_replies_enabled, true),
     boolToInt(merged.discord_reactions_enabled, true),
     Number(merged.points_reply || 0),
-    Number(merged.cooldown_reply_mins || 0)
+    Number(merged.cooldown_reply_mins || 0),
+    Number(merged.daily_reward_points ?? DEFAULTS.daily_reward_points),
+    Number(merged.daily_streak_bonus ?? DEFAULTS.daily_streak_bonus),
+    Number(merged.daily_streak_cap ?? DEFAULTS.daily_streak_cap),
+    Number(merged.minigame_reward_first ?? DEFAULTS.minigame_reward_first),
+    Number(merged.minigame_reward_second ?? DEFAULTS.minigame_reward_second),
+    Number(merged.minigame_reward_third ?? DEFAULTS.minigame_reward_third)
   );
 
   return getConfig(normalizedGuildId);
@@ -1325,6 +1345,104 @@ function awardGamePoints(guildId, userId, username, points, gameKey, place) {
   return awardPoints(guildId, userId, username, ACTION.GAME_PLACE, points, `game:${gameKey}:${userId}:${Date.now()}`, `${gameKey} place ${place}`);
 }
 
+function claimDailyReward(guildId, userId, username) {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  const normalizedUserId = String(userId || '').trim();
+  if (!normalizedGuildId || !normalizedUserId) {
+    return { success: false, message: 'guildId and userId are required' };
+  }
+
+  const now = Date.now();
+  const row = db.prepare('SELECT * FROM engagement_daily_streaks WHERE guild_id = ? AND user_id = ?')
+    .get(normalizedGuildId, normalizedUserId);
+  const lastClaimMs = row?.last_claimed_at ? new Date(row.last_claimed_at).getTime() : 0;
+  const elapsedMs = lastClaimMs > 0 ? (now - lastClaimMs) : Number.POSITIVE_INFINITY;
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  const twoDaysMs = 2 * oneDayMs;
+
+  if (Number.isFinite(elapsedMs) && elapsedMs < oneDayMs) {
+    return {
+      success: false,
+      reason: 'cooldown',
+      retryAfterMs: Math.max(0, oneDayMs - elapsedMs),
+      streak: Number(row?.streak_count || 0),
+    };
+  }
+
+  let streak = 1;
+  if (row && Number.isFinite(elapsedMs) && elapsedMs <= twoDaysMs) {
+    streak = Math.max(1, Number(row.streak_count || 0) + 1);
+  }
+  const bestStreak = Math.max(Number(row?.best_streak || 0), streak);
+
+  const cfg = getConfig(normalizedGuildId);
+  const base = Math.max(0, Number(cfg.daily_reward_points ?? DEFAULTS.daily_reward_points));
+  const bonus = Math.max(0, Number(cfg.daily_streak_bonus ?? DEFAULTS.daily_streak_bonus));
+  const cap = Math.max(1, Number(cfg.daily_streak_cap ?? DEFAULTS.daily_streak_cap));
+  const rewardPoints = Math.trunc(base + (Math.min(streak, cap) - 1) * bonus);
+
+  const claimDateKey = new Date().toISOString().slice(0, 10);
+  const refId = `daily:${normalizedGuildId}:${normalizedUserId}:${claimDateKey}`;
+  const awarded = awardPoints(
+    normalizedGuildId,
+    normalizedUserId,
+    username || normalizedUserId,
+    ACTION.DAILY_STREAK,
+    rewardPoints,
+    refId,
+    `Daily streak claim (streak ${streak})`
+  );
+  if (!awarded.awarded && awarded.reason === 'duplicate') {
+    return { success: false, reason: 'cooldown', retryAfterMs: oneDayMs, streak };
+  }
+
+  db.prepare(`
+    INSERT INTO engagement_daily_streaks (guild_id, user_id, streak_count, last_claimed_at, best_streak, updated_at)
+    VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(guild_id, user_id) DO UPDATE SET
+      streak_count = excluded.streak_count,
+      last_claimed_at = excluded.last_claimed_at,
+      best_streak = CASE WHEN excluded.best_streak > engagement_daily_streaks.best_streak THEN excluded.best_streak ELSE engagement_daily_streaks.best_streak END,
+      updated_at = CURRENT_TIMESTAMP
+  `).run(normalizedGuildId, normalizedUserId, streak, bestStreak);
+
+  return { success: true, streak, bestStreak, points: rewardPoints };
+}
+
+function awardMinigamePlacements(guildId, placements = [], gameKey = 'minigame') {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  if (!normalizedGuildId || !Array.isArray(placements) || placements.length === 0) return [];
+  const cfg = getConfig(normalizedGuildId);
+  const rewardTable = [
+    Math.max(0, Number(cfg.minigame_reward_first ?? DEFAULTS.minigame_reward_first)),
+    Math.max(0, Number(cfg.minigame_reward_second ?? DEFAULTS.minigame_reward_second)),
+    Math.max(0, Number(cfg.minigame_reward_third ?? DEFAULTS.minigame_reward_third)),
+  ];
+  const results = [];
+
+  for (let i = 0; i < placements.length; i++) {
+    const entry = placements[i] || {};
+    const userId = String(entry.userId || '').trim();
+    if (!userId) continue;
+    const points = rewardTable[Math.min(i, rewardTable.length - 1)];
+    const username = String(entry.username || userId).trim();
+    const actionType = i === 0 ? ACTION.GAME_WIN : ACTION.GAME_PLACE;
+    const result = awardPoints(
+      normalizedGuildId,
+      userId,
+      username,
+      actionType,
+      points,
+      `game:${gameKey}:${userId}:${Date.now()}:${i + 1}`,
+      `${gameKey} placement #${i + 1}`
+    );
+    if (result.awarded) {
+      results.push({ userId, username, place: i + 1, points });
+    }
+  }
+  return results;
+}
+
 function adminGrant(guildId, userId, username, points, adminId, reason) {
   const refId = `admin:${adminId}:${Date.now()}`;
   const result = awardPoints(
@@ -1943,6 +2061,8 @@ module.exports = {
   removeShopItem,
   redeemItem,
   listRedemptions,
+  claimDailyReward,
+  awardMinigamePlacements,
   getAchievements,
   upsertAchievement,
   deleteAchievement,

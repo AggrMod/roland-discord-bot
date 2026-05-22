@@ -55,6 +55,12 @@ function createAdminEngagementRouter({
         'discord_messages_enabled',
         'discord_replies_enabled',
         'discord_reactions_enabled',
+        'daily_reward_points',
+        'daily_streak_bonus',
+        'daily_streak_cap',
+        'minigame_reward_first',
+        'minigame_reward_second',
+        'minigame_reward_third',
       ];
       const patch = {};
       for (const key of allowed) {

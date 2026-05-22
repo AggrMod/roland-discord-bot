@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const ddService = require('../../services/diceDuelService');
+const engagementService = require('../../services/engagementService');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
 
@@ -81,6 +82,10 @@ async function runGame(game, lobbyMessage, guildId) {
     await channel.send({ content: `🏆 Multiple survivors: ${mentions}`, embeds: [ddService.buildCancelledEmbed(`🤝 Draw! Survivors: ${mentions}`, guildId)] });
   }
 
+  const rewardUsers = survivors.slice(0, 3).map(id => ({ userId: id }));
+  if (rewardUsers.length > 0) {
+    engagementService.awardMinigamePlacements(guildId, rewardUsers, 'diceduel');
+  }
   ddService.endGame(game.lobbyMessageId);
 }
 

@@ -224,7 +224,7 @@ V1 acceptance:
 
 ### 3) Engagement + Minigames: Unified Economy + Daily Streak
 Priority: `P0`  
-Status: `PARTIAL`
+Status: `READY`
 
 Why:
 - Engagement loop is weaker if game wins do not consistently feed points/rewards and daily habit triggers are missing.
@@ -234,3 +234,15 @@ V1 acceptance:
 2. Configurable per-game rewards (base + multiplier/bonus rules).
 3. `/daily` (or equivalent) streak command with anti-abuse cooldown and streak state.
 4. Streak and game rewards appear in engagement history and leaderboards.
+
+Progress update (2026-05-22):
+- Added `engagement_daily_streaks` table + migration (`019_engagement_daily_streaks`).
+- Added `/points daily` reward claim flow with 24h cooldown, streak progression, and best-streak tracking.
+- Added `daily_streak` ledger action writes via engagement service.
+- Wired minigame reward payouts into engagement ledger for:
+  - `trivia`, `slots`, `rps`, `blackjack`, `numberguess`, `wordscramble`, `higherlower`, `reactionrace`, `diceduel`
+  - `gamenight` (top placements at session end)
+- Added tenant-configurable reward knobs in engagement config:
+  - `daily_reward_points`, `daily_streak_bonus`, `daily_streak_cap`
+  - `minigame_reward_first`, `minigame_reward_second`, `minigame_reward_third`
+- Added release-gate test: `tests/test-engagement-streak-and-minigame-rewards.js`.

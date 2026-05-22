@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const wsService = require('../../services/wordScrambleService');
+const engagementService = require('../../services/engagementService');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
 
@@ -51,8 +52,15 @@ async function runGame(game, lobbyMessage, guildId) {
   }
 
   await sleep(2000);
-  const { winners, score } = wsService.winner(game);
+  const { winners, score, sorted } = wsService.winner(game);
   await channel.send({ embeds: [wsService.buildWinnerEmbed({ winners, score, guildId })] });
+  if (Array.isArray(sorted) && sorted.length) {
+    engagementService.awardMinigamePlacements(
+      guildId,
+      sorted.slice(0, 3).map(([id]) => ({ userId: id })),
+      'wordscramble'
+    );
+  }
   wsService.endGame(game.lobbyMessageId);
 }
 

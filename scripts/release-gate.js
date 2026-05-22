@@ -14,6 +14,7 @@ const checks = [
   { name: 'ticket-tenant-safety', cmd: process.execPath, args: ['tests/test-ticket-tenant-safety.js'] },
   { name: 'admin-user-tenant-scoping', cmd: process.execPath, args: ['tests/test-admin-user-tenant-scoping.js'] },
   { name: 'wallet-delegation', cmd: process.execPath, args: ['tests/test-wallet-delegation.js'] },
+  { name: 'engagement-streak-and-minigame-rewards', cmd: process.execPath, args: ['tests/test-engagement-streak-and-minigame-rewards.js'] },
   { name: 'module-refactor', cmd: process.execPath, args: ['tests/test-module-refactor.js'] },
   { name: 'micro-verify', cmd: process.execPath, args: ['tests/test-micro-verify.js'] },
   { name: 'missions-v1-flow', cmd: process.execPath, args: ['tests/test-heist-v1-flow.js'] },

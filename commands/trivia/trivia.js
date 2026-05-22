@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const triviaService = require('../../services/triviaService');
+const engagementService = require('../../services/engagementService');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
 
@@ -46,6 +47,13 @@ async function runGame(game, lobbyMessage, guildId) {
   await sleep(2000);
   const { winners, score } = triviaService.winner(game);
   await channel.send({ embeds: [triviaService.buildWinnerEmbed({ winners, score, total, guildId })] });
+  if (Array.isArray(winners) && winners.length) {
+    engagementService.awardMinigamePlacements(
+      guildId,
+      winners.map(id => ({ userId: id })),
+      'trivia'
+    );
+  }
   triviaService.endGame(game.lobbyMessageId);
 }
 

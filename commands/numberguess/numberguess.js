@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const ngService = require('../../services/numberGuessService');
+const engagementService = require('../../services/engagementService');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
 
@@ -39,6 +40,13 @@ async function runGame(game, lobbyMessage, guildId) {
 
   const { winners, score, sorted } = ngService.winner(game);
   await channel.send({ embeds: [ngService.buildWinnerEmbed({ winners, score, guildId })] });
+  if (Array.isArray(sorted) && sorted.length) {
+    engagementService.awardMinigamePlacements(
+      guildId,
+      sorted.slice(0, 3).map(([id]) => ({ userId: id })),
+      'numberguess'
+    );
+  }
   ngService.endGame(game.lobbyMessageId);
 }
 

@@ -59,6 +59,7 @@ This file is the source-of-truth command reference for the current production co
 - `/points balance`
 - `/points leaderboard`
 - `/points history`
+- `/points daily`
 - `/points shop`
 - `/points redeem`
 - `/points admin`

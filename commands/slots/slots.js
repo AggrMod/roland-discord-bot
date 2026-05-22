@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const slotsService = require('../../services/slotsService');
+const engagementService = require('../../services/engagementService');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
 
@@ -35,6 +36,10 @@ async function runGame(game, lobbyMessage, guildId) {
     await channel.send({ embeds: [slotsService.buildCancelledEmbed(`🤝 Tie! ${mention} all share top score of **${top.score} pts** with **${top.combo}**!`, guildId)] });
   }
 
+  const payoutWinners = winners.slice(0, 3).map(w => ({ userId: w.userId }));
+  if (payoutWinners.length > 0) {
+    engagementService.awardMinigamePlacements(guildId, payoutWinners, 'slots');
+  }
   slotsService.endGame(game.lobbyMessageId);
 }
 

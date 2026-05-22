@@ -7,6 +7,7 @@
 
 const { EmbedBuilder } = require('discord.js');
 const { applyEmbedBranding, getBranding } = require('./embedBranding');
+const engagementService = require('./engagementService');
 const logger = require('../utils/logger');
 
 const JOIN_EMOJI = '🎉';
@@ -202,6 +203,10 @@ class GameNightService {
     await sleep(2000);
     const sorted = [...session.scores.entries()].sort((a, b) => b[1] - a[1]);
     const topWinners = sorted.filter(([, s]) => s === sorted[0][1]).map(([id]) => `<@${id}>`);
+    const rewardUsers = sorted.slice(0, 3).map(([id]) => ({ userId: id, username: session.playerNames.get(id) || id }));
+    if (rewardUsers.length > 0) {
+      engagementService.awardMinigamePlacements(guildId, rewardUsers, 'gamenight');
+    }
     await channel.send({ content: topWinners.join(' '), embeds: [this.buildChampionEmbed(session, guildId, total)] });
     this.endSession(channel.id);
   }

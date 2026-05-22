@@ -1358,6 +1358,17 @@ function initDatabase() {
     )
   `);
   db.exec(`
+    CREATE TABLE IF NOT EXISTS engagement_daily_streaks (
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      streak_count INTEGER NOT NULL DEFAULT 0,
+      last_claimed_at DATETIME,
+      best_streak INTEGER NOT NULL DEFAULT 0,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (guild_id, user_id)
+    )
+  `);
+  db.exec(`
     CREATE TABLE IF NOT EXISTS shop_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       guild_id TEXT NOT NULL,

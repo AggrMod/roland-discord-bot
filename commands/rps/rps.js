@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const rpsService = require('../../services/rpsService');
+const engagementService = require('../../services/engagementService');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
 
@@ -63,6 +64,10 @@ async function runGame(game, lobbyMessage, guildId) {
   } else {
     const mention = survivors.map(id => `<@${id}>`).join(', ');
     await channel.send({ embeds: [rpsService.buildCancelledEmbed(`🤝 Draw! ${mention} are the co-champions!`, guildId)] });
+  }
+  const rewardUsers = survivors.slice(0, 3).map(id => ({ userId: id }));
+  if (rewardUsers.length > 0) {
+    engagementService.awardMinigamePlacements(guildId, rewardUsers, 'rps');
   }
   rpsService.endGame(game.lobbyMessageId);
 }

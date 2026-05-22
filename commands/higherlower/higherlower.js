@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const hlService = require('../../services/higherLowerService');
+const engagementService = require('../../services/engagementService');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
 
@@ -86,6 +87,10 @@ async function runGame(client, game, lobbyMessage, guildId) {
     });
   }
 
+  const rewardUsers = survivors.slice(0, 3).map(id => ({ userId: id }));
+  if (rewardUsers.length > 0) {
+    engagementService.awardMinigamePlacements(guildId, rewardUsers, 'higherlower');
+  }
   hlService.endGame(game.lobbyMessageId);
 }
 

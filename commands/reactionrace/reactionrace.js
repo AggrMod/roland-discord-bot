@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const rrService = require('../../services/reactionRaceService');
+const engagementService = require('../../services/engagementService');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
 
@@ -68,6 +69,10 @@ async function runGame(game, lobbyMessage, guildId) {
     await channel.send({ content: `🏆 <@${survivors[0]}>`, embeds: [rrService.buildWinnerEmbed({ winnerId: survivors[0], rounds: game.roundNumber, guildId })] });
   } else {
     await channel.send({ embeds: [rrService.buildCancelledEmbed(survivors.length === 0 ? '💀 Everyone eliminated!' : `🤝 Draw! ${survivors.map(id=>`<@${id}>`).join(', ')}`, guildId)] });
+  }
+  const rewardUsers = survivors.slice(0, 3).map(id => ({ userId: id }));
+  if (rewardUsers.length > 0) {
+    engagementService.awardMinigamePlacements(guildId, rewardUsers, 'reactionrace');
   }
   rrService.endGame(game.lobbyMessageId);
 }

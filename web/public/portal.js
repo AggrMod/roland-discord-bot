@@ -2046,9 +2046,9 @@ function updateSidebarModuleNav() {
   const battleNavMobile = document.getElementById('mobileNavBattle');
   if (battleNavMobile) battleNavMobile.style.display = 'none';
 
-  // Pricing is now available in top/mobile navigation; keep legacy sidebar plans entry hidden.
+  // Keep Plans visible in desktop sidebar under Management.
   const plansNav = document.getElementById('sidebarNavPlans');
-  if (plansNav) plansNav.style.display = 'none';
+  if (plansNav) plansNav.style.display = '';
 
   // Keep legacy mobile plans entry hidden to avoid duplicate Pricing item.
   const mobilePlans = document.getElementById('mobileNavPlans');
@@ -2085,7 +2085,8 @@ function updateSidebarModuleNav() {
 
   const managementLabel = document.getElementById('sidebarGroupManagement');
   if (managementLabel) {
-    const hasVisibleManagement = !!sidebarSettings && sidebarSettings.style.display !== 'none';
+    const hasVisibleManagement = (plansNav && plansNav.style.display !== 'none')
+      || (!!sidebarSettings && sidebarSettings.style.display !== 'none');
     managementLabel.style.display = hasVisibleManagement ? '' : 'none';
   }
 
@@ -2097,6 +2098,10 @@ function updateSidebarModuleNav() {
     el = divider.nextElementSibling;
     while (el && !el.classList.contains('sidebar-section-divider')) { if (el.style.display !== 'none') { hasNext = true; break; } el = el.nextElementSibling; }
     divider.style.display = (hasPrev && hasNext) ? '' : 'none';
+  });
+
+  document.querySelectorAll('.sidebar .nav-item').forEach((item) => {
+    item.dataset.navVisible = item.style.display === 'none' ? '0' : '1';
   });
 }
 
@@ -18150,15 +18155,12 @@ function openExternalPlanUrl(encodedUrl) {
 async function submitCryptoPaymentReceipt() {
   try {
     const txSignature = String(document.getElementById('billingCryptoTxSignature')?.value || '').trim();
-    const tokenSymbol = String(document.getElementById('billingCryptoToken')?.value || 'SOL').trim().toUpperCase();
-    const amount = Number(document.getElementById('billingCryptoAmount')?.value || 0);
     const senderWallet = String(document.getElementById('billingCryptoSenderWallet')?.value || '').trim();
-    const planKey = String(document.getElementById('billingCryptoPlan')?.value || '').trim().toLowerCase();
-    const billingInterval = document.getElementById('billingAnnualToggle')?.checked ? 'yearly' : 'monthly';
+    const quoteToken = String(document.getElementById('billingCryptoQuoteToken')?.value || '').trim();
 
     if (!txSignature) return showError('Transaction signature is required.');
     if (!senderWallet) return showError('Sender wallet is required.');
-    if (!Number.isFinite(amount) || amount <= 0) return showError('Amount must be greater than 0.');
+    if (!quoteToken) return showError('Prepare a payment quote first.');
 
     const existingRes = await fetch('/api/admin/billing/crypto-receipts?limit=100', {
       credentials: 'include',
@@ -18180,11 +18182,8 @@ async function submitCryptoPaymentReceipt() {
       headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
       body: JSON.stringify({
         txSignature,
-        tokenSymbol,
-        amount,
         senderWallet,
-        planKey,
-        billingInterval,
+        quoteToken,
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -18194,13 +18193,63 @@ async function submitCryptoPaymentReceipt() {
 
     showSuccess('Crypto receipt submitted. Superadmin will review it shortly.');
     const txInput = document.getElementById('billingCryptoTxSignature');
-    const amountInput = document.getElementById('billingCryptoAmount');
     const walletInput = document.getElementById('billingCryptoSenderWallet');
+    const quoteInput = document.getElementById('billingCryptoQuoteToken');
+    const quoteSummary = document.getElementById('billingCryptoQuoteSummary');
     if (txInput) txInput.value = '';
-    if (amountInput) amountInput.value = '';
     if (walletInput) walletInput.value = '';
+    if (quoteInput) quoteInput.value = '';
+    if (quoteSummary) quoteSummary.textContent = 'No active quote yet. Prepare quote to lock amount for 5 minutes.';
+    const amountInput = document.getElementById('billingCryptoAmount');
+    if (amountInput) amountInput.value = '';
+    billingCryptoQuoteState = null;
   } catch (error) {
     showError(`Failed to submit receipt: ${error?.message || 'unknown error'}`);
+  }
+}
+
+async function prepareBillingCryptoQuote() {
+  try {
+    const planKey = String(document.getElementById('billingCryptoPlan')?.value || '').trim().toLowerCase();
+    const billingInterval = String(document.getElementById('billingCryptoInterval')?.value || '').trim().toLowerCase();
+    const tokenSymbol = String(document.getElementById('billingCryptoToken')?.value || 'SOL').trim().toUpperCase();
+    const quoteSummary = document.getElementById('billingCryptoQuoteSummary');
+    const quoteAmountEl = document.getElementById('billingCryptoAmount');
+    const quoteTokenEl = document.getElementById('billingCryptoQuoteToken');
+
+    if (!planKey) return showError('Select a plan for quote.');
+    if (!billingInterval) return showError('Select billing interval.');
+    if (!tokenSymbol) return showError('Select payment token.');
+
+    const response = await fetch('/api/admin/billing/crypto-quote', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({
+        planKey,
+        billingInterval,
+        tokenSymbol,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data?.success === false || !data?.quoteToken) {
+      throw new Error(data?.message || 'Could not prepare quote');
+    }
+
+    billingCryptoQuoteState = data?.quote || null;
+    if (quoteAmountEl) quoteAmountEl.value = String(data?.quote?.tokenAmount ?? '');
+    if (quoteTokenEl) quoteTokenEl.value = String(data?.quoteToken || '');
+    if (quoteSummary) {
+      const q = data?.quote || {};
+      const expires = q?.expiresAt ? new Date(q.expiresAt).toLocaleTimeString() : 'soon';
+      const rateInfo = q?.tokenSymbol === 'SOL' && Number(q?.fxRate) > 0
+        ? ` (1 SOL = $${Number(q.fxRate).toFixed(2)})`
+        : '';
+      quoteSummary.textContent = `Quote ready: ${q.tokenAmount} ${q.tokenSymbol} for ${q.planKey}/${q.billingInterval}, expires at ${expires}${rateInfo}.`;
+    }
+    showSuccess('Quote prepared. Use this exact amount in your transfer.');
+  } catch (error) {
+    showError(`Failed to prepare quote: ${error?.message || 'unknown error'}`);
   }
 }
 
@@ -18296,44 +18345,53 @@ async function loadCurrentPlan() {
       : '<div style="color:var(--text-secondary);font-size:0.82em;">No payment receipts submitted yet.</div>';
 
     content.innerHTML = `
-      <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;">
-        ${record?.iconUrl ? `<img src="${record.iconUrl}" style="width:48px;height:48px;border-radius:10px;object-fit:cover;">` : ''}
-        <div style="min-width:220px;">
-          <div style="font-size:1.1em;font-weight:700;color:#e0e7ff;">${escapeHtml(record?.name || activeGuildId || 'Current Server')}</div>
-          <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <div class="billing-plan-header">
+        ${record?.iconUrl ? `<img src="${record.iconUrl}" class="billing-plan-header__icon" alt="${escapeHtml(record?.name || 'Server')} icon">` : ''}
+        <div class="billing-plan-header__meta">
+          <div class="billing-plan-header__name">${escapeHtml(record?.name || activeGuildId || 'Current Server')}</div>
+          <div class="billing-plan-header__badges">
             <span class="badge badge-active">${escapeHtml(planName)}</span>
             <span class="badge ${statusColor}">${escapeHtml(subscriptionStatus)}</span>
           </div>
-          <div style="color:var(--text-secondary);font-size:0.82em;margin-top:6px;">${escapeHtml(intervalLabel)}</div>
-          ${data.expiresAt ? `<div style="color:var(--text-secondary);font-size:0.82em;margin-top:4px;">Active until ${new Date(data.expiresAt).toLocaleString()}</div>` : ''}
-          ${data.plan === 'starter' ? '<div style="color:var(--text-secondary);font-size:0.82em;margin-top:4px;">Starter is free by default. Upgrade anytime for higher module limits.</div>' : ''}
+          <div class="billing-plan-header__sub">${escapeHtml(intervalLabel)}</div>
+          ${data.expiresAt ? `<div class="billing-plan-header__sub">Active until ${new Date(data.expiresAt).toLocaleString()}</div>` : ''}
+          ${data.plan === 'starter' ? '<div class="billing-plan-header__sub">Starter is free by default. Upgrade anytime for higher module limits.</div>' : ''}
         </div>
-        <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;">
+        <div class="billing-plan-header__actions">
           ${actionButtons.join('')}
         </div>
       </div>
-      <div style="margin-top:14px;padding:12px;border:1px solid rgba(99,102,241,0.2);border-radius:10px;background:rgba(15,23,42,0.45);">
-        <div style="font-weight:600;color:#e0e7ff;margin-bottom:8px;">Pay with SOL/USDC (Manual Review)</div>
-        <div style="display:grid;gap:6px;margin-bottom:10px;font-size:0.8em;color:var(--text-secondary);">
-          <div><strong style="color:#c9d6ff;">Destination wallet:</strong> ${billingWallet ? `<code>${escapeHtml(billingWallet)}</code>` : '<span style="color:#fca5a5;">Not configured yet. Contact support.</span>'}</div>
-          <div><strong style="color:#c9d6ff;">Accepted tokens:</strong> ${escapeHtml(acceptedTokens)}</div>
-          <div><strong style="color:#c9d6ff;">On-chain verification:</strong> ${onchainVerificationEnabled ? 'enabled' : 'manual review only'}</div>
+      <div class="billing-panel">
+        <div class="billing-panel__title">Pay with SOL/USDC (Manual Review)</div>
+        <div class="billing-panel__facts">
+          <div><strong>Destination wallet:</strong> ${billingWallet ? `<code>${escapeHtml(billingWallet)}</code>` : '<span class="billing-panel__warn">Not configured yet. Contact support.</span>'}</div>
+          <div><strong>Accepted tokens:</strong> ${escapeHtml(acceptedTokens)}</div>
+          <div><strong>On-chain verification:</strong> ${onchainVerificationEnabled ? 'enabled' : 'manual review only'}</div>
         </div>
-        <div style="display:grid;grid-template-columns:minmax(0,1fr) 110px 130px minmax(0,1fr) 120px auto;gap:8px;align-items:end;">
-          <div><div style="font-size:0.78em;color:var(--text-secondary);margin-bottom:4px;">TX Signature</div><input id="billingCryptoTxSignature" type="text" placeholder="Transaction signature" style="width:100%;"></div>
-          <div><div style="font-size:0.78em;color:var(--text-secondary);margin-bottom:4px;">Token</div><select id="billingCryptoToken"><option value="SOL">SOL</option><option value="USDC">USDC</option></select></div>
-          <div><div style="font-size:0.78em;color:var(--text-secondary);margin-bottom:4px;">Amount</div><input id="billingCryptoAmount" type="number" min="0" step="0.000001" placeholder="0.00" style="width:100%;"></div>
-          <div><div style="font-size:0.78em;color:var(--text-secondary);margin-bottom:4px;">Sender Wallet</div><input id="billingCryptoSenderWallet" type="text" placeholder="Wallet address" style="width:100%;"></div>
-          <div><div style="font-size:0.78em;color:var(--text-secondary);margin-bottom:4px;">Plan</div><select id="billingCryptoPlan"><option value="growth">Growth</option><option value="pro">Pro</option></select></div>
-          <button class="btn-primary" onclick="submitCryptoPaymentReceipt()">Submit</button>
+        <div class="billing-form-grid">
+          <label class="billing-field billing-field--span2"><span>TX Signature</span><input id="billingCryptoTxSignature" type="text" placeholder="Transaction signature"></label>
+          <label class="billing-field"><span>Token</span><select id="billingCryptoToken"><option value="SOL">SOL</option><option value="USDC">USDC</option></select></label>
+          <label class="billing-field"><span>Interval</span><select id="billingCryptoInterval"><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label>
+          <label class="billing-field billing-field--span2"><span>Sender Wallet</span><input id="billingCryptoSenderWallet" type="text" placeholder="Wallet address"></label>
+          <label class="billing-field"><span>Plan</span><select id="billingCryptoPlan"><option value="growth">Growth</option><option value="pro">Pro</option></select></label>
+          <label class="billing-field"><span>Quoted Amount</span><input id="billingCryptoAmount" type="text" readonly placeholder="Prepare quote first"></label>
+          <input id="billingCryptoQuoteToken" type="hidden" value="">
+          <button class="btn-secondary billing-submit-btn" onclick="prepareBillingCryptoQuote()">Prepare Quote</button>
+          <button class="btn-primary billing-submit-btn" onclick="submitCryptoPaymentReceipt()">Submit</button>
         </div>
-        <div style="margin-top:8px;font-size:0.78em;color:var(--text-secondary);">After submission, receipt goes to Superadmin Billing queue for approval/rejection.</div>
+        <div id="billingCryptoQuoteSummary" class="billing-panel__hint">No active quote yet. Prepare quote to lock amount for 5 minutes.</div>
+        <div class="billing-panel__hint">After submission, receipt goes to Superadmin Billing queue for approval/rejection.</div>
       </div>
-      <div style="margin-top:14px;padding:12px;border:1px solid rgba(99,102,241,0.2);border-radius:10px;background:rgba(15,23,42,0.45);">
-        <div style="font-weight:600;color:#e0e7ff;margin-bottom:8px;">Payment History</div>
+      <div class="billing-panel">
+        <div class="billing-panel__title">Payment History</div>
         ${paymentHistoryHtml}
       </div>
     `;
+    const intervalSelect = document.getElementById('billingCryptoInterval');
+    if (intervalSelect) {
+      const preferredInterval = document.getElementById('billingAnnualToggle')?.checked ? 'yearly' : 'monthly';
+      intervalSelect.value = preferredInterval;
+    }
     card.style.display = 'block';
   } catch(e) { /* no plan API yet, silent fail */ }
 }
@@ -19842,6 +19900,7 @@ async function loadEngagementRedemptions() {
 
 // ==================== DASHBOARD & SEARCH LOGIC ====================
 let dashboardDataCache = null;
+let billingCryptoQuoteState = null;
 let dashboardAnalyticsRange = '7d';
 
 async function renderDashboardGrid() {
@@ -20003,14 +20062,33 @@ function toggleDashboardViewMode() {
 function onSidebarSearch(query) {
   const q = (query || "").toLowerCase().trim();
   const items = document.querySelectorAll(".sidebar .nav-item");
-  
+
+  if (!q) {
+    updateSidebarModuleNav();
+    return;
+  }
+
   items.forEach(item => {
+    const allowedByPolicy = item.dataset.navVisible !== '0';
+    if (!allowedByPolicy) {
+      item.style.display = "none";
+      return;
+    }
     const label = item.querySelector(".nav-label")?.textContent.toLowerCase() || "";
     if (label.includes(q)) {
       item.style.display = "flex";
     } else {
       item.style.display = "none";
     }
+  });
+
+  document.querySelectorAll('.sidebar-section-divider').forEach(divider => {
+    let hasPrev = false, hasNext = false;
+    let el = divider.previousElementSibling;
+    while (el) { if (el.style.display !== 'none' && !el.classList.contains('sidebar-section-divider')) { hasPrev = true; break; } el = el.previousElementSibling; }
+    el = divider.nextElementSibling;
+    while (el && !el.classList.contains('sidebar-section-divider')) { if (el.style.display !== 'none') { hasNext = true; break; } el = el.nextElementSibling; }
+    divider.style.display = (hasPrev && hasNext) ? '' : 'none';
   });
 }
 

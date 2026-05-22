@@ -320,6 +320,24 @@ function createAdminCoreRouter({
     }
   });
 
+  router.post('/billing/crypto-quote', adminAuthMiddleware, async (req, res) => {
+    try {
+      const body = req.body || {};
+      const result = await billingService.createCryptoQuote(req.guildId, {
+        planKey: body.planKey,
+        billingInterval: body.billingInterval,
+        tokenSymbol: body.tokenSymbol,
+      });
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to create quote', 'VALIDATION_ERROR'));
+      }
+      res.json(toSuccessResponse(result));
+    } catch (error) {
+      logger.error('Error creating billing crypto quote:', error);
+      res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.post('/billing/crypto-receipts', adminAuthMiddleware, (req, res) => {
     try {
       const body = req.body || {};
@@ -330,6 +348,7 @@ function createAdminCoreRouter({
         senderWallet: body.senderWallet,
         planKey: body.planKey,
         billingInterval: body.billingInterval,
+        quoteToken: body.quoteToken,
       });
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to submit payment receipt', 'VALIDATION_ERROR'));

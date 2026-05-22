@@ -3,6 +3,7 @@ const tenantService = require('./tenantService');
 const settingsManager = require('../config/settings');
 const { getPlanPreset, normalizePlanKey } = require('../config/plans');
 const { Connection, PublicKey, LAMPORTS_PER_SOL } = require('@solana/web3.js');
+const crypto = require('crypto');
 
 function normalizeString(value) {
   if (value === undefined || value === null) return null;
@@ -105,6 +106,14 @@ function envValue(keys = []) {
   return null;
 }
 
+function toBase64Url(value) {
+  return Buffer.from(String(value || ''), 'utf8').toString('base64url');
+}
+
+function fromBase64Url(value) {
+  return Buffer.from(String(value || ''), 'base64url').toString('utf8');
+}
+
 function applyTemplate(url, params = {}) {
   const normalized = normalizeString(url);
   if (!normalized) return null;
@@ -126,6 +135,133 @@ function applyTemplate(url, params = {}) {
 }
 
 class BillingService {
+  getQuoteSigningSecret() {
+    return envValue([
+      'BILLING_QUOTE_SECRET',
+      'PUBLIC_WEB_AUTH_SECRET',
+      'SESSION_SECRET',
+      'JWT_SECRET',
+    ]) || 'guildpilot-local-quote-secret';
+  }
+
+  signQuotePayload(payload = {}) {
+    const payloadJson = JSON.stringify(payload);
+    const payloadPart = toBase64Url(payloadJson);
+    const signature = crypto
+      .createHmac('sha256', this.getQuoteSigningSecret())
+      .update(payloadPart)
+      .digest('base64url');
+    return `${payloadPart}.${signature}`;
+  }
+
+  parseAndVerifyQuoteToken(token) {
+    const raw = normalizeString(token);
+    if (!raw) return { success: false, message: 'quoteToken is required' };
+    const parts = raw.split('.');
+    if (parts.length !== 2) return { success: false, message: 'quoteToken format is invalid' };
+    const [payloadPart, signaturePart] = parts;
+    const expectedSig = crypto
+      .createHmac('sha256', this.getQuoteSigningSecret())
+      .update(payloadPart)
+      .digest('base64url');
+    if (expectedSig !== signaturePart) return { success: false, message: 'quoteToken signature is invalid' };
+    try {
+      const payload = JSON.parse(fromBase64Url(payloadPart));
+      return { success: true, payload };
+    } catch (_error) {
+      return { success: false, message: 'quoteToken payload is invalid' };
+    }
+  }
+
+  async getSolUsdRate() {
+    const fallback = Number(process.env.BILLING_SOL_USD_FALLBACK || 0);
+    const timeoutMs = Math.max(1000, Number(process.env.BILLING_QUOTE_TIMEOUT_MS || 5000));
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', {
+        method: 'GET',
+        headers: { 'accept': 'application/json' },
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (!response.ok) throw new Error(`price source returned ${response.status}`);
+      const json = await response.json();
+      const rate = Number(json?.solana?.usd || 0);
+      if (!Number.isFinite(rate) || rate <= 0) throw new Error('invalid SOL/USD rate');
+      return { success: true, rate, source: 'coingecko' };
+    } catch (error) {
+      clearTimeout(timer);
+      if (Number.isFinite(fallback) && fallback > 0) {
+        return { success: true, rate: fallback, source: 'env_fallback' };
+      }
+      return { success: false, message: `Failed to fetch SOL/USD rate: ${error?.message || 'unknown error'}` };
+    }
+  }
+
+  async createCryptoQuote(guildId, payload = {}) {
+    const normalizedGuildId = normalizeString(guildId);
+    if (!normalizedGuildId) return { success: false, message: 'guildId is required' };
+
+    const planKey = normalizePlanKey(payload.planKey || payload.plan_key);
+    const billingInterval = normalizeInterval(payload.billingInterval || payload.billing_interval);
+    const tokenSymbol = normalizeTokenSymbol(payload.tokenSymbol || payload.token_symbol);
+
+    if (!planKey || planKey === 'starter' || planKey === 'enterprise') {
+      return { success: false, message: 'planKey must be a paid self-serve plan' };
+    }
+    if (!billingInterval) return { success: false, message: 'billingInterval must be monthly or yearly' };
+    if (!tokenSymbol) return { success: false, message: 'tokenSymbol must be SOL or USDC' };
+
+    const expectedUsd = this.getExpectedPlanUsd(planKey, billingInterval);
+    if (!Number.isFinite(expectedUsd) || expectedUsd <= 0) {
+      return { success: false, message: 'Unable to compute plan price for quote' };
+    }
+
+    let quotedAmount = expectedUsd;
+    let fxRate = null;
+    let rateSource = tokenSymbol === 'USDC' ? 'fixed_1_usd' : null;
+    if (tokenSymbol === 'SOL') {
+      const rateResult = await this.getSolUsdRate();
+      if (!rateResult.success) return rateResult;
+      fxRate = Number(rateResult.rate);
+      rateSource = rateResult.source || 'unknown';
+      quotedAmount = expectedUsd / fxRate;
+    }
+
+    const amountDecimals = tokenSymbol === 'SOL' ? 6 : 2;
+    const normalizedAmount = Number(quotedAmount.toFixed(amountDecimals));
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+      return { success: false, message: 'Failed to calculate payable quote amount' };
+    }
+
+    const expiresAtMs = Date.now() + (5 * 60 * 1000);
+    const quotePayload = {
+      kind: 'billing_quote',
+      guildId: normalizedGuildId,
+      planKey,
+      billingInterval,
+      tokenSymbol,
+      usdAmount: Number(expectedUsd.toFixed(2)),
+      tokenAmount: normalizedAmount,
+      fxRate,
+      rateSource,
+      amountDecimals,
+      issuedAt: Date.now(),
+      expiresAt: expiresAtMs,
+      nonce: crypto.randomBytes(8).toString('hex'),
+    };
+
+    return {
+      success: true,
+      quoteToken: this.signQuotePayload(quotePayload),
+      quote: {
+        ...quotePayload,
+        expiresAtIso: new Date(expiresAtMs).toISOString(),
+      },
+      paymentDetails: this.getPaymentDetails(normalizedGuildId),
+    };
+  }
   isOnchainVerificationEnabled() {
     const settings = settingsManager.getSettings();
     if (settings && Object.prototype.hasOwnProperty.call(settings, 'billingOnchainVerifyEnabled')) {
@@ -257,19 +393,38 @@ class BillingService {
 
     const txSignature = normalizeString(payload.txSignature || payload.tx_signature);
     const senderWallet = normalizeString(payload.senderWallet || payload.sender_wallet);
-    const tokenSymbol = normalizeTokenSymbol(payload.tokenSymbol || payload.token_symbol);
-    const planKey = normalizePlanKey(payload.planKey || payload.plan_key);
-    const billingInterval = normalizeInterval(payload.billingInterval || payload.billing_interval);
-    const amount = Number(payload.amount);
+    const quoteToken = normalizeString(payload.quoteToken || payload.quote_token);
+    let tokenSymbol = normalizeTokenSymbol(payload.tokenSymbol || payload.token_symbol);
+    let planKey = normalizePlanKey(payload.planKey || payload.plan_key);
+    let billingInterval = normalizeInterval(payload.billingInterval || payload.billing_interval);
+    let amount = Number(payload.amount);
 
     if (!txSignature) return { success: false, message: 'txSignature is required' };
     if (!senderWallet) return { success: false, message: 'senderWallet is required' };
+    if (!isLikelySolanaSignature(txSignature)) return { success: false, message: 'txSignature format is invalid' };
+    if (!isLikelySolanaAddress(senderWallet)) return { success: false, message: 'senderWallet format is invalid' };
+
+    let quoteMetadata = null;
+    if (quoteToken) {
+      const parsed = this.parseAndVerifyQuoteToken(quoteToken);
+      if (!parsed.success) return parsed;
+      const q = parsed.payload || {};
+      if (String(q.kind || '') !== 'billing_quote') return { success: false, message: 'quoteToken kind is invalid' };
+      if (String(q.guildId || '') !== normalizedGuildId) return { success: false, message: 'quoteToken guild mismatch' };
+      if (!Number.isFinite(Number(q.expiresAt)) || Number(q.expiresAt) <= Date.now()) {
+        return { success: false, message: 'quoteToken has expired. Prepare a new quote.' };
+      }
+      tokenSymbol = normalizeTokenSymbol(q.tokenSymbol);
+      planKey = normalizePlanKey(q.planKey);
+      billingInterval = normalizeInterval(q.billingInterval);
+      amount = Number(q.tokenAmount);
+      quoteMetadata = q;
+    }
+
     if (!tokenSymbol) return { success: false, message: 'tokenSymbol must be SOL or USDC' };
     if (!planKey || planKey === 'starter' || planKey === 'enterprise') return { success: false, message: 'planKey must be a paid self-serve plan' };
     if (!billingInterval) return { success: false, message: 'billingInterval must be monthly or yearly' };
     if (!Number.isFinite(amount) || amount <= 0) return { success: false, message: 'amount must be greater than 0' };
-    if (!isLikelySolanaSignature(txSignature)) return { success: false, message: 'txSignature format is invalid' };
-    if (!isLikelySolanaAddress(senderWallet)) return { success: false, message: 'senderWallet format is invalid' };
     if (amount > 1000000) return { success: false, message: 'amount is outside allowed range' };
 
     const preset = getPlanPreset(planKey);
@@ -291,7 +446,20 @@ class BillingService {
         planKey,
         billingInterval
       );
-      return { success: true };
+      return {
+        success: true,
+        quoted: !!quoteMetadata,
+        quote: quoteMetadata ? {
+          usdAmount: quoteMetadata.usdAmount,
+          tokenAmount: quoteMetadata.tokenAmount,
+          tokenSymbol: quoteMetadata.tokenSymbol,
+          planKey: quoteMetadata.planKey,
+          billingInterval: quoteMetadata.billingInterval,
+          fxRate: quoteMetadata.fxRate,
+          rateSource: quoteMetadata.rateSource,
+          expiresAt: quoteMetadata.expiresAt,
+        } : null,
+      };
     } catch (error) {
       if (String(error?.message || '').toLowerCase().includes('unique')) {
         return { success: false, message: 'This transaction signature was already submitted.' };

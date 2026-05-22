@@ -5314,6 +5314,146 @@ body::before {
   }
 }
 
+/* ==================== BILLING PANEL ==================== */
+.billing-plan-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.billing-plan-header__icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1px solid rgba(99, 102, 241, 0.28);
+}
+
+.billing-plan-header__meta {
+  min-width: 240px;
+}
+
+.billing-plan-header__name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #e0e7ff;
+}
+
+.billing-plan-header__badges {
+  margin-top: 6px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.billing-plan-header__sub {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.billing-plan-header__actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.billing-panel {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.billing-panel__title {
+  font-weight: 700;
+  color: #e0e7ff;
+  margin-bottom: 10px;
+  font-size: 1.02rem;
+}
+
+.billing-panel__facts {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.billing-panel__facts strong {
+  color: #c9d6ff;
+}
+
+.billing-panel__warn {
+  color: #fca5a5;
+}
+
+.billing-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) 120px 140px minmax(0, 1.8fr) 130px auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.billing-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.billing-field--span2 {
+  grid-column: span 2;
+}
+
+.billing-field > span {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.billing-field input,
+.billing-field select {
+  width: 100%;
+  min-height: 40px;
+  border-radius: 8px;
+  border: 1px solid rgba(99, 102, 241, 0.26);
+  background: rgba(30, 41, 59, 0.82);
+  color: #e0e7ff;
+  padding: 8px 10px;
+  box-sizing: border-box;
+}
+
+.billing-field input:focus,
+.billing-field select:focus {
+  outline: none;
+  border-color: rgba(129, 140, 248, 0.75);
+  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.2);
+}
+
+.billing-submit-btn {
+  min-height: 40px;
+}
+
+.billing-panel__hint {
+  margin-top: 10px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 1100px) {
+  .billing-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .billing-field--span2 {
+    grid-column: span 2;
+  }
+  .billing-submit-btn {
+    grid-column: span 2;
+  }
+}
+
 @media (max-width: 768px) {
   .home-page {
     gap: 22px;

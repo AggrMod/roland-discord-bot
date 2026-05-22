@@ -60,12 +60,29 @@ function createAdminCoreRouter({
       const memberCount = guild?.memberCount || 0;
       const onlineCount = guild?.approximatePresenceCount || 0; 
       const roleCount = guild?.roles?.cache?.size || 0;
-      const verifiedWalletsCount = Number(safeGet('SELECT COUNT(DISTINCT wallet_address) AS cnt FROM wallets', [], { cnt: 0 })?.cnt || 0);
+      const verifiedWalletsCount = Number(safeGet(`
+        SELECT COUNT(DISTINCT w.wallet_address) AS cnt
+        FROM wallets w
+        INNER JOIN user_tenant_memberships utm
+          ON utm.discord_id = w.discord_id
+        WHERE utm.guild_id = ?
+      `, [guildId], { cnt: 0 })?.cnt || 0);
       
       // 2. Module Status
       const moduleState = tenantService.getTenantContext(guildId)?.modules || {};
       const modules = {
-        verification: { enabled: !!moduleState.verification, stats: { verifiedUsers: Number(safeGet('SELECT COUNT(DISTINCT discord_id) AS cnt FROM wallets', [], { cnt: 0 })?.cnt || 0) } },
+        verification: {
+          enabled: !!moduleState.verification,
+          stats: {
+            verifiedUsers: Number(safeGet(`
+              SELECT COUNT(DISTINCT w.discord_id) AS cnt
+              FROM wallets w
+              INNER JOIN user_tenant_memberships utm
+                ON utm.discord_id = w.discord_id
+              WHERE utm.guild_id = ?
+            `, [guildId], { cnt: 0 })?.cnt || 0),
+          },
+        },
         governance: { enabled: !!moduleState.governance, stats: { activeProposals: Number(safeGet('SELECT COUNT(*) AS cnt FROM proposals WHERE guild_id = ? AND status IN ("supporting", "voting")', [guildId], { cnt: 0 })?.cnt || 0) } },
         missions: { enabled: !!moduleState.heist, stats: { activeMissions: Number(safeGet('SELECT COUNT(*) AS cnt FROM heist_missions WHERE guild_id = ? AND status IN ("recruiting", "active")', [guildId], { cnt: 0 })?.cnt || 0) } },
         welcome: { enabled: !!moduleState.welcome, stats: { configured: Number(safeGet('SELECT COUNT(*) AS cnt FROM tenant_welcome_settings WHERE guild_id = ? AND enabled = 1', [guildId], { cnt: 0 })?.cnt || 0) } },
@@ -75,7 +92,13 @@ function createAdminCoreRouter({
       const moduleAnalytics = {
         verification: {
           linkedWallets: verifiedWalletsCount,
-          uniqueUsers: Number(safeGet('SELECT COUNT(DISTINCT discord_id) AS cnt FROM wallets', [], { cnt: 0 })?.cnt || 0),
+          uniqueUsers: Number(safeGet(`
+            SELECT COUNT(DISTINCT w.discord_id) AS cnt
+            FROM wallets w
+            INNER JOIN user_tenant_memberships utm
+              ON utm.discord_id = w.discord_id
+            WHERE utm.guild_id = ?
+          `, [guildId], { cnt: 0 })?.cnt || 0),
         },
         governance: {
           activeProposals: Number(safeGet('SELECT COUNT(*) AS cnt FROM proposals WHERE guild_id = ? AND status IN ("supporting", "voting")', [guildId], { cnt: 0 })?.cnt || 0),
@@ -118,10 +141,12 @@ function createAdminCoreRouter({
       const walletPreview = safeAll(`
         SELECT w.wallet_address, w.primary_wallet, w.is_favorite, w.created_at, u.username, u.total_nfts
         FROM wallets w
+        INNER JOIN user_tenant_memberships utm ON utm.discord_id = w.discord_id
         LEFT JOIN users u ON u.discord_id = w.discord_id
+        WHERE utm.guild_id = ?
         ORDER BY w.primary_wallet DESC, w.is_favorite DESC, w.created_at DESC
         LIMIT 3
-      `, [], []).map((row) => ({
+      `, [guildId], []).map((row) => ({
         walletAddress: row.wallet_address,
         label: row.primary_wallet ? 'Primary' : (row.is_favorite ? 'Favorite' : 'Linked'),
         username: row.username || null,

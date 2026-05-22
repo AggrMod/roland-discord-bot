@@ -63,6 +63,8 @@ const LIMIT_DEFINITIONS = Object.freeze({
   },
   engagement: {
     max_shop_items: { label: 'Max Shop Items' },
+    allow_discord_provider: { label: 'Engagement Discord Provider Enabled (0/1)' },
+    allow_x_provider: { label: 'Engagement X Provider Enabled (0/1)' },
   },
   aiassistant: {
     max_requests_per_day: { label: 'AI Assistant Requests Per Day' },

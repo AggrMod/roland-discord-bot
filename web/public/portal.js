@@ -17994,9 +17994,9 @@ async function loadPortalPlanCatalog(force = false) {
     portalPlanCatalogCache = data.plans;
   } catch (_error) {
     portalPlanCatalogCache = [
-      { key: 'starter', label: 'Free', tagline: 'For new communities getting started', billing: { monthlyUsd: 0 }, color: '#64748b', cta: 'Get Started Free', ctaAction: 'signup_free', features: [] },
-      { key: 'growth', label: 'Growth', tagline: 'For active projects scaling operations', billing: { monthlyUsd: 19.99 }, color: '#6366f1', popular: true, cta: 'Start Growth', ctaAction: 'upgrade_growth', features: [] },
-      { key: 'pro', label: 'Pro', tagline: 'For communities running full-stack automation', billing: { monthlyUsd: 49.99 }, color: '#f59e0b', cta: 'Start Pro', ctaAction: 'upgrade_pro', features: [] },
+      { key: 'starter', label: 'Free', tagline: 'All core modules enabled. AI Assistant unlocks on Pro.', billing: { monthlyUsd: 0 }, color: '#64748b', cta: 'Get Started Free', ctaAction: 'signup_free', features: [] },
+      { key: 'growth', label: 'Growth', tagline: 'All core modules enabled with higher limits and X engagement.', billing: { monthlyUsd: 19.99 }, color: '#6366f1', popular: true, cta: 'Start Growth', ctaAction: 'upgrade_growth', features: [] },
+      { key: 'pro', label: 'Pro', tagline: 'All modules enabled, including AI Assistant and highest limits.', billing: { monthlyUsd: 49.99 }, color: '#f59e0b', cta: 'Start Pro', ctaAction: 'upgrade_pro', features: [] },
       { key: 'enterprise', label: 'Enterprise', tagline: 'Custom rollout and support bundles', billing: { monthlyUsd: null, enterprise: true }, color: '#10b981', cta: 'Contact Team', ctaAction: 'contact_enterprise', features: [] },
     ];
   }

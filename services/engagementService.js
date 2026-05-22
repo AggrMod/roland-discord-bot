@@ -114,6 +114,22 @@ function normalizeProvider(provider) {
   return PROVIDERS[key] ? key : '';
 }
 
+function isXProviderAllowed(guildId) {
+  const limit = entitlementService.getEffectiveLimit(guildId, 'engagement', 'allow_x_provider');
+  if (limit === null || limit === undefined) return true;
+  return Number(limit) >= 1;
+}
+
+function enforceProviderPlanAccess(guildId, providerKey) {
+  if (providerKey !== 'x') return { success: true };
+  if (isXProviderAllowed(guildId)) return { success: true };
+  return {
+    success: false,
+    code: 'plan_restricted',
+    message: 'X engagement provider is available on Growth and Pro plans.',
+  };
+}
+
 function safeJsonParse(value, fallback) {
   if (value === null || value === undefined || value === '') return fallback;
   if (typeof value !== 'string') return value;
@@ -312,6 +328,8 @@ function upsertMonitoredAccount(guildId, payload = {}) {
   const normalizedGuildId = normalizeGuildId(guildId);
   const providerKey = normalizeProvider(payload.provider);
   if (!normalizedGuildId || !providerKey) return { success: false, message: 'Valid guildId and provider are required' };
+  const providerAccess = enforceProviderPlanAccess(normalizedGuildId, providerKey);
+  if (!providerAccess.success) return providerAccess;
 
   const accountHandle = formatHandle(payload.account_handle || payload.accountHandle);
   if (!accountHandle) return { success: false, message: 'account_handle is required' };
@@ -398,6 +416,8 @@ function upsertHashtagMonitor(guildId, payload = {}) {
   const normalizedGuildId = normalizeGuildId(guildId);
   const providerKey = normalizeProvider(payload.provider);
   if (!normalizedGuildId || !providerKey) return { success: false, message: 'Valid guildId and provider are required' };
+  const providerAccess = enforceProviderPlanAccess(normalizedGuildId, providerKey);
+  if (!providerAccess.success) return providerAccess;
 
   const hashtag = formatHashtag(payload.hashtag);
   if (!hashtag) return { success: false, message: 'hashtag is required' };
@@ -482,6 +502,8 @@ function upsertLinkedAccount(guildId, userId, payload = {}) {
   if (!normalizedGuildId || !normalizedUserId || !providerKey) {
     return { success: false, message: 'Valid guildId, userId, and provider are required' };
   }
+  const providerAccess = enforceProviderPlanAccess(normalizedGuildId, providerKey);
+  if (!providerAccess.success) return providerAccess;
 
   const handle = formatHandle(payload.handle || payload.username || payload.account_handle);
   const providerUserId = String(payload.provider_user_id || payload.providerUserId || '').trim() || null;
@@ -705,6 +727,8 @@ function createTask(guildId, payload = {}) {
   const normalizedGuildId = normalizeGuildId(guildId);
   const providerKey = normalizeProvider(payload.provider);
   if (!normalizedGuildId || !providerKey) return { success: false, message: 'Valid guildId and provider are required' };
+  const providerAccess = enforceProviderPlanAccess(normalizedGuildId, providerKey);
+  if (!providerAccess.success) return providerAccess;
 
   const normalized = normalizeTaskPayload(providerKey, payload);
   const existing = normalized.sourcePostId
@@ -915,6 +939,8 @@ async function ingestProviderPost(guildId, provider, payload = {}) {
   const normalizedGuildId = normalizeGuildId(guildId);
   const providerKey = normalizeProvider(provider);
   if (!normalizedGuildId || !providerKey) return { success: false, message: 'Valid guildId and provider are required' };
+  const providerAccess = enforceProviderPlanAccess(normalizedGuildId, providerKey);
+  if (!providerAccess.success) return providerAccess;
 
   const sourceHandle = formatHandle(payload.account_handle || payload.accountHandle || payload.author_handle || payload.authorHandle);
   const sourcePostId = String(payload.source_post_id || payload.sourcePostId || payload.id || '').trim();

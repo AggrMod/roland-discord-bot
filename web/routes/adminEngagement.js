@@ -1,6 +1,7 @@
 const express = require('express');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
 const xProviderService = require('../../services/xProviderService');
+const entitlementService = require('../../services/entitlementService');
 
 function parseInteger(value, fallback = 0) {
   const parsed = Number.parseInt(value, 10);
@@ -13,6 +14,7 @@ function createAdminEngagementRouter({
   ensureEngagementModule,
 }) {
   const router = express.Router();
+  const toResultStatus = (result) => result?.code === 'plan_restricted' ? 403 : 400;
 
   const loadService = () => require('../../services/engagementService');
   const guard = (req, res) => ensureEngagementModule(req, res);
@@ -80,6 +82,10 @@ function createAdminEngagementRouter({
   router.post('/api/admin/engagement/providers/x/sync', adminAuthMiddleware, async (req, res) => {
     if (!guard(req, res)) return;
     try {
+      const xProviderLimit = entitlementService.getEffectiveLimit(req.guildId, 'engagement', 'allow_x_provider');
+      if (xProviderLimit !== null && xProviderLimit < 1) {
+        return res.status(403).json(toErrorResponse('X engagement provider is available on Growth and Pro plans.', 'PLAN_RESTRICTED'));
+      }
       if (!xProviderService.isConfigured()) {
         return res.status(400).json(toErrorResponse('X provider is not configured', 'VALIDATION_ERROR'));
       }
@@ -238,7 +244,7 @@ function createAdminEngagementRouter({
       const eng = loadService();
       const result = eng.upsertMonitoredAccount(req.guildId, req.body || {});
       if (!result?.success) {
-        return res.status(400).json(toErrorResponse(result?.message || 'Failed to save monitored account', 'VALIDATION_ERROR', null, result));
+        return res.status(toResultStatus(result)).json(toErrorResponse(result?.message || 'Failed to save monitored account', 'VALIDATION_ERROR', null, result));
       }
       return res.json(toSuccessResponse(result));
     } catch (error) {
@@ -253,7 +259,7 @@ function createAdminEngagementRouter({
       const eng = loadService();
       const result = eng.upsertMonitoredAccount(req.guildId, { ...(req.body || {}), id: parseInteger(req.params.id) });
       if (!result?.success) {
-        return res.status(400).json(toErrorResponse(result?.message || 'Failed to update monitored account', 'VALIDATION_ERROR', null, result));
+        return res.status(toResultStatus(result)).json(toErrorResponse(result?.message || 'Failed to update monitored account', 'VALIDATION_ERROR', null, result));
       }
       return res.json(toSuccessResponse(result));
     } catch (error) {
@@ -292,7 +298,7 @@ function createAdminEngagementRouter({
       const eng = loadService();
       const result = eng.upsertHashtagMonitor(req.guildId, req.body || {});
       if (!result?.success) {
-        return res.status(400).json(toErrorResponse(result?.message || 'Failed to save hashtag monitor', 'VALIDATION_ERROR', null, result));
+        return res.status(toResultStatus(result)).json(toErrorResponse(result?.message || 'Failed to save hashtag monitor', 'VALIDATION_ERROR', null, result));
       }
       return res.json(toSuccessResponse(result));
     } catch (error) {
@@ -307,7 +313,7 @@ function createAdminEngagementRouter({
       const eng = loadService();
       const result = eng.upsertHashtagMonitor(req.guildId, { ...(req.body || {}), id: parseInteger(req.params.id) });
       if (!result?.success) {
-        return res.status(400).json(toErrorResponse(result?.message || 'Failed to update hashtag monitor', 'VALIDATION_ERROR', null, result));
+        return res.status(toResultStatus(result)).json(toErrorResponse(result?.message || 'Failed to update hashtag monitor', 'VALIDATION_ERROR', null, result));
       }
       return res.json(toSuccessResponse(result));
     } catch (error) {
@@ -351,7 +357,7 @@ function createAdminEngagementRouter({
       const eng = loadService();
       const result = eng.createTask(req.guildId, req.body || {});
       if (!result?.success) {
-        return res.status(400).json(toErrorResponse(result?.message || 'Failed to create task', 'VALIDATION_ERROR', null, result));
+        return res.status(toResultStatus(result)).json(toErrorResponse(result?.message || 'Failed to create task', 'VALIDATION_ERROR', null, result));
       }
       return res.json(toSuccessResponse(result));
     } catch (error) {
@@ -367,7 +373,7 @@ function createAdminEngagementRouter({
       const provider = req.body?.provider;
       const result = await eng.ingestProviderPost(req.guildId, provider, req.body || {});
       if (!result?.success) {
-        return res.status(400).json(toErrorResponse(result?.message || 'Failed to ingest provider post', 'VALIDATION_ERROR', null, result));
+        return res.status(toResultStatus(result)).json(toErrorResponse(result?.message || 'Failed to ingest provider post', 'VALIDATION_ERROR', null, result));
       }
       return res.json(toSuccessResponse(result));
     } catch (error) {

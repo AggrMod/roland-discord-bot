@@ -21,19 +21,20 @@ const MODULE_KEYS = Object.freeze([
 const PLAN_MARKETING = Object.freeze({
   starter: {
     displayLabel: 'Free',
-    tagline: 'For new communities getting started',
+    tagline: 'All core modules enabled. AI Assistant unlocks on Pro.',
     color: '#64748b',
     cta: 'Get Started Free',
     ctaAction: 'signup_free',
     features: [
-      { label: 'Up to 4 enabled modules', included: true },
+      { label: 'All modules enabled except AI Assistant', included: true },
       { label: '3 verification rules', included: true },
       { label: '3 active governance proposals', included: true },
       { label: '3 ticket categories', included: true },
       { label: 'Invite tracking (30 days)', included: true },
       { label: 'Welcome flow (basic)', included: true },
-      { label: 'Vault module', included: false },
-      { label: 'Engagement module', included: false },
+      { label: 'Vault module (25 rewards)', included: true },
+      { label: 'Engagement module (Discord)', included: true },
+      { label: 'Engagement X provider', included: false },
       { label: 'AI assistant module', included: false },
       { label: 'Welcome image uploads', included: false },
       { label: 'Branding customization', included: false },
@@ -41,38 +42,38 @@ const PLAN_MARKETING = Object.freeze({
   },
   growth: {
     displayLabel: 'Growth',
-    tagline: 'For active projects scaling operations',
+    tagline: 'All core modules enabled with higher limits and X engagement.',
     color: '#6366f1',
     popular: true,
     cta: 'Start Growth',
     ctaAction: 'upgrade_growth',
     features: [
-      { label: 'Up to 6 enabled modules', included: true },
+      { label: 'All modules enabled except AI Assistant', included: true },
       { label: '12 verification rules', included: true },
       { label: '25 active governance proposals', included: true },
       { label: '12 ticket categories', included: true },
       { label: 'Invite tracking (180 days + export)', included: true },
       { label: 'Welcome image uploads', included: true },
       { label: 'Vault module (100 rewards)', included: true },
-      { label: 'Engagement module', included: true },
+      { label: 'Engagement module (Discord + X)', included: true },
       { label: 'AI assistant module', included: false },
       { label: 'Advanced branding customization', included: false },
     ],
   },
   pro: {
     displayLabel: 'Pro',
-    tagline: 'For communities running full-stack automation',
+    tagline: 'All modules enabled, including AI Assistant and highest limits.',
     color: '#f59e0b',
     cta: 'Start Pro',
     ctaAction: 'upgrade_pro',
     features: [
-      { label: 'Up to 8 enabled modules', included: true },
+      { label: 'All modules enabled', included: true },
       { label: '50 verification rules', included: true },
       { label: '100 active governance proposals', included: true },
       { label: '40 ticket categories', included: true },
       { label: 'Unlimited invite history + export', included: true },
       { label: 'Vault module (500 rewards)', included: true },
-      { label: 'Engagement module', included: true },
+      { label: 'Engagement module (Discord + X)', included: true },
       { label: 'AI assistant (1000 req/day)', included: true },
       { label: 'Advanced branding customization', included: true },
       { label: 'Priority operational support', included: true },
@@ -97,7 +98,7 @@ const PLAN_PRESETS = Object.freeze({
   starter: {
     key: 'starter',
     label: 'Free',
-    description: 'Foundational tenant bundle for verification, governance, and support.',
+    description: 'All core modules enabled with starter limits. AI Assistant is Pro-only.',
     billing: {
       monthlyUsd: 0,
       annualDiscountPct: 15,
@@ -105,7 +106,7 @@ const PLAN_PRESETS = Object.freeze({
     },
     limits: {
       max_commands: 20,
-      max_enabled_modules: 4,
+      max_enabled_modules: null,
       max_branding_profiles: 1,
       max_read_only_overrides: 0
     },
@@ -164,7 +165,9 @@ const PLAN_PRESETS = Object.freeze({
       },
       analytics: {},
       engagement: {
-        max_shop_items: 3
+        max_shop_items: 3,
+        allow_discord_provider: 1,
+        allow_x_provider: 0,
       },
       aiassistant: {
         max_requests_per_day: 0
@@ -176,9 +179,9 @@ const PLAN_PRESETS = Object.freeze({
       treasury: true,
       wallettracker: true,
       invites: true,
-      minigames: false,
-      heist: false,
-      vault: false,
+      minigames: true,
+      heist: true,
+      vault: true,
       welcome: true,
       ticketing: true,
       nfttracker: true,
@@ -186,14 +189,14 @@ const PLAN_PRESETS = Object.freeze({
       selfserveroles: true,
       branding: true,
       analytics: true,
-      engagement: false,
+      engagement: true,
       aiassistant: false
     }
   },
   growth: {
     key: 'growth',
     label: 'Growth',
-    description: 'Adds treasury, NFT tracking, and stronger self-service controls.',
+    description: 'All core modules enabled with higher limits plus X engagement support.',
     billing: {
       monthlyUsd: 19.99,
       annualDiscountPct: 15,
@@ -201,7 +204,7 @@ const PLAN_PRESETS = Object.freeze({
     },
     limits: {
       max_commands: 40,
-      max_enabled_modules: 6,
+      max_enabled_modules: null,
       max_branding_profiles: 1,
       max_read_only_overrides: 1
     },
@@ -260,7 +263,9 @@ const PLAN_PRESETS = Object.freeze({
       },
       analytics: {},
       engagement: {
-        max_shop_items: 25
+        max_shop_items: 25,
+        allow_discord_provider: 1,
+        allow_x_provider: 1,
       },
       aiassistant: {
         max_requests_per_day: 0
@@ -273,7 +278,7 @@ const PLAN_PRESETS = Object.freeze({
       wallettracker: true,
       invites: true,
       minigames: true,
-      heist: false,
+      heist: true,
       vault: true,
       welcome: true,
       ticketing: true,
@@ -289,7 +294,7 @@ const PLAN_PRESETS = Object.freeze({
   pro: {
     key: 'pro',
     label: 'Pro',
-    description: 'Full-featured operational bundle with competitive modules enabled.',
+    description: 'All modules enabled, including AI Assistant and expanded operational limits.',
     billing: {
       monthlyUsd: 49.99,
       annualDiscountPct: 15,
@@ -297,7 +302,7 @@ const PLAN_PRESETS = Object.freeze({
     },
     limits: {
       max_commands: 80,
-      max_enabled_modules: 8,
+      max_enabled_modules: null,
       max_branding_profiles: 2,
       max_read_only_overrides: 2
     },
@@ -356,7 +361,9 @@ const PLAN_PRESETS = Object.freeze({
       },
       analytics: {},
       engagement: {
-        max_shop_items: 100
+        max_shop_items: 100,
+        allow_discord_provider: 1,
+        allow_x_provider: 1,
       },
       aiassistant: {
         max_requests_per_day: 1000
@@ -452,7 +459,9 @@ const PLAN_PRESETS = Object.freeze({
       },
       analytics: {},
       engagement: {
-        max_shop_items: null
+        max_shop_items: null,
+        allow_discord_provider: 1,
+        allow_x_provider: 1,
       },
       aiassistant: {
         max_requests_per_day: null

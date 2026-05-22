@@ -8352,7 +8352,6 @@ async function loadSuperadminWorkspaceHubV2() {
     }
     if (!plansRes.ok || plansJson?.success === false) {
       workspaceLoadState.plansFailed = true;
-      workspaceWarnings.push('Plan catalog is temporarily unavailable; using local fallback labels.');
     }
 
     const tenants = Array.isArray(tenantsJson?.tenants) ? tenantsJson.tenants : [];

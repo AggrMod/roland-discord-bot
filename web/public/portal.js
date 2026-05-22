@@ -7306,7 +7306,7 @@ function getGuildPilotSupportUrl() {
     currentPlanSnapshot?.renewal?.supportUrl,
     window?.GUILDPILOT_SUPPORT_URL,
     window?.PORTAL_SUPPORT_URL,
-    'https://discord.gg/guildpilot',
+    'https://discord.gg/dNfxyZQSD9',
   ];
   for (const value of candidates) {
     const url = String(value || '').trim();

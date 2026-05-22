@@ -75,6 +75,9 @@ class SettingsManager {
 
       // Micro-Transfer Verification
       verificationReceiveWallet: '',
+      billingReceiveWallet: '',
+      billingOnchainVerifyEnabled: false,
+      billingSupportUrl: '',
       nftActivityWebhookSecret: '',
       aiAssistantApiKeyEncrypted: '',
       openaiApiKeyEncrypted: '',

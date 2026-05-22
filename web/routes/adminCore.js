@@ -271,6 +271,7 @@ function createAdminCoreRouter({
         status: snapshot?.status || tenantContext?.status || 'active',
         expiresAt: snapshot?.expiresAt || null,
         billing: snapshot?.billing || null,
+        paymentDetails: billingService.getPaymentDetails(req.guildId),
         renewal: snapshot?.renewal || { options: [] },
       }));
     } catch (error) {
@@ -294,6 +295,7 @@ function createAdminCoreRouter({
         plan: requestedPlan,
         interval: requestedInterval,
         options,
+        paymentDetails: billingService.getPaymentDetails(req.guildId),
         supportUrl: billingService.getSupportUrl(req.guildId),
       }));
     } catch (error) {

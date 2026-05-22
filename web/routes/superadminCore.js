@@ -1,6 +1,7 @@
 const express = require('express');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
 const { decryptSecret, encryptSecret, maskSecret } = require('../../utils/secretVault');
+const billingService = require('../../services/billingService');
 
 function createSuperadminCoreRouter({
   superadminGuard,
@@ -59,6 +60,11 @@ function createSuperadminCoreRouter({
           pollIntervalSeconds: settings.pollIntervalSeconds || 30,
           verifyRateLimitMinutes: settings.verifyRateLimitMinutes || 5,
           maxPendingPerUser: settings.maxPendingPerUser || 1,
+          billingReceiveWallet: settings.billingReceiveWallet || process.env.BILLING_RECEIVE_WALLET || billingService.getBillingReceiveWallet() || '',
+          billingOnchainVerifyEnabled: Object.prototype.hasOwnProperty.call(settings, 'billingOnchainVerifyEnabled')
+            ? !!settings.billingOnchainVerifyEnabled
+            : billingService.isOnchainVerificationEnabled(),
+          billingSupportUrl: settings.billingSupportUrl || process.env.BILLING_SUPPORT_URL || process.env.SUPPORT_URL || '',
           chainEmojiMap: settings.chainEmojiMap || {},
           openaiApiKeyConfigured: !!openaiApiKey,
           openaiApiKeyMasked: openaiApiKey ? maskSecret(openaiApiKey) : '',
@@ -92,6 +98,7 @@ function createSuperadminCoreRouter({
         'moduleMicroVerifyEnabled', 'verificationReceiveWallet',
         'verifyRequestTtlMinutes', 'pollIntervalSeconds',
         'verifyRateLimitMinutes', 'maxPendingPerUser', 'chainEmojiMap',
+        'billingReceiveWallet', 'billingOnchainVerifyEnabled', 'billingSupportUrl',
         'openaiApiKey', 'geminiApiKey',
         'xClientId', 'xClientSecret', 'xBearerToken', 'xPollingEnabled', 'xPollingIntervalSeconds',
         'aiAssistantDefaultProvider', 'aiAssistantFallbackProvider',

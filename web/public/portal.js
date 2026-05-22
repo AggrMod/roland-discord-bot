@@ -8597,12 +8597,37 @@ async function loadSuperadminWorkspaceHubV2() {
             <div class="gp-actions-row"><button class="btn-primary" onclick="saveChainEmojiMap()">Save Chain Emojis</button></div>
           </div>
         `;
+      } else if (superadminWorkspaceFocus === 'billingSettings') {
+        workspaceBody = `
+          <div class="sa-v2-panel">
+            <div class="sa-v2-detail-header"><h4>Billing & Payments</h4><button class="btn-secondary" onclick="setSuperadminWorkspaceFocus('')">Back</button></div>
+            <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px;">
+              <label style="display:grid; gap:6px;">
+                <span style="font-size:0.82em; color:var(--text-secondary);">Receiving Wallet (SOL/USDC on Solana)</span>
+                <input id="sa_billingReceiveWallet" type="text" value="${escapeHtml(globalSettings.billingReceiveWallet || '')}" placeholder="Solana wallet address">
+              </label>
+              <label style="display:grid; gap:6px;">
+                <span style="font-size:0.82em; color:var(--text-secondary);">Support URL (optional)</span>
+                <input id="sa_billingSupportUrl" type="url" value="${escapeHtml(globalSettings.billingSupportUrl || '')}" placeholder="https://...">
+              </label>
+            </div>
+            <label style="display:flex; align-items:center; gap:10px; margin-top:10px;">
+              <input id="sa_billingOnchainVerifyEnabled" type="checkbox" ${globalSettings.billingOnchainVerifyEnabled ? 'checked' : ''}>
+              Enable on-chain receipt verification
+            </label>
+            <div class="sa-v2-inline-note" style="margin-top:10px;">
+              Tenant admins submit payment receipts from Plans. Superadmins review and approve in Billing workspace.
+            </div>
+            <div class="gp-actions-row"><button class="btn-primary" onclick="saveBillingSettings()">Save Billing Settings</button></div>
+          </div>
+        `;
       } else {
         workspaceBody = `
           <div class="sa-v2-grid">
             <article class="sa-v2-card sa-v2-card--action" onclick="setSuperadminWorkspaceFocus('aiProviders')"><h4>AI Provider Routing</h4><p>Provider defaults and model routing.</p><button class="btn-secondary" onclick="event.stopPropagation(); setSuperadminWorkspaceFocus('aiProviders')">Open AI Settings</button></article>
             <article class="sa-v2-card sa-v2-card--action" onclick="setSuperadminWorkspaceFocus('xProvider')"><h4>X Provider</h4><p>OAuth and polling settings.</p><button class="btn-secondary" onclick="event.stopPropagation(); setSuperadminWorkspaceFocus('xProvider')">Open X Settings</button></article>
             <article class="sa-v2-card sa-v2-card--action" onclick="setSuperadminWorkspaceFocus('chainEmojis')"><h4>Chain Emojis & Replay</h4><p>Global chain map and replay tools.</p><button class="btn-secondary" onclick="event.stopPropagation(); setSuperadminWorkspaceFocus('chainEmojis')">Open Chain Controls</button></article>
+            <article class="sa-v2-card sa-v2-card--action" onclick="setSuperadminWorkspaceFocus('billingSettings')"><h4>Billing & Payments</h4><p>Receiving wallet and payment verification controls.</p><button class="btn-secondary" onclick="event.stopPropagation(); setSuperadminWorkspaceFocus('billingSettings')">Open Billing Settings</button></article>
           </div>
         `;
       }
@@ -9777,6 +9802,36 @@ async function saveChainEmojiMap() {
   } catch (error) {
     console.error('[admin-ui-v2][save_failure]', { action: 'saveChainEmojiMap', error: error?.message || String(error) });
     showError(formatAdminWorkspaceError('Failed to save chain emoji map', error));
+  }
+}
+
+async function saveBillingSettings() {
+  const billingReceiveWallet = document.getElementById('sa_billingReceiveWallet')?.value?.trim() || '';
+  const billingSupportUrl = document.getElementById('sa_billingSupportUrl')?.value?.trim() || '';
+  const billingOnchainVerifyEnabled = !!document.getElementById('sa_billingOnchainVerifyEnabled')?.checked;
+
+  try {
+    const response = await fetch('/api/superadmin/global-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        billingReceiveWallet,
+        billingSupportUrl,
+        billingOnchainVerifyEnabled,
+      })
+    });
+    const data = await response.json();
+    if (!data.success) {
+      console.error('[admin-ui-v2][save_failure]', { action: 'saveBillingSettings', error: data.message || 'Failed to save billing settings' });
+      showError(data.message || 'Failed to save billing settings');
+      return;
+    }
+    showSuccess('Billing settings saved');
+    await loadSuperadminView();
+  } catch (error) {
+    console.error('[admin-ui-v2][save_failure]', { action: 'saveBillingSettings', error: error?.message || String(error) });
+    showError(formatAdminWorkspaceError('Failed to save billing settings', error));
   }
 }
 
@@ -18146,6 +18201,23 @@ async function loadCurrentPlan() {
       : 'badge-paused';
     const intervalLabel = data?.billing?.billingInterval === 'yearly' ? 'Yearly billing' : 'Monthly billing';
     const renewalOptions = Array.isArray(data?.renewal?.options) ? data.renewal.options : [];
+    const paymentDetails = data?.paymentDetails || {};
+    const billingWallet = String(paymentDetails.destinationWallet || '').trim();
+    const acceptedTokens = Array.isArray(paymentDetails.acceptedTokens) ? paymentDetails.acceptedTokens.join(', ') : 'SOL, USDC';
+    const onchainVerificationEnabled = !!paymentDetails.onchainVerificationEnabled;
+    let receiptRows = [];
+    try {
+      const receiptsRes = await fetch('/api/admin/billing/crypto-receipts?limit=25', {
+        credentials: 'include',
+        headers: buildTenantRequestHeaders(),
+      });
+      if (receiptsRes.ok) {
+        const receiptsJson = await receiptsRes.json();
+        if (receiptsJson?.success && Array.isArray(receiptsJson?.receipts)) {
+          receiptRows = receiptsJson.receipts;
+        }
+      }
+    } catch (_receiptError) {}
 
     const actionButtons = [];
     if (data?.billing?.manageUrl) {
@@ -18158,6 +18230,47 @@ async function loadCurrentPlan() {
     if (data?.renewal?.supportUrl) {
       actionButtons.push(`<button class="btn-secondary" onclick="openExternalPlanUrl('${escapeJsString(encodeURIComponent(data.renewal.supportUrl))}')">Contact Support</button>`);
     }
+
+    const renderReceiptStatusBadge = (statusRaw) => {
+      const status = String(statusRaw || 'pending').toLowerCase();
+      if (status === 'approved') return '<span class="badge badge-active">approved</span>';
+      if (status === 'rejected') return '<span class="badge badge-paused">rejected</span>';
+      return '<span class="badge">pending</span>';
+    };
+    const paymentHistoryHtml = receiptRows.length
+      ? `
+        <div style="overflow:auto;">
+          <table class="data-table" style="min-width:860px;">
+            <thead>
+              <tr>
+                <th>Submitted</th>
+                <th>Status</th>
+                <th>Plan</th>
+                <th>Token</th>
+                <th>Amount</th>
+                <th>TX</th>
+                <th>Sender</th>
+                <th>Review Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${receiptRows.map((row) => `
+                <tr>
+                  <td>${escapeHtml(row?.createdAt ? new Date(row.createdAt).toLocaleString() : 'n/a')}</td>
+                  <td>${renderReceiptStatusBadge(row?.status)}</td>
+                  <td>${escapeHtml((row?.planKey || 'n/a').toUpperCase())} / ${escapeHtml((row?.billingInterval || 'n/a').toLowerCase())}</td>
+                  <td>${escapeHtml(String(row?.tokenSymbol || 'n/a').toUpperCase())}</td>
+                  <td>${escapeHtml(row?.amount !== null && row?.amount !== undefined ? String(row.amount) : 'n/a')}</td>
+                  <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;"><code>${escapeHtml(String(row?.txSignature || 'n/a'))}</code></td>
+                  <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;"><code>${escapeHtml(String(row?.senderWallet || 'n/a'))}</code></td>
+                  <td>${escapeHtml(String(row?.verificationError || '').trim() || '-')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `
+      : '<div style="color:var(--text-secondary);font-size:0.82em;">No payment receipts submitted yet.</div>';
 
     content.innerHTML = `
       <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;">
@@ -18178,6 +18291,11 @@ async function loadCurrentPlan() {
       </div>
       <div style="margin-top:14px;padding:12px;border:1px solid rgba(99,102,241,0.2);border-radius:10px;background:rgba(15,23,42,0.45);">
         <div style="font-weight:600;color:#e0e7ff;margin-bottom:8px;">Pay with SOL/USDC (Manual Review)</div>
+        <div style="display:grid;gap:6px;margin-bottom:10px;font-size:0.8em;color:var(--text-secondary);">
+          <div><strong style="color:#c9d6ff;">Destination wallet:</strong> ${billingWallet ? `<code>${escapeHtml(billingWallet)}</code>` : '<span style="color:#fca5a5;">Not configured yet. Contact support.</span>'}</div>
+          <div><strong style="color:#c9d6ff;">Accepted tokens:</strong> ${escapeHtml(acceptedTokens)}</div>
+          <div><strong style="color:#c9d6ff;">On-chain verification:</strong> ${onchainVerificationEnabled ? 'enabled' : 'manual review only'}</div>
+        </div>
         <div style="display:grid;grid-template-columns:minmax(0,1fr) 110px 130px minmax(0,1fr) 120px auto;gap:8px;align-items:end;">
           <div><div style="font-size:0.78em;color:var(--text-secondary);margin-bottom:4px;">TX Signature</div><input id="billingCryptoTxSignature" type="text" placeholder="Transaction signature" style="width:100%;"></div>
           <div><div style="font-size:0.78em;color:var(--text-secondary);margin-bottom:4px;">Token</div><select id="billingCryptoToken"><option value="SOL">SOL</option><option value="USDC">USDC</option></select></div>
@@ -18187,6 +18305,10 @@ async function loadCurrentPlan() {
           <button class="btn-primary" onclick="submitCryptoPaymentReceipt()">Submit</button>
         </div>
         <div style="margin-top:8px;font-size:0.78em;color:var(--text-secondary);">After submission, receipt goes to Superadmin Billing queue for approval/rejection.</div>
+      </div>
+      <div style="margin-top:14px;padding:12px;border:1px solid rgba(99,102,241,0.2);border-radius:10px;background:rgba(15,23,42,0.45);">
+        <div style="font-weight:600;color:#e0e7ff;margin-bottom:8px;">Payment History</div>
+        ${paymentHistoryHtml}
       </div>
     `;
     card.style.display = 'block';

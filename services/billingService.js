@@ -1,5 +1,6 @@
 const db = require('../database/db');
 const tenantService = require('./tenantService');
+const settingsManager = require('../config/settings');
 const { getPlanPreset, normalizePlanKey } = require('../config/plans');
 const { Connection, PublicKey, LAMPORTS_PER_SOL } = require('@solana/web3.js');
 
@@ -125,7 +126,18 @@ function applyTemplate(url, params = {}) {
 }
 
 class BillingService {
+  isOnchainVerificationEnabled() {
+    const settings = settingsManager.getSettings();
+    if (settings && Object.prototype.hasOwnProperty.call(settings, 'billingOnchainVerifyEnabled')) {
+      return !!settings.billingOnchainVerifyEnabled;
+    }
+    return String(process.env.BILLING_ONCHAIN_VERIFY_ENABLED || 'false').trim().toLowerCase() === 'true';
+  }
+
   getBillingReceiveWallet() {
+    const settings = settingsManager.getSettings();
+    const configured = normalizeString(settings?.billingReceiveWallet);
+    if (configured) return configured;
     const explicit = normalizeString(process.env.BILLING_RECEIVE_WALLET);
     if (explicit) return explicit;
     const treasuryConfig = db.prepare('SELECT solana_wallet FROM treasury_config WHERE id = 1').get();
@@ -134,8 +146,21 @@ class BillingService {
     return normalizeString(process.env.VERIFICATION_RECEIVE_WALLET);
   }
 
+  getPaymentDetails(guildId) {
+    const settings = settingsManager.getSettings();
+    const destinationWallet = this.getBillingReceiveWallet();
+    const supportUrl = normalizeString(settings?.billingSupportUrl) || this.getSupportUrl(guildId);
+    return {
+      destinationWallet: destinationWallet || null,
+      acceptedTokens: ['SOL', 'USDC'],
+      onchainVerificationEnabled: this.isOnchainVerificationEnabled(),
+      supportUrl: supportUrl || null,
+      mode: 'manual_receipt_review',
+    };
+  }
+
   async verifyCryptoReceiptOnChain({ receiptId }) {
-    const enabled = String(process.env.BILLING_ONCHAIN_VERIFY_ENABLED || 'false').trim().toLowerCase() === 'true';
+    const enabled = this.isOnchainVerificationEnabled();
     if (!enabled) {
       return { success: false, message: 'On-chain receipt verification is disabled (set BILLING_ONCHAIN_VERIFY_ENABLED=true)' };
     }
@@ -699,6 +724,11 @@ class BillingService {
   }
 
   getSupportUrl(guildId) {
+    const settings = settingsManager.getSettings();
+    const settingsSupport = normalizeString(settings?.billingSupportUrl);
+    if (settingsSupport) {
+      return applyTemplate(settingsSupport, { guildId, planKey: null, interval: null });
+    }
     const envSupport = envValue(['BILLING_SUPPORT_URL', 'SUPPORT_URL']);
     if (envSupport) {
       return applyTemplate(envSupport, { guildId, planKey: null, interval: null });

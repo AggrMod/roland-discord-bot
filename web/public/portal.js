@@ -15020,6 +15020,10 @@ async function loadVotingPowerView(targetPaneId = null) {
   const preferred = document.getElementById(governanceSettingsTargetPaneId || 'adminVotingPowerContent');
   const content = preferred || document.getElementById('adminVotingPowerContent');
   if (!content) return;
+  if (!activeGuildId) {
+    content.innerHTML = '<p style="color:var(--text-secondary);font-size:0.9em;">Select a server first to load governance settings.</p>';
+    return;
+  }
 
   const alternatePaneId = governanceSettingsTargetPaneId === 'adminVotingPowerContent'
     ? 'governanceModuleSettingsContent'
@@ -15182,6 +15186,10 @@ async function loadVotingPowerView(targetPaneId = null) {
 
 
 async function addVPMapping() {
+  if (!(isAdmin || isSuperadmin) || !activeGuildId) {
+    showError('Admin access and active server are required.');
+    return;
+  }
   const sel = document.getElementById('vpRoleSelect') || document.getElementById('vpMappingRoleSelect');
   const vpInput = document.getElementById('vpAmountInput') || document.getElementById('vpMappingVPInput');
   if (!sel || !vpInput) return;
@@ -15212,6 +15220,10 @@ async function addVPMapping() {
 }
 
 async function removeVPMapping(roleId) {
+  if (!(isAdmin || isSuperadmin) || !activeGuildId) {
+    showError('Admin access and active server are required.');
+    return;
+  }
   if (!confirm('Remove this VP mapping?')) return;
   try {
     const res = await fetch(`/api/admin/governance/vp-mappings/${roleId}`, {
@@ -15240,6 +15252,10 @@ async function loadAdminRoles(targetPaneId = null) {
   const preferred = document.getElementById(verificationRulesTargetPaneId || 'adminRolesContent');
   const content = preferred || document.getElementById('adminRolesContent');
   if (!content) return;
+  if (!activeGuildId) {
+    content.innerHTML = '<p style="color:var(--text-secondary);font-size:0.9em;">Select a server first to load verification settings.</p>';
+    return;
+  }
 
   content.innerHTML = `<div style="text-align:center; padding: var(--space-5); color: var(--text-secondary);"><div class="spinner"></div><p>Loading roles config...</p></div>`;
 

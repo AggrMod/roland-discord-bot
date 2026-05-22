@@ -20446,8 +20446,21 @@ function addWelcomeStepField(field = {}) {
   wrap.appendChild(row);
 }
 
+function ensureWelcomeAdminContext(actionLabel = 'continue') {
+  if (!(isAdmin || isSuperadmin)) {
+    showError('Admin permissions required.');
+    return false;
+  }
+  if (!activeGuildId) {
+    showError(`Select a server first to ${actionLabel}.`);
+    return false;
+  }
+  return true;
+}
+
 async function applyWelcomePreset() {
   try {
+    if (!ensureWelcomeAdminContext('apply preset')) return;
     const presetKey = String(document.getElementById('welcome_preset_key')?.value || '').trim();
     if (!presetKey) {
       showInfo('Select a preset first.');
@@ -20470,6 +20483,7 @@ async function applyWelcomePreset() {
 
 async function restoreDefaultWelcomePreset() {
   try {
+    if (!ensureWelcomeAdminContext('restore preset')) return;
     const res = await fetch('/api/admin/welcome/preset', {
       method: 'POST',
       credentials: 'include',
@@ -20487,6 +20501,7 @@ async function restoreDefaultWelcomePreset() {
 
 async function sendWelcomeTest() {
   try {
+    if (!ensureWelcomeAdminContext('send a test welcome')) return;
     const res = await fetch('/api/admin/welcome/test', {
       method: 'POST',
       credentials: 'include',
@@ -20503,6 +20518,7 @@ async function sendWelcomeTest() {
 
 async function postWelcomeCaptchaPanel() {
   try {
+    if (!ensureWelcomeAdminContext('post verification panel')) return;
     const channelId = document.getElementById('welcome_verification_channel_id')?.value || null;
     const res = await fetch('/api/admin/welcome/captcha-panel', {
       method: 'POST',
@@ -20532,6 +20548,7 @@ async function uploadWelcomeImage() {
   };
 
   try {
+    if (!ensureWelcomeAdminContext('upload image')) return;
     if (btn) {
       btn.disabled = true;
       btn.textContent = 'Uploading...';

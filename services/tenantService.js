@@ -795,21 +795,24 @@ class TenantService {
   getTenantVerificationSettings(guildId) {
     try {
       const guild = String(guildId || '').trim();
-      if (!guild) return { ogRoleId: null, ogRoleLimit: 0, baseVerifiedRoleId: null };
+      if (!guild) return { ogRoleId: null, ogRoleLimit: 0, baseVerifiedRoleId: null, includeDelegatedWallets: true };
       const tenantRow = this.getTenant(guild);
-      if (!tenantRow) return { ogRoleId: null, ogRoleLimit: 0, baseVerifiedRoleId: null };
+      if (!tenantRow) return { ogRoleId: null, ogRoleLimit: 0, baseVerifiedRoleId: null, includeDelegatedWallets: true };
       const tenantId = Number(tenantRow?.tenant?.id || tenantRow?.id || 0);
-      if (!tenantId) return { ogRoleId: null, ogRoleLimit: 0, baseVerifiedRoleId: null };
+      if (!tenantId) return { ogRoleId: null, ogRoleLimit: 0, baseVerifiedRoleId: null, includeDelegatedWallets: true };
 
-      const row = db.prepare('SELECT og_role_id, og_role_limit, base_verified_role_id FROM tenant_verification_settings WHERE tenant_id = ?').get(tenantId);
+      const row = db.prepare('SELECT og_role_id, og_role_limit, base_verified_role_id, include_delegated_wallets FROM tenant_verification_settings WHERE tenant_id = ?').get(tenantId);
       return {
         ogRoleId: row?.og_role_id || null,
         ogRoleLimit: Number(row?.og_role_limit || 0),
-        baseVerifiedRoleId: row?.base_verified_role_id || null
+        baseVerifiedRoleId: row?.base_verified_role_id || null,
+        includeDelegatedWallets: row?.include_delegated_wallets === undefined
+          ? true
+          : Number(row?.include_delegated_wallets || 0) === 1
       };
     } catch (error) {
       logger.warn('[TenantService] getTenantVerificationSettings fallback:', error?.message || error);
-      return { ogRoleId: null, ogRoleLimit: 0, baseVerifiedRoleId: null };
+      return { ogRoleId: null, ogRoleLimit: 0, baseVerifiedRoleId: null, includeDelegatedWallets: true };
     }
   }
 
@@ -827,17 +830,21 @@ class TenantService {
         ogRoleId: patch.ogRoleId !== undefined ? (patch.ogRoleId || null) : current.ogRoleId,
         ogRoleLimit: patch.ogRoleLimit !== undefined ? Number(patch.ogRoleLimit || 0) : current.ogRoleLimit,
         baseVerifiedRoleId: patch.baseVerifiedRoleId !== undefined ? (patch.baseVerifiedRoleId || null) : current.baseVerifiedRoleId,
+        includeDelegatedWallets: patch.includeDelegatedWallets !== undefined
+          ? !!patch.includeDelegatedWallets
+          : !!current.includeDelegatedWallets,
       };
 
       db.prepare(`
-        INSERT INTO tenant_verification_settings (tenant_id, og_role_id, og_role_limit, base_verified_role_id)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO tenant_verification_settings (tenant_id, og_role_id, og_role_limit, base_verified_role_id, include_delegated_wallets)
+        VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(tenant_id) DO UPDATE SET
           og_role_id = excluded.og_role_id,
           og_role_limit = excluded.og_role_limit,
           base_verified_role_id = excluded.base_verified_role_id,
+          include_delegated_wallets = excluded.include_delegated_wallets,
           updated_at = CURRENT_TIMESTAMP
-      `).run(tenantId, next.ogRoleId, next.ogRoleLimit, next.baseVerifiedRoleId);
+      `).run(tenantId, next.ogRoleId, next.ogRoleLimit, next.baseVerifiedRoleId, next.includeDelegatedWallets ? 1 : 0);
 
       this.logAudit(guild, actorId, 'verification_settings_update', {
         changed: Object.keys(patch),

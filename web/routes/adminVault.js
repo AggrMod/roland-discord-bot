@@ -1,6 +1,53 @@
 const express = require('express');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
 
+const BULK_BACKFILL_CONFIRM_PHRASE = 'RUN_BACKFILL';
+
+function parseBulkBackfillOptions(body = {}) {
+  const toNumber = (value, fallback) => {
+    if (value === undefined || value === null || value === '') return fallback;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : NaN;
+  };
+
+  const limitPerWallet = toNumber(body?.limitPerWallet ?? body?.limit_per_wallet, 5000);
+  const delayMs = toNumber(body?.delayMs ?? body?.delay_ms, 250);
+  const maxRuntimeMs = toNumber(body?.maxRuntimeMs ?? body?.max_runtime_ms, 10 * 60 * 1000);
+  const rpcRetryMax = toNumber(body?.rpcRetryMax ?? body?.rpc_retry_max, 2);
+  const dryRun = body?.dryRun === true || body?.dry_run === true;
+  const confirmation = String(body?.confirmation || '').trim();
+
+  if (!Number.isInteger(limitPerWallet) || limitPerWallet < 1 || limitPerWallet > 50000) {
+    return { success: false, message: 'limitPerWallet must be an integer between 1 and 50000' };
+  }
+  if (!Number.isInteger(delayMs) || delayMs < 0 || delayMs > 5000) {
+    return { success: false, message: 'delayMs must be an integer between 0 and 5000' };
+  }
+  if (!Number.isInteger(maxRuntimeMs) || maxRuntimeMs < 10_000 || maxRuntimeMs > 30 * 60 * 1000) {
+    return { success: false, message: 'maxRuntimeMs must be between 10000 and 1800000' };
+  }
+  if (!Number.isInteger(rpcRetryMax) || rpcRetryMax < 0 || rpcRetryMax > 5) {
+    return { success: false, message: 'rpcRetryMax must be an integer between 0 and 5' };
+  }
+  if (!dryRun && confirmation !== BULK_BACKFILL_CONFIRM_PHRASE) {
+    return {
+      success: false,
+      message: `Non-dry-run bulk backfill requires confirmation="${BULK_BACKFILL_CONFIRM_PHRASE}"`,
+    };
+  }
+
+  return {
+    success: true,
+    options: {
+      limitPerWallet,
+      delayMs,
+      maxRuntimeMs,
+      rpcRetryMax,
+      dryRun,
+    },
+  };
+}
+
 function createAdminVaultRouter({
   logger,
   adminAuthMiddleware,
@@ -282,17 +329,12 @@ function createAdminVaultRouter({
   router.post('/api/admin/vault/backfill-all', adminAuthMiddleware, async (req, res) => {
     if (!ensureVaultModule(req, res)) return;
     try {
-      const limitPerWallet = Number(req.body?.limitPerWallet || req.body?.limit_per_wallet || 5000);
-      const dryRun = req.body?.dryRun === true || req.body?.dry_run === true;
-      const delayMs = Number(req.body?.delayMs ?? req.body?.delay_ms ?? 250);
-      const maxRuntimeMs = Number(req.body?.maxRuntimeMs ?? req.body?.max_runtime_ms ?? (10 * 60 * 1000));
-      const rpcRetryMax = Number(req.body?.rpcRetryMax ?? req.body?.rpc_retry_max ?? 2);
+      const parsed = parseBulkBackfillOptions(req.body || {});
+      if (!parsed.success) {
+        return res.status(400).json(toErrorResponse(parsed.message, 'VALIDATION_ERROR'));
+      }
       const result = await vaultService.backfillAllMissingMintTransfersForActiveSeason(req.guildId || '', {
-        limitPerWallet,
-        dryRun,
-        delayMs,
-        maxRuntimeMs,
-        rpcRetryMax,
+        ...parsed.options,
       });
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to run bulk backfill', 'VALIDATION_ERROR', null, result));
@@ -365,12 +407,12 @@ function createAdminVaultRouter({
     }
   });
 
-  router.put('/api/admin/vault/rewards/claims/:id', adminAuthMiddleware, (req, res) => {
+  router.put('/api/admin/vault/rewards/claims/:id', adminAuthMiddleware, async (req, res) => {
     if (!ensureVaultModule(req, res)) return;
     try {
       const claimStatus = String(req.body?.claimStatus || req.body?.claim_status || '').trim();
       const claimNote = req.body?.claimNote || req.body?.claim_note || null;
-      const result = vaultService.updateRewardClaimStatus(req.guildId || '', req.params.id, claimStatus, claimNote);
+      const result = await vaultService.updateRewardClaimStatus(req.guildId || '', req.params.id, claimStatus, claimNote);
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to update claim status', 'VALIDATION_ERROR', null, result));
       }
@@ -426,3 +468,4 @@ function createAdminVaultRouter({
 }
 
 module.exports = createAdminVaultRouter;
+module.exports.parseBulkBackfillOptions = parseBulkBackfillOptions;

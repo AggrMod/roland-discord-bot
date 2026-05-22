@@ -2257,36 +2257,47 @@ class TrackedWalletsService {
    * If walletRow.panel_message_id exists, tries to edit that message first.
    */
   async postHoldingsPanel(walletRow, targetChannelId, guildId) {
-    const client = clientProvider.getClient();
-    if (!client) return { success: false, message: 'Discord client not available' };
+    try {
+      const client = clientProvider.getClient();
+      if (!client) return { success: false, message: 'Discord client not available' };
 
-    const channelId = targetChannelId || walletRow.panel_channel_id;
-    if (!channelId) return { success: false, message: 'No channel configured for holdings panel' };
+      const channelId = targetChannelId || walletRow.panel_channel_id;
+      if (!channelId) return { success: false, message: 'No channel configured for holdings panel' };
 
-    const channel = await client.channels.fetch(channelId).catch(() => null);
-    if (!channel || !channel.send) return { success: false, message: 'Channel not found or bot lacks access' };
+      const channel = await client.channels.fetch(channelId).catch(() => null);
+      if (!channel || !channel.send) return { success: false, message: 'Channel not found or bot lacks access' };
 
-    const { embed, components } = await this.buildHoldingsEmbed(walletRow, guildId);
+      const { embed, components } = await this.buildHoldingsEmbed(walletRow, guildId);
 
-    // Try to edit existing panel message
-    if (walletRow.panel_message_id) {
-      try {
-        const existing = await channel.messages.fetch(walletRow.panel_message_id).catch(() => null);
-        if (existing) {
-          await existing.edit({ embeds: [embed], components });
-          logger.log(`[wallet-panel] updated panel for ${walletRow.wallet_address} in channel ${channelId}`);
-          return { success: true, action: 'updated', messageId: walletRow.panel_message_id };
+      // Try to edit existing panel message
+      if (walletRow.panel_message_id) {
+        try {
+          const existing = await channel.messages.fetch(walletRow.panel_message_id).catch(() => null);
+          if (existing) {
+            await existing.edit({ embeds: [embed], components });
+            logger.log(`[wallet-panel] updated panel for ${walletRow.wallet_address} in channel ${channelId}`);
+            return { success: true, action: 'updated', messageId: walletRow.panel_message_id };
+          }
+        } catch (e) {
+          logger.warn(`[wallet-panel] could not edit old panel message: ${e.message}`);
         }
-      } catch (e) {
-        logger.warn(`[wallet-panel] could not edit old panel message: ${e.message}`);
       }
-    }
 
-    // Post fresh panel
-    const msg = await sendDiscordMessageWithRetry(channel, { embeds: [embed], components });
-    this.savePanelMessageId(walletRow.id, msg.id);
-    logger.log(`[wallet-panel] posted panel for ${walletRow.wallet_address} in channel ${channelId}`);
-    return { success: true, action: 'posted', messageId: msg.id };
+      // Post fresh panel
+      const msg = await sendDiscordMessageWithRetry(channel, { embeds: [embed], components });
+      this.savePanelMessageId(walletRow.id, msg.id);
+      logger.log(`[wallet-panel] posted panel for ${walletRow.wallet_address} in channel ${channelId}`);
+      return { success: true, action: 'posted', messageId: msg.id };
+    } catch (error) {
+      const status = Number(error?.status || error?.rawError?.status || 0);
+      const code = String(error?.code || '').toUpperCase();
+      const isPermission = status === 403 || code === 'MISSING_PERMISSIONS' || code === '50013';
+      const message = isPermission
+        ? 'Bot lacks permission to post wallet panel in this channel'
+        : `Failed to post wallet panel: ${String(error?.message || error)}`;
+      logger.warn(`[wallet-panel] post failed for ${walletRow?.wallet_address || 'unknown'}: ${String(error?.message || error)}`);
+      return { success: false, code: isPermission ? 'forbidden' : 'send_failed', message };
+    }
   }
 
   /**

@@ -115,6 +115,16 @@ module.exports = {
         .setDescription('Show all available vault rewards'))
     .addSubcommand((sub) =>
       sub
+        .setName('claims')
+        .setDescription('Show your pending vault reward claims'))
+    .addSubcommand((sub) =>
+      sub
+        .setName('verify-social')
+        .setDescription('Verify X social requirements for a pending reward claim')
+        .addIntegerOption((option) =>
+          option.setName('reward_id').setDescription('Reward claim ID').setRequired(true).setMinValue(1)))
+    .addSubcommand((sub) =>
+      sub
         .setName('leaderboard')
         .setDescription('Show top users in this season')
         .addStringOption((option) =>
@@ -276,6 +286,8 @@ module.exports = {
         case 'open': return this.handleOpen(interaction, guildId);
         case 'history': return this.handleHistory(interaction, guildId);
         case 'rewards': return this.handleRewards(interaction, guildId);
+        case 'claims': return this.handleClaims(interaction, guildId);
+        case 'verify-social': return this.handleVerifySocial(interaction, guildId);
         case 'leaderboard': return this.handleLeaderboard(interaction, guildId);
         case 'upgrade': return this.handleUpgrade(interaction, guildId);
         default:
@@ -796,6 +808,44 @@ module.exports = {
       { name: 'Tier Balances', value: formatTierBalancesInline(result?.stats?.key_balances), inline: false },
     );
     return interaction.editReply({ embeds: [embed] });
+  },
+
+  async handleClaims(interaction, guildId) {
+    await interaction.deferReply({ ephemeral: true });
+    const rewards = vaultService.listUserRewards(guildId, interaction.user.id, { limit: 25 });
+    if (!rewards.length) {
+      return interaction.editReply({ content: 'No vault reward claims found yet.' });
+    }
+    const lines = rewards.slice(0, 15).map((row) => {
+      const socialReqs = row?.reward_payload ? (Array.isArray(row.reward_payload?.social_requirements) ? row.reward_payload.social_requirements.length : 0) : 0;
+      const gate = socialReqs > 0 ? ` | social gates: ${socialReqs}` : '';
+      return `#${row.id} | ${row.reward_name} | status: ${row.claim_status}${gate}`;
+    });
+    return interaction.editReply({ content: `Your reward claims:\n${lines.join('\n')}\n\nUse \`/vault verify-social reward_id:<id>\` to verify gated rewards.` });
+  },
+
+  async handleVerifySocial(interaction, guildId) {
+    await interaction.deferReply({ ephemeral: true });
+    const rewardId = interaction.options.getInteger('reward_id', true);
+    const result = await vaultService.verifyRewardSocialRequirements(guildId, rewardId, interaction.user.id);
+    if (!result.success) {
+      return interaction.editReply({ content: `Could not verify reward requirements: ${result.message || 'unknown error'}` });
+    }
+    if (!result.gated) {
+      return interaction.editReply({ content: 'This reward has no social requirements.' });
+    }
+    if (result.verified) {
+      return interaction.editReply({ content: 'All social requirements verified. Admin can now finalize your claim.' });
+    }
+    const pendingLines = (result.pending || []).map((entry) => {
+      if (entry.action === 'x_follow') return `- Follow @${entry.targetAccountHandle || entry.targetAccountId || 'target account'}`;
+      if (entry.action === 'x_like') return `- Like post ${entry.targetPostId || entry.targetRef || ''}`;
+      if (entry.action === 'x_repost') return `- Repost post ${entry.targetPostId || entry.targetRef || ''}`;
+      return `- ${entry.action} ${entry.targetRef || ''}`.trim();
+    });
+    return interaction.editReply({
+      content: `Requirements still pending:\n${pendingLines.join('\n')}\n\nAfter completing them, run this command again.`,
+    });
   },
 
   async handleAdminSetup(interaction, guildId) {

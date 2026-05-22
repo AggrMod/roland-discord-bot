@@ -2,6 +2,9 @@
 
 Last updated: 2026-05-22
 
+Signoff companion:
+- Use `docs/V1_RELEASE_SIGNOFF_STAGING.md` as the mandatory final release gate runbook (execution order, pass/fail criteria, and evidence capture).
+
 Legend:
 - `READY` = implementation appears complete and covered by existing tests/smokes.
 - `HARDEN` = mostly complete but still needs focused launch QA and edge-case checks.
@@ -15,9 +18,9 @@ Implemented:
 - Admin/server-context guards in load/save/actions.
 
 Before signoff:
-- End-to-end QA for both captcha prompt modes (`dm`, `panel`) with role add/remove flow.
-- Validate upload behavior on slow networks and very large image optimization fallback.
-- Verify analytics counters after real join bursts.
+- End-to-end QA for both captcha prompt modes (`dm`, `panel`) with role add/remove flow (automated smoke now covers both prompt paths and verifies deferred-vs-immediate welcome delivery behavior).
+- Validate upload behavior on slow networks and very large image optimization fallback (automated guard coverage now verifies oversize image rejection + MIME-type validation).
+- Verify analytics counters after real join bursts (automated burst-counter regression now covers high-volume join/welcome/captcha event aggregation in `tests/test-welcome-analytics-bursts.js`).
 
 ## 2) Identity & Verification
 Status: `HARDEN`
@@ -28,9 +31,10 @@ Implemented:
 - Wallet verification API and challenge/signature flow.
 
 Before signoff:
-- High-volume role-sync soak test on production-like guild.
-- Rule limit UX validation per plan with clear errors.
-- Verify token rule edge cases (`maxAmount`, `neverRemove`) with regression script.
+- High-volume role-sync soak test on production-like guild (automated high-wallet-volume sync regression now exists in `tests/test-verification-high-volume-sync.js` to guard scale-path stability).
+- Rule limit UX validation per plan with clear errors (automated verification token-rule limit regression now asserts `limit_exceeded` + user-facing limit message via `tests/test-verification-plan-limits.js`).
+- Run staging smoke for token-rule edge behavior (`maxAmount`, `neverRemove`) against live guild roles.
+- Validate delegated-wallet evaluation toggle behavior (`includeDelegatedWallets`) in live role-sync runs (automated regression now covers include vs direct-only wallet resolution paths).
 
 ## 3) Governance & Voting
 Status: `HARDEN`
@@ -41,9 +45,9 @@ Implemented:
 - Governance settings save flow guarded by active server context.
 
 Before signoff:
-- End-to-end proposal lifecycle script (support -> vote -> conclude) under plan limits.
-- Verify channel override behavior and message posting consistency.
-- Decide if poll system is V1 scope or explicitly deferred.
+- Run staging validation for proposal lifecycle under real plan limits and channels (automated lifecycle + plan-limit enforcement regressions now exist).
+- Verify channel override behavior and message posting consistency (automated proposal-channel override regression exists).
+- Poll system is explicitly deferred to V2 (governance lifecycle + proposal operations remain V1 scope).
 
 ## 4) Wallet Tracker
 Status: `HARDEN`
@@ -53,8 +57,8 @@ Implemented:
 - Tenant-scoped dashboard wallet analytics fixed.
 
 Before signoff:
-- Verify wallet add/edit/remove race handling during polling.
-- Validate table/panel rendering for large wallet sets.
+- Run staging smoke for live RPC/webhook polling while admins mutate wallet rows (automated race + scale regression exists).
+- Validate channel panel refresh behavior with live Discord permissions/channel changes (automated permission-drift regression now asserts structured forbidden response instead of route-level 500 when channel posting permissions are missing).
 
 ## 5) NFT Activity Tracker
 Status: `HARDEN`
@@ -63,8 +67,8 @@ Implemented:
 - Tracked collections CRUD, activity config, events endpoint, webhook ingestion.
 
 Before signoff:
-- Webhook replay/duplication stress test.
-- Alert delivery verification for multiple collections and edge metadata payloads.
+- Run staging smoke for live webhook throughput bursts (automated replay/duplication + multi-collection edge alert + high-volume burst regression now exist: `tests/test-nft-webhook-throughput-burst.js`).
+- Validate Discord delivery reliability on restricted/missing permissions channels (automated permission-fallback regression now ensures one blocked channel does not block other eligible alert targets: `tests/test-nft-alert-permission-fallback.js`).
 
 ## 6) Token Tracker
 Status: `HARDEN`
@@ -74,18 +78,19 @@ Implemented:
 - Dashboard analytics include active rule counts.
 
 Before signoff:
-- Validate token event ingestion and role-gating update latency.
-- Confirm plan-limit messaging and block behavior in UI.
+- Run staging smoke for live webhook + RPC ingestion latency under active wallet churn (automated webhook batch aggregation regression exists).
+- Confirm plan-limit messaging and block behavior in UI (backend now enforces token cap with `limit_exceeded`; API returns `403` for limit blocks and regression coverage exists in `tests/test-token-tracker-plan-limits.js`).
 
 ## 7) Invite Tracker
 Status: `HARDEN`
 
 Implemented:
 - Summary/settings/events/leaderboard/export/panel endpoints + portal config.
+- Anti-cheat invite heuristics (joiner account-age + inviter burst-rate filters).
 
 Before signoff:
-- Invite attribution correctness QA (joins, leaves, edge reconnects).
-- CSV export sanity checks on large datasets.
+- Run staging QA for real Discord reconnect/leave attribution drift under invite churn (automated attribution + duplicate join guard regression exists).
+- Validate CSV export behavior on production-like datasets (automated large-export regression exists).
 
 ## 8) AI Assistant
 Status: `HARDEN`
@@ -95,8 +100,8 @@ Implemented:
 - Release-gate smoke test exists.
 
 Before signoff:
-- Plan-gating verification (Pro lock) in both command and UI paths.
-- Usage/token budget UX validation for daily reset boundaries.
+- Run staging sanity pass for command + portal behavior with real Free vs Pro tenants (automated module/plan gating regression exists).
+- Validate UX copy for daily reset messaging and token-budget exhaustion (automated daily-boundary limit regression exists).
 
 ## 9) Support Tickets
 Status: `HARDEN`
@@ -106,19 +111,19 @@ Implemented:
 - Tenant safety test exists.
 
 Before signoff:
-- Full transcript retrieval QA for large threads.
-- Category permission drift checks after role changes.
+- Run staging transcript retrieval sanity on very long active tickets (automated large-thread transcript pagination regression exists).
+- Validate live Discord channel overwrite behavior after category role changes (automated handler-permission drift resolution regression exists).
 
 ## 10) Engagement Hub
-Status: `FINISH`
+Status: `HARDEN`
 
 Implemented:
 - Config, providers, sync, leaderboard, shop, monitored accounts, hashtags, tasks, achievements, redemptions.
 
 Before signoff:
-- Consolidate duplicated portal section loaders (currently multiple repeated load/save blocks).
-- Verify X-provider plan gating UX across all relevant actions.
-- Add focused regression tests for provider-linked actions.
+- Run a manual tenant-admin vs member-role UX pass across the Engagement tab sections.
+- Verify X-provider plan gating UX across all relevant actions (automated gating regression now covers tasks, account linking, monitored accounts, hashtag monitors, and provider ingest).
+- Soak-test provider task verification (X follow/like/repost/reply) with real linked accounts in staging (automated verification regression now covers all required action types, duplicate guard behavior, and reward accrual path).
 
 ## 11) Minigames
 Status: `HARDEN`
@@ -127,8 +132,10 @@ Implemented:
 - Command suite and battle settings/admin surfaces.
 
 Before signoff:
-- Permission matrix QA (moderator/admin use as intended).
-- Load test concurrent sessions for the most-used games.
+- Permission matrix QA (moderator/admin use as intended; automated moderator/admin command-gating regression exists).
+- Concurrent-session replacement safety now has automated coverage: creating a new Game Night in the same channel clears prior gather timers and avoids stale-session leaks (`tests/test-minigames-session-replace-safety.js`).
+- Base concurrent lifecycle load coverage now exists for high session counts (create/add/remove/end across 200 parallel channels) in `tests/test-minigames-concurrent-session-scale.js`.
+- Run staging/live Discord soak for most-used games to validate collector behavior under real event pressure.
 
 ## 12) Missions
 Status: `HARDEN`
@@ -138,8 +145,8 @@ Implemented:
 - Release-gate missions flow test exists.
 
 Before signoff:
-- Production-like scenario tests for template spawn + resolve consistency.
-- Verify trait-bonus + category gate interactions under limits.
+- Production-like scenario tests for template spawn + resolve consistency (automated spawn/resolve mission flow regression exists).
+- Verify trait-bonus + category gate interactions under limits (automated trait gate mode + trait bonus payout regression exists).
 
 ## 13) Vault (Must Launch)
 Status: `HARDEN` (close to `READY`)
@@ -150,7 +157,8 @@ Implemented:
 
 Before signoff:
 - Final operations runbook validation (claim handling and bulk backfill safeguards).
-- Mint webhook + manual grant reconciliation check.
+- Mint webhook + manual grant reconciliation check (automated mint-event duplicate/upgrade reconciliation regression exists).
+- Bulk backfill operation guardrails now enforce bounded options and explicit live-run confirmation (`confirmation=RUN_BACKFILL` when `dryRun=false`), with regression coverage in `tests/test-vault-backfill-ops-guardrails.js`.
 
 ## 14) Self-Serve Roles
 Status: `HARDEN`
@@ -159,8 +167,9 @@ Implemented:
 - Role panels CRUD/posting and role claim config + panel posting route.
 
 Before signoff:
-- Verify interaction permissions and stale panel reconciliation.
-- Cross-check limits and panel max-size behavior.
+- Verify interaction permissions and stale panel reconciliation (automated interaction permission regression now covers non-claimable role rejection, ManageRoles gating, role hierarchy gating, and add/remove success path via `tests/test-role-claim-interaction-permissions.js`; stale message reconciliation regression already exists).
+- Cross-check limits and panel max-size behavior (automated posting guard now blocks >25 enabled role buttons with explicit error).
+- Validate stale panel message recovery when source message is deleted (automated repost reconciliation regression now covers stale message fallback + persisted message ID update).
 
 ## 15) Superadmin Workspace Hub
 Status: `HARDEN`
@@ -172,7 +181,7 @@ Implemented:
 Before signoff:
 - Final UX pass for overflow/responsiveness in dense tenant/billing states.
 - Full action audit for destructive ops + confirmation coverage.
-- Validate telemetry for workspace load/save failure markers.
+- Validate telemetry for workspace load/save failure markers (automated route regression now asserts telemetry validation + acceptance path via `tests/test-superadmin-workspace-telemetry.js`).
 
 ## Cross-Module V1 Signoff Gates (must pass)
 1. All release-gate tests green (`npm test`).
@@ -211,7 +220,7 @@ Progress update (2026-05-22):
 
 ### 2) Vault: X (Twitter) Social Task Gates
 Priority: `P0`  
-Status: `NOT STARTED`
+Status: `HARDEN`
 
 Why:
 - Vault reward unlocks should support social-growth actions (follow/like/repost) to match baseline community growth tooling.
@@ -221,6 +230,21 @@ V1 acceptance:
 2. Task completion is validated and cached with retry-safe checks.
 3. Admin UI supports creating/editing/removing social-gated requirements.
 4. Redemption flow blocks until requirements are complete and shows clear reasons.
+
+Progress update (2026-05-22):
+- Added social requirement parsing for vault reward payloads (`social_requirements` array and legacy `x_task_gate` object support).
+- Added verification cache table + migration: `021_vault_social_requirement_checks`.
+- Added user command flow:
+  - `/vault claims` to list pending claims
+  - `/vault verify-social reward_id:<id>` to validate X requirements
+- Added claim-finalization gate:
+  - Admin claim status update to `claimed`/`fulfilled` is blocked until social requirements are verified.
+  - Error payload includes clear pending requirement details.
+- Added release-gate regression test: `tests/test-vault-social-gates.js`.
+- Added Vault reward modal social requirement editor (add/remove X requirements) and synced it with reward payload JSON, so social gates can be configured without manual JSON editing.
+
+Before signoff:
+- Run live X verification smoke on a staging guild with a linked X account.
 
 ### 3) Engagement + Minigames: Unified Economy + Daily Streak
 Priority: `P0`  
@@ -246,3 +270,9 @@ Progress update (2026-05-22):
   - `daily_reward_points`, `daily_streak_bonus`, `daily_streak_cap`
   - `minigame_reward_first`, `minigame_reward_second`, `minigame_reward_third`
 - Added release-gate test: `tests/test-engagement-streak-and-minigame-rewards.js`.
+
+
+
+
+
+

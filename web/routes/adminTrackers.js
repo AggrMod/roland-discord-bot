@@ -454,7 +454,8 @@ function createAdminTrackersRouter({
           minAlertAmount: minAlertAmount === undefined ? 0 : minAlertAmount,
         });
         if (!result.success) {
-          return res.status(400).json(toErrorResponse(result.message || 'Failed to add tracked token', 'VALIDATION_ERROR', null, result));
+          const status = result.code === 'limit_exceeded' ? 403 : 400;
+          return res.status(status).json(toErrorResponse(result.message || 'Failed to add tracked token', 'VALIDATION_ERROR', null, result));
         }
         return res.json(toSuccessResponse(result));
       } catch (routeError) {

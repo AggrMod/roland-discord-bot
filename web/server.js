@@ -1001,6 +1001,25 @@ class WebServer {
       roleService,
       proposalService,
       tenantService,
+      entitlementService,
+      countActiveGovernanceProposals: (guildId) => {
+        const normalizedGuildId = String(guildId || '').trim();
+        if (!normalizedGuildId) return 0;
+        try {
+          return Number(db.prepare(`
+            SELECT COUNT(*) AS cnt
+            FROM proposals
+            WHERE guild_id = ?
+              AND status IN ('supporting', 'voting')
+          `).get(normalizedGuildId)?.cnt || 0);
+        } catch (_error) {
+          return Number(db.prepare(`
+            SELECT COUNT(*) AS cnt
+            FROM proposals
+            WHERE status IN ('supporting', 'voting')
+          `).get()?.cnt || 0);
+        }
+      },
       getRequestedGuildId,
       fetchGuildById,
       settingsManager,

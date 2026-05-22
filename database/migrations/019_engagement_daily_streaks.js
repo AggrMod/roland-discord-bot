@@ -1,8 +1,7 @@
-const db = require('../db');
-const logger = require('../../utils/logger');
-
-module.exports = function applyEngagementDailyStreaksMigration() {
-  try {
+module.exports = {
+  version: 19,
+  name: 'engagement_daily_streaks',
+  up: ({ db, logger }) => {
     db.exec(`
       CREATE TABLE IF NOT EXISTS engagement_daily_streaks (
         guild_id TEXT NOT NULL,
@@ -15,9 +14,7 @@ module.exports = function applyEngagementDailyStreaksMigration() {
       )
     `);
     db.exec('CREATE INDEX IF NOT EXISTS idx_daily_streaks_guild ON engagement_daily_streaks(guild_id)');
-    logger.log('[migration] 019_engagement_daily_streaks applied');
-  } catch (error) {
-    logger.warn('[migration] 019_engagement_daily_streaks skipped/failed:', error.message);
-  }
+    logger.log('[migration] 019 engagement_daily_streaks applied');
+  },
 };
 

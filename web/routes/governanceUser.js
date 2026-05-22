@@ -7,6 +7,8 @@ function createGovernanceUserRouter({
   roleService,
   proposalService,
   tenantService,
+  entitlementService,
+  countActiveGovernanceProposals,
   getRequestedGuildId,
   fetchGuildById,
   settingsManager,
@@ -181,6 +183,25 @@ function createGovernanceUserRouter({
       const { userInfo, votingPower } = await resolveEffectiveVotingPower(discordId, requestedGuildId, membership.member);
       if (!userInfo || votingPower < 1) {
         return res.status(403).json(toErrorResponse('You need at least 1 verified NFT to create proposals', 'FORBIDDEN', null, { success: false }));
+      }
+
+      if (entitlementService?.enforceLimit && typeof countActiveGovernanceProposals === 'function') {
+        const activeCount = Number(countActiveGovernanceProposals(requestedGuildId) || 0);
+        const governanceLimit = entitlementService.enforceLimit({
+          guildId: requestedGuildId,
+          moduleKey: 'governance',
+          limitKey: 'max_active_proposals',
+          currentCount: activeCount,
+          incrementBy: 1,
+          itemLabel: 'active proposals',
+        });
+        if (!governanceLimit?.success) {
+          return res.status(400).json(toErrorResponse(governanceLimit.message, 'LIMIT_EXCEEDED', {
+            code: 'limit_exceeded',
+            limit: governanceLimit.limit,
+            used: governanceLimit.used,
+          }));
+        }
       }
 
       const result = proposalService.createProposal(discordId, {

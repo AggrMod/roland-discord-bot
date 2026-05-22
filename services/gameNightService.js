@@ -46,6 +46,10 @@ class GameNightService {
   }
 
   createSession({ channelId, messageId, creatorId, gatherSecs = 60, selectedGames }) {
+    const previous = this._sessions.get(channelId);
+    if (previous?.gatherTimer) {
+      clearTimeout(previous.gatherTimer);
+    }
     const games = (selectedGames && selectedGames.length > 0)
       ? selectedGames.filter(g => GAME_ROSTER.includes(g))
       : [...GAME_ROSTER];

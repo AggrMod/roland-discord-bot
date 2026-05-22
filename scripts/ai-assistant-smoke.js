@@ -48,6 +48,7 @@ async function run() {
   const originalCallOpenAi = aiAssistantService.callOpenAi.bind(aiAssistantService);
   const originalCallGemini = aiAssistantService.callGemini.bind(aiAssistantService);
   const originalIsMultitenantEnabled = tenantService.isMultitenantEnabled.bind(tenantService);
+  const originalIsModuleEnabled = tenantService.isModuleEnabled ? tenantService.isModuleEnabled.bind(tenantService) : null;
   const originalGetEffectiveLimit = entitlementService.getEffectiveLimit.bind(entitlementService);
 
   aiAssistantService.getGlobalProviderSettings = () => ({
@@ -221,13 +222,62 @@ async function run() {
     });
     assert(!tokenBudgetResult.success && tokenBudgetResult.code === 'token_budget_reached', 'token budget limit did not trigger');
 
-    console.log('[ai-smoke] OK: mention/passive/slash/briefing + limits + mention safety checks passed');
+    // Daily boundary enforcement (yesterday usage should not count toward today).
+    db.prepare('DELETE FROM ai_assistant_usage_events WHERE guild_id = ?').run(TEST_GUILD_ID);
+    const dailyLimitSettings = aiAssistantService.saveTenantSettings(TEST_GUILD_ID, {
+      perUserDailyLimit: 1,
+      burstPerMinute: 0,
+      dailyTokenBudget: 0,
+    });
+    assert(dailyLimitSettings.success, 'failed to set per-user daily limit');
+    db.prepare(`
+      INSERT INTO ai_assistant_usage_events (
+        guild_id, user_id, provider, model, status, trigger_source, channel_id, prompt_chars, response_chars, estimated_tokens, created_at
+      ) VALUES (?, ?, 'openai', 'gpt-5.4', 'ok', 'slash', ?, 12, 12, 1, datetime('now', '-1 day'))
+    `).run(TEST_GUILD_ID, TEST_USER_ID, TEST_CHANNEL_ID);
+    const boundaryResult = await aiAssistantService.ask({
+      guildId: TEST_GUILD_ID,
+      userId: TEST_USER_ID,
+      channelId: TEST_CHANNEL_ID,
+      prompt: 'daily boundary request should pass',
+      triggerSource: 'slash',
+      requesterTag: 'smoke#0001',
+      memberRoleNames: ['Member'],
+      memberRoleIds: [TEST_ROLE_ID],
+      skipKnowledge: true,
+    });
+    assert(boundaryResult.success, 'yesterday usage should not count against today daily limit');
+
+    // Plan/module gating path.
+    tenantService.isMultitenantEnabled = () => true;
+    tenantService.isModuleEnabled = () => false;
+    const moduleDisabledResult = await aiAssistantService.ask({
+      guildId: TEST_GUILD_ID,
+      userId: TEST_USER_ID,
+      channelId: TEST_CHANNEL_ID,
+      prompt: 'module gate check',
+      triggerSource: 'slash',
+      requesterTag: 'smoke#0001',
+      memberRoleNames: ['Member'],
+      memberRoleIds: [TEST_ROLE_ID],
+      skipKnowledge: true,
+    });
+    assert(!moduleDisabledResult.success && moduleDisabledResult.code === 'module_disabled', 'module gating should block AI assistant when disabled');
+    if (originalIsModuleEnabled) {
+      tenantService.isModuleEnabled = originalIsModuleEnabled;
+    }
+    tenantService.isMultitenantEnabled = () => false;
+
+    console.log('[ai-smoke] OK: mention/passive/slash/briefing + limits + daily-boundary + module-gating checks passed');
   } finally {
     // Restore patched functions.
     aiAssistantService.getGlobalProviderSettings = originalGetGlobalProviderSettings;
     aiAssistantService.callOpenAi = originalCallOpenAi;
     aiAssistantService.callGemini = originalCallGemini;
     tenantService.isMultitenantEnabled = originalIsMultitenantEnabled;
+    if (originalIsModuleEnabled) {
+      tenantService.isModuleEnabled = originalIsModuleEnabled;
+    }
     entitlementService.getEffectiveLimit = originalGetEffectiveLimit;
 
     cleanupGuildState();

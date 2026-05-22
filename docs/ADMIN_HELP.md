@@ -91,6 +91,8 @@ This file is the source-of-truth command reference for the current production co
 - `/vault history`
 - `/vault leaderboard`
 - `/vault rewards`
+- `/vault claims`
+- `/vault verify-social`
 - `/vault upgrade`
 - Admin: `/vault admin panel|setup|setstatus|config-view|config-set|addkeys|removekeys|backfill|rewards-list|rewards-add|rewards-update|rewards-remove`
 

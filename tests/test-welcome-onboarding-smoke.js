@@ -7,7 +7,8 @@ const tenantService = require('../services/tenantService');
 const clientProvider = require('../utils/clientProvider');
 
 async function run() {
-  const guildId = `welcome-smoke-${Date.now()}`;
+  const stamp = Date.now();
+  const guildId = `welcome-smoke-${stamp}`;
   const userId = `user-${Date.now()}`;
   const welcomeChannelId = 'welcome-channel';
   const verificationChannelId = 'verify-channel';
@@ -121,6 +122,84 @@ async function run() {
     assert.ok(Number(analyticsResult.totals.joinsTotal || 0) >= 1, 'analytics should count joins');
     assert.ok(Number(analyticsResult.totals.captchaPassed || 0) >= 1, 'analytics should count captcha pass');
     assert.ok(Number(analyticsResult.totals.welcomeSent || 0) >= 1, 'analytics should count welcome sent');
+
+    const dmModeGuildId = `${guildId}-dm`;
+    const dmModeUserId = `${userId}-dm`;
+    const dmSentMessages = [];
+    const dmMemberState = { added: [], removed: [], dmSent: 0 };
+
+    const dmWelcomeChannel = {
+      id: welcomeChannelId,
+      name: 'welcome',
+      send: async (payload) => {
+        dmSentMessages.push(payload);
+        return { id: `dm-msg-${dmSentMessages.length}` };
+      },
+    };
+    const dmChannelsMap = new Map([
+      [welcomeChannelId, dmWelcomeChannel],
+      [verificationChannelId, verificationChannel],
+    ]);
+    const dmMember = {
+      id: dmModeUserId,
+      displayName: 'Smoke Tester DM',
+      user: {
+        id: dmModeUserId,
+        username: 'SmokeTesterDm',
+        displayAvatarURL: () => 'https://example.com/avatar-dm.png',
+      },
+      roles: {
+        add: async (roleId) => { dmMemberState.added.push(String(roleId)); },
+        remove: async (roleId) => { dmMemberState.removed.push(String(roleId)); },
+      },
+      send: async () => { dmMemberState.dmSent += 1; },
+      guild: {
+        id: dmModeGuildId,
+        name: 'Welcome Smoke Guild DM',
+        memberCount: 52,
+        channels: {
+          cache: dmChannelsMap,
+          fetch: async () => dmChannelsMap,
+        },
+        members: {
+          fetch: async (id) => (String(id) === String(dmModeUserId) ? dmMember : null),
+        },
+      },
+    };
+
+    const dmSettingsResult = welcomeService.updateSettings(dmModeGuildId, {
+      enabled: true,
+      welcomeChannelId,
+      verificationChannelId,
+      welcomeMessageTemplate: 'Welcome {user_mention} to {server_name}',
+      welcomeEmbed: { title: 'Welcome, {username}', description: 'dm mode test', fields: [] },
+      dmEnabled: true,
+      dmMessageTemplate: 'DM hello {username}',
+      autoRoleIds: [newcomerRoleId],
+      captchaEnabled: true,
+      captchaRoleId,
+      captchaRemoveRoleId: newcomerRoleId,
+      captchaPromptMode: 'dm',
+    });
+    assert.strictEqual(dmSettingsResult.success, true, 'dm mode settings update should succeed');
+
+    clientProvider.getClient = () => ({
+      guilds: {
+        fetch: async (id) => (String(id) === String(dmModeGuildId) ? dmMember.guild : null),
+      },
+    });
+
+    const dmJoinResult = await welcomeService.handleMemberJoin(dmMember);
+    assert.strictEqual(dmJoinResult.success, true, 'dm prompt mode join flow should succeed');
+    assert.strictEqual(dmSentMessages.length, 1, 'dm prompt mode should send welcome immediately on join');
+
+    const dmChallengeToken = welcomeService.createChallenge(dmModeGuildId, dmModeUserId);
+    const dmVerifyResult = await welcomeService.verifyCaptcha({
+      challengeToken: dmChallengeToken,
+      captchaToken: 'smoke-token-dm',
+    });
+    assert.strictEqual(dmVerifyResult.success, true, 'dm prompt mode captcha verify should succeed');
+    assert.strictEqual(dmSentMessages.length, 1, 'dm prompt mode verify should not send duplicate welcome');
 
     console.log('welcome onboarding smoke assertions passed');
   } finally {

@@ -24,6 +24,17 @@ function isTransientDiscordSendError(error) {
     || msg.includes('aborted');
 }
 
+function isPermissionDiscordSendError(error) {
+  const status = Number(error?.status || error?.rawError?.status || 0);
+  const code = String(error?.code || '').toUpperCase();
+  const msg = String(error?.message || '').toLowerCase();
+  return status === 403
+    || code === '50013'
+    || code === 'MISSING_PERMISSIONS'
+    || msg.includes('missing permissions')
+    || msg.includes('missing access');
+}
+
 async function sendDiscordMessageWithRetry(channel, payload) {
   for (let attempt = 0; attempt <= DISCORD_SEND_RETRY_MAX; attempt++) {
     try {
@@ -687,7 +698,11 @@ class NFTActivityService {
         await sendDiscordMessageWithRetry(channel, { embeds: [embed], components });
         logger.log(`[nft-alert] sent guild=${target.guild_id || 'global'} channel=${target.channel_id} type=${evt.eventType} tx=${evt.txSignature || 'none'}`);
       } catch (sendErr) {
-        logger.error(`[nft-alert] failed guild=${target.guild_id || 'global'} channel=${target.channel_id} type=${evt.eventType} tx=${evt.txSignature || 'none'}`, sendErr);
+        if (isPermissionDiscordSendError(sendErr)) {
+          logger.warn(`[nft-alert] permission denied guild=${target.guild_id || 'global'} channel=${target.channel_id} type=${evt.eventType} tx=${evt.txSignature || 'none'}`);
+        } else {
+          logger.error(`[nft-alert] failed guild=${target.guild_id || 'global'} channel=${target.channel_id} type=${evt.eventType} tx=${evt.txSignature || 'none'}`, sendErr);
+        }
       }
     }
 

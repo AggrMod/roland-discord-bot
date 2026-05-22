@@ -2075,8 +2075,10 @@ class HeistService {
       if (Number.isFinite(flat) && flat !== 0) {
         value += flat;
       }
-      const maxBonus = Number(rule.max_bonus);
-      if (Number.isFinite(maxBonus)) {
+      const rawMaxBonus = rule.max_bonus;
+      if (rawMaxBonus !== null && rawMaxBonus !== undefined && String(rawMaxBonus).trim() !== '') {
+        const maxBonus = Number(rawMaxBonus);
+        if (!Number.isFinite(maxBonus)) continue;
         const base = Number(baseValue || 0);
         value = Math.min(value, base + Math.max(0, maxBonus));
       }

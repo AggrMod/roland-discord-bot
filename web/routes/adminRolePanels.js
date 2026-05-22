@@ -169,6 +169,12 @@ function createAdminRolePanelsRouter({
       if (!enabledRoles.length) {
         return res.status(400).json(toErrorResponse('No enabled roles on this panel', 'VALIDATION_ERROR'));
       }
+      if (enabledRoles.length > 25) {
+        return res.status(400).json(toErrorResponse(
+          `Role panel has ${enabledRoles.length} enabled roles. Discord supports max 25 role buttons per message; reduce enabled roles or split into multiple panels.`,
+          'VALIDATION_ERROR'
+        ));
+      }
 
       const channel = client?.channels?.cache?.get(targetChannelId)
         || await client?.channels?.fetch?.(targetChannelId).catch(() => null);

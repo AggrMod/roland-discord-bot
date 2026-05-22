@@ -103,9 +103,25 @@ class RoleService {
     }
   }
 
+  getVerificationWallets(discordId, guildId = null) {
+    const normalizedGuildId = this.normalizeGuildId(guildId);
+    if (!normalizedGuildId) {
+      return walletService.getAllUserWallets(discordId, '');
+    }
+
+    const verificationSettings = tenantService.getTenantVerificationSettings(normalizedGuildId);
+    const includeDelegatedWallets = verificationSettings?.includeDelegatedWallets !== false;
+    if (includeDelegatedWallets) {
+      return walletService.getAllUserWallets(discordId, normalizedGuildId);
+    }
+    return walletService.getLinkedWallets(discordId)
+      .map(w => String(w?.wallet_address || '').trim())
+      .filter(Boolean);
+  }
+
   async updateUserRoles(discordId, username, guildId = null) {
     try {
-      const wallets = walletService.getAllUserWallets(discordId, guildId || "");
+      const wallets = this.getVerificationWallets(discordId, guildId || "");
       
       if (wallets.length === 0) {
         logger.warn(`No wallets linked for user ${discordId}`);
@@ -323,7 +339,7 @@ class RoleService {
       };
       const currentMemberRoleIds = new Set(member.roles.cache.keys());
 
-      const wallets = walletService.getAllUserWallets(discordId, guildId || "");
+      const wallets = this.getVerificationWallets(discordId, guildId || "");
       const nftSnapshot = await nftService.getAllNFTsForWalletsWithHealth(wallets, { guildId });
       const allNFTs = Array.isArray(nftSnapshot?.nfts) ? nftSnapshot.nfts : [];
       const nftHealth = nftSnapshot?.health || null;

@@ -11374,6 +11374,10 @@ function vaultRenderAdminPanel() {
             <label class="form-label">Key Tier (optional)</label><input id="vaultRewardKeyTierInput" class="form-input" placeholder="blank = all tiers">
             <label class="form-label">Quantity (blank = unlimited)</label><input id="vaultRewardQuantityInput" type="number" min="0" class="form-input">
             <label class="form-label">Type</label><select id="vaultRewardTypeInput" class="form-input"><option value="claimable_reward">claimable_reward</option><option value="none">none</option></select>
+            <label class="form-label">Social Requirements (X)</label>
+            <div id="vaultRewardSocialRequirementsRows" style="display:grid;gap:8px;"></div>
+            <button class="btn-secondary" type="button" onclick="vaultAddRewardSocialRequirementRow()">Add Social Requirement</button>
+            <label class="form-label">Payload JSON (advanced)</label><textarea id="vaultRewardPayloadInput" class="form-input" rows="5" placeholder='{"social_requirements":[{"provider":"x","action":"follow","target":"@guildpilot"}]}'></textarea>
             <label style="display:flex;gap:8px;align-items:center;margin-top:8px;"><input id="vaultRewardEnabledInput" type="checkbox" checked> Enabled</label>
           </div>
           <div class="modal-footer">
@@ -11842,6 +11846,7 @@ function vaultLoadRewardToForm(code) {
   setValue('vaultRewardQuantityInput', reward.quantity === null || reward.quantity === undefined ? '' : Number(reward.quantity || 0));
   setValue('vaultRewardTypeInput', String(reward.type || 'claimable_reward'));
   setValue('vaultRewardPayloadInput', reward.payload !== undefined ? JSON.stringify(reward.payload, null, 2) : '');
+  vaultRenderRewardSocialRequirements(Array.isArray(reward?.payload?.social_requirements) ? reward.payload.social_requirements : []);
   const enabledEl = document.getElementById('vaultRewardEnabledInput');
   if (enabledEl) enabledEl.checked = reward.enabled !== false;
 }
@@ -11865,6 +11870,8 @@ function vaultOpenRewardModal(code = '') {
     setValue('vaultRewardKeyTierInput', '');
     setValue('vaultRewardQuantityInput', '');
     setValue('vaultRewardTypeInput', 'claimable_reward');
+    setValue('vaultRewardPayloadInput', '');
+    vaultRenderRewardSocialRequirements([]);
     const enabledEl = document.getElementById('vaultRewardEnabledInput');
     if (enabledEl) enabledEl.checked = true;
     titleEl.textContent = 'Add Reward';
@@ -11883,6 +11890,13 @@ async function vaultSaveReward() {
     showError('Reward code is required.');
     return;
   }
+  const advancedPayload = vaultJsonParseInput(document.getElementById('vaultRewardPayloadInput')?.value, {}) || {};
+  const socialRequirements = vaultCollectRewardSocialRequirements();
+  if (socialRequirements.length) {
+    advancedPayload.social_requirements = socialRequirements;
+  } else if (Array.isArray(advancedPayload.social_requirements)) {
+    delete advancedPayload.social_requirements;
+  }
   const payload = {
     code,
     name: String(document.getElementById('vaultRewardNameInput')?.value || '').trim() || code,
@@ -11891,7 +11905,7 @@ async function vaultSaveReward() {
     keyTier: String(document.getElementById('vaultRewardKeyTierInput')?.value || '').trim() || null,
     type: String(document.getElementById('vaultRewardTypeInput')?.value || 'claimable_reward').trim(),
     enabled: !!document.getElementById('vaultRewardEnabledInput')?.checked,
-    payload: vaultJsonParseInput(document.getElementById('vaultRewardPayloadInput')?.value, null),
+    payload: advancedPayload,
   };
   const quantityRaw = String(document.getElementById('vaultRewardQuantityInput')?.value || '').trim();
   payload.quantity = quantityRaw === '' ? null : Math.max(0, Number.parseInt(quantityRaw, 10) || 0);
@@ -14918,6 +14932,66 @@ function getInviteTrackerSettingsPayload() {
     inviterMinAccountAgeHours: Number.isFinite(inviterMinAgeHours) ? inviterMinAgeHours : 48,
     excludedCodes: String(excludedCodesInput?.value || ''),
   };
+}
+
+function vaultRenderRewardSocialRequirements(requirements = []) {
+  const wrap = document.getElementById('vaultRewardSocialRequirementsRows');
+  if (!wrap) return;
+  const rows = Array.isArray(requirements) ? requirements : [];
+  if (!rows.length) {
+    wrap.innerHTML = '<div style="color:var(--text-secondary);font-size:0.85em;">No social requirements configured.</div>';
+    return;
+  }
+  wrap.innerHTML = rows.map((req, idx) => {
+    const action = String(req?.action || req?.type || 'follow').toLowerCase();
+    const target = String(req?.target || req?.account || req?.tweet_id || '').trim();
+    const provider = String(req?.provider || 'x').toLowerCase();
+    return `
+      <div style="display:grid;grid-template-columns:120px 160px 1fr auto;gap:8px;align-items:center;">
+        <select class="form-input" data-vault-social-provider="${idx}">
+          <option value="x"${provider === 'x' ? ' selected' : ''}>X</option>
+        </select>
+        <select class="form-input" data-vault-social-action="${idx}">
+          <option value="follow"${action === 'follow' ? ' selected' : ''}>follow</option>
+          <option value="like"${action === 'like' ? ' selected' : ''}>like</option>
+          <option value="retweet"${action === 'retweet' ? ' selected' : ''}>retweet</option>
+          <option value="reply"${action === 'reply' ? ' selected' : ''}>reply</option>
+        </select>
+        <input class="form-input" data-vault-social-target="${idx}" value="${escapeHtml(target)}" placeholder="@handle or tweet id">
+        <button class="btn-danger" type="button" onclick="vaultRemoveRewardSocialRequirementRow(${idx})">Remove</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function vaultCollectRewardSocialRequirements() {
+  const wrap = document.getElementById('vaultRewardSocialRequirementsRows');
+  if (!wrap) return [];
+  const rows = Array.from(wrap.querySelectorAll('[data-vault-social-provider]')).map((providerEl) => {
+    const idx = providerEl.getAttribute('data-vault-social-provider');
+    const actionEl = wrap.querySelector(`[data-vault-social-action="${idx}"]`);
+    const targetEl = wrap.querySelector(`[data-vault-social-target="${idx}"]`);
+    const provider = String(providerEl?.value || 'x').trim().toLowerCase();
+    const action = String(actionEl?.value || 'follow').trim().toLowerCase();
+    const target = String(targetEl?.value || '').trim();
+    if (!target) return null;
+    return { provider, action, target };
+  }).filter(Boolean);
+  return rows;
+}
+
+function vaultAddRewardSocialRequirementRow() {
+  const current = vaultCollectRewardSocialRequirements();
+  current.push({ provider: 'x', action: 'follow', target: '' });
+  vaultRenderRewardSocialRequirements(current);
+}
+
+function vaultRemoveRewardSocialRequirementRow(index) {
+  const current = vaultCollectRewardSocialRequirements();
+  const idx = Number(index);
+  if (!Number.isFinite(idx) || idx < 0 || idx >= current.length) return;
+  current.splice(idx, 1);
+  vaultRenderRewardSocialRequirements(current);
 }
 
 async function saveInviteTrackerSettings() {
@@ -18706,95 +18780,6 @@ async function loadSystemStatus(targetId = 'systemStatusContent') {
 // ENGAGEMENT & POINTS SECTION
 // 
 
-async function loadEngagementSection() {
-  await Promise.all([loadEngagementConfig(), loadEngagementLeaderboard(), loadEngagementShop()]);
-}
-
-async function loadEngagementConfig() {
-  try {
-    const res = await fetch('/api/admin/engagement/config', { credentials: 'include' });
-    const data = await res.json();
-    if (!data.success) return;
-    const cfg = data.config;
-    document.getElementById('engEnabled').checked = !!cfg.enabled;
-    document.getElementById('engPtsMsg').value = cfg.points_message ?? 5;
-    document.getElementById('engPtsReact').value = cfg.points_reaction ?? 2;
-    document.getElementById('engCooldownMsg').value = cfg.cooldown_message_mins ?? 60;
-    document.getElementById('engCooldownReact').value = cfg.cooldown_reaction_daily ?? 5;
-  } catch (e) { console.error('[Engagement] config load error:', e); }
-}
-
-async function saveEngagementConfig() {
-  try {
-    const body = {
-      enabled: document.getElementById('engEnabled').checked,
-      points_message: parseInt(document.getElementById('engPtsMsg').value, 10),
-      points_reaction: parseInt(document.getElementById('engPtsReact').value, 10),
-      cooldown_message_mins: parseInt(document.getElementById('engCooldownMsg').value, 10),
-      cooldown_reaction_daily: parseInt(document.getElementById('engCooldownReact').value, 10),
-    };
-    const res = await fetch('/api/admin/engagement/config', {
-      method: 'PUT', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    if (data.success) showSuccess('Engagement settings saved!');
-    else showError(data.message || 'Failed to save.');
-  } catch (e) { showError('Error saving engagement config.'); }
-}
-
-async function loadEngagementLeaderboard() {
-  const el = document.getElementById('engagementLeaderboardView');
-  if (!el) return;
-  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
-  try {
-    const res = await fetch('/api/admin/engagement/leaderboard?limit=25', { credentials: 'include' });
-    const data = await res.json();
-    if (!data.success || !data.leaderboard?.length) {
-      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon"></div><h4 class="empty-state-title">No data yet</h4><p class="empty-state-message">Points will appear here once members start chatting.</p></div>';
-      return;
-    }
-    const medals = ['','',''];
-    const rows = data.leaderboard.map((r, i) => `
-      <div class="table-row">
-        <span style="width:36px;text-align:center;">${medals[i] || (i+1)}</span>
-        <span style="flex:1;font-weight:500;">${escapeHtml(r.username || r.user_id)}</span>
-        <span style="color:var(--accent-gold);font-weight:600;">${r.total_points.toLocaleString()} pts</span>
-      </div>`).join('');
-    el.innerHTML = `<div class="table-list" style="display:flex;flex-direction:column;gap:6px;">${rows}</div>`;
-  } catch (e) { el.innerHTML = '<p style="color:var(--error);">Failed to load leaderboard.</p>'; }
-}
-
-async function loadEngagementShop() {
-  const el = document.getElementById('engagementShopView');
-  if (!el) return;
-  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
-  try {
-    const res = await fetch('/api/admin/engagement/shop', { credentials: 'include' });
-    const data = await res.json();
-    if (!data.success || !data.items?.length) {
-      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon"></div><h4 class="empty-state-title">Shop is empty</h4><p class="empty-state-message">Add items to reward your community.</p></div>';
-      return;
-    }
-    const rows = data.items.map(item => {
-      const stock = item.quantity_remaining < 0 ? '' : item.quantity_remaining;
-      const typeLabel = { role: ' Role', code: ' Code', custom: ' Custom' }[item.type] || item.type;
-      return `
-        <div class="table-row" style="align-items:flex-start;">
-          <span style="width:36px;font-size:0.8em;color:var(--text-muted);">#${item.id}</span>
-          <div style="flex:1;">
-            <div style="font-weight:600;">${escapeHtml(item.name)}</div>
-            ${item.description ? `<div style="font-size:0.85em;color:var(--text-muted);">${escapeHtml(item.description)}</div>` : ''}
-            <div style="font-size:0.8em;color:var(--text-muted);margin-top:2px;">${typeLabel}  Stock: ${stock}</div>
-          </div>
-          <span style="color:var(--accent-gold);font-weight:600;white-space:nowrap;">${item.cost.toLocaleString()} pts</span>
-          <button class="btn-danger btn-sm" style="margin-left:10px;" onclick="deleteEngShopItem(${item.id})">Remove</button>
-        </div>`;
-    }).join('');
-    el.innerHTML = `<div class="table-list" style="display:flex;flex-direction:column;gap:8px;">${rows}</div>`;
-  } catch (e) { el.innerHTML = '<p style="color:var(--error);">Failed to load shop items.</p>'; }
-}
 
 function openEngShopModal() {
   document.getElementById('engShopName').value = '';
@@ -18854,45 +18839,6 @@ async function deleteEngShopItem(itemId) {
   } catch (e) { showError('Error removing item.'); }
 }
 
-async function loadEngagementSettingsTab() {
-  try {
-    const res = await fetch('/api/admin/engagement/config', { credentials: 'include' });
-    const data = await res.json();
-    if (!data.success) return;
-    const cfg = data.config;
-    const en = document.getElementById('ps_moduleEngagementEnabled');
-    const pm = document.getElementById('ps_engPtsMsg');
-    const pr = document.getElementById('ps_engPtsReact');
-    const cm = document.getElementById('ps_engCooldownMsg');
-    const cr = document.getElementById('ps_engCooldownReact');
-    if (en) en.checked = !!cfg.enabled;
-    if (pm) pm.value = cfg.points_message ?? 5;
-    if (pr) pr.value = cfg.points_reaction ?? 2;
-    if (cm) cm.value = cfg.cooldown_message_mins ?? 60;
-    if (cr) cr.value = cfg.cooldown_reaction_daily ?? 5;
-  } catch (e) { console.error('[Engagement] settings tab load error:', e); }
-}
-
-async function saveEngagementConfigFromSettings() {
-  try {
-    const body = {
-      enabled: document.getElementById('ps_moduleEngagementEnabled')?.checked ?? true,
-      points_message: parseInt(document.getElementById('ps_engPtsMsg')?.value || '5', 10),
-      points_reaction: parseInt(document.getElementById('ps_engPtsReact')?.value || '2', 10),
-      cooldown_message_mins: parseInt(document.getElementById('ps_engCooldownMsg')?.value || '60', 10),
-      cooldown_reaction_daily: parseInt(document.getElementById('ps_engCooldownReact')?.value || '5', 10),
-    };
-    const res = await fetch('/api/admin/engagement/config', {
-      method: 'PUT', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    if (data.success) showSuccess('Engagement settings saved!');
-    else showError(data.message || 'Failed to save.');
-  } catch (e) { showError('Error saving engagement settings.'); }
-}
-
 function startXAccountLink() {
   const params = new URLSearchParams();
   params.set('returnTo', `/?${new URLSearchParams({ section: 'engagement', ...(activeGuildId ? { guild: activeGuildId } : {}) }).toString()}`);
@@ -18931,71 +18877,6 @@ async function runXProviderSync(mode) {
     loadEngagementTasks();
   } catch (e) {
     showError('Error syncing X provider.');
-  }
-}
-
-async function loadEngagementProviders() {
-  const el = document.getElementById('engagementProvidersView');
-  if (!el) return;
-  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
-  try {
-    const canAdminEngagement = !!(typeof isAdmin !== 'undefined' && isAdmin) || !!(typeof isSuperadmin !== 'undefined' && isSuperadmin);
-    const providerRes = await fetch(
-      canAdminEngagement ? '/api/admin/engagement/providers' : '/api/user/engagement/accounts',
-      { credentials: 'include', headers: buildTenantRequestHeaders() }
-    );
-    const providerData = await providerRes.json();
-    const accountRes = await fetch('/api/user/engagement/accounts', { credentials: 'include', headers: buildTenantRequestHeaders() });
-    const accountData = await accountRes.json();
-    const providers = canAdminEngagement
-      ? (providerData.providers || [])
-      : (accountData.providers || providerData.providers || []);
-    const linkedAccounts = Array.isArray(accountData.accounts) ? accountData.accounts : [];
-
-    if (!providerData.success || !providers.length) {
-      el.innerHTML = '<p style="color:var(--text-secondary);">No providers available.</p>';
-      return;
-    }
-    el.innerHTML = providers.map(provider => {
-      const linked = linkedAccounts.find(account => account.provider === provider.key);
-      const linkedLabel = linked
-        ? `Linked as ${escapeHtml(linked.handle || linked.display_name || linked.provider_user_id || provider.label)}`
-        : 'Not linked for this Discord account';
-      const linkingActions = provider.key === 'x' && provider.supportsAccountLinking
-        ? `
-            <button class="btn-secondary btn-sm" onclick="startXAccountLink()">${linked ? 'Reconnect X' : 'Connect X'}</button>
-          `
-        : '';
-      const adminActions = canAdminEngagement && provider.key === 'x'
-        ? `
-            <button class="btn-secondary btn-sm" onclick="runXProviderSync('account')" ${provider.configured ? '' : 'disabled'}>Sync Account</button>
-            <button class="btn-secondary btn-sm" onclick="runXProviderSync('hashtag')" ${provider.configured ? '' : 'disabled'}>Sync Hashtag</button>
-          `
-        : '';
-      const helperText = provider.key === 'x'
-        ? (provider.configured
-            ? 'Members can link X for automatic task verification.'
-            : 'Configure the shared X app in Superadmin before linking or syncing.')
-        : `Monitoring: ${provider.supportsSourceMonitoring ? 'yes' : 'no'}  Hashtags: ${provider.supportsHashtagMonitoring ? 'yes' : 'no'}  Linking: ${provider.supportsAccountLinking ? 'yes' : 'no'}`;
-      const actions = (linkingActions || adminActions)
-        ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">${linkingActions}${adminActions}</div>`
-        : '';
-        return `
-          <div class="table-row" style="align-items:flex-start;">
-            <div style="flex:1;">
-              <div style="font-weight:600;">${escapeHtml(provider.label)}</div>
-              <div style="font-size:0.82em;color:var(--text-muted);margin:4px 0 8px 0;">
-                ${helperText}
-              </div>
-              ${provider.supportsAccountLinking ? `<div style="font-size:0.82em;color:${linked ? '#86efac' : 'var(--text-muted)'};">${linkedLabel}</div>` : ''}
-              ${actions}
-            </div>
-            <span class="status-badge ${provider.configured ? 'status-live' : 'status-paused'}">${provider.configured ? 'Configured' : 'Credentials Missing'}</span>
-          </div>
-        `;
-    }).join('');
-  } catch (e) {
-    el.innerHTML = '<p style="color:var(--error);">Failed to load providers.</p>';
   }
 }
 
@@ -19049,175 +18930,6 @@ function engagementHeaders() {
     'X-Requested-With': 'XMLHttpRequest',
     ...buildTenantRequestHeaders(),
   };
-}
-
-async function loadEngagementSection() {
-  await Promise.all([
-    loadEngagementConfig(),
-    loadEngagementProviders(),
-    loadEngagementLeaderboard(),
-    loadEngagementShop(),
-    loadEngagementMonitoredAccounts(),
-    loadEngagementHashtags(),
-    loadEngagementTasks(),
-    loadEngagementAchievements(),
-    loadEngagementRedemptions(),
-  ]);
-}
-
-async function loadEngagementConfig() {
-  try {
-    const res = await fetch('/api/admin/engagement/config', { credentials: 'include', headers: buildTenantRequestHeaders() });
-    const data = await res.json();
-    if (!data.success) return;
-    const cfg = data.config || {};
-    currentEngagementConfig = cfg;
-    if (document.getElementById('engEnabled')) document.getElementById('engEnabled').checked = !!cfg.enabled;
-    if (document.getElementById('engPtsMsg')) document.getElementById('engPtsMsg').value = cfg.points_message ?? 5;
-    if (document.getElementById('engPtsReply')) document.getElementById('engPtsReply').value = cfg.points_reply ?? 3;
-    if (document.getElementById('engPtsReact')) document.getElementById('engPtsReact').value = cfg.points_reaction ?? 2;
-    if (document.getElementById('engCooldownMsg')) document.getElementById('engCooldownMsg').value = cfg.cooldown_message_mins ?? 60;
-    if (document.getElementById('engCooldownReply')) document.getElementById('engCooldownReply').value = cfg.cooldown_reply_mins ?? 30;
-    if (document.getElementById('engCooldownReact')) document.getElementById('engCooldownReact').value = cfg.cooldown_reaction_daily ?? 5;
-    if (document.getElementById('engCurrencyPlural')) document.getElementById('engCurrencyPlural').value = cfg.currency_name_plural ?? 'points';
-    if (document.getElementById('engCurrencySymbol')) document.getElementById('engCurrencySymbol').value = cfg.currency_symbol ?? 'pts';
-    await Promise.all([
-      populateChannelSelect('engTaskFeedChannel', cfg.task_feed_channel_id ?? ''),
-      populateChannelSelect('engPurchaseLogChannel', cfg.purchase_log_channel_id ?? ''),
-      populateChannelSelect('engAchievementChannel', cfg.achievement_channel_id ?? ''),
-      populateChannelSelect('engMonitoredChannel', ''),
-      populateChannelSelect('engHashtagChannel', ''),
-    ]);
-
-    const en = document.getElementById('ps_moduleEngagementEnabled');
-    const pm = document.getElementById('ps_engPtsMsg');
-    const pr = document.getElementById('ps_engPtsReact');
-    const cm = document.getElementById('ps_engCooldownMsg');
-    const cr = document.getElementById('ps_engCooldownReact');
-    if (en) en.checked = !!cfg.enabled;
-    if (pm) pm.value = cfg.points_message ?? 5;
-    if (pr) pr.value = cfg.points_reaction ?? 2;
-    if (cm) cm.value = cfg.cooldown_message_mins ?? 60;
-    if (cr) cr.value = cfg.cooldown_reaction_daily ?? 5;
-  } catch (e) { console.error('[Engagement] config load error:', e); }
-}
-
-async function saveEngagementConfig() {
-  try {
-    const body = {
-      enabled: document.getElementById('engEnabled')?.checked ?? true,
-      points_message: parseInt(document.getElementById('engPtsMsg')?.value || '5', 10),
-      points_reply: parseInt(document.getElementById('engPtsReply')?.value || '3', 10),
-      points_reaction: parseInt(document.getElementById('engPtsReact')?.value || '2', 10),
-      cooldown_message_mins: parseInt(document.getElementById('engCooldownMsg')?.value || '60', 10),
-      cooldown_reply_mins: parseInt(document.getElementById('engCooldownReply')?.value || '30', 10),
-      cooldown_reaction_daily: parseInt(document.getElementById('engCooldownReact')?.value || '5', 10),
-      currency_name_plural: document.getElementById('engCurrencyPlural')?.value.trim() || 'points',
-      currency_symbol: document.getElementById('engCurrencySymbol')?.value.trim() || 'pts',
-      task_feed_channel_id: document.getElementById('engTaskFeedChannel')?.value.trim() || null,
-      purchase_log_channel_id: document.getElementById('engPurchaseLogChannel')?.value.trim() || null,
-      achievement_channel_id: document.getElementById('engAchievementChannel')?.value.trim() || null,
-    };
-    const res = await fetch('/api/admin/engagement/config', {
-      method: 'PUT',
-      credentials: 'include',
-      headers: engagementHeaders(),
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    if (data.success) {
-      currentEngagementConfig = data.config || body;
-      showSuccess('Engagement settings saved!');
-      loadEngagementLeaderboard();
-      loadEngagementShop();
-      loadEngagementTasks();
-      loadEngagementAchievements();
-      loadEngagementRedemptions();
-    } else {
-      showError(data.message || 'Failed to save.');
-    }
-  } catch (e) { showError('Error saving engagement config.'); }
-}
-
-async function loadEngagementProviders() {
-  const el = document.getElementById('engagementProvidersView');
-  if (!el) return;
-  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
-  try {
-    const res = await fetch('/api/admin/engagement/providers', { credentials: 'include', headers: buildTenantRequestHeaders() });
-    const data = await res.json();
-    if (!data.success || !data.providers?.length) {
-      el.innerHTML = '<p style="color:var(--text-secondary);">No providers available.</p>';
-      return;
-    }
-    el.innerHTML = data.providers.map(provider => `
-      <div class="table-row">
-        <div style="flex:1;">
-          <div style="font-weight:600;">${escapeHtml(provider.label)}</div>
-          <div style="font-size:0.82em;color:var(--text-muted);">
-            Monitoring: ${provider.supportsSourceMonitoring ? 'yes' : 'no'}  Hashtags: ${provider.supportsHashtagMonitoring ? 'yes' : 'no'}  Linking: ${provider.supportsAccountLinking ? 'yes' : 'no'}
-          </div>
-        </div>
-        <span class="status-badge ${provider.configured ? 'status-live' : 'status-paused'}">${provider.configured ? 'Configured' : 'Credentials Missing'}</span>
-      </div>
-    `).join('');
-  } catch (e) {
-    el.innerHTML = '<p style="color:var(--error);">Failed to load providers.</p>';
-  }
-}
-
-async function loadEngagementLeaderboard() {
-  const el = document.getElementById('engagementLeaderboardView');
-  if (!el) return;
-  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
-  try {
-    const res = await fetch('/api/admin/engagement/leaderboard?limit=25', { credentials: 'include', headers: buildTenantRequestHeaders() });
-    const data = await res.json();
-    if (!data.success || !data.leaderboard?.length) {
-      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon"></div><h4 class="empty-state-title">No data yet</h4><p class="empty-state-message">Points will appear here once members start chatting and completing tasks.</p></div>';
-      return;
-    }
-    const medals = ['', '', ''];
-    el.innerHTML = data.leaderboard.map((row, index) => `
-      <div class="table-row">
-        <span style="width:36px;text-align:center;">${medals[index] || (index + 1)}</span>
-        <span style="flex:1;font-weight:500;">${escapeHtml(row.username || row.user_id)}</span>
-        <span style="color:var(--accent-gold);font-weight:600;">${formatEngagementAmount(row.total_points)}</span>
-      </div>
-    `).join('');
-  } catch (e) {
-    el.innerHTML = '<p style="color:var(--error);">Failed to load leaderboard.</p>';
-  }
-}
-
-async function loadEngagementShop() {
-  const el = document.getElementById('engagementShopView');
-  if (!el) return;
-  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
-  try {
-    const res = await fetch('/api/admin/engagement/shop', { credentials: 'include', headers: buildTenantRequestHeaders() });
-    const data = await res.json();
-    if (!data.success || !data.items?.length) {
-      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon"></div><h4 class="empty-state-title">Marketplace is empty</h4><p class="empty-state-message">Add items to reward your community.</p></div>';
-      return;
-    }
-    el.innerHTML = data.items.map(item => {
-      const stock = item.quantity_remaining < 0 ? '' : item.quantity_remaining;
-      return `
-        <div class="table-row" style="align-items:flex-start;">
-          <span style="width:36px;font-size:0.8em;color:var(--text-muted);">#${item.id}</span>
-          <div style="flex:1;">
-            <div style="font-weight:600;">${escapeHtml(item.name)}</div>
-            ${item.description ? `<div style="font-size:0.85em;color:var(--text-muted);">${escapeHtml(item.description)}</div>` : ''}
-            <div style="font-size:0.8em;color:var(--text-muted);margin-top:2px;">${escapeHtml(item.reward_type || item.type)}  ${escapeHtml(item.fulfillment_mode || 'auto')}  Stock: ${stock}</div>
-          </div>
-          <span style="color:var(--accent-gold);font-weight:600;white-space:nowrap;">${formatEngagementAmount(item.cost)}</span>
-          <button class="btn-danger btn-sm" style="margin-left:10px;" onclick="deleteEngShopItem(${item.id})">Remove</button>
-        </div>`;
-    }).join('');
-  } catch (e) {
-    el.innerHTML = '<p style="color:var(--error);">Failed to load shop items.</p>';
-  }
 }
 
 async function submitEngShopItem() {

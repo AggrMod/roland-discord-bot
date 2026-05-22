@@ -23,6 +23,9 @@ const SORT_BUTTON_PREFIX = 'invite_tracker_sort_';
 const SORT_BY_INVITES = 'invites';
 const SORT_BY_NFTS = 'nfts';
 const SORT_BY_TOKENS = 'tokens';
+const INVITE_TRACKER_JOINER_MIN_AGE_HOURS = Math.max(0, Number(process.env.INVITE_TRACKER_JOINER_MIN_AGE_HOURS || 0));
+const INVITE_TRACKER_INVITER_BURST_WINDOW_MIN = Math.max(1, Number(process.env.INVITE_TRACKER_INVITER_BURST_WINDOW_MIN || 30));
+const INVITE_TRACKER_INVITER_BURST_MAX = Math.max(1, Number(process.env.INVITE_TRACKER_INVITER_BURST_MAX || 8));
 
 function normalizePanelSortBy(value) {
   const normalized = String(value || '').trim().toLowerCase();
@@ -541,6 +544,68 @@ class InviteTrackerService {
     return { success: true };
   }
 
+  _countRecentInvitesForInviter(guildId, inviterUserId, windowMinutes = INVITE_TRACKER_INVITER_BURST_WINDOW_MIN) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const normalizedInviterId = normalizeUserId(inviterUserId);
+    if (!normalizedGuildId || !normalizedInviterId) return 0;
+
+    try {
+      const safeWindow = Math.max(1, Math.min(24 * 60, Number(windowMinutes) || INVITE_TRACKER_INVITER_BURST_WINDOW_MIN));
+      const row = db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM invite_events
+        WHERE guild_id = ?
+          AND inviter_user_id = ?
+          AND joined_at >= datetime('now', ?)
+      `).get(normalizedGuildId, normalizedInviterId, `-${safeWindow} minutes`);
+      return Number(row?.count || 0);
+    } catch (_error) {
+      return 0;
+    }
+  }
+
+  _applyInviteAntiCheat({
+    guildId,
+    member = null,
+    inviterUserId = null,
+    inviterUsername = null,
+    source = 'invite',
+  }) {
+    const nowMs = Date.now();
+    const normalizedInviterId = normalizeUserId(inviterUserId);
+    let nextInviterUserId = normalizedInviterId || null;
+    let nextInviterUsername = inviterUsername || null;
+    let nextSource = source || 'invite';
+
+    if (INVITE_TRACKER_JOINER_MIN_AGE_HOURS > 0) {
+      const createdMs = Number(member?.user?.createdTimestamp || member?.user?.createdAt?.getTime?.() || 0);
+      if (createdMs > 0) {
+        const accountAgeMs = nowMs - createdMs;
+        const minAgeMs = INVITE_TRACKER_JOINER_MIN_AGE_HOURS * 60 * 60 * 1000;
+        if (accountAgeMs < minAgeMs) {
+          nextInviterUserId = null;
+          nextInviterUsername = null;
+          nextSource = 'invite_filtered_joiner_account_age';
+        }
+      }
+    }
+
+    if (nextInviterUserId && INVITE_TRACKER_INVITER_BURST_MAX > 0) {
+      const recentCount = this._countRecentInvitesForInviter(guildId, nextInviterUserId, INVITE_TRACKER_INVITER_BURST_WINDOW_MIN);
+      if (recentCount >= INVITE_TRACKER_INVITER_BURST_MAX) {
+        nextInviterUserId = null;
+        nextInviterUsername = null;
+        nextSource = 'invite_filtered_burst_limit';
+      }
+    }
+
+    return {
+      inviterUserId: nextInviterUserId,
+      inviterUsername: nextInviterUsername,
+      source: nextSource,
+    };
+  }
+
   async trackMemberJoin(member) {
     const guild = member?.guild;
     const guildId = normalizeGuildId(guild?.id);
@@ -605,6 +670,17 @@ class InviteTrackerService {
       }
     }
 
+    const antiCheatResult = this._applyInviteAntiCheat({
+      guildId,
+      member,
+      inviterUserId: resolvedInviterUserId,
+      inviterUsername: resolvedInviterUsername,
+      source: resolvedSource,
+    });
+    resolvedInviterUserId = antiCheatResult.inviterUserId;
+    resolvedInviterUsername = antiCheatResult.inviterUsername;
+    resolvedSource = antiCheatResult.source;
+
     const result = this._recordInviteEvent({
       guildId,
       joinedUserId: member.id,
@@ -664,11 +740,12 @@ class InviteTrackerService {
     };
   }
 
-  listEvents(guildId, { limit = 50, days = null } = {}) {
+  listEvents(guildId, { limit = 50, days = null, maxLimit = 500 } = {}) {
     const normalizedGuildId = normalizeGuildId(guildId);
     if (!normalizedGuildId) return { success: false, message: 'guildId is required' };
 
-    const safeLimit = clampInt(limit, 1, 500, 50);
+    const absoluteMax = Math.max(1, Math.min(5000, Number(maxLimit) || 500));
+    const safeLimit = clampInt(limit, 1, absoluteMax, 50);
     const periodPolicy = this._getInvitePeriodPolicy(normalizedGuildId, days);
     const wherePeriod = periodPolicy.days ? `AND joined_at >= datetime('now', ?)` : '';
     const params = [normalizedGuildId];
@@ -1287,7 +1364,7 @@ class InviteTrackerService {
       return { success: false, code: 'plan_restricted', message: 'CSV export is available on paid plans.' };
     }
 
-    const eventsResult = this.listEvents(normalizedGuildId, { limit: 5000, days });
+    const eventsResult = this.listEvents(normalizedGuildId, { limit: 5000, maxLimit: 5000, days });
     if (!eventsResult.success) return eventsResult;
 
     const header = [

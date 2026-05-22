@@ -1,6 +1,8 @@
 const db = require('../database/db');
 const logger = require('../utils/logger');
 const { Connection, PublicKey } = require('@solana/web3.js');
+const xProviderService = require('./xProviderService');
+const { decryptSecret } = require('../utils/secretVault');
 
 function nowIso() {
   return new Date().toISOString();
@@ -50,6 +52,54 @@ function parseDbTimestampMs(value) {
   if (!raw) return NaN;
   const normalized = raw.includes('T') ? raw : `${raw.replace(' ', 'T')}Z`;
   return new Date(normalized).getTime();
+}
+
+function normalizeXSocialRequirements(rewardPayload) {
+  const payload = rewardPayload && typeof rewardPayload === 'object' ? rewardPayload : {};
+  const out = [];
+  const arr = Array.isArray(payload.social_requirements)
+    ? payload.social_requirements
+    : (Array.isArray(payload.socialRequirements) ? payload.socialRequirements : []);
+
+  for (const raw of arr) {
+    if (!raw || typeof raw !== 'object') continue;
+    const provider = String(raw.provider || 'x').trim().toLowerCase();
+    if (provider !== 'x') continue;
+    const action = String(raw.action || raw.action_type || '').trim().toLowerCase();
+    if (!action) continue;
+    const targetPostId = String(raw.target_post_id || raw.targetPostId || '').trim();
+    const targetAccountId = String(raw.target_account_id || raw.targetAccountId || '').trim();
+    const targetAccountHandle = String(raw.target_account_handle || raw.targetAccountHandle || '').trim().replace(/^@+/, '').toLowerCase();
+    out.push({
+      provider,
+      action,
+      targetPostId: targetPostId || null,
+      targetAccountId: targetAccountId || null,
+      targetAccountHandle: targetAccountHandle || null,
+    });
+  }
+
+  const legacy = payload.x_task_gate && typeof payload.x_task_gate === 'object' ? payload.x_task_gate : null;
+  if (legacy) {
+    const postId = String(legacy.postId || legacy.post_id || '').trim();
+    const accountId = String(legacy.followAccountId || legacy.follow_account_id || '').trim();
+    const accountHandle = String(legacy.followAccountHandle || legacy.follow_account_handle || '').trim().replace(/^@+/, '').toLowerCase();
+    if (legacy.requireLike && postId) out.push({ provider: 'x', action: 'x_like', targetPostId: postId, targetAccountId: null, targetAccountHandle: null });
+    if (legacy.requireRepost && postId) out.push({ provider: 'x', action: 'x_repost', targetPostId: postId, targetAccountId: null, targetAccountHandle: null });
+    if (legacy.requireFollow && (accountId || accountHandle)) out.push({ provider: 'x', action: 'x_follow', targetPostId: null, targetAccountId: accountId || null, targetAccountHandle: accountHandle || null });
+  }
+
+  const dedup = new Map();
+  for (const req of out) {
+    const key = `${req.provider}|${req.action}|${req.targetPostId || ''}|${req.targetAccountId || ''}|${req.targetAccountHandle || ''}`;
+    if (!dedup.has(key)) dedup.set(key, req);
+  }
+  return [...dedup.values()];
+}
+
+function buildRequirementTargetRef(req) {
+  if (req.action === 'x_follow') return String(req.targetAccountId || req.targetAccountHandle || '').trim().toLowerCase();
+  return String(req.targetPostId || '').trim();
 }
 
 class VaultService {
@@ -974,7 +1024,7 @@ class VaultService {
     return { success: true, rewardId: insert.lastInsertRowid };
   }
 
-  updateRewardClaimStatus(guildId, rewardId, claimStatus, claimNote = null) {
+  async updateRewardClaimStatus(guildId, rewardId, claimStatus, claimNote = null) {
     const gid = normalizeGuildId(guildId);
     const id = Number(rewardId);
     const status = String(claimStatus || '').trim().toLowerCase();
@@ -984,6 +1034,21 @@ class VaultService {
     const row = db.prepare('SELECT * FROM vault_rewards WHERE id = ? AND guild_id = ? LIMIT 1').get(id, gid);
     if (!row) return { success: false, message: 'Reward not found' };
 
+    const finalizedStatuses = new Set(['claimed', 'fulfilled']);
+    if (finalizedStatuses.has(status)) {
+      const gate = await this.canFinalizeRewardClaim(gid, id, row.discord_user_id);
+      if (!gate.success) return gate;
+      if (gate.allowed === false) {
+        return {
+          success: false,
+          code: gate.code || 'social_requirements_pending',
+          message: gate.message || 'Social requirements are not verified yet.',
+          pending: gate.pending || [],
+          requirements: gate.requirements || [],
+        };
+      }
+    }
+
     db.prepare(`
       UPDATE vault_rewards
       SET claim_status = ?, updated_at = CURRENT_TIMESTAMP
@@ -991,7 +1056,7 @@ class VaultService {
     `).run(status, id, gid);
 
     let inventoryUpdate = null;
-    const claimedStatuses = new Set(['claimed', 'fulfilled']);
+    const claimedStatuses = finalizedStatuses;
     const previousStatus = String(row.claim_status || '').trim().toLowerCase();
     if (claimedStatuses.has(status) && !claimedStatuses.has(previousStatus)) {
       inventoryUpdate = this.decrementRewardInventoryOnClaim(gid, row.reward_code, 1);
@@ -1208,6 +1273,159 @@ class VaultService {
     sql += ' ORDER BY datetime(created_at) DESC, id DESC LIMIT ?';
     params.push(Math.max(1, Math.min(500, Number(limit) || 100)));
     return db.prepare(sql).all(...params).map(row => ({ ...row, reward_payload: safeJsonParse(row.reward_payload, null) }));
+  }
+
+  listUserRewards(guildId, discordUserId, { claimStatus = null, limit = 50 } = {}) {
+    const gid = normalizeGuildId(guildId);
+    const uid = String(discordUserId || '').trim();
+    if (!gid || !uid) return [];
+    let sql = 'SELECT * FROM vault_rewards WHERE guild_id = ? AND discord_user_id = ?';
+    const params = [gid, uid];
+    if (claimStatus) {
+      sql += ' AND claim_status = ?';
+      params.push(String(claimStatus || '').trim());
+    }
+    sql += ' ORDER BY datetime(created_at) DESC, id DESC LIMIT ?';
+    params.push(Math.max(1, Math.min(200, Number(limit) || 50)));
+    return db.prepare(sql).all(...params).map(row => ({ ...row, reward_payload: safeJsonParse(row.reward_payload, null) }));
+  }
+
+  getLinkedXAccount(guildId, discordUserId) {
+    const gid = normalizeGuildId(guildId);
+    const uid = String(discordUserId || '').trim();
+    if (!gid || !uid) return null;
+    const row = db.prepare(`
+      SELECT *
+      FROM engagement_social_accounts
+      WHERE guild_id = ? AND user_id = ? AND provider = 'x'
+      ORDER BY datetime(updated_at) DESC, id DESC
+      LIMIT 1
+    `).get(gid, uid);
+    if (!row) return null;
+    const rawToken = String(row.access_token || '').trim();
+    const accessToken = rawToken.startsWith('v1:') ? decryptSecret(rawToken) : rawToken;
+    return {
+      ...row,
+      accessToken: String(accessToken || '').trim(),
+      providerUserId: String(row.provider_user_id || '').trim(),
+      handle: String(row.handle || '').trim().replace(/^@+/, '').toLowerCase(),
+      metadata: safeJsonParse(row.metadata_json, {}),
+    };
+  }
+
+  async verifyRewardSocialRequirements(guildId, rewardId, discordUserId) {
+    const gid = normalizeGuildId(guildId);
+    const rid = Number(rewardId);
+    const uid = String(discordUserId || '').trim();
+    if (!gid || !Number.isFinite(rid) || rid <= 0 || !uid) {
+      return { success: false, message: 'Invalid verification input' };
+    }
+    const rewardRow = db.prepare('SELECT * FROM vault_rewards WHERE id = ? AND guild_id = ? AND discord_user_id = ? LIMIT 1').get(rid, gid, uid);
+    if (!rewardRow) return { success: false, message: 'Reward not found' };
+
+    const requirements = normalizeXSocialRequirements(safeJsonParse(rewardRow.reward_payload, {}));
+    if (!requirements.length) return { success: true, gated: false, verified: true, requirements: [], pending: [] };
+
+    const account = this.getLinkedXAccount(gid, uid);
+    if (!account?.accessToken) {
+      return { success: true, gated: true, verified: false, code: 'missing_linked_x', message: 'Link your X account in Engagement before verifying.', requirements, pending: requirements };
+    }
+
+    const runtimeBearer = xProviderService.getRuntimeConfig().bearerToken;
+    const results = [];
+    for (const req of requirements) {
+      const targetRef = buildRequirementTargetRef(req);
+      let verified = false;
+      let lastError = null;
+      try {
+        if (req.action === 'x_like' && req.targetPostId) {
+          const liked = await xProviderService.getLikedPosts(account.providerUserId || account.metadata?.userId || account.handle, {
+            accessToken: account.accessToken,
+            maxResults: 100,
+          });
+          verified = (liked.posts || []).some(post => String(post.id) === String(req.targetPostId));
+        } else if (req.action === 'x_repost' && req.targetPostId) {
+          const reposts = await xProviderService.getRetweetingUsers(req.targetPostId, {
+            bearerToken: runtimeBearer,
+            accessToken: account.accessToken,
+            maxResults: 100,
+          });
+          verified = (reposts.users || []).some(entry => String(entry.id) === String(account.providerUserId));
+        } else if (req.action === 'x_follow' && (req.targetAccountId || req.targetAccountHandle)) {
+          let targetId = String(req.targetAccountId || '').trim();
+          if (!targetId && req.targetAccountHandle) {
+            const lookup = await xProviderService.getUserByUsername(req.targetAccountHandle, {
+              bearerToken: runtimeBearer,
+              accessToken: account.accessToken,
+            });
+            targetId = String(lookup?.data?.id || '').trim();
+          }
+          const following = await xProviderService.getFollowing(account.providerUserId, {
+            accessToken: account.accessToken,
+            bearerToken: runtimeBearer,
+            maxResults: 1000,
+          });
+          verified = !!targetId && (following.users || []).some(entry => String(entry.id) === targetId);
+        } else {
+          lastError = 'Unsupported requirement';
+        }
+      } catch (error) {
+        lastError = String(error?.message || 'Verification failed');
+      }
+
+      db.prepare(`
+        INSERT INTO vault_reward_social_checks (
+          guild_id, reward_id, user_id, provider, action_type, target_ref, status, last_error, verified_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(reward_id, action_type, target_ref) DO UPDATE SET
+          status = excluded.status,
+          last_error = excluded.last_error,
+          verified_at = excluded.verified_at,
+          updated_at = CURRENT_TIMESTAMP
+      `).run(
+        gid,
+        rid,
+        uid,
+        req.provider,
+        req.action,
+        targetRef,
+        verified ? 'verified' : 'pending',
+        verified ? null : (lastError || 'Not yet verified'),
+        verified ? nowIso() : null
+      );
+
+      results.push({
+        ...req,
+        targetRef,
+        verified,
+        lastError,
+      });
+    }
+
+    const pending = results.filter(entry => !entry.verified);
+    return {
+      success: true,
+      gated: true,
+      verified: pending.length === 0,
+      requirements: results,
+      pending,
+    };
+  }
+
+  async canFinalizeRewardClaim(guildId, rewardId, discordUserId) {
+    const verifyResult = await this.verifyRewardSocialRequirements(guildId, rewardId, discordUserId);
+    if (!verifyResult.success) return verifyResult;
+    if (!verifyResult.gated) return { success: true, allowed: true, gated: false };
+    if (verifyResult.verified) return { success: true, allowed: true, gated: true };
+    return {
+      success: true,
+      allowed: false,
+      gated: true,
+      code: 'social_requirements_pending',
+      message: 'Reward claim is gated until X social requirements are verified.',
+      pending: verifyResult.pending || [],
+      requirements: verifyResult.requirements || [],
+    };
   }
 
   listAdminLogs(guildId, limit = 100) {

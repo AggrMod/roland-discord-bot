@@ -71,6 +71,7 @@ function createAdminSettingsRouter({
         if (tenantVerification.ogRoleId !== undefined) effectiveSettings.ogRoleId = tenantVerification.ogRoleId || '';
         if (tenantVerification.ogRoleLimit !== undefined) effectiveSettings.ogRoleLimit = tenantVerification.ogRoleLimit || 0;
         if (tenantVerification.baseVerifiedRoleId !== undefined) effectiveSettings.baseVerifiedRoleId = tenantVerification.baseVerifiedRoleId || '';
+        if (tenantVerification.includeDelegatedWallets !== undefined) effectiveSettings.includeDelegatedWallets = !!tenantVerification.includeDelegatedWallets;
         const tenantBattleSettings = tenantService.getTenantBattleSettings(req.guildId);
         if (tenantBattleSettings.battleRoundPauseMinSec !== null) effectiveSettings.battleRoundPauseMinSec = tenantBattleSettings.battleRoundPauseMinSec;
         if (tenantBattleSettings.battleRoundPauseMaxSec !== null) effectiveSettings.battleRoundPauseMaxSec = tenantBattleSettings.battleRoundPauseMaxSec;
@@ -127,7 +128,7 @@ function createAdminSettingsRouter({
         'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleBrandingEnabled', 'moduleMissionsEnabled', 'moduleVaultEnabled', 'moduleBattleEnabled', 'moduleMinigamesEnabled',
         'moduleWelcomeEnabled', 'moduleTicketingEnabled', 'moduleRoleClaimEnabled', 'moduleEngagementEnabled', 'moduleAiAssistantEnabled',
         'battleRoundPauseMinSec', 'battleRoundPauseMaxSec', 'battleElitePrepSec', 'battleForcedEliminationIntervalRounds', 'battleDefaultEra',
-        'baseVerifiedRoleId', 'autoResyncEnabled', 'ogRoleId', 'ogRoleLimit',
+        'baseVerifiedRoleId', 'autoResyncEnabled', 'ogRoleId', 'ogRoleLimit', 'includeDelegatedWallets',
         'treasuryWalletAddress', 'treasuryRefreshInterval', 'txAlertChannelId',
         'txAlertEnabled', 'txAlertIncomingOnly', 'txAlertMinSol',
         'displayName', 'displayEmoji', 'displayColor',
@@ -235,11 +236,13 @@ function createAdminSettingsRouter({
           if (sanitized.ogRoleId !== undefined) tenantVerificationPatch.ogRoleId = sanitized.ogRoleId;
           if (sanitized.ogRoleLimit !== undefined) tenantVerificationPatch.ogRoleLimit = sanitized.ogRoleLimit;
           if (sanitized.baseVerifiedRoleId !== undefined) tenantVerificationPatch.baseVerifiedRoleId = sanitized.baseVerifiedRoleId;
+          if (sanitized.includeDelegatedWallets !== undefined) tenantVerificationPatch.includeDelegatedWallets = !!sanitized.includeDelegatedWallets;
           if (Object.keys(tenantVerificationPatch).length > 0) {
             tenantService.updateTenantVerificationSettings(req.guildId, tenantVerificationPatch, req.session?.discordUser?.id || 'unknown');
             delete sanitized.ogRoleId;
             delete sanitized.ogRoleLimit;
             delete sanitized.baseVerifiedRoleId;
+            delete sanitized.includeDelegatedWallets;
           }
 
           const tenantBattlePatch = {};

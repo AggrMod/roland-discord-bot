@@ -142,17 +142,14 @@
             <span class="nav-label">Hub</span>
           </button>
           <div class="sidebar-section-divider"></div>
-          <button class="nav-item" data-section="governance" data-module="governance" onclick="switchSection('governance')" id="sidebarNavGovernance" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-landmark"></i></span>
-            <span class="nav-label">Governance</span>
-          </button>
+          <div class="sidebar-group-label" id="sidebarGroupCommunity">Community</div>
           <button class="nav-item" data-section="wallets" data-module="verification" onclick="switchSection('wallets')" id="sidebarNavWallets" style="display:none;">
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-shield-halved"></i></span>
             <span class="nav-label">Verification</span>
           </button>
-          <button class="nav-item" data-section="battle" data-module="battle" onclick="switchSection('battle')" id="sidebarNavBattle" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-gamepad"></i></span>
-            <span class="nav-label">Minigames</span>
+          <button class="nav-item" data-section="governance" data-module="governance" onclick="switchSection('governance')" id="sidebarNavGovernance" style="display:none;">
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-landmark"></i></span>
+            <span class="nav-label">Governance</span>
           </button>
           <button class="nav-item" data-section="treasury" data-module="treasury" onclick="switchSection('treasury')" id="sidebarNavTreasury" style="display:none;">
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-wallet"></i></span>
@@ -166,6 +163,18 @@
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-coins"></i></span>
             <span class="nav-label">Token Tracker</span>
           </button>
+          <button class="nav-item" data-section="engagement" data-module="engagement" onclick="switchSection('engagement')" id="sidebarNavEngagement" style="display:none;">
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-chart-line"></i></span>
+            <span class="nav-label">Engagement</span>
+          </button>
+          <button class="nav-item" data-section="battle" data-module="battle" onclick="switchSection('battle')" id="sidebarNavBattle" style="display:none;">
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-gamepad"></i></span>
+            <span class="nav-label">Minigames</span>
+          </button>
+          <button class="nav-item" data-section="heist" data-module="heist" onclick="switchSection('heist')" id="sidebarNavHeist" style="display:none;">
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-rocket"></i></span>
+            <span class="nav-label">Missions</span>
+          </button>
           <button class="nav-item" data-section="self-serve-roles" data-module="selfserveroles" onclick="switchSection('self-serve-roles')" id="sidebarNavSelfServe" style="display:none;">
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-user-tag"></i></span>
             <span class="nav-label">Self-Serve Roles</span>
@@ -174,23 +183,12 @@
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-ticket"></i></span>
             <span class="nav-label">Ticketing</span>
           </button>
-          <button class="nav-item" data-section="welcome" data-module="welcome" onclick="switchSection('welcome')" id="sidebarNavWelcome" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-hand-sparkles"></i></span>
-            <span class="nav-label">Welcome</span>
-          </button>
-          <button class="nav-item" data-section="engagement" data-module="engagement" onclick="switchSection('engagement')" id="sidebarNavEngagement" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-chart-line"></i></span>
-            <span class="nav-label">Engagement</span>
-          </button>
-          <button class="nav-item" data-section="heist" data-module="heist" onclick="switchSection('heist')" id="sidebarNavHeist" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-rocket"></i></span>
-            <span class="nav-label">Missions</span>
-          </button>
           <button class="nav-item" data-section="plans" onclick="switchSection('plans')" id="sidebarNavPlans" style="display:none;">
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-gem"></i></span>
             <span class="nav-label">Plans</span>
           </button>
           <div class="sidebar-section-divider"></div>
+          <div class="sidebar-group-label" id="sidebarGroupManagement">Management</div>
           <button class="nav-item" data-section="settings" onclick="openAdminSettingsEntry()" id="sidebarNavSettings" style="display:none;">
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-gear"></i></span>
             <span class="nav-label">Modules</span>

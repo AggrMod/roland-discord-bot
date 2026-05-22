@@ -6625,6 +6625,15 @@ body {
   background: linear-gradient(90deg, transparent, rgba(118, 136, 255, 0.35), transparent) !important;
 }
 
+.sidebar-group-label {
+  margin: 6px 10px 2px;
+  color: rgba(174, 193, 231, 0.72);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
 .sidebar-server-context {
   margin-top: auto;
   padding: 0 6px 6px;

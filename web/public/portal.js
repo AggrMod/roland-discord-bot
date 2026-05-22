@@ -1401,14 +1401,12 @@ function updateModuleVisibility() {
     { id: 'sidebarNavTokenActivity', key: 'tokentracker' },
     { id: 'sidebarNavSelfServe', key: 'selfserveroles' },
     { id: 'sidebarNavTicketing', key: 'ticketing' },
-    { id: 'sidebarNavWelcome', key: 'welcome' },
     { id: 'sidebarNavEngagement', key: 'engagement' },
     { id: 'sidebarNavHeist', key: 'heist' },
     { id: 'mobileNavTreasury', key: 'wallettracker' },
     { id: 'mobileNavTokenActivity', key: 'tokentracker' },
     { id: 'mobileNavSelfServe', key: 'selfserveroles' },
     { id: 'mobileNavTicketing', key: 'ticketing' },
-    { id: 'mobileNavWelcome', key: 'welcome' },
     { id: 'mobileNavEngagement', key: 'engagement' },
     { id: 'mobileNavHeist', key: 'heist' },
   ];
@@ -1423,20 +1421,20 @@ function updateModuleVisibility() {
 // ==================== MODULE REGISTRY & HUB ====================
 
 const MODULE_REGISTRY = [
+  { key: 'welcome', label: 'Welcome & Onboarding', icon: '\u{1F44B}', section: 'welcome', desc: 'Join messages, onboarding flow, and captcha checks for new members.' },
   { key: 'verification', label: 'Identity / Verification', icon: '\u{1F4BC}', section: 'wallets', desc: 'Securely verify wallet ownership and manage roles.' },
   { key: 'governance', label: 'Governance / Voting', icon: '\u{1F4DC}', section: 'governance', desc: 'Participate in DAO decision-making and proposals.' },
   { key: 'wallettracker', label: 'Wallet Tracker', icon: '\u{1F4B0}', section: 'treasury', desc: 'Monitor community floor price and tracked wallets.' },
   { key: 'nfttracker', label: 'NFT Activity', icon: '\u{1F3A8}', section: 'nft-activity', desc: 'Real-time sales and listings feed for collections.' },
   { key: 'tokentracker', label: 'Token Tracker', icon: '\u{1FA99}', section: 'token-activity', desc: 'Monitor token transactions and swap activity.' },
   { key: 'invites', label: 'Invite Tracker', icon: '\u{1F4E7}', section: 'invites', adminOnly: true, desc: 'Measure invite performance, leaderboard trends, and referral activity.' },
-  { key: 'aiassistant', label: 'AI Assistant', icon: '\u{1F916}', section: 'aiassistant', adminOnly: true, desc: 'Tune prompts, safety controls, and assistant behavior for your server.' },
   { key: 'ticketing', label: 'Support Tickets', icon: '\u{1F3AB}', section: 'ticketing', desc: 'Integrated support desk and category routing.' },
   { key: 'engagement', label: 'Engagement Hub', icon: '\u{1F3C6}', section: 'engagement', desc: 'Activity points, reward shop, and leaderboards.' },
   { key: 'minigames', label: 'Minigames', icon: '\u2694\uFE0F', section: 'battle', desc: 'Arcade module including Battle Arena sessions, lobbies, and game events.' },
   { key: 'heist', label: 'Missions', icon: '\u{1F3AF}', section: 'heist', desc: 'Role-based missions and strategic community goals.' },
   { key: 'vault', label: 'Vault', icon: '\u{1F510}', section: 'vault', desc: 'Key rewards, mint sync rules, seasons, and vault operations.' },
-  { key: 'welcome', label: 'Welcome & Onboarding', icon: '\u{1F44B}', section: 'welcome', desc: 'Join messages, auto-roles, onboarding DM, and captcha checks.' },
   { key: 'selfserveroles', label: 'Self-Serve Roles', icon: '\u{1F3AD}', section: 'self-serve-roles', desc: 'Claim optional roles assigned by administrators.' },
+  { key: 'aiassistant', label: 'AI Assistant', icon: '\u{1F916}', section: 'aiassistant', adminOnly: true, desc: 'Tune prompts, safety controls, and assistant behavior for your server.' },
   { key: 'help', label: 'Help Center', icon: '\u2753', section: 'help', desc: 'Guides, command references, and troubleshooting across all modules.' }
 ];
 
@@ -2014,21 +2012,19 @@ function updateSidebarModuleNav() {
   const state = window._tenantModuleState || {};
 
   const moduleItems = [
-    { id: 'sidebarNavGovernance', module: 'governance' },
-    { id: 'mobileNavGovernance', module: 'governance' },
     { id: 'sidebarNavWallets', module: 'verification' },
     { id: 'mobileNavWallets', module: 'verification' },
+    { id: 'sidebarNavGovernance', module: 'governance' },
+    { id: 'mobileNavGovernance', module: 'governance' },
     { id: 'sidebarNavTreasury', module: 'wallettracker' },
     { id: 'mobileNavTreasury', module: 'wallettracker' },
     { id: 'sidebarNavNftActivity', module: 'nfttracker' },
     { id: 'mobileNavNftActivity', module: 'nfttracker' },
     { id: 'sidebarNavTokenActivity', module: 'tokentracker' },
     { id: 'mobileNavTokenActivity', module: 'tokentracker' },
+    { id: 'sidebarNavEngagement', module: 'engagement' },
     { id: 'sidebarNavHeist', module: 'heist' },
     { id: 'mobileNavHeist', module: 'heist' },
-    { id: 'sidebarNavWelcome', module: 'welcome' },
-    { id: 'mobileNavWelcome', module: 'welcome' },
-    { id: 'sidebarNavEngagement', module: 'engagement' },
     // Plans nav handled separately (superadmin-only)
   ];
 
@@ -2064,6 +2060,32 @@ function updateSidebarModuleNav() {
   const mobileSettings = document.getElementById('mobileNavSettings');
   if (mobileSettings) {
     mobileSettings.style.display = (isAdmin || isSuperadmin) ? '' : 'none';
+  }
+
+  const communityLabel = document.getElementById('sidebarGroupCommunity');
+  if (communityLabel) {
+    const communityIds = [
+      'sidebarNavWallets',
+      'sidebarNavGovernance',
+      'sidebarNavTreasury',
+      'sidebarNavNftActivity',
+      'sidebarNavTokenActivity',
+      'sidebarNavEngagement',
+      'sidebarNavHeist',
+      'sidebarNavSelfServe',
+      'sidebarNavTicketing',
+    ];
+    const hasVisibleCommunity = communityIds.some((id) => {
+      const el = document.getElementById(id);
+      return el && el.style.display !== 'none';
+    });
+    communityLabel.style.display = hasVisibleCommunity ? '' : 'none';
+  }
+
+  const managementLabel = document.getElementById('sidebarGroupManagement');
+  if (managementLabel) {
+    const hasVisibleManagement = !!sidebarSettings && sidebarSettings.style.display !== 'none';
+    managementLabel.style.display = hasVisibleManagement ? '' : 'none';
   }
 
   // Hide dividers that have no visible nav items between them

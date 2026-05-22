@@ -295,9 +295,9 @@ class BillingService {
     };
   }
 
-  async verifyCryptoReceiptOnChain({ receiptId }) {
+  async verifyCryptoReceiptOnChain({ receiptId, force = false } = {}) {
     const enabled = this.isOnchainVerificationEnabled();
-    if (!enabled) {
+    if (!enabled && !force) {
       return { success: false, message: 'On-chain receipt verification is disabled (set BILLING_ONCHAIN_VERIFY_ENABLED=true)' };
     }
     const id = Number(receiptId);
@@ -466,6 +466,107 @@ class BillingService {
       }
       return { success: false, message: 'Failed to submit payment receipt' };
     }
+  }
+
+  computePeriodEndIso(billingInterval, fromDate = new Date()) {
+    const base = fromDate instanceof Date ? new Date(fromDate.getTime()) : new Date(fromDate);
+    if (!Number.isFinite(base.getTime())) return null;
+    const normalized = normalizeInterval(billingInterval) || 'monthly';
+    if (normalized === 'yearly') {
+      base.setUTCFullYear(base.getUTCFullYear() + 1);
+      return base.toISOString();
+    }
+    base.setUTCMonth(base.getUTCMonth() + 1);
+    return base.toISOString();
+  }
+
+  applyApprovedReceiptEntitlement(receiptRow, actorId = 'billing-auto-approval') {
+    if (!receiptRow || !receiptRow.guild_id) return { success: false, message: 'receiptRow is required' };
+    const guildId = String(receiptRow.guild_id).trim();
+    const planKey = normalizePlanKey(receiptRow.plan_key);
+    const billingInterval = normalizeInterval(receiptRow.billing_interval) || 'monthly';
+    if (!guildId || !planKey) return { success: false, message: 'receipt is missing guild or plan metadata' };
+
+    const tenant = tenantService.getTenant(guildId) || tenantService.ensureTenant(guildId, null) || tenantService.getTenant(guildId);
+    if (!tenant?.id) return { success: false, message: 'Tenant not found for receipt guild' };
+
+    const setPlan = tenantService.setTenantPlan(guildId, planKey, actorId);
+    if (!setPlan?.success) return { success: false, message: setPlan?.message || 'Failed to apply plan from receipt' };
+
+    const setStatus = tenantService.setTenantStatus(guildId, 'active', actorId);
+    if (!setStatus?.success) return { success: false, message: setStatus?.message || 'Failed to activate tenant after receipt approval' };
+
+    const periodEnd = this.computePeriodEndIso(billingInterval, new Date());
+    db.prepare(`
+      INSERT INTO tenant_billing (
+        tenant_id, provider, subscription_status, billing_interval, current_period_end, last_payment_at, last_payment_status, metadata_json
+      ) VALUES (?, 'manual_crypto', 'approved', ?, ?, ?, 'approved', ?)
+      ON CONFLICT(tenant_id) DO UPDATE SET
+        provider = 'manual_crypto',
+        subscription_status = 'approved',
+        billing_interval = excluded.billing_interval,
+        current_period_end = excluded.current_period_end,
+        last_payment_at = excluded.last_payment_at,
+        last_payment_status = 'approved',
+        metadata_json = excluded.metadata_json,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(
+      tenant.id,
+      billingInterval,
+      periodEnd,
+      new Date().toISOString(),
+      JSON.stringify({
+        source: 'billing_auto_verification',
+        receiptId: Number(receiptRow.id || 0) || null,
+        txSignature: receiptRow.tx_signature || null,
+        actorId,
+        appliedAt: new Date().toISOString(),
+      })
+    );
+
+    return { success: true, guildId, planKey, billingInterval, currentPeriodEnd: periodEnd };
+  }
+
+  async autoVerifyAndApplyReceipt(receiptId, actorId = 'billing-auto-approval') {
+    const id = Number(receiptId);
+    if (!Number.isFinite(id) || id <= 0) return { success: false, message: 'Valid receiptId is required' };
+    const receipt = db.prepare('SELECT * FROM crypto_payment_receipts WHERE id = ? LIMIT 1').get(id);
+    if (!receipt) return { success: false, message: 'Receipt not found' };
+
+    const destinationWallet = this.getBillingReceiveWallet();
+    if (!destinationWallet) {
+      return { success: true, autoProcessed: false, status: 'pending', reason: 'Billing destination wallet is not configured' };
+    }
+
+    const verify = await this.verifyCryptoReceiptOnChain({ receiptId: id, force: true });
+    if (!verify.success) {
+      return { success: true, autoProcessed: false, status: 'pending', reason: verify.message || 'On-chain verification failed' };
+    }
+
+    if (!verify.verified) {
+      return {
+        success: true,
+        autoProcessed: false,
+        status: 'pending',
+        reason: verify.reason || 'Transaction does not match quote yet',
+        details: verify.details || null,
+      };
+    }
+
+    const approve = this.setCryptoReceiptStatus({ id, status: 'approved' });
+    if (!approve.success) return { success: false, message: approve.message || 'Failed to mark receipt approved' };
+
+    const entitlement = this.applyApprovedReceiptEntitlement(approve.receipt, actorId);
+    if (!entitlement.success) return { success: false, message: entitlement.message || 'Failed to apply entitlement' };
+
+    return {
+      success: true,
+      autoProcessed: true,
+      status: 'approved',
+      reason: 'Receipt verified and plan activated automatically',
+      entitlement,
+      verification: verify.details || null,
+    };
   }
 
   getExpectedPlanUsd(planKey, billingInterval = 'monthly') {

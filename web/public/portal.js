@@ -18191,7 +18191,16 @@ async function submitCryptoPaymentReceipt() {
       throw new Error(data?.message || data?.error?.message || `HTTP ${res.status}`);
     }
 
-    showSuccess('Crypto receipt submitted. Superadmin will review it shortly.');
+    const auto = data?.data?.autoProcess || data?.autoProcess || null;
+    if (auto?.autoProcessed && String(auto?.status || '').toLowerCase() === 'approved') {
+      const nextPlan = auto?.entitlement?.planKey ? String(auto.entitlement.planKey).toUpperCase() : 'selected plan';
+      showSuccess(`Payment verified on-chain. Plan upgraded to ${nextPlan}.`);
+      loadCurrentPlan().catch(() => {});
+    } else if (auto?.reason) {
+      showSuccess(`Receipt submitted. ${auto.reason}`);
+    } else {
+      showSuccess('Crypto receipt submitted. Superadmin will review it shortly.');
+    }
     const txInput = document.getElementById('billingCryptoTxSignature');
     const walletInput = document.getElementById('billingCryptoSenderWallet');
     const quoteInput = document.getElementById('billingCryptoQuoteToken');
@@ -18203,6 +18212,7 @@ async function submitCryptoPaymentReceipt() {
     const amountInput = document.getElementById('billingCryptoAmount');
     if (amountInput) amountInput.value = '';
     billingCryptoQuoteState = null;
+    setBillingQuoteUiState(false);
   } catch (error) {
     showError(`Failed to submit receipt: ${error?.message || 'unknown error'}`);
   }
@@ -18239,6 +18249,7 @@ async function prepareBillingCryptoQuote() {
     billingCryptoQuoteState = data?.quote || null;
     if (quoteAmountEl) quoteAmountEl.value = String(data?.quote?.tokenAmount ?? '');
     if (quoteTokenEl) quoteTokenEl.value = String(data?.quoteToken || '');
+    setBillingQuoteUiState(true);
     if (quoteSummary) {
       const q = data?.quote || {};
       const expires = q?.expiresAt ? new Date(q.expiresAt).toLocaleTimeString() : 'soon';
@@ -18369,18 +18380,18 @@ async function loadCurrentPlan() {
           <div><strong>On-chain verification:</strong> ${onchainVerificationEnabled ? 'enabled' : 'manual review only'}</div>
         </div>
         <div class="billing-form-grid">
-          <label class="billing-field billing-field--span2"><span>TX Signature</span><input id="billingCryptoTxSignature" type="text" placeholder="Transaction signature"></label>
+          <label class="billing-field billing-field--span2"><span>TX Signature</span><input id="billingCryptoTxSignature" type="text" placeholder="Generate quote first" disabled></label>
           <label class="billing-field"><span>Token</span><select id="billingCryptoToken"><option value="SOL">SOL</option><option value="USDC">USDC</option></select></label>
           <label class="billing-field"><span>Interval</span><select id="billingCryptoInterval"><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label>
-          <label class="billing-field billing-field--span2"><span>Sender Wallet</span><input id="billingCryptoSenderWallet" type="text" placeholder="Wallet address"></label>
+          <label class="billing-field billing-field--span2"><span>Sender Wallet</span><input id="billingCryptoSenderWallet" type="text" placeholder="Generate quote first" disabled></label>
           <label class="billing-field"><span>Plan</span><select id="billingCryptoPlan"><option value="growth">Growth</option><option value="pro">Pro</option></select></label>
           <label class="billing-field"><span>Quoted Amount</span><input id="billingCryptoAmount" type="text" readonly placeholder="Prepare quote first"></label>
           <input id="billingCryptoQuoteToken" type="hidden" value="">
           <button class="btn-secondary billing-submit-btn" onclick="prepareBillingCryptoQuote()">Prepare Quote</button>
-          <button class="btn-primary billing-submit-btn" onclick="submitCryptoPaymentReceipt()">Submit</button>
+          <button id="billingCryptoSubmitBtn" class="btn-primary billing-submit-btn" onclick="submitCryptoPaymentReceipt()" disabled>Submit</button>
         </div>
-        <div id="billingCryptoQuoteSummary" class="billing-panel__hint">No active quote yet. Prepare quote to lock amount for 5 minutes.</div>
-        <div class="billing-panel__hint">After submission, receipt goes to Superadmin Billing queue for approval/rejection.</div>
+        <div id="billingCryptoQuoteSummary" class="billing-panel__hint">Step 1: Prepare a quote to lock amount for 5 minutes.</div>
+        <div id="billingCryptoFlowHint" class="billing-panel__hint">Step 2: Pay that exact amount. Step 3: Submit TX for automatic verification and plan activation.</div>
       </div>
       <div class="billing-panel">
         <div class="billing-panel__title">Payment History</div>
@@ -18392,8 +18403,25 @@ async function loadCurrentPlan() {
       const preferredInterval = document.getElementById('billingAnnualToggle')?.checked ? 'yearly' : 'monthly';
       intervalSelect.value = preferredInterval;
     }
+    setBillingQuoteUiState(false);
     card.style.display = 'block';
   } catch(e) { /* no plan API yet, silent fail */ }
+}
+
+function setBillingQuoteUiState(hasQuote) {
+  const unlocked = !!hasQuote;
+  const txInput = document.getElementById('billingCryptoTxSignature');
+  const senderInput = document.getElementById('billingCryptoSenderWallet');
+  const submitBtn = document.getElementById('billingCryptoSubmitBtn');
+  if (txInput) {
+    txInput.disabled = !unlocked;
+    txInput.placeholder = unlocked ? 'Paste transaction signature after payment' : 'Generate quote first';
+  }
+  if (senderInput) {
+    senderInput.disabled = !unlocked;
+    senderInput.placeholder = unlocked ? 'Wallet used to send payment' : 'Generate quote first';
+  }
+  if (submitBtn) submitBtn.disabled = !unlocked;
 }
 
 // ==================== SYSTEM MONITOR ====================

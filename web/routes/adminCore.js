@@ -338,9 +338,13 @@ function createAdminCoreRouter({
     }
   });
 
-  router.post('/billing/crypto-receipts', adminAuthMiddleware, (req, res) => {
+  router.post('/billing/crypto-receipts', adminAuthMiddleware, async (req, res) => {
     try {
       const body = req.body || {};
+      const quoteToken = typeof body.quoteToken === 'string' ? body.quoteToken.trim() : '';
+      if (!quoteToken) {
+        return res.status(400).json(toErrorResponse('Prepare a payment quote before submitting a transaction signature.', 'VALIDATION_ERROR'));
+      }
       const result = billingService.submitCryptoReceipt(req.guildId, {
         txSignature: body.txSignature,
         amount: body.amount,
@@ -348,12 +352,26 @@ function createAdminCoreRouter({
         senderWallet: body.senderWallet,
         planKey: body.planKey,
         billingInterval: body.billingInterval,
-        quoteToken: body.quoteToken,
+        quoteToken,
       });
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to submit payment receipt', 'VALIDATION_ERROR'));
       }
-      res.json(toSuccessResponse(result));
+      let autoProcess = null;
+      if (quoteToken) {
+        const submitted = billingService.listCryptoReceiptsByGuild(req.guildId, { limit: 25 });
+        const submittedRows = Array.isArray(submitted?.receipts) ? submitted.receipts : [];
+        const txSignature = String(body.txSignature || '').trim();
+        const matched = submittedRows.find((row) => String(row?.txSignature || '').trim() === txSignature)
+          || submittedRows[0];
+        if (matched?.id) {
+          autoProcess = await billingService.autoVerifyAndApplyReceipt(matched.id, 'tenant-self-serve-billing');
+        }
+      }
+      res.json(toSuccessResponse({
+        ...result,
+        autoProcess,
+      }));
     } catch (error) {
       logger.error('Error submitting billing crypto receipt:', error);
       res.status(500).json(toErrorResponse('Internal server error'));

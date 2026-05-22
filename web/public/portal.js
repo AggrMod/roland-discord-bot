@@ -2023,6 +2023,7 @@ function updateSidebarModuleNav() {
     { id: 'sidebarNavTokenActivity', module: 'tokentracker' },
     { id: 'mobileNavTokenActivity', module: 'tokentracker' },
     { id: 'sidebarNavEngagement', module: 'engagement' },
+    { id: 'mobileNavEngagement', module: 'engagement' },
     { id: 'sidebarNavHeist', module: 'heist' },
     { id: 'mobileNavHeist', module: 'heist' },
     // Plans nav handled separately (superadmin-only)

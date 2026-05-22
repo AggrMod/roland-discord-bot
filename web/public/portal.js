@@ -9713,6 +9713,10 @@ function removeSuperadmin(userId) {
 }
 
 async function saveMicroVerifySettings() {
+  if (!isSuperadmin) {
+    showError('Superadmin access required.');
+    return;
+  }
   const enabled = !!document.getElementById('sa_microVerifyEnabled')?.checked;
   const receiveWallet = document.getElementById('sa_verificationReceiveWallet')?.value?.trim() || '';
   const ttl = parseInt(document.getElementById('sa_verifyTtlMinutes')?.value) || 15;
@@ -9748,6 +9752,10 @@ async function saveMicroVerifySettings() {
 }
 
 async function saveAiProviderSettings() {
+  if (!isSuperadmin) {
+    showError('Superadmin access required.');
+    return;
+  }
   const openaiApiKey = document.getElementById('sa_openaiApiKey')?.value?.trim() || '';
   const geminiApiKey = document.getElementById('sa_geminiApiKey')?.value?.trim() || '';
   const clearOpenaiApiKey = !!document.getElementById('sa_openaiApiKeyClear')?.checked;
@@ -9790,6 +9798,10 @@ async function saveAiProviderSettings() {
 }
 
 async function saveXProviderSettings() {
+  if (!isSuperadmin) {
+    showError('Superadmin access required.');
+    return;
+  }
   const xClientId = document.getElementById('sa_xClientId')?.value?.trim() || '';
   const xClientSecret = document.getElementById('sa_xClientSecret')?.value?.trim() || '';
   const xBearerToken = document.getElementById('sa_xBearerToken')?.value?.trim() || '';
@@ -9830,6 +9842,10 @@ async function saveXProviderSettings() {
 }
 
 async function saveChainEmojiMap() {
+  if (!isSuperadmin) {
+    showError('Superadmin access required.');
+    return;
+  }
   const chains = ['solana', 'usdc', 'ethereum', 'base', 'polygon', 'arbitrum', 'optimism', 'bsc', 'avalanche'];
   const chainEmojiMap = {};
   chains.forEach(chain => {
@@ -9861,6 +9877,10 @@ async function saveChainEmojiMap() {
 }
 
 async function saveBillingSettings() {
+  if (!isSuperadmin) {
+    showError('Superadmin access required.');
+    return;
+  }
   const billingReceiveWallet = document.getElementById('sa_billingReceiveWallet')?.value?.trim() || '';
   const billingSupportUrl = document.getElementById('sa_billingSupportUrl')?.value?.trim() || '';
   const billingOnchainVerifyEnabled = !!document.getElementById('sa_billingOnchainVerifyEnabled')?.checked;
@@ -9891,6 +9911,10 @@ async function saveBillingSettings() {
 }
 
 async function replayNftActivityTx() {
+  if (!isSuperadmin) {
+    showError('Superadmin access required.');
+    return;
+  }
   const el = document.getElementById('sa_nftReplayTx');
   const txSignature = String(el?.value || '').trim();
   if (!txSignature) {

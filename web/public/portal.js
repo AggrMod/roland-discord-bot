@@ -12835,6 +12835,14 @@ async function populateChannelSelect(selectId, selectedValue) {
 // ==================== GOVERNANCE SETTINGS ====================
 
 async function saveGovernanceSettings() {
+  if (!(isAdmin || isSuperadmin)) {
+    showError('Admin permissions required.');
+    return;
+  }
+  if (!activeGuildId) {
+    showError('Select a server first to save governance settings.');
+    return;
+  }
   const payload = {
     quorumPercentage: parseFloat(document.getElementById('gov_quorumPercentage')?.value) || 0,
     supportThreshold: parseInt(document.getElementById('gov_supportThreshold')?.value) || 0,
@@ -20171,6 +20179,14 @@ function onSidebarSearch(query) {
 async function loadWelcomeSettingsSection() {
   const wrap = document.getElementById('welcomeSettingsPanel');
   if (!wrap) return;
+  if (!(isAdmin || isSuperadmin)) {
+    wrap.innerHTML = '<div style="color:var(--text-secondary);">Admin permissions required.</div>';
+    return;
+  }
+  if (!activeGuildId) {
+    wrap.innerHTML = '<div style="color:var(--text-secondary);">Select a server first to configure welcome settings.</div>';
+    return;
+  }
   wrap.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading welcome settings...</p></div>';
   try {
     const headers = buildTenantRequestHeaders();
@@ -20356,6 +20372,14 @@ async function loadWelcomeSettingsSection() {
 
 async function saveWelcomeSettings() {
   try {
+    if (!(isAdmin || isSuperadmin)) {
+      showError('Admin permissions required.');
+      return;
+    }
+    if (!activeGuildId) {
+      showError('Select a server first to save welcome settings.');
+      return;
+    }
     const roleSelect = document.getElementById('welcome_auto_roles');
     const roleIds = roleSelect
       ? Array.from(roleSelect.selectedOptions || []).map(opt => String(opt.value || '').trim()).filter(Boolean)

@@ -3206,6 +3206,49 @@ function renderWallets(options = {}) {
       </div>
     </div>
   `;
+  const delegatedWallets = Array.isArray(userData?.delegatedWallets) ? userData.delegatedWallets : [];
+  const delegatedRows = delegatedWallets.length
+    ? delegatedWallets.map((entry) => {
+      const cold = String(entry?.coldWalletAddress || '').trim();
+      const delegate = String(entry?.delegateWalletAddress || '').trim();
+      const expiresAt = entry?.expiresAt ? formatDate(new Date(entry.expiresAt)) : 'No expiry';
+      return `
+        <div class="wallet-item" style="border-left:3px solid rgba(99,102,241,0.55);">
+          <div class="wallet-info">
+            <div class="wallet-address">${escapeHtml(cold)}</div>
+            <div class="wallet-meta">
+              <span>Delegated via ${escapeHtml(delegate || 'Unknown')}</span>
+              <span>${escapeHtml(expiresAt)}</span>
+            </div>
+          </div>
+          <div class="wallet-actions">
+            <button class="btn-danger" onclick="revokeDelegatedWallet('${escapeJsString(cold)}')">
+              <span>&#10006;</span>
+              <span>Revoke</span>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('')
+    : '<div style="color:var(--text-secondary);font-size:0.86em;">No delegated cold wallets configured.</div>';
+  const delegationCard = `
+    <div class="card" style="margin-top:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div>
+          <div style="font-weight:700;color:#e0e7ff;">Cold Wallet Delegation</div>
+          <div style="color:var(--text-secondary);font-size:0.84em;margin-top:4px;">
+            Add a cold wallet to include holdings in verification while keeping only a hot delegate wallet linked to Discord.
+          </div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-top:12px;">
+        <input id="delegationColdWalletInput" type="text" placeholder="Cold wallet address" style="padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+        <input id="delegationDelegateWalletInput" type="text" placeholder="Delegate wallet (optional, defaults to primary)" style="padding:10px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border-color);color:var(--text-primary);">
+        <button class="btn-primary" onclick="addDelegatedWallet()">Add</button>
+      </div>
+      <div style="margin-top:12px;display:grid;gap:8px;">${delegatedRows}</div>
+    </div>
+  `;
 
   if (!userData.wallets || userData.wallets.length === 0) {
     container.innerHTML = `
@@ -3221,6 +3264,7 @@ function renderWallets(options = {}) {
           </button>
         </div>
       </div>
+      ${delegationCard}
     `;
     return;
   }
@@ -3252,7 +3296,70 @@ function renderWallets(options = {}) {
       </div>
     </div>
   `;
-  }).join('') + '</div>';
+  }).join('') + '</div>' + delegationCard;
+}
+
+async function addDelegatedWallet() {
+  try {
+    const discordId = String(userData?.user?.discordId || '').trim();
+    if (!discordId) {
+      showError('Please log in first.');
+      return;
+    }
+    const coldInput = document.getElementById('delegationColdWalletInput');
+    const delegateInput = document.getElementById('delegationDelegateWalletInput');
+    const coldWalletAddress = String(coldInput?.value || '').trim();
+    const delegateWalletAddress = String(delegateInput?.value || '').trim();
+    if (!coldWalletAddress) {
+      showError('Cold wallet address is required.');
+      return;
+    }
+    const res = await fetch(`/api/wallets/${encodeURIComponent(discordId)}/delegations`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({ coldWalletAddress, delegateWalletAddress: delegateWalletAddress || undefined }),
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json?.error?.message || json?.message || 'Failed to add delegation');
+    }
+    showSuccess('Delegated wallet added.');
+    await loadPortal();
+  } catch (error) {
+    showError(error?.message || 'Failed to add delegated wallet');
+  }
+}
+
+function revokeDelegatedWallet(coldWalletAddress) {
+  const short = String(coldWalletAddress || '').trim();
+  showConfirmModal(
+    'Revoke Delegation',
+    `Revoke delegated cold wallet ${short.slice(0, 8)}...${short.slice(-8)}?`,
+    async () => {
+      try {
+        const discordId = String(userData?.user?.discordId || '').trim();
+        if (!discordId) {
+          showError('Please log in first.');
+          return;
+        }
+        const res = await fetch(`/api/wallets/${encodeURIComponent(discordId)}/delegations/${encodeURIComponent(short)}`, {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: buildTenantRequestHeaders(),
+        });
+        const json = await res.json();
+        if (!res.ok || json.success === false) {
+          throw new Error(json?.error?.message || json?.message || 'Failed to revoke delegation');
+        }
+        showSuccess('Delegation revoked.');
+        await loadPortal();
+      } catch (error) {
+        showError(error?.message || 'Failed to revoke delegation');
+      }
+    },
+    'Revoke'
+  );
 }
 
 async function setWalletIdentityOptOut(optOut, toggleId = 'walletIdentityOptOutToggle') {

@@ -186,7 +186,7 @@ These are high-priority launch items for parity with established Web3 community 
 
 ### 1) Identity / Verification: Cold Wallet Delegation
 Priority: `P0`  
-Status: `PARTIAL (backend shipped, UI polish pending)`
+Status: `READY`
 
 Why:
 - High-value holders should be able to prove ownership without linking vault wallets directly to Discord identity.
@@ -205,7 +205,9 @@ Progress update (2026-05-22):
   - `POST /api/wallets/:discordId/delegations`
   - `DELETE /api/wallets/:discordId/delegations/:coldWalletAddress`
 - Added release-gate test: `tests/test-wallet-delegation.js`.
-- Remaining: dedicated portal UX for delegation management and explicit delegation audit stream in superadmin activity.
+- Added portal delegation UX in profile/wallet sections (add + revoke + visibility).
+- Added delegation audit writes into `superadmin_identity_audit_logs`.
+- Added automatic delegation revocation when delegate wallet is removed.
 
 ### 2) Vault: X (Twitter) Social Task Gates
 Priority: `P0`  

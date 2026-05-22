@@ -11,6 +11,29 @@ class WalletService {
     return String(value || '').trim();
   }
 
+  writeDelegationAudit({ discordId, actorId, action, delegateWalletAddress = null, coldWalletAddress = null, guildId = '', metadata = null }) {
+    try {
+      db.prepare(`
+        INSERT INTO superadmin_identity_audit_logs (
+          discord_id, wallet_address, action, actor_id, before_json, after_json, metadata_json
+        ) VALUES (?, ?, ?, ?, NULL, NULL, ?)
+      `).run(
+        String(discordId || '').trim(),
+        String(coldWalletAddress || delegateWalletAddress || '').trim() || null,
+        String(action || 'wallet_delegation_event').slice(0, 80),
+        String(actorId || discordId || '').trim() || null,
+        JSON.stringify({
+          guildId: this.normalizeGuild(guildId),
+          delegateWalletAddress: delegateWalletAddress ? String(delegateWalletAddress).trim() : null,
+          coldWalletAddress: coldWalletAddress ? String(coldWalletAddress).trim() : null,
+          ...(metadata && typeof metadata === 'object' ? metadata : {}),
+        })
+      );
+    } catch (error) {
+      logger.warn('Failed to write wallet delegation audit log:', error?.message || error);
+    }
+  }
+
   triggerVaultBackfill(discordId, guildId, walletAddress) {
     try {
       const normalizedGuildId = String(guildId || '').trim();
@@ -151,6 +174,23 @@ class WalletService {
       const result = db.prepare('DELETE FROM wallets WHERE discord_id = ? AND wallet_address = ?').run(discordId, walletAddress);
       
       if (result.changes > 0) {
+        const delegateWallet = this.normalizeWallet(walletAddress);
+        const revokedDelegations = db.prepare(`
+          UPDATE wallet_delegations
+          SET status = 'revoked', updated_at = CURRENT_TIMESTAMP
+          WHERE discord_id = ?
+            AND LOWER(delegate_wallet_address) = LOWER(?)
+            AND status = 'active'
+        `).run(discordId, delegateWallet);
+        if (Number(revokedDelegations?.changes || 0) > 0) {
+          this.writeDelegationAudit({
+            discordId,
+            actorId: discordId,
+            action: 'wallet_delegation_delegate_removed',
+            delegateWalletAddress: delegateWallet,
+            metadata: { revokedDelegationCount: Number(revokedDelegations.changes || 0) },
+          });
+        }
         logger.log(`Wallet ${walletAddress} removed from user ${discordId}`);
         return { success: true, message: 'Wallet removed successfully' };
       }
@@ -242,6 +282,14 @@ class WalletService {
         metadata ? JSON.stringify(metadata) : null
       );
       logger.log(`Delegated wallet added for ${discordId}: ${coldWallet} via ${delegateWallet}${normalizedGuildId ? ` [guild ${normalizedGuildId}]` : ''}`);
+      this.writeDelegationAudit({
+        discordId,
+        actorId: discordId,
+        action: 'wallet_delegation_add',
+        delegateWalletAddress: delegateWallet,
+        coldWalletAddress: coldWallet,
+        guildId: normalizedGuildId,
+      });
       return { success: true };
     } catch (error) {
       logger.error('Error adding delegated wallet:', error);
@@ -265,6 +313,13 @@ class WalletService {
         return { success: false, message: 'Delegation not found' };
       }
       logger.log(`Delegated wallet revoked for ${discordId}: ${coldWallet}${normalizedGuildId ? ` [guild ${normalizedGuildId}]` : ''}`);
+      this.writeDelegationAudit({
+        discordId,
+        actorId: discordId,
+        action: 'wallet_delegation_revoke',
+        coldWalletAddress: coldWallet,
+        guildId: normalizedGuildId,
+      });
       return { success: true };
     } catch (error) {
       logger.error('Error revoking delegated wallet:', error);
@@ -324,3 +379,8 @@ class WalletService {
 }
 
 module.exports = new WalletService();
+
+
+
+
+

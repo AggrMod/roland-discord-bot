@@ -299,6 +299,8 @@ img { max-width: 100%; height: auto; display: block; }
 .pricing-card .plan-features { list-style: none; flex: 1; margin-bottom: 24px; }
 .pricing-card .plan-features li { padding: 6px 0; font-size: 0.88rem; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
 .pricing-card .plan-features li::before { content: '\2713'; color: var(--success); font-weight: 700; }
+.pricing-card .plan-features li.excluded { color: var(--text-muted); opacity: 0.72; }
+.pricing-card .plan-features li.excluded::before { content: '\2715'; color: #f87171; }
 
 /* ---- CTA Section ---- */
 .cta-section {

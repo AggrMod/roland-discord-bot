@@ -17345,6 +17345,15 @@ async function loadUserTicketOverview() {
 async function loadTicketingView(targetContainerId = 'adminTicketingContent') {
   const container = document.getElementById(targetContainerId);
   if (!container) return;
+  if (!activeGuildId) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-title">Select a server first</div>
+        <div class="empty-state-message">Ticketing settings are tenant-scoped. Choose a server to manage categories, panel, and settings.</div>
+      </div>
+    `;
+    return;
+  }
 
   container.innerHTML = `
     <div style="display:flex;gap:8px;margin-bottom:var(--space-4);flex-wrap:wrap;">
@@ -18292,15 +18301,24 @@ async function prepareBillingCryptoQuote() {
 }
 
 async function loadCurrentPlan() {
+  const card = document.getElementById('currentPlanCard');
+  const content = document.getElementById('currentPlanContent');
+  if (!card || !content) return;
+  if (!activeGuildId) {
+    content.innerHTML = '<div style="color:var(--text-secondary);font-size:0.88em;">Select a server first to view billing and plan details.</div>';
+    card.style.display = 'block';
+    return;
+  }
+
   try {
     const res = await fetch('/api/admin/plan', { credentials: 'include', headers: buildTenantRequestHeaders() });
-    if (!res.ok) return;
+    if (!res.ok) {
+      content.innerHTML = '<div style="color:#fca5a5;font-size:0.88em;">Could not load plan details right now. Please try again.</div>';
+      card.style.display = 'block';
+      return;
+    }
     const data = await res.json();
     currentPlanSnapshot = data;
-
-    const card = document.getElementById('currentPlanCard');
-    const content = document.getElementById('currentPlanContent');
-    if (!card || !content) return;
 
     const record = getServerRecord(activeGuildId);
     const planName = getTenantPlanLabel(data.plan || 'starter');
@@ -18432,7 +18450,10 @@ async function loadCurrentPlan() {
     }
     setBillingQuoteUiState(false);
     card.style.display = 'block';
-  } catch(e) { /* no plan API yet, silent fail */ }
+  } catch (e) {
+    content.innerHTML = `<div style="color:#fca5a5;font-size:0.88em;">Failed to load billing: ${escapeHtml(String(e?.message || 'unknown error'))}</div>`;
+    card.style.display = 'block';
+  }
 }
 
 function setBillingQuoteUiState(hasQuote) {

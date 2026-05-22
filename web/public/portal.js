@@ -7087,6 +7087,12 @@ function hideAllAdminCards() {
 }
 
 let _envStatusCache = null;
+function isMockModeEnabled() {
+  if (!_envStatusCache || typeof _envStatusCache !== 'object') return false;
+  const entries = Object.values(_envStatusCache);
+  return entries.some((entry) => !!entry?.mockMode);
+}
+
 async function loadEnvStatusBar() {
   const bar = document.getElementById('adminEnvStatusBar');
   if (!bar) return;
@@ -7547,6 +7553,7 @@ function renderTenantDetailPanel(tenant, tenantLimits = null, workspaceTenantTab
   const showControlsSection = forcePlanControls;
   const showModulesSection = forceModulesControls;
   const showBrandingSection = forceBranding;
+  const allowTenantMockData = isMockModeEnabled();
 
   const billing = tenant.billing || null;
   const billingStatus = String(billing?.subscriptionStatus || 'unknown').toLowerCase();
@@ -7726,6 +7733,7 @@ function renderTenantDetailPanel(tenant, tenantLimits = null, workspaceTenantTab
               <option value="suspended"${String(tenant.status || 'active') === 'suspended' ? ' selected' : ''}>Suspended</option>
             </select>
           </label>
+          ${allowTenantMockData ? `
           <div style="display:flex; align-items:center; justify-content:space-between; margin-top:12px; padding:10px 12px; border:1px solid rgba(99,102,241,0.16); border-radius:10px; background:rgba(14,23,44,0.45);">
             <div style="color:#e0e7ff; font-size:0.9em; font-weight:600;">Tenant Mock Data</div>
             <label style="position:relative;display:inline-block;width:44px;height:24px;">
@@ -7737,6 +7745,7 @@ function renderTenantDetailPanel(tenant, tenantLimits = null, workspaceTenantTab
           <div style="margin-top:8px; text-align:right;">
             <button class="btn-secondary" id="tenantMockDataSaveBtn" onclick="saveTenantMockData()" style="padding:8px 14px;">Save Mock Data</button>
           </div>
+          ` : ''}
           <div style="margin-top:12px; padding:10px 12px; border:1px solid rgba(99,102,241,0.16); border-radius:10px; background:rgba(14,23,44,0.45); color:#c9d6ff; font-size:0.85em;">
             <div style="font-weight:600; margin-bottom:8px;">Billing Snapshot</div>
             <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px;">
@@ -9444,6 +9453,10 @@ async function saveTenantStatus() {
 
 async function saveTenantMockData() {
   if (!selectedTenantGuildId) return;
+  if (!isMockModeEnabled()) {
+    showError('Tenant mock data is disabled in live mode.');
+    return;
+  }
 
   const input = document.getElementById('tenantMockDataSwitch');
   const btn = document.getElementById('tenantMockDataSaveBtn');

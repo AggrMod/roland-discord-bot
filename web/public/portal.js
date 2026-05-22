@@ -18027,8 +18027,8 @@ async function updatePlanPrices() {
     const featureRows = (Array.isArray(plan.features) ? plan.features : []).map(f => {
       const included = f.included === true;
       const icon = included
-        ? `<span style="color:#4ade80;font-size:1em;line-height:1;flex-shrink:0;">âœ“</span>`
-        : `<span style="color:rgba(148,163,184,0.35);font-size:1em;line-height:1;flex-shrink:0;">âœ•</span>`;
+        ? `<span style="color:#4ade80;font-size:1em;line-height:1;flex-shrink:0;">&#10003;</span>`
+        : `<span style="color:rgba(148,163,184,0.35);font-size:1em;line-height:1;flex-shrink:0;">&#10005;</span>`;
       return `<li style="opacity:${included ? '1' : '0.5'};">${icon}<span>${escapeHtml(f.label)}</span></li>`;
     }).join('');
 
@@ -18041,7 +18041,7 @@ async function updatePlanPrices() {
             <span class="plan-price-amount">${isContactPlan ? '' : '$'}${priceText}</span>
             <span class="plan-price-period">${period}</span>
           </div>
-          ${annualTotal ? `<div class="plan-annual-note">Billed as ${annualTotal} Â· Save 15%</div>` : ''}
+          ${annualTotal ? `<div class="plan-annual-note">Billed as ${annualTotal} &middot; Save 15%</div>` : ''}
         </div>
         <ul class="plan-features">${featureRows}</ul>
         <div class="plan-cta">

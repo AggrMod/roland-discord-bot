@@ -6721,7 +6721,7 @@ function showNotification(message, type = 'info') {
   const toast = document.createElement('div');
   toast.className = 'toast-notification';
   const colors = { success: '#10b981', error: '#ef4444', info: '#3b82f6', warning: '#f59e0b' };
-  const icons = { success: 'âœ“', error: 'âœ•', info: 'â„¹', warning: 'âš ' };
+  const icons = { success: 'OK', error: 'X', info: 'i', warning: '!' };
   toast.style.cssText = `
     position:fixed; top:24px; right:24px; z-index:9999;
     padding:14px 20px; border-radius:10px; max-width:400px;
@@ -7299,6 +7299,21 @@ function reportAdminUiTelemetry(event, payload = {}) {
       body: JSON.stringify({ event: normalizedEvent, payload }),
     }).catch(() => {});
   } catch (_error) {}
+}
+
+function getGuildPilotSupportUrl() {
+  const candidates = [
+    currentPlanSnapshot?.renewal?.supportUrl,
+    window?.GUILDPILOT_SUPPORT_URL,
+    window?.PORTAL_SUPPORT_URL,
+    'https://discord.gg/guildpilot',
+  ];
+  for (const value of candidates) {
+    const url = String(value || '').trim();
+    if (!url) continue;
+    if (/^https?:\/\//i.test(url)) return url;
+  }
+  return '';
 }
 
 function reportAdminUiSaveFailure(action, error, extra = {}) {
@@ -18104,7 +18119,7 @@ function handlePlanCta(action) {
   if (action === 'upgrade_pro') targetPlan = 'pro';
 
   if (action === 'contact_enterprise') {
-    const support = currentPlanSnapshot?.renewal?.supportUrl;
+    const support = getGuildPilotSupportUrl();
     if (support) {
       window.open(support, '_blank', 'noopener,noreferrer');
       return;

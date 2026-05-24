@@ -11,8 +11,12 @@
     "audit": "npm audit --production",
     "test": "node scripts/release-gate.js",
     "check:help-parity": "node scripts/check-help-parity.js",
+    "check:test-coverage-matrix": "node scripts/check-test-coverage-matrix.js",
     "check:release-gate": "node scripts/release-gate.js",
-    "check:missions-smoke": "node tests/test-heist-v1-flow.js"
+    "check:missions-smoke": "node tests/test-heist-v1-flow.js",
+    "qa:signoff:start": "node tools/qa-signoff-collab/server.js",
+    "test:v1:full": "node scripts/test-v1-complete.js",
+    "test:v1:plan-sequence": "node scripts/test-v1-plan-sequence.js"
   },
   "dependencies": {
     "@solana/web3.js": "^1.95.8",

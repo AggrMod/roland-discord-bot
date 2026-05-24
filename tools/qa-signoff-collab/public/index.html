@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GuildPilot V1 QA Signoff</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <h1>GuildPilot V1 QA Signoff</h1>
+      <p class="sub">Collaborative signoff board (standalone service, separate from bot runtime).</p>
+      <div class="controls">
+        <input id="testerName" type="text" placeholder="Your name" />
+        <input id="adminToken" type="password" placeholder="Admin token (if required)" />
+        <button id="refreshBtn">Refresh</button>
+        <button id="exportBtn">Download JSON</button>
+        <button id="reportBtn">Generate Findings List</button>
+      </div>
+      <div id="summary" class="summary"></div>
+      <p id="statusText" class="status"></p>
+    </section>
+
+    <section class="module">
+      <div class="module-head"><h2 class="module-title">Findings Register</h2></div>
+      <div class="controls" style="margin-bottom:8px;">
+        <input id="findingModuleId" type="text" placeholder="module_id (e.g. vault)" />
+        <input id="findingTitle" type="text" placeholder="Finding title" style="min-width:260px;" />
+        <select id="findingSeverity">
+          <option value="low">LOW</option>
+          <option value="medium" selected>MEDIUM</option>
+          <option value="high">HIGH</option>
+          <option value="critical">CRITICAL</option>
+        </select>
+        <select id="findingDecision">
+          <option value="undecided">Undecided</option>
+          <option value="v1">Implement for V1</option>
+          <option value="roadmap">Move to Roadmap</option>
+        </select>
+        <select id="findingStatus">
+          <option value="open">Open</option>
+          <option value="in_progress">In Progress</option>
+          <option value="done">Done</option>
+        </select>
+        <input id="findingOwner" type="text" placeholder="Owner" />
+      </div>
+      <textarea id="findingDetails" placeholder="Details / acceptance impact / evidence"></textarea>
+      <div class="controls" style="margin-top:8px;"><button id="addFindingBtn">Add Finding</button></div>
+      <div id="findingsWrap" class="findings-wrap"></div>
+    </section>
+
+    <section id="modulesWrap" class="modules"></section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

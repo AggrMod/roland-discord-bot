@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GuildPilot V1 QA Signoff (Standalone)</title>
+  <style>
+    body { margin: 0; font-family: Segoe UI, Arial, sans-serif; background: #070f26; color: #e6ecff; }
+    .wrap { max-width: 1300px; margin: 0 auto; padding: 20px; }
+    .card { background: #101d45; border: 1px solid #2b3e79; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+    h1, h2 { margin: 0 0 8px; }
+    .muted { color: #9cb0e5; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .pill { background: #16285d; border: 1px solid #3550a5; border-radius: 999px; padding: 6px 10px; font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-top: 1px solid #22366f; padding: 8px; text-align: left; vertical-align: top; }
+    th { color: #b9c7f6; font-size: 12px; text-transform: uppercase; }
+    input, select, textarea, button { border-radius: 8px; border: 1px solid #314788; background: #0c173b; color: #e6ecff; padding: 8px; }
+    textarea { width: 100%; min-height: 52px; }
+    button { cursor: pointer; background: #5562f5; border-color: #6e79ff; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>V1 QA Signoff Board (Standalone)</h1>
+      <p class="muted">Not integrated into bot runtime. Open this file directly in a browser and load the template JSON.</p>
+      <div class="row">
+        <input id="templateFile" type="file" accept="application/json" />
+        <button id="loadTemplateBtn">Load Template</button>
+        <button id="exportBtn">Export Signoff JSON</button>
+        <input id="testerName" type="text" placeholder="Default tester name" style="min-width:220px;" />
+      </div>
+      <div class="row" id="summary"></div>
+      <p class="muted" id="statusText">Load `tools/qa-signoff/signoff-template.json` to start.</p>
+    </div>
+    <div id="modules"></div>
+  </div>
+
+  <script>
+    const STATUS = ['pending', 'pass', 'fail', 'blocked', 'na'];
+    let board = { version: 'v1', updatedAt: '', modules: [] };
+
+    const byId = (id) => document.getElementById(id);
+
+    function esc(v) { return String(v || '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'); }
+
+    function updateSummary() {
+      const counts = { total: 0, pending: 0, pass: 0, fail: 0, blocked: 0, na: 0 };
+      for (const m of board.modules || []) {
+        for (const c of m.checks || []) {
+          counts.total += 1;
+          const s = String(c.status || 'pending').toLowerCase();
+          counts[s] = (counts[s] || 0) + 1;
+        }
+      }
+      byId('summary').innerHTML = [
+        `Total ${counts.total}`,
+        `Pass ${counts.pass}`,
+        `Fail ${counts.fail}`,
+        `Blocked ${counts.blocked}`,
+        `Pending ${counts.pending}`,
+        `N/A ${counts.na}`,
+      ].map((t) => `<span class="pill">${esc(t)}</span>`).join('');
+    }
+
+    function render() {
+      const wrap = byId('modules');
+      wrap.innerHTML = (board.modules || []).map((m, mi) => {
+        const rows = (m.checks || []).map((c, ci) => {
+          const opts = STATUS.map((s) => `<option value="${s}" ${String(c.status || 'pending') === s ? 'selected' : ''}>${s.toUpperCase()}</option>`).join('');
+          return `
+            <tr>
+              <td><strong>${esc(c.label || c)}</strong></td>
+              <td><select data-mi="${mi}" data-ci="${ci}" data-k="status">${opts}</select></td>
+              <td><input data-mi="${mi}" data-ci="${ci}" data-k="testedBy" value="${esc(c.testedBy || '')}" placeholder="Tester" /></td>
+              <td><textarea data-mi="${mi}" data-ci="${ci}" data-k="notes" placeholder="Notes / evidence URL">${esc(c.notes || '')}</textarea></td>
+              <td class="muted">${esc(c.updatedAt || '-')}</td>
+            </tr>`;
+        }).join('');
+        return `<div class="card"><h2>${esc(m.moduleLabel)}</h2><table><thead><tr><th>Check</th><th>Status</th><th>Tester</th><th>Notes</th><th>Updated</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      }).join('');
+      updateSummary();
+    }
+
+    function normalizeTemplate(json) {
+      const modules = (json.modules || []).map((m) => ({
+        moduleId: m.moduleId,
+        moduleLabel: m.moduleLabel,
+        checks: (m.checks || []).map((entry) => {
+          if (typeof entry === 'string') return { label: entry, status: 'pending', testedBy: '', notes: '', updatedAt: '' };
+          return {
+            label: String(entry.label || ''),
+            status: STATUS.includes(String(entry.status || '').toLowerCase()) ? String(entry.status).toLowerCase() : 'pending',
+            testedBy: String(entry.testedBy || ''),
+            notes: String(entry.notes || ''),
+            updatedAt: String(entry.updatedAt || ''),
+          };
+        })
+      }));
+      return { version: json.version || 'v1', updatedAt: json.updatedAt || '', modules };
+    }
+
+    byId('loadTemplateBtn').addEventListener('click', async () => {
+      const file = byId('templateFile').files[0];
+      if (!file) {
+        byId('statusText').textContent = 'Choose a JSON template file first.';
+        return;
+      }
+      try {
+        const raw = await file.text();
+        const parsed = JSON.parse(raw);
+        board = normalizeTemplate(parsed);
+        byId('statusText').textContent = `Template loaded: ${file.name}`;
+        render();
+      } catch (e) {
+        byId('statusText').textContent = `Failed to load template: ${e.message}`;
+      }
+    });
+
+    document.addEventListener('change', (event) => {
+      const t = event.target;
+      if (!t || !t.dataset) return;
+      const mi = Number(t.dataset.mi);
+      const ci = Number(t.dataset.ci);
+      const k = t.dataset.k;
+      if (!Number.isInteger(mi) || !Number.isInteger(ci) || !k) return;
+      const row = board.modules?.[mi]?.checks?.[ci];
+      if (!row) return;
+      row[k] = String(t.value || '');
+      if (k === 'status' && !STATUS.includes(row[k])) row[k] = 'pending';
+      if (!row.testedBy) {
+        const fallback = String(byId('testerName').value || '').trim();
+        if (fallback) row.testedBy = fallback;
+      }
+      row.updatedAt = new Date().toISOString();
+      updateSummary();
+    });
+
+    byId('exportBtn').addEventListener('click', () => {
+      const payload = { ...board, exportedAt: new Date().toISOString() };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `v1-signoff-${new Date().toISOString().replaceAll(':','-')}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      byId('statusText').textContent = 'Signoff JSON exported.';
+    });
+  </script>
+</body>
+</html>

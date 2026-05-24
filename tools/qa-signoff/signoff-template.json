@@ -1,0 +1,240 @@
+{
+  "version": "v1",
+  "updatedAt": "2026-05-24",
+  "modules": [
+    {
+      "moduleId": "welcome_onboarding",
+      "moduleLabel": "Welcome & Onboarding",
+      "checks": [
+        {
+          "label": "DM and panel verification flows work end-to-end",
+          "howToTest": "In Welcome & Onboarding: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "Captcha role add/remove flow is correct",
+          "howToTest": "In Welcome & Onboarding: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "Welcome analytics counters increment correctly",
+          "howToTest": "In Welcome & Onboarding: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        }
+      ]
+    },
+    {
+      "moduleId": "identity_verification",
+      "moduleLabel": "Identity & Verification",
+      "checks": [
+        {
+          "label": "Wallet challenge/signature verification works",
+          "howToTest": "In Identity & Verification: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "Delegated wallet behavior works and revocation removes access",
+          "howToTest": "In Identity & Verification: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "Role sync respects plan limits and edge flags",
+          "howToTest": "In Identity & Verification: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        }
+      ]
+    },
+    {
+      "moduleId": "governance_voting",
+      "moduleLabel": "Governance & Voting",
+      "checks": [
+        {
+          "label": "Proposal lifecycle create/vote/close works",
+          "howToTest": "In Governance & Voting: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "Channel posting and override behavior is consistent",
+          "howToTest": "In Governance & Voting: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        }
+      ]
+    },
+    {
+      "moduleId": "wallet_tracker",
+      "moduleLabel": "Wallet Tracker",
+      "checks": [
+        {
+          "label": "Wallet CRUD and panel posting work",
+          "howToTest": "In Wallet Tracker: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "Missing Discord permission errors are graceful",
+          "howToTest": "In Wallet Tracker: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        }
+      ]
+    },
+    {
+      "moduleId": "nft_activity",
+      "moduleLabel": "NFT Activity Tracker",
+      "checks": [
+        {
+          "label": "Webhook ingestion and deduping work under burst load",
+          "howToTest": "In NFT Activity Tracker: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "Restricted channel delivery fails safely without full outage",
+          "howToTest": "In NFT Activity Tracker: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        }
+      ]
+    },
+    {
+      "moduleId": "token_tracker",
+      "moduleLabel": "Token Tracker",
+      "checks": [
+        {
+          "label": "Tracker CRUD and event ingestion work",
+          "howToTest": "In Token Tracker: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "Plan-limit blocks return clear messages",
+          "howToTest": "In Token Tracker: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        }
+      ]
+    },
+    {
+      "moduleId": "invite_tracker",
+      "moduleLabel": "Invite Tracker",
+      "checks": [
+        {
+          "label": "Invite attribution and leaderboard is correct",
+          "howToTest": "In Invite Tracker: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "Anti-cheat heuristics prevent inflated counts",
+          "howToTest": "In Invite Tracker: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "CSV export works on large data sets",
+          "howToTest": "In Invite Tracker: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        }
+      ]
+    },
+    {
+      "moduleId": "ai_assistant",
+      "moduleLabel": "AI Assistant",
+      "checks": [
+        {
+          "label": "Plan gating is enforced (Free blocked, Pro enabled)",
+          "howToTest": "In AI Assistant: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "Usage budget and reset messaging are correct",
+          "howToTest": "In AI Assistant: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        }
+      ]
+    },
+    {
+      "moduleId": "support_tickets",
+      "moduleLabel": "Support Tickets",
+      "checks": [
+        {
+          "label": "Ticket create/routing/transcript flow works",
+          "howToTest": "In Support Tickets: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "Permission overwrite drift resolves safely",
+          "howToTest": "In Support Tickets: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        }
+      ]
+    },
+    {
+      "moduleId": "engagement_hub",
+      "moduleLabel": "Engagement Hub",
+      "checks": [
+        {
+          "label": "Discord provider free, X provider Growth+ gating is correct",
+          "howToTest": "In Engagement Hub: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "Tasks/rewards/leaderboard points accounting is correct",
+          "howToTest": "In Engagement Hub: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        }
+      ]
+    },
+    {
+      "moduleId": "minigames",
+      "moduleLabel": "Minigames",
+      "checks": [
+        {
+          "label": "Moderator/admin command permissions are correct",
+          "howToTest": "In Minigames: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "Session lifecycle is stable under concurrency",
+          "howToTest": "In Minigames: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "Wins payout into engagement ledger correctly",
+          "howToTest": "In Minigames: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        }
+      ]
+    },
+    {
+      "moduleId": "missions",
+      "moduleLabel": "Missions",
+      "checks": [
+        {
+          "label": "Template spawn/resolve/cancel flows work",
+          "howToTest": "In Missions: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "Trait/category gate interactions are correct",
+          "howToTest": "In Missions: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        }
+      ]
+    },
+    {
+      "moduleId": "vault",
+      "moduleLabel": "Vault (Must Launch)",
+      "checks": [
+        {
+          "label": "Claims lifecycle and milestones/seasons are stable",
+          "howToTest": "In Vault (Must Launch): configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "Social requirements block claim finalization when unmet",
+          "howToTest": "In Vault (Must Launch): configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "Backfill guardrails and live confirmation work",
+          "howToTest": "In Vault (Must Launch): configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        }
+      ]
+    },
+    {
+      "moduleId": "self_serve_roles",
+      "moduleLabel": "Self-Serve Roles",
+      "checks": [
+        {
+          "label": "Role panel posting/updates/reconcile works",
+          "howToTest": "In Self-Serve Roles: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "Claim/unclaim respects role hierarchy and claimability",
+          "howToTest": "In Self-Serve Roles: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        }
+      ]
+    },
+    {
+      "moduleId": "superadmin_workspace",
+      "moduleLabel": "Superadmin Workspace",
+      "checks": [
+        {
+          "label": "All workspace tabs are stable and responsive",
+          "howToTest": "In Superadmin Workspace: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "Plan/module/branding tenant operations persist with audit events",
+          "howToTest": "In Superadmin Workspace: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "label": "Billing queue and review actions work end-to-end",
+          "howToTest": "In Superadmin Workspace: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        }
+      ]
+    }
+  ]
+}

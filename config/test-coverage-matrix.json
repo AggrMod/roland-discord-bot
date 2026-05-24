@@ -1,0 +1,170 @@
+{
+  "requiredCapabilities": [
+    {
+      "id": "welcome_onboarding",
+      "label": "Welcome & Onboarding (config + execution)",
+      "tests": [
+        "tests/test-welcome-onboarding-smoke.js",
+        "tests/test-welcome-analytics-bursts.js",
+        "tests/test-welcome-image-upload-limits.js"
+      ]
+    },
+    {
+      "id": "identity_verification",
+      "label": "Identity & Verification (config + execution)",
+      "tests": [
+        "tests/test-verification-role-safety.js",
+        "tests/test-verification-role-config-validation.js",
+        "tests/test-verification-plan-limits.js",
+        "tests/test-verification-token-rule-edges.js",
+        "tests/test-verification-delegation-toggle.js",
+        "tests/test-wallet-delegation.js"
+      ]
+    },
+    {
+      "id": "governance_voting",
+      "label": "Governance & Voting",
+      "tests": [
+        "tests/test-governance-cancel-behavior.js",
+        "tests/test-governance-proposal-lifecycle.js",
+        "tests/test-governance-channel-override.js",
+        "tests/test-governance-plan-limits.js"
+      ]
+    },
+    {
+      "id": "treasury",
+      "label": "Treasury",
+      "tests": [
+        "tests/test-treasury.js",
+        "tests/test-treasury-tx-alert-validation.js"
+      ]
+    },
+    {
+      "id": "wallet_tracker",
+      "label": "Wallet Tracker",
+      "tests": [
+        "tests/test-wallet-tracker-command-dispatch.js",
+        "tests/test-wallet-tracker-race-and-scale.js",
+        "tests/test-wallet-panel-permission-drift.js"
+      ]
+    },
+    {
+      "id": "nft_activity",
+      "label": "NFT Activity Tracker",
+      "tests": [
+        "tests/test-nft-webhook-dedup-and-alerts.js",
+        "tests/test-nft-alert-permission-fallback.js",
+        "tests/test-nft-webhook-throughput-burst.js"
+      ]
+    },
+    {
+      "id": "token_tracker",
+      "label": "Token Tracker",
+      "tests": [
+        "tests/test-token-webhook-batch-aggregation.js",
+        "tests/test-token-tracker-plan-limits.js"
+      ]
+    },
+    {
+      "id": "invite_tracker",
+      "label": "Invite Tracker",
+      "tests": [
+        "tests/test-invites-command-dispatch.js",
+        "tests/test-invite-tracker-attribution-export.js",
+        "tests/test-invite-tracker-anticheat.js"
+      ]
+    },
+    {
+      "id": "points_command",
+      "label": "Points Command",
+      "tests": [
+        "tests/test-points-command-guards.js"
+      ]
+    },
+    {
+      "id": "ai_assistant",
+      "label": "AI Assistant",
+      "tests": [
+        "tests/test-aiassistant-command-gating-dispatch.js",
+        "scripts/ai-assistant-smoke.js"
+      ]
+    },
+    {
+      "id": "support_tickets",
+      "label": "Support Tickets",
+      "tests": [
+        "tests/test-ticket-tenant-safety.js",
+        "tests/test-ticket-transcript-permission-drift.js"
+      ]
+    },
+    {
+      "id": "engagement",
+      "label": "Engagement",
+      "tests": [
+        "tests/test-engagement-provider-flows.js",
+        "tests/test-engagement-streak-and-minigame-rewards.js"
+      ]
+    },
+    {
+      "id": "minigames",
+      "label": "Minigames",
+      "tests": [
+        "tests/test-minigames-router.js",
+        "tests/test-minigames-moderator-permissions.js",
+        "tests/test-minigames-session-replace-safety.js",
+        "tests/test-minigames-concurrent-session-scale.js",
+        "tests/test-battle-race-safety.js"
+      ]
+    },
+    {
+      "id": "missions",
+      "label": "Missions",
+      "tests": [
+        "tests/test-heist-command-gating.js",
+        "tests/test-heist-v1-flow.js",
+        "tests/test-heist-trait-gates-bonuses.js"
+      ]
+    },
+    {
+      "id": "vault",
+      "label": "Vault",
+      "tests": [
+        "tests/test-vault-key-tiers.js",
+        "tests/test-vault-social-gates.js",
+        "tests/test-vault-mint-reconciliation.js",
+        "tests/test-vault-backfill-ops-guardrails.js"
+      ]
+    },
+    {
+      "id": "self_serve_roles",
+      "label": "Self-Serve Roles",
+      "tests": [
+        "tests/test-role-panel-post-limit.js",
+        "tests/test-role-panel-stale-reconcile.js",
+        "tests/test-role-claim-interaction-permissions.js"
+      ]
+    },
+    {
+      "id": "moderation",
+      "label": "Moderation commands",
+      "tests": [
+        "tests/test-moderation-command-dispatch.js"
+      ]
+    },
+    {
+      "id": "config_command",
+      "label": "Config command admin dispatch",
+      "tests": [
+        "tests/test-config-command-dispatch.js"
+      ]
+    },
+    {
+      "id": "superadmin_workspace",
+      "label": "Superadmin Workspace",
+      "tests": [
+        "tests/test-superadmin-workspace-telemetry.js",
+        "tests/test-admin-user-tenant-scoping.js"
+      ]
+    }
+  ]
+}

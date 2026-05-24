@@ -17,6 +17,21 @@
         {
           "label": "Welcome analytics counters increment correctly",
           "howToTest": "In Welcome & Onboarding: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "checkId": "auto_test_welcome_onboarding_smoke_js",
+          "label": "Automated regression passes: tests/test-welcome-onboarding-smoke.js",
+          "howToTest": "Run node tests/test-welcome-onboarding-smoke.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_welcome_analytics_bursts_js",
+          "label": "Automated regression passes: tests/test-welcome-analytics-bursts.js",
+          "howToTest": "Run node tests/test-welcome-analytics-bursts.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_welcome_image_upload_limits_js",
+          "label": "Automated regression passes: tests/test-welcome-image-upload-limits.js",
+          "howToTest": "Run node tests/test-welcome-image-upload-limits.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
         }
       ]
     },
@@ -35,6 +50,36 @@
         {
           "label": "Role sync respects plan limits and edge flags",
           "howToTest": "In Identity & Verification: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "checkId": "auto_test_verification_role_safety_js",
+          "label": "Automated regression passes: tests/test-verification-role-safety.js",
+          "howToTest": "Run node tests/test-verification-role-safety.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_verification_role_config_validation_js",
+          "label": "Automated regression passes: tests/test-verification-role-config-validation.js",
+          "howToTest": "Run node tests/test-verification-role-config-validation.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_verification_plan_limits_js",
+          "label": "Automated regression passes: tests/test-verification-plan-limits.js",
+          "howToTest": "Run node tests/test-verification-plan-limits.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_verification_token_rule_edges_js",
+          "label": "Automated regression passes: tests/test-verification-token-rule-edges.js",
+          "howToTest": "Run node tests/test-verification-token-rule-edges.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_verification_delegation_toggle_js",
+          "label": "Automated regression passes: tests/test-verification-delegation-toggle.js",
+          "howToTest": "Run node tests/test-verification-delegation-toggle.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_wallet_delegation_js",
+          "label": "Automated regression passes: tests/test-wallet-delegation.js",
+          "howToTest": "Run node tests/test-wallet-delegation.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
         }
       ]
     },
@@ -49,6 +94,26 @@
         {
           "label": "Channel posting and override behavior is consistent",
           "howToTest": "In Governance & Voting: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "checkId": "auto_test_governance_cancel_behavior_js",
+          "label": "Automated regression passes: tests/test-governance-cancel-behavior.js",
+          "howToTest": "Run node tests/test-governance-cancel-behavior.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_governance_proposal_lifecycle_js",
+          "label": "Automated regression passes: tests/test-governance-proposal-lifecycle.js",
+          "howToTest": "Run node tests/test-governance-proposal-lifecycle.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_governance_channel_override_js",
+          "label": "Automated regression passes: tests/test-governance-channel-override.js",
+          "howToTest": "Run node tests/test-governance-channel-override.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_governance_plan_limits_js",
+          "label": "Automated regression passes: tests/test-governance-plan-limits.js",
+          "howToTest": "Run node tests/test-governance-plan-limits.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
         }
       ]
     },
@@ -63,6 +128,21 @@
         {
           "label": "Missing Discord permission errors are graceful",
           "howToTest": "In Wallet Tracker: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "checkId": "auto_test_wallet_tracker_command_dispatch_js",
+          "label": "Automated regression passes: tests/test-wallet-tracker-command-dispatch.js",
+          "howToTest": "Run node tests/test-wallet-tracker-command-dispatch.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_wallet_tracker_race_and_scale_js",
+          "label": "Automated regression passes: tests/test-wallet-tracker-race-and-scale.js",
+          "howToTest": "Run node tests/test-wallet-tracker-race-and-scale.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_wallet_panel_permission_drift_js",
+          "label": "Automated regression passes: tests/test-wallet-panel-permission-drift.js",
+          "howToTest": "Run node tests/test-wallet-panel-permission-drift.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
         }
       ]
     },
@@ -77,6 +157,21 @@
         {
           "label": "Restricted channel delivery fails safely without full outage",
           "howToTest": "In NFT Activity Tracker: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "checkId": "auto_test_nft_webhook_dedup_and_alerts_js",
+          "label": "Automated regression passes: tests/test-nft-webhook-dedup-and-alerts.js",
+          "howToTest": "Run node tests/test-nft-webhook-dedup-and-alerts.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_nft_alert_permission_fallback_js",
+          "label": "Automated regression passes: tests/test-nft-alert-permission-fallback.js",
+          "howToTest": "Run node tests/test-nft-alert-permission-fallback.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_nft_webhook_throughput_burst_js",
+          "label": "Automated regression passes: tests/test-nft-webhook-throughput-burst.js",
+          "howToTest": "Run node tests/test-nft-webhook-throughput-burst.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
         }
       ]
     },
@@ -91,6 +186,16 @@
         {
           "label": "Plan-limit blocks return clear messages",
           "howToTest": "In Token Tracker: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "checkId": "auto_test_token_webhook_batch_aggregation_js",
+          "label": "Automated regression passes: tests/test-token-webhook-batch-aggregation.js",
+          "howToTest": "Run node tests/test-token-webhook-batch-aggregation.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_token_tracker_plan_limits_js",
+          "label": "Automated regression passes: tests/test-token-tracker-plan-limits.js",
+          "howToTest": "Run node tests/test-token-tracker-plan-limits.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
         }
       ]
     },
@@ -109,6 +214,21 @@
         {
           "label": "CSV export works on large data sets",
           "howToTest": "In Invite Tracker: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "checkId": "auto_test_invites_command_dispatch_js",
+          "label": "Automated regression passes: tests/test-invites-command-dispatch.js",
+          "howToTest": "Run node tests/test-invites-command-dispatch.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_invite_tracker_attribution_export_js",
+          "label": "Automated regression passes: tests/test-invite-tracker-attribution-export.js",
+          "howToTest": "Run node tests/test-invite-tracker-attribution-export.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_invite_tracker_anticheat_js",
+          "label": "Automated regression passes: tests/test-invite-tracker-anticheat.js",
+          "howToTest": "Run node tests/test-invite-tracker-anticheat.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
         }
       ]
     },
@@ -123,6 +243,16 @@
         {
           "label": "Usage budget and reset messaging are correct",
           "howToTest": "In AI Assistant: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "checkId": "auto_test_aiassistant_command_gating_dispatch_js",
+          "label": "Automated regression passes: tests/test-aiassistant-command-gating-dispatch.js",
+          "howToTest": "Run node tests/test-aiassistant-command-gating-dispatch.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_ai_assistant_smoke_js",
+          "label": "Automated regression passes: scripts/ai-assistant-smoke.js",
+          "howToTest": "Run node scripts/ai-assistant-smoke.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
         }
       ]
     },
@@ -137,6 +267,16 @@
         {
           "label": "Permission overwrite drift resolves safely",
           "howToTest": "In Support Tickets: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "checkId": "auto_test_ticket_tenant_safety_js",
+          "label": "Automated regression passes: tests/test-ticket-tenant-safety.js",
+          "howToTest": "Run node tests/test-ticket-tenant-safety.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_ticket_transcript_permission_drift_js",
+          "label": "Automated regression passes: tests/test-ticket-transcript-permission-drift.js",
+          "howToTest": "Run node tests/test-ticket-transcript-permission-drift.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
         }
       ]
     },
@@ -151,6 +291,21 @@
         {
           "label": "Tasks/rewards/leaderboard points accounting is correct",
           "howToTest": "In Engagement Hub: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "checkId": "auto_test_points_command_guards_js",
+          "label": "Automated regression passes: tests/test-points-command-guards.js",
+          "howToTest": "Run node tests/test-points-command-guards.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_engagement_provider_flows_js",
+          "label": "Automated regression passes: tests/test-engagement-provider-flows.js",
+          "howToTest": "Run node tests/test-engagement-provider-flows.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_engagement_streak_and_minigame_rewards_js",
+          "label": "Automated regression passes: tests/test-engagement-streak-and-minigame-rewards.js",
+          "howToTest": "Run node tests/test-engagement-streak-and-minigame-rewards.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
         }
       ]
     },
@@ -169,6 +324,31 @@
         {
           "label": "Wins payout into engagement ledger correctly",
           "howToTest": "In Minigames: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "checkId": "auto_test_minigames_router_js",
+          "label": "Automated regression passes: tests/test-minigames-router.js",
+          "howToTest": "Run node tests/test-minigames-router.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_minigames_moderator_permissions_js",
+          "label": "Automated regression passes: tests/test-minigames-moderator-permissions.js",
+          "howToTest": "Run node tests/test-minigames-moderator-permissions.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_minigames_session_replace_safety_js",
+          "label": "Automated regression passes: tests/test-minigames-session-replace-safety.js",
+          "howToTest": "Run node tests/test-minigames-session-replace-safety.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_minigames_concurrent_session_scale_js",
+          "label": "Automated regression passes: tests/test-minigames-concurrent-session-scale.js",
+          "howToTest": "Run node tests/test-minigames-concurrent-session-scale.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_battle_race_safety_js",
+          "label": "Automated regression passes: tests/test-battle-race-safety.js",
+          "howToTest": "Run node tests/test-battle-race-safety.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
         }
       ]
     },
@@ -183,6 +363,21 @@
         {
           "label": "Trait/category gate interactions are correct",
           "howToTest": "In Missions: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "checkId": "auto_test_heist_command_gating_js",
+          "label": "Automated regression passes: tests/test-heist-command-gating.js",
+          "howToTest": "Run node tests/test-heist-command-gating.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_heist_v1_flow_js",
+          "label": "Automated regression passes: tests/test-heist-v1-flow.js",
+          "howToTest": "Run node tests/test-heist-v1-flow.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_heist_trait_gates_bonuses_js",
+          "label": "Automated regression passes: tests/test-heist-trait-gates-bonuses.js",
+          "howToTest": "Run node tests/test-heist-trait-gates-bonuses.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
         }
       ]
     },
@@ -201,6 +396,26 @@
         {
           "label": "Backfill guardrails and live confirmation work",
           "howToTest": "In Vault (Must Launch): configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "checkId": "auto_test_vault_key_tiers_js",
+          "label": "Automated regression passes: tests/test-vault-key-tiers.js",
+          "howToTest": "Run node tests/test-vault-key-tiers.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_vault_social_gates_js",
+          "label": "Automated regression passes: tests/test-vault-social-gates.js",
+          "howToTest": "Run node tests/test-vault-social-gates.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_vault_mint_reconciliation_js",
+          "label": "Automated regression passes: tests/test-vault-mint-reconciliation.js",
+          "howToTest": "Run node tests/test-vault-mint-reconciliation.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_vault_backfill_ops_guardrails_js",
+          "label": "Automated regression passes: tests/test-vault-backfill-ops-guardrails.js",
+          "howToTest": "Run node tests/test-vault-backfill-ops-guardrails.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
         }
       ]
     },
@@ -215,6 +430,21 @@
         {
           "label": "Claim/unclaim respects role hierarchy and claimability",
           "howToTest": "In Self-Serve Roles: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "checkId": "auto_test_role_panel_post_limit_js",
+          "label": "Automated regression passes: tests/test-role-panel-post-limit.js",
+          "howToTest": "Run node tests/test-role-panel-post-limit.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_role_panel_stale_reconcile_js",
+          "label": "Automated regression passes: tests/test-role-panel-stale-reconcile.js",
+          "howToTest": "Run node tests/test-role-panel-stale-reconcile.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_role_claim_interaction_permissions_js",
+          "label": "Automated regression passes: tests/test-role-claim-interaction-permissions.js",
+          "howToTest": "Run node tests/test-role-claim-interaction-permissions.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
         }
       ]
     },
@@ -233,6 +463,36 @@
         {
           "label": "Billing queue and review actions work end-to-end",
           "howToTest": "In Superadmin Workspace: configure the related setting first, execute the real user/admin flow for this check, then confirm expected behavior in Discord and API/UI responses."
+        },
+        {
+          "checkId": "auto_test_treasury_js",
+          "label": "Automated regression passes: tests/test-treasury.js",
+          "howToTest": "Run node tests/test-treasury.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_treasury_tx_alert_validation_js",
+          "label": "Automated regression passes: tests/test-treasury-tx-alert-validation.js",
+          "howToTest": "Run node tests/test-treasury-tx-alert-validation.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_moderation_command_dispatch_js",
+          "label": "Automated regression passes: tests/test-moderation-command-dispatch.js",
+          "howToTest": "Run node tests/test-moderation-command-dispatch.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_config_command_dispatch_js",
+          "label": "Automated regression passes: tests/test-config-command-dispatch.js",
+          "howToTest": "Run node tests/test-config-command-dispatch.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_superadmin_workspace_telemetry_js",
+          "label": "Automated regression passes: tests/test-superadmin-workspace-telemetry.js",
+          "howToTest": "Run node tests/test-superadmin-workspace-telemetry.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
+        },
+        {
+          "checkId": "auto_test_admin_user_tenant_scoping_js",
+          "label": "Automated regression passes: tests/test-admin-user-tenant-scoping.js",
+          "howToTest": "Run node tests/test-admin-user-tenant-scoping.js, then perform one manual Discord/UI sanity pass for the same behavior before signoff."
         }
       ]
     }

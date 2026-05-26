@@ -218,6 +218,21 @@ class ProposalService {
     this.client = client;
   }
 
+  async fetchTextChannelForGuild(channelId, expectedGuildId = '') {
+    const normalizedChannelId = String(channelId || '').trim();
+    const normalizedGuildId = String(expectedGuildId || '').trim();
+    if (!normalizedChannelId || !this.client) return null;
+
+    const channel = await this.client.channels.fetch(normalizedChannelId).catch(() => null);
+    if (!channel || !channel.isTextBased()) return null;
+
+    if (!normalizedGuildId) return channel;
+    const channelGuildId = String(channel.guildId || channel.guild?.id || '').trim();
+    if (channelGuildId && channelGuildId !== normalizedGuildId) return null;
+
+    return channel;
+  }
+
   generateProposalId() {
     const row = db.prepare(`
       SELECT COALESCE(
@@ -799,6 +814,7 @@ class ProposalService {
       const safeText = messageText.length > 1900 ? `${messageText.slice(0, 1897)}...` : messageText;
 
       const settings = settingsManager.getSettings ? settingsManager.getSettings() : {};
+      const proposalGuildId = String(proposal.guild_id || '').trim();
       const candidateAnchors = [];
       const supportingChannelId = String(proposal.channel_id || '').trim();
       const supportingMessageId = String(proposal.message_id || '').trim();
@@ -813,7 +829,7 @@ class ProposalService {
       }
 
       for (const anchor of candidateAnchors) {
-        const channel = await this.client.channels.fetch(anchor.channelId).catch(() => null);
+        const channel = await this.fetchTextChannelForGuild(anchor.channelId, proposalGuildId);
         if (!channel || !channel.isTextBased()) continue;
 
         const message = await channel.messages.fetch(anchor.messageId).catch(() => null);
@@ -857,9 +873,9 @@ class ProposalService {
       ).trim();
       if (!fallbackChannelId) return { success: false, message: 'No discussion channel configured' };
 
-      const fallbackChannel = await this.client.channels.fetch(fallbackChannelId).catch(() => null);
+      const fallbackChannel = await this.fetchTextChannelForGuild(fallbackChannelId, proposalGuildId);
       if (!fallbackChannel || !fallbackChannel.isTextBased()) {
-        return { success: false, message: 'Fallback discussion channel unavailable' };
+        return { success: false, message: 'Fallback discussion channel unavailable for this server' };
       }
 
       await fallbackChannel.send({
@@ -1154,9 +1170,17 @@ class ProposalService {
 
       const proposal = this.getProposal(proposalId);
       if (!proposal) return { success: false, message: 'Proposal not found' };
+      const proposalGuildId = String(proposal.guild_id || '').trim();
 
-      const channel = await this.client.channels.fetch(proposalsChannelId);
-      if (!channel || !channel.isTextBased()) return { success: false, message: 'Proposals channel is not text-based' };
+      const channel = await this.fetchTextChannelForGuild(proposalsChannelId, proposalGuildId);
+      if (!channel || !channel.isTextBased()) {
+        return {
+          success: false,
+          message: proposalGuildId
+            ? 'Proposals channel is missing or not part of this server'
+            : 'Proposals channel is not text-based',
+        };
+      }
 
       const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
       const supportThreshold = Number(settings.supportThreshold || 4);
@@ -1298,9 +1322,17 @@ class ProposalService {
 
       const proposal = this.getProposal(proposalId);
       if (!proposal) return { success: false, message: 'Proposal not found' };
+      const proposalGuildId = String(proposal.guild_id || '').trim();
 
-      const votingChannel = await this.client.channels.fetch(votingChannelId);
-      if (!votingChannel || !votingChannel.isTextBased()) return { success: false, message: 'Voting channel unavailable' };
+      const votingChannel = await this.fetchTextChannelForGuild(votingChannelId, proposalGuildId);
+      if (!votingChannel || !votingChannel.isTextBased()) {
+        return {
+          success: false,
+          message: proposalGuildId
+            ? 'Voting channel unavailable for this server'
+            : 'Voting channel unavailable',
+        };
+      }
 
       const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 

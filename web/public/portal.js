@@ -17867,7 +17867,7 @@ function _showCategoryForm(cat) {
         <div style="flex:0 0 140px;">
           <label style="font-size:0.85em;font-weight:600;">Emoji</label>
           <select id="catEmoji" style="width:100%;padding:6px 10px;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);margin-top:4px;">
-            ${['','','','','','','','','',''].map(e => `<option value="${e}" ${(isEdit ? (cat.emoji || '') : '') === e ? 'selected' : ''}>${e}</option>`).join('')}
+            ${['🎫','🛠️','💬','❓','📢','🧾','🐛','💡','🔐','⚙️'].map(e => `<option value="${e}" ${(isEdit ? (cat.emoji || '') : '') === e ? 'selected' : ''}>${e}</option>`).join('')}
           </select>
         </div>
         <div style="flex:1;">

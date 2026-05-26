@@ -7136,4 +7136,40 @@ footer a[href="/terms-of-service"]:hover {
   .overview-metrics-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
+
+  /* Collapse inline two/three-column rows emitted by portal.js in profile/module cards */
+  .content-area [style*="grid-template-columns:1fr 1fr"],
+  .content-area [style*="grid-template-columns: 1fr 1fr"],
+  .content-area [style*="grid-template-columns:1fr 1fr 1fr"],
+  .content-area [style*="grid-template-columns: 1fr 1fr 1fr"],
+  .content-area [style*="grid-template-columns:minmax(0,1fr) minmax(0,1fr)"],
+  .content-area [style*="grid-template-columns:minmax(0, 1fr) minmax(0, 1fr)"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  .content-area input,
+  .content-area select,
+  .content-area textarea,
+  .content-area button {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 980px) and (orientation: landscape) {
+  .top-nav {
+    padding: 8px 10px !important;
+    gap: 8px !important;
+  }
+
+  .nav-brand h1 {
+    font-size: clamp(1.3rem, 3.6vw, 1.9rem) !important;
+  }
+
+  .member-identity-tile {
+    max-width: 48vw;
+  }
+
+  .content-area {
+    padding: 10px !important;
+  }
 }

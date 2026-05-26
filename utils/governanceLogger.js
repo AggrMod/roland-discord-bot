@@ -1,6 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 const settingsManager = require('../config/settings');
 const logger = require('./logger');
+const db = require('../database/db');
 
 class GovernanceLogger {
   constructor() {
@@ -43,13 +44,34 @@ class GovernanceLogger {
     return String(process.env.GOVERNANCE_LOG_CHANNEL_ID || '').trim();
   }
 
+  resolveEventGuildId(data = {}) {
+    const explicitGuildId = String(data?.guildId || '').trim();
+    if (explicitGuildId) return explicitGuildId;
+
+    const proposalId = String(data?.proposalId || '').trim();
+    if (!proposalId) return '';
+
+    try {
+      const row = db.prepare('SELECT guild_id FROM proposals WHERE proposal_id = ?').get(proposalId);
+      return String(row?.guild_id || '').trim();
+    } catch (_error) {
+      return '';
+    }
+  }
+
   async log(eventType, data = {}) {
     try {
       const channelId = this.resolveLogChannelId(data);
       if (!channelId || !this.client) return;
+      const eventGuildId = this.resolveEventGuildId(data);
 
       const channel = await this.client.channels.fetch(channelId);
       if (!channel || !channel.isTextBased()) return;
+      const channelGuildId = String(channel.guildId || channel.guild?.id || '').trim();
+      if (eventGuildId && channelGuildId && eventGuildId !== channelGuildId) {
+        logger.warn(`Governance log dropped due to guild mismatch (event guild ${eventGuildId}, channel guild ${channelGuildId})`);
+        return;
+      }
 
       const embed = this.buildEmbed(eventType, data);
       if (!embed) return;

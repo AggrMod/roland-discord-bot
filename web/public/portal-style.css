@@ -7066,3 +7066,74 @@ footer a[href="/terms-of-service"]:hover {
     display: none !important;
   }
 }
+
+/* ==================== Responsive Stability Hotfix (V1 QA) ==================== */
+.portal-layout.sidebar-hidden {
+  grid-template-columns: 1fr !important;
+}
+
+.content-area {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+
+@media (max-width: 1200px) {
+  .portal-layout {
+    grid-template-columns: 1fr !important;
+    overflow: visible !important;
+  }
+
+  .sidebar {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .top-nav {
+    display: flex !important;
+    flex-wrap: wrap;
+    align-items: center !important;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: auto !important;
+    padding: 10px 12px !important;
+  }
+
+  .nav-brand h1 {
+    min-height: auto !important;
+    font-size: clamp(1.8rem, 8vw, 2.4rem) !important;
+    line-height: 1.05;
+  }
+
+  .nav-user {
+    width: auto;
+    margin-left: auto;
+  }
+
+  .portal-layout {
+    grid-template-columns: 1fr !important;
+    overflow: visible !important;
+  }
+
+  .content-area {
+    padding: 12px !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .dashboard-header-main {
+    min-width: 0 !important;
+  }
+
+  .dashboard-bento,
+  .dashboard-grid,
+  .module-grid,
+  .panel-modules-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .overview-metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}

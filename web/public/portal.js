@@ -19003,6 +19003,95 @@ function parseEngagementTaskTypes(text) {
     .filter(Boolean);
 }
 
+const ENGAGEMENT_TASK_OPTIONS = Object.freeze([
+  { value: 'x_like', label: 'X Like' },
+  { value: 'x_repost', label: 'X Repost' },
+  { value: 'x_reply', label: 'X Reply / Comment' },
+  { value: 'x_follow', label: 'X Follow' },
+  { value: 'x_hashtag_post', label: 'X Hashtag Post' },
+  { value: 'discord_message', label: 'Discord Message' },
+  { value: 'discord_reply', label: 'Discord Reply' },
+  { value: 'discord_reaction', label: 'Discord Reaction' },
+]);
+
+function getEngagementTaskOptionsByProvider(kind) {
+  const providerId = kind === 'hashtag' ? 'engHashtagProvider' : 'engMonitoredProvider';
+  const provider = String(document.getElementById(providerId)?.value || 'x').trim().toLowerCase();
+  if (kind === 'hashtag') {
+    return ENGAGEMENT_TASK_OPTIONS.filter((opt) => opt.value.startsWith('x_'));
+  }
+  if (provider === 'discord') {
+    return ENGAGEMENT_TASK_OPTIONS.filter((opt) => opt.value.startsWith('discord_'));
+  }
+  return ENGAGEMENT_TASK_OPTIONS.filter((opt) => opt.value.startsWith('x_'));
+}
+
+function getEngagementTaskOptionHtml(kind, selected = '') {
+  const chosen = String(selected || '').trim();
+  return getEngagementTaskOptionsByProvider(kind)
+    .map((opt) => `<option value="${escapeHtml(opt.value)}"${opt.value === chosen ? ' selected' : ''}>${escapeHtml(opt.label)}</option>`)
+    .join('');
+}
+
+function addEngagementRewardRow(kind, taskType = 'x_like', points = 10) {
+  const wrapId = kind === 'hashtag' ? 'engHashtagTaskRows' : 'engMonitoredTaskRows';
+  const wrap = document.getElementById(wrapId);
+  if (!wrap) return;
+  const row = document.createElement('div');
+  row.className = 'eng-reward-row';
+  row.style.display = 'grid';
+  row.style.gridTemplateColumns = 'minmax(0,2fr) minmax(80px,1fr) auto';
+  row.style.gap = '8px';
+  row.innerHTML = `
+    <select class="form-input" data-eng-task-type="1">
+      ${getEngagementTaskOptionHtml(kind, taskType)}
+    </select>
+    <input class="form-input" data-eng-task-points="1" type="number" min="0" step="1" value="${Number(points || 0)}" placeholder="Points">
+    <button class="btn-danger btn-sm" type="button" onclick="this.closest('.eng-reward-row')?.remove()">Remove</button>
+  `;
+  wrap.appendChild(row);
+}
+
+function syncEngagementTaskRowsForProvider(kind) {
+  const wrapId = kind === 'hashtag' ? 'engHashtagTaskRows' : 'engMonitoredTaskRows';
+  const hintId = kind === 'hashtag' ? 'engHashtagTaskHint' : 'engMonitoredTaskHint';
+  const wrap = document.getElementById(wrapId);
+  if (!wrap) return;
+  const options = getEngagementTaskOptionsByProvider(kind);
+  const allowed = new Set(options.map((opt) => opt.value));
+  Array.from(wrap.querySelectorAll('.eng-reward-row')).forEach((row) => {
+    const select = row.querySelector('[data-eng-task-type="1"]');
+    if (!select) return;
+    const current = String(select.value || '').trim();
+    select.innerHTML = options.map((opt) => `<option value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</option>`).join('');
+    select.value = allowed.has(current) ? current : (options[0]?.value || '');
+  });
+  const hintEl = document.getElementById(hintId);
+  if (hintEl && kind === 'monitored') {
+    const provider = String(document.getElementById('engMonitoredProvider')?.value || 'x').trim().toLowerCase();
+    hintEl.textContent = provider === 'discord'
+      ? 'Discord engagement tasks: message, reply, reaction.'
+      : 'X engagement tasks: likes, reposts, replies, follows.';
+  }
+}
+
+function collectEngagementRewardRows(kind) {
+  const wrapId = kind === 'hashtag' ? 'engHashtagTaskRows' : 'engMonitoredTaskRows';
+  const wrap = document.getElementById(wrapId);
+  if (!wrap) return { taskTypes: [], rewardConfig: {} };
+  const rows = Array.from(wrap.querySelectorAll('.eng-reward-row'));
+  const taskTypes = [];
+  const rewardConfig = {};
+  rows.forEach((row) => {
+    const taskType = String(row.querySelector('[data-eng-task-type="1"]')?.value || '').trim();
+    const points = Number(row.querySelector('[data-eng-task-points="1"]')?.value || 0);
+    if (!taskType) return;
+    if (!taskTypes.includes(taskType)) taskTypes.push(taskType);
+    rewardConfig[taskType] = Number.isFinite(points) && points >= 0 ? Math.floor(points) : 0;
+  });
+  return { taskTypes, rewardConfig };
+}
+
 function formatEngagementAmount(value) {
   const amount = Number(value || 0);
   const cfg = currentEngagementConfig || {};
@@ -19066,6 +19155,11 @@ async function deleteEngShopItem(itemId) {
 async function loadEngagementMonitoredAccounts() {
   const el = document.getElementById('engagementMonitoredAccountsView');
   if (!el) return;
+  const taskWrap = document.getElementById('engMonitoredTaskRows');
+  if (taskWrap && !taskWrap.querySelector('.eng-reward-row')) {
+    addEngagementRewardRow('monitored', 'x_like', 10);
+  }
+  syncEngagementTaskRowsForProvider('monitored');
   el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
   try {
     const res = await fetch('/api/admin/engagement/monitored-accounts', { credentials: 'include', headers: buildTenantRequestHeaders() });
@@ -19092,17 +19186,26 @@ async function loadEngagementMonitoredAccounts() {
 
 async function submitEngagementMonitoredAccount() {
   try {
+    const rewardRows = collectEngagementRewardRows('monitored');
     const body = {
       provider: document.getElementById('engMonitoredProvider').value,
       account_handle: document.getElementById('engMonitoredHandle').value.trim(),
       mirror_channel_id: document.getElementById('engMonitoredChannel').value.trim() || null,
-      task_types: parseEngagementTaskTypes(document.getElementById('engMonitoredTasks').value),
-      reward_config: parseEngagementJson(document.getElementById('engMonitoredRewards').value, {}),
-      requirements: parseEngagementJson(document.getElementById('engMonitoredRequirements').value, {}),
+      task_types: rewardRows.taskTypes,
+      reward_config: rewardRows.rewardConfig,
+      requirements: {},
     };
+    const commentMinLength = Number(document.getElementById('engMonitoredCommentMinLength')?.value || 0);
+    if (Number.isFinite(commentMinLength) && commentMinLength > 0) {
+      body.requirements.commentMinLength = Math.floor(commentMinLength);
+    }
     const mirrorTemplate = document.getElementById('engMonitoredMirrorTemplate')?.value?.trim() || '';
     if (mirrorTemplate) {
       body.reward_config = { ...(body.reward_config || {}), mirrorMessageTemplate: mirrorTemplate };
+    }
+    if (!Array.isArray(body.task_types) || body.task_types.length === 0) {
+      showError('Please add at least one task type.');
+      return;
     }
     const res = await fetch('/api/admin/engagement/monitored-accounts', {
       method: 'POST',
@@ -19118,7 +19221,7 @@ async function submitEngagementMonitoredAccount() {
     showSuccess('Monitored account saved.');
     loadEngagementMonitoredAccounts();
   } catch (e) {
-    showError('Reward/requirements JSON is invalid.');
+    showError('Failed to save monitored account.');
   }
 }
 
@@ -19144,6 +19247,11 @@ async function deleteEngagementMonitoredAccount(id) {
 async function loadEngagementHashtags() {
   const el = document.getElementById('engagementHashtagView');
   if (!el) return;
+  const taskWrap = document.getElementById('engHashtagTaskRows');
+  if (taskWrap && !taskWrap.querySelector('.eng-reward-row')) {
+    addEngagementRewardRow('hashtag', 'x_hashtag_post', 15);
+  }
+  syncEngagementTaskRowsForProvider('hashtag');
   el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
   try {
     const res = await fetch('/api/admin/engagement/hashtags', { credentials: 'include', headers: buildTenantRequestHeaders() });
@@ -19170,16 +19278,21 @@ async function loadEngagementHashtags() {
 
 async function submitEngagementHashtagMonitor() {
   try {
+    const rewardRows = collectEngagementRewardRows('hashtag');
     const body = {
       provider: document.getElementById('engHashtagProvider').value,
       hashtag: document.getElementById('engHashtagTag').value.trim(),
       mirror_channel_id: document.getElementById('engHashtagChannel').value.trim() || null,
-      task_types: parseEngagementTaskTypes(document.getElementById('engHashtagTasks').value),
-      reward_config: parseEngagementJson(document.getElementById('engHashtagRewards').value, {}),
+      task_types: rewardRows.taskTypes,
+      reward_config: rewardRows.rewardConfig,
     };
     const mirrorTemplate = document.getElementById('engHashtagMirrorTemplate')?.value?.trim() || '';
     if (mirrorTemplate) {
       body.reward_config = { ...(body.reward_config || {}), mirrorMessageTemplate: mirrorTemplate };
+    }
+    if (!Array.isArray(body.task_types) || body.task_types.length === 0) {
+      showError('Please add at least one task type.');
+      return;
     }
     const res = await fetch('/api/admin/engagement/hashtags', {
       method: 'POST',
@@ -19195,7 +19308,7 @@ async function submitEngagementHashtagMonitor() {
     showSuccess('Hashtag monitor saved.');
     loadEngagementHashtags();
   } catch (e) {
-    showError('Reward JSON is invalid.');
+    showError('Failed to save hashtag monitor.');
   }
 }
 

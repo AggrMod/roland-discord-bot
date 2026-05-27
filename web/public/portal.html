@@ -1089,17 +1089,28 @@
               <h3 class="card-title">📣 Monitored Accounts</h3>
               <button class="btn-primary btn-sm" onclick="submitEngagementMonitoredAccount()">Add / Update</button>
             </div>
+            <div style="font-size:0.82em;color:var(--text-muted);margin-bottom:10px;">
+              <strong>General:</strong> Provider, account handle, mirror channel, and mirror message apply to all task types below.
+            </div>
             <div class="settings-grid" style="margin-bottom:12px;">
-              <div><label class="form-label">Provider</label><select id="engMonitoredProvider" class="form-input"><option value="x">X</option><option value="discord">Discord</option></select></div>
+              <div><label class="form-label">Provider</label><select id="engMonitoredProvider" class="form-input" onchange="syncEngagementTaskRowsForProvider('monitored')"><option value="x">X</option><option value="discord">Discord</option></select></div>
               <div><label class="form-label">Account Handle</label><input id="engMonitoredHandle" class="form-input" placeholder="@account"></div>
               <div><label class="form-label">Mirror Channel</label>
                 <select id="engMonitoredChannel" class="form-input">
                   <option value="">— None —</option>
                 </select>
               </div>
-              <div><label class="form-label">Task Types</label><input id="engMonitoredTasks" class="form-input" placeholder="x_like,x_repost"></div>
-              <div style="grid-column:1 / -1;"><label class="form-label">Reward JSON</label><textarea id="engMonitoredRewards" class="form-input" rows="3" placeholder='{"x_like":10,"x_repost":20}'></textarea></div>
-              <div style="grid-column:1 / -1;"><label class="form-label">Requirements JSON</label><textarea id="engMonitoredRequirements" class="form-input" rows="2" placeholder='{"commentMinLength":20}'></textarea></div>
+              <div style="grid-column:1 / -1;">
+                <label class="form-label">Tasks & Points</label>
+                <div id="engMonitoredTaskHint" style="font-size:0.8em;color:var(--text-muted);margin-bottom:6px;">X engagement tasks: likes, reposts, replies, follows.</div>
+                <div id="engMonitoredTaskRows" style="display:grid;gap:8px;"></div>
+                <button class="btn-secondary btn-sm" type="button" onclick="addEngagementRewardRow('monitored')">+ Add Task</button>
+              </div>
+              <div>
+                <label class="form-label">Minimum reply/comment length (optional)</label>
+                <input id="engMonitoredCommentMinLength" type="number" min="0" class="form-input" placeholder="20">
+                <div style="font-size:0.76em;color:var(--text-muted);margin-top:4px;">Used for X reply tasks to reduce low-quality spam.</div>
+              </div>
               <div style="grid-column:1 / -1;"><label class="form-label">Mirror Message Template</label><input id="engMonitoredMirrorTemplate" class="form-input" placeholder="New post by @{handle}: {link}"></div>
               <div style="grid-column:1 / -1;font-size:0.8em;color:var(--text-muted);">Placeholders: {provider}, {handle}, {hashtag}, {title}, {body}, {url}, {link}</div>
             </div>
@@ -1113,16 +1124,23 @@
               <h3 class="card-title"># Hashtag Monitors</h3>
               <button class="btn-primary btn-sm" onclick="submitEngagementHashtagMonitor()">Add / Update</button>
             </div>
+            <div style="font-size:0.82em;color:var(--text-muted);margin-bottom:10px;">
+              <strong>X Engagement:</strong> Hashtag monitors are X-only and create rewardable tasks from matching posts.
+            </div>
             <div class="settings-grid" style="margin-bottom:12px;">
-              <div><label class="form-label">Provider</label><select id="engHashtagProvider" class="form-input"><option value="x">X</option></select></div>
+              <div><label class="form-label">Provider</label><select id="engHashtagProvider" class="form-input" onchange="syncEngagementTaskRowsForProvider('hashtag')"><option value="x">X</option></select></div>
               <div><label class="form-label">Hashtag</label><input id="engHashtagTag" class="form-input" placeholder="#guildpilot"></div>
               <div><label class="form-label">Mirror Channel</label>
                 <select id="engHashtagChannel" class="form-input">
                   <option value="">— None —</option>
                 </select>
               </div>
-              <div><label class="form-label">Task Types</label><input id="engHashtagTasks" class="form-input" placeholder="x_hashtag_post,x_like"></div>
-              <div style="grid-column:1 / -1;"><label class="form-label">Reward JSON</label><textarea id="engHashtagRewards" class="form-input" rows="3" placeholder='{"x_hashtag_post":15}'></textarea></div>
+              <div style="grid-column:1 / -1;">
+                <label class="form-label">Tasks & Points</label>
+                <div id="engHashtagTaskHint" style="font-size:0.8em;color:var(--text-muted);margin-bottom:6px;">X hashtag tasks: hashtag post + optional secondary actions.</div>
+                <div id="engHashtagTaskRows" style="display:grid;gap:8px;"></div>
+                <button class="btn-secondary btn-sm" type="button" onclick="addEngagementRewardRow('hashtag')">+ Add Task</button>
+              </div>
               <div style="grid-column:1 / -1;"><label class="form-label">Mirror Message Template</label><input id="engHashtagMirrorTemplate" class="form-input" placeholder="Tagged post {hashtag}: {link}"></div>
               <div style="grid-column:1 / -1;font-size:0.8em;color:var(--text-muted);">Placeholders: {provider}, {handle}, {hashtag}, {title}, {body}, {url}, {link}</div>
             </div>

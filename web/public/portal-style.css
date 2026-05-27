@@ -7173,3 +7173,38 @@ footer a[href="/terms-of-service"]:hover {
     padding: 10px !important;
   }
 }
+
+/* ==================== Engagement UX Compaction ==================== */
+#section-engagement.engagement-user-mode {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+#section-engagement.engagement-user-mode .section-header,
+#section-engagement.engagement-user-mode #engagementConfigCard {
+  grid-column: 1 / -1;
+}
+
+#section-engagement .engagement-compact-card {
+  margin: 0;
+}
+
+#section-engagement .engagement-compact-card .card-header-row {
+  margin-bottom: 6px;
+}
+
+#section-engagement .engagement-compact-card .table-row {
+  padding: 8px 10px;
+}
+
+#section-engagement .engagement-compact-card .btn-sm {
+  padding: 5px 10px;
+  font-size: 0.78rem;
+}
+
+@media (max-width: 1080px) {
+  #section-engagement.engagement-user-mode {
+    grid-template-columns: 1fr;
+  }
+}

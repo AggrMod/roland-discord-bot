@@ -2032,8 +2032,10 @@ async function redeemItem(guildId, userId, username, itemId) {
 
   try {
     const redemption = transaction();
+    const cfg = getConfig(normalizedGuildId);
+    const mustCreateTicket = !!(cfg && cfg.fulfillment_ticket_category_id);
     let fulfillment = { mode: normalizedItem.fulfillment_mode === 'manual' ? 'pending' : 'auto' };
-    if (normalizedItem.fulfillment_mode === 'manual') {
+    if (normalizedItem.fulfillment_mode === 'manual' || mustCreateTicket) {
       fulfillment = await createManualFulfillment(
         normalizedGuildId,
         redemption,

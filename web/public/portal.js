@@ -19570,6 +19570,7 @@ async function loadEngagementTasks() {
         : '<p style="color:var(--text-secondary);">No active tasks available right now.</p>';
       return;
     }
+
     const rows = data.tasks.map(task => {
       const endsAtMs = task.ends_at ? new Date(task.ends_at).getTime() : Number.NaN;
       const isExpired = String(task.status || '').toLowerCase() === 'expired'
@@ -19581,64 +19582,56 @@ async function loadEngagementTasks() {
         const verifyButton = !canAdminEngagement && !done && !isExpired
           ? `<button class="btn-secondary btn-sm" onclick="completeEngagementTask(${Number(task.id)}, '${escapeJsString(action)}')" style="padding:4px 8px;">${task.provider === 'x' ? 'Verify' : 'Complete'}</button>`
           : '';
-        return `
-          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 10px;border:1px solid rgba(99,102,241,0.18);border-radius:999px;background:rgba(15,23,42,0.45);">
+        return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 10px;border:1px solid rgba(99,102,241,0.18);border-radius:999px;background:rgba(15,23,42,0.45);">
             <span style="font-size:0.8em;color:${done ? '#86efac' : '#cbd5e1'};">${escapeHtml(formatEngagementActionLabel(action))}</span>
             <span class="status-badge ${done ? 'status-live' : 'status-paused'}" style="font-size:0.68em;">${done ? 'Done' : 'Pending'}</span>
             ${verifyButton}
-          </div>
-        `;
+          </div>`;
       }).join('');
-      const actionLinks = (() => {
-        if (task.provider !== 'x' || !task.source_post_url) return '';
-        const postId = String(task.source_post_id || '').trim();
-        const openBtn = `<a class="btn-secondary btn-sm" href="${escapeHtml(task.source_post_url)}" target="_blank" rel="noopener noreferrer">Open Post</a>`;
-        const likeBtn = `<a class="btn-secondary btn-sm" href="${escapeHtml(task.source_post_url)}" target="_blank" rel="noopener noreferrer">Like</a>`;
-        const repostBtn = postId
-          ? `<a class="btn-secondary btn-sm" href="https://x.com/intent/retweet?tweet_id=${encodeURIComponent(postId)}" target="_blank" rel="noopener noreferrer">Repost</a>`
-          : '';
-        const replyBtn = postId
-          ? `<a class="btn-secondary btn-sm" href="https://x.com/intent/tweet?in_reply_to=${encodeURIComponent(postId)}" target="_blank" rel="noopener noreferrer">Reply</a>`
-          : '';
-        return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">${openBtn}${likeBtn}${repostBtn}${replyBtn}</div>`;
-      })();
+
       const totalReward = formatEngagementAmount(Object.values(task.reward_config || {}).reduce((sum, value) => sum + Number(value || 0), 0));
       const actionsText = (task.required_actions || []).map(formatEngagementActionLabel).join(', ') || 'None';
       const statusBadge = `<span class="status-badge ${isExpired ? 'status-paused' : (task.status === 'active' ? 'status-live' : 'status-paused')}">${isExpired ? 'expired' : escapeHtml(task.status || 'active')}</span>`;
       const metaLine = `${escapeHtml(task.provider)} • ${escapeHtml(task.trigger_type)} • ${escapeHtml(totalReward)}`;
       const titleLine = `<div style="font-weight:600;">${escapeHtml(task.title || `${task.provider} task`)}</div><div style="font-size:0.78em;color:var(--text-muted);margin-top:4px;">${metaLine}</div>`;
+
       const detailBlocks = [
         isExpired ? '<div style="font-size:0.78em;color:#fca5a5;font-weight:700;">Not earnable anymore (expired)</div>' : '',
-        task.source_post_url ? `<a href="${escapeHtml(task.source_post_url)}" target="_blank" rel="noopener noreferrer" style="color:#93c5fd;font-size:0.78em;">${escapeHtml(task.source_post_url)}</a>` : '',
         task.body ? `<div style="font-size:0.8em;color:var(--text-secondary);">${escapeHtml(task.body)}</div>` : '',
-        actionLinks,
         `<div style="display:flex;gap:8px;flex-wrap:wrap;">${actionBadges || '<span style="color:var(--text-muted);font-size:0.82em;">No actions configured</span>'}</div>`,
-        canAdminEngagement ? `<div style="display:flex;gap:8px;"><button class="btn-secondary btn-sm" onclick="openEngagementRepostModal(${Number(task.id)})">Repost</button><button class="btn-danger btn-sm" onclick="deleteEngagementTask(${Number(task.id)})">Delete</button></div>` : '',
       ].filter(Boolean).join('<div style="margin-top:6px;"></div>');
-      return `
-        <tr ${isExpired ? 'style="background:rgba(127,29,29,0.14);"' : ''}>
-          <td style="padding:10px 12px;min-width:280px;">${titleLine}</td>
-          <td style="padding:10px 12px;min-width:180px;">${escapeHtml(actionsText)}</td>
-          <td style="padding:10px 12px;min-width:120px;">${statusBadge}</td>
-          <td style="padding:10px 12px;min-width:360px;">${detailBlocks}</td>
-        </tr>
-      `;
+
+      const actionControls = [
+        task.source_post_url
+          ? `<a class="btn-secondary btn-sm" href="${escapeHtml(task.source_post_url)}" target="_blank" rel="noopener noreferrer">Go to post</a>`
+          : '<span style="font-size:0.8em;color:var(--text-muted);">No source URL</span>',
+        canAdminEngagement ? `<button class="btn-secondary btn-sm" onclick="openEngagementRepostModal(${Number(task.id)})">Repost</button>` : '',
+        canAdminEngagement ? `<button class="btn-danger btn-sm" onclick="deleteEngagementTask(${Number(task.id)})">Delete</button>` : '',
+      ].filter(Boolean).join('');
+
+      return `<tr ${isExpired ? 'style="background:rgba(127,29,29,0.14);"' : ''}>
+          <td style="padding:8px 10px;min-width:220px;">${titleLine}</td>
+          <td style="padding:8px 10px;min-width:160px;font-size:0.82em;">${escapeHtml(actionsText)}</td>
+          <td style="padding:8px 10px;min-width:120px;">${statusBadge}</td>
+          <td style="padding:8px 10px;min-width:280px;">${detailBlocks}</td>
+          <td style="padding:8px 10px;min-width:230px;"><div style="display:flex;gap:6px;flex-wrap:wrap;">${actionControls}</div></td>
+        </tr>`;
     }).join('');
-    el.innerHTML = `
-      <div class="data-table-wrap">
+
+    el.innerHTML = `<div class="data-table-wrap">
         <table class="data-table">
           <thead>
             <tr>
               <th>Task</th>
-              <th>Actions</th>
+              <th>Required</th>
               <th>Status</th>
               <th>Details</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
         </table>
-      </div>
-    `;
+      </div>`;
   } catch (e) {
     el.innerHTML = '<p style="color:var(--error);">Failed to load tasks.</p>';
   }
@@ -19827,6 +19820,7 @@ async function saveEngagementConfig() {
       task_feed_channel_id: String(document.getElementById('engTaskFeedChannel')?.value || '').trim() || null,
       purchase_log_channel_id: String(document.getElementById('engPurchaseLogChannel')?.value || '').trim() || null,
       achievement_channel_id: String(document.getElementById('engAchievementChannel')?.value || '').trim() || null,
+      fulfillment_ticket_category_id: Number(document.getElementById('engFulfillmentTicketCategory')?.value || 0) || null,
     };
 
     const res = await fetch('/api/admin/engagement/config', {
@@ -19876,9 +19870,14 @@ function canAdminEngagementPortal() {
 }
 
 function setEngagementPortalMode(canAdmin) {
+  const engagementSection = document.getElementById('section-engagement');
   const summaryView = document.getElementById('engagementMemberSummaryView');
   const linkedAccountsCard = document.getElementById('engagementLinkedAccountsCard');
   const historyCard = document.getElementById('engagementHistoryCard');
+  const leaderboardCard = document.getElementById('engagementLeaderboardCard');
+  const shopCard = document.getElementById('engagementShopCard');
+  const achievementsCard = document.getElementById('engagementAchievementsCard');
+  const redemptionsCard = document.getElementById('engagementRedemptionsView')?.closest('.card');
   const configGrid = document.getElementById('engagementConfigGrid');
   const configSaveBtn = document.getElementById('engagementConfigSaveBtn');
   const shopAddBtn = document.getElementById('engagementShopAddBtn');
@@ -19891,6 +19890,8 @@ function setEngagementPortalMode(canAdmin) {
   const configTitle = document.querySelector('#engagementConfigCard .card-title');
   const tasksCard = document.getElementById('engagementTasksView')?.closest('.card');
   const tasksTitle = tasksCard?.querySelector('.card-title');
+  const providersCard = document.getElementById('engagementProvidersView')?.closest('.card');
+  const taskAutomationCard = document.getElementById('engagementTaskAutomationCard');
   const adminOnlyCards = [
     document.getElementById('engagementMonitoredAccountsView')?.closest('.card'),
     document.getElementById('engagementHashtagView')?.closest('.card'),
@@ -19909,7 +19910,18 @@ function setEngagementPortalMode(canAdmin) {
   if (achievementSaveBtn) achievementSaveBtn.style.display = canAdmin ? 'inline-flex' : 'none';
   if (redemptionsRefreshBtn) redemptionsRefreshBtn.style.display = 'inline-flex';
   if (configTitle) configTitle.textContent = canAdmin ? 'Settings' : 'My Engagement';
-  if (tasksTitle) tasksTitle.textContent = canAdmin ? 'Task Automation' : 'Active Tasks';
+  if (tasksTitle) tasksTitle.textContent = canAdmin ? '🧩 Tasks' : '🧩 Active Tasks';
+  if (providersCard) providersCard.style.display = canAdmin ? '' : 'none';
+  if (taskAutomationCard) taskAutomationCard.style.display = canAdmin ? '' : 'none';
+  if (engagementSection) {
+    engagementSection.classList.toggle('engagement-admin-mode', canAdmin);
+    engagementSection.classList.toggle('engagement-user-mode', !canAdmin);
+  }
+
+  [linkedAccountsCard, historyCard, leaderboardCard, shopCard, tasksCard, achievementsCard, redemptionsCard].forEach(card => {
+    if (!card) return;
+    card.classList.toggle('engagement-compact-card', !canAdmin);
+  });
 
   adminOnlyCards.forEach(card => {
     card.style.display = canAdmin ? '' : 'none';
@@ -20175,7 +20187,7 @@ async function redeemEngagementItem(itemId) {
     }
     const result = data.result || data.data || data;
     const mode = String(result.fulfillmentMode || result.fulfillment_mode || '');
-    if (mode === 'manual') {
+    if (mode === 'manual' || mode === 'ticket' || mode === 'log' || mode === 'pending') {
       showSuccess('Redemption created. A fulfillment ticket/log entry has been created.');
     } else {
       showSuccess('Item redeemed successfully.');
@@ -20240,6 +20252,7 @@ async function loadEngagementConfig() {
         populateChannelSelect('engTaskFeedChannel', cfg.task_feed_channel_id ?? ''),
         populateChannelSelect('engPurchaseLogChannel', cfg.purchase_log_channel_id ?? ''),
         populateChannelSelect('engAchievementChannel', cfg.achievement_channel_id ?? ''),
+        populateEngagementTicketCategorySelect(cfg.fulfillment_ticket_category_id ?? ''),
         populateChannelSelect('engMonitoredChannel', ''),
         populateChannelSelect('engHashtagChannel', ''),
       ]);
@@ -20533,6 +20546,28 @@ async function renderDashboardGrid() {
   } catch (err) {
     console.error("Dashboard render error:", err);
     grid.innerHTML = `<div class="empty-state"><p>Error loading dashboard. Please try again.</p></div>`;
+  }
+}
+
+async function populateEngagementTicketCategorySelect(selectedValue = '') {
+  const select = document.getElementById('engFulfillmentTicketCategory');
+  if (!select) return;
+  try {
+    const res = await fetch('/api/admin/tickets/categories', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await res.json();
+    const categories = Array.isArray(data?.categories) ? data.categories : [];
+    select.innerHTML = '<option value="">-- None --</option>';
+    categories.forEach(category => {
+      const id = String(category?.id || '').trim();
+      if (!id) return;
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = category?.name ? `${category.name} (#${id})` : `Category #${id}`;
+      select.appendChild(opt);
+    });
+    select.value = selectedValue ? String(selectedValue) : '';
+  } catch (_error) {
+    select.innerHTML = '<option value="">-- None --</option>';
   }
 }
 function renderDashboardTile(title, value, icon, meta, statusClass, onClickStr = null) {

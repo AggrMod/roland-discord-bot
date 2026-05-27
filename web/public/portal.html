@@ -308,7 +308,7 @@
             <div id="managedServersList" style="margin-top: var(--space-3);"></div>
           </div>
 
-          <div class="card">
+          <div class="card" id="engagementTaskAutomationCard">
             <div class="card-header">
               <h3>Servers You Can Invite</h3>
             </div>
@@ -1014,6 +1014,12 @@
                       <option value="">— None —</option>
                     </select>
                   </label>
+                  <label class="settings-row" style="display:grid;gap:6px;">
+                    <span class="settings-label">Redemption ticket category</span>
+                    <select id="engFulfillmentTicketCategory" class="input-sm" style="width:100%;">
+                      <option value="">-- None --</option>
+                    </select>
+                  </label>
                 </div>
               </details>
             </div>
@@ -1212,9 +1218,9 @@
             </div>
           </div>
 
-          <div class="card">
+          <div class="card" id="engagementTasksCard">
             <div class="card-header-row">
-              <h3 class="card-title">Active Tasks</h3>
+              <h3 class="card-title">🗂️ Tasks</h3>
               <button class="btn-secondary btn-sm" type="button" onclick="loadEngagementTasks()">Refresh</button>
             </div>
             <div id="engagementTasksView">
@@ -1222,7 +1228,7 @@
             </div>
           </div>
 
-          <div class="card">
+          <div class="card" id="engagementAchievementsCard">
             <div class="card-header-row">
               <h3 class="card-title">🏅 Achievements</h3>
               <button class="btn-primary btn-sm" id="engagementAchievementSaveBtn" onclick="submitEngagementAchievement()">Add / Update</button>

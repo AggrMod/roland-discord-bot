@@ -8767,11 +8767,28 @@ async function loadSuperadminWorkspaceHubV2() {
               <label style="display:grid; gap:6px;"><span style="font-size:0.82em; color:var(--text-secondary);">X Client Secret (optional update)</span><input id="sa_xClientSecret" type="password" value=""></label>
               <label style="display:grid; gap:6px;"><span style="font-size:0.82em; color:var(--text-secondary);">X Bearer Token (optional update)</span><input id="sa_xBearerToken" type="password" value=""></label>
             </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:8px; color:var(--text-secondary); font-size:0.82em;">
+              <div>
+                Client Secret:
+                <strong style="color:${globalSettings.xClientSecretConfigured ? '#86efac' : '#fca5a5'};">
+                  ${globalSettings.xClientSecretConfigured ? 'Configured' : 'Not configured'}
+                </strong>
+                ${globalSettings.xClientSecretMasked ? `<span style="margin-left:6px; color:#a5b4fc;">(${escapeHtml(globalSettings.xClientSecretMasked)})</span>` : ''}
+              </div>
+              <div>
+                Bearer Token:
+                <strong style="color:${globalSettings.xBearerTokenConfigured ? '#86efac' : '#fca5a5'};">
+                  ${globalSettings.xBearerTokenConfigured ? 'Configured' : 'Not configured'}
+                </strong>
+                ${globalSettings.xBearerTokenMasked ? `<span style="margin-left:6px; color:#a5b4fc;">(${escapeHtml(globalSettings.xBearerTokenMasked)})</span>` : ''}
+              </div>
+            </div>
             <div style="display:flex; gap:14px; flex-wrap:wrap; margin-top:10px;">
               <label style="display:flex; align-items:center; gap:8px;"><input id="sa_xClientSecretClear" type="checkbox">Clear stored X client secret</label>
               <label style="display:flex; align-items:center; gap:8px;"><input id="sa_xBearerTokenClear" type="checkbox">Clear stored X bearer token</label>
             </div>
             <label style="display:flex; align-items:center; gap:10px; margin-top:10px;"><input id="sa_xPollingEnabled" type="checkbox" ${globalSettings.xPollingEnabled ? 'checked' : ''}>Enable X polling</label>
+            <div class="sa-v2-inline-note" style="margin-top:8px;">Secrets are never shown in full for security. Entering a new value replaces the stored value.</div>
             <div class="gp-actions-row"><button class="btn-primary" onclick="saveXProviderSettings()">Save X Settings</button></div>
           </div>
         `;

@@ -18929,7 +18929,7 @@ async function deleteEngShopItem(itemId) {
 function startXAccountLink(section = 'engagement') {
   const normalizedSection = String(section || '').trim() === 'profile' ? 'profile' : 'engagement';
   const params = new URLSearchParams();
-  params.set('returnTo', `/?${new URLSearchParams({ section: normalizedSection, ...(activeGuildId ? { guild: activeGuildId } : {}) }).toString()}`);
+  params.set('returnTo', `/app?${new URLSearchParams({ section: normalizedSection, ...(activeGuildId ? { guild: activeGuildId } : {}) }).toString()}`);
   if (activeGuildId) {
     params.set('guild', activeGuildId);
   }

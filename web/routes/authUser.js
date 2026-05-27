@@ -1287,7 +1287,7 @@ function createAuthUserRouter({
       const rawReturn = String(req.query.returnTo || '').trim();
       const returnTo = rawReturn && rawReturn.startsWith('/') && !rawReturn.startsWith('//')
         ? rawReturn
-        : `/?${new URLSearchParams({
+        : `/app?${new URLSearchParams({
             section: 'engagement',
             ...(guildId ? { guild: guildId } : {}),
           }).toString()}`;
@@ -1365,7 +1365,7 @@ function createAuthUserRouter({
 
       const returnTo = authState.returnTo && String(authState.returnTo).startsWith('/') && !String(authState.returnTo).startsWith('//')
         ? String(authState.returnTo)
-        : '/?section=engagement';
+        : '/app?section=engagement';
       if (!result?.success) {
         return res.redirect(`${returnTo}${returnTo.includes('?') ? '&' : '?'}xAuth=failed`);
       }

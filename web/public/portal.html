@@ -278,6 +278,18 @@
               </div>
             </div>
           </div>
+          <div class="card" id="profileSocialsCard">
+            <div class="card-header">
+              <h3>Social Accounts</h3>
+              <div style="color:var(--text-secondary);font-size:0.85em;">Connect your social profiles for engagement tasks</div>
+            </div>
+            <div id="profileSocialAccountsList">
+              <div class="loading-state">
+                <div class="loading-spinner"></div>
+                <p class="loading-text">Loading social accounts...</p>
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- Servers Section -->
@@ -1078,7 +1090,7 @@
               <button class="btn-primary btn-sm" onclick="submitEngagementMonitoredAccount()">Add / Update</button>
             </div>
             <div class="settings-grid" style="margin-bottom:12px;">
-              <div><label class="form-label">Provider</label><select id="engMonitoredProvider" class="form-input"><option value="x">X</option><option value="bluesky">Bluesky</option><option value="discord">Discord</option></select></div>
+              <div><label class="form-label">Provider</label><select id="engMonitoredProvider" class="form-input"><option value="x">X</option><option value="discord">Discord</option></select></div>
               <div><label class="form-label">Account Handle</label><input id="engMonitoredHandle" class="form-input" placeholder="@account"></div>
               <div><label class="form-label">Mirror Channel</label>
                 <select id="engMonitoredChannel" class="form-input">
@@ -1100,7 +1112,7 @@
               <button class="btn-primary btn-sm" onclick="submitEngagementHashtagMonitor()">Add / Update</button>
             </div>
             <div class="settings-grid" style="margin-bottom:12px;">
-              <div><label class="form-label">Provider</label><select id="engHashtagProvider" class="form-input"><option value="x">X</option><option value="bluesky">Bluesky</option></select></div>
+              <div><label class="form-label">Provider</label><select id="engHashtagProvider" class="form-input"><option value="x">X</option></select></div>
               <div><label class="form-label">Hashtag</label><input id="engHashtagTag" class="form-input" placeholder="#guildpilot"></div>
               <div><label class="form-label">Mirror Channel</label>
                 <select id="engHashtagChannel" class="form-input">
@@ -1124,7 +1136,7 @@
               </div>
             </div>
             <div class="settings-grid" id="engagementTaskAdminForm" style="margin-bottom:12px;">
-              <div><label class="form-label">Provider</label><select id="engTaskProvider" class="form-input"><option value="x">X</option><option value="bluesky">Bluesky</option><option value="discord">Discord</option></select></div>
+              <div><label class="form-label">Provider</label><select id="engTaskProvider" class="form-input"><option value="x">X</option><option value="discord">Discord</option></select></div>
               <div><label class="form-label">Source Post ID</label><input id="engTaskSourcePostId" class="form-input" placeholder="post-123"></div>
               <div><label class="form-label">Source Handle</label><input id="engTaskSourceHandle" class="form-input" placeholder="@account"></div>
               <div><label class="form-label">Source URL</label><input id="engTaskSourceUrl" class="form-input" placeholder="https://..."></div>

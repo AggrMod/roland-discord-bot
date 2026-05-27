@@ -3181,6 +3181,41 @@ function renderProfileSection() {
     privacyToggleId: 'profileWalletIdentityOptOutToggle',
     privacyCardId: 'profilePrivacyCard'
   });
+
+  loadProfileSocialAccounts();
+}
+
+async function loadProfileSocialAccounts() {
+  const container = document.getElementById('profileSocialAccountsList');
+  if (!container) return;
+
+  container.innerHTML = '<p style="color:var(--text-secondary);">Loading social accounts...</p>';
+  try {
+    const res = await fetch('/api/user/engagement/accounts', {
+      credentials: 'include',
+      headers: buildTenantRequestHeaders(),
+    });
+    const data = await res.json().catch(() => ({}));
+    const accounts = Array.isArray(data?.accounts) ? data.accounts : [];
+    const xAccount = accounts.find((entry) => String(entry?.provider || '').toLowerCase() === 'x');
+    const isLinked = !!xAccount;
+    const handle = xAccount?.account_handle ? `@${String(xAccount.account_handle).replace(/^@/, '')}` : 'Not connected';
+
+    container.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 0;">
+        <div>
+          <div style="font-weight:700;color:#e0e7ff;">X (Twitter)</div>
+          <div style="color:var(--text-secondary);font-size:0.86em;margin-top:4px;">${escapeHtml(handle)}</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn-secondary btn-sm" onclick="startXAccountLink('profile')">${isLinked ? 'Reconnect X' : 'Connect X'}</button>
+          ${isLinked ? '<button class="btn-secondary btn-sm" onclick="disconnectEngagementAccount(\'x\')">Disconnect</button>' : ''}
+        </div>
+      </div>
+    `;
+  } catch (error) {
+    container.innerHTML = `<p style="color:var(--error);">Failed to load social accounts: ${escapeHtml(error?.message || 'Unknown error')}</p>`;
+  }
 }
 
 function renderWallets(options = {}) {
@@ -18839,9 +18874,10 @@ async function deleteEngShopItem(itemId) {
   } catch (e) { showError('Error removing item.'); }
 }
 
-function startXAccountLink() {
+function startXAccountLink(section = 'engagement') {
+  const normalizedSection = String(section || '').trim() === 'profile' ? 'profile' : 'engagement';
   const params = new URLSearchParams();
-  params.set('returnTo', `/?${new URLSearchParams({ section: 'engagement', ...(activeGuildId ? { guild: activeGuildId } : {}) }).toString()}`);
+  params.set('returnTo', `/?${new URLSearchParams({ section: normalizedSection, ...(activeGuildId ? { guild: activeGuildId } : {}) }).toString()}`);
   if (activeGuildId) {
     params.set('guild', activeGuildId);
   }
@@ -19551,7 +19587,12 @@ async function disconnectEngagementAccount(providerKey) {
       return;
     }
     showSuccess(`${String(providerKey || '').toUpperCase()} account disconnected.`);
-    loadEngagementSection();
+    const activeSectionId = document.querySelector('.content-section.active')?.id || '';
+    if (activeSectionId === 'section-profile') {
+      loadProfileSocialAccounts();
+    } else {
+      loadEngagementSection();
+    }
   } catch (error) {
     showError(`Failed to disconnect account: ${error.message}`);
   }

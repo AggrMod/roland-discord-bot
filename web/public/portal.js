@@ -19684,6 +19684,43 @@ async function loadEngagementRedemptions() {
   }
 }
 
+async function saveEngagementConfig() {
+  try {
+    const body = {
+      enabled: !!document.getElementById('engEnabled')?.checked,
+      points_message: parseInt(document.getElementById('engPtsMsg')?.value || '5', 10),
+      points_reply: parseInt(document.getElementById('engPtsReply')?.value || '3', 10),
+      points_reaction: parseInt(document.getElementById('engPtsReact')?.value || '2', 10),
+      cooldown_message_mins: parseInt(document.getElementById('engCooldownMsg')?.value || '60', 10),
+      cooldown_reply_mins: parseInt(document.getElementById('engCooldownReply')?.value || '30', 10),
+      cooldown_reaction_daily: parseInt(document.getElementById('engCooldownReact')?.value || '5', 10),
+      currency_name_plural: String(document.getElementById('engCurrencyPlural')?.value || 'points').trim() || 'points',
+      currency_symbol: String(document.getElementById('engCurrencySymbol')?.value || 'pts').trim() || 'pts',
+      task_feed_channel_id: String(document.getElementById('engTaskFeedChannel')?.value || '').trim() || null,
+      purchase_log_channel_id: String(document.getElementById('engPurchaseLogChannel')?.value || '').trim() || null,
+      achievement_channel_id: String(document.getElementById('engAchievementChannel')?.value || '').trim() || null,
+    };
+
+    const res = await fetch('/api/admin/engagement/config', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: engagementHeaders(),
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      showError(data?.message || 'Failed to save engagement settings.');
+      return;
+    }
+    showSuccess('Engagement settings saved.');
+    if (data?.config) {
+      currentEngagementConfig = data.config;
+    }
+  } catch (error) {
+    showError(error?.message || 'Error saving engagement settings.');
+  }
+}
+
 async function saveEngagementConfigFromSettings() {
   try {
     const body = {

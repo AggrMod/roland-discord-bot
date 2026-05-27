@@ -3199,7 +3199,8 @@ async function loadProfileSocialAccounts() {
     const accounts = Array.isArray(data?.accounts) ? data.accounts : [];
     const xAccount = accounts.find((entry) => String(entry?.provider || '').toLowerCase() === 'x');
     const isLinked = !!xAccount;
-    const handle = xAccount?.account_handle ? `@${String(xAccount.account_handle).replace(/^@/, '')}` : 'Not connected';
+    const resolvedHandle = String(xAccount?.handle || xAccount?.account_handle || '').trim();
+    const handle = resolvedHandle ? `@${resolvedHandle.replace(/^@/, '')}` : 'Not connected';
 
     container.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 0;">
@@ -7441,13 +7442,8 @@ function reportAdminUiTelemetry(event, payload = {}) {
     const normalizedEvent = String(event || '').trim();
     if (!normalizedEvent) return;
     console.info(`[admin-ui-v2][${normalizedEvent}]`, payload || {});
-    if (window.ENABLE_SUPERADMIN_TELEMETRY !== true) return;
-    fetch('/api/superadmin/workspace/telemetry', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event: normalizedEvent, payload }),
-    }).catch(() => {});
+    // Telemetry transport intentionally disabled in portal client to avoid noisy
+    // console/network errors in production environments.
   } catch (_error) {}
 }
 

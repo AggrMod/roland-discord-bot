@@ -1278,7 +1278,12 @@ function createAuthUserRouter({
       const state = crypto.randomBytes(24).toString('hex');
       const pkce = xProviderService.generatePkcePair();
       const redirectUri = xProviderService.resolveRedirectUri(req);
-      const guildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() }) || null;
+      const explicitGuild = normalizeGuildId(String(req.query?.guild || req.query?.guildId || '').trim());
+      const headerGuild = normalizeGuildId(String(req.get('x-guild-id') || '').trim());
+      const guildId = explicitGuild
+        || headerGuild
+        || getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() })
+        || null;
       const rawReturn = String(req.query.returnTo || '').trim();
       const returnTo = rawReturn && rawReturn.startsWith('/') && !rawReturn.startsWith('//')
         ? rawReturn

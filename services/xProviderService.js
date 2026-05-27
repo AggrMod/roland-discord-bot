@@ -109,14 +109,14 @@ function resolveRedirectUri(req) {
   const explicitFromSettings = normalizeCallbackUrl(settings.xRedirectUri);
   const requestOrigin = normalizeOrigin(getRequestOrigin(req));
   const requestIsLocal = isLocalUrl(`${requestOrigin}/auth/x/callback`);
+  const preferred = requestOrigin ? normalizeCallbackUrl(`${requestOrigin}/auth/x/callback`) : '';
+  if (preferred && (!isLocalUrl(preferred) || requestIsLocal)) return preferred;
   if (explicitFromSettings && (!isLocalUrl(explicitFromSettings) || requestIsLocal)) {
     return explicitFromSettings;
   }
 
   const configured = getConfiguredRedirectUris();
-  const preferred = requestOrigin ? normalizeCallbackUrl(`${requestOrigin}/auth/x/callback`) : '';
 
-  if (preferred) return preferred;
   const fallbackConfigured = configured.find(uri => !isLocalUrl(uri)) || configured[0];
   if (fallbackConfigured && (!isLocalUrl(fallbackConfigured) || requestIsLocal)) {
     return fallbackConfigured;

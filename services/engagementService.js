@@ -991,6 +991,42 @@ function listTaskCompletions(guildId, { taskId = null, userId = null, limit = 10
   }));
 }
 
+function deleteTask(guildId, taskId) {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  const normalizedTaskId = Number(taskId);
+  if (!normalizedGuildId || !Number.isFinite(normalizedTaskId) || normalizedTaskId <= 0) {
+    return { success: false, message: 'Valid guildId and taskId are required' };
+  }
+
+  const existing = db.prepare('SELECT id FROM engagement_social_tasks WHERE guild_id = ? AND id = ?')
+    .get(normalizedGuildId, normalizedTaskId);
+  if (!existing) return { success: false, message: 'Task not found' };
+
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM engagement_task_completions WHERE guild_id = ? AND task_id = ?')
+      .run(normalizedGuildId, normalizedTaskId);
+    db.prepare('DELETE FROM engagement_social_tasks WHERE guild_id = ? AND id = ?')
+      .run(normalizedGuildId, normalizedTaskId);
+  });
+  tx();
+  return { success: true };
+}
+
+function resolveTaskMirrorTemplate(guildId, taskRecord) {
+  const triggerId = Number(taskRecord?.requirements?.trigger_id || 0);
+  if (!triggerId) return '';
+  if (String(taskRecord?.trigger_type || '') === 'hashtag_match') {
+    const monitor = db.prepare('SELECT reward_config_json FROM engagement_hashtag_monitors WHERE guild_id = ? AND id = ?')
+      .get(normalizeGuildId(guildId), triggerId);
+    const cfg = safeJsonParse(monitor?.reward_config_json, {});
+    return String(cfg?.mirrorMessageTemplate || '').trim();
+  }
+  const account = db.prepare('SELECT reward_config_json FROM engagement_monitored_accounts WHERE guild_id = ? AND id = ?')
+    .get(normalizeGuildId(guildId), triggerId);
+  const cfg = safeJsonParse(account?.reward_config_json, {});
+  return String(cfg?.mirrorMessageTemplate || '').trim();
+}
+
 async function postTaskMirror(guildId, taskRecord, source, options = {}) {
   const client = clientProvider.getClient();
   const targetChannelId = taskRecord.mirrored_channel_id || getConfig(guildId).task_feed_channel_id || getConfig(guildId).social_log_channel_id;
@@ -1038,6 +1074,41 @@ async function postTaskMirror(guildId, taskRecord, source, options = {}) {
     logger.warn(`[engagement] could not mirror social task: ${error.message}`);
     return { channelId: targetChannelId, messageId: null };
   }
+}
+
+async function repostTask(guildId, taskId, options = {}) {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  const normalizedTaskId = Number(taskId);
+  if (!normalizedGuildId || !Number.isFinite(normalizedTaskId) || normalizedTaskId <= 0) {
+    return { success: false, message: 'Valid guildId and taskId are required' };
+  }
+  const task = getTaskById(normalizedGuildId, normalizedTaskId);
+  if (!task) return { success: false, message: 'Task not found' };
+  const targetChannelId = String(options.mirror_channel_id || options.mirrorChannelId || '').trim();
+  const template = String(options.template || '').trim() || resolveTaskMirrorTemplate(normalizedGuildId, task);
+  const mirrorResult = await postTaskMirror(
+    normalizedGuildId,
+    {
+      ...task,
+      mirrored_channel_id: targetChannelId || task.mirrored_channel_id || null,
+    },
+    { url: task.source_post_url || '' },
+    { template }
+  );
+  if (!mirrorResult?.messageId) {
+    return { success: false, message: 'Task repost failed. Check channel permissions and configuration.' };
+  }
+  db.prepare(`
+    UPDATE engagement_social_tasks
+    SET mirrored_channel_id = ?, mirrored_message_id = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE guild_id = ? AND id = ?
+  `).run(
+    mirrorResult.channelId || task.mirrored_channel_id || null,
+    mirrorResult.messageId,
+    normalizedGuildId,
+    normalizedTaskId
+  );
+  return { success: true, mirror: mirrorResult };
 }
 
 function findMatchingHashtags(text, providerKey, guildId) {
@@ -2185,6 +2256,8 @@ module.exports = {
   listTasks,
   getTaskById,
   listTaskCompletions,
+  deleteTask,
+  repostTask,
   ingestProviderPost,
   syncXProviderForGuild,
   runXProviderSync,

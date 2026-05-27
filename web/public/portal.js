@@ -19176,7 +19176,10 @@ async function loadEngagementMonitoredAccounts() {
           <div style="font-size:0.82em;color:var(--text-muted);">Mirror channel: ${escapeHtml(account.mirror_channel_id || 'default')}</div>
           <div style="font-size:0.82em;color:var(--text-muted);">Mirror message: ${escapeHtml(account.reward_config?.mirrorMessageTemplate || 'embed only')}</div>
         </div>
-        <button class="btn-danger btn-sm" onclick="deleteEngagementMonitoredAccount(${account.id})">Delete</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn-secondary btn-sm" onclick='openEngagementMonitoredAccountEditor(${JSON.stringify(encodeURIComponent(JSON.stringify(account)))})'>Edit</button>
+          <button class="btn-danger btn-sm" onclick="deleteEngagementMonitoredAccount(${account.id})">Delete</button>
+        </div>
       </div>
     `).join('');
   } catch (e) {
@@ -19184,9 +19187,52 @@ async function loadEngagementMonitoredAccounts() {
   }
 }
 
+function openEngagementMonitoredAccountEditor(encoded = '') {
+  const panel = document.getElementById('engMonitoredEditorPanel');
+  if (!panel) return;
+  panel.style.display = 'block';
+  const parsed = (() => {
+    try {
+      if (!encoded) return null;
+      return JSON.parse(decodeURIComponent(String(encoded)));
+    } catch (_e) {
+      return null;
+    }
+  })();
+  document.getElementById('engMonitoredEditId').value = parsed?.id ? String(parsed.id) : '';
+  document.getElementById('engMonitoredProvider').value = parsed?.provider || 'x';
+  document.getElementById('engMonitoredHandle').value = parsed?.account_handle || '';
+  document.getElementById('engMonitoredChannel').value = parsed?.mirror_channel_id || '';
+  document.getElementById('engMonitoredIncludeReplies').checked = !!parsed?.requirements?.includeReplies;
+  document.getElementById('engMonitoredCommentMinLength').value = Number(parsed?.requirements?.commentMinLength || 0) || '';
+  document.getElementById('engMonitoredTaskWindowHours').value = Number(parsed?.requirements?.taskWindowHours || 0) || '';
+  document.getElementById('engMonitoredMirrorTemplate').value = String(parsed?.reward_config?.mirrorMessageTemplate || '');
+  const taskWrap = document.getElementById('engMonitoredTaskRows');
+  if (taskWrap) taskWrap.innerHTML = '';
+  const rewardConfig = parsed?.reward_config || {};
+  const taskTypes = Array.isArray(parsed?.task_types) ? parsed.task_types : [];
+  if (taskTypes.length) {
+    taskTypes.forEach(taskType => addEngagementRewardRow('monitored', taskType, Number(rewardConfig?.[taskType] || 0)));
+  } else {
+    addEngagementRewardRow('monitored', 'x_like', 10);
+  }
+  syncEngagementTaskRowsForProvider('monitored');
+}
+
+function closeEngagementMonitoredAccountEditor() {
+  const panel = document.getElementById('engMonitoredEditorPanel');
+  if (panel) panel.style.display = 'none';
+  document.getElementById('engMonitoredEditId').value = '';
+  document.getElementById('engMonitoredHandle').value = '';
+  document.getElementById('engMonitoredCommentMinLength').value = '';
+  document.getElementById('engMonitoredTaskWindowHours').value = '';
+  document.getElementById('engMonitoredMirrorTemplate').value = '';
+}
+
 async function submitEngagementMonitoredAccount() {
   try {
     const rewardRows = collectEngagementRewardRows('monitored');
+    const editId = Number(document.getElementById('engMonitoredEditId')?.value || 0);
     const body = {
       provider: document.getElementById('engMonitoredProvider').value,
       account_handle: document.getElementById('engMonitoredHandle').value.trim(),
@@ -19212,8 +19258,11 @@ async function submitEngagementMonitoredAccount() {
       showError('Please add at least one task type.');
       return;
     }
-    const res = await fetch('/api/admin/engagement/monitored-accounts', {
-      method: 'POST',
+    const endpoint = editId > 0
+      ? `/api/admin/engagement/monitored-accounts/${editId}`
+      : '/api/admin/engagement/monitored-accounts';
+    const res = await fetch(endpoint, {
+      method: editId > 0 ? 'PUT' : 'POST',
       credentials: 'include',
       headers: engagementHeaders(),
       body: JSON.stringify(body),
@@ -19223,7 +19272,8 @@ async function submitEngagementMonitoredAccount() {
       showError(data.message || 'Failed to save monitored account.');
       return;
     }
-    showSuccess('Monitored account saved.');
+    showSuccess(editId > 0 ? 'Monitored account updated.' : 'Monitored account saved.');
+    closeEngagementMonitoredAccountEditor();
     loadEngagementMonitoredAccounts();
   } catch (e) {
     showError('Failed to save monitored account.');
@@ -19273,7 +19323,10 @@ async function loadEngagementHashtags() {
           <div style="font-size:0.82em;color:var(--text-muted);">Mirror channel: ${escapeHtml(monitor.mirror_channel_id || 'default')}</div>
           <div style="font-size:0.82em;color:var(--text-muted);">Mirror message: ${escapeHtml(monitor.reward_config?.mirrorMessageTemplate || 'embed only')}</div>
         </div>
-        <button class="btn-danger btn-sm" onclick="deleteEngagementHashtagMonitor(${monitor.id})">Delete</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn-secondary btn-sm" onclick='openEngagementHashtagEditor(${JSON.stringify(encodeURIComponent(JSON.stringify(monitor)))})'>Edit</button>
+          <button class="btn-danger btn-sm" onclick="deleteEngagementHashtagMonitor(${monitor.id})">Delete</button>
+        </div>
       </div>
     `).join('');
   } catch (e) {
@@ -19281,9 +19334,49 @@ async function loadEngagementHashtags() {
   }
 }
 
+function openEngagementHashtagEditor(encoded = '') {
+  const panel = document.getElementById('engHashtagEditorPanel');
+  if (!panel) return;
+  panel.style.display = 'block';
+  const parsed = (() => {
+    try {
+      if (!encoded) return null;
+      return JSON.parse(decodeURIComponent(String(encoded)));
+    } catch (_e) {
+      return null;
+    }
+  })();
+  document.getElementById('engHashtagEditId').value = parsed?.id ? String(parsed.id) : '';
+  document.getElementById('engHashtagProvider').value = parsed?.provider || 'x';
+  document.getElementById('engHashtagTag').value = parsed?.hashtag || '';
+  document.getElementById('engHashtagChannel').value = parsed?.mirror_channel_id || '';
+  document.getElementById('engHashtagTaskWindowHours').value = Number(parsed?.requirements?.taskWindowHours || 0) || '';
+  document.getElementById('engHashtagMirrorTemplate').value = String(parsed?.reward_config?.mirrorMessageTemplate || '');
+  const taskWrap = document.getElementById('engHashtagTaskRows');
+  if (taskWrap) taskWrap.innerHTML = '';
+  const rewardConfig = parsed?.reward_config || {};
+  const taskTypes = Array.isArray(parsed?.task_types) ? parsed.task_types : [];
+  if (taskTypes.length) {
+    taskTypes.forEach(taskType => addEngagementRewardRow('hashtag', taskType, Number(rewardConfig?.[taskType] || 0)));
+  } else {
+    addEngagementRewardRow('hashtag', 'x_hashtag_post', 15);
+  }
+  syncEngagementTaskRowsForProvider('hashtag');
+}
+
+function closeEngagementHashtagEditor() {
+  const panel = document.getElementById('engHashtagEditorPanel');
+  if (panel) panel.style.display = 'none';
+  document.getElementById('engHashtagEditId').value = '';
+  document.getElementById('engHashtagTag').value = '';
+  document.getElementById('engHashtagTaskWindowHours').value = '';
+  document.getElementById('engHashtagMirrorTemplate').value = '';
+}
+
 async function submitEngagementHashtagMonitor() {
   try {
     const rewardRows = collectEngagementRewardRows('hashtag');
+    const editId = Number(document.getElementById('engHashtagEditId')?.value || 0);
     const body = {
       provider: document.getElementById('engHashtagProvider').value,
       hashtag: document.getElementById('engHashtagTag').value.trim(),
@@ -19304,8 +19397,11 @@ async function submitEngagementHashtagMonitor() {
       showError('Please add at least one task type.');
       return;
     }
-    const res = await fetch('/api/admin/engagement/hashtags', {
-      method: 'POST',
+    const endpoint = editId > 0
+      ? `/api/admin/engagement/hashtags/${editId}`
+      : '/api/admin/engagement/hashtags';
+    const res = await fetch(endpoint, {
+      method: editId > 0 ? 'PUT' : 'POST',
       credentials: 'include',
       headers: engagementHeaders(),
       body: JSON.stringify(body),
@@ -19315,7 +19411,8 @@ async function submitEngagementHashtagMonitor() {
       showError(data.message || 'Failed to save hashtag monitor.');
       return;
     }
-    showSuccess('Hashtag monitor saved.');
+    showSuccess(editId > 0 ? 'Hashtag monitor updated.' : 'Hashtag monitor saved.');
+    closeEngagementHashtagEditor();
     loadEngagementHashtags();
   } catch (e) {
     showError('Failed to save hashtag monitor.');
@@ -19382,6 +19479,12 @@ async function loadEngagementTasks() {
             ${task.source_post_url ? `<div style="font-size:0.82em;color:var(--text-muted);word-break:break-all;"><a href="${escapeHtml(task.source_post_url)}" target="_blank" rel="noopener noreferrer" style="color:#93c5fd;">${escapeHtml(task.source_post_url)}</a></div>` : ''}
             ${task.body ? `<div style="font-size:0.84em;color:var(--text-secondary);margin-top:6px;">${escapeHtml(task.body)}</div>` : ''}
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">${actionBadges || '<span style="color:var(--text-muted);font-size:0.82em;">No actions configured</span>'}</div>
+            ${canAdminEngagement ? `
+              <div style="display:flex;gap:8px;margin-top:10px;">
+                <button class="btn-secondary btn-sm" onclick="repostEngagementTask(${Number(task.id)})">Repost</button>
+                <button class="btn-danger btn-sm" onclick="deleteEngagementTask(${Number(task.id)})">Delete</button>
+              </div>
+            ` : ''}
           </div>
           <span class="status-badge ${task.status === 'active' ? 'status-live' : 'status-paused'}">${escapeHtml(task.status || 'active')}</span>
         </div>
@@ -19780,6 +19883,46 @@ async function disconnectEngagementAccount(providerKey) {
     }
   } catch (error) {
     showError(`Failed to disconnect account: ${error.message}`);
+  }
+}
+
+async function deleteEngagementTask(taskId) {
+  if (!confirm('Delete this task and its completions?')) return;
+  try {
+    const res = await fetch(`/api/admin/engagement/tasks/${Number(taskId)}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'X-Requested-With': 'XMLHttpRequest', ...buildTenantRequestHeaders() },
+    });
+    const data = await res.json();
+    if (!data.success) {
+      showError(data.message || 'Failed to delete task.');
+      return;
+    }
+    showSuccess('Task deleted.');
+    loadEngagementTasks();
+  } catch (_e) {
+    showError('Failed to delete task.');
+  }
+}
+
+async function repostEngagementTask(taskId) {
+  try {
+    const res = await fetch(`/api/admin/engagement/tasks/${Number(taskId)}/repost`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: engagementHeaders(),
+      body: JSON.stringify({}),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      showError(data.message || 'Failed to repost task.');
+      return;
+    }
+    showSuccess('Task reposted to configured channel.');
+    loadEngagementTasks();
+  } catch (_e) {
+    showError('Failed to repost task.');
   }
 }
 

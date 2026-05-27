@@ -421,6 +421,36 @@ function createAdminEngagementRouter({
     }
   });
 
+  router.delete('/api/admin/engagement/tasks/:id', adminAuthMiddleware, (req, res) => {
+    if (!guard(req, res)) return;
+    try {
+      const eng = loadService();
+      const result = eng.deleteTask(req.guildId, parseInteger(req.params.id));
+      if (!result?.success) {
+        return res.status(404).json(toErrorResponse(result?.message || 'Task not found', 'NOT_FOUND', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (error) {
+      logger.error('Error deleting engagement task:', error);
+      return res.status(500).json(toErrorResponse(error?.message || 'Internal server error'));
+    }
+  });
+
+  router.post('/api/admin/engagement/tasks/:id/repost', adminAuthMiddleware, async (req, res) => {
+    if (!guard(req, res)) return;
+    try {
+      const eng = loadService();
+      const result = await eng.repostTask(req.guildId, parseInteger(req.params.id), req.body || {});
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to repost task', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (error) {
+      logger.error('Error reposting engagement task:', error);
+      return res.status(500).json(toErrorResponse(error?.message || 'Internal server error'));
+    }
+  });
+
   router.get('/api/admin/engagement/linked-accounts', adminAuthMiddleware, (req, res) => {
     if (!guard(req, res)) return;
     try {

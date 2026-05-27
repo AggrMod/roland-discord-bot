@@ -1076,16 +1076,17 @@
               <h3 class="card-title">Monitored Accounts</h3>
               <button class="btn-primary btn-sm" onclick="openEngagementMonitoredAccountEditor()">+ Add Account</button>
             </div>
-            <div id="engMonitoredEditorPanel" style="display:none;margin-bottom:12px;padding:12px;border:1px solid rgba(99,102,241,0.22);border-radius:12px;background:rgba(15,23,42,0.35);">
-              <div style="font-size:0.82em;color:var(--text-muted);margin-bottom:10px;">
-                <strong>General:</strong> Provider, account handle, mirror channel, and mirror message apply to all task types below.
-              </div>
-              <input id="engMonitoredEditId" type="hidden">
-              <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px;">
-                <button class="btn-secondary btn-sm" type="button" onclick="closeEngagementMonitoredAccountEditor()">Cancel</button>
-                <button class="btn-primary btn-sm" type="button" onclick="submitEngagementMonitoredAccount()">Save Account</button>
-              </div>
-              <div class="settings-grid">
+            <div id="engMonitoredEditorPanel" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeEngagementMonitoredAccountEditor()">
+              <div class="modal" style="max-width:960px;width:95%;">
+                <div class="modal-header">
+                  <h3 class="modal-title">Monitored Account</h3>
+                </div>
+                <div class="modal-body">
+                  <div style="font-size:0.82em;color:var(--text-muted);margin-bottom:10px;">
+                    <strong>General:</strong> Provider, account handle, mirror channel, and mirror message apply to all task types below.
+                  </div>
+                  <input id="engMonitoredEditId" type="hidden">
+                  <div class="settings-grid">
                 <div><label class="form-label">Provider</label><select id="engMonitoredProvider" class="form-input" onchange="syncEngagementTaskRowsForProvider('monitored')"><option value="x">X</option><option value="discord">Discord</option></select></div>
                 <div><label class="form-label">Account Handle</label><input id="engMonitoredHandle" class="form-input" placeholder="@account"></div>
                 <div><label class="form-label">Mirror Channel</label>
@@ -1117,6 +1118,12 @@
                 </div>
                 <div style="grid-column:1 / -1;"><label class="form-label">Mirror Message Template</label><input id="engMonitoredMirrorTemplate" class="form-input" placeholder="New post by @{handle}: {link}"></div>
                 <div style="grid-column:1 / -1;font-size:0.8em;color:var(--text-muted);">Placeholders: {provider}, {handle}, {hashtag}, {title}, {body}, {url}, {link}</div>
+                  </div>
+                </div>
+                <div class="modal-footer">
+                  <button class="btn-secondary btn-sm" type="button" onclick="closeEngagementMonitoredAccountEditor()">Cancel</button>
+                  <button class="btn-primary btn-sm" type="button" onclick="submitEngagementMonitoredAccount()">Save Account</button>
+                </div>
               </div>
             </div>
             <div id="engagementMonitoredAccountsView">
@@ -1129,16 +1136,17 @@
               <h3 class="card-title"># Hashtag Monitors</h3>
               <button class="btn-primary btn-sm" onclick="openEngagementHashtagEditor()">+ Add Hashtag</button>
             </div>
-            <div id="engHashtagEditorPanel" style="display:none;margin-bottom:12px;padding:12px;border:1px solid rgba(99,102,241,0.22);border-radius:12px;background:rgba(15,23,42,0.35);">
-              <div style="font-size:0.82em;color:var(--text-muted);margin-bottom:10px;">
-                <strong>X Engagement:</strong> Hashtag monitors are X-only and create rewardable tasks from matching posts.
-              </div>
-              <input id="engHashtagEditId" type="hidden">
-              <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px;">
-                <button class="btn-secondary btn-sm" type="button" onclick="closeEngagementHashtagEditor()">Cancel</button>
-                <button class="btn-primary btn-sm" type="button" onclick="submitEngagementHashtagMonitor()">Save Hashtag</button>
-              </div>
-              <div class="settings-grid">
+            <div id="engHashtagEditorPanel" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeEngagementHashtagEditor()">
+              <div class="modal" style="max-width:960px;width:95%;">
+                <div class="modal-header">
+                  <h3 class="modal-title">Hashtag Monitor</h3>
+                </div>
+                <div class="modal-body">
+                  <div style="font-size:0.82em;color:var(--text-muted);margin-bottom:10px;">
+                    <strong>X Engagement:</strong> Hashtag monitors are X-only and create rewardable tasks from matching posts.
+                  </div>
+                  <input id="engHashtagEditId" type="hidden">
+                  <div class="settings-grid">
                 <div><label class="form-label">Provider</label><select id="engHashtagProvider" class="form-input" onchange="syncEngagementTaskRowsForProvider('hashtag')"><option value="x">X</option></select></div>
                 <div><label class="form-label">Hashtag</label><input id="engHashtagTag" class="form-input" placeholder="#guildpilot"></div>
                 <div><label class="form-label">Mirror Channel</label>
@@ -1159,6 +1167,12 @@
                 </div>
                 <div style="grid-column:1 / -1;"><label class="form-label">Mirror Message Template</label><input id="engHashtagMirrorTemplate" class="form-input" placeholder="Tagged post {hashtag}: {link}"></div>
                 <div style="grid-column:1 / -1;font-size:0.8em;color:var(--text-muted);">Placeholders: {provider}, {handle}, {hashtag}, {title}, {body}, {url}, {link}</div>
+                  </div>
+                </div>
+                <div class="modal-footer">
+                  <button class="btn-secondary btn-sm" type="button" onclick="closeEngagementHashtagEditor()">Cancel</button>
+                  <button class="btn-primary btn-sm" type="button" onclick="submitEngagementHashtagMonitor()">Save Hashtag</button>
+                </div>
               </div>
             </div>
             <div id="engagementHashtagView">
@@ -2920,6 +2934,28 @@
       <div class="modal-footer">
         <button class="btn-secondary" onclick="closeConfirmModal()">Cancel</button>
         <button class="btn-danger" id="confirmButton" onclick="confirmAction()">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="engagementRepostModal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeEngagementRepostModal()">
+    <div class="modal" style="max-width:520px;width:95%;">
+      <div class="modal-header">
+        <h3 class="modal-title">Repost Engagement Task</h3>
+      </div>
+      <div class="modal-body">
+        <input id="engagementRepostTaskId" type="hidden">
+        <div>
+          <label class="form-label">Target Channel</label>
+          <select id="engagementRepostChannel" class="form-input">
+            <option value="">-- Use task/default channel --</option>
+          </select>
+          <div style="font-size:0.8em;color:var(--text-muted);margin-top:6px;">If no default is configured, choose a channel here.</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeEngagementRepostModal()">Cancel</button>
+        <button class="btn-primary" onclick="confirmEngagementRepost()">Repost Task</button>
       </div>
     </div>
   </div>

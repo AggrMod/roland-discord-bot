@@ -1027,6 +1027,21 @@ function resolveTaskMirrorTemplate(guildId, taskRecord) {
   return String(cfg?.mirrorMessageTemplate || '').trim();
 }
 
+function resolveTaskMirrorChannel(guildId, taskRecord) {
+  const direct = String(taskRecord?.mirrored_channel_id || '').trim();
+  if (direct) return direct;
+  const triggerId = Number(taskRecord?.requirements?.trigger_id || 0);
+  if (!triggerId) return '';
+  if (String(taskRecord?.trigger_type || '') === 'hashtag_match') {
+    const monitor = db.prepare('SELECT mirror_channel_id FROM engagement_hashtag_monitors WHERE guild_id = ? AND id = ?')
+      .get(normalizeGuildId(guildId), triggerId);
+    return String(monitor?.mirror_channel_id || '').trim();
+  }
+  const account = db.prepare('SELECT mirror_channel_id FROM engagement_monitored_accounts WHERE guild_id = ? AND id = ?')
+    .get(normalizeGuildId(guildId), triggerId);
+  return String(account?.mirror_channel_id || '').trim();
+}
+
 async function postTaskMirror(guildId, taskRecord, source, options = {}) {
   const client = clientProvider.getClient();
   const targetChannelId = taskRecord.mirrored_channel_id || getConfig(guildId).task_feed_channel_id || getConfig(guildId).social_log_channel_id;
@@ -1085,12 +1100,23 @@ async function repostTask(guildId, taskId, options = {}) {
   const task = getTaskById(normalizedGuildId, normalizedTaskId);
   if (!task) return { success: false, message: 'Task not found' };
   const targetChannelId = String(options.mirror_channel_id || options.mirrorChannelId || '').trim();
+  const fallbackChannelId = resolveTaskMirrorChannel(normalizedGuildId, task)
+    || getConfig(normalizedGuildId).task_feed_channel_id
+    || getConfig(normalizedGuildId).social_log_channel_id
+    || '';
+  const resolvedChannelId = targetChannelId || fallbackChannelId;
+  if (!resolvedChannelId) {
+    return {
+      success: false,
+      message: 'No repost channel configured. Select a channel in the repost dialog or configure Engagement task feed channel.',
+    };
+  }
   const template = String(options.template || '').trim() || resolveTaskMirrorTemplate(normalizedGuildId, task);
   const mirrorResult = await postTaskMirror(
     normalizedGuildId,
     {
       ...task,
-      mirrored_channel_id: targetChannelId || task.mirrored_channel_id || null,
+      mirrored_channel_id: resolvedChannelId || null,
     },
     { url: task.source_post_url || '' },
     { template }

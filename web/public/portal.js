@@ -19187,10 +19187,11 @@ async function loadEngagementMonitoredAccounts() {
   }
 }
 
-function openEngagementMonitoredAccountEditor(encoded = '') {
+async function openEngagementMonitoredAccountEditor(encoded = '') {
   const panel = document.getElementById('engMonitoredEditorPanel');
   if (!panel) return;
-  panel.style.display = 'block';
+  panel.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
   const parsed = (() => {
     try {
       if (!encoded) return null;
@@ -19202,7 +19203,9 @@ function openEngagementMonitoredAccountEditor(encoded = '') {
   document.getElementById('engMonitoredEditId').value = parsed?.id ? String(parsed.id) : '';
   document.getElementById('engMonitoredProvider').value = parsed?.provider || 'x';
   document.getElementById('engMonitoredHandle').value = parsed?.account_handle || '';
-  document.getElementById('engMonitoredChannel').value = parsed?.mirror_channel_id || '';
+  const monitoredSelectedChannel = String(parsed?.mirror_channel_id || '').trim();
+  await populateChannelSelect('engMonitoredChannel', monitoredSelectedChannel);
+  document.getElementById('engMonitoredChannel').value = monitoredSelectedChannel;
   document.getElementById('engMonitoredIncludeReplies').checked = !!parsed?.requirements?.includeReplies;
   document.getElementById('engMonitoredCommentMinLength').value = Number(parsed?.requirements?.commentMinLength || 0) || '';
   document.getElementById('engMonitoredTaskWindowHours').value = Number(parsed?.requirements?.taskWindowHours || 0) || '';
@@ -19222,11 +19225,19 @@ function openEngagementMonitoredAccountEditor(encoded = '') {
 function closeEngagementMonitoredAccountEditor() {
   const panel = document.getElementById('engMonitoredEditorPanel');
   if (panel) panel.style.display = 'none';
+  document.body.style.overflow = '';
   document.getElementById('engMonitoredEditId').value = '';
+  document.getElementById('engMonitoredProvider').value = 'x';
+  document.getElementById('engMonitoredChannel').value = '';
+  document.getElementById('engMonitoredIncludeReplies').checked = false;
   document.getElementById('engMonitoredHandle').value = '';
   document.getElementById('engMonitoredCommentMinLength').value = '';
   document.getElementById('engMonitoredTaskWindowHours').value = '';
   document.getElementById('engMonitoredMirrorTemplate').value = '';
+  const taskWrap = document.getElementById('engMonitoredTaskRows');
+  if (taskWrap) taskWrap.innerHTML = '';
+  addEngagementRewardRow('monitored', 'x_like', 10);
+  syncEngagementTaskRowsForProvider('monitored');
 }
 
 async function submitEngagementMonitoredAccount() {
@@ -19334,10 +19345,11 @@ async function loadEngagementHashtags() {
   }
 }
 
-function openEngagementHashtagEditor(encoded = '') {
+async function openEngagementHashtagEditor(encoded = '') {
   const panel = document.getElementById('engHashtagEditorPanel');
   if (!panel) return;
-  panel.style.display = 'block';
+  panel.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
   const parsed = (() => {
     try {
       if (!encoded) return null;
@@ -19349,7 +19361,9 @@ function openEngagementHashtagEditor(encoded = '') {
   document.getElementById('engHashtagEditId').value = parsed?.id ? String(parsed.id) : '';
   document.getElementById('engHashtagProvider').value = parsed?.provider || 'x';
   document.getElementById('engHashtagTag').value = parsed?.hashtag || '';
-  document.getElementById('engHashtagChannel').value = parsed?.mirror_channel_id || '';
+  const hashtagSelectedChannel = String(parsed?.mirror_channel_id || '').trim();
+  await populateChannelSelect('engHashtagChannel', hashtagSelectedChannel);
+  document.getElementById('engHashtagChannel').value = hashtagSelectedChannel;
   document.getElementById('engHashtagTaskWindowHours').value = Number(parsed?.requirements?.taskWindowHours || 0) || '';
   document.getElementById('engHashtagMirrorTemplate').value = String(parsed?.reward_config?.mirrorMessageTemplate || '');
   const taskWrap = document.getElementById('engHashtagTaskRows');
@@ -19367,10 +19381,17 @@ function openEngagementHashtagEditor(encoded = '') {
 function closeEngagementHashtagEditor() {
   const panel = document.getElementById('engHashtagEditorPanel');
   if (panel) panel.style.display = 'none';
+  document.body.style.overflow = '';
   document.getElementById('engHashtagEditId').value = '';
+  document.getElementById('engHashtagProvider').value = 'x';
+  document.getElementById('engHashtagChannel').value = '';
   document.getElementById('engHashtagTag').value = '';
   document.getElementById('engHashtagTaskWindowHours').value = '';
   document.getElementById('engHashtagMirrorTemplate').value = '';
+  const taskWrap = document.getElementById('engHashtagTaskRows');
+  if (taskWrap) taskWrap.innerHTML = '';
+  addEngagementRewardRow('hashtag', 'x_hashtag_post', 15);
+  syncEngagementTaskRowsForProvider('hashtag');
 }
 
 async function submitEngagementHashtagMonitor() {
@@ -19481,7 +19502,7 @@ async function loadEngagementTasks() {
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">${actionBadges || '<span style="color:var(--text-muted);font-size:0.82em;">No actions configured</span>'}</div>
             ${canAdminEngagement ? `
               <div style="display:flex;gap:8px;margin-top:10px;">
-                <button class="btn-secondary btn-sm" onclick="repostEngagementTask(${Number(task.id)})">Repost</button>
+                <button class="btn-secondary btn-sm" onclick="openEngagementRepostModal(${Number(task.id)})">Repost</button>
                 <button class="btn-danger btn-sm" onclick="deleteEngagementTask(${Number(task.id)})">Delete</button>
               </div>
             ` : ''}
@@ -19887,7 +19908,13 @@ async function disconnectEngagementAccount(providerKey) {
 }
 
 async function deleteEngagementTask(taskId) {
-  if (!confirm('Delete this task and its completions?')) return;
+  const cooldownKey = `eng-task-delete-${Number(taskId)}`;
+  const now = Date.now();
+  window.__engagementAdminCooldown = window.__engagementAdminCooldown || new Map();
+  const previous = Number(window.__engagementAdminCooldown.get(cooldownKey) || 0);
+  if (now - previous < 1500) return;
+  window.__engagementAdminCooldown.set(cooldownKey, now);
+  if (!confirm('Delete this task and its completions? This cannot be undone.')) return;
   try {
     const res = await fetch(`/api/admin/engagement/tasks/${Number(taskId)}`, {
       method: 'DELETE',
@@ -19906,13 +19933,19 @@ async function deleteEngagementTask(taskId) {
   }
 }
 
-async function repostEngagementTask(taskId) {
+async function repostEngagementTask(taskId, mirrorChannelId = '') {
+  const cooldownKey = `eng-task-repost-${Number(taskId)}`;
+  const now = Date.now();
+  window.__engagementAdminCooldown = window.__engagementAdminCooldown || new Map();
+  const previous = Number(window.__engagementAdminCooldown.get(cooldownKey) || 0);
+  if (now - previous < 3000) return;
+  window.__engagementAdminCooldown.set(cooldownKey, now);
   try {
     const res = await fetch(`/api/admin/engagement/tasks/${Number(taskId)}/repost`, {
       method: 'POST',
       credentials: 'include',
       headers: engagementHeaders(),
-      body: JSON.stringify({}),
+      body: JSON.stringify({ mirror_channel_id: mirrorChannelId || null }),
     });
     const data = await res.json();
     if (!data.success) {
@@ -19924,6 +19957,39 @@ async function repostEngagementTask(taskId) {
   } catch (_e) {
     showError('Failed to repost task.');
   }
+}
+
+async function openEngagementRepostModal(taskId) {
+  const modal = document.getElementById('engagementRepostModal');
+  const taskIdInput = document.getElementById('engagementRepostTaskId');
+  const channelSelect = document.getElementById('engagementRepostChannel');
+  if (!modal || !taskIdInput || !channelSelect) return;
+  taskIdInput.value = String(Number(taskId) || 0);
+  await populateChannelSelect('engagementRepostChannel', '');
+  const defaultOption = document.createElement('option');
+  defaultOption.value = '';
+  defaultOption.textContent = '-- Use task/default channel --';
+  channelSelect.insertBefore(defaultOption, channelSelect.firstChild);
+  channelSelect.value = '';
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeEngagementRepostModal() {
+  const modal = document.getElementById('engagementRepostModal');
+  if (modal) modal.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+async function confirmEngagementRepost() {
+  const taskId = Number(document.getElementById('engagementRepostTaskId')?.value || 0);
+  const channelId = String(document.getElementById('engagementRepostChannel')?.value || '').trim();
+  if (!taskId) {
+    showError('Task ID missing.');
+    return;
+  }
+  await repostEngagementTask(taskId, channelId);
+  closeEngagementRepostModal();
 }
 
 async function redeemEngagementItem(itemId) {

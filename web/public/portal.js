@@ -19570,7 +19570,7 @@ async function loadEngagementTasks() {
         : '<p style="color:var(--text-secondary);">No active tasks available right now.</p>';
       return;
     }
-    el.innerHTML = data.tasks.map(task => {
+    const rows = data.tasks.map(task => {
       const endsAtMs = task.ends_at ? new Date(task.ends_at).getTime() : Number.NaN;
       const isExpired = String(task.status || '').toLowerCase() === 'expired'
         || (Number.isFinite(endsAtMs) && endsAtMs <= Date.now());
@@ -19602,27 +19602,43 @@ async function loadEngagementTasks() {
           : '';
         return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">${openBtn}${likeBtn}${repostBtn}${replyBtn}</div>`;
       })();
+      const totalReward = formatEngagementAmount(Object.values(task.reward_config || {}).reduce((sum, value) => sum + Number(value || 0), 0));
+      const actionsText = (task.required_actions || []).map(formatEngagementActionLabel).join(', ') || 'None';
+      const statusBadge = `<span class="status-badge ${isExpired ? 'status-paused' : (task.status === 'active' ? 'status-live' : 'status-paused')}">${isExpired ? 'expired' : escapeHtml(task.status || 'active')}</span>`;
+      const metaLine = `${escapeHtml(task.provider)} • ${escapeHtml(task.trigger_type)} • ${escapeHtml(totalReward)}`;
+      const titleLine = `<div style="font-weight:600;">${escapeHtml(task.title || `${task.provider} task`)}</div><div style="font-size:0.78em;color:var(--text-muted);margin-top:4px;">${metaLine}</div>`;
+      const detailBlocks = [
+        isExpired ? '<div style="font-size:0.78em;color:#fca5a5;font-weight:700;">Not earnable anymore (expired)</div>' : '',
+        task.source_post_url ? `<a href="${escapeHtml(task.source_post_url)}" target="_blank" rel="noopener noreferrer" style="color:#93c5fd;font-size:0.78em;">${escapeHtml(task.source_post_url)}</a>` : '',
+        task.body ? `<div style="font-size:0.8em;color:var(--text-secondary);">${escapeHtml(task.body)}</div>` : '',
+        actionLinks,
+        `<div style="display:flex;gap:8px;flex-wrap:wrap;">${actionBadges || '<span style="color:var(--text-muted);font-size:0.82em;">No actions configured</span>'}</div>`,
+        canAdminEngagement ? `<div style="display:flex;gap:8px;"><button class="btn-secondary btn-sm" onclick="openEngagementRepostModal(${Number(task.id)})">Repost</button><button class="btn-danger btn-sm" onclick="deleteEngagementTask(${Number(task.id)})">Delete</button></div>` : '',
+      ].filter(Boolean).join('<div style="margin-top:6px;"></div>');
       return `
-        <div class="table-row" style="align-items:flex-start;${isExpired ? 'border-color:rgba(248,113,113,0.55);background:rgba(127,29,29,0.16);' : ''}">
-          <div style="flex:1;">
-            <div style="font-weight:600;">${escapeHtml(task.title || `${task.provider} task`)}</div>
-            <div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(task.provider)}  ${escapeHtml(task.trigger_type)}  ${formatEngagementAmount(Object.values(task.reward_config || {}).reduce((sum, value) => sum + Number(value || 0), 0))}</div>
-            ${isExpired ? '<div style="font-size:0.8em;color:#fca5a5;font-weight:700;margin-top:6px;">Not earnable anymore (expired)</div>' : ''}
-            ${task.source_post_url ? `<div style="font-size:0.82em;color:var(--text-muted);word-break:break-all;"><a href="${escapeHtml(task.source_post_url)}" target="_blank" rel="noopener noreferrer" style="color:#93c5fd;">${escapeHtml(task.source_post_url)}</a></div>` : ''}
-            ${task.body ? `<div style="font-size:0.84em;color:var(--text-secondary);margin-top:6px;">${escapeHtml(task.body)}</div>` : ''}
-            ${actionLinks}
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">${actionBadges || '<span style="color:var(--text-muted);font-size:0.82em;">No actions configured</span>'}</div>
-            ${canAdminEngagement ? `
-              <div style="display:flex;gap:8px;margin-top:10px;">
-                <button class="btn-secondary btn-sm" onclick="openEngagementRepostModal(${Number(task.id)})">Repost</button>
-                <button class="btn-danger btn-sm" onclick="deleteEngagementTask(${Number(task.id)})">Delete</button>
-              </div>
-            ` : ''}
-          </div>
-          <span class="status-badge ${task.status === 'active' ? 'status-live' : 'status-paused'}">${escapeHtml(task.status || 'active')}</span>
-        </div>
+        <tr ${isExpired ? 'style="background:rgba(127,29,29,0.14);"' : ''}>
+          <td style="padding:10px 12px;min-width:280px;">${titleLine}</td>
+          <td style="padding:10px 12px;min-width:180px;">${escapeHtml(actionsText)}</td>
+          <td style="padding:10px 12px;min-width:120px;">${statusBadge}</td>
+          <td style="padding:10px 12px;min-width:360px;">${detailBlocks}</td>
+        </tr>
       `;
     }).join('');
+    el.innerHTML = `
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Task</th>
+              <th>Actions</th>
+              <th>Status</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
   } catch (e) {
     el.innerHTML = '<p style="color:var(--error);">Failed to load tasks.</p>';
   }

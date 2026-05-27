@@ -1210,6 +1210,13 @@
               <div><label class="form-label">Actions</label><input id="engTaskActions" class="form-input" placeholder="x_like,x_reply"></div>
               <div style="grid-column: span 2;"><label class="form-label">Reward JSON</label><textarea id="engTaskRewards" class="form-input" rows="2" placeholder='{"x_like":10,"x_reply":25}'></textarea></div>
             </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header-row">
+              <h3 class="card-title">Active Tasks</h3>
+              <button class="btn-secondary btn-sm" type="button" onclick="loadEngagementTasks()">Refresh</button>
+            </div>
             <div id="engagementTasksView">
               <div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>
             </div>

@@ -1212,7 +1212,11 @@ async function ingestProviderPost(guildId, provider, payload = {}) {
   const url = String(payload.url || payload.source_post_url || payload.sourcePostUrl || '').trim() || null;
 
   const matchingAccounts = listMonitoredAccounts(normalizedGuildId, providerKey).filter(account => account.enabled && formatHandle(account.account_handle) === sourceHandle);
-  const matchingHashtags = findMatchingHashtags(`${title}\n${body}`, providerKey, normalizedGuildId).filter(monitor => monitor.enabled);
+  // Prevent duplicate tasks: if a post is already captured by monitored account rules,
+  // skip hashtag triggers for the same post.
+  const matchingHashtags = matchingAccounts.length > 0
+    ? []
+    : findMatchingHashtags(`${title}\n${body}`, providerKey, normalizedGuildId).filter(monitor => monitor.enabled);
   const triggered = [...matchingAccounts, ...matchingHashtags];
   if (!triggered.length) return { success: true, createdTasks: [], matched: false };
 

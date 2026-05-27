@@ -7437,9 +7437,11 @@ const SUPERADMIN_WORKSPACES = new Set(['overview', 'tenants', 'billing', 'securi
 
 function reportAdminUiTelemetry(event, payload = {}) {
   try {
+    if (!isSuperadmin) return;
     const normalizedEvent = String(event || '').trim();
     if (!normalizedEvent) return;
     console.info(`[admin-ui-v2][${normalizedEvent}]`, payload || {});
+    if (window.ENABLE_SUPERADMIN_TELEMETRY !== true) return;
     fetch('/api/superadmin/workspace/telemetry', {
       method: 'POST',
       credentials: 'include',
@@ -8761,7 +8763,11 @@ async function loadSuperadminWorkspaceHubV2() {
             <div class="sa-v2-detail-header"><h4>X Provider</h4><button class="btn-secondary" onclick="setSuperadminWorkspaceFocus('')">Back</button></div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
               <label style="display:grid; gap:6px;"><span style="font-size:0.82em; color:var(--text-secondary);">X Client ID</span><input id="sa_xClientId" type="text" value="${escapeHtml(globalSettings.xClientId || '')}"></label>
+              <label style="display:grid; gap:6px;"><span style="font-size:0.82em; color:var(--text-secondary);">X Redirect URI (optional)</span><input id="sa_xRedirectUri" type="text" value="${escapeHtml(globalSettings.xRedirectUri || '')}" placeholder="https://guildpilot.app/auth/x/callback"></label>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;">
               <label style="display:grid; gap:6px;"><span style="font-size:0.82em; color:var(--text-secondary);">Polling Interval (sec)</span><input id="sa_xPollingInterval" type="number" min="30" max="3600" value="${escapeHtml(String(globalSettings.xPollingIntervalSeconds || 300))}"></label>
+              <div></div>
             </div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;">
               <label style="display:grid; gap:6px;"><span style="font-size:0.82em; color:var(--text-secondary);">X Client Secret (optional update)</span><input id="sa_xClientSecret" type="password" value=""></label>
@@ -9965,6 +9971,7 @@ async function saveXProviderSettings() {
     return;
   }
   const xClientId = document.getElementById('sa_xClientId')?.value?.trim() || '';
+  const xRedirectUri = document.getElementById('sa_xRedirectUri')?.value?.trim() || '';
   const xClientSecret = document.getElementById('sa_xClientSecret')?.value?.trim() || '';
   const xBearerToken = document.getElementById('sa_xBearerToken')?.value?.trim() || '';
   const clearXClientSecret = !!document.getElementById('sa_xClientSecretClear')?.checked;
@@ -9975,6 +9982,7 @@ async function saveXProviderSettings() {
   try {
     const payload = {
       xClientId,
+      xRedirectUri,
       xPollingEnabled,
       xPollingIntervalSeconds,
     };
@@ -10018,6 +10026,10 @@ async function testXProviderApi() {
     const data = await response.json();
     if (!data.success) {
       showError(data.message || 'X API test failed');
+      return;
+    }
+    if (data.restricted) {
+      showInfo(data.message || 'X API credentials are valid but your X plan restricts this probe endpoint.');
       return;
     }
     const scanned = Number(data?.scanned || 0);

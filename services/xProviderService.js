@@ -69,7 +69,13 @@ function base64Url(buffer) {
 }
 
 function getConfiguredRedirectUris() {
+  const settings = settingsManager.getSettings ? settingsManager.getSettings() : {};
+  const fromSettings = [
+    settings.xRedirectUri,
+    ...parseCommaSeparated(settings.xRedirectUris),
+  ];
   const configured = [
+    ...fromSettings,
     process.env.X_REDIRECT_URI,
     ...parseCommaSeparated(process.env.X_REDIRECT_URIS),
   ];
@@ -89,15 +95,15 @@ function getRuntimeConfig() {
 
 function resolveRedirectUri(req) {
   const configured = getConfiguredRedirectUris();
-  if (configured.length === 0) {
-    return 'http://localhost:3000/auth/x/callback';
-  }
   const requestOrigin = normalizeOrigin(getRequestOrigin(req));
-  if (requestOrigin) {
-    const preferred = normalizeCallbackUrl(`${requestOrigin}/auth/x/callback`);
-    if (preferred && configured.includes(preferred)) {
-      return preferred;
-    }
+  const preferred = requestOrigin ? normalizeCallbackUrl(`${requestOrigin}/auth/x/callback`) : '';
+
+  if (preferred && configured.includes(preferred)) {
+    return preferred;
+  }
+  if (configured.length === 0) {
+    if (preferred) return preferred;
+    return 'http://localhost:3000/auth/x/callback';
   }
   return configured[0];
 }

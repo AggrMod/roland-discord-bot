@@ -72,6 +72,7 @@ function createSuperadminCoreRouter({
           geminiApiKeyConfigured: !!geminiApiKey,
           geminiApiKeyMasked: geminiApiKey ? maskSecret(geminiApiKey) : '',
           xClientId: xClientId || '',
+          xRedirectUri: settings.xRedirectUri || process.env.X_REDIRECT_URI || '',
           xClientSecretConfigured: !!xClientSecret,
           xClientSecretMasked: xClientSecret ? maskSecret(xClientSecret) : '',
           xBearerTokenConfigured: !!xBearerToken,
@@ -101,7 +102,7 @@ function createSuperadminCoreRouter({
         'verifyRateLimitMinutes', 'maxPendingPerUser', 'chainEmojiMap',
         'billingReceiveWallet', 'billingOnchainVerifyEnabled', 'billingSupportUrl',
         'openaiApiKey', 'geminiApiKey',
-        'xClientId', 'xClientSecret', 'xBearerToken', 'xPollingEnabled', 'xPollingIntervalSeconds',
+        'xClientId', 'xRedirectUri', 'xClientSecret', 'xBearerToken', 'xPollingEnabled', 'xPollingIntervalSeconds',
         'aiAssistantDefaultProvider', 'aiAssistantFallbackProvider',
         'aiAssistantDefaultModelOpenai', 'aiAssistantDefaultModelGemini',
       ];
@@ -206,6 +207,14 @@ function createSuperadminCoreRouter({
     } catch (error) {
       logger.error('X provider test failed:', error);
       const status = Number(error?.status || 0);
+      if (status === 402) {
+        return res.json(toSuccessResponse({
+          ok: false,
+          restricted: true,
+          scanned: 0,
+          message: 'X credentials are accepted, but this X API plan cannot access search endpoints (HTTP 402).',
+        }));
+      }
       const message = error?.message || 'X API probe failed';
       res.status(status >= 400 && status < 600 ? status : 500).json(
         toErrorResponse(message, 'X_PROVIDER_TEST_FAILED')

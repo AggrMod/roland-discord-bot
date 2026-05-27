@@ -231,7 +231,7 @@ function createAdminEngagementRouter({
     }
   });
 
-  router.get('/api/admin/engagement/monitored-accounts', adminAuthMiddleware, (req, res) => {
+  const handleGetMonitoredAccounts = (req, res) => {
     if (!guard(req, res)) return;
     try {
       const eng = loadService();
@@ -242,7 +242,11 @@ function createAdminEngagementRouter({
       logger.error('Error loading monitored engagement accounts:', error);
       return res.status(500).json(toErrorResponse(error?.message || 'Internal server error'));
     }
-  });
+  };
+
+  router.get('/api/admin/engagement/monitored-accounts', adminAuthMiddleware, handleGetMonitoredAccounts);
+  // Backward-compat alias for older cached portal bundles that call a malformed URL.
+  router.get('/api/admin/engagement.onitored-accounts', adminAuthMiddleware, handleGetMonitoredAccounts);
 
   router.post('/api/admin/engagement/monitored-accounts', adminAuthMiddleware, (req, res) => {
     if (!guard(req, res)) return;

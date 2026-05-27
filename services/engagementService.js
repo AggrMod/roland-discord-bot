@@ -83,6 +83,7 @@ const ACHIEVEMENT_METRICS = Object.freeze({
   SHOP_PURCHASES: 'shop_purchases',
   ADMIN_GRANTS: 'admin_grants',
 });
+const PROFILE_SCOPE_GUILD_ID = '__profile__';
 
 function normalizeGuildId(guildId) {
   return String(guildId || '').trim();
@@ -110,6 +111,14 @@ function readStoredSecretValue(value) {
 function normalizeProvider(provider) {
   const key = String(provider || '').trim().toLowerCase();
   return PROVIDERS[key] ? key : '';
+}
+
+function isProfileScopedProvider(providerKey) {
+  return providerKey === 'x';
+}
+
+function resolveAccountScopeGuildId(providerKey, guildId) {
+  return isProfileScopedProvider(providerKey) ? PROFILE_SCOPE_GUILD_ID : normalizeGuildId(guildId);
 }
 
 function isXProviderAllowed(guildId) {
@@ -509,15 +518,39 @@ function updateHashtagMonitorRequirements(guildId, id, requirements = {}) {
 function listLinkedAccounts(guildId, userId = null) {
   const normalizedGuildId = normalizeGuildId(guildId);
   const normalizedUserId = String(userId || '').trim();
-  const rows = normalizedUserId
-    ? db.prepare('SELECT * FROM engagement_social_accounts WHERE guild_id = ? AND user_id = ? ORDER BY updated_at DESC').all(normalizedGuildId, normalizedUserId)
-    : db.prepare('SELECT * FROM engagement_social_accounts WHERE guild_id = ? ORDER BY updated_at DESC').all(normalizedGuildId);
-  return rows.map(row => ({
+  let rows = [];
+  if (normalizedUserId) {
+    rows = db.prepare(`
+      SELECT * FROM engagement_social_accounts
+      WHERE user_id = ? AND (guild_id = ? OR guild_id = ?)
+      ORDER BY updated_at DESC
+    `).all(normalizedUserId, normalizedGuildId, PROFILE_SCOPE_GUILD_ID);
+  } else {
+    rows = db.prepare('SELECT * FROM engagement_social_accounts WHERE guild_id = ? ORDER BY updated_at DESC').all(normalizedGuildId);
+  }
+
+  const mapped = rows.map(row => ({
     ...row,
     metadata: safeJsonParse(row.metadata_json, {}),
     access_token: row.access_token ? '[stored]' : null,
     refresh_token: row.refresh_token ? '[stored]' : null,
   }));
+  if (!normalizedUserId) return mapped;
+  const deduped = [];
+  const seenProviders = new Set();
+  const sorted = mapped.sort((a, b) => {
+    const aProfile = String(a.guild_id || '') === PROFILE_SCOPE_GUILD_ID ? 1 : 0;
+    const bProfile = String(b.guild_id || '') === PROFILE_SCOPE_GUILD_ID ? 1 : 0;
+    if (aProfile !== bProfile) return bProfile - aProfile;
+    return 0;
+  });
+  for (const row of sorted) {
+    const key = String(row.provider || '').toLowerCase();
+    if (!key || seenProviders.has(key)) continue;
+    seenProviders.add(key);
+    deduped.push(row);
+  }
+  return deduped;
 }
 
 function upsertLinkedAccount(guildId, userId, payload = {}) {
@@ -540,7 +573,8 @@ function upsertLinkedAccount(guildId, userId, payload = {}) {
   const hasAccessToken = Object.prototype.hasOwnProperty.call(payload, 'access_token') || Object.prototype.hasOwnProperty.call(payload, 'accessToken');
   const hasRefreshToken = Object.prototype.hasOwnProperty.call(payload, 'refresh_token') || Object.prototype.hasOwnProperty.call(payload, 'refreshToken');
   const hasTokenExpiresAt = Object.prototype.hasOwnProperty.call(payload, 'token_expires_at') || Object.prototype.hasOwnProperty.call(payload, 'tokenExpiresAt');
-  const existing = db.prepare('SELECT id, access_token, refresh_token, token_expires_at FROM engagement_social_accounts WHERE guild_id = ? AND user_id = ? AND provider = ?').get(normalizedGuildId, normalizedUserId, providerKey);
+  const scopedGuildId = resolveAccountScopeGuildId(providerKey, normalizedGuildId);
+  const existing = db.prepare('SELECT id, access_token, refresh_token, token_expires_at FROM engagement_social_accounts WHERE guild_id = ? AND user_id = ? AND provider = ?').get(scopedGuildId, normalizedUserId, providerKey);
   if (existing) {
     db.prepare(`
       UPDATE engagement_social_accounts
@@ -567,7 +601,7 @@ function upsertLinkedAccount(guildId, userId, payload = {}) {
       access_token, refresh_token, token_expires_at, status, metadata_json, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
   `).run(
-    normalizedGuildId,
+    scopedGuildId,
     normalizedUserId,
     providerKey,
       providerUserId,
@@ -583,11 +617,22 @@ function upsertLinkedAccount(guildId, userId, payload = {}) {
 }
 
 function disconnectLinkedAccount(guildId, userId, provider) {
-  const result = db.prepare('DELETE FROM engagement_social_accounts WHERE guild_id = ? AND user_id = ? AND provider = ?').run(
-    normalizeGuildId(guildId),
-    String(userId || '').trim(),
-    normalizeProvider(provider)
-  );
+  const providerKey = normalizeProvider(provider);
+  const normalizedGuildId = normalizeGuildId(guildId);
+  const normalizedUserId = String(userId || '').trim();
+  let result;
+  if (isProfileScopedProvider(providerKey)) {
+    result = db.prepare(`
+      DELETE FROM engagement_social_accounts
+      WHERE user_id = ? AND provider = ? AND (guild_id = ? OR guild_id = ?)
+    `).run(normalizedUserId, providerKey, normalizedGuildId, PROFILE_SCOPE_GUILD_ID);
+  } else {
+    result = db.prepare('DELETE FROM engagement_social_accounts WHERE guild_id = ? AND user_id = ? AND provider = ?').run(
+      normalizedGuildId,
+      normalizedUserId,
+      providerKey
+    );
+  }
   return { success: result.changes > 0 };
 }
 
@@ -597,14 +642,41 @@ function getLinkedAccountRecord(guildId, userId, provider) {
   const providerKey = normalizeProvider(provider);
   if (!normalizedGuildId || !normalizedUserId || !providerKey) return null;
 
-  const row = db.prepare(`
-    SELECT *
-    FROM engagement_social_accounts
-    WHERE guild_id = ? AND user_id = ? AND provider = ?
-    LIMIT 1
-  `).get(normalizedGuildId, normalizedUserId, providerKey);
+  const profileScoped = isProfileScopedProvider(providerKey);
+  const row = profileScoped
+    ? db.prepare(`
+      SELECT *
+      FROM engagement_social_accounts
+      WHERE user_id = ? AND provider = ? AND (guild_id = ? OR guild_id = ?)
+      ORDER BY CASE WHEN guild_id = ? THEN 0 ELSE 1 END, updated_at DESC
+      LIMIT 1
+    `).get(normalizedUserId, providerKey, PROFILE_SCOPE_GUILD_ID, normalizedGuildId, PROFILE_SCOPE_GUILD_ID)
+    : db.prepare(`
+      SELECT *
+      FROM engagement_social_accounts
+      WHERE guild_id = ? AND user_id = ? AND provider = ?
+      LIMIT 1
+    `).get(normalizedGuildId, normalizedUserId, providerKey);
 
   if (!row) return null;
+  if (profileScoped && String(row.guild_id || '') !== PROFILE_SCOPE_GUILD_ID) {
+    // Lazy migration path: copy legacy guild-scoped X link into profile scope.
+    try {
+      upsertLinkedAccount(normalizedGuildId, normalizedUserId, {
+        provider: providerKey,
+        provider_user_id: row.provider_user_id,
+        handle: row.handle,
+        display_name: row.display_name,
+        access_token: row.access_token,
+        refresh_token: row.refresh_token,
+        token_expires_at: row.token_expires_at,
+        status: row.status,
+        metadata: safeJsonParse(row.metadata_json, {}),
+      });
+    } catch (_error) {
+      // best-effort migration only
+    }
+  }
   return {
     ...row,
     metadata: safeJsonParse(row.metadata_json, {}),

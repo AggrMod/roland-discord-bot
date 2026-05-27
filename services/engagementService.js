@@ -1771,13 +1771,23 @@ function getUserPoints(guildId, userId) {
   return { ...(row || {}), row: row || null, total_points: total, rank };
 }
 
-function getUserHistory(guildId, userId, limit = 10) {
-  return db.prepare(`
+function getUserHistory(guildId, userId, limit = 10, offset = 0) {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  const normalizedUserId = String(userId || '').trim();
+  const safeLimit = Math.max(1, Math.min(Number(limit || 10), 100));
+  const safeOffset = Math.max(0, Number(offset || 0));
+  const total = Number(db.prepare(`
+    SELECT COUNT(1) AS count
+    FROM points_ledger
+    WHERE guild_id = ? AND user_id = ?
+  `).get(normalizedGuildId, normalizedUserId)?.count || 0);
+  const items = db.prepare(`
     SELECT action_type, points, note, channel_id, created_at
     FROM points_ledger
     WHERE guild_id = ? AND user_id = ?
-    ORDER BY created_at DESC LIMIT ?
-  `).all(normalizeGuildId(guildId), String(userId || '').trim(), Math.max(1, Math.min(Number(limit || 10), 100)));
+    ORDER BY created_at DESC LIMIT ? OFFSET ?
+  `).all(normalizedGuildId, normalizedUserId, safeLimit, safeOffset);
+  return { items, total, limit: safeLimit, offset: safeOffset };
 }
 
 function getShopItems(guildId, { includeDisabled = false } = {}) {

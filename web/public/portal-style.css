@@ -7179,6 +7179,8 @@ footer a[href="/terms-of-service"]:hover {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+  align-items: start;
+  grid-auto-rows: max-content;
 }
 
 #section-engagement.engagement-user-mode .section-header,
@@ -7188,6 +7190,8 @@ footer a[href="/terms-of-service"]:hover {
 
 #section-engagement .engagement-compact-card {
   margin: 0;
+  min-height: auto;
+  height: auto;
 }
 
 #section-engagement .engagement-compact-card .card-header-row {
@@ -7201,6 +7205,23 @@ footer a[href="/terms-of-service"]:hover {
 #section-engagement .engagement-compact-card .btn-sm {
   padding: 5px 10px;
   font-size: 0.78rem;
+}
+
+#section-engagement.engagement-user-mode #engagementHistoryView {
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+#section-engagement.engagement-user-mode #engagementLinkedAccountsView,
+#section-engagement.engagement-user-mode #engagementLeaderboardView,
+#section-engagement.engagement-user-mode #engagementShopView,
+#section-engagement.engagement-user-mode #engagementAchievementsView,
+#section-engagement.engagement-user-mode #engagementTasksView,
+#section-engagement.engagement-user-mode #engagementRedemptionsView {
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 @media (max-width: 1080px) {

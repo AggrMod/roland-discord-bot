@@ -20038,14 +20038,21 @@ async function loadEngagementHistory() {
   if (!el) return;
   el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
   try {
-    const res = await fetch('/api/user/engagement/history?limit=25', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    window.__engagementHistoryPage = window.__engagementHistoryPage || { limit: 10, offset: 0, total: 0 };
+    const limit = Math.max(1, Math.min(Number(window.__engagementHistoryPage.limit || 10), 50));
+    const offset = Math.max(0, Number(window.__engagementHistoryPage.offset || 0));
+    const res = await fetch(`/api/user/engagement/history?limit=${limit}&offset=${offset}`, { credentials: 'include', headers: buildTenantRequestHeaders() });
     const data = await res.json();
     const history = Array.isArray(data.history) ? data.history : [];
+    const pagination = data.pagination || {};
+    window.__engagementHistoryPage.total = Number(pagination.total || history.length || 0);
+    window.__engagementHistoryPage.limit = Number(pagination.limit || limit);
+    window.__engagementHistoryPage.offset = Number(pagination.offset || offset);
     if (!data.success || !history.length) {
       el.innerHTML = '<p style="color:var(--text-secondary);">No points history yet. Start chatting or completing tasks to earn rewards.</p>';
       return;
     }
-    el.innerHTML = history.map(entry => `
+    const itemsHtml = history.map(entry => `
       <div class="table-row" style="align-items:flex-start;">
         <div style="flex:1;">
           <div style="font-weight:600;">${escapeHtml(formatEngagementHistoryLabel(entry))}</div>
@@ -20055,9 +20062,37 @@ async function loadEngagementHistory() {
         <span style="font-weight:700;color:${Number(entry.points || 0) >= 0 ? '#86efac' : '#fca5a5'};">${Number(entry.points || 0) > 0 ? '+' : ''}${Number(entry.points || 0).toLocaleString()}</span>
       </div>
     `).join('');
+    const start = Number(window.__engagementHistoryPage.offset || 0) + 1;
+    const end = Math.min(Number(window.__engagementHistoryPage.offset || 0) + history.length, Number(window.__engagementHistoryPage.total || history.length));
+    const hasPrev = Number(window.__engagementHistoryPage.offset || 0) > 0;
+    const hasNext = Number(window.__engagementHistoryPage.offset || 0) + history.length < Number(window.__engagementHistoryPage.total || history.length);
+    el.innerHTML = `
+      <div style="display:grid;gap:8px;">
+        ${itemsHtml}
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:4px;">
+          <span style="font-size:0.78em;color:var(--text-muted);">Showing ${start}-${end} of ${Number(window.__engagementHistoryPage.total || history.length)}</span>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-secondary btn-sm" ${hasPrev ? '' : 'disabled'} onclick="changeEngagementHistoryPage(-1)">Previous</button>
+            <button class="btn-secondary btn-sm" ${hasNext ? '' : 'disabled'} onclick="changeEngagementHistoryPage(1)">Next</button>
+          </div>
+        </div>
+      </div>
+    `;
   } catch (error) {
     el.innerHTML = `<p style="color:var(--error);">Failed to load history: ${escapeHtml(error.message)}</p>`;
   }
+}
+
+function changeEngagementHistoryPage(direction = 1) {
+  window.__engagementHistoryPage = window.__engagementHistoryPage || { limit: 10, offset: 0, total: 0 };
+  const step = Math.max(1, Number(window.__engagementHistoryPage.limit || 10));
+  const current = Math.max(0, Number(window.__engagementHistoryPage.offset || 0));
+  let nextOffset = current + (Number(direction) * step);
+  if (nextOffset < 0) nextOffset = 0;
+  const maxOffset = Math.max(0, Number(window.__engagementHistoryPage.total || 0) - step);
+  if (nextOffset > maxOffset) nextOffset = maxOffset;
+  window.__engagementHistoryPage.offset = nextOffset;
+  loadEngagementHistory();
 }
 
 async function disconnectEngagementAccount(providerKey) {
@@ -20213,6 +20248,7 @@ async function loadEngagementSection() {
     loadEngagementRedemptions(),
   ];
   if (!canAdmin) {
+    window.__engagementHistoryPage = { limit: 10, offset: 0, total: 0 };
     tasks.push(
       loadEngagementMemberAccounts(),
       loadEngagementHistory()

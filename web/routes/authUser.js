@@ -1546,8 +1546,16 @@ function createAuthUserRouter({
       const guildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
       if (!guildId) return res.status(400).json(toErrorResponse('Select a server first', 'VALIDATION_ERROR'));
       const eng = require('../../services/engagementService');
+      const limit = Math.max(1, Math.min(Number(req.query.limit || 10), 100));
+      const offset = Math.max(0, Number(req.query.offset || 0));
+      const historyPage = eng.getUserHistory(guildId, req.session.discordUser.id, limit, offset);
       return res.json(toSuccessResponse({
-        history: eng.getUserHistory(guildId, req.session.discordUser.id, Number(req.query.limit || 25)),
+        history: historyPage.items || [],
+        pagination: {
+          total: Number(historyPage.total || 0),
+          limit: Number(historyPage.limit || limit),
+          offset: Number(historyPage.offset || offset),
+        },
         currency: eng.getCurrencyMeta(guildId),
       }));
     } catch (routeError) {

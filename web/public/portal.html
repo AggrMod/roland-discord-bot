@@ -1116,6 +1116,12 @@
                   <input id="engMonitoredTaskWindowHours" type="number" min="1" max="720" class="form-input" placeholder="24">
                   <div style="font-size:0.76em;color:var(--text-muted);margin-top:4px;">After this window, one final check runs and task closes.</div>
                 </div>
+                <div style="grid-column:1 / -1;">
+                  <label class="form-label">Ping Roles On New Task</label>
+                  <select id="engMonitoredPingRoles" class="form-input" multiple data-ms-title="Select Roles To Ping" data-ms-placeholder="No role pings">
+                  </select>
+                  <div style="font-size:0.76em;color:var(--text-muted);margin-top:4px;">Selected roles are pinged when a new mirrored task is posted.</div>
+                </div>
                 <div style="grid-column:1 / -1;"><label class="form-label">Mirror Message Template</label><input id="engMonitoredMirrorTemplate" class="form-input" placeholder="New post by @{handle}: {link}"></div>
                 <div style="grid-column:1 / -1;font-size:0.8em;color:var(--text-muted);">Placeholders: {provider}, {handle}, {hashtag}, {title}, {body}, {url}, {link}</div>
                   </div>
@@ -1164,6 +1170,12 @@
                   <label class="form-label">Task expiry window (hours)</label>
                   <input id="engHashtagTaskWindowHours" type="number" min="1" max="720" class="form-input" placeholder="24">
                   <div style="font-size:0.76em;color:var(--text-muted);margin-top:4px;">After this window, one final check runs and task closes.</div>
+                </div>
+                <div style="grid-column:1 / -1;">
+                  <label class="form-label">Ping Roles On New Task</label>
+                  <select id="engHashtagPingRoles" class="form-input" multiple data-ms-title="Select Roles To Ping" data-ms-placeholder="No role pings">
+                  </select>
+                  <div style="font-size:0.76em;color:var(--text-muted);margin-top:4px;">Selected roles are pinged when a new mirrored hashtag task is posted.</div>
                 </div>
                 <div style="grid-column:1 / -1;"><label class="form-label">Mirror Message Template</label><input id="engHashtagMirrorTemplate" class="form-input" placeholder="Tagged post {hashtag}: {link}"></div>
                 <div style="grid-column:1 / -1;font-size:0.8em;color:var(--text-muted);">Placeholders: {provider}, {handle}, {hashtag}, {title}, {body}, {url}, {link}</div>

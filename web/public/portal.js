@@ -19187,6 +19187,40 @@ async function loadEngagementMonitoredAccounts() {
   }
 }
 
+function formatEngagementActionLabel(actionType) {
+  const key = String(actionType || '').trim().toLowerCase();
+  const labels = {
+    x_like: 'Like',
+    x_repost: 'Repost',
+    x_reply: 'Reply',
+    x_follow: 'Follow',
+    x_hashtag_post: 'Hashtag Post',
+    discord_message: 'Message',
+    discord_reply: 'Reply',
+    discord_reaction: 'Reaction',
+  };
+  return labels[key] || key.replace(/_/g, ' ');
+}
+
+async function populateRoleMultiSelect(selectId, selectedValues = []) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const roles = await fetchDiscordRoles();
+  const selectedSet = new Set((Array.isArray(selectedValues) ? selectedValues : []).map(v => String(v || '').trim()).filter(Boolean));
+  sel.innerHTML = '';
+  roles.forEach(role => {
+    const opt = document.createElement('option');
+    opt.value = role.id;
+    opt.textContent = role.name;
+    if (selectedSet.has(String(role.id))) {
+      opt.selected = true;
+    }
+    sel.appendChild(opt);
+  });
+  initializePortalMultiSelects(sel.parentElement || document);
+  refreshPortalMultiSelectControl(sel);
+}
+
 async function openEngagementMonitoredAccountEditor(encoded = '') {
   const panel = document.getElementById('engMonitoredEditorPanel');
   if (!panel) return;
@@ -19210,6 +19244,7 @@ async function openEngagementMonitoredAccountEditor(encoded = '') {
   document.getElementById('engMonitoredCommentMinLength').value = Number(parsed?.requirements?.commentMinLength || 0) || '';
   document.getElementById('engMonitoredTaskWindowHours').value = Number(parsed?.requirements?.taskWindowHours || 0) || '';
   document.getElementById('engMonitoredMirrorTemplate').value = String(parsed?.reward_config?.mirrorMessageTemplate || '');
+  await populateRoleMultiSelect('engMonitoredPingRoles', parsed?.requirements?.pingRoleIds || []);
   const taskWrap = document.getElementById('engMonitoredTaskRows');
   if (taskWrap) taskWrap.innerHTML = '';
   const rewardConfig = parsed?.reward_config || {};
@@ -19234,6 +19269,8 @@ function closeEngagementMonitoredAccountEditor() {
   document.getElementById('engMonitoredCommentMinLength').value = '';
   document.getElementById('engMonitoredTaskWindowHours').value = '';
   document.getElementById('engMonitoredMirrorTemplate').value = '';
+  setPortalMultiSelectValues(document.getElementById('engMonitoredPingRoles'), []);
+  refreshPortalMultiSelectControl('engMonitoredPingRoles');
   const taskWrap = document.getElementById('engMonitoredTaskRows');
   if (taskWrap) taskWrap.innerHTML = '';
   addEngagementRewardRow('monitored', 'x_like', 10);
@@ -19260,6 +19297,10 @@ async function submitEngagementMonitoredAccount() {
     const taskWindowHours = Number(document.getElementById('engMonitoredTaskWindowHours')?.value || 0);
     if (Number.isFinite(taskWindowHours) && taskWindowHours > 0) {
       body.requirements.taskWindowHours = Math.floor(taskWindowHours);
+    }
+    const pingRoleValues = getPortalMultiSelectValues(document.getElementById('engMonitoredPingRoles'));
+    if (pingRoleValues.length > 0) {
+      body.requirements.pingRoleIds = pingRoleValues;
     }
     const mirrorTemplate = document.getElementById('engMonitoredMirrorTemplate')?.value?.trim() || '';
     if (mirrorTemplate) {
@@ -19366,6 +19407,7 @@ async function openEngagementHashtagEditor(encoded = '') {
   document.getElementById('engHashtagChannel').value = hashtagSelectedChannel;
   document.getElementById('engHashtagTaskWindowHours').value = Number(parsed?.requirements?.taskWindowHours || 0) || '';
   document.getElementById('engHashtagMirrorTemplate').value = String(parsed?.reward_config?.mirrorMessageTemplate || '');
+  await populateRoleMultiSelect('engHashtagPingRoles', parsed?.requirements?.pingRoleIds || []);
   const taskWrap = document.getElementById('engHashtagTaskRows');
   if (taskWrap) taskWrap.innerHTML = '';
   const rewardConfig = parsed?.reward_config || {};
@@ -19388,6 +19430,8 @@ function closeEngagementHashtagEditor() {
   document.getElementById('engHashtagTag').value = '';
   document.getElementById('engHashtagTaskWindowHours').value = '';
   document.getElementById('engHashtagMirrorTemplate').value = '';
+  setPortalMultiSelectValues(document.getElementById('engHashtagPingRoles'), []);
+  refreshPortalMultiSelectControl('engHashtagPingRoles');
   const taskWrap = document.getElementById('engHashtagTaskRows');
   if (taskWrap) taskWrap.innerHTML = '';
   addEngagementRewardRow('hashtag', 'x_hashtag_post', 15);
@@ -19409,6 +19453,10 @@ async function submitEngagementHashtagMonitor() {
     const taskWindowHours = Number(document.getElementById('engHashtagTaskWindowHours')?.value || 0);
     if (Number.isFinite(taskWindowHours) && taskWindowHours > 0) {
       body.requirements.taskWindowHours = Math.floor(taskWindowHours);
+    }
+    const pingRoleValues = getPortalMultiSelectValues(document.getElementById('engHashtagPingRoles'));
+    if (pingRoleValues.length > 0) {
+      body.requirements.pingRoleIds = pingRoleValues;
     }
     const mirrorTemplate = document.getElementById('engHashtagMirrorTemplate')?.value?.trim() || '';
     if (mirrorTemplate) {
@@ -19477,28 +19525,46 @@ async function loadEngagementTasks() {
       return;
     }
     el.innerHTML = data.tasks.map(task => {
+      const endsAtMs = task.ends_at ? new Date(task.ends_at).getTime() : Number.NaN;
+      const isExpired = String(task.status || '').toLowerCase() === 'expired'
+        || (Number.isFinite(endsAtMs) && endsAtMs <= Date.now());
       const completions = Array.isArray(task.completions) ? task.completions : [];
       const completionSet = new Set(completions.map(entry => String(entry.action_type || '').trim()));
       const actionBadges = (task.required_actions || []).map(action => {
         const done = completionSet.has(action);
-        const verifyButton = !canAdminEngagement && !done
+        const verifyButton = !canAdminEngagement && !done && !isExpired
           ? `<button class="btn-secondary btn-sm" onclick="completeEngagementTask(${Number(task.id)}, '${escapeJsString(action)}')" style="padding:4px 8px;">${task.provider === 'x' ? 'Verify' : 'Complete'}</button>`
           : '';
         return `
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 10px;border:1px solid rgba(99,102,241,0.18);border-radius:999px;background:rgba(15,23,42,0.45);">
-            <span style="font-size:0.8em;color:${done ? '#86efac' : '#cbd5e1'};">${escapeHtml(action)}</span>
+            <span style="font-size:0.8em;color:${done ? '#86efac' : '#cbd5e1'};">${escapeHtml(formatEngagementActionLabel(action))}</span>
             <span class="status-badge ${done ? 'status-live' : 'status-paused'}" style="font-size:0.68em;">${done ? 'Done' : 'Pending'}</span>
             ${verifyButton}
           </div>
         `;
       }).join('');
+      const actionLinks = (() => {
+        if (task.provider !== 'x' || !task.source_post_url) return '';
+        const postId = String(task.source_post_id || '').trim();
+        const openBtn = `<a class="btn-secondary btn-sm" href="${escapeHtml(task.source_post_url)}" target="_blank" rel="noopener noreferrer">Open Post</a>`;
+        const likeBtn = `<a class="btn-secondary btn-sm" href="${escapeHtml(task.source_post_url)}" target="_blank" rel="noopener noreferrer">Like</a>`;
+        const repostBtn = postId
+          ? `<a class="btn-secondary btn-sm" href="https://x.com/intent/retweet?tweet_id=${encodeURIComponent(postId)}" target="_blank" rel="noopener noreferrer">Repost</a>`
+          : '';
+        const replyBtn = postId
+          ? `<a class="btn-secondary btn-sm" href="https://x.com/intent/tweet?in_reply_to=${encodeURIComponent(postId)}" target="_blank" rel="noopener noreferrer">Reply</a>`
+          : '';
+        return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">${openBtn}${likeBtn}${repostBtn}${replyBtn}</div>`;
+      })();
       return `
-        <div class="table-row" style="align-items:flex-start;">
+        <div class="table-row" style="align-items:flex-start;${isExpired ? 'border-color:rgba(248,113,113,0.55);background:rgba(127,29,29,0.16);' : ''}">
           <div style="flex:1;">
             <div style="font-weight:600;">${escapeHtml(task.title || `${task.provider} task`)}</div>
             <div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(task.provider)}  ${escapeHtml(task.trigger_type)}  ${formatEngagementAmount(Object.values(task.reward_config || {}).reduce((sum, value) => sum + Number(value || 0), 0))}</div>
+            ${isExpired ? '<div style="font-size:0.8em;color:#fca5a5;font-weight:700;margin-top:6px;">Not earnable anymore (expired)</div>' : ''}
             ${task.source_post_url ? `<div style="font-size:0.82em;color:var(--text-muted);word-break:break-all;"><a href="${escapeHtml(task.source_post_url)}" target="_blank" rel="noopener noreferrer" style="color:#93c5fd;">${escapeHtml(task.source_post_url)}</a></div>` : ''}
             ${task.body ? `<div style="font-size:0.84em;color:var(--text-secondary);margin-top:6px;">${escapeHtml(task.body)}</div>` : ''}
+            ${actionLinks}
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">${actionBadges || '<span style="color:var(--text-muted);font-size:0.82em;">No actions configured</span>'}</div>
             ${canAdminEngagement ? `
               <div style="display:flex;gap:8px;margin-top:10px;">

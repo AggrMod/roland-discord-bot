@@ -213,6 +213,21 @@ function renderMirrorMessageTemplate(template, taskRecord, source = {}) {
     .trim();
 }
 
+function formatActionLabel(actionType) {
+  const key = String(actionType || '').trim().toLowerCase();
+  const labels = {
+    x_like: 'Like',
+    x_repost: 'Repost',
+    x_reply: 'Reply',
+    x_follow: 'Follow',
+    x_hashtag_post: 'Hashtag Post',
+    discord_message: 'Message',
+    discord_reply: 'Reply',
+    discord_reaction: 'Reaction',
+  };
+  return labels[key] || key.replace(/_/g, ' ');
+}
+
 function getConfig(guildId) {
   const normalizedGuildId = normalizeGuildId(guildId);
   const row = normalizedGuildId
@@ -1052,9 +1067,9 @@ async function postTaskMirror(guildId, taskRecord, source, options = {}) {
     if (!channel || !channel.isTextBased()) return { channelId: targetChannelId, messageId: null };
 
     const meta = getCurrencyMeta(guildId);
-    const actions = (taskRecord.required_actions || []).join(', ') || 'activity';
+    const actions = (taskRecord.required_actions || []).map(formatActionLabel).join(', ') || 'activity';
     const rewardLines = Object.entries(taskRecord.reward_config || {})
-      .map(([action, value]) => `${action}: ${formatCurrency(guildId, value)}`)
+      .map(([action, value]) => `${formatActionLabel(action)}: ${formatCurrency(guildId, value)}`)
       .join('\n');
 
     const embed = new EmbedBuilder()
@@ -1079,9 +1094,14 @@ async function postTaskMirror(guildId, taskRecord, source, options = {}) {
       defaultFooter: 'GuildPilot · Engagement Task',
     });
 
+    const pingRoleIds = Array.isArray(taskRecord?.requirements?.pingRoleIds)
+      ? taskRecord.requirements.pingRoleIds.map(roleId => String(roleId || '').trim()).filter(Boolean)
+      : [];
+    const roleMentions = pingRoleIds.map(roleId => `<@&${roleId}>`).join(' ').trim();
     const templateContent = renderMirrorMessageTemplate(options.template, taskRecord, source);
-    const messagePayload = templateContent
-      ? { content: templateContent, embeds: [embed] }
+    const composedContent = [roleMentions, templateContent].filter(Boolean).join('\n').trim();
+    const messagePayload = composedContent
+      ? { content: composedContent, embeds: [embed] }
       : { embeds: [embed] };
     const message = await channel.send(messagePayload).catch(() => null);
     return { channelId: targetChannelId, messageId: message?.id || null };
@@ -2096,6 +2116,16 @@ function recordTaskCompletion(guildId, taskId, userId, username, payload = {}) {
   if (!task) return { success: false, message: 'Task not found' };
 
   const actionType = String(payload.action_type || payload.actionType || '').trim();
+  const taskStatus = String(task.status || '').trim().toLowerCase();
+  if (taskStatus && taskStatus !== 'active') {
+    return { success: false, message: 'Task is no longer earnable' };
+  }
+  if (task.ends_at) {
+    const endsAtMs = new Date(task.ends_at).getTime();
+    if (Number.isFinite(endsAtMs) && endsAtMs <= Date.now()) {
+      return { success: false, message: 'Task has expired and is no longer earnable' };
+    }
+  }
   const requiredActions = safeJsonParse(task.required_actions_json, []);
   if (!requiredActions.includes(actionType)) return { success: false, message: 'Action is not configured for this task' };
 

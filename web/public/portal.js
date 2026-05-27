@@ -8789,7 +8789,10 @@ async function loadSuperadminWorkspaceHubV2() {
             </div>
             <label style="display:flex; align-items:center; gap:10px; margin-top:10px;"><input id="sa_xPollingEnabled" type="checkbox" ${globalSettings.xPollingEnabled ? 'checked' : ''}>Enable X polling</label>
             <div class="sa-v2-inline-note" style="margin-top:8px;">Secrets are never shown in full for security. Entering a new value replaces the stored value.</div>
-            <div class="gp-actions-row"><button class="btn-primary" onclick="saveXProviderSettings()">Save X Settings</button></div>
+            <div class="gp-actions-row">
+              <button class="btn-secondary" onclick="testXProviderApi()">Test X API</button>
+              <button class="btn-primary" onclick="saveXProviderSettings()">Save X Settings</button>
+            </div>
           </div>
         `;
       } else if (superadminWorkspaceFocus === 'chainEmojis') {
@@ -9997,6 +10000,30 @@ async function saveXProviderSettings() {
   } catch (error) {
     console.error('[admin-ui-v2][save_failure]', { action: 'saveXProviderSettings', error: error?.message || String(error) });
     showError(formatAdminWorkspaceError('Failed to save X provider settings', error));
+  }
+}
+
+async function testXProviderApi() {
+  if (!isSuperadmin) {
+    showError('Superadmin access required.');
+    return;
+  }
+  try {
+    const response = await fetch('/api/superadmin/x-provider/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({}),
+    });
+    const data = await response.json();
+    if (!data.success) {
+      showError(data.message || 'X API test failed');
+      return;
+    }
+    const scanned = Number(data?.scanned || 0);
+    showSuccess(`X API test succeeded (${scanned} posts scanned).`);
+  } catch (error) {
+    showError(formatAdminWorkspaceError('Failed to test X API', error));
   }
 }
 
@@ -19045,6 +19072,7 @@ async function loadEngagementMonitoredAccounts() {
           <div style="font-weight:600;">${escapeHtml(account.provider)}  @${escapeHtml(account.account_handle)}</div>
           <div style="font-size:0.82em;color:var(--text-muted);">Tasks: ${escapeHtml((account.task_types || []).join(', ') || 'none')}</div>
           <div style="font-size:0.82em;color:var(--text-muted);">Mirror channel: ${escapeHtml(account.mirror_channel_id || 'default')}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">Mirror message: ${escapeHtml(account.reward_config?.mirrorMessageTemplate || 'embed only')}</div>
         </div>
         <button class="btn-danger btn-sm" onclick="deleteEngagementMonitoredAccount(${account.id})">Delete</button>
       </div>
@@ -19064,6 +19092,10 @@ async function submitEngagementMonitoredAccount() {
       reward_config: parseEngagementJson(document.getElementById('engMonitoredRewards').value, {}),
       requirements: parseEngagementJson(document.getElementById('engMonitoredRequirements').value, {}),
     };
+    const mirrorTemplate = document.getElementById('engMonitoredMirrorTemplate')?.value?.trim() || '';
+    if (mirrorTemplate) {
+      body.reward_config = { ...(body.reward_config || {}), mirrorMessageTemplate: mirrorTemplate };
+    }
     const res = await fetch('/api/admin/engagement/monitored-accounts', {
       method: 'POST',
       credentials: 'include',
@@ -19118,6 +19150,7 @@ async function loadEngagementHashtags() {
           <div style="font-weight:600;">${escapeHtml(monitor.provider)}  ${escapeHtml(monitor.hashtag)}</div>
           <div style="font-size:0.82em;color:var(--text-muted);">Tasks: ${escapeHtml((monitor.task_types || []).join(', ') || 'none')}</div>
           <div style="font-size:0.82em;color:var(--text-muted);">Mirror channel: ${escapeHtml(monitor.mirror_channel_id || 'default')}</div>
+          <div style="font-size:0.82em;color:var(--text-muted);">Mirror message: ${escapeHtml(monitor.reward_config?.mirrorMessageTemplate || 'embed only')}</div>
         </div>
         <button class="btn-danger btn-sm" onclick="deleteEngagementHashtagMonitor(${monitor.id})">Delete</button>
       </div>
@@ -19136,6 +19169,10 @@ async function submitEngagementHashtagMonitor() {
       task_types: parseEngagementTaskTypes(document.getElementById('engHashtagTasks').value),
       reward_config: parseEngagementJson(document.getElementById('engHashtagRewards').value, {}),
     };
+    const mirrorTemplate = document.getElementById('engHashtagMirrorTemplate')?.value?.trim() || '';
+    if (mirrorTemplate) {
+      body.reward_config = { ...(body.reward_config || {}), mirrorMessageTemplate: mirrorTemplate };
+    }
     const res = await fetch('/api/admin/engagement/hashtags', {
       method: 'POST',
       credentials: 'include',

@@ -2,6 +2,7 @@ const express = require('express');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
 const { decryptSecret, encryptSecret, maskSecret } = require('../../utils/secretVault');
 const billingService = require('../../services/billingService');
+const xProviderService = require('../../services/xProviderService');
 
 function createSuperadminCoreRouter({
   superadminGuard,
@@ -179,6 +180,36 @@ function createSuperadminCoreRouter({
     } catch (error) {
       logger.error('Error updating global settings:', error);
       res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/x-provider/test', superadminGuard, async (_req, res) => {
+    try {
+      const runtime = xProviderService.getRuntimeConfig();
+      if (!runtime.clientId) {
+        return res.status(400).json(toErrorResponse('X client ID is not configured', 'VALIDATION_ERROR'));
+      }
+      if (!runtime.bearerToken) {
+        return res.status(400).json(toErrorResponse('X bearer token is not configured', 'VALIDATION_ERROR'));
+      }
+
+      const probe = await xProviderService.searchRecentPosts('guildpilot', {
+        maxResults: 10,
+        bearerToken: runtime.bearerToken,
+      });
+
+      res.json(toSuccessResponse({
+        ok: true,
+        scanned: Array.isArray(probe.posts) ? probe.posts.length : 0,
+        message: 'X API probe succeeded.',
+      }));
+    } catch (error) {
+      logger.error('X provider test failed:', error);
+      const status = Number(error?.status || 0);
+      const message = error?.message || 'X API probe failed';
+      res.status(status >= 400 && status < 600 ? status : 500).json(
+        toErrorResponse(message, 'X_PROVIDER_TEST_FAILED')
+      );
     }
   });
 

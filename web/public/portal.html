@@ -1100,6 +1100,8 @@
               <div><label class="form-label">Task Types</label><input id="engMonitoredTasks" class="form-input" placeholder="x_like,x_repost"></div>
               <div style="grid-column:1 / -1;"><label class="form-label">Reward JSON</label><textarea id="engMonitoredRewards" class="form-input" rows="3" placeholder='{"x_like":10,"x_repost":20}'></textarea></div>
               <div style="grid-column:1 / -1;"><label class="form-label">Requirements JSON</label><textarea id="engMonitoredRequirements" class="form-input" rows="2" placeholder='{"commentMinLength":20}'></textarea></div>
+              <div style="grid-column:1 / -1;"><label class="form-label">Mirror Message Template</label><input id="engMonitoredMirrorTemplate" class="form-input" placeholder="New post by @{handle}: {link}"></div>
+              <div style="grid-column:1 / -1;font-size:0.8em;color:var(--text-muted);">Placeholders: {provider}, {handle}, {hashtag}, {title}, {body}, {url}, {link}</div>
             </div>
             <div id="engagementMonitoredAccountsView">
               <div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>
@@ -1121,6 +1123,8 @@
               </div>
               <div><label class="form-label">Task Types</label><input id="engHashtagTasks" class="form-input" placeholder="x_hashtag_post,x_like"></div>
               <div style="grid-column:1 / -1;"><label class="form-label">Reward JSON</label><textarea id="engHashtagRewards" class="form-input" rows="3" placeholder='{"x_hashtag_post":15}'></textarea></div>
+              <div style="grid-column:1 / -1;"><label class="form-label">Mirror Message Template</label><input id="engHashtagMirrorTemplate" class="form-input" placeholder="Tagged post {hashtag}: {link}"></div>
+              <div style="grid-column:1 / -1;font-size:0.8em;color:var(--text-muted);">Placeholders: {provider}, {handle}, {hashtag}, {title}, {body}, {url}, {link}</div>
             </div>
             <div id="engagementHashtagView">
               <div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>

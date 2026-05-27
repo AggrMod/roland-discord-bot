@@ -57,15 +57,6 @@ const PROVIDERS = Object.freeze({
     supportsAutomaticVerification: true,
     supportedTaskTypes: ['x_like', 'x_repost', 'x_reply', 'x_follow', 'x_hashtag_post'],
   },
-  bluesky: {
-    key: 'bluesky',
-    label: 'Bluesky',
-    supportsSourceMonitoring: true,
-    supportsHashtagMonitoring: true,
-    supportsAccountLinking: true,
-    supportsAutomaticVerification: true,
-    supportedTaskTypes: ['bluesky_like', 'bluesky_repost', 'bluesky_reply', 'bluesky_follow'],
-  },
 });
 
 const ACTION = Object.freeze({
@@ -179,18 +170,32 @@ function getProviderConnectionStatus(providerKey) {
     return { configured: true, mode: 'native' };
   }
   if (providerKey === 'x') {
+    const runtime = xProviderService.getRuntimeConfig();
     return {
-      configured: !!(process.env.X_CLIENT_ID || process.env.X_BEARER_TOKEN || process.env.X_API_KEY),
-      mode: 'deployment-managed',
-    };
-  }
-  if (providerKey === 'bluesky') {
-    return {
-      configured: !!(process.env.BLUESKY_IDENTIFIER || process.env.BLUESKY_CLIENT_ID || process.env.BLUESKY_APP_PASSWORD),
-      mode: 'deployment-managed',
+      configured: !!(runtime.clientId && (runtime.bearerToken || runtime.clientSecret)),
+      mode: 'superadmin-or-env',
     };
   }
   return { configured: false, mode: 'unknown' };
+}
+
+function renderMirrorMessageTemplate(template, taskRecord, source = {}) {
+  const rawTemplate = String(template || '').trim();
+  if (!rawTemplate) return '';
+  const providerLabel = PROVIDERS[taskRecord.provider]?.label || taskRecord.provider || 'Provider';
+  const replacements = {
+    provider: providerLabel,
+    handle: source?.handle || taskRecord.source_account_handle || '',
+    hashtag: source?.hashtag || taskRecord.hashtag || '',
+    title: taskRecord.title || '',
+    body: taskRecord.body || '',
+    url: source?.url || taskRecord.source_post_url || '',
+    link: source?.url || taskRecord.source_post_url || '',
+  };
+  return rawTemplate
+    .replace(/\{(provider|handle|hashtag|title|body|url|link)\}/gi, (_match, key) => replacements[String(key || '').toLowerCase()] || '')
+    .slice(0, 1800)
+    .trim();
 }
 
 function getConfig(guildId) {
@@ -905,7 +910,7 @@ function listTaskCompletions(guildId, { taskId = null, userId = null, limit = 10
   }));
 }
 
-async function postTaskMirror(guildId, taskRecord, source) {
+async function postTaskMirror(guildId, taskRecord, source, options = {}) {
   const client = clientProvider.getClient();
   const targetChannelId = taskRecord.mirrored_channel_id || getConfig(guildId).task_feed_channel_id || getConfig(guildId).social_log_channel_id;
   if (!client || !targetChannelId) return { channelId: targetChannelId || null, messageId: null };
@@ -942,7 +947,11 @@ async function postTaskMirror(guildId, taskRecord, source) {
       defaultFooter: 'GuildPilot · Engagement Task',
     });
 
-    const message = await channel.send({ embeds: [embed] }).catch(() => null);
+    const templateContent = renderMirrorMessageTemplate(options.template, taskRecord, source);
+    const messagePayload = templateContent
+      ? { content: templateContent, embeds: [embed] }
+      : { embeds: [embed] };
+    const message = await channel.send(messagePayload).catch(() => null);
     return { channelId: targetChannelId, messageId: message?.id || null };
   } catch (error) {
     logger.warn(`[engagement] could not mirror social task: ${error.message}`);
@@ -1011,7 +1020,12 @@ async function ingestProviderPost(guildId, provider, payload = {}) {
 
     let mirror = { channelId: trigger.mirror_channel_id || getConfig(normalizedGuildId).task_feed_channel_id, messageId: null };
     if (trigger.mirror_posts || trigger.auto_create_task) {
-      mirror = await postTaskMirror(normalizedGuildId, normalizedTask, { url });
+      mirror = await postTaskMirror(
+        normalizedGuildId,
+        normalizedTask,
+        { url },
+        { template: trigger.reward_config?.mirrorMessageTemplate || '' }
+      );
       db.prepare(`
         UPDATE engagement_social_tasks
         SET mirrored_channel_id = COALESCE(?, mirrored_channel_id),

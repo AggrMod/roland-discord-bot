@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const db = require('../database/db');
 const logger = require('../utils/logger');
 const entitlementService = require('./entitlementService');
@@ -1100,9 +1100,43 @@ async function postTaskMirror(guildId, taskRecord, source, options = {}) {
     const roleMentions = pingRoleIds.map(roleId => `<@&${roleId}>`).join(' ').trim();
     const templateContent = renderMirrorMessageTemplate(options.template, taskRecord, source);
     const composedContent = [roleMentions, templateContent].filter(Boolean).join('\n').trim();
+    const components = [];
+    if (taskRecord.provider === 'x' && (source?.url || taskRecord.source_post_url)) {
+      const sourceUrl = String(source?.url || taskRecord.source_post_url || '').trim();
+      const sourcePostId = String(taskRecord.source_post_id || '').trim();
+      const buttons = [];
+      if (sourceUrl) {
+        buttons.push(
+          new ButtonBuilder()
+            .setStyle(ButtonStyle.Link)
+            .setLabel('Open Post')
+            .setURL(sourceUrl),
+          new ButtonBuilder()
+            .setStyle(ButtonStyle.Link)
+            .setLabel('Like')
+            .setURL(sourceUrl)
+        );
+      }
+      if (sourcePostId) {
+        buttons.push(
+          new ButtonBuilder()
+            .setStyle(ButtonStyle.Link)
+            .setLabel('Repost')
+            .setURL(`https://x.com/intent/retweet?tweet_id=${encodeURIComponent(sourcePostId)}`),
+          new ButtonBuilder()
+            .setStyle(ButtonStyle.Link)
+            .setLabel('Reply')
+            .setURL(`https://x.com/intent/tweet?in_reply_to=${encodeURIComponent(sourcePostId)}`)
+        );
+      }
+      if (buttons.length) {
+        components.push(new ActionRowBuilder().addComponents(buttons.slice(0, 5)));
+      }
+    }
+
     const messagePayload = composedContent
-      ? { content: composedContent, embeds: [embed] }
-      : { embeds: [embed] };
+      ? { content: composedContent, embeds: [embed], components }
+      : { embeds: [embed], components };
     const message = await channel.send(messagePayload).catch(() => null);
     return { channelId: targetChannelId, messageId: message?.id || null };
   } catch (error) {

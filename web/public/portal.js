@@ -19168,20 +19168,39 @@ async function loadEngagementMonitoredAccounts() {
       el.innerHTML = '<p style="color:var(--text-secondary);">No monitored accounts configured yet.</p>';
       return;
     }
-    el.innerHTML = data.accounts.map(account => `
-      <div class="table-row" style="align-items:flex-start;">
-        <div style="flex:1;">
-          <div style="font-weight:600;">${escapeHtml(account.provider)}  @${escapeHtml(account.account_handle)}</div>
-          <div style="font-size:0.82em;color:var(--text-muted);">Tasks: ${escapeHtml((account.task_types || []).join(', ') || 'none')}</div>
-          <div style="font-size:0.82em;color:var(--text-muted);">Mirror channel: ${escapeHtml(account.mirror_channel_id || 'default')}</div>
-          <div style="font-size:0.82em;color:var(--text-muted);">Mirror message: ${escapeHtml(account.reward_config?.mirrorMessageTemplate || 'embed only')}</div>
-        </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn-secondary btn-sm" onclick='openEngagementMonitoredAccountEditor(${JSON.stringify(encodeURIComponent(JSON.stringify(account)))})'>Edit</button>
-          <button class="btn-danger btn-sm" onclick="deleteEngagementMonitoredAccount(${account.id})">Delete</button>
-        </div>
+    const rows = data.accounts.map(account => {
+      const taskLabels = (Array.isArray(account.task_types) ? account.task_types : []).map(formatEngagementActionLabel);
+      return `
+        <tr>
+          <td style="padding:10px 12px;">@${escapeHtml(account.account_handle || '')}</td>
+          <td style="padding:10px 12px;">${escapeHtml(String(account.provider || '').toUpperCase())}</td>
+          <td style="padding:10px 12px;">${escapeHtml(taskLabels.join(', ') || 'None')}</td>
+          <td style="padding:10px 12px;">${escapeHtml(account.mirror_channel_id || 'Default')}</td>
+          <td style="padding:10px 12px;">${escapeHtml(account.reward_config?.mirrorMessageTemplate || 'Embed only')}</td>
+          <td style="padding:10px 12px;text-align:right;white-space:nowrap;">
+            <button class="btn-secondary btn-sm" onclick='openEngagementMonitoredAccountEditor(${JSON.stringify(encodeURIComponent(JSON.stringify(account)))})'>Edit</button>
+            <button class="btn-danger btn-sm" onclick="deleteEngagementMonitoredAccount(${account.id})">Delete</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+    el.innerHTML = `
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Account</th>
+              <th>Provider</th>
+              <th>Tasks</th>
+              <th>Mirror Channel</th>
+              <th>Mirror Message</th>
+              <th style="text-align:right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
       </div>
-    `).join('');
+    `;
   } catch (e) {
     el.innerHTML = '<p style="color:var(--error);">Failed to load monitored accounts.</p>';
   }
@@ -19224,6 +19243,10 @@ async function populateRoleMultiSelect(selectId, selectedValues = []) {
 async function openEngagementMonitoredAccountEditor(encoded = '') {
   const panel = document.getElementById('engMonitoredEditorPanel');
   if (!panel) return;
+  if (panel.parentElement !== document.body) {
+    document.body.appendChild(panel);
+  }
+  panel.style.zIndex = '12000';
   panel.style.display = 'flex';
   document.body.style.overflow = 'hidden';
   const parsed = (() => {
@@ -19367,20 +19390,39 @@ async function loadEngagementHashtags() {
       el.innerHTML = '<p style="color:var(--text-secondary);">No hashtag monitors configured yet.</p>';
       return;
     }
-    el.innerHTML = data.hashtags.map(monitor => `
-      <div class="table-row" style="align-items:flex-start;">
-        <div style="flex:1;">
-          <div style="font-weight:600;">${escapeHtml(monitor.provider)}  ${escapeHtml(monitor.hashtag)}</div>
-          <div style="font-size:0.82em;color:var(--text-muted);">Tasks: ${escapeHtml((monitor.task_types || []).join(', ') || 'none')}</div>
-          <div style="font-size:0.82em;color:var(--text-muted);">Mirror channel: ${escapeHtml(monitor.mirror_channel_id || 'default')}</div>
-          <div style="font-size:0.82em;color:var(--text-muted);">Mirror message: ${escapeHtml(monitor.reward_config?.mirrorMessageTemplate || 'embed only')}</div>
-        </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn-secondary btn-sm" onclick='openEngagementHashtagEditor(${JSON.stringify(encodeURIComponent(JSON.stringify(monitor)))})'>Edit</button>
-          <button class="btn-danger btn-sm" onclick="deleteEngagementHashtagMonitor(${monitor.id})">Delete</button>
-        </div>
+    const rows = data.hashtags.map(monitor => {
+      const taskLabels = (Array.isArray(monitor.task_types) ? monitor.task_types : []).map(formatEngagementActionLabel);
+      return `
+        <tr>
+          <td style="padding:10px 12px;">${escapeHtml(monitor.hashtag || '')}</td>
+          <td style="padding:10px 12px;">${escapeHtml(String(monitor.provider || '').toUpperCase())}</td>
+          <td style="padding:10px 12px;">${escapeHtml(taskLabels.join(', ') || 'None')}</td>
+          <td style="padding:10px 12px;">${escapeHtml(monitor.mirror_channel_id || 'Default')}</td>
+          <td style="padding:10px 12px;">${escapeHtml(monitor.reward_config?.mirrorMessageTemplate || 'Embed only')}</td>
+          <td style="padding:10px 12px;text-align:right;white-space:nowrap;">
+            <button class="btn-secondary btn-sm" onclick='openEngagementHashtagEditor(${JSON.stringify(encodeURIComponent(JSON.stringify(monitor)))})'>Edit</button>
+            <button class="btn-danger btn-sm" onclick="deleteEngagementHashtagMonitor(${monitor.id})">Delete</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+    el.innerHTML = `
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Hashtag</th>
+              <th>Provider</th>
+              <th>Tasks</th>
+              <th>Mirror Channel</th>
+              <th>Mirror Message</th>
+              <th style="text-align:right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
       </div>
-    `).join('');
+    `;
   } catch (e) {
     el.innerHTML = '<p style="color:var(--error);">Failed to load hashtag monitors.</p>';
   }
@@ -19389,6 +19431,10 @@ async function loadEngagementHashtags() {
 async function openEngagementHashtagEditor(encoded = '') {
   const panel = document.getElementById('engHashtagEditorPanel');
   if (!panel) return;
+  if (panel.parentElement !== document.body) {
+    document.body.appendChild(panel);
+  }
+  panel.style.zIndex = '12000';
   panel.style.display = 'flex';
   document.body.style.overflow = 'hidden';
   const parsed = (() => {

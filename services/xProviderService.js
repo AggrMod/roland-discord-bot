@@ -50,6 +50,17 @@ function normalizeOrigin(value) {
   }
 }
 
+function isLocalUrl(value) {
+  const normalized = normalizeCallbackUrl(value);
+  if (!normalized) return false;
+  try {
+    const host = new URL(normalized).hostname.toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  } catch (_error) {
+    return false;
+  }
+}
+
 function getRequestOrigin(req) {
   const forwardedHostRaw = req.get('x-forwarded-host') || '';
   const directHostRaw = req.get('host') || '';
@@ -94,15 +105,23 @@ function getRuntimeConfig() {
 }
 
 function resolveRedirectUri(req) {
-  const configured = getConfiguredRedirectUris();
+  const settings = settingsManager.getSettings ? settingsManager.getSettings() : {};
+  const explicitFromSettings = normalizeCallbackUrl(settings.xRedirectUri);
   const requestOrigin = normalizeOrigin(getRequestOrigin(req));
+  const requestIsLocal = isLocalUrl(`${requestOrigin}/auth/x/callback`);
+  if (explicitFromSettings && (!isLocalUrl(explicitFromSettings) || requestIsLocal)) {
+    return explicitFromSettings;
+  }
+
+  const configured = getConfiguredRedirectUris();
   const preferred = requestOrigin ? normalizeCallbackUrl(`${requestOrigin}/auth/x/callback`) : '';
 
-  if (preferred && configured.includes(preferred)) {
-    return preferred;
+  if (preferred) return preferred;
+  const fallbackConfigured = configured.find(uri => !isLocalUrl(uri)) || configured[0];
+  if (fallbackConfigured && (!isLocalUrl(fallbackConfigured) || requestIsLocal)) {
+    return fallbackConfigured;
   }
   if (configured.length === 0) {
-    if (preferred) return preferred;
     return 'http://localhost:3000/auth/x/callback';
   }
   return configured[0];

@@ -101,6 +101,7 @@ function createAdminEngagementRouter({
       const maxResults = Math.max(5, Math.min(parseInteger(req.body?.max_results || req.body?.maxResults, 10), 100));
       const sinceId = String(req.body?.since_id || req.body?.sinceId || '').trim();
       let posts = [];
+      let resolvedAccountHandle = String(req.body?.account_handle || req.body?.accountHandle || '').trim();
 
       if (mode === 'hashtag') {
         let hashtag = String(req.body?.hashtag || '').trim();
@@ -115,15 +116,22 @@ function createAdminEngagementRouter({
         const searchResult = await xProviderService.searchRecentPosts(query, { sinceId, maxResults });
         posts = searchResult.posts || [];
       } else {
-        let accountHandle = String(req.body?.account_handle || req.body?.accountHandle || '').trim();
+        let accountHandle = resolvedAccountHandle;
+        let includeReplies = !!(req.body?.include_replies ?? req.body?.includeReplies ?? false);
         if (!accountHandle && req.body?.monitored_account_id) {
           const account = eng.listMonitoredAccounts(req.guildId, 'x').find(entry => Number(entry.id) === parseInteger(req.body.monitored_account_id));
           accountHandle = account?.account_handle || '';
+          includeReplies = !!account?.requirements?.includeReplies;
         }
         if (!accountHandle) {
           return res.status(400).json(toErrorResponse('account_handle is required', 'VALIDATION_ERROR'));
         }
-        const timelineResult = await xProviderService.getRecentPostsByHandle(accountHandle, { sinceId, maxResults, exclude: ['retweets'] });
+        resolvedAccountHandle = accountHandle;
+        const timelineResult = await xProviderService.getRecentPostsByHandle(accountHandle, {
+          sinceId,
+          maxResults,
+          exclude: includeReplies ? ['retweets'] : ['retweets', 'replies'],
+        });
         posts = timelineResult.posts || [];
       }
 
@@ -132,7 +140,7 @@ function createAdminEngagementRouter({
         const ingestResult = await eng.ingestProviderPost(req.guildId, 'x', {
           source_post_id: post.id,
           source_post_url: `https://x.com/i/web/status/${post.id}`,
-          account_handle: req.body?.account_handle || req.body?.accountHandle || '',
+          account_handle: mode === 'account' ? resolvedAccountHandle : (req.body?.account_handle || req.body?.accountHandle || ''),
           account_id: post.author_id || null,
           title: `X post ${post.id}`,
           body: post.text,
@@ -343,10 +351,11 @@ function createAdminEngagementRouter({
     }
   });
 
-  router.get('/api/admin/engagement/tasks', adminAuthMiddleware, (req, res) => {
+  router.get('/api/admin/engagement/tasks', adminAuthMiddleware, async (req, res) => {
     if (!guard(req, res)) return;
     try {
       const eng = loadService();
+      await eng.runFinalCheckAndExpireTasks(req.guildId);
       const tasks = eng.listTasks(req.guildId, {
         provider: req.query.provider || '',
         status: req.query.status || '',

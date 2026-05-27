@@ -165,6 +165,12 @@ function formatHashtag(value) {
   return clean ? `#${clean}` : '';
 }
 
+function addHoursIso(hours) {
+  const safeHours = Number(hours || 0);
+  if (!Number.isFinite(safeHours) || safeHours <= 0) return null;
+  return new Date(Date.now() + (safeHours * 60 * 60 * 1000)).toISOString();
+}
+
 function withJsonFields(row, fields) {
   if (!row) return null;
   const clone = { ...row };
@@ -371,6 +377,9 @@ function upsertMonitoredAccount(guildId, payload = {}) {
   const taskTypes = normalizeTaskTypes(providerKey, payload.task_types || payload.taskTypes);
   const rewardConfig = normalizeRewardConfig(payload.reward_config || payload.rewardConfig);
   const requirements = normalizeRequirements(payload.requirements);
+  if (Object.prototype.hasOwnProperty.call(payload, 'include_replies') || Object.prototype.hasOwnProperty.call(payload, 'includeReplies')) {
+    requirements.includeReplies = !!(payload.include_replies ?? payload.includeReplies);
+  }
   const id = payload.id ? Number(payload.id) : null;
 
   if (id) {
@@ -1058,6 +1067,7 @@ async function ingestProviderPost(guildId, provider, payload = {}) {
 
   const createdTasks = [];
   for (const trigger of triggered) {
+    const taskWindowHours = Number(trigger?.requirements?.taskWindowHours || 0);
     const result = createTask(normalizedGuildId, {
       provider: providerKey,
       trigger_type: matchingAccounts.some(account => account.id === trigger.id) ? 'account_post' : 'hashtag_match',
@@ -1075,6 +1085,8 @@ async function ingestProviderPost(guildId, provider, payload = {}) {
         trigger_id: trigger.id,
       },
       status: 'active',
+      starts_at: new Date().toISOString(),
+      ends_at: addHoursIso(taskWindowHours),
       metadata: {
         raw: payload.raw || null,
       },
@@ -1112,6 +1124,48 @@ async function ingestProviderPost(guildId, provider, payload = {}) {
   return { success: true, createdTasks, matched: true };
 }
 
+async function runFinalCheckAndExpireTasks(guildId) {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  if (!normalizedGuildId) return { success: true, expired: 0 };
+
+  const dueTasks = db.prepare(`
+    SELECT id, provider
+    FROM engagement_social_tasks
+    WHERE guild_id = ? AND status = 'active' AND ends_at IS NOT NULL AND datetime(ends_at) <= datetime('now')
+    ORDER BY id ASC
+  `).all(normalizedGuildId);
+
+  let expired = 0;
+  for (const task of dueTasks) {
+    const taskId = Number(task.id || 0);
+    if (!taskId) continue;
+    if (String(task.provider || '').toLowerCase() === 'x') {
+      const participants = db.prepare(`
+        SELECT DISTINCT user_id
+        FROM engagement_task_completions
+        WHERE guild_id = ? AND task_id = ?
+      `).all(normalizedGuildId, taskId);
+      for (const participant of participants) {
+        const userId = String(participant?.user_id || '').trim();
+        if (!userId) continue;
+        try {
+          await verifyXTaskAction(normalizedGuildId, taskId, userId, userId);
+        } catch (_error) {
+          // best-effort final pass
+        }
+      }
+    }
+    db.prepare(`
+      UPDATE engagement_social_tasks
+      SET status = 'expired', updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND guild_id = ?
+    `).run(taskId, normalizedGuildId);
+    expired += 1;
+  }
+
+  return { success: true, expired };
+}
+
 function getGuildsWithXMonitors() {
   const rows = db.prepare(`
     SELECT DISTINCT guild_id
@@ -1130,6 +1184,7 @@ async function syncXProviderForGuild(guildId, { maxResults = 10 } = {}) {
   if (!normalizedGuildId) return { success: false, message: 'guildId is required' };
   const runtime = xProviderService.getRuntimeConfig();
   if (!runtime.bearerToken) return { success: false, message: 'X bearer token not configured' };
+  await runFinalCheckAndExpireTasks(normalizedGuildId);
 
   const accounts = listMonitoredAccounts(normalizedGuildId, 'x').filter(entry => entry.enabled);
   const hashtags = listHashtagMonitors(normalizedGuildId, 'x').filter(entry => entry.enabled);
@@ -1142,7 +1197,7 @@ async function syncXProviderForGuild(guildId, { maxResults = 10 } = {}) {
         sinceId,
         maxResults,
         bearerToken: runtime.bearerToken,
-        exclude: ['retweets'],
+        exclude: account.requirements?.includeReplies ? ['retweets'] : ['retweets', 'replies'],
       });
       stats.scannedAccounts += 1;
       const posts = Array.isArray(timeline.posts) ? [...timeline.posts].reverse() : [];
@@ -2157,5 +2212,6 @@ module.exports = {
   recordTaskCompletion,
   getUsableXLinkedAccount,
   verifyXTaskAction,
+  runFinalCheckAndExpireTasks,
   evaluateAchievementsForUser,
 };

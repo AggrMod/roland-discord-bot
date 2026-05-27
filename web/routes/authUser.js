@@ -1618,6 +1618,7 @@ function createAuthUserRouter({
       const guildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
       if (!guildId) return res.status(400).json(toErrorResponse('Select a server first', 'VALIDATION_ERROR'));
       const eng = require('../../services/engagementService');
+      await eng.runFinalCheckAndExpireTasks(guildId);
       return res.json(toSuccessResponse({
         tasks: eng.listTasks(guildId, {
           provider: req.query.provider || '',

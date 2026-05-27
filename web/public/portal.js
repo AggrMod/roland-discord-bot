@@ -19194,10 +19194,15 @@ async function submitEngagementMonitoredAccount() {
       task_types: rewardRows.taskTypes,
       reward_config: rewardRows.rewardConfig,
       requirements: {},
+      include_replies: !!document.getElementById('engMonitoredIncludeReplies')?.checked,
     };
     const commentMinLength = Number(document.getElementById('engMonitoredCommentMinLength')?.value || 0);
     if (Number.isFinite(commentMinLength) && commentMinLength > 0) {
       body.requirements.commentMinLength = Math.floor(commentMinLength);
+    }
+    const taskWindowHours = Number(document.getElementById('engMonitoredTaskWindowHours')?.value || 0);
+    if (Number.isFinite(taskWindowHours) && taskWindowHours > 0) {
+      body.requirements.taskWindowHours = Math.floor(taskWindowHours);
     }
     const mirrorTemplate = document.getElementById('engMonitoredMirrorTemplate')?.value?.trim() || '';
     if (mirrorTemplate) {
@@ -19285,7 +19290,12 @@ async function submitEngagementHashtagMonitor() {
       mirror_channel_id: document.getElementById('engHashtagChannel').value.trim() || null,
       task_types: rewardRows.taskTypes,
       reward_config: rewardRows.rewardConfig,
+      requirements: {},
     };
+    const taskWindowHours = Number(document.getElementById('engHashtagTaskWindowHours')?.value || 0);
+    if (Number.isFinite(taskWindowHours) && taskWindowHours > 0) {
+      body.requirements.taskWindowHours = Math.floor(taskWindowHours);
+    }
     const mirrorTemplate = document.getElementById('engHashtagMirrorTemplate')?.value?.trim() || '';
     if (mirrorTemplate) {
       body.reward_config = { ...(body.reward_config || {}), mirrorMessageTemplate: mirrorTemplate };

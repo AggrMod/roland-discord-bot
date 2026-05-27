@@ -1098,6 +1098,17 @@
                 <input id="engMonitoredCommentMinLength" type="number" min="0" class="form-input" placeholder="20">
                 <div style="font-size:0.76em;color:var(--text-muted);margin-top:4px;">Used for X reply tasks to reduce low-quality spam.</div>
               </div>
+              <div style="display:flex;align-items:flex-end;">
+                <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);font-size:0.86em;">
+                  <input id="engMonitoredIncludeReplies" type="checkbox">
+                  Include reply posts during sync
+                </label>
+              </div>
+              <div>
+                <label class="form-label">Task expiry window (hours)</label>
+                <input id="engMonitoredTaskWindowHours" type="number" min="1" max="720" class="form-input" placeholder="24">
+                <div style="font-size:0.76em;color:var(--text-muted);margin-top:4px;">After this window, one final check runs and task closes.</div>
+              </div>
               <div style="grid-column:1 / -1;"><label class="form-label">Mirror Message Template</label><input id="engMonitoredMirrorTemplate" class="form-input" placeholder="New post by @{handle}: {link}"></div>
               <div style="grid-column:1 / -1;font-size:0.8em;color:var(--text-muted);">Placeholders: {provider}, {handle}, {hashtag}, {title}, {body}, {url}, {link}</div>
             </div>
@@ -1127,6 +1138,11 @@
                 <div id="engHashtagTaskHint" style="font-size:0.8em;color:var(--text-muted);margin-bottom:6px;">X hashtag tasks: hashtag post + optional secondary actions.</div>
                 <div id="engHashtagTaskRows" style="display:grid;gap:8px;"></div>
                 <button class="btn-secondary btn-sm" type="button" onclick="addEngagementRewardRow('hashtag')">+ Add Task</button>
+              </div>
+              <div>
+                <label class="form-label">Task expiry window (hours)</label>
+                <input id="engHashtagTaskWindowHours" type="number" min="1" max="720" class="form-input" placeholder="24">
+                <div style="font-size:0.76em;color:var(--text-muted);margin-top:4px;">After this window, one final check runs and task closes.</div>
               </div>
               <div style="grid-column:1 / -1;"><label class="form-label">Mirror Message Template</label><input id="engHashtagMirrorTemplate" class="form-input" placeholder="Tagged post {hashtag}: {link}"></div>
               <div style="grid-column:1 / -1;font-size:0.8em;color:var(--text-muted);">Placeholders: {provider}, {handle}, {hashtag}, {title}, {body}, {url}, {link}</div>

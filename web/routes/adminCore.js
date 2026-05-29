@@ -85,7 +85,7 @@ function createAdminCoreRouter({
             `, [guildId], { cnt: 0 })?.cnt || 0),
           },
         },
-        governance: { enabled: !!moduleState.governance, stats: { activeProposals: Number(safeGet('SELECT COUNT(*) AS cnt FROM proposals WHERE guild_id = ? AND status IN ("supporting", "voting")', [guildId], { cnt: 0 })?.cnt || 0) } },
+        governance: { enabled: !!moduleState.governance, stats: { activeProposals: Number(safeGet('SELECT COUNT(*) AS cnt FROM proposals WHERE guild_id = ? AND status IN ("supporting", "voting", "active")', [guildId], { cnt: 0 })?.cnt || 0) } },
         missions: { enabled: !!moduleState.heist, stats: { activeMissions: Number(safeGet('SELECT COUNT(*) AS cnt FROM heist_missions WHERE guild_id = ? AND status IN ("recruiting", "active")', [guildId], { cnt: 0 })?.cnt || 0) } },
         welcome: { enabled: !!moduleState.welcome, stats: { configured: Number(safeGet('SELECT COUNT(*) AS cnt FROM tenant_welcome_settings WHERE guild_id = ? AND enabled = 1', [guildId], { cnt: 0 })?.cnt || 0) } },
         tracking: {
@@ -125,7 +125,7 @@ function createAdminCoreRouter({
           `, [guildId], { cnt: 0 })?.cnt || 0),
         },
         governance: {
-          activeProposals: Number(safeGet('SELECT COUNT(*) AS cnt FROM proposals WHERE guild_id = ? AND status IN ("supporting", "voting")', [guildId], { cnt: 0 })?.cnt || 0),
+          activeProposals: Number(safeGet('SELECT COUNT(*) AS cnt FROM proposals WHERE guild_id = ? AND status IN ("supporting", "voting", "active")', [guildId], { cnt: 0 })?.cnt || 0),
           totalVotesCast: Number(safeGet('SELECT COUNT(*) AS cnt FROM votes v JOIN proposals p ON p.proposal_id = v.proposal_id WHERE p.guild_id = ?', [guildId], { cnt: 0 })?.cnt || 0),
         },
         missions: {
@@ -199,7 +199,7 @@ function createAdminCoreRouter({
                (SELECT SUM(voting_power) FROM votes WHERE proposal_id = proposals.proposal_id AND vote_choice = 'abstain') as abstain_votes,
                total_vp
         FROM proposals 
-        WHERE guild_id = ? AND status IN ("supporting", "voting")
+        WHERE guild_id = ? AND status IN ("supporting", "voting", "active")
         ORDER BY created_at DESC LIMIT 3
       `, [guildId], []).map(p => ({
         id: p.proposal_id,

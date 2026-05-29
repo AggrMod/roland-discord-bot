@@ -5899,6 +5899,10 @@ function goHomePage() {
   switchSection('landing', { updateUrl: false });
 }
 
+function openSidebarSection(sectionName) {
+  switchSection(sectionName, { force: true, fromModules: true });
+}
+
 function switchSection(sectionName, options = {}) {
   sectionName = normalizePortalSectionName(sectionName);
 
@@ -20661,9 +20665,9 @@ async function renderDashboardGrid() {
         </div>
         <div class="overview-metrics-grid">
           <div class="overview-metric"><div class="overview-metric-val">${Number(metrics.members || 0).toLocaleString()}</div><div class="overview-metric-label">Members</div></div>
-          <div class="overview-metric"><div class="overview-metric-val">${Number(metrics.online || 0).toLocaleString()}</div><div class="overview-metric-label">Online</div></div>
           <div class="overview-metric"><div class="overview-metric-val">${Number(metrics.roles || 0).toLocaleString()}</div><div class="overview-metric-label">Roles</div></div>
           <div class="overview-metric"><div class="overview-metric-val">${Number(metrics.wallets || 0).toLocaleString()}</div><div class="overview-metric-label">Wallets</div></div>
+          <div class="overview-metric"><div class="overview-metric-val">${Number(moduleAnalytics?.verification?.uniqueUsers || 0).toLocaleString()}</div><div class="overview-metric-label">Verified Users</div></div>
         </div>
       </div>
     `;
@@ -20684,7 +20688,9 @@ async function renderDashboardGrid() {
 
     const tilesHtml = `<div class="panel-modules-grid" style="grid-column:1 / 2;">${tileConfig.map((tile) => {
       const kpi = dashboardExtractKpi(tile.metric);
-      const ringProgress = tile.enabled ? 82 : 18;
+      const ringProgress = tile.enabled ? dashboardRingProgressFromValue(kpi) : 18;
+      const subKpi = dashboardExtractKpi(tile.sub);
+      const subRing = tile.enabled ? dashboardRingProgressFromValue(subKpi) : 12;
       return `
       <div class="module-bento-tile" onclick="switchSection('${escapeJsString(tile.section)}')">
         <div class="module-bento-top">
@@ -20699,10 +20705,17 @@ async function renderDashboardGrid() {
             <div class="module-bento-metric">${escapeHtml(tile.metric)}</div>
             <div class="module-bento-status" style="margin-top:4px; font-size:0.78rem;">${escapeHtml(tile.sub)}</div>
           </div>
-          <div class="module-kpi-ring" style="--ring-progress:${ringProgress}%;">
-            <div class="module-kpi-ring__inner">
-              <i class="${tile.icon}"></i>
-              <span>${escapeHtml(kpi)}</span>
+          <div class="module-kpi-pair">
+            <div class="module-kpi-ring" style="--ring-progress:${ringProgress}%;">
+              <div class="module-kpi-ring__inner">
+                <i class="${tile.icon}"></i>
+                <span>${escapeHtml(kpi)}</span>
+              </div>
+            </div>
+            <div class="module-kpi-ring module-kpi-ring--mini" style="--ring-progress:${subRing}%;">
+              <div class="module-kpi-ring__inner">
+                <span>${escapeHtml(subKpi)}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -20721,7 +20734,7 @@ async function renderDashboardGrid() {
               <div class="wallet-list-item">
                 <div>
                   <div class="wallet-address">${escapeHtml(String(row.walletAddress || '').slice(0, 6))}...${escapeHtml(String(row.walletAddress || '').slice(-4))}</div>
-                  <div class="wallet-holdings">${escapeHtml(row.username || 'Member')} · ${escapeHtml(row.label || 'Linked')}</div>
+                  <div class="wallet-holdings">${escapeHtml(row.username || 'Member')} - ${escapeHtml(row.label || 'Linked')}</div>
                 </div>
                 <div class="wallet-balance">${Number(row.totalNfts || 0).toLocaleString()} NFTs</div>
               </div>
@@ -20739,12 +20752,12 @@ async function renderDashboardGrid() {
         <div class="activity-snapshot-grid">
           <div class="activity-snapshot-item">
             <div class="activity-snapshot-label">Governance</div>
-            <div class="activity-snapshot-value">${Number(moduleAnalytics?.governance?.activeProposals || 0).toLocaleString()} active</div>
+            <div class="activity-snapshot-value"><span class="kpi-inline-ring" style="--ring-progress:${dashboardRingProgressFromValue(moduleAnalytics?.governance?.activeProposals || 0)}%;">${Number(moduleAnalytics?.governance?.activeProposals || 0).toLocaleString()}</span> active</div>
             <div class="activity-snapshot-sub">${Number(moduleAnalytics?.governance?.totalVotesCast || 0).toLocaleString()} votes</div>
           </div>
           <div class="activity-snapshot-item">
             <div class="activity-snapshot-label">Missions</div>
-            <div class="activity-snapshot-value">${Number(moduleAnalytics?.missions?.activeMissions || 0).toLocaleString()} active</div>
+            <div class="activity-snapshot-value"><span class="kpi-inline-ring" style="--ring-progress:${dashboardRingProgressFromValue(moduleAnalytics?.missions?.activeMissions || 0)}%;">${Number(moduleAnalytics?.missions?.activeMissions || 0).toLocaleString()}</span> active</div>
             <div class="activity-snapshot-sub">${Number(moduleAnalytics?.missions?.participantsActive || 0).toLocaleString()} participants</div>
           </div>
           <div class="activity-snapshot-item">
@@ -20837,6 +20850,13 @@ function setDashboardAnalyticsRange(range = '7d') {
 function dashboardExtractKpi(metricText = '') {
   const match = String(metricText || '').match(/[\d,.]+/);
   return match ? match[0] : '0';
+}
+
+function dashboardRingProgressFromValue(valueText = '') {
+  const normalized = String(valueText || '').replace(/,/g, '');
+  const numeric = Number(normalized);
+  if (!Number.isFinite(numeric) || numeric <= 0) return 12;
+  return Math.min(92, Math.max(18, Math.round(18 + Math.log10(numeric + 1) * 22)));
 }
 
 function toggleDashboardViewMode() {

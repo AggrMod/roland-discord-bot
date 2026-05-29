@@ -7224,6 +7224,36 @@ footer a[href="/terms-of-service"]:hover {
   padding-right: 4px;
 }
 
+.engagement-range-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.62);
+}
+
+.engagement-range-strip__title {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
+
+.engagement-range-toggle {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.engagement-range-toggle .btn-sm.active {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.95), rgba(139, 92, 246, 0.95));
+  border-color: rgba(167, 139, 250, 0.8);
+  color: #fff;
+}
+
 @media (max-width: 1080px) {
   #section-engagement.engagement-user-mode {
     grid-template-columns: 1fr;

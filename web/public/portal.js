@@ -19928,6 +19928,74 @@ function setEngagementPortalMode(canAdmin) {
   });
 }
 
+function getEngagementRangeCutoff(rangeKey = '7d') {
+  const now = Date.now();
+  if (rangeKey === '24h' || rangeKey === 'today') return now - (24 * 60 * 60 * 1000);
+  if (rangeKey === '30d') return now - (30 * 24 * 60 * 60 * 1000);
+  return now - (7 * 24 * 60 * 60 * 1000);
+}
+
+function animateMetricValue(el, nextValue) {
+  if (!el) return;
+  const target = Number(nextValue || 0);
+  const previous = Number(el.dataset.currentValue || 0);
+  const duration = 320;
+  const startedAt = performance.now();
+  function tick(ts) {
+    const progress = Math.min(1, (ts - startedAt) / duration);
+    const value = Math.round(previous + ((target - previous) * progress));
+    el.textContent = value.toLocaleString();
+    if (progress < 1) requestAnimationFrame(tick);
+    else el.dataset.currentValue = String(target);
+  }
+  requestAnimationFrame(tick);
+}
+
+function calculateUserEngagementRangeStats(rangeKey = '7d') {
+  const cutoff = getEngagementRangeCutoff(rangeKey);
+  const history = Array.isArray(window.__engagementSummaryHistoryRows) ? window.__engagementSummaryHistoryRows : [];
+  const redemptions = Array.isArray(window.__engagementSummaryRedemptions) ? window.__engagementSummaryRedemptions : [];
+  const achievements = Array.isArray(window.__engagementSummaryAchievements) ? window.__engagementSummaryAchievements : [];
+
+  let earned = 0;
+  history.forEach(entry => {
+    const ts = entry?.created_at ? new Date(entry.created_at).getTime() : 0;
+    if (!ts || ts < cutoff) return;
+    const points = Number(entry?.points || 0);
+    if (points > 0) earned += points;
+  });
+
+  const redemptionCount = redemptions.filter(entry => {
+    const ts = entry?.created_at ? new Date(entry.created_at).getTime() : 0;
+    return ts && ts >= cutoff;
+  }).length;
+
+  const unlocked = achievements.filter(entry => {
+    const ts = entry?.awarded_at ? new Date(entry.awarded_at).getTime() : 0;
+    return ts && ts >= cutoff;
+  }).length;
+
+  return { earned, redemptionCount, unlocked };
+}
+
+function applyEngagementSummaryRange(rangeKey = '7d') {
+  window.__engagementUserRange = rangeKey;
+  const wrap = document.getElementById('engagementUserRangeToggle');
+  if (wrap) {
+    wrap.querySelectorAll('button[data-range]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.range === rangeKey);
+    });
+  }
+  const stats = calculateUserEngagementRangeStats(rangeKey);
+  animateMetricValue(document.getElementById('engRangePointsValue'), stats.earned);
+  animateMetricValue(document.getElementById('engRangeRedemptionsValue'), stats.redemptionCount);
+  animateMetricValue(document.getElementById('engRangeAchievementsValue'), stats.unlocked);
+}
+
+function setEngagementSummaryRange(rangeKey = '7d') {
+  applyEngagementSummaryRange(rangeKey);
+}
+
 function renderEngagementMemberSummary(summary = {}, currency = {}, config = {}) {
   const el = document.getElementById('engagementMemberSummaryView');
   if (!el) return;
@@ -19942,6 +20010,14 @@ function renderEngagementMemberSummary(summary = {}, currency = {}, config = {})
 
   el.innerHTML = `
     <div style="display:grid;gap:14px;">
+      <div class="engagement-range-strip">
+        <div class="engagement-range-strip__title">Activity Window</div>
+        <div id="engagementUserRangeToggle" class="engagement-range-toggle">
+          <button class="btn-secondary btn-sm active" type="button" data-range="24h" onclick="setEngagementSummaryRange('24h')">Today</button>
+          <button class="btn-secondary btn-sm" type="button" data-range="7d" onclick="setEngagementSummaryRange('7d')">7d</button>
+          <button class="btn-secondary btn-sm" type="button" data-range="30d" onclick="setEngagementSummaryRange('30d')">30d</button>
+        </div>
+      </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
         <div style="padding:14px;border:1px solid rgba(99,102,241,0.18);border-radius:12px;background:rgba(15,23,42,0.45);">
           <div style="font-size:0.8em;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Balance</div>
@@ -19963,9 +20039,22 @@ function renderEngagementMemberSummary(summary = {}, currency = {}, config = {})
           <div style="margin-top:6px;font-size:1.65em;font-weight:700;color:#f8fafc;">${achievements.length}</div>
           <div style="font-size:0.82em;color:var(--text-secondary);">Recent redemptions: ${redemptions.length}</div>
         </div>
+        <div style="padding:14px;border:1px solid rgba(34,197,94,0.2);border-radius:12px;background:rgba(2,6,23,0.62);">
+          <div style="font-size:0.8em;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Points Earned (Range)</div>
+          <div id="engRangePointsValue" data-current-value="0" style="margin-top:6px;font-size:1.65em;font-weight:700;color:#86efac;">0</div>
+        </div>
+        <div style="padding:14px;border:1px solid rgba(99,102,241,0.18);border-radius:12px;background:rgba(2,6,23,0.62);">
+          <div style="font-size:0.8em;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Redemptions (Range)</div>
+          <div id="engRangeRedemptionsValue" data-current-value="0" style="margin-top:6px;font-size:1.65em;font-weight:700;color:#f8fafc;">0</div>
+        </div>
+        <div style="padding:14px;border:1px solid rgba(99,102,241,0.18);border-radius:12px;background:rgba(2,6,23,0.62);">
+          <div style="font-size:0.8em;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Unlocks (Range)</div>
+          <div id="engRangeAchievementsValue" data-current-value="0" style="margin-top:6px;font-size:1.65em;font-weight:700;color:#f8fafc;">0</div>
+        </div>
       </div>
     </div>
   `;
+  applyEngagementSummaryRange(window.__engagementUserRange || '7d');
 }
 
 async function loadEngagementMemberAccounts() {
@@ -20249,6 +20338,7 @@ async function loadEngagementSection() {
   ];
   if (!canAdmin) {
     window.__engagementHistoryPage = { limit: 10, offset: 0, total: 0 };
+    window.__engagementUserRange = window.__engagementUserRange || '7d';
     tasks.push(
       loadEngagementMemberAccounts(),
       loadEngagementHistory()
@@ -20296,6 +20386,26 @@ async function loadEngagementConfig() {
     }
 
     currentEngagementConfig = data.config || {};
+    window.__engagementSummaryHistoryRows = [];
+    window.__engagementSummaryRedemptions = [];
+    window.__engagementSummaryAchievements = [];
+    try {
+      const [historyRes, redemptionsRes, achievementsRes] = await Promise.all([
+        fetch('/api/user/engagement/history?limit=200&offset=0', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+        fetch('/api/user/engagement/redemptions?limit=200', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+        fetch('/api/user/engagement/achievements?limit=200', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      ]);
+      const [historyData, redemptionsData, achievementsData] = await Promise.all([
+        historyRes.json().catch(() => ({})),
+        redemptionsRes.json().catch(() => ({})),
+        achievementsRes.json().catch(() => ({})),
+      ]);
+      window.__engagementSummaryHistoryRows = Array.isArray(historyData?.history) ? historyData.history : [];
+      window.__engagementSummaryRedemptions = Array.isArray(redemptionsData?.redemptions) ? redemptionsData.redemptions : [];
+      window.__engagementSummaryAchievements = Array.isArray(achievementsData?.achievements) ? achievementsData.achievements : [];
+    } catch (_error) {
+      // Non-blocking analytics strip fallback.
+    }
     renderEngagementMemberSummary(data.summary || {}, data.currency || {}, data.config || {});
   } catch (e) {
     console.error('[Engagement] config load error:', e);

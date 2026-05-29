@@ -7312,6 +7312,18 @@ footer a[href="/terms-of-service"]:hover {
   grid-column: 1 / -1;
 }
 
+#section-engagement.engagement-user-mode .section-header { order: 1; }
+#section-engagement.engagement-user-mode #engagementConfigCard { order: 2; }
+#section-engagement.engagement-user-mode #engagementTasksCard {
+  order: 3;
+  grid-column: 1 / -1;
+}
+#section-engagement.engagement-user-mode #engagementLinkedAccountsCard { order: 4; }
+#section-engagement.engagement-user-mode #engagementHistoryCard { order: 5; }
+#section-engagement.engagement-user-mode #engagementLeaderboardCard { order: 6; }
+#section-engagement.engagement-user-mode #engagementShopCard { order: 7; }
+#section-engagement.engagement-user-mode #engagementAchievementsCard { order: 8; }
+
 #section-engagement .engagement-compact-card {
   margin: 0;
   min-height: auto;
@@ -7341,11 +7353,16 @@ footer a[href="/terms-of-service"]:hover {
 #section-engagement.engagement-user-mode #engagementLeaderboardView,
 #section-engagement.engagement-user-mode #engagementShopView,
 #section-engagement.engagement-user-mode #engagementAchievementsView,
-#section-engagement.engagement-user-mode #engagementTasksView,
 #section-engagement.engagement-user-mode #engagementRedemptionsView {
   max-height: 360px;
   overflow-y: auto;
   padding-right: 4px;
+}
+
+#section-engagement.engagement-user-mode #engagementTasksView {
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
 }
 
 .engagement-range-strip {

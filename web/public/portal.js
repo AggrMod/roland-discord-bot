@@ -19596,67 +19596,71 @@ async function loadEngagementTasks() {
       return;
     }
 
-    const rows = data.tasks.map(task => {
+    const rows = data.tasks.map((task) => {
       const endsAtMs = task.ends_at ? new Date(task.ends_at).getTime() : Number.NaN;
       const isExpired = String(task.status || '').toLowerCase() === 'expired'
         || (Number.isFinite(endsAtMs) && endsAtMs <= Date.now());
       const completions = Array.isArray(task.completions) ? task.completions : [];
-      const completionSet = new Set(completions.map(entry => String(entry.action_type || '').trim()));
-      const actionBadges = (task.required_actions || []).map(action => {
-        const done = completionSet.has(action);
-        const verifyButton = !canAdminEngagement && !done && !isExpired
-          ? `<button class="btn-secondary btn-sm" onclick="completeEngagementTask(${Number(task.id)}, '${escapeJsString(action)}')" style="padding:4px 8px;">${task.provider === 'x' ? 'Verify' : 'Complete'}</button>`
-          : '';
-        return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 10px;border:1px solid rgba(99,102,241,0.18);border-radius:999px;background:rgba(15,23,42,0.45);">
-            <span style="font-size:0.8em;color:${done ? '#86efac' : '#cbd5e1'};">${escapeHtml(formatEngagementActionLabel(action))}</span>
-            <span class="status-badge ${done ? 'status-live' : 'status-paused'}" style="font-size:0.68em;">${done ? 'Done' : 'Pending'}</span>
-            ${verifyButton}
-          </div>`;
-      }).join('');
-
+      const completionSet = new Set(completions.map((entry) => String(entry.action_type || '').trim()));
+      const requiredActions = Array.isArray(task.required_actions) ? task.required_actions : [];
+      const completedCount = requiredActions.filter((action) => completionSet.has(action)).length;
       const totalReward = formatEngagementAmount(Object.values(task.reward_config || {}).reduce((sum, value) => sum + Number(value || 0), 0));
-      const actionsText = (task.required_actions || []).map(formatEngagementActionLabel).join(', ') || 'None';
       const statusBadge = `<span class="status-badge ${isExpired ? 'status-paused' : (task.status === 'active' ? 'status-live' : 'status-paused')}">${isExpired ? 'expired' : escapeHtml(task.status || 'active')}</span>`;
-      const metaLine = `${escapeHtml(task.provider)} • ${escapeHtml(task.trigger_type)} • ${escapeHtml(totalReward)}`;
-      const titleLine = `<div style="font-weight:600;">${escapeHtml(task.title || `${task.provider} task`)}</div><div style="font-size:0.78em;color:var(--text-muted);margin-top:4px;">${metaLine}</div>`;
-
-      const detailBlocks = [
-        isExpired ? '<div style="font-size:0.78em;color:#fca5a5;font-weight:700;">Not earnable anymore (expired)</div>' : '',
-        task.body ? `<div style="font-size:0.8em;color:var(--text-secondary);">${escapeHtml(task.body)}</div>` : '',
-        `<div style="display:flex;gap:8px;flex-wrap:wrap;">${actionBadges || '<span style="color:var(--text-muted);font-size:0.82em;">No actions configured</span>'}</div>`,
-      ].filter(Boolean).join('<div style="margin-top:6px;"></div>');
+      const taskName = escapeHtml(task.title || `${task.provider} task`);
+      const taskMeta = `<div style="font-size:0.78em;color:var(--text-muted);margin-top:4px;">${escapeHtml(task.provider)} • ${escapeHtml(task.trigger_type)}</div>`;
+      const actionTags = requiredActions.map((action) => {
+        const done = completionSet.has(action);
+        return `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border:1px solid rgba(99,102,241,0.22);border-radius:999px;font-size:0.74em;color:${done ? '#86efac' : '#cbd5e1'};">${done ? '✓' : '•'} ${escapeHtml(formatEngagementActionLabel(action))}</span>`;
+      }).join(' ');
+      const detailText = task.body
+        ? `<div style="font-size:0.8em;color:var(--text-secondary);margin-bottom:6px;">${escapeHtml(task.body)}</div>`
+        : '';
 
       const actionControls = [
+        !canAdminEngagement
+          ? `<button class="btn-secondary btn-sm" ${isExpired ? 'disabled' : ''} onclick="completeEngagementTask(${Number(task.id)}, '')">Verify</button>`
+          : '',
         task.source_post_url
           ? `<a class="btn-secondary btn-sm" href="${escapeHtml(task.source_post_url)}" target="_blank" rel="noopener noreferrer">Go to post</a>`
-          : '<span style="font-size:0.8em;color:var(--text-muted);">No source URL</span>',
+          : '',
         canAdminEngagement ? `<button class="btn-secondary btn-sm" onclick="openEngagementRepostModal(${Number(task.id)})">Repost</button>` : '',
         canAdminEngagement ? `<button class="btn-danger btn-sm" onclick="deleteEngagementTask(${Number(task.id)})">Delete</button>` : '',
       ].filter(Boolean).join('');
 
       return `<tr ${isExpired ? 'style="background:rgba(127,29,29,0.14);"' : ''}>
-          <td style="padding:8px 10px;min-width:220px;">${titleLine}</td>
-          <td style="padding:8px 10px;min-width:160px;font-size:0.82em;">${escapeHtml(actionsText)}</td>
-          <td style="padding:8px 10px;min-width:120px;">${statusBadge}</td>
-          <td style="padding:8px 10px;min-width:280px;">${detailBlocks}</td>
-          <td style="padding:8px 10px;min-width:230px;"><div style="display:flex;gap:6px;flex-wrap:wrap;">${actionControls}</div></td>
-        </tr>`;
+        <td style="padding:10px 12px;min-width:240px;">
+          <div style="font-weight:600;">${taskName}</div>
+          ${taskMeta}
+        </td>
+        <td style="padding:10px 12px;">${statusBadge}</td>
+        <td style="padding:10px 12px;font-size:0.82em;color:var(--text-secondary);">${completedCount}/${requiredActions.length || 0}</td>
+        <td style="padding:10px 12px;font-weight:600;color:#86efac;">${escapeHtml(totalReward)}</td>
+        <td style="padding:10px 12px;">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">${actionControls || '<span style="color:var(--text-muted);font-size:0.82em;">No actions</span>'}</div>
+        </td>
+        <td style="padding:10px 12px;min-width:320px;">
+          ${detailText}
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">${actionTags || '<span style="color:var(--text-muted);font-size:0.82em;">No required actions</span>'}</div>
+          ${isExpired ? '<div style="font-size:0.76em;color:#fca5a5;font-weight:700;margin-top:6px;">Task expired</div>' : ''}
+        </td>
+      </tr>`;
     }).join('');
 
     el.innerHTML = `<div class="data-table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Task</th>
-              <th>Required</th>
-              <th>Status</th>
-              <th>Details</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>`;
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Task</th>
+            <th>Status</th>
+            <th>Progress</th>
+            <th>Reward</th>
+            <th>Actions</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
   } catch (e) {
     el.innerHTML = '<p style="color:var(--error);">Failed to load tasks.</p>';
   }

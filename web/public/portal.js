@@ -20682,7 +20682,10 @@ async function renderDashboardGrid() {
       { key: 'vault', section: 'vault', title: 'Vault', icon: 'fas fa-lock', metric: `${Number(moduleAnalytics?.vault?.activeItems || 0).toLocaleString()} items`, sub: `${Number(moduleAnalytics?.vault?.pendingClaims || 0).toLocaleString()} pending claims`, enabled: true },
     ];
 
-    const tilesHtml = `<div class="panel-modules-grid" style="grid-column:1 / 2;">${tileConfig.map((tile) => `
+    const tilesHtml = `<div class="panel-modules-grid" style="grid-column:1 / 2;">${tileConfig.map((tile) => {
+      const kpi = dashboardExtractKpi(tile.metric);
+      const ringProgress = tile.enabled ? 82 : 18;
+      return `
       <div class="module-bento-tile" onclick="switchSection('${escapeJsString(tile.section)}')">
         <div class="module-bento-top">
           <div class="module-bento-info">
@@ -20696,10 +20699,16 @@ async function renderDashboardGrid() {
             <div class="module-bento-metric">${escapeHtml(tile.metric)}</div>
             <div class="module-bento-status" style="margin-top:4px; font-size:0.78rem;">${escapeHtml(tile.sub)}</div>
           </div>
-          <div class="module-bento-icon-wrapper"><i class="${tile.icon}"></i></div>
+          <div class="module-kpi-ring" style="--ring-progress:${ringProgress}%;">
+            <div class="module-kpi-ring__inner">
+              <i class="${tile.icon}"></i>
+              <span>${escapeHtml(kpi)}</span>
+            </div>
+          </div>
         </div>
       </div>
-    `).join('')}</div>`;
+    `;
+    }).join('')}</div>`;
 
     const walletPanelHtml = `
       <div class="bento-panel panel-wallet-snapshot" style="grid-column:2 / 3;">
@@ -20823,6 +20832,11 @@ function setDashboardAnalyticsRange(range = '7d') {
   if (dashboardAnalyticsRange === normalized) return;
   dashboardAnalyticsRange = normalized;
   renderDashboardGrid();
+}
+
+function dashboardExtractKpi(metricText = '') {
+  const match = String(metricText || '').match(/[\d,.]+/);
+  return match ? match[0] : '0';
 }
 
 function toggleDashboardViewMode() {

@@ -6366,6 +6366,44 @@ body::before {
   color: var(--gold);
 }
 
+.module-kpi-ring {
+  --ring-progress: 78%;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  padding: 4px;
+  background: conic-gradient(
+    rgba(99, 102, 241, 0.95) 0 var(--ring-progress),
+    rgba(143, 155, 179, 0.28) var(--ring-progress) 100%
+  );
+  box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.25), 0 8px 20px rgba(15, 23, 42, 0.45);
+}
+
+.module-kpi-ring__inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: linear-gradient(165deg, rgba(20, 30, 56, 0.95), rgba(11, 18, 35, 0.95));
+  border: 1px solid rgba(129, 140, 248, 0.26);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.module-kpi-ring__inner i {
+  font-size: 0.8rem;
+  color: #8b7cff;
+}
+
+.module-kpi-ring__inner span {
+  font-size: 0.63rem;
+  font-weight: 800;
+  color: #d9e4ff;
+  letter-spacing: 0.02em;
+}
+
 .module-bento-metric {
   margin-top: 12px;
   font-size: 0.9rem;

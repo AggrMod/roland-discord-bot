@@ -1271,25 +1271,34 @@ function createAuthUserRouter({
 
   router.get('/auth/x/login', (req, res) => {
     (async () => {
+      const rawReturn = String(req.query.returnTo || '').trim();
+      const explicitGuild = normalizeGuildId(String(req.query?.guild || req.query?.guildId || '').trim());
+      const continueParams = new URLSearchParams();
+      if (rawReturn) continueParams.set('returnTo', rawReturn);
+      if (explicitGuild) continueParams.set('guild', explicitGuild);
+      const continuePath = `/auth/x/login${continueParams.toString() ? `?${continueParams.toString()}` : ''}`;
       if (!req.session.discordUser) {
-        return res.redirect('/dashboard?error=x_requires_login');
+        req.session.returnTo = continuePath;
+        await saveSession(req);
+        return res.redirect('/auth/discord/login');
       }
       if (!xProviderService.isConfigured()) {
-        return res.redirect('/dashboard?error=x_not_configured');
+        return res.redirect('/app?section=profile&xAuth=not_configured');
       }
 
       const state = crypto.randomBytes(24).toString('hex');
       const pkce = xProviderService.generatePkcePair();
       const redirectUri = xProviderService.resolveRedirectUri(req);
-      const explicitGuild = normalizeGuildId(String(req.query?.guild || req.query?.guildId || '').trim());
       const headerGuild = normalizeGuildId(String(req.get('x-guild-id') || '').trim());
       const guildId = explicitGuild
         || headerGuild
         || getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() })
         || null;
-      const rawReturn = String(req.query.returnTo || '').trim();
-      const returnTo = rawReturn && rawReturn.startsWith('/') && !rawReturn.startsWith('//')
+      const normalizedReturnPath = rawReturn.startsWith('/app')
         ? rawReturn
+        : `/app${rawReturn && rawReturn !== '/' ? rawReturn : ''}`;
+      const returnTo = normalizedReturnPath && normalizedReturnPath.startsWith('/app') && !normalizedReturnPath.startsWith('//')
+        ? normalizedReturnPath
         : `/app?${new URLSearchParams({
             section: 'engagement',
             ...(guildId ? { guild: guildId } : {}),
@@ -1312,7 +1321,7 @@ function createAuthUserRouter({
       return res.redirect(authorizeUrl);
     })().catch((routeError) => {
       logger.error('X OAuth login start error:', routeError);
-      return res.redirect('/dashboard?error=x_oauth_login_start_failed');
+      return res.redirect('/app?section=profile&xAuth=login_start_failed');
     });
   });
 
@@ -1323,7 +1332,7 @@ function createAuthUserRouter({
       if (!authState || !code || !state || String(state) !== String(authState.state || '')) {
         if (req.session?.xOAuth) delete req.session.xOAuth;
         await saveSession(req);
-        return res.redirect('/dashboard?error=x_invalid_state');
+        return res.redirect('/app?section=profile&xAuth=invalid_state');
       }
 
       const tokenData = await xProviderService.exchangeCodeForTokens({
@@ -1338,7 +1347,7 @@ function createAuthUserRouter({
       if (!guildId) {
         delete req.session.xOAuth;
         await saveSession(req);
-        return res.redirect('/dashboard?error=x_missing_guild');
+        return res.redirect('/app?section=profile&xAuth=missing_guild');
       }
 
       const eng = require('../../services/engagementService');
@@ -1377,7 +1386,7 @@ function createAuthUserRouter({
       logger.error('X OAuth callback error:', routeError);
       if (req.session?.xOAuth) delete req.session.xOAuth;
       await saveSession(req);
-      return res.redirect('/dashboard?error=x_auth_failed');
+      return res.redirect('/app?section=profile&xAuth=failed');
     });
   });
 

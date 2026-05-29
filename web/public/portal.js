@@ -19882,30 +19882,32 @@ function canAdminEngagementPortal() {
 
 function setEngagementPortalMode(canAdmin) {
   const engagementSection = document.getElementById('section-engagement');
-  const summaryView = document.getElementById('engagementMemberSummaryView');
-  const linkedAccountsCard = document.getElementById('engagementLinkedAccountsCard');
-  const historyCard = document.getElementById('engagementHistoryCard');
-  const leaderboardCard = document.getElementById('engagementLeaderboardCard');
-  const shopCard = document.getElementById('engagementShopCard');
-  const achievementsCard = document.getElementById('engagementAchievementsCard');
-  const redemptionsCard = document.getElementById('engagementRedemptionsView')?.closest('.card');
-  const configGrid = document.getElementById('engagementConfigGrid');
-  const configSaveBtn = document.getElementById('engagementConfigSaveBtn');
-  const shopAddBtn = document.getElementById('engagementShopAddBtn');
-  const taskAdminForm = document.getElementById('engagementTaskAdminForm');
-  const taskIngestBtn = document.getElementById('engagementTaskIngestBtn');
-  const taskCreateBtn = document.getElementById('engagementTaskCreateBtn');
-  const achievementAdminForm = document.getElementById('engagementAchievementAdminForm');
-  const achievementSaveBtn = document.getElementById('engagementAchievementSaveBtn');
-  const redemptionsRefreshBtn = document.getElementById('engagementRedemptionsRefreshBtn');
-  const configTitle = document.querySelector('#engagementConfigCard .card-title');
-  const tasksCard = document.getElementById('engagementTasksView')?.closest('.card');
+  if (!engagementSection) return;
+  const inEngagement = (selector) => engagementSection.querySelector(selector);
+  const summaryView = inEngagement('#engagementMemberSummaryView');
+  const linkedAccountsCard = inEngagement('#engagementLinkedAccountsCard');
+  const historyCard = inEngagement('#engagementHistoryCard');
+  const leaderboardCard = inEngagement('#engagementLeaderboardCard');
+  const shopCard = inEngagement('#engagementShopCard');
+  const achievementsCard = inEngagement('#engagementAchievementsCard');
+  const redemptionsCard = inEngagement('#engagementRedemptionsView')?.closest('.card');
+  const configGrid = inEngagement('#engagementConfigGrid');
+  const configSaveBtn = inEngagement('#engagementConfigSaveBtn');
+  const shopAddBtn = inEngagement('#engagementShopAddBtn');
+  const taskAdminForm = inEngagement('#engagementTaskAdminForm');
+  const taskIngestBtn = inEngagement('#engagementTaskIngestBtn');
+  const taskCreateBtn = inEngagement('#engagementTaskCreateBtn');
+  const achievementAdminForm = inEngagement('#engagementAchievementAdminForm');
+  const achievementSaveBtn = inEngagement('#engagementAchievementSaveBtn');
+  const redemptionsRefreshBtn = inEngagement('#engagementRedemptionsRefreshBtn');
+  const configTitle = inEngagement('#engagementConfigCard .card-title');
+  const tasksCard = inEngagement('#engagementTasksView')?.closest('.card');
   const tasksTitle = tasksCard?.querySelector('.card-title');
-  const providersCard = document.getElementById('engagementProvidersView')?.closest('.card');
-  const taskAutomationCard = document.getElementById('engagementTaskAutomationCard');
+  const providersCard = inEngagement('#engagementProvidersView')?.closest('.card');
+  const taskAutomationCard = inEngagement('#engagementTaskAutomationCard');
   const adminOnlyCards = [
-    document.getElementById('engagementMonitoredAccountsView')?.closest('.card'),
-    document.getElementById('engagementHashtagView')?.closest('.card'),
+    inEngagement('#engagementMonitoredAccountsView')?.closest('.card'),
+    inEngagement('#engagementHashtagView')?.closest('.card'),
   ].filter(Boolean);
 
   if (summaryView) summaryView.style.display = canAdmin ? 'none' : 'block';
@@ -19924,10 +19926,8 @@ function setEngagementPortalMode(canAdmin) {
   if (tasksTitle) tasksTitle.textContent = canAdmin ? '🧩 Tasks' : '🧩 Active Tasks';
   if (providersCard) providersCard.style.display = canAdmin ? '' : 'none';
   if (taskAutomationCard) taskAutomationCard.style.display = canAdmin ? '' : 'none';
-  if (engagementSection) {
-    engagementSection.classList.toggle('engagement-admin-mode', canAdmin);
-    engagementSection.classList.toggle('engagement-user-mode', !canAdmin);
-  }
+  engagementSection.classList.toggle('engagement-admin-mode', canAdmin);
+  engagementSection.classList.toggle('engagement-user-mode', !canAdmin);
 
   [linkedAccountsCard, historyCard, leaderboardCard, shopCard, tasksCard, achievementsCard, redemptionsCard].forEach(card => {
     if (!card) return;

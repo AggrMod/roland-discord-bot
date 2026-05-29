@@ -20635,17 +20635,23 @@ async function renderDashboardGrid() {
       modules,
       moduleAnalytics = {},
       analyticsRange = dashboardAnalyticsRange,
+      walletPreview = [],
+      activeProposals = [],
+      activeMissions = [],
     } = data.data;
     dashboardAnalyticsRange = ['24h', '7d', '30d'].includes(String(analyticsRange)) ? String(analyticsRange) : dashboardAnalyticsRange;
     const metrics = server.metrics || {};
     grid.className = "dashboard-bento";
 
     const overviewHtml = `
-      <div class="bento-panel panel-overview" style="grid-column:1 / -1;">
+      <div class="bento-panel panel-overview panel-overview--hero" style="grid-column:1 / -1;">
         <div class="bento-panel-header">
-          <div class="bento-panel-title">
-            <img src="${server.icon || '/assets/default-server.png'}" class="bento-icon" alt="" style="object-fit:cover; border-radius:50%;" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%234f46e5%22/><text x=%2250%22 y=%2265%22 font-family=%22Arial%22 font-size=%2240%22 fill=%22white%22 text-anchor=%22middle%22>${server.name ? server.name.charAt(0) : 'S'}</text></svg>'">
-            ${server.name || 'Web3 Community'}
+          <div>
+            <div class="bento-panel-title">
+              <img src="${server.icon || '/assets/default-server.png'}" class="bento-icon" alt="" style="object-fit:cover; border-radius:50%;" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%234f46e5%22/><text x=%2250%22 y=%2265%22 font-family=%22Arial%22 font-size=%2240%22 fill=%22white%22 text-anchor=%22middle%22>${server.name ? server.name.charAt(0) : 'S'}</text></svg>'">
+              ${server.name || 'Web3 Community'}
+            </div>
+            <div class="panel-overview-subtitle">Command center overview for modules, activity, and operations.</div>
           </div>
           <div style="display:flex; gap:6px; flex-wrap:wrap;">
             <button class="btn btn-secondary btn-sm" onclick="setDashboardAnalyticsRange('24h')" ${dashboardAnalyticsRange === '24h' ? 'disabled' : ''}>24h</button>
@@ -20676,7 +20682,7 @@ async function renderDashboardGrid() {
       { key: 'vault', section: 'vault', title: 'Vault', icon: 'fas fa-lock', metric: `${Number(moduleAnalytics?.vault?.activeItems || 0).toLocaleString()} items`, sub: `${Number(moduleAnalytics?.vault?.pendingClaims || 0).toLocaleString()} pending claims`, enabled: true },
     ];
 
-    const tilesHtml = `<div class="panel-modules-grid" style="grid-column:1 / -1;">${tileConfig.map((tile) => `
+    const tilesHtml = `<div class="panel-modules-grid" style="grid-column:1 / 2;">${tileConfig.map((tile) => `
       <div class="module-bento-tile" onclick="switchSection('${escapeJsString(tile.section)}')">
         <div class="module-bento-top">
           <div class="module-bento-info">
@@ -20695,7 +20701,58 @@ async function renderDashboardGrid() {
       </div>
     `).join('')}</div>`;
 
-    grid.innerHTML = overviewHtml + tilesHtml;
+    const walletPanelHtml = `
+      <div class="bento-panel panel-wallet-snapshot" style="grid-column:2 / 3;">
+        <div class="bento-panel-header">
+          <div class="bento-panel-title"><i class="fas fa-wallet"></i> Wallet Connectivity</div>
+        </div>
+        ${walletPreview.length ? `
+          <div class="wallet-list">
+            ${walletPreview.map((row) => `
+              <div class="wallet-list-item">
+                <div>
+                  <div class="wallet-address">${escapeHtml(String(row.walletAddress || '').slice(0, 6))}...${escapeHtml(String(row.walletAddress || '').slice(-4))}</div>
+                  <div class="wallet-holdings">${escapeHtml(row.username || 'Member')} · ${escapeHtml(row.label || 'Linked')}</div>
+                </div>
+                <div class="wallet-balance">${Number(row.totalNfts || 0).toLocaleString()} NFTs</div>
+              </div>
+            `).join('')}
+          </div>
+        ` : '<div class="empty-state"><p>No linked wallets yet.</p></div>'}
+      </div>
+    `;
+
+    const activityPanelHtml = `
+      <div class="bento-panel panel-activity-snapshot" style="grid-column:2 / 3;">
+        <div class="bento-panel-header">
+          <div class="bento-panel-title"><i class="fas fa-signal"></i> Live Activity</div>
+        </div>
+        <div class="activity-snapshot-grid">
+          <div class="activity-snapshot-item">
+            <div class="activity-snapshot-label">Governance</div>
+            <div class="activity-snapshot-value">${Number(moduleAnalytics?.governance?.activeProposals || 0).toLocaleString()} active</div>
+            <div class="activity-snapshot-sub">${Number(moduleAnalytics?.governance?.totalVotesCast || 0).toLocaleString()} votes</div>
+          </div>
+          <div class="activity-snapshot-item">
+            <div class="activity-snapshot-label">Missions</div>
+            <div class="activity-snapshot-value">${Number(moduleAnalytics?.missions?.activeMissions || 0).toLocaleString()} active</div>
+            <div class="activity-snapshot-sub">${Number(moduleAnalytics?.missions?.participantsActive || 0).toLocaleString()} participants</div>
+          </div>
+          <div class="activity-snapshot-item">
+            <div class="activity-snapshot-label">Top Proposal</div>
+            <div class="activity-snapshot-value">${escapeHtml(activeProposals[0]?.title || 'No active proposals')}</div>
+            <div class="activity-snapshot-sub">${escapeHtml(activeProposals[0]?.status || 'idle')}</div>
+          </div>
+          <div class="activity-snapshot-item">
+            <div class="activity-snapshot-label">Top Mission</div>
+            <div class="activity-snapshot-value">${escapeHtml(activeMissions[0]?.title || 'No active missions')}</div>
+            <div class="activity-snapshot-sub">${escapeHtml(activeMissions[0]?.status || 'idle')}</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    grid.innerHTML = overviewHtml + tilesHtml + walletPanelHtml + activityPanelHtml;
   } catch (err) {
     console.error("Dashboard render error:", err);
     grid.innerHTML = `<div class="empty-state"><p>Error loading dashboard. Please try again.</p></div>`;

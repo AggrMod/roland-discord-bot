@@ -6064,11 +6064,14 @@ body::before {
 /* ==================== BENTO BOX DASHBOARD GRID ==================== */
 .dashboard-bento {
   display: grid;
-  grid-template-columns: 2fr 1.2fr;
+  grid-template-columns: minmax(0, 2.2fr) minmax(300px, 1fr);
   grid-template-rows: auto auto auto;
   gap: var(--space-6);
   margin-top: var(--space-6);
   width: 100%;
+  max-width: 1500px;
+  margin-left: auto;
+  margin-right: auto;
 }
 #appHubGreeting {
   font-size: clamp(2rem, 4vw, 3rem);
@@ -6166,6 +6169,18 @@ body::before {
   grid-row: 1 / 2;
 }
 
+.panel-overview--hero {
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(114, 132, 255, 0.16), rgba(14, 24, 44, 0.86)),
+    linear-gradient(145deg, rgba(16, 28, 50, 0.95), rgba(8, 16, 32, 0.95));
+}
+
+.panel-overview-subtitle {
+  margin-top: 8px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
 .overview-metrics-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -6180,7 +6195,7 @@ body::before {
 }
 
 .overview-metric-val {
-  font-size: 2.2rem;
+  font-size: clamp(1.8rem, 2.2vw, 2.5rem);
   font-weight: 800;
   color: var(--text-primary);
   letter-spacing: -0.04em;
@@ -6258,7 +6273,7 @@ body::before {
   grid-column: 1 / 2;
   grid-row: 2 / 3;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4);
   background: transparent;
   border: none;
@@ -6275,7 +6290,7 @@ body::before {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 140px;
+  min-height: 124px;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
   position: relative;
@@ -6352,10 +6367,48 @@ body::before {
 }
 
 .module-bento-metric {
-  margin-top: 16px;
-  font-size: 0.85rem;
+  margin-top: 12px;
+  font-size: 0.9rem;
   color: var(--text-secondary);
   font-weight: 500;
+}
+
+.panel-wallet-snapshot,
+.panel-activity-snapshot {
+  min-height: 0;
+}
+
+.activity-snapshot-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr;
+}
+
+.activity-snapshot-item {
+  border: 1px solid rgba(129, 140, 248, 0.18);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(13, 22, 40, 0.55);
+}
+
+.activity-snapshot-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+
+.activity-snapshot-value {
+  margin-top: 4px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #e6edff;
+}
+
+.activity-snapshot-sub {
+  margin-top: 2px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
 }
 
 /* Governance Progress */
@@ -6434,7 +6487,7 @@ body::before {
   .dashboard-bento {
     grid-template-columns: 1fr;
   }
-  .panel-overview, .panel-wallets, .panel-modules-grid, .panel-governance, .panel-mission {
+  .panel-overview, .panel-wallets, .panel-wallet-snapshot, .panel-activity-snapshot, .panel-modules-grid, .panel-governance, .panel-mission {
     grid-column: 1 / -1;
     grid-row: auto;
   }

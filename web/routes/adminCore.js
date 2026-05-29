@@ -36,9 +36,11 @@ function createAdminCoreRouter({
       const guildId = req.guildId;
       const requestedRange = String(req.query.range || '7d').toLowerCase();
       const normalizedRange = ['24h', '7d', '30d'].includes(requestedRange) ? requestedRange : '7d';
-      const sqliteWindow = normalizedRange === '24h'
-        ? 'now","-24 hour'
-        : (normalizedRange === '30d' ? 'now","-30 day' : 'now","-7 day');
+      const sqliteDateModifier = normalizedRange === '24h'
+        ? '-1 day'
+        : (normalizedRange === '30d' ? '-30 day' : '-7 day');
+      const sqliteDateWindowExpr = `date('now', '${sqliteDateModifier}')`;
+      const sqliteDateTimeWindowExpr = `datetime('now', '${sqliteDateModifier}')`;
       const client = typeof getClient === 'function' ? getClient() : null;
       const guild = req.guild || await fetchGuildById(guildId);
       const safeGet = (sql, params = [], fallback = {}) => {
@@ -90,8 +92,22 @@ function createAdminCoreRouter({
           enabled: !!(moduleState.nfttracker || moduleState.tokentracker),
           stats: {
             actions: Number(
-              (safeGet(`SELECT COUNT(*) AS cnt FROM nft_activity_events WHERE guild_id = ? AND created_at >= datetime("${sqliteWindow}")`, [guildId], { cnt: 0 })?.cnt || 0)
-              + (safeGet(`SELECT COUNT(*) AS cnt FROM tracked_token_events WHERE guild_id = ? AND datetime(COALESCE(event_time, created_at)) >= datetime("${sqliteWindow}")`, [guildId], { cnt: 0 })?.cnt || 0)
+              (safeGet(`
+                SELECT COUNT(*) AS cnt
+                FROM nft_activity_events e
+                WHERE datetime(COALESCE(e.event_time, e.created_at)) >= ${sqliteDateTimeWindowExpr}
+                  AND EXISTS (
+                    SELECT 1
+                    FROM nft_tracked_collections c
+                    WHERE c.guild_id = ?
+                      AND c.enabled = 1
+                      AND (
+                        LOWER(COALESCE(c.collection_address, '')) = LOWER(COALESCE(e.collection_key, ''))
+                        OR LOWER(COALESCE(c.me_symbol, '')) = LOWER(COALESCE(e.collection_key, ''))
+                      )
+                  )
+              `, [guildId], { cnt: 0 })?.cnt || 0)
+              + (safeGet(`SELECT COUNT(*) AS cnt FROM tracked_token_events WHERE guild_id = ? AND datetime(COALESCE(event_time, created_at)) >= ${sqliteDateTimeWindowExpr}`, [guildId], { cnt: 0 })?.cnt || 0)
             ),
           },
         }
@@ -117,22 +133,36 @@ function createAdminCoreRouter({
           participantsActive: Number(safeGet('SELECT COALESCE(SUM(filled_slots), 0) AS cnt FROM heist_missions WHERE guild_id = ? AND status IN ("recruiting", "active")', [guildId], { cnt: 0 })?.cnt || 0),
         },
         welcome: {
-          joins: Number(safeGet(`SELECT COALESCE(SUM(joins_total), 0) AS cnt FROM tenant_welcome_analytics_daily WHERE guild_id = ? AND day >= date("${sqliteWindow}")`, [guildId], { cnt: 0 })?.cnt || 0),
-          welcomesSent: Number(safeGet(`SELECT COALESCE(SUM(welcome_sent), 0) AS cnt FROM tenant_welcome_analytics_daily WHERE guild_id = ? AND day >= date("${sqliteWindow}")`, [guildId], { cnt: 0 })?.cnt || 0),
+          joins: Number(safeGet(`SELECT COALESCE(SUM(joins_total), 0) AS cnt FROM tenant_welcome_analytics_daily WHERE guild_id = ? AND day_key >= ${sqliteDateWindowExpr}`, [guildId], { cnt: 0 })?.cnt || 0),
+          welcomesSent: Number(safeGet(`SELECT COALESCE(SUM(welcome_sent), 0) AS cnt FROM tenant_welcome_analytics_daily WHERE guild_id = ? AND day_key >= ${sqliteDateWindowExpr}`, [guildId], { cnt: 0 })?.cnt || 0),
         },
         invites: {
-          joins: Number(safeGet(`SELECT COUNT(*) AS cnt FROM invite_events WHERE guild_id = ? AND joined_at >= datetime("${sqliteWindow}")`, [guildId], { cnt: 0 })?.cnt || 0),
+          joins: Number(safeGet(`SELECT COUNT(*) AS cnt FROM invite_events WHERE guild_id = ? AND datetime(joined_at) >= ${sqliteDateTimeWindowExpr}`, [guildId], { cnt: 0 })?.cnt || 0),
         },
         nfttracker: {
-          events: Number(safeGet(`SELECT COUNT(*) AS cnt FROM nft_activity_events WHERE guild_id = ? AND created_at >= datetime("${sqliteWindow}")`, [guildId], { cnt: 0 })?.cnt || 0),
+          events: Number(safeGet(`
+            SELECT COUNT(*) AS cnt
+            FROM nft_activity_events e
+            WHERE datetime(COALESCE(e.event_time, e.created_at)) >= ${sqliteDateTimeWindowExpr}
+              AND EXISTS (
+                SELECT 1
+                FROM nft_tracked_collections c
+                WHERE c.guild_id = ?
+                  AND c.enabled = 1
+                  AND (
+                    LOWER(COALESCE(c.collection_address, '')) = LOWER(COALESCE(e.collection_key, ''))
+                    OR LOWER(COALESCE(c.me_symbol, '')) = LOWER(COALESCE(e.collection_key, ''))
+                  )
+              )
+          `, [guildId], { cnt: 0 })?.cnt || 0),
           trackedCollections: Number(safeGet('SELECT COUNT(*) AS cnt FROM nft_tracked_collections WHERE guild_id = ? AND enabled = 1', [guildId], { cnt: 0 })?.cnt || 0),
         },
         tokentracker: {
           activeRules: Number(safeGet('SELECT COUNT(*) AS cnt FROM token_role_rules WHERE guild_id = ? AND enabled = 1', [guildId], { cnt: 0 })?.cnt || 0),
         },
         engagement: {
-          points: Number(safeGet(`SELECT COALESCE(SUM(points), 0) AS cnt FROM points_ledger WHERE guild_id = ? AND created_at >= datetime("${sqliteWindow}")`, [guildId], { cnt: 0 })?.cnt || 0),
-          activeUsers: Number(safeGet(`SELECT COUNT(DISTINCT user_id) AS cnt FROM points_ledger WHERE guild_id = ? AND created_at >= datetime("${sqliteWindow}")`, [guildId], { cnt: 0 })?.cnt || 0),
+          points: Number(safeGet(`SELECT COALESCE(SUM(points), 0) AS cnt FROM points_ledger WHERE guild_id = ? AND datetime(created_at) >= ${sqliteDateTimeWindowExpr}`, [guildId], { cnt: 0 })?.cnt || 0),
+          activeUsers: Number(safeGet(`SELECT COUNT(DISTINCT user_id) AS cnt FROM points_ledger WHERE guild_id = ? AND datetime(created_at) >= ${sqliteDateTimeWindowExpr}`, [guildId], { cnt: 0 })?.cnt || 0),
         },
         ticketing: {
           openTickets: Number(safeGet('SELECT COUNT(*) AS cnt FROM tickets WHERE guild_id = ? AND status = "open"', [guildId], { cnt: 0 })?.cnt || 0),

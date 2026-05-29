@@ -2454,6 +2454,13 @@ function enforceInitialServerSelection() {
 
 async function loadPortal() {
   try {
+    const canonicalUrl = new URL(window.location.href);
+    const canonicalAuth = String(canonicalUrl.searchParams.get('auth') || '').trim().toLowerCase();
+    if (canonicalUrl.pathname === '/' && canonicalAuth === 'ready') {
+      window.location.replace(`/app${canonicalUrl.search}${canonicalUrl.hash || ''}`);
+      return;
+    }
+
     // Check feature flags
     const flagsResponse = await fetch('/api/features', { credentials: 'include' });
     if (flagsResponse.ok) {
@@ -7134,7 +7141,7 @@ function login() {
   const currentSection = (document.querySelector('.nav-item.active') || {}).dataset?.section || '';
   if (activeGuildId) qs.set('guild', activeGuildId);
   if (currentSection && currentSection !== 'landing') qs.set('section', currentSection);
-  const returnTo = '/' + (qs.toString() ? '?' + qs.toString() : '');
+  const returnTo = '/app' + (qs.toString() ? '?' + qs.toString() : '');
   window.location.href = '/auth/discord/login?returnTo=' + encodeURIComponent(returnTo);
 
   // If navigation is blocked for any reason, allow retry.

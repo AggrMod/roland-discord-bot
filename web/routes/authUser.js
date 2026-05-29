@@ -1248,7 +1248,10 @@ function createAuthUserRouter({
       const returnTo = req.session.returnTo;
       delete req.session.returnTo;
       await saveSession(req);
-      const safeReturn = returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/app';
+      let safeReturn = returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/app';
+      if (safeReturn === '/' || safeReturn.startsWith('/?')) {
+        safeReturn = `/app${safeReturn.slice(1)}`;
+      }
       const loginReadyRedirect = safeReturn.includes('?')
         ? `${safeReturn}&auth=ready`
         : `${safeReturn}?auth=ready`;

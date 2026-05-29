@@ -526,6 +526,7 @@ client.on(Events.InteractionCreate, async interaction => {
       return;
     }
     if (customId === 'panel_verify') { await handlePanelVerifyButton(interaction); return; }
+    if (customId.startsWith('eng_verify_task_')) { await handleEngagementVerifyButton(interaction); return; }
     if (customId === 'treasury_refresh_panel') { await handleTreasuryRefreshButton(interaction); return; }
     if (customId === 'heist_panel_discover' || customId === 'heist_panel_status' || customId === 'heist_panel_join') { await handleHeistPanelButton(interaction); return; }
     if (customId.startsWith('vault_panel_')) {
@@ -667,6 +668,59 @@ async function handlePanelVerifyButton(interaction) {
     await interaction.editReply({ embeds: [embed] });
   } catch (e) {
     logger.error('Verify button error:', e);
+  }
+}
+
+async function handleEngagementVerifyButton(interaction) {
+  try {
+    await interaction.deferReply({ ephemeral: true });
+    const taskId = Number(String(interaction.customId || '').replace('eng_verify_task_', '').trim());
+    if (!Number.isFinite(taskId) || taskId <= 0) {
+      await interaction.editReply({ content: 'Invalid task reference.' });
+      return;
+    }
+    const guildId = String(interaction.guildId || '').trim();
+    const userId = String(interaction.user?.id || '').trim();
+    const username = String(interaction.user?.username || interaction.user?.globalName || interaction.user?.tag || '').trim();
+    if (!guildId || !userId) {
+      await interaction.editReply({ content: 'Missing guild or user context.' });
+      return;
+    }
+
+    const engagementService = require('./services/engagementService');
+    const task = engagementService.getTaskById(guildId, taskId, { userId });
+    if (!task || String(task.provider || '').toLowerCase() !== 'x') {
+      await interaction.editReply({ content: 'Task is unavailable for verification.' });
+      return;
+    }
+
+    const result = await engagementService.verifyXTaskAction(guildId, taskId, userId, username);
+    if (!result?.success) {
+      await interaction.editReply({ content: `Verification failed: ${result?.message || 'Unknown error'}` });
+      return;
+    }
+
+    const verifiedCount = Number(result.verifiedCount || 0);
+    const rewarded = (Array.isArray(result.results) ? result.results : [])
+      .reduce((sum, row) => sum + Number(row?.rewardPoints || 0), 0);
+    if (verifiedCount > 0 && rewarded > 0) {
+      await interaction.editReply({ content: `Verified ${verifiedCount} action(s). Awarded ${rewarded} points.` });
+      return;
+    }
+    if (verifiedCount > 0) {
+      await interaction.editReply({ content: `Verified ${verifiedCount} action(s). No new points were awarded (already claimed or zero-point action).` });
+      return;
+    }
+    await interaction.editReply({ content: 'No new completed actions found yet. Try again after you complete the task actions on X.' });
+  } catch (error) {
+    logger.warn(`[engagement] verify button failed: ${error?.message || error}`);
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content: 'Verification failed. Please try again.' });
+      } else {
+        await interaction.reply({ content: 'Verification failed. Please try again.', ephemeral: true });
+      }
+    } catch (_) {}
   }
 }
 

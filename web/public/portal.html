@@ -1221,7 +1221,10 @@
           <div class="card" id="engagementTasksCard">
             <div class="card-header-row">
               <h3 class="card-title">🗂️ Tasks</h3>
-              <button class="btn-secondary btn-sm" type="button" onclick="loadEngagementTasks()">Refresh</button>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <button class="btn-secondary btn-sm" type="button" id="engagementVerifyAllBtn" onclick="verifyAllEngagementTasks()">Verify All</button>
+                <button class="btn-secondary btn-sm" type="button" onclick="loadEngagementTasks()">Refresh</button>
+              </div>
             </div>
             <div id="engagementTasksView">
               <div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>

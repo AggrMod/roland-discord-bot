@@ -6029,14 +6029,28 @@ function switchSection(sectionName, options = {}) {
     item.classList.add('active');
   });
 
-  // Update content sections
+  // Update content sections (hard-hide non-active sections to prevent bleed-through)
+  const targetSectionId = `section-${resolvedSectionName}`;
   document.querySelectorAll('.content-section').forEach(section => {
     section.classList.remove('active');
+    if (section.id !== targetSectionId) {
+      section.style.display = 'none';
+    }
   });
   const targetSection = document.getElementById(`section-${resolvedSectionName}`);
   if (targetSection) {
     targetSection.classList.add('active');
+    targetSection.style.display = '';
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // Ensure engagement overlays never leak into other sections.
+  if (resolvedSectionName !== 'engagement') {
+    const monitoredOverlay = document.getElementById('engMonitoredEditorPanel');
+    const hashtagOverlay = document.getElementById('engHashtagEditorPanel');
+    if (monitoredOverlay) monitoredOverlay.style.display = 'none';
+    if (hashtagOverlay) hashtagOverlay.style.display = 'none';
+    document.body.style.overflow = '';
   }
 
   // Breadcrumb Logic
@@ -7233,7 +7247,7 @@ window.addEventListener('unhandledrejection', (event) => {
 
 // ==================== INTEGRATED ADMIN WORKSPACE ====================
 function hideAllAdminCards() {
-  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminSuperadminCard', 'adminSystemMonitorCard', 'adminAnalyticsCard', 'adminHelpCard', 'adminRolesCard', 'adminActivityCard', 'adminStatsCard', 'adminNftTrackerCard', 'adminInviteTrackerCard', 'adminVotingPowerCard', 'adminSelfServeRolesCard', 'adminApiRefCard', 'adminTicketingCard']
+  ['adminUsersCard', 'adminProposalsCard', 'adminSettingsCard', 'adminSuperadminCard', 'adminSystemMonitorCard', 'adminAnalyticsCard', 'adminHelpCard', 'adminRolesCard', 'adminActivityCard', 'adminStatsCard', 'adminNftTrackerCard', 'adminInviteTrackerCard', 'adminVotingPowerCard', 'adminSelfServeRolesCard', 'adminApiRefCard', 'adminTicketingCard', 'adminEngagementCard']
     .forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
@@ -19816,6 +19830,64 @@ async function loadEngagementRedemptions() {
   }
 }
 
+async function verifyAllEngagementTasks() {
+  try {
+    if (canAdminEngagementPortal()) {
+      showInfo('Verify All is available in member view.');
+      return;
+    }
+    const tasksResponse = await fetch('/api/user/engagement/tasks?limit=50&status=active', {
+      credentials: 'include',
+      headers: buildTenantRequestHeaders(),
+    });
+    const tasksData = await tasksResponse.json().catch(() => ({}));
+    const tasks = Array.isArray(tasksData?.tasks) ? tasksData.tasks : [];
+    const xTasks = tasks.filter((task) => String(task?.provider || '').toLowerCase() === 'x' && Number(task?.id) > 0);
+    if (!xTasks.length) {
+      showInfo('No active X tasks to verify.');
+      return;
+    }
+
+    let verifiedActions = 0;
+    let rewardPoints = 0;
+    for (const task of xTasks) {
+      try {
+        const verifyResponse = await fetch(`/api/user/engagement/tasks/${Number(task.id)}/complete`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { ...buildTenantRequestHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const verifyData = await verifyResponse.json().catch(() => ({}));
+        const result = verifyData?.data || verifyData?.result || verifyData || {};
+        verifiedActions += Number(result?.verifiedCount || 0);
+        if (Array.isArray(result?.results)) {
+          rewardPoints += result.results.reduce((sum, item) => sum + Number(item?.rewardPoints || 0), 0);
+        } else {
+          rewardPoints += Number(result?.rewardPoints || 0);
+        }
+      } catch (_error) {
+        // continue trying remaining tasks
+      }
+    }
+
+    if (verifiedActions > 0 || rewardPoints > 0) {
+      showSuccess(`Verification complete. Verified ${verifiedActions} action(s), awarded ${rewardPoints} points.`);
+    } else {
+      showInfo('No new completed actions found yet.');
+    }
+
+    await Promise.all([
+      loadEngagementTasks(),
+      loadEngagementConfig(),
+      loadEngagementHistory(),
+      loadEngagementLeaderboard(),
+    ]);
+  } catch (error) {
+    showError(error?.message || 'Failed to verify tasks.');
+  }
+}
+
 async function saveEngagementConfig() {
   try {
     const body = {
@@ -19900,6 +19972,7 @@ function setEngagementPortalMode(canAdmin) {
   const achievementAdminForm = inEngagement('#engagementAchievementAdminForm');
   const achievementSaveBtn = inEngagement('#engagementAchievementSaveBtn');
   const redemptionsRefreshBtn = inEngagement('#engagementRedemptionsRefreshBtn');
+  const verifyAllBtn = inEngagement('#engagementVerifyAllBtn');
   const configTitle = inEngagement('#engagementConfigCard .card-title');
   const tasksCard = inEngagement('#engagementTasksView')?.closest('.card');
   const tasksTitle = tasksCard?.querySelector('.card-title');
@@ -19922,6 +19995,7 @@ function setEngagementPortalMode(canAdmin) {
   if (achievementAdminForm) achievementAdminForm.style.display = canAdmin ? 'grid' : 'none';
   if (achievementSaveBtn) achievementSaveBtn.style.display = canAdmin ? 'inline-flex' : 'none';
   if (redemptionsRefreshBtn) redemptionsRefreshBtn.style.display = 'inline-flex';
+  if (verifyAllBtn) verifyAllBtn.style.display = canAdmin ? 'none' : 'inline-flex';
   if (configTitle) configTitle.textContent = canAdmin ? 'Settings' : 'My Engagement';
   if (tasksTitle) tasksTitle.textContent = canAdmin ? '🧩 Tasks' : '🧩 Active Tasks';
   if (providersCard) providersCard.style.display = canAdmin ? '' : 'none';

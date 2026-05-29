@@ -821,12 +821,15 @@ async function getUsableXLinkedAccount(guildId, userId, { forceRefresh = false }
 }
 
 function normalizeTaskPayload(providerKey, payload = {}) {
+  const sourcePostRaw = String(payload.source_post_id || payload.sourcePostId || '').trim();
+  const sourcePostUrlRaw = String(payload.source_post_url || payload.sourcePostUrl || '').trim();
+  const sourcePostId = normalizeXPostId(sourcePostRaw || sourcePostUrlRaw);
   const requiredActions = normalizeTaskTypes(providerKey, payload.required_actions || payload.requiredActions || payload.task_types || payload.taskTypes);
   return {
     provider: providerKey,
     triggerType: String(payload.trigger_type || payload.triggerType || 'manual').trim() || 'manual',
-    sourcePostId: String(payload.source_post_id || payload.sourcePostId || '').trim() || null,
-    sourcePostUrl: String(payload.source_post_url || payload.sourcePostUrl || '').trim() || null,
+    sourcePostId,
+    sourcePostUrl: sourcePostUrlRaw || null,
     sourceAccountHandle: formatHandle(payload.source_account_handle || payload.sourceAccountHandle),
     sourceAccountId: String(payload.source_account_id || payload.sourceAccountId || '').trim() || null,
     hashtag: formatHashtag(payload.hashtag),
@@ -842,6 +845,17 @@ function normalizeTaskPayload(providerKey, payload = {}) {
     mirroredMessageId: String(payload.mirrored_message_id || payload.mirroredMessageId || '').trim() || null,
     metadata: normalizeRequirements(payload.metadata),
   };
+}
+
+function normalizeXPostId(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (/^\d{6,32}$/.test(raw)) return raw;
+  const statusMatch = raw.match(/status\/(\d{6,32})/i);
+  if (statusMatch?.[1]) return statusMatch[1];
+  const idMatch = raw.match(/(\d{6,32})/);
+  if (idMatch?.[1]) return idMatch[1];
+  return raw;
 }
 
 function createTask(guildId, payload = {}) {
@@ -1127,6 +1141,14 @@ async function postTaskMirror(guildId, taskRecord, source, options = {}) {
             .setStyle(ButtonStyle.Link)
             .setLabel('Reply')
             .setURL(`https://x.com/intent/tweet?in_reply_to=${encodeURIComponent(sourcePostId)}`)
+        );
+      }
+      if (taskRecord?.id) {
+        buttons.push(
+          new ButtonBuilder()
+            .setStyle(ButtonStyle.Primary)
+            .setCustomId(`eng_verify_task_${Number(taskRecord.id)}`)
+            .setLabel('Verify')
         );
       }
       if (buttons.length) {
@@ -2241,8 +2263,34 @@ async function verifyXTaskAction(guildId, taskId, userId, username = '') {
 
   let accessToken = decryptXAccessToken(account);
   if (!accessToken) return { success: false, message: 'Linked X account does not have an active access token' };
+  let providerUserId = String(account.provider_user_id || account.metadata?.userId || '').trim();
+  let providerHandle = String(account.handle || account.metadata?.username || '').trim().replace(/^@+/, '');
+  if (!providerUserId) {
+    try {
+      const me = await xProviderService.getAuthenticatedUser(accessToken);
+      providerUserId = String(me?.data?.id || '').trim();
+      providerHandle = String(me?.data?.username || providerHandle || '').trim().replace(/^@+/, '');
+      if (providerUserId) {
+        upsertLinkedAccount(normalizedGuildId, normalizedUserId, {
+          provider: 'x',
+          provider_user_id: providerUserId,
+          handle: providerHandle,
+          display_name: String(me?.data?.name || account.display_name || '').trim() || null,
+          status: 'linked',
+          metadata: {
+            ...(account.metadata || {}),
+            userId: providerUserId,
+            username: providerHandle || null,
+          },
+        });
+      }
+    } catch (_error) {
+      // best-effort enrichment; verification can still run with existing data
+    }
+  }
 
   const results = [];
+  const normalizedSourcePostId = normalizeXPostId(task.source_post_id);
   for (const actionType of task.required_actions || []) {
     const existing = db.prepare('SELECT id FROM engagement_task_completions WHERE task_id = ? AND user_id = ? AND action_type = ?')
       .get(Number(taskId), normalizedUserId, actionType);
@@ -2253,37 +2301,37 @@ async function verifyXTaskAction(guildId, taskId, userId, username = '') {
 
       let verified = false;
       const verifyAction = async () => {
-        if (actionType === 'x_like' && task.source_post_id) {
-          const liked = await xProviderService.getLikedPosts(account.provider_user_id || account.metadata?.userId || account.handle, {
+        if (actionType === 'x_like' && normalizedSourcePostId) {
+          const liked = await xProviderService.getLikedPosts(providerUserId || providerHandle, {
             accessToken,
             maxResults: 100,
           });
-          return (liked.posts || []).some(post => String(post.id) === String(task.source_post_id));
+          return (liked.posts || []).some(post => String(post.id) === String(normalizedSourcePostId));
         }
-        if (actionType === 'x_repost' && task.source_post_id) {
-          const reposts = await xProviderService.getRetweetingUsers(task.source_post_id, {
+        if (actionType === 'x_repost' && normalizedSourcePostId) {
+          const reposts = await xProviderService.getRetweetingUsers(normalizedSourcePostId, {
             bearerToken: xProviderService.getRuntimeConfig().bearerToken,
             maxResults: 100,
           });
-          return (reposts.users || []).some(entry => String(entry.id) === String(account.provider_user_id));
+          return (reposts.users || []).some(entry => String(entry.id) === String(providerUserId));
         }
-        if (actionType === 'x_follow' && task.source_account_id) {
-          const following = await xProviderService.getFollowing(account.provider_user_id, {
+        if (actionType === 'x_follow' && task.source_account_id && providerUserId) {
+          const following = await xProviderService.getFollowing(providerUserId, {
             accessToken,
             maxResults: 500,
           });
           return (following.users || []).some(entry => String(entry.id) === String(task.source_account_id));
         }
-        if (actionType === 'x_reply' && task.source_post_id && account.handle) {
-          const query = `conversation_id:${task.source_post_id} from:${account.handle.replace(/^@+/, '')}`;
+        if (actionType === 'x_reply' && normalizedSourcePostId && providerHandle) {
+          const query = `conversation_id:${normalizedSourcePostId} from:${providerHandle}`;
           const replies = await xProviderService.searchRecentPosts(query, {
             accessToken,
             maxResults: 50,
           });
-          return (replies.posts || []).some(post => String(post.in_reply_to_user_id || '') !== '' && String(post.conversation_id || '') === String(task.source_post_id));
+          return (replies.posts || []).some(post => String(post.in_reply_to_user_id || '') !== '' && String(post.conversation_id || '') === String(normalizedSourcePostId));
         }
-        if (actionType === 'x_hashtag_post' && task.hashtag && account.handle) {
-          const query = `${task.hashtag} from:${account.handle.replace(/^@+/, '')} -is:retweet`;
+        if (actionType === 'x_hashtag_post' && task.hashtag && providerHandle) {
+          const query = `${task.hashtag} from:${providerHandle} -is:retweet`;
           const posts = await xProviderService.searchRecentPosts(query, {
             accessToken,
             maxResults: 25,

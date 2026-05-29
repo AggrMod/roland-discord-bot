@@ -7323,6 +7323,7 @@ footer a[href="/terms-of-service"]:hover {
 #section-engagement.engagement-user-mode #engagementLeaderboardCard { order: 6; }
 #section-engagement.engagement-user-mode #engagementShopCard { order: 7; }
 #section-engagement.engagement-user-mode #engagementAchievementsCard { order: 8; }
+#section-engagement.engagement-user-mode #engagementRedemptionsCard { order: 9; }
 
 #section-engagement .engagement-compact-card {
   margin: 0;

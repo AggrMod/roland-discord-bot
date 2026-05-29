@@ -19694,6 +19694,9 @@ async function completeEngagementTask(taskId, actionType) {
     }
     loadEngagementTasks();
     if (typeof loadEngagementLeaderboard === 'function') loadEngagementLeaderboard();
+    if (typeof loadEngagementHistory === 'function') loadEngagementHistory();
+    if (typeof loadEngagementConfig === 'function') loadEngagementConfig();
+    if (typeof loadEngagementRedemptions === 'function') loadEngagementRedemptions();
   } catch (error) {
     showError(`Task completion failed: ${error.message}`);
   }
@@ -19966,7 +19969,7 @@ function setEngagementPortalMode(canAdmin) {
   const leaderboardCard = inEngagement('#engagementLeaderboardCard');
   const shopCard = inEngagement('#engagementShopCard');
   const achievementsCard = inEngagement('#engagementAchievementsCard');
-  const redemptionsCard = inEngagement('#engagementRedemptionsView')?.closest('.card');
+  const redemptionsCard = inEngagement('#engagementRedemptionsCard');
   const configGrid = inEngagement('#engagementConfigGrid');
   const configSaveBtn = inEngagement('#engagementConfigSaveBtn');
   const shopAddBtn = inEngagement('#engagementShopAddBtn');

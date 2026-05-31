@@ -1343,12 +1343,7 @@ function createAuthUserRouter({
       const userData = await xProviderService.getAuthenticatedUser(tokenData.access_token);
       const linkedUser = userData?.data || {};
 
-      const guildId = String(authState.guildId || '').trim();
-      if (!guildId) {
-        delete req.session.xOAuth;
-        await saveSession(req);
-        return res.redirect('/app?section=profile&xAuth=missing_guild');
-      }
+      const guildId = String(authState.guildId || '').trim() || '__profile__';
 
       const eng = require('../../services/engagementService');
       const result = eng.upsertLinkedAccount(guildId, req.session.discordUser.id, {
@@ -1377,7 +1372,7 @@ function createAuthUserRouter({
 
       const returnTo = authState.returnTo && String(authState.returnTo).startsWith('/') && !String(authState.returnTo).startsWith('//')
         ? String(authState.returnTo)
-        : '/app?section=engagement';
+        : '/app?section=profile';
       if (!result?.success) {
         return res.redirect(`${returnTo}${returnTo.includes('?') ? '&' : '?'}xAuth=failed`);
       }
@@ -1581,8 +1576,7 @@ function createAuthUserRouter({
       return res.status(401).json(toErrorResponse('Not authenticated', 'UNAUTHORIZED'));
     }
     try {
-      const guildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
-      if (!guildId) return res.status(400).json(toErrorResponse('Select a server first', 'VALIDATION_ERROR'));
+      const guildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() }) || '__profile__';
       const eng = require('../../services/engagementService');
       return res.json(toSuccessResponse({
         accounts: eng.listLinkedAccounts(guildId, req.session.discordUser.id),
@@ -1599,8 +1593,7 @@ function createAuthUserRouter({
       return res.status(401).json(toErrorResponse('Not authenticated', 'UNAUTHORIZED'));
     }
     try {
-      const guildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
-      if (!guildId) return res.status(400).json(toErrorResponse('Select a server first', 'VALIDATION_ERROR'));
+      const guildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() }) || '__profile__';
       const eng = require('../../services/engagementService');
       const result = eng.upsertLinkedAccount(guildId, req.session.discordUser.id, req.body || {});
       if (!result?.success) {
@@ -1618,8 +1611,7 @@ function createAuthUserRouter({
       return res.status(401).json(toErrorResponse('Not authenticated', 'UNAUTHORIZED'));
     }
     try {
-      const guildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
-      if (!guildId) return res.status(400).json(toErrorResponse('Select a server first', 'VALIDATION_ERROR'));
+      const guildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() }) || '__profile__';
       const eng = require('../../services/engagementService');
       return res.json(toSuccessResponse(
         eng.disconnectLinkedAccount(guildId, req.session.discordUser.id, req.params.provider)

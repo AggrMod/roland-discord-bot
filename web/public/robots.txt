@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /app
+Disallow: /api/
+Disallow: /auth/
+Disallow: /verify
+Disallow: /admin
+
+Sitemap: https://guildpilot.app/sitemap.xml

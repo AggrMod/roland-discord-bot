@@ -2026,6 +2026,10 @@ function updateSidebarModuleNav() {
     { id: 'mobileNavEngagement', module: 'engagement' },
     { id: 'sidebarNavHeist', module: 'heist' },
     { id: 'mobileNavHeist', module: 'heist' },
+    { id: 'sidebarNavSelfServe', module: 'selfserveroles' },
+    { id: 'mobileNavSelfServe', module: 'selfserveroles' },
+    { id: 'sidebarNavTicketing', module: 'ticketing' },
+    { id: 'mobileNavTicketing', module: 'ticketing' },
     // Plans nav handled separately (superadmin-only)
   ];
 
@@ -2046,13 +2050,11 @@ function updateSidebarModuleNav() {
   const battleNavMobile = document.getElementById('mobileNavBattle');
   if (battleNavMobile) battleNavMobile.style.display = 'none';
 
-  // Keep Plans visible in desktop sidebar under Management.
+  // Keep Plans visible in the grouped sidebar menu on desktop and mobile.
   const plansNav = document.getElementById('sidebarNavPlans');
   if (plansNav) plansNav.style.display = '';
-
-  // Keep legacy mobile plans entry hidden to avoid duplicate Pricing item.
   const mobilePlans = document.getElementById('mobileNavPlans');
-  if (mobilePlans) mobilePlans.style.display = 'none';
+  if (mobilePlans) mobilePlans.style.display = '';
 
   const sidebarSettings = document.getElementById('sidebarNavSettings');
   if (sidebarSettings) {
@@ -2082,12 +2084,37 @@ function updateSidebarModuleNav() {
     });
     communityLabel.style.display = hasVisibleCommunity ? '' : 'none';
   }
+  const mobileCommunityLabel = document.getElementById('mobileGroupCommunity');
+  if (mobileCommunityLabel) {
+    const communityIds = [
+      'mobileNavWallets',
+      'mobileNavGovernance',
+      'mobileNavTreasury',
+      'mobileNavNftActivity',
+      'mobileNavTokenActivity',
+      'mobileNavEngagement',
+      'mobileNavHeist',
+      'mobileNavSelfServe',
+      'mobileNavTicketing',
+    ];
+    const hasVisibleCommunity = communityIds.some((id) => {
+      const el = document.getElementById(id);
+      return el && el.style.display !== 'none';
+    });
+    mobileCommunityLabel.style.display = hasVisibleCommunity ? '' : 'none';
+  }
 
   const managementLabel = document.getElementById('sidebarGroupManagement');
   if (managementLabel) {
     const hasVisibleManagement = (plansNav && plansNav.style.display !== 'none')
       || (!!sidebarSettings && sidebarSettings.style.display !== 'none');
     managementLabel.style.display = hasVisibleManagement ? '' : 'none';
+  }
+  const mobileManagementLabel = document.getElementById('mobileGroupManagement');
+  if (mobileManagementLabel) {
+    const hasVisibleManagement = (mobilePlans && mobilePlans.style.display !== 'none')
+      || (!!mobileSettings && mobileSettings.style.display !== 'none');
+    mobileManagementLabel.style.display = hasVisibleManagement ? '' : 'none';
   }
 
   // Hide dividers that have no visible nav items between them
@@ -2100,7 +2127,7 @@ function updateSidebarModuleNav() {
     divider.style.display = (hasPrev && hasNext) ? '' : 'none';
   });
 
-  document.querySelectorAll('.sidebar .nav-item').forEach((item) => {
+  document.querySelectorAll('.sidebar .nav-item, #mobileMenu .nav-item').forEach((item) => {
     item.dataset.navVisible = item.style.display === 'none' ? '0' : '1';
   });
 }
@@ -2666,14 +2693,18 @@ function refreshAdminEntryVisibility() {
   const canShowAdminSettingsEntry = !!isAdmin || !!isSuperadmin;
   const hasServerContext = !!activeGuildId;
   const superadminSidebarGroup = document.getElementById('adminSuperadminSidebarGroup');
+  const mobileSuperadminSidebarGroup = document.getElementById('mobileSuperadminSidebarGroup');
   const mobileNavAdmin = document.getElementById('mobileNavAdmin');
+  const mobileNavMonitor = document.getElementById('mobileNavMonitor');
   const topNavSuperadmin = document.getElementById('topNavSuperadmin');
   const topNavAdminSettings = document.getElementById('topNavAdminSettings');
   const topNavModules = document.getElementById('topNavModules');
   const serversSuperadminBtn = document.getElementById('serversSuperadminBtn');
 
   if (superadminSidebarGroup) superadminSidebarGroup.style.display = canShowSuperadminEntry ? 'block' : 'none';
+  if (mobileSuperadminSidebarGroup) mobileSuperadminSidebarGroup.style.display = canShowSuperadminEntry ? 'block' : 'none';
   if (mobileNavAdmin) mobileNavAdmin.style.display = canShowSuperadminEntry ? 'block' : 'none';
+  if (mobileNavMonitor) mobileNavMonitor.style.display = canShowSuperadminEntry ? 'block' : 'none';
   if (topNavSuperadmin) topNavSuperadmin.style.display = canShowSuperadminEntry ? '' : 'none';
   if (topNavModules && canShowAdminSettingsEntry) topNavModules.style.display = 'none';
   if (serversSuperadminBtn) serversSuperadminBtn.style.display = canShowSuperadminEntry ? 'inline-flex' : 'none';
@@ -20966,9 +20997,10 @@ function toggleDashboardViewMode() {
   localStorage.setItem("dashboard_view_mode", isUserView ? "user" : "admin");
 }
 
-function onSidebarSearch(query) {
+function onSidebarSearch(query, scopeSelector = '.sidebar') {
   const q = (query || "").toLowerCase().trim();
-  const items = document.querySelectorAll(".sidebar .nav-item");
+  const scope = document.querySelector(scopeSelector) || document.querySelector('.sidebar') || document;
+  const items = scope.querySelectorAll(".nav-item");
 
   if (!q) {
     updateSidebarModuleNav();
@@ -20989,7 +21021,7 @@ function onSidebarSearch(query) {
     }
   });
 
-  document.querySelectorAll('.sidebar-section-divider').forEach(divider => {
+  scope.querySelectorAll('.sidebar-section-divider').forEach(divider => {
     let hasPrev = false, hasNext = false;
     let el = divider.previousElementSibling;
     while (el) { if (el.style.display !== 'none' && !el.classList.contains('sidebar-section-divider')) { hasPrev = true; break; } el = el.previousElementSibling; }

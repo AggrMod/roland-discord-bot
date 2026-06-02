@@ -7106,6 +7106,169 @@ footer a[href="/terms-of-service"]:hover {
   color: #c6d2ff !important;
 }
 
+/* ==================== Mobile Sidebar Parity ==================== */
+#mobileMenu.mobile-menu {
+  background: rgba(2, 6, 18, 0.72) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+#mobileMenu .mobile-menu-content {
+  width: min(82vw, 260px) !important;
+  max-width: 260px !important;
+  height: 100dvh !important;
+  padding: 14px 10px 10px !important;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(7, 12, 24, 0.98), rgba(10, 16, 30, 0.95)) !important;
+  border-right: 1px solid rgba(120, 137, 255, 0.22) !important;
+  box-shadow: 18px 0 42px rgba(3, 8, 20, 0.45) !important;
+}
+
+#mobileMenu .mobile-menu-close {
+  top: 12px !important;
+  right: 12px !important;
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 10px !important;
+  background: rgba(20, 29, 53, 0.82) !important;
+  border: 1px solid rgba(114, 132, 255, 0.28) !important;
+  color: #dce6ff !important;
+  font-size: 1rem !important;
+  z-index: 2;
+}
+
+#mobileMenu .mobile-menu-close:hover {
+  background: rgba(96, 116, 255, 0.18) !important;
+  border-color: rgba(120, 138, 255, 0.42) !important;
+}
+
+#mobileMenu .mobile-sidebar-search {
+  margin-top: 44px;
+  padding: 0 6px 8px !important;
+  position: relative;
+  flex: 0 0 auto;
+}
+
+#mobileMenu .mobile-sidebar-search input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  border-radius: 10px !important;
+  height: 38px;
+  padding: 8px 34px 8px 12px !important;
+  background: rgba(20, 29, 53, 0.72) !important;
+  border: 1px solid rgba(114, 132, 255, 0.28) !important;
+  color: #f2f6ff;
+}
+
+#mobileMenu .mobile-sidebar-search .search-icon {
+  right: 16px;
+  top: 11px;
+}
+
+#mobileMenu .mobile-menu-items {
+  margin-top: 0 !important;
+  padding: 2px 2px 8px !important;
+  gap: 8px !important;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 137, 255, 0.5) rgba(10, 16, 30, 0.4);
+}
+
+#mobileMenu .mobile-menu-items::-webkit-scrollbar {
+  width: 8px;
+}
+
+#mobileMenu .mobile-menu-items::-webkit-scrollbar-thumb {
+  background: rgba(120, 137, 255, 0.45);
+  border-radius: 999px;
+}
+
+#mobileMenu .nav-item {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 12px !important;
+  border-left: none !important;
+  padding: 10px 12px !important;
+  gap: 10px !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: #d3def7 !important;
+  display: flex;
+  align-items: center;
+}
+
+#mobileMenu .nav-item .nav-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 26px;
+  background: rgba(108, 124, 255, 0.14);
+  border: 1px solid rgba(127, 142, 255, 0.26);
+  color: #dce6ff;
+  font-size: 0.82rem !important;
+}
+
+#mobileMenu .nav-item .nav-label {
+  min-width: 0;
+  font-size: 0.92rem !important;
+  font-weight: 600;
+  color: #d3def7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#mobileMenu .nav-item:hover {
+  background: linear-gradient(135deg, rgba(89, 108, 246, 0.18), rgba(59, 130, 246, 0.12)) !important;
+  border-color: rgba(118, 136, 255, 0.34) !important;
+}
+
+#mobileMenu .nav-item.active {
+  background: linear-gradient(135deg, rgba(109, 92, 255, 0.28), rgba(79, 70, 229, 0.2)) !important;
+  border-color: rgba(145, 133, 255, 0.5) !important;
+  box-shadow: 0 10px 22px rgba(29, 39, 92, 0.32);
+}
+
+#mobileMenu .nav-item.active .nav-icon {
+  background: rgba(145, 133, 255, 0.26);
+  border-color: rgba(165, 154, 255, 0.45);
+}
+
+#mobileMenu .nav-item.active .nav-label {
+  color: #f2f6ff !important;
+}
+
+#mobileMenu .sidebar-section-divider {
+  height: 1px;
+  flex: 0 0 auto;
+  margin: 2px 8px;
+  background: linear-gradient(90deg, transparent, rgba(118, 136, 255, 0.35), transparent) !important;
+}
+
+#mobileMenu .sidebar-group-label {
+  margin: 6px 10px 2px;
+  color: rgba(174, 193, 231, 0.72);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+#mobileMenu .sidebar-footer {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(118, 136, 255, 0.22);
+}
+
 /* ==================== Topbar Height Harmonization ==================== */
 .top-nav {
   min-height: 76px !important;

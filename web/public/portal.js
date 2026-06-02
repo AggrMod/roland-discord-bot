@@ -5907,8 +5907,12 @@ function switchSection(sectionName, options = {}) {
   sectionName = normalizePortalSectionName(sectionName);
 
   // Prevent redundant reloads if clicking the already active section (unless forced)
-  const currentSection = getStoredPortalSection();
-  if (sectionName === currentSection && !options.force) {
+  const storedSection = getStoredPortalSection();
+  const activeSection = document.querySelector('.content-section.active');
+  const activeSectionName = activeSection?.id?.startsWith('section-')
+    ? normalizePortalSectionName(activeSection.id.slice('section-'.length))
+    : '';
+  if (sectionName === storedSection && sectionName === activeSectionName && !options.force) {
     return;
   }
 
@@ -5931,7 +5935,7 @@ function switchSection(sectionName, options = {}) {
   if (workspaceSections.has(sectionName)) {
     moduleAdminWorkspaceMode = true;
   } else if (adminManagedModuleSections.has(sectionName)) {
-    const fromWorkspace = options.fromModules === true || workspaceSections.has(currentSection);
+    const fromWorkspace = options.fromModules === true || workspaceSections.has(storedSection) || workspaceSections.has(activeSectionName);
     if (!fromWorkspace) {
       moduleAdminWorkspaceMode = false;
     }

@@ -7214,6 +7214,24 @@ footer a[href="/terms-of-service"]:hover {
 }
 
 @media (max-width: 768px) {
+  html,
+  body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden !important;
+  }
+
+  .portal-container,
+  .portal-layout,
+  .content-area,
+  .content-section,
+  .app-surface {
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+  }
+
   .top-nav {
     display: flex !important;
     flex-wrap: wrap;
@@ -7242,7 +7260,7 @@ footer a[href="/terms-of-service"]:hover {
 
   .content-area {
     padding: 12px !important;
-    overflow-x: auto !important;
+    overflow-x: hidden !important;
     -webkit-overflow-scrolling: touch;
   }
 
@@ -7255,6 +7273,41 @@ footer a[href="/terms-of-service"]:hover {
   .module-grid,
   .panel-modules-grid {
     grid-template-columns: 1fr !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .dashboard-bento > *,
+  .panel-modules-grid > *,
+  #appHubBento > *,
+  #adminDashboardGrid > * {
+    grid-column: 1 / -1 !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .bento-panel,
+  .module-bento-tile,
+  .dashboard-tile,
+  .card,
+  .wallet-list-item {
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .bento-panel-header,
+  .module-bento-top,
+  .wallet-list-item,
+  .dashboard-header {
+    min-width: 0 !important;
+  }
+
+  .wallet-address,
+  .wallet-holdings,
+  .module-bento-title,
+  .module-bento-status,
+  .module-bento-metric {
+    overflow-wrap: anywhere;
   }
 
   .overview-metrics-grid {

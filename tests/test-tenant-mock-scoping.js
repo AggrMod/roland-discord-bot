@@ -15,7 +15,7 @@ async function run() {
     fetchNFTsFromHelius: nftService.fetchNFTsFromHelius.bind(nftService),
     countNFTsForWallets: nftService.countNFTsForWallets.bind(nftService),
     getAllNFTsForWallets: nftService.getAllNFTsForWallets.bind(nftService),
-    getAllUserWallets: walletService.getAllUserWallets.bind(walletService),
+    getLinkedWallets: walletService.getLinkedWallets.bind(walletService),
     tiersConfig: roleService.tiersConfig,
     traitRolesConfig: roleService.traitRolesConfig
   };
@@ -44,7 +44,7 @@ async function run() {
       forwardedGuildId = options.guildId || null;
       return [{ mint: 'scope-test', attributes: [], assignedToMission: null }];
     };
-    walletService.getAllUserWallets = () => [testWallet];
+    walletService.getLinkedWallets = () => [{ wallet_address: testWallet }];
 
     const userId = `tenant-scope-${Date.now()}`;
     db.prepare(`
@@ -86,7 +86,7 @@ async function run() {
     nftService.fetchNFTsFromHelius = originals.fetchNFTsFromHelius;
     nftService.countNFTsForWallets = originals.countNFTsForWallets;
     nftService.getAllNFTsForWallets = originals.getAllNFTsForWallets;
-    walletService.getAllUserWallets = originals.getAllUserWallets;
+    walletService.getLinkedWallets = originals.getLinkedWallets;
     roleService.tiersConfig = originals.tiersConfig;
     roleService.traitRolesConfig = originals.traitRolesConfig;
   }

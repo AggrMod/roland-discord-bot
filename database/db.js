@@ -672,7 +672,7 @@ function initDatabase() {
       og_role_id TEXT,
       og_role_limit INTEGER DEFAULT 0,
       base_verified_role_id TEXT,
-      include_delegated_wallets INTEGER DEFAULT 1,
+      include_delegated_wallets INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
@@ -845,7 +845,7 @@ function initDatabase() {
     'ALTER TABLE tenant_verification_settings ADD COLUMN og_role_id TEXT',
     'ALTER TABLE tenant_verification_settings ADD COLUMN og_role_limit INTEGER DEFAULT 0',
     'ALTER TABLE tenant_verification_settings ADD COLUMN base_verified_role_id TEXT',
-    'ALTER TABLE tenant_verification_settings ADD COLUMN include_delegated_wallets INTEGER DEFAULT 1',
+    'ALTER TABLE tenant_verification_settings ADD COLUMN include_delegated_wallets INTEGER DEFAULT 0',
     'ALTER TABLE tenant_branding ADD COLUMN footer_text TEXT',
     'ALTER TABLE tenant_branding ADD COLUMN ticketing_color TEXT',
     'ALTER TABLE tenant_branding ADD COLUMN selfserve_color TEXT',

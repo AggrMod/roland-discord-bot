@@ -50,6 +50,12 @@ The primary goal of V2 is to transition from a Solana-centric architecture to a 
 * **Token Gating standards**: Support ERC-20 (fungible), ERC-721 (NFTs), and ERC-1155 (semi-fungible) role gating rules.
 * **EVM Trackers**: Hook up Alchemy or QuickNode webhook streams to feed ERC-20/NFT transfers, swaps, and buys into the Discord alert system.
 
+### C. Secure Cold Wallet Delegation
+* **V1 revocation context**: The original delegation flow was removed from V1 because users could submit arbitrary cold wallets without proving control.
+* **Proof-of-control requirement**: Reintroduce only with a signed delegation message from the cold wallet or a verifiable on-chain delegation record.
+* **Revocation and expiry**: Delegations must have explicit expiry, audit logs, and user/admin revocation flows before affecting role sync.
+* **Risk controls**: Surface clear trust messaging and never count delegated wallets unless proof verification succeeds.
+
 ---
 
 ## 2. Advanced Workflow & Automation (Rules Engine)

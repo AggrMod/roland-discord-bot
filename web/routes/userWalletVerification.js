@@ -255,10 +255,11 @@ function createUserWalletVerificationRouter({
       return res.status(403).json(toErrorResponse('Forbidden', 'FORBIDDEN'));
     }
     try {
-      const { discordId } = req.params;
-      const guildId = String(req.guildId || '').trim();
-      const delegations = walletService.getDelegatedWallets(discordId, guildId);
-      return res.json(toSuccessResponse({ delegations }));
+      return res.json(toSuccessResponse({
+        delegations: [],
+        disabled: true,
+        message: 'Cold wallet delegation is disabled for security review. Link wallets directly for verification.',
+      }));
     } catch (routeError) {
       logger.error('Error fetching wallet delegations:', routeError);
       return res.status(500).json(toErrorResponse('Internal server error'));
@@ -272,29 +273,10 @@ function createUserWalletVerificationRouter({
     if (req.session.discordUser.id !== req.params.discordId) {
       return res.status(403).json(toErrorResponse('Forbidden', 'FORBIDDEN'));
     }
-    try {
-      const { discordId } = req.params;
-      const guildId = String(req.guildId || '').trim();
-      const coldWalletAddress = String(req.body?.coldWalletAddress || '').trim();
-      const delegateWalletAddress = String(req.body?.delegateWalletAddress || '').trim()
-        || String(walletService.getFavoriteWallet(discordId) || '').trim();
-      const expiresAt = req.body?.expiresAt ? String(req.body.expiresAt) : null;
-      const result = walletService.addDelegatedWallet({
-        discordId,
-        guildId,
-        delegateWalletAddress,
-        coldWalletAddress,
-        expiresAt,
-        metadata: { source: 'user_portal' },
-      });
-      if (!result.success) {
-        return res.status(400).json(toErrorResponse(result.message || 'Failed to add delegated wallet', 'VALIDATION_ERROR'));
-      }
-      return res.json(toSuccessResponse({ message: 'Delegated wallet added' }));
-    } catch (routeError) {
-      logger.error('Error creating wallet delegation:', routeError);
-      return res.status(500).json(toErrorResponse('Internal server error'));
-    }
+    return res.status(410).json(toErrorResponse(
+      'Cold wallet delegation is disabled for security review. Please link wallets directly.',
+      'DELEGATION_DISABLED'
+    ));
   });
 
   router.delete('/api/wallets/:discordId/delegations/:coldWalletAddress', (req, res) => {

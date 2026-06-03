@@ -86,7 +86,7 @@ To ensure GuildPilot can fully replace competitor stacks out-of-the-box, these m
 ## 3. Module-by-Module Refinement Recommendations
 
 ### Identity & Verification
-- Add delegated wallet verification (cold vault linked via burner wallet).
+- Cold wallet delegation revoked from V1 after security review; only directly linked wallets may grant access.
 
 ### Governance / Voting
 - Add token-weighted presets and schedule reminder command support.

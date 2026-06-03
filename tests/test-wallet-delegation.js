@@ -3,58 +3,50 @@ const db = require('../database/db');
 const walletService = require('../services/walletService');
 
 function run() {
-  const discordId = `delegation-test-${Date.now()}`;
+  const discordId = `delegation-disabled-test-${Date.now()}`;
   const suffix = String(Date.now());
-  const username = 'delegation-user';
-  const guildA = 'guild-delegation-a';
-  const guildB = 'guild-delegation-b';
+  const username = 'delegation-disabled-user';
+  const guildId = 'guild-delegation-disabled';
   const delegateWallet = `DelegateWallet-${suffix}`;
   const coldWallet = `ColdWallet-${suffix}`;
-  const expiredColdWallet = `ColdWalletExpired-${suffix}`;
 
   db.prepare('DELETE FROM wallet_delegations WHERE discord_id = ?').run(discordId);
   db.prepare('DELETE FROM wallets WHERE discord_id = ?').run(discordId);
   db.prepare('DELETE FROM users WHERE discord_id = ?').run(discordId);
 
-  const link = walletService.linkWallet(discordId, username, delegateWallet, guildA);
-  assert.strictEqual(link.success, true, 'delegate wallet should link');
+  const link = walletService.linkWallet(discordId, username, delegateWallet, guildId);
+  assert.strictEqual(link.success, true, 'direct wallet should link');
 
-  const addActive = walletService.addDelegatedWallet({
+  const addAttempt = walletService.addDelegatedWallet({
     discordId,
-    guildId: guildA,
+    guildId,
     delegateWalletAddress: delegateWallet,
     coldWalletAddress: coldWallet,
   });
-  assert.strictEqual(addActive.success, true, 'active delegation should be added');
+  assert.strictEqual(addAttempt.success, false, 'delegation creation must be disabled');
+  assert.strictEqual(addAttempt.code, 'DELEGATION_DISABLED', 'disabled response should be explicit');
 
-  const addExpired = walletService.addDelegatedWallet({
-    discordId,
-    guildId: guildA,
-    delegateWalletAddress: delegateWallet,
-    coldWalletAddress: expiredColdWallet,
-    expiresAt: '2000-01-01T00:00:00.000Z',
-  });
-  assert.strictEqual(addExpired.success, true, 'expired delegation row can be stored');
+  // Simulate legacy/previously inserted rows and verify they are ignored.
+  db.prepare(`
+    INSERT INTO wallet_delegations (
+      discord_id, guild_id, delegate_wallet_address, cold_wallet_address, status, updated_at
+    ) VALUES (?, ?, ?, ?, 'active', CURRENT_TIMESTAMP)
+    ON CONFLICT(discord_id, guild_id, cold_wallet_address)
+    DO UPDATE SET status = 'active', updated_at = CURRENT_TIMESTAMP
+  `).run(discordId, guildId, delegateWallet, coldWallet);
 
-  const guildAWallets = walletService.getAllUserWallets(discordId, guildA);
-  assert.ok(guildAWallets.includes(delegateWallet), 'direct wallet should be present');
-  assert.ok(guildAWallets.includes(coldWallet.toLowerCase()), 'active delegated cold wallet should be present');
-  assert.ok(!guildAWallets.includes(expiredColdWallet.toLowerCase()), 'expired delegated wallet should not be present');
+  const delegations = walletService.getDelegatedWallets(discordId, guildId);
+  assert.deepStrictEqual(delegations, [], 'delegation reads must be hidden while disabled');
 
-  const guildBWallets = walletService.getAllUserWallets(discordId, guildB);
-  assert.ok(!guildBWallets.includes(coldWallet.toLowerCase()), 'guild-scoped delegation should not resolve outside its guild');
-
-  const revoke = walletService.revokeDelegatedWallet(discordId, coldWallet, guildA);
-  assert.strictEqual(revoke.success, true, 'delegation revoke should succeed');
-
-  const afterRevokeWallets = walletService.getAllUserWallets(discordId, guildA);
-  assert.ok(!afterRevokeWallets.includes(coldWallet.toLowerCase()), 'revoked delegated wallet should be removed from effective wallet list');
+  const effectiveWallets = walletService.getAllUserWallets(discordId, guildId);
+  assert.ok(effectiveWallets.includes(delegateWallet), 'direct wallet should remain effective');
+  assert.ok(!effectiveWallets.includes(coldWallet), 'legacy delegated cold wallet must not be effective');
 
   db.prepare('DELETE FROM wallet_delegations WHERE discord_id = ?').run(discordId);
   db.prepare('DELETE FROM wallets WHERE discord_id = ?').run(discordId);
   db.prepare('DELETE FROM users WHERE discord_id = ?').run(discordId);
 
-  console.log('wallet delegation assertions passed');
+  console.log('wallet delegation disabled assertions passed');
 }
 
 run();

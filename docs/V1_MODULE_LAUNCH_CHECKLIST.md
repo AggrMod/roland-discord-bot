@@ -34,7 +34,7 @@ Before signoff:
 - High-volume role-sync soak test on production-like guild (automated high-wallet-volume sync regression now exists in `tests/test-verification-high-volume-sync.js` to guard scale-path stability).
 - Rule limit UX validation per plan with clear errors (automated verification token-rule limit regression now asserts `limit_exceeded` + user-facing limit message via `tests/test-verification-plan-limits.js`).
 - Run staging smoke for token-rule edge behavior (`maxAmount`, `neverRemove`) against live guild roles.
-- Validate delegated-wallet evaluation toggle behavior (`includeDelegatedWallets`) in live role-sync runs (automated regression now covers include vs direct-only wallet resolution paths).
+- Validate delegated-wallet protection in live role-sync runs: only directly linked wallets may grant access; legacy delegated rows must be ignored.
 
 ## 3) Governance & Voting
 Status: `HARDEN`
@@ -195,28 +195,25 @@ These are high-priority launch items for parity with established Web3 community 
 
 ### 1) Identity / Verification: Cold Wallet Delegation
 Priority: `P0`  
-Status: `READY`
+Status: `REVOKED FROM V1`
 
 Why:
-- High-value holders should be able to prove ownership without linking vault wallets directly to Discord identity.
+- Security review found the V1 delegation flow could allow users to add arbitrary cold wallets without proving control of those wallets. This is not acceptable for launch verification.
 
 V1 acceptance:
-1. Delegate-wallet flow exists in portal and API.
-2. Verification rules can optionally evaluate delegated wallets (with explicit toggle).
-3. Audit trail logs delegation create/revoke events.
-4. Role sync correctly removes access when delegation is revoked or expires.
+1. Portal does not show cold wallet delegation UI.
+2. Delegation creation API returns `DELEGATION_DISABLED`.
+3. Existing/legacy delegated rows are hidden from user responses.
+4. Verification and role sync only evaluate directly linked wallets.
 
-Progress update (2026-05-22):
-- Added `wallet_delegations` schema + migration (`v18_wallet_delegation_support`).
-- Verification wallet resolver now includes active delegated cold wallets in tenant scope.
-- Added authenticated delegation endpoints:
-  - `GET /api/wallets/:discordId/delegations`
-  - `POST /api/wallets/:discordId/delegations`
-  - `DELETE /api/wallets/:discordId/delegations/:coldWalletAddress`
-- Added release-gate test: `tests/test-wallet-delegation.js`.
-- Added portal delegation UX in profile/wallet sections (add + revoke + visibility).
-- Added delegation audit writes into `superadmin_identity_audit_logs`.
-- Added automatic delegation revocation when delegate wallet is removed.
+Progress update (2026-06-03):
+- Cold wallet delegation was hard-disabled for V1.
+- Verification wallet resolver now ignores delegated wallets regardless of tenant settings.
+- `GET /api/wallets/:discordId/delegations` returns an empty disabled state.
+- `POST /api/wallets/:discordId/delegations` returns `410 DELEGATION_DISABLED`.
+- Existing revoke route remains available for cleanup of legacy rows.
+- Portal delegation UX was removed from profile/wallet sections.
+- Release-gate tests now assert delegated rows are ignored and cannot grant access.
 
 ### 2) Vault: X (Twitter) Social Task Gates
 Priority: `P0`  

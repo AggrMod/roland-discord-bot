@@ -795,24 +795,22 @@ class TenantService {
   getTenantVerificationSettings(guildId) {
     try {
       const guild = String(guildId || '').trim();
-      if (!guild) return { ogRoleId: null, ogRoleLimit: 0, baseVerifiedRoleId: null, includeDelegatedWallets: true };
+      if (!guild) return { ogRoleId: null, ogRoleLimit: 0, baseVerifiedRoleId: null, includeDelegatedWallets: false };
       const tenantRow = this.getTenant(guild);
-      if (!tenantRow) return { ogRoleId: null, ogRoleLimit: 0, baseVerifiedRoleId: null, includeDelegatedWallets: true };
+      if (!tenantRow) return { ogRoleId: null, ogRoleLimit: 0, baseVerifiedRoleId: null, includeDelegatedWallets: false };
       const tenantId = Number(tenantRow?.tenant?.id || tenantRow?.id || 0);
-      if (!tenantId) return { ogRoleId: null, ogRoleLimit: 0, baseVerifiedRoleId: null, includeDelegatedWallets: true };
+      if (!tenantId) return { ogRoleId: null, ogRoleLimit: 0, baseVerifiedRoleId: null, includeDelegatedWallets: false };
 
       const row = db.prepare('SELECT og_role_id, og_role_limit, base_verified_role_id, include_delegated_wallets FROM tenant_verification_settings WHERE tenant_id = ?').get(tenantId);
       return {
         ogRoleId: row?.og_role_id || null,
         ogRoleLimit: Number(row?.og_role_limit || 0),
         baseVerifiedRoleId: row?.base_verified_role_id || null,
-        includeDelegatedWallets: row?.include_delegated_wallets === undefined
-          ? true
-          : Number(row?.include_delegated_wallets || 0) === 1
+        includeDelegatedWallets: false
       };
     } catch (error) {
       logger.warn('[TenantService] getTenantVerificationSettings fallback:', error?.message || error);
-      return { ogRoleId: null, ogRoleLimit: 0, baseVerifiedRoleId: null, includeDelegatedWallets: true };
+      return { ogRoleId: null, ogRoleLimit: 0, baseVerifiedRoleId: null, includeDelegatedWallets: false };
     }
   }
 
@@ -830,9 +828,7 @@ class TenantService {
         ogRoleId: patch.ogRoleId !== undefined ? (patch.ogRoleId || null) : current.ogRoleId,
         ogRoleLimit: patch.ogRoleLimit !== undefined ? Number(patch.ogRoleLimit || 0) : current.ogRoleLimit,
         baseVerifiedRoleId: patch.baseVerifiedRoleId !== undefined ? (patch.baseVerifiedRoleId || null) : current.baseVerifiedRoleId,
-        includeDelegatedWallets: patch.includeDelegatedWallets !== undefined
-          ? !!patch.includeDelegatedWallets
-          : !!current.includeDelegatedWallets,
+        includeDelegatedWallets: false,
       };
 
       db.prepare(`

@@ -104,16 +104,9 @@ class RoleService {
   }
 
   getVerificationWallets(discordId, guildId = null) {
-    const normalizedGuildId = this.normalizeGuildId(guildId);
-    if (!normalizedGuildId) {
-      return walletService.getAllUserWallets(discordId, '');
-    }
-
-    const verificationSettings = tenantService.getTenantVerificationSettings(normalizedGuildId);
-    const includeDelegatedWallets = verificationSettings?.includeDelegatedWallets !== false;
-    if (includeDelegatedWallets) {
-      return walletService.getAllUserWallets(discordId, normalizedGuildId);
-    }
+    // Security hard-disable: only directly linked wallets may affect verification.
+    // Cold/delegated wallet claims are not safe enough for V1 because users could
+    // add arbitrary wallets without proving control of the cold wallet itself.
     return walletService.getLinkedWallets(discordId)
       .map(w => String(w?.wallet_address || '').trim())
       .filter(Boolean);

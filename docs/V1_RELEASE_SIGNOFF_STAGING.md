@@ -97,7 +97,7 @@ For each module below, execute on both `staging-clean` and `staging-loaded` unle
 
 ### 8.2 Identity & Verification
 - Validate wallet challenge/signature flow.
-- Validate delegated wallet behavior and revoke effects.
+- Validate cold wallet delegation is disabled: no portal UI, creation API returns disabled, and legacy delegated rows do not grant roles.
 - Validate sync rules with plan limits and edge flags.
 - Pass criteria: role sync deterministic, auditable, and plan-safe.
 

@@ -11,36 +11,30 @@ function run() {
   const originalGetLinkedWallets = walletService.getLinkedWallets;
 
   try {
+    let getAllUserWalletsCalled = false;
     tenantService.getTenantVerificationSettings = () => ({ includeDelegatedWallets: true });
-    walletService.getAllUserWallets = () => ['direct-wallet', 'delegated-cold-wallet'];
+    walletService.getAllUserWallets = () => {
+      getAllUserWalletsCalled = true;
+      return ['direct-wallet', 'delegated-cold-wallet'];
+    };
     walletService.getLinkedWallets = () => [{ wallet_address: 'direct-wallet' }];
 
-    const withDelegated = roleService.getVerificationWallets('user-1', 'guild-1');
+    const withLegacyToggleEnabled = roleService.getVerificationWallets('user-1', 'guild-1');
     assert.deepStrictEqual(
-      withDelegated,
-      ['direct-wallet', 'delegated-cold-wallet'],
-      'when includeDelegatedWallets=true, verification should use full wallet set'
-    );
-
-    tenantService.getTenantVerificationSettings = () => ({ includeDelegatedWallets: false });
-    const directOnly = roleService.getVerificationWallets('user-1', 'guild-1');
-    assert.deepStrictEqual(
-      directOnly,
+      withLegacyToggleEnabled,
       ['direct-wallet'],
-      'when includeDelegatedWallets=false, verification should use only directly linked wallets'
+      'verification must ignore delegated wallets even if legacy toggle is enabled'
     );
+    assert.strictEqual(getAllUserWalletsCalled, false, 'verification should not call effective wallet resolver');
 
-    // No guild scope keeps backward-compatible behavior.
-    tenantService.getTenantVerificationSettings = () => ({ includeDelegatedWallets: false });
-    walletService.getAllUserWallets = () => ['direct-wallet', 'delegated-cold-wallet'];
     const noGuildScope = roleService.getVerificationWallets('user-1', '');
     assert.deepStrictEqual(
       noGuildScope,
-      ['direct-wallet', 'delegated-cold-wallet'],
-      'without guild context, behavior remains backward compatible and includes all effective wallets'
+      ['direct-wallet'],
+      'verification without guild context must still use only directly linked wallets'
     );
 
-    console.log('verification delegation toggle assertions passed');
+    console.log('verification delegation disabled assertions passed');
   } finally {
     tenantService.getTenantVerificationSettings = originalGetTenantVerificationSettings;
     walletService.getAllUserWallets = originalGetAllUserWallets;
@@ -49,4 +43,3 @@ function run() {
 }
 
 run();
-

@@ -2683,8 +2683,10 @@ function showUnauthenticatedState() {
     dashboardWelcomeTitle.textContent = 'Welcome, Guild Admin';
   }
 
-  document.getElementById('loginPrompt').style.display = 'block';
-  document.getElementById('dashboardContent').style.display = 'none';
+  const loginPrompt = document.getElementById('loginPrompt');
+  if (loginPrompt) loginPrompt.style.display = 'block';
+  const dashboardContent = document.getElementById('dashboardContent');
+  if (dashboardContent) dashboardContent.style.display = 'none';
 }
 
 function refreshAdminEntryVisibility() {

@@ -137,8 +137,10 @@ function createAuthUserRouter({
 
   const WEB_AUTH_TOKEN_KIND = 'public_web_access_v1';
   const WEB_AUTH_STATE_KIND = 'public_web_oauth_state_v1';
+  const PORTAL_AUTH_STATE_KIND = 'portal_discord_oauth_state_v1';
   const WEB_AUTH_TOKEN_TTL_MS = Math.max(5 * 60 * 1000, Number(process.env.PUBLIC_WEB_ACCESS_TOKEN_TTL_MS || 8 * 60 * 60 * 1000));
   const WEB_AUTH_STATE_TTL_MS = Math.max(60 * 1000, Number(process.env.PUBLIC_WEB_OAUTH_STATE_TTL_MS || 10 * 60 * 1000));
+  const PORTAL_AUTH_STATE_TTL_MS = Math.max(60 * 1000, Number(process.env.PORTAL_OAUTH_STATE_TTL_MS || 10 * 60 * 1000));
 
   const getAllowedWebReturnOrigins = (req) => {
     const configured = parseCommaSeparated(process.env.PUBLIC_WEB_ALLOWED_RETURN_ORIGINS)
@@ -1177,28 +1179,36 @@ function createAuthUserRouter({
   router.get('/auth/discord/login', (req, res) => {
     (async () => {
       const rawReturn = req.query.returnTo || '';
+      let returnTo = '/app';
       if (rawReturn && rawReturn.startsWith('/') && !rawReturn.startsWith('//')) {
-        req.session.returnTo = rawReturn;
+        returnTo = rawReturn;
       } else if (req.query.guild || req.query.section) {
         const qs = new URLSearchParams();
         if (req.query.guild) qs.set('guild', req.query.guild);
         if (req.query.section) qs.set('section', req.query.section);
-        req.session.returnTo = '/app?' + qs.toString();
-      } else {
-        // Default authenticated destination should be the app shell, not public marketing landing.
-        req.session.returnTo = '/app';
+        returnTo = '/app?' + qs.toString();
       }
 
       const clientId = process.env.CLIENT_ID;
       const oauthRedirectUri = resolveOAuthRedirectUri(req);
-      const oauthState = crypto.randomBytes(24).toString('hex');
-      req.session.oauthRedirectUri = oauthRedirectUri;
-      req.session.oauthState = oauthState;
-      await saveSession(req);
+      const now = Date.now();
+      const oauthState = signPayload({
+        kind: PORTAL_AUTH_STATE_KIND,
+        returnTo,
+        redirectUri: oauthRedirectUri,
+        nonce: crypto.randomBytes(12).toString('hex'),
+        iat: now,
+        exp: now + PORTAL_AUTH_STATE_TTL_MS,
+      });
+      if (!oauthState) {
+        logger.error('[auth] Could not sign portal OAuth state; check SESSION_SECRET/PUBLIC_WEB_AUTH_SECRET.');
+        return res.redirect('/app?error=oauth_state_failed');
+      }
 
       const redirectUri = encodeURIComponent(oauthRedirectUri);
       const scope = encodeURIComponent('identify guilds');
       const state = encodeURIComponent(oauthState);
+      logger.log(`[auth] Discord login start redirectUri=${oauthRedirectUri} returnTo=${returnTo}`);
       const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&state=${state}`;
       return res.redirect(authUrl);
     })().catch((routeError) => {
@@ -1210,14 +1220,25 @@ function createAuthUserRouter({
   router.get('/auth/discord/callback', async (req, res) => {
     const { code, state } = req.query;
     if (!code) return res.redirect('/app?error=no_code');
+    const statePayload = verifySignedToken(String(state || ''));
+    const now = Date.now();
+    const signedStateValid = statePayload
+      && statePayload.kind === PORTAL_AUTH_STATE_KIND
+      && Number(statePayload.exp || 0) >= now;
+
+    // Compatibility fallback for sessions created before signed state rollout.
     const expectedState = String(req.session?.oauthState || '');
-    if (!state || String(state) !== expectedState) {
+    const legacyStateValid = !!expectedState && !!state && String(state) === expectedState;
+    if (!signedStateValid && !legacyStateValid) {
       if (req.session?.oauthState) delete req.session.oauthState;
+      logger.warn(`[auth] Discord callback rejected invalid state hasSession=${!!req.session} hasExpected=${!!expectedState}`);
       return res.redirect('/app?error=invalid_state');
     }
 
     try {
-      const oauthRedirectUri = req.session?.oauthRedirectUri || resolveOAuthRedirectUri(req);
+      const oauthRedirectUri = String(statePayload?.redirectUri || '').trim()
+        || req.session?.oauthRedirectUri
+        || resolveOAuthRedirectUri(req);
       if (req.session?.oauthRedirectUri) delete req.session.oauthRedirectUri;
       if (req.session?.oauthState) delete req.session.oauthState;
 
@@ -1234,12 +1255,19 @@ function createAuthUserRouter({
       });
 
       const tokenData = await tokenResponse.json();
-      if (!tokenData.access_token) return res.redirect('/app?error=no_token');
+      if (!tokenData.access_token) {
+        logger.warn(`[auth] Discord callback token exchange failed status=${tokenResponse.status}`);
+        return res.redirect('/app?error=no_token');
+      }
 
       const userResponse = await fetch('https://discord.com/api/users/@me', {
         headers: { Authorization: `Bearer ${tokenData.access_token}` }
       });
       const userData = await userResponse.json();
+      if (!userResponse.ok || !userData?.id) {
+        logger.warn(`[auth] Discord callback user fetch failed status=${userResponse.status}`);
+        return res.redirect('/app?error=user_fetch_failed');
+      }
 
       req.session.discordUser = {
         id: userData.id,
@@ -1251,7 +1279,7 @@ function createAuthUserRouter({
         tokenExpiresAt: Date.now() + (Math.max(60, Number(tokenData.expires_in || 3600)) - 30) * 1000
       };
 
-      const returnTo = req.session.returnTo;
+      const returnTo = String(statePayload?.returnTo || req.session.returnTo || '').trim();
       delete req.session.returnTo;
       await saveSession(req);
       let safeReturn = returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/app';
@@ -1261,6 +1289,7 @@ function createAuthUserRouter({
       const loginReadyRedirect = safeReturn.includes('?')
         ? `${safeReturn}&auth=ready`
         : `${safeReturn}?auth=ready`;
+      logger.log(`[auth] Discord callback stored session user=${userData.id} returnTo=${safeReturn}`);
       return res.redirect(loginReadyRedirect);
     } catch (routeError) {
       logger.error('OAuth callback error:', routeError);
@@ -1393,6 +1422,7 @@ function createAuthUserRouter({
 
   router.get('/api/user/me', async (req, res) => {
     if (!req.session.discordUser) {
+      logger.warn(`[auth] /api/user/me unauthorized hasSession=${!!req.session} sessionId=${req.sessionID || 'none'} cookie=${req.headers.cookie ? 'present' : 'missing'}`);
       return res.status(401).json(toErrorResponse('Not authenticated', 'UNAUTHORIZED'));
     }
 

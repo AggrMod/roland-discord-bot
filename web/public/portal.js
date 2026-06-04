@@ -20648,6 +20648,7 @@ async function renderDashboardGrid() {
       server,
       modules,
       moduleAnalytics = {},
+      permissionHealth = null,
       analyticsRange = dashboardAnalyticsRange,
       walletPreview = [],
       activeProposals = [],
@@ -20681,6 +20682,27 @@ async function renderDashboardGrid() {
         </div>
       </div>
     `;
+
+    const permissionWarningHtml = permissionHealth && permissionHealth.ok === false ? `
+      <div class="bento-panel" style="grid-column:1 / -1; border-color:rgba(245,158,11,0.45); background:linear-gradient(135deg, rgba(245,158,11,0.13), rgba(15,23,42,0.82));">
+        <div class="bento-panel-header" style="align-items:flex-start; gap:14px;">
+          <div>
+            <div class="bento-panel-title"><i class="fas fa-triangle-exclamation" style="color:#f59e0b;"></i> Setup Attention</div>
+            <div style="color:var(--text-secondary); margin-top:6px;">The bot is connected, but some Discord permissions are missing for this server.</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="openGuildInvite('${escapeJsString(activeGuildId || server.id || '')}')">Re-authorize Bot</button>
+        </div>
+        <div class="activity-snapshot-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); margin-top:14px;">
+          ${(permissionHealth.missing || []).slice(0, 5).map((item) => `
+            <div class="activity-snapshot-item" style="border-color:rgba(245,158,11,0.22);">
+              <div class="activity-snapshot-label">${escapeHtml(item.label || 'Permission')}</div>
+              <div class="activity-snapshot-value">${escapeHtml((item.modules || []).join(', ') || 'Module operations')}</div>
+              <div class="activity-snapshot-sub">${escapeHtml(item.reason || 'Required for this module to work correctly.')}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : '';
 
     const tileConfig = [
       { key: 'verification', section: 'verification', title: 'Verification', icon: 'fas fa-shield-alt', metric: `${Number(moduleAnalytics?.verification?.linkedWallets || 0).toLocaleString()} wallets`, sub: `${Number(moduleAnalytics?.verification?.uniqueUsers || 0).toLocaleString()} users`, enabled: !!modules?.verification?.enabled },
@@ -20784,7 +20806,7 @@ async function renderDashboardGrid() {
       </div>
     `;
 
-    grid.innerHTML = overviewHtml + tilesHtml + walletPanelHtml + activityPanelHtml;
+    grid.innerHTML = overviewHtml + permissionWarningHtml + tilesHtml + walletPanelHtml + activityPanelHtml;
   } catch (err) {
     console.error("Dashboard render error:", err);
     grid.innerHTML = `<div class="empty-state"><p>Error loading dashboard. Please try again.</p></div>`;

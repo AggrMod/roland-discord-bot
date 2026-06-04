@@ -43,6 +43,64 @@ function createAdminCoreRouter({
       const sqliteDateTimeWindowExpr = `datetime('now', '${sqliteDateModifier}')`;
       const client = typeof getClient === 'function' ? getClient() : null;
       const guild = req.guild || await fetchGuildById(guildId);
+      const botMember = guild?.members?.me || (guild?.members?.fetchMe ? await guild.members.fetchMe().catch(() => null) : null);
+      const botPermissions = botMember?.permissions || null;
+      const hasBotPermission = (permission) => {
+        try {
+          return !!botPermissions?.has?.(permission);
+        } catch (_error) {
+          return false;
+        }
+      };
+      const requiredPermissionChecks = [
+        {
+          key: 'manage_guild',
+          label: 'Manage Server',
+          permission: 'ManageGuild',
+          modules: ['Invite Tracker'],
+          reason: 'Required to read and cache Discord invites for accurate invite tracking.',
+        },
+        {
+          key: 'manage_roles',
+          label: 'Manage Roles',
+          permission: 'ManageRoles',
+          modules: ['Verification', 'Self-Serve Roles', 'Welcome CAPTCHA'],
+          reason: 'Required to assign and remove member roles.',
+        },
+        {
+          key: 'send_messages',
+          label: 'Send Messages',
+          permission: 'SendMessages',
+          modules: ['Welcome', 'Engagement', 'Ticketing', 'Trackers'],
+          reason: 'Required to post panels, alerts, task messages, and ticket responses.',
+        },
+        {
+          key: 'embed_links',
+          label: 'Embed Links',
+          permission: 'EmbedLinks',
+          modules: ['Welcome', 'Engagement', 'Governance', 'Trackers'],
+          reason: 'Required to send rich Discord embeds.',
+        },
+        {
+          key: 'manage_channels',
+          label: 'Manage Channels',
+          permission: 'ManageChannels',
+          modules: ['Ticketing'],
+          reason: 'Required to create and manage support ticket channels.',
+        },
+      ];
+      const missingBotPermissions = botPermissions
+        ? requiredPermissionChecks.filter((item) => !hasBotPermission(item.permission)).map(({ permission, ...item }) => item)
+        : requiredPermissionChecks.map(({ permission, ...item }) => ({
+            ...item,
+            reason: `${item.reason} Bot permissions could not be read for this server.`,
+          }));
+      const permissionHealth = {
+        ok: missingBotPermissions.length === 0,
+        checked: !!botPermissions,
+        botRoleName: botMember?.displayName || botMember?.user?.username || null,
+        missing: missingBotPermissions,
+      };
       const safeGet = (sql, params = [], fallback = {}) => {
         try {
           return db.prepare(sql).get(...params) || fallback;
@@ -248,6 +306,7 @@ function createAdminCoreRouter({
         modules,
         analyticsRange: normalizedRange,
         moduleAnalytics,
+        permissionHealth,
         walletPreview,
         activeProposals,
         activeMissions

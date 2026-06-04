@@ -335,15 +335,25 @@ class WebServer {
       }
     });
 
+    const sessionCookieDomain = String(process.env.SESSION_COOKIE_DOMAIN || '').trim();
+    const sessionCookieSecureSetting = (() => {
+      const raw = String(process.env.SESSION_COOKIE_SECURE || '').trim().toLowerCase();
+      if (raw === 'false' || raw === '0' || raw === 'off') return false;
+      if (raw === 'true' || raw === '1' || raw === 'on') return true;
+      return process.env.NODE_ENV === 'production' ? 'auto' : false;
+    })();
+
     this.app.use(session({
       store: sessionStore,
       secret: sessionSecret,
       resave: false,
       saveUninitialized: false,
+      proxy: process.env.NODE_ENV === 'production',
       cookie: {
-        secure: process.env.NODE_ENV === 'production',
+        secure: sessionCookieSecureSetting,
         httpOnly: true,
         sameSite: 'lax',
+        ...(sessionCookieDomain ? { domain: sessionCookieDomain } : {}),
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
       }
     }));

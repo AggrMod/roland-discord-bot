@@ -31,12 +31,18 @@ function createAuthUserRouter({
   const router = express.Router();
   let hasProposalsGuildColumnCached = null;
 
-  const saveSession = (req) => new Promise((resolve) => {
+  const saveSession = (req) => new Promise((resolve, reject) => {
     if (!req.session || typeof req.session.save !== 'function') {
       resolve();
       return;
     }
-    req.session.save(() => resolve());
+    req.session.save((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
   });
 
   const hasProposalsGuildColumn = () => {

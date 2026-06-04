@@ -1256,7 +1256,9 @@ function createAuthUserRouter({
 
       const tokenData = await tokenResponse.json();
       if (!tokenData.access_token) {
-        logger.warn(`[auth] Discord callback token exchange failed status=${tokenResponse.status}`);
+        const oauthError = String(tokenData?.error || 'unknown_error').slice(0, 120);
+        const oauthDescription = String(tokenData?.error_description || tokenData?.message || '').slice(0, 240);
+        logger.warn(`[auth] Discord callback token exchange failed status=${tokenResponse.status} error=${oauthError} description=${oauthDescription}`);
         return res.redirect('/app?error=no_token');
       }
 

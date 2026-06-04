@@ -224,13 +224,73 @@ async function maybeSendLegacyMinigameAliasNotice(interaction) {
 }
 
 // Validate critical environment variables on startup
+function getTrimmedEnv(varName) {
+  return String(process.env[varName] || '').trim();
+}
+
+function normalizeDiscordToken(value) {
+  let token = String(value || '').trim();
+  if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) {
+    token = token.slice(1, -1).trim();
+  }
+  if (/^Bot\s+/i.test(token)) {
+    token = token.replace(/^Bot\s+/i, '').trim();
+  }
+  return token;
+}
+
+function resolveDiscordToken() {
+  const candidates = ['DISCORD_TOKEN', 'DISCORD_BOT_TOKEN', 'BOT_TOKEN'];
+  for (const source of candidates) {
+    const token = normalizeDiscordToken(process.env[source]);
+    if (token) {
+      return { token, source };
+    }
+  }
+  return { token: '', source: '' };
+}
+
+function isPlaceholderToken(token) {
+  return /^(your[_-]?token|replace[_-]?me|changeme|discord[_-]?token|bot[_-]?token|null|undefined)$/i.test(token);
+}
+
+function validateDiscordToken(token, source) {
+  if (!token) {
+    logger.error('CRITICAL: Missing Discord bot token. Set DISCORD_TOKEN, DISCORD_BOT_TOKEN, or BOT_TOKEN.');
+    return false;
+  }
+  if (isPlaceholderToken(token)) {
+    logger.error(`CRITICAL: ${source} is still a placeholder value. Set the real Discord bot token.`);
+    return false;
+  }
+  if (/\s/.test(token)) {
+    logger.error(`CRITICAL: ${source} contains whitespace. Remove spaces/newlines/quotes from the Discord bot token.`);
+    return false;
+  }
+  if (token.length < 50) {
+    logger.error(`CRITICAL: ${source} is too short to be a valid Discord bot token.`);
+    return false;
+  }
+  return true;
+}
+
 function validateEnvVars() {
-  const required = ['DISCORD_TOKEN', 'CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DISCORD_REDIRECT_URI', 'SESSION_SECRET'];
+  const { token, source } = resolveDiscordToken();
+  if (!validateDiscordToken(token, source)) {
+    process.exit(1);
+  }
+  process.env.DISCORD_TOKEN = token;
+  process.env.DISCORD_TOKEN_SOURCE = source;
+
+  const required = ['CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DISCORD_REDIRECT_URI', 'SESSION_SECRET'];
 
   const missing = [];
   for (const varName of required) {
-    if (!process.env[varName]) {
+    const value = getTrimmedEnv(varName);
+    if (!value) {
       missing.push(varName);
+    } else {
+      process.env[varName] = value;
     }
   }
 
@@ -258,6 +318,8 @@ function validateEnvVars() {
   if (process.env.NODE_ENV === 'production' && process.env.MOCK_MODE === 'true') {
     throw new Error('FATAL: MOCK_MODE=true is not allowed in production');
   }
+
+  logger.log(`Discord token loaded from ${source}`);
 }
 
 validateEnvVars();
@@ -1613,7 +1675,7 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
 });
 
 client.on(Events.Error, e => logger.error(`Client error: ${e.message}`));
-process.on('unhandledRejection', e => logger.error(`Unhandled rejection: ${e.message}`));
+process.on('unhandledRejection', e => logger.error(`Unhandled rejection: ${e?.message || e}`));
 process.on('uncaughtException', e => { logger.error(`Uncaught exception: ${e.message}`); process.exit(1); });
 
 function gracefulShutdown(s) {
@@ -1627,4 +1689,20 @@ function gracefulShutdown(s) {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-client.login(process.env.DISCORD_TOKEN);
+async function startDiscordClient() {
+  try {
+    await client.login(process.env.DISCORD_TOKEN);
+  } catch (error) {
+    const message = error?.message || String(error);
+    const code = String(error?.code || error?.name || '');
+    logger.error(`CRITICAL: Discord login failed: ${message}`);
+    if (code.toLowerCase().includes('tokeninvalid') || message.toLowerCase().includes('invalid token')) {
+      logger.error(
+        'CRITICAL: The configured Discord bot token is invalid. Check DISCORD_TOKEN/DISCORD_BOT_TOKEN/BOT_TOKEN on the host, remove quotes/spaces, and redeploy after regenerating the bot token if needed.'
+      );
+    }
+    process.exit(1);
+  }
+}
+
+startDiscordClient();

@@ -12145,7 +12145,8 @@ async function vaultRunBackfillAllMissingTx() {
     const failed = Number(summary.failed || 0);
     const timedOut = !!summary.timedOut;
     const errorCount = Array.isArray(summary.errors) ? summary.errors.length : 0;
-    showSuccess(`Bulk backfill finished (${dryRun ? 'dry-run' : 'live'}). scanned=${scanned}, matched=${matched}, ingested=${ingested}, duplicates=${duplicates}, failed=${failed}, walletErrors=${errorCount}${timedOut ? ', timedOut=true' : ''}`);
+    const errorDetails = errorCount > 0 ? ` (Error: ${summary.errors[0].message})` : '';
+    showSuccess(`Bulk backfill finished (${dryRun ? 'dry-run' : 'live'}). scanned=${scanned}, matched=${matched}, ingested=${ingested}, duplicates=${duplicates}, failed=${failed}, walletErrors=${errorCount}${errorDetails}${timedOut ? ', timedOut=true' : ''}`);
     await loadVaultSettingsTab();
   } catch (error) {
     showError(error.message || 'Failed to run bulk backfill.');

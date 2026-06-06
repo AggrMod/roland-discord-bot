@@ -2358,6 +2358,7 @@ class VaultService {
           if (delayMs > 0) await sleep(delayMs);
         }
       } catch (error) {
+        console.error('[vault] Wallet backfill error for', walletAddress, error);
         summary.errors.push({
           walletAddress,
           message: String(error?.message || error),

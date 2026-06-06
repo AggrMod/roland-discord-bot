@@ -2279,8 +2279,8 @@ class VaultService {
           let parsedTransactions = [];
           let parseErr = null;
           try {
-            // Chunk signatures into batches of 100 to avoid RPC limits
-            const CHUNK_SIZE = 100;
+            // Chunk signatures into batches of 20 to avoid RPC limits (e.g. 413 Payload Too Large)
+            const CHUNK_SIZE = 20;
             for (let c = 0; c < signatures.length; c += CHUNK_SIZE) {
               const chunk = signatures.slice(c, c + CHUNK_SIZE);
               let chunkParsed = null;

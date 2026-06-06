@@ -2237,11 +2237,13 @@ class VaultService {
       failed: 0,
       timedOut: false,
       errors: [],
+      processedRecords: [],
     };
 
     const emitProgress = () => {
       if (typeof options?.onProgress === 'function') {
-        options.onProgress({ ...summary, inProgress: true });
+        const { processedRecords, ...streamSummary } = summary;
+        options.onProgress({ ...streamSummary, inProgress: true });
       }
     };
     emitProgress();
@@ -2359,8 +2361,17 @@ class VaultService {
               WHERE guild_id = ? AND tx_signature = ?
               LIMIT 1
             `).get(gid, signature);
+
             if (exists) {
               summary.duplicates += 1;
+              summary.processedRecords.push({
+                txSignature: signature,
+                payerWallet: 'Unknown (Duplicate)',
+                lamports: 0,
+                isDuplicate: true,
+                ingested: false,
+                error: null,
+              });
             } else {
               const nativeTransfers = this.extractNativeTransfersFromParsedTransaction(tx);
               const matchingTransfers = nativeTransfers.filter((transfer) => {
@@ -2372,6 +2383,7 @@ class VaultService {
                 summary.matchedTransfers += 1;
                 matchingTransfers.sort((a, b) => Number(b?.amount || 0) - Number(a?.amount || 0));
                 const payerWallet = String(matchingTransfers[0]?.fromUserAccount || '').trim() || null;
+                const totalLamports = matchingTransfers.reduce((sum, t) => sum + Number(t.lamports || t.amount || 0), 0);
 
                 const ingestResult = dryRun
                   ? { success: true, duplicate: false }
@@ -2387,12 +2399,24 @@ class VaultService {
                       nativeTransfers: matchingTransfers,
                     });
 
+                const isDuplicate = !!ingestResult?.duplicate;
+                const ingested = ingestResult?.success && !isDuplicate;
+
                 if (ingestResult?.success) {
-                  if (ingestResult?.duplicate) summary.duplicates += 1;
+                  if (isDuplicate) summary.duplicates += 1;
                   else summary.ingested += 1;
                 } else {
                   summary.failed += 1;
                 }
+
+                summary.processedRecords.push({
+                  txSignature: signature,
+                  payerWallet,
+                  lamports: totalLamports,
+                  isDuplicate,
+                  ingested,
+                  error: ingestResult?.success ? null : (ingestResult?.message || 'Failed to ingest'),
+                });
               }
             }
 

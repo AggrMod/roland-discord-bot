@@ -12184,6 +12184,33 @@ async function vaultRunBackfillAllMissingTx() {
               const timedOut = !!summary.timedOut;
               const errorCount = Array.isArray(summary.errors) ? summary.errors.length : 0;
               const errorDetails = errorCount > 0 ? ` (Error: ${summary.errors[0].message})` : '';
+
+              if (Array.isArray(summary.processedRecords) && summary.processedRecords.length > 0) {
+                try {
+                  const headers = ['Transaction Signature', 'Payer Wallet', 'Lamports', 'Is Duplicate', 'Ingested', 'Error'];
+                  const rows = summary.processedRecords.map(r => [
+                    r.txSignature || '',
+                    r.payerWallet || '',
+                    r.lamports || 0,
+                    r.isDuplicate ? 'Yes' : 'No',
+                    r.ingested ? 'Yes' : 'No',
+                    r.error || ''
+                  ]);
+                  const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\\n');
+                  const blob = new Blob([csvContent], { type: 'text/csv' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `vault-backfill-report-${Date.now()}.csv`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                } catch (e) {
+                  console.error('Failed to generate backfill CSV report:', e);
+                }
+              }
+
               showSuccess(`Bulk backfill finished (${dryRun ? 'dry-run' : 'live'}). scanned=${scanned}, matched=${matched}, ingested=${ingested}, duplicates=${duplicates}, failed=${failed}, walletErrors=${errorCount}${errorDetails}${timedOut ? ', timedOut=true' : ''}`);
               await loadVaultSettingsTab();
             } else if (payload.type === 'error') {

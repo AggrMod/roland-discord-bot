@@ -2276,18 +2276,33 @@ class VaultService {
           remaining -= signatures.length;
           beforeSignature = signatures[signatures.length - 1] || null;
 
-          let parsedTransactions = null;
+          let parsedTransactions = [];
           let parseErr = null;
-          for (let attempt = 0; attempt <= rpcRetryMax; attempt += 1) {
-            try {
-              parsedTransactions = await connection.getParsedTransactions(signatures, { maxSupportedTransactionVersion: 0 });
-              parseErr = null;
-              break;
-            } catch (error) {
-              parseErr = error;
-              if (attempt < rpcRetryMax) await sleep(delayMs * Math.max(1, attempt + 1));
+          try {
+            // Chunk signatures into batches of 100 to avoid RPC limits
+            const CHUNK_SIZE = 100;
+            for (let c = 0; c < signatures.length; c += CHUNK_SIZE) {
+              const chunk = signatures.slice(c, c + CHUNK_SIZE);
+              let chunkParsed = null;
+              let chunkErr = null;
+              for (let attempt = 0; attempt <= rpcRetryMax; attempt += 1) {
+                try {
+                  chunkParsed = await connection.getParsedTransactions(chunk, { maxSupportedTransactionVersion: 0 });
+                  chunkErr = null;
+                  break;
+                } catch (error) {
+                  chunkErr = error;
+                  if (attempt < rpcRetryMax) await sleep(delayMs * Math.max(1, attempt + 1));
+                }
+              }
+              if (chunkErr) throw chunkErr;
+              parsedTransactions.push(...(chunkParsed || []));
+              if (delayMs > 0 && c + CHUNK_SIZE < signatures.length) await sleep(delayMs);
             }
+          } catch (error) {
+            parseErr = error;
           }
+
           if (parseErr) throw parseErr;
           for (let i = 0; i < signatures.length; i += 1) {
             const signature = signatures[i];

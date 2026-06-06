@@ -2292,6 +2292,11 @@ class VaultService {
                   break;
                 } catch (error) {
                   chunkErr = error;
+                  const msg = String(error?.message || '').toLowerCase();
+                  // If RPC explicitly rejects the batch size, abort batching immediately
+                  if (msg.includes('413') || msg.includes('too many') || msg.includes('payload')) {
+                    break;
+                  }
                   if (attempt < rpcRetryMax) await sleep(delayMs * Math.max(1, attempt + 1));
                 }
               }
@@ -2301,6 +2306,37 @@ class VaultService {
             }
           } catch (error) {
             parseErr = error;
+          }
+
+          if (parseErr) {
+            console.warn('[vault] Batch getParsedTransactions failed, falling back to 1-by-1 fetch:', parseErr.message);
+            parseErr = null;
+            parsedTransactions = [];
+            // Fallback: fetch 1-by-1 if the RPC provider doesn't support getParsedTransactions
+            for (const signature of signatures) {
+              if ((Date.now() - startTs) > maxRuntimeMs) {
+                summary.timedOut = true;
+                break;
+              }
+              let singleParsed = null;
+              let singleErr = null;
+              for (let attempt = 0; attempt <= rpcRetryMax; attempt += 1) {
+                try {
+                  singleParsed = await connection.getParsedTransaction(signature, { maxSupportedTransactionVersion: 0 });
+                  singleErr = null;
+                  break;
+                } catch (error) {
+                  singleErr = error;
+                  if (attempt < rpcRetryMax) await sleep(delayMs * Math.max(1, attempt + 1));
+                }
+              }
+              if (singleErr) {
+                parseErr = singleErr;
+                break; // Even 1-by-1 failed, abort wallet
+              }
+              parsedTransactions.push(singleParsed);
+              await sleep(Math.max(50, delayMs)); // force small delay on 1-by-1
+            }
           }
 
           if (parseErr) throw parseErr;

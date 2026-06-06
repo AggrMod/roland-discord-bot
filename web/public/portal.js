@@ -11496,7 +11496,7 @@ function vaultRenderAdminPanel() {
         <div class="settings-row"><div class="settings-info"><div class="settings-label">RPC Retry Attempts</div><div class="settings-desc">Retries transient RPC failures.</div></div><input id="vaultBulkBackfillRpcRetryMax" type="number" class="input-sm" min="0" max="5" value="2"></div>
       </div>
       <div style="margin-top:8px;">
-        <button class="btn-secondary" onclick="vaultRunBackfillAllMissingTx()">Backfill Missing TXs (All Configured Mint Wallets)</button>
+        <button id="vaultBulkBackfillBtn" class="btn-secondary" onclick="vaultRunBackfillAllMissingTx()">Backfill Missing TXs (All Configured Mint Wallets)</button>
       </div>
       </details>
 
@@ -12124,10 +12124,21 @@ async function vaultRunBackfillAllMissingTx() {
   const delayMs = Math.max(0, Math.min(5000, Number(document.getElementById('vaultBulkBackfillDelayMs')?.value || 250) || 0));
   const maxRuntimeSec = Math.max(10, Math.min(1800, Number(document.getElementById('vaultBulkBackfillMaxRuntimeSec')?.value || 600) || 600));
   const rpcRetryMax = Math.max(0, Math.min(5, Number(document.getElementById('vaultBulkBackfillRpcRetryMax')?.value || 2) || 0));
+  
+  const btn = document.getElementById('vaultBulkBackfillBtn');
+  const originalText = btn ? btn.innerText : 'Backfill Missing TXs';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = 'Starting Backfill...';
+  }
+
   try {
-    const data = await vaultFetchJson('/api/admin/vault/backfill-all', {
+    const res = await fetch('/api/admin/vault/backfill-all', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      headers: buildTenantRequestHeaders({ 
+        'Content-Type': 'application/json'
+      }),
       body: JSON.stringify({
         limitPerWallet,
         dryRun,
@@ -12137,19 +12148,61 @@ async function vaultRunBackfillAllMissingTx() {
       }),
     });
 
-    const summary = data?.data || data || {};
-    const scanned = Number(summary.scannedSignatures || 0);
-    const matched = Number(summary.matchedTransfers || 0);
-    const ingested = Number(summary.ingested || 0);
-    const duplicates = Number(summary.duplicates || 0);
-    const failed = Number(summary.failed || 0);
-    const timedOut = !!summary.timedOut;
-    const errorCount = Array.isArray(summary.errors) ? summary.errors.length : 0;
-    const errorDetails = errorCount > 0 ? ` (Error: ${summary.errors[0].message})` : '';
-    showSuccess(`Bulk backfill finished (${dryRun ? 'dry-run' : 'live'}). scanned=${scanned}, matched=${matched}, ingested=${ingested}, duplicates=${duplicates}, failed=${failed}, walletErrors=${errorCount}${errorDetails}${timedOut ? ', timedOut=true' : ''}`);
-    await loadVaultSettingsTab();
+    if (!res.ok) {
+      let errText = await res.text();
+      try { errText = JSON.parse(errText).error || errText; } catch(e) {}
+      throw new Error(errText || 'Failed to start bulk backfill.');
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (value) {
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // keep partial line
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const payload = JSON.parse(line);
+            if (payload.type === 'progress') {
+              const summary = payload.data;
+              const errorCount = Array.isArray(summary.errors) ? summary.errors.length : 0;
+              if (btn) {
+                btn.innerText = `Scanning... scanned=${summary.scannedSignatures}, matched=${summary.matchedTransfers}, ingested=${summary.ingested}, failed=${summary.failed}, errs=${errorCount}`;
+              }
+            } else if (payload.type === 'complete') {
+              const summary = payload.data?.data || payload.data || {};
+              const scanned = Number(summary.scannedSignatures || 0);
+              const matched = Number(summary.matchedTransfers || 0);
+              const ingested = Number(summary.ingested || 0);
+              const duplicates = Number(summary.duplicates || 0);
+              const failed = Number(summary.failed || 0);
+              const timedOut = !!summary.timedOut;
+              const errorCount = Array.isArray(summary.errors) ? summary.errors.length : 0;
+              const errorDetails = errorCount > 0 ? ` (Error: ${summary.errors[0].message})` : '';
+              showSuccess(`Bulk backfill finished (${dryRun ? 'dry-run' : 'live'}). scanned=${scanned}, matched=${matched}, ingested=${ingested}, duplicates=${duplicates}, failed=${failed}, walletErrors=${errorCount}${errorDetails}${timedOut ? ', timedOut=true' : ''}`);
+              await loadVaultSettingsTab();
+            } else if (payload.type === 'error') {
+              throw new Error(payload.error?.message || payload.error?.error || 'Bulk backfill failed during stream');
+            }
+          } catch(e) {
+            console.error('Error parsing stream line:', e, line);
+          }
+        }
+      }
+      if (done) break;
+    }
   } catch (error) {
     showError(error.message || 'Failed to run bulk backfill.');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = originalText;
+    }
   }
 }
 

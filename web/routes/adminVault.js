@@ -362,12 +362,22 @@ function createAdminVaultRouter({
       if (!parsed.success) {
         return res.status(400).json(toErrorResponse(parsed.message, 'VALIDATION_ERROR'));
       }
+
+      res.setHeader('Content-Type', 'text/plain');
+      res.setHeader('Transfer-Encoding', 'chunked');
+
       const result = await vaultService.backfillAllMissingMintTransfersForActiveSeason(req.guildId || '', {
         ...parsed.options,
+        onProgress: (summary) => {
+          res.write(JSON.stringify({ type: 'progress', data: summary }) + '\n');
+        }
       });
+
       if (!result.success) {
-        return res.status(400).json(toErrorResponse(result.message || 'Failed to run bulk backfill', 'VALIDATION_ERROR', null, result));
+        res.write(JSON.stringify({ type: 'error', error: toErrorResponse(result.message || 'Failed to run bulk backfill', 'VALIDATION_ERROR', null, result) }) + '\n');
+        return res.end();
       }
+
       vaultService.logAdminAction(
         req.guildId || '',
         req.session?.discordUser?.id || null,
@@ -381,10 +391,17 @@ function createAdminVaultRouter({
           scannedSignatures: Number(result.scannedSignatures || 0),
         }
       );
-      return res.json(toSuccessResponse(result));
+
+      res.write(JSON.stringify({ type: 'complete', data: toSuccessResponse(result) }) + '\n');
+      return res.end();
     } catch (error) {
       logger.error('Error in vault bulk backfill endpoint:', error);
-      return res.status(500).json(toErrorResponse('Internal server error'));
+      if (!res.headersSent) {
+        return res.status(500).json(toErrorResponse('Internal server error'));
+      } else {
+        res.write(JSON.stringify({ type: 'error', error: toErrorResponse('Internal server error') }) + '\n');
+        return res.end();
+      }
     }
   });
 

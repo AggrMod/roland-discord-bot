@@ -2239,6 +2239,13 @@ class VaultService {
       errors: [],
     };
 
+    const emitProgress = () => {
+      if (typeof options?.onProgress === 'function') {
+        options.onProgress({ ...summary, inProgress: true });
+      }
+    };
+    emitProgress();
+
     for (const walletAddress of paymentWallets) {
       try {
         const walletPubkey = new PublicKey(walletAddress);
@@ -2273,6 +2280,7 @@ class VaultService {
           if (!signatures.length) break;
 
           summary.scannedSignatures += signatures.length;
+          emitProgress();
           remaining -= signatures.length;
           beforeSignature = signatures[signatures.length - 1] || null;
 
@@ -2353,43 +2361,45 @@ class VaultService {
             `).get(gid, signature);
             if (exists) {
               summary.duplicates += 1;
-              continue;
-            }
-
-            const nativeTransfers = this.extractNativeTransfersFromParsedTransaction(tx);
-            const matchingTransfers = nativeTransfers.filter((transfer) => {
-              const destination = String(transfer?.toUserAccount || transfer?.to || '').trim();
-              const lamports = Number(transfer?.amount || transfer?.lamports || 0);
-              return destination === walletAddress && Number.isFinite(lamports) && lamports >= minLamports;
-            });
-            if (!matchingTransfers.length) continue;
-            summary.matchedTransfers += 1;
-
-            matchingTransfers.sort((a, b) => Number(b?.amount || 0) - Number(a?.amount || 0));
-            const payerWallet = String(matchingTransfers[0]?.fromUserAccount || '').trim() || null;
-
-            const ingestResult = dryRun
-              ? { success: true, duplicate: false }
-              : this.ingestMintEvent({
-                  guildId: gid,
-                  seasonId: season.season_id,
-                  txSignature: signature,
-                  walletAddress: payerWallet,
-                  mintType: 'paid',
-                  type: 'TRANSFER',
-                  source: 'vault_backfill_transfer',
-                  paymentWalletAddress: walletAddress,
-                  nativeTransfers: matchingTransfers,
-                });
-
-            if (ingestResult?.success) {
-              if (ingestResult?.duplicate) summary.duplicates += 1;
-              else summary.ingested += 1;
             } else {
-              summary.failed += 1;
+              const nativeTransfers = this.extractNativeTransfersFromParsedTransaction(tx);
+              const matchingTransfers = nativeTransfers.filter((transfer) => {
+                const destination = String(transfer?.toUserAccount || transfer?.to || '').trim();
+                const lamports = Number(transfer?.amount || transfer?.lamports || 0);
+                return destination === walletAddress && Number.isFinite(lamports) && lamports >= minLamports;
+              });
+              if (matchingTransfers.length) {
+                summary.matchedTransfers += 1;
+                matchingTransfers.sort((a, b) => Number(b?.amount || 0) - Number(a?.amount || 0));
+                const payerWallet = String(matchingTransfers[0]?.fromUserAccount || '').trim() || null;
+
+                const ingestResult = dryRun
+                  ? { success: true, duplicate: false }
+                  : this.ingestMintEvent({
+                      guildId: gid,
+                      seasonId: season.season_id,
+                      txSignature: signature,
+                      walletAddress: payerWallet,
+                      mintType: 'paid',
+                      type: 'TRANSFER',
+                      source: 'vault_backfill_transfer',
+                      paymentWalletAddress: walletAddress,
+                      nativeTransfers: matchingTransfers,
+                    });
+
+                if (ingestResult?.success) {
+                  if (ingestResult?.duplicate) summary.duplicates += 1;
+                  else summary.ingested += 1;
+                } else {
+                  summary.failed += 1;
+                }
+              }
             }
+
+            if (i % 20 === 0) emitProgress();
           }
 
+          emitProgress();
           if (signatures.length < fetchLimit) break;
           if (delayMs > 0) await sleep(delayMs);
         }
@@ -2400,10 +2410,15 @@ class VaultService {
           message: String(error?.message || error),
         });
         summary.failed += 1;
+        emitProgress();
       }
       if (summary.timedOut) break;
     }
 
+    // Final emit without inProgress flag
+    if (typeof options?.onProgress === 'function') {
+      options.onProgress({ ...summary, inProgress: false });
+    }
     return summary;
   }
 

@@ -364,7 +364,6 @@ function createAdminVaultRouter({
       }
 
       res.setHeader('Content-Type', 'text/plain');
-      res.setHeader('Transfer-Encoding', 'chunked');
 
       const result = await vaultService.backfillAllMissingMintTransfersForActiveSeason(req.guildId || '', {
         ...parsed.options,

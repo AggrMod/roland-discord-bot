@@ -326,6 +326,35 @@ function createAdminVaultRouter({
     }
   });
 
+  router.post('/api/admin/vault/verify-payment-tx', adminAuthMiddleware, async (req, res) => {
+    if (!ensureVaultModule(req, res)) return;
+    try {
+      const txSignature = String(req.body?.txSignature || req.body?.tx_signature || '').trim();
+      const discordUserId = String(req.body?.discordUserId || req.body?.discord_user_id || '').trim();
+      const seasonId = String(req.body?.seasonId || req.body?.season_id || '').trim();
+      const result = await vaultService.verifyPaymentTransaction(req.guildId || '', txSignature, {
+        discordUserId: discordUserId || null,
+        seasonId: seasonId || null,
+        source: 'portal_onchain_payment_verify',
+      });
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to verify payment transaction', 'VALIDATION_ERROR', null, result));
+      }
+      vaultService.logAdminAction(req.guildId || '', req.session?.discordUser?.id || null, 'verify_payment_tx', result.linkedUserId || discordUserId || null, {
+        txSignature,
+        seasonId: result.seasonId || seasonId || null,
+        payerWallet: result.payerWallet || null,
+        lamports: Number(result?.matchedTransfer?.lamports || 0),
+        duplicate: !!result.duplicate,
+        keysGranted: Number(result?.grants?.keys_granted || 0),
+      });
+      return res.json(toSuccessResponse(result));
+    } catch (error) {
+      logger.error('Error verifying vault payment transaction:', error);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.post('/api/admin/vault/backfill-all', adminAuthMiddleware, async (req, res) => {
     if (!ensureVaultModule(req, res)) return;
     try {

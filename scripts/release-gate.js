@@ -55,6 +55,7 @@ const checks = [
   { name: 'vault-social-gates', cmd: process.execPath, args: ['tests/test-vault-social-gates.js'] },
   { name: 'vault-mint-reconciliation', cmd: process.execPath, args: ['tests/test-vault-mint-reconciliation.js'] },
   { name: 'vault-backfill-ops-guardrails', cmd: process.execPath, args: ['tests/test-vault-backfill-ops-guardrails.js'] },
+  { name: 'vault-onchain-payment-verification', cmd: process.execPath, args: ['tests/test-vault-onchain-payment-verification.js'] },
   { name: 'module-refactor', cmd: process.execPath, args: ['tests/test-module-refactor.js'] },
   { name: 'micro-verify', cmd: process.execPath, args: ['tests/test-micro-verify.js'] },
   { name: 'missions-v1-flow', cmd: process.execPath, args: ['tests/test-heist-v1-flow.js'] },

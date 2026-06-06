@@ -11478,6 +11478,16 @@ function vaultRenderAdminPanel() {
       </div>
       <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultRunBackfill()">Run Active-Season Backfill</button></div>
 
+      <div class="vault-section-card gp-subtle-panel" style="margin-top:14px;">
+        <strong>Secure payment recovery:</strong>
+        verify a SOL payment transaction directly on-chain. This does not trust webhook payloads and is safe to rerun because transaction signatures are deduplicated.
+      </div>
+      <div class="settings-grid" style="margin-top:10px;">
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Payment TX Signature</div><div class="settings-desc">SOL transfer to a configured Vault payment wallet.</div></div><input id="vaultVerifyPaymentTxSignature" class="input-sm" placeholder="transaction signature"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Discord ID Override (optional)</div><div class="settings-desc">Usually blank; linked wallet owner is detected automatically.</div></div><input id="vaultVerifyPaymentDiscordId" class="input-sm" placeholder="optional"></div>
+      </div>
+      <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultVerifyPaymentTransaction()">Verify Payment TX On-Chain</button></div>
+
       <div class="settings-grid" style="margin-top:10px;">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Bulk Backfill Max Signatures / Wallet</div><div class="settings-desc">Scans newest to oldest until this max is reached (safe to rerun; duplicates are skipped).</div></div><input id="vaultBulkBackfillLimitPerWallet" type="number" class="input-sm" min="1" max="50000" value="5000"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Dry Run</div><div class="settings-desc">Analyze and count candidates without ingesting events.</div></div><input id="vaultBulkBackfillDryRun" type="checkbox"></div>
@@ -12084,6 +12094,27 @@ async function vaultRunBackfill() {
     await loadVaultSettingsTab();
   } catch (error) {
     showError(error.message || 'Failed to run backfill.');
+  }
+}
+
+async function vaultVerifyPaymentTransaction() {
+  const txSignature = String(document.getElementById('vaultVerifyPaymentTxSignature')?.value || '').trim();
+  if (!txSignature) return showError('Payment transaction signature is required.');
+  const discordUserId = String(document.getElementById('vaultVerifyPaymentDiscordId')?.value || '').trim();
+  try {
+    const data = await vaultFetchJson('/api/admin/vault/verify-payment-tx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ txSignature, discordUserId: discordUserId || null }),
+    });
+    const result = data?.data || data || {};
+    const keys = Number(result?.grants?.keys_granted || 0);
+    const duplicate = result.duplicate ? ' Duplicate payment was already processed.' : '';
+    const payer = result.payerWallet ? ` Payer: ${result.payerWallet}.` : '';
+    showSuccess(`Payment verified on-chain. Keys granted: ${keys}.${duplicate}${payer}`);
+    await vaultRefreshActivity();
+  } catch (error) {
+    showError(error.message || 'Failed to verify payment transaction.');
   }
 }
 

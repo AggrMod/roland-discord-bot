@@ -1713,6 +1713,97 @@ class VaultService {
     return transfers;
   }
 
+  async verifyPaymentTransaction(guildId, txSignature, options = {}) {
+    const gid = normalizeGuildId(guildId);
+    const signature = String(txSignature || '').trim();
+    if (!gid) return { success: false, message: 'guildId is required' };
+    if (!signature) return { success: false, message: 'txSignature is required' };
+
+    const config = this.getConfig(gid);
+    const season = options?.seasonId
+      ? (this.getSeason(gid, options.seasonId) || this.getActiveSeason(gid))
+      : this.getActiveSeason(gid);
+    if (!season) return { success: false, message: 'No active season' };
+
+    const paymentWallets = [...this.getConfiguredPaymentWalletSet(config)];
+    if (!paymentWallets.length) {
+      return { success: false, message: 'No mint payment wallet configured in Vault settings' };
+    }
+
+    const source = config?.mintSource || {};
+    const minLamports = clampInt(source.paymentMinLamports, 0, 1);
+    const connection = this.getRpcConnection();
+    const parsedTx = await connection.getParsedTransaction(signature, {
+      commitment: 'confirmed',
+      maxSupportedTransactionVersion: 0,
+    });
+    if (!parsedTx) {
+      return { success: false, message: 'Transaction not found or not confirmed yet' };
+    }
+    if (parsedTx?.meta?.err) {
+      return { success: false, message: 'Transaction failed on-chain' };
+    }
+
+    const nativeTransfers = this.extractNativeTransfersFromParsedTransaction(parsedTx);
+    const matches = nativeTransfers
+      .filter((transfer) => {
+        const destination = String(transfer?.toUserAccount || '').trim();
+        const amount = Number(transfer?.amount || 0);
+        return paymentWallets.includes(destination) && Number.isFinite(amount) && amount >= minLamports;
+      })
+      .sort((a, b) => Number(b?.amount || 0) - Number(a?.amount || 0));
+
+    if (!matches.length) {
+      return {
+        success: false,
+        message: 'No qualifying SOL transfer to a configured Vault payment wallet was found',
+        paymentWallets,
+        minLamports,
+      };
+    }
+
+    const selectedTransfer = matches[0];
+    const payerWallet = String(selectedTransfer?.fromUserAccount || '').trim();
+    const linkedUserId = options?.discordUserId
+      ? String(options.discordUserId || '').trim()
+      : (payerWallet ? this.findLinkedDiscordUserByWallet(payerWallet) : null);
+    const expectedDiscordUserId = String(options?.expectedDiscordUserId || '').trim();
+    if (expectedDiscordUserId && String(linkedUserId || '') !== expectedDiscordUserId) {
+      return {
+        success: false,
+        message: 'Payment sender wallet is not linked to your Discord account',
+        payerWallet: payerWallet || null,
+        linkedUserId: linkedUserId || null,
+      };
+    }
+
+    const ingestResult = this.ingestMintEvent({
+      guildId: gid,
+      seasonId: season.season_id,
+      txSignature: signature,
+      walletAddress: payerWallet || null,
+      discordUserId: linkedUserId || null,
+      type: 'TRANSFER',
+      source: String(options?.source || 'vault_onchain_payment_verify'),
+      nativeTransfers: matches,
+    });
+
+    return {
+      ...ingestResult,
+      verifiedOnChain: !!ingestResult?.success,
+      txSignature: signature,
+      seasonId: season.season_id,
+      payerWallet: payerWallet || null,
+      linkedUserId: linkedUserId || ingestResult?.linkedUserId || null,
+      matchedTransfer: {
+        fromWallet: payerWallet || null,
+        toWallet: String(selectedTransfer?.toUserAccount || '').trim() || null,
+        lamports: Number(selectedTransfer?.amount || 0),
+      },
+      matchedTransferCount: matches.length,
+    };
+  }
+
   classifyMintEventType(event, config = null) {
     const explicitType = this.normalizeMintTypeValue(event?.mintType || event?.mint_type);
     if (['paid', 'free', 'manual'].includes(explicitType)) {
@@ -1910,12 +2001,16 @@ class VaultService {
     const mintAddress = canonical.mintAddress;
     const classificationReason = canonical.classificationReason;
 
-    const existing = db.prepare(`
+    const existingAnyGuild = db.prepare(`
       SELECT *
       FROM vault_mint_events
-      WHERE guild_id = ? AND tx_signature = ?
+      WHERE tx_signature = ?
       LIMIT 1
-    `).get(guildId, txSignature);
+    `).get(txSignature);
+    if (existingAnyGuild && String(existingAnyGuild.guild_id || '') !== guildId) {
+      return { success: true, duplicate: true, message: 'Duplicate tx signature ignored' };
+    }
+    const existing = existingAnyGuild || null;
     const existingGrants = existing
       ? {
           paid_mints: String(existing.mint_type || '').toLowerCase() === 'paid' ? 1 : 0,

@@ -378,6 +378,23 @@ module.exports = {
       return true;
     }
 
+    if (customId === 'vault_panel_verify_payment') {
+      const modal = new ModalBuilder()
+        .setCustomId('vault_panel_payment_tx_modal')
+        .setTitle('Verify Vault Payment');
+      const txInput = new TextInputBuilder()
+        .setCustomId('tx_signature')
+        .setLabel('Solana transaction signature')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMinLength(40)
+        .setMaxLength(120)
+        .setPlaceholder('Paste the payment transaction signature here');
+      modal.addComponents(new ActionRowBuilder().addComponents(txInput));
+      await interaction.showModal(modal);
+      return true;
+    }
+
     if (customId === 'vault_panel_conversions') {
       await interaction.deferReply({ ephemeral: true });
       const rules = vaultService.getKeyTierConversions(guildId).filter(rule => rule && rule.enabled !== false);
@@ -458,8 +475,38 @@ module.exports = {
     if (!interaction?.isModalSubmit?.()) return false;
     if (!await moduleGuard.checkModuleEnabled(interaction, 'vault')) return true;
     const customId = String(interaction.customId || '');
-    if (customId !== 'vault_panel_upgrade_modal') return false;
     const guildId = interaction.guildId;
+    if (customId === 'vault_panel_payment_tx_modal') {
+      const txSignature = String(interaction.fields.getTextInputValue('tx_signature') || '').trim();
+      await interaction.deferReply({ ephemeral: true });
+      const result = await vaultService.verifyPaymentTransaction(guildId, txSignature, {
+        expectedDiscordUserId: interaction.user.id,
+        source: 'discord_panel_payment_verify',
+      });
+      if (!result.success) {
+        await interaction.editReply({ content: `Payment could not be verified: ${result.message || 'unknown error'}` });
+        return true;
+      }
+      const duplicateLine = result.duplicate ? '\nThis transaction was already processed, so no extra keys were added.' : '';
+      const keysGranted = Number(result?.grants?.keys_granted || 0);
+      const balance = vaultService.getBalance(guildId, interaction.user.id, result.seasonId || null);
+      const availableKeys = balance?.success ? Number(balance.stats?.available_keys || 0) : null;
+      const fields = [
+        { name: 'Keys Granted', value: String(keysGranted), inline: true },
+        { name: 'Payment', value: `${Number(result?.matchedTransfer?.lamports || 0)} lamports`, inline: true },
+      ];
+      if (availableKeys !== null) fields.push({ name: 'Available Keys', value: String(availableKeys), inline: true });
+      await interaction.editReply({
+        embeds: [this.buildPanelResponseEmbed(guildId, {
+          title: 'Payment Verified On-Chain',
+          description: `Your payment transaction was verified against the configured Vault wallet.${duplicateLine}`,
+          accentColor: '#22c55e',
+        }).addFields(fields)],
+      });
+      return true;
+    }
+
+    if (customId !== 'vault_panel_upgrade_modal') return false;
     const fromTier = String(interaction.fields.getTextInputValue('from_tier') || '').trim();
     const toTier = String(interaction.fields.getTextInputValue('to_tier') || '').trim();
     const timesRaw = String(interaction.fields.getTextInputValue('times') || '').trim();
@@ -503,15 +550,18 @@ module.exports = {
       useThumbnail: false,
     });
 
-    const row = new ActionRowBuilder().addComponents(
+    const primaryRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('vault_panel_open').setLabel('Open Vault').setEmoji('🔓').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('vault_panel_verify_payment').setLabel('Verify Payment').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('vault_panel_upgrade').setLabel('Upgrade Key').setEmoji('⬆️').setStyle(ButtonStyle.Secondary),
+    );
+    const infoRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('vault_panel_conversions').setLabel('View Conversions').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('vault_panel_rewards').setLabel('Available Rewards').setEmoji('🎁').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('vault_panel_leaderboard').setLabel('Leaderboard').setEmoji('🏆').setStyle(ButtonStyle.Primary),
     );
 
-    return { embeds: [embed], components: [row] };
+    return { embeds: [embed], components: [primaryRow, infoRow] };
   },
 
   buildPanelResponseEmbed(guildId, options = {}) {

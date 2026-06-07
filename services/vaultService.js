@@ -1852,6 +1852,36 @@ class VaultService {
       }
     }
 
+    // Fallback: Check net SOL balance changes for payment wallets
+    // This catches SOL transfers via CPIs that getParsedTransactions doesn't fully parse
+    const preBalances = parsedTx.meta.preBalances || [];
+    const postBalances = parsedTx.meta.postBalances || [];
+    for (let i = 0; i < accountKeys.length; i++) {
+      const acc = accountKeys[i];
+      const key = typeof acc === 'string' ? acc : String(acc?.pubkey || '');
+      if (key && paymentWalletsSet.has(key)) {
+        const pre = preBalances[i] || 0;
+        const post = postBalances[i] || 0;
+        if (post > pre) {
+          const lamportsGained = post - pre;
+          
+          // Check if we already recorded native transfers for this wallet in this tx
+          const alreadyRecorded = transfers.reduce((sum, t) => {
+             return (t.toUserAccount === key && t.tokenMint === 'native') ? sum + t.amount : sum;
+          }, 0);
+
+          if (lamportsGained > alreadyRecorded) {
+            transfers.push({
+              fromUserAccount: feePayer,
+              toUserAccount: key,
+              amount: lamportsGained - alreadyRecorded,
+              tokenMint: 'native',
+            });
+          }
+        }
+      }
+    }
+
     return transfers;
   }
 
@@ -2682,7 +2712,7 @@ class VaultService {
       const tokenAddress = String(parts[10] || '').trim();
 
       if (action === 'TRANSFER' && flow === 'in' && paymentWallets.includes(toWallet)) {
-        const isNative = tokenAddress === 'SOL';
+        const isNative = tokenAddress === 'SOL' || tokenAddress === '' || tokenAddress === 'So11111111111111111111111111111111111111112';
         const isUSDC = tokenAddress === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
         
         if (!isNative && !isUSDC) {

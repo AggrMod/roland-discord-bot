@@ -12327,7 +12327,6 @@ async function vaultRunBackfillAllMissingTx() {
               }
 
               showSuccess(`Bulk backfill finished. Scanned: ${scanned}, Matched: ${matched}, Keys: ${keysDiscovered}`);
-              vaultRefreshActivity();
             } else if (payload.type === 'error') {
               throw new Error(payload.error?.message || payload.error?.error || 'Bulk backfill failed during stream');
             }

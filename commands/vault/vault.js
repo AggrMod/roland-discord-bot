@@ -315,9 +315,14 @@ module.exports = {
     const customId = String(interaction.customId || '');
     if (!customId.startsWith('vault_panel_')) return false;
 
-    if (customId === 'vault_panel_open') {
+    if (customId === 'vault_panel_balance') {
+      return this.handleBalance(interaction, guildId);
+    }
+
+    if (customId.startsWith('vault_panel_open_tier_')) {
+      const keyTier = customId.replace('vault_panel_open_tier_', '');
       await interaction.deferReply({ ephemeral: true });
-      const result = vaultService.openVault(guildId, interaction.user.id);
+      const result = vaultService.openVault(guildId, interaction.user.id, { keyTier });
       if (!result.success) {
         await interaction.editReply({ content: `ERROR: ${result.message}` });
         return true;
@@ -347,6 +352,74 @@ module.exports = {
           accentColor,
         })],
       });
+      return true;
+    }
+
+    if (customId === 'vault_panel_open') {
+      const balanceResult = vaultService.getBalance(guildId, interaction.user.id);
+      if (!balanceResult.success) {
+        await interaction.reply({ content: `ERROR: ${balanceResult.message}`, ephemeral: true });
+        return true;
+      }
+      const keyBalances = balanceResult.stats?.key_balances || {};
+      const availableTiers = Object.entries(keyBalances).filter(([_, amount]) => Number(amount || 0) > 0).map(([tier]) => tier);
+      
+      if (availableTiers.length === 0) {
+        await interaction.reply({ content: `You do not have any keys available to open the vault.`, ephemeral: true });
+        return true;
+      }
+
+      if (availableTiers.length === 1) {
+        const keyTier = availableTiers[0];
+        await interaction.deferReply({ ephemeral: true });
+        const result = vaultService.openVault(guildId, interaction.user.id, { keyTier });
+        if (!result.success) {
+          await interaction.editReply({ content: `ERROR: ${result.message}` });
+          return true;
+        }
+        const ticket = await this.maybeCreateRewardTicket(guildId, interaction.user, result);
+        const ticketLine = ticket?.created ? `\nFulfillment ticket created: #${ticket.ticketNumber || '?'} (<#${ticket.channelId}>)` : '';
+        const rewardTier = String(result?.reward?.tier || 'common').toLowerCase();
+        const tierEmoji = rewardTierEmoji(rewardTier);
+        const isSpotlight = rewardTier === 'epic' || rewardTier === 'legendary';
+        const title = isSpotlight
+          ? `${tierEmoji} Spotlight Reward Unlocked`
+          : 'Vault Opening Result';
+        const accentColor = String(result?.reward?.code || '') === 'no_reward'
+          ? '#ef4444'
+          : rewardTierColorHex(rewardTier);
+        const details = [
+          `Reward: **${String(result?.reward?.name || result?.reward?.code || 'Unknown Reward')}**`,
+          `Tier: \`${rewardTier}\``,
+          `Key Tier Used: \`${String(result?.keyTier || 'default')}\``,
+          `Opening ID: \`${String(result?.openingId || 'n/a')}\``,
+          `Tier Balances: ${formatTierBalancesInline(result?.stats?.key_balances)}`,
+        ].join('\n');
+        await interaction.editReply({
+          embeds: [this.buildPanelResponseEmbed(guildId, {
+            title,
+            description: `${this.buildOpenResultMessage(guildId, result, { trailingLabel: 'Available keys' })}\n\n${details}${ticketLine}`,
+            accentColor,
+          })],
+        });
+        return true;
+      }
+
+      // Prompt for tier
+      const embed = this.buildPanelResponseEmbed(guildId, {
+        title: 'Choose Key Tier',
+        description: 'You have multiple tiers of keys available. Which one would you like to use to open the vault?',
+      });
+      const row = new ActionRowBuilder();
+      for (const tier of availableTiers.slice(0, 5)) {
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`vault_panel_open_tier_${tier}`)
+            .setLabel(`Use ${tier} Key (${keyBalances[tier]})`)
+            .setStyle(ButtonStyle.Primary)
+        );
+      }
+      await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
       return true;
     }
 
@@ -558,6 +631,7 @@ module.exports = {
 
     const primaryRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('vault_panel_open').setLabel('Open Vault').setEmoji('🔓').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('vault_panel_balance').setLabel('Check Balance').setEmoji('⚖️').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('vault_panel_verify_payment').setLabel('Verify Payment').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('vault_panel_upgrade').setLabel('Upgrade Key').setEmoji('⬆️').setStyle(ButtonStyle.Secondary),
     );

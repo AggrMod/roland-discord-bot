@@ -364,6 +364,9 @@ function createAdminVaultRouter({
       }
 
       res.setHeader('Content-Type', 'text/plain');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no'); // Disable NGINX buffering so chunks stream immediately
 
       const result = await vaultService.backfillAllMissingMintTransfersForActiveSeason(req.guildId || '', {
         ...parsed.options,

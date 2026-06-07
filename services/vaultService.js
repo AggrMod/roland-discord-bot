@@ -2312,6 +2312,7 @@ class VaultService {
               }
               if (chunkErr) throw chunkErr;
               parsedTransactions.push(...(chunkParsed || []));
+              emitProgress(); // keep connection alive
               if (delayMs > 0 && c + CHUNK_SIZE < signatures.length) await sleep(delayMs);
             }
           } catch (error) {
@@ -2345,6 +2346,7 @@ class VaultService {
                 break; // Even 1-by-1 failed, abort wallet
               }
               parsedTransactions.push(singleParsed);
+              emitProgress(); // keep connection alive
               await sleep(Math.max(50, delayMs)); // force small delay on 1-by-1
             }
           }

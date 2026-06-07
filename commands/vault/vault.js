@@ -251,7 +251,12 @@ module.exports = {
             .setName('backfill')
             .setDescription('Backfill active season key grants for linked wallet')
             .addUserOption((option) => option.setName('user').setDescription('Target user').setRequired(true))
-            .addStringOption((option) => option.setName('wallet').setDescription('Linked wallet address').setRequired(true)))),
+            .addStringOption((option) => option.setName('wallet').setDescription('Linked wallet address').setRequired(true)))
+        .addSubcommand((sub) =>
+          sub
+            .setName('import-csv')
+            .setDescription('Import a Solscan CSV to grant keys retroactively')
+            .addAttachmentOption((option) => option.setName('csv_file').setDescription('Solscan export CSV').setRequired(true)))),
 
   async execute(interaction) {
     if (!await moduleGuard.checkModuleEnabled(interaction, 'vault')) return;
@@ -276,6 +281,7 @@ module.exports = {
           case 'rewards-remove': return this.handleAdminRewardsRemove(interaction, guildId);
           case 'setstatus': return this.handleAdminSetStatus(interaction, guildId);
           case 'backfill': return this.handleAdminBackfill(interaction, guildId);
+          case 'import-csv': return this.handleAdminImportCsv(interaction, guildId);
           default:
             return interaction.reply({ content: 'Unknown admin subcommand.', ephemeral: true });
         }
@@ -1044,5 +1050,46 @@ module.exports = {
     if (!result.success) return interaction.editReply({ content: `ERROR: ${result.message}` });
     vaultService.logAdminAction(guildId, interaction.user.id, 'manual_backfill', user.id, { wallet, processed: result.processed || 0 });
     return interaction.editReply({ content: `Backfill completed for <@${user.id}>. Processed events: ${result.processed || 0}` });
+  },
+
+  async handleAdminImportCsv(interaction, guildId) {
+    await interaction.deferReply({ ephemeral: true });
+    const attachment = interaction.options.getAttachment('csv_file', true);
+
+    if (!attachment.contentType?.includes('csv') && !attachment.name.endsWith('.csv')) {
+      return interaction.editReply({ content: 'ERROR: Please upload a valid CSV file.' });
+    }
+
+    try {
+      const response = await fetch(attachment.url);
+      if (!response.ok) throw new Error('Failed to download CSV');
+
+      const csvText = await response.text();
+      const result = vaultService.processCsvImport(guildId, csvText);
+
+      if (!result.success) {
+        return interaction.editReply({ content: result.message });
+      }
+
+      vaultService.logAdminAction(guildId, interaction.user.id, 'csv_import', null, {
+        filename: attachment.name,
+        processed: result.processed,
+        success: result.successCount,
+        duplicates: result.duplicates,
+        skipped: result.skipped,
+      });
+
+      const linesResult = [
+        '**CSV Import Complete**',
+        `Rows processed (valid transfers): ${result.processed}`,
+        `Successfully ingested: ${result.successCount}`,
+        `Skipped (duplicates/already existed): ${result.duplicates}`,
+        `Ignored (wrong token/too small): ${result.skipped}`,
+      ];
+
+      return interaction.editReply({ content: linesResult.join('\n') });
+    } catch (error) {
+      return interaction.editReply({ content: `ERROR parsing CSV: ${error.message}` });
+    }
   },
 };

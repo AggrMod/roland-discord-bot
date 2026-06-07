@@ -1769,8 +1769,10 @@ class VaultService {
     const transfers = [];
     if (!parsedTx || !parsedTx.meta || !parsedTx.transaction) return transfers;
 
+    const paymentWalletsSet = new Set(paymentWallets.map(w => String(w).trim()).filter(Boolean));
+    if (paymentWalletsSet.size === 0) return transfers;
+
     const accountKeys = parsedTx.transaction.message?.accountKeys || [];
-    // The primary fee payer is typically the first account key
     let feePayer = '';
     const firstKey = accountKeys[0];
     if (firstKey) {
@@ -1778,69 +1780,77 @@ class VaultService {
     }
     if (!feePayer) return transfers;
 
-    const preBalances = parsedTx.meta.preBalances || [];
-    const postBalances = parsedTx.meta.postBalances || [];
+    // Build ATA to Owner map for SPL tokens
+    const ataToOwner = {};
+    const preToken = parsedTx.meta.preTokenBalances || [];
+    const postToken = parsedTx.meta.postTokenBalances || [];
+    for (const t of [...preToken, ...postToken]) {
+      const owner = String(t.owner || '').trim();
+      const mint = String(t.mint || '').trim();
+      if (owner && mint && effectiveTokens.includes(mint) && t.accountIndex !== undefined) {
+        const acc = accountKeys[t.accountIndex];
+        const accPubkey = typeof acc === 'string' ? acc : String(acc?.pubkey || '');
+        if (accPubkey) {
+          ataToOwner[accPubkey] = { owner, mint };
+        }
+      }
+    }
 
-    // Track native SOL balance increases for each payment wallet
-    paymentWallets.forEach((wallet) => {
-      const walletStr = String(wallet).trim();
-      if (!walletStr) return;
-      const idx = accountKeys.findIndex((k) => {
-        const kStr = typeof k === 'string' ? k : String(k.pubkey || k);
-        return kStr === walletStr;
-      });
+    // Collect all instructions
+    const allInstructions = [];
+    const topLevel = parsedTx.transaction.message?.instructions || [];
+    allInstructions.push(...topLevel);
 
-      if (idx !== -1 && typeof preBalances[idx] === 'number' && typeof postBalances[idx] === 'number') {
-        const diff = postBalances[idx] - preBalances[idx];
-        if (diff > 0) {
+    const inner = parsedTx.meta.innerInstructions || [];
+    for (const group of inner) {
+      if (Array.isArray(group.instructions)) {
+        allInstructions.push(...group.instructions);
+      }
+    }
+
+    for (const inst of allInstructions) {
+      if (!inst.parsed) continue;
+
+      const program = inst.program;
+      const type = inst.parsed.type;
+      const info = inst.parsed.info || {};
+
+      // Handle Native SOL transfers
+      if (program === 'system' && type === 'transfer') {
+        const dest = String(info.destination || '').trim();
+        const source = String(info.source || '').trim();
+        const lamports = Number(info.lamports || 0);
+
+        if (dest && paymentWalletsSet.has(dest) && lamports > 0) {
           transfers.push({
-            fromUserAccount: feePayer,
-            toUserAccount: walletStr,
-            amount: diff,
+            fromUserAccount: source || feePayer,
+            toUserAccount: dest,
+            amount: lamports,
             tokenMint: 'native',
           });
         }
       }
-    });
 
-    // Track SPL token balance increases
-    const preToken = parsedTx.meta.preTokenBalances || [];
-    const postToken = parsedTx.meta.postTokenBalances || [];
+      // Handle SPL Token transfers
+      if (program === 'spl-token' && (type === 'transfer' || type === 'transferChecked')) {
+        const destATA = String(info.destination || '').trim();
+        const sourceATA = String(info.source || '').trim();
+        const amountRaw = info.amount || info.tokenAmount?.amount || '0';
+        const lamports = Number(amountRaw);
 
-    paymentWallets.forEach((wallet) => {
-      const walletStr = String(wallet).trim();
-      if (!walletStr) return;
-      
-      effectiveTokens.forEach((tokenMint) => {
-        const mintStr = String(tokenMint).trim();
-        if (!mintStr) return;
-
-        // Note: multiple token accounts could belong to the same owner, sum them up
-        let preSum = 0;
-        preToken.forEach((t) => {
-          if (t.owner === walletStr && t.mint === mintStr) {
-            preSum += Number(t?.uiTokenAmount?.amount || 0);
+        if (destATA && ataToOwner[destATA] && lamports > 0) {
+          const ownerInfo = ataToOwner[destATA];
+          if (paymentWalletsSet.has(ownerInfo.owner)) {
+            transfers.push({
+              fromUserAccount: ataToOwner[sourceATA]?.owner || feePayer,
+              toUserAccount: ownerInfo.owner,
+              amount: lamports,
+              tokenMint: ownerInfo.mint,
+            });
           }
-        });
-
-        let postSum = 0;
-        postToken.forEach((t) => {
-          if (t.owner === walletStr && t.mint === mintStr) {
-            postSum += Number(t?.uiTokenAmount?.amount || 0);
-          }
-        });
-
-        const diff = postSum - preSum;
-        if (diff > 0) {
-          transfers.push({
-            fromUserAccount: feePayer,
-            toUserAccount: walletStr,
-            amount: diff,
-            tokenMint: mintStr,
-          });
         }
-      });
-    });
+      }
+    }
 
     return transfers;
   }
@@ -1910,24 +1920,36 @@ class VaultService {
       };
     }
 
-    const ingestResult = this.ingestMintEvent({
-      guildId: gid,
-      seasonId: season.season_id,
-      txSignature: signature,
-      walletAddress: payerWallet || null,
-      discordUserId: linkedUserId || null,
-      type: 'TRANSFER',
-      source: String(options?.source || 'vault_onchain_payment_verify'),
-      nativeTransfers: matches,
-    });
+    let firstIngestResult = null;
+    let anySuccess = false;
+
+    for (let i = 0; i < matches.length; i++) {
+      const match = matches[i];
+      const matchPayerWallet = String(match?.fromUserAccount || '').trim();
+      const currentSignature = i === 0 ? signature : `${signature}-${i + 1}`;
+
+      const ingestResult = this.ingestMintEvent({
+        guildId: gid,
+        seasonId: season.season_id,
+        txSignature: currentSignature,
+        walletAddress: matchPayerWallet || null,
+        discordUserId: linkedUserId || null,
+        type: 'TRANSFER',
+        source: String(options?.source || 'vault_onchain_payment_verify'),
+        nativeTransfers: [match],
+      });
+
+      if (i === 0) firstIngestResult = ingestResult;
+      if (ingestResult?.success) anySuccess = true;
+    }
 
     return {
-      ...ingestResult,
-      verifiedOnChain: !!ingestResult?.success,
+      ...firstIngestResult,
+      verifiedOnChain: anySuccess,
       txSignature: signature,
       seasonId: season.season_id,
       payerWallet: payerWallet || null,
-      linkedUserId: linkedUserId || ingestResult?.linkedUserId || null,
+      linkedUserId: linkedUserId || firstIngestResult?.linkedUserId || null,
       matchedTransfer: {
         fromWallet: payerWallet || null,
         toWallet: String(selectedTransfer?.toUserAccount || '').trim() || null,
@@ -2078,6 +2100,7 @@ class VaultService {
       keyTierGrants[fallbackTierId] = paid ? clampInt(defaultTier.paid, 0, 0) : (free ? clampInt(defaultTier.free, 0, 0) : 0);
       totalPressureGranted = paid ? clampInt(defaultTier.pressure, 0, 0) : (free ? clampInt(defaultTier.pressure, 0, 0) : 0);
     }
+
     const totalKeysGranted = Object.values(keyTierGrants).reduce((sum, next) => sum + clampInt(next, 0, 0), 0);
 
     return {
@@ -2611,6 +2634,97 @@ class VaultService {
     } catch (error) {
       logger.error('[vault] onWalletLinked failure:', error);
     }
+  }
+
+  processCsvImport(guildId, csvText) {
+    const lines = csvText.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    if (lines.length < 2) return { success: false, message: 'CSV appears to be empty or missing data rows.' };
+
+    const season = this.getActiveSeason(guildId);
+    if (!season) return { success: false, message: 'No active vault season found.' };
+    
+    const config = this.getConfig(guildId);
+    const minLamports = Math.max(1, Number(config?.minting?.minLamports || 40000000));
+    const paymentWallets = Array.isArray(config?.minting?.paymentWallets) ? config.minting.paymentWallets : [];
+    
+    if (!paymentWallets.length) return { success: false, message: 'No payment wallets configured in vault settings.' };
+
+    let processed = 0;
+    let skipped = 0;
+    let duplicates = 0;
+    let successCount = 0;
+
+    // Track duplicate signatures to append index
+    const signatureCounts = {};
+
+    for (let i = 1; i < lines.length; i++) {
+      const parts = lines[i].split(',');
+      if (parts.length < 11) continue;
+      
+      const txSignatureRaw = String(parts[0] || '').trim();
+      const action = String(parts[3] || '').trim();
+      const fromWallet = String(parts[4] || '').trim();
+      const toWallet = String(parts[5] || '').trim();
+      const flow = String(parts[7] || '').trim();
+      const amountRaw = String(parts[8] || '').trim();
+      const decimalsRaw = String(parts[9] || '').trim();
+      const tokenAddress = String(parts[10] || '').trim();
+
+      if (action === 'TRANSFER' && flow === 'in' && paymentWallets.includes(toWallet)) {
+        const isNative = tokenAddress === 'SOL';
+        const isUSDC = tokenAddress === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+        
+        if (!isNative && !isUSDC) {
+          skipped++;
+          continue;
+        }
+
+        const decimals = Number(decimalsRaw) || (isNative ? 9 : 6);
+        const amountFloat = parseFloat(amountRaw) || 0;
+        const lamports = Math.round(amountFloat * Math.pow(10, decimals));
+
+        if (lamports >= minLamports) {
+          processed++;
+          signatureCounts[txSignatureRaw] = (signatureCounts[txSignatureRaw] || 0) + 1;
+          const idx = signatureCounts[txSignatureRaw];
+          // If there's more than 1 transfer for this signature, append an index so it doesn't fail unique constraint
+          const txSignature = idx > 1 ? `${txSignatureRaw}-${idx}` : txSignatureRaw;
+
+          const ingestResult = this.ingestMintEvent({
+            guildId,
+            seasonId: season.season_id,
+            txSignature,
+            walletAddress: fromWallet,
+            mintType: 'paid',
+            type: 'TRANSFER',
+            source: 'csv_import',
+            paymentWalletAddress: toWallet,
+            nativeTransfers: [{
+              fromUserAccount: fromWallet,
+              toUserAccount: toWallet,
+              amount: lamports,
+              tokenMint: isNative ? 'native' : tokenAddress
+            }],
+          });
+
+          if (ingestResult?.success && !ingestResult?.duplicate) {
+            successCount++;
+          } else if (ingestResult?.duplicate) {
+            duplicates++;
+          }
+        } else {
+          skipped++;
+        }
+      }
+    }
+
+    return {
+      success: true,
+      processed,
+      successCount,
+      duplicates,
+      skipped
+    };
   }
 }
 

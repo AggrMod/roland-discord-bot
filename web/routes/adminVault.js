@@ -326,6 +326,35 @@ function createAdminVaultRouter({
     }
   });
 
+  router.post('/api/admin/vault/import-csv', adminAuthMiddleware, (req, res) => {
+    if (!ensureVaultModule(req, res)) return;
+    try {
+      const csvData = req.body?.csvData;
+      if (!csvData || typeof csvData !== 'string') {
+        return res.status(400).json(toErrorResponse('Missing or invalid csvData in request body', 'VALIDATION_ERROR'));
+      }
+      
+      const result = vaultService.processCsvImport(req.guildId || '', csvData);
+      
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to import CSV', 'VALIDATION_ERROR', null, result));
+      }
+
+      vaultService.logAdminAction(req.guildId || '', req.session?.discordUser?.id || null, 'csv_import', null, { 
+        source: 'portal',
+        processed: result.processed, 
+        success: result.successCount, 
+        duplicates: result.duplicates, 
+        skipped: result.skipped 
+      });
+
+      return res.json(toSuccessResponse(result));
+    } catch (error) {
+      logger.error('Error in vault import csv endpoint:', error);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.post('/api/admin/vault/verify-payment-tx', adminAuthMiddleware, async (req, res) => {
     if (!ensureVaultModule(req, res)) return;
     try {

@@ -11467,6 +11467,15 @@ function vaultRenderAdminPanel() {
       <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultRunBackfill()">Run Active-Season Backfill</button></div>
 
       <div class="vault-section-card gp-subtle-panel" style="margin-top:14px;">
+        <strong>Solscan CSV Import:</strong>
+        Upload a CSV export from Solscan to backfill missing payments and assign keys in bulk. This will parse the CSV for transfers to your configured payment wallets.
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center;">
+        <input type="file" id="vaultCsvUploadInput" accept=".csv" style="display:none;" onchange="vaultUploadCsv()">
+        <button class="btn-secondary" onclick="document.getElementById('vaultCsvUploadInput').click()">Import Solscan CSV</button>
+      </div>
+
+      <div class="vault-section-card gp-subtle-panel" style="margin-top:14px;">
         <strong>Secure payment recovery:</strong>
         verify a SOL payment transaction directly on-chain. This does not trust webhook payloads and is safe to rerun because transaction signatures are deduplicated.
       </div>
@@ -12068,20 +12077,48 @@ async function vaultAssignReward() {
 }
 
 async function vaultRunBackfill() {
-  const walletAddress = String(document.getElementById('vaultBackfillWallet')?.value || '').trim();
+  const walletAddress = document.getElementById('vaultBackfillWallet')?.value?.trim();
+  const discordUserId = document.getElementById('vaultBackfillDiscordId')?.value?.trim();
   if (!walletAddress) return showError('Wallet address is required for backfill.');
-  const discordUserId = String(document.getElementById('vaultBackfillDiscordId')?.value || '').trim();
   try {
-    const data = await vaultFetchJson('/api/admin/vault/backfill', {
+    const payload = { walletAddress };
+    if (discordUserId) payload.discordUserId = discordUserId;
+    const res = await vaultFetchJson('/api/admin/vault/backfill', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ walletAddress, discordUserId }),
+      body: JSON.stringify(payload)
     });
-    const processed = Number(data?.data?.processed ?? data?.processed ?? 0);
-    showSuccess(`Backfill completed. Processed: ${processed}.`);
-    await loadVaultSettingsTab();
+    showSuccess(`Backfill queued/processed. Check audit logs.`);
+    vaultRefreshActivity();
   } catch (error) {
-    showError(error.message || 'Failed to run backfill.');
+    showError(error.message);
+  }
+}
+
+async function vaultUploadCsv() {
+  const fileInput = document.getElementById('vaultCsvUploadInput');
+  const file = fileInput?.files?.[0];
+  if (!file) return;
+  
+  try {
+    const text = await file.text();
+    const res = await vaultFetchJson('/api/admin/vault/import-csv', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ csvData: text })
+    });
+    
+    let msg = `CSV processed successfully. Valid: ${res.data?.successCount || 0}, Duplicates: ${res.data?.duplicates || 0}, Skipped: ${res.data?.skipped || 0}`;
+    if (res.data?.errors?.length) {
+      msg += `. Encountered ${res.data.errors.length} errors. Check console.`;
+      console.warn('CSV Import Errors:', res.data.errors);
+    }
+    showSuccess(msg);
+    vaultRefreshActivity();
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    if (fileInput) fileInput.value = ''; // reset file input
   }
 }
 

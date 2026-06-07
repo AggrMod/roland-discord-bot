@@ -94,7 +94,7 @@ This file is the source-of-truth command reference for the current production co
 - `/vault claims`
 - `/vault verify-social`
 - `/vault upgrade`
-- Admin: `/vault admin panel|setup|setstatus|config-view|config-set|addkeys|removekeys|backfill|rewards-list|rewards-add|rewards-update|rewards-remove`
+- Admin: `/vault admin panel|setup|setstatus|config-view|config-set|addkeys|removekeys|backfill|import-csv|rewards-list|rewards-add|rewards-update|rewards-remove`
 
 ## Moderation
 - `/moderation kick`

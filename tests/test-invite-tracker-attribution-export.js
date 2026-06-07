@@ -83,9 +83,12 @@ async function run() {
 
     const exported = await inviteTrackerService.exportCsv(guildId, { days: null });
     assert.strictEqual(exported.success, true, 'csv export should succeed for allowed plan');
-    const lines = String(exported.csv || '').split('\n');
+    const csv = String(exported.csv || '');
+    assert.ok(csv.startsWith('\uFEFF'), 'csv export should include UTF-8 BOM for Excel compatibility');
+    assert.ok(csv.includes('\r\n'), 'csv export should use CRLF line endings for Excel compatibility');
+    const lines = csv.split('\r\n');
     assert.ok(lines.length >= 623, 'csv export should include header + full large dataset without 500-row truncation');
-    assert.strictEqual(lines[0], 'joined_at,joined_user_id,joined_username,inviter_user_id,inviter_username,invite_code,source', 'csv header should match expected schema');
+    assert.strictEqual(lines[0].replace(/^\uFEFF/, ''), 'joined_at,joined_user_id,joined_username,inviter_user_id,inviter_username,invite_code,source', 'csv header should match expected schema');
 
     console.log('invite tracker attribution + large export assertions passed');
   } finally {

@@ -1764,6 +1764,8 @@ class VaultService {
   }
 
   extractTransfersFromParsedTransaction(parsedTx, paymentWallets = [], paymentTokens = []) {
+    const usdcMint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+    const effectiveTokens = [...new Set([...(paymentTokens || []), usdcMint])];
     const transfers = [];
     if (!parsedTx || !parsedTx.meta || !parsedTx.transaction) return transfers;
 
@@ -1809,7 +1811,7 @@ class VaultService {
       const walletStr = String(wallet).trim();
       if (!walletStr) return;
       
-      paymentTokens.forEach((tokenMint) => {
+      effectiveTokens.forEach((tokenMint) => {
         const mintStr = String(tokenMint).trim();
         if (!mintStr) return;
 

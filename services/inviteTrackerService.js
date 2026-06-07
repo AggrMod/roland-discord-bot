@@ -1377,7 +1377,7 @@ class InviteTrackerService {
       'source',
     ];
 
-    const lines = [header.join(',')];
+    const lines = ['\uFEFF' + header.join(',')];
     for (const row of eventsResult.events) {
       lines.push([
         csvEscape(row.joinedAt || ''),

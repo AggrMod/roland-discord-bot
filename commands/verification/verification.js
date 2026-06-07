@@ -828,7 +828,7 @@ module.exports = {
     }
 
     const csvEscape = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
-    const csv = 'discord_id,username,wallet_address,primary_wallet,verified,created_at\r\n' +
+    const csv = '\uFEFFdiscord_id,username,wallet_address,primary_wallet,verified,created_at\r\n' +
       wallets.map(w => [
         csvEscape(w.discord_id),
         csvEscape(w.username || ''),

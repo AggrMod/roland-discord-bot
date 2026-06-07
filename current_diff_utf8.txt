@@ -1,0 +1,325 @@
+diff --git a/commands/vault/vault.js b/commands/vault/vault.js
+index 729a4b4..f1f0f8a 100644
+--- a/commands/vault/vault.js
++++ b/commands/vault/vault.js
+@@ -378,6 +378,23 @@ module.exports = {
+       return true;
+     }
+ 
++    if (customId === 'vault_panel_verify_payment') {
++      const modal = new ModalBuilder()
++        .setCustomId('vault_panel_payment_tx_modal')
++        .setTitle('Verify Vault Payment');
++      const txInput = new TextInputBuilder()
++        .setCustomId('tx_signature')
++        .setLabel('Solana transaction signature')
++        .setStyle(TextInputStyle.Paragraph)
++        .setRequired(true)
++        .setMinLength(40)
++        .setMaxLength(120)
++        .setPlaceholder('Paste the payment transaction signature here');
++      modal.addComponents(new ActionRowBuilder().addComponents(txInput));
++      await interaction.showModal(modal);
++      return true;
++    }
++
+     if (customId === 'vault_panel_conversions') {
+       await interaction.deferReply({ ephemeral: true });
+       const rules = vaultService.getKeyTierConversions(guildId).filter(rule => rule && rule.enabled !== false);
+@@ -458,8 +475,38 @@ module.exports = {
+     if (!interaction?.isModalSubmit?.()) return false;
+     if (!await moduleGuard.checkModuleEnabled(interaction, 'vault')) return true;
+     const customId = String(interaction.customId || '');
+-    if (customId !== 'vault_panel_upgrade_modal') return false;
+     const guildId = interaction.guildId;
++    if (customId === 'vault_panel_payment_tx_modal') {
++      const txSignature = String(interaction.fields.getTextInputValue('tx_signature') || '').trim();
++      await interaction.deferReply({ ephemeral: true });
++      const result = await vaultService.verifyPaymentTransaction(guildId, txSignature, {
++        expectedDiscordUserId: interaction.user.id,
++        source: 'discord_panel_payment_verify',
++      });
++      if (!result.success) {
++        await interaction.editReply({ content: `Payment could not be verified: ${result.message || 'unknown error'}` });
++        return true;
++      }
++      const duplicateLine = result.duplicate ? '\nThis transaction was already processed, so no extra keys were added.' : '';
++      const keysGranted = Number(result?.grants?.keys_granted || 0);
++      const balance = vaultService.getBalance(guildId, interaction.user.id, result.seasonId || null);
++      const availableKeys = balance?.success ? Number(balance.stats?.available_keys || 0) : null;
++      const fields = [
++        { name: 'Keys Granted', value: String(keysGranted), inline: true },
++        { name: 'Payment', value: `${Number(result?.matchedTransfer?.lamports || 0)} lamports`, inline: true },
++      ];
++      if (availableKeys !== null) fields.push({ name: 'Available Keys', value: String(availableKeys), inline: true });
++      await interaction.editReply({
++        embeds: [this.buildPanelResponseEmbed(guildId, {
++          title: 'Payment Verified On-Chain',
++          description: `Your payment transaction was verified against the configured Vault wallet.${duplicateLine}`,
++          accentColor: '#22c55e',
++        }).addFields(fields)],
++      });
++      return true;
++    }
++
++    if (customId !== 'vault_panel_upgrade_modal') return false;
+     const fromTier = String(interaction.fields.getTextInputValue('from_tier') || '').trim();
+     const toTier = String(interaction.fields.getTextInputValue('to_tier') || '').trim();
+     const timesRaw = String(interaction.fields.getTextInputValue('times') || '').trim();
+@@ -503,15 +550,18 @@ module.exports = {
+       useThumbnail: false,
+     });
+ 
+-    const row = new ActionRowBuilder().addComponents(
++    const primaryRow = new ActionRowBuilder().addComponents(
+       new ButtonBuilder().setCustomId('vault_panel_open').setLabel('Open Vault').setEmoji('🔓').setStyle(ButtonStyle.Success),
++      new ButtonBuilder().setCustomId('vault_panel_verify_payment').setLabel('Verify Payment').setStyle(ButtonStyle.Secondary),
+       new ButtonBuilder().setCustomId('vault_panel_upgrade').setLabel('Upgrade Key').setEmoji('⬆️').setStyle(ButtonStyle.Secondary),
++    );
++    const infoRow = new ActionRowBuilder().addComponents(
+       new ButtonBuilder().setCustomId('vault_panel_conversions').setLabel('View Conversions').setStyle(ButtonStyle.Secondary),
+       new ButtonBuilder().setCustomId('vault_panel_rewards').setLabel('Available Rewards').setEmoji('🎁').setStyle(ButtonStyle.Secondary),
+       new ButtonBuilder().setCustomId('vault_panel_leaderboard').setLabel('Leaderboard').setEmoji('🏆').setStyle(ButtonStyle.Primary),
+     );
+ 
+-    return { embeds: [embed], components: [row] };
++    return { embeds: [embed], components: [primaryRow, infoRow] };
+   },
+ 
+   buildPanelResponseEmbed(guildId, options = {}) {
+diff --git a/index.js b/index.js
+index 36a4bfe..7033e9a 100644
+--- a/index.js
++++ b/index.js
+@@ -619,7 +619,7 @@ client.on(Events.InteractionCreate, async interaction => {
+ 
+   if (interaction.isModalSubmit()) {
+     if (interaction.customId.startsWith('ticket_modal_')) { await handleTicketModalSubmit(interaction); return; }
+-    if (interaction.customId === 'vault_panel_upgrade_modal') {
++    if (interaction.customId === 'vault_panel_upgrade_modal' || interaction.customId === 'vault_panel_payment_tx_modal') {
+       const vaultCommand = client.commands.get('vault');
+       if (vaultCommand && typeof vaultCommand.handlePanelModal === 'function') {
+         await vaultCommand.handlePanelModal(interaction);
+diff --git a/scripts/release-gate.js b/scripts/release-gate.js
+index 1d87438..d5e5ee1 100644
+--- a/scripts/release-gate.js
++++ b/scripts/release-gate.js
+@@ -55,6 +55,7 @@ const checks = [
+   { name: 'vault-social-gates', cmd: process.execPath, args: ['tests/test-vault-social-gates.js'] },
+   { name: 'vault-mint-reconciliation', cmd: process.execPath, args: ['tests/test-vault-mint-reconciliation.js'] },
+   { name: 'vault-backfill-ops-guardrails', cmd: process.execPath, args: ['tests/test-vault-backfill-ops-guardrails.js'] },
++  { name: 'vault-onchain-payment-verification', cmd: process.execPath, args: ['tests/test-vault-onchain-payment-verification.js'] },
+   { name: 'module-refactor', cmd: process.execPath, args: ['tests/test-module-refactor.js'] },
+   { name: 'micro-verify', cmd: process.execPath, args: ['tests/test-micro-verify.js'] },
+   { name: 'missions-v1-flow', cmd: process.execPath, args: ['tests/test-heist-v1-flow.js'] },
+diff --git a/services/vaultService.js b/services/vaultService.js
+index e6ee4da..77589fd 100644
+--- a/services/vaultService.js
++++ b/services/vaultService.js
+@@ -1713,6 +1713,97 @@ class VaultService {
+     return transfers;
+   }
+ 
++  async verifyPaymentTransaction(guildId, txSignature, options = {}) {
++    const gid = normalizeGuildId(guildId);
++    const signature = String(txSignature || '').trim();
++    if (!gid) return { success: false, message: 'guildId is required' };
++    if (!signature) return { success: false, message: 'txSignature is required' };
++
++    const config = this.getConfig(gid);
++    const season = options?.seasonId
++      ? (this.getSeason(gid, options.seasonId) || this.getActiveSeason(gid))
++      : this.getActiveSeason(gid);
++    if (!season) return { success: false, message: 'No active season' };
++
++    const paymentWallets = [...this.getConfiguredPaymentWalletSet(config)];
++    if (!paymentWallets.length) {
++      return { success: false, message: 'No mint payment wallet configured in Vault settings' };
++    }
++
++    const source = config?.mintSource || {};
++    const minLamports = clampInt(source.paymentMinLamports, 0, 1);
++    const connection = this.getRpcConnection();
++    const parsedTx = await connection.getParsedTransaction(signature, {
++      commitment: 'confirmed',
++      maxSupportedTransactionVersion: 0,
++    });
++    if (!parsedTx) {
++      return { success: false, message: 'Transaction not found or not confirmed yet' };
++    }
++    if (parsedTx?.meta?.err) {
++      return { success: false, message: 'Transaction failed on-chain' };
++    }
++
++    const nativeTransfers = this.extractNativeTransfersFromParsedTransaction(parsedTx);
++    const matches = nativeTransfers
++      .filter((transfer) => {
++        const destination = String(transfer?.toUserAccount || '').trim();
++        const amount = Number(transfer?.amount || 0);
++        return paymentWallets.includes(destination) && Number.isFinite(amount) && amount >= minLamports;
++      })
++      .sort((a, b) => Number(b?.amount || 0) - Number(a?.amount || 0));
++
++    if (!matches.length) {
++      return {
++        success: false,
++        message: 'No qualifying SOL transfer to a configured Vault payment wallet was found',
++        paymentWallets,
++        minLamports,
++      };
++    }
++
++    const selectedTransfer = matches[0];
++    const payerWallet = String(selectedTransfer?.fromUserAccount || '').trim();
++    const linkedUserId = options?.discordUserId
++      ? String(options.discordUserId || '').trim()
++      : (payerWallet ? this.findLinkedDiscordUserByWallet(payerWallet) : null);
++    const expectedDiscordUserId = String(options?.expectedDiscordUserId || '').trim();
++    if (expectedDiscordUserId && String(linkedUserId || '') !== expectedDiscordUserId) {
++      return {
++        success: false,
++        message: 'Payment sender wallet is not linked to your Discord account',
++        payerWallet: payerWallet || null,
++        linkedUserId: linkedUserId || null,
++      };
++    }
++
++    const ingestResult = this.ingestMintEvent({
++      guildId: gid,
++      seasonId: season.season_id,
++      txSignature: signature,
++      walletAddress: payerWallet || null,
++      discordUserId: linkedUserId || null,
++      type: 'TRANSFER',
++      source: String(options?.source || 'vault_onchain_payment_verify'),
++      nativeTransfers: matches,
++    });
++
++    return {
++      ...ingestResult,
++      verifiedOnChain: !!ingestResult?.success,
++      txSignature: signature,
++      seasonId: season.season_id,
++      payerWallet: payerWallet || null,
++      linkedUserId: linkedUserId || ingestResult?.linkedUserId || null,
++      matchedTransfer: {
++        fromWallet: payerWallet || null,
++        toWallet: String(selectedTransfer?.toUserAccount || '').trim() || null,
++        lamports: Number(selectedTransfer?.amount || 0),
++      },
++      matchedTransferCount: matches.length,
++    };
++  }
++
+   classifyMintEventType(event, config = null) {
+     const explicitType = this.normalizeMintTypeValue(event?.mintType || event?.mint_type);
+     if (['paid', 'free', 'manual'].includes(explicitType)) {
+@@ -1910,12 +2001,16 @@ class VaultService {
+     const mintAddress = canonical.mintAddress;
+     const classificationReason = canonical.classificationReason;
+ 
+-    const existing = db.prepare(`
++    const existingAnyGuild = db.prepare(`
+       SELECT *
+       FROM vault_mint_events
+-      WHERE guild_id = ? AND tx_signature = ?
++      WHERE tx_signature = ?
+       LIMIT 1
+-    `).get(guildId, txSignature);
++    `).get(txSignature);
++    if (existingAnyGuild && String(existingAnyGuild.guild_id || '') !== guildId) {
++      return { success: true, duplicate: true, message: 'Duplicate tx signature ignored' };
++    }
++    const existing = existingAnyGuild || null;
+     const existingGrants = existing
+       ? {
+           paid_mints: String(existing.mint_type || '').toLowerCase() === 'paid' ? 1 : 0,
+diff --git a/web/public/portal.js b/web/public/portal.js
+index 2c478b3..30dfff6 100644
+--- a/web/public/portal.js
++++ b/web/public/portal.js
+@@ -11478,6 +11478,16 @@ function vaultRenderAdminPanel() {
+       </div>
+       <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultRunBackfill()">Run Active-Season Backfill</button></div>
+ 
++      <div class="vault-section-card gp-subtle-panel" style="margin-top:14px;">
++        <strong>Secure payment recovery:</strong>
++        verify a SOL payment transaction directly on-chain. This does not trust webhook payloads and is safe to rerun because transaction signatures are deduplicated.
++      </div>
++      <div class="settings-grid" style="margin-top:10px;">
++        <div class="settings-row"><div class="settings-info"><div class="settings-label">Payment TX Signature</div><div class="settings-desc">SOL transfer to a configured Vault payment wallet.</div></div><input id="vaultVerifyPaymentTxSignature" class="input-sm" placeholder="transaction signature"></div>
++        <div class="settings-row"><div class="settings-info"><div class="settings-label">Discord ID Override (optional)</div><div class="settings-desc">Usually blank; linked wallet owner is detected automatically.</div></div><input id="vaultVerifyPaymentDiscordId" class="input-sm" placeholder="optional"></div>
++      </div>
++      <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultVerifyPaymentTransaction()">Verify Payment TX On-Chain</button></div>
++
+       <div class="settings-grid" style="margin-top:10px;">
+         <div class="settings-row"><div class="settings-info"><div class="settings-label">Bulk Backfill Max Signatures / Wallet</div><div class="settings-desc">Scans newest to oldest until this max is reached (safe to rerun; duplicates are skipped).</div></div><input id="vaultBulkBackfillLimitPerWallet" type="number" class="input-sm" min="1" max="50000" value="5000"></div>
+         <div class="settings-row"><div class="settings-info"><div class="settings-label">Dry Run</div><div class="settings-desc">Analyze and count candidates without ingesting events.</div></div><input id="vaultBulkBackfillDryRun" type="checkbox"></div>
+@@ -12087,6 +12097,27 @@ async function vaultRunBackfill() {
+   }
+ }
+ 
++async function vaultVerifyPaymentTransaction() {
++  const txSignature = String(document.getElementById('vaultVerifyPaymentTxSignature')?.value || '').trim();
++  if (!txSignature) return showError('Payment transaction signature is required.');
++  const discordUserId = String(document.getElementById('vaultVerifyPaymentDiscordId')?.value || '').trim();
++  try {
++    const data = await vaultFetchJson('/api/admin/vault/verify-payment-tx', {
++      method: 'POST',
++      headers: { 'Content-Type': 'application/json' },
++      body: JSON.stringify({ txSignature, discordUserId: discordUserId || null }),
++    });
++    const result = data?.data || data || {};
++    const keys = Number(result?.grants?.keys_granted || 0);
++    const duplicate = result.duplicate ? ' Duplicate payment was already processed.' : '';
++    const payer = result.payerWallet ? ` Payer: ${result.payerWallet}.` : '';
++    showSuccess(`Payment verified on-chain. Keys granted: ${keys}.${duplicate}${payer}`);
++    await vaultRefreshActivity();
++  } catch (error) {
++    showError(error.message || 'Failed to verify payment transaction.');
++  }
++}
++
+ async function vaultRunBackfillAllMissingTx() {
+   const limitPerWallet = Math.max(1, Math.min(50000, Number(document.getElementById('vaultBulkBackfillLimitPerWallet')?.value || 5000) || 5000));
+   const dryRun = !!document.getElementById('vaultBulkBackfillDryRun')?.checked;
+diff --git a/web/routes/adminVault.js b/web/routes/adminVault.js
+index f54426c..a1a042b 100644
+--- a/web/routes/adminVault.js
++++ b/web/routes/adminVault.js
+@@ -326,6 +326,35 @@ function createAdminVaultRouter({
+     }
+   });
+ 
++  router.post('/api/admin/vault/verify-payment-tx', adminAuthMiddleware, async (req, res) => {
++    if (!ensureVaultModule(req, res)) return;
++    try {
++      const txSignature = String(req.body?.txSignature || req.body?.tx_signature || '').trim();
++      const discordUserId = String(req.body?.discordUserId || req.body?.discord_user_id || '').trim();
++      const seasonId = String(req.body?.seasonId || req.body?.season_id || '').trim();
++      const result = await vaultService.verifyPaymentTransaction(req.guildId || '', txSignature, {
++        discordUserId: discordUserId || null,
++        seasonId: seasonId || null,
++        source: 'portal_onchain_payment_verify',
++      });
++      if (!result.success) {
++        return res.status(400).json(toErrorResponse(result.message || 'Failed to verify payment transaction', 'VALIDATION_ERROR', null, result));
++      }
++      vaultService.logAdminAction(req.guildId || '', req.session?.discordUser?.id || null, 'verify_payment_tx', result.linkedUserId || discordUserId || null, {
++        txSignature,
++        seasonId: result.seasonId || seasonId || null,
++        payerWallet: result.payerWallet || null,
++        lamports: Number(result?.matchedTransfer?.lamports || 0),
++        duplicate: !!result.duplicate,
++        keysGranted: Number(result?.grants?.keys_granted || 0),
++      });
++      return res.json(toSuccessResponse(result));
++    } catch (error) {
++      logger.error('Error verifying vault payment transaction:', error);
++      return res.status(500).json(toErrorResponse('Internal server error'));
++    }
++  });
++
+   router.post('/api/admin/vault/backfill-all', adminAuthMiddleware, async (req, res) => {
+     if (!ensureVaultModule(req, res)) return;
+     try {

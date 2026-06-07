@@ -6599,7 +6599,7 @@ function exportTreasuryCSV() {
   // TODO: multi-wallet export. For now, export single wallet info from visible table.
   const table = document.querySelector('#treasuryWalletTableContainer table');
   if (!table) { showSuccess('No wallet data to export.'); return; }
-  let csv = 'Address,Channel,Status\n';
+  let csv = '\uFEFFAddress,Channel,Status\n';
   table.querySelectorAll('tbody tr').forEach(row => {
     const cells = row.querySelectorAll('td');
     const addr = cells[0]?.textContent?.trim().replace(/[{}\n]/g, ' ').replace(/\s+/g, ' ') || '';

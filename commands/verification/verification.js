@@ -1,4 +1,4 @@
-﻿const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
 const walletService = require('../../services/walletService');
 const roleService = require('../../services/roleService');
 const nftService = require('../../services/nftService');
@@ -828,7 +828,7 @@ module.exports = {
     }
 
     const csvEscape = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
-    const csv = 'discord_id,username,wallet_address,primary_wallet,verified,created_at\n' +
+    const csv = 'discord_id,username,wallet_address,primary_wallet,verified,created_at\r\n' +
       wallets.map(w => [
         csvEscape(w.discord_id),
         csvEscape(w.username || ''),
@@ -836,7 +836,7 @@ module.exports = {
         csvEscape(w.primary_wallet ? 'true' : 'false'),
         csvEscape(w.verified ? 'true' : 'false'),
         csvEscape(w.created_at || '')
-      ].join(',')).join('\n');
+      ].join(',')).join('\r\n');
 
     const buffer = Buffer.from(csv, 'utf-8');
     const roleSuffix = selectedRole

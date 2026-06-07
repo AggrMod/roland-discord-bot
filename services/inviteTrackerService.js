@@ -1392,7 +1392,7 @@ class InviteTrackerService {
 
     return {
       success: true,
-      csv: lines.join('\n'),
+      csv: lines.join('\r\n'),
       filename: `invite-tracker-${normalizedGuildId}-${new Date().toISOString().slice(0, 10)}.csv`,
       limitedByPlan: eventsResult.limitedByPlan,
       periodDays: eventsResult.periodDays,

@@ -29,6 +29,7 @@ let _portalMultiSelectAutoId = 0;
 let _portalMultiSelectPickerState = null;
 let vaultSettingsCache = null;
 let vaultConfigModalState = { type: '', index: -1 };
+let vaultKeyEconomyTab = 'tiers';
 const VAULT_UI_MODE_STORAGE_KEY = 'vaultUiMode';
 let quickSwitchActiveIndex = 0;
 
@@ -10831,13 +10832,9 @@ function vaultGetJsonObjectInputValue(inputId, fallback = {}) {
 
 function vaultBuildKeyEconomySummaryHtml() {
   const tiers = vaultGetJsonArrayInputValue('vault_keyTiersJson', []);
-  const grants = vaultGetJsonObjectInputValue('vault_keyTierGrantsJson', {});
   const bands = vaultGetJsonArrayInputValue('vault_paymentBandsJson', []);
   const conversions = vaultGetJsonArrayInputValue('vault_keyTierConversionsJson', []);
   const enabledTiers = tiers.filter(tier => tier?.enabled !== false).length;
-  const paidKeys = Object.values(grants).reduce((sum, row) => sum + Math.max(0, Number(row?.paid || 0) || 0), 0);
-  const freeKeys = Object.values(grants).reduce((sum, row) => sum + Math.max(0, Number(row?.free || 0) || 0), 0);
-  const pressure = Object.values(grants).reduce((sum, row) => sum + Math.max(0, Number(row?.pressure || 0) || 0), 0);
   const enabledConversions = conversions.filter(rule => rule?.enabled !== false).length;
   const tierChips = tiers.length
     ? tiers.slice(0, 5).map((tier) => `<span class="vault-economy-chip">${escapeHtml(String(tier?.name || tier?.id || 'Tier'))}</span>`).join('')
@@ -10848,15 +10845,12 @@ function vaultBuildKeyEconomySummaryHtml() {
       <div class="vault-economy-head">
         <div>
           <h4>Key Economy</h4>
-          <p>Manage key tiers, mint grants, SOL payment bands, and upgrade rules from one clean modal.</p>
+          <p>Manage key tiers, SOL payment bands, and upgrade rules from one focused modal.</p>
         </div>
         <button class="btn-primary" onclick="vaultOpenKeyEconomyModal()">Configure Key Economy</button>
       </div>
       <div class="vault-economy-metrics">
         <div><strong>${enabledTiers}/${tiers.length}</strong><span>Enabled tiers</span></div>
-        <div><strong>${paidKeys}</strong><span>Paid mint keys</span></div>
-        <div><strong>${freeKeys}</strong><span>Free mint keys</span></div>
-        <div><strong>${pressure}</strong><span>Paid pressure</span></div>
         <div><strong>${bands.length}</strong><span>Payment bands</span></div>
         <div><strong>${enabledConversions}</strong><span>Upgrade rules</span></div>
       </div>
@@ -10875,7 +10869,6 @@ function vaultRenderSimpleConfigEditors() {
   if (!tiersWrap || !grantsWrap || !bandsWrap || !conversionsWrap) return;
 
   const tiers = vaultGetJsonArrayInputValue('vault_keyTiersJson', []);
-  const grants = vaultGetJsonObjectInputValue('vault_keyTierGrantsJson', {});
   const bands = vaultGetJsonArrayInputValue('vault_paymentBandsJson', []);
   const conversions = vaultGetJsonArrayInputValue('vault_keyTierConversionsJson', []);
 
@@ -10899,29 +10892,13 @@ function vaultRenderSimpleConfigEditors() {
     </table>
   ` : '<p style="color:var(--text-secondary);">No tiers yet.</p>';
 
-  const tierIds = tiers.map(t => String(t?.id || '').trim()).filter(Boolean);
-  grantsWrap.innerHTML = tierIds.length ? `
-    <table class="vault-admin-table">
-      <thead><tr><th align="left">Tier ID</th><th align="left">Paid Mint Keys</th><th align="left">Free Mint Keys</th><th align="left">Pressure (Paid)</th></tr></thead>
-      <tbody>
-        ${tierIds.map((tierId) => {
-    const row = grants[tierId] || {};
-    return `
-      <tr data-vault-simple-grant-row="${escapeHtml(tierId)}">
-        <td><code>${escapeHtml(tierId)}</code></td>
-        <td><input class="input-sm" style="width:70px;" data-vault-grant-paid="${escapeHtml(tierId)}" type="number" min="0" value="${Number(row?.paid || 0)}" placeholder="paid keys"></td>
-        <td><input class="input-sm" style="width:70px;" data-vault-grant-free="${escapeHtml(tierId)}" type="number" min="0" value="${Number(row?.free || 0)}" placeholder="free keys"></td>
-        <td><input class="input-sm" style="width:70px;" data-vault-grant-pressure="${escapeHtml(tierId)}" type="number" min="0" value="${Number(row?.pressure || 0)}" placeholder="pressure"></td>
-      </tr>
-    `;
-  }).join('')}
-      </tbody>
-    </table>
-  ` : '<p style="color:var(--text-secondary);">Define tiers first to edit grants.</p>';
+  if (grantsWrap) {
+    grantsWrap.innerHTML = '<p style="color:var(--text-secondary);">Mint grants are hidden for V1. Payment bands decide key assignment; existing advanced grant values are preserved internally.</p>';
+  }
 
   bandsWrap.innerHTML = bands.length ? `
     <table class="vault-admin-table">
-      <thead><tr><th align="left">Tier</th><th align="left">Min Lamports</th><th align="left">Max Lamports</th><th align="left">Paid</th><th align="left">Free</th><th align="left">Actions</th></tr></thead>
+      <thead><tr><th align="left">Tier</th><th align="left">Min Lamports</th><th align="left">Max Lamports</th><th align="left">Keys Granted</th><th align="left">Bonus Free</th><th align="left">Actions</th></tr></thead>
       <tbody>
         ${bands.map((band, idx) => `
           <tr data-vault-simple-band-row="${idx}">
@@ -10976,8 +10953,16 @@ function vaultSyncSimpleEditorsToJson() {
   const normalizedTiers = Array.from(uniqueById.values());
   const tierIds = new Set(normalizedTiers.map(t => t.id));
 
+  const existingGrants = vaultGetJsonObjectInputValue('vault_keyTierGrantsJson', {});
+  const hasVisibleGrantInputs = !!document.querySelector('[data-vault-grant-paid]');
   const grants = {};
   normalizedTiers.forEach((tier) => {
+    if (!hasVisibleGrantInputs) {
+      grants[tier.id] = existingGrants[tier.id] && typeof existingGrants[tier.id] === 'object'
+        ? existingGrants[tier.id]
+        : { paid: 0, free: 0, pressure: 0 };
+      return;
+    }
     const paidEl = document.querySelector(`[data-vault-grant-paid="${tier.id}"]`);
     const freeEl = document.querySelector(`[data-vault-grant-free="${tier.id}"]`);
     const pressureEl = document.querySelector(`[data-vault-grant-pressure="${tier.id}"]`);
@@ -11068,8 +11053,6 @@ function vaultOpenConfigRowModal(type, index = -1) {
     const rows = vaultGetJsonArrayInputValue('vault_keyTiersJson', []);
     const row = Number(index) >= 0 ? (rows[index] || {}) : {};
     const tierId = String(row?.id || '').trim().toLowerCase();
-    const grants = vaultGetJsonObjectInputValue('vault_keyTierGrantsJson', {});
-    const existingGrant = grants[tierId] || {};
     const bands = vaultGetJsonArrayInputValue('vault_paymentBandsJson', []);
     const existingBand = bands.find((band) => String(band?.keyTier || '').trim().toLowerCase() === tierId) || null;
     const conversions = vaultGetJsonArrayInputValue('vault_keyTierConversionsJson', []);
@@ -11081,15 +11064,11 @@ function vaultOpenConfigRowModal(type, index = -1) {
       <label class="form-label">Inherits From</label><input id="vaultModalTierInherits" class="form-input" value="${escapeHtml(String(row?.inheritsFrom || ''))}" placeholder="optional">
       <label style="display:flex;gap:8px;align-items:center;margin-top:8px;"><input id="vaultModalTierEnabled" type="checkbox" ${row?.enabled === false ? '' : 'checked'}> Enabled</label>
       <hr style="border-color:rgba(99,102,241,0.15);margin:8px 0;">
-      <div style="font-weight:600;color:#c9d6ff;">Mint Grants for this tier</div>
-      <label class="form-label">Paid Mint Keys</label><input id="vaultModalTierGrantPaid" class="form-input" type="number" min="0" value="${Math.max(0, Number(existingGrant?.paid || 0) || 0)}">
-      <label class="form-label">Free Mint Keys</label><input id="vaultModalTierGrantFree" class="form-input" type="number" min="0" value="${Math.max(0, Number(existingGrant?.free || 0) || 0)}">
-      <hr style="border-color:rgba(99,102,241,0.15);margin:8px 0;">
       <label style="display:flex;gap:8px;align-items:center;"><input id="vaultModalTierBandEnabled" type="checkbox" ${existingBand ? 'checked' : ''}> Configure SOL Payment Band for this tier</label>
       <label class="form-label">Band Min Lamports</label><input id="vaultModalTierBandMin" class="form-input" type="number" min="0" value="${existingBand ? Math.max(0, Number(existingBand?.minLamports || 0) || 0) : 0}">
       <label class="form-label">Band Max Lamports (blank = no max)</label><input id="vaultModalTierBandMax" class="form-input" type="number" min="0" value="${existingBand?.maxLamports === null || existingBand?.maxLamports === undefined ? '' : (Math.max(0, Number(existingBand?.maxLamports || 0) || 0))}">
-      <label class="form-label">Band Paid Keys</label><input id="vaultModalTierBandPaid" class="form-input" type="number" min="0" value="${existingBand ? Math.max(0, Number(existingBand?.paid || 0) || 0) : Math.max(0, Number(existingGrant?.paid || 0) || 0)}">
-      <label class="form-label">Band Free Keys</label><input id="vaultModalTierBandFree" class="form-input" type="number" min="0" value="${existingBand ? Math.max(0, Number(existingBand?.free || 0) || 0) : Math.max(0, Number(existingGrant?.free || 0) || 0)}">
+      <label class="form-label">Keys Granted</label><input id="vaultModalTierBandPaid" class="form-input" type="number" min="0" value="${existingBand ? Math.max(0, Number(existingBand?.paid || 0) || 0) : 1}">
+      <label class="form-label">Bonus Free Keys</label><input id="vaultModalTierBandFree" class="form-input" type="number" min="0" value="${existingBand ? Math.max(0, Number(existingBand?.free || 0) || 0) : 0}">
       <hr style="border-color:rgba(99,102,241,0.15);margin:8px 0;">
       <label style="display:flex;gap:8px;align-items:center;"><input id="vaultModalTierUpgradeEnabled" type="checkbox" ${existingUpgrade ? 'checked' : ''}> Configure upgrade rule into this tier</label>
       <label class="form-label">Upgrade From Tier</label><input id="vaultModalTierUpgradeFrom" class="form-input" value="${escapeHtml(String(existingUpgrade?.fromTier || ''))}" placeholder="bronze">
@@ -11127,6 +11106,7 @@ function vaultOpenKeyEconomyModal() {
   if (!modal) return;
   modal.style.display = 'flex';
   vaultRenderSimpleConfigEditors();
+  vaultSetKeyEconomyTab(vaultKeyEconomyTab || 'tiers');
 }
 
 function vaultCloseKeyEconomyModal() {
@@ -11135,6 +11115,17 @@ function vaultCloseKeyEconomyModal() {
   vaultSyncSimpleEditorsToJson();
   const summaryWrap = document.getElementById('vaultKeyEconomySummary');
   if (summaryWrap) summaryWrap.innerHTML = vaultBuildKeyEconomySummaryHtml();
+}
+
+function vaultSetKeyEconomyTab(tab) {
+  const normalized = ['tiers', 'bands', 'upgrades'].includes(String(tab || '').trim()) ? String(tab).trim() : 'tiers';
+  vaultKeyEconomyTab = normalized;
+  document.querySelectorAll('[data-vault-economy-tab]').forEach((section) => {
+    section.style.display = section.getAttribute('data-vault-economy-tab') === normalized ? '' : 'none';
+  });
+  document.querySelectorAll('[data-vault-economy-tab-button]').forEach((button) => {
+    button.className = button.getAttribute('data-vault-economy-tab-button') === normalized ? 'btn-primary' : 'btn-secondary';
+  });
 }
 
 function vaultCloseConfigRowModal() {
@@ -11158,10 +11149,7 @@ function vaultSaveConfigRowModal() {
     if (el) el.value = JSON.stringify(rows, null, 2);
 
     const grants = vaultGetJsonObjectInputValue('vault_keyTierGrantsJson', {});
-    grants[next.id] = {
-      paid: Math.max(0, Number(document.getElementById('vaultModalTierGrantPaid')?.value || 0) || 0),
-      free: Math.max(0, Number(document.getElementById('vaultModalTierGrantFree')?.value || 0) || 0),
-    };
+    if (!grants[next.id]) grants[next.id] = { paid: 0, free: 0, pressure: 0 };
     const grantsEl = document.getElementById('vault_keyTierGrantsJson');
     if (grantsEl) grantsEl.value = JSON.stringify(grants, null, 2);
 
@@ -11328,7 +11316,7 @@ function vaultRenderAdminPanel() {
         .vault-economy-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:14px; }
         .vault-economy-head h4 { margin:0 0 5px; color:#eef2ff; }
         .vault-economy-head p { margin:0; color:var(--text-secondary); max-width:780px; }
-        .vault-economy-metrics { display:grid; grid-template-columns:repeat(6,minmax(120px,1fr)); gap:10px; }
+        .vault-economy-metrics { display:grid; grid-template-columns:repeat(3,minmax(120px,1fr)); gap:10px; }
         .vault-economy-metrics div { padding:12px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(2,6,23,0.34); }
         .vault-economy-metrics strong { display:block; font-size:1.35rem; color:#fff; line-height:1; }
         .vault-economy-metrics span { display:block; margin-top:6px; color:#94a3b8; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.04em; }
@@ -11339,6 +11327,7 @@ function vaultRenderAdminPanel() {
         .vault-economy-modal-grid { display:grid; grid-template-columns:1fr; gap:12px; }
         .vault-economy-modal-section { padding:12px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(15,23,42,0.48); }
         .vault-economy-modal-section h5 { margin:0 0 8px 0; }
+        .vault-economy-tabs { display:flex; gap:8px; flex-wrap:wrap; }
         @media (max-width: 980px) {
           .vault-economy-head { flex-direction:column; }
           .vault-economy-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -11399,28 +11388,29 @@ function vaultRenderAdminPanel() {
             <div class="vault-section-card gp-subtle-panel" style="margin-top:0;">
               Configure everything that decides how keys enter, convert, and upgrade in one place. Changes are applied to the hidden config automatically when you save Vault Config.
             </div>
+            <div class="vault-economy-tabs">
+              <button data-vault-economy-tab-button="tiers" class="btn-primary" onclick="vaultSetKeyEconomyTab('tiers')">Tiers</button>
+              <button data-vault-economy-tab-button="bands" class="btn-secondary" onclick="vaultSetKeyEconomyTab('bands')">Payment Bands</button>
+              <button data-vault-economy-tab-button="upgrades" class="btn-secondary" onclick="vaultSetKeyEconomyTab('upgrades')">Upgrades</button>
+            </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <button class="btn-secondary" onclick="vaultSyncSimpleEditorsToJson();vaultRenderSimpleConfigEditors()">Apply Changes</button>
               <button class="btn-secondary" onclick="vaultRenderSimpleConfigEditors()">Reload Current Config</button>
               <button class="btn-secondary" onclick="vaultApplyTierTemplate()">Apply Bronze/Silver/Gold Template</button>
             </div>
-            <div class="vault-economy-modal-section">
+            <div class="vault-economy-modal-section" data-vault-economy-tab="tiers">
               <h5>Key Tiers</h5>
               <div id="vaultSimpleTiersRows"></div>
               <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleTierRow()">Add Tier</button></div>
             </div>
-            <div class="vault-economy-modal-section">
-              <h5>Mint Grants</h5>
-              <p style="color:var(--text-secondary);margin:0 0 8px 0;">Set keys and pressure granted per tier for paid and free mints.</p>
-              <div id="vaultSimpleGrantsRows"></div>
-            </div>
-            <div class="vault-economy-modal-section">
+            <div id="vaultSimpleGrantsRows" style="display:none;"></div>
+            <div class="vault-economy-modal-section" data-vault-economy-tab="bands" style="display:none;">
               <h5>SOL Payment Bands</h5>
               <p style="color:var(--text-secondary);margin:0 0 8px 0;">Map payment ranges in lamports to key tiers.</p>
               <div id="vaultSimpleBandsRows"></div>
               <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleBandRow()">Add Payment Band</button></div>
             </div>
-            <div class="vault-economy-modal-section">
+            <div class="vault-economy-modal-section" data-vault-economy-tab="upgrades" style="display:none;">
               <h5>Upgrade Rules</h5>
               <p style="color:var(--text-secondary);margin:0 0 8px 0;">Example: 10 silver keys -> 1 gold key.</p>
               <div id="vaultSimpleConversionsRows"></div>

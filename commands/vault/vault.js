@@ -765,9 +765,15 @@ module.exports = {
     const config = vaultService.getConfig(guildId);
     const stats = result.stats;
     const keyBalances = stats?.key_balances && typeof stats.key_balances === 'object' ? stats.key_balances : {};
-    const keyBalanceLine = Object.entries(keyBalances)
-      .map(([tierId, amount]) => `${tierId}:${Number(amount || 0)}`)
-      .join(' | ') || 'default:0';
+
+    const tiers = Array.isArray(config?.keyTiers) ? config.keyTiers.filter(t => t && t.enabled !== false) : [{id:'default'}];
+    const keyBalanceLine = tiers.map(t => {
+      const id = String(t.id || 'default').toLowerCase();
+      const amt = Number(keyBalances[id] || 0);
+      const name = id.charAt(0).toUpperCase() + id.slice(1);
+      return `**${name}**: ${amt}`;
+    }).join('\n') || '**Default**: 0';
+
     const embed = new EmbedBuilder()
       .setColor('#f59e0b')
       .setTitle(`${config?.display?.gameName || 'Vault'} Status`)

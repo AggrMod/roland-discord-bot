@@ -139,12 +139,46 @@ class VaultService {
     return {
       general: {
         enabled: false,
+        announceChannelId: '',
+        announceRewardTiers: ['rare', 'epic', 'legendary'],
+        announceCommonRewards: false,
+      },
+      display: {
         projectName: 'Guild Pilot Project',
         gameName: 'Reward Vault',
         seasonName: 'Default Season',
-      },
-      theme: {
         keyName: 'Reward Key',
+        messages: {
+          noKeys: 'You do not have any available keys.',
+          vaultInactive: 'The vault is currently inactive.',
+          openSuccess: 'Vault opened! You received **{{rewardName}}**.',
+          noRewardOpen: 'Vault opened, but this key did not reveal a reward.',
+          openSuspenseLines: [
+            'You slide the key into the lock. The vault hums and the room goes quiet.',
+            'The mechanism clicks once, then twice. Everyone waits for the final turn.',
+            'You pull the handle. Steel groans and the vault decides your fate.',
+          ],
+          noRewardOpenVariants: [
+            'The vault coughed, laughed, and swallowed your key.',
+            'A note slides out: "Nice try. Come back with better luck."',
+            'The lock opens an inch, then slams shut. Not today.',
+            'The vault guard nods, shrugs, and says: "That key was training mode."',
+          ],
+        },
+      },
+      minting: {
+        mode: 'custom_webhook',
+        countTransfersToPaymentWallet: false,
+        paymentWallets: [],
+        minLamports: 1,
+        paymentBands: [],
+        grantsPerMint: {
+          default: {
+            paid: 1,
+            free: 0,
+            pressure: 1,
+          },
+        },
       },
       keyTiers: [
         {
@@ -155,31 +189,6 @@ class VaultService {
         },
       ],
       keyTierConversions: [],
-      mintRules: {
-        keysPerPaidMint: 1,
-        keysPerFreeMint: 0,
-        pressurePerPaidMint: 1,
-        pressurePerFreeMint: 0,
-        keyTierGrants: {
-          default: {
-            paid: 1,
-            free: 0,
-          },
-        },
-      },
-      mintSource: {
-        mode: 'custom_webhook',
-        countTransfersToPaymentWallet: false,
-        paymentWalletAddress: '',
-        paymentWalletAddresses: [],
-        paymentMinLamports: 1,
-        paymentBands: [],
-      },
-      announcements: {
-        channelId: '',
-        announceRewardTiers: ['rare', 'epic', 'legendary'],
-        announceCommonRewards: false,
-      },
       ticketing: {
         createTicketOnWin: false,
         rewardTicketCategoryId: null,
@@ -192,14 +201,22 @@ class VaultService {
       },
       rewardTable: {
         version: 'default',
-        failChancePercent: 75,
-        noRewardWeight: 0,
         rewards: [
+          {
+            code: 'nothing',
+            name: 'Nothing',
+            tier: 'common',
+            weight: 75,
+            enabled: true,
+            quantity: -1,
+            type: 'no_reward',
+            payload: {},
+          },
           {
             code: 'sticker_pack',
             name: 'Sticker Pack',
             tier: 'common',
-            weight: 70,
+            weight: 17,
             enabled: true,
             quantity: 250,
             type: 'claimable_reward',
@@ -209,7 +226,7 @@ class VaultService {
             code: 'merch_coupon',
             name: 'Merch Coupon',
             tier: 'rare',
-            weight: 20,
+            weight: 5,
             enabled: true,
             quantity: 80,
             type: 'claimable_reward',
@@ -219,7 +236,7 @@ class VaultService {
             code: 'mystery_box',
             name: 'Mystery Box Claim',
             tier: 'rare',
-            weight: 10,
+            weight: 3,
             enabled: true,
             quantity: 35,
             type: 'claimable_reward',
@@ -228,23 +245,6 @@ class VaultService {
         ],
       },
       milestones: [],
-      messages: {
-        noKeys: 'You do not have any available keys.',
-        vaultInactive: 'The vault is currently inactive.',
-        openSuccess: 'Vault opened! You received **{{rewardName}}**.',
-        noRewardOpen: 'Vault opened, but this key did not reveal a reward.',
-        openSuspenseLines: [
-          'You slide the key into the lock. The vault hums and the room goes quiet.',
-          'The mechanism clicks once, then twice. Everyone waits for the final turn.',
-          'You pull the handle. Steel groans and the vault decides your fate.',
-        ],
-        noRewardOpenVariants: [
-          'The vault coughed, laughed, and swallowed your key.',
-          'A note slides out: "Nice try. Come back with better luck."',
-          'The lock opens an inch, then slams shut. Not today.',
-          'The vault guard nods, shrugs, and says: "That key was training mode."',
-        ],
-      },
     };
   }
 
@@ -261,8 +261,123 @@ class VaultService {
     return out;
   }
 
+  migrateLegacyConfig(cfg) {
+    if (!cfg || typeof cfg !== 'object') return {};
+    const out = { ...cfg };
+
+    // Migrate messages into display
+    if (out.messages) {
+      out.display = out.display || {};
+      out.display.messages = { ...out.display.messages, ...out.messages };
+      delete out.messages;
+    }
+
+    // Migrate theme into display
+    if (out.theme) {
+      out.display = out.display || {};
+      if (out.theme.keyName) out.display.keyName = out.theme.keyName;
+      delete out.theme;
+    }
+
+    // Migrate general naming into display
+    if (out.general) {
+      out.display = out.display || {};
+      if (out.general.projectName) out.display.projectName = out.general.projectName;
+      if (out.general.gameName) out.display.gameName = out.general.gameName;
+      if (out.general.seasonName) out.display.seasonName = out.general.seasonName;
+      delete out.general.projectName;
+      delete out.general.gameName;
+      delete out.general.seasonName;
+    }
+
+    // Migrate announcements into general
+    if (out.announcements) {
+      out.general = out.general || {};
+      if (out.announcements.channelId) out.general.announceChannelId = out.announcements.channelId;
+      if (out.announcements.announceRewardTiers) out.general.announceRewardTiers = out.announcements.announceRewardTiers;
+      if (out.announcements.announceCommonRewards !== undefined) out.general.announceCommonRewards = out.announcements.announceCommonRewards;
+      delete out.announcements;
+    }
+
+    // Migrate mintSource to minting
+    if (out.mintSource) {
+      out.minting = out.minting || {};
+      out.minting.mode = out.mintSource.mode || out.minting.mode;
+      out.minting.countTransfersToPaymentWallet = out.mintSource.countTransfersToPaymentWallet || false;
+      out.minting.minLamports = out.mintSource.paymentMinLamports || 1;
+      
+      const wallets = [];
+      if (Array.isArray(out.mintSource.paymentWalletAddresses)) {
+        wallets.push(...out.mintSource.paymentWalletAddresses);
+      }
+      if (out.mintSource.paymentWalletAddress && !wallets.includes(out.mintSource.paymentWalletAddress)) {
+        wallets.push(out.mintSource.paymentWalletAddress);
+      }
+      out.minting.paymentWallets = wallets;
+      out.minting.paymentBands = out.mintSource.paymentBands || [];
+      delete out.mintSource;
+    }
+
+    // Migrate mintRules to minting
+    if (out.mintRules) {
+      out.minting = out.minting || {};
+      const oldGrants = out.mintRules.keyTierGrants || {};
+      out.minting.grantsPerMint = {};
+      
+      for (const [tier, grant] of Object.entries(oldGrants)) {
+        out.minting.grantsPerMint[tier] = {
+          paid: clampInt(grant?.paid, 0, 0),
+          free: clampInt(grant?.free, 0, 0),
+          pressure: clampInt(out.mintRules.pressurePerPaidMint, 1, 1),
+        };
+      }
+      // If default tier wasn't specified but top-level exists
+      if (!out.minting.grantsPerMint.default) {
+        out.minting.grantsPerMint.default = {
+          paid: clampInt(out.mintRules.keysPerPaidMint, 1, 1),
+          free: clampInt(out.mintRules.keysPerFreeMint, 0, 0),
+          pressure: clampInt(out.mintRules.pressurePerPaidMint, 1, 1),
+        };
+      }
+      delete out.mintRules;
+    }
+
+    // Migrate rewardTable failChancePercent
+    if (out.rewardTable && out.rewardTable.failChancePercent !== undefined) {
+      const failChance = clampInt(out.rewardTable.failChancePercent, 0, 0);
+      const hasNoReward = (out.rewardTable.rewards || []).some(r => r.type === 'no_reward');
+      if (failChance > 0 && !hasNoReward) {
+        const totalWeight = (out.rewardTable.rewards || []).reduce((acc, r) => acc + (r.weight || 0), 0);
+        // If failChance is X%, then X = W_fail / (W_fail + W_total) * 100
+        // W_fail = (X * W_total) / (100 - X)
+        let wFail = 75; // default
+        if (failChance < 100) {
+          wFail = Math.max(1, Math.round((failChance * totalWeight) / (100 - failChance)));
+        } else {
+          wFail = 999999;
+        }
+        out.rewardTable.rewards = out.rewardTable.rewards || [];
+        out.rewardTable.rewards.push({
+          code: 'nothing',
+          name: 'Nothing',
+          tier: 'common',
+          weight: wFail,
+          enabled: true,
+          quantity: -1,
+          type: 'no_reward',
+          payload: {},
+        });
+      }
+      delete out.rewardTable.failChancePercent;
+      delete out.rewardTable.noRewardWeight;
+    }
+
+    return out;
+  }
+
   validateAndNormalizeConfig(config) {
-    const next = this.mergeConfig(this.getDefaultConfig(), config || {});
+    const migratedConfig = this.migrateLegacyConfig(config || {});
+    const next = this.mergeConfig(this.getDefaultConfig(), migratedConfig);
     const keyTiersRaw = Array.isArray(next.keyTiers) ? next.keyTiers : [];
     const normalizedTiers = [];
     const seen = new Set();
@@ -280,7 +395,7 @@ class VaultService {
     if (!normalizedTiers.length) {
       normalizedTiers.push({
         id: 'default',
-        name: String(next?.theme?.keyName || 'Reward Key'),
+        name: String(next?.display?.keyName || 'Reward Key'),
         enabled: true,
         inheritsFrom: null,
       });
@@ -331,29 +446,27 @@ class VaultService {
       pairSeen.add(pair);
     }
 
-    const keyTierGrantsRaw = next?.mintRules?.keyTierGrants && typeof next.mintRules.keyTierGrants === 'object'
-      ? next.mintRules.keyTierGrants
+    const grantsPerMintRaw = next?.minting?.grantsPerMint && typeof next.minting.grantsPerMint === 'object'
+      ? next.minting.grantsPerMint
       : {};
     const normalizedGrants = {};
-    for (const [tierIdRaw, grant] of Object.entries(keyTierGrantsRaw)) {
+    for (const [tierIdRaw, grant] of Object.entries(grantsPerMintRaw)) {
       const tierId = normalizeKeyTierId(tierIdRaw);
       if (!byId.has(tierId)) continue;
       normalizedGrants[tierId] = {
         paid: clampInt(grant?.paid, 0, 0),
         free: clampInt(grant?.free, 0, 0),
+        pressure: clampInt(grant?.pressure, 0, 0),
       };
     }
     if (!Object.keys(normalizedGrants).length && normalizedTiers.length) {
       const fallbackTierId = normalizedTiers[0].id;
-      normalizedGrants[fallbackTierId] = {
-        paid: clampInt(next?.mintRules?.keysPerPaidMint, 0, 0),
-        free: clampInt(next?.mintRules?.keysPerFreeMint, 0, 0),
-      };
+      normalizedGrants[fallbackTierId] = { paid: 1, free: 0, pressure: 1 };
     }
-    next.mintRules = next.mintRules || {};
-    next.mintRules.keyTierGrants = normalizedGrants;
+    next.minting = next.minting || {};
+    next.minting.grantsPerMint = normalizedGrants;
 
-    const paymentBandsRaw = Array.isArray(next?.mintSource?.paymentBands) ? next.mintSource.paymentBands : [];
+    const paymentBandsRaw = Array.isArray(next?.minting?.paymentBands) ? next.minting.paymentBands : [];
     const normalizedBands = paymentBandsRaw
       .map((band) => ({
         keyTier: normalizeKeyTierId(band?.keyTier || band?.key_tier || 'default'),
@@ -367,8 +480,7 @@ class VaultService {
       .filter((band) => byId.has(band.keyTier))
       .filter((band) => band.maxLamports === null || band.maxLamports >= band.minLamports)
       .sort((a, b) => Number(a.minLamports || 0) - Number(b.minLamports || 0));
-    next.mintSource = next.mintSource || {};
-    next.mintSource.paymentBands = normalizedBands;
+    next.minting.paymentBands = normalizedBands;
 
     const rewards = Array.isArray(next?.rewardTable?.rewards) ? next.rewardTable.rewards : [];
     next.rewardTable = next.rewardTable || {};
@@ -398,7 +510,8 @@ class VaultService {
       row = db.prepare('SELECT * FROM vault_config WHERE guild_id = ?').get(gid);
     }
     const cfg = safeJsonParse(row?.config_json, {}) || {};
-    return this.mergeConfig(this.getDefaultConfig(), cfg);
+    const migratedCfg = this.migrateLegacyConfig(cfg);
+    return this.mergeConfig(this.getDefaultConfig(), migratedCfg);
   }
 
   getConfig(guildId) {
@@ -579,7 +692,7 @@ class VaultService {
       .filter(tier => !!tier.id);
 
     if (!normalized.length) {
-      return [{ id: 'default', name: String(cfg?.theme?.keyName || 'Reward Key'), enabled: true, inheritsFrom: null }];
+      return [{ id: 'default', name: String(cfg?.display?.keyName || 'Reward Key'), enabled: true, inheritsFrom: null }];
     }
     return normalized;
   }
@@ -703,10 +816,6 @@ class VaultService {
   }
 
   rollReward(guildId, keyTierId = 'default') {
-    const cfg = this.getConfig(guildId) || {};
-    const failChancePercent = Math.max(0, Math.min(100, Number(cfg?.rewardTable?.failChancePercent ?? 75) || 0));
-    if (failChancePercent > 0 && (Math.random() * 100) < failChancePercent) return null;
-    const noRewardWeight = clampInt(cfg?.rewardTable?.noRewardWeight, 0, 0);
     const inheritedTiers = new Set(this.getInheritedTierChain(guildId, keyTierId));
     const rewards = this.getRewards(guildId)
       .filter((reward) => {
@@ -718,13 +827,9 @@ class VaultService {
         return quantity > 0;
       });
     const weightedRewardTotal = rewards.reduce((sum, reward) => sum + Number(reward.weight || 0), 0);
-    const total = weightedRewardTotal + noRewardWeight;
+    const total = weightedRewardTotal;
     if (total <= 0) return null;
     let roll = Math.random() * total;
-    if (noRewardWeight > 0) {
-      roll -= noRewardWeight;
-      if (roll < 0) return null;
-    }
     for (const reward of rewards) {
       roll -= Number(reward.weight || 0);
       if (roll <= 0) return reward;
@@ -813,7 +918,7 @@ class VaultService {
     if (!gid || !uid) return { success: false, message: 'Missing guild or user id' };
     const cfg = this.getConfig(gid);
     if (!cfg?.general?.enabled) {
-      return { success: false, code: 'vault_inactive', message: cfg?.messages?.vaultInactive || 'Vault inactive' };
+      return { success: false, code: 'vault_inactive', message: cfg?.display?.messages?.vaultInactive || 'Vault inactive' };
     }
     const season = this.getActiveSeason(gid);
     if (!season) return { success: false, message: 'No active season' };
@@ -859,7 +964,7 @@ class VaultService {
       const balances = this.getStatsKeyBalances(stats);
       const availableKeys = this.getAvailableKeysForTier(stats, selectedTier.id);
       if (availableKeys <= 0) {
-        return { success: false, code: 'no_keys', message: `${cfg?.messages?.noKeys || 'No keys available'} (${selectedTier.name})` };
+        return { success: false, code: 'no_keys', message: `${cfg?.display?.messages?.noKeys || 'No keys available'} (${selectedTier.name})` };
       }
 
       if (selectedTier.id === 'default') {
@@ -1079,7 +1184,7 @@ class VaultService {
     const uid = String(discordUserId || '').trim();
     const amt = clampInt(amount, 1, 0);
     if (!gid || !uid || amt <= 0) return { success: false, message: 'Invalid input' };
-    const stats = this.ensureUserStats(gid, sid, uid);
+    const stats = this.ensureUserStats(guildId, sid, uid);
     const tierId = normalizeKeyTierId(keyTier);
     const balances = this.getStatsKeyBalances(stats);
     balances[tierId] = Math.max(0, Number(balances[tierId] || 0) + amt);
@@ -1098,7 +1203,7 @@ class VaultService {
     const uid = String(discordUserId || '').trim();
     const amt = clampInt(amount, 1, 0);
     if (!gid || !uid || amt <= 0) return { success: false, message: 'Invalid input' };
-    const stats = this.ensureUserStats(gid, sid, uid);
+    const stats = this.ensureUserStats(guildId, sid, uid);
     const tierId = normalizeKeyTierId(keyTier);
     const available = this.getAvailableKeysForTier(stats, tierId);
     if (available < amt) return { success: false, message: 'Insufficient available keys' };
@@ -1471,7 +1576,7 @@ class VaultService {
     const gid = normalizeGuildId(guildId);
     const cfg = this.getConfig(gid) || {};
     const season = this.getActiveSeason(gid);
-    const paymentBands = Array.isArray(cfg?.mintSource?.paymentBands) ? cfg.mintSource.paymentBands : [];
+    const paymentBands = Array.isArray(cfg?.minting?.paymentBands) ? cfg.minting.paymentBands : [];
     const conversions = Array.isArray(cfg?.keyTierConversions) ? cfg.keyTierConversions.filter(r => r && r.enabled !== false) : [];
     const ticketing = cfg?.ticketing || {};
     return {
@@ -1586,35 +1691,22 @@ class VaultService {
   }
 
   getConfiguredPaymentWalletSet(config) {
-    const source = config?.mintSource || {};
-    const out = new Set();
-    const addWallet = (value) => {
-      const wallet = String(value || '').trim();
-      if (wallet) out.add(wallet);
-    };
-
-    addWallet(source.paymentWalletAddress);
-    addWallet(source.mintWalletAddress);
-    addWallet(source.transferTargetWallet);
-
-    if (Array.isArray(source.paymentWalletAddresses)) {
-      source.paymentWalletAddresses.forEach(addWallet);
-    } else if (typeof source.paymentWalletAddresses === 'string') {
-      source.paymentWalletAddresses
-        .split(/[\n,\s]+/)
-        .map(value => value.trim())
-        .filter(Boolean)
-        .forEach(addWallet);
+    const wallets = new Set();
+    const source = config?.minting || {};
+    if (Array.isArray(source.paymentWallets)) {
+      for (const w of source.paymentWallets) {
+        const addr = this.normalizeSolanaAddress(w);
+        if (addr) wallets.add(addr);
+      }
     }
-
-    return out;
+    return wallets;
   }
 
   detectPaymentWalletTransfer(event, config) {
-    const source = config?.mintSource || {};
-    const enabled = source.countTransfersToPaymentWallet === true || source.usePaymentTransfersAsMints === true;
+    const source = config?.minting || {};
+    const enabled = source.countTransfersToPaymentWallet === true;
     const paymentWallets = this.getConfiguredPaymentWalletSet(config);
-    const minLamports = clampInt(source.paymentMinLamports, 0, 1);
+    const minLamports = clampInt(source.minLamports, 0, 1);
 
     if (!enabled || paymentWallets.size === 0) {
       return {
@@ -1730,8 +1822,8 @@ class VaultService {
       return { success: false, message: 'No mint payment wallet configured in Vault settings' };
     }
 
-    const source = config?.mintSource || {};
-    const minLamports = clampInt(source.paymentMinLamports, 0, 1);
+    const source = config?.minting || {};
+    const minLamports = clampInt(source.minLamports, 0, 1);
     const connection = this.getRpcConnection();
     const parsedTx = await connection.getParsedTransaction(signature, {
       commitment: 'confirmed',
@@ -1899,15 +1991,15 @@ class VaultService {
     const normalizedType = this.normalizeMintTypeValue(mintType);
     const paid = normalizedType === 'paid';
     const free = normalizedType === 'free';
-    const rules = config?.mintRules || {};
+    const minting = config?.minting || {};
     const transferLamports = Number(context?.transferLamports || 0);
     const hasLamports = Number.isFinite(transferLamports) && transferLamports > 0;
-    const configuredTierGrants = rules?.keyTierGrants && typeof rules.keyTierGrants === 'object'
-      ? rules.keyTierGrants
+    const configuredTierGrants = minting?.grantsPerMint && typeof minting.grantsPerMint === 'object'
+      ? minting.grantsPerMint
       : {};
     const keyTierGrants = {};
 
-    const paymentBands = Array.isArray(config?.mintSource?.paymentBands) ? config.mintSource.paymentBands : [];
+    const paymentBands = Array.isArray(minting?.paymentBands) ? minting.paymentBands : [];
     const matchedBand = (paid || free) && hasLamports
       ? paymentBands.find((band) => {
           const min = Math.max(0, Number(band?.minLamports || 0) || 0);
@@ -1921,6 +2013,8 @@ class VaultService {
 
     const tierList = Array.isArray(config?.keyTiers) ? config.keyTiers : [];
     const fallbackTierId = normalizeKeyTierId(tierList[0]?.id || 'default');
+    let totalPressureGranted = 0;
+
     if (matchedBand) {
       const bandTier = normalizeKeyTierId(matchedBand.keyTier || fallbackTierId);
       keyTierGrants[bandTier] = paid ? clampInt(matchedBand.paid, 0, 1) : (free ? clampInt(matchedBand.free, 0, 0) : 0);
@@ -1929,11 +2023,19 @@ class VaultService {
         const tierId = normalizeKeyTierId(tierIdRaw);
         const paidGrant = clampInt(tierRule?.paid, 0, 0);
         const freeGrant = clampInt(tierRule?.free, 0, 0);
-        keyTierGrants[tierId] = paid ? paidGrant : (free ? freeGrant : 0);
+        const pressureGrant = clampInt(tierRule?.pressure, 0, 0);
+        const keysGranted = paid ? paidGrant : (free ? freeGrant : 0);
+        keyTierGrants[tierId] = keysGranted;
+        if (keysGranted > 0 || pressureGrant > 0) {
+          totalPressureGranted += paid ? pressureGrant : 0; // Wait, we can give free pressure too
+          if (free) totalPressureGranted += pressureGrant;
+        }
       }
     }
     if (!Object.keys(keyTierGrants).length) {
-      keyTierGrants[fallbackTierId] = paid ? clampInt(rules.keysPerPaidMint, 0, 0) : (free ? clampInt(rules.keysPerFreeMint, 0, 0) : 0);
+      const defaultTier = configuredTierGrants[fallbackTierId] || {};
+      keyTierGrants[fallbackTierId] = paid ? clampInt(defaultTier.paid, 0, 0) : (free ? clampInt(defaultTier.free, 0, 0) : 0);
+      totalPressureGranted = paid ? clampInt(defaultTier.pressure, 0, 0) : (free ? clampInt(defaultTier.pressure, 0, 0) : 0);
     }
     const totalKeysGranted = Object.values(keyTierGrants).reduce((sum, next) => sum + clampInt(next, 0, 0), 0);
 
@@ -1944,7 +2046,7 @@ class VaultService {
       key_tier_grants: keyTierGrants,
       grant_source: matchedBand ? 'payment_band' : 'default_tier_rules',
       matched_payment_band: matchedBand || null,
-      pressure_granted: paid ? clampInt(rules.pressurePerPaidMint, 0, 0) : (free ? clampInt(rules.pressurePerFreeMint, 0, 0) : 0),
+      pressure_granted: totalPressureGranted,
     };
   }
 
@@ -2213,8 +2315,8 @@ class VaultService {
       return { success: false, message: 'No mint payment wallet configured in Vault settings' };
     }
 
-    const mintSource = config?.mintSource || {};
-    const minLamports = clampInt(mintSource.paymentMinLamports, 0, 1);
+    const minting = config?.minting || {};
+    const minLamports = clampInt(minting.minLamports, 0, 1);
     const maxSignaturesPerWallet = Math.max(1, Math.min(50000, clampInt(options?.limitPerWallet, 1, 5000)));
     const dryRun = options?.dryRun === true || String(options?.dryRun || '').trim().toLowerCase() === 'true';
     const delayMs = Math.max(0, Math.min(5000, Number(options?.delayMs ?? 250) || 0));

@@ -534,8 +534,8 @@ module.exports = {
   buildPanelMessage(guildId) {
     const config = vaultService.getConfig(guildId);
     const moduleName = getModuleDisplayName('vault', guildId);
-    const gameName = String(config?.general?.gameName || moduleName || 'Reward Vault');
-    const keyLabel = String(config?.theme?.keyName || 'Reward Key');
+    const gameName = String(config?.display?.gameName || moduleName || 'Reward Vault');
+    const keyLabel = String(config?.display?.keyName || 'Reward Key');
 
     const embed = new EmbedBuilder()
       .setTitle(`${moduleName} Control Panel`)
@@ -690,7 +690,7 @@ module.exports = {
       .join(' | ') || 'default:0';
     const embed = new EmbedBuilder()
       .setColor('#f59e0b')
-      .setTitle(`${config?.general?.gameName || 'Vault'} Status`)
+      .setTitle(`${config?.display?.gameName || 'Vault'} Status`)
       .addFields(
         { name: 'Season', value: String(result.season?.season_name || result.season?.season_id || 'default'), inline: true },
         { name: 'Available Keys', value: String(stats.available_keys || 0), inline: true },
@@ -737,7 +737,7 @@ module.exports = {
 
   buildOpenResultMessage(guildId, result, options = {}) {
     const config = vaultService.getConfig(guildId) || {};
-    const gameName = String(config?.general?.gameName || 'Reward Vault');
+    const gameName = String(config?.display?.gameName || 'Reward Vault');
     const rewardName = String(result?.reward?.name || 'Unknown Reward');
     const rewardTier = String(result?.reward?.tier || 'common').toLowerCase();
     const availableKeys = Number(result?.stats?.available_keys || 0);
@@ -773,10 +773,10 @@ module.exports = {
       ],
     };
 
-    const suspenseLines = toStringArray(config?.messages?.openSuspenseLines, suspenseFallback);
-    const failLines = toStringArray(config?.messages?.noRewardOpenVariants, failFallback);
-    const noRewardText = String(config?.messages?.noRewardOpen || 'Vault opened, but this key did not reveal a reward.');
-    const successTemplate = String(config?.messages?.openSuccess || 'Vault opened! You received **{{rewardName}}**.');
+    const suspenseLines = toStringArray(config?.display?.openSuspenseLines, suspenseFallback);
+    const failLines = toStringArray(config?.display?.noRewardOpenVariants, failFallback);
+    const noRewardText = String(config?.display?.noRewardOpen || 'Vault opened, but this key did not reveal a reward.');
+    const successTemplate = String(config?.display?.openSuccess || 'Vault opened! You received **{{rewardName}}**.');
 
     if (String(result?.reward?.code || '') === 'no_reward') {
       const suspense = pickRandom(suspenseLines, suspenseFallback[0]);
@@ -905,7 +905,10 @@ module.exports = {
     const projectName = interaction.options.getString('project_name');
     const vaultName = interaction.options.getString('vault_name');
     if (projectName) config.general.projectName = projectName;
-    if (vaultName) config.general.gameName = vaultName;
+    if (vaultName) {
+      config.display = config.display || {};
+      config.display.gameName = vaultName;
+    }
     const saveResult = vaultService.saveConfig(guildId, config);
     vaultService.ensureDefaultSeason(guildId);
     if (!saveResult.success) return interaction.editReply({ content: `ERROR: ${saveResult.message}` });
@@ -920,14 +923,12 @@ module.exports = {
     const lines = [
       `Enabled: ${config?.general?.enabled ? 'yes' : 'no'}`,
       `Project: ${config?.general?.projectName || '-'}`,
-      `Vault Name: ${config?.general?.gameName || '-'}`,
+      `Vault Name: ${config?.display?.gameName || '-'}`,
       `Active Season: ${season?.season_name || season?.season_id || 'none'}`,
       `Rewards: ${rewards.length}`,
-      `Fail Chance (%): ${Number(config?.rewardTable?.failChancePercent ?? 75)}`,
-      `No Reward Weight: ${Number(config?.rewardTable?.noRewardWeight || 0)}`,
-      `Mint Mode: ${config?.mintSource?.mode || 'custom_webhook'}`,
-      `Keys per paid mint: ${config?.mintRules?.keysPerPaidMint ?? 0}`,
-      `Keys per free mint: ${config?.mintRules?.keysPerFreeMint ?? 0}`,
+      `Mint Mode: ${config?.minting?.mintMode || 'none'}`,
+      `Keys per paid mint: ${config?.minting?.defaultGrants?.paid ?? 0}`,
+      `Keys per free mint: ${config?.minting?.defaultGrants?.free ?? 0}`,
     ];
     return interaction.editReply({ content: lines.join('\n') });
   },

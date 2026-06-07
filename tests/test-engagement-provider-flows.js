@@ -88,7 +88,7 @@ async function run() {
   const stored = db.prepare(`
     SELECT access_token, refresh_token
     FROM engagement_social_accounts
-    WHERE guild_id = ? AND user_id = ? AND provider = 'x'
+    WHERE (guild_id = ? OR guild_id = '__profile__') AND user_id = ? AND provider = 'x'
     LIMIT 1
   `).get(guildId, userId);
   assert.ok(stored, 'stored linked account row should exist');

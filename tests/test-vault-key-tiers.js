@@ -53,32 +53,25 @@ function run() {
       { id: 'silver', name: 'Silver', enabled: true, inheritsFrom: 'bronze' },
       { id: 'gold', name: 'Gold', enabled: true, inheritsFrom: 'silver' },
     ],
-    mintRules: {
-      keysPerPaidMint: 0,
-      keysPerFreeMint: 0,
-      pressurePerPaidMint: 0,
-      pressurePerFreeMint: 0,
-      keyTierGrants: {
-        bronze: { paid: 1, free: 0 },
-        silver: { paid: 1, free: 0 },
-        gold: { paid: 1, free: 0 },
-      },
-    },
-    mintSource: {
+    minting: {
       mode: 'custom_webhook',
       countTransfersToPaymentWallet: true,
-      paymentWalletAddress: '11111111111111111111111111111111',
-      paymentWalletAddresses: ['11111111111111111111111111111111'],
-      paymentMinLamports: 1,
+      paymentWallets: ['11111111111111111111111111111111'],
+      minLamports: 1,
+      grantsPerMint: {
+        bronze: { paid: 1, free: 0, pressure: 0 },
+        silver: { paid: 1, free: 0, pressure: 0 },
+        gold: { paid: 1, free: 0, pressure: 0 },
+      },
       paymentBands: [
         { keyTier: 'bronze', minLamports: 1, maxLamports: 499999999, paid: 1, free: 0 },
         { keyTier: 'gold', minLamports: 500000000, maxLamports: null, paid: 1, free: 0 },
       ],
     },
     rewardTable: {
-      failChancePercent: 0,
-      noRewardWeight: 0,
+      version: 'default',
       rewards: [
+        { code: 'nothing', name: 'Nothing', tier: 'common', weight: 0, enabled: true, type: 'no_reward' },
         { code: 'bronze_reward', name: 'Bronze Reward', tier: 'common', weight: 1, keyTier: 'bronze', enabled: true, quantity: null, type: 'none' },
         { code: 'silver_reward', name: 'Silver Reward', tier: 'rare', weight: 1, keyTier: 'silver', enabled: true, quantity: null, type: 'none' },
         { code: 'gold_reward', name: 'Gold Reward', tier: 'epic', weight: 1, keyTier: 'gold', enabled: true, quantity: null, type: 'none' },

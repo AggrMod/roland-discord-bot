@@ -10864,15 +10864,16 @@ function vaultRenderSimpleConfigEditors() {
   const tierIds = tiers.map(t => String(t?.id || '').trim()).filter(Boolean);
   grantsWrap.innerHTML = tierIds.length ? `
     <table class="vault-admin-table">
-      <thead><tr><th align="left">Tier ID</th><th align="left">Paid Mint Keys</th><th align="left">Free Mint Keys</th></tr></thead>
+      <thead><tr><th align="left">Tier ID</th><th align="left">Paid Mint Keys</th><th align="left">Free Mint Keys</th><th align="left">Pressure (Paid)</th></tr></thead>
       <tbody>
         ${tierIds.map((tierId) => {
     const row = grants[tierId] || {};
     return `
       <tr data-vault-simple-grant-row="${escapeHtml(tierId)}">
         <td><code>${escapeHtml(tierId)}</code></td>
-        <td><input class="input-sm" data-vault-grant-paid="${escapeHtml(tierId)}" type="number" min="0" value="${Number(row?.paid || 0)}" placeholder="paid keys"></td>
-        <td><input class="input-sm" data-vault-grant-free="${escapeHtml(tierId)}" type="number" min="0" value="${Number(row?.free || 0)}" placeholder="free keys"></td>
+        <td><input class="input-sm" style="width:70px;" data-vault-grant-paid="${escapeHtml(tierId)}" type="number" min="0" value="${Number(row?.paid || 0)}" placeholder="paid keys"></td>
+        <td><input class="input-sm" style="width:70px;" data-vault-grant-free="${escapeHtml(tierId)}" type="number" min="0" value="${Number(row?.free || 0)}" placeholder="free keys"></td>
+        <td><input class="input-sm" style="width:70px;" data-vault-grant-pressure="${escapeHtml(tierId)}" type="number" min="0" value="${Number(row?.pressure || 0)}" placeholder="pressure"></td>
       </tr>
     `;
   }).join('')}
@@ -10941,9 +10942,11 @@ function vaultSyncSimpleEditorsToJson() {
   normalizedTiers.forEach((tier) => {
     const paidEl = document.querySelector(`[data-vault-grant-paid="${tier.id}"]`);
     const freeEl = document.querySelector(`[data-vault-grant-free="${tier.id}"]`);
+    const pressureEl = document.querySelector(`[data-vault-grant-pressure="${tier.id}"]`);
     grants[tier.id] = {
       paid: Math.max(0, Number(paidEl?.value || 0) || 0),
       free: Math.max(0, Number(freeEl?.value || 0) || 0),
+      pressure: Math.max(0, Number(pressureEl?.value || 0) || 0),
     };
   });
 
@@ -11192,24 +11195,14 @@ function vaultRenderAdminPanel() {
   if (!pane) return;
   const config = vaultSettingsCache?.config || {};
   const general = config.general || {};
-  const theme = config.theme || {};
-  const mintRules = config.mintRules || {};
-  const mintSource = config.mintSource || {};
-  const paymentBands = Array.isArray(mintSource.paymentBands) ? mintSource.paymentBands : [];
-  const paymentWalletsList = Array.isArray(mintSource.paymentWalletAddresses)
-    ? mintSource.paymentWalletAddresses
-    : (String(mintSource.paymentWalletAddresses || '')
-      .split(/[\n,\s]+/)
-      .map(value => value.trim())
-      .filter(Boolean));
-  if (String(mintSource.paymentWalletAddress || '').trim() && !paymentWalletsList.includes(String(mintSource.paymentWalletAddress || '').trim())) {
-    paymentWalletsList.unshift(String(mintSource.paymentWalletAddress || '').trim());
-  }
+  const display = config.display || {};
+  const minting = config.minting || {};
+  const paymentBands = Array.isArray(minting.paymentBands) ? minting.paymentBands : [];
+  const paymentWalletsList = Array.isArray(minting.paymentWallets) ? minting.paymentWallets : [];
   const paymentWalletsCsv = paymentWalletsList.join(', ');
-  const paymentMinLamports = Math.max(0, Number(mintSource.paymentMinLamports ?? 1) || 0);
-  const announcements = config.announcements || {};
+  const paymentMinLamports = Math.max(0, Number(minting.minLamports ?? 1) || 0);
   const security = config.security || {};
-  const messages = config.messages || {};
+  const messages = display.messages || {};
   const ticketing = config.ticketing || {};
   const rewards = Array.isArray(vaultSettingsCache?.rewards) ? vaultSettingsCache.rewards : [];
   const seasons = Array.isArray(vaultSettingsCache?.seasons) ? vaultSettingsCache.seasons : [];
@@ -11222,12 +11215,10 @@ function vaultRenderAdminPanel() {
   const channels = Array.isArray(vaultSettingsCache?.channels) ? vaultSettingsCache.channels : [];
   const keyTiers = Array.isArray(config.keyTiers) ? config.keyTiers : [];
   const keyTierConversions = Array.isArray(config.keyTierConversions) ? config.keyTierConversions : [];
-  const keyTierGrants = (mintRules && mintRules.keyTierGrants && typeof mintRules.keyTierGrants === 'object') ? mintRules.keyTierGrants : {};
+  const grantsPerMint = (minting.grantsPerMint && typeof minting.grantsPerMint === 'object') ? minting.grantsPerMint : {};
   const activeSeasonId = vaultGetCachedActiveSeasonId();
-  const announceChannelOptions = vaultBuildChannelSelect(channels, announcements.channelId, 'No announcement channel');
+  const announceChannelOptions = vaultBuildChannelSelect(channels, general.announceChannelId, 'No announcement channel');
   const ticketAlertChannelOptions = vaultBuildChannelSelect(channels, ticketing.alertChannelId, 'No alert channel');
-  const failChancePercent = Math.max(0, Math.min(100, Number(config?.rewardTable?.failChancePercent ?? 75) || 0));
-  const noRewardWeight = Math.max(0, Number(config?.rewardTable?.noRewardWeight || 0) || 0);
 
   const rewardsRows = rewards.length
     ? rewards.map(reward => `
@@ -11300,28 +11291,22 @@ function vaultRenderAdminPanel() {
 
       <div class="settings-grid" style="margin-bottom:16px;">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Enabled</div></div><input id="vault_enabled" type="checkbox" ${general.enabled ? 'checked' : ''}></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Project Name</div></div><input id="vault_projectName" class="input-sm" value="${escapeHtml(String(general.projectName || ''))}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Vault Name</div></div><input id="vault_gameName" class="input-sm" value="${escapeHtml(String(general.gameName || ''))}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Season Label</div></div><input id="vault_seasonName" class="input-sm" value="${escapeHtml(String(general.seasonName || ''))}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Key Label</div></div><input id="vault_keyName" class="input-sm" value="${escapeHtml(String(theme.keyName || 'Reward Key'))}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Project Name</div></div><input id="vault_projectName" class="input-sm" value="${escapeHtml(String(display.projectName || ''))}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Vault Name</div></div><input id="vault_gameName" class="input-sm" value="${escapeHtml(String(display.gameName || ''))}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Season Label</div></div><input id="vault_seasonName" class="input-sm" value="${escapeHtml(String(display.seasonName || ''))}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Key Label</div></div><input id="vault_keyName" class="input-sm" value="${escapeHtml(String(display.keyName || 'Reward Key'))}"></div>
       </div>
 
       <h4 style="margin:16px 0 8px 0;">Mint Rules and Security</h4>
       <div class="settings-grid" style="margin-bottom:16px;">
-        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Mint Mode</div></div><input id="vault_mintMode" class="input-sm" value="${escapeHtml(String(mintSource.mode || 'custom_webhook'))}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Use Payment Transfers as Mints</div></div><input id="vault_usePaymentTransfersAsMints" type="checkbox" ${(mintSource.countTransfersToPaymentWallet || mintSource.usePaymentTransfersAsMints) ? 'checked' : ''}></div>
+        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Mint Mode</div></div><input id="vault_mintMode" class="input-sm" value="${escapeHtml(String(minting.mode || 'custom_webhook'))}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Use Payment Transfers as Mints</div></div><input id="vault_usePaymentTransfersAsMints" type="checkbox" ${minting.countTransfersToPaymentWallet ? 'checked' : ''}></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Mint Payment Wallet(s)</div></div><input id="vault_paymentWalletAddresses" class="input-sm" placeholder="wallet1,wallet2" value="${escapeHtml(paymentWalletsCsv)}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Min Payment (Lamports)</div></div><input id="vault_paymentMinLamports" type="number" class="input-sm" min="0" value="${paymentMinLamports}"></div>
         <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Open Cooldown (sec)</div></div><input id="vault_openCooldownSeconds" type="number" class="input-sm" min="0" value="${Number(security.openCooldownSeconds || 0)}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Keys / Paid Mint</div></div><input id="vault_keysPerPaidMint" type="number" class="input-sm" min="0" value="${Number(mintRules.keysPerPaidMint || 0)}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Keys / Free Mint</div></div><input id="vault_keysPerFreeMint" type="number" class="input-sm" min="0" value="${Number(mintRules.keysPerFreeMint || 0)}"></div>
-        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Pressure / Paid</div></div><input id="vault_pressurePerPaidMint" type="number" class="input-sm" min="0" value="${Number(mintRules.pressurePerPaidMint || 0)}"></div>
-        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Pressure / Free</div></div><input id="vault_pressurePerFreeMint" type="number" class="input-sm" min="0" value="${Number(mintRules.pressurePerFreeMint || 0)}"></div>
-        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Fail Chance (%)</div></div><input id="vault_failChancePercent" type="number" class="input-sm" min="0" max="100" value="${failChancePercent}"></div>
-        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">No Reward Weight</div></div><input id="vault_noRewardWeight" type="number" class="input-sm" min="0" value="${noRewardWeight}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Announcements Channel</div></div><select id="vault_announceChannelId" class="input-sm">${announceChannelOptions}</select></div>
-        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Announce Tiers (CSV)</div></div><input id="vault_announceTiers" class="input-sm" value="${escapeHtml((announcements.announceRewardTiers || []).join(','))}"></div>
-        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Announce Common Rewards</div></div><input id="vault_announceCommonRewards" type="checkbox" ${announcements.announceCommonRewards ? 'checked' : ''}></div>
+        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Announce Tiers (CSV)</div></div><input id="vault_announceTiers" class="input-sm" value="${escapeHtml((general.announceRewardTiers || []).join(','))}"></div>
+        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Announce Common Rewards</div></div><input id="vault_announceCommonRewards" type="checkbox" ${general.announceCommonRewards ? 'checked' : ''}></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Create Ticket On Win</div></div><input id="vault_createTicketOnWin" type="checkbox" ${ticketing.createTicketOnWin ? 'checked' : ''}></div>
         <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Reward Ticket Category ID</div><div class="settings-desc">Ticket category where winning rewards create fulfillment tickets.</div></div><input id="vault_rewardTicketCategoryId" class="input-sm" value="${escapeHtml(String(ticketing.rewardTicketCategoryId || ''))}" placeholder="e.g. 3"></div>
       <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Ticket Failure Alert Channel</div><div class="settings-desc">Optional channel for alerts when ticket creation fails.</div></div><select id="vault_ticketAlertChannelId" class="input-sm">${ticketAlertChannelOptions}</select></div>
@@ -11373,7 +11358,7 @@ function vaultRenderAdminPanel() {
       </div>
 
       <textarea id="vault_keyTiersJson" style="display:none;">${escapeHtml(JSON.stringify(keyTiers, null, 2))}</textarea>
-      <textarea id="vault_keyTierGrantsJson" style="display:none;">${escapeHtml(JSON.stringify(keyTierGrants, null, 2))}</textarea>
+      <textarea id="vault_keyTierGrantsJson" style="display:none;">${escapeHtml(JSON.stringify(grantsPerMint, null, 2))}</textarea>
       <textarea id="vault_paymentBandsJson" style="display:none;">${escapeHtml(JSON.stringify(paymentBands, null, 2))}</textarea>
       <textarea id="vault_keyTierConversionsJson" style="display:none;">${escapeHtml(JSON.stringify(keyTierConversions, null, 2))}</textarea>
 
@@ -11569,70 +11554,63 @@ async function vaultSaveGeneralConfig() {
     const current = vaultSettingsCache?.config || {};
     const next = JSON.parse(JSON.stringify(current));
     next.general = next.general || {};
-    next.theme = next.theme || {};
-    next.mintRules = next.mintRules || {};
-    next.mintSource = next.mintSource || {};
-    next.announcements = next.announcements || {};
+    next.display = next.display || {};
+    next.minting = next.minting || {};
     next.ticketing = next.ticketing || {};
     next.security = next.security || {};
-    next.messages = next.messages || {};
 
     next.general.enabled = !!document.getElementById('vault_enabled')?.checked;
-    next.general.projectName = String(document.getElementById('vault_projectName')?.value || '').trim();
-    next.general.gameName = String(document.getElementById('vault_gameName')?.value || '').trim();
-    next.general.seasonName = String(document.getElementById('vault_seasonName')?.value || '').trim();
+    next.general.announceChannelId = String(document.getElementById('vault_announceChannelId')?.value || '').trim();
+    next.general.announceRewardTiers = String(document.getElementById('vault_announceTiers')?.value || '')
+      .split(',')
+      .map(value => value.trim())
+      .filter(Boolean);
+    next.general.announceCommonRewards = !!document.getElementById('vault_announceCommonRewards')?.checked;
 
-    next.theme.keyName = String(document.getElementById('vault_keyName')?.value || '').trim();
-    if (Object.prototype.hasOwnProperty.call(next.theme, 'pointsName')) delete next.theme.pointsName;
-    if (Object.prototype.hasOwnProperty.call(next.theme, 'bonusEntryName')) delete next.theme.bonusEntryName;
+    next.display.projectName = String(document.getElementById('vault_projectName')?.value || '').trim();
+    next.display.gameName = String(document.getElementById('vault_gameName')?.value || '').trim();
+    next.display.seasonName = String(document.getElementById('vault_seasonName')?.value || '').trim();
+    next.display.keyName = String(document.getElementById('vault_keyName')?.value || '').trim();
+    next.display.messages = next.display.messages || {};
 
-    next.mintSource.mode = String(document.getElementById('vault_mintMode')?.value || '').trim() || 'custom_webhook';
-    next.mintSource.countTransfersToPaymentWallet = !!document.getElementById('vault_usePaymentTransfersAsMints')?.checked;
+    next.minting.mode = String(document.getElementById('vault_mintMode')?.value || '').trim() || 'custom_webhook';
+    next.minting.countTransfersToPaymentWallet = !!document.getElementById('vault_usePaymentTransfersAsMints')?.checked;
     const paymentWalletsRaw = String(document.getElementById('vault_paymentWalletAddresses')?.value || '').trim();
     const paymentWallets = paymentWalletsRaw
       .split(/[\n,\s]+/)
       .map(value => value.trim())
       .filter(Boolean);
-    next.mintSource.paymentWalletAddresses = paymentWallets;
-    next.mintSource.paymentWalletAddress = paymentWallets[0] || '';
-    next.mintSource.paymentMinLamports = Math.max(0, Number(document.getElementById('vault_paymentMinLamports')?.value || 0) || 0);
+    next.minting.paymentWallets = paymentWallets;
+    next.minting.minLamports = Math.max(0, Number(document.getElementById('vault_paymentMinLamports')?.value || 0) || 0);
+
     next.security.openCooldownSeconds = Number(document.getElementById('vault_openCooldownSeconds')?.value || 0) || 0;
-    next.mintRules.keysPerPaidMint = Number(document.getElementById('vault_keysPerPaidMint')?.value || 0) || 0;
-    next.mintRules.keysPerFreeMint = Number(document.getElementById('vault_keysPerFreeMint')?.value || 0) || 0;
-    next.mintRules.pressurePerPaidMint = Number(document.getElementById('vault_pressurePerPaidMint')?.value || 0) || 0;
-    next.mintRules.pressurePerFreeMint = Number(document.getElementById('vault_pressurePerFreeMint')?.value || 0) || 0;
+
     const keyTiersParsed = vaultJsonParseInput(document.getElementById('vault_keyTiersJson')?.value, null);
-    const keyTierGrantsParsed = vaultJsonParseInput(document.getElementById('vault_keyTierGrantsJson')?.value, null);
+    const grantsPerMintParsed = vaultJsonParseInput(document.getElementById('vault_keyTierGrantsJson')?.value, null);
     const paymentBandsParsed = vaultJsonParseInput(document.getElementById('vault_paymentBandsJson')?.value, null);
     const keyTierConversionsParsed = vaultJsonParseInput(document.getElementById('vault_keyTierConversionsJson')?.value, null);
+    
     next.keyTiers = Array.isArray(keyTiersParsed) ? keyTiersParsed : [];
-    next.mintRules.keyTierGrants = keyTierGrantsParsed && typeof keyTierGrantsParsed === 'object' ? keyTierGrantsParsed : {};
-    next.mintSource.paymentBands = Array.isArray(paymentBandsParsed) ? paymentBandsParsed : [];
+    next.minting.grantsPerMint = grantsPerMintParsed && typeof grantsPerMintParsed === 'object' ? grantsPerMintParsed : {};
+    next.minting.paymentBands = Array.isArray(paymentBandsParsed) ? paymentBandsParsed : [];
     next.keyTierConversions = Array.isArray(keyTierConversionsParsed) ? keyTierConversionsParsed : [];
-    if (Object.prototype.hasOwnProperty.call(next.mintRules, 'bonusEntriesPerPaidMint')) delete next.mintRules.bonusEntriesPerPaidMint;
-    if (Object.prototype.hasOwnProperty.call(next.mintRules, 'bonusEntriesPerFreeMint')) delete next.mintRules.bonusEntriesPerFreeMint;
-    if (Object.prototype.hasOwnProperty.call(next.mintRules, 'pointsPerPaidMint')) delete next.mintRules.pointsPerPaidMint;
-    if (Object.prototype.hasOwnProperty.call(next.mintRules, 'pointsPerFreeMint')) delete next.mintRules.pointsPerFreeMint;
-    next.rewardTable = next.rewardTable || {};
-    next.rewardTable.failChancePercent = Math.max(0, Math.min(100, Number(document.getElementById('vault_failChancePercent')?.value || 0) || 0));
-    next.rewardTable.noRewardWeight = Math.max(0, Number(document.getElementById('vault_noRewardWeight')?.value || 0) || 0);
 
-    next.announcements.channelId = String(document.getElementById('vault_announceChannelId')?.value || '').trim();
-    next.announcements.announceRewardTiers = String(document.getElementById('vault_announceTiers')?.value || '')
-      .split(',')
-      .map(value => value.trim())
-      .filter(Boolean);
-    next.announcements.announceCommonRewards = !!document.getElementById('vault_announceCommonRewards')?.checked;
+    // cleanup legacy properties if they still exist at the root
+    delete next.theme;
+    delete next.mintRules;
+    delete next.mintSource;
+    delete next.announcements;
+    delete next.messages;
     next.ticketing.createTicketOnWin = !!document.getElementById('vault_createTicketOnWin')?.checked;
     const ticketCategoryRaw = String(document.getElementById('vault_rewardTicketCategoryId')?.value || '').trim();
     next.ticketing.rewardTicketCategoryId = ticketCategoryRaw ? Number.parseInt(ticketCategoryRaw, 10) || null : null;
     const ticketAlertChannelRaw = String(document.getElementById('vault_ticketAlertChannelId')?.value || '').trim();
     next.ticketing.alertChannelId = ticketAlertChannelRaw || null;
 
-    next.messages.noKeys = String(document.getElementById('vault_msgNoKeys')?.value || '').trim();
-    next.messages.vaultInactive = String(document.getElementById('vault_msgInactive')?.value || '').trim();
-    next.messages.openSuccess = String(document.getElementById('vault_msgSuccess')?.value || '').trim();
-    next.messages.noRewardOpen = String(document.getElementById('vault_msgNoRewardOpen')?.value || '').trim();
+    next.display.messages.noKeys = String(document.getElementById('vault_msgNoKeys')?.value || '').trim();
+    next.display.messages.vaultInactive = String(document.getElementById('vault_msgInactive')?.value || '').trim();
+    next.display.messages.openSuccess = String(document.getElementById('vault_msgSuccess')?.value || '').trim();
+    next.display.messages.noRewardOpen = String(document.getElementById('vault_msgNoRewardOpen')?.value || '').trim();
 
     await vaultFetchJson('/api/admin/vault/config', {
       method: 'PUT',
@@ -11657,10 +11635,10 @@ function vaultApplyTierTemplate() {
     { id: 'gold', name: 'Gold Key', enabled: true, inheritsFrom: 'silver' },
   ];
   const grantTemplate = {
-    default: { paid: 0, free: 0 },
-    bronze: { paid: 1, free: 0 },
-    silver: { paid: 0, free: 0 },
-    gold: { paid: 0, free: 0 },
+    default: { paid: 0, free: 0, pressure: 0 },
+    bronze: { paid: 1, free: 0, pressure: 1 },
+    silver: { paid: 0, free: 0, pressure: 0 },
+    gold: { paid: 0, free: 0, pressure: 0 },
   };
   const paymentBandsTemplate = [
     { keyTier: 'bronze', minLamports: 1, maxLamports: 499999999, paid: 1, free: 0 },

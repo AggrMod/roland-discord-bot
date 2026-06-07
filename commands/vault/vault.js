@@ -423,37 +423,76 @@ module.exports = {
       return true;
     }
 
-    if (customId === 'vault_panel_upgrade') {
+    if (customId.startsWith('vault_panel_upg_btn_')) {
+      const index = parseInt(customId.replace('vault_panel_upg_btn_', ''), 10);
+      const conversions = vaultService.getKeyTierConversions(guildId).filter(c => c && c.enabled !== false);
+      const c = conversions[index];
+      if (!c) {
+        await interaction.reply({ content: 'Conversion rule no longer valid.', ephemeral: true });
+        return true;
+      }
+      
+      const balanceResult = vaultService.getBalance(guildId, interaction.user.id);
+      const keyBalances = balanceResult.stats?.key_balances || {};
+      const maxTimes = Math.floor(Number(keyBalances[String(c.fromTier).toLowerCase()] || 0) / Number(c.fromAmount || 1));
+
       const modal = new ModalBuilder()
-        .setCustomId('vault_panel_upgrade_modal')
-        .setTitle('Upgrade Vault Keys');
-      const fromTierInput = new TextInputBuilder()
-        .setCustomId('from_tier')
-        .setLabel('From Tier (e.g. bronze)')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true)
-        .setMaxLength(32)
-        .setPlaceholder('bronze');
-      const toTierInput = new TextInputBuilder()
-        .setCustomId('to_tier')
-        .setLabel('To Tier (e.g. gold)')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true)
-        .setMaxLength(32)
-        .setPlaceholder('gold');
+        .setCustomId(`vault_panel_upg_do_${index}`)
+        .setTitle(`Upgrade ${c.fromTier} ➡️ ${c.toTier}`);
       const timesInput = new TextInputBuilder()
         .setCustomId('times')
-        .setLabel('Times (default 1)')
+        .setLabel(`How many times? (Max: ${maxTimes})`)
         .setStyle(TextInputStyle.Short)
-        .setRequired(false)
+        .setRequired(true)
         .setMaxLength(5)
         .setPlaceholder('1');
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(fromTierInput),
-        new ActionRowBuilder().addComponents(toTierInput),
-        new ActionRowBuilder().addComponents(timesInput),
-      );
+      modal.addComponents(new ActionRowBuilder().addComponents(timesInput));
       await interaction.showModal(modal);
+      return true;
+    }
+
+    if (customId === 'vault_panel_upgrade') {
+      const conversions = vaultService.getKeyTierConversions(guildId).filter(c => c && c.enabled !== false);
+      if (!conversions.length) {
+         await interaction.reply({ content: 'No conversion rules are currently configured.', ephemeral: true });
+         return true;
+      }
+      const balanceResult = vaultService.getBalance(guildId, interaction.user.id);
+      const keyBalances = balanceResult.stats?.key_balances || {};
+
+      const validConversions = conversions.filter(c => {
+        const fromAmt = Number(keyBalances[String(c.fromTier).toLowerCase()] || 0);
+        return fromAmt >= Number(c.fromAmount || 1);
+      });
+
+      if (!validConversions.length) {
+         const embed = this.buildPanelResponseEmbed(guildId, {
+           title: 'Upgrade Unavailable',
+           description: 'You do not have enough keys for any available upgrades.',
+           accentColor: '#ef4444'
+         });
+         const lines = conversions.map(c => `- Need ${c.fromAmount} **${c.fromTier}** to get ${c.toAmount} **${c.toTier}**`);
+         embed.addFields({ name: 'Configured Paths', value: lines.join('\n') });
+         await interaction.reply({ embeds: [embed], ephemeral: true });
+         return true;
+      }
+
+      const row = new ActionRowBuilder();
+      validConversions.slice(0, 5).forEach((c) => {
+        const maxTimes = Math.floor(Number(keyBalances[String(c.fromTier).toLowerCase()] || 0) / Number(c.fromAmount || 1));
+        const index = conversions.indexOf(c);
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`vault_panel_upg_btn_${index}`)
+            .setLabel(`${c.fromAmount} ${c.fromTier} ➡️ ${c.toAmount} ${c.toTier} (Max: ${maxTimes})`)
+            .setStyle(ButtonStyle.Primary)
+        );
+      });
+      const embed = this.buildPanelResponseEmbed(guildId, {
+        title: 'Upgrade Keys',
+        description: 'Select an upgrade path below:',
+      });
+      await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
       return true;
     }
 
@@ -585,29 +624,37 @@ module.exports = {
       return true;
     }
 
-    if (customId !== 'vault_panel_upgrade_modal') return false;
-    const fromTier = String(interaction.fields.getTextInputValue('from_tier') || '').trim();
-    const toTier = String(interaction.fields.getTextInputValue('to_tier') || '').trim();
-    const timesRaw = String(interaction.fields.getTextInputValue('times') || '').trim();
-    const times = Math.max(1, Math.min(1000, Number.parseInt(timesRaw || '1', 10) || 1));
-    await interaction.deferReply({ ephemeral: true });
-    const result = vaultService.upgradeKeys(guildId, interaction.user.id, { fromTier, toTier, times });
-    if (!result.success) {
-      await interaction.editReply({ content: `ERROR: ${result.message}` });
+    if (customId.startsWith('vault_panel_upg_do_')) {
+      const index = parseInt(customId.replace('vault_panel_upg_do_', ''), 10);
+      const conversions = vaultService.getKeyTierConversions(guildId).filter(c => c && c.enabled !== false);
+      const c = conversions[index];
+      if (!c) {
+        await interaction.reply({ content: 'Conversion rule no longer valid.', ephemeral: true });
+        return true;
+      }
+      const fromTier = String(c.fromTier);
+      const toTier = String(c.toTier);
+      const timesRaw = String(interaction.fields.getTextInputValue('times') || '').trim();
+      const times = Math.max(1, Math.min(1000, Number.parseInt(timesRaw || '1', 10) || 1));
+      await interaction.deferReply({ ephemeral: true });
+      const result = vaultService.upgradeKeys(guildId, interaction.user.id, { fromTier, toTier, times });
+      if (!result.success) {
+        await interaction.editReply({ content: `ERROR: ${result.message}` });
+        return true;
+      }
+      const embed = this.buildPanelResponseEmbed(guildId, {
+        title: 'Key Upgrade Completed',
+        description: `Converted ${result.moved.consumed} **${fromTier}** keys into ${result.moved.added} **${toTier}** keys.`,
+        accentColor: '#22c55e',
+      });
+      embed.addFields(
+        { name: 'Conversion Count', value: `x${times}`, inline: true },
+        { name: 'Season', value: String(result?.seasonId || 'default'), inline: true },
+        { name: 'Tier Balances', value: formatTierBalancesInline(result?.stats?.key_balances), inline: false },
+      );
+      await interaction.editReply({ embeds: [embed] });
       return true;
-    }
-    const embed = this.buildPanelResponseEmbed(guildId, {
-      title: 'Key Upgrade Completed',
-      description: `Converted ${result.moved.consumed} **${fromTier}** keys into ${result.moved.added} **${toTier}** keys.`,
-      accentColor: '#22c55e',
-    });
-    embed.addFields(
-      { name: 'Conversion Count', value: `x${times}`, inline: true },
-      { name: 'Season', value: String(result?.seasonId || 'default'), inline: true },
-      { name: 'Tier Balances', value: formatTierBalancesInline(result?.stats?.key_balances), inline: false },
-    );
-    await interaction.editReply({ embeds: [embed] });
-    return true;
+    }    return true;
   },
 
   buildPanelMessage(guildId) {

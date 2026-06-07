@@ -170,6 +170,7 @@ class VaultService {
         mode: 'custom_webhook',
         countTransfersToPaymentWallet: false,
         paymentWallets: [],
+        paymentTokens: [],
         minLamports: 1,
         paymentBands: [],
         grantsPerMint: {
@@ -1762,45 +1763,82 @@ class VaultService {
     };
   }
 
-  extractNativeTransfersFromParsedTransaction(parsedTx) {
+  extractTransfersFromParsedTransaction(parsedTx, paymentWallets = [], paymentTokens = []) {
     const transfers = [];
-    const pushTransfer = (fromWallet, toWallet, lamports) => {
-      const from = String(fromWallet || '').trim();
-      const to = String(toWallet || '').trim();
-      const amount = Number(lamports || 0);
-      if (!from || !to) return;
-      if (!Number.isFinite(amount) || amount <= 0) return;
-      transfers.push({
-        fromUserAccount: from,
-        toUserAccount: to,
-        amount,
-      });
-    };
+    if (!parsedTx || !parsedTx.meta || !parsedTx.transaction) return transfers;
 
-    const readInstruction = (ix) => {
-      if (!ix || typeof ix !== 'object') return;
-      const parsed = ix.parsed;
-      const program = String(ix.program || '').trim().toLowerCase();
-      const type = String(parsed?.type || '').trim().toLowerCase();
-      if (program !== 'system' || type !== 'transfer') return;
-      const info = parsed?.info || {};
-      pushTransfer(
-        info.source || info.from || info.fromUserAccount,
-        info.destination || info.to || info.toUserAccount,
-        info.lamports || info.amount
-      );
-    };
-
-    const outerInstructions = Array.isArray(parsedTx?.transaction?.message?.instructions)
-      ? parsedTx.transaction.message.instructions
-      : [];
-    outerInstructions.forEach(readInstruction);
-
-    const innerRows = Array.isArray(parsedTx?.meta?.innerInstructions) ? parsedTx.meta.innerInstructions : [];
-    for (const row of innerRows) {
-      const innerInstructions = Array.isArray(row?.instructions) ? row.instructions : [];
-      innerInstructions.forEach(readInstruction);
+    const accountKeys = parsedTx.transaction.message?.accountKeys || [];
+    // The primary fee payer is typically the first account key
+    let feePayer = '';
+    const firstKey = accountKeys[0];
+    if (firstKey) {
+      feePayer = typeof firstKey === 'string' ? firstKey : String(firstKey.pubkey || firstKey);
     }
+    if (!feePayer) return transfers;
+
+    const preBalances = parsedTx.meta.preBalances || [];
+    const postBalances = parsedTx.meta.postBalances || [];
+
+    // Track native SOL balance increases for each payment wallet
+    paymentWallets.forEach((wallet) => {
+      const walletStr = String(wallet).trim();
+      if (!walletStr) return;
+      const idx = accountKeys.findIndex((k) => {
+        const kStr = typeof k === 'string' ? k : String(k.pubkey || k);
+        return kStr === walletStr;
+      });
+
+      if (idx !== -1 && typeof preBalances[idx] === 'number' && typeof postBalances[idx] === 'number') {
+        const diff = postBalances[idx] - preBalances[idx];
+        if (diff > 0) {
+          transfers.push({
+            fromUserAccount: feePayer,
+            toUserAccount: walletStr,
+            amount: diff,
+            tokenMint: 'native',
+          });
+        }
+      }
+    });
+
+    // Track SPL token balance increases
+    const preToken = parsedTx.meta.preTokenBalances || [];
+    const postToken = parsedTx.meta.postTokenBalances || [];
+
+    paymentWallets.forEach((wallet) => {
+      const walletStr = String(wallet).trim();
+      if (!walletStr) return;
+      
+      paymentTokens.forEach((tokenMint) => {
+        const mintStr = String(tokenMint).trim();
+        if (!mintStr) return;
+
+        // Note: multiple token accounts could belong to the same owner, sum them up
+        let preSum = 0;
+        preToken.forEach((t) => {
+          if (t.owner === walletStr && t.mint === mintStr) {
+            preSum += Number(t?.uiTokenAmount?.amount || 0);
+          }
+        });
+
+        let postSum = 0;
+        postToken.forEach((t) => {
+          if (t.owner === walletStr && t.mint === mintStr) {
+            postSum += Number(t?.uiTokenAmount?.amount || 0);
+          }
+        });
+
+        const diff = postSum - preSum;
+        if (diff > 0) {
+          transfers.push({
+            fromUserAccount: feePayer,
+            toUserAccount: walletStr,
+            amount: diff,
+            tokenMint: mintStr,
+          });
+        }
+      });
+    });
 
     return transfers;
   }
@@ -1836,8 +1874,9 @@ class VaultService {
       return { success: false, message: 'Transaction failed on-chain' };
     }
 
-    const nativeTransfers = this.extractNativeTransfersFromParsedTransaction(parsedTx);
-    const matches = nativeTransfers
+    const paymentTokens = Array.isArray(config?.minting?.paymentTokens) ? config.minting.paymentTokens : [];
+    const transfers = this.extractTransfersFromParsedTransaction(parsedTx, paymentWallets, paymentTokens);
+    const matches = transfers
       .filter((transfer) => {
         const destination = String(transfer?.toUserAccount || '').trim();
         const amount = Number(transfer?.amount || 0);
@@ -2477,17 +2516,18 @@ class VaultService {
                 error: null,
               });
             } else {
-              const nativeTransfers = this.extractNativeTransfersFromParsedTransaction(tx);
-              const matchingTransfers = nativeTransfers.filter((transfer) => {
-                const destination = String(transfer?.toUserAccount || transfer?.to || '').trim();
-                const lamports = Number(transfer?.amount || transfer?.lamports || 0);
+              const paymentTokens = Array.isArray(minting?.paymentTokens) ? minting.paymentTokens : [];
+              const transfers = this.extractTransfersFromParsedTransaction(tx, [walletAddress], paymentTokens);
+              const matchingTransfers = transfers.filter((transfer) => {
+                const destination = String(transfer?.toUserAccount || '').trim();
+                const lamports = Number(transfer?.amount || 0);
                 return destination === walletAddress && Number.isFinite(lamports) && lamports >= minLamports;
               });
               if (matchingTransfers.length) {
                 summary.matchedTransfers += 1;
                 matchingTransfers.sort((a, b) => Number(b?.amount || 0) - Number(a?.amount || 0));
                 const payerWallet = String(matchingTransfers[0]?.fromUserAccount || '').trim() || null;
-                const totalLamports = matchingTransfers.reduce((sum, t) => sum + Number(t.lamports || t.amount || 0), 0);
+                const totalLamports = matchingTransfers.reduce((sum, t) => sum + Number(t.amount || 0), 0);
 
                 const ingestResult = dryRun
                   ? { success: true, duplicate: false }
@@ -2500,7 +2540,7 @@ class VaultService {
                       type: 'TRANSFER',
                       source: 'vault_backfill_transfer',
                       paymentWalletAddress: walletAddress,
-                      nativeTransfers: matchingTransfers,
+                      nativeTransfers: matchingTransfers, // Now includes token transfers
                     });
 
                 const isDuplicate = !!ingestResult?.duplicate;

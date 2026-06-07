@@ -11200,6 +11200,8 @@ function vaultRenderAdminPanel() {
   const paymentBands = Array.isArray(minting.paymentBands) ? minting.paymentBands : [];
   const paymentWalletsList = Array.isArray(minting.paymentWallets) ? minting.paymentWallets : [];
   const paymentWalletsCsv = paymentWalletsList.join(', ');
+  const paymentTokensList = Array.isArray(minting.paymentTokens) ? minting.paymentTokens : [];
+  const paymentTokensCsv = paymentTokensList.join(', ');
   const paymentMinLamports = Math.max(0, Number(minting.minLamports ?? 1) || 0);
   const security = config.security || {};
   const messages = display.messages || {};
@@ -11302,6 +11304,7 @@ function vaultRenderAdminPanel() {
         <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Mint Mode</div></div><input id="vault_mintMode" class="input-sm" value="${escapeHtml(String(minting.mode || 'custom_webhook'))}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Use Payment Transfers as Mints</div></div><input id="vault_usePaymentTransfersAsMints" type="checkbox" ${minting.countTransfersToPaymentWallet ? 'checked' : ''}></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Mint Payment Wallet(s)</div></div><input id="vault_paymentWalletAddresses" class="input-sm" placeholder="wallet1,wallet2" value="${escapeHtml(paymentWalletsCsv)}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Mint Payment Token(s)</div><div class="settings-desc">Optional SPL Token mints (e.g. USDC).</div></div><input id="vault_paymentTokenAddresses" class="input-sm" placeholder="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" value="${escapeHtml(paymentTokensCsv)}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Min Payment (Lamports)</div></div><input id="vault_paymentMinLamports" type="number" class="input-sm" min="0" value="${paymentMinLamports}"></div>
         <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Open Cooldown (sec)</div></div><input id="vault_openCooldownSeconds" type="number" class="input-sm" min="0" value="${Number(security.openCooldownSeconds || 0)}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Announcements Channel</div></div><select id="vault_announceChannelId" class="input-sm">${announceChannelOptions}</select></div>
@@ -11581,6 +11584,13 @@ async function vaultSaveGeneralConfig() {
       .map(value => value.trim())
       .filter(Boolean);
     next.minting.paymentWallets = paymentWallets;
+    
+    const paymentTokensRaw = String(document.getElementById('vault_paymentTokenAddresses')?.value || '').trim();
+    const paymentTokens = paymentTokensRaw
+      .split(/[\n,\s]+/)
+      .map(value => value.trim())
+      .filter(Boolean);
+    next.minting.paymentTokens = paymentTokens;
     next.minting.minLamports = Math.max(0, Number(document.getElementById('vault_paymentMinLamports')?.value || 0) || 0);
 
     next.security.openCooldownSeconds = Number(document.getElementById('vault_openCooldownSeconds')?.value || 0) || 0;

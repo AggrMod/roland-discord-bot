@@ -64,9 +64,20 @@ async function run() {
         'should request the supplied tx signature'
       );
       return {
-        meta: { err: null, innerInstructions: [] },
+        meta: { 
+          err: null, 
+          innerInstructions: [],
+          preBalances: [10000, 0],
+          postBalances: [5000, 5000],
+          preTokenBalances: [],
+          postTokenBalances: []
+        },
         transaction: {
           message: {
+            accountKeys: [
+              { pubkey: payerWallet, signer: true, writable: true },
+              { pubkey: paymentWallet, signer: false, writable: true }
+            ],
             instructions: [
               {
                 program: 'system',

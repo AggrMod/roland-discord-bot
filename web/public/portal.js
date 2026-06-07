@@ -10829,11 +10829,49 @@ function vaultGetJsonObjectInputValue(inputId, fallback = {}) {
   return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : fallback;
 }
 
+function vaultBuildKeyEconomySummaryHtml() {
+  const tiers = vaultGetJsonArrayInputValue('vault_keyTiersJson', []);
+  const grants = vaultGetJsonObjectInputValue('vault_keyTierGrantsJson', {});
+  const bands = vaultGetJsonArrayInputValue('vault_paymentBandsJson', []);
+  const conversions = vaultGetJsonArrayInputValue('vault_keyTierConversionsJson', []);
+  const enabledTiers = tiers.filter(tier => tier?.enabled !== false).length;
+  const paidKeys = Object.values(grants).reduce((sum, row) => sum + Math.max(0, Number(row?.paid || 0) || 0), 0);
+  const freeKeys = Object.values(grants).reduce((sum, row) => sum + Math.max(0, Number(row?.free || 0) || 0), 0);
+  const pressure = Object.values(grants).reduce((sum, row) => sum + Math.max(0, Number(row?.pressure || 0) || 0), 0);
+  const enabledConversions = conversions.filter(rule => rule?.enabled !== false).length;
+  const tierChips = tiers.length
+    ? tiers.slice(0, 5).map((tier) => `<span class="vault-economy-chip">${escapeHtml(String(tier?.name || tier?.id || 'Tier'))}</span>`).join('')
+    : '<span class="vault-economy-muted">No tiers configured</span>';
+  const moreChip = tiers.length > 5 ? `<span class="vault-economy-chip">+${tiers.length - 5} more</span>` : '';
+  return `
+    <div class="vault-economy-card">
+      <div class="vault-economy-head">
+        <div>
+          <h4>Key Economy</h4>
+          <p>Manage key tiers, mint grants, SOL payment bands, and upgrade rules from one clean modal.</p>
+        </div>
+        <button class="btn-primary" onclick="vaultOpenKeyEconomyModal()">Configure Key Economy</button>
+      </div>
+      <div class="vault-economy-metrics">
+        <div><strong>${enabledTiers}/${tiers.length}</strong><span>Enabled tiers</span></div>
+        <div><strong>${paidKeys}</strong><span>Paid mint keys</span></div>
+        <div><strong>${freeKeys}</strong><span>Free mint keys</span></div>
+        <div><strong>${pressure}</strong><span>Paid pressure</span></div>
+        <div><strong>${bands.length}</strong><span>Payment bands</span></div>
+        <div><strong>${enabledConversions}</strong><span>Upgrade rules</span></div>
+      </div>
+      <div class="vault-economy-tier-strip">${tierChips}${moreChip}</div>
+    </div>
+  `;
+}
+
 function vaultRenderSimpleConfigEditors() {
   const tiersWrap = document.getElementById('vaultSimpleTiersRows');
   const grantsWrap = document.getElementById('vaultSimpleGrantsRows');
   const bandsWrap = document.getElementById('vaultSimpleBandsRows');
   const conversionsWrap = document.getElementById('vaultSimpleConversionsRows');
+  const summaryWrap = document.getElementById('vaultKeyEconomySummary');
+  if (summaryWrap) summaryWrap.innerHTML = vaultBuildKeyEconomySummaryHtml();
   if (!tiersWrap || !grantsWrap || !bandsWrap || !conversionsWrap) return;
 
   const tiers = vaultGetJsonArrayInputValue('vault_keyTiersJson', []);
@@ -11084,6 +11122,21 @@ function vaultOpenConfigRowModal(type, index = -1) {
   modal.style.display = 'flex';
 }
 
+function vaultOpenKeyEconomyModal() {
+  const modal = document.getElementById('vaultKeyEconomyModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  vaultRenderSimpleConfigEditors();
+}
+
+function vaultCloseKeyEconomyModal() {
+  const modal = document.getElementById('vaultKeyEconomyModal');
+  if (modal) modal.style.display = 'none';
+  vaultSyncSimpleEditorsToJson();
+  const summaryWrap = document.getElementById('vaultKeyEconomySummary');
+  if (summaryWrap) summaryWrap.innerHTML = vaultBuildKeyEconomySummaryHtml();
+}
+
 function vaultCloseConfigRowModal() {
   const modal = document.getElementById('vaultConfigRowModal');
   if (modal) modal.style.display = 'none';
@@ -11271,6 +11324,25 @@ function vaultRenderAdminPanel() {
         .vault-admin-table th { text-align:left; color:#c9d6ff; padding:8px 10px; border-bottom:1px solid rgba(99,102,241,0.25); }
         .vault-admin-table td { padding:8px 10px; border-bottom:1px solid rgba(99,102,241,0.12); color:#e2e8f0; }
         .vault-section-card { margin-top:14px; padding:12px; border:1px solid rgba(99,102,241,0.18); border-radius:10px; background:rgba(15,23,42,0.35); }
+        .vault-economy-card { margin:12px 0 16px; padding:16px; border:1px solid rgba(129,140,248,0.35); border-radius:16px; background:linear-gradient(135deg, rgba(79,70,229,0.18), rgba(15,23,42,0.78)); box-shadow:0 18px 55px rgba(15,23,42,0.22); }
+        .vault-economy-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:14px; }
+        .vault-economy-head h4 { margin:0 0 5px; color:#eef2ff; }
+        .vault-economy-head p { margin:0; color:var(--text-secondary); max-width:780px; }
+        .vault-economy-metrics { display:grid; grid-template-columns:repeat(6,minmax(120px,1fr)); gap:10px; }
+        .vault-economy-metrics div { padding:12px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(2,6,23,0.34); }
+        .vault-economy-metrics strong { display:block; font-size:1.35rem; color:#fff; line-height:1; }
+        .vault-economy-metrics span { display:block; margin-top:6px; color:#94a3b8; font-size:0.78rem; text-transform:uppercase; letter-spacing:0.04em; }
+        .vault-economy-tier-strip { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+        .vault-economy-chip { display:inline-flex; align-items:center; border:1px solid rgba(45,212,191,0.32); color:#a7f3d0; background:rgba(20,184,166,0.1); border-radius:999px; padding:5px 9px; font-size:0.82rem; }
+        .vault-economy-muted { color:#94a3b8; }
+        .vault-economy-modal .modal { width:min(1120px,94vw); max-width:1120px; max-height:88vh; overflow:auto; }
+        .vault-economy-modal-grid { display:grid; grid-template-columns:1fr; gap:12px; }
+        .vault-economy-modal-section { padding:12px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(15,23,42,0.48); }
+        .vault-economy-modal-section h5 { margin:0 0 8px 0; }
+        @media (max-width: 980px) {
+          .vault-economy-head { flex-direction:column; }
+          .vault-economy-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+        }
       </style>
       <h3>Vault Setup</h3>
       <p style="color:var(--text-secondary);margin-bottom:12px;">Configure your key economy and prize flow. Start with the basic setup below, then open advanced tools only if needed.</p>
@@ -11315,38 +11387,51 @@ function vaultRenderAdminPanel() {
       <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Ticket Failure Alert Channel</div><div class="settings-desc">Optional channel for alerts when ticket creation fails.</div></div><select id="vault_ticketAlertChannelId" class="input-sm">${ticketAlertChannelOptions}</select></div>
       </div>
 
-      <h4 style="margin:16px 0 8px 0;">No-JSON Setup (Recommended)</h4>
-      <p style="color:var(--text-secondary);margin:0 0 10px 0;">Use these editors if you dont want to touch JSON. Click <strong>Apply to JSON</strong> before saving.</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-        <button class="btn-secondary" onclick="vaultSyncSimpleEditorsToJson()">Apply to JSON</button>
-        <button class="btn-secondary" onclick="vaultRenderSimpleConfigEditors()">Reload From JSON</button>
-        <button class="btn-secondary" onclick="vaultApplyTierTemplate()">Apply Bronze/Silver/Gold Template</button>
-      </div>
+      <div id="vaultKeyEconomySummary"></div>
 
-      <div class="card gp-workspace-card" style="margin-bottom:10px;">
-        <h5 style="margin:0 0 8px 0;">Key Tiers</h5>
-        <div id="vaultSimpleTiersRows"></div>
-        <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleTierRow()">Add Tier</button></div>
-      </div>
-
-      <div class="card gp-workspace-card" style="margin-bottom:10px;">
-        <h5 style="margin:0 0 8px 0;">Mint Grants (Per Tier)</h5>
-        <p style="color:var(--text-secondary);margin:0 0 8px 0;">Set keys granted for paid and free mints.</p>
-        <div id="vaultSimpleGrantsRows"></div>
-      </div>
-
-      <div class="card gp-workspace-card" style="margin-bottom:10px;">
-        <h5 style="margin:0 0 8px 0;">SOL Payment Bands</h5>
-        <p style="color:var(--text-secondary);margin:0 0 8px 0;">Map payment ranges (lamports) to key tiers.</p>
-        <div id="vaultSimpleBandsRows"></div>
-        <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleBandRow()">Add Payment Band</button></div>
-      </div>
-
-      <div class="card gp-workspace-card" style="margin-bottom:10px;">
-        <h5 style="margin:0 0 8px 0;">Upgrade Rules</h5>
-        <p style="color:var(--text-secondary);margin:0 0 8px 0;">Example: 10 bronze -> 1 gold.</p>
-        <div id="vaultSimpleConversionsRows"></div>
-        <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleConversionRow()">Add Upgrade Rule</button></div>
+      <div id="vaultKeyEconomyModal" class="modal-overlay vault-economy-modal" style="display:none;" onclick="if(event.target===this)vaultCloseKeyEconomyModal()">
+        <div class="modal">
+          <div class="modal-header">
+            <h3 class="modal-title">Key Economy</h3>
+            <button class="btn-secondary" onclick="vaultCloseKeyEconomyModal()">Close</button>
+          </div>
+          <div class="modal-body vault-economy-modal-grid">
+            <div class="vault-section-card gp-subtle-panel" style="margin-top:0;">
+              Configure everything that decides how keys enter, convert, and upgrade in one place. Changes are applied to the hidden config automatically when you save Vault Config.
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn-secondary" onclick="vaultSyncSimpleEditorsToJson();vaultRenderSimpleConfigEditors()">Apply Changes</button>
+              <button class="btn-secondary" onclick="vaultRenderSimpleConfigEditors()">Reload Current Config</button>
+              <button class="btn-secondary" onclick="vaultApplyTierTemplate()">Apply Bronze/Silver/Gold Template</button>
+            </div>
+            <div class="vault-economy-modal-section">
+              <h5>Key Tiers</h5>
+              <div id="vaultSimpleTiersRows"></div>
+              <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleTierRow()">Add Tier</button></div>
+            </div>
+            <div class="vault-economy-modal-section">
+              <h5>Mint Grants</h5>
+              <p style="color:var(--text-secondary);margin:0 0 8px 0;">Set keys and pressure granted per tier for paid and free mints.</p>
+              <div id="vaultSimpleGrantsRows"></div>
+            </div>
+            <div class="vault-economy-modal-section">
+              <h5>SOL Payment Bands</h5>
+              <p style="color:var(--text-secondary);margin:0 0 8px 0;">Map payment ranges in lamports to key tiers.</p>
+              <div id="vaultSimpleBandsRows"></div>
+              <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleBandRow()">Add Payment Band</button></div>
+            </div>
+            <div class="vault-economy-modal-section">
+              <h5>Upgrade Rules</h5>
+              <p style="color:var(--text-secondary);margin:0 0 8px 0;">Example: 10 silver keys -> 1 gold key.</p>
+              <div id="vaultSimpleConversionsRows"></div>
+              <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleConversionRow()">Add Upgrade Rule</button></div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-secondary" onclick="vaultCloseKeyEconomyModal()">Done</button>
+            <button class="btn-primary" onclick="vaultSyncSimpleEditorsToJson();vaultRenderSimpleConfigEditors();showSuccess('Key economy changes staged. Click Save Vault Config to persist.')">Apply Changes</button>
+          </div>
+        </div>
       </div>
 
       <div id="vaultConfigRowModal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)vaultCloseConfigRowModal()">

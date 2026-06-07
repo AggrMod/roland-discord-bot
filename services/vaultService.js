@@ -2401,6 +2401,7 @@ class VaultService {
       dryRun,
       duplicates: 0,
       failed: 0,
+      keysDiscovered: 0,
       timedOut: false,
       errors: [],
       processedRecords: [],
@@ -2554,8 +2555,13 @@ class VaultService {
                 const payerWallet = String(matchingTransfers[0]?.fromUserAccount || '').trim() || null;
                 const totalLamports = matchingTransfers.reduce((sum, t) => sum + Number(t.amount || 0), 0);
 
+                let grantCalc = null;
+                if (dryRun) {
+                  grantCalc = this.computeMintGrants(config, 'paid', { transferLamports: totalLamports });
+                }
+
                 const ingestResult = dryRun
-                  ? { success: true, duplicate: false }
+                  ? { success: true, duplicate: false, grants: grantCalc }
                   : this.ingestMintEvent({
                       guildId: gid,
                       seasonId: season.season_id,
@@ -2570,10 +2576,14 @@ class VaultService {
 
                 const isDuplicate = !!ingestResult?.duplicate;
                 const ingested = ingestResult?.success && !isDuplicate;
+                const keysGranted = Number(ingestResult?.grants?.keys_granted || 0);
 
                 if (ingestResult?.success) {
                   if (isDuplicate) summary.duplicates += 1;
-                  else summary.ingested += 1;
+                  else {
+                    summary.ingested += 1;
+                    summary.keysDiscovered += keysGranted;
+                  }
                 } else {
                   summary.failed += 1;
                 }
@@ -2584,6 +2594,7 @@ class VaultService {
                   lamports: totalLamports,
                   isDuplicate,
                   ingested,
+                  keysGranted,
                   error: ingestResult?.success ? null : (ingestResult?.message || 'Failed to ingest'),
                 });
               }

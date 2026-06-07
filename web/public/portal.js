@@ -11569,6 +11569,7 @@ function vaultRenderAdminPanel() {
       </div>
       <div style="margin-top:8px;">
         <button id="vaultBulkBackfillBtn" class="btn-secondary" onclick="vaultRunBackfillAllMissingTx()">Backfill Missing TXs (All Configured Mint Wallets)</button>
+        <div id="vaultBulkBackfillResult" style="margin-top:12px;font-size:0.9rem;color:var(--text-secondary);white-space:pre-wrap;background:rgba(2,6,23,0.5);padding:10px;border-radius:6px;display:none;border:1px solid rgba(99,102,241,0.2);"></div>
       </div>
       </details>
 
@@ -12284,17 +12285,27 @@ async function vaultRunBackfillAllMissingTx() {
               const timedOut = !!summary.timedOut;
               const errorCount = Array.isArray(summary.errors) ? summary.errors.length : 0;
               const errorDetails = errorCount > 0 ? ` (Error: ${summary.errors[0].message})` : '';
+              const keysDiscovered = Number(summary.keysDiscovered || 0);
+
+              const resultText = `Bulk backfill finished (${dryRun ? 'dry-run' : 'live'}).\nScanned: ${scanned}\nMatched Transfers: ${matched}\nKeys Discovered: ${keysDiscovered}\nIngested: ${ingested}\nDuplicates: ${duplicates}\nFailed: ${failed}\nErrors: ${errorCount}${errorDetails}${timedOut ? '\n(Timed Out)' : ''}`;
+
+              const resDiv = document.getElementById('vaultBulkBackfillResult');
+              if (resDiv) {
+                resDiv.style.display = 'block';
+                resDiv.innerText = resultText;
+              }
 
               if (Array.isArray(summary.processedRecords)) {
                 if (summary.processedRecords.length > 0) {
                   try {
-                    const headers = ['Transaction Signature', 'Payer Wallet', 'Lamports', 'Is Duplicate', 'Ingested', 'Error'];
+                    const headers = ['Transaction Signature', 'Payer Wallet', 'Lamports', 'Is Duplicate', 'Ingested', 'Keys Granted', 'Error'];
                     const rows = summary.processedRecords.map(r => [
                       r.txSignature || '',
                       r.payerWallet || '',
                       r.lamports || 0,
                       r.isDuplicate ? 'Yes' : 'No',
                       r.ingested ? 'Yes' : 'No',
+                      r.keysGranted || 0,
                       r.error || ''
                     ]);
                     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\\n');
@@ -12315,7 +12326,7 @@ async function vaultRunBackfillAllMissingTx() {
                 }
               }
 
-              showSuccess(`Bulk backfill finished (${dryRun ? 'dry-run' : 'live'}). scanned=${scanned}, matched=${matched}, ingested=${ingested}, duplicates=${duplicates}, failed=${failed}, walletErrors=${errorCount}${errorDetails}${timedOut ? ', timedOut=true' : ''}`);
+              showSuccess(`Bulk backfill finished. Scanned: ${scanned}, Matched: ${matched}, Keys: ${keysDiscovered}`);
               await loadVaultSettingsTab();
             } else if (payload.type === 'error') {
               throw new Error(payload.error?.message || payload.error?.error || 'Bulk backfill failed during stream');

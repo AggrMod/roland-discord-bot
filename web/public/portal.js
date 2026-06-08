@@ -35,25 +35,58 @@ const VAULT_UI_MODE_STORAGE_KEY = 'vaultUiMode';
 let quickSwitchActiveIndex = 0;
 
 function vaultGetUiMode() {
-  const raw = String(localStorage.getItem(VAULT_UI_MODE_STORAGE_KEY) || '').trim().toLowerCase();
-  return raw === 'advanced' ? 'advanced' : 'simple';
+  return 'advanced';
 }
 
 function vaultSetUiMode(mode) {
-  const normalized = String(mode || '').trim().toLowerCase() === 'advanced' ? 'advanced' : 'simple';
-  localStorage.setItem(VAULT_UI_MODE_STORAGE_KEY, normalized);
+  // No-op: simple/advanced toggle removed in v1 redesign
 }
 
 function vaultApplyUiMode() {
-  const mode = vaultGetUiMode();
-  const simpleBtn = document.getElementById('vaultUiSimpleBtn');
-  const advancedBtn = document.getElementById('vaultUiAdvancedBtn');
-  if (simpleBtn) simpleBtn.className = mode === 'simple' ? 'btn-primary' : 'btn-secondary';
-  if (advancedBtn) advancedBtn.className = mode === 'advanced' ? 'btn-primary' : 'btn-secondary';
+  // Dynamic context-driven visibility - no more simple/advanced toggle
+  vaultApplyDynamicVisibility();
+}
 
+function vaultApplyDynamicVisibility() {
+  // Show all settings-rows that were previously behind data-vault-advanced
   document.querySelectorAll('[data-vault-advanced="1"]').forEach((el) => {
-    el.style.display = mode === 'advanced' ? '' : 'none';
+    el.style.display = '';
   });
+
+  // Payment fields: show if 'Buy Keys via Payments' is enabled
+  const paymentEnabled = !!document.getElementById('vault_usePaymentTransfersAsMints')?.checked;
+  const paymentFieldsEl = document.getElementById('vault_payment_fields_container');
+  if (paymentFieldsEl) paymentFieldsEl.style.display = paymentEnabled ? '' : 'none';
+
+  // SPL Token fields: show if payment is enabled AND custom token is checked
+  const customTokenEnabled = !!document.getElementById('vault_customSplTokenToggle')?.checked;
+  const tokenFieldsEl = document.getElementById('vault_spl_token_fields_container');
+  if (tokenFieldsEl) tokenFieldsEl.style.display = (paymentEnabled && customTokenEnabled) ? '' : 'none';
+
+  // Mint mode fields: show if 'Receive Keys on NFT Mint' is enabled
+  const mintEnabled = !!document.getElementById('vault_mintModeEnabled')?.checked;
+  const mintFieldsEl = document.getElementById('vault_mint_fields_container');
+  if (mintFieldsEl) mintFieldsEl.style.display = mintEnabled ? '' : 'none';
+
+  // Ticket fields: show if 'Open Ticket on Win' is enabled
+  const ticketEnabled = !!document.getElementById('vault_createTicketOnWin')?.checked;
+  const ticketFieldsEl = document.getElementById('vault_ticket_fields_container');
+  if (ticketFieldsEl) ticketFieldsEl.style.display = ticketEnabled ? '' : 'none';
+
+  // Win channel dependent fields: show if a win channel is selected
+  const winChannelId = String(document.getElementById('vault_winChannelId')?.value || '').trim();
+  const winChannelFieldsEl = document.getElementById('vault_win_channel_fields_container');
+  if (winChannelFieldsEl) winChannelFieldsEl.style.display = winChannelId ? '' : 'none';
+
+  // Upgrades fields: show if key upgrades toggle is enabled
+  const upgradesEnabled = !!document.getElementById('vault_upgradesEnabled')?.checked;
+  const upgradeFieldsEl = document.getElementById('vault_upgrade_fields_container');
+  if (upgradeFieldsEl) upgradeFieldsEl.style.display = upgradesEnabled ? '' : 'none';
+
+  // Custom messages fields: show if customization toggle is enabled
+  const customMsgEnabled = !!document.getElementById('vault_customMessagesEnabled')?.checked;
+  const customMsgFieldsEl = document.getElementById('vault_custom_messages_container');
+  if (customMsgFieldsEl) customMsgFieldsEl.style.display = customMsgEnabled ? '' : 'none';
 }
 const PORTAL_PAGE_EXPECTATIONS = Object.freeze({
   sections: [
@@ -11493,53 +11526,139 @@ function vaultRenderAdminPanel() {
         .vault-economy-modal-section { padding:12px; border:1px solid rgba(99,102,241,0.18); border-radius:12px; background:rgba(15,23,42,0.48); }
         .vault-economy-modal-section h5 { margin:0 0 8px 0; }
         .vault-economy-tabs { display:flex; gap:8px; flex-wrap:wrap; }
+        .vault-ctx-group { margin-top:10px; padding-left:16px; border-left:2px solid rgba(99,102,241,0.25); }
         @media (max-width: 980px) {
           .vault-economy-head { flex-direction:column; }
           .vault-economy-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
         }
       </style>
-      <h3>Vault Setup</h3>
-      <p style="color:var(--text-secondary);margin-bottom:12px;">Configure your key economy and prize flow. Start with the basic setup below, then open advanced tools only if needed.</p>
-      <div style="display:flex;gap:8px;margin-bottom:10px;">
-        <button id="vaultUiSimpleBtn" class="btn-primary" onclick="vaultSetUiMode('simple');vaultApplyUiMode()">Simple Setup</button>
-        <button id="vaultUiAdvancedBtn" class="btn-secondary" onclick="vaultSetUiMode('advanced');vaultApplyUiMode()">Advanced Setup</button>
-      </div>
+      <h3>Vault Settings</h3>
+      <p style="color:var(--text-secondary);margin-bottom:16px;">Configure your key economy, payment rules, and prize flow for this server.</p>
+
+      <!-- ═══════════ SECTION 1: General & Display ═══════════ -->
+      <h4 style="margin:0 0 8px 0;">General & Display</h4>
       <div class="settings-grid" style="margin-bottom:16px;">
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Enabled</div></div><input id="vault_enabled" type="checkbox" ${general.enabled ? 'checked' : ''}></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Project Name</div></div><input id="vault_projectName" class="input-sm" value="${escapeHtml(String(display.projectName || ''))}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Vault Name</div></div><input id="vault_gameName" class="input-sm" value="${escapeHtml(String(display.gameName || ''))}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Season Label</div></div><input id="vault_seasonName" class="input-sm" value="${escapeHtml(String(display.seasonName || ''))}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Key Label</div></div><input id="vault_keyName" class="input-sm" value="${escapeHtml(String(display.keyName || 'Reward Key'))}"></div>
+        <div class="settings-row">
+          <div class="settings-info"><div class="settings-label">Enable Vault Module</div><div class="settings-desc">Activates key roll events and player commands in Discord.</div></div>
+          <label class="toggle-switch"><input type="checkbox" id="vault_enabled" ${general.enabled ? 'checked' : ''} onchange="vaultApplyDynamicVisibility()"><span class="toggle-slider"></span></label>
+        </div>
+        <div class="settings-row">
+          <div class="settings-info"><div class="settings-label">Project Name</div><div class="settings-desc">Branding name shown in vault embeds (e.g. "Cartoon Maffia").</div></div>
+          <input id="vault_projectName" class="input-sm" value="${escapeHtml(String(display.projectName || ''))}">
+        </div>
+        <div class="settings-row">
+          <div class="settings-info"><div class="settings-label">Vault Name</div><div class="settings-desc">Custom label for the vault game itself (e.g. "Maffia Chest").</div></div>
+          <input id="vault_gameName" class="input-sm" value="${escapeHtml(String(display.gameName || ''))}">
+        </div>
+        <div class="settings-row">
+          <div class="settings-info"><div class="settings-label">Key Name</div><div class="settings-desc">Singular item name for the keys players collect (e.g. "Maffia Key").</div></div>
+          <input id="vault_keyName" class="input-sm" value="${escapeHtml(String(display.keyName || 'Reward Key'))}">
+        </div>
+        <div class="settings-row">
+          <div class="settings-info"><div class="settings-label">Season Label</div><div class="settings-desc">Display name for the current active season.</div></div>
+          <input id="vault_seasonName" class="input-sm" value="${escapeHtml(String(display.seasonName || ''))}">
+        </div>
+        <div class="settings-row">
+          <div class="settings-info"><div class="settings-label">Log Channel</div><div class="settings-desc">Channel where vault key opens and claims are announced.</div></div>
+          <select id="vault_announceChannelId" class="input-sm">${announceChannelOptions}</select>
+        </div>
+        <div class="settings-row">
+          <div class="settings-info"><div class="settings-label">Winner Reveal Channel</div><div class="settings-desc">Channel where winning animations and prize reveals are posted.</div></div>
+          <select id="vault_winChannelId" class="input-sm" onchange="vaultApplyDynamicVisibility()">${winChannelOptions}</select>
+        </div>
+        <div id="vault_win_channel_fields_container" class="vault-ctx-group" style="display:${String(general.winChannelId || '').trim() ? '' : 'none'};">
+          <div class="settings-row">
+            <div class="settings-info"><div class="settings-label">Reveal Delay (seconds)</div><div class="settings-desc">Suspense delay before showing the roll outcome in the reveal channel.</div></div>
+            <input id="vault_prizeRevealDelaySeconds" type="number" class="input-sm" min="0" max="30" value="${Math.max(0, Number(general.prizeRevealDelaySeconds ?? 3) || 0)}">
+          </div>
+          <div class="settings-row">
+            <div class="settings-info"><div class="settings-label">Announce Tiers</div><div class="settings-desc">Only announce prizes from these tiers (comma-separated, e.g. rare,epic,legendary).</div></div>
+            <input id="vault_announceTiers" class="input-sm" value="${escapeHtml((general.announceRewardTiers || []).join(','))}">
+          </div>
+          <div class="settings-row">
+            <div class="settings-info"><div class="settings-label">Announce Common Rewards</div><div class="settings-desc">Also post announcements for common-tier prizes.</div></div>
+            <label class="toggle-switch"><input type="checkbox" id="vault_announceCommonRewards" ${general.announceCommonRewards ? 'checked' : ''}><span class="toggle-slider"></span></label>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="settings-info"><div class="settings-label">Open Cooldown (seconds)</div><div class="settings-desc">Minimum delay between consecutive vault roll attempts per user.</div></div>
+          <input id="vault_openCooldownSeconds" type="number" class="input-sm" min="0" value="${Number(security.openCooldownSeconds || 0)}">
+        </div>
+        <div class="settings-row">
+          <div class="settings-info"><div class="settings-label">Open Ticket on Win</div><div class="settings-desc">Opens a private Discord support ticket when a player wins a claimable prize.</div></div>
+          <label class="toggle-switch"><input type="checkbox" id="vault_createTicketOnWin" ${ticketing.createTicketOnWin ? 'checked' : ''} onchange="vaultApplyDynamicVisibility()"><span class="toggle-slider"></span></label>
+        </div>
+        <div id="vault_ticket_fields_container" class="vault-ctx-group" style="display:${ticketing.createTicketOnWin ? '' : 'none'};">
+          <div class="settings-row">
+            <div class="settings-info"><div class="settings-label">Ticket Category</div><div class="settings-desc">Category where new winning claim channels will be created.</div></div>
+            <select id="vault_rewardTicketCategoryId" class="input-sm">${ticketCategoryOptions}</select>
+          </div>
+          <div class="settings-row">
+            <div class="settings-info"><div class="settings-label">Ticket Alert Channel</div><div class="settings-desc">Alert admins here if automated ticket creation fails.</div></div>
+            <select id="vault_ticketAlertChannelId" class="input-sm">${ticketAlertChannelOptions}</select>
+          </div>
+        </div>
       </div>
 
-      <h4 style="margin:16px 0 8px 0;">Mint Rules</h4>
-      <div class="settings-grid" style="margin-bottom:16px;">
-        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Mint Mode</div></div><input id="vault_mintMode" class="input-sm" value="${escapeHtml(String(minting.mode || 'custom_webhook'))}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Use Payment Transfers as Mints</div></div><input id="vault_usePaymentTransfersAsMints" type="checkbox" ${minting.countTransfersToPaymentWallet ? 'checked' : ''}></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Mint Payment Wallet(s)</div></div><input id="vault_paymentWalletAddresses" class="input-sm" placeholder="wallet1,wallet2" value="${escapeHtml(paymentWalletsCsv)}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Mint Payment Token(s)</div><div class="settings-desc">Optional SPL Token mints (e.g. USDC).</div></div><input id="vault_paymentTokenAddresses" class="input-sm" placeholder="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" value="${escapeHtml(paymentTokensCsv)}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Min Payment (Lamports)</div></div><input id="vault_paymentMinLamports" type="number" class="input-sm" min="0" value="${paymentMinLamports}"></div>
-      </div>
-
+      <!-- ═══════════ SECTION 2: Key Economy & Payment ═══════════ -->
+      <h4 style="margin:16px 0 8px 0;">Key Economy & Payments</h4>
       <div id="vaultKeyEconomySummary"></div>
+      <div class="settings-grid" style="margin-bottom:16px;">
+        <div class="settings-row">
+          <div class="settings-info"><div class="settings-label">Receive Keys on NFT Mint</div><div class="settings-desc">Automatically reward keys when a user mints project NFTs.</div></div>
+          <label class="toggle-switch"><input type="checkbox" id="vault_mintModeEnabled" ${String(minting.mode || 'custom_webhook') !== 'disabled' ? 'checked' : ''} onchange="vaultApplyDynamicVisibility()"><span class="toggle-slider"></span></label>
+        </div>
+        <div id="vault_mint_fields_container" class="vault-ctx-group" style="display:${String(minting.mode || 'custom_webhook') !== 'disabled' ? '' : 'none'};">
+          <div class="settings-row">
+            <div class="settings-info"><div class="settings-label">Mint Mode</div><div class="settings-desc">How mint events are received (custom_webhook or helius_webhook).</div></div>
+            <input id="vault_mintMode" class="input-sm" value="${escapeHtml(String(minting.mode || 'custom_webhook'))}">
+          </div>
+        </div>
 
-      <h4 style="margin:16px 0 8px 0;">Win Odds</h4>
-      <div class="vault-section-card gp-subtle-panel" style="margin-top:0;">
-        <div style="color:var(--text-secondary);font-size:0.9em;margin-bottom:8px;">First the selected key tier rolls its winner chance. If it wins, the prize is drawn from eligible rewards by weight.</div>
-        <div id="vaultWinChanceRows"></div>
+        <div class="settings-row">
+          <div class="settings-info"><div class="settings-label">Buy Keys via Payments</div><div class="settings-desc">Allow users to send SOL or SPL tokens to buy keys.</div></div>
+          <label class="toggle-switch"><input type="checkbox" id="vault_usePaymentTransfersAsMints" ${minting.countTransfersToPaymentWallet ? 'checked' : ''} onchange="vaultApplyDynamicVisibility()"><span class="toggle-slider"></span></label>
+        </div>
+        <div id="vault_payment_fields_container" class="vault-ctx-group" style="display:${minting.countTransfersToPaymentWallet ? '' : 'none'};">
+          <div class="settings-row">
+            <div class="settings-info"><div class="settings-label">Recipient Wallets</div><div class="settings-desc">Treasury wallet addresses where users send payments.</div></div>
+            <input id="vault_paymentWalletAddresses" class="input-sm" placeholder="wallet1, wallet2" value="${escapeHtml(paymentWalletsCsv)}">
+          </div>
+          <div class="settings-row">
+            <div class="settings-info"><div class="settings-label">Minimum Payment (SOL)</div><div class="settings-desc">Payments below this value will be ignored. Enter value in SOL (e.g. 0.05).</div></div>
+            <input id="vault_paymentMinSol" type="number" class="input-sm" min="0" step="0.001" value="${(paymentMinLamports / 1000000000).toFixed(9).replace(/\.?0+$/, '')}">
+          </div>
+          <div class="settings-row">
+            <div class="settings-info"><div class="settings-label">Use Custom SPL Token</div><div class="settings-desc">Accept an SPL token (like USDC) instead of, or in addition to, native SOL.</div></div>
+            <label class="toggle-switch"><input type="checkbox" id="vault_customSplTokenToggle" ${paymentTokensList.length > 0 ? 'checked' : ''} onchange="vaultApplyDynamicVisibility()"><span class="toggle-slider"></span></label>
+          </div>
+          <div id="vault_spl_token_fields_container" class="vault-ctx-group" style="display:${paymentTokensList.length > 0 ? '' : 'none'};">
+            <div class="settings-row">
+              <div class="settings-info"><div class="settings-label">Token Mint Address</div><div class="settings-desc">SPL token contract address.</div></div>
+              <input id="vault_paymentTokenAddresses" class="input-sm" placeholder="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" value="${escapeHtml(paymentTokensCsv)}">
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-row">
+          <div class="settings-info"><div class="settings-label">Enable Key Upgrades</div><div class="settings-desc">Allow users to merge keys into higher-tier keys.</div></div>
+          <label class="toggle-switch"><input type="checkbox" id="vault_upgradesEnabled" ${keyTierConversions.length > 0 ? 'checked' : ''} onchange="vaultApplyDynamicVisibility()"><span class="toggle-slider"></span></label>
+        </div>
+        <div id="vault_upgrade_fields_container" class="vault-ctx-group" style="display:${keyTierConversions.length > 0 ? '' : 'none'};">
+          <div class="settings-row">
+            <div class="settings-info"><div class="settings-label">Upgrade Cooldown (seconds)</div><div class="settings-desc">Delay between consecutive key upgrades per user.</div></div>
+            <input id="vault_upgradeCooldownSeconds" type="number" class="input-sm" min="0" value="${Number(security.upgradeCooldownSeconds || 0)}">
+          </div>
+          <div class="settings-row">
+            <div class="settings-info"><div class="settings-label">Daily Upgrade Limit</div><div class="settings-desc">Maximum upgrades a player can perform per day (0 = unlimited).</div></div>
+            <input id="vault_upgradeDailyCapPerUser" type="number" class="input-sm" min="0" value="${Number(security.upgradeDailyCapPerUser || 0)}">
+          </div>
+        </div>
       </div>
 
-      <h4 style="margin:16px 0 8px 0;">Announcements and Fulfillment</h4>
-      <div class="settings-grid" style="margin-bottom:16px;">
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Announcements Channel</div></div><select id="vault_announceChannelId" class="input-sm">${announceChannelOptions}</select></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Vault Wins Channel</div><div class="settings-desc">Every prize win is announced here before the reveal.</div></div><select id="vault_winChannelId" class="input-sm">${winChannelOptions}</select></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Prize Reveal Delay (sec)</div></div><input id="vault_prizeRevealDelaySeconds" type="number" class="input-sm" min="0" max="30" value="${Math.max(0, Number(general.prizeRevealDelaySeconds ?? 3) || 0)}"></div>
-        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Announce Tiers (CSV)</div></div><input id="vault_announceTiers" class="input-sm" value="${escapeHtml((general.announceRewardTiers || []).join(','))}"></div>
-        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Announce Common Rewards</div></div><input id="vault_announceCommonRewards" type="checkbox" ${general.announceCommonRewards ? 'checked' : ''}></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Create Ticket On Win</div></div><input id="vault_createTicketOnWin" type="checkbox" ${ticketing.createTicketOnWin ? 'checked' : ''}></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Reward Ticket Category</div><div class="settings-desc">Ticket category where winning rewards create fulfillment tickets.</div></div><select id="vault_rewardTicketCategoryId" class="input-sm">${ticketCategoryOptions}</select></div>
-        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Open Cooldown (sec)</div></div><input id="vault_openCooldownSeconds" type="number" class="input-sm" min="0" value="${Number(security.openCooldownSeconds || 0)}"></div>
-        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Ticket Failure Alert Channel</div><div class="settings-desc">Optional channel for alerts when ticket creation fails.</div></div><select id="vault_ticketAlertChannelId" class="input-sm">${ticketAlertChannelOptions}</select></div>
+      <!-- Key Tiers & Payment Bands (managed via Key Economy modal) -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+        <button class="btn-primary" onclick="vaultOpenKeyEconomyModal()">Configure Key Tiers & Payment Bands</button>
       </div>
 
       <div id="vaultKeyEconomyModal" class="modal-overlay vault-economy-modal" style="display:none;" onclick="if(event.target===this)vaultCloseKeyEconomyModal()">
@@ -11550,7 +11669,7 @@ function vaultRenderAdminPanel() {
           </div>
           <div class="modal-body vault-economy-modal-grid">
             <div class="vault-section-card gp-subtle-panel" style="margin-top:0;">
-              Configure everything that decides how keys enter, convert, and upgrade in one place. Changes are applied to the hidden config automatically when you save Vault Config.
+              Configure how keys are created, tiered, and upgraded. Changes are applied when you save Vault Config.
             </div>
             <div class="vault-economy-tabs">
               <button data-vault-economy-tab-button="tiers" class="btn-primary" onclick="vaultSetKeyEconomyTab('tiers')">Tiers</button>
@@ -11569,14 +11688,14 @@ function vaultRenderAdminPanel() {
             </div>
             <div id="vaultSimpleGrantsRows" style="display:none;"></div>
             <div class="vault-economy-modal-section" data-vault-economy-tab="bands" style="display:none;">
-              <h5>SOL Payment Bands</h5>
-              <p style="color:var(--text-secondary);margin:0 0 8px 0;">Map payment ranges in lamports to key tiers.</p>
+              <h5>Payment Bands</h5>
+              <p style="color:var(--text-secondary);margin:0 0 8px 0;">Map payment value ranges to key tiers. Values are in lamports internally (1 SOL = 1,000,000,000 lamports).</p>
               <div id="vaultSimpleBandsRows"></div>
               <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleBandRow()">Add Payment Band</button></div>
             </div>
             <div class="vault-economy-modal-section" data-vault-economy-tab="upgrades" style="display:none;">
               <h5>Upgrade Rules</h5>
-              <p style="color:var(--text-secondary);margin:0 0 8px 0;">Example: 10 silver keys -> 1 gold key.</p>
+              <p style="color:var(--text-secondary);margin:0 0 8px 0;">Define recipes for merging keys. Example: 10 Bronze Keys → 1 Gold Key.</p>
               <div id="vaultSimpleConversionsRows"></div>
               <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleConversionRow()">Add Upgrade Rule</button></div>
             </div>
@@ -11611,7 +11730,7 @@ function vaultRenderAdminPanel() {
           <div class="modal-body" style="display:grid;gap:8px;">
             <label class="form-label">Winner Chance (%)</label>
             <input id="vaultWinChancePercentInput" type="number" min="0" max="100" step="0.01" class="form-input" value="25">
-            <div style="color:var(--text-secondary);font-size:0.85em;">This is the chance that a key of this tier wins before the prize is drawn.</div>
+            <div style="color:var(--text-secondary);font-size:0.85em;">Percentage chance that this key tier wins a prize before the prize is drawn from the reward table.</div>
           </div>
           <div class="modal-footer">
             <button class="btn-secondary" onclick="vaultCloseWinChanceModal()">Cancel</button>
@@ -11620,28 +11739,14 @@ function vaultRenderAdminPanel() {
         </div>
       </div>
 
-
-      <h4 style="margin:16px 0 8px 0;">Messages</h4>
-      <div style="display:grid;gap:8px;">
-        <textarea id="vault_msgNoKeys" class="form-input" rows="2" placeholder="No keys message">${escapeHtml(String(messages.noKeys || ''))}</textarea>
-        <textarea id="vault_msgInactive" class="form-input" rows="2" placeholder="Vault inactive message">${escapeHtml(String(messages.vaultInactive || ''))}</textarea>
-        <textarea id="vault_msgSuccess" class="form-input" rows="2" placeholder="Open success message">${escapeHtml(String(messages.openSuccess || ''))}</textarea>
-        <textarea id="vault_msgNoRewardOpen" class="form-input" rows="2" placeholder="No reward open message">${escapeHtml(String(messages.noRewardOpen || ''))}</textarea>
+      <!-- ═══════════ SECTION 3: Rewards & Win Odds ═══════════ -->
+      <h4 style="margin:16px 0 8px 0;">Win Odds</h4>
+      <div class="vault-section-card gp-subtle-panel" style="margin-top:0;">
+        <div style="color:var(--text-secondary);font-size:0.9em;margin-bottom:8px;">Each key tier rolls its own win chance first. If it wins, a prize is drawn from the eligible rewards by weight.</div>
+        <div id="vaultWinChanceRows"></div>
       </div>
-      <div style="margin-top:12px;"><button class="btn-primary" onclick="vaultSaveGeneralConfig()">Save Vault Config</button></div>
 
-      <h4 style="margin:20px 0 8px 0;" data-vault-advanced="1">Season Management</h4>
-      <table class="vault-admin-table" data-vault-advanced="1"><thead><tr><th align="left">ID</th><th align="left">Name</th><th align="left">Status</th><th align="left">Action</th></tr></thead><tbody>${seasonsRows}</tbody></table>
-      <div class="settings-grid" style="margin-top:10px;" data-vault-advanced="1">
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Season ID</div></div><input id="vaultSeasonIdInput" class="input-sm" placeholder="season_2026_q2" value="${escapeHtml(activeSeasonId)}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Season Name</div></div><input id="vaultSeasonNameInput" class="input-sm" placeholder="Season Name"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Start (ISO)</div></div><input id="vaultSeasonStartInput" class="input-sm" placeholder="2026-04-01T00:00:00Z"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">End (ISO)</div></div><input id="vaultSeasonEndInput" class="input-sm" placeholder="2026-06-30T23:59:59Z"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Active</div></div><input id="vaultSeasonActiveInput" type="checkbox"></div>
-      </div>
-      <div style="margin-top:8px;" data-vault-advanced="1"><button class="btn-primary" onclick="vaultUpsertSeason()">Create/Update Season</button></div>
-
-      <h4 style="margin:20px 0 8px 0;">Reward Table Manager</h4>
+      <h4 style="margin:16px 0 8px 0;">Reward Table</h4>
       <table class="vault-admin-table"><thead><tr><th align="left">Code</th><th align="left">Name</th><th align="left">Tier</th><th align="left">Weight</th><th align="left">Drop Chance</th><th align="left">Key Tier</th><th align="left">Qty</th><th align="left">State</th><th align="left">Actions</th></tr></thead><tbody>${rewardsRows}</tbody></table>
       <div style="margin-top:8px;">
         <button class="btn-primary" onclick="vaultOpenRewardModal()">Add Reward</button>
@@ -11671,21 +11776,55 @@ function vaultRenderAdminPanel() {
         </div>
       </div>
 
-      <h4 style="margin:20px 0 8px 0;">Milestones / Pressure Rules</h4>
-      <p style="color:var(--text-secondary);margin:0 0 8px 0;">Managed automatically in this simplified view.</p>
-
-      <details style="margin-top:20px;">
-      <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Operations: Manual Adjustments and Support Actions</summary>
-      <h4 style="margin:10px 0 8px 0;">Manual Operations</h4>
-      <div class="settings-grid">
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Discord User ID</div></div><input id="vaultManualDiscordId" class="input-sm" placeholder="123456789012345678"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Season ID</div></div><input id="vaultManualSeasonId" class="input-sm" value="${escapeHtml(activeSeasonId)}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Keys Amount</div></div><input id="vaultManualKeyAmount" type="number" class="input-sm" min="1" value="1"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Key Tier</div></div><input id="vaultManualKeyTier" class="input-sm" value="default"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Action</div></div><input id="vaultManualKeyAction" class="input-sm" value="add"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Reason</div></div><input id="vaultManualReason" class="input-sm" value="portal_manual"></div>
+      <!-- ═══════════ SECTION 4: Custom Messages ═══════════ -->
+      <h4 style="margin:16px 0 8px 0;">Custom Messages</h4>
+      <div class="settings-grid" style="margin-bottom:16px;">
+        <div class="settings-row">
+          <div class="settings-info"><div class="settings-label">Customize Discord Messages</div><div class="settings-desc">Override the default bot messages sent when players open the vault.</div></div>
+          <label class="toggle-switch"><input type="checkbox" id="vault_customMessagesEnabled" ${(messages.noKeys || messages.vaultInactive || messages.openSuccess || messages.noRewardOpen) ? 'checked' : ''} onchange="vaultApplyDynamicVisibility()"><span class="toggle-slider"></span></label>
+        </div>
       </div>
-      <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultMutateKeys()">Apply Key Mutation</button></div>
+      <div id="vault_custom_messages_container" class="vault-ctx-group" style="display:${(messages.noKeys || messages.vaultInactive || messages.openSuccess || messages.noRewardOpen) ? '' : 'none'};">
+        <div style="display:grid;gap:8px;">
+          <label class="form-label">Out of Keys Message</label>
+          <textarea id="vault_msgNoKeys" class="form-input" rows="2" placeholder="You do not have any available keys.">${escapeHtml(String(messages.noKeys || ''))}</textarea>
+          <label class="form-label">Vault Inactive Message</label>
+          <textarea id="vault_msgInactive" class="form-input" rows="2" placeholder="The vault is currently inactive.">${escapeHtml(String(messages.vaultInactive || ''))}</textarea>
+          <label class="form-label">Open Success Message</label>
+          <textarea id="vault_msgSuccess" class="form-input" rows="2" placeholder="Vault opened! You received **{{rewardName}}.** (supports {{rewardName}})">${escapeHtml(String(messages.openSuccess || ''))}</textarea>
+          <label class="form-label">Empty Roll Message</label>
+          <textarea id="vault_msgNoRewardOpen" class="form-input" rows="2" placeholder="Vault opened, but this key did not reveal a reward.">${escapeHtml(String(messages.noRewardOpen || ''))}</textarea>
+        </div>
+      </div>
+
+      <div style="margin-top:16px;"><button class="btn-primary" onclick="vaultSaveGeneralConfig()">Save Vault Config</button></div>
+
+      <!-- ═══════════ SECTION 5: Season Management ═══════════ -->
+      <h4 style="margin:20px 0 8px 0;">Season Management</h4>
+      <table class="vault-admin-table"><thead><tr><th align="left">ID</th><th align="left">Name</th><th align="left">Status</th><th align="left">Action</th></tr></thead><tbody>${seasonsRows}</tbody></table>
+      <div class="settings-grid" style="margin-top:10px;">
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Season ID</div><div class="settings-desc">Unique identifier for the season (e.g. season_2026_q3).</div></div><input id="vaultSeasonIdInput" class="input-sm" placeholder="season_2026_q2" value="${escapeHtml(activeSeasonId)}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Season Name</div><div class="settings-desc">Display name shown to players.</div></div><input id="vaultSeasonNameInput" class="input-sm" placeholder="Season Name"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Start Date</div><div class="settings-desc">Season start date (ISO format).</div></div><input id="vaultSeasonStartInput" class="input-sm" placeholder="2026-04-01T00:00:00Z"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">End Date</div><div class="settings-desc">Season end date (ISO format).</div></div><input id="vaultSeasonEndInput" class="input-sm" placeholder="2026-06-30T23:59:59Z"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Active</div><div class="settings-desc">Only one season can be active at a time.</div></div><input id="vaultSeasonActiveInput" type="checkbox"></div>
+      </div>
+      <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultUpsertSeason()">Create/Update Season</button></div>
+
+      <!-- ═══════════ SECTION 6: Operations ═══════════ -->
+      <details style="margin-top:20px;">
+      <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Operations: Manual Adjustments & Support Actions</summary>
+      <h4 style="margin:10px 0 8px 0;">Manual Key Adjustment</h4>
+      <p style="color:var(--text-secondary);font-size:0.88em;margin-bottom:8px;">Add or remove keys for a specific Discord user in the active season.</p>
+      <div class="settings-grid">
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Discord User ID</div><div class="settings-desc">The target player's Discord ID.</div></div><input id="vaultManualDiscordId" class="input-sm" placeholder="123456789012345678"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Season ID</div><div class="settings-desc">Target season (defaults to active season).</div></div><input id="vaultManualSeasonId" class="input-sm" value="${escapeHtml(activeSeasonId)}"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Keys Amount</div><div class="settings-desc">Number of keys to add or remove.</div></div><input id="vaultManualKeyAmount" type="number" class="input-sm" min="1" value="1"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Key Tier</div><div class="settings-desc">Which tier of key to adjust (e.g. default, bronze, silver).</div></div><input id="vaultManualKeyTier" class="input-sm" value="default"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Action</div><div class="settings-desc">Choose "add" to grant keys or "remove" to deduct keys.</div></div><select id="vaultManualKeyAction" class="input-sm"><option value="add">Add Keys</option><option value="remove">Remove Keys</option></select></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Reason</div><div class="settings-desc">Logged in the audit trail for accountability.</div></div><input id="vaultManualReason" class="input-sm" value="portal_manual"></div>
+      </div>
+      <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultMutateKeys()">Apply Key Adjustment</button></div>
 
       <h4 style="margin:20px 0 8px 0;">Key Holdings Overview (Active Season)</h4>
       <div style="display:flex;gap:8px;margin-bottom:8px;">
@@ -11705,58 +11844,61 @@ function vaultRenderAdminPanel() {
         <tbody>${keyOverviewRows}</tbody>
       </table>
 
+      <h4 style="margin:20px 0 8px 0;">Manual Reward Assignment</h4>
+      <p style="color:var(--text-secondary);font-size:0.88em;margin-bottom:8px;">Instantly assign a specific reward to a user (bypasses the vault roll).</p>
       <div class="settings-grid" style="margin-top:10px;">
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Assign Reward Code</div></div><input id="vaultAssignRewardCode" class="input-sm" placeholder="reward_code"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Assign Reward Name</div></div><input id="vaultAssignRewardName" class="input-sm" placeholder="Manual reward"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Assign Reward Tier</div></div><input id="vaultAssignRewardTier" class="input-sm" value="rare"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Reward Code</div><div class="settings-desc">Code of the reward to assign (must exist in the reward table).</div></div><input id="vaultAssignRewardCode" class="input-sm" placeholder="reward_code"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Reward Name</div><div class="settings-desc">Display name for the manually assigned reward.</div></div><input id="vaultAssignRewardName" class="input-sm" placeholder="Manual reward"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Reward Tier</div><div class="settings-desc">Rarity tier of the reward (e.g. common, rare, epic).</div></div><input id="vaultAssignRewardTier" class="input-sm" value="rare"></div>
       </div>
       <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultAssignReward()">Assign Reward</button></div>
       </details>
 
       <details style="margin-top:20px;">
-      <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Advanced: Backfill and Recovery Tools</summary>
+      <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Recovery: Backfill & Payment Verification</summary>
+      <p style="color:var(--text-secondary);font-size:0.88em;margin:8px 0;">Use these tools to recover missed payments or bulk-import historical transactions.</p>
+
+      <h4 style="margin:10px 0 8px 0;">Single Wallet Backfill</h4>
       <div class="settings-grid" style="margin-top:10px;">
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Backfill Wallet</div></div><input id="vaultBackfillWallet" class="input-sm" placeholder="wallet address"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Backfill Discord ID (optional)</div></div><input id="vaultBackfillDiscordId" class="input-sm" placeholder="optional"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Wallet Address</div><div class="settings-desc">Solana wallet address to scan for missed mint transactions.</div></div><input id="vaultBackfillWallet" class="input-sm" placeholder="wallet address"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Discord ID (optional)</div><div class="settings-desc">Override the auto-detected wallet owner. Leave blank for automatic detection.</div></div><input id="vaultBackfillDiscordId" class="input-sm" placeholder="optional"></div>
       </div>
       <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultRunBackfill()">Run Active-Season Backfill</button></div>
 
-      <div class="vault-section-card gp-subtle-panel" style="margin-top:14px;">
-        <strong>Solscan CSV Import:</strong>
-        Upload a CSV export from Solscan to backfill missing payments and assign keys in bulk. This will parse the CSV for transfers to your configured payment wallets.
-      </div>
+      <h4 style="margin:20px 0 8px 0;">Solscan CSV Import</h4>
+      <p style="color:var(--text-secondary);font-size:0.88em;margin-bottom:8px;">Upload a CSV export from Solscan to backfill missing payments and assign keys in bulk. Parses for transfers to your configured payment wallets.</p>
       <div style="margin-top:10px;display:flex;gap:8px;align-items:center;">
         <input type="file" id="vaultCsvUploadInput" accept=".csv" style="display:none;" onchange="vaultUploadCsv()">
         <button class="btn-secondary" onclick="document.getElementById('vaultCsvUploadInput').click()">Import Solscan CSV</button>
       </div>
 
-      <div class="vault-section-card gp-subtle-panel" style="margin-top:14px;">
-        <strong>Secure payment recovery:</strong>
-        verify a SOL payment transaction directly on-chain. This does not trust webhook payloads and is safe to rerun because transaction signatures are deduplicated.
-      </div>
+      <h4 style="margin:20px 0 8px 0;">On-chain Payment Recovery</h4>
+      <p style="color:var(--text-secondary);font-size:0.88em;margin-bottom:8px;">Verify a SOL payment transaction directly on-chain. Safe to rerun — transaction signatures are deduplicated.</p>
       <div class="settings-grid" style="margin-top:10px;">
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Payment TX Signature</div><div class="settings-desc">SOL transfer to a configured Vault payment wallet.</div></div><input id="vaultVerifyPaymentTxSignature" class="input-sm" placeholder="transaction signature"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Discord ID Override (optional)</div><div class="settings-desc">Usually blank; linked wallet owner is detected automatically.</div></div><input id="vaultVerifyPaymentDiscordId" class="input-sm" placeholder="optional"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Transaction Signature</div><div class="settings-desc">The Solana transaction signature to verify and credit.</div></div><input id="vaultVerifyPaymentTxSignature" class="input-sm" placeholder="transaction signature"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Discord ID Override (optional)</div><div class="settings-desc">Usually blank; the linked wallet owner is detected automatically.</div></div><input id="vaultVerifyPaymentDiscordId" class="input-sm" placeholder="optional"></div>
       </div>
       <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultVerifyPaymentTransaction()">Verify Payment TX On-Chain</button></div>
 
+      <h4 style="margin:20px 0 8px 0;">Bulk Backfill (All Configured Wallets)</h4>
+      <p style="color:var(--text-secondary);font-size:0.88em;margin-bottom:8px;">Scans all configured payment wallets for missed transactions. Safe to rerun — duplicates are automatically skipped.</p>
       <div class="settings-grid" style="margin-top:10px;">
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Bulk Backfill Max Signatures / Wallet</div><div class="settings-desc">Scans newest to oldest until this max is reached (safe to rerun; duplicates are skipped).</div></div><input id="vaultBulkBackfillLimitPerWallet" type="number" class="input-sm" min="1" max="50000" value="5000"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Dry Run</div><div class="settings-desc">Analyze and count candidates without ingesting events.</div></div><input id="vaultBulkBackfillDryRun" type="checkbox"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Delay Per Batch (ms)</div><div class="settings-desc">Throttle between RPC batches.</div></div><input id="vaultBulkBackfillDelayMs" type="number" class="input-sm" min="0" max="5000" value="250"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Max Runtime (sec)</div><div class="settings-desc">Stops scan when this runtime is exceeded.</div></div><input id="vaultBulkBackfillMaxRuntimeSec" type="number" class="input-sm" min="10" max="1800" value="600"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">RPC Retry Attempts</div><div class="settings-desc">Retries transient RPC failures.</div></div><input id="vaultBulkBackfillRpcRetryMax" type="number" class="input-sm" min="0" max="5" value="2"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Max Signatures / Wallet</div><div class="settings-desc">Scans newest to oldest until this limit is reached.</div></div><input id="vaultBulkBackfillLimitPerWallet" type="number" class="input-sm" min="1" max="50000" value="5000"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Dry Run</div><div class="settings-desc">Analyze and count candidates without actually ingesting events.</div></div><label class="toggle-switch"><input type="checkbox" id="vaultBulkBackfillDryRun"><span class="toggle-slider"></span></label></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Delay Per Batch (ms)</div><div class="settings-desc">Throttle between RPC batches to avoid rate limits.</div></div><input id="vaultBulkBackfillDelayMs" type="number" class="input-sm" min="0" max="5000" value="250"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Max Runtime (seconds)</div><div class="settings-desc">Safety cap — stops the scan when this runtime is exceeded.</div></div><input id="vaultBulkBackfillMaxRuntimeSec" type="number" class="input-sm" min="10" max="1800" value="600"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">RPC Retry Attempts</div><div class="settings-desc">Number of times to retry transient RPC failures.</div></div><input id="vaultBulkBackfillRpcRetryMax" type="number" class="input-sm" min="0" max="5" value="2"></div>
       </div>
       <div style="margin-top:8px;">
-        <button id="vaultBulkBackfillBtn" class="btn-secondary" onclick="vaultRunBackfillAllMissingTx()">Backfill Missing TXs (All Configured Mint Wallets)</button>
+        <button id="vaultBulkBackfillBtn" class="btn-secondary" onclick="vaultRunBackfillAllMissingTx()">Backfill Missing TXs (All Configured Wallets)</button>
         <div id="vaultBulkBackfillResult" style="margin-top:12px;font-size:0.9rem;color:var(--text-secondary);white-space:pre-wrap;background:rgba(2,6,23,0.5);padding:10px;border-radius:6px;display:none;border:1px solid rgba(99,102,241,0.2);"></div>
       </div>
       </details>
 
       <details style="margin-top:20px;">
-      <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Advanced: Activity and Claim Operations</summary>
-      <h4 style="margin:20px 0 8px 0;">Audit / Openings / Claims Status</h4>
-      <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Activity & Claims</summary>
+      <h4 style="margin:10px 0 8px 0;">Audit / Openings / Claims</h4>
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
         <button class="btn-secondary" onclick="vaultRefreshActivity()">Refresh Activity</button>
         <button class="btn-secondary" onclick="vaultExportOpeningsCsv()">Export Openings CSV</button>
         <button class="btn-secondary" onclick="vaultExportClaimsCsv()">Export Claims CSV</button>
@@ -11766,19 +11908,31 @@ function vaultRenderAdminPanel() {
       <pre id="vaultClaimsView" style="white-space:pre-wrap;max-height:180px;overflow:auto;">${escapeHtml(vaultFormatRows(claims.map(item => `#${item.id} [${item.claim_status}] ${item.discord_user_id || '-'} -> ${item.reward_name || item.reward_code || '-'}`), 'No claims yet.'))}</pre>
       <pre id="vaultAuditView" style="white-space:pre-wrap;max-height:180px;overflow:auto;">${escapeHtml(vaultFormatRows(audit.map(item => `[${item.created_at || ''}] ${item.action || '-'} by ${item.admin_discord_user_id || 'system'}`), 'No audit records yet.'))}</pre>
 
+      <h4 style="margin:16px 0 8px 0;">Update Claim Status</h4>
       <div class="settings-grid" style="margin-top:10px;">
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Claim ID</div></div><input id="vaultClaimIdInput" class="input-sm" placeholder="numeric reward id"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Claim Status</div></div><input id="vaultClaimStatusInput" class="input-sm" placeholder="pending|approved|fulfilled|rejected"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Claim ID</div><div class="settings-desc">The numeric ID of the reward claim to update.</div></div><input id="vaultClaimIdInput" class="input-sm" placeholder="numeric reward id"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Claim Status</div><div class="settings-desc">Set to: pending, approved, fulfilled, or rejected.</div></div><select id="vaultClaimStatusInput" class="input-sm"><option value="pending">pending</option><option value="approved">approved</option><option value="fulfilled">fulfilled</option><option value="rejected">rejected</option></select></div>
       </div>
       <textarea id="vaultClaimNoteInput" class="form-input" rows="2" placeholder="optional note"></textarea>
       <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultUpdateClaimStatus()">Update Claim Status</button></div>
 
       </details>
+
+      <!-- ═══════════ SECTION: Config Export/Import ═══════════ -->
+      <details style="margin-top:20px;">
+      <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Config Export / Import</summary>
+      <p style="color:var(--text-secondary);font-size:0.88em;margin:8px 0;">Export or import the full vault configuration including seasons for backup or migration.</p>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+        <button class="btn-secondary" onclick="vaultExportConfig()">Export Config</button>
+        <button class="btn-secondary" onclick="vaultImportConfig()">Import Config</button>
+      </div>
+      </details>
     </div>
   `;
   vaultRenderSimpleConfigEditors();
-  vaultApplyUiMode();
+  vaultApplyDynamicVisibility();
 }
+
 
 async function loadVaultSettingsTab() {
   if (!isAdmin) return;
@@ -11845,7 +11999,8 @@ async function vaultSaveGeneralConfig() {
     next.display.keyName = String(document.getElementById('vault_keyName')?.value || '').trim();
     next.display.messages = next.display.messages || {};
 
-    next.minting.mode = String(document.getElementById('vault_mintMode')?.value || '').trim() || 'custom_webhook';
+    const mintModeEnabled = !!document.getElementById('vault_mintModeEnabled')?.checked;
+    next.minting.mode = mintModeEnabled ? (String(document.getElementById('vault_mintMode')?.value || '').trim() || 'custom_webhook') : 'disabled';
     next.minting.countTransfersToPaymentWallet = !!document.getElementById('vault_usePaymentTransfersAsMints')?.checked;
     const paymentWalletsRaw = String(document.getElementById('vault_paymentWalletAddresses')?.value || '').trim();
     const paymentWallets = paymentWalletsRaw
@@ -11854,15 +12009,29 @@ async function vaultSaveGeneralConfig() {
       .filter(Boolean);
     next.minting.paymentWallets = paymentWallets;
     
-    const paymentTokensRaw = String(document.getElementById('vault_paymentTokenAddresses')?.value || '').trim();
-    const paymentTokens = paymentTokensRaw
-      .split(/[\n,\s]+/)
-      .map(value => value.trim())
-      .filter(Boolean);
-    next.minting.paymentTokens = paymentTokens;
-    next.minting.minLamports = Math.max(0, Number(document.getElementById('vault_paymentMinLamports')?.value || 0) || 0);
+    if (document.getElementById('vault_customSplTokenToggle')?.checked) {
+      const paymentTokensRaw = String(document.getElementById('vault_paymentTokenAddresses')?.value || '').trim();
+      const paymentTokens = paymentTokensRaw
+        .split(/[\n,\s]+/)
+        .map(value => value.trim())
+        .filter(Boolean);
+      next.minting.paymentTokens = paymentTokens;
+    } else {
+      next.minting.paymentTokens = [];
+    }
+
+    const paymentMinSolRaw = Number(document.getElementById('vault_paymentMinSol')?.value || 0) || 0;
+    next.minting.minLamports = Math.max(0, Math.round(paymentMinSolRaw * 1000000000));
 
     next.security.openCooldownSeconds = Number(document.getElementById('vault_openCooldownSeconds')?.value || 0) || 0;
+    
+    if (document.getElementById('vault_upgradesEnabled')?.checked) {
+      next.security.upgradeCooldownSeconds = Number(document.getElementById('vault_upgradeCooldownSeconds')?.value || 0) || 0;
+      next.security.upgradeDailyCapPerUser = Number(document.getElementById('vault_upgradeDailyCapPerUser')?.value || 0) || 0;
+    } else {
+      next.security.upgradeCooldownSeconds = 0;
+      next.security.upgradeDailyCapPerUser = 0;
+    }
 
     const keyTiersParsed = vaultJsonParseInput(document.getElementById('vault_keyTiersJson')?.value, null);
     const grantsPerMintParsed = vaultJsonParseInput(document.getElementById('vault_keyTierGrantsJson')?.value, null);
@@ -11874,6 +12043,9 @@ async function vaultSaveGeneralConfig() {
     next.minting.grantsPerMint = grantsPerMintParsed && typeof grantsPerMintParsed === 'object' ? grantsPerMintParsed : {};
     next.minting.paymentBands = Array.isArray(paymentBandsParsed) ? paymentBandsParsed : [];
     next.keyTierConversions = Array.isArray(keyTierConversionsParsed) ? keyTierConversionsParsed : [];
+    if (!document.getElementById('vault_upgradesEnabled')?.checked) {
+      next.keyTierConversions = [];
+    }
     next.rewardTable = next.rewardTable || {};
     next.rewardTable.winChancesByKeyTier = winChancesParsed && typeof winChancesParsed === 'object' && !Array.isArray(winChancesParsed) ? winChancesParsed : {};
 
@@ -11889,10 +12061,17 @@ async function vaultSaveGeneralConfig() {
     const ticketAlertChannelRaw = String(document.getElementById('vault_ticketAlertChannelId')?.value || '').trim();
     next.ticketing.alertChannelId = ticketAlertChannelRaw || null;
 
-    next.display.messages.noKeys = String(document.getElementById('vault_msgNoKeys')?.value || '').trim();
-    next.display.messages.vaultInactive = String(document.getElementById('vault_msgInactive')?.value || '').trim();
-    next.display.messages.openSuccess = String(document.getElementById('vault_msgSuccess')?.value || '').trim();
-    next.display.messages.noRewardOpen = String(document.getElementById('vault_msgNoRewardOpen')?.value || '').trim();
+    if (document.getElementById('vault_customMessagesEnabled')?.checked) {
+      next.display.messages.noKeys = String(document.getElementById('vault_msgNoKeys')?.value || '').trim();
+      next.display.messages.vaultInactive = String(document.getElementById('vault_msgInactive')?.value || '').trim();
+      next.display.messages.openSuccess = String(document.getElementById('vault_msgSuccess')?.value || '').trim();
+      next.display.messages.noRewardOpen = String(document.getElementById('vault_msgNoRewardOpen')?.value || '').trim();
+    } else {
+      next.display.messages.noKeys = '';
+      next.display.messages.vaultInactive = '';
+      next.display.messages.openSuccess = '';
+      next.display.messages.noRewardOpen = '';
+    }
 
     await vaultFetchJson('/api/admin/vault/config', {
       method: 'PUT',

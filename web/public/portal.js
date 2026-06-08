@@ -10948,10 +10948,9 @@ function vaultBuildKeyEconomySummaryHtml() {
     <div class="vault-economy-card">
       <div class="vault-economy-head">
         <div>
-          <h4>Key Economy</h4>
-          <p>Manage key tiers, SOL payment bands, and upgrade rules from one focused modal.</p>
+          <h4>Key Economy Summary</h4>
+          <p>Overview of the current active tiers, payment bands, and upgrades.</p>
         </div>
-        <button class="btn-primary" onclick="vaultOpenKeyEconomyModal()">Configure Key Economy</button>
       </div>
       <div class="vault-economy-metrics">
         <div><strong>${enabledTiers}/${tiers.length}</strong><span>Enabled tiers</span></div>
@@ -11686,55 +11685,36 @@ function vaultRenderAdminPanel() {
         </div>
       </div>
 
-      <!-- Key Tiers & Payment Bands (managed via Key Economy modal) -->
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
-        <button class="btn-primary" onclick="vaultOpenKeyEconomyModal()">Configure Key Tiers & Payment Bands</button>
+      <!-- Key Tiers & Payment Bands -->
+      <h4 style="margin:24px 0 16px 0;">Key Economy Settings</h4>
+      <div class="vault-section-card gp-subtle-panel" style="margin-top:0;">
+        Configure how keys are created, tiered, and upgraded.
       </div>
-
-      <div id="vaultKeyEconomyModal" class="modal-overlay vault-economy-modal" style="display:none;" onclick="if(event.target===this)vaultCloseKeyEconomyModal()">
-        <div class="modal">
-          <div class="modal-header">
-            <h3 class="modal-title">Key Economy</h3>
-            <button class="btn-secondary" onclick="vaultCloseKeyEconomyModal()">Close</button>
-          </div>
-          <div class="modal-body vault-economy-modal-grid">
-            <div class="vault-section-card gp-subtle-panel" style="margin-top:0;">
-              Configure how keys are created, tiered, and upgraded. Changes are applied when you save Vault Config.
-            </div>
-            <div class="vault-economy-tabs">
-              <button data-vault-economy-tab-button="tiers" class="btn-primary" onclick="vaultSetKeyEconomyTab('tiers')">Tiers</button>
-              <button data-vault-economy-tab-button="bands" class="btn-secondary" onclick="vaultSetKeyEconomyTab('bands')">Payment Bands</button>
-              <button data-vault-economy-tab-button="upgrades" class="btn-secondary" onclick="vaultSetKeyEconomyTab('upgrades')">Upgrades</button>
-            </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button class="btn-secondary" onclick="vaultSyncSimpleEditorsToJson();vaultRenderSimpleConfigEditors()">Apply Changes</button>
-              <button class="btn-secondary" onclick="vaultRenderSimpleConfigEditors()">Reload Current Config</button>
-              <button class="btn-secondary" onclick="vaultApplyTierTemplate()">Apply Bronze/Silver/Gold Template</button>
-            </div>
-            <div class="vault-economy-modal-section" data-vault-economy-tab="tiers">
-              <h5>Key Tiers</h5>
-              <div id="vaultSimpleTiersRows"></div>
-              <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleTierRow()">Add Tier</button></div>
-            </div>
-            <div id="vaultSimpleGrantsRows" style="display:none;"></div>
-            <div class="vault-economy-modal-section" data-vault-economy-tab="bands" style="display:none;">
-              <h5>Payment Bands</h5>
-              <p style="color:var(--text-secondary);margin:0 0 8px 0;">Map payment value ranges to key tiers. Values are in lamports internally (1 SOL = 1,000,000,000 lamports).</p>
-              <div id="vaultSimpleBandsRows"></div>
-              <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleBandRow()">Add Payment Band</button></div>
-            </div>
-            <div class="vault-economy-modal-section" data-vault-economy-tab="upgrades" style="display:none;">
-              <h5>Upgrade Rules</h5>
-              <p style="color:var(--text-secondary);margin:0 0 8px 0;">Define recipes for merging keys. Example: 10 Bronze Keys → 1 Gold Key.</p>
-              <div id="vaultSimpleConversionsRows"></div>
-              <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleConversionRow()">Add Upgrade Rule</button></div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button class="btn-secondary" onclick="vaultCloseKeyEconomyModal()">Done</button>
-            <button class="btn-primary" onclick="vaultSyncSimpleEditorsToJson();vaultRenderSimpleConfigEditors();showSuccess('Key economy changes staged. Click Save Vault Config to persist.')">Apply Changes</button>
-          </div>
-        </div>
+      <div class="vault-economy-tabs">
+        <button data-vault-economy-tab-button="tiers" class="btn-primary" onclick="vaultSetKeyEconomyTab('tiers')">Tiers</button>
+        <button data-vault-economy-tab-button="bands" class="btn-secondary" onclick="vaultSetKeyEconomyTab('bands')">Payment Bands</button>
+        <button data-vault-economy-tab-button="upgrades" class="btn-secondary" onclick="vaultSetKeyEconomyTab('upgrades')">Upgrades</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+        <button class="btn-secondary" onclick="vaultApplyTierTemplate()">Apply Bronze/Silver/Gold Template</button>
+      </div>
+      <div class="vault-economy-modal-section" data-vault-economy-tab="tiers">
+        <h5 style="margin-top:16px;">Key Tiers</h5>
+        <div id="vaultSimpleTiersRows"></div>
+        <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleTierRow()">Add Tier</button></div>
+      </div>
+      <div id="vaultSimpleGrantsRows" style="display:none;"></div>
+      <div class="vault-economy-modal-section" data-vault-economy-tab="bands" style="display:none;">
+        <h5 style="margin-top:16px;">Payment Bands</h5>
+        <p style="color:var(--text-secondary);margin:0 0 8px 0;">Map payment value ranges to key tiers. Values are in lamports internally (1 SOL = 1,000,000,000 lamports).</p>
+        <div id="vaultSimpleBandsRows"></div>
+        <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleBandRow()">Add Payment Band</button></div>
+      </div>
+      <div class="vault-economy-modal-section" data-vault-economy-tab="upgrades" style="display:none;">
+        <h5 style="margin-top:16px;">Upgrade Rules</h5>
+        <p style="color:var(--text-secondary);margin:0 0 8px 0;">Define recipes for merging keys. Example: 10 Bronze Keys → 1 Gold Key.</p>
+        <div id="vaultSimpleConversionsRows"></div>
+        <div style="margin-top:8px;"><button class="btn-secondary" onclick="vaultAddSimpleConversionRow()">Add Upgrade Rule</button></div>
       </div>
 
       <div id="vaultConfigRowModal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)vaultCloseConfigRowModal()">

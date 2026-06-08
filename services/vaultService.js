@@ -2704,8 +2704,7 @@ class VaultService {
       const fromWallet = String(parts[4] || '').trim();
       const toWallet = String(parts[5] || '').trim();
       const flow = String(parts[7] || '').trim();
-      const amountRaw = String(parts[8] || '').trim();
-      const decimalsRaw = String(parts[9] || '').trim();
+      const amountRaw = String(parts[6] || '').trim(); // Index 6 is 'Amount' (already in base units like lamports)
       const tokenAddress = String(parts[10] || '').trim();
 
       if (action === 'TRANSFER' && flow === 'in' && paymentWallets.includes(toWallet)) {
@@ -2717,9 +2716,7 @@ class VaultService {
           continue;
         }
 
-        const decimals = Number(decimalsRaw) || (isNative ? 9 : 6);
-        const amountFloat = parseFloat(amountRaw) || 0;
-        const lamports = Math.round(amountFloat * Math.pow(10, decimals));
+        const lamports = Number(amountRaw) || 0;
 
         if (lamports >= minLamports) {
           processed++;

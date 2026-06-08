@@ -11550,8 +11550,13 @@ function vaultRenderAdminPanel() {
           .vault-economy-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
         }
       </style>
-      <h3>Vault Settings</h3>
-      <p style="color:var(--text-secondary);margin-bottom:16px;">Configure your key economy, payment rules, and prize flow for this server.</p>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
+        <div>
+          <h3 style="margin:0 0 4px 0;">Vault Settings</h3>
+          <p style="color:var(--text-secondary);margin:0;">Configure your key economy, payment rules, and prize flow for this server.</p>
+        </div>
+        <button class="btn-primary" style="padding: 10px 24px; font-size: 1.05em;" onclick="vaultSaveGeneralConfig()">Save Config</button>
+      </div>
 
 
       <div class="settings-tabs" style="margin-bottom: 20px; flex-wrap:wrap; gap:8px;" id="vaultSettingsTabs">
@@ -11826,7 +11831,7 @@ function vaultRenderAdminPanel() {
         </div>
       </div>
 
-      <div style="margin-top:16px;"><button class="btn-primary" onclick="vaultSaveGeneralConfig()">Save Vault Config</button></div>
+      <div style="margin-top:16px; display:none;"><button class="btn-primary" onclick="vaultSaveGeneralConfig()">Save Vault Config</button></div>
 
       </div>
       <div class="vault-tab-content" id="vault-tab-season" style="display:none;">

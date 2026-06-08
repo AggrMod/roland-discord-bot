@@ -11784,6 +11784,21 @@ function vaultRenderAdminPanel() {
       <textarea id="vault_keyTierConversionsJson" style="display:none;">${escapeHtml(JSON.stringify(keyTierConversions, null, 2))}</textarea>
       <textarea id="vault_winChancesJson" style="display:none;">${escapeHtml(JSON.stringify(rewardTable.winChancesByKeyTier || {}, null, 2))}</textarea>
 
+      </div>
+      <div class="vault-tab-content" id="vault-tab-rewards" style="display:none;">
+      <!-- ═══════════ SECTION 3: Rewards & Win Odds ═══════════ -->
+      <h4 style="margin:16px 0 8px 0;">Win Odds</h4>
+      <div class="vault-section-card gp-subtle-panel" style="margin-top:0;">
+        <div style="color:var(--text-secondary);font-size:0.9em;margin-bottom:8px;">Each key tier rolls its own win chance first. If it wins, a prize is drawn from the eligible rewards by weight.</div>
+        <div id="vaultWinChanceRows"></div>
+      </div>
+
+      <h4 style="margin:16px 0 8px 0;">Reward Table</h4>
+      <table class="vault-admin-table"><thead><tr><th align="left">Code</th><th align="left">Name</th><th align="left">Tier</th><th align="left">Weight</th><th align="left">Drop Chance</th><th align="left">Key Tier</th><th align="left">Qty</th><th align="left">State</th><th align="left">Actions</th></tr></thead><tbody>${rewardsRows}</tbody></table>
+      <div style="margin-top:8px;">
+        <button class="btn-primary" onclick="vaultOpenRewardModal()">Add Reward</button>
+      </div>
+
       <div id="vaultWinChanceModal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)vaultCloseWinChanceModal()">
         <div class="modal" style="max-width:460px;">
           <div class="modal-header"><h3 class="modal-title" id="vaultWinChanceModalTitle">Edit Win Chance</h3></div>
@@ -11799,20 +11814,6 @@ function vaultRenderAdminPanel() {
         </div>
       </div>
 
-      </div>
-      <div class="vault-tab-content" id="vault-tab-rewards" style="display:none;">
-      <!-- ═══════════ SECTION 3: Rewards & Win Odds ═══════════ -->
-      <h4 style="margin:16px 0 8px 0;">Win Odds</h4>
-      <div class="vault-section-card gp-subtle-panel" style="margin-top:0;">
-        <div style="color:var(--text-secondary);font-size:0.9em;margin-bottom:8px;">Each key tier rolls its own win chance first. If it wins, a prize is drawn from the eligible rewards by weight.</div>
-        <div id="vaultWinChanceRows"></div>
-      </div>
-
-      <h4 style="margin:16px 0 8px 0;">Reward Table</h4>
-      <table class="vault-admin-table"><thead><tr><th align="left">Code</th><th align="left">Name</th><th align="left">Tier</th><th align="left">Weight</th><th align="left">Drop Chance</th><th align="left">Key Tier</th><th align="left">Qty</th><th align="left">State</th><th align="left">Actions</th></tr></thead><tbody>${rewardsRows}</tbody></table>
-      <div style="margin-top:8px;">
-        <button class="btn-primary" onclick="vaultOpenRewardModal()">Add Reward</button>
-      </div>
 
       <div id="vaultRewardModal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)vaultCloseRewardModal()">
         <div class="modal" style="max-width:620px;">

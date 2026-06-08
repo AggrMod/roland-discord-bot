@@ -2217,10 +2217,7 @@ class VaultService {
         }
       : null;
     const topLamports = Array.isArray(canonical?.paymentTransfer?.matches) && canonical.paymentTransfer.matches.length
-      ? Number(canonical.paymentTransfer.matches.reduce((best, next) => {
-          const lamports = Number(next?.lamports || 0);
-          return lamports > best ? lamports : best;
-        }, 0))
+      ? Number(canonical.paymentTransfer.matches.reduce((sum, next) => sum + Number(next?.lamports || 0), 0))
       : Number(event?.transferLamports || 0);
     const grants = this.computeMintGrants(config, mintType, { transferLamports: topLamports });
     const linkedUserId = canonical.discordUserId || (walletAddress ? this.findLinkedDiscordUserByWallet(walletAddress) : null);

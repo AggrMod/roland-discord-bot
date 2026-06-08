@@ -2221,7 +2221,7 @@ class VaultService {
           const lamports = Number(next?.lamports || 0);
           return lamports > best ? lamports : best;
         }, 0))
-      : 0;
+      : Number(event?.transferLamports || 0);
     const grants = this.computeMintGrants(config, mintType, { transferLamports: topLamports });
     const linkedUserId = canonical.discordUserId || (walletAddress ? this.findLinkedDiscordUserByWallet(walletAddress) : null);
 

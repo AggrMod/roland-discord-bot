@@ -10999,15 +10999,24 @@ function vaultRenderSimpleConfigEditors() {
     grantsWrap.innerHTML = '<p style="color:var(--text-secondary);">Mint grants are hidden for V1. Payment bands decide key assignment; existing advanced grant values are preserved internally.</p>';
   }
 
-  bandsWrap.innerHTML = bands.length ? `
+    bandsWrap.innerHTML = bands.length ? `
     <table class="vault-admin-table">
-      <thead><tr><th align="left">Tier</th><th align="left">Min Lamports</th><th align="left">Max Lamports</th><th align="left">Keys Granted</th><th align="left">Bonus Free</th><th align="left">Actions</th></tr></thead>
+      <thead><tr><th align="left">Tier</th><th align="left">Min</th><th align="left">Max</th><th align="left">Keys Granted</th><th align="left">Bonus Free</th><th align="left">Actions</th></tr></thead>
       <tbody>
-        ${bands.map((band, idx) => `
+        ${bands.map((band, idx) => {
+          const tokenType = String(band?.tokenType || 'native');
+          let decimals = 9;
+          let label = 'SOL';
+          if (tokenType === 'usdc') { decimals = 6; label = 'USDC'; }
+          else if (tokenType === 'custom') { decimals = Number(band?.tokenDecimals || 9); label = escapeHtml(band?.tokenSymbol || 'SPL'); }
+          const minDecimals = (Number(band?.minLamports ?? band?.min_lamports ?? 0) || 0) / (10 ** decimals);
+          const maxVal = band?.maxLamports === null || band?.maxLamports === undefined ? null : Number(band?.maxLamports);
+          const maxDecimals = maxVal === null ? '∞' : (maxVal / (10 ** decimals));
+          return `
           <tr data-vault-simple-band-row="${idx}">
             <td><code>${escapeHtml(String(band?.keyTier || band?.key_tier || ''))}</code></td>
-            <td>${Number(band?.minLamports ?? band?.min_lamports ?? 0) || 0}</td>
-            <td>${band?.maxLamports === null || band?.max_lamports === null ? '' : (Number(band?.maxLamports ?? band?.max_lamports ?? 0) || 0)}</td>
+            <td><span class="vault-economy-chip" style="margin-right:6px;">${label}</span> ${minDecimals}</td>
+            <td>${maxDecimals}</td>
             <td>${Number(band?.paid || 0)}</td>
             <td>${Number(band?.free || 0)}</td>
             <td style="display:flex;gap:6px;">
@@ -11015,7 +11024,8 @@ function vaultRenderSimpleConfigEditors() {
               <button class="btn-danger" onclick="vaultRemoveSimpleBandRow(${idx})">Remove</button>
             </td>
           </tr>
-        `).join('')}
+        `;
+        }).join('')}
       </tbody>
     </table>
   ` : '<p style="color:var(--text-secondary);">No payment bands yet.</p>';
@@ -11268,10 +11278,34 @@ function vaultOpenConfigRowModal(type, index = -1) {
     const rows = vaultGetJsonArrayInputValue('vault_paymentBandsJson', []);
     const row = Number(index) >= 0 ? (rows[index] || {}) : {};
     title.textContent = Number(index) >= 0 ? 'Edit Payment Band' : 'Add Payment Band';
+    const tokenType = row.tokenType || 'native';
+    let decimals = 9;
+    if (tokenType === 'usdc') decimals = 6;
+    else if (tokenType === 'custom') decimals = Number(row.tokenDecimals || 9);
+    const minVal = (Number(row?.minLamports ?? 0) || 0) / (10 ** decimals);
+    const maxVal = row?.maxLamports === null || row?.maxLamports === undefined ? '' : ((Number(row?.maxLamports) || 0) / (10 ** decimals));
+
     body.innerHTML = `
       <label class="form-label">Tier ID</label><input id="vaultModalBandTier" class="form-input" value="${escapeHtml(String(row?.keyTier || row?.key_tier || ''))}" placeholder="bronze">
-      <label class="form-label">Min Lamports</label><input id="vaultModalBandMin" class="form-input" type="number" min="0" value="${Number(row?.minLamports ?? row?.min_lamports ?? 0) || 0}">
-      <label class="form-label">Max Lamports (blank = no max)</label><input id="vaultModalBandMax" class="form-input" type="number" min="0" value="${row?.maxLamports === null || row?.max_lamports === null ? '' : (Number(row?.maxLamports ?? row?.max_lamports ?? 0) || '')}">
+      <label class="form-label">Token Type</label>
+      <select id="vaultModalBandTokenType" class="form-input" onchange="
+        const t = this.value; 
+        document.getElementById('vaultModalBandCustomOpts').style.display = t === 'custom' ? 'block' : 'none';
+      ">
+        <option value="native" ${tokenType === 'native' ? 'selected' : ''}>Native SOL</option>
+        <option value="usdc" ${tokenType === 'usdc' ? 'selected' : ''}>USDC</option>
+        <option value="custom" ${tokenType === 'custom' ? 'selected' : ''}>Custom SPL</option>
+      </select>
+      <div id="vaultModalBandCustomOpts" style="display: ${tokenType === 'custom' ? 'block' : 'none'}; padding:8px; background:var(--background-secondary); border-radius:4px; margin:8px 0;">
+        <label class="form-label">Token Mint Address</label>
+        <input id="vaultModalBandTokenMint" class="form-input" value="${escapeHtml(String(row?.tokenMint || ''))}" placeholder="Token Address">
+        <label class="form-label">Token Symbol</label>
+        <input id="vaultModalBandTokenSymbol" class="form-input" value="${escapeHtml(String(row?.tokenSymbol || ''))}" placeholder="BONK">
+        <label class="form-label">Token Decimals</label>
+        <input id="vaultModalBandTokenDecimals" class="form-input" type="number" value="${Number(row?.tokenDecimals || 9)}">
+      </div>
+      <label class="form-label">Min Amount</label><input id="vaultModalBandMin" class="form-input" type="number" step="any" min="0" value="${minVal}">
+      <label class="form-label">Max Amount (blank = no max)</label><input id="vaultModalBandMax" class="form-input" type="number" step="any" min="0" value="${maxVal}">
       <label class="form-label">Paid Keys</label><input id="vaultModalBandPaid" class="form-input" type="number" min="0" value="${Number(row?.paid || 0)}">
       <label class="form-label">Free Keys</label><input id="vaultModalBandFree" class="form-input" type="number" min="0" value="${Number(row?.free || 0)}">
     `;
@@ -11375,11 +11409,27 @@ function vaultSaveConfigRowModal() {
     if (convEl) convEl.value = JSON.stringify(filteredConv, null, 2);
   } else if (type === 'band') {
     const rows = vaultGetJsonArrayInputValue('vault_paymentBandsJson', []);
-    const maxRaw = String(document.getElementById('vaultModalBandMax')?.value || '').trim();
+    const tokenType = String(document.getElementById('vaultModalBandTokenType')?.value || 'native');
+    const tokenMint = tokenType === 'native' ? 'native' : (tokenType === 'usdc' ? 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' : String(document.getElementById('vaultModalBandTokenMint')?.value || '').trim());
+    let decimals = 9;
+    if (tokenType === 'usdc') decimals = 6;
+    else if (tokenType === 'custom') decimals = Math.max(0, Number(document.getElementById('vaultModalBandTokenDecimals')?.value || 9));
+
+    const minRaw = Number(document.getElementById('vaultModalBandMin')?.value || 0) || 0;
+    const maxStr = String(document.getElementById('vaultModalBandMax')?.value || '').trim();
+    const maxRaw = maxStr === '' ? null : Number(maxStr);
+
+    const minLamports = Math.floor(minRaw * (10 ** decimals));
+    const maxLamports = maxRaw === null ? null : Math.floor(maxRaw * (10 ** decimals));
+
     const next = {
       keyTier: String(document.getElementById('vaultModalBandTier')?.value || '').trim().toLowerCase(),
-      minLamports: Math.max(0, Number(document.getElementById('vaultModalBandMin')?.value || 0) || 0),
-      maxLamports: maxRaw === '' ? null : Math.max(0, Number(maxRaw) || 0),
+      tokenType: tokenType,
+      tokenMint: tokenMint,
+      tokenSymbol: tokenType === 'custom' ? String(document.getElementById('vaultModalBandTokenSymbol')?.value || '').trim() : undefined,
+      tokenDecimals: tokenType === 'custom' ? decimals : undefined,
+      minLamports: minLamports,
+      maxLamports: maxLamports,
       paid: Math.max(0, Number(document.getElementById('vaultModalBandPaid')?.value || 0) || 0),
       free: Math.max(0, Number(document.getElementById('vaultModalBandFree')?.value || 0) || 0),
     };

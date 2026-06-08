@@ -2184,24 +2184,51 @@ class VaultService {
     const paid = normalizedType === 'paid';
     const free = normalizedType === 'free';
     const minting = config?.minting || {};
-    const transferLamports = Number(context?.transferLamports || 0);
-    const hasLamports = Number.isFinite(transferLamports) && transferLamports > 0;
     const configuredTierGrants = minting?.grantsPerMint && typeof minting.grantsPerMint === 'object'
       ? minting.grantsPerMint
       : {};
     const keyTierGrants = {};
 
     const paymentBands = Array.isArray(minting?.paymentBands) ? minting.paymentBands : [];
-    const matchedBand = (paid || free) && hasLamports
-      ? paymentBands.find((band) => {
-          const min = Math.max(0, Number(band?.minLamports || 0) || 0);
-          const maxRaw = band?.maxLamports;
+    const transfers = Array.isArray(context?.transfers) ? context.transfers : [];
+    
+    // Legacy support for transferLamports without explicit tokenMint
+    if (!transfers.length && context?.transferLamports) {
+      transfers.push({ amount: Number(context.transferLamports), tokenMint: 'native' });
+    }
+
+    let matchedBand = null;
+    
+    if ((paid || free) && transfers.length > 0) {
+      // Find the highest paying band among all transfers
+      let bestBand = null;
+      let bestKeys = -1;
+      
+      for (const transfer of transfers) {
+        const amt = Number(transfer.amount || 0);
+        const tMint = String(transfer.tokenMint || 'native');
+        if (amt <= 0) continue;
+        
+        for (const band of paymentBands) {
+          const bMint = String(band.tokenMint || 'native');
+          if (bMint !== tMint) continue;
+          
+          const min = Math.max(0, Number(band.minLamports || 0) || 0);
+          const maxRaw = band.maxLamports;
           const max = maxRaw === null || maxRaw === undefined || maxRaw === '' ? null : Math.max(0, Number(maxRaw) || 0);
-          if (transferLamports < min) return false;
-          if (max !== null && transferLamports > max) return false;
-          return true;
-        })
-      : null;
+          
+          if (amt < min) continue;
+          if (max !== null && amt > max) continue;
+          
+          const keys = paid ? Number(band.paid || 0) : (free ? Number(band.free || 0) : 0);
+          if (keys > bestKeys) {
+            bestKeys = keys;
+            bestBand = band;
+          }
+        }
+      }
+      matchedBand = bestBand;
+    }
 
     const tierList = Array.isArray(config?.keyTiers) ? config.keyTiers : [];
     const fallbackTierId = normalizeKeyTierId(tierList[0]?.id || 'default');
@@ -2315,10 +2342,23 @@ class VaultService {
           pressure_granted: clampInt(existing.pressure_granted, 0, 0),
         }
       : null;
-    const topLamports = Array.isArray(canonical?.paymentTransfer?.matches) && canonical.paymentTransfer.matches.length
-      ? Number(canonical.paymentTransfer.matches.reduce((sum, next) => sum + Number(next?.lamports || 0), 0))
-      : Number(event?.transferLamports || 0);
-    const grants = this.computeMintGrants(config, mintType, { transferLamports: topLamports });
+    // Build context transfers from paymentTransfer.matches or fallback
+    let contextTransfers = [];
+    if (Array.isArray(canonical?.paymentTransfer?.matches) && canonical.paymentTransfer.matches.length > 0) {
+      contextTransfers = canonical.paymentTransfer.matches.map(m => ({
+        amount: Number(m.lamports || 0),
+        tokenMint: String(m.tokenMint || 'native')
+      }));
+    } else if (event?.transferLamports) {
+      contextTransfers.push({ amount: Number(event.transferLamports), tokenMint: 'native' });
+    } else if (Array.isArray(event?.nativeTransfers) && event.nativeTransfers.length > 0) {
+      contextTransfers = event.nativeTransfers.map(m => ({
+        amount: Number(m.amount || 0),
+        tokenMint: String(m.tokenMint || 'native')
+      }));
+    }
+
+    const grants = this.computeMintGrants(config, mintType, { transfers: contextTransfers });
     const linkedUserId = canonical.discordUserId || (walletAddress ? this.findLinkedDiscordUserByWallet(walletAddress) : null);
 
     if (existing) {
@@ -2670,20 +2710,35 @@ class VaultService {
             } else {
               const paymentTokens = Array.isArray(minting?.paymentTokens) ? minting.paymentTokens : [];
               const transfers = this.extractTransfersFromParsedTransaction(tx, [walletAddress], paymentTokens);
+              const paymentBands = Array.isArray(config?.minting?.paymentBands) ? config.minting.paymentBands : [];
               const matchingTransfers = transfers.filter((transfer) => {
                 const destination = String(transfer?.toUserAccount || '').trim();
                 const lamports = Number(transfer?.amount || 0);
-                return destination === walletAddress && Number.isFinite(lamports) && lamports >= minLamports;
+                const tokenMint = String(transfer?.tokenMint || 'native');
+                
+                if (destination !== walletAddress || !Number.isFinite(lamports)) return false;
+                
+                // If there are payment bands, only accept transfers that meet the minimum of ANY matching band
+                if (paymentBands.length > 0) {
+                  const matchingBands = paymentBands.filter(b => String(b.tokenMint || 'native') === tokenMint);
+                  if (matchingBands.length === 0 && tokenMint === 'native' && lamports >= minLamports) return true; // legacy fallback
+                  if (matchingBands.length === 0) return false;
+                  const lowestMin = Math.min(...matchingBands.map(b => Math.max(0, Number(b.minLamports || 0))));
+                  return lamports >= lowestMin;
+                }
+                
+                return lamports >= minLamports;
               });
+
               if (matchingTransfers.length) {
                 summary.matchedTransfers += 1;
                 matchingTransfers.sort((a, b) => Number(b?.amount || 0) - Number(a?.amount || 0));
                 const payerWallet = String(matchingTransfers[0]?.fromUserAccount || '').trim() || null;
-                const totalLamports = matchingTransfers.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+                const totalLamports = matchingTransfers.reduce((sum, t) => sum + Number(t.amount || 0), 0); // Used for logging
 
                 let grantCalc = null;
                 if (dryRun) {
-                  grantCalc = this.computeMintGrants(config, 'paid', { transferLamports: totalLamports });
+                  grantCalc = this.computeMintGrants(config, 'paid', { transfers: matchingTransfers });
                 }
 
                 const ingestResult = dryRun

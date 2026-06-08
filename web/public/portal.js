@@ -11876,15 +11876,6 @@ function vaultRenderAdminPanel() {
         <tbody>${keyOverviewRows}</tbody>
       </table>
 
-      <h4 style="margin:20px 0 8px 0;">Manual Reward Assignment</h4>
-      <p style="color:var(--text-secondary);font-size:0.88em;margin-bottom:8px;">Instantly assign a specific reward to a user (bypasses the vault roll).</p>
-      <div class="vault-settings-grid" style="margin-top:10px;">
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Reward Code</div><div class="settings-desc">Code of the reward to assign (must exist in the reward table).</div></div><input id="vaultAssignRewardCode" class="input-sm" placeholder="reward_code"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Reward Name</div><div class="settings-desc">Display name for the manually assigned reward.</div></div><input id="vaultAssignRewardName" class="input-sm" placeholder="Manual reward"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Reward Tier</div><div class="settings-desc">Rarity tier of the reward (e.g. common, rare, epic).</div></div><input id="vaultAssignRewardTier" class="input-sm" value="rare"></div>
-      </div>
-      <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultAssignReward()">Assign Reward</button></div>
-      </details>
 
       </div>
       <div class="vault-tab-content" id="vault-tab-recovery" style="display:none;">
@@ -11926,7 +11917,6 @@ function vaultRenderAdminPanel() {
         <button id="vaultBulkBackfillBtn" class="btn-secondary" onclick="vaultRunBackfillAllMissingTx()">Backfill Missing TXs (All Configured Wallets)</button>
         <div id="vaultBulkBackfillResult" style="margin-top:12px;font-size:0.9rem;color:var(--text-secondary);white-space:pre-wrap;background:rgba(2,6,23,0.5);padding:10px;border-radius:6px;display:none;border:1px solid rgba(99,102,241,0.2);"></div>
       </div>
-      </details>
 
       </div>
       <div class="vault-tab-content" id="vault-tab-activity" style="display:none;">
@@ -11950,7 +11940,6 @@ function vaultRenderAdminPanel() {
       <textarea id="vaultClaimNoteInput" class="form-input" rows="2" placeholder="optional note"></textarea>
       <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultUpdateClaimStatus()">Update Claim Status</button></div>
 
-      </details>
 
       <!-- ═══════════ SECTION: Config Export/Import ═══════════ -->
       </div>
@@ -11961,7 +11950,6 @@ function vaultRenderAdminPanel() {
         <button class="btn-secondary" onclick="vaultExportConfig()">Export Config</button>
         <button class="btn-secondary" onclick="vaultImportConfig()">Import Config</button>
       </div>
-      </details>
       </div>
     </div>
   `;

@@ -14,6 +14,12 @@ function clampInt(value, min = 0, fallback = 0) {
   return Math.max(min, n);
 }
 
+function clampPercent(value, fallback = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(100, n));
+}
+
 function safeJsonParse(value, fallback = null) {
   try {
     if (value === undefined || value === null || value === '') return fallback;
@@ -140,6 +146,8 @@ class VaultService {
       general: {
         enabled: false,
         announceChannelId: '',
+        winChannelId: '',
+        prizeRevealDelaySeconds: 3,
         announceRewardTiers: ['rare', 'epic', 'legendary'],
         announceCommonRewards: false,
       },
@@ -496,6 +504,20 @@ class VaultService {
       };
     });
 
+    const explicitWinChancesRaw = migratedConfig?.rewardTable?.winChancesByKeyTier;
+    const hasExplicitWinChances = explicitWinChancesRaw && typeof explicitWinChancesRaw === 'object' && !Array.isArray(explicitWinChancesRaw);
+    const winChancesRaw = hasExplicitWinChances ? explicitWinChancesRaw : {};
+    const legacyDerivedChance = this.deriveLegacyWinChancePercent(next.rewardTable.rewards);
+    const normalizedWinChances = {};
+    for (const tier of normalizedTiers) {
+      const raw = winChancesRaw[tier.id] ?? winChancesRaw[normalizeKeyTierId(tier.id)];
+      normalizedWinChances[tier.id] = clampPercent(raw, hasExplicitWinChances ? 25 : legacyDerivedChance);
+    }
+    if (!Object.keys(normalizedWinChances).length) {
+      normalizedWinChances.default = hasExplicitWinChances ? 25 : legacyDerivedChance;
+    }
+    next.rewardTable.winChancesByKeyTier = normalizedWinChances;
+
     return next;
   }
 
@@ -657,6 +679,18 @@ class VaultService {
     return { success: true, season: this.getSeason(gid, sid) };
   }
 
+  deleteSeason(guildId, seasonId) {
+    const gid = normalizeGuildId(guildId);
+    const sid = normalizeSeasonId(seasonId);
+    if (!gid || !sid) return { success: false, message: 'Invalid season' };
+    if (sid === 'default') return { success: false, message: 'Default season cannot be removed' };
+    const existing = this.getSeason(gid, sid);
+    if (!existing) return { success: false, message: 'Season not found' };
+    if (Number(existing.active || 0) === 1) return { success: false, message: 'Active season cannot be removed' };
+    db.prepare('DELETE FROM vault_seasons WHERE guild_id = ? AND season_id = ?').run(gid, sid);
+    return { success: true };
+  }
+
   getSeason(guildId, seasonId) {
     const gid = normalizeGuildId(guildId);
     const sid = normalizeSeasonId(seasonId);
@@ -816,26 +850,80 @@ class VaultService {
     return this.saveConfig(guildId, cfg);
   }
 
-  rollReward(guildId, keyTierId = 'default') {
+  deriveLegacyWinChancePercent(rewards = []) {
+    const list = Array.isArray(rewards) ? rewards : [];
+    const enabled = list.filter(reward => reward && reward.enabled !== false && Number(reward.weight || 0) > 0);
+    const noRewardWeight = enabled
+      .filter(reward => String(reward?.type || '').trim().toLowerCase() === 'no_reward' || String(reward?.code || '').trim().toLowerCase() === 'nothing')
+      .reduce((sum, reward) => sum + Math.max(0, Number(reward.weight || 0)), 0);
+    const prizeWeight = enabled
+      .filter(reward => String(reward?.type || '').trim().toLowerCase() !== 'no_reward')
+      .reduce((sum, reward) => sum + Math.max(0, Number(reward.weight || 0)), 0);
+    const total = noRewardWeight + prizeWeight;
+    if (total <= 0) return 25;
+    return Math.round((prizeWeight / total) * 10000) / 100;
+  }
+
+  getWinChanceForKeyTier(guildId, keyTierId = 'default') {
+    const cfg = this.getConfig(guildId) || {};
+    const selectedTier = this.resolveKeyTier(guildId, keyTierId);
+    const tierId = normalizeKeyTierId(selectedTier?.id || keyTierId || 'default');
+    const chances = cfg?.rewardTable?.winChancesByKeyTier && typeof cfg.rewardTable.winChancesByKeyTier === 'object'
+      ? cfg.rewardTable.winChancesByKeyTier
+      : {};
+    const direct = chances[tierId];
+    if (direct !== undefined && direct !== null && direct !== '') return clampPercent(direct, 0);
+    const chain = this.getInheritedTierChain(guildId, tierId);
+    for (const inheritedTier of chain.slice(1)) {
+      if (chances[inheritedTier] !== undefined && chances[inheritedTier] !== null && chances[inheritedTier] !== '') {
+        return clampPercent(chances[inheritedTier], 0);
+      }
+    }
+    if (chances.default !== undefined && chances.default !== null && chances.default !== '') return clampPercent(chances.default, 0);
+    return this.deriveLegacyWinChancePercent(cfg?.rewardTable?.rewards || []);
+  }
+
+  rollWinForKeyTier(guildId, keyTierId = 'default') {
+    const winChancePercent = this.getWinChanceForKeyTier(guildId, keyTierId);
+    const roll = Math.random() * 100;
+    return {
+      won: roll < winChancePercent,
+      winChancePercent,
+      roll,
+    };
+  }
+
+  getEligiblePrizeRewards(guildId, keyTierId = 'default') {
     const inheritedTiers = new Set(this.getInheritedTierChain(guildId, keyTierId));
-    const rewards = this.getRewards(guildId)
+    return this.getRewards(guildId)
       .filter((reward) => {
         if (!reward || reward.enabled === false || Number(reward.weight || 0) <= 0) return false;
+        const rewardType = String(reward?.type || '').trim().toLowerCase();
+        const rewardCode = String(reward?.code || '').trim().toLowerCase();
+        if (rewardType === 'no_reward' || rewardCode === 'no_reward' || rewardCode === 'nothing') return false;
         const rewardKeyTier = reward?.keyTier ? normalizeKeyTierId(reward.keyTier) : null;
         if (rewardKeyTier && !inheritedTiers.has(rewardKeyTier)) return false;
         const quantity = normalizeRewardQuantity(reward.quantity);
         if (quantity === null) return true;
         return quantity > 0;
       });
+  }
+
+  rollPrizeForKeyTier(guildId, keyTierId = 'default') {
+    const rewards = this.getEligiblePrizeRewards(guildId, keyTierId);
     const weightedRewardTotal = rewards.reduce((sum, reward) => sum + Number(reward.weight || 0), 0);
     const total = weightedRewardTotal;
-    if (total <= 0) return null;
+    if (total <= 0) return { reward: null, totalWeight: 0, eligibleRewards: rewards };
     let roll = Math.random() * total;
     for (const reward of rewards) {
       roll -= Number(reward.weight || 0);
-      if (roll <= 0) return reward;
+      if (roll <= 0) return { reward, totalWeight: total, eligibleRewards: rewards };
     }
-    return rewards.length ? rewards[rewards.length - 1] : null;
+    return { reward: rewards.length ? rewards[rewards.length - 1] : null, totalWeight: total, eligibleRewards: rewards };
+  }
+
+  rollReward(guildId, keyTierId = 'default') {
+    return this.rollPrizeForKeyTier(guildId, keyTierId).reward;
   }
 
   ensureUserStats(guildId, seasonId, discordUserId, walletAddress = null) {
@@ -929,16 +1017,25 @@ class VaultService {
       return { success: false, message: 'Selected key tier is disabled' };
     }
 
-    const rolledReward = this.rollReward(gid, selectedTier.id);
-    const reward = rolledReward || {
+    const winRoll = this.rollWinForKeyTier(gid, selectedTier.id);
+    const prizeRoll = winRoll.won ? this.rollPrizeForKeyTier(gid, selectedTier.id) : { reward: null, totalWeight: 0, eligibleRewards: [] };
+    const won = !!(winRoll.won && prizeRoll.reward);
+    const reward = won ? prizeRoll.reward : {
       code: 'no_reward',
       name: 'No Reward',
       tier: 'none',
-      type: 'none',
+      type: 'no_reward',
       payload: null,
     };
-    const openingStatus = reward.code === 'no_reward' ? 'empty' : 'completed';
-    const rewardWonIncrement = reward.code === 'no_reward' ? 0 : 1;
+    const openingStatus = won ? 'completed' : 'empty';
+    const rewardWonIncrement = won ? 1 : 0;
+    const oddsContext = {
+      won,
+      winChancePercent: winRoll.winChancePercent,
+      winRoll: winRoll.roll,
+      prizeTotalWeight: Number(prizeRoll.totalWeight || 0),
+      eligiblePrizeCount: Array.isArray(prizeRoll.eligibleRewards) ? prizeRoll.eligibleRewards.length : 0,
+    };
     let openingResult = null;
 
     const tx = db.transaction(() => {
@@ -1033,6 +1130,8 @@ class VaultService {
         },
         keyTier: selectedTier.id,
         keyTierName: selectedTier.name,
+        won,
+        odds: oddsContext,
       };
       return openingResult;
     });

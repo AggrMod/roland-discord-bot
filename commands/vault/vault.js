@@ -60,6 +60,10 @@ function pickRandom(values, fallback) {
   return choices[Math.floor(Math.random() * choices.length)] || fallback;
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+
 function renderTemplate(rawTemplate, variables = {}) {
   const template = String(rawTemplate || '').trim();
   if (!template) return '';
@@ -327,15 +331,17 @@ module.exports = {
         await interaction.editReply({ content: `ERROR: ${result.message}` });
         return true;
       }
+      const announcement = await this.announceVaultWin(guildId, interaction.user, result, interaction);
       const ticket = await this.maybeCreateRewardTicket(guildId, interaction.user, result);
       const ticketLine = ticket?.created ? `\nFulfillment ticket created: #${ticket.ticketNumber || '?'} (<#${ticket.channelId}>)` : '';
+      const announceLine = announcement?.posted ? `\nWin posted in <#${announcement.channelId}>.` : '';
       const rewardTier = String(result?.reward?.tier || 'common').toLowerCase();
       const tierEmoji = rewardTierEmoji(rewardTier);
       const isSpotlight = rewardTier === 'epic' || rewardTier === 'legendary';
       const title = isSpotlight
         ? `${tierEmoji} Spotlight Reward Unlocked`
         : 'Vault Opening Result';
-      const accentColor = String(result?.reward?.code || '') === 'no_reward'
+      const accentColor = !result?.won
         ? '#ef4444'
         : rewardTierColorHex(rewardTier);
       const details = [
@@ -348,7 +354,7 @@ module.exports = {
       await interaction.editReply({
         embeds: [this.buildPanelResponseEmbed(guildId, {
           title,
-          description: `${this.buildOpenResultMessage(guildId, result, { trailingLabel: 'Available keys' })}\n\n${details}${ticketLine}`,
+          description: `${this.buildOpenResultMessage(guildId, result, { trailingLabel: 'Available keys' })}\n\n${details}${announceLine}${ticketLine}`,
           accentColor,
         })],
       });
@@ -362,7 +368,7 @@ module.exports = {
         return true;
       }
       const keyBalances = balanceResult.stats?.key_balances || {};
-      const availableTiers = Object.entries(keyBalances).filter(([_, amount]) => Number(amount || 0) > 0).map(([tier]) => tier);
+      const availableTiers = Object.entries(keyBalances).filter((entry) => Number(entry[1] || 0) > 0).map(([tier]) => tier);
       
       if (availableTiers.length === 0) {
         await interaction.reply({ content: `You do not have any keys available to open the vault.`, ephemeral: true });
@@ -377,15 +383,17 @@ module.exports = {
           await interaction.editReply({ content: `ERROR: ${result.message}` });
           return true;
         }
+        const announcement = await this.announceVaultWin(guildId, interaction.user, result, interaction);
         const ticket = await this.maybeCreateRewardTicket(guildId, interaction.user, result);
         const ticketLine = ticket?.created ? `\nFulfillment ticket created: #${ticket.ticketNumber || '?'} (<#${ticket.channelId}>)` : '';
+        const announceLine = announcement?.posted ? `\nWin posted in <#${announcement.channelId}>.` : '';
         const rewardTier = String(result?.reward?.tier || 'common').toLowerCase();
         const tierEmoji = rewardTierEmoji(rewardTier);
         const isSpotlight = rewardTier === 'epic' || rewardTier === 'legendary';
         const title = isSpotlight
           ? `${tierEmoji} Spotlight Reward Unlocked`
           : 'Vault Opening Result';
-        const accentColor = String(result?.reward?.code || '') === 'no_reward'
+        const accentColor = !result?.won
           ? '#ef4444'
           : rewardTierColorHex(rewardTier);
         const details = [
@@ -398,7 +406,7 @@ module.exports = {
         await interaction.editReply({
           embeds: [this.buildPanelResponseEmbed(guildId, {
             title,
-            description: `${this.buildOpenResultMessage(guildId, result, { trailingLabel: 'Available keys' })}\n\n${details}${ticketLine}`,
+            description: `${this.buildOpenResultMessage(guildId, result, { trailingLabel: 'Available keys' })}\n\n${details}${announceLine}${ticketLine}`,
             accentColor,
           })],
         });
@@ -545,6 +553,7 @@ module.exports = {
       await interaction.deferReply({ ephemeral: true });
       const rewards = vaultService.getRewards(guildId)
         .filter((reward) => reward && reward.enabled !== false && Number(reward.weight || 0) > 0)
+        .filter((reward) => String(reward?.type || '').trim().toLowerCase() !== 'no_reward' && String(reward?.code || '').trim().toLowerCase() !== 'no_reward' && String(reward?.code || '').trim().toLowerCase() !== 'nothing')
         .filter((reward) => reward.quantity === null || Number(reward.quantity || 0) > 0);
       if (!rewards.length) {
         await interaction.editReply({
@@ -710,7 +719,7 @@ module.exports = {
   async maybeCreateRewardTicket(guildId, user, openResult) {
     try {
       const reward = openResult?.reward || {};
-      if (!openResult?.success || String(reward?.code || '') === 'no_reward') {
+      if (!openResult?.success || !openResult?.won || String(reward?.code || '') === 'no_reward') {
         return { created: false, reason: 'no_reward' };
       }
       const cfg = vaultService.getConfig(guildId) || {};
@@ -842,15 +851,17 @@ module.exports = {
     const keyTier = interaction.options.getString('key_tier');
     const result = vaultService.openVault(guildId, interaction.user.id, { keyTier });
     if (!result.success) return interaction.editReply({ content: `ERROR: ${result.message}` });
+    const announcement = await this.announceVaultWin(guildId, interaction.user, result, interaction);
     const ticket = await this.maybeCreateRewardTicket(guildId, interaction.user, result);
     const ticketLine = ticket?.created ? `\nFulfillment ticket created: #${ticket.ticketNumber || '?'} (<#${ticket.channelId}>)` : '';
+    const announceLine = announcement?.posted ? `\nWin posted in <#${announcement.channelId}>.` : '';
     const rewardTier = String(result?.reward?.tier || 'common').toLowerCase();
     const tierEmoji = rewardTierEmoji(rewardTier);
     const isSpotlight = rewardTier === 'epic' || rewardTier === 'legendary';
     const title = isSpotlight
       ? `${tierEmoji} Spotlight Reward Unlocked`
       : 'Vault Opening Result';
-    const accentColor = String(result?.reward?.code || '') === 'no_reward'
+    const accentColor = !result?.won
       ? '#ef4444'
       : rewardTierColorHex(rewardTier);
     const details = [
@@ -862,7 +873,7 @@ module.exports = {
     ].join('\n');
     const embed = this.buildPanelResponseEmbed(guildId, {
       title,
-      description: `${this.buildOpenResultMessage(guildId, result, { trailingLabel: 'Available keys now' })}\n\n${details}${ticketLine}`,
+      description: `${this.buildOpenResultMessage(guildId, result, { trailingLabel: 'Available keys now' })}\n\n${details}${announceLine}${ticketLine}`,
       accentColor,
     });
     return interaction.editReply({ embeds: [embed] });
@@ -911,7 +922,7 @@ module.exports = {
     const noRewardText = String(config?.display?.noRewardOpen || 'Vault opened, but this key did not reveal a reward.');
     const successTemplate = String(config?.display?.openSuccess || 'Vault opened! You received **{{rewardName}}**.');
 
-    if (String(result?.reward?.code || '') === 'no_reward') {
+    if (!result?.won || String(result?.reward?.code || '') === 'no_reward') {
       const suspense = pickRandom(suspenseLines, suspenseFallback[0]);
       const funnyFail = pickRandom(failLines, failFallback[0]);
       return `${suspense}\n${funnyFail}\n${noRewardText}\nKey Tier: ${keyTierName}\n${trailingLabel}: ${availableKeys}`;
@@ -940,6 +951,7 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
     const rewards = vaultService.getRewards(guildId)
       .filter((reward) => reward && reward.enabled !== false && Number(reward.weight || 0) > 0)
+      .filter((reward) => String(reward?.type || '').trim().toLowerCase() !== 'no_reward' && String(reward?.code || '').trim().toLowerCase() !== 'no_reward' && String(reward?.code || '').trim().toLowerCase() !== 'nothing')
       .filter((reward) => reward.quantity === null || Number(reward.quantity || 0) > 0);
     if (!rewards.length) {
       return interaction.editReply({
@@ -1217,6 +1229,52 @@ module.exports = {
       return interaction.editReply({ content: linesResult.join('\n') });
     } catch (error) {
       return interaction.editReply({ content: `ERROR parsing CSV: ${error.message}` });
+    }
+  },
+
+  async announceVaultWin(guildId, user, openResult, interaction = null) {
+    try {
+      if (!openResult?.success || !openResult?.won) return { posted: false, reason: 'no_win' };
+      const cfg = vaultService.getConfig(guildId) || {};
+      const winChannelId = String(cfg?.general?.winChannelId || '').trim();
+      if (!winChannelId) return { posted: false, reason: 'missing_channel' };
+      const client = interaction?.client || ticketService?.client;
+      const channel = client?.channels?.cache?.get(winChannelId)
+        || await client?.channels?.fetch?.(winChannelId).catch(() => null);
+      if (!channel || !channel.isTextBased?.()) return { posted: false, reason: 'channel_unavailable' };
+
+      const gameName = String(cfg?.display?.gameName || 'Reward Vault');
+      const keyTierName = String(openResult?.keyTierName || openResult?.keyTier || 'default');
+      const reward = openResult.reward || {};
+      const revealDelaySec = Math.max(0, Math.min(30, Number(cfg?.general?.prizeRevealDelaySeconds ?? 3) || 0));
+      const drawEmbed = this.buildPanelResponseEmbed(guildId, {
+        title: `${gameName} Win`,
+        description: `<@${user.id}> opened the vault with a **${keyTierName}** key and hit a winning roll.\nDrawing the prize now...`,
+        accentColor: '#22c55e',
+      });
+      drawEmbed.addFields(
+        { name: 'Opening ID', value: String(openResult.openingId || 'n/a'), inline: true },
+        { name: 'Win Chance', value: `${Number(openResult?.odds?.winChancePercent || 0).toFixed(2)}%`, inline: true },
+      );
+      await channel.send({ embeds: [drawEmbed] });
+      if (revealDelaySec > 0) await sleep(revealDelaySec * 1000);
+
+      const rewardTier = String(reward?.tier || 'common').toLowerCase();
+      const revealEmbed = this.buildPanelResponseEmbed(guildId, {
+        title: `${rewardTierEmoji(rewardTier)} Prize Revealed`,
+        description: `<@${user.id}> won **${String(reward?.name || reward?.code || 'Unknown Reward')}**.`,
+        accentColor: rewardTierColorHex(rewardTier),
+      });
+      revealEmbed.addFields(
+        { name: 'Prize Tier', value: String(rewardTier || 'common'), inline: true },
+        { name: 'Key Tier', value: keyTierName, inline: true },
+        { name: 'Prize Pool Weight', value: `${Number(reward?.weight || 0)} / ${Number(openResult?.odds?.prizeTotalWeight || 0)}`, inline: true },
+      );
+      await channel.send({ embeds: [revealEmbed] });
+      return { posted: true, channelId: channel.id };
+    } catch (error) {
+      logger.warn('[vault] win announcement failed:', error?.message || error);
+      return { posted: false, reason: 'exception' };
     }
   },
 };

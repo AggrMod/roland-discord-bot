@@ -29,6 +29,7 @@ let _portalMultiSelectAutoId = 0;
 let _portalMultiSelectPickerState = null;
 let vaultSettingsCache = null;
 let vaultConfigModalState = { type: '', index: -1 };
+let vaultWinChanceModalState = { tierId: '' };
 let vaultKeyEconomyTab = 'tiers';
 const VAULT_UI_MODE_STORAGE_KEY = 'vaultUiMode';
 let quickSwitchActiveIndex = 0;
@@ -10820,6 +10821,76 @@ function vaultBuildChannelSelect(channels, selectedId, noneLabel = 'No channel s
   return `<option value="">${escapeHtml(noneLabel)}</option>${fallbackSelectedOption}${options}`;
 }
 
+function vaultBuildTicketCategorySelect(categories, selectedId, noneLabel = 'No ticket category') {
+  const selected = String(selectedId || '').trim();
+  const rows = Array.isArray(categories) ? categories : [];
+  const options = rows
+    .slice()
+    .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')))
+    .map((category) => {
+      const id = String(category?.id || '').trim();
+      if (!id) return '';
+      const label = String(category?.name || `Category #${id}`);
+      const status = category?.enabled === false || Number(category?.enabled) === 0 ? ' (disabled)' : '';
+      return `<option value="${escapeHtml(id)}"${id === selected ? ' selected' : ''}>${escapeHtml(label + status)}</option>`;
+    })
+    .join('');
+  const fallbackSelectedOption = (selected && !options.includes(`value="${escapeHtml(selected)}"`))
+    ? `<option value="${escapeHtml(selected)}" selected>Unknown category (${escapeHtml(selected)})</option>`
+    : '';
+  return `<option value="">${escapeHtml(noneLabel)}</option>${fallbackSelectedOption}${options}`;
+}
+
+function vaultBuildKeyTierOptions(selectedId = '', includeAll = true) {
+  const selected = String(selectedId || '').trim().toLowerCase();
+  const tiers = vaultGetJsonArrayInputValue('vault_keyTiersJson', Array.isArray(vaultSettingsCache?.config?.keyTiers) ? vaultSettingsCache.config.keyTiers : []);
+  const options = [];
+  if (includeAll) options.push(`<option value=""${!selected ? ' selected' : ''}>All key tiers</option>`);
+  tiers.forEach((tier) => {
+    const id = String(tier?.id || '').trim().toLowerCase();
+    if (!id) return;
+    const label = String(tier?.name || id);
+    options.push(`<option value="${escapeHtml(id)}"${id === selected ? ' selected' : ''}>${escapeHtml(label)} (${escapeHtml(id)})</option>`);
+  });
+  if (selected && !options.some(option => option.includes(`value="${escapeHtml(selected)}"`))) {
+    options.push(`<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)}</option>`);
+  }
+  return options.join('');
+}
+
+function vaultCalculateRewardChanceText(reward, rewards = null, keyTierId = '') {
+  const allRewards = Array.isArray(rewards) ? rewards : (Array.isArray(vaultSettingsCache?.rewards) ? vaultSettingsCache.rewards : []);
+  const selectedTier = String(keyTierId || reward?.keyTier || '').trim().toLowerCase();
+  const tierChain = (() => {
+    const tiers = Array.isArray(vaultSettingsCache?.config?.keyTiers) ? vaultSettingsCache.config.keyTiers : [];
+    const byId = new Map(tiers.map(tier => [String(tier?.id || '').trim().toLowerCase(), tier]));
+    const chain = [];
+    let cursor = selectedTier ? byId.get(selectedTier) : null;
+    const seen = new Set();
+    while (cursor && !seen.has(String(cursor.id || '').toLowerCase())) {
+      const id = String(cursor.id || '').toLowerCase();
+      chain.push(id);
+      seen.add(id);
+      cursor = cursor?.inheritsFrom ? byId.get(String(cursor.inheritsFrom || '').toLowerCase()) : null;
+    }
+    return new Set(chain);
+  })();
+  const eligible = allRewards.filter((item) => {
+    if (!item || item.enabled === false || Number(item.weight || 0) <= 0) return false;
+    const type = String(item?.type || '').toLowerCase();
+    const code = String(item?.code || '').toLowerCase();
+    if (type === 'no_reward' || code === 'no_reward' || code === 'nothing') return false;
+    const itemTier = String(item?.keyTier || '').trim().toLowerCase();
+    if (selectedTier && itemTier && !tierChain.has(itemTier) && itemTier !== selectedTier) return false;
+    const qty = item.quantity === null || item.quantity === undefined || item.quantity === '' ? null : Number(item.quantity);
+    return qty === null || qty > 0;
+  });
+  const total = eligible.reduce((sum, item) => sum + Math.max(0, Number(item.weight || 0)), 0);
+  const weight = Math.max(0, Number(reward?.weight || 0));
+  const pct = total > 0 ? ((weight / total) * 100) : 0;
+  return `${pct.toFixed(2)}% of eligible prize pool`;
+}
+
 function vaultGetJsonArrayInputValue(inputId, fallback = []) {
   const parsed = vaultJsonParseInput(document.getElementById(inputId)?.value, null);
   return Array.isArray(parsed) ? parsed : fallback;
@@ -10884,7 +10955,7 @@ function vaultRenderSimpleConfigEditors() {
             <td>${tier?.enabled === false ? 'No' : 'Yes'}</td>
             <td style="display:flex;gap:6px;">
               <button class="btn-secondary" onclick="vaultOpenConfigRowModal('tier', ${idx})">Edit</button>
-              <button class="btn-danger" onclick="vaultRemoveSimpleTierRow(${idx})">Delete</button>
+              <button class="btn-danger" onclick="vaultRemoveSimpleTierRow(${idx})">Remove</button>
             </td>
           </tr>
         `).join('')}
@@ -10909,7 +10980,7 @@ function vaultRenderSimpleConfigEditors() {
             <td>${Number(band?.free || 0)}</td>
             <td style="display:flex;gap:6px;">
               <button class="btn-secondary" onclick="vaultOpenConfigRowModal('band', ${idx})">Edit</button>
-              <button class="btn-danger" onclick="vaultRemoveSimpleBandRow(${idx})">Delete</button>
+              <button class="btn-danger" onclick="vaultRemoveSimpleBandRow(${idx})">Remove</button>
             </td>
           </tr>
         `).join('')}
@@ -10930,13 +11001,14 @@ function vaultRenderSimpleConfigEditors() {
             <td>${rule?.enabled === false ? 'No' : 'Yes'}</td>
             <td style="display:flex;gap:6px;">
               <button class="btn-secondary" onclick="vaultOpenConfigRowModal('conversion', ${idx})">Edit</button>
-              <button class="btn-danger" onclick="vaultRemoveSimpleConversionRow(${idx})">Delete</button>
+              <button class="btn-danger" onclick="vaultRemoveSimpleConversionRow(${idx})">Remove</button>
             </td>
           </tr>
         `).join('')}
       </tbody>
     </table>
   ` : '<p style="color:var(--text-secondary);">No upgrade rules yet.</p>';
+  vaultRenderWinChanceRows();
 }
 
 function vaultSyncSimpleEditorsToJson() {
@@ -10951,7 +11023,6 @@ function vaultSyncSimpleEditorsToJson() {
   const uniqueById = new Map();
   tiers.forEach((tier) => uniqueById.set(tier.id, tier));
   const normalizedTiers = Array.from(uniqueById.values());
-  const tierIds = new Set(normalizedTiers.map(t => t.id));
 
   const existingGrants = vaultGetJsonObjectInputValue('vault_keyTierGrantsJson', {});
   const hasVisibleGrantInputs = !!document.querySelector('[data-vault-grant-paid]');
@@ -11001,6 +11072,92 @@ function vaultSyncSimpleEditorsToJson() {
   if (grantsEl) grantsEl.value = JSON.stringify(grants, null, 2);
   if (bandsEl) bandsEl.value = JSON.stringify(bands, null, 2);
   if (convEl) convEl.value = JSON.stringify(conversions, null, 2);
+}
+
+function vaultGetWinChancesInputValue() {
+  const parsed = vaultGetJsonObjectInputValue('vault_winChancesJson', {});
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+}
+
+function vaultRenderWinChanceRows() {
+  const wrap = document.getElementById('vaultWinChanceRows');
+  if (!wrap) return;
+  const tiers = vaultGetJsonArrayInputValue('vault_keyTiersJson', []);
+  const chances = vaultGetWinChancesInputValue();
+  if (!tiers.length) {
+    wrap.innerHTML = '<p style="color:var(--text-secondary);">Add a key tier first.</p>';
+    return;
+  }
+  wrap.innerHTML = `
+    <table class="vault-admin-table">
+      <thead><tr><th align="left">Key Tier</th><th align="left">Winner Chance</th><th align="left">Eligible Prizes</th><th align="left">Actions</th></tr></thead>
+      <tbody>
+        ${tiers.map((tier) => {
+          const tierId = String(tier?.id || 'default').trim().toLowerCase() || 'default';
+          const chance = Math.max(0, Math.min(100, Number(chances[tierId] ?? 25) || 0));
+          const eligibleCount = (Array.isArray(vaultSettingsCache?.rewards) ? vaultSettingsCache.rewards : [])
+            .filter((reward) => {
+              if (!reward || reward.enabled === false || Number(reward.weight || 0) <= 0) return false;
+              const type = String(reward?.type || '').toLowerCase();
+              const code = String(reward?.code || '').toLowerCase();
+              if (type === 'no_reward' || code === 'no_reward' || code === 'nothing') return false;
+              return !reward.keyTier || String(reward.keyTier || '').toLowerCase() === tierId;
+            }).length;
+          return `
+            <tr>
+              <td><code>${escapeHtml(tierId)}</code><div style="font-size:0.78em;color:var(--text-secondary);">${escapeHtml(String(tier?.name || tierId))}</div></td>
+              <td>${chance.toFixed(2)}%</td>
+              <td>${eligibleCount}</td>
+              <td style="display:flex;gap:6px;">
+                <button class="btn-secondary" onclick="vaultOpenWinChanceModal('${escapeJsString(tierId)}')">Edit</button>
+                <button class="btn-danger" onclick="vaultRemoveWinChance('${escapeJsString(tierId)}')">Remove</button>
+              </td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function vaultOpenWinChanceModal(tierId) {
+  const normalizedTierId = String(tierId || 'default').trim().toLowerCase() || 'default';
+  vaultWinChanceModalState = { tierId: normalizedTierId };
+  const modal = document.getElementById('vaultWinChanceModal');
+  const title = document.getElementById('vaultWinChanceModalTitle');
+  const input = document.getElementById('vaultWinChancePercentInput');
+  const chances = vaultGetWinChancesInputValue();
+  if (!modal || !title || !input) return;
+  title.textContent = `Edit Win Chance: ${normalizedTierId}`;
+  input.value = String(Math.max(0, Math.min(100, Number(chances[normalizedTierId] ?? 25) || 0)));
+  modal.style.display = 'flex';
+}
+
+function vaultCloseWinChanceModal() {
+  const modal = document.getElementById('vaultWinChanceModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function vaultSaveWinChanceModal() {
+  const tierId = String(vaultWinChanceModalState?.tierId || '').trim().toLowerCase();
+  if (!tierId) return;
+  const chance = Math.max(0, Math.min(100, Number(document.getElementById('vaultWinChancePercentInput')?.value || 0) || 0));
+  const chances = vaultGetWinChancesInputValue();
+  chances[tierId] = chance;
+  const el = document.getElementById('vault_winChancesJson');
+  if (el) el.value = JSON.stringify(chances, null, 2);
+  vaultCloseWinChanceModal();
+  vaultRenderWinChanceRows();
+}
+
+function vaultRemoveWinChance(tierId) {
+  const normalizedTierId = String(tierId || '').trim().toLowerCase();
+  const chances = vaultGetWinChancesInputValue();
+  if (!normalizedTierId || !Object.prototype.hasOwnProperty.call(chances, normalizedTierId)) return;
+  delete chances[normalizedTierId];
+  const el = document.getElementById('vault_winChancesJson');
+  if (el) el.value = JSON.stringify(chances, null, 2);
+  vaultRenderWinChanceRows();
 }
 
 function vaultAddSimpleTierRow() {
@@ -11247,6 +11404,7 @@ function vaultRenderAdminPanel() {
   const security = config.security || {};
   const messages = display.messages || {};
   const ticketing = config.ticketing || {};
+  const rewardTable = config.rewardTable || {};
   const rewards = Array.isArray(vaultSettingsCache?.rewards) ? vaultSettingsCache.rewards : [];
   const seasons = Array.isArray(vaultSettingsCache?.seasons) ? vaultSettingsCache.seasons : [];
   const milestones = Array.isArray(vaultSettingsCache?.milestones) ? vaultSettingsCache.milestones : [];
@@ -11254,14 +11412,16 @@ function vaultRenderAdminPanel() {
   const claims = Array.isArray(vaultSettingsCache?.claims) ? vaultSettingsCache.claims : [];
   const audit = Array.isArray(vaultSettingsCache?.audit) ? vaultSettingsCache.audit : [];
   const keyOverview = Array.isArray(vaultSettingsCache?.keyOverview) ? vaultSettingsCache.keyOverview : [];
-  const health = vaultSettingsCache?.health || {};
   const channels = Array.isArray(vaultSettingsCache?.channels) ? vaultSettingsCache.channels : [];
+  const ticketCategories = Array.isArray(vaultSettingsCache?.ticketCategories) ? vaultSettingsCache.ticketCategories : [];
   const keyTiers = Array.isArray(config.keyTiers) ? config.keyTiers : [];
   const keyTierConversions = Array.isArray(config.keyTierConversions) ? config.keyTierConversions : [];
   const grantsPerMint = (minting.grantsPerMint && typeof minting.grantsPerMint === 'object') ? minting.grantsPerMint : {};
   const activeSeasonId = vaultGetCachedActiveSeasonId();
   const announceChannelOptions = vaultBuildChannelSelect(channels, general.announceChannelId, 'No announcement channel');
+  const winChannelOptions = vaultBuildChannelSelect(channels, general.winChannelId, 'No wins channel');
   const ticketAlertChannelOptions = vaultBuildChannelSelect(channels, ticketing.alertChannelId, 'No alert channel');
+  const ticketCategoryOptions = vaultBuildTicketCategorySelect(ticketCategories, ticketing.rewardTicketCategoryId, 'No fulfillment ticket category');
 
   const rewardsRows = rewards.length
     ? rewards.map(reward => `
@@ -11270,6 +11430,7 @@ function vaultRenderAdminPanel() {
         <td>${escapeHtml(String(reward.name || ''))}</td>
         <td>${escapeHtml(String(reward.tier || 'common'))}</td>
         <td>${Number(reward.weight || 0)}</td>
+        <td>${escapeHtml(vaultCalculateRewardChanceText(reward, rewards, reward.keyTier || ''))}</td>
         <td>${escapeHtml(String(reward.keyTier || 'all'))}</td>
         <td>${vaultFormatQuantity(reward.quantity)}</td>
         <td>${reward.enabled === false ? 'disabled' : 'enabled'}</td>
@@ -11279,7 +11440,7 @@ function vaultRenderAdminPanel() {
         </td>
       </tr>
     `).join('')
-    : '<tr><td colspan="8" style="color:var(--text-secondary);">No rewards configured.</td></tr>';
+    : '<tr><td colspan="9" style="color:var(--text-secondary);">No rewards configured.</td></tr>';
 
   const keyOverviewRows = keyOverview.length
     ? keyOverview.map(row => `
@@ -11300,7 +11461,11 @@ function vaultRenderAdminPanel() {
         <td><code>${escapeHtml(String(season.season_id || ''))}</code></td>
         <td>${escapeHtml(String(season.season_name || season.season_id || ''))}</td>
         <td>${Number(season.active || 0) === 1 ? 'active' : 'inactive'}</td>
-        <td><button class="btn-secondary" onclick="vaultActivateSeason('${escapeJsString(String(season.season_id || ''))}')">Activate</button></td>
+        <td style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn-secondary" onclick="vaultLoadSeasonToForm('${escapeJsString(String(season.season_id || ''))}')">Edit</button>
+          <button class="btn-secondary" onclick="vaultActivateSeason('${escapeJsString(String(season.season_id || ''))}')">Activate</button>
+          <button class="btn-danger" onclick="vaultDeleteSeason('${escapeJsString(String(season.season_id || ''))}')">Remove</button>
+        </td>
       </tr>
     `).join('')
     : '<tr><td colspan="4" style="color:var(--text-secondary);">No seasons available.</td></tr>';
@@ -11339,19 +11504,6 @@ function vaultRenderAdminPanel() {
         <button id="vaultUiSimpleBtn" class="btn-primary" onclick="vaultSetUiMode('simple');vaultApplyUiMode()">Simple Setup</button>
         <button id="vaultUiAdvancedBtn" class="btn-secondary" onclick="vaultSetUiMode('advanced');vaultApplyUiMode()">Advanced Setup</button>
       </div>
-      <div class="vault-section-card gp-subtle-panel">
-        <strong>Quick start:</strong>
-        1) Enable Vault and set names -> 2) Configure mint and key rules -> 3) Add rewards -> 4) Save config.
-      </div>
-      <div class="vault-section-card gp-subtle-panel">
-        <strong>Health:</strong>
-        enabled=${health.enabled ? 'yes' : 'no'},
-        season=${escapeHtml(String(health.activeSeasonId || 'none'))},
-        bands=${Number(health.paymentBandsConfigured || 0)},
-        conversions=${Number(health.keyConversionRulesEnabled || 0)},
-        ticketOnWin=${health.ticketOnWinEnabled ? 'yes' : 'no'}
-      </div>
-
       <div class="settings-grid" style="margin-bottom:16px;">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Enabled</div></div><input id="vault_enabled" type="checkbox" ${general.enabled ? 'checked' : ''}></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Project Name</div></div><input id="vault_projectName" class="input-sm" value="${escapeHtml(String(display.projectName || ''))}"></div>
@@ -11360,23 +11512,35 @@ function vaultRenderAdminPanel() {
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Key Label</div></div><input id="vault_keyName" class="input-sm" value="${escapeHtml(String(display.keyName || 'Reward Key'))}"></div>
       </div>
 
-      <h4 style="margin:16px 0 8px 0;">Mint Rules and Security</h4>
+      <h4 style="margin:16px 0 8px 0;">Mint Rules</h4>
       <div class="settings-grid" style="margin-bottom:16px;">
         <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Mint Mode</div></div><input id="vault_mintMode" class="input-sm" value="${escapeHtml(String(minting.mode || 'custom_webhook'))}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Use Payment Transfers as Mints</div></div><input id="vault_usePaymentTransfersAsMints" type="checkbox" ${minting.countTransfersToPaymentWallet ? 'checked' : ''}></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Mint Payment Wallet(s)</div></div><input id="vault_paymentWalletAddresses" class="input-sm" placeholder="wallet1,wallet2" value="${escapeHtml(paymentWalletsCsv)}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Mint Payment Token(s)</div><div class="settings-desc">Optional SPL Token mints (e.g. USDC).</div></div><input id="vault_paymentTokenAddresses" class="input-sm" placeholder="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" value="${escapeHtml(paymentTokensCsv)}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Min Payment (Lamports)</div></div><input id="vault_paymentMinLamports" type="number" class="input-sm" min="0" value="${paymentMinLamports}"></div>
-        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Open Cooldown (sec)</div></div><input id="vault_openCooldownSeconds" type="number" class="input-sm" min="0" value="${Number(security.openCooldownSeconds || 0)}"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Announcements Channel</div></div><select id="vault_announceChannelId" class="input-sm">${announceChannelOptions}</select></div>
-        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Announce Tiers (CSV)</div></div><input id="vault_announceTiers" class="input-sm" value="${escapeHtml((general.announceRewardTiers || []).join(','))}"></div>
-        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Announce Common Rewards</div></div><input id="vault_announceCommonRewards" type="checkbox" ${general.announceCommonRewards ? 'checked' : ''}></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Create Ticket On Win</div></div><input id="vault_createTicketOnWin" type="checkbox" ${ticketing.createTicketOnWin ? 'checked' : ''}></div>
-        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Reward Ticket Category ID</div><div class="settings-desc">Ticket category where winning rewards create fulfillment tickets.</div></div><input id="vault_rewardTicketCategoryId" class="input-sm" value="${escapeHtml(String(ticketing.rewardTicketCategoryId || ''))}" placeholder="e.g. 3"></div>
-      <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Ticket Failure Alert Channel</div><div class="settings-desc">Optional channel for alerts when ticket creation fails.</div></div><select id="vault_ticketAlertChannelId" class="input-sm">${ticketAlertChannelOptions}</select></div>
       </div>
 
       <div id="vaultKeyEconomySummary"></div>
+
+      <h4 style="margin:16px 0 8px 0;">Win Odds</h4>
+      <div class="vault-section-card gp-subtle-panel" style="margin-top:0;">
+        <div style="color:var(--text-secondary);font-size:0.9em;margin-bottom:8px;">First the selected key tier rolls its winner chance. If it wins, the prize is drawn from eligible rewards by weight.</div>
+        <div id="vaultWinChanceRows"></div>
+      </div>
+
+      <h4 style="margin:16px 0 8px 0;">Announcements and Fulfillment</h4>
+      <div class="settings-grid" style="margin-bottom:16px;">
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Announcements Channel</div></div><select id="vault_announceChannelId" class="input-sm">${announceChannelOptions}</select></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Vault Wins Channel</div><div class="settings-desc">Every prize win is announced here before the reveal.</div></div><select id="vault_winChannelId" class="input-sm">${winChannelOptions}</select></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Prize Reveal Delay (sec)</div></div><input id="vault_prizeRevealDelaySeconds" type="number" class="input-sm" min="0" max="30" value="${Math.max(0, Number(general.prizeRevealDelaySeconds ?? 3) || 0)}"></div>
+        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Announce Tiers (CSV)</div></div><input id="vault_announceTiers" class="input-sm" value="${escapeHtml((general.announceRewardTiers || []).join(','))}"></div>
+        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Announce Common Rewards</div></div><input id="vault_announceCommonRewards" type="checkbox" ${general.announceCommonRewards ? 'checked' : ''}></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Create Ticket On Win</div></div><input id="vault_createTicketOnWin" type="checkbox" ${ticketing.createTicketOnWin ? 'checked' : ''}></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Reward Ticket Category</div><div class="settings-desc">Ticket category where winning rewards create fulfillment tickets.</div></div><select id="vault_rewardTicketCategoryId" class="input-sm">${ticketCategoryOptions}</select></div>
+        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Open Cooldown (sec)</div></div><input id="vault_openCooldownSeconds" type="number" class="input-sm" min="0" value="${Number(security.openCooldownSeconds || 0)}"></div>
+        <div class="settings-row" data-vault-advanced="1"><div class="settings-info"><div class="settings-label">Ticket Failure Alert Channel</div><div class="settings-desc">Optional channel for alerts when ticket creation fails.</div></div><select id="vault_ticketAlertChannelId" class="input-sm">${ticketAlertChannelOptions}</select></div>
+      </div>
 
       <div id="vaultKeyEconomyModal" class="modal-overlay vault-economy-modal" style="display:none;" onclick="if(event.target===this)vaultCloseKeyEconomyModal()">
         <div class="modal">
@@ -11439,6 +11603,22 @@ function vaultRenderAdminPanel() {
       <textarea id="vault_keyTierGrantsJson" style="display:none;">${escapeHtml(JSON.stringify(grantsPerMint, null, 2))}</textarea>
       <textarea id="vault_paymentBandsJson" style="display:none;">${escapeHtml(JSON.stringify(paymentBands, null, 2))}</textarea>
       <textarea id="vault_keyTierConversionsJson" style="display:none;">${escapeHtml(JSON.stringify(keyTierConversions, null, 2))}</textarea>
+      <textarea id="vault_winChancesJson" style="display:none;">${escapeHtml(JSON.stringify(rewardTable.winChancesByKeyTier || {}, null, 2))}</textarea>
+
+      <div id="vaultWinChanceModal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)vaultCloseWinChanceModal()">
+        <div class="modal" style="max-width:460px;">
+          <div class="modal-header"><h3 class="modal-title" id="vaultWinChanceModalTitle">Edit Win Chance</h3></div>
+          <div class="modal-body" style="display:grid;gap:8px;">
+            <label class="form-label">Winner Chance (%)</label>
+            <input id="vaultWinChancePercentInput" type="number" min="0" max="100" step="0.01" class="form-input" value="25">
+            <div style="color:var(--text-secondary);font-size:0.85em;">This is the chance that a key of this tier wins before the prize is drawn.</div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-secondary" onclick="vaultCloseWinChanceModal()">Cancel</button>
+            <button class="btn-primary" onclick="vaultSaveWinChanceModal()">Save</button>
+          </div>
+        </div>
+      </div>
 
 
       <h4 style="margin:16px 0 8px 0;">Messages</h4>
@@ -11462,7 +11642,7 @@ function vaultRenderAdminPanel() {
       <div style="margin-top:8px;" data-vault-advanced="1"><button class="btn-primary" onclick="vaultUpsertSeason()">Create/Update Season</button></div>
 
       <h4 style="margin:20px 0 8px 0;">Reward Table Manager</h4>
-      <table class="vault-admin-table"><thead><tr><th align="left">Code</th><th align="left">Name</th><th align="left">Tier</th><th align="left">Weight</th><th align="left">Key Tier</th><th align="left">Qty</th><th align="left">State</th><th align="left">Actions</th></tr></thead><tbody>${rewardsRows}</tbody></table>
+      <table class="vault-admin-table"><thead><tr><th align="left">Code</th><th align="left">Name</th><th align="left">Tier</th><th align="left">Weight</th><th align="left">Drop Chance</th><th align="left">Key Tier</th><th align="left">Qty</th><th align="left">State</th><th align="left">Actions</th></tr></thead><tbody>${rewardsRows}</tbody></table>
       <div style="margin-top:8px;">
         <button class="btn-primary" onclick="vaultOpenRewardModal()">Add Reward</button>
       </div>
@@ -11473,11 +11653,11 @@ function vaultRenderAdminPanel() {
           <div class="modal-body" style="display:grid;gap:8px;">
             <label class="form-label">Code</label><input id="vaultRewardCodeInput" class="form-input" placeholder="reward_code">
             <label class="form-label">Name</label><input id="vaultRewardNameInput" class="form-input" placeholder="Reward Name">
-            <label class="form-label">Tier</label><input id="vaultRewardTierInput" class="form-input" placeholder="common|rare|epic|legendary">
+            <label class="form-label">Tier</label><select id="vaultRewardTierInput" class="form-input"><option value="common">common</option><option value="uncommon">uncommon</option><option value="rare">rare</option><option value="epic">epic</option><option value="legendary">legendary</option><option value="jackpot">jackpot</option></select>
             <label class="form-label">Weight</label><input id="vaultRewardWeightInput" type="number" min="0" class="form-input" value="1">
-            <label class="form-label">Key Tier (optional)</label><input id="vaultRewardKeyTierInput" class="form-input" placeholder="blank = all tiers">
+            <label class="form-label">Key Tier Eligibility</label><select id="vaultRewardKeyTierInput" class="form-input">${vaultBuildKeyTierOptions('', true)}</select>
             <label class="form-label">Quantity (blank = unlimited)</label><input id="vaultRewardQuantityInput" type="number" min="0" class="form-input">
-            <label class="form-label">Type</label><select id="vaultRewardTypeInput" class="form-input"><option value="claimable_reward">claimable_reward</option><option value="none">none</option></select>
+            <label class="form-label">Type</label><select id="vaultRewardTypeInput" class="form-input"><option value="claimable_reward">claimable_reward</option><option value="none">none</option><option value="role_reward">role_reward</option><option value="custom">custom</option></select>
             <label class="form-label">Social Requirements (X)</label>
             <div id="vaultRewardSocialRequirementsRows" style="display:grid;gap:8px;"></div>
             <button class="btn-secondary" type="button" onclick="vaultAddRewardSocialRequirementRow()">Add Social Requirement</button>
@@ -11606,7 +11786,7 @@ async function loadVaultSettingsTab() {
   if (!pane) return;
   pane.innerHTML = '<div class="card gp-workspace-card"><p style="color:var(--text-secondary);">Loading vault settings...</p></div>';
   try {
-    const [configRes, seasonsRes, rewardsRes, milestonesRes, openingsRes, claimsRes, auditRes, keyOverviewRes, healthRes, channelsRes] = await Promise.all([
+    const [configRes, seasonsRes, rewardsRes, milestonesRes, openingsRes, claimsRes, auditRes, keyOverviewRes, healthRes, channelsRes, ticketCategoriesRes] = await Promise.all([
       vaultFetchJson('/api/admin/vault/config'),
       vaultFetchJson('/api/admin/vault/seasons'),
       vaultFetchJson('/api/admin/vault/rewards'),
@@ -11617,6 +11797,7 @@ async function loadVaultSettingsTab() {
       vaultFetchJson('/api/admin/vault/users/keys-overview?limit=300'),
       vaultFetchJson('/api/admin/vault/health'),
       vaultFetchJson('/api/admin/discord/channels'),
+      vaultFetchJson('/api/admin/tickets/categories').catch(() => ({ data: { categories: [] }, categories: [] })),
     ]);
     vaultSettingsCache = {
       config: configRes?.data?.config || configRes?.config || {},
@@ -11629,6 +11810,7 @@ async function loadVaultSettingsTab() {
       keyOverview: keyOverviewRes?.data?.rows || keyOverviewRes?.rows || [],
       health: healthRes?.data?.health || healthRes?.health || {},
       channels: channelsRes?.data?.channels || channelsRes?.channels || [],
+      ticketCategories: ticketCategoriesRes?.data?.categories || ticketCategoriesRes?.categories || [],
     };
     vaultRenderAdminPanel();
   } catch (error) {
@@ -11649,6 +11831,8 @@ async function vaultSaveGeneralConfig() {
 
     next.general.enabled = !!document.getElementById('vault_enabled')?.checked;
     next.general.announceChannelId = String(document.getElementById('vault_announceChannelId')?.value || '').trim();
+    next.general.winChannelId = String(document.getElementById('vault_winChannelId')?.value || '').trim();
+    next.general.prizeRevealDelaySeconds = Math.max(0, Math.min(30, Number(document.getElementById('vault_prizeRevealDelaySeconds')?.value || 0) || 0));
     next.general.announceRewardTiers = String(document.getElementById('vault_announceTiers')?.value || '')
       .split(',')
       .map(value => value.trim())
@@ -11684,11 +11868,14 @@ async function vaultSaveGeneralConfig() {
     const grantsPerMintParsed = vaultJsonParseInput(document.getElementById('vault_keyTierGrantsJson')?.value, null);
     const paymentBandsParsed = vaultJsonParseInput(document.getElementById('vault_paymentBandsJson')?.value, null);
     const keyTierConversionsParsed = vaultJsonParseInput(document.getElementById('vault_keyTierConversionsJson')?.value, null);
+    const winChancesParsed = vaultJsonParseInput(document.getElementById('vault_winChancesJson')?.value, null);
     
     next.keyTiers = Array.isArray(keyTiersParsed) ? keyTiersParsed : [];
     next.minting.grantsPerMint = grantsPerMintParsed && typeof grantsPerMintParsed === 'object' ? grantsPerMintParsed : {};
     next.minting.paymentBands = Array.isArray(paymentBandsParsed) ? paymentBandsParsed : [];
     next.keyTierConversions = Array.isArray(keyTierConversionsParsed) ? keyTierConversionsParsed : [];
+    next.rewardTable = next.rewardTable || {};
+    next.rewardTable.winChancesByKeyTier = winChancesParsed && typeof winChancesParsed === 'object' && !Array.isArray(winChancesParsed) ? winChancesParsed : {};
 
     // cleanup legacy properties if they still exist at the root
     delete next.theme;
@@ -11953,6 +12140,40 @@ async function vaultActivateSeason(seasonId) {
   }
 }
 
+function vaultLoadSeasonToForm(seasonId) {
+  const id = String(seasonId || '').trim();
+  const seasons = Array.isArray(vaultSettingsCache?.seasons) ? vaultSettingsCache.seasons : [];
+  const season = seasons.find(item => String(item?.season_id || '') === id);
+  if (!season) return;
+  const setValue = (inputId, value) => {
+    const input = document.getElementById(inputId);
+    if (input) input.value = value ?? '';
+  };
+  setValue('vaultSeasonIdInput', season.season_id || '');
+  setValue('vaultSeasonNameInput', season.season_name || season.season_id || '');
+  setValue('vaultSeasonStartInput', season.starts_at || '');
+  setValue('vaultSeasonEndInput', season.ends_at || '');
+  const activeEl = document.getElementById('vaultSeasonActiveInput');
+  if (activeEl) activeEl.checked = Number(season.active || 0) === 1;
+}
+
+async function vaultDeleteSeason(seasonId) {
+  const id = String(seasonId || '').trim();
+  if (!id) return;
+  if (!confirm(`Remove season "${id}"? This cannot be undone.`)) return;
+  try {
+    await vaultFetchJson(`/api/admin/vault/seasons/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    showSuccess('Season removed.');
+    await loadVaultSettingsTab();
+  } catch (error) {
+    showError(error.message || 'Failed to remove season.');
+  }
+}
+
 function vaultLoadRewardToForm(code) {
   const rewards = Array.isArray(vaultSettingsCache?.rewards) ? vaultSettingsCache.rewards : [];
   const reward = rewards.find(item => String(item?.code || '').toLowerCase() === String(code || '').toLowerCase());
@@ -11979,6 +12200,8 @@ function vaultOpenRewardModal(code = '') {
   const titleEl = document.getElementById('vaultRewardModalTitle');
   const modal = document.getElementById('vaultRewardModal');
   if (!modal || !titleEl) return;
+  const keyTierSelect = document.getElementById('vaultRewardKeyTierInput');
+  if (keyTierSelect) keyTierSelect.innerHTML = vaultBuildKeyTierOptions('', true);
   if (code) {
     vaultLoadRewardToForm(code);
     titleEl.textContent = `Edit Reward: ${code}`;

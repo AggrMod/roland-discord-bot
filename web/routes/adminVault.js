@@ -179,6 +179,21 @@ function createAdminVaultRouter({
     }
   });
 
+  router.delete('/api/admin/vault/seasons/:seasonId', adminAuthMiddleware, (req, res) => {
+    if (!ensureVaultModule(req, res)) return;
+    try {
+      const result = vaultService.deleteSeason(req.guildId || '', req.params.seasonId);
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to remove season', 'VALIDATION_ERROR', null, result));
+      }
+      vaultService.logAdminAction(req.guildId || '', req.session?.discordUser?.id || null, 'season_remove', null, { seasonId: req.params.seasonId });
+      return res.json(toSuccessResponse({ seasons: vaultService.listSeasons(req.guildId || '') }));
+    } catch (error) {
+      logger.error('Error removing vault season:', error);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
   router.get('/api/admin/vault/rewards', adminAuthMiddleware, (req, res) => {
     if (!ensureVaultModule(req, res)) return;
     try {

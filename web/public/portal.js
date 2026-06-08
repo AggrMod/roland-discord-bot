@@ -11506,6 +11506,24 @@ function vaultRenderAdminPanel() {
   pane.innerHTML = `
     <div class="card gp-workspace-card gp-workspace-stack">
       <style>
+        .vault-settings-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+          gap: 12px;
+        }
+        .vault-settings-grid .settings-row {
+          align-items: flex-start;
+          height: auto;
+          min-height: 70px;
+        }
+        .vault-settings-grid .settings-info {
+          flex: 1 1 60%;
+        }
+        .vault-settings-grid .input-sm, .vault-settings-grid select.input-sm, .vault-settings-grid .toggle-switch {
+          flex: 0 0 auto;
+          max-width: 45%;
+          margin-top: 2px;
+        }
         .vault-admin-table { width:100%; border-collapse:collapse; font-size:0.9em; }
         .vault-admin-table th { text-align:left; color:#c9d6ff; padding:8px 10px; border-bottom:1px solid rgba(99,102,241,0.25); }
         .vault-admin-table td { padding:8px 10px; border-bottom:1px solid rgba(99,102,241,0.12); color:#e2e8f0; }
@@ -11537,7 +11555,7 @@ function vaultRenderAdminPanel() {
 
       <!-- ═══════════ SECTION 1: General & Display ═══════════ -->
       <h4 style="margin:0 0 8px 0;">General & Display</h4>
-      <div class="settings-grid" style="margin-bottom:16px;">
+      <div class="vault-settings-grid" style="margin-bottom:16px;">
         <div class="settings-row">
           <div class="settings-info"><div class="settings-label">Enable Vault Module</div><div class="settings-desc">Activates key roll events and player commands in Discord.</div></div>
           <label class="toggle-switch"><input type="checkbox" id="vault_enabled" ${general.enabled ? 'checked' : ''} onchange="vaultApplyDynamicVisibility()"><span class="toggle-slider"></span></label>
@@ -11603,7 +11621,7 @@ function vaultRenderAdminPanel() {
       <!-- ═══════════ SECTION 2: Key Economy & Payment ═══════════ -->
       <h4 style="margin:16px 0 8px 0;">Key Economy & Payments</h4>
       <div id="vaultKeyEconomySummary"></div>
-      <div class="settings-grid" style="margin-bottom:16px;">
+      <div class="vault-settings-grid" style="margin-bottom:16px;">
         <div class="settings-row">
           <div class="settings-info"><div class="settings-label">Receive Keys on NFT Mint</div><div class="settings-desc">Automatically reward keys when a user mints project NFTs.</div></div>
           <label class="toggle-switch"><input type="checkbox" id="vault_mintModeEnabled" ${String(minting.mode || 'custom_webhook') !== 'disabled' ? 'checked' : ''} onchange="vaultApplyDynamicVisibility()"><span class="toggle-slider"></span></label>
@@ -11778,7 +11796,7 @@ function vaultRenderAdminPanel() {
 
       <!-- ═══════════ SECTION 4: Custom Messages ═══════════ -->
       <h4 style="margin:16px 0 8px 0;">Custom Messages</h4>
-      <div class="settings-grid" style="margin-bottom:16px;">
+      <div class="vault-settings-grid" style="margin-bottom:16px;">
         <div class="settings-row">
           <div class="settings-info"><div class="settings-label">Customize Discord Messages</div><div class="settings-desc">Override the default bot messages sent when players open the vault.</div></div>
           <label class="toggle-switch"><input type="checkbox" id="vault_customMessagesEnabled" ${(messages.noKeys || messages.vaultInactive || messages.openSuccess || messages.noRewardOpen) ? 'checked' : ''} onchange="vaultApplyDynamicVisibility()"><span class="toggle-slider"></span></label>
@@ -11802,7 +11820,7 @@ function vaultRenderAdminPanel() {
       <!-- ═══════════ SECTION 5: Season Management ═══════════ -->
       <h4 style="margin:20px 0 8px 0;">Season Management</h4>
       <table class="vault-admin-table"><thead><tr><th align="left">ID</th><th align="left">Name</th><th align="left">Status</th><th align="left">Action</th></tr></thead><tbody>${seasonsRows}</tbody></table>
-      <div class="settings-grid" style="margin-top:10px;">
+      <div class="vault-settings-grid" style="margin-top:10px;">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Season ID</div><div class="settings-desc">Unique identifier for the season (e.g. season_2026_q3).</div></div><input id="vaultSeasonIdInput" class="input-sm" placeholder="season_2026_q2" value="${escapeHtml(activeSeasonId)}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Season Name</div><div class="settings-desc">Display name shown to players.</div></div><input id="vaultSeasonNameInput" class="input-sm" placeholder="Season Name"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Start Date</div><div class="settings-desc">Season start date (ISO format).</div></div><input id="vaultSeasonStartInput" class="input-sm" placeholder="2026-04-01T00:00:00Z"></div>
@@ -11816,7 +11834,7 @@ function vaultRenderAdminPanel() {
       <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Operations: Manual Adjustments & Support Actions</summary>
       <h4 style="margin:10px 0 8px 0;">Manual Key Adjustment</h4>
       <p style="color:var(--text-secondary);font-size:0.88em;margin-bottom:8px;">Add or remove keys for a specific Discord user in the active season.</p>
-      <div class="settings-grid">
+      <div class="vault-settings-grid">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Discord User ID</div><div class="settings-desc">The target player's Discord ID.</div></div><input id="vaultManualDiscordId" class="input-sm" placeholder="123456789012345678"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Season ID</div><div class="settings-desc">Target season (defaults to active season).</div></div><input id="vaultManualSeasonId" class="input-sm" value="${escapeHtml(activeSeasonId)}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Keys Amount</div><div class="settings-desc">Number of keys to add or remove.</div></div><input id="vaultManualKeyAmount" type="number" class="input-sm" min="1" value="1"></div>
@@ -11846,7 +11864,7 @@ function vaultRenderAdminPanel() {
 
       <h4 style="margin:20px 0 8px 0;">Manual Reward Assignment</h4>
       <p style="color:var(--text-secondary);font-size:0.88em;margin-bottom:8px;">Instantly assign a specific reward to a user (bypasses the vault roll).</p>
-      <div class="settings-grid" style="margin-top:10px;">
+      <div class="vault-settings-grid" style="margin-top:10px;">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Reward Code</div><div class="settings-desc">Code of the reward to assign (must exist in the reward table).</div></div><input id="vaultAssignRewardCode" class="input-sm" placeholder="reward_code"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Reward Name</div><div class="settings-desc">Display name for the manually assigned reward.</div></div><input id="vaultAssignRewardName" class="input-sm" placeholder="Manual reward"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Reward Tier</div><div class="settings-desc">Rarity tier of the reward (e.g. common, rare, epic).</div></div><input id="vaultAssignRewardTier" class="input-sm" value="rare"></div>
@@ -11859,7 +11877,7 @@ function vaultRenderAdminPanel() {
       <p style="color:var(--text-secondary);font-size:0.88em;margin:8px 0;">Use these tools to recover missed payments or bulk-import historical transactions.</p>
 
       <h4 style="margin:10px 0 8px 0;">Single Wallet Backfill</h4>
-      <div class="settings-grid" style="margin-top:10px;">
+      <div class="vault-settings-grid" style="margin-top:10px;">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Wallet Address</div><div class="settings-desc">Solana wallet address to scan for missed mint transactions.</div></div><input id="vaultBackfillWallet" class="input-sm" placeholder="wallet address"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Discord ID (optional)</div><div class="settings-desc">Override the auto-detected wallet owner. Leave blank for automatic detection.</div></div><input id="vaultBackfillDiscordId" class="input-sm" placeholder="optional"></div>
       </div>
@@ -11874,7 +11892,7 @@ function vaultRenderAdminPanel() {
 
       <h4 style="margin:20px 0 8px 0;">On-chain Payment Recovery</h4>
       <p style="color:var(--text-secondary);font-size:0.88em;margin-bottom:8px;">Verify a SOL payment transaction directly on-chain. Safe to rerun — transaction signatures are deduplicated.</p>
-      <div class="settings-grid" style="margin-top:10px;">
+      <div class="vault-settings-grid" style="margin-top:10px;">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Transaction Signature</div><div class="settings-desc">The Solana transaction signature to verify and credit.</div></div><input id="vaultVerifyPaymentTxSignature" class="input-sm" placeholder="transaction signature"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Discord ID Override (optional)</div><div class="settings-desc">Usually blank; the linked wallet owner is detected automatically.</div></div><input id="vaultVerifyPaymentDiscordId" class="input-sm" placeholder="optional"></div>
       </div>
@@ -11882,7 +11900,7 @@ function vaultRenderAdminPanel() {
 
       <h4 style="margin:20px 0 8px 0;">Bulk Backfill (All Configured Wallets)</h4>
       <p style="color:var(--text-secondary);font-size:0.88em;margin-bottom:8px;">Scans all configured payment wallets for missed transactions. Safe to rerun — duplicates are automatically skipped.</p>
-      <div class="settings-grid" style="margin-top:10px;">
+      <div class="vault-settings-grid" style="margin-top:10px;">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Max Signatures / Wallet</div><div class="settings-desc">Scans newest to oldest until this limit is reached.</div></div><input id="vaultBulkBackfillLimitPerWallet" type="number" class="input-sm" min="1" max="50000" value="5000"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Dry Run</div><div class="settings-desc">Analyze and count candidates without actually ingesting events.</div></div><label class="toggle-switch"><input type="checkbox" id="vaultBulkBackfillDryRun"><span class="toggle-slider"></span></label></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Delay Per Batch (ms)</div><div class="settings-desc">Throttle between RPC batches to avoid rate limits.</div></div><input id="vaultBulkBackfillDelayMs" type="number" class="input-sm" min="0" max="5000" value="250"></div>
@@ -11909,7 +11927,7 @@ function vaultRenderAdminPanel() {
       <pre id="vaultAuditView" style="white-space:pre-wrap;max-height:180px;overflow:auto;">${escapeHtml(vaultFormatRows(audit.map(item => `[${item.created_at || ''}] ${item.action || '-'} by ${item.admin_discord_user_id || 'system'}`), 'No audit records yet.'))}</pre>
 
       <h4 style="margin:16px 0 8px 0;">Update Claim Status</h4>
-      <div class="settings-grid" style="margin-top:10px;">
+      <div class="vault-settings-grid" style="margin-top:10px;">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Claim ID</div><div class="settings-desc">The numeric ID of the reward claim to update.</div></div><input id="vaultClaimIdInput" class="input-sm" placeholder="numeric reward id"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Claim Status</div><div class="settings-desc">Set to: pending, approved, fulfilled, or rejected.</div></div><select id="vaultClaimStatusInput" class="input-sm"><option value="pending">pending</option><option value="approved">approved</option><option value="fulfilled">fulfilled</option><option value="rejected">rejected</option></select></div>
       </div>

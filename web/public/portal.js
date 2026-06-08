@@ -11553,6 +11553,15 @@ function vaultRenderAdminPanel() {
       <h3>Vault Settings</h3>
       <p style="color:var(--text-secondary);margin-bottom:16px;">Configure your key economy, payment rules, and prize flow for this server.</p>
 
+
+      <div class="settings-tabs" style="margin-bottom: 20px;" id="vaultSettingsTabs">
+        <button class="settings-tab active" data-vault-tab="general" onclick="vaultSwitchTab('general')">General</button>
+        <button class="settings-tab" data-vault-tab="economy" onclick="vaultSwitchTab('economy')">Economy & Payments</button>
+        <button class="settings-tab" data-vault-tab="rewards" onclick="vaultSwitchTab('rewards')">Rewards</button>
+        <button class="settings-tab" data-vault-tab="messages" onclick="vaultSwitchTab('messages')">Messages</button>
+        <button class="settings-tab" data-vault-tab="operations" onclick="vaultSwitchTab('operations')">Operations</button>
+      </div>
+      <div class="vault-tab-content" id="vault-tab-general">
       <!-- ═══════════ SECTION 1: General & Display ═══════════ -->
       <h4 style="margin:0 0 8px 0;">General & Display</h4>
       <div class="vault-settings-grid" style="margin-bottom:16px;">
@@ -11618,6 +11627,8 @@ function vaultRenderAdminPanel() {
         </div>
       </div>
 
+      </div>
+      <div class="vault-tab-content" id="vault-tab-economy" style="display:none;">
       <!-- ═══════════ SECTION 2: Key Economy & Payment ═══════════ -->
       <h4 style="margin:16px 0 8px 0;">Key Economy & Payments</h4>
       <div id="vaultKeyEconomySummary"></div>
@@ -11757,6 +11768,8 @@ function vaultRenderAdminPanel() {
         </div>
       </div>
 
+      </div>
+      <div class="vault-tab-content" id="vault-tab-rewards" style="display:none;">
       <!-- ═══════════ SECTION 3: Rewards & Win Odds ═══════════ -->
       <h4 style="margin:16px 0 8px 0;">Win Odds</h4>
       <div class="vault-section-card gp-subtle-panel" style="margin-top:0;">
@@ -11794,6 +11807,8 @@ function vaultRenderAdminPanel() {
         </div>
       </div>
 
+      </div>
+      <div class="vault-tab-content" id="vault-tab-messages" style="display:none;">
       <!-- ═══════════ SECTION 4: Custom Messages ═══════════ -->
       <h4 style="margin:16px 0 8px 0;">Custom Messages</h4>
       <div class="vault-settings-grid" style="margin-bottom:16px;">
@@ -11817,14 +11832,16 @@ function vaultRenderAdminPanel() {
 
       <div style="margin-top:16px;"><button class="btn-primary" onclick="vaultSaveGeneralConfig()">Save Vault Config</button></div>
 
+      </div>
+      <div class="vault-tab-content" id="vault-tab-operations" style="display:none;">
       <!-- ═══════════ SECTION 5: Season Management ═══════════ -->
       <h4 style="margin:20px 0 8px 0;">Season Management</h4>
       <table class="vault-admin-table"><thead><tr><th align="left">ID</th><th align="left">Name</th><th align="left">Status</th><th align="left">Action</th></tr></thead><tbody>${seasonsRows}</tbody></table>
       <div class="vault-settings-grid" style="margin-top:10px;">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Season ID</div><div class="settings-desc">Unique identifier for the season (e.g. season_2026_q3).</div></div><input id="vaultSeasonIdInput" class="input-sm" placeholder="season_2026_q2" value="${escapeHtml(activeSeasonId)}"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Season Name</div><div class="settings-desc">Display name shown to players.</div></div><input id="vaultSeasonNameInput" class="input-sm" placeholder="Season Name"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Start Date</div><div class="settings-desc">Season start date (ISO format).</div></div><input id="vaultSeasonStartInput" class="input-sm" placeholder="2026-04-01T00:00:00Z"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">End Date</div><div class="settings-desc">Season end date (ISO format).</div></div><input id="vaultSeasonEndInput" class="input-sm" placeholder="2026-06-30T23:59:59Z"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Start Date</div><div class="settings-desc">Season start date (local time).</div></div><input id="vaultSeasonStartInput" type="datetime-local" class="input-sm"></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">End Date</div><div class="settings-desc">Season end date (local time).</div></div><input id="vaultSeasonEndInput" type="datetime-local" class="input-sm"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Active</div><div class="settings-desc">Only one season can be active at a time.</div></div><input id="vaultSeasonActiveInput" type="checkbox"></div>
       </div>
       <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultUpsertSeason()">Create/Update Season</button></div>
@@ -11945,6 +11962,7 @@ function vaultRenderAdminPanel() {
         <button class="btn-secondary" onclick="vaultImportConfig()">Import Config</button>
       </div>
       </details>
+      </div>
     </div>
   `;
   vaultRenderSimpleConfigEditors();
@@ -12305,8 +12323,8 @@ async function vaultUpsertSeason() {
   const payload = {
     seasonId,
     seasonName: String(document.getElementById('vaultSeasonNameInput')?.value || '').trim() || seasonId,
-    startsAt: String(document.getElementById('vaultSeasonStartInput')?.value || '').trim() || null,
-    endsAt: String(document.getElementById('vaultSeasonEndInput')?.value || '').trim() || null,
+    startsAt: document.getElementById('vaultSeasonStartInput')?.value ? new Date(document.getElementById('vaultSeasonStartInput').value).toISOString() : null,
+    endsAt: document.getElementById('vaultSeasonEndInput')?.value ? new Date(document.getElementById('vaultSeasonEndInput').value).toISOString() : null,
     active: !!document.getElementById('vaultSeasonActiveInput')?.checked,
     metadata: vaultJsonParseInput(document.getElementById('vaultSeasonMetadataInput')?.value, null),
   };
@@ -12348,8 +12366,9 @@ function vaultLoadSeasonToForm(seasonId) {
   };
   setValue('vaultSeasonIdInput', season.season_id || '');
   setValue('vaultSeasonNameInput', season.season_name || season.season_id || '');
-  setValue('vaultSeasonStartInput', season.starts_at || '');
-  setValue('vaultSeasonEndInput', season.ends_at || '');
+  const formatForLocal = (isoString) => { try { return isoString ? new Date(isoString).toLocaleString('sv').replace(' ', 'T').slice(0, 16) : ''; } catch (e) { return ''; } };
+  setValue('vaultSeasonStartInput', formatForLocal(season.starts_at));
+  setValue('vaultSeasonEndInput', formatForLocal(season.ends_at));
   const activeEl = document.getElementById('vaultSeasonActiveInput');
   if (activeEl) activeEl.checked = Number(season.active || 0) === 1;
 }
@@ -22079,3 +22098,22 @@ async function buildWelcomeUploadPayload(file) {
 
 
 
+
+window.vaultSwitchTab = function(tabId) {
+  // Update buttons
+  document.querySelectorAll('#vaultSettingsTabs .settings-tab').forEach(btn => {
+    if (btn.getAttribute('data-vault-tab') === tabId) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+  // Update content divs
+  document.querySelectorAll('.vault-tab-content').forEach(div => {
+    if (div.id === 'vault-tab-' + tabId) {
+      div.style.display = 'block';
+    } else {
+      div.style.display = 'none';
+    }
+  });
+};

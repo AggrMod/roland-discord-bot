@@ -11598,14 +11598,6 @@ function vaultRenderAdminPanel() {
             <div class="settings-info"><div class="settings-label">Reveal Delay (seconds)</div><div class="settings-desc">Suspense delay before showing the roll outcome in the reveal channel.</div></div>
             <input id="vault_prizeRevealDelaySeconds" type="number" class="input-sm" min="0" max="30" value="${Math.max(0, Number(general.prizeRevealDelaySeconds ?? 3) || 0)}">
           </div>
-          <div class="settings-row">
-            <div class="settings-info"><div class="settings-label">Announce Tiers</div><div class="settings-desc">Only announce prizes from these tiers (comma-separated, e.g. rare,epic,legendary).</div></div>
-            <input id="vault_announceTiers" class="input-sm" value="${escapeHtml((general.announceRewardTiers || []).join(','))}">
-          </div>
-          <div class="settings-row">
-            <div class="settings-info"><div class="settings-label">Announce Common Rewards</div><div class="settings-desc">Also post announcements for common-tier prizes.</div></div>
-            <label class="toggle-switch"><input type="checkbox" id="vault_announceCommonRewards" ${general.announceCommonRewards ? 'checked' : ''}><span class="toggle-slider"></span></label>
-          </div>
         </div>
         <div class="settings-row">
           <div class="settings-info"><div class="settings-label">Open Cooldown (seconds)</div><div class="settings-desc">Minimum delay between consecutive vault roll attempts per user.</div></div>
@@ -12023,11 +12015,8 @@ async function vaultSaveGeneralConfig() {
     next.general.announceChannelId = String(document.getElementById('vault_announceChannelId')?.value || '').trim();
     next.general.winChannelId = String(document.getElementById('vault_winChannelId')?.value || '').trim();
     next.general.prizeRevealDelaySeconds = Math.max(0, Math.min(30, Number(document.getElementById('vault_prizeRevealDelaySeconds')?.value || 0) || 0));
-    next.general.announceRewardTiers = String(document.getElementById('vault_announceTiers')?.value || '')
-      .split(',')
-      .map(value => value.trim())
-      .filter(Boolean);
-    next.general.announceCommonRewards = !!document.getElementById('vault_announceCommonRewards')?.checked;
+    next.general.announceRewardTiers = []; // V1 Go Live: All tiers announced
+    next.general.announceCommonRewards = true; // V1 Go Live: All wins announced
 
     next.display.projectName = String(document.getElementById('vault_projectName')?.value || '').trim();
     next.display.gameName = String(document.getElementById('vault_gameName')?.value || '').trim();

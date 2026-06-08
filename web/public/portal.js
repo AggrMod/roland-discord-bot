@@ -11554,12 +11554,16 @@ function vaultRenderAdminPanel() {
       <p style="color:var(--text-secondary);margin-bottom:16px;">Configure your key economy, payment rules, and prize flow for this server.</p>
 
 
-      <div class="settings-tabs" style="margin-bottom: 20px;" id="vaultSettingsTabs">
+      <div class="settings-tabs" style="margin-bottom: 20px; flex-wrap:wrap; gap:8px;" id="vaultSettingsTabs">
         <button class="settings-tab active" data-vault-tab="general" onclick="vaultSwitchTab('general')">General</button>
-        <button class="settings-tab" data-vault-tab="economy" onclick="vaultSwitchTab('economy')">Economy & Payments</button>
+        <button class="settings-tab" data-vault-tab="economy" onclick="vaultSwitchTab('economy')">Economy</button>
         <button class="settings-tab" data-vault-tab="rewards" onclick="vaultSwitchTab('rewards')">Rewards</button>
         <button class="settings-tab" data-vault-tab="messages" onclick="vaultSwitchTab('messages')">Messages</button>
+        <button class="settings-tab" data-vault-tab="season" onclick="vaultSwitchTab('season')">Season</button>
         <button class="settings-tab" data-vault-tab="operations" onclick="vaultSwitchTab('operations')">Operations</button>
+        <button class="settings-tab" data-vault-tab="recovery" onclick="vaultSwitchTab('recovery')">Recovery</button>
+        <button class="settings-tab" data-vault-tab="activity" onclick="vaultSwitchTab('activity')">Activity</button>
+        <button class="settings-tab" data-vault-tab="config" onclick="vaultSwitchTab('config')">Config</button>
       </div>
       <div class="vault-tab-content" id="vault-tab-general">
       <!-- ═══════════ SECTION 1: General & Display ═══════════ -->
@@ -11825,7 +11829,7 @@ function vaultRenderAdminPanel() {
       <div style="margin-top:16px;"><button class="btn-primary" onclick="vaultSaveGeneralConfig()">Save Vault Config</button></div>
 
       </div>
-      <div class="vault-tab-content" id="vault-tab-operations" style="display:none;">
+      <div class="vault-tab-content" id="vault-tab-season" style="display:none;">
       <!-- ═══════════ SECTION 5: Season Management ═══════════ -->
       <h4 style="margin:20px 0 8px 0;">Season Management</h4>
       <table class="vault-admin-table"><thead><tr><th align="left">ID</th><th align="left">Name</th><th align="left">Status</th><th align="left">Action</th></tr></thead><tbody>${seasonsRows}</tbody></table>
@@ -11839,8 +11843,9 @@ function vaultRenderAdminPanel() {
       <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultUpsertSeason()">Create/Update Season</button></div>
 
       <!-- ═══════════ SECTION 6: Operations ═══════════ -->
-      <details style="margin-top:20px;">
-      <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Operations: Manual Adjustments & Support Actions</summary>
+      </div>
+      <div class="vault-tab-content" id="vault-tab-operations" style="display:none;">
+        <h4 style="margin:0 0 16px 0;">Operations: Manual Adjustments</h4>
       <h4 style="margin:10px 0 8px 0;">Manual Key Adjustment</h4>
       <p style="color:var(--text-secondary);font-size:0.88em;margin-bottom:8px;">Add or remove keys for a specific Discord user in the active season.</p>
       <div class="vault-settings-grid">
@@ -11881,8 +11886,9 @@ function vaultRenderAdminPanel() {
       <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultAssignReward()">Assign Reward</button></div>
       </details>
 
-      <details style="margin-top:20px;">
-      <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Recovery: Backfill & Payment Verification</summary>
+      </div>
+      <div class="vault-tab-content" id="vault-tab-recovery" style="display:none;">
+        <h4 style="margin:0 0 16px 0;">Recovery & Backfill</h4>
       <p style="color:var(--text-secondary);font-size:0.88em;margin:8px 0;">Use these tools to recover missed payments or bulk-import historical transactions.</p>
 
       <h4 style="margin:10px 0 8px 0;">Single Wallet Backfill</h4>
@@ -11922,8 +11928,9 @@ function vaultRenderAdminPanel() {
       </div>
       </details>
 
-      <details style="margin-top:20px;">
-      <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Activity & Claims</summary>
+      </div>
+      <div class="vault-tab-content" id="vault-tab-activity" style="display:none;">
+        <h4 style="margin:0 0 16px 0;">Activity & Claims</h4>
       <h4 style="margin:10px 0 8px 0;">Audit / Openings / Claims</h4>
       <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
         <button class="btn-secondary" onclick="vaultRefreshActivity()">Refresh Activity</button>
@@ -11946,8 +11953,9 @@ function vaultRenderAdminPanel() {
       </details>
 
       <!-- ═══════════ SECTION: Config Export/Import ═══════════ -->
-      <details style="margin-top:20px;">
-      <summary style="cursor:pointer;font-weight:700;color:var(--text-primary);">Config Export / Import</summary>
+      </div>
+      <div class="vault-tab-content" id="vault-tab-config" style="display:none;">
+        <h4 style="margin:0 0 16px 0;">Config Export / Import</h4>
       <p style="color:var(--text-secondary);font-size:0.88em;margin:8px 0;">Export or import the full vault configuration including seasons for backup or migration.</p>
       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
         <button class="btn-secondary" onclick="vaultExportConfig()">Export Config</button>

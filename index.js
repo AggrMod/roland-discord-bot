@@ -518,6 +518,13 @@ client.once(Events.ClientReady, () => {
   intervals.push(setInterval(sweepWebhookRetryQueue, retrySweepIntervalMs));
   setTimeout(sweepWebhookRetryQueue, 20 * 1000);
 
+  const runVaultAutoBackfills = () => {
+    const vaultService = require('./services/vaultService');
+    vaultService.runAutoBackfills().catch(err => logger.error('[vault-auto-backfill] error:', err));
+  };
+  intervals.push(setInterval(runVaultAutoBackfills, 15 * 60 * 1000)); // check every 15 mins
+  setTimeout(runVaultAutoBackfills, 2 * 60 * 1000); // initial check after 2 mins
+
   databaseBackupService.start();
 
   const runAiSummaries = () => {

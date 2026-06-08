@@ -2860,6 +2860,44 @@ class VaultService {
       skipped
     };
   }
+
+  async runAutoBackfills() {
+    try {
+      const rows = db.prepare('SELECT guild_id, config_json FROM vault_config').all();
+      const now = Date.now();
+      for (const row of rows) {
+        try {
+          const config = JSON.parse(row.config_json || '{}');
+          if (config.enabled !== true) continue;
+          const intervalHours = Number(config.autoBackfillIntervalHours || 0);
+          if (intervalHours <= 0) continue;
+          
+          const lastRun = Number(config.lastAutoBackfillMs || 0);
+          const intervalMs = intervalHours * 60 * 60 * 1000;
+          if (now - lastRun >= intervalMs) {
+            logger.log(`[vault] Running auto-backfill for guild ${row.guild_id} (interval: ${intervalHours}h)`);
+            
+            // Trigger backfill (limit strictly to avoid rate limits during cron)
+            await this.backfillAllMissingMintTransfersForActiveSeason(row.guild_id, { 
+              limitPerWallet: 500, 
+              dryRun: false,
+              delayMs: 500
+            });
+            
+            // Update last run time
+            config.lastAutoBackfillMs = now;
+            db.prepare('UPDATE vault_config SET config_json = ?, updated_at = CURRENT_TIMESTAMP WHERE guild_id = ?')
+              .run(JSON.stringify(config), row.guild_id);
+          }
+        } catch (err) {
+          logger.error(`[vault] Auto-backfill failed for guild ${row.guild_id}:`, err);
+        }
+      }
+    } catch (e) {
+      logger.error('[vault] runAutoBackfills global error:', e);
+    }
+  }
 }
 
 module.exports = new VaultService();
+

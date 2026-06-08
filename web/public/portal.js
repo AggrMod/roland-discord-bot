@@ -11865,7 +11865,10 @@ function vaultRenderAdminPanel() {
       </div>
       <div class="vault-tab-content" id="vault-tab-recovery" style="display:none;">
         <h4 style="margin:0 0 16px 0;">Recovery & Backfill</h4>
-      <p style="color:var(--text-secondary);font-size:0.88em;margin:8px 0;">Use these tools to recover missed payments or bulk-import historical transactions.</p>
+        <div class="vault-section-card gp-subtle-panel" style="margin-top:0;">
+          <p style="color:var(--text-secondary);margin-top:0;">Automatically or manually fetch and sync missed on-chain payments.</p>
+          <div class="settings-row"><div class="settings-info"><div class="settings-label">Auto-Backfill Interval (Hours)</div><div class="settings-desc">Run bulk backfill automatically every X hours (0 = disabled). Checks up to 500 latest signatures.</div></div><input id="vault_autoBackfillIntervalHours" type="number" class="input-sm" min="0" max="720" value="${Number(config.autoBackfillIntervalHours || 0)}"></div>
+        </div>
 
       <h4 style="margin:10px 0 8px 0;">Single Wallet Backfill</h4>
       <div class="vault-settings-grid" style="margin-top:10px;">
@@ -11993,6 +11996,7 @@ async function vaultSaveGeneralConfig() {
     next.security = next.security || {};
 
     next.general.enabled = !!document.getElementById('vault_enabled')?.checked;
+    next.autoBackfillIntervalHours = Number(document.getElementById('vault_autoBackfillIntervalHours')?.value || 0);
     next.general.announceChannelId = String(document.getElementById('vault_announceChannelId')?.value || '').trim();
     next.general.winChannelId = String(document.getElementById('vault_winChannelId')?.value || '').trim();
     next.general.prizeRevealDelaySeconds = Math.max(0, Math.min(30, Number(document.getElementById('vault_prizeRevealDelaySeconds')?.value || 0) || 0));

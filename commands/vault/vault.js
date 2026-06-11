@@ -72,6 +72,7 @@ function renderTemplate(rawTemplate, variables = {}) {
 
 function rewardTierEmoji(tier) {
   const key = String(tier || '').trim().toLowerCase();
+  if (key === 'jackpot') return '🎰';
   if (key === 'legendary') return '👑';
   if (key === 'epic') return '💎';
   if (key === 'rare') return '✨';
@@ -81,6 +82,7 @@ function rewardTierEmoji(tier) {
 
 function rewardTierColorHex(tier) {
   const key = String(tier || '').trim().toLowerCase();
+  if (key === 'jackpot') return '#ff1493';
   if (key === 'legendary') return '#f59e0b';
   if (key === 'epic') return '#a855f7';
   if (key === 'rare') return '#38bdf8';

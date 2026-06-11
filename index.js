@@ -626,7 +626,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
   if (interaction.isModalSubmit()) {
     if (interaction.customId.startsWith('ticket_modal_')) { await handleTicketModalSubmit(interaction); return; }
-    if (interaction.customId === 'vault_panel_upgrade_modal' || interaction.customId === 'vault_panel_payment_tx_modal') {
+    if (interaction.customId === 'vault_panel_upgrade_modal' || interaction.customId.startsWith('vault_panel_upg_do_') || interaction.customId === 'vault_panel_payment_tx_modal') {
       const vaultCommand = client.commands.get('vault');
       if (vaultCommand && typeof vaultCommand.handlePanelModal === 'function') {
         await vaultCommand.handlePanelModal(interaction);

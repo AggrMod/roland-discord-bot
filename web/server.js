@@ -393,8 +393,8 @@ class WebServer {
     const publicApiLimiter = rateLimit({ ...rateLimitDefaults, windowMs: 15 * 60 * 1000, max: 100, message: rateLimitMessage });
     const authLimiter = rateLimit({ ...rateLimitDefaults, windowMs: 15 * 60 * 1000, max: 10, message: rateLimitMessage });
     const verifyLimiter = rateLimit({ ...rateLimitDefaults, windowMs: 60 * 60 * 1000, max: 20, message: rateLimitMessage });
-    const adminLimiter = rateLimit({ ...rateLimitDefaults, windowMs: 15 * 60 * 1000, max: 200, message: rateLimitMessage });
-    const superadminLimiter = rateLimit({ ...rateLimitDefaults, windowMs: 15 * 60 * 1000, max: 300, message: rateLimitMessage });
+    const adminLimiter = rateLimit({ ...rateLimitDefaults, windowMs: 15 * 60 * 1000, max: 2000, message: rateLimitMessage });
+    const superadminLimiter = rateLimit({ ...rateLimitDefaults, windowMs: 15 * 60 * 1000, max: 3000, message: rateLimitMessage });
 
     const commentLimiter = rateLimit({
       ...rateLimitDefaults,

@@ -260,7 +260,11 @@ module.exports = {
           sub
             .setName('import-csv')
             .setDescription('Import a Solscan CSV to grant keys retroactively')
-            .addAttachmentOption((option) => option.setName('csv_file').setDescription('Solscan export CSV').setRequired(true)))),
+            .addAttachmentOption((option) => option.setName('csv_file').setDescription('Solscan export CSV').setRequired(true)))
+        .addSubcommand((sub) =>
+          sub
+            .setName('fix-stats')
+            .setDescription('Recalculate keys_used for all users in the vault'))),
 
   async execute(interaction) {
     if (!await moduleGuard.checkModuleEnabled(interaction, 'vault')) return;
@@ -286,6 +290,7 @@ module.exports = {
           case 'setstatus': return this.handleAdminSetStatus(interaction, guildId);
           case 'backfill': return this.handleAdminBackfill(interaction, guildId);
           case 'import-csv': return this.handleAdminImportCsv(interaction, guildId);
+          case 'fix-stats': return this.handleAdminFixStats(interaction, guildId);
           default:
             return interaction.reply({ content: 'Unknown admin subcommand.', ephemeral: true });
         }
@@ -1276,5 +1281,14 @@ module.exports = {
       logger.warn('[vault] win announcement failed:', error?.message || error);
       return { posted: false, reason: 'exception' };
     }
+  },
+
+  async handleAdminFixStats(interaction, guildId) {
+    await interaction.deferReply({ ephemeral: true });
+    const result = vaultService.adminFixStats(guildId, interaction.user.id);
+    if (!result.success) {
+      return interaction.editReply({ content: `ERROR: ${result.message}` });
+    }
+    return interaction.editReply({ content: `Successfully recalculated keys_used for ${result.updated} users in this guild based on their actual vault openings.` });
   },
 };

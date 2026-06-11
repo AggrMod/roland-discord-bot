@@ -2952,6 +2952,29 @@ class VaultService {
       logger.error('[vault] runAutoBackfills global error:', e);
     }
   }
+
+  adminFixStats(guildId, adminId) {
+    const gid = normalizeGuildId(guildId);
+    if (!gid) return { success: false, message: 'Invalid guild id' };
+    try {
+      const res = db.prepare(`
+        UPDATE vault_user_stats
+        SET keys_used = (
+            SELECT COUNT(*) 
+            FROM vault_openings 
+            WHERE vault_openings.guild_id = vault_user_stats.guild_id 
+              AND vault_openings.season_id = vault_user_stats.season_id 
+              AND vault_openings.discord_user_id = vault_user_stats.discord_user_id
+        )
+        WHERE guild_id = ?
+      `).run(gid);
+      this.logAdminAction(gid, adminId, 'fix_stats', null, { rowsUpdated: res.changes });
+      return { success: true, updated: res.changes };
+    } catch (e) {
+      logger.error('adminFixStats error:', e);
+      return { success: false, message: 'Database error' };
+    }
+  }
 }
 
 module.exports = new VaultService();

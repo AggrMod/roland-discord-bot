@@ -1075,7 +1075,7 @@ class VaultService {
         balances[selectedTier.id] = Math.max(0, Number(balances[selectedTier.id] || 0) - 1);
         db.prepare(`
           UPDATE vault_user_stats
-          SET key_balances_json = ?, rewards_won = rewards_won + ?, updated_at = CURRENT_TIMESTAMP
+          SET key_balances_json = ?, keys_used = keys_used + 1, rewards_won = rewards_won + ?, updated_at = CURRENT_TIMESTAMP
           WHERE guild_id = ? AND season_id = ? AND discord_user_id = ?
         `).run(JSON.stringify(balances), rewardWonIncrement, gid, season.season_id, uid);
       }

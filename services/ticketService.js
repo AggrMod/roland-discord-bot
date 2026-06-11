@@ -895,15 +895,16 @@ class TicketService {
         return { success: false, message: 'Only the ticket opener or assigned handlers can close this ticket' };
       }
 
-      const channel = await this.client.channels.fetch(channelId);
+      const channel = await this.client.channels.fetch(channelId).catch(() => null);
 
-      const transcript = await this._buildTranscript(channel, ticket);
+      const transcript = channel ? await this._buildTranscript(channel, ticket) : 'Channel was deleted before closing.';
 
       // Update DB
       db.prepare('UPDATE tickets SET status = ?, closed_at = CURRENT_TIMESTAMP, transcript = ?, inactive_warning_sent_at = NULL WHERE channel_id = ?')
         .run('closed', transcript, channelId);
 
-      // Remove opener write permission
+      if (channel) {
+        // Remove opener write permission
       try {
         await channel.permissionOverwrites.edit(ticket.opener_id, {
           SendMessages: false,
@@ -923,20 +924,22 @@ class TicketService {
       }
 
       // Update embed
-      const msgs = await channel.messages.fetch({ limit: 10 });
-      const botMsg = msgs.find(m => m.author.id === this.client.user.id && m.embeds.length > 0);
-      if (botMsg) {
-        const embed = EmbedBuilder.from(botMsg.embeds[0]);
-        const statusIdx = embed.data.fields?.findIndex(f => f.name === 'Status');
-        if (statusIdx >= 0) embed.data.fields[statusIdx].value = '🔴 Closed';
-        applyEmbedBranding(embed, {
-          guildId: ticket.guild_id || '',
-          moduleKey: 'ticketing',
-          defaultColor: '#ED4245',
-          defaultFooter: 'Powered by Guild Pilot',
-          fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
-        });
-        await botMsg.edit({ embeds: [embed], components: [] });
+      const msgs = await channel.messages.fetch({ limit: 10 }).catch(() => null);
+      if (msgs) {
+        const botMsg = msgs.find(m => m.author.id === this.client.user.id && m.embeds.length > 0);
+        if (botMsg) {
+          const embed = EmbedBuilder.from(botMsg.embeds[0]);
+          const statusIdx = embed.data.fields?.findIndex(f => f.name === 'Status');
+          if (statusIdx >= 0) embed.data.fields[statusIdx].value = '🔴 Closed';
+          applyEmbedBranding(embed, {
+            guildId: ticket.guild_id || '',
+            moduleKey: 'ticketing',
+            defaultColor: '#ED4245',
+            defaultFooter: 'Powered by Guild Pilot',
+            fallbackLogoUrl: this.client?.user?.displayAvatarURL?.() || null,
+          });
+          await botMsg.edit({ embeds: [embed], components: [] }).catch(() => {});
+        }
       }
 
       const closeDescription = options.closedByText
@@ -973,7 +976,8 @@ class TicketService {
           .setEmoji('🗑️'),
       );
 
-      await channel.send({ embeds: [closeEmbed], components: [row] });
+      await channel.send({ embeds: [closeEmbed], components: [row] }).catch(() => {});
+      }
 
       return { success: true, transcript };
     } catch (error) {

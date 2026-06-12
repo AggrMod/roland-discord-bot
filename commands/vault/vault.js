@@ -790,8 +790,9 @@ module.exports = {
       const weight = Math.max(0, Number(reward.weight || 0));
       const chance = totalWeight > 0 ? ((weight / totalWeight) * 100).toFixed(1) : '0.0';
       const tierEmoji = rewardTierEmoji(reward?.tier);
+      const reqKey = String(reward?.keyTier || 'default').toLowerCase();
       return `${tierEmoji} **${reward.name || reward.code}**\n` +
-        `• Tier: \`${String(reward.tier || 'common')}\`  • Qty: \`${qtyLabel}\`  • Chance: \`${chance}%\``;
+        `• Tier: \`${String(reward.tier || 'common')}\`  • Qty: \`${qtyLabel}\`  • Chance: \`${chance}%\`  • Req. Key: \`${reqKey}\``;
     });
 
     const embed = this.buildPanelResponseEmbed(guildId, {

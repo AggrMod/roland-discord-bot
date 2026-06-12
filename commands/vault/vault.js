@@ -799,10 +799,18 @@ module.exports = {
       title: String(options.title || 'Reward Catalog'),
       description: String(options.subtitle || ''),
     });
-    embed.addFields({
-      name: `Available Rewards (${Math.min(sorted.length, 24)} shown)`,
-      value: lines.join('\n\n') || 'No rewards available.',
-    });
+    const chunkSize = 6;
+    if (lines.length === 0) {
+      embed.addFields({ name: 'Available Rewards (0 shown)', value: 'No rewards available.' });
+    } else {
+      for (let i = 0; i < lines.length; i += chunkSize) {
+        const chunk = lines.slice(i, i + chunkSize);
+        embed.addFields({
+          name: i === 0 ? `Available Rewards (${Math.min(sorted.length, 24)} shown)` : 'Available Rewards (cont.)',
+          value: chunk.join('\n\n'),
+        });
+      }
+    }
     if (sorted.length > 24) {
       embed.addFields({ name: 'More Rewards', value: `${sorted.length - 24} additional rewards are configured.` });
     }

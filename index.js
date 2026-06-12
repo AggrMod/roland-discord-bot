@@ -1681,9 +1681,9 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
   }
 });
 
-client.on(Events.Error, e => logger.error(`Client error: ${e.message}`));
-process.on('unhandledRejection', e => logger.error(`Unhandled rejection: ${e?.message || e}`));
-process.on('uncaughtException', e => { logger.error(`Uncaught exception: ${e.message}`); process.exit(1); });
+client.on(Events.Error, e => logger.error('Client error:', e));
+process.on('unhandledRejection', e => logger.error('Unhandled rejection:', e));
+process.on('uncaughtException', e => { logger.error('Uncaught exception:', e); process.exit(1); });
 
 function gracefulShutdown(s) {
   logger.log(`Shutdown (${s})...`);

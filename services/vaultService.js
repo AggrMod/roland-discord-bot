@@ -2936,11 +2936,15 @@ class VaultService {
             logger.log(`[vault] Running auto-backfill for guild ${row.guild_id} (interval: ${intervalHours}h)`);
             
             // Trigger backfill (limit strictly to avoid rate limits during cron)
-            await this.backfillAllMissingMintTransfersForActiveSeason(row.guild_id, { 
+            const result = await this.backfillAllMissingMintTransfersForActiveSeason(row.guild_id, { 
               limitPerWallet: 500, 
               dryRun: false,
               delayMs: 500
             });
+            if (!result?.success) {
+              logger.warn(`[vault] Auto-backfill skipped for guild ${row.guild_id}: ${result?.message || 'unknown error'}`);
+              continue;
+            }
             
             // Update last run time
             config.lastAutoBackfillMs = now;

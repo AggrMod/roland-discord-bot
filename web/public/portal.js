@@ -11947,7 +11947,8 @@ function vaultRenderAdminPanel() {
       <p style="color:var(--text-secondary);font-size:0.88em;margin-bottom:8px;">Scans all configured payment wallets for missed transactions. Safe to rerun — duplicates are automatically skipped.</p>
       <div class="vault-settings-grid" style="margin-top:10px;">
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Max Signatures / Wallet</div><div class="settings-desc">Scans newest to oldest until this limit is reached.</div></div><input id="vaultBulkBackfillLimitPerWallet" type="number" class="input-sm" min="1" max="50000" value="5000"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Dry Run</div><div class="settings-desc">Analyze and count candidates without actually ingesting events.</div></div><label class="toggle-switch"><input type="checkbox" id="vaultBulkBackfillDryRun"><span class="toggle-slider"></span></label></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Dry Run</div><div class="settings-desc">Analyze and count candidates without actually ingesting events.</div></div><label class="toggle-switch"><input type="checkbox" id="vaultBulkBackfillDryRun" checked><span class="toggle-slider"></span></label></div>
+        <div class="settings-row"><div class="settings-info"><div class="settings-label">Confirm Live Run</div><div class="settings-desc">Required only when Dry Run is off. This prevents accidental key grants.</div></div><label class="toggle-switch"><input type="checkbox" id="vaultBulkBackfillLiveConfirm"><span class="toggle-slider"></span></label></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Delay Per Batch (ms)</div><div class="settings-desc">Throttle between RPC batches to avoid rate limits.</div></div><input id="vaultBulkBackfillDelayMs" type="number" class="input-sm" min="0" max="5000" value="250"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">Max Runtime (seconds)</div><div class="settings-desc">Safety cap — stops the scan when this runtime is exceeded.</div></div><input id="vaultBulkBackfillMaxRuntimeSec" type="number" class="input-sm" min="10" max="1800" value="600"></div>
         <div class="settings-row"><div class="settings-info"><div class="settings-label">RPC Retry Attempts</div><div class="settings-desc">Number of times to retry transient RPC failures.</div></div><input id="vaultBulkBackfillRpcRetryMax" type="number" class="input-sm" min="0" max="5" value="2"></div>
@@ -12677,9 +12678,13 @@ async function vaultVerifyPaymentTransaction() {
 async function vaultRunBackfillAllMissingTx() {
   const limitPerWallet = Math.max(1, Math.min(50000, Number(document.getElementById('vaultBulkBackfillLimitPerWallet')?.value || 5000) || 5000));
   const dryRun = !!document.getElementById('vaultBulkBackfillDryRun')?.checked;
+  const liveConfirmed = !!document.getElementById('vaultBulkBackfillLiveConfirm')?.checked;
   const delayMs = Math.max(0, Math.min(5000, Number(document.getElementById('vaultBulkBackfillDelayMs')?.value || 250) || 0));
   const maxRuntimeSec = Math.max(10, Math.min(1800, Number(document.getElementById('vaultBulkBackfillMaxRuntimeSec')?.value || 600) || 600));
   const rpcRetryMax = Math.max(0, Math.min(5, Number(document.getElementById('vaultBulkBackfillRpcRetryMax')?.value || 2) || 0));
+  if (!dryRun && !liveConfirmed) {
+    return showError('Turn on Confirm Live Run before running a live bulk backfill.');
+  }
   
   const btn = document.getElementById('vaultBulkBackfillBtn');
   const originalText = btn ? btn.innerText : 'Backfill Missing TXs';
@@ -12701,12 +12706,16 @@ async function vaultRunBackfillAllMissingTx() {
         delayMs,
         maxRuntimeMs: maxRuntimeSec * 1000,
         rpcRetryMax,
+        confirmation: dryRun ? '' : 'RUN_BACKFILL',
       }),
     });
 
     if (!res.ok) {
       let errText = await res.text();
-      try { errText = JSON.parse(errText).error || errText; } catch(e) {}
+      try {
+        const parsedError = JSON.parse(errText);
+        errText = parsedError?.message || parsedError?.error?.message || parsedError?.error || errText;
+      } catch(e) {}
       throw new Error(errText || 'Failed to start bulk backfill.');
     }
 

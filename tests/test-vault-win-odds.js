@@ -43,8 +43,8 @@ function seedConfig(guildId, winChancesByKeyTier) {
       winChancesByKeyTier,
       rewards: [
         { code: 'nothing', name: 'Nothing', tier: 'common', weight: 999, enabled: true, quantity: null, type: 'no_reward' },
-        { code: 'cheap', name: 'Cheap Prize', tier: 'common', weight: 100, enabled: true, quantity: null, type: 'none' },
-        { code: 'jackpot', name: 'Jackpot', tier: 'legendary', weight: 1, keyTier: 'gold', enabled: true, quantity: null, type: 'none' },
+        { code: 'cheap', name: 'Cheap Prize', tier: 'common', weight: 100, enabled: true, quantity: null, type: 'claimable_reward' },
+        { code: 'jackpot', name: 'Jackpot', tier: 'legendary', weight: 1, keyTier: 'gold', enabled: true, quantity: null, type: 'claimable_reward' },
       ],
     },
   });
@@ -72,6 +72,7 @@ function run() {
   const goldWin = withRandom(0.999, () => vaultService.openVault(guildId, userId, { keyTier: 'gold' }));
   assert.strictEqual(goldWin.success, true, 'gold open should succeed');
   assert.strictEqual(goldWin.won, true, '100 percent gold chance should win');
+  assert.ok(Number(goldWin.claimId || 0) > 0, 'claimable win should expose a vault claim id');
   assert.notStrictEqual(goldWin.reward.code, 'nothing', 'legacy no_reward row should not be selected as a prize');
   assert.ok(['cheap', 'jackpot'].includes(goldWin.reward.code), 'gold can access inherited/default and gold prizes');
 

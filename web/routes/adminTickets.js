@@ -6,8 +6,32 @@ function createAdminTicketsRouter({
   adminAuthMiddleware,
   ensureTicketingModule,
   ticketService,
+  vaultService,
 }) {
   const router = express.Router();
+
+  function parseTicketTemplateResponses(ticket) {
+    try {
+      const parsed = JSON.parse(ticket?.template_responses || '{}');
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch (_error) {
+      return {};
+    }
+  }
+
+  function getVaultClaimIdFromTicket(ticket) {
+    const responses = parseTicketTemplateResponses(ticket);
+    const direct = responses['Vault Claim ID'] || responses.vaultClaimId || responses.claimId;
+    const parsedDirect = Number.parseInt(String(direct || '').trim(), 10);
+    if (Number.isFinite(parsedDirect) && parsedDirect > 0) return parsedDirect;
+    const combined = Object.values(responses).map(value => String(value || '')).join('\n');
+    const match = combined.match(/Vault Claim ID:\s*(\d+)/i);
+    if (match) {
+      const parsed = Number.parseInt(match[1], 10);
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+    return null;
+  }
 
   router.get('/api/admin/tickets/categories', adminAuthMiddleware, (req, res) => {
     if (!ensureTicketingModule(req, res)) return;
@@ -124,6 +148,40 @@ function createAdminTicketsRouter({
       return res.json(toSuccessResponse(result));
     } catch (routeError) {
       logger.error('Error fetching ticket transcript:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.put('/api/admin/tickets/:id/vault-claim-status', adminAuthMiddleware, async (req, res) => {
+    if (!ensureTicketingModule(req, res)) return;
+    try {
+      if (!vaultService || typeof vaultService.updateRewardClaimStatus !== 'function') {
+        return res.status(503).json(toErrorResponse('Vault service is unavailable', 'SERVICE_UNAVAILABLE'));
+      }
+      const ticket = ticketService.getTicketById(parseInt(req.params.id, 10), req.guildId);
+      if (!ticket) {
+        return res.status(404).json(toErrorResponse('Ticket not found', 'NOT_FOUND'));
+      }
+      const claimId = getVaultClaimIdFromTicket(ticket);
+      if (!claimId) {
+        return res.status(400).json(toErrorResponse('This ticket is not linked to a Vault reward claim', 'VALIDATION_ERROR'));
+      }
+      const claimStatus = String(req.body?.claimStatus || req.body?.claim_status || '').trim();
+      const claimNote = req.body?.claimNote || req.body?.claim_note || `Updated from ticket #${ticket.ticket_number || ticket.id}`;
+      const result = await vaultService.updateRewardClaimStatus(req.guildId || '', claimId, claimStatus, claimNote);
+      if (!result.success) {
+        return res.status(400).json(toErrorResponse(result.message || 'Failed to update Vault claim status', 'VALIDATION_ERROR', null, result));
+      }
+      vaultService.logAdminAction(req.guildId || '', req.session?.discordUser?.id || null, 'reward_claim_status_from_ticket', result.reward?.discord_user_id || null, {
+        ticketId: Number(ticket.id),
+        ticketNumber: Number(ticket.ticket_number || 0) || null,
+        rewardId: claimId,
+        claimStatus,
+        claimNote: claimNote ? String(claimNote) : null,
+      });
+      return res.json(toSuccessResponse({ ...result, claimId, ticketId: ticket.id }));
+    } catch (routeError) {
+      logger.error('Error updating Vault claim status from ticket:', routeError);
       return res.status(500).json(toErrorResponse('Internal server error'));
     }
   });

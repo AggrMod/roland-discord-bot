@@ -1105,7 +1105,7 @@ class VaultService {
         openingStatus
       );
 
-      this.applyRewardEffects({
+      const rewardEffects = this.applyRewardEffects({
         guildId: gid,
         seasonId: season.season_id,
         discordUserId: uid,
@@ -1132,6 +1132,7 @@ class VaultService {
         keyTierName: selectedTier.name,
         won,
         odds: oddsContext,
+        claimId: rewardEffects?.rewardId || null,
       };
       return openingResult;
     });
@@ -1144,7 +1145,7 @@ class VaultService {
   applyRewardEffects({ guildId, seasonId, discordUserId, reward }) {
     const type = String(reward?.type || 'none').trim().toLowerCase();
     if (type === 'claimable_reward') {
-      db.prepare(`
+      const insert = db.prepare(`
         INSERT INTO vault_rewards (
           guild_id, season_id, discord_user_id, reward_code, reward_name, reward_tier, reward_payload, claim_status, source, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 'vault_open', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -1157,7 +1158,9 @@ class VaultService {
         String(reward.tier || 'common'),
         reward.payload !== undefined ? JSON.stringify(reward.payload) : null
       );
+      return { rewardId: insert.lastInsertRowid };
     }
+    return { rewardId: null };
   }
 
   decrementRewardInventoryOnClaim(guildId, rewardCode, decrementBy = 1) {

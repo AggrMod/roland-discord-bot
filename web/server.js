@@ -1458,6 +1458,7 @@ class WebServer {
       adminAuthMiddleware,
       ensureTicketingModule,
       ticketService,
+      vaultService,
     }));
     const createAdminWelcomeRouter = require('./routes/adminWelcome');
     this.app.use('/', createAdminWelcomeRouter({

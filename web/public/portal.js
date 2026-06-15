@@ -11971,15 +11971,6 @@ function vaultRenderAdminPanel() {
       <pre id="vaultClaimsView" style="white-space:pre-wrap;max-height:180px;overflow:auto;">${escapeHtml(vaultFormatRows(claims.map(item => `#${item.id} [${item.claim_status}] ${item.discord_user_id || '-'} -> ${item.reward_name || item.reward_code || '-'}`), 'No claims yet.'))}</pre>
       <pre id="vaultAuditView" style="white-space:pre-wrap;max-height:180px;overflow:auto;">${escapeHtml(vaultFormatRows(audit.map(item => `[${item.created_at || ''}] ${item.action || '-'} by ${item.admin_discord_user_id || 'system'}`), 'No audit records yet.'))}</pre>
 
-      <h4 style="margin:16px 0 8px 0;">Update Claim Status</h4>
-      <div class="vault-settings-grid" style="margin-top:10px;">
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Claim ID</div><div class="settings-desc">The numeric ID of the reward claim to update.</div></div><input id="vaultClaimIdInput" class="input-sm" placeholder="numeric reward id"></div>
-        <div class="settings-row"><div class="settings-info"><div class="settings-label">Claim Status</div><div class="settings-desc">Set to: pending, approved, fulfilled, or rejected.</div></div><select id="vaultClaimStatusInput" class="input-sm"><option value="pending">pending</option><option value="approved">approved</option><option value="fulfilled">fulfilled</option><option value="rejected">rejected</option></select></div>
-      </div>
-      <textarea id="vaultClaimNoteInput" class="form-input" rows="2" placeholder="optional note"></textarea>
-      <div style="margin-top:8px;"><button class="btn-primary" onclick="vaultUpdateClaimStatus()">Update Claim Status</button></div>
-
-
       <!-- ═══════════ SECTION: Config Export/Import ═══════════ -->
       </div>
       <div class="vault-tab-content" id="vault-tab-config" style="display:none;">
@@ -12866,27 +12857,6 @@ async function vaultRefreshActivity() {
     showSuccess('Vault activity refreshed.');
   } catch (error) {
     showError(error.message || 'Failed to refresh vault activity.');
-  }
-}
-
-async function vaultUpdateClaimStatus() {
-  const claimId = String(document.getElementById('vaultClaimIdInput')?.value || '').trim();
-  const claimStatus = String(document.getElementById('vaultClaimStatusInput')?.value || '').trim();
-  if (!claimId || !claimStatus) {
-    showError('Claim ID and claim status are required.');
-    return;
-  }
-  const claimNote = String(document.getElementById('vaultClaimNoteInput')?.value || '').trim();
-  try {
-    await vaultFetchJson(`/api/admin/vault/rewards/claims/${encodeURIComponent(claimId)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ claimStatus, claimNote }),
-    });
-    showSuccess('Claim status updated.');
-    await loadVaultSettingsTab();
-  } catch (error) {
-    showError(error.message || 'Failed to update claim status.');
   }
 }
 
@@ -18356,6 +18326,7 @@ async function loadTicketingView(targetContainerId = 'adminTicketingContent') {
 }
 
 function showTicketTab(tab) {
+  window._ticketActiveTab = tab;
   ['categories', 'panel', 'tickets', 'archive', 'settings'].forEach(t => {
     const btn = document.getElementById('ticketTab' + t.charAt(0).toUpperCase() + t.slice(1));
     if (btn) btn.className = t === tab ? 'btn-primary' : 'btn-secondary';
@@ -18823,6 +18794,63 @@ async function postTicketPanel() {
   }
 }
 
+function parseTicketTemplateResponses(ticket) {
+  try {
+    const parsed = JSON.parse(ticket?.template_responses || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (_error) {
+    return {};
+  }
+}
+
+function getTicketVaultClaimId(ticket) {
+  const responses = parseTicketTemplateResponses(ticket);
+  const direct = responses['Vault Claim ID'] || responses.vaultClaimId || responses.claimId;
+  const directId = Number.parseInt(String(direct || '').trim(), 10);
+  if (Number.isFinite(directId) && directId > 0) return directId;
+  const combined = Object.values(responses).map(value => String(value || '')).join('\n');
+  const match = combined.match(/Vault Claim ID:\s*(\d+)/i);
+  if (!match) return null;
+  const parsed = Number.parseInt(match[1], 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function renderTicketVaultClaimActions(ticket) {
+  const claimId = getTicketVaultClaimId(ticket);
+  if (!claimId) return '';
+  return `
+    <div style="margin-top:6px;display:flex;gap:4px;justify-content:center;flex-wrap:wrap;">
+      <span style="font-size:0.75em;color:var(--text-secondary);align-self:center;">Claim #${claimId}</span>
+      <button class="btn-secondary" onclick="updateTicketVaultClaimStatus(${Number(ticket.id)}, 'approved')" style="font-size:0.75em;padding:3px 7px;">Approve</button>
+      <button class="btn-secondary" onclick="updateTicketVaultClaimStatus(${Number(ticket.id)}, 'fulfilled')" style="font-size:0.75em;padding:3px 7px;">Fulfill</button>
+      <button class="btn-danger" onclick="updateTicketVaultClaimStatus(${Number(ticket.id)}, 'rejected')" style="font-size:0.75em;padding:3px 7px;">Reject</button>
+    </div>
+  `;
+}
+
+async function updateTicketVaultClaimStatus(ticketId, claimStatus) {
+  const status = String(claimStatus || '').trim().toLowerCase();
+  if (!ticketId || !status) return;
+  const note = `Updated from ticket #${ticketId}`;
+  try {
+    const res = await fetch(`/api/admin/tickets/${encodeURIComponent(String(ticketId))}/vault-claim-status`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...Object.fromEntries(buildTenantRequestHeaders().entries()) },
+      body: JSON.stringify({ claimStatus: status, claimNote: note }),
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      return showError(json.message || json?.error?.message || 'Failed to update Vault claim status.');
+    }
+    showSuccess(`Vault claim #${json.claimId || json?.data?.claimId || ''} marked ${status}.`);
+    if (window._ticketActiveTab === 'archive') await loadTicketArchiveTab();
+    else await loadTicketOpenTab();
+  } catch (error) {
+    showError(error.message || 'Error updating Vault claim status.');
+  }
+}
+
 async function loadTicketOpenTab() {
   const container = document.getElementById('ticketTabContent');
   container.innerHTML = 'Loading tickets...';
@@ -18858,6 +18886,7 @@ async function loadTicketOpenTab() {
           <td style="padding:8px;color:var(--text-secondary);font-size:0.9em;">${created}</td>
           <td style="padding:8px;text-align:center;">
             <button class="btn-secondary" onclick="viewTicketTranscript(${t.id})" style="font-size:0.8em;padding:4px 8px;">Transcript</button>
+            ${renderTicketVaultClaimActions(t)}
           </td>
         </tr>`;
       }
@@ -18928,6 +18957,7 @@ async function loadTicketArchiveTab() {
           <td style="padding:8px;color:var(--text-secondary);font-size:0.9em;">${closed}</td>
           <td style="padding:8px;text-align:center;">
             <button class="btn-secondary" onclick="viewTicketTranscript(${t.id})" style="font-size:0.8em;padding:4px 8px;">Transcript</button>
+            ${renderTicketVaultClaimActions(t)}
           </td>
         </tr>`;
       }

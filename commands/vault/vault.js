@@ -741,6 +741,7 @@ module.exports = {
         `User: <@${user.id}> (${user.username})`,
         `Season: ${openResult?.season?.season_name || openResult?.season?.season_id || 'default'}`,
         `Opening ID: ${openResult?.openingId || 'n/a'}`,
+        `Vault Claim ID: ${openResult?.claimId || 'n/a'}`,
         `Reward: ${reward?.name || reward?.code || 'unknown'}`,
         `Reward Code: ${reward?.code || 'unknown'}`,
         `Reward Tier: ${reward?.tier || 'unknown'}`,
@@ -758,6 +759,10 @@ module.exports = {
         intro,
         templateResponses: {
           Subject: `Vault Reward Fulfillment: ${reward?.name || reward?.code || 'reward'}`,
+          'Vault Claim ID': String(openResult?.claimId || ''),
+          'Vault Opening ID': String(openResult?.openingId || ''),
+          'Reward Code': String(reward?.code || 'unknown'),
+          'Reward Name': String(reward?.name || reward?.code || 'unknown'),
           Context: `Auto-created from vault opening ${openResult?.openingId || ''}`.trim(),
         },
       });

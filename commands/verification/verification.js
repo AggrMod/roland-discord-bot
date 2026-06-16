@@ -687,7 +687,9 @@ module.exports = {
       });
     }
 
-    const wallets = walletService.getAllUserWallets(targetUser.id);
+    const wallets = walletService.getAllUserWallets(targetUser.id)
+      .map(wallet => (typeof wallet === 'string' ? { wallet_address: wallet } : wallet))
+      .filter(wallet => wallet && wallet.wallet_address);
     const governanceEnabled = isGovernanceEnabled(interaction.guildId || null);
     const exportFields = [
       { name: 'NFT Holdings', value: `${userInfo.total_nfts}`, inline: true },

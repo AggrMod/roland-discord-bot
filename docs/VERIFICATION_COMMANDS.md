@@ -10,7 +10,7 @@ This guide reflects the current live `/verification` command surface.
 
 ## Admin Commands
 - `/verification admin panel` - Post a verification panel in-channel.
-- `/verification admin export-user` - Export one member's verification data.
+- `/verification admin export-user` - Export one member's verification data (optional `full-addresses` for copy-ready wallet addresses).
 - `/verification admin remove-user` - Remove a member's verification record (requires confirm).
 - `/verification admin export-wallets` - Export verified wallets CSV (optional `role` and `primary-only`).
 - `/verification admin token-role-add` - Add token balance role rule.

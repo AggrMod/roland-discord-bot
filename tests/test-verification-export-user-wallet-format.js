@@ -8,7 +8,6 @@ async function run() {
   const originalGetAllUserWallets = walletService.getAllUserWallets;
 
   const longWallet = 'WalletAddress1234567890ABCDEFGH';
-  let editedReply = null;
 
   roleService.getUserInfo = async () => ({
     discord_id: 'user-1',
@@ -19,21 +18,23 @@ async function run() {
   });
   walletService.getAllUserWallets = () => [longWallet];
 
-  const interaction = {
-    guildId: 'guild-1',
-    user: { tag: 'Admin#0001' },
-    options: {
-      getUser: () => ({ id: 'user-1', username: 'ExportUser', tag: 'ExportUser#0001' }),
-    },
-    deferReply: async (payload) => {
-      assert.deepStrictEqual(payload, { ephemeral: true });
-    },
-    editReply: async (payload) => {
-      editedReply = payload;
-    },
-  };
+  const runExport = async ({ fullAddresses = false } = {}) => {
+    let editedReply = null;
+    const interaction = {
+      guildId: 'guild-1',
+      user: { tag: 'Admin#0001' },
+      options: {
+        getUser: () => ({ id: 'user-1', username: 'ExportUser', tag: 'ExportUser#0001' }),
+        getBoolean: (name) => name === 'full-addresses' ? fullAddresses : null,
+      },
+      deferReply: async (payload) => {
+        assert.deepStrictEqual(payload, { ephemeral: true });
+      },
+      editReply: async (payload) => {
+        editedReply = payload;
+      },
+    };
 
-  try {
     await verificationCommand.handleAdminExportUser(interaction);
 
     assert.ok(editedReply, 'export command should edit the deferred reply');
@@ -42,7 +43,12 @@ async function run() {
     const embed = editedReply.embeds[0].toJSON();
     const walletField = embed.fields.find(field => field.name === 'Linked Wallets');
     assert.ok(walletField, 'export embed should include linked wallets');
-    assert.strictEqual(walletField.value, '`WalletAd...ABCDEFGH`');
+    return walletField.value;
+  };
+
+  try {
+    assert.strictEqual(await runExport(), '`WalletAd...ABCDEFGH`');
+    assert.strictEqual(await runExport({ fullAddresses: true }), `\`${longWallet}\``);
   } finally {
     roleService.getUserInfo = originalGetUserInfo;
     walletService.getAllUserWallets = originalGetAllUserWallets;

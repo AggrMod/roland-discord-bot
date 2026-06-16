@@ -93,7 +93,12 @@ module.exports = {
             .addUserOption(option =>
               option.setName('user')
                 .setDescription('The member to export')
-                .setRequired(true)))
+                .setRequired(true))
+            .addBooleanOption(option =>
+              option
+                .setName('full-addresses')
+                .setDescription('Show full wallet addresses for copying')
+                .setRequired(false)))
         
         .addSubcommand(subcommand =>
           subcommand
@@ -690,6 +695,15 @@ module.exports = {
     const wallets = walletService.getAllUserWallets(targetUser.id)
       .map(wallet => (typeof wallet === 'string' ? { wallet_address: wallet } : wallet))
       .filter(wallet => wallet && wallet.wallet_address);
+    const fullAddresses = interaction.options.getBoolean('full-addresses') || false;
+    const walletList = wallets.length > 0
+      ? wallets.map(w => {
+        const primaryMarker = w.primary_wallet ? ' *' : '';
+        return fullAddresses
+          ? `\`${w.wallet_address}\`${primaryMarker}`
+          : `\`${w.wallet_address.slice(0, 8)}...${w.wallet_address.slice(-8)}\`${primaryMarker}`;
+      }).join('\n')
+      : '_No wallets linked_';
     const governanceEnabled = isGovernanceEnabled(interaction.guildId || null);
     const exportFields = [
       { name: 'NFT Holdings', value: `${userInfo.total_nfts}`, inline: true },
@@ -700,9 +714,7 @@ module.exports = {
     }
     exportFields.push({
       name: 'Linked Wallets',
-      value: wallets.length > 0
-        ? wallets.map(w => `\`${w.wallet_address.slice(0, 8)}...${w.wallet_address.slice(-8)}\`${w.primary_wallet ? ' ⭐' : ''}`).join('\n')
-        : '_No wallets linked_',
+      value: walletList,
       inline: false
     });
 

@@ -10163,7 +10163,7 @@ async function loadAdminHelpView() {
       { name: '/verification refresh', desc: 'Refresh roles from holdings', options: '-', example: '/verification refresh' },
       { name: '/verification quick', desc: 'Quick micro verification flow', options: '-', example: '/verification quick' },
       { name: '/verification admin panel', desc: 'Post verification panel', options: 'title, description, color', example: '/verification admin panel title:"Verify"' },
-      { name: '/verification admin export-user', desc: 'Export member verification data', options: 'user (required)', example: '/verification admin export-user user:@member' },
+      { name: '/verification admin export-user', desc: 'Export member verification data', options: 'user (required), full-addresses (optional)', example: '/verification admin export-user user:@member full-addresses:true' },
       { name: '/verification admin remove-user', desc: 'Remove member verification record', options: 'user, confirm (required)', example: '/verification admin remove-user user:@member confirm:true' },
       { name: '/verification admin export-wallets', desc: 'Export verified wallets CSV', options: 'role, primary-only (optional)', example: '/verification admin export-wallets role:@Verified primary-only:true' },
       { name: '/verification admin token-role-add', desc: 'Add token balance role rule', options: 'mint, role, min_amount (required), symbol/max_amount (optional)', example: '/verification admin token-role-add mint:So1... role:@Holder min_amount:1' },

@@ -67,7 +67,7 @@ This document outlines the new module-first command architecture for the GuildPi
 **New admin structure**:
 ```
 /verification admin panel             - Post verification panel
-/verification admin export-user       - Export user data
+/verification admin export-user       - Export user data (optional full-addresses)
 /verification admin remove-user       - Remove user from system
 /verification admin actions list      - List verification actions
 /verification admin actions add       - Add collection/token/trait action

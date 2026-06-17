@@ -14343,7 +14343,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
       fetch('/api/admin/aiassistant/personas', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/aiassistant/role-limits', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/aiassistant/ingestion/jobs?limit=30', { credentials: 'include', headers: buildTenantRequestHeaders() }),
-      fetch('/api/admin/aiassistant/action-suggestions', { credentials: 'include', headers: buildTenantRequestHeaders() }),
+      fetch('/api/admin/aiassistant/action-suggestions?status=pending', { credentials: 'include', headers: buildTenantRequestHeaders() }),
       fetch('/api/admin/aiassistant/analytics?days=7', { credentials: 'include', headers: buildTenantRequestHeaders() }),
     ]);
     const settingsJson = await settingsRes.json();
@@ -14426,20 +14426,35 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
         <td style="padding:8px;color:var(--text-secondary);border-bottom:1px solid rgba(99,102,241,0.12);font-size:0.8em;">${escapeHtml(String(job.updatedAt || '-'))}</td>
       </tr>
     `).join('') || '<tr><td colspan="5" style="padding:10px;color:var(--text-secondary);">No ingestion jobs yet.</td></tr>';
-    const suggestionRows = aiAssistantSuggestionCache.map(suggestion => `
+    const suggestionRows = aiAssistantSuggestionCache.map(suggestion => {
+      const actionType = String(suggestion.actionType || '');
+      const actionLabel = actionType === 'knowledge_doc_upsert'
+        ? 'Review and save a knowledge draft'
+        : (actionType === 'system_prompt_append'
+          ? 'Review and append a tenant policy note'
+          : (actionType === 'proposal_brief_draft'
+            ? 'Generate a draft proposal brief'
+            : 'Review this suggested admin action'));
+      const payload = suggestion.payload && typeof suggestion.payload === 'object' ? suggestion.payload : {};
+      const detail = payload.title || payload.tags || payload.briefPrompt || payload.appendText || suggestion.reason || '';
+      return `
       <tr>
         <td style="padding:8px;color:#c9d6ff;border-bottom:1px solid rgba(99,102,241,0.12);">${Number(suggestion.id || 0)}</td>
-        <td style="padding:8px;color:#cbd5e1;border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(suggestion.title || suggestion.actionType || '-'))}</td>
-        <td style="padding:8px;color:var(--text-secondary);border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(suggestion.status || 'pending'))}</td>
-        <td style="padding:8px;color:var(--text-secondary);border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(suggestion.reason || '-').slice(0, 120))}</td>
+        <td style="padding:8px;color:#cbd5e1;border-bottom:1px solid rgba(99,102,241,0.12);">
+          <div style="font-weight:700;color:#e0e7ff;">${escapeHtml(String(suggestion.title || actionLabel))}</div>
+          <div style="font-size:0.78em;color:var(--text-secondary);margin-top:3px;">${escapeHtml(actionLabel)}</div>
+        </td>
+        <td style="padding:8px;color:var(--text-secondary);border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(suggestion.reason || '-').slice(0, 160))}</td>
+        <td style="padding:8px;color:var(--text-secondary);border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(detail || '-').slice(0, 120))}</td>
         <td style="padding:8px;border-bottom:1px solid rgba(99,102,241,0.12);">
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button class="btn-primary btn-sm" onclick="applyAiAssistantSuggestion(${Number(suggestion.id || 0)})" ${String(suggestion.status || '') !== 'pending' ? 'disabled' : ''}>Apply</button>
-            <button class="btn-secondary btn-sm" onclick="rejectAiAssistantSuggestion(${Number(suggestion.id || 0)})" ${String(suggestion.status || '') !== 'pending' ? 'disabled' : ''}>Reject</button>
+            <button class="btn-primary btn-sm" onclick="applyAiAssistantSuggestion(${Number(suggestion.id || 0)})">Approve & Apply</button>
+            <button class="btn-secondary btn-sm" onclick="rejectAiAssistantSuggestion(${Number(suggestion.id || 0)})">Dismiss</button>
           </div>
         </td>
       </tr>
-    `).join('') || '<tr><td colspan="5" style="padding:10px;color:var(--text-secondary);">No suggestions yet.</td></tr>';
+    `;
+    }).join('') || '<tr><td colspan="5" style="padding:10px;color:var(--text-secondary);">No pending admin review items.</td></tr>';
     const analyticsTopicsRows = (analytics.topMissingTopics || []).map(topic => `
       <tr>
         <td style="padding:8px;color:#c9d6ff;border-bottom:1px solid rgba(99,102,241,0.12);">${escapeHtml(String(topic.topic || '-'))}</td>
@@ -14469,7 +14484,10 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
         </td>
       </tr>
     `).join('') || '<tr><td colspan="5" style="padding:10px;color:var(--text-secondary);">No knowledge sources yet. Add your first one below.</td></tr>';
-    const channelPolicyRows = channels.map(channel => {
+    const channelPolicyChannels = allowed.length
+      ? channels.filter(channel => allowed.map(v => String(v)).includes(String(channel.id)))
+      : channels;
+    const channelPolicyRows = channelPolicyChannels.map(channel => {
       const policy = channelPolicyMap.get(String(channel.id)) || {};
       const mode = String(policy.mode || 'mention');
       const minConfidence = Number.isFinite(Number(policy.minConfidence)) ? Number(policy.minConfidence) : 35;
@@ -14496,10 +14514,29 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
           </td>
         </tr>
       `;
-    }).join('') || '<tr><td colspan="5" style="padding:10px;color:var(--text-secondary);">No channels available.</td></tr>';
+    }).join('') || '<tr><td colspan="5" style="padding:10px;color:var(--text-secondary);">No allowed channels configured yet.</td></tr>';
+    const announcementChannelOptions = channels.map(c => `<option value="${escapeHtml(String(c.id))}">${escapeHtml(c.name || c.id)}</option>`).join('');
+    const botSelfKnowledge = [
+      'GuildPilot Bot Self Knowledge',
+      '',
+      'GuildPilot is a Discord community operations bot. It manages tenant-scoped server tools from the admin portal and Discord slash commands.',
+      'AI Assistant answers questions using tenant knowledge sources first. If the knowledgebase lacks a matching source, it should say that clearly and ask admins to add or update knowledge.',
+      'Admins can configure allowed channels, allowed roles, daily recap channels, monitored activity channels, tenant policy/style, memory, safety, personas, role limits, channel modes, and knowledge sources.',
+      'AI provider credentials, provider choice, and model settings are controlled by Superadmin, not by tenant admins.',
+      'Knowledge sources can be manual documents, URLs, PDFs, pasted markdown, or Discord channel imports such as announcement channels.',
+      `Available bot modules include: ${Object.values(TENANT_MODULE_LABELS || {}).join(', ')}.`,
+      'Key AI commands: /aiassistant ask asks a question, /aiassistant briefing creates an instant server briefing, and /aiassistant status shows module status.',
+      'Responses are split across Discord messages when needed so answers should not be cut off by the portal response setting.',
+    ].join('\n');
 
     pane.innerHTML = `
-      <div style="${cardStyle}">
+      <div class="settings-tabs" style="margin-bottom:var(--space-4);">
+        <button class="settings-tab active" data-aiassistant-tab="general" onclick="switchAiAssistantTab('general')">General</button>
+        <button class="settings-tab" data-aiassistant-tab="knowledgebase" onclick="switchAiAssistantTab('knowledgebase')">Knowledgebase</button>
+        <button class="settings-tab" data-aiassistant-tab="channelmode" onclick="switchAiAssistantTab('channelmode')">Channel Mode</button>
+        <button class="settings-tab" data-aiassistant-tab="audit" onclick="switchAiAssistantTab('audit')">Audit</button>
+      </div>
+      <div data-aiassistant-tab-panel="general" style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
           <h3 style="margin:0;color:#c9d6ff;"> AI Assistant</h3>
           <span style="color:var(--text-secondary);font-size:0.82em;">Tenant-scoped runtime settings</span>
@@ -14514,13 +14551,10 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
             Enable mention trigger ("@GuildPilot" in chat)
           </label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            <label style="display:grid;gap:6px;">
-              <span style="font-size:0.82em;color:var(--text-secondary);">Preferred Provider</span>
-              <select id="aiassistant_provider" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
-                <option value="openai" ${s.provider === 'openai' ? 'selected' : ''}>OpenAI</option>
-                <option value="gemini" ${s.provider === 'gemini' ? 'selected' : ''}>Gemini</option>
-              </select>
-            </label>
+            <div style="padding:10px 12px;border:1px solid rgba(99,102,241,0.16);border-radius:8px;background:rgba(30,41,59,0.35);color:var(--text-secondary);font-size:0.86em;">
+              <input id="aiassistant_provider" type="hidden" value="${escapeHtml(String(s.provider || 'openai'))}">
+              AI provider and model settings are managed by Superadmin.
+            </div>
             <label style="display:grid;gap:6px;">
               <span style="font-size:0.82em;color:var(--text-secondary);">Slash Response Visibility</span>
               <select id="aiassistant_visibility" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
@@ -14534,10 +14568,10 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
               <span style="font-size:0.82em;color:var(--text-secondary);">Mention Cooldown (seconds per user)</span>
               <input id="aiassistant_cooldown_seconds" type="number" min="3" max="600" value="${escapeHtml(String(s.cooldownSeconds || 12))}" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
             </label>
-            <label style="display:grid;gap:6px;">
-              <span style="font-size:0.82em;color:var(--text-secondary);">Max Response Length (chars)</span>
-              <input id="aiassistant_max_response_chars" type="number" min="300" max="1900" value="${escapeHtml(String(s.maxResponseChars || 1600))}" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
-            </label>
+            <div style="padding:10px 12px;border:1px solid rgba(16,185,129,0.18);border-radius:8px;background:rgba(16,185,129,0.08);color:#a7f3d0;font-size:0.86em;">
+              <input id="aiassistant_max_response_chars" type="hidden" value="${escapeHtml(String(s.maxResponseChars || 1600))}">
+              Longer answers are split into follow-up Discord messages instead of being cut off.
+            </div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <label style="display:grid;gap:6px;">
@@ -14555,16 +14589,8 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
               </label>
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            <label style="display:grid;gap:6px;">
-              <span style="font-size:0.82em;color:var(--text-secondary);">OpenAI Model</span>
-              <input id="aiassistant_model_openai" type="text" value="${escapeHtml(String(s.modelOpenai || 'gpt-5.4'))}" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-family:monospace;">
-            </label>
-            <label style="display:grid;gap:6px;">
-              <span style="font-size:0.82em;color:var(--text-secondary);">Gemini Model</span>
-              <input id="aiassistant_model_gemini" type="text" value="${escapeHtml(String(s.modelGemini || 'gemini-2.0-flash'))}" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-family:monospace;">
-            </label>
-          </div>
+          <input id="aiassistant_model_openai" type="hidden" value="${escapeHtml(String(s.modelOpenai || 'gpt-5.4'))}">
+          <input id="aiassistant_model_gemini" type="hidden" value="${escapeHtml(String(s.modelGemini || 'gemini-2.0-flash'))}">
           <label style="display:grid;gap:6px;">
             <span style="font-size:0.82em;color:var(--text-secondary);">Allowed Channels (blank = all channels)</span>
             <select id="aiassistant_allowed_channels" multiple size="6" data-ms-title="Allowed Channels" data-ms-placeholder="All channels" style="width:100%;padding:8px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
@@ -14647,13 +14673,13 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
           <button class="btn-primary" onclick="saveAiAssistantSettings()">Save AI Assistant Settings</button>
         </div>
       </div>
-      <div style="${cardStyle}">
+      <div data-aiassistant-tab-panel="channelmode" style="${cardStyle}display:none;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
           <h3 style="margin:0;color:#c9d6ff;"> Channel Modes</h3>
           <button class="btn-primary" onclick="saveAiAssistantChannelPolicies()">Save Channel Modes</button>
         </div>
         <div style="color:var(--text-secondary);font-size:0.8em;margin-bottom:10px;">
-          Off: no AI replies. Mention: only replies on @GuildPilot. Passive: can also auto-reply with confidence/cooldown caps.
+          Only channels from the Allowed Channels list are shown here. Off: no AI replies. Mention: only replies on @GuildPilot. Passive: can also auto-reply with confidence/cooldown caps.
         </div>
         <div style="border:1px solid rgba(99,102,241,0.18);border-radius:8px;overflow:auto;">
           <table style="width:100%;border-collapse:collapse;font-size:0.84em;">
@@ -14670,7 +14696,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
           </table>
         </div>
       </div>
-      <div style="${cardStyle}">
+      <div data-aiassistant-tab-panel="audit" style="${cardStyle}display:none;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
           <h3 style="margin:0;color:#c9d6ff;"> AI Usage Overview (Today)</h3>
           <button class="btn-secondary" onclick="loadAiAssistantSettingsView()">Refresh Metrics</button>
@@ -14700,10 +14726,37 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
           </table>
         </div>
       </div>
-      <div style="${cardStyle}">
+      <div data-aiassistant-tab-panel="knowledgebase" style="${cardStyle}display:none;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
           <h3 style="margin:0;color:#c9d6ff;"> Knowledge Sources</h3>
           <span style="color:var(--text-secondary);font-size:0.82em;">Tenant docs used for grounded AI answers</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:12px;">
+          <div style="border:1px solid rgba(99,102,241,0.16);border-radius:8px;background:rgba(30,41,59,0.35);padding:12px;">
+            <div style="font-weight:700;color:#e0e7ff;margin-bottom:6px;">Announcement Channels</div>
+            <div style="color:var(--text-secondary);font-size:0.82em;margin-bottom:10px;">Import recent announcement messages so the assistant can answer questions about active promotions, updates, and announcements.</div>
+            <label style="display:grid;gap:6px;margin-bottom:10px;">
+              <span style="font-size:0.82em;color:var(--text-secondary);">Channels to import</span>
+              <select id="aiassistant_announcement_channels" multiple size="5" data-ms-title="Announcement Channels" data-ms-placeholder="Select announcement channels" style="width:100%;padding:8px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+                ${announcementChannelOptions}
+              </select>
+            </label>
+            <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;">
+              <label style="display:grid;gap:6px;">
+                <span style="font-size:0.82em;color:var(--text-secondary);">Messages per channel</span>
+                <input id="aiassistant_announcement_message_limit" type="number" min="20" max="500" value="120" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+              </label>
+              <button class="btn-primary" onclick="importAiAssistantAnnouncementChannels()">Import</button>
+            </div>
+          </div>
+          <div style="border:1px solid rgba(99,102,241,0.16);border-radius:8px;background:rgba(30,41,59,0.35);padding:12px;">
+            <div style="font-weight:700;color:#e0e7ff;margin-bottom:6px;">Bot Self Knowledge</div>
+            <div style="color:var(--text-secondary);font-size:0.82em;margin-bottom:10px;">Save this source so the assistant can explain what the bot does and how admins should use it.</div>
+            <textarea id="aiassistant_bot_self_knowledge" rows="8" maxlength="12000" style="width:100%;box-sizing:border-box;padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">${escapeHtml(botSelfKnowledge)}</textarea>
+            <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+              <button class="btn-primary" onclick="saveAiAssistantBotSelfKnowledge()">Save Bot Info Knowledge</button>
+            </div>
+          </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
           <label style="display:grid;gap:6px;">
@@ -14800,7 +14853,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
     initializePortalMultiSelects(pane);
 
     pane.insertAdjacentHTML('beforeend', `
-      <div style="${cardStyle}">
+      <div data-aiassistant-tab-panel="general" style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
           <h3 style="margin:0;color:#c9d6ff;"> Persona Profiles</h3>
           <button class="btn-secondary btn-sm" onclick="loadAiAssistantSettingsView()">Refresh</button>
@@ -14850,7 +14903,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
           </table>
         </div>
       </div>
-      <div style="${cardStyle}">
+      <div data-aiassistant-tab-panel="general" style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
           <h3 style="margin:0;color:#c9d6ff;"> Role Tier Limits</h3>
           <button class="btn-primary btn-sm" onclick="saveAiAssistantRoleLimits()">Save Role Limits</button>
@@ -14869,7 +14922,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
           </table>
         </div>
       </div>
-      <div style="${cardStyle}">
+      <div data-aiassistant-tab-panel="knowledgebase" style="${cardStyle}display:none;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
           <h3 style="margin:0;color:#c9d6ff;"> Knowledge Ingestion</h3>
           <button class="btn-secondary btn-sm" onclick="loadAiAssistantSettingsView()">Refresh Jobs</button>
@@ -14921,17 +14974,20 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
           </table>
         </div>
       </div>
-      <div style="${cardStyle}">
+      <div data-aiassistant-tab-panel="audit" style="${cardStyle}display:none;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;"> Guarded AI Actions</h3>
+          <h3 style="margin:0;color:#c9d6ff;"> Admin Review Queue</h3>
           <button class="btn-secondary btn-sm" onclick="loadAiAssistantSettingsView()">Refresh</button>
+        </div>
+        <div style="color:var(--text-secondary);font-size:0.82em;margin-bottom:10px;">
+          These are pending AI-suggested admin changes. Approve & Apply performs the listed action; Dismiss rejects it and removes it from this queue.
         </div>
         <div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-bottom:10px;align-items:end;">
           <label style="display:grid;gap:6px;">
-            <span style="font-size:0.82em;color:var(--text-secondary);">Generate Suggestions From Prompt</span>
-            <input id="aiassistant_suggestion_prompt" type="text" maxlength="3000" placeholder="Describe an admin task to convert into suggestions..." style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
+            <span style="font-size:0.82em;color:var(--text-secondary);">Create a Review Item</span>
+            <input id="aiassistant_suggestion_prompt" type="text" maxlength="3000" placeholder="Example: create a knowledge note for the mint FAQ..." style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
           </label>
-          <button class="btn-primary" onclick="generateAiAssistantSuggestions()">Generate</button>
+          <button class="btn-primary" onclick="generateAiAssistantSuggestions()">Add to Queue</button>
         </div>
         <div style="border:1px solid rgba(99,102,241,0.18);border-radius:8px;overflow:auto;">
           <table style="width:100%;border-collapse:collapse;font-size:0.84em;">
@@ -14939,8 +14995,8 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
               <tr style="background:rgba(99,102,241,0.12);">
                 <th style="padding:8px;text-align:left;color:#c9d6ff;">ID</th>
                 <th style="padding:8px;text-align:left;color:#c9d6ff;">Title</th>
-                <th style="padding:8px;text-align:left;color:#c9d6ff;">Status</th>
-                <th style="padding:8px;text-align:left;color:#c9d6ff;">Reason</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Why</th>
+                <th style="padding:8px;text-align:left;color:#c9d6ff;">Details</th>
                 <th style="padding:8px;text-align:left;color:#c9d6ff;">Actions</th>
               </tr>
             </thead>
@@ -14948,7 +15004,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
           </table>
         </div>
       </div>
-      <div style="${cardStyle}">
+      <div data-aiassistant-tab-panel="audit" style="${cardStyle}display:none;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
           <h3 style="margin:0;color:#c9d6ff;"> AI Analytics</h3>
           <button class="btn-secondary btn-sm" onclick="loadAiAssistantSettingsView()">Refresh Analytics</button>
@@ -14974,6 +15030,18 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
   } catch (error) {
     pane.innerHTML = `<div style="${cardStyle}"><div style="color:#fca5a5;">${escapeHtml(error.message || 'Failed to load AI assistant settings')}</div></div>`;
   }
+}
+
+function switchAiAssistantTab(tabKey) {
+  const normalized = ['general', 'knowledgebase', 'channelmode', 'audit'].includes(String(tabKey || '').trim())
+    ? String(tabKey).trim()
+    : 'general';
+  document.querySelectorAll('[data-aiassistant-tab]').forEach(button => {
+    button.classList.toggle('active', button.getAttribute('data-aiassistant-tab') === normalized);
+  });
+  document.querySelectorAll('[data-aiassistant-tab-panel]').forEach(panel => {
+    panel.style.display = panel.getAttribute('data-aiassistant-tab-panel') === normalized ? '' : 'none';
+  });
 }
 
 async function saveAiAssistantSettings() {
@@ -15352,6 +15420,83 @@ async function importAiAssistantKnowledge() {
     await loadAiAssistantSettingsView();
   } catch (error) {
     showError(`Failed to import source: ${error.message}`);
+  }
+}
+
+async function importAiAssistantAnnouncementChannels() {
+  const channelSelect = document.getElementById('aiassistant_announcement_channels');
+  const channelIds = Array.from(channelSelect?.selectedOptions || []).map(option => String(option.value || '').trim()).filter(Boolean);
+  const messageLimit = parseInt(document.getElementById('aiassistant_announcement_message_limit')?.value, 10) || 120;
+  if (!channelIds.length) {
+    showError('Select at least one announcement channel to import.');
+    return;
+  }
+
+  let imported = 0;
+  let lastError = '';
+  for (const channelId of channelIds) {
+    try {
+      const label = Array.from(channelSelect?.options || []).find(option => String(option.value || '') === channelId)?.textContent || channelId;
+      const res = await fetch('/api/admin/aiassistant/ingestion/import', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+        body: JSON.stringify({
+          sourceType: 'discord_channel',
+          channelId,
+          messageLimit,
+          title: `Announcements: ${label}`,
+          tags: 'announcement,promotion,update',
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.success === false) {
+        lastError = json.message || `Failed to import ${label}`;
+      } else {
+        imported += 1;
+      }
+    } catch (error) {
+      lastError = error.message || 'Import failed';
+    }
+  }
+
+  if (imported > 0) {
+    showSuccess(`Imported ${imported} announcement channel${imported === 1 ? '' : 's'}`);
+    await loadAiAssistantSettingsView();
+    return;
+  }
+  showError(lastError || 'Failed to import announcement channels');
+}
+
+async function saveAiAssistantBotSelfKnowledge() {
+  const body = String(document.getElementById('aiassistant_bot_self_knowledge')?.value || '').trim();
+  if (body.length < 20) {
+    showError('Bot info knowledge is empty.');
+    return;
+  }
+  try {
+    const res = await fetch('/api/admin/aiassistant/knowledge', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({
+        title: 'GuildPilot Bot Self Knowledge',
+        body,
+        tags: 'bot-info,guildpilot,admin-help',
+        enabled: true,
+        sourceType: 'bot_self',
+        sourceRef: 'portal',
+      }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.success === false) {
+      showError(json.message || 'Failed to save bot info knowledge');
+      return;
+    }
+    showSuccess('Bot info knowledge saved');
+    await loadAiAssistantSettingsView();
+  } catch (error) {
+    showError(`Failed to save bot info knowledge: ${error.message}`);
   }
 }
 

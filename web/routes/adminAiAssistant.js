@@ -35,9 +35,6 @@ function createAdminAiAssistantRouter({
       const body = req.body || {};
       const result = aiAssistantService.saveTenantSettings(req.guildId || null, {
         enabled: body.enabled,
-        provider: body.provider,
-        modelOpenai: body.modelOpenai,
-        modelGemini: body.modelGemini,
         mentionEnabled: body.mentionEnabled,
         responseVisibility: body.responseVisibility,
         systemPrompt: body.systemPrompt,

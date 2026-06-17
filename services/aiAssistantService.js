@@ -48,6 +48,8 @@ const DEFAULTS = Object.freeze({
   summaryActivityChannels: [],
 });
 
+const MAX_AI_OUTPUT_TOKENS = 2400;
+
 const PROMPT_DENYLIST_RULES = Object.freeze([
   {
     code: 'illegal_access',
@@ -1953,7 +1955,7 @@ class AiAssistantService {
         { role: 'user', content: prompt },
       ],
       temperature: 0.7,
-      max_tokens: 700,
+      max_tokens: MAX_AI_OUTPUT_TOKENS,
     };
     const response = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -1983,7 +1985,7 @@ class AiAssistantService {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 700,
+        maxOutputTokens: MAX_AI_OUTPUT_TOKENS,
       },
     };
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
@@ -2395,7 +2397,7 @@ class AiAssistantService {
         const output = provider === 'gemini'
           ? await this.callGemini({ apiKey, model, prompt: cleanPrompt, systemPrompt })
           : await this.callOpenAi({ apiKey, model, prompt: cleanPrompt, systemPrompt });
-        const text = sanitizeDiscordMentions(String(output || '').trim()).slice(0, maxChars);
+        const text = sanitizeDiscordMentions(String(output || '').trim());
         const estimatedTokens = this.getEstimatedTokens(cleanPrompt.length + text.length);
         this.logUsage({
           guildId: normalizedGuildId,

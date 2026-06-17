@@ -100,6 +100,7 @@ const PORTAL_PAGE_EXPECTATIONS = Object.freeze({
     'wallets',
     'invites',
     'aiassistant',
+    'telegram-bridge',
     'heist',
     'nft-activity',
     'token-activity',

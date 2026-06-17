@@ -3,9 +3,14 @@ const logger = require('../utils/logger');
 const tenantService = require('./tenantService');
 const entitlementService = require('./entitlementService');
 const clientProvider = require('../utils/clientProvider');
+const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
 
 const DISCORD_MESSAGE_LIMIT = 2000;
 const DISCORD_SAFE_CHUNK = 1850;
+const DISCORD_EMBED_DESCRIPTION_LIMIT = 4096;
+const DISCORD_EMBED_SAFE_CHUNK = 3900;
+const TELEGRAM_BRIDGE_COLOR = 0x2AABEE;
+const MEDIA_MAX_BYTES = Math.max(1, Math.min(25, Number(process.env.TELEGRAM_BRIDGE_MAX_MEDIA_MB || 8))) * 1024 * 1024;
 const VALID_DIRECTION_MODES = new Set(['telegram_to_discord', 'discord_to_telegram', 'two_way']);
 const VALID_CHAT_TYPES = new Set(['group', 'supergroup', 'channel', 'private']);
 
@@ -57,15 +62,15 @@ function rowToMapping(row) {
   };
 }
 
-function splitDiscordText(text) {
+function splitDiscordText(text, limit = DISCORD_MESSAGE_LIMIT, safeChunk = DISCORD_SAFE_CHUNK) {
   const input = String(text || '');
   if (!input) return [''];
   const chunks = [];
   let remaining = input;
-  while (remaining.length > DISCORD_MESSAGE_LIMIT) {
-    let idx = remaining.lastIndexOf('\n', DISCORD_SAFE_CHUNK);
-    if (idx < 500) idx = remaining.lastIndexOf(' ', DISCORD_SAFE_CHUNK);
-    if (idx < 500) idx = DISCORD_SAFE_CHUNK;
+  while (remaining.length > limit) {
+    let idx = remaining.lastIndexOf('\n', safeChunk);
+    if (idx < 500) idx = remaining.lastIndexOf(' ', safeChunk);
+    if (idx < 500) idx = safeChunk;
     chunks.push(remaining.slice(0, idx).trimEnd());
     remaining = remaining.slice(idx).trimStart();
   }
@@ -83,6 +88,20 @@ function pickLargestPhoto(message) {
   const photos = Array.isArray(message?.photo) ? message.photo : [];
   if (!photos.length) return null;
   return photos.slice().sort((a, b) => Number(b.file_size || 0) - Number(a.file_size || 0))[0];
+}
+
+function safeFileName(value, fallback) {
+  const raw = String(value || fallback || 'telegram-file').trim() || 'telegram-file';
+  return raw
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+    .replace(/\s+/g, ' ')
+    .slice(0, 120);
+}
+
+function truncateEmbedField(value, max = 1024) {
+  const text = String(value || '').trim();
+  if (text.length <= max) return text;
+  return `${text.slice(0, Math.max(0, max - 3))}...`;
 }
 
 function normalizeTelegramMessage(update) {
@@ -331,17 +350,45 @@ class TelegramBridgeService {
   }
 
   formatTelegramForDiscord(mapping, message) {
-    const lines = [];
-    if (mapping.includeSourceHeader) {
-      const source = message.chatTitle || mapping.telegramChatTitle || mapping.name || message.chatId;
-      lines.push(`**Telegram: ${source}**`);
-    }
-    if (mapping.includeAuthor && message.authorName) {
-      lines.push(`_${message.authorName}_`);
-    }
-    if (message.text) lines.push(message.text);
-    if (!message.text && message.media.length) lines.push('[Telegram media]');
-    return lines.join('\n').trim() || '[Telegram message]';
+    return String(message.text || (message.media.length ? 'Media from Telegram' : 'Telegram message')).trim();
+  }
+
+  buildTelegramEmbeds(mapping, message, fallbackLines = [], options = {}) {
+    const source = message.chatTitle || mapping.telegramChatTitle || mapping.name || message.chatId;
+    const description = this.formatTelegramForDiscord(mapping, message);
+    const chunks = splitDiscordText(description, DISCORD_EMBED_DESCRIPTION_LIMIT, DISCORD_EMBED_SAFE_CHUNK);
+    const total = chunks.length;
+    return chunks.map((chunk, index) => {
+      const embed = new EmbedBuilder()
+        .setColor(TELEGRAM_BRIDGE_COLOR)
+        .setTitle(mapping.includeSourceHeader ? `Telegram: ${source}` : 'Telegram Bridge')
+        .setDescription(chunk || 'Telegram message')
+        .setFooter({
+          text: `Telegram ${message.chatType || 'chat'} ${message.chatId}${total > 1 ? ` • part ${index + 1}/${total}` : ''}`,
+        });
+
+      if (mapping.includeAuthor && message.authorName) {
+        embed.setAuthor({ name: truncateEmbedField(message.authorName, 256) });
+      }
+      if (message.date) {
+        const ts = new Date(Number(message.date) * 1000);
+        if (!Number.isNaN(ts.getTime())) embed.setTimestamp(ts);
+      }
+      if (message.isEdit) {
+        embed.addFields({ name: 'Status', value: 'Edited on Telegram', inline: true });
+      }
+      if (index === 0 && fallbackLines.length) {
+        embed.addFields({
+          name: 'Media note',
+          value: truncateEmbedField(fallbackLines.join('\n')),
+          inline: false,
+        });
+      }
+      if (index === 0 && options.imageFileName) {
+        embed.setImage(`attachment://${options.imageFileName}`);
+      }
+      return embed;
+    });
   }
 
   insertMessageLog(mapping, message, discordMessageId, dedupeKey, editState = 'original') {
@@ -365,6 +412,49 @@ class TelegramBridgeService {
       message.mediaGroupId || null,
       editState
     );
+  }
+
+  async downloadTelegramMedia(media) {
+    const token = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
+    if (!token || !global.fetch) {
+      return { success: false, skipped: true, reason: 'telegram_bot_token_missing' };
+    }
+    if (media.fileSize && Number(media.fileSize) > MEDIA_MAX_BYTES) {
+      return { success: false, skipped: true, reason: 'file_too_large', fileSize: media.fileSize };
+    }
+
+    const getFileResponse = await fetch(`https://api.telegram.org/bot${token}/getFile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_id: media.fileId }),
+    });
+    if (!getFileResponse.ok) {
+      return { success: false, reason: `getFile_failed_${getFileResponse.status}` };
+    }
+    const getFileJson = await getFileResponse.json().catch(() => null);
+    const filePath = getFileJson?.result?.file_path;
+    const fileSize = Number(getFileJson?.result?.file_size || media.fileSize || 0) || 0;
+    if (!filePath) return { success: false, reason: 'file_path_missing' };
+    if (fileSize && fileSize > MEDIA_MAX_BYTES) {
+      return { success: false, skipped: true, reason: 'file_too_large', fileSize };
+    }
+
+    const fileResponse = await fetch(`https://api.telegram.org/file/bot${token}/${filePath}`);
+    if (!fileResponse.ok) {
+      return { success: false, reason: `file_download_failed_${fileResponse.status}` };
+    }
+    const arrayBuffer = await fileResponse.arrayBuffer();
+    if (arrayBuffer.byteLength > MEDIA_MAX_BYTES) {
+      return { success: false, skipped: true, reason: 'file_too_large', fileSize: arrayBuffer.byteLength };
+    }
+    const fileName = safeFileName(media.fileName || filePath.split('/').pop(), `${media.type || 'telegram'}-${media.fileId}`);
+    return {
+      success: true,
+      attachment: new AttachmentBuilder(Buffer.from(arrayBuffer), { name: fileName }),
+      fileName,
+      fileSize: arrayBuffer.byteLength,
+      type: media.type || 'file',
+    };
   }
 
   async mirrorTelegramToDiscord(mapping, message) {
@@ -393,13 +483,13 @@ class TelegramBridgeService {
       return { success: false, message: 'Discord channel not found or not text-based' };
     }
 
-    const chunks = splitDiscordText(this.formatTelegramForDiscord(mapping, message));
     const sentIds = [];
     try {
       if (message.isEdit && existing?.discord_message_id) {
         const target = await channel.messages?.fetch?.(existing.discord_message_id).catch(() => null);
         if (target?.edit) {
-          const edited = await target.edit({ content: chunks[0].slice(0, DISCORD_MESSAGE_LIMIT) });
+          const [embed] = this.buildTelegramEmbeds(mapping, message);
+          const edited = await target.edit({ content: null, embeds: [embed] });
           sentIds.push(edited?.id || existing.discord_message_id);
           db.prepare('UPDATE telegram_bridge_message_log SET edit_state = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run('edited', existing.id);
           this.recordAudit({ guildId: mapping.guildId, mappingId: mapping.id, telegramChatId: message.chatId, discordChannelId: mapping.discordChannelId, status: 'mirrored', eventType: message.eventType, message: 'Edited Telegram message updated in Discord' });
@@ -407,14 +497,36 @@ class TelegramBridgeService {
         }
       }
 
-      for (const chunk of chunks) {
-        const sent = await channel.send({ content: chunk || '[Telegram message]' });
-        sentIds.push(sent?.id || null);
+      const attachments = [];
+      const fallbackLines = [];
+      let embedImageFileName = '';
+      if (mapping.mirrorMedia && message.media.length) {
+        for (const item of message.media) {
+          const downloaded = await this.downloadTelegramMedia(item).catch(error => ({
+            success: false,
+            reason: error?.message || 'download_failed',
+          }));
+          if (downloaded.success && downloaded.attachment) {
+            attachments.push(downloaded.attachment);
+            if (!embedImageFileName && item.type === 'photo' && downloaded.fileName) {
+              embedImageFileName = downloaded.fileName;
+            }
+          } else {
+            fallbackLines.push(`${item.type}: ${item.fileName || item.fileId}${downloaded.reason ? ` (${downloaded.reason})` : ''}`);
+          }
+        }
+        if (!attachments.length && fallbackLines.length) {
+          const mediaText = message.media.map(item => `${item.type}: ${item.fileName || item.fileId}${item.fileSize ? ` (${item.fileSize} bytes)` : ''}`).join('\n');
+          fallbackLines.push(`Could not attach media:\n${mediaText}`);
+        }
       }
 
-      if (mapping.mirrorMedia && message.media.length) {
-        const mediaText = message.media.map(item => `${item.type}: ${item.fileName || item.fileId}${item.fileSize ? ` (${item.fileSize} bytes)` : ''}`).join('\n');
-        const sent = await channel.send({ content: `Telegram media attached to the original message:\n${mediaText}`.slice(0, DISCORD_MESSAGE_LIMIT) });
+      const embeds = this.buildTelegramEmbeds(mapping, message, fallbackLines, { imageFileName: embedImageFileName });
+      for (let index = 0; index < embeds.length; index++) {
+        const sent = await channel.send({
+          embeds: [embeds[index]],
+          files: index === 0 ? attachments : [],
+        });
         sentIds.push(sent?.id || null);
       }
 
@@ -523,4 +635,5 @@ module.exports = new TelegramBridgeService();
 module.exports._private = {
   normalizeTelegramMessage,
   splitDiscordText,
+  safeFileName,
 };

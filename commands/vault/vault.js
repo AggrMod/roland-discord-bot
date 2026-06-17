@@ -12,6 +12,7 @@ const {
 const moduleGuard = require('../../utils/moduleGuard');
 const vaultService = require('../../services/vaultService');
 const ticketService = require('../../services/ticketService');
+const walletService = require('../../services/walletService');
 const logger = require('../../utils/logger');
 const { applyEmbedBranding } = require('../../services/embedBranding');
 const { getModuleDisplayName } = require('../../services/moduleLabelService');
@@ -736,15 +737,22 @@ module.exports = {
       if (!Number.isFinite(categoryId) || categoryId <= 0) return { created: false, reason: 'missing_category' };
 
       const tierBalances = openResult?.stats?.key_balances || {};
+      const payoutWallet = walletService.getFavoriteWallet(user.id)
+        || walletService.getAllUserWallets(user.id, guildId)[0]
+        || '';
+      const payoutWalletLine = payoutWallet
+        ? `Primary Payout Wallet: ${payoutWallet}\nWallet Link: https://solscan.io/account/${payoutWallet}`
+        : 'Primary Payout Wallet: No linked wallet found';
       const intro = [
         'Vault reward fulfillment ticket created automatically.',
         `User: <@${user.id}> (${user.username})`,
         `Season: ${openResult?.season?.season_name || openResult?.season?.season_id || 'default'}`,
         `Opening ID: ${openResult?.openingId || 'n/a'}`,
-        `Vault Claim ID: ${openResult?.claimId || 'n/a'}`,
+        `Vault Reward ID: ${openResult?.claimId || 'n/a'}`,
         `Reward: ${reward?.name || reward?.code || 'unknown'}`,
         `Reward Code: ${reward?.code || 'unknown'}`,
         `Reward Tier: ${reward?.tier || 'unknown'}`,
+        payoutWalletLine,
         `Key Tier Used: ${openResult?.keyTier || 'default'}`,
         `Available Keys After Open: ${Number(openResult?.stats?.available_keys || 0)}`,
         `Tier Balances: ${JSON.stringify(tierBalances)}`,
@@ -759,7 +767,9 @@ module.exports = {
         intro,
         templateResponses: {
           Subject: `Vault Reward Fulfillment: ${reward?.name || reward?.code || 'reward'}`,
-          'Vault Claim ID': String(openResult?.claimId || ''),
+          'Vault Reward ID': String(openResult?.claimId || ''),
+          'Payout Wallet': payoutWallet || 'No linked wallet found',
+          'Payout Wallet Link': payoutWallet ? `https://solscan.io/account/${payoutWallet}` : 'n/a',
           'Vault Opening ID': String(openResult?.openingId || ''),
           'Reward Code': String(reward?.code || 'unknown'),
           'Reward Name': String(reward?.name || reward?.code || 'unknown'),

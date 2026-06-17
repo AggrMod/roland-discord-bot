@@ -1111,6 +1111,12 @@ class VaultService {
         discordUserId: uid,
         reward,
       });
+      const inventoryUpdate = won
+        ? this.decrementRewardInventoryOnWin(gid, reward.code, 1)
+        : null;
+      if (inventoryUpdate && !inventoryUpdate.success) {
+        throw new Error(inventoryUpdate.message || 'Could not reserve reward inventory');
+      }
 
       const freshStats = db.prepare(`
         SELECT *
@@ -1133,6 +1139,7 @@ class VaultService {
         won,
         odds: oddsContext,
         claimId: rewardEffects?.rewardId || null,
+        inventoryUpdate,
       };
       return openingResult;
     });
@@ -1163,11 +1170,11 @@ class VaultService {
     return { rewardId: null };
   }
 
-  decrementRewardInventoryOnClaim(guildId, rewardCode, decrementBy = 1) {
+  decrementRewardInventoryOnWin(guildId, rewardCode, decrementBy = 1) {
     const gid = normalizeGuildId(guildId);
     const code = String(rewardCode || '').trim().toLowerCase();
     const qtyToSubtract = Math.max(1, Number.parseInt(decrementBy, 10) || 1);
-    if (!gid || !code) return { success: false, message: 'Invalid inventory decrement input' };
+    if (!gid || !code) return { success: false, message: 'Invalid inventory reservation input' };
 
     const cfg = this.getConfig(gid);
     if (!cfg) return { success: false, message: 'Config unavailable' };
@@ -1263,13 +1270,6 @@ class VaultService {
       WHERE id = ? AND guild_id = ?
     `).run(status, id, gid);
 
-    let inventoryUpdate = null;
-    const claimedStatuses = finalizedStatuses;
-    const previousStatus = String(row.claim_status || '').trim().toLowerCase();
-    if (claimedStatuses.has(status) && !claimedStatuses.has(previousStatus)) {
-      inventoryUpdate = this.decrementRewardInventoryOnClaim(gid, row.reward_code, 1);
-    }
-
     return {
       success: true,
       reward: {
@@ -1277,7 +1277,7 @@ class VaultService {
         claim_status: status,
         claim_note: claimNote ? String(claimNote) : null,
       },
-      inventoryUpdate,
+      inventoryUpdate: null,
     };
   }
 

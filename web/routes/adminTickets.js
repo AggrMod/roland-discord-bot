@@ -19,13 +19,13 @@ function createAdminTicketsRouter({
     }
   }
 
-  function getVaultClaimIdFromTicket(ticket) {
+  function getVaultRewardIdFromTicket(ticket) {
     const responses = parseTicketTemplateResponses(ticket);
-    const direct = responses['Vault Claim ID'] || responses.vaultClaimId || responses.claimId;
+    const direct = responses['Vault Reward ID'] || responses.vaultRewardId || responses.rewardId || responses['Vault Claim ID'] || responses.vaultClaimId || responses.claimId;
     const parsedDirect = Number.parseInt(String(direct || '').trim(), 10);
     if (Number.isFinite(parsedDirect) && parsedDirect > 0) return parsedDirect;
     const combined = Object.values(responses).map(value => String(value || '')).join('\n');
-    const match = combined.match(/Vault Claim ID:\s*(\d+)/i);
+    const match = combined.match(/Vault (?:Reward|Claim) ID:\s*(\d+)/i);
     if (match) {
       const parsed = Number.parseInt(match[1], 10);
       if (Number.isFinite(parsed) && parsed > 0) return parsed;
@@ -162,9 +162,9 @@ function createAdminTicketsRouter({
       if (!ticket) {
         return res.status(404).json(toErrorResponse('Ticket not found', 'NOT_FOUND'));
       }
-      const claimId = getVaultClaimIdFromTicket(ticket);
+      const claimId = getVaultRewardIdFromTicket(ticket);
       if (!claimId) {
-        return res.status(400).json(toErrorResponse('This ticket is not linked to a Vault reward claim', 'VALIDATION_ERROR'));
+        return res.status(400).json(toErrorResponse('This ticket is not linked to a Vault reward', 'VALIDATION_ERROR'));
       }
       const claimStatus = String(req.body?.claimStatus || req.body?.claim_status || '').trim();
       const claimNote = req.body?.claimNote || req.body?.claim_note || `Updated from ticket #${ticket.ticket_number || ticket.id}`;

@@ -10659,11 +10659,10 @@ async function loadAdminSettingsView() {
       </div>`;
     };
 
-    // Render only assigned + enabled modules in tenant settings
+    // Render only assigned modules in tenant settings
     const visibleToggles = MODULE_TOGGLE_DEFS
       .filter(m => assignedKeys === null || assignedKeys.includes(m.moduleKey))
-      .filter(m => s[m.id] !== false)
-      .map(m => moduleToggle(m.id, m.label, m.icon, true))
+      .map(m => moduleToggle(m.id, m.label, m.icon, false))
       .join('');
 
     // Attach toggle animation via event delegation (after HTML injected)

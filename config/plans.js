@@ -198,7 +198,7 @@ const PLAN_PRESETS = Object.freeze({
       analytics: true,
       engagement: true,
       aiassistant: false,
-      telegrambridge: false
+      telegrambridge: true
     }
   },
   growth: {

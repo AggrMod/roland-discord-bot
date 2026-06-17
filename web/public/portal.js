@@ -2237,7 +2237,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     'section-battle': !moduleState.minigames
   };
   if (activeSection && disabledActive[activeSection]) {
-    switchSection('landing');
+    switchSection(activeGuildId ? 'module-hub' : 'servers');
   }
 }
 

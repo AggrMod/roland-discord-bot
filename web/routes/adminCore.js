@@ -239,6 +239,7 @@ function createAdminCoreRouter({
           pendingClaims: Number(safeGet('SELECT COUNT(*) AS cnt FROM heist_vault_redemptions WHERE guild_id = ? AND fulfillment_status = "pending"', [guildId], { cnt: 0 })?.cnt || 0),
         },
         telegrambridge: {
+          enabled: !!moduleState.telegrambridge,
           activeSyncs: Number(safeGet('SELECT COUNT(*) AS cnt FROM telegram_bridge_mappings WHERE guild_id = ? AND enabled = 1', [guildId], { cnt: 0 })?.cnt || 0),
           failures: Number(safeGet(`SELECT COUNT(*) AS cnt FROM telegram_bridge_audit WHERE guild_id = ? AND status = "failed" AND datetime(created_at) >= ${sqliteDateTimeWindowExpr}`, [guildId], { cnt: 0 })?.cnt || 0),
         },

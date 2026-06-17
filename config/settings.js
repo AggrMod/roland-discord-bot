@@ -66,6 +66,7 @@ class SettingsManager {
       moduleTicketingEnabled: true,
       moduleEngagementEnabled: true,
       moduleAiAssistantEnabled: false,
+      moduleTelegramBridgeEnabled: false,
 
       // Ticketing automation
       ticketAutoCloseEnabled: true,
@@ -354,7 +355,8 @@ class SettingsManager {
         'moduleRoleClaimEnabled',
         'moduleTicketingEnabled',
         'moduleEngagementEnabled',
-        'moduleAiAssistantEnabled'
+        'moduleAiAssistantEnabled',
+        'moduleTelegramBridgeEnabled'
       ];
       
       for (const key of moduleKeys) {

@@ -71,8 +71,8 @@ function createAdminCoreRouter({
           key: 'send_messages',
           label: 'Send Messages',
           permission: 'SendMessages',
-          modules: ['Welcome', 'Engagement', 'Ticketing', 'Trackers'],
-          reason: 'Required to post panels, alerts, task messages, and ticket responses.',
+          modules: ['Welcome', 'Engagement', 'Ticketing', 'Trackers', 'Telegram Bridge'],
+          reason: 'Required to post panels, alerts, task messages, bridge messages, and ticket responses.',
         },
         {
           key: 'embed_links',
@@ -168,6 +168,12 @@ function createAdminCoreRouter({
               + (safeGet(`SELECT COUNT(*) AS cnt FROM tracked_token_events WHERE guild_id = ? AND datetime(COALESCE(event_time, created_at)) >= ${sqliteDateTimeWindowExpr}`, [guildId], { cnt: 0 })?.cnt || 0)
             ),
           },
+        },
+        telegrambridge: {
+          enabled: !!moduleState.telegrambridge,
+          stats: {
+            syncs: Number(safeGet('SELECT COUNT(*) AS cnt FROM telegram_bridge_mappings WHERE guild_id = ? AND enabled = 1', [guildId], { cnt: 0 })?.cnt || 0),
+          },
         }
       };
 
@@ -231,6 +237,10 @@ function createAdminCoreRouter({
         vault: {
           activeItems: Number(safeGet('SELECT COUNT(*) AS cnt FROM heist_vault_items WHERE guild_id = ? AND enabled = 1', [guildId], { cnt: 0 })?.cnt || 0),
           pendingClaims: Number(safeGet('SELECT COUNT(*) AS cnt FROM heist_vault_redemptions WHERE guild_id = ? AND fulfillment_status = "pending"', [guildId], { cnt: 0 })?.cnt || 0),
+        },
+        telegrambridge: {
+          activeSyncs: Number(safeGet('SELECT COUNT(*) AS cnt FROM telegram_bridge_mappings WHERE guild_id = ? AND enabled = 1', [guildId], { cnt: 0 })?.cnt || 0),
+          failures: Number(safeGet(`SELECT COUNT(*) AS cnt FROM telegram_bridge_audit WHERE guild_id = ? AND status = "failed" AND datetime(created_at) >= ${sqliteDateTimeWindowExpr}`, [guildId], { cnt: 0 })?.cnt || 0),
         },
       };
 

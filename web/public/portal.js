@@ -1468,6 +1468,7 @@ const MODULE_REGISTRY = [
   { key: 'minigames', label: 'Minigames', icon: '\u2694\uFE0F', section: 'battle', desc: 'Arcade module including Battle Arena sessions, lobbies, and game events.' },
   { key: 'heist', label: 'Missions', icon: '\u{1F3AF}', section: 'heist', desc: 'Role-based missions and strategic community goals.' },
   { key: 'vault', label: 'Vault', icon: '\u{1F510}', section: 'vault', desc: 'Key rewards, mint sync rules, seasons, and vault operations.' },
+  { key: 'telegrambridge', label: 'Telegram Bridge', icon: '\u{1F4E1}', section: 'telegram-bridge', adminOnly: true, desc: 'Mirror Telegram groups and channels into Discord channels.' },
   { key: 'selfserveroles', label: 'Self-Serve Roles', icon: '\u{1F3AD}', section: 'self-serve-roles', desc: 'Claim optional roles assigned by administrators.' },
   { key: 'aiassistant', label: 'AI Assistant', icon: '\u{1F916}', section: 'aiassistant', adminOnly: true, desc: 'Tune prompts, safety controls, and assistant behavior for your server.' },
   { key: 'help', label: 'Help Center', icon: '\u2753', section: 'help', desc: 'Guides, command references, and troubleshooting across all modules.' }
@@ -1486,6 +1487,7 @@ const MODULE_TOGGLE_SETTING_FIELD_MAP = Object.freeze({
   minigames: ['moduleMinigamesEnabled', 'moduleBattleEnabled'],
   heist: ['moduleMissionsEnabled'],
   vault: ['moduleVaultEnabled'],
+  telegrambridge: ['moduleTelegramBridgeEnabled'],
   welcome: ['moduleWelcomeEnabled'],
   selfserveroles: ['moduleRoleClaimEnabled'],
 });
@@ -2182,6 +2184,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     nfttracker: !!settings.moduleNftTrackerEnabled,
     tokentracker: !!settings.moduleTokenTrackerEnabled,
     aiassistant: !!settings.moduleAiAssistantEnabled,
+    telegrambridge: !!settings.moduleTelegramBridgeEnabled,
     heist: !!settings.moduleMissionsEnabled,
     vault: !!settings.moduleVaultEnabled,
     welcome: settings.moduleWelcomeEnabled !== false,
@@ -2225,6 +2228,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     'section-wallets': !moduleState.verification,
     'section-invites': !moduleState.invites,
     'section-aiassistant': !moduleState.aiassistant,
+    'section-telegram-bridge': !moduleState.telegrambridge,
     'section-treasury': !moduleState.wallettracker,
     'section-nft-activity': !moduleState.nfttracker,
     'section-token-activity': !moduleState.tokentracker,
@@ -2250,6 +2254,7 @@ const SETTINGS_TAB_MODULE_MAP = {
   battle:       'minigames',
   heist:        'heist',
   vault:        'vault',
+  telegrambridge: 'telegrambridge',
   selfserve:    'selfserveroles',
   ticketing:    'ticketing',
   engagement:   'engagement',
@@ -2274,6 +2279,7 @@ function applySettingsTabVisibility(settings = {}) {
     nfttracker: !!settings.moduleNftTrackerEnabled,
     tokentracker: !!settings.moduleTokenTrackerEnabled,
     aiassistant: !!settings.moduleAiAssistantEnabled,
+    telegrambridge: !!settings.moduleTelegramBridgeEnabled,
     minigames: minigamesEnabled,
     heist: !!settings.moduleMissionsEnabled,
     vault: !!settings.moduleVaultEnabled,
@@ -5881,6 +5887,7 @@ function switchSection(sectionName, options = {}) {
     'wallets',
     'invites',
     'aiassistant',
+    'telegram-bridge',
     'treasury',
     'nft-activity',
     'token-activity',
@@ -5927,6 +5934,7 @@ function switchSection(sectionName, options = {}) {
     'module-hub',
     'settings',
     'vault',
+    'telegram-bridge',
     'governance',
     'invites',
     'aiassistant',
@@ -5955,6 +5963,7 @@ function switchSection(sectionName, options = {}) {
     wallets: 'verification',
     invites: 'invites',
     aiassistant: 'aiassistant',
+    'telegram-bridge': 'telegrambridge',
     treasury: 'wallettracker',
     'nft-activity': 'nfttracker',
     'token-activity': 'tokentracker',
@@ -6074,6 +6083,8 @@ function switchSection(sectionName, options = {}) {
     loadInviteTrackerSettingsView('inviteTrackerModuleSettingsPanel');
   } else if (sectionName === 'aiassistant') {
     loadAiAssistantSettingsView('aiAssistantModuleSettingsPanel');
+  } else if (sectionName === 'telegram-bridge') {
+    loadTelegramBridgeView('telegramBridgeModuleSettingsPanel');
   } else if (sectionName === 'treasury') {
     loadTreasuryWalletTable();
   } else if (sectionName === 'nft-activity') {
@@ -7474,6 +7485,7 @@ const TENANT_MODULE_LABELS = {
   treasury: 'Treasury',
   wallettracker: 'Wallet Tracker',
   aiassistant: 'AI Assistant',
+  telegrambridge: 'Telegram Bridge',
   invites: 'Invite Tracker',
   minigames: 'Minigames',
   heist: 'Missions',
@@ -10617,6 +10629,7 @@ async function loadAdminSettingsView() {
       { id: 'moduleBrandingEnabled',     label: 'Branding',        icon: 'BR', moduleKey: 'branding'      },
       { id: 'moduleMissionsEnabled',     label: 'Missions',        icon: 'H',  moduleKey: 'heist'         },
       { id: 'moduleVaultEnabled',        label: 'Vault',           icon: '', moduleKey: 'vault'         },
+      { id: 'moduleTelegramBridgeEnabled', label: 'Telegram Bridge', icon: 'TG', moduleKey: 'telegrambridge' },
       { id: 'moduleWelcomeEnabled',      label: 'Welcome',         icon: '', moduleKey: 'welcome'       },
       { id: 'moduleWalletTrackerEnabled',label: 'Wallet Tracker',  icon: 'W',  moduleKey: 'wallettracker' },
       { id: 'moduleAiAssistantEnabled',  label: 'AI Assistant',    icon: 'AI', moduleKey: 'aiassistant'  },
@@ -10733,7 +10746,7 @@ async function savePortalSettings() {
   // Only save module toggles that are actually rendered (handles assigned-module filtering)
   const moduleIds = [
     'moduleMinigamesEnabled', 'moduleBattleEnabled', 'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleBrandingEnabled',
-    'moduleMissionsEnabled', 'moduleVaultEnabled', 'moduleWelcomeEnabled', 'moduleWalletTrackerEnabled', 'moduleTreasuryEnabled', 'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleAiAssistantEnabled',
+    'moduleMissionsEnabled', 'moduleVaultEnabled', 'moduleTelegramBridgeEnabled', 'moduleWelcomeEnabled', 'moduleWalletTrackerEnabled', 'moduleTreasuryEnabled', 'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleAiAssistantEnabled',
     'moduleRoleClaimEnabled', 'moduleTicketingEnabled', 'moduleEngagementEnabled',
   ];
   const newSettings = {};
@@ -21495,6 +21508,276 @@ async function loadEngagementRedemptions() {
 
 
 
+// ==================== TELEGRAM BRIDGE ====================
+let telegramBridgeCache = { settings: null, mappings: [], channels: [], audit: [] };
+let telegramBridgeTab = 'syncs';
+
+async function telegramBridgeFetch(path, options = {}) {
+  const response = await fetch(path, {
+    credentials: 'include',
+    ...options,
+    headers: {
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...buildTenantRequestHeaders(),
+      ...(options.headers || {}),
+    },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) {
+    throw new Error(data.message || data.error?.message || `Telegram Bridge request failed (${response.status})`);
+  }
+  return data.data || data;
+}
+
+function telegramBridgeChannelOptions(selected = '') {
+  const channels = Array.isArray(telegramBridgeCache.channels) ? telegramBridgeCache.channels : [];
+  const selectedId = String(selected || '');
+  const options = ['<option value="">Select Discord channel</option>'];
+  channels
+    .filter(ch => ch.kind !== 'category')
+    .forEach(ch => {
+      const label = `${ch.parentName ? `${ch.parentName} / ` : ''}#${ch.name || ch.id}`;
+      options.push(`<option value="${escapeHtml(String(ch.id))}" ${String(ch.id) === selectedId ? 'selected' : ''}>${escapeHtml(label)}</option>`);
+    });
+  return options.join('');
+}
+
+function switchTelegramBridgeTab(tab) {
+  telegramBridgeTab = ['syncs', 'setup', 'audit'].includes(String(tab || '')) ? String(tab) : 'syncs';
+  document.querySelectorAll('[data-telegram-bridge-tab]').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-telegram-bridge-tab') === telegramBridgeTab);
+  });
+  document.querySelectorAll('[data-telegram-bridge-panel]').forEach(panel => {
+    panel.style.display = panel.getAttribute('data-telegram-bridge-panel') === telegramBridgeTab ? '' : 'none';
+  });
+}
+
+function renderTelegramBridgeView(targetId = 'telegramBridgeModuleSettingsPanel') {
+  const el = document.getElementById(targetId);
+  if (!el) return;
+  const settings = telegramBridgeCache.settings || {};
+  const mappings = Array.isArray(telegramBridgeCache.mappings) ? telegramBridgeCache.mappings : [];
+  const audit = Array.isArray(telegramBridgeCache.audit) ? telegramBridgeCache.audit : [];
+  const webhookConfigured = !!telegramBridgeCache.webhookConfigured;
+  const botTokenConfigured = !!telegramBridgeCache.botTokenConfigured;
+  const rows = mappings.map(mapping => `
+    <tr>
+      <td>${escapeHtml(mapping.name || mapping.telegramChatTitle || mapping.telegramChatId)}</td>
+      <td>${escapeHtml(mapping.telegramChatId)}<div style="color:var(--text-muted);font-size:0.78em;">${escapeHtml(mapping.telegramChatType || 'group')}</div></td>
+      <td>${escapeHtml(mapping.discordChannelId)}</td>
+      <td><span class="badge">${mapping.directionMode === 'two_way' ? 'Two-way ready' : 'Telegram -> Discord'}</span></td>
+      <td>${mapping.enabled ? 'Active' : 'Off'}</td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn-secondary btn-sm" onclick="telegramBridgeLoadMappingToForm(${Number(mapping.id)})">Edit</button>
+        <button class="btn-secondary btn-sm" onclick="telegramBridgeSendTest(${Number(mapping.id)})">Test</button>
+        <button class="btn-danger btn-sm" onclick="telegramBridgeDeleteMapping(${Number(mapping.id)})">Delete</button>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="6" style="padding:14px;color:var(--text-secondary);">No syncs configured yet.</td></tr>';
+
+  const auditRows = audit.map(item => `
+    <tr>
+      <td>${escapeHtml(item.createdAt || '')}</td>
+      <td>${escapeHtml(item.status || '')}</td>
+      <td>${escapeHtml(item.eventType || '')}</td>
+      <td>${escapeHtml(item.telegramChatId || '')}</td>
+      <td>${escapeHtml(item.message || '')}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="5" style="padding:14px;color:var(--text-secondary);">No audit events yet.</td></tr>';
+
+  el.innerHTML = `
+    <div class="card" style="margin-bottom:var(--space-4);">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div>
+          <h3 style="margin:0 0 6px 0;">Telegram Bridge</h3>
+          <div style="color:var(--text-secondary);font-size:0.88em;">Multiple Telegram sources can mirror into one or more Discord channels. Direction is v1 locked to Telegram -> Discord.</div>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);">
+          <input type="checkbox" id="telegramBridgeEnabledInput" ${settings.enabled !== false ? 'checked' : ''} onchange="saveTelegramBridgeSettings()">
+          Module enabled
+        </label>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+        <span class="badge">Bot token: ${botTokenConfigured ? 'configured' : 'missing'}</span>
+        <span class="badge">Webhook secret: ${webhookConfigured ? 'configured' : 'missing'}</span>
+        <span class="badge">Webhook: ${escapeHtml(settings.webhookStatus || 'unknown')}</span>
+      </div>
+    </div>
+    <div class="settings-tabs" style="margin-bottom:var(--space-4);">
+      <button class="settings-tab" data-telegram-bridge-tab="syncs" onclick="switchTelegramBridgeTab('syncs')">Syncs</button>
+      <button class="settings-tab" data-telegram-bridge-tab="setup" onclick="switchTelegramBridgeTab('setup')">Setup</button>
+      <button class="settings-tab" data-telegram-bridge-tab="audit" onclick="switchTelegramBridgeTab('audit')">Audit</button>
+    </div>
+    <div data-telegram-bridge-panel="syncs">
+      <div class="card" style="margin-bottom:var(--space-4);">
+        <input type="hidden" id="telegramBridgeMappingId" value="">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+          <label>Name<input id="telegramBridgeName" class="form-input" placeholder="Announcements to Discord"></label>
+          <label>Telegram Chat ID<input id="telegramBridgeChatId" class="form-input" placeholder="-1001234567890"></label>
+          <label>Telegram Display Name<input id="telegramBridgeChatTitle" class="form-input" placeholder="Announcements"></label>
+          <label>Telegram Type<select id="telegramBridgeChatType" class="form-input"><option value="channel">Channel</option><option value="group">Group</option><option value="supergroup">Supergroup</option><option value="private">Private</option></select></label>
+          <label>Discord Target<select id="telegramBridgeDiscordChannel" class="form-input">${telegramBridgeChannelOptions('')}</select></label>
+          <label>Direction<select id="telegramBridgeDirection" class="form-input" disabled><option value="telegram_to_discord">Telegram -> Discord</option></select></label>
+        </div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;color:var(--text-secondary);">
+          <label><input type="checkbox" id="telegramBridgeMappingEnabled" checked> Enabled</label>
+          <label><input type="checkbox" id="telegramBridgeIncludeHeader" checked> Source header</label>
+          <label><input type="checkbox" id="telegramBridgeIncludeAuthor" checked> Author</label>
+          <label><input type="checkbox" id="telegramBridgeMirrorMedia" checked> Media</label>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+          <button class="btn-primary" onclick="telegramBridgeSaveMapping()">Save Sync</button>
+          <button class="btn-secondary" onclick="telegramBridgeClearForm()">Clear</button>
+        </div>
+      </div>
+      <div class="card">
+        <table class="data-table"><thead><tr><th>Name</th><th>Telegram</th><th>Discord Channel</th><th>Direction</th><th>Status</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>
+      </div>
+    </div>
+    <div data-telegram-bridge-panel="setup" style="display:none;">
+      <div class="card">
+        <h3>Telegram Setup</h3>
+        <ol style="color:var(--text-secondary);line-height:1.7;">
+          <li>Create a Telegram bot with BotFather and set <code>TELEGRAM_BOT_TOKEN</code>.</li>
+          <li>Set <code>TELEGRAM_WEBHOOK_SECRET</code> and configure Telegram webhook to <code>/api/webhooks/telegram/&lt;secret&gt;</code>.</li>
+          <li>Add the bot to each Telegram group/channel. For groups, disable privacy mode when all messages should mirror. For channels, make the bot admin.</li>
+          <li>Use <code>/bridgeid</code> in Telegram to get the chat ID, then create one or more syncs here.</li>
+        </ol>
+      </div>
+    </div>
+    <div data-telegram-bridge-panel="audit" style="display:none;">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;">
+          <h3 style="margin:0;">Audit</h3>
+          <button class="btn-secondary btn-sm" onclick="loadTelegramBridgeView()">Refresh</button>
+        </div>
+        <table class="data-table"><thead><tr><th>Time</th><th>Status</th><th>Type</th><th>Telegram Chat</th><th>Message</th></tr></thead><tbody>${auditRows}</tbody></table>
+      </div>
+    </div>
+  `;
+  switchTelegramBridgeTab(telegramBridgeTab);
+}
+
+async function loadTelegramBridgeView(targetId = 'telegramBridgeModuleSettingsPanel') {
+  const el = document.getElementById(targetId);
+  if (el) el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading Telegram Bridge...</p></div>';
+  try {
+    const [settings, mappings, channelsJson, audit] = await Promise.all([
+      telegramBridgeFetch('/api/admin/telegram-bridge/settings'),
+      telegramBridgeFetch('/api/admin/telegram-bridge/mappings'),
+      telegramBridgeFetch('/api/admin/discord/channels'),
+      telegramBridgeFetch('/api/admin/telegram-bridge/audit?limit=50'),
+    ]);
+    telegramBridgeCache = {
+      settings: settings.settings || {},
+      webhookConfigured: !!settings.webhookConfigured,
+      botTokenConfigured: !!settings.botTokenConfigured,
+      mappings: mappings.mappings || [],
+      channels: channelsJson.channels || [],
+      audit: audit.audit || [],
+    };
+    renderTelegramBridgeView(targetId);
+  } catch (error) {
+    if (el) el.innerHTML = `<div class="card"><p style="color:var(--error);">${escapeHtml(error.message || 'Failed to load Telegram Bridge')}</p></div>`;
+  }
+}
+
+async function saveTelegramBridgeSettings() {
+  try {
+    await telegramBridgeFetch('/api/admin/telegram-bridge/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled: !!document.getElementById('telegramBridgeEnabledInput')?.checked }),
+    });
+    showSuccess('Telegram Bridge settings saved');
+    await loadTelegramBridgeView();
+  } catch (error) {
+    showError(error.message || 'Failed to save Telegram Bridge settings');
+  }
+}
+
+function telegramBridgeClearForm() {
+  ['telegramBridgeMappingId', 'telegramBridgeName', 'telegramBridgeChatId', 'telegramBridgeChatTitle'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const type = document.getElementById('telegramBridgeChatType');
+  if (type) type.value = 'channel';
+  const ch = document.getElementById('telegramBridgeDiscordChannel');
+  if (ch) ch.value = '';
+  ['telegramBridgeMappingEnabled', 'telegramBridgeIncludeHeader', 'telegramBridgeIncludeAuthor', 'telegramBridgeMirrorMedia'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.checked = true;
+  });
+}
+
+function telegramBridgeLoadMappingToForm(mappingId) {
+  const mapping = (telegramBridgeCache.mappings || []).find(item => Number(item.id) === Number(mappingId));
+  if (!mapping) return;
+  document.getElementById('telegramBridgeMappingId').value = mapping.id;
+  document.getElementById('telegramBridgeName').value = mapping.name || '';
+  document.getElementById('telegramBridgeChatId').value = mapping.telegramChatId || '';
+  document.getElementById('telegramBridgeChatTitle').value = mapping.telegramChatTitle || '';
+  document.getElementById('telegramBridgeChatType').value = mapping.telegramChatType || 'channel';
+  document.getElementById('telegramBridgeDiscordChannel').value = mapping.discordChannelId || '';
+  document.getElementById('telegramBridgeMappingEnabled').checked = !!mapping.enabled;
+  document.getElementById('telegramBridgeIncludeHeader').checked = mapping.includeSourceHeader !== false;
+  document.getElementById('telegramBridgeIncludeAuthor').checked = mapping.includeAuthor !== false;
+  document.getElementById('telegramBridgeMirrorMedia').checked = mapping.mirrorMedia !== false;
+  switchTelegramBridgeTab('syncs');
+}
+
+async function telegramBridgeSaveMapping() {
+  const id = String(document.getElementById('telegramBridgeMappingId')?.value || '').trim();
+  const payload = {
+    name: String(document.getElementById('telegramBridgeName')?.value || '').trim(),
+    telegramChatId: String(document.getElementById('telegramBridgeChatId')?.value || '').trim(),
+    telegramChatTitle: String(document.getElementById('telegramBridgeChatTitle')?.value || '').trim(),
+    telegramChatType: String(document.getElementById('telegramBridgeChatType')?.value || 'channel').trim(),
+    discordChannelId: String(document.getElementById('telegramBridgeDiscordChannel')?.value || '').trim(),
+    directionMode: 'telegram_to_discord',
+    enabled: !!document.getElementById('telegramBridgeMappingEnabled')?.checked,
+    includeSourceHeader: !!document.getElementById('telegramBridgeIncludeHeader')?.checked,
+    includeAuthor: !!document.getElementById('telegramBridgeIncludeAuthor')?.checked,
+    mirrorMedia: !!document.getElementById('telegramBridgeMirrorMedia')?.checked,
+  };
+  if (!payload.telegramChatId || !payload.discordChannelId) {
+    showError('Telegram chat ID and Discord target channel are required.');
+    return;
+  }
+  try {
+    await telegramBridgeFetch(id ? `/api/admin/telegram-bridge/mappings/${encodeURIComponent(id)}` : '/api/admin/telegram-bridge/mappings', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(payload),
+    });
+    showSuccess('Telegram Bridge sync saved');
+    telegramBridgeClearForm();
+    await loadTelegramBridgeView();
+  } catch (error) {
+    showError(error.message || 'Failed to save Telegram Bridge sync');
+  }
+}
+
+async function telegramBridgeDeleteMapping(mappingId) {
+  if (!confirm('Delete this Telegram Bridge sync?')) return;
+  try {
+    await telegramBridgeFetch(`/api/admin/telegram-bridge/mappings/${encodeURIComponent(String(mappingId))}`, { method: 'DELETE' });
+    showSuccess('Telegram Bridge sync deleted');
+    await loadTelegramBridgeView();
+  } catch (error) {
+    showError(error.message || 'Failed to delete Telegram Bridge sync');
+  }
+}
+
+async function telegramBridgeSendTest(mappingId) {
+  try {
+    await telegramBridgeFetch(`/api/admin/telegram-bridge/mappings/${encodeURIComponent(String(mappingId))}/test`, { method: 'POST', body: JSON.stringify({}) });
+    showSuccess('Telegram Bridge test message sent');
+    await loadTelegramBridgeView();
+  } catch (error) {
+    showError(error.message || 'Failed to send Telegram Bridge test');
+  }
+}
+
 // ==================== DASHBOARD & SEARCH LOGIC ====================
 let dashboardDataCache = null;
 let billingCryptoQuoteState = null;
@@ -21590,6 +21873,7 @@ async function renderDashboardGrid() {
       { key: 'ticketing', section: 'ticketing', title: 'Ticketing', icon: 'fas fa-ticket-alt', metric: `${Number(moduleAnalytics?.ticketing?.openTickets || 0).toLocaleString()} open`, sub: 'Open support tickets', enabled: true },
       { key: 'selfserveroles', section: 'self-serve-roles', title: 'Self-Serve Roles', icon: 'fas fa-user-tag', metric: `${Number(moduleAnalytics?.selfserveroles?.activePanels || 0).toLocaleString()} panels`, sub: 'Role panels enabled', enabled: true },
       { key: 'vault', section: 'vault', title: 'Vault', icon: 'fas fa-lock', metric: `${Number(moduleAnalytics?.vault?.activeItems || 0).toLocaleString()} items`, sub: `${Number(moduleAnalytics?.vault?.pendingClaims || 0).toLocaleString()} pending claims`, enabled: true },
+      { key: 'telegrambridge', section: 'telegram-bridge', title: 'Telegram Bridge', icon: 'fas fa-satellite-dish', metric: `${Number(moduleAnalytics?.telegrambridge?.activeSyncs || 0).toLocaleString()} syncs`, sub: `${Number(moduleAnalytics?.telegrambridge?.failures || 0).toLocaleString()} failures`, enabled: !!modules?.telegrambridge?.enabled },
     ];
 
     const tilesHtml = `<div class="panel-modules-grid" style="grid-column:1 / 2;">${tileConfig.map((tile) => {

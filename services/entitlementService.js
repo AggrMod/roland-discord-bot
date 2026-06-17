@@ -69,6 +69,9 @@ const LIMIT_DEFINITIONS = Object.freeze({
   aiassistant: {
     max_requests_per_day: { label: 'AI Assistant Requests Per Day' },
   },
+  telegrambridge: {
+    max_sync_mappings: { label: 'Max Telegram Bridge Syncs' },
+  },
 });
 
 function normalizeGuildId(guildId) {

@@ -67,6 +67,7 @@ function createAdminSettingsRouter({
         effectiveSettings.moduleTicketingEnabled = !!tenantContext.modules.ticketing;
         effectiveSettings.moduleEngagementEnabled = !!tenantContext.modules.engagement;
         effectiveSettings.moduleAiAssistantEnabled = !!tenantContext.modules.aiassistant;
+        effectiveSettings.moduleTelegramBridgeEnabled = !!tenantContext.modules.telegrambridge;
         const tenantVerification = tenantService.getTenantVerificationSettings(req.guildId);
         if (tenantVerification.ogRoleId !== undefined) effectiveSettings.ogRoleId = tenantVerification.ogRoleId || '';
         if (tenantVerification.ogRoleLimit !== undefined) effectiveSettings.ogRoleLimit = tenantVerification.ogRoleLimit || 0;
@@ -126,7 +127,7 @@ function createAdminSettingsRouter({
         'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleTreasuryEnabled', 'moduleWalletTrackerEnabled',
         'moduleInviteTrackerEnabled',
         'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleBrandingEnabled', 'moduleMissionsEnabled', 'moduleVaultEnabled', 'moduleBattleEnabled', 'moduleMinigamesEnabled',
-        'moduleWelcomeEnabled', 'moduleTicketingEnabled', 'moduleRoleClaimEnabled', 'moduleEngagementEnabled', 'moduleAiAssistantEnabled',
+        'moduleWelcomeEnabled', 'moduleTicketingEnabled', 'moduleRoleClaimEnabled', 'moduleEngagementEnabled', 'moduleAiAssistantEnabled', 'moduleTelegramBridgeEnabled',
         'battleRoundPauseMinSec', 'battleRoundPauseMaxSec', 'battleElitePrepSec', 'battleForcedEliminationIntervalRounds', 'battleDefaultEra',
         'baseVerifiedRoleId', 'autoResyncEnabled', 'ogRoleId', 'ogRoleLimit',
         'treasuryWalletAddress', 'treasuryRefreshInterval', 'txAlertChannelId',
@@ -199,6 +200,7 @@ function createAdminSettingsRouter({
             moduleTicketingEnabled: 'ticketing',
             moduleEngagementEnabled: 'engagement',
             moduleAiAssistantEnabled: 'aiassistant',
+            moduleTelegramBridgeEnabled: 'telegrambridge',
           };
           for (const [field, moduleKey] of Object.entries(moduleFieldMap)) {
             if (sanitized[field] !== undefined) {

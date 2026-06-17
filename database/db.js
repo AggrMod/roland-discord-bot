@@ -111,6 +111,10 @@ const REQUIRED_SCHEMA = Object.freeze({
   tenant_welcome_assets: ['id', 'guild_id', 'file_name', 'mime_type', 'image_blob', 'byte_size', 'created_at', 'updated_at'],
   tracked_token_webhook_retry_queue: ['signature', 'attempt_count', 'next_attempt_at', 'last_reason', 'last_error'],
   nft_activity_alert_configs: ['guild_id', 'enabled', 'event_types', 'min_sol'],
+  telegram_bridge_settings: ['guild_id', 'enabled', 'webhook_status', 'webhook_last_update_at'],
+  telegram_bridge_mappings: ['guild_id', 'telegram_chat_id', 'discord_channel_id', 'direction_mode', 'enabled'],
+  telegram_bridge_message_log: ['mapping_id', 'guild_id', 'source_platform', 'target_platform', 'dedupe_key', 'origin_platform', 'created_by_bridge'],
+  telegram_bridge_audit: ['guild_id', 'mapping_id', 'status', 'event_type', 'created_at'],
 });
 
 function ensureSchemaMigrationsTable() {

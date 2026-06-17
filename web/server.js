@@ -30,6 +30,7 @@ const nftActivityService = require('../services/nftActivityService');
 const trackedWalletsService = require('../services/trackedWalletsService');
 const inviteTrackerService = require('../services/inviteTrackerService');
 const aiAssistantService = require('../services/aiAssistantService');
+const telegramBridgeService = require('../services/telegramBridgeService');
 const ticketService = require('../services/ticketService');
 const welcomeService = require('../services/welcomeService');
 const entitlementService = require('../services/entitlementService');
@@ -711,6 +712,10 @@ class WebServer {
 
     function ensureAiAssistantModule(req, res) {
       return ensureTenantModuleEnabled(req, res, 'aiassistant', 'AI Assistant');
+    }
+
+    function ensureTelegramBridgeModule(req, res) {
+      return ensureTenantModuleEnabled(req, res, 'telegrambridge', 'Telegram Bridge');
     }
 
     function ensureMinigamesModule(req, res) {
@@ -1451,6 +1456,15 @@ class WebServer {
       adminAuthMiddleware,
       ensureAiAssistantModule,
       aiAssistantService,
+    }));
+    const createAdminTelegramBridgeRouter = require('./routes/adminTelegramBridge');
+    this.app.use('/', createAdminTelegramBridgeRouter({
+      logger,
+      adminAuthMiddleware,
+      ensureTelegramBridgeModule,
+      telegramBridgeService,
+      fetchGuildById,
+      timingSafeEquals,
     }));
     const createAdminTicketsRouter = require('./routes/adminTickets');
     this.app.use('/', createAdminTicketsRouter({

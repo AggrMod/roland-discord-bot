@@ -26,6 +26,9 @@ function createAdminTelegramBridgeRouter({
       return { ok: false, message: 'Valid Discord target channel is required' };
     }
     const guild = req.guild || await fetchGuildById(req.guildId);
+    if (!guild) {
+      return { ok: false, message: 'Discord server not found or bot is not in the server' };
+    }
     const channel = await guild.channels.fetch(normalized).catch(() => null);
     if (!channel || !channel.isTextBased?.()) {
       return { ok: false, message: 'Discord target channel must be a text-based channel in this server' };

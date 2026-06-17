@@ -2184,7 +2184,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     nfttracker: !!settings.moduleNftTrackerEnabled,
     tokentracker: !!settings.moduleTokenTrackerEnabled,
     aiassistant: !!settings.moduleAiAssistantEnabled,
-    telegrambridge: !!(modules?.telegrambridge?.enabled || settings.moduleTelegramBridgeEnabled),
+    telegrambridge: !!settings.moduleTelegramBridgeEnabled,
     heist: !!settings.moduleMissionsEnabled,
     vault: !!settings.moduleVaultEnabled,
     welcome: settings.moduleWelcomeEnabled !== false,

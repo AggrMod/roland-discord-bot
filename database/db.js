@@ -115,6 +115,9 @@ const REQUIRED_SCHEMA = Object.freeze({
   telegram_bridge_mappings: ['guild_id', 'telegram_chat_id', 'discord_channel_id', 'direction_mode', 'enabled'],
   telegram_bridge_message_log: ['mapping_id', 'guild_id', 'source_platform', 'target_platform', 'dedupe_key', 'origin_platform', 'created_by_bridge'],
   telegram_bridge_audit: ['guild_id', 'mapping_id', 'status', 'event_type', 'created_at'],
+  auto_message_settings: ['guild_id', 'enabled', 'updated_at'],
+  auto_messages: ['guild_id', 'name', 'channel_id', 'enabled', 'schedule_type', 'schedule_config_json', 'timezone', 'embed_json', 'next_run_at'],
+  auto_message_audit: ['guild_id', 'auto_message_id', 'status', 'event_type', 'created_at'],
 });
 
 function ensureSchemaMigrationsTable() {

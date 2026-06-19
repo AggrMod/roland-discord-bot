@@ -31,6 +31,7 @@ const trackedWalletsService = require('../services/trackedWalletsService');
 const inviteTrackerService = require('../services/inviteTrackerService');
 const aiAssistantService = require('../services/aiAssistantService');
 const telegramBridgeService = require('../services/telegramBridgeService');
+const autoMessageService = require('../services/autoMessageService');
 const ticketService = require('../services/ticketService');
 const welcomeService = require('../services/welcomeService');
 const entitlementService = require('../services/entitlementService');
@@ -716,6 +717,10 @@ class WebServer {
 
     function ensureTelegramBridgeModule(req, res) {
       return ensureTenantModuleEnabled(req, res, 'telegrambridge', 'Telegram Bridge');
+    }
+
+    function ensureAutoMessagesModule(req, res) {
+      return ensureTenantModuleEnabled(req, res, 'automessages', 'Auto Messages');
     }
 
     function ensureMinigamesModule(req, res) {
@@ -1466,6 +1471,14 @@ class WebServer {
       fetchGuildById,
       timingSafeEquals,
     }));
+    const createAdminAutoMessagesRouter = require('./routes/adminAutoMessages');
+    this.app.use('/', createAdminAutoMessagesRouter({
+      logger,
+      adminAuthMiddleware,
+      ensureAutoMessagesModule,
+      autoMessageService,
+      fetchGuildById,
+    }));
     const createAdminTicketsRouter = require('./routes/adminTickets');
     this.app.use('/', createAdminTicketsRouter({
       logger,
@@ -1571,9 +1584,18 @@ class WebServer {
       this.billingSweepTimer.unref?.();
       logger.log(`[billing-expiry-sweep] enabled intervalMs=${intervalMs} graceMinutes=${graceMinutes}`);
     }
+
+    const autoMessagesEnabled = String(process.env.AUTO_MESSAGES_SCHEDULER_ENABLED || 'true').toLowerCase() !== 'false';
+    if (autoMessagesEnabled) {
+      autoMessageService.startScheduler({
+        intervalMs: Math.max(15 * 1000, Number(process.env.AUTO_MESSAGES_SCHEDULER_MS) || 60 * 1000),
+      });
+    }
   }
 
   stop() {
+    autoMessageService.stopScheduler();
+
     if (this.billingSweepTimer) {
       clearInterval(this.billingSweepTimer);
       this.billingSweepTimer = null;

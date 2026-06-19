@@ -68,6 +68,7 @@ function createAdminSettingsRouter({
         effectiveSettings.moduleEngagementEnabled = !!tenantContext.modules.engagement;
         effectiveSettings.moduleAiAssistantEnabled = !!tenantContext.modules.aiassistant;
         effectiveSettings.moduleTelegramBridgeEnabled = !!tenantContext.modules.telegrambridge;
+        effectiveSettings.moduleAutoMessagesEnabled = !!tenantContext.modules.automessages;
         const tenantVerification = tenantService.getTenantVerificationSettings(req.guildId);
         if (tenantVerification.ogRoleId !== undefined) effectiveSettings.ogRoleId = tenantVerification.ogRoleId || '';
         if (tenantVerification.ogRoleLimit !== undefined) effectiveSettings.ogRoleLimit = tenantVerification.ogRoleLimit || 0;
@@ -127,7 +128,7 @@ function createAdminSettingsRouter({
         'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleTreasuryEnabled', 'moduleWalletTrackerEnabled',
         'moduleInviteTrackerEnabled',
         'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleBrandingEnabled', 'moduleMissionsEnabled', 'moduleVaultEnabled', 'moduleBattleEnabled', 'moduleMinigamesEnabled',
-        'moduleWelcomeEnabled', 'moduleTicketingEnabled', 'moduleRoleClaimEnabled', 'moduleEngagementEnabled', 'moduleAiAssistantEnabled', 'moduleTelegramBridgeEnabled',
+        'moduleWelcomeEnabled', 'moduleTicketingEnabled', 'moduleRoleClaimEnabled', 'moduleEngagementEnabled', 'moduleAiAssistantEnabled', 'moduleTelegramBridgeEnabled', 'moduleAutoMessagesEnabled',
         'battleRoundPauseMinSec', 'battleRoundPauseMaxSec', 'battleElitePrepSec', 'battleForcedEliminationIntervalRounds', 'battleDefaultEra',
         'baseVerifiedRoleId', 'autoResyncEnabled', 'ogRoleId', 'ogRoleLimit',
         'treasuryWalletAddress', 'treasuryRefreshInterval', 'txAlertChannelId',
@@ -201,6 +202,7 @@ function createAdminSettingsRouter({
             moduleEngagementEnabled: 'engagement',
             moduleAiAssistantEnabled: 'aiassistant',
             moduleTelegramBridgeEnabled: 'telegrambridge',
+            moduleAutoMessagesEnabled: 'automessages',
           };
           for (const [field, moduleKey] of Object.entries(moduleFieldMap)) {
             if (sanitized[field] !== undefined) {

@@ -1470,6 +1470,7 @@ const MODULE_REGISTRY = [
   { key: 'heist', label: 'Missions', icon: '\u{1F3AF}', section: 'heist', desc: 'Role-based missions and strategic community goals.' },
   { key: 'vault', label: 'Vault', icon: '\u{1F510}', section: 'vault', desc: 'Key rewards, mint sync rules, seasons, and vault operations.' },
   { key: 'telegrambridge', label: 'Telegram Bridge', icon: '\u{1F4E1}', section: 'telegram-bridge', adminOnly: true, desc: 'Mirror Telegram groups and channels into Discord channels.' },
+  { key: 'automessages', label: 'Auto Messages', icon: '\u{1F4E2}', section: 'auto-messages', adminOnly: true, desc: 'Schedule recurring embedded announcements in selected Discord channels.' },
   { key: 'selfserveroles', label: 'Self-Serve Roles', icon: '\u{1F3AD}', section: 'self-serve-roles', desc: 'Claim optional roles assigned by administrators.' },
   { key: 'aiassistant', label: 'AI Assistant', icon: '\u{1F916}', section: 'aiassistant', adminOnly: true, desc: 'Tune prompts, safety controls, and assistant behavior for your server.' },
   { key: 'help', label: 'Help Center', icon: '\u2753', section: 'help', desc: 'Guides, command references, and troubleshooting across all modules.' }
@@ -1489,6 +1490,7 @@ const MODULE_TOGGLE_SETTING_FIELD_MAP = Object.freeze({
   heist: ['moduleMissionsEnabled'],
   vault: ['moduleVaultEnabled'],
   telegrambridge: ['moduleTelegramBridgeEnabled'],
+  automessages: ['moduleAutoMessagesEnabled'],
   welcome: ['moduleWelcomeEnabled'],
   selfserveroles: ['moduleRoleClaimEnabled'],
 });
@@ -2186,6 +2188,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     tokentracker: !!settings.moduleTokenTrackerEnabled,
     aiassistant: !!settings.moduleAiAssistantEnabled,
     telegrambridge: !!settings.moduleTelegramBridgeEnabled,
+    automessages: !!settings.moduleAutoMessagesEnabled,
     heist: !!settings.moduleMissionsEnabled,
     vault: !!settings.moduleVaultEnabled,
     welcome: settings.moduleWelcomeEnabled !== false,
@@ -2203,6 +2206,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     wallets: moduleState.verification,
     invites: moduleState.invites,
     aiassistant: moduleState.aiassistant,
+    'auto-messages': moduleState.automessages,
     treasury: moduleState.wallettracker,
     'nft-activity': moduleState.nfttracker,
     'token-activity': moduleState.tokentracker,
@@ -2230,6 +2234,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     'section-invites': !moduleState.invites,
     'section-aiassistant': !moduleState.aiassistant,
     'section-telegram-bridge': !moduleState.telegrambridge,
+    'section-auto-messages': !moduleState.automessages,
     'section-treasury': !moduleState.wallettracker,
     'section-nft-activity': !moduleState.nfttracker,
     'section-token-activity': !moduleState.tokentracker,
@@ -2256,6 +2261,7 @@ const SETTINGS_TAB_MODULE_MAP = {
   heist:        'heist',
   vault:        'vault',
   telegrambridge: 'telegrambridge',
+  automessages: 'automessages',
   selfserve:    'selfserveroles',
   ticketing:    'ticketing',
   engagement:   'engagement',
@@ -2281,6 +2287,7 @@ function applySettingsTabVisibility(settings = {}) {
     tokentracker: !!settings.moduleTokenTrackerEnabled,
     aiassistant: !!settings.moduleAiAssistantEnabled,
     telegrambridge: !!settings.moduleTelegramBridgeEnabled,
+    automessages: !!settings.moduleAutoMessagesEnabled,
     minigames: minigamesEnabled,
     heist: !!settings.moduleMissionsEnabled,
     vault: !!settings.moduleVaultEnabled,
@@ -5936,6 +5943,7 @@ function switchSection(sectionName, options = {}) {
     'settings',
     'vault',
     'telegram-bridge',
+    'auto-messages',
     'governance',
     'invites',
     'aiassistant',
@@ -5965,6 +5973,7 @@ function switchSection(sectionName, options = {}) {
     invites: 'invites',
     aiassistant: 'aiassistant',
     'telegram-bridge': 'telegrambridge',
+    'auto-messages': 'automessages',
     treasury: 'wallettracker',
     'nft-activity': 'nfttracker',
     'token-activity': 'tokentracker',
@@ -6086,6 +6095,8 @@ function switchSection(sectionName, options = {}) {
     loadAiAssistantSettingsView('aiAssistantModuleSettingsPanel');
   } else if (sectionName === 'telegram-bridge') {
     loadTelegramBridgeView('telegramBridgeModuleSettingsPanel');
+  } else if (sectionName === 'auto-messages') {
+    loadAutoMessagesView('autoMessagesModuleSettingsPanel');
   } else if (sectionName === 'treasury') {
     loadTreasuryWalletTable();
   } else if (sectionName === 'nft-activity') {
@@ -7487,6 +7498,7 @@ const TENANT_MODULE_LABELS = {
   wallettracker: 'Wallet Tracker',
   aiassistant: 'AI Assistant',
   telegrambridge: 'Telegram Bridge',
+  automessages: 'Auto Messages',
   invites: 'Invite Tracker',
   minigames: 'Minigames',
   heist: 'Missions',
@@ -10631,6 +10643,7 @@ async function loadAdminSettingsView() {
       { id: 'moduleMissionsEnabled',     label: 'Missions',        icon: 'H',  moduleKey: 'heist'         },
       { id: 'moduleVaultEnabled',        label: 'Vault',           icon: '', moduleKey: 'vault'         },
       { id: 'moduleTelegramBridgeEnabled', label: 'Telegram Bridge', icon: 'TG', moduleKey: 'telegrambridge' },
+      { id: 'moduleAutoMessagesEnabled', label: 'Auto Messages', icon: 'AM', moduleKey: 'automessages' },
       { id: 'moduleWelcomeEnabled',      label: 'Welcome',         icon: '', moduleKey: 'welcome'       },
       { id: 'moduleWalletTrackerEnabled',label: 'Wallet Tracker',  icon: 'W',  moduleKey: 'wallettracker' },
       { id: 'moduleAiAssistantEnabled',  label: 'AI Assistant',    icon: 'AI', moduleKey: 'aiassistant'  },
@@ -10746,7 +10759,7 @@ async function savePortalSettings() {
   // Only save module toggles that are actually rendered (handles assigned-module filtering)
   const moduleIds = [
     'moduleMinigamesEnabled', 'moduleBattleEnabled', 'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleBrandingEnabled',
-    'moduleMissionsEnabled', 'moduleVaultEnabled', 'moduleTelegramBridgeEnabled', 'moduleWelcomeEnabled', 'moduleWalletTrackerEnabled', 'moduleTreasuryEnabled', 'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleAiAssistantEnabled',
+    'moduleMissionsEnabled', 'moduleVaultEnabled', 'moduleTelegramBridgeEnabled', 'moduleAutoMessagesEnabled', 'moduleWelcomeEnabled', 'moduleWalletTrackerEnabled', 'moduleTreasuryEnabled', 'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleAiAssistantEnabled',
     'moduleRoleClaimEnabled', 'moduleTicketingEnabled', 'moduleEngagementEnabled',
   ];
   const newSettings = {};
@@ -21508,6 +21521,365 @@ async function loadEngagementRedemptions() {
 
 
 
+// ==================== AUTO MESSAGES ====================
+let autoMessagesCache = { settings: null, messages: [], channels: [], audit: [] };
+let autoMessagesTab = 'messages';
+
+async function autoMessagesFetch(path, options = {}) {
+  const response = await fetch(path, {
+    credentials: 'include',
+    ...options,
+    headers: {
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...buildTenantRequestHeaders(),
+      ...(options.headers || {}),
+    },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.success === false) {
+    throw new Error(data.message || data.error?.message || `Auto Messages request failed (${response.status})`);
+  }
+  return data.data || data;
+}
+
+function autoMessagesChannelOptions(selected = '') {
+  const channels = Array.isArray(autoMessagesCache.channels) ? autoMessagesCache.channels : [];
+  const selectedId = String(selected || '');
+  const options = ['<option value="">Select Discord channel</option>'];
+  channels
+    .filter(ch => ch.kind !== 'category')
+    .forEach(ch => {
+      const label = `${ch.parentName ? `${ch.parentName} / ` : ''}#${ch.name || ch.id}`;
+      options.push(`<option value="${escapeHtml(String(ch.id))}" ${String(ch.id) === selectedId ? 'selected' : ''}>${escapeHtml(label)}</option>`);
+    });
+  return options.join('');
+}
+
+function switchAutoMessagesTab(tab) {
+  autoMessagesTab = ['messages', 'editor', 'audit'].includes(String(tab || '')) ? String(tab) : 'messages';
+  document.querySelectorAll('[data-auto-messages-tab]').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-auto-messages-tab') === autoMessagesTab);
+  });
+  document.querySelectorAll('[data-auto-messages-panel]').forEach(panel => {
+    panel.style.display = panel.getAttribute('data-auto-messages-panel') === autoMessagesTab ? '' : 'none';
+  });
+  autoMessagesRefreshScheduleFields();
+}
+
+function autoMessagesScheduleLabel(message) {
+  const cfg = message?.scheduleConfig || {};
+  if (message?.scheduleType === 'daily') return `Daily at ${cfg.time || '09:00'} ${message.timezone || ''}`.trim();
+  if (message?.scheduleType === 'weekly') return `Weekly ${Array.isArray(cfg.weekdays) ? cfg.weekdays.join(', ') : 'mon'} at ${cfg.time || '09:00'} ${message.timezone || ''}`.trim();
+  return `Every ${Number(cfg.value || 1)} ${escapeHtml(cfg.unit || 'hours')}`;
+}
+
+function autoMessagesFormatDate(value) {
+  if (!value) return 'Never';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString();
+}
+
+function autoMessagesRefreshScheduleFields() {
+  const type = String(document.getElementById('autoMessageScheduleType')?.value || 'interval');
+  ['interval', 'daily', 'weekly'].forEach(key => {
+    const el = document.getElementById(`autoMessageSchedule_${key}`);
+    if (el) el.style.display = key === type ? '' : 'none';
+  });
+}
+
+function renderAutoMessagesView(targetId = 'autoMessagesModuleSettingsPanel') {
+  const el = document.getElementById(targetId);
+  if (!el) return;
+  const settings = autoMessagesCache.settings || {};
+  const messages = Array.isArray(autoMessagesCache.messages) ? autoMessagesCache.messages : [];
+  const audit = Array.isArray(autoMessagesCache.audit) ? autoMessagesCache.audit : [];
+  const rows = messages.map(message => `
+    <tr>
+      <td>${escapeHtml(message.name || message.embed?.title || `Message #${message.id}`)}</td>
+      <td>${escapeHtml(message.channelId || '')}</td>
+      <td>${escapeHtml(autoMessagesScheduleLabel(message))}</td>
+      <td>${escapeHtml(autoMessagesFormatDate(message.nextRunAt))}</td>
+      <td>${message.enabled ? 'Active' : 'Off'}</td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn-secondary btn-sm" onclick="autoMessagesLoadToForm(${Number(message.id)})">Edit</button>
+        <button class="btn-secondary btn-sm" onclick="autoMessagesSendTest(${Number(message.id)})">Test</button>
+        <button class="btn-danger btn-sm" onclick="autoMessagesDelete(${Number(message.id)})">Delete</button>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="6" style="padding:14px;color:var(--text-secondary);">No auto messages configured yet.</td></tr>';
+
+  const auditRows = audit.map(item => `
+    <tr>
+      <td>${escapeHtml(autoMessagesFormatDate(item.createdAt))}</td>
+      <td>${escapeHtml(item.status || '')}</td>
+      <td>${escapeHtml(item.eventType || '')}</td>
+      <td>${escapeHtml(item.channelId || '')}</td>
+      <td>${escapeHtml(item.message || '')}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="5" style="padding:14px;color:var(--text-secondary);">No audit events yet.</td></tr>';
+
+  el.innerHTML = `
+    <div class="card" style="margin-bottom:var(--space-4);">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <div>
+          <h3 style="margin:0 0 6px 0;">Auto Messages</h3>
+          <div style="color:var(--text-secondary);font-size:0.88em;">Schedule recurring embeds in Discord channels. Missed downtime runs are skipped.</div>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;color:var(--text-secondary);">
+          <input type="checkbox" id="autoMessagesEnabledInput" ${settings.enabled !== false ? 'checked' : ''} onchange="saveAutoMessagesSettings()">
+          Module enabled
+        </label>
+      </div>
+    </div>
+    <div class="settings-tabs" style="margin-bottom:var(--space-4);">
+      <button class="settings-tab" data-auto-messages-tab="messages" onclick="switchAutoMessagesTab('messages')">Messages</button>
+      <button class="settings-tab" data-auto-messages-tab="editor" onclick="switchAutoMessagesTab('editor')">Editor</button>
+      <button class="settings-tab" data-auto-messages-tab="audit" onclick="switchAutoMessagesTab('audit')">Audit</button>
+    </div>
+    <div data-auto-messages-panel="messages">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;">
+          <h3 style="margin:0;">Configured Messages</h3>
+          <button class="btn-primary btn-sm" onclick="autoMessagesClearForm(); switchAutoMessagesTab('editor')">New Message</button>
+        </div>
+        <table class="data-table"><thead><tr><th>Name</th><th>Channel</th><th>Schedule</th><th>Next Run</th><th>Status</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>
+      </div>
+    </div>
+    <div data-auto-messages-panel="editor" style="display:none;">
+      <div class="card">
+        <input type="hidden" id="autoMessageId" value="">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+          <label>Name<input id="autoMessageName" class="form-input" placeholder="Weekly reminder"></label>
+          <label>Discord Channel<select id="autoMessageChannel" class="form-input">${autoMessagesChannelOptions('')}</select></label>
+          <label>Timezone<input id="autoMessageTimezone" class="form-input" value="Europe/Amsterdam" placeholder="Europe/Amsterdam"></label>
+          <label>Schedule Type<select id="autoMessageScheduleType" class="form-input" onchange="autoMessagesRefreshScheduleFields()"><option value="interval">Interval</option><option value="daily">Daily</option><option value="weekly">Weekly</option></select></label>
+        </div>
+        <div id="autoMessageSchedule_interval" style="display:grid;grid-template-columns:140px 160px;gap:12px;margin-top:12px;">
+          <label>Every<input id="autoMessageIntervalValue" type="number" min="1" max="365" class="form-input" value="1"></label>
+          <label>Unit<select id="autoMessageIntervalUnit" class="form-input"><option value="hours">Hours</option><option value="minutes">Minutes</option><option value="days">Days</option></select></label>
+        </div>
+        <div id="autoMessageSchedule_daily" style="display:none;margin-top:12px;">
+          <label style="max-width:220px;display:block;">Time<input id="autoMessageDailyTime" type="time" class="form-input" value="09:00"></label>
+        </div>
+        <div id="autoMessageSchedule_weekly" style="display:none;margin-top:12px;">
+          <label style="max-width:220px;display:block;">Time<input id="autoMessageWeeklyTime" type="time" class="form-input" value="09:00"></label>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;color:var(--text-secondary);">
+            ${['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map(day => `<label><input type="checkbox" data-auto-message-weekday value="${day}" ${day === 'mon' ? 'checked' : ''}> ${day.toUpperCase()}</label>`).join('')}
+          </div>
+        </div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;color:var(--text-secondary);">
+          <label><input type="checkbox" id="autoMessageEnabled" checked> Enabled</label>
+          <label><input type="checkbox" id="autoMessageAllowEveryone"> Allow @everyone/@here</label>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:14px;">
+          <label>Embed Title<input id="autoMessageEmbedTitle" class="form-input" placeholder="Community reminder"></label>
+          <label>Color<input id="autoMessageEmbedColor" type="color" class="form-input" value="#2AABEE" style="height:42px;"></label>
+          <label style="grid-column:1 / -1;">Description<textarea id="autoMessageEmbedDescription" class="form-input" rows="5" placeholder="Write the recurring message..."></textarea></label>
+          <label>Image URL<input id="autoMessageImageUrl" class="form-input" placeholder="https://..."></label>
+          <label>Thumbnail URL<input id="autoMessageThumbnailUrl" class="form-input" placeholder="https://..."></label>
+          <label>Footer<input id="autoMessageFooter" class="form-input" placeholder="GuildPilot"></label>
+          <label style="grid-column:1 / -1;">Mention content above embed<textarea id="autoMessageContentText" class="form-input" rows="2" placeholder="@Role optional text"></textarea></label>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+          <button class="btn-primary" onclick="autoMessagesSave()">Save Message</button>
+          <button class="btn-secondary" onclick="autoMessagesClearForm()">Clear</button>
+        </div>
+      </div>
+    </div>
+    <div data-auto-messages-panel="audit" style="display:none;">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;">
+          <h3 style="margin:0;">Audit</h3>
+          <button class="btn-secondary btn-sm" onclick="loadAutoMessagesView()">Refresh</button>
+        </div>
+        <table class="data-table"><thead><tr><th>Time</th><th>Status</th><th>Type</th><th>Channel</th><th>Message</th></tr></thead><tbody>${auditRows}</tbody></table>
+      </div>
+    </div>
+  `;
+  switchAutoMessagesTab(autoMessagesTab);
+}
+
+async function loadAutoMessagesView(targetId = 'autoMessagesModuleSettingsPanel') {
+  const el = document.getElementById(targetId);
+  if (el) el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading Auto Messages...</p></div>';
+  try {
+    const [settings, messages, channelsJson, audit] = await Promise.all([
+      autoMessagesFetch('/api/admin/auto-messages/settings'),
+      autoMessagesFetch('/api/admin/auto-messages/messages'),
+      autoMessagesFetch('/api/admin/discord/channels'),
+      autoMessagesFetch('/api/admin/auto-messages/audit?limit=50'),
+    ]);
+    autoMessagesCache = {
+      settings: settings.settings || {},
+      messages: messages.messages || [],
+      channels: channelsJson.channels || [],
+      audit: audit.audit || [],
+    };
+    renderAutoMessagesView(targetId);
+  } catch (error) {
+    if (el) el.innerHTML = `<div class="card"><p style="color:var(--error);">${escapeHtml(error.message || 'Failed to load Auto Messages')}</p></div>`;
+  }
+}
+
+async function saveAutoMessagesSettings() {
+  try {
+    await autoMessagesFetch('/api/admin/auto-messages/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled: !!document.getElementById('autoMessagesEnabledInput')?.checked }),
+    });
+    showSuccess('Auto Messages settings saved');
+    await loadAutoMessagesView();
+  } catch (error) {
+    showError(error.message || 'Failed to save Auto Messages settings');
+  }
+}
+
+function autoMessagesCollectSchedule() {
+  const type = String(document.getElementById('autoMessageScheduleType')?.value || 'interval');
+  if (type === 'daily') {
+    return { scheduleType: 'daily', scheduleConfig: { time: String(document.getElementById('autoMessageDailyTime')?.value || '09:00') } };
+  }
+  if (type === 'weekly') {
+    const weekdays = Array.from(document.querySelectorAll('[data-auto-message-weekday]:checked')).map(el => el.value);
+    return { scheduleType: 'weekly', scheduleConfig: { time: String(document.getElementById('autoMessageWeeklyTime')?.value || '09:00'), weekdays } };
+  }
+  return {
+    scheduleType: 'interval',
+    scheduleConfig: {
+      value: Number(document.getElementById('autoMessageIntervalValue')?.value || 1),
+      unit: String(document.getElementById('autoMessageIntervalUnit')?.value || 'hours'),
+    },
+  };
+}
+
+function autoMessagesPayloadFromForm() {
+  const schedule = autoMessagesCollectSchedule();
+  return {
+    name: String(document.getElementById('autoMessageName')?.value || '').trim(),
+    channelId: String(document.getElementById('autoMessageChannel')?.value || '').trim(),
+    enabled: !!document.getElementById('autoMessageEnabled')?.checked,
+    timezone: String(document.getElementById('autoMessageTimezone')?.value || 'Europe/Amsterdam').trim(),
+    allowEveryone: !!document.getElementById('autoMessageAllowEveryone')?.checked,
+    contentText: String(document.getElementById('autoMessageContentText')?.value || '').trim(),
+    ...schedule,
+    embed: {
+      title: String(document.getElementById('autoMessageEmbedTitle')?.value || '').trim(),
+      description: String(document.getElementById('autoMessageEmbedDescription')?.value || '').trim(),
+      color: String(document.getElementById('autoMessageEmbedColor')?.value || '#2AABEE').trim(),
+      imageUrl: String(document.getElementById('autoMessageImageUrl')?.value || '').trim(),
+      thumbnailUrl: String(document.getElementById('autoMessageThumbnailUrl')?.value || '').trim(),
+      footer: String(document.getElementById('autoMessageFooter')?.value || '').trim(),
+    },
+  };
+}
+
+function autoMessagesClearForm() {
+  ['autoMessageId', 'autoMessageName', 'autoMessageContentText', 'autoMessageImageUrl', 'autoMessageThumbnailUrl', 'autoMessageFooter'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const channel = document.getElementById('autoMessageChannel');
+  if (channel) channel.value = '';
+  const tz = document.getElementById('autoMessageTimezone');
+  if (tz) tz.value = 'Europe/Amsterdam';
+  const scheduleType = document.getElementById('autoMessageScheduleType');
+  if (scheduleType) scheduleType.value = 'interval';
+  const intervalValue = document.getElementById('autoMessageIntervalValue');
+  if (intervalValue) intervalValue.value = '1';
+  const intervalUnit = document.getElementById('autoMessageIntervalUnit');
+  if (intervalUnit) intervalUnit.value = 'hours';
+  const dailyTime = document.getElementById('autoMessageDailyTime');
+  if (dailyTime) dailyTime.value = '09:00';
+  const weeklyTime = document.getElementById('autoMessageWeeklyTime');
+  if (weeklyTime) weeklyTime.value = '09:00';
+  document.querySelectorAll('[data-auto-message-weekday]').forEach(el => { el.checked = el.value === 'mon'; });
+  const enabled = document.getElementById('autoMessageEnabled');
+  if (enabled) enabled.checked = true;
+  const allow = document.getElementById('autoMessageAllowEveryone');
+  if (allow) allow.checked = false;
+  const title = document.getElementById('autoMessageEmbedTitle');
+  if (title) title.value = '';
+  const desc = document.getElementById('autoMessageEmbedDescription');
+  if (desc) desc.value = '';
+  const color = document.getElementById('autoMessageEmbedColor');
+  if (color) color.value = '#2AABEE';
+  autoMessagesRefreshScheduleFields();
+}
+
+function autoMessagesLoadToForm(messageId) {
+  const message = (autoMessagesCache.messages || []).find(item => Number(item.id) === Number(messageId));
+  if (!message) return;
+  document.getElementById('autoMessageId').value = message.id;
+  document.getElementById('autoMessageName').value = message.name || '';
+  document.getElementById('autoMessageChannel').value = message.channelId || '';
+  document.getElementById('autoMessageTimezone').value = message.timezone || 'Europe/Amsterdam';
+  document.getElementById('autoMessageEnabled').checked = !!message.enabled;
+  document.getElementById('autoMessageAllowEveryone').checked = !!message.allowEveryone;
+  document.getElementById('autoMessageContentText').value = message.contentText || '';
+  document.getElementById('autoMessageScheduleType').value = message.scheduleType || 'interval';
+  const cfg = message.scheduleConfig || {};
+  document.getElementById('autoMessageIntervalValue').value = cfg.value || 1;
+  document.getElementById('autoMessageIntervalUnit').value = cfg.unit || 'hours';
+  document.getElementById('autoMessageDailyTime').value = cfg.time || '09:00';
+  document.getElementById('autoMessageWeeklyTime').value = cfg.time || '09:00';
+  const weekdays = new Set(Array.isArray(cfg.weekdays) ? cfg.weekdays : ['mon']);
+  document.querySelectorAll('[data-auto-message-weekday]').forEach(el => { el.checked = weekdays.has(el.value); });
+  const embed = message.embed || {};
+  document.getElementById('autoMessageEmbedTitle').value = embed.title || '';
+  document.getElementById('autoMessageEmbedDescription').value = embed.description || '';
+  document.getElementById('autoMessageEmbedColor').value = embed.color || '#2AABEE';
+  document.getElementById('autoMessageImageUrl').value = embed.imageUrl || '';
+  document.getElementById('autoMessageThumbnailUrl').value = embed.thumbnailUrl || '';
+  document.getElementById('autoMessageFooter').value = embed.footer || '';
+  switchAutoMessagesTab('editor');
+}
+
+async function autoMessagesSave() {
+  const id = String(document.getElementById('autoMessageId')?.value || '').trim();
+  const payload = autoMessagesPayloadFromForm();
+  if (!payload.channelId) {
+    showError('Discord channel is required.');
+    return;
+  }
+  if (!payload.embed.title || !payload.embed.description) {
+    showError('Embed title and description are required.');
+    return;
+  }
+  try {
+    await autoMessagesFetch(id ? `/api/admin/auto-messages/messages/${encodeURIComponent(id)}` : '/api/admin/auto-messages/messages', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(payload),
+    });
+    showSuccess('Auto message saved');
+    await loadAutoMessagesView();
+    switchAutoMessagesTab('messages');
+  } catch (error) {
+    showError(error.message || 'Failed to save auto message');
+  }
+}
+
+async function autoMessagesDelete(messageId) {
+  if (!confirm('Delete this auto message?')) return;
+  try {
+    await autoMessagesFetch(`/api/admin/auto-messages/messages/${encodeURIComponent(messageId)}`, { method: 'DELETE' });
+    showSuccess('Auto message deleted');
+    await loadAutoMessagesView();
+  } catch (error) {
+    showError(error.message || 'Failed to delete auto message');
+  }
+}
+
+async function autoMessagesSendTest(messageId) {
+  try {
+    await autoMessagesFetch(`/api/admin/auto-messages/messages/${encodeURIComponent(messageId)}/test`, { method: 'POST' });
+    showSuccess('Auto message test sent');
+    await loadAutoMessagesView();
+  } catch (error) {
+    showError(error.message || 'Failed to send auto message test');
+  }
+}
+
 // ==================== TELEGRAM BRIDGE ====================
 let telegramBridgeCache = { settings: null, mappings: [], channels: [], audit: [] };
 let telegramBridgeTab = 'syncs';
@@ -21874,6 +22246,7 @@ async function renderDashboardGrid() {
       { key: 'selfserveroles', section: 'self-serve-roles', title: 'Self-Serve Roles', icon: 'fas fa-user-tag', metric: `${Number(moduleAnalytics?.selfserveroles?.activePanels || 0).toLocaleString()} panels`, sub: 'Role panels enabled', enabled: true },
       { key: 'vault', section: 'vault', title: 'Vault', icon: 'fas fa-lock', metric: `${Number(moduleAnalytics?.vault?.activeItems || 0).toLocaleString()} items`, sub: `${Number(moduleAnalytics?.vault?.pendingClaims || 0).toLocaleString()} pending claims`, enabled: true },
       { key: 'telegrambridge', section: 'telegram-bridge', title: 'Telegram Bridge', icon: 'fas fa-satellite-dish', metric: `${Number(moduleAnalytics?.telegrambridge?.activeSyncs || 0).toLocaleString()} syncs`, sub: `${Number(moduleAnalytics?.telegrambridge?.failures || 0).toLocaleString()} failures`, enabled: !!modules?.telegrambridge?.enabled },
+      { key: 'automessages', section: 'auto-messages', title: 'Auto Messages', icon: 'fas fa-bullhorn', metric: `${Number(moduleAnalytics?.automessages?.activeMessages || 0).toLocaleString()} active`, sub: `${Number(moduleAnalytics?.automessages?.failures || 0).toLocaleString()} failures`, enabled: !!modules?.automessages?.enabled },
     ];
 
     const tilesHtml = `<div class="panel-modules-grid" style="grid-column:1 / 2;">${tileConfig.map((tile) => {

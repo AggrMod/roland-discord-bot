@@ -72,6 +72,9 @@ const LIMIT_DEFINITIONS = Object.freeze({
   telegrambridge: {
     max_sync_mappings: { label: 'Max Telegram Bridge Syncs' },
   },
+  automessages: {
+    max_auto_messages: { label: 'Max Auto Messages' },
+  },
 });
 
 function normalizeGuildId(guildId) {

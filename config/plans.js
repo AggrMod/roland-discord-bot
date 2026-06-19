@@ -16,7 +16,8 @@ const MODULE_KEYS = Object.freeze([
   'analytics',
   'engagement',
   'aiassistant',
-  'telegrambridge'
+  'telegrambridge',
+  'automessages'
 ]);
 
 const PLAN_MARKETING = Object.freeze({
@@ -38,6 +39,7 @@ const PLAN_MARKETING = Object.freeze({
       { label: 'Engagement X provider', included: false },
       { label: 'AI assistant module', included: false },
       { label: 'Telegram Bridge module', included: false },
+      { label: 'Auto Messages module', included: true },
       { label: 'Welcome image uploads', included: false },
       { label: 'Branding customization', included: false },
     ],
@@ -60,6 +62,7 @@ const PLAN_MARKETING = Object.freeze({
       { label: 'Engagement module (Discord + X)', included: true },
       { label: 'AI assistant module', included: false },
       { label: 'Telegram Bridge module', included: true },
+      { label: 'Auto Messages module', included: true },
       { label: 'Advanced branding customization', included: false },
     ],
   },
@@ -79,6 +82,7 @@ const PLAN_MARKETING = Object.freeze({
       { label: 'Engagement module (Discord + X)', included: true },
       { label: 'AI assistant (1000 req/day)', included: true },
       { label: 'Telegram Bridge module', included: true },
+      { label: 'Auto Messages module', included: true },
       { label: 'Advanced branding customization', included: true },
       { label: 'Priority operational support', included: true },
     ],
@@ -178,6 +182,9 @@ const PLAN_PRESETS = Object.freeze({
       },
       telegrambridge: {
         max_sync_mappings: 1
+      },
+      automessages: {
+        max_auto_messages: 3
       }
     },
     modules: {
@@ -198,7 +205,8 @@ const PLAN_PRESETS = Object.freeze({
       analytics: true,
       engagement: true,
       aiassistant: false,
-      telegrambridge: true
+      telegrambridge: true,
+      automessages: true
     }
   },
   growth: {
@@ -280,6 +288,9 @@ const PLAN_PRESETS = Object.freeze({
       },
       telegrambridge: {
         max_sync_mappings: 5
+      },
+      automessages: {
+        max_auto_messages: 10
       }
     },
     modules: {
@@ -300,7 +311,8 @@ const PLAN_PRESETS = Object.freeze({
       analytics: true,
       engagement: true,
       aiassistant: false,
-      telegrambridge: true
+      telegrambridge: true,
+      automessages: true
     }
   },
   pro: {
@@ -382,6 +394,9 @@ const PLAN_PRESETS = Object.freeze({
       },
       telegrambridge: {
         max_sync_mappings: 25
+      },
+      automessages: {
+        max_auto_messages: 50
       }
     },
     modules: {
@@ -402,7 +417,8 @@ const PLAN_PRESETS = Object.freeze({
       analytics: true,
       engagement: true,
       aiassistant: true,
-      telegrambridge: true
+      telegrambridge: true,
+      automessages: true
     }
   },
   enterprise: {
@@ -484,6 +500,9 @@ const PLAN_PRESETS = Object.freeze({
       },
       telegrambridge: {
         max_sync_mappings: null
+      },
+      automessages: {
+        max_auto_messages: null
       }
     },
     modules: {
@@ -504,7 +523,8 @@ const PLAN_PRESETS = Object.freeze({
       analytics: true,
       engagement: true,
       aiassistant: true,
-      telegrambridge: true
+      telegrambridge: true,
+      automessages: true
     }
   }
 });

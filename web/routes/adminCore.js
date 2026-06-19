@@ -71,14 +71,14 @@ function createAdminCoreRouter({
           key: 'send_messages',
           label: 'Send Messages',
           permission: 'SendMessages',
-          modules: ['Welcome', 'Engagement', 'Ticketing', 'Trackers', 'Telegram Bridge'],
+          modules: ['Welcome', 'Engagement', 'Ticketing', 'Trackers', 'Telegram Bridge', 'Auto Messages'],
           reason: 'Required to post panels, alerts, task messages, bridge messages, and ticket responses.',
         },
         {
           key: 'embed_links',
           label: 'Embed Links',
           permission: 'EmbedLinks',
-          modules: ['Welcome', 'Engagement', 'Governance', 'Trackers'],
+          modules: ['Welcome', 'Engagement', 'Governance', 'Trackers', 'Auto Messages'],
           reason: 'Required to send rich Discord embeds.',
         },
         {
@@ -174,6 +174,12 @@ function createAdminCoreRouter({
           stats: {
             syncs: Number(safeGet('SELECT COUNT(*) AS cnt FROM telegram_bridge_mappings WHERE guild_id = ? AND enabled = 1', [guildId], { cnt: 0 })?.cnt || 0),
           },
+        },
+        automessages: {
+          enabled: !!moduleState.automessages,
+          stats: {
+            activeMessages: Number(safeGet('SELECT COUNT(*) AS cnt FROM auto_messages WHERE guild_id = ? AND enabled = 1', [guildId], { cnt: 0 })?.cnt || 0),
+          },
         }
       };
 
@@ -242,6 +248,12 @@ function createAdminCoreRouter({
           enabled: !!moduleState.telegrambridge,
           activeSyncs: Number(safeGet('SELECT COUNT(*) AS cnt FROM telegram_bridge_mappings WHERE guild_id = ? AND enabled = 1', [guildId], { cnt: 0 })?.cnt || 0),
           failures: Number(safeGet(`SELECT COUNT(*) AS cnt FROM telegram_bridge_audit WHERE guild_id = ? AND status = "failed" AND datetime(created_at) >= ${sqliteDateTimeWindowExpr}`, [guildId], { cnt: 0 })?.cnt || 0),
+        },
+        automessages: {
+          enabled: !!moduleState.automessages,
+          activeMessages: Number(safeGet('SELECT COUNT(*) AS cnt FROM auto_messages WHERE guild_id = ? AND enabled = 1', [guildId], { cnt: 0 })?.cnt || 0),
+          sent: Number(safeGet(`SELECT COUNT(*) AS cnt FROM auto_message_audit WHERE guild_id = ? AND status = "sent" AND datetime(created_at) >= ${sqliteDateTimeWindowExpr}`, [guildId], { cnt: 0 })?.cnt || 0),
+          failures: Number(safeGet(`SELECT COUNT(*) AS cnt FROM auto_message_audit WHERE guild_id = ? AND status = "failed" AND datetime(created_at) >= ${sqliteDateTimeWindowExpr}`, [guildId], { cnt: 0 })?.cnt || 0),
         },
       };
 

@@ -9,11 +9,21 @@ async function run() {
   const guildId = `guild-gov-${suffix}`;
   const creatorId = `gov-creator-${suffix}`;
   const supporterId = `gov-supporter-${suffix}`;
+  // Extra eligible-but-non-voting voters. The VP snapshot counts every user
+  // with total_nfts > 0, so these pad the proposal's total VP. Without them,
+  // the creator + supporter would be the only eligible voters and their two
+  // votes would be 100% of the VP, tripping checkAutoClose's ">50% voted"
+  // early-close BEFORE the repeat-vote assertion below. (That early-close is
+  // correct product behavior — the test simply needs a realistic electorate.)
+  const padVoterIds = Array.from({ length: 6 }, (_, i) => `gov-padvoter-${i}-${suffix}`);
 
   db.prepare('DELETE FROM proposal_supporters WHERE proposal_id IN (SELECT proposal_id FROM proposals WHERE guild_id = ?)').run(guildId);
   db.prepare('DELETE FROM votes WHERE proposal_id IN (SELECT proposal_id FROM proposals WHERE guild_id = ?)').run(guildId);
   db.prepare('DELETE FROM proposals WHERE guild_id = ?').run(guildId);
   db.prepare('DELETE FROM users WHERE discord_id IN (?, ?)').run(creatorId, supporterId);
+  for (const padId of padVoterIds) {
+    db.prepare('DELETE FROM users WHERE discord_id = ?').run(padId);
+  }
 
   db.prepare(`
     INSERT OR REPLACE INTO users (discord_id, username, total_nfts, total_tokens, tier, voting_power, created_at, updated_at)
@@ -23,6 +33,12 @@ async function run() {
     INSERT OR REPLACE INTO users (discord_id, username, total_nfts, total_tokens, tier, voting_power, created_at, updated_at)
     VALUES (?, ?, ?, 0, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
   `).run(supporterId, `supporter_${suffix}`, 8, 'Silver', 0);
+  for (const padId of padVoterIds) {
+    db.prepare(`
+      INSERT OR REPLACE INTO users (discord_id, username, total_nfts, total_tokens, tier, voting_power, created_at, updated_at)
+      VALUES (?, ?, ?, 0, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(padId, `padvoter_${padId}`, 50, 'Gold', 0);
+  }
 
   const created = proposalService.createProposal(creatorId, {
     title: `Governance lifecycle ${suffix}`,

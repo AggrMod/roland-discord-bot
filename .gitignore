@@ -12,6 +12,7 @@ config/module-toggles.json
 Thumbs.db
 database/backups/
 database/safe_backup/
+backups/
 Audit-09042026/
 *.diff
 diff.txt

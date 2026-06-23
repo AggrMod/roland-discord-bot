@@ -1,6 +1,29 @@
 #!/usr/bin/env node
 
 const { spawnSync } = require('child_process');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+// Each check runs in its own child process AND its own throwaway SQLite
+// database, so checks can never see each other's rows. This is what makes the
+// gate deterministic: previously every check shared ./database/guildpilot.db
+// (because database/db.js opens DATABASE_PATH || guildpilot.db at load), so a
+// check's outcome could depend on data left behind by an earlier check.
+//
+// Tests that set their own DATABASE_PATH internally simply override the value
+// we pass; they were already isolated and are unaffected.
+const runRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'guildpilot-release-gate-'));
+
+function cleanupRunRoot() {
+  try {
+    fs.rmSync(runRoot, { recursive: true, force: true });
+  } catch (_error) {
+    // best-effort cleanup; a leftover temp dir never affects correctness
+  }
+}
+
+process.on('exit', cleanupRunRoot);
 
 const checks = [
   { name: 'help-parity', cmd: process.execPath, args: ['scripts/check-help-parity.js'] },
@@ -75,7 +98,14 @@ for (const check of checks) {
   const result = spawnSync(check.cmd, check.args, {
     stdio: 'inherit',
     shell: false,
-    env: process.env,
+    env: {
+      ...process.env,
+      // Fresh, isolated database file per check.
+      DATABASE_PATH: path.join(runRoot, `${check.name}.db`),
+      // Never run the hourly backup service against the throwaway DB.
+      DB_BACKUP_ENABLED: 'false',
+      DB_BACKUP_ON_STARTUP: 'false',
+    },
   });
   if (result.status !== 0) {
     failed = true;

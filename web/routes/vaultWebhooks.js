@@ -1,5 +1,6 @@
 const express = require('express');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
+const { withinBatchLimit, getMaxBatchSize } = require('./webhookGuards');
 
 function createVaultWebhooksRouter({
   logger,
@@ -45,6 +46,9 @@ function createVaultWebhooksRouter({
         ? body.events
         : (Array.isArray(body) ? body : [body]);
       const incoming = incomingRaw.filter(Boolean);
+      if (!withinBatchLimit(incoming.length)) {
+        return res.status(413).json(toErrorResponse(`Too many events in one request (max ${getMaxBatchSize()})`, 'PAYLOAD_TOO_LARGE'));
+      }
       const summary = {
         received: incoming.length,
         processed: 0,

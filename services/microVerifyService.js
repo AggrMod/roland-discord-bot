@@ -2,6 +2,7 @@ const db = require('../database/db');
 const logger = require('../utils/logger');
 const { Connection, PublicKey, LAMPORTS_PER_SOL } = require('@solana/web3.js');
 const clientProvider = require('../utils/clientProvider');
+const { maskAddress, maskSignature } = require('../utils/mask');
 
 class MicroVerifyService {
   constructor() {
@@ -415,7 +416,7 @@ class MicroVerifyService {
         });
       }
 
-      logger.log(`Micro-verify completed: ${request.discord_id} -> ${senderWallet} (${txSignature})`);
+      logger.log(`Micro-verify completed: ${request.discord_id} -> ${maskAddress(senderWallet)} (${maskSignature(txSignature)})`);
 
       return {
         success: true,

@@ -1,5 +1,6 @@
 const express = require('express');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
+const { withinBatchLimit, getMaxBatchSize } = require('./webhookGuards');
 
 function createActivityWebhooksRouter({
   logger,
@@ -34,6 +35,9 @@ function createActivityWebhooksRouter({
       }
 
       const events = Array.isArray(req.body) ? req.body : [req.body];
+      if (!withinBatchLimit(events.length)) {
+        return res.status(413).json(toErrorResponse(`Too many events in one request (max ${getMaxBatchSize()})`, 'PAYLOAD_TOO_LARGE'));
+      }
       let nftProcessed = 0;
       let nftIgnored = 0;
       for (const event of events) {
@@ -76,6 +80,9 @@ function createActivityWebhooksRouter({
       }
 
       const events = Array.isArray(req.body) ? req.body : [req.body];
+      if (!withinBatchLimit(events.length)) {
+        return res.status(413).json(toErrorResponse(`Too many events in one request (max ${getMaxBatchSize()})`, 'PAYLOAD_TOO_LARGE'));
+      }
       setImmediate(() => {
         trackedWalletsService.ingestWebhookBatch(events, { source: 'webhook-token-only' })
           .then(summary => {

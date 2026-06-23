@@ -5,6 +5,8 @@ const tenantService = require('./tenantService');
 const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 const TOKEN_2022_PROGRAM_ID = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
 const MOCK_MODE = process.env.MOCK_MODE === 'true';
+const IS_PRODUCTION = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+const ALLOW_MOCK_IN_PROD = process.env.ALLOW_MOCK_IN_PROD === 'true';
 
 function isValidSolanaAddress(address) {
   try {
@@ -19,8 +21,14 @@ function isValidSolanaAddress(address) {
 
 class TokenService {
   constructor() {
+    // Mirror nftService: fabricated balances must never decide token-gated
+    // roles in production. Fail fast unless an operator explicitly opts in.
+    if (IS_PRODUCTION && MOCK_MODE && !ALLOW_MOCK_IN_PROD) {
+      throw new Error('MOCK_MODE is not allowed in production. Disable MOCK_MODE or set ALLOW_MOCK_IN_PROD=true explicitly.');
+    }
     this.connection = new Connection(process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com');
     this.invalidWalletWarned = new Set();
+    this.mockInProdWarnedGuilds = new Set();
   }
 
   _normalizeMintList(mintFilter) {
@@ -46,7 +54,23 @@ class TokenService {
       ? tenantService.getTenantContext(guildId)?.limits?.mockDataEnabled === true
       : false;
 
+    if (IS_PRODUCTION && !ALLOW_MOCK_IN_PROD && tenantMockEnabled) {
+      const warnKey = String(guildId || 'global');
+      if (!this.mockInProdWarnedGuilds.has(warnKey)) {
+        logger.error(`Tenant mock_data_enabled ignored in production for guild ${warnKey}`);
+        this.mockInProdWarnedGuilds.add(warnKey);
+      }
+    }
+
     if (MOCK_MODE || tenantMockEnabled) {
+      // In production (without explicit opt-in) never fabricate balances —
+      // return empty so token gates simply find no holdings rather than passing.
+      if (IS_PRODUCTION && !ALLOW_MOCK_IN_PROD) {
+        return [];
+      }
+      if (tenantMockEnabled && !MOCK_MODE) {
+        logger.warn(`Tenant mock_data_enabled active for guild ${guildId}; serving mock token balances for ${normalizedWallet}`);
+      }
       return this.getMockTokenBalances(mintList);
     }
 

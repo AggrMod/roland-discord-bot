@@ -1,6 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
+const { maskAddress } = require('../../utils/mask');
 
 function createUserWalletVerificationRouter({
   logger,
@@ -122,7 +123,7 @@ function createUserWalletVerificationRouter({
       // Always attempt OG assignment in guild context (safe no-op if not eligible/already assigned).
       triggerOgRoleBestEffort(req, discordId, req.session.discordUser.username || 'Web User');
 
-      logger.log(`Web signature verification: User ${discordId} linked wallet ${walletAddress}`);
+      logger.log(`Web signature verification: User ${discordId} linked wallet ${maskAddress(walletAddress)}`);
       return res.json(toSuccessResponse({ message: 'Wallet verified successfully!' }));
     } catch (routeError) {
       logger.error('Error in signature verification:', routeError);
@@ -189,7 +190,7 @@ function createUserWalletVerificationRouter({
       // Always attempt OG assignment in guild context (safe no-op if not eligible/already assigned).
       triggerOgRoleBestEffort(req, discordId, req.session.discordUser?.username || 'Web User');
 
-      logger.log(`Web verification: User ${discordId} linked wallet ${walletAddress}`);
+      logger.log(`Web verification: User ${discordId} linked wallet ${maskAddress(walletAddress)}`);
       return res.json(toSuccessResponse({ message: 'Wallet verified successfully', isFavorite: !!linkResult?.isFirstWallet }));
     } catch (routeError) {
       logger.error('Error verifying wallet:', routeError);
@@ -239,7 +240,7 @@ function createUserWalletVerificationRouter({
       db.prepare('UPDATE wallets SET is_favorite = 0 WHERE discord_id = ?').run(discordId);
       db.prepare('UPDATE wallets SET is_favorite = 1 WHERE discord_id = ? AND wallet_address = ?').run(discordId, walletAddress);
 
-      logger.log(`User ${discordId} set favorite wallet: ${walletAddress}`);
+      logger.log(`User ${discordId} set favorite wallet: ${maskAddress(walletAddress)}`);
       return res.json(toSuccessResponse({ message: 'Favorite wallet updated' }));
     } catch (routeError) {
       logger.error('Error setting favorite wallet:', routeError);

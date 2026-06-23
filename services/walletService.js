@@ -1,6 +1,7 @@
 const db = require('../database/db');
 const logger = require('../utils/logger');
 const clientProvider = require('../utils/clientProvider');
+const { maskAddress } = require('../utils/mask');
 
 class WalletService {
   normalizeWallet(value) {
@@ -81,11 +82,11 @@ class WalletService {
       const result = linkTransaction();
 
       if (result.success && result.isFirstWallet) {
-        logger.log(`Wallet ${walletAddress} linked to user ${discordId}`);
+        logger.log(`Wallet ${maskAddress(walletAddress)} linked to user ${discordId}`);
         this.triggerOGRoleAssignment(discordId, username, guildId);
         this.triggerVaultBackfill(discordId, guildId, walletAddress);
       } else if (result.success) {
-        logger.log(`Wallet ${walletAddress} linked to user ${discordId}`);
+        logger.log(`Wallet ${maskAddress(walletAddress)} linked to user ${discordId}`);
         this.triggerVaultBackfill(discordId, guildId, walletAddress);
       }
 
@@ -191,7 +192,7 @@ class WalletService {
             metadata: { revokedDelegationCount: Number(revokedDelegations.changes || 0) },
           });
         }
-        logger.log(`Wallet ${walletAddress} removed from user ${discordId}`);
+        logger.log(`Wallet ${maskAddress(walletAddress)} removed from user ${discordId}`);
         return { success: true, message: 'Wallet removed successfully' };
       }
       return { success: false, message: 'Wallet not found' };
@@ -237,7 +238,7 @@ class WalletService {
       if (!result.changes) {
         return { success: false, message: 'Delegation not found' };
       }
-      logger.log(`Delegated wallet revoked for ${discordId}: ${coldWallet}${normalizedGuildId ? ` [guild ${normalizedGuildId}]` : ''}`);
+      logger.log(`Delegated wallet revoked for ${discordId}: ${maskAddress(coldWallet)}${normalizedGuildId ? ` [guild ${normalizedGuildId}]` : ''}`);
       this.writeDelegationAudit({
         discordId,
         actorId: discordId,

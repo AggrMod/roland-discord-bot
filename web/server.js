@@ -411,6 +411,51 @@ class WebServer {
       message: rateLimitMessage
     });
 
+    // Per-user limiter for authenticated /api/user/* routes (Fix C / audit M-7).
+    // Generous by default so the portal's polling + multi-call page loads are
+    // never throttled; keyed per Discord user so one account can't affect others.
+    const userLimiter = rateLimit({
+      ...rateLimitDefaults,
+      windowMs: 60 * 1000,
+      max: Math.max(1, Number(process.env.USER_RATE_MAX) || 240),
+      validate: { xForwardedForHeader: false, ip: false },
+      keyGenerator: (req) => {
+        const userId = req.session?.discordUser?.id;
+        if (userId) return `u:${userId}`;
+        return ipKeyGenerator(req.ip || '');
+      },
+      message: rateLimitMessage
+    });
+
+    // Webhook abuse controls (Fix B / audit M-2, M-4). Generous, env-tunable
+    // defaults so legitimate providers (Helius, billing) are never throttled in
+    // normal operation. Limits are by IP; webhooks are unauthenticated-by-IP.
+    const webhookLimiter = rateLimit({
+      ...rateLimitDefaults,
+      windowMs: Math.max(1000, Number(process.env.WEBHOOK_RATE_WINDOW_MS) || 60 * 1000),
+      max: Math.max(1, Number(process.env.WEBHOOK_RATE_MAX) || 600),
+      message: rateLimitMessage,
+    });
+
+    // Best-effort, fail-open replay short-circuit for the activity/vault
+    // webhooks. Durable idempotency still lives in the DB (tx_signature /
+    // payload_hash); this just avoids redoing work for obvious replays.
+    const { replayKeyFor, createReplayCache } = require('./routes/webhookGuards');
+    const webhookReplayCache = createReplayCache({
+      windowMs: Math.max(1000, Number(process.env.WEBHOOK_REPLAY_WINDOW_MS) || 60 * 1000),
+    });
+    const webhookReplayGuard = (req, res, next) => {
+      try {
+        const key = replayKeyFor(req);
+        if (webhookReplayCache.isReplay(key)) {
+          return res.json(toSuccessResponse({ duplicate: true, replay: true }));
+        }
+      } catch (_error) {
+        // Never block a webhook because the guard failed.
+      }
+      return next();
+    };
+
     this.app.use('/api/public/', publicApiLimiter);
     this.app.use('/auth/', authLimiter);
     this.app.use('/api/verify/', verifyLimiter);
@@ -418,6 +463,11 @@ class WebServer {
     this.app.use('/api/micro-verify/request', verifyLimiter);
     this.app.use('/api/admin/', adminLimiter);
     this.app.use('/api/superadmin/', superadminLimiter);
+    this.app.use('/api/user/', userLimiter);
+    // Billing webhook: rate-limit only (it has its own durable replay/idempotency).
+    this.app.use('/api/billing/webhook/', webhookLimiter);
+    // Activity + vault webhooks: rate-limit + replay short-circuit.
+    this.app.use('/api/webhooks/', webhookLimiter, webhookReplayGuard);
 
     const fallbackGuildId = () => normalizeGuildId(process.env.GUILD_ID || process.env.DISCORD_GUILD_ID);
 

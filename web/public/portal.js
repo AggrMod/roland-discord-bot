@@ -957,8 +957,13 @@ async function verifyBySignature() {
     }
     if (btn) btn.innerHTML = ' Requesting challenge...';
 
-    // 2. Get challenge from server
-    const challengeRes = await fetch('/api/verify/challenge', { method: 'POST', credentials: 'include' });
+    // 2. Get challenge from server (bind it to this wallet — see Fix H)
+    const challengeRes = await fetch('/api/verify/challenge', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletAddress })
+    });
     const challengeData = await challengeRes.json();
     if (!challengeData.success) throw new Error(challengeData.message || 'Failed to get challenge');
 

@@ -50,6 +50,16 @@ function createUserWalletVerificationRouter({
     }
   };
 
+  // Fix H (audit H-4, M-5): consume the challenge on the FIRST verify attempt
+  // (one-time nonce); validation (expiry + wallet binding) lives in a unit-
+  // tested util.
+  const { buildChallengeMessage, challengeError } = require('../utils/verifyChallenge');
+  const takeChallenge = (req) => {
+    const challenge = req.session.verifyChallenge;
+    if (challenge) delete req.session.verifyChallenge; // single-use
+    return challenge;
+  };
+
   router.post('/api/verify/challenge', (req, res) => {
     if (!requireUser(req, res)) return;
 
@@ -57,8 +67,19 @@ function createUserWalletVerificationRouter({
       const nonce = crypto.randomBytes(16).toString('hex');
       const branding = getBranding(req.guildId || '', 'verification');
       const brandName = String(branding?.brandName || branding?.displayName || 'Guild Pilot').trim() || 'Guild Pilot';
-      const message = `${brandName} Wallet Verification\nUser: ${req.session.discordUser.username}\nNonce: ${nonce}`;
-      req.session.verifyChallenge = { message, nonce, createdAt: Date.now() };
+      const discordId = req.session.discordUser.id;
+      const walletAddress = String(req.body?.walletAddress || '').trim();
+
+      const message = buildChallengeMessage({
+        brandName,
+        discordId,
+        walletAddress,
+        username: req.session.discordUser.username,
+        nonce,
+        issuedAt: new Date().toISOString(),
+      });
+
+      req.session.verifyChallenge = { message, nonce, createdAt: Date.now(), walletAddress: walletAddress || null, discordId };
       return res.json(toSuccessResponse({ message }));
     } catch (routeError) {
       logger.error('Error generating challenge:', routeError);
@@ -77,17 +98,16 @@ function createUserWalletVerificationRouter({
         return res.status(400).json(toErrorResponse('Missing walletAddress or signature', 'VALIDATION_ERROR'));
       }
 
-      const challenge = req.session.verifyChallenge;
-      if (!challenge || (Date.now() - challenge.createdAt) > 5 * 60 * 1000) {
-        return res.status(400).json(toErrorResponse('Challenge expired. Please try again.', 'VALIDATION_ERROR'));
+      const challenge = takeChallenge(req); // single-use: consumed on first attempt
+      const cError = challengeError(challenge, walletAddress);
+      if (cError) {
+        return res.status(400).json(toErrorResponse(cError, 'VALIDATION_ERROR'));
       }
 
       const isValid = verifySignature(walletAddress, signature, challenge.message);
       if (!isValid) {
         return res.status(400).json(toErrorResponse('Invalid signature. Make sure you signed with the correct wallet.', 'VALIDATION_ERROR'));
       }
-
-      delete req.session.verifyChallenge;
 
       const existingWallet = db.prepare('SELECT * FROM wallets WHERE wallet_address = ?').get(walletAddress);
       if (existingWallet) {
@@ -144,14 +164,13 @@ function createUserWalletVerificationRouter({
         return res.status(400).json(toErrorResponse('Missing required fields', 'VALIDATION_ERROR'));
       }
 
-      const challenge = req.session.verifyChallenge;
-      if (!challenge || (Date.now() - challenge.createdAt) > 5 * 60 * 1000) {
-        return res.status(400).json(toErrorResponse('Challenge expired. Request a new challenge first.', 'VALIDATION_ERROR'));
+      const challenge = takeChallenge(req); // single-use: consumed on first attempt
+      const cError = challengeError(challenge, walletAddress);
+      if (cError) {
+        return res.status(400).json(toErrorResponse(cError, 'VALIDATION_ERROR'));
       }
 
       const isValid = verifySignature(walletAddress, signature, challenge.message);
-      delete req.session.verifyChallenge;
-
       if (!isValid) {
         return res.status(400).json(toErrorResponse('Invalid signature', 'VALIDATION_ERROR'));
       }

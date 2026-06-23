@@ -45,6 +45,12 @@ function createAuthUserRouter({
     });
   });
 
+  // Fix G (audit H-5): regenerate the session id on login to prevent session
+  // fixation (a pre-login session id, e.g. one set while storing returnTo, must
+  // not be promoted to an authenticated session). Kill switch:
+  // SESSION_FIXATION_PROTECTION=off restores the old in-place behavior.
+  const { regenerateSession } = require('../utils/sessionFixation');
+
   const hasProposalsGuildColumn = () => {
     if (typeof hasProposalsGuildColumnCached === 'boolean') return hasProposalsGuildColumnCached;
     try {
@@ -142,39 +148,40 @@ function createAuthUserRouter({
   const WEB_AUTH_STATE_TTL_MS = Math.max(60 * 1000, Number(process.env.PUBLIC_WEB_OAUTH_STATE_TTL_MS || 10 * 60 * 1000));
   const PORTAL_AUTH_STATE_TTL_MS = Math.max(60 * 1000, Number(process.env.PORTAL_OAUTH_STATE_TTL_MS || 10 * 60 * 1000));
 
-  const getAllowedWebReturnOrigins = (req) => {
-    const configured = parseCommaSeparated(process.env.PUBLIC_WEB_ALLOWED_RETURN_ORIGINS)
-      .map(normalizeOrigin)
-      .filter(Boolean);
-    const defaults = [
-      'https://the-solpranos.com',
-      'https://www.the-solpranos.com',
-      normalizeOrigin(getRequestOrigin(req)),
-    ].filter(Boolean);
-    return Array.from(new Set([...configured, ...defaults]));
-  };
+  // Fix I (audit C-2, H-6): build the allowed return-origin set from
+  // operator-configured origins (WEB_URL / aliases / explicit allowlist), NOT
+  // from the request's X-Forwarded-Host. Previously the request-derived origin
+  // was auto-allowed, so an attacker spoofing X-Forwarded-Host could add their
+  // own origin to the allowlist and exfiltrate the bearer token delivered in
+  // the redirect fragment. Escape hatch (insecure, default off):
+  // PUBLIC_WEB_TRUST_REQUEST_ORIGIN=true.
+  const returnOrigin = require('../utils/returnOrigin');
+
+  const getAllowedWebReturnOrigins = (req) =>
+    returnOrigin.buildAllowedReturnOrigins(process.env, getRequestOrigin(req));
 
   const sanitizeExternalReturnTo = (rawReturnTo, req) => {
     const raw = String(rawReturnTo || '').trim();
     if (!raw) return '';
-
-    let parsed;
+    if (!returnOrigin.isReturnOriginAllowed(raw, getAllowedWebReturnOrigins(req))) {
+      return '';
+    }
     try {
-      parsed = new URL(raw);
+      return new URL(raw).toString();
     } catch (_error) {
       return '';
     }
-
-    const allowedOrigins = getAllowedWebReturnOrigins(req);
-    if (!allowedOrigins.includes(parsed.origin)) {
-      return '';
-    }
-    return parsed.toString();
   };
 
   const getPublicWebDiscordRedirectUri = (req) => {
     const configured = String(process.env.PUBLIC_WEB_DISCORD_REDIRECT_URI || '').trim();
     if (configured) return configured;
+    // Prefer the operator-configured canonical origin over request headers.
+    const base = returnOrigin.getConfiguredWebOrigins(process.env)[0];
+    if (base) {
+      return `${base}/api/public/v1/auth/discord/callback`;
+    }
+    // Last-resort fallback only when nothing is configured (e.g. local dev).
     const requestOrigin = normalizeOrigin(getRequestOrigin(req));
     if (!requestOrigin) return '';
     return `${requestOrigin}/api/public/v1/auth/discord/callback`;
@@ -1271,6 +1278,11 @@ function createAuthUserRouter({
         return res.redirect('/app?error=user_fetch_failed');
       }
 
+      // Capture returnTo BEFORE regenerating (regenerate yields a fresh,
+      // empty session). Then establish the authenticated user on the new id.
+      const returnTo = String(statePayload?.returnTo || req.session.returnTo || '').trim();
+      await regenerateSession(req);
+
       req.session.discordUser = {
         id: userData.id,
         username: userData.username,
@@ -1281,7 +1293,6 @@ function createAuthUserRouter({
         tokenExpiresAt: Date.now() + (Math.max(60, Number(tokenData.expires_in || 3600)) - 30) * 1000
       };
 
-      const returnTo = String(statePayload?.returnTo || req.session.returnTo || '').trim();
       delete req.session.returnTo;
       await saveSession(req);
       let safeReturn = returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/app';

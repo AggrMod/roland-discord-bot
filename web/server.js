@@ -362,6 +362,12 @@ class WebServer {
 
     // CSRF defense-in-depth: require XMLHttpRequest marker on internal mutating
     // API calls. Secret-authenticated webhook/entitlement routes are exempt.
+    // Fix J (audit C-1) layers a real synchronizer-token check on top, gated by
+    // CSRF_MODE (off | monitor | enforce; default monitor — logs but does not
+    // block, so the portal can never be locked out by a rollout). The token is
+    // only required for cookie-authenticated requests (bearer/public API and
+    // unauthenticated requests are not CSRF-exploitable).
+    const { csrfMode, getOrCreateCsrfToken, isCsrfTokenValid } = require('./utils/csrf');
     const mutatingMethods = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
     this.app.use('/api', (req, res, next) => {
       if (!mutatingMethods.has(req.method)) {
@@ -379,10 +385,21 @@ class WebServer {
         return res.status(403).json(toErrorResponse('Missing or invalid X-Requested-With header', 'FORBIDDEN'));
       }
 
+      const mode = csrfMode();
+      if (mode !== 'off' && req.session?.discordUser) {
+        const ok = isCsrfTokenValid(req.session.csrfToken, req.headers['x-csrf-token']);
+        if (!ok) {
+          if (mode === 'enforce') {
+            return res.status(403).json(toErrorResponse('Invalid or missing CSRF token', 'FORBIDDEN'));
+          }
+          logger.warn(`[csrf] MONITOR: missing/invalid CSRF token for ${req.method} ${pathName} (enforce mode would reject)`);
+        }
+      }
+
       next();
     });
-    // Stub endpoint so portal.js fetchCsrfToken() doesn't 404.
-    this.app.get('/api/csrf-token', (req, res) => res.json(toSuccessResponse({ token: '' })));
+    // Issue a real per-session CSRF token (portal.js fetches and attaches it).
+    this.app.get('/api/csrf-token', (req, res) => res.json(toSuccessResponse({ token: getOrCreateCsrfToken(req.session) })));
   }
 
   setupRoutes() {

@@ -166,7 +166,7 @@ module.exports = {
   async handleView(interaction) {
     await interaction.deferReply();
 
-    const summary = treasuryService.getSummary();
+    const summary = treasuryService.getSummary(interaction.guildId || null);
 
     if (!summary.success) {
       return interaction.editReply({ 
@@ -199,7 +199,7 @@ module.exports = {
   async handleAdminStatus(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
-    const adminSummary = treasuryService.getAdminSummary();
+    const adminSummary = treasuryService.getAdminSummary(interaction.guildId || null);
     if (!adminSummary.success) {
       return interaction.editReply({ content: `❌ ${adminSummary.message || 'Unable to read treasury config.'}`, ephemeral: true });
     }
@@ -233,7 +233,7 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
 
     try {
-      const result = await treasuryService.fetchBalances();
+      const result = await treasuryService.fetchBalances(interaction.guildId || null);
       if (!result.success) {
         return interaction.editReply({ content: `❌ ${result.message || 'Refresh failed.'}`, ephemeral: true });
       }
@@ -255,7 +255,7 @@ module.exports = {
   async handleAdminEnable(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
-    const result = treasuryService.updateConfig({ enabled: true });
+    const result = treasuryService.updateConfig({ enabled: true }, interaction.guildId || null);
     if (!result.success) {
       return interaction.editReply({ content: `❌ ${result.message}`, ephemeral: true });
     }
@@ -270,7 +270,7 @@ module.exports = {
   async handleAdminDisable(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
-    const result = treasuryService.updateConfig({ enabled: false });
+    const result = treasuryService.updateConfig({ enabled: false }, interaction.guildId || null);
     if (!result.success) {
       return interaction.editReply({ content: `❌ ${result.message}`, ephemeral: true });
     }
@@ -287,7 +287,7 @@ module.exports = {
 
     const address = interaction.options.getString('address');
 
-    const result = treasuryService.updateConfig({ solanaWallet: address });
+    const result = treasuryService.updateConfig({ solanaWallet: address }, interaction.guildId || null);
     if (!result.success) {
       return interaction.editReply({ 
         content: `❌ ${result.message}`,
@@ -308,7 +308,7 @@ module.exports = {
 
     const hours = interaction.options.getInteger('hours');
 
-    const result = treasuryService.updateConfig({ refreshHours: hours });
+    const result = treasuryService.updateConfig({ refreshHours: hours }, interaction.guildId || null);
     if (!result.success) {
       return interaction.editReply({ content: `❌ ${result.message}`, ephemeral: true });
     }
@@ -324,7 +324,7 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
 
     const limit = interaction.options.getInteger('limit') || 10;
-    const result = await treasuryService.getRecentTransactions(limit);
+    const result = await treasuryService.getRecentTransactions(limit, interaction.guildId || null);
 
     if (!result.success) {
       return interaction.editReply({ content: `❌ ${result.message}`, ephemeral: true });
@@ -369,13 +369,13 @@ module.exports = {
       txAlertIncomingOnly: incomingOnly !== null ? incomingOnly : undefined,
       txAlertMinSol: minSol !== null ? minSol : undefined,
       txLastSignature: null
-    });
+    }, interaction.guildId || null);
 
     if (!result.success) {
       return interaction.editReply({ content: `❌ ${result.message}`, ephemeral: true });
     }
 
-    const cfg = treasuryService.getAdminSummary().config;
+    const cfg = treasuryService.getAdminSummary(interaction.guildId || null).config;
     await interaction.editReply({
       content: enabled
         ? `✅ Tx alerts enabled in <#${cfg.txAlertChannelId}> | incoming_only=${cfg.txAlertIncomingOnly ? 'yes' : 'no'} | min_sol=${cfg.txAlertMinSol}`

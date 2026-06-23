@@ -78,19 +78,58 @@ class TreasuryService {
   /**
    * Get current treasury configuration
    */
-  getConfig() {
+  // Fix E (audit H-1): per-tenant treasury config. Default OFF means every
+  // method below targets the legacy single global row exactly as before — zero
+  // behavior change. When TREASURY_PER_TENANT=true AND a valid guildId is
+  // supplied, config is read/written from the per-guild table instead, so one
+  // tenant's admin can no longer overwrite another tenant's treasury settings.
+  _perTenantEnabled() {
+    return String(process.env.TREASURY_PER_TENANT || '').trim().toLowerCase() === 'true';
+  }
+
+  _scopeFor(guildId) {
+    const gid = String(guildId || '').trim();
+    if (this._perTenantEnabled() && /^\d{17,20}$/.test(gid)) {
+      return { table: 'treasury_config_guild', whereCol: 'guild_id', key: gid, perGuild: true };
+    }
+    return { table: 'treasury_config', whereCol: 'id', key: 1, perGuild: false };
+  }
+
+  getConfig(guildId = null) {
     try {
-      let config = db.prepare('SELECT * FROM treasury_config WHERE id = 1').get();
-      
+      const scope = this._scopeFor(guildId);
+      let config = db.prepare(`SELECT * FROM ${scope.table} WHERE ${scope.whereCol} = ?`).get(scope.key);
+
       if (!config) {
-        // Initialize default config
-        db.prepare(`
-          INSERT INTO treasury_config (id, enabled, refresh_hours) 
-          VALUES (1, 0, 4)
-        `).run();
-        config = db.prepare('SELECT * FROM treasury_config WHERE id = 1').get();
+        if (scope.perGuild) {
+          // Lazily backfill from the legacy global row so a tenant inherits any
+          // pre-existing single-tenant config the first time it is touched.
+          let legacy = null;
+          try { legacy = db.prepare('SELECT * FROM treasury_config WHERE id = 1').get(); } catch (_error) { legacy = null; }
+          db.prepare(`
+            INSERT INTO treasury_config_guild (
+              guild_id, enabled, solana_wallet, refresh_hours,
+              tx_alerts_enabled, tx_alert_channel_id, tx_alert_incoming_only,
+              tx_alert_min_sol, tx_last_signature, watch_channel_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            scope.key,
+            legacy?.enabled ?? 0,
+            legacy?.solana_wallet ?? null,
+            legacy?.refresh_hours ?? 4,
+            legacy?.tx_alerts_enabled ?? 0,
+            legacy?.tx_alert_channel_id ?? null,
+            legacy?.tx_alert_incoming_only ?? 0,
+            legacy?.tx_alert_min_sol ?? 0,
+            legacy?.tx_last_signature ?? null,
+            legacy?.watch_channel_id ?? null
+          );
+        } else {
+          db.prepare('INSERT INTO treasury_config (id, enabled, refresh_hours) VALUES (1, 0, 4)').run();
+        }
+        config = db.prepare(`SELECT * FROM ${scope.table} WHERE ${scope.whereCol} = ?`).get(scope.key);
       }
-      
+
       return config;
     } catch (error) {
       logger.error('Error fetching treasury config:', error);
@@ -101,8 +140,11 @@ class TreasuryService {
   /**
    * Update treasury configuration (admin only)
    */
-  updateConfig({ enabled, solanaWallet, refreshHours, txAlertsEnabled, txAlertChannelId, txAlertIncomingOnly, txAlertMinSol, txLastSignature, watchChannelId }) {
+  updateConfig({ enabled, solanaWallet, refreshHours, txAlertsEnabled, txAlertChannelId, txAlertIncomingOnly, txAlertMinSol, txLastSignature, watchChannelId } = {}, guildId = null) {
     try {
+      const scope = this._scopeFor(guildId);
+      // Ensure the target row exists (creates/backfills a per-guild row if needed).
+      this.getConfig(guildId);
       const updates = [];
       const params = [];
 
@@ -167,9 +209,9 @@ class TreasuryService {
       }
 
       updates.push('updated_at = CURRENT_TIMESTAMP');
-      params.push(1); // WHERE id = 1
+      params.push(scope.key); // WHERE <whereCol> = key
 
-      const sql = `UPDATE treasury_config SET ${updates.join(', ')} WHERE id = ?`;
+      const sql = `UPDATE ${scope.table} SET ${updates.join(', ')} WHERE ${scope.whereCol} = ?`;
       db.prepare(sql).run(...params);
 
       logger.log('📝 Treasury config updated:', { enabled, solanaWallet: solanaWallet ? this.maskAddress(solanaWallet) : null, refreshHours });
@@ -207,9 +249,10 @@ class TreasuryService {
   /**
    * Fetch treasury balances from Solana blockchain
    */
-  async fetchBalances() {
-    const config = this.getConfig();
-    
+  async fetchBalances(guildId = null) {
+    const scope = this._scopeFor(guildId);
+    const config = this.getConfig(guildId);
+
     if (!config || !config.enabled) {
       return { success: false, message: 'Treasury monitoring is disabled' };
     }
@@ -243,14 +286,14 @@ class TreasuryService {
 
       // Update database
       db.prepare(`
-        UPDATE treasury_config 
-        SET sol_balance = ?, 
-            usdc_balance = ?, 
+        UPDATE ${scope.table}
+        SET sol_balance = ?,
+            usdc_balance = ?,
             last_updated = CURRENT_TIMESTAMP,
             last_error = NULL,
             updated_at = CURRENT_TIMESTAMP
-        WHERE id = 1
-      `).run(solBalanceFormatted, usdcBalance);
+        WHERE ${scope.whereCol} = ?
+      `).run(solBalanceFormatted, usdcBalance, scope.key);
 
       logger.log(`💰 Treasury balances updated: ${solBalanceFormatted} SOL, ${usdcBalance} USDC`);
 
@@ -267,11 +310,11 @@ class TreasuryService {
       
       // Store error in database
       db.prepare(`
-        UPDATE treasury_config 
+        UPDATE ${scope.table}
         SET last_error = ?,
             updated_at = CURRENT_TIMESTAMP
-        WHERE id = 1
-      `).run(error.message);
+        WHERE ${scope.whereCol} = ?
+      `).run(error.message, scope.key);
 
       return {
         success: false,
@@ -283,9 +326,9 @@ class TreasuryService {
   /**
    * Get treasury summary (safe for public consumption)
    */
-  getSummary() {
-    const config = this.getConfig();
-    
+  getSummary(guildId = null) {
+    const config = this.getConfig(guildId);
+
     if (!config || !config.enabled) {
       return {
         success: false,
@@ -310,9 +353,9 @@ class TreasuryService {
   /**
    * Get treasury summary for admin (includes masked wallet)
    */
-  getAdminSummary() {
-    const config = this.getConfig();
-    
+  getAdminSummary(guildId = null) {
+    const config = this.getConfig(guildId);
+
     if (!config) {
       return {
         success: false,
@@ -351,8 +394,8 @@ class TreasuryService {
   /**
    * Get recent treasury wallet transactions (incoming/outgoing SOL)
    */
-  async getRecentTransactions(limit = 15) {
-    const config = this.getConfig();
+  async getRecentTransactions(limit = 15, guildId = null) {
+    const config = this.getConfig(guildId);
 
     if (!config || !config.solana_wallet) {
       return { success: false, message: 'No treasury wallet configured' };
@@ -406,18 +449,18 @@ class TreasuryService {
   /**
    * Check for new txs and post alerts to configured channel
    */
-  async checkAndSendTxAlerts() {
-    const config = this.getConfig();
+  async checkAndSendTxAlerts(guildId = null) {
+    const config = this.getConfig(guildId);
     if (!config || config.tx_alerts_enabled !== 1 || !config.tx_alert_channel_id || !config.solana_wallet) return;
 
-    const txResult = await this.getRecentTransactions(20);
+    const txResult = await this.getRecentTransactions(20, guildId);
     if (!txResult.success || !txResult.transactions.length) return;
 
     const latestSig = txResult.transactions[0].signature;
 
     // First run baseline: set pointer, don't flood old txs
     if (!config.tx_last_signature) {
-      this.updateConfig({ txLastSignature: latestSig });
+      this.updateConfig({ txLastSignature: latestSig }, guildId);
       return;
     }
 
@@ -434,7 +477,7 @@ class TreasuryService {
       .filter(tx => !(config.tx_alert_incoming_only === 1 && tx.direction !== 'incoming'))
       .filter(tx => Math.abs(tx.deltaSol) >= Number(config.tx_alert_min_sol || 0));
 
-    this.updateConfig({ txLastSignature: latestSig });
+    this.updateConfig({ txLastSignature: latestSig }, guildId);
 
     if (!filtered.length) return;
 
@@ -459,11 +502,12 @@ class TreasuryService {
   /**
    * Post or update a persistent watch panel embed in Discord
    */
-  async postOrUpdateWatchPanel(client) {
+  async postOrUpdateWatchPanel(client, guildId = null) {
     const c = client || this.client;
     if (!c) return { success: false, message: 'No Discord client available' };
 
-    const config = this.getConfig();
+    const scope = this._scopeFor(guildId);
+    const config = this.getConfig(guildId);
     if (!config || !config.watch_channel_id) {
       return { success: false, message: 'No watch channel configured' };
     }
@@ -509,7 +553,7 @@ class TreasuryService {
 
       // Post new message
       const msg = await channel.send({ embeds: [embed] });
-      db.prepare('UPDATE treasury_config SET watch_message_id = ? WHERE id = 1').run(msg.id);
+      db.prepare(`UPDATE ${scope.table} SET watch_message_id = ? WHERE ${scope.whereCol} = ?`).run(msg.id, scope.key);
       logger.log(`💰 Treasury watch panel posted in #${channel.name} (${msg.id})`);
       return { success: true, messageId: msg.id };
     } catch (error) {
@@ -543,9 +587,57 @@ class TreasuryService {
   /**
    * Start automatic refresh scheduler
    */
+  // The guild scopes the scheduler should service. Global mode -> [null]
+  // (legacy single config). Per-tenant mode -> every enabled per-guild config.
+  _activeSchedulerGuildIds() {
+    if (!this._perTenantEnabled()) return [null];
+    try {
+      const rows = db.prepare(`
+        SELECT guild_id FROM treasury_config_guild
+        WHERE enabled = 1 AND solana_wallet IS NOT NULL AND solana_wallet != ''
+      `).all();
+      return rows.map(row => row.guild_id).filter(Boolean);
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  _schedulerIntervalMs() {
+    if (!this._perTenantEnabled()) {
+      const config = this.getConfig();
+      return Math.max(1, Number(config?.refresh_hours) || 4) * 60 * 60 * 1000;
+    }
+    try {
+      const row = db.prepare(`
+        SELECT MIN(refresh_hours) AS h FROM treasury_config_guild
+        WHERE enabled = 1 AND solana_wallet IS NOT NULL AND solana_wallet != ''
+      `).get();
+      return Math.max(1, Number(row?.h) || 4) * 60 * 60 * 1000;
+    } catch (_error) {
+      return 4 * 60 * 60 * 1000;
+    }
+  }
+
+  async _runSchedulerPass() {
+    const moduleGuard = require('../utils/moduleGuard');
+    if (!moduleGuard.isModuleEnabled('treasury')) return;
+    for (const guildId of this._activeSchedulerGuildIds()) {
+      try {
+        const result = await this.fetchBalances(guildId);
+        if (result.success) {
+          const cfg = this.getConfig(guildId);
+          if (cfg && cfg.watch_channel_id) {
+            await this.postOrUpdateWatchPanel(this.client, guildId).catch(err => logger.error('Watch panel update failed:', err));
+          }
+        }
+        await this.checkAndSendTxAlerts(guildId).catch(err => logger.error('Treasury tx alert check failed:', err));
+      } catch (error) {
+        logger.error(`Scheduled treasury pass failed${guildId ? ` for guild ${guildId}` : ''}:`, error);
+      }
+    }
+  }
+
   startScheduler() {
-    const config = this.getConfig();
-    
     // Check if treasury module is enabled (via module toggles)
     const moduleGuard = require('../utils/moduleGuard');
     if (!moduleGuard.isModuleEnabled('treasury')) {
@@ -553,37 +645,36 @@ class TreasuryService {
       return;
     }
 
-    if (!config || !config.enabled || !config.solana_wallet) {
-      logger.log('⏸️ Treasury scheduler not started (disabled or no wallet configured)');
+    const activeGuildIds = this._activeSchedulerGuildIds();
+
+    if (!this._perTenantEnabled()) {
+      const config = this.getConfig();
+      if (!config || !config.enabled || !config.solana_wallet) {
+        logger.log('⏸️ Treasury scheduler not started (disabled or no wallet configured)');
+        return;
+      }
+    } else if (activeGuildIds.length === 0) {
+      logger.log('⏸️ Treasury scheduler not started (no enabled per-guild treasury configs)');
       return;
     }
 
-    const intervalMs = config.refresh_hours * 60 * 60 * 1000;
+    const intervalMs = this._schedulerIntervalMs();
 
     // Clear existing timer
     if (this.refreshTimer) {
       clearInterval(this.refreshTimer);
     }
 
-    // Initial fetch
-    if (moduleGuard.isModuleEnabled('treasury')) {
-      this.fetchBalances()
-        .then(result => { if (result.success && config.watch_channel_id) this.postOrUpdateWatchPanel().catch(err => logger.error('Watch panel update failed:', err)); })
-        .catch(err => logger.error('Initial treasury fetch failed:', err));
-      this.checkAndSendTxAlerts().catch(err => logger.error('Initial treasury tx alert check failed:', err));
-    }
+    // Initial pass
+    this._runSchedulerPass().catch(err => logger.error('Initial treasury pass failed:', err));
 
-    // Schedule recurring fetches
+    // Schedule recurring passes
     this.refreshTimer = setInterval(() => {
-      if (moduleGuard.isModuleEnabled('treasury')) {
-        this.fetchBalances()
-          .then(result => { if (result.success) { const cfg = this.getConfig(); if (cfg && cfg.watch_channel_id) this.postOrUpdateWatchPanel().catch(err => logger.error('Watch panel update failed:', err)); } })
-          .catch(err => logger.error('Scheduled treasury fetch failed:', err));
-        this.checkAndSendTxAlerts().catch(err => logger.error('Scheduled treasury tx alert check failed:', err));
-      }
+      this._runSchedulerPass().catch(err => logger.error('Scheduled treasury pass failed:', err));
     }, intervalMs);
 
-    logger.log(`⏰ Treasury auto-refresh started (every ${config.refresh_hours} hours)`);
+    const scopeNote = this._perTenantEnabled() ? `, ${activeGuildIds.length} guild(s)` : '';
+    logger.log(`⏰ Treasury auto-refresh started (every ${Math.round(intervalMs / 3600000)} hours${scopeNote})`);
   }
 
   /**

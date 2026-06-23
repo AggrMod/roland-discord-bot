@@ -114,7 +114,7 @@ function createAdminTrackersRouter({
   router.get('/api/admin/treasury', adminAuthMiddleware, (req, res) => {
     if (!ensureWalletTrackerModule(req, res)) return;
     try {
-      const summary = treasuryService?.getAdminSummary?.();
+      const summary = treasuryService?.getAdminSummary?.(req.guildId || null);
       if (!summary?.success) {
         return res.status(400).json(toErrorResponse(summary?.message || 'Failed to load treasury config', 'VALIDATION_ERROR', null, summary || null));
       }
@@ -138,11 +138,11 @@ function createAdminTrackersRouter({
         txAlertIncomingOnly: body.txAlertIncomingOnly ?? body.tx_alert_incoming_only,
         txAlertMinSol: body.txAlertMinSol ?? body.tx_alert_min_sol,
         watchChannelId: body.watchChannelId ?? body.watch_channel_id,
-      });
+      }, req.guildId || null);
       if (!result?.success) {
         return res.status(400).json(toErrorResponse(result?.message || 'Failed to update treasury config', 'VALIDATION_ERROR', null, result || null));
       }
-      const summary = treasuryService?.getAdminSummary?.();
+      const summary = treasuryService?.getAdminSummary?.(req.guildId || null);
       return res.json(toSuccessResponse({
         ...result,
         config: summary?.config || null,

@@ -432,7 +432,7 @@ router.get('/stats', asyncHandler(async (req, res) => {
  * Returns treasury summary (no sensitive wallet addresses)
  */
 router.get('/treasury', asyncHandler(async (req, res) => {
-  const summary = treasuryService.getSummary();
+  const summary = treasuryService.getSummary(getRequestedGuildId(req) || null);
 
   if (!summary.success) {
     return res.json(success({}, { message: summary.message || 'Treasury unavailable' }));
@@ -449,7 +449,7 @@ router.get('/treasury', asyncHandler(async (req, res) => {
  */
 router.get('/treasury/transactions', asyncHandler(async (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit || '20', 10), 1), 50);
-  const result = await treasuryService.getRecentTransactions(limit);
+  const result = await treasuryService.getRecentTransactions(limit, getRequestedGuildId(req) || null);
 
   if (!result.success) {
     return res.status(400).json(error('TREASURY_TX_UNAVAILABLE', result.message || 'Could not fetch treasury transactions'));

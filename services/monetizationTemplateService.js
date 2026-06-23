@@ -325,7 +325,7 @@ class MonetizationTemplateService {
     }
 
     for (const [moduleKey, enabled] of Object.entries(template.modules || {})) {
-      const moduleResult = tenantService.setTenantModule(guildId, moduleKey, !!enabled, actorId);
+      const moduleResult = tenantService.setTenantModule(guildId, moduleKey, !!enabled, actorId, { bypassPlanGate: true });
       if (!moduleResult.success) {
         return { success: false, message: moduleResult.message || `Failed to set module ${moduleKey}` };
       }
@@ -383,7 +383,7 @@ class MonetizationTemplateService {
     }
 
     for (const [moduleKey, enabled] of Object.entries(beforeTenant.modules || {})) {
-      const moduleResult = tenantService.setTenantModule(guildId, moduleKey, !!enabled, actorId);
+      const moduleResult = tenantService.setTenantModule(guildId, moduleKey, !!enabled, actorId, { bypassPlanGate: true });
       if (!moduleResult.success) {
         return { success: false, message: moduleResult.message || `Failed restoring module ${moduleKey}` };
       }

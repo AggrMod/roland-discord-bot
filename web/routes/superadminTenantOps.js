@@ -912,7 +912,8 @@ function createSuperadminTenantOpsRouter({
         req.params.guildId,
         moduleKey,
         enabled,
-        req.session.discordUser.id
+        req.session.discordUser.id,
+        { bypassPlanGate: true } // superadmin can intentionally grant any module
       );
 
       if (!result.success) {

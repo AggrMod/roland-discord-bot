@@ -629,7 +629,7 @@ class TenantService {
     };
   }
 
-  setTenantModule(guildId, moduleKey, enabled, actorId) {
+  setTenantModule(guildId, moduleKey, enabled, actorId, options = {}) {
     const normalizedGuildId = normalizeGuildId(guildId);
     const normalizedModuleKey = normalizeString(moduleKey)?.toLowerCase();
 
@@ -700,6 +700,30 @@ class TenantService {
               used: enabledModuleSet.size,
             };
           }
+        }
+      }
+
+      // Plan-identity gate (Fix D / audit M-1): a tenant's plan should not be
+      // able to enable a module the plan doesn't include (e.g. a free tenant
+      // turning on aiassistant). Operator/superadmin callers pass
+      // bypassPlanGate. Already-enabled (grandfathered) modules are never
+      // disturbed. Rollout is monitor-before-enforce via env, default off so
+      // there is NO behavior change until an operator opts in.
+      const planGateMode = String(process.env.MODULE_IDENTITY_ENFORCE || 'off').trim().toLowerCase();
+      if (!options.bypassPlanGate && !alreadyEnabled && (planGateMode === 'monitor' || planGateMode === 'enforce')) {
+        const planKey = normalizePlanKey(before?.planKey || context.tenant?.plan_key || getDefaultPlanKey()) || getDefaultPlanKey();
+        const plan = getPlanPreset(planKey);
+        const moduleIncludedInPlan = plan?.modules?.[requestedCountKey] === true;
+        if (!moduleIncludedInPlan) {
+          if (planGateMode === 'enforce') {
+            return {
+              success: false,
+              code: 'module_not_in_plan',
+              message: `The ${normalizedModuleKey} module is not included in the ${planKey} plan. Upgrade to enable it.`,
+              planKey,
+            };
+          }
+          logger.warn(`[module-identity] MONITOR: would block enabling '${requestedCountKey}' on plan '${planKey}' for guild ${normalizedGuildId} (set MODULE_IDENTITY_ENFORCE=enforce to block)`);
         }
       }
     }

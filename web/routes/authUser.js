@@ -1311,8 +1311,16 @@ function createAuthUserRouter({
   });
 
   router.get('/auth/discord/logout', (req, res) => {
-    req.session.destroy(() => {
-      res.clearCookie('connect.sid');
+    // Fix L-5 (audit): clear the cookie with the SAME attributes it was set
+    // with, otherwise the browser keeps it when SESSION_COOKIE_DOMAIN is used.
+    const clearOptions = { path: '/' };
+    const cookieDomain = String(process.env.SESSION_COOKIE_DOMAIN || '').trim();
+    if (cookieDomain) clearOptions.domain = cookieDomain;
+    req.session.destroy((error) => {
+      if (error) {
+        logger.warn('Session destroy on logout failed:', error?.message || error);
+      }
+      res.clearCookie('connect.sid', clearOptions);
       return res.redirect('/dashboard');
     });
   });

@@ -293,9 +293,32 @@ class WebServer {
 
     this.app.use(require('cookie-parser')());
     this.app.use(express.json({ limit: process.env.WEBHOOK_BODY_LIMIT || '6mb' }));
+    // Fix M-3 (audit): Content-Security-Policy, flag-gated. Default off keeps
+    // today's behavior (no CSP). CSP_MODE=report-only emits a non-blocking
+    // Content-Security-Policy-Report-Only header (observe before enforcing);
+    // CSP_MODE=enforce blocks. The portal relies on inline handlers/styles, so
+    // 'unsafe-inline' is allowed — the policy still restricts script/object/
+    // frame sources, base-uri, and frame-ancestors (clickjacking).
+    const cspMode = String(process.env.CSP_MODE || 'off').trim().toLowerCase();
+    const cspEnabled = cspMode === 'report-only' || cspMode === 'reportonly' || cspMode === 'enforce';
     this.app.use(helmet({
-      // Portal currently relies on inline handlers/styles; keep CSP rollout separate.
-      contentSecurityPolicy: false,
+      contentSecurityPolicy: cspEnabled
+        ? {
+          useDefaults: false,
+          reportOnly: cspMode !== 'enforce',
+          directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'", 'https://challenges.cloudflare.com'],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: ["'self'", 'data:', 'https:'],
+            connectSrc: ["'self'", 'https:'],
+            frameSrc: ['https://challenges.cloudflare.com'],
+            frameAncestors: ["'self'"],
+            baseUri: ["'self'"],
+            objectSrc: ["'none'"],
+          },
+        }
+        : false,
       crossOriginEmbedderPolicy: false,
     }));
     this.app.use(express.static(path.join(__dirname, 'public'), {

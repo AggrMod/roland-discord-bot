@@ -498,7 +498,11 @@ class TenantService {
 
     const context = this.getTenantContext(guildId);
     if (!context || !context.tenant) {
-      return true;
+      // Fix L-2 (audit): default is fail-open for back-compat. Set
+      // TENANT_MODULE_GATE_FAIL_CLOSED=true to deny modules for guilds with no
+      // tenant context (e.g. not-yet-scaffolded), the safer posture.
+      const failClosed = String(process.env.TENANT_MODULE_GATE_FAIL_CLOSED || '').trim().toLowerCase() === 'true';
+      return !failClosed;
     }
 
     const stmt = db.prepare(`

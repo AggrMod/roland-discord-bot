@@ -1487,6 +1487,7 @@ const MODULE_TOGGLE_SETTING_FIELD_MAP = Object.freeze({
   aiassistant: ['moduleAiAssistantEnabled'],
   ticketing: ['moduleTicketingEnabled'],
   engagement: ['moduleEngagementEnabled'],
+  guildguard: ['moduleGuildGuardEnabled'],
   minigames: ['moduleMinigamesEnabled', 'moduleBattleEnabled'],
   heist: ['moduleMissionsEnabled'],
   vault: ['moduleVaultEnabled'],
@@ -2195,6 +2196,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     welcome: settings.moduleWelcomeEnabled !== false,
     ticketing: !!settings.moduleTicketingEnabled,
     engagement: !!settings.moduleEngagementEnabled,
+    guildguard: !!settings.moduleGuildGuardEnabled,
     roleclaim: !!settings.moduleRoleClaimEnabled,
     minigames: minigamesEnabled,
     battle: minigamesEnabled,
@@ -2296,6 +2298,7 @@ function applySettingsTabVisibility(settings = {}) {
     selfserveroles: !!settings.moduleRoleClaimEnabled,
     ticketing: !!settings.moduleTicketingEnabled,
     engagement: !!settings.moduleEngagementEnabled,
+    guildguard: !!settings.moduleGuildGuardEnabled,
   };
   const sectionIntegratedTabs = new Set(['aiassistant', 'treasury', 'invites', 'nfttracker', 'tokentracker', 'battle', 'heist', 'selfserve', 'ticketing', 'engagement']);
 
@@ -7507,6 +7510,7 @@ const TENANT_MODULE_LABELS = {
   nfttracker: 'NFT Tracker',
   tokentracker: 'Token Tracker',
   selfserveroles: 'Self-Serve Roles',
+  guildguard: 'Guild Guard',
   branding: 'Branding',
   analytics: 'Analytics',
   engagement: 'Engagement & Points'
@@ -10655,6 +10659,7 @@ async function loadAdminSettingsView() {
       { id: 'moduleRoleClaimEnabled',    label: 'Self-Serve Roles',icon: 'R',  moduleKey: 'selfserveroles'},
       { id: 'moduleTicketingEnabled',    label: 'Ticketing',       icon: 'TK', moduleKey: 'ticketing'     },
       { id: 'moduleEngagementEnabled',   label: 'Engagement',      icon: 'E',  moduleKey: 'engagement'    },
+      { id: 'moduleGuildGuardEnabled',   label: 'Guild Guard',     icon: 'GG', moduleKey: 'guildguard'    },
     ];
 
     // Build module toggle helper (styled toggle switch)
@@ -10761,7 +10766,7 @@ async function savePortalSettings() {
   const moduleIds = [
     'moduleMinigamesEnabled', 'moduleBattleEnabled', 'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleBrandingEnabled',
     'moduleMissionsEnabled', 'moduleVaultEnabled', 'moduleTelegramBridgeEnabled', 'moduleAutoMessagesEnabled', 'moduleWelcomeEnabled', 'moduleWalletTrackerEnabled', 'moduleTreasuryEnabled', 'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleAiAssistantEnabled',
-    'moduleRoleClaimEnabled', 'moduleTicketingEnabled', 'moduleEngagementEnabled',
+    'moduleRoleClaimEnabled', 'moduleTicketingEnabled', 'moduleEngagementEnabled', 'moduleGuildGuardEnabled',
   ];
   const newSettings = {};
   for (const id of moduleIds) {

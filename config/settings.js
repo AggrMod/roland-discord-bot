@@ -65,6 +65,7 @@ class SettingsManager {
       moduleRoleClaimEnabled: true,
       moduleTicketingEnabled: true,
       moduleEngagementEnabled: true,
+      moduleGuildGuardEnabled: true,
       moduleAiAssistantEnabled: false,
       moduleTelegramBridgeEnabled: false,
       moduleAutoMessagesEnabled: true,
@@ -356,6 +357,7 @@ class SettingsManager {
         'moduleRoleClaimEnabled',
         'moduleTicketingEnabled',
         'moduleEngagementEnabled',
+        'moduleGuildGuardEnabled',
         'moduleAiAssistantEnabled',
         'moduleTelegramBridgeEnabled',
         'moduleAutoMessagesEnabled'

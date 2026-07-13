@@ -66,6 +66,7 @@ function createAdminSettingsRouter({
         effectiveSettings.moduleRoleClaimEnabled = !!tenantContext.modules.selfserveroles;
         effectiveSettings.moduleTicketingEnabled = !!tenantContext.modules.ticketing;
         effectiveSettings.moduleEngagementEnabled = !!tenantContext.modules.engagement;
+        effectiveSettings.moduleGuildGuardEnabled = !!tenantContext.modules.guildguard;
         effectiveSettings.moduleAiAssistantEnabled = !!tenantContext.modules.aiassistant;
         effectiveSettings.moduleTelegramBridgeEnabled = !!tenantContext.modules.telegrambridge;
         effectiveSettings.moduleAutoMessagesEnabled = !!tenantContext.modules.automessages;
@@ -128,7 +129,7 @@ function createAdminSettingsRouter({
         'moduleGovernanceEnabled', 'moduleVerificationEnabled', 'moduleTreasuryEnabled', 'moduleWalletTrackerEnabled',
         'moduleInviteTrackerEnabled',
         'moduleNftTrackerEnabled', 'moduleTokenTrackerEnabled', 'moduleBrandingEnabled', 'moduleMissionsEnabled', 'moduleVaultEnabled', 'moduleBattleEnabled', 'moduleMinigamesEnabled',
-        'moduleWelcomeEnabled', 'moduleTicketingEnabled', 'moduleRoleClaimEnabled', 'moduleEngagementEnabled', 'moduleAiAssistantEnabled', 'moduleTelegramBridgeEnabled', 'moduleAutoMessagesEnabled',
+        'moduleWelcomeEnabled', 'moduleTicketingEnabled', 'moduleRoleClaimEnabled', 'moduleEngagementEnabled', 'moduleGuildGuardEnabled', 'moduleAiAssistantEnabled', 'moduleTelegramBridgeEnabled', 'moduleAutoMessagesEnabled',
         'battleRoundPauseMinSec', 'battleRoundPauseMaxSec', 'battleElitePrepSec', 'battleForcedEliminationIntervalRounds', 'battleDefaultEra',
         'baseVerifiedRoleId', 'autoResyncEnabled', 'ogRoleId', 'ogRoleLimit',
         'treasuryWalletAddress', 'treasuryRefreshInterval', 'txAlertChannelId',
@@ -200,6 +201,7 @@ function createAdminSettingsRouter({
             moduleRoleClaimEnabled: 'selfserveroles',
             moduleTicketingEnabled: 'ticketing',
             moduleEngagementEnabled: 'engagement',
+            moduleGuildGuardEnabled: 'guildguard',
             moduleAiAssistantEnabled: 'aiassistant',
             moduleTelegramBridgeEnabled: 'telegrambridge',
             moduleAutoMessagesEnabled: 'automessages',

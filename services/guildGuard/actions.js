@@ -1,4 +1,5 @@
 const db = require('../../database/db');
+const identityRegistry = require('./identityRegistry');
 
 function recordAction({ event, incident, actionType, status, metadata = {} }) {
   if (!incident?.incident_id) return null;
@@ -10,9 +11,9 @@ function recordAction({ event, incident, actionType, status, metadata = {} }) {
     .get(event.guildId, incident.incident_id);
 }
 
-async function alertStaff({ source, event, decision, config, incident, signals }) {
+async function alertStaff({ source, event, decision, config, incident, signals, thresholdOverride = null, pingStaff = false }) {
   const channelId = String(config?.alertChannelId || '').trim();
-  const threshold = Number(config?.risk?.alert || 25);
+  const threshold = thresholdOverride === null ? Number(config?.risk?.alert || 25) : Number(thresholdOverride);
   if (!channelId || Number(decision?.score || 0) < threshold || !incident) return null;
   const guild = source?.guild || source?.member?.guild;
   let channel = guild?.channels?.cache?.get(channelId) || null;
@@ -21,6 +22,10 @@ async function alertStaff({ source, event, decision, config, incident, signals }
   }
   if (!channel?.send) return recordAction({ event, incident, actionType: 'alert', status: 'skipped', metadata: { reason: 'alert_channel_unavailable', channelId } });
   const detectorNames = [...new Set((signals || []).map(signal => String(signal.detector || '').trim()).filter(Boolean))];
+  const staffIds = pingStaff
+    ? [...new Set(identityRegistry.list(event.guildId).map(identity => String(identity.user_id || '').trim()).filter(userId => userId && userId !== event.userId))]
+    : [];
+  const staffMentions = staffIds.map(userId => `<@${userId}>`).join(' ');
   const messageUrl = event.channelId && event.eventId && /^\d{15,25}$/.test(String(event.eventId))
     ? `https://discord.com/channels/${event.guildId}/${event.channelId}/${event.eventId}`
     : null;
@@ -28,12 +33,13 @@ async function alertStaff({ source, event, decision, config, incident, signals }
     `🛡️ Guild Guard alert: ${event.eventType || 'event'} scored ${decision.score}/100.`,
     `Detectors: ${detectorNames.join(', ') || 'risk signal'}.`,
     event.userId ? `User: <@${event.userId}>` : null,
+    staffMentions ? `Moderator notification: ${staffMentions}` : null,
     messageUrl ? `Message: ${messageUrl}` : null,
     `Incident: ${incident.incident_id}`
   ].filter(Boolean).join('\n');
   try {
-    await channel.send({ content, allowedMentions: { parse: [] } });
-    return recordAction({ event, incident, actionType: 'alert', status: 'applied', metadata: { channelId, detectors: detectorNames } });
+    await channel.send({ content, allowedMentions: staffIds.length ? { users: staffIds } : { parse: [] } });
+    return recordAction({ event, incident, actionType: 'alert', status: 'applied', metadata: { channelId, detectors: detectorNames, pingedStaffIds: staffIds } });
   } catch (error) {
     return recordAction({ event, incident, actionType: 'alert', status: 'failed', metadata: { channelId, error: String(error?.message || error) } });
   }
@@ -42,7 +48,45 @@ async function alertStaff({ source, event, decision, config, incident, signals }
 async function execute({ source, event, decision, config, incident, signals }) {
   const actions = config?.actions || {};
   if (!incident) return null;
-  await alertStaff({ source, event, decision, config, incident, signals });
+  const staffRule = config?.rules?.staffImpersonation || {};
+  const staffImpersonationTriggered = staffRule.enabled === true
+    && Number(decision?.score || 0) > Number(staffRule.threshold ?? 50)
+    && (signals || []).some(signal => signal.detector === 'staff_impersonation');
+  await alertStaff({
+    source,
+    event,
+    decision,
+    config,
+    incident,
+    signals,
+    thresholdOverride: staffImpersonationTriggered ? Number(staffRule.threshold ?? 50) : null,
+    pingStaff: staffImpersonationTriggered && staffRule.pingStaff !== false
+  });
+  if (staffImpersonationTriggered) {
+    if (config?.mode !== 'enforce' || actions.enabled !== true) {
+      return recordAction({ event, incident, actionType: 'staff_impersonation_escalation', status: 'skipped', metadata: { reason: 'enforcement_disabled', threshold: Number(staffRule.threshold ?? 50) } });
+    }
+    const member = source?.member || source;
+    const metadata = { threshold: Number(staffRule.threshold ?? 50), timeoutSeconds: Number(staffRule.timeoutSeconds || 3600), timeoutApplied: false, messageDeleted: false };
+    if (staffRule.timeoutUsers !== false && typeof member?.timeout === 'function') {
+      try {
+        await member.timeout(Math.max(1, Math.min(2419200, metadata.timeoutSeconds)) * 1000, 'Guild Guard staff impersonation escalation');
+        metadata.timeoutApplied = true;
+      } catch (error) {
+        metadata.timeoutError = String(error?.message || error);
+      }
+    }
+    if (staffRule.deleteMessages !== false && typeof source?.delete === 'function') {
+      try {
+        await source.delete();
+        metadata.messageDeleted = true;
+      } catch (error) {
+        metadata.deleteError = String(error?.message || error);
+      }
+    }
+    const applied = metadata.timeoutApplied || metadata.messageDeleted;
+    return recordAction({ event, incident, actionType: 'staff_impersonation_escalation', status: applied ? 'applied' : 'skipped', metadata });
+  }
   if (decision?.action === 'monitor') return null;
   if (config?.mode !== 'enforce' || actions.enabled !== true) {
     return recordAction({ event, incident, actionType: decision.action, status: 'skipped', metadata: { reason: 'enforcement_disabled' } });

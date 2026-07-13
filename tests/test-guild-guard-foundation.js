@@ -192,6 +192,35 @@ assert.ok(alertResult.incident);
 assert.ok(alertPayload && alertPayload.content.includes('Guild Guard alert'));
 assert.ok(db.prepare("SELECT COUNT(*) AS count FROM actions WHERE incident_id = ? AND action_type = 'alert' AND status = 'applied'").get(alertResult.incident.incident_id).count >= 1);
 
+guard.identityRegistry.upsert('guild-rule', { userId: 'rule-staff', username: 'RuleModerator', displayName: 'Rule Moderator' });
+guard.updateConfig('guild-rule', {
+  enabled: true,
+  mode: 'enforce',
+  alertChannelId: 'rule-alert-channel',
+  detectors: { impersonation: { enabled: true, score: 70 } },
+  actions: { enabled: true },
+  rules: { staffImpersonation: { enabled: true, threshold: 50, timeoutSeconds: 3600, deleteMessages: true, pingStaff: true } }
+});
+let ruleAlertPayload = null;
+let ruleTimeoutMs = null;
+let ruleDeleted = false;
+const ruleGuild = {
+  id: 'guild-rule',
+  channels: { cache: new Map([['rule-alert-channel', { send: async payload => { ruleAlertPayload = payload; } }]]) }
+};
+const ruleResult = await guard.process({
+  id: 'rule-message-1', guild: ruleGuild, guildId: 'guild-rule', content: 'visit our support page',
+  author: { id: 'rule-attacker', username: 'RuleModerator' },
+  member: { timeout: async duration => { ruleTimeoutMs = duration; } },
+  delete: async () => { ruleDeleted = true; }
+}, 'message_create');
+assert.ok(ruleResult.incident);
+assert.strictEqual(ruleTimeoutMs, 3600000);
+assert.strictEqual(ruleDeleted, true);
+assert.ok(ruleAlertPayload && ruleAlertPayload.content.includes('<@rule-staff>'));
+assert.deepStrictEqual(ruleAlertPayload.allowedMentions.users, ['rule-staff']);
+assert.strictEqual(db.prepare("SELECT status FROM actions WHERE incident_id = ? AND action_type = 'staff_impersonation_escalation'").get(ruleResult.incident.incident_id).status, 'applied');
+
 guard.updateConfig('guild-raid', {
   enabled: true,
   detectors: { raids: { enabled: true, windowSeconds: 60, joinThreshold: 3 } }

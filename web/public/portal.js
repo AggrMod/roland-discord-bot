@@ -1733,6 +1733,11 @@ function renderGuildGuardConfig(config) {
   document.querySelectorAll('[data-guildguard-detector]').forEach(input => { input.checked = config.detectors?.[input.dataset.guildguardDetector]?.enabled === true; });
   document.getElementById('guildGuardActionsEnabled').checked = config.actions?.enabled === true;
   document.querySelectorAll('[data-guildguard-action]').forEach(input => { input.checked = config.actions?.[input.dataset.guildguardAction] === true; });
+  document.getElementById('guildGuardStaffRuleEnabled').checked = config.rules?.staffImpersonation?.enabled === true;
+  document.getElementById('guildGuardStaffRuleThreshold').value = Number(config.rules?.staffImpersonation?.threshold || 50);
+  document.getElementById('guildGuardStaffRuleTimeoutSeconds').value = Number(config.rules?.staffImpersonation?.timeoutSeconds || 3600);
+  document.getElementById('guildGuardStaffRuleDelete').checked = config.rules?.staffImpersonation?.deleteMessages !== false;
+  document.getElementById('guildGuardStaffRulePing').checked = config.rules?.staffImpersonation?.pingStaff !== false;
   document.getElementById('guildGuardRiskWarning').value = Number(config.risk?.warning || 35);
   document.getElementById('guildGuardRiskTimeout').value = Number(config.risk?.timeout || 60);
   document.getElementById('guildGuardRiskQuarantine').value = Number(config.risk?.quarantine || 80);
@@ -1834,6 +1839,16 @@ async function saveGuildGuardConfig(event) {
   document.querySelectorAll('[data-guildguard-detector]').forEach(input => { detectors[input.dataset.guildguardDetector] = { enabled: input.checked }; });
   const actions = { enabled: document.getElementById('guildGuardActionsEnabled').checked };
   document.querySelectorAll('[data-guildguard-action]').forEach(input => { actions[input.dataset.guildguardAction] = input.checked; });
+  const rules = {
+    staffImpersonation: {
+      enabled: document.getElementById('guildGuardStaffRuleEnabled').checked,
+      threshold: Number(document.getElementById('guildGuardStaffRuleThreshold').value || 50),
+      timeoutUsers: true,
+      timeoutSeconds: Number(document.getElementById('guildGuardStaffRuleTimeoutSeconds').value || 3600),
+      deleteMessages: document.getElementById('guildGuardStaffRuleDelete').checked,
+      pingStaff: document.getElementById('guildGuardStaffRulePing').checked
+    }
+  };
   const risk = {
     warning: Number(document.getElementById('guildGuardRiskWarning').value || 35),
     timeout: Number(document.getElementById('guildGuardRiskTimeout').value || 60),
@@ -1842,7 +1857,7 @@ async function saveGuildGuardConfig(event) {
     decayEnabled: document.getElementById('guildGuardRiskDecayEnabled').checked,
     decayHalfLifeHours: Number(document.getElementById('guildGuardRiskDecayHalfLife').value || 24)
   };
-  const response = await fetch('/api/admin/guildguard/config', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: document.getElementById('guildGuardEnabled').checked, mode: document.getElementById('guildGuardMode').value, retentionDays: Number(document.getElementById('guildGuardRetention').value || 30), alertChannelId: document.getElementById('guildGuardAlertChannel').value || null, detectors, actions, risk }) });
+  const response = await fetch('/api/admin/guildguard/config', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: document.getElementById('guildGuardEnabled').checked, mode: document.getElementById('guildGuardMode').value, retentionDays: Number(document.getElementById('guildGuardRetention').value || 30), alertChannelId: document.getElementById('guildGuardAlertChannel').value || null, detectors, actions, rules, risk }) });
   const payload = await response.json();
   if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to save Guild Guard configuration');
   renderGuildGuardConfig(payload.data?.config || payload.config || {});

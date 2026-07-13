@@ -34,6 +34,13 @@
     <section class="card"><h2>Configuration</h2><pre id="config">Loading...</pre></section>
   </main>
   <script>
+    const guildId = new URLSearchParams(window.location.search).get('guildId') || '';
+    const requestHeaders = { 'X-Requested-With': 'XMLHttpRequest', ...(guildId ? { 'x-guild-id': guildId } : {}) };
+    const apiFetch = (url, options = {}) => fetch(url, {
+      credentials: 'include',
+      ...options,
+      headers: { ...requestHeaders, ...(options.headers || {}) }
+    });
     const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
     const statusCount = (summary, status) => Number(summary?.statuses?.[status] || 0);
     async function reviewIncident(id, status) {
@@ -43,15 +50,15 @@
         ? `/api/admin/guildguard/incidents/${encodeURIComponent(id)}/false-positive`
         : `/api/admin/guildguard/incidents/${encodeURIComponent(id)}/review`;
       const body = status === 'false_positive' ? { reason } : { status };
-      const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const response = await apiFetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (!response.ok) throw new Error('Unable to update incident');
       await load();
     }
     async function load() {
       const [incidentResponse, configResponse, summaryResponse] = await Promise.all([
-        fetch('/api/admin/guildguard/incidents?limit=100'),
-        fetch('/api/admin/guildguard/config'),
-        fetch('/api/admin/guildguard/summary?days=7')
+        apiFetch('/api/admin/guildguard/incidents?limit=100'),
+        apiFetch('/api/admin/guildguard/config'),
+        apiFetch('/api/admin/guildguard/summary?days=7')
       ]);
       const incidentData = await incidentResponse.json();
       const configData = await configResponse.json();
@@ -71,7 +78,7 @@
       }));
     }
     document.getElementById('retention').addEventListener('click', async () => {
-      const response = await fetch('/api/admin/guildguard/retention/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const response = await apiFetch('/api/admin/guildguard/retention/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       const payload = await response.json();
       const result = payload.data?.result || payload.result || {};
       document.getElementById('retention-result').textContent = ` Deleted ${result.deleted || 0} row(s).`;

@@ -1473,6 +1473,7 @@ const MODULE_REGISTRY = [
   { key: 'telegrambridge', label: 'Telegram Bridge', icon: '\u{1F4E1}', section: 'telegram-bridge', adminOnly: true, desc: 'Mirror Telegram groups and channels into Discord channels.' },
   { key: 'automessages', label: 'Auto Messages', icon: '\u{1F4E2}', section: 'auto-messages', adminOnly: true, desc: 'Schedule recurring embedded announcements in selected Discord channels.' },
   { key: 'selfserveroles', label: 'Self-Serve Roles', icon: '\u{1F3AD}', section: 'self-serve-roles', desc: 'Claim optional roles assigned by administrators.' },
+  { key: 'guildguard', label: 'Guild Guard', icon: '\u{1F6E1}\uFE0F', section: 'guildguard', adminOnly: true, externalPath: '/admin/guildguard', desc: 'Review security incidents and configure moderation detectors.' },
   { key: 'aiassistant', label: 'AI Assistant', icon: '\u{1F916}', section: 'aiassistant', adminOnly: true, desc: 'Tune prompts, safety controls, and assistant behavior for your server.' },
   { key: 'help', label: 'Help Center', icon: '\u2753', section: 'help', desc: 'Guides, command references, and troubleshooting across all modules.' }
 ];
@@ -1545,6 +1546,12 @@ async function toggleModuleFromHub(moduleKey, enabled, inputEl) {
   } finally {
     inputEl.disabled = false;
   }
+}
+
+function openModuleExternal(pathname) {
+  const target = new URL(pathname, window.location.origin);
+  if (activeGuildId) target.searchParams.set('guildId', activeGuildId);
+  window.location.assign(target.toString());
 }
 
 function updateBreadcrumbs(items = []) {
@@ -1654,7 +1661,9 @@ function renderModuleHub() {
     
     const onClick = !isEnabled
       ? ''
-      : `switchSection('${mod.section}')`;
+      : mod.externalPath
+        ? `openModuleExternal('${escapeJsString(mod.externalPath)}')`
+        : `switchSection('${mod.section}')`;
     const toggleHtml = (canManageModules && canToggleModuleFromHub(mod.key))
       ? `
         <div style="display:flex;align-items:center;gap:8px; margin-left:auto;" onclick="event.stopPropagation()">

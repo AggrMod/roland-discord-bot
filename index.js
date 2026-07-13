@@ -556,6 +556,47 @@ client.on(Events.GuildCreate, async guild => {
   }
 });
 
+function canUseGuildGuardQuickAction(interaction, action) {
+  const permissions = interaction.memberPermissions;
+  if (permissions?.has?.(PermissionFlagsBits.Administrator) || permissions?.has?.(PermissionFlagsBits.ManageGuild)) return true;
+  const required = {
+    timeout: PermissionFlagsBits.ModerateMembers,
+    unmute: PermissionFlagsBits.ModerateMembers,
+    kick: PermissionFlagsBits.KickMembers,
+    ban: PermissionFlagsBits.BanMembers,
+    delete: PermissionFlagsBits.ManageMessages
+  }[action];
+  return Boolean(required && permissions?.has?.(required));
+}
+
+async function handleGuildGuardActionButton(interaction) {
+  try {
+    const [, action, incidentId] = String(interaction.customId || '').split(':');
+    if (!canUseGuildGuardQuickAction(interaction, action)) {
+      await interaction.reply({ content: 'You do not have permission to use this moderator action.', ephemeral: true });
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    const incident = guildGuardService.getIncident(interaction.guildId, incidentId);
+    if (!incident) {
+      await interaction.editReply({ content: 'This Guild Guard incident is no longer available.' });
+      return;
+    }
+    const result = await guildGuardService.executeQuickAction({
+      guild: interaction.guild,
+      incident,
+      action,
+      actorId: interaction.user?.id
+    });
+    await interaction.editReply({ content: result.status === 'applied' ? `Guild Guard action applied: ${action}.` : `Guild Guard action failed: ${result.metadata_json || 'see incident log'}` });
+  } catch (error) {
+    logger.warn(`[guild-guard] quick action failed: ${error?.message || error}`);
+    const content = 'Guild Guard action could not be completed.';
+    if (interaction.deferred || interaction.replied) await interaction.editReply({ content }).catch(() => {});
+    else await interaction.reply({ content, ephemeral: true }).catch(() => {});
+  }
+}
+
 client.on(Events.InteractionCreate, async interaction => {
   if (interaction.isAutocomplete()) {
     const command = client.commands.get(interaction.commandName);
@@ -587,6 +628,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
   if (interaction.isButton()) {
     const customId = interaction.customId;
+    if (customId.startsWith('guildguard_action:')) { await handleGuildGuardActionButton(interaction); return; }
     if (customId === inviteTrackerService.REFRESH_BUTTON_ID || customId.startsWith(inviteTrackerService.SORT_BUTTON_PREFIX)) {
       await inviteTrackerService.handlePanelInteraction(interaction).catch(() => {});
       return;

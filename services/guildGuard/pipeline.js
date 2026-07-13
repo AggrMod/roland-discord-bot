@@ -38,6 +38,7 @@ class DetectionPipeline {
     if (signals.length > 0) await this.recordSignals(event, signals, config);
     const incident = await this.recordIncident(event, signals, score, {
       action: decidePolicy(score, config).action,
+      channelId: event.channelId,
       rawContent: event.rawContent,
       urls: event.urls,
       mentions: event.mentions

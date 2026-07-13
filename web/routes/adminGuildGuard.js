@@ -20,6 +20,37 @@ function createAdminGuildGuardRouter({ logger, adminAuthMiddleware, ensureGuildG
     }
   });
 
+  router.get('/api/admin/guildguard/rules', adminAuthMiddleware, (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    return res.json(toSuccessResponse({ rules: guildGuardService.listRules(req.guildId) }));
+  });
+
+  router.post('/api/admin/guildguard/rules', adminAuthMiddleware, (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    try {
+      const config = guildGuardService.createRule(req.guildId, req.body || {}, req.session?.discordUser?.id);
+      return res.status(201).json(toSuccessResponse({ rules: config.rules }));
+    } catch (error) {
+      return res.status(400).json(toErrorResponse(error.message || 'Invalid Guild Guard rule', 'VALIDATION_ERROR'));
+    }
+  });
+
+  router.put('/api/admin/guildguard/rules/:ruleId', adminAuthMiddleware, (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    try {
+      const rule = guildGuardService.updateRule(req.guildId, req.params.ruleId, req.body || {});
+      if (!rule) return res.status(404).json(toErrorResponse('Rule not found', 'NOT_FOUND'));
+      return res.json(toSuccessResponse({ rule }));
+    } catch (error) {
+      return res.status(400).json(toErrorResponse(error.message || 'Invalid Guild Guard rule', 'VALIDATION_ERROR'));
+    }
+  });
+
+  router.delete('/api/admin/guildguard/rules/:ruleId', adminAuthMiddleware, (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    return res.json(toSuccessResponse({ removed: guildGuardService.deleteRule(req.guildId, req.params.ruleId) }));
+  });
+
   router.get('/api/admin/guildguard/incidents', adminAuthMiddleware, (req, res) => {
     if (!ensureGuildGuardModule(req, res)) return;
     return res.json(toSuccessResponse({ incidents: guildGuardService.listIncidents(req.guildId, req.query?.limit) }));

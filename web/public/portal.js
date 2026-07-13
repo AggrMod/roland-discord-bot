@@ -1713,7 +1713,7 @@ const GUILD_GUARD_DETECTOR_LABELS = Object.freeze({
 });
 
 function switchGuildGuardTab(tab) {
-  const selected = ['incidents', 'configuration', 'domains', 'staff'].includes(tab) ? tab : 'incidents';
+  const selected = ['incidents', 'configuration', 'rules', 'domains', 'staff'].includes(tab) ? tab : 'incidents';
   document.querySelectorAll('#guildGuardTabs .settings-tab').forEach(button => button.classList.toggle('active', button.dataset.tab === selected));
   document.querySelectorAll('#section-guildguard .settings-tab-pane').forEach(pane => { pane.style.display = pane.id === `guildGuardTab-${selected}` ? '' : 'none'; });
 }
@@ -1733,11 +1733,6 @@ function renderGuildGuardConfig(config) {
   document.querySelectorAll('[data-guildguard-detector]').forEach(input => { input.checked = config.detectors?.[input.dataset.guildguardDetector]?.enabled === true; });
   document.getElementById('guildGuardActionsEnabled').checked = config.actions?.enabled === true;
   document.querySelectorAll('[data-guildguard-action]').forEach(input => { input.checked = config.actions?.[input.dataset.guildguardAction] === true; });
-  document.getElementById('guildGuardStaffRuleEnabled').checked = config.rules?.staffImpersonation?.enabled === true;
-  document.getElementById('guildGuardStaffRuleThreshold').value = Number(config.rules?.staffImpersonation?.threshold || 50);
-  document.getElementById('guildGuardStaffRuleTimeoutSeconds').value = Number(config.rules?.staffImpersonation?.timeoutSeconds || 3600);
-  document.getElementById('guildGuardStaffRuleDelete').checked = config.rules?.staffImpersonation?.deleteMessages !== false;
-  document.getElementById('guildGuardStaffRulePing').checked = config.rules?.staffImpersonation?.pingStaff !== false;
   document.getElementById('guildGuardRiskWarning').value = Number(config.risk?.warning || 35);
   document.getElementById('guildGuardRiskTimeout').value = Number(config.risk?.timeout || 60);
   document.getElementById('guildGuardRiskQuarantine').value = Number(config.risk?.quarantine || 80);
@@ -1839,16 +1834,6 @@ async function saveGuildGuardConfig(event) {
   document.querySelectorAll('[data-guildguard-detector]').forEach(input => { detectors[input.dataset.guildguardDetector] = { enabled: input.checked }; });
   const actions = { enabled: document.getElementById('guildGuardActionsEnabled').checked };
   document.querySelectorAll('[data-guildguard-action]').forEach(input => { actions[input.dataset.guildguardAction] = input.checked; });
-  const rules = {
-    staffImpersonation: {
-      enabled: document.getElementById('guildGuardStaffRuleEnabled').checked,
-      threshold: Number(document.getElementById('guildGuardStaffRuleThreshold').value || 50),
-      timeoutUsers: true,
-      timeoutSeconds: Number(document.getElementById('guildGuardStaffRuleTimeoutSeconds').value || 3600),
-      deleteMessages: document.getElementById('guildGuardStaffRuleDelete').checked,
-      pingStaff: document.getElementById('guildGuardStaffRulePing').checked
-    }
-  };
   const risk = {
     warning: Number(document.getElementById('guildGuardRiskWarning').value || 35),
     timeout: Number(document.getElementById('guildGuardRiskTimeout').value || 60),
@@ -1857,12 +1842,86 @@ async function saveGuildGuardConfig(event) {
     decayEnabled: document.getElementById('guildGuardRiskDecayEnabled').checked,
     decayHalfLifeHours: Number(document.getElementById('guildGuardRiskDecayHalfLife').value || 24)
   };
-  const response = await fetch('/api/admin/guildguard/config', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: document.getElementById('guildGuardEnabled').checked, mode: document.getElementById('guildGuardMode').value, retentionDays: Number(document.getElementById('guildGuardRetention').value || 30), alertChannelId: document.getElementById('guildGuardAlertChannel').value || null, detectors, actions, rules, risk }) });
+  const response = await fetch('/api/admin/guildguard/config', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: document.getElementById('guildGuardEnabled').checked, mode: document.getElementById('guildGuardMode').value, retentionDays: Number(document.getElementById('guildGuardRetention').value || 30), alertChannelId: document.getElementById('guildGuardAlertChannel').value || null, detectors, actions, risk }) });
   const payload = await response.json();
   if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to save Guild Guard configuration');
   renderGuildGuardConfig(payload.data?.config || payload.config || {});
   document.getElementById('guildGuardConfigStatus').textContent = 'Saved';
   setTimeout(() => { document.getElementById('guildGuardConfigStatus').textContent = ''; }, 3000);
+}
+
+let guildGuardRulesCache = [];
+
+function renderGuildGuardRules(rules) {
+  guildGuardRulesCache = Array.isArray(rules) ? rules : [];
+  const target = document.getElementById('guildGuardRules');
+  if (!guildGuardRulesCache.length) { target.innerHTML = '<p class="section-subtitle">No rules configured.</p>'; return; }
+  target.innerHTML = `<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Name</th><th>Detector</th><th>Score</th><th>Actions</th><th>Status</th><th></th></tr></thead><tbody>${guildGuardRulesCache.map(rule => {
+    const actions = rule.actions || {};
+    const labels = [actions.notifyStaff !== false ? 'Alert' : '', actions.pingStaff ? 'Ping' : '', actions.timeoutUsers ? `Mute ${actions.timeoutSeconds || 3600}s` : '', actions.deleteMessages ? 'Delete' : ''].filter(Boolean).join(', ');
+    return `<tr><td>${escapeHtml(rule.name)}</td><td>${escapeHtml((rule.detectors || []).join(', '))}</td><td>&gt; ${escapeHtml(rule.threshold)}</td><td>${escapeHtml(labels || 'Record')}</td><td>${rule.enabled === false ? 'Disabled' : 'Enabled'}</td><td><button type="button" class="btn-secondary" data-guildguard-rule-edit="${escapeHtml(rule.id)}">Edit</button> <button type="button" class="btn-danger" data-guildguard-rule-delete="${escapeHtml(rule.id)}">Delete</button></td></tr>`;
+  }).join('')}</tbody></table></div>`;
+  target.querySelectorAll('[data-guildguard-rule-edit]').forEach(button => button.addEventListener('click', () => openGuildGuardRuleModal(button.dataset.guildguardRuleEdit)));
+  target.querySelectorAll('[data-guildguard-rule-delete]').forEach(button => button.addEventListener('click', () => deleteGuildGuardRule(button.dataset.guildguardRuleDelete)));
+}
+
+async function loadGuildGuardRules() {
+  const response = await fetch('/api/admin/guildguard/rules', { credentials: 'include' });
+  const payload = await response.json();
+  if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to load Guild Guard rules');
+  renderGuildGuardRules(payload.data?.rules || payload.rules || []);
+}
+
+function openGuildGuardRuleModal(ruleId = '') {
+  const rule = guildGuardRulesCache.find(item => item.id === ruleId) || null;
+  const actions = rule?.actions || {};
+  document.getElementById('guildGuardRuleModalTitle').textContent = rule ? 'Edit Guild Guard rule' : 'Add Guild Guard rule';
+  document.getElementById('guildGuardRuleId').value = rule?.id || '';
+  document.getElementById('guildGuardRuleName').value = rule?.name || '';
+  document.getElementById('guildGuardRuleDetector').value = rule?.detectors?.[0] || 'staff_impersonation';
+  document.getElementById('guildGuardRuleThreshold').value = Number(rule?.threshold || 50);
+  document.getElementById('guildGuardRuleEnabled').checked = rule?.enabled !== false;
+  document.getElementById('guildGuardRuleNotify').checked = actions.notifyStaff !== false;
+  document.getElementById('guildGuardRulePing').checked = actions.pingStaff === true;
+  document.getElementById('guildGuardRuleDelete').checked = actions.deleteMessages !== false;
+  document.getElementById('guildGuardRuleTimeout').checked = actions.timeoutUsers === true;
+  document.getElementById('guildGuardRuleTimeoutSeconds').value = Number(actions.timeoutSeconds || 3600);
+  document.getElementById('guildGuardRuleModal').style.display = 'flex';
+}
+
+function closeGuildGuardRuleModal() {
+  document.getElementById('guildGuardRuleModal').style.display = 'none';
+}
+
+async function saveGuildGuardRule(event) {
+  event.preventDefault();
+  const ruleId = document.getElementById('guildGuardRuleId').value.trim();
+  const body = {
+    name: document.getElementById('guildGuardRuleName').value.trim(),
+    detectors: [document.getElementById('guildGuardRuleDetector').value],
+    threshold: Number(document.getElementById('guildGuardRuleThreshold').value || 50),
+    enabled: document.getElementById('guildGuardRuleEnabled').checked,
+    actions: {
+      notifyStaff: document.getElementById('guildGuardRuleNotify').checked,
+      pingStaff: document.getElementById('guildGuardRulePing').checked,
+      deleteMessages: document.getElementById('guildGuardRuleDelete').checked,
+      timeoutUsers: document.getElementById('guildGuardRuleTimeout').checked,
+      timeoutSeconds: Number(document.getElementById('guildGuardRuleTimeoutSeconds').value || 3600)
+    }
+  };
+  const response = await fetch(ruleId ? `/api/admin/guildguard/rules/${encodeURIComponent(ruleId)}` : '/api/admin/guildguard/rules', { method: ruleId ? 'PUT' : 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const payload = await response.json();
+  if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to save Guild Guard rule');
+  closeGuildGuardRuleModal();
+  await loadGuildGuardRules();
+}
+
+async function deleteGuildGuardRule(ruleId) {
+  if (!window.confirm('Delete this Guild Guard rule?')) return;
+  const response = await fetch(`/api/admin/guildguard/rules/${encodeURIComponent(ruleId)}`, { method: 'DELETE', credentials: 'include' });
+  const payload = await response.json();
+  if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to delete Guild Guard rule');
+  await loadGuildGuardRules();
 }
 
 function renderGuildGuardDomains(domains) {
@@ -1918,6 +1977,7 @@ async function loadGuildGuardView() {
     renderGuildGuardConfig(configPayload.data?.config || configPayload.config || {});
     renderGuildGuardSummary(summaryPayload.data?.summary || summaryPayload.summary || {});
     await loadGuildGuardIdentities();
+    await loadGuildGuardRules();
     await loadGuildGuardDomains();
     status.textContent = '';
   } catch (error) {
@@ -1927,6 +1987,7 @@ async function loadGuildGuardView() {
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('guildGuardConfigForm')?.addEventListener('submit', event => saveGuildGuardConfig(event).catch(error => { document.getElementById('guildGuardConfigStatus').textContent = error.message; }));
+  document.getElementById('guildGuardRuleForm')?.addEventListener('submit', event => saveGuildGuardRule(event).catch(error => { document.getElementById('guildGuardStatus').textContent = error.message; }));
   document.getElementById('guildGuardDomainForm')?.addEventListener('submit', event => saveGuildGuardDomain(event).catch(error => { document.getElementById('guildGuardDomainStatus').textContent = error.message; }));
 });
 

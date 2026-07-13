@@ -44,16 +44,16 @@ const DEFAULT_CONFIG = Object.freeze({
   },
   retentionDays: 30,
   alertChannelId: null,
-  rules: {
-    staffImpersonation: {
-      enabled: true,
+  rules: [
+    {
+      id: 'staff_impersonation_escalation',
+      name: 'Staff impersonation escalation',
+      detectors: ['staff_impersonation'],
       threshold: 50,
-      timeoutUsers: true,
-      timeoutSeconds: 3600,
-      deleteMessages: true,
-      pingStaff: true
+      enabled: true,
+      actions: { timeoutUsers: true, timeoutSeconds: 3600, deleteMessages: true, notifyStaff: true, pingStaff: true }
     }
-  },
+  ],
   actions: {
     enabled: false,
     deleteMessages: false,

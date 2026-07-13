@@ -27,6 +27,43 @@ function normalizeGuildId(guildId) {
   return value || null;
 }
 
+const GUILD_GUARD_RULE_DETECTORS = new Set([
+  'spam_flood', 'duplicate_message', 'mass_mention', 'suspicious_account',
+  'staff_impersonation', 'link_protection', 'lookalike_domain', 'raid_burst'
+]);
+
+function normalizeRules(value) {
+  const source = Array.isArray(value)
+    ? value
+    : (value?.staffImpersonation ? [{
+      id: 'staff_impersonation_escalation',
+      name: 'Staff impersonation escalation',
+      detectors: ['staff_impersonation'],
+      threshold: value.staffImpersonation.threshold,
+      enabled: value.staffImpersonation.enabled,
+      actions: value.staffImpersonation
+    }] : []);
+  return source.map((rule, index) => {
+    const detectors = [...new Set((Array.isArray(rule?.detectors) ? rule.detectors : [rule?.detector])
+      .map(detector => String(detector || '').trim()).filter(detector => GUILD_GUARD_RULE_DETECTORS.has(detector)))];
+    const actions = rule?.actions && typeof rule.actions === 'object' ? rule.actions : rule;
+    return {
+      id: String(rule?.id || `guild_guard_rule_${index + 1}`).trim().slice(0, 80),
+      name: String(rule?.name || `Guild Guard rule ${index + 1}`).trim().slice(0, 120),
+      detectors: detectors.length ? detectors : ['staff_impersonation'],
+      threshold: Math.max(1, Math.min(100, Number(rule?.threshold ?? 50) || 50)),
+      enabled: rule?.enabled !== false,
+      actions: {
+        timeoutUsers: actions.timeoutUsers === true,
+        timeoutSeconds: Math.max(1, Math.min(2419200, Number(actions.timeoutSeconds || 3600))),
+        deleteMessages: actions.deleteMessages !== false,
+        notifyStaff: actions.notifyStaff !== false,
+        pingStaff: actions.pingStaff === true
+      }
+    };
+  });
+}
+
 function defaultRow(guildId) {
   return { guild_id: guildId, enabled: 0, mode: DEFAULT_CONFIG.mode, config_json: JSON.stringify(DEFAULT_CONFIG) };
 }
@@ -42,6 +79,7 @@ function getConfig(guildId) {
     row = db.prepare('SELECT * FROM guild_guard_configs WHERE guild_id = ?').get(normalized) || seed;
   }
   const config = mergeConfig(DEFAULT_CONFIG, jsonParse(row.config_json, {}));
+  config.rules = normalizeRules(config.rules);
   config.enabled = Boolean(row.enabled);
   config.mode = row.mode || config.mode;
   return config;
@@ -52,6 +90,7 @@ function updateConfig(guildId, patch) {
   if (!normalized) throw new Error('guildId is required');
   const current = getConfig(normalized);
   const next = mergeConfig(current, patch);
+  next.rules = normalizeRules(next.rules);
   db.prepare(`
     INSERT INTO guild_guard_configs (guild_id, enabled, mode, config_json)
     VALUES (?, ?, ?, ?)
@@ -59,6 +98,40 @@ function updateConfig(guildId, patch) {
       config_json = excluded.config_json, updated_at = CURRENT_TIMESTAMP
   `).run(normalized, next.enabled ? 1 : 0, next.mode, JSON.stringify(next));
   return next;
+}
+
+function listRules(guildId) {
+  return getConfig(guildId).rules;
+}
+
+function createRule(guildId, input, actorId = null) {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  if (!normalizedGuildId) throw new Error('guildId is required');
+  const rule = normalizeRules([{ ...input, id: crypto.randomUUID(), createdBy: actorId }])[0];
+  if (!String(input?.name || '').trim()) throw new Error('Rule name is required');
+  const rules = listRules(normalizedGuildId);
+  rules.push(rule);
+  return updateConfig(normalizedGuildId, { rules });
+}
+
+function updateRule(guildId, ruleId, patch) {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  const normalizedRuleId = String(ruleId || '').trim();
+  const rules = listRules(normalizedGuildId);
+  const index = rules.findIndex(rule => rule.id === normalizedRuleId);
+  if (index < 0) return null;
+  rules[index] = normalizeRules([{ ...rules[index], ...patch, id: normalizedRuleId }])[0];
+  return updateConfig(normalizedGuildId, { rules }).rules.find(rule => rule.id === normalizedRuleId) || null;
+}
+
+function deleteRule(guildId, ruleId) {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  const normalizedRuleId = String(ruleId || '').trim();
+  const rules = listRules(normalizedGuildId);
+  const next = rules.filter(rule => rule.id !== normalizedRuleId);
+  if (next.length === rules.length) return false;
+  updateConfig(normalizedGuildId, { rules: next });
+  return true;
 }
 
 function isExempt(event, config) {
@@ -225,6 +298,10 @@ async function handleMemberUpdate(oldMember, newMember) {
   return process({ ...newMember, oldMember }, 'member_update');
 }
 
+async function executeQuickAction(args) {
+  return actionService.executeQuickAction(args);
+}
+
 async function createTestIncident(guildId, input = {}) {
   return process({ ...input, guildId, id: input.id || `test:${Date.now()}` }, 'test', { force: true, recordEmpty: true, incidentStatus: 'test' });
 }
@@ -346,11 +423,16 @@ module.exports = {
   DEFAULT_CONFIG,
   getConfig,
   updateConfig,
+  listRules,
+  createRule,
+  updateRule,
+  deleteRule,
   isExempt,
   process,
   handleMessageCreate,
   handleMemberJoin,
   handleMemberUpdate,
+  executeQuickAction,
   createTestIncident,
   listIncidents,
   getDashboardSummary,

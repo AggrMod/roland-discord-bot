@@ -422,6 +422,7 @@
           <div class="settings-tabs" id="guildGuardTabs">
             <button class="settings-tab active" data-tab="incidents" onclick="switchGuildGuardTab('incidents')">Review</button>
             <button class="settings-tab" data-tab="configuration" onclick="switchGuildGuardTab('configuration')">Detection &amp; actions</button>
+            <button class="settings-tab" data-tab="rules" onclick="switchGuildGuardTab('rules')">Rules</button>
             <button class="settings-tab" data-tab="domains" onclick="switchGuildGuardTab('domains')">Domains</button>
             <button class="settings-tab" data-tab="staff" onclick="switchGuildGuardTab('staff')">Trusted staff</button>
           </div>
@@ -457,15 +458,6 @@
                 <label class="settings-row"><span>Timeout users</span><input data-guildguard-action="timeoutUsers" type="checkbox"></label>
                 <label class="settings-row"><span>Raid lockdown</span><input data-guildguard-action="lockdownEnabled" type="checkbox"></label>
               </div>
-              <h3>Escalation rules</h3>
-              <p class="section-subtitle">Rules require Enforce mode and Allow actions. Staff impersonation alerts can still notify moderators while in Monitor mode.</p>
-              <div class="settings-grid">
-                <label class="settings-row"><span>Staff impersonation escalation</span><input id="guildGuardStaffRuleEnabled" type="checkbox"></label>
-                <label class="settings-row"><span>Escalation score threshold</span><input id="guildGuardStaffRuleThreshold" type="number" min="1" max="100"></label>
-                <label class="settings-row"><span>Mute duration (seconds)</span><input id="guildGuardStaffRuleTimeoutSeconds" type="number" min="1" max="2419200"></label>
-                <label class="settings-row"><span>Delete flagged message</span><input id="guildGuardStaffRuleDelete" type="checkbox"></label>
-                <label class="settings-row"><span>Ping moderators/admins</span><input id="guildGuardStaffRulePing" type="checkbox"></label>
-              </div>
               <h3>Risk policy</h3>
               <div class="settings-grid">
                 <label class="settings-row"><span>Warning threshold</span><input id="guildGuardRiskWarning" type="number" min="1" max="100"></label>
@@ -477,6 +469,12 @@
               </div>
               <button type="submit" class="btn-primary">Save Guild Guard configuration</button><span id="guildGuardConfigStatus" class="form-status"></span>
             </form>
+          </div>
+          <div id="guildGuardTab-rules" class="settings-tab-pane" style="display:none;">
+            <div class="card gp-workspace-card">
+              <div class="card-header-row"><div><h3>Automation rules</h3><p class="section-subtitle">Create rules that match detectors and risk scores, then notify staff, mute users, or remove messages.</p></div><button type="button" class="btn-primary" onclick="openGuildGuardRuleModal()">Add rule</button></div>
+              <div id="guildGuardRules">Loading...</div>
+            </div>
           </div>
           <div id="guildGuardTab-domains" class="settings-tab-pane" style="display:none;">
             <div class="card gp-workspace-card">
@@ -498,6 +496,21 @@
             </div>
           </div>
         </section>
+
+        <div id="guildGuardRuleModal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeGuildGuardRuleModal()">
+          <div class="modal" style="max-width:560px;">
+            <div class="modal-header"><h3 class="modal-title" id="guildGuardRuleModalTitle">Add Guild Guard rule</h3><button type="button" class="modal-close" onclick="closeGuildGuardRuleModal()">✕</button></div>
+            <form id="guildGuardRuleForm">
+              <input type="hidden" id="guildGuardRuleId">
+              <label class="form-label">Rule name<input id="guildGuardRuleName" class="form-input" required maxlength="120" placeholder="Unsafe link escalation"></label>
+              <label class="form-label">Detector<select id="guildGuardRuleDetector" class="form-input"><option value="spam_flood">Spam flood</option><option value="duplicate_message">Duplicate message</option><option value="mass_mention">Mass mention</option><option value="suspicious_account">Suspicious account</option><option value="staff_impersonation">Staff impersonation</option><option value="link_protection">Unsafe link</option><option value="lookalike_domain">Lookalike domain</option><option value="raid_burst">Raid burst</option></select></label>
+              <label class="form-label">Trigger score greater than<input id="guildGuardRuleThreshold" class="form-input" type="number" min="1" max="100" value="50" required></label>
+              <div class="settings-grid"><label class="settings-row"><span>Enabled</span><input id="guildGuardRuleEnabled" type="checkbox" checked></label><label class="settings-row"><span>Notify staff</span><input id="guildGuardRuleNotify" type="checkbox" checked></label><label class="settings-row"><span>Ping moderators/admins</span><input id="guildGuardRulePing" type="checkbox" checked></label><label class="settings-row"><span>Delete message</span><input id="guildGuardRuleDelete" type="checkbox" checked></label><label class="settings-row"><span>Mute user</span><input id="guildGuardRuleTimeout" type="checkbox" checked></label></div>
+              <label class="form-label">Mute duration (seconds)<input id="guildGuardRuleTimeoutSeconds" class="form-input" type="number" min="1" max="2419200" value="3600"></label>
+              <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:var(--space-4);"><button type="button" class="btn-secondary" onclick="closeGuildGuardRuleModal()">Cancel</button><button type="submit" class="btn-primary">Save rule</button></div>
+            </form>
+          </div>
+        </div>
 
         <!-- Governance Section -->
         <section id="section-governance" class="content-section app-surface">

@@ -219,8 +219,10 @@ assert.ok(ruleResult.incident);
 assert.strictEqual(ruleTimeoutMs, 3600000);
 assert.strictEqual(ruleDeleted, true);
 assert.ok(ruleAlertPayload && ruleAlertPayload.content.includes('<@rule-staff>'));
+assert.ok(Array.isArray(ruleAlertPayload.embeds) && ruleAlertPayload.embeds.length === 1);
+assert.strictEqual(ruleAlertPayload.components[0].components.length, 5);
 assert.deepStrictEqual(ruleAlertPayload.allowedMentions.users, ['rule-staff']);
-assert.strictEqual(db.prepare("SELECT status FROM actions WHERE incident_id = ? AND action_type = 'staff_impersonation_escalation'").get(ruleResult.incident.incident_id).status, 'applied');
+assert.strictEqual(db.prepare("SELECT status FROM actions WHERE incident_id = ? AND action_type = 'rule:staff_impersonation_escalation'").get(ruleResult.incident.incident_id).status, 'applied');
 await actionService.execute({
   source: { guild: ruleGuild, member: { timeout: async () => {} }, delete: async () => {} },
   event: ruleResult.event,
@@ -230,6 +232,25 @@ await actionService.execute({
   signals: ruleResult.signals
 });
 assert.strictEqual(ruleAlertCount, 1, 'retries must not send duplicate moderator alerts');
+const customRules = guard.listRules('guild-rule');
+assert.ok(customRules.some(rule => rule.id === 'staff_impersonation_escalation'));
+const createdRuleConfig = guard.createRule('guild-rule', {
+  name: 'Duplicate message review', detectors: ['duplicate_message'], threshold: 40,
+  actions: { notifyStaff: true, pingStaff: false, timeoutUsers: false, deleteMessages: false }
+});
+const customRule = createdRuleConfig.rules.find(rule => rule.name === 'Duplicate message review');
+assert.ok(customRule);
+assert.strictEqual(guard.updateRule('guild-rule', customRule.id, { enabled: false }).enabled, false);
+assert.strictEqual(guard.deleteRule('guild-rule', customRule.id), true);
+let quickTimeoutMs = null;
+const quickAction = await actionService.executeQuickAction({
+  guild: { id: 'guild-rule', members: { fetch: async () => ({ timeout: async duration => { quickTimeoutMs = duration; } }) } },
+  incident: ruleResult.incident,
+  action: 'timeout',
+  actorId: 'rule-admin'
+});
+assert.strictEqual(quickAction.status, 'applied');
+assert.strictEqual(quickTimeoutMs, 3600000);
 
 guard.updateConfig('guild-raid', {
   enabled: true,

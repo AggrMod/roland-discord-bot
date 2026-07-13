@@ -1764,11 +1764,11 @@ async function loadGuildGuardAlertChannels(selectedId = '') {
 
 function renderGuildGuardIncidents(incidents) {
   const target = document.getElementById('guildGuardIncidents');
-  if (!incidents.length) { target.innerHTML = '<tr><td colspan="5">No incidents in the selected server.</td></tr>'; return; }
+  if (!incidents.length) { target.innerHTML = '<tr><td colspan="7">No incidents in the selected server.</td></tr>'; return; }
   target.innerHTML = incidents.map(incident => {
     const labels = guildGuardSignals(incident);
     const typeLabel = `${incident.event_type || 'event'}${labels.length ? ` -> ${labels.join(', ')}` : ''}`;
-    return `<tr><td>${escapeHtml(incident.created_at)}</td><td><code>${escapeHtml(typeLabel)}</code></td><td>${escapeHtml(incident.risk_score)}</td><td>${escapeHtml(incident.status)}</td><td><button class="btn-secondary" data-guildguard-detail-id="${escapeHtml(incident.incident_id)}">Details</button><button class="btn-secondary" data-guildguard-review="reviewed" data-incident-id="${escapeHtml(incident.incident_id)}">Review</button><button class="btn-secondary" data-guildguard-review="confirmed" data-incident-id="${escapeHtml(incident.incident_id)}">Confirm</button><button class="btn-danger" data-guildguard-review="false_positive" data-incident-id="${escapeHtml(incident.incident_id)}">False positive</button></td></tr>`;
+    return `<tr><td>${escapeHtml(incident.created_at)}</td><td><code>${escapeHtml(incident.user_id || 'unknown')}</code></td><td>${escapeHtml(incident.user_incident_count ?? 1)}</td><td><code>${escapeHtml(typeLabel)}</code></td><td>${escapeHtml(incident.risk_score)}</td><td>${escapeHtml(incident.status)}</td><td><button class="btn-secondary" data-guildguard-detail-id="${escapeHtml(incident.incident_id)}">Details</button><button class="btn-secondary" data-guildguard-review="reviewed" data-incident-id="${escapeHtml(incident.incident_id)}">Review</button><button class="btn-secondary" data-guildguard-review="confirmed" data-incident-id="${escapeHtml(incident.incident_id)}">Confirm</button><button class="btn-danger" data-guildguard-review="false_positive" data-incident-id="${escapeHtml(incident.incident_id)}">False positive</button></td></tr>`;
   }).join('');
   target.querySelectorAll('[data-guildguard-review]').forEach(button => button.addEventListener('click', () => reviewGuildGuardIncident(button.dataset.incidentId, button.dataset.guildguardReview)));
   target.querySelectorAll('[data-guildguard-detail-id]').forEach(button => button.addEventListener('click', () => loadGuildGuardIncidentDetail(button.dataset.guildguardDetailId)));
@@ -1784,14 +1784,37 @@ async function loadGuildGuardIncidentDetail(incidentId) {
     const riskResponse = incident.user_id ? await fetch(`/api/admin/guildguard/users/${encodeURIComponent(incident.user_id)}/risk`, { credentials: 'include' }) : null;
     const riskPayload = riskResponse ? await riskResponse.json() : {};
     const risk = riskPayload.data || riskPayload;
+    const incidentSummary = risk.incidentSummary || { total: 0, open: 0, confirmed: 0, falsePositive: 0, averageRiskScore: 0 };
     const signals = JSON.parse(incident.signals_json || '[]');
     const evidence = JSON.parse(incident.evidence_json || '{}');
     target.style.display = '';
-    target.innerHTML = `<div class="card-header-row"><h3>Incident details</h3><button type="button" class="btn-secondary" onclick="document.getElementById('guildGuardIncidentDetail').style.display='none'">Close</button></div><p><strong>Incident:</strong> <code>${escapeHtml(incident.incident_id)}</code> &nbsp; <strong>User:</strong> <code>${escapeHtml(incident.user_id || 'unknown')}</code></p><p><strong>Signals:</strong> ${escapeHtml(signals.map(signal => `${GUILD_GUARD_DETECTOR_LABELS[signal.detector] || signal.detector} (${signal.score})`).join(', ') || 'none')}</p><details open><summary>Evidence</summary><pre>${escapeHtml(JSON.stringify(evidence, null, 2))}</pre></details><h4>User risk history</h4><p>Current score: <strong>${escapeHtml(risk.profile?.risk_score ?? 0)}</strong> (${escapeHtml(risk.profile?.risk_level || 'low')}); violations: ${escapeHtml(risk.profile?.violation_count ?? 0)}</p><div class="data-table-wrap"><table class="data-table"><thead><tr><th>Time</th><th>Event</th><th>Score</th><th>Status</th></tr></thead><tbody>${(risk.incidents || []).slice(0, 20).map(item => `<tr><td>${escapeHtml(item.created_at)}</td><td>${escapeHtml(item.event_type)}</td><td>${escapeHtml(item.risk_score)}</td><td>${escapeHtml(item.status)}</td></tr>`).join('') || '<tr><td colspan="4">No related incidents.</td></tr>'}</tbody></table></div>`;
+    target.innerHTML = `<div class="card-header-row"><h3>Incident details</h3><div class="button-row"><button type="button" class="btn-danger" data-guildguard-clear-user="${escapeHtml(incident.user_id || '')}">Clear user history</button><button type="button" class="btn-secondary" data-guildguard-close-detail>Close</button></div></div><p><strong>Incident:</strong> <code>${escapeHtml(incident.incident_id)}</code> &nbsp; <strong>User:</strong> <code>${escapeHtml(incident.user_id || 'unknown')}</code></p><p><strong>Signals:</strong> ${escapeHtml(signals.map(signal => `${GUILD_GUARD_DETECTOR_LABELS[signal.detector] || signal.detector} (${signal.score})`).join(', ') || 'none')}</p><details open><summary>Evidence</summary><pre>${escapeHtml(JSON.stringify(evidence, null, 2))}</pre></details><h4>User risk history</h4><p>Current score: <strong>${escapeHtml(risk.profile?.risk_score ?? 0)}</strong> (${escapeHtml(risk.profile?.risk_level || 'low')}); violations: ${escapeHtml(risk.profile?.violation_count ?? 0)}</p><p>Incidents: <strong>${escapeHtml(incidentSummary.total)}</strong> · Open: ${escapeHtml(incidentSummary.open)} · Confirmed: ${escapeHtml(incidentSummary.confirmed)} · False positives: ${escapeHtml(incidentSummary.falsePositive)} · Average risk: ${escapeHtml(incidentSummary.averageRiskScore)}</p><div class="data-table-wrap"><table class="data-table"><thead><tr><th>Time</th><th>Event</th><th>Score</th><th>Status</th></tr></thead><tbody>${(risk.incidents || []).slice(0, 20).map(item => `<tr><td>${escapeHtml(item.created_at)}</td><td>${escapeHtml(item.event_type)}</td><td>${escapeHtml(item.risk_score)}</td><td>${escapeHtml(item.status)}</td></tr>`).join('') || '<tr><td colspan="4">No related incidents.</td></tr>'}</tbody></table></div>`;
+    target.querySelector('[data-guildguard-close-detail]')?.addEventListener('click', () => { target.style.display = 'none'; });
+    target.querySelector('[data-guildguard-clear-user]')?.addEventListener('click', () => {
+      clearGuildGuardUserHistory(incident.user_id).catch(error => { target.textContent = error.message || 'Unable to clear user history'; });
+    });
   } catch (error) {
     target.style.display = '';
     target.textContent = error.message || 'Unable to load incident details';
   }
+}
+
+async function clearGuildGuardUserHistory(userId) {
+  const normalizedUserId = String(userId || '').trim();
+  if (!normalizedUserId) return;
+  if (!window.confirm(`Clear all Guild Guard incidents, signals, actions, and risk history for ${normalizedUserId}?`)) return;
+  const response = await fetch(`/api/admin/guildguard/users/${encodeURIComponent(normalizedUserId)}/history`, {
+    method: 'DELETE',
+    credentials: 'include'
+  });
+  const payload = await response.json();
+  if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to clear user history');
+  const target = document.getElementById('guildGuardIncidentDetail');
+  if (target) {
+    target.style.display = '';
+    target.innerHTML = '<p>User Guild Guard history cleared.</p>';
+  }
+  await loadGuildGuardView();
 }
 
 function renderGuildGuardSummary(summary) {

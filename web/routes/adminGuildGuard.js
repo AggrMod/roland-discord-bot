@@ -74,9 +74,24 @@ function createAdminGuildGuardRouter({ logger, adminAuthMiddleware, ensureGuildG
     if (!userId) return res.status(400).json(toErrorResponse('User ID is required', 'VALIDATION_ERROR'));
     return res.json(toSuccessResponse({
       profile: guildGuardService.getRiskProfile(req.guildId, userId),
+      incidentSummary: guildGuardService.getUserIncidentSummary(req.guildId, userId),
       incidents: guildGuardService.listUserIncidents(req.guildId, userId, req.query?.limit),
       signals: guildGuardService.listRiskSignals(req.guildId, userId, req.query?.signalLimit)
     }));
+  });
+
+  router.delete('/api/admin/guildguard/users/:userId/history', adminAuthMiddleware, (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    const userId = String(req.params.userId || '').trim();
+    if (!userId) return res.status(400).json(toErrorResponse('User ID is required', 'VALIDATION_ERROR'));
+    try {
+      return res.json(toSuccessResponse({
+        userId,
+        removed: guildGuardService.clearUserHistory(req.guildId, userId)
+      }));
+    } catch (error) {
+      return res.status(400).json(toErrorResponse(error.message || 'Unable to clear user history', 'VALIDATION_ERROR'));
+    }
   });
 
   router.post('/api/admin/guildguard/users/:userId/risk/reset', adminAuthMiddleware, (req, res) => {

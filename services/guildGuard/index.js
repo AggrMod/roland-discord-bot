@@ -189,6 +189,48 @@ function listUserIncidents(guildId, userId, limit = 50) {
     .all(normalizeGuildId(guildId), String(userId || '').trim(), bounded);
 }
 
+function getUserIncidentSummary(guildId, userId) {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  const normalizedUserId = String(userId || '').trim();
+  if (!normalizedGuildId || !normalizedUserId) return { total: 0, open: 0, confirmed: 0, falsePositive: 0, averageRiskScore: 0 };
+  const row = db.prepare(`
+    SELECT COUNT(*) AS total,
+      SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) AS open,
+      SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) AS confirmed,
+      SUM(CASE WHEN status = 'false_positive' THEN 1 ELSE 0 END) AS falsePositive,
+      ROUND(COALESCE(AVG(risk_score), 0), 1) AS averageRiskScore
+    FROM incidents WHERE guild_id = ? AND user_id = ?
+  `).get(normalizedGuildId, normalizedUserId);
+  return {
+    total: Number(row?.total || 0),
+    open: Number(row?.open || 0),
+    confirmed: Number(row?.confirmed || 0),
+    falsePositive: Number(row?.falsePositive || 0),
+    averageRiskScore: Number(row?.averageRiskScore || 0)
+  };
+}
+
+function clearUserHistory(guildId, userId) {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  const normalizedUserId = String(userId || '').trim();
+  if (!normalizedGuildId || !normalizedUserId) throw new Error('guildId and userId are required');
+  const tx = db.transaction(() => {
+    const incidentIds = db.prepare('SELECT incident_id FROM incidents WHERE guild_id = ? AND user_id = ?')
+      .all(normalizedGuildId, normalizedUserId).map(row => row.incident_id);
+    const counts = { incidents: incidentIds.length, actions: 0, signals: 0, falsePositives: 0, riskProfiles: 0 };
+    if (incidentIds.length) {
+      const placeholders = incidentIds.map(() => '?').join(',');
+      counts.actions = db.prepare(`DELETE FROM actions WHERE guild_id = ? AND incident_id IN (${placeholders})`).run(normalizedGuildId, ...incidentIds).changes;
+      counts.falsePositives = db.prepare(`DELETE FROM false_positives WHERE guild_id = ? AND incident_id IN (${placeholders})`).run(normalizedGuildId, ...incidentIds).changes;
+    }
+    counts.signals = db.prepare('DELETE FROM risk_signals WHERE guild_id = ? AND user_id = ?').run(normalizedGuildId, normalizedUserId).changes;
+    db.prepare('DELETE FROM incidents WHERE guild_id = ? AND user_id = ?').run(normalizedGuildId, normalizedUserId);
+    counts.riskProfiles = db.prepare('DELETE FROM risk_profiles WHERE guild_id = ? AND user_id = ?').run(normalizedGuildId, normalizedUserId).changes;
+    return counts;
+  });
+  return tx();
+}
+
 function resetRiskProfile(guildId, userId) {
   return db.prepare('DELETE FROM risk_profiles WHERE guild_id = ? AND user_id = ?').run(normalizeGuildId(guildId), String(userId || '').trim()).changes > 0;
 }
@@ -308,7 +350,15 @@ async function createTestIncident(guildId, input = {}) {
 
 function listIncidents(guildId, limit = 50) {
   const bounded = Math.max(1, Math.min(200, Number(limit) || 50));
-  return db.prepare('SELECT * FROM incidents WHERE guild_id = ? ORDER BY created_at DESC, id DESC LIMIT ?').all(normalizeGuildId(guildId), bounded);
+  return db.prepare(`
+    SELECT incidents.*,
+      (SELECT COUNT(*) FROM incidents AS related
+       WHERE related.guild_id = incidents.guild_id AND related.user_id = incidents.user_id) AS user_incident_count
+    FROM incidents
+    WHERE guild_id = ?
+    ORDER BY created_at DESC, id DESC
+    LIMIT ?
+  `).all(normalizeGuildId(guildId), bounded);
 }
 
 function getDashboardSummary(guildId, windowDays = 7) {
@@ -439,6 +489,8 @@ module.exports = {
   getRiskProfile,
   listRiskSignals,
   listUserIncidents,
+  getUserIncidentSummary,
+  clearUserHistory,
   resetRiskProfile,
   decayRiskProfiles,
   getIncident,

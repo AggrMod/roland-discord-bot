@@ -74,6 +74,7 @@ const otherGuild = await guard.createTestIncident('guild-b', { id: 'test-inciden
 assert.strictEqual(otherGuild.incident.guild_id, 'guild-b');
 assert.strictEqual(guard.listIncidents('guild-a').length, 1);
 assert.strictEqual(guard.listIncidents('guild-b').length, 1);
+assert.strictEqual(guard.listIncidents('guild-a')[0].user_incident_count, 1);
 
 assert.strictEqual(scoreSignals([{ score: 40 }, { score: 80 }]), 100);
 assert.strictEqual(decidePolicy(70, config).action, 'timeout');
@@ -251,6 +252,15 @@ const quickAction = await actionService.executeQuickAction({
 });
 assert.strictEqual(quickAction.status, 'applied');
 assert.strictEqual(quickTimeoutMs, 3600000);
+const userSummary = guard.getUserIncidentSummary('guild-rule', 'rule-attacker');
+assert.strictEqual(userSummary.total, 1);
+assert.strictEqual(userSummary.open, 1);
+assert.ok(userSummary.averageRiskScore > 0);
+const clearCounts = guard.clearUserHistory('guild-rule', 'rule-attacker');
+assert.strictEqual(clearCounts.incidents, 1);
+assert.strictEqual(clearCounts.riskProfiles, 1);
+assert.strictEqual(guard.getUserIncidentSummary('guild-rule', 'rule-attacker').total, 0);
+assert.strictEqual(guard.getRiskProfile('guild-rule', 'rule-attacker'), null);
 
 guard.updateConfig('guild-raid', {
   enabled: true,

@@ -394,6 +394,7 @@ const inviteTrackerService = require('./services/inviteTrackerService');
 const heistService = require('./services/heistService');
 const welcomeService = require('./services/welcomeService');
 const moderationService = require('./services/moderationService');
+const guildGuardService = require('./services/guildGuard');
 
 const intervals = [];
 
@@ -457,6 +458,7 @@ client.once(Events.ClientReady, () => {
   startTicketInactivityScheduler();
   startXEngagementScheduler();
   startHeistScheduler();
+  startGuildGuardRetentionScheduler();
 
   treasuryService.setClient(client);
   treasuryService.startScheduler();
@@ -643,6 +645,11 @@ client.on(Events.InviteCreate, invite => inviteTrackerService.handleInviteCreate
 client.on(Events.InviteDelete, invite => inviteTrackerService.handleInviteDelete(invite));
 client.on(Events.GuildMemberAdd, async member => {
   try {
+    await guildGuardService.handleMemberJoin(member);
+  } catch (error) {
+    logger.warn(`[guild-guard] member join normalization failed guild=${member?.guild?.id || 'unknown'} user=${member?.id || 'unknown'}: ${error?.message || error}`);
+  }
+  try {
     await inviteTrackerService.trackMemberJoin(member);
   } catch (error) {
     logger.warn(`[invite-tracker] trackMemberJoin failed for guild=${member?.guild?.id || 'unknown'} user=${member?.id || 'unknown'}: ${error?.message || error}`);
@@ -660,7 +667,14 @@ client.on(Events.GuildMemberAdd, async member => {
     logger.warn(`[moderation] processJoin failed for guild=${member?.guild?.id || 'unknown'} user=${member?.id || 'unknown'}: ${error?.message || error}`);
   }
 });
-client.on(Events.GuildMemberUpdate, (o, n) => inviteTrackerService.handleMemberRoleUpdate(o, n));
+client.on(Events.GuildMemberUpdate, async (o, n) => {
+  try {
+    await guildGuardService.handleMemberUpdate(o, n);
+  } catch (error) {
+    logger.warn(`[guild-guard] member update normalization failed guild=${n?.guild?.id || 'unknown'} user=${n?.id || 'unknown'}: ${error?.message || error}`);
+  }
+  inviteTrackerService.handleMemberRoleUpdate(o, n);
+});
 
 async function handlePanelVerifyButton(interaction) {
   try {
@@ -1401,6 +1415,23 @@ function startHeistScheduler() {
   setTimeout(tick, 20 * 1000);
 }
 
+function startGuildGuardRetentionScheduler() {
+  const enabled = String(process.env.GUILD_GUARD_RETENTION_SWEEP_ENABLED || 'true').toLowerCase() !== 'false';
+  if (!enabled) return;
+  const intervalSec = Math.max(5 * 60, Number(process.env.GUILD_GUARD_RETENTION_SWEEP_INTERVAL_SEC || 24 * 60 * 60));
+  const run = () => {
+    try {
+      const result = guildGuardService.runRetentionSweep();
+      const deleted = result.reduce((total, row) => total + (Number(row.deleted) || 0), 0);
+      if (deleted > 0) logger.log(`[guild-guard] retention sweep guilds=${result.length} deleted=${deleted}`);
+    } catch (error) {
+      logger.warn(`[guild-guard] retention sweep failed: ${error?.message || error}`);
+    }
+  };
+  intervals.push(setInterval(run, intervalSec * 1000));
+  setTimeout(run, 45 * 1000);
+}
+
 async function handleTicketOpenButton(interaction) {
   try {
     const cid = interaction.customId.replace('ticket_open_', '');
@@ -1612,6 +1643,11 @@ async function handleAiAssistantPassiveMessage(message) {
 
 client.on(Events.MessageCreate, async message => {
   if (message.author.bot || !message.guild) return;
+  try {
+    await guildGuardService.handleMessageCreate(message);
+  } catch (error) {
+    logger.warn(`[guild-guard] message normalization failed guild=${message.guildId || 'unknown'} user=${message.author?.id || 'unknown'}: ${error?.message || error}`);
+  }
   try {
     const keywordScan = moderationService.checkMessageForKeywords(message.guildId, message.content);
     if (keywordScan?.matched) {

@@ -34,6 +34,7 @@ const telegramBridgeService = require('../services/telegramBridgeService');
 const autoMessageService = require('../services/autoMessageService');
 const ticketService = require('../services/ticketService');
 const welcomeService = require('../services/welcomeService');
+const guildGuardService = require('../services/guildGuard');
 const entitlementService = require('../services/entitlementService');
 const billingService = require('../services/billingService');
 const monetizationTemplateService = require('../services/monetizationTemplateService');
@@ -784,6 +785,10 @@ class WebServer {
       return ensureTenantModuleEnabled(req, res, 'welcome', 'Welcome & Onboarding');
     }
 
+    function ensureGuildGuardModule(req, res) {
+      return ensureTenantModuleEnabled(req, res, 'guildguard', 'Guild Guard');
+    }
+
     // ==================== API V1 (VERSIONED PUBLIC API) ====================
 
     const v1Router = require('./routes/v1');
@@ -1037,6 +1042,9 @@ class WebServer {
     // Keep advanced admin dashboard accessible for deep management tools
     this.app.get('/admin-panel', (req, res) => {
       res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+    });
+    this.app.get('/admin/guildguard', (req, res) => {
+      res.sendFile(path.join(__dirname, 'public', 'guildguard.html'));
     });
 
     // ==================== FEATURE FLAGS ====================
@@ -1528,6 +1536,13 @@ class WebServer {
       ensureAutoMessagesModule,
       autoMessageService,
       fetchGuildById,
+    }));
+    const createAdminGuildGuardRouter = require('./routes/adminGuildGuard');
+    this.app.use('/', createAdminGuildGuardRouter({
+      logger,
+      adminAuthMiddleware,
+      ensureGuildGuardModule,
+      guildGuardService,
     }));
     const createAdminTicketsRouter = require('./routes/adminTickets');
     this.app.use('/', createAdminTicketsRouter({

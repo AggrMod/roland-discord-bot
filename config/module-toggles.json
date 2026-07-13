@@ -4,5 +4,6 @@
   "treasuryEnabled": true,
   "minigamesEnabled": true,
   "battleEnabled": true,
-  "heistEnabled": true
+  "heistEnabled": true,
+  "guildguardEnabled": true
 }

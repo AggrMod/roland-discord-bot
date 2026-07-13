@@ -87,6 +87,7 @@ const checks = [
   { name: 'vault-onchain-payment-verification', cmd: process.execPath, args: ['tests/test-vault-onchain-payment-verification.js'] },
   { name: 'vault-win-odds', cmd: process.execPath, args: ['tests/test-vault-win-odds.js'] },
   { name: 'module-refactor', cmd: process.execPath, args: ['tests/test-module-refactor.js'] },
+  { name: 'guild-guard-foundation', cmd: process.execPath, args: ['tests/test-guild-guard-foundation.js'] },
   { name: 'micro-verify', cmd: process.execPath, args: ['tests/test-micro-verify.js'] },
   { name: 'missions-v1-flow', cmd: process.execPath, args: ['tests/test-heist-v1-flow.js'] },
   { name: 'missions-trait-gates-bonuses', cmd: process.execPath, args: ['tests/test-heist-trait-gates-bonuses.js'] },

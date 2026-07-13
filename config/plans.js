@@ -15,6 +15,7 @@ const MODULE_KEYS = Object.freeze([
   'branding',
   'analytics',
   'engagement',
+  'guildguard',
   'aiassistant',
   'telegrambridge',
   'automessages'
@@ -177,6 +178,7 @@ const PLAN_PRESETS = Object.freeze({
         allow_discord_provider: 1,
         allow_x_provider: 0,
       },
+      guildguard: { max_incidents_per_day: 100, max_retention_days: 30, allow_ai_assistance: 0 },
       aiassistant: {
         max_requests_per_day: 0
       },
@@ -204,6 +206,7 @@ const PLAN_PRESETS = Object.freeze({
       branding: true,
       analytics: true,
       engagement: true,
+      guildguard: true,
       aiassistant: false,
       telegrambridge: true,
       automessages: true
@@ -283,6 +286,7 @@ const PLAN_PRESETS = Object.freeze({
         allow_discord_provider: 1,
         allow_x_provider: 1,
       },
+      guildguard: { max_incidents_per_day: 1000, max_retention_days: 90, allow_ai_assistance: 0 },
       aiassistant: {
         max_requests_per_day: 0
       },
@@ -310,6 +314,7 @@ const PLAN_PRESETS = Object.freeze({
       branding: true,
       analytics: true,
       engagement: true,
+      guildguard: true,
       aiassistant: false,
       telegrambridge: true,
       automessages: true
@@ -389,6 +394,7 @@ const PLAN_PRESETS = Object.freeze({
         allow_discord_provider: 1,
         allow_x_provider: 1,
       },
+      guildguard: { max_incidents_per_day: 10000, max_retention_days: 365, allow_ai_assistance: 1 },
       aiassistant: {
         max_requests_per_day: 1000
       },
@@ -416,6 +422,7 @@ const PLAN_PRESETS = Object.freeze({
       branding: true,
       analytics: true,
       engagement: true,
+      guildguard: true,
       aiassistant: true,
       telegrambridge: true,
       automessages: true
@@ -495,6 +502,7 @@ const PLAN_PRESETS = Object.freeze({
         allow_discord_provider: 1,
         allow_x_provider: 1,
       },
+      guildguard: { max_incidents_per_day: null, max_retention_days: null, allow_ai_assistance: 1 },
       aiassistant: {
         max_requests_per_day: null
       },
@@ -522,6 +530,7 @@ const PLAN_PRESETS = Object.freeze({
       branding: true,
       analytics: true,
       engagement: true,
+      guildguard: true,
       aiassistant: true,
       telegrambridge: true,
       automessages: true

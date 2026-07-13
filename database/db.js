@@ -118,6 +118,16 @@ const REQUIRED_SCHEMA = Object.freeze({
   auto_message_settings: ['guild_id', 'enabled', 'updated_at'],
   auto_messages: ['guild_id', 'name', 'channel_id', 'enabled', 'schedule_type', 'schedule_config_json', 'timezone', 'embed_json', 'next_run_at'],
   auto_message_audit: ['guild_id', 'auto_message_id', 'status', 'event_type', 'created_at'],
+  guild_guard_configs: ['guild_id', 'enabled', 'mode', 'config_json', 'updated_at'],
+  staff_identities: ['guild_id', 'user_id', 'enabled', 'aliases_json'],
+  domain_allowlist: ['guild_id', 'domain', 'created_at'],
+  domain_blocklist: ['guild_id', 'domain', 'created_at'],
+  risk_profiles: ['guild_id', 'user_id', 'risk_score', 'signal_count', 'updated_at'],
+  risk_signals: ['guild_id', 'event_id', 'detector', 'severity', 'score', 'metadata_json'],
+  incidents: ['incident_id', 'guild_id', 'event_id', 'event_type', 'status', 'signals_json'],
+  actions: ['guild_id', 'incident_id', 'action_type', 'status', 'metadata_json'],
+  raid_events: ['guild_id', 'event_id', 'join_count', 'window_seconds', 'status'],
+  false_positives: ['guild_id', 'incident_id', 'reported_by', 'status', 'created_at'],
 });
 
 function ensureSchemaMigrationsTable() {

@@ -10,6 +10,7 @@ const MODULE_DISPLAY_NAMES = Object.freeze({
   selfserveroles: 'Self-Serve Roles',
   branding: 'Branding',
   engagement: 'Engagement',
+  guildguard: 'Guild Guard',
   aiassistant: 'AI Assistant',
   vault: 'Vault',
   welcome: 'Welcome & Onboarding',
@@ -31,6 +32,9 @@ function getCompatibleModuleKeys(moduleKey) {
     return ['selfserveroles', 'selfserve'];
   }
   if (normalized === 'battle' || normalized === 'minigames') return ['minigames', 'battle'];
+  if (normalized === 'guild_guard' || normalized === 'guild-guard' || normalized === 'guard') {
+    return ['guildguard', 'guild_guard', 'guild-guard', 'guard'];
+  }
   return [normalized];
 }
 
@@ -38,6 +42,9 @@ function getModuleDisplayName(moduleKey) {
   const normalized = normalizeModuleKey(moduleKey);
   if (normalized === 'selfserve' || normalized === 'self-serve-roles' || normalized === 'selfserve-roles') {
     return MODULE_DISPLAY_NAMES.selfserveroles;
+  }
+  if (normalized === 'guild_guard' || normalized === 'guild-guard' || normalized === 'guard') {
+    return MODULE_DISPLAY_NAMES.guildguard;
   }
   return MODULE_DISPLAY_NAMES[normalized] || moduleKey;
 }

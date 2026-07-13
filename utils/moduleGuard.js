@@ -19,7 +19,8 @@ const DEFAULT_TOGGLES = Object.freeze({
   minigamesEnabled: true,
   battleEnabled: true,
   heistEnabled: true,
-  vaultEnabled: false
+  vaultEnabled: false,
+  guildguardEnabled: true
 });
 
 class ModuleGuard {

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Guild Guard Review</title>
+  <style>
+    body { margin: 0; padding: 2rem; background: #0f172a; color: #e2e8f0; font: 15px system-ui, sans-serif; }
+    main { max-width: 1100px; margin: auto; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 1rem; margin: 1rem 0; }
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; }
+    .metric { background: #0f172a; border-radius: 8px; padding: .8rem; }
+    .metric strong { display: block; font-size: 1.5rem; color: #a5b4fc; }
+    table { width: 100%; border-collapse: collapse; } th, td { text-align: left; padding: .6rem; border-bottom: 1px solid #334155; }
+    button { background: #6366f1; color: white; border: 0; border-radius: 6px; padding: .45rem .65rem; margin: .15rem; cursor: pointer; }
+    button.secondary { background: #475569; }
+    button.danger { background: #b91c1c; }
+    code { color: #a5b4fc; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Guild Guard Review</h1>
+    <p id="summary">Loading incidents...</p>
+    <section class="metrics">
+      <div class="metric"><span>Total (7d)</span><strong id="metric-total">—</strong></div>
+      <div class="metric"><span>Open</span><strong id="metric-open">—</strong></div>
+      <div class="metric"><span>Confirmed</span><strong id="metric-confirmed">—</strong></div>
+      <div class="metric"><span>False positives</span><strong id="metric-false-positive">—</strong></div>
+      <div class="metric"><span>Avg. risk</span><strong id="metric-risk">—</strong></div>
+    </section>
+    <section class="card"><h2>Incidents</h2><table><thead><tr><th>Time</th><th>Type</th><th>Score</th><th>Status</th><th>Action</th></tr></thead><tbody id="incidents"></tbody></table></section>
+    <section class="card"><h2>Operations</h2><button id="retention">Run retention cleanup</button><span id="retention-result"></span></section>
+    <section class="card"><h2>Configuration</h2><pre id="config">Loading...</pre></section>
+  </main>
+  <script>
+    const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+    const statusCount = (summary, status) => Number(summary?.statuses?.[status] || 0);
+    async function reviewIncident(id, status) {
+      const reason = status === 'false_positive' ? window.prompt('Why is this a false positive?') : '';
+      if (status === 'false_positive' && !reason) return;
+      const endpoint = status === 'false_positive'
+        ? `/api/admin/guildguard/incidents/${encodeURIComponent(id)}/false-positive`
+        : `/api/admin/guildguard/incidents/${encodeURIComponent(id)}/review`;
+      const body = status === 'false_positive' ? { reason } : { status };
+      const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!response.ok) throw new Error('Unable to update incident');
+      await load();
+    }
+    async function load() {
+      const [incidentResponse, configResponse, summaryResponse] = await Promise.all([
+        fetch('/api/admin/guildguard/incidents?limit=100'),
+        fetch('/api/admin/guildguard/config'),
+        fetch('/api/admin/guildguard/summary?days=7')
+      ]);
+      const incidentData = await incidentResponse.json();
+      const configData = await configResponse.json();
+      const summaryData = await summaryResponse.json();
+      const incidents = incidentData.data?.incidents || incidentData.incidents || [];
+      const summary = summaryData.data?.summary || summaryData.summary || {};
+      document.getElementById('summary').textContent = `${incidents.length} recent incident(s); last event ${summary.lastIncidentAt || 'none'}`;
+      document.getElementById('metric-total').textContent = summary.total ?? 0;
+      document.getElementById('metric-open').textContent = statusCount(summary, 'open');
+      document.getElementById('metric-confirmed').textContent = statusCount(summary, 'confirmed');
+      document.getElementById('metric-false-positive').textContent = statusCount(summary, 'false_positive');
+      document.getElementById('metric-risk').textContent = summary.averageRiskScore ?? 0;
+      document.getElementById('config').textContent = JSON.stringify(configData.data?.config || configData.config || {}, null, 2);
+      document.getElementById('incidents').innerHTML = incidents.map(incident => `<tr><td>${escapeHtml(incident.created_at)}</td><td><code>${escapeHtml(incident.event_type)}</code></td><td>${escapeHtml(incident.risk_score)}</td><td>${escapeHtml(incident.status)}</td><td><button data-id="${escapeHtml(incident.incident_id)}" data-status="reviewed">Review</button><button class="secondary" data-id="${escapeHtml(incident.incident_id)}" data-status="confirmed">Confirm</button><button class="danger" data-id="${escapeHtml(incident.incident_id)}" data-status="false_positive">False positive</button></td></tr>`).join('');
+      document.querySelectorAll('button[data-id]').forEach(button => button.addEventListener('click', async () => {
+        try { await reviewIncident(button.dataset.id, button.dataset.status); } catch (error) { document.getElementById('summary').textContent = error.message; }
+      }));
+    }
+    document.getElementById('retention').addEventListener('click', async () => {
+      const response = await fetch('/api/admin/guildguard/retention/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const payload = await response.json();
+      const result = payload.data?.result || payload.result || {};
+      document.getElementById('retention-result').textContent = ` Deleted ${result.deleted || 0} row(s).`;
+      await load();
+    });
+    load().catch(error => { document.getElementById('summary').textContent = error.message; });
+  </script>
+</body>
+</html>

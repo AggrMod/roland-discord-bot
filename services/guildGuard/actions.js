@@ -11,16 +11,39 @@ function recordAction({ event, incident, actionType, status, metadata = {} }) {
     .get(event.guildId, incident.incident_id);
 }
 
+function claimAction({ event, incident, actionType, metadata = {} }) {
+  if (!incident?.incident_id) return null;
+  const result = db.prepare(`
+    INSERT INTO actions (guild_id, incident_id, action_type, status, metadata_json)
+    SELECT ?, ?, ?, 'pending', ?
+    WHERE NOT EXISTS (
+      SELECT 1 FROM actions
+      WHERE guild_id = ? AND incident_id = ? AND action_type = ? AND status IN ('pending', 'applied')
+    )
+  `).run(event.guildId, incident.incident_id, actionType, JSON.stringify(metadata), event.guildId, incident.incident_id, actionType);
+  if (!result.changes) return null;
+  return db.prepare('SELECT * FROM actions WHERE id = ?').get(result.lastInsertRowid);
+}
+
+function finalizeAction(actionId, status, metadata) {
+  db.prepare('UPDATE actions SET status = ?, metadata_json = ? WHERE id = ?')
+    .run(status, JSON.stringify(metadata || {}), actionId);
+  return db.prepare('SELECT * FROM actions WHERE id = ?').get(actionId);
+}
+
 async function alertStaff({ source, event, decision, config, incident, signals, thresholdOverride = null, pingStaff = false }) {
   const channelId = String(config?.alertChannelId || '').trim();
   const threshold = thresholdOverride === null ? Number(config?.risk?.alert || 25) : Number(thresholdOverride);
   if (!channelId || Number(decision?.score || 0) < threshold || !incident) return null;
+  const claim = claimAction({ event, incident, actionType: 'alert', metadata: { channelId, pending: true } });
+  if (!claim) return db.prepare("SELECT * FROM actions WHERE guild_id = ? AND incident_id = ? AND action_type = 'alert' ORDER BY id DESC LIMIT 1")
+    .get(event.guildId, incident.incident_id);
   const guild = source?.guild || source?.member?.guild;
   let channel = guild?.channels?.cache?.get(channelId) || null;
   if (!channel && typeof guild?.channels?.fetch === 'function') {
     try { channel = await guild.channels.fetch(channelId); } catch (_) { channel = null; }
   }
-  if (!channel?.send) return recordAction({ event, incident, actionType: 'alert', status: 'skipped', metadata: { reason: 'alert_channel_unavailable', channelId } });
+  if (!channel?.send) return finalizeAction(claim.id, 'skipped', { reason: 'alert_channel_unavailable', channelId });
   const detectorNames = [...new Set((signals || []).map(signal => String(signal.detector || '').trim()).filter(Boolean))];
   const staffIds = pingStaff
     ? [...new Set(identityRegistry.list(event.guildId).map(identity => String(identity.user_id || '').trim()).filter(userId => userId && userId !== event.userId))]
@@ -39,9 +62,9 @@ async function alertStaff({ source, event, decision, config, incident, signals, 
   ].filter(Boolean).join('\n');
   try {
     await channel.send({ content, allowedMentions: staffIds.length ? { users: staffIds } : { parse: [] } });
-    return recordAction({ event, incident, actionType: 'alert', status: 'applied', metadata: { channelId, detectors: detectorNames, pingedStaffIds: staffIds } });
+    return finalizeAction(claim.id, 'applied', { channelId, detectors: detectorNames, pingedStaffIds: staffIds });
   } catch (error) {
-    return recordAction({ event, incident, actionType: 'alert', status: 'failed', metadata: { channelId, error: String(error?.message || error) } });
+    return finalizeAction(claim.id, 'failed', { channelId, error: String(error?.message || error) });
   }
 }
 

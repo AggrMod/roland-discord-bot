@@ -202,11 +202,12 @@ guard.updateConfig('guild-rule', {
   rules: { staffImpersonation: { enabled: true, threshold: 50, timeoutSeconds: 3600, deleteMessages: true, pingStaff: true } }
 });
 let ruleAlertPayload = null;
+let ruleAlertCount = 0;
 let ruleTimeoutMs = null;
 let ruleDeleted = false;
 const ruleGuild = {
   id: 'guild-rule',
-  channels: { cache: new Map([['rule-alert-channel', { send: async payload => { ruleAlertPayload = payload; } }]]) }
+  channels: { cache: new Map([['rule-alert-channel', { send: async payload => { ruleAlertPayload = payload; ruleAlertCount += 1; } }]]) }
 };
 const ruleResult = await guard.process({
   id: 'rule-message-1', guild: ruleGuild, guildId: 'guild-rule', content: 'visit our support page',
@@ -220,6 +221,15 @@ assert.strictEqual(ruleDeleted, true);
 assert.ok(ruleAlertPayload && ruleAlertPayload.content.includes('<@rule-staff>'));
 assert.deepStrictEqual(ruleAlertPayload.allowedMentions.users, ['rule-staff']);
 assert.strictEqual(db.prepare("SELECT status FROM actions WHERE incident_id = ? AND action_type = 'staff_impersonation_escalation'").get(ruleResult.incident.incident_id).status, 'applied');
+await actionService.execute({
+  source: { guild: ruleGuild, member: { timeout: async () => {} }, delete: async () => {} },
+  event: ruleResult.event,
+  decision: ruleResult.decision,
+  config: ruleResult.config,
+  incident: ruleResult.incident,
+  signals: ruleResult.signals
+});
+assert.strictEqual(ruleAlertCount, 1, 'retries must not send duplicate moderator alerts');
 
 guard.updateConfig('guild-raid', {
   enabled: true,

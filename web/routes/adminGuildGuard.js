@@ -65,7 +65,7 @@ function createAdminGuildGuardRouter({ logger, adminAuthMiddleware, ensureGuildG
     if (!ensureGuildGuardModule(req, res)) return;
     const incident = guildGuardService.getIncident(req.guildId, req.params.incidentId);
     if (!incident) return res.status(404).json(toErrorResponse('Incident not found', 'NOT_FOUND'));
-    return res.json(toSuccessResponse({ incident }));
+    return res.json(toSuccessResponse({ incident, globalReport: guildGuardService.getGlobalReportForIncident(req.guildId, req.params.incidentId) }));
   });
 
   router.get('/api/admin/guildguard/users/:userId/risk', adminAuthMiddleware, (req, res) => {
@@ -75,6 +75,7 @@ function createAdminGuildGuardRouter({ logger, adminAuthMiddleware, ensureGuildG
     return res.json(toSuccessResponse({
       profile: guildGuardService.getRiskProfile(req.guildId, userId),
       incidentSummary: guildGuardService.getUserIncidentSummary(req.guildId, userId),
+      globalReputation: guildGuardService.getGlobalReputation(userId),
       incidents: guildGuardService.listUserIncidents(req.guildId, userId, req.query?.limit),
       signals: guildGuardService.listRiskSignals(req.guildId, userId, req.query?.signalLimit)
     }));
@@ -97,6 +98,33 @@ function createAdminGuildGuardRouter({ logger, adminAuthMiddleware, ensureGuildG
   router.post('/api/admin/guildguard/users/:userId/risk/reset', adminAuthMiddleware, (req, res) => {
     if (!ensureGuildGuardModule(req, res)) return;
     return res.json(toSuccessResponse({ removed: guildGuardService.resetRiskProfile(req.guildId, req.params.userId) }));
+  });
+
+  router.post('/api/admin/guildguard/incidents/:incidentId/global-publish', adminAuthMiddleware, (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    try {
+      const report = guildGuardService.publishGlobalReport(
+        req.guildId,
+        req.params.incidentId,
+        req.session?.discordUser?.id,
+        req.body?.category
+      );
+      return res.status(201).json(toSuccessResponse({ report }));
+    } catch (error) {
+      return res.status(400).json(toErrorResponse(error.message || 'Unable to publish global reputation report', 'VALIDATION_ERROR'));
+    }
+  });
+
+  router.delete('/api/admin/guildguard/global-reputation/reports/:reportId', adminAuthMiddleware, (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    const report = guildGuardService.revokeGlobalReport(req.params.reportId, req.session?.discordUser?.id, req.body?.reason, req.guildId);
+    if (!report) return res.status(404).json(toErrorResponse('Global reputation report not found', 'NOT_FOUND'));
+    return res.json(toSuccessResponse({ report }));
+  });
+
+  router.get('/api/admin/guildguard/global-reputation/reports', adminAuthMiddleware, (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    return res.json(toSuccessResponse({ reports: guildGuardService.listGlobalReports(req.guildId, req.query?.limit) }));
   });
 
   router.post('/api/admin/guildguard/incidents/:incidentId/review', adminAuthMiddleware, (req, res) => {

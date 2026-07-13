@@ -123,6 +123,42 @@ async function alertStaff({ source, event, decision, config, incident, signals, 
   }
 }
 
+async function alertGlobalReputation({ source, event, reputation, config }) {
+  const channelId = String(config?.alertChannelId || '').trim();
+  const networkConfig = config?.globalReputation || {};
+  if (!channelId || networkConfig.notifyOnJoin === false || Number(reputation?.activeScore || 0) < Number(networkConfig.alertThreshold || 50)) return false;
+  const guild = source?.guild || source?.member?.guild;
+  let channel = guild?.channels?.cache?.get(channelId) || null;
+  if (!channel && typeof guild?.channels?.fetch === 'function') {
+    try { channel = await guild.channels.fetch(channelId); } catch (_) { channel = null; }
+  }
+  if (!channel?.send) return false;
+  const staffIds = [...new Set(identityRegistry.list(event.guildId).map(identity => String(identity.user_id || '').trim()).filter(userId => userId && userId !== event.userId))];
+  const staffMentions = staffIds.map(userId => `<@${userId}>`).join(' ');
+  const categories = reputation.categoryLabels?.join(', ') || 'Global reputation match';
+  const lastReported = reputation.lastReportedAt ? `Last report: ${reputation.lastReportedAt}` : 'Last report: unknown';
+  const embed = new EmbedBuilder()
+    .setColor(reputation.activeScore >= 80 ? 0xED4245 : 0xFEE75C)
+    .setTitle('Global Safety Network match')
+    .setDescription(`A member entering this server has an active cross-tenant reputation signal.`)
+    .addFields(
+      { name: 'User', value: event.userId ? `<@${event.userId}>` : 'Unknown', inline: true },
+      { name: 'Active score', value: `${reputation.activeScore}/100`, inline: true },
+      { name: 'Categories', value: categories, inline: true },
+      { name: 'Reports', value: `${reputation.reportCount} report(s) from ${reputation.sourceCount} tenant(s)`, inline: false },
+      { name: 'Recency', value: lastReported, inline: false }
+    )
+    .setFooter({ text: 'Global Safety Network | moderator review recommended' })
+    .setTimestamp();
+  const content = [`🛡️ Global Safety Network match: ${reputation.activeScore}/100.`, event.userId ? `User: <@${event.userId}>` : null, staffMentions ? `Moderator notification: ${staffMentions}` : null].filter(Boolean).join('\n');
+  try {
+    await channel.send({ content, embeds: [embed], allowedMentions: staffIds.length ? { users: staffIds } : { parse: [] } });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 async function execute({ source, event, decision, config, incident, signals }) {
   const actions = config?.actions || {};
   if (!incident) return null;
@@ -210,4 +246,4 @@ async function execute({ source, event, decision, config, incident, signals }) {
   return recordAction({ event, incident, actionType: action, status: 'skipped', metadata: { reason: 'unsupported_or_missing_permission' } });
 }
 
-module.exports = { execute, recordAction, executeQuickAction };
+module.exports = { execute, recordAction, executeQuickAction, alertGlobalReputation };

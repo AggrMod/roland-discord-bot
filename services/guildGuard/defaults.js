@@ -44,6 +44,19 @@ const DEFAULT_CONFIG = Object.freeze({
   },
   retentionDays: 30,
   alertChannelId: null,
+  globalReputation: {
+    consumeEnabled: true,
+    publishEnabled: false,
+    notifyOnJoin: true,
+    alertThreshold: 50,
+    halfLifeDays: {
+      spam: 90,
+      unsafe_link: 120,
+      impersonation: 180,
+      scam: 365,
+      suspicious_account: 120
+    }
+  },
   rules: [
     {
       id: 'staff_impersonation_escalation',

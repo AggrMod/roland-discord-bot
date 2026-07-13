@@ -1713,7 +1713,7 @@ const GUILD_GUARD_DETECTOR_LABELS = Object.freeze({
 });
 
 function switchGuildGuardTab(tab) {
-  const selected = ['incidents', 'configuration', 'rules', 'domains', 'staff'].includes(tab) ? tab : 'incidents';
+  const selected = ['incidents', 'configuration', 'rules', 'domains', 'staff', 'global'].includes(tab) ? tab : 'incidents';
   document.querySelectorAll('#guildGuardTabs .settings-tab').forEach(button => button.classList.toggle('active', button.dataset.tab === selected));
   document.querySelectorAll('#section-guildguard .settings-tab-pane').forEach(pane => { pane.style.display = pane.id === `guildGuardTab-${selected}` ? '' : 'none'; });
 }
@@ -1739,6 +1739,16 @@ function renderGuildGuardConfig(config) {
   document.getElementById('guildGuardRiskAlert').value = Number(config.risk?.alert || 25);
   document.getElementById('guildGuardRiskDecayEnabled').checked = config.risk?.decayEnabled !== false;
   document.getElementById('guildGuardRiskDecayHalfLife').value = Number(config.risk?.decayHalfLifeHours || 24);
+  const globalReputation = config.globalReputation || {};
+  document.getElementById('guildGuardGlobalConsume').checked = globalReputation.consumeEnabled !== false;
+  document.getElementById('guildGuardGlobalPublish').checked = globalReputation.publishEnabled === true;
+  document.getElementById('guildGuardGlobalNotify').checked = globalReputation.notifyOnJoin !== false;
+  document.getElementById('guildGuardGlobalThreshold').value = Number(globalReputation.alertThreshold || 50);
+  document.getElementById('guildGuardGlobalHalfLifeSpam').value = Number(globalReputation.halfLifeDays?.spam || 90);
+  document.getElementById('guildGuardGlobalHalfLifeUnsafeLink').value = Number(globalReputation.halfLifeDays?.unsafe_link || 120);
+  document.getElementById('guildGuardGlobalHalfLifeImpersonation').value = Number(globalReputation.halfLifeDays?.impersonation || 180);
+  document.getElementById('guildGuardGlobalHalfLifeScam').value = Number(globalReputation.halfLifeDays?.scam || 365);
+  document.getElementById('guildGuardGlobalHalfLifeSuspicious').value = Number(globalReputation.halfLifeDays?.suspicious_account || 120);
 }
 
 async function loadGuildGuardAlertChannels(selectedId = '') {
@@ -1781,6 +1791,7 @@ async function loadGuildGuardIncidentDetail(incidentId) {
     const incidentPayload = await incidentResponse.json();
     if (!incidentResponse.ok) throw new Error(incidentPayload.message || 'Unable to load incident details');
     const incident = incidentPayload.data?.incident || incidentPayload.incident;
+    const globalReport = incidentPayload.data?.globalReport || incidentPayload.globalReport || null;
     const riskResponse = incident.user_id ? await fetch(`/api/admin/guildguard/users/${encodeURIComponent(incident.user_id)}/risk`, { credentials: 'include' }) : null;
     const riskPayload = riskResponse ? await riskResponse.json() : {};
     const risk = riskPayload.data || riskPayload;
@@ -1788,10 +1799,22 @@ async function loadGuildGuardIncidentDetail(incidentId) {
     const signals = JSON.parse(incident.signals_json || '[]');
     const evidence = JSON.parse(incident.evidence_json || '{}');
     target.style.display = '';
-    target.innerHTML = `<div class="card-header-row"><h3>Incident details</h3><div class="button-row"><button type="button" class="btn-danger" data-guildguard-clear-user="${escapeHtml(incident.user_id || '')}">Clear user history</button><button type="button" class="btn-secondary" data-guildguard-close-detail>Close</button></div></div><p><strong>Incident:</strong> <code>${escapeHtml(incident.incident_id)}</code> &nbsp; <strong>User:</strong> <code>${escapeHtml(incident.user_id || 'unknown')}</code></p><p><strong>Signals:</strong> ${escapeHtml(signals.map(signal => `${GUILD_GUARD_DETECTOR_LABELS[signal.detector] || signal.detector} (${signal.score})`).join(', ') || 'none')}</p><details open><summary>Evidence</summary><pre>${escapeHtml(JSON.stringify(evidence, null, 2))}</pre></details><h4>User risk history</h4><p>Current score: <strong>${escapeHtml(risk.profile?.risk_score ?? 0)}</strong> (${escapeHtml(risk.profile?.risk_level || 'low')}); violations: ${escapeHtml(risk.profile?.violation_count ?? 0)}</p><p>Incidents: <strong>${escapeHtml(incidentSummary.total)}</strong> · Open: ${escapeHtml(incidentSummary.open)} · Confirmed: ${escapeHtml(incidentSummary.confirmed)} · False positives: ${escapeHtml(incidentSummary.falsePositive)} · Average risk: ${escapeHtml(incidentSummary.averageRiskScore)}</p><div class="data-table-wrap"><table class="data-table"><thead><tr><th>Time</th><th>Event</th><th>Score</th><th>Status</th></tr></thead><tbody>${(risk.incidents || []).slice(0, 20).map(item => `<tr><td>${escapeHtml(item.created_at)}</td><td>${escapeHtml(item.event_type)}</td><td>${escapeHtml(item.risk_score)}</td><td>${escapeHtml(item.status)}</td></tr>`).join('') || '<tr><td colspan="4">No related incidents.</td></tr>'}</tbody></table></div>`;
+    const globalAction = incident.status === 'confirmed' && globalReport?.status !== 'active'
+      ? `<button type="button" class="btn-primary" data-guildguard-global-publish="${escapeHtml(incident.incident_id)}">Publish globally</button>`
+      : globalReport?.status === 'active'
+        ? `<button type="button" class="btn-danger" data-guildguard-global-revoke="${escapeHtml(globalReport.report_id)}">Revoke global report</button>`
+        : '';
+    const globalReputation = risk.globalReputation || { activeScore: 0, reportCount: 0, sourceCount: 0, categoryLabels: [] };
+    target.innerHTML = `<div class="card-header-row"><h3>Incident details</h3><div class="button-row">${globalAction}<button type="button" class="btn-danger" data-guildguard-clear-user="${escapeHtml(incident.user_id || '')}">Clear user history</button><button type="button" class="btn-secondary" data-guildguard-close-detail>Close</button></div></div><p><strong>Incident:</strong> <code>${escapeHtml(incident.incident_id)}</code> &nbsp; <strong>User:</strong> <code>${escapeHtml(incident.user_id || 'unknown')}</code></p><p><strong>Signals:</strong> ${escapeHtml(signals.map(signal => `${GUILD_GUARD_DETECTOR_LABELS[signal.detector] || signal.detector} (${signal.score})`).join(', ') || 'none')}</p><details open><summary>Evidence</summary><pre>${escapeHtml(JSON.stringify(evidence, null, 2))}</pre></details><h4>User risk history</h4><p>Current score: <strong>${escapeHtml(risk.profile?.risk_score ?? 0)}</strong> (${escapeHtml(risk.profile?.risk_level || 'low')}); violations: ${escapeHtml(risk.profile?.violation_count ?? 0)}</p><p>Incidents: <strong>${escapeHtml(incidentSummary.total)}</strong> · Open: ${escapeHtml(incidentSummary.open)} · Confirmed: ${escapeHtml(incidentSummary.confirmed)} · False positives: ${escapeHtml(incidentSummary.falsePositive)} · Average risk: ${escapeHtml(incidentSummary.averageRiskScore)}</p><p><strong>Global reputation:</strong> ${escapeHtml(globalReputation.activeScore)}/100 · ${escapeHtml(globalReputation.reportCount)} report(s) from ${escapeHtml(globalReputation.sourceCount)} tenant(s) · ${escapeHtml((globalReputation.categoryLabels || []).join(', ') || 'none')}</p><div class="data-table-wrap"><table class="data-table"><thead><tr><th>Time</th><th>Event</th><th>Score</th><th>Status</th></tr></thead><tbody>${(risk.incidents || []).slice(0, 20).map(item => `<tr><td>${escapeHtml(item.created_at)}</td><td>${escapeHtml(item.event_type)}</td><td>${escapeHtml(item.risk_score)}</td><td>${escapeHtml(item.status)}</td></tr>`).join('') || '<tr><td colspan="4">No related incidents.</td></tr>'}</tbody></table></div>`;
     target.querySelector('[data-guildguard-close-detail]')?.addEventListener('click', () => { target.style.display = 'none'; });
     target.querySelector('[data-guildguard-clear-user]')?.addEventListener('click', () => {
       clearGuildGuardUserHistory(incident.user_id).catch(error => { target.textContent = error.message || 'Unable to clear user history'; });
+    });
+    target.querySelector('[data-guildguard-global-publish]')?.addEventListener('click', () => {
+      publishGuildGuardGlobalReport(incident.incident_id).catch(error => { target.textContent = error.message || 'Unable to publish global report'; });
+    });
+    target.querySelector('[data-guildguard-global-revoke]')?.addEventListener('click', () => {
+      revokeGuildGuardGlobalReport(globalReport.report_id).catch(error => { target.textContent = error.message || 'Unable to revoke global report'; });
     });
   } catch (error) {
     target.style.display = '';
@@ -1814,6 +1837,25 @@ async function clearGuildGuardUserHistory(userId) {
     target.style.display = '';
     target.innerHTML = '<p>User Guild Guard history cleared.</p>';
   }
+  await loadGuildGuardView();
+}
+
+async function publishGuildGuardGlobalReport(incidentId) {
+  const response = await fetch(`/api/admin/guildguard/incidents/${encodeURIComponent(incidentId)}/global-publish`, {
+    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({})
+  });
+  const payload = await response.json();
+  if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to publish global report');
+  await loadGuildGuardIncidentDetail(incidentId);
+}
+
+async function revokeGuildGuardGlobalReport(reportId) {
+  if (!window.confirm('Revoke this report from the Global Safety Network?')) return;
+  const response = await fetch(`/api/admin/guildguard/global-reputation/reports/${encodeURIComponent(reportId)}`, {
+    method: 'DELETE', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'Moderator revoked report' })
+  });
+  const payload = await response.json();
+  if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to revoke global report');
   await loadGuildGuardView();
 }
 
@@ -1865,7 +1907,20 @@ async function saveGuildGuardConfig(event) {
     decayEnabled: document.getElementById('guildGuardRiskDecayEnabled').checked,
     decayHalfLifeHours: Number(document.getElementById('guildGuardRiskDecayHalfLife').value || 24)
   };
-  const response = await fetch('/api/admin/guildguard/config', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: document.getElementById('guildGuardEnabled').checked, mode: document.getElementById('guildGuardMode').value, retentionDays: Number(document.getElementById('guildGuardRetention').value || 30), alertChannelId: document.getElementById('guildGuardAlertChannel').value || null, detectors, actions, risk }) });
+  const globalReputation = {
+    consumeEnabled: document.getElementById('guildGuardGlobalConsume').checked,
+    publishEnabled: document.getElementById('guildGuardGlobalPublish').checked,
+    notifyOnJoin: document.getElementById('guildGuardGlobalNotify').checked,
+    alertThreshold: Number(document.getElementById('guildGuardGlobalThreshold').value || 50),
+    halfLifeDays: {
+      spam: Number(document.getElementById('guildGuardGlobalHalfLifeSpam').value || 90),
+      unsafe_link: Number(document.getElementById('guildGuardGlobalHalfLifeUnsafeLink').value || 120),
+      impersonation: Number(document.getElementById('guildGuardGlobalHalfLifeImpersonation').value || 180),
+      scam: Number(document.getElementById('guildGuardGlobalHalfLifeScam').value || 365),
+      suspicious_account: Number(document.getElementById('guildGuardGlobalHalfLifeSuspicious').value || 120)
+    }
+  };
+  const response = await fetch('/api/admin/guildguard/config', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: document.getElementById('guildGuardEnabled').checked, mode: document.getElementById('guildGuardMode').value, retentionDays: Number(document.getElementById('guildGuardRetention').value || 30), alertChannelId: document.getElementById('guildGuardAlertChannel').value || null, detectors, actions, risk, globalReputation }) });
   const payload = await response.json();
   if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to save Guild Guard configuration');
   renderGuildGuardConfig(payload.data?.config || payload.config || {});
@@ -1977,6 +2032,22 @@ async function removeGuildGuardDomain(type, domain) {
   await loadGuildGuardDomains();
 }
 
+function renderGuildGuardGlobalReports(reports) {
+  const target = document.getElementById('guildGuardGlobalReports');
+  if (!target) return;
+  if (!reports.length) { target.innerHTML = '<tr><td colspan="6">No reports published by this server.</td></tr>'; return; }
+  const labels = { spam: 'Spam', unsafe_link: 'Unsafe link', impersonation: 'Impersonation', scam: 'Scam', suspicious_account: 'Suspicious account' };
+  target.innerHTML = reports.map(report => `<tr><td>${escapeHtml(report.created_at)}</td><td><code>${escapeHtml(report.user_id)}</code></td><td>${escapeHtml(labels[report.category] || report.category)}</td><td>${escapeHtml(report.base_score)}</td><td>${escapeHtml(report.status)}</td><td>${report.status === 'active' ? `<button type="button" class="btn-danger" data-guildguard-global-revoke="${escapeHtml(report.report_id)}">Revoke</button>` : '—'}</td></tr>`).join('');
+  target.querySelectorAll('[data-guildguard-global-revoke]').forEach(button => button.addEventListener('click', () => revokeGuildGuardGlobalReport(button.dataset.guildguardGlobalRevoke).catch(error => { target.textContent = error.message || 'Unable to revoke global report'; })));
+}
+
+async function loadGuildGuardGlobalReports() {
+  const response = await fetch('/api/admin/guildguard/global-reputation/reports?limit=100', { credentials: 'include' });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message || 'Unable to load global reputation reports');
+  renderGuildGuardGlobalReports(payload.data?.reports || payload.reports || []);
+}
+
 async function runGuildGuardRetention() {
   const response = await fetch('/api/admin/guildguard/retention/run', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: '{}' });
   if (!response.ok) throw new Error('Unable to run Guild Guard retention cleanup');
@@ -2002,6 +2073,7 @@ async function loadGuildGuardView() {
     await loadGuildGuardIdentities();
     await loadGuildGuardRules();
     await loadGuildGuardDomains();
+    await loadGuildGuardGlobalReports();
     status.textContent = '';
   } catch (error) {
     status.textContent = error.message || 'Unable to load Guild Guard';

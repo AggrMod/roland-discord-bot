@@ -32,6 +32,157 @@ const GUILD_GUARD_RULE_DETECTORS = new Set([
   'staff_impersonation', 'link_protection', 'lookalike_domain', 'raid_burst'
 ]);
 
+const GLOBAL_REPUTATION_CATEGORIES = new Set(['spam', 'unsafe_link', 'impersonation', 'scam', 'suspicious_account']);
+const GLOBAL_REPUTATION_LABELS = Object.freeze({
+  spam: 'Spam',
+  unsafe_link: 'Unsafe link',
+  impersonation: 'Impersonation',
+  scam: 'Scam',
+  suspicious_account: 'Suspicious account'
+});
+
+function normalizeGlobalCategory(value, incident = null) {
+  const requested = String(value || '').trim().toLowerCase();
+  if (GLOBAL_REPUTATION_CATEGORIES.has(requested)) return requested;
+  let signals = [];
+  try { signals = JSON.parse(incident?.signals_json || '[]'); } catch (_) { signals = []; }
+  const detectors = new Set(signals.map(signal => String(signal?.detector || '').trim()));
+  if (detectors.has('staff_impersonation')) return 'impersonation';
+  if (detectors.has('link_protection') || detectors.has('lookalike_domain')) return 'unsafe_link';
+  if (detectors.has('spam_flood') || detectors.has('duplicate_message') || detectors.has('mass_mention')) return 'spam';
+  if (detectors.has('suspicious_account') || detectors.has('raid_burst')) return 'suspicious_account';
+  return 'scam';
+}
+
+function getGlobalReputationConfig(guildId) {
+  const config = getConfig(guildId).globalReputation || {};
+  const defaults = DEFAULT_CONFIG.globalReputation;
+  const halfLifeDays = Object.fromEntries(Object.entries(defaults.halfLifeDays).map(([category, fallback]) => [
+    category,
+    Math.max(1, Math.min(3650, Number(config.halfLifeDays?.[category] || fallback) || fallback))
+  ]));
+  return {
+    consumeEnabled: config.consumeEnabled !== false,
+    publishEnabled: config.publishEnabled === true,
+    notifyOnJoin: config.notifyOnJoin !== false,
+    alertThreshold: Math.max(1, Math.min(100, Number(config.alertThreshold || defaults.alertThreshold) || defaults.alertThreshold)),
+    halfLifeDays
+  };
+}
+
+function parseUtcTimestamp(value) {
+  const timestamp = String(value || '');
+  if (!timestamp) return NaN;
+  const normalized = !/[zZ]|[+-]\d\d:?\d\d$/.test(timestamp)
+    ? `${timestamp.replace(' ', 'T')}Z`
+    : timestamp;
+  return new Date(normalized).getTime();
+}
+
+function globalReportContribution(report, config, now = Date.now()) {
+  const baseScore = Math.max(0, Math.min(100, Number(report.base_score) || 0));
+  const halfLifeDays = config.halfLifeDays[normalizeGlobalCategory(report.category)] || 90;
+  const reportedAt = parseUtcTimestamp(report.created_at);
+  const ageDays = Number.isFinite(reportedAt) ? Math.max(0, (now - reportedAt) / 86400000) : 0;
+  const contribution = baseScore * Math.pow(0.5, ageDays / halfLifeDays);
+  return { ...report, category: normalizeGlobalCategory(report.category), ageDays, contribution };
+}
+
+function getGlobalReputation(userId, options = {}) {
+  const normalizedUserId = String(userId || '').trim();
+  if (!normalizedUserId) return { userId: null, activeScore: 0, reportCount: 0, sourceCount: 0, categories: [], reports: [] };
+  const reports = db.prepare("SELECT * FROM guild_guard_global_reports WHERE user_id = ? AND status = 'active' ORDER BY created_at DESC, id DESC")
+    .all(normalizedUserId);
+  const config = getGlobalReputationConfig(options.guildId || null);
+  const contributions = reports
+    .filter(report => !options.excludeGuildId || report.source_guild_id !== String(options.excludeGuildId))
+    .map(report => globalReportContribution(report, config, options.now || Date.now()));
+  const categories = [...new Set(contributions.map(report => report.category))];
+  const sourceCount = new Set(contributions.map(report => report.source_guild_id)).size;
+  const activeScore = Math.min(100, Math.round(contributions.reduce((total, report) => total + report.contribution, 0)));
+  const lastReportedAt = contributions.map(report => report.created_at).sort().pop() || null;
+  const firstReportedAt = contributions.map(report => report.created_at).sort().shift() || null;
+  return {
+    userId: normalizedUserId,
+    activeScore,
+    level: activeScore >= 80 ? 'high' : activeScore >= 50 ? 'elevated' : activeScore > 0 ? 'low' : 'none',
+    reportCount: contributions.length,
+    sourceCount,
+    categories,
+    categoryLabels: categories.map(category => GLOBAL_REPUTATION_LABELS[category] || category),
+    firstReportedAt,
+    lastReportedAt,
+    reports: options.includeReports === false ? [] : contributions.map(report => ({
+      reportId: report.report_id,
+      category: report.category,
+      categoryLabel: GLOBAL_REPUTATION_LABELS[report.category] || report.category,
+      baseScore: Number(report.base_score) || 0,
+      contribution: Math.round(report.contribution * 10) / 10,
+      ageDays: Math.round(report.ageDays * 10) / 10,
+      createdAt: report.created_at,
+      status: report.status
+    }))
+  };
+}
+
+function getGlobalReportForIncident(guildId, incidentId) {
+  return db.prepare('SELECT * FROM guild_guard_global_reports WHERE source_guild_id = ? AND source_incident_id = ?')
+    .get(normalizeGuildId(guildId), String(incidentId || '').trim()) || null;
+}
+
+function listGlobalReports(guildId, limit = 100) {
+  const bounded = Math.max(1, Math.min(500, Number(limit) || 100));
+  return db.prepare('SELECT * FROM guild_guard_global_reports WHERE source_guild_id = ? ORDER BY created_at DESC, id DESC LIMIT ?')
+    .all(normalizeGuildId(guildId), bounded);
+}
+
+function publishGlobalReport(guildId, incidentId, reportedBy, category = null) {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  const incident = getIncident(normalizedGuildId, incidentId);
+  if (!incident) throw new Error('Incident not found');
+  if (incident.status !== 'confirmed') throw new Error('Only confirmed incidents can be published globally');
+  if (!incident.user_id) throw new Error('Incident has no target user');
+  if (!getGlobalReputationConfig(normalizedGuildId).publishEnabled) throw new Error('Global reputation publishing is disabled');
+  const existing = getGlobalReportForIncident(normalizedGuildId, incident.incident_id);
+  if (existing?.status === 'active') return existing;
+  const reportId = existing?.report_id || crypto.randomUUID();
+  const normalizedCategory = normalizeGlobalCategory(category, incident);
+  db.prepare(`
+    INSERT INTO guild_guard_global_reports
+      (report_id, user_id, category, base_score, source_guild_id, source_incident_id, reported_by, status, revoke_reason, revoked_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'active', NULL, NULL)
+    ON CONFLICT(source_guild_id, source_incident_id) DO UPDATE SET
+      user_id = excluded.user_id, category = excluded.category, base_score = excluded.base_score,
+      reported_by = excluded.reported_by, status = 'active', revoke_reason = NULL,
+      revoked_at = NULL, updated_at = CURRENT_TIMESTAMP
+  `).run(reportId, incident.user_id, normalizedCategory, Math.max(1, Math.min(100, Number(incident.risk_score) || 0)), normalizedGuildId, incident.incident_id, String(reportedBy || 'unknown'));
+  db.prepare(`
+    INSERT INTO actions (guild_id, incident_id, action_type, status, metadata_json)
+    VALUES (?, ?, 'global_publish', 'applied', ?)
+  `).run(normalizedGuildId, incident.incident_id, JSON.stringify({ reportedBy: reportedBy || null, category: normalizedCategory }));
+  return getGlobalReportForIncident(normalizedGuildId, incident.incident_id);
+}
+
+function revokeGlobalReport(reportId, actorId, reason = '', guildId = null) {
+  const normalizedReportId = String(reportId || '').trim();
+  const existing = db.prepare('SELECT * FROM guild_guard_global_reports WHERE report_id = ?').get(normalizedReportId);
+  if (!existing) return null;
+  if (guildId && existing.source_guild_id !== normalizeGuildId(guildId)) return null;
+  db.prepare(`
+    UPDATE guild_guard_global_reports
+    SET status = 'revoked', revoke_reason = ?, revoked_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+    WHERE report_id = ?
+  `).run(String(reason || '').slice(0, 1000) || `Revoked by ${actorId || 'admin'}`, normalizedReportId);
+  return db.prepare('SELECT * FROM guild_guard_global_reports WHERE report_id = ?').get(normalizedReportId);
+}
+
+function claimGlobalMatch(guildId, eventId, userId, reportId, activeScore) {
+  return db.prepare(`
+    INSERT OR IGNORE INTO guild_guard_global_matches (guild_id, event_id, user_id, report_id, active_score)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(normalizeGuildId(guildId), String(eventId || '').trim(), String(userId || '').trim(), String(reportId || '').trim(), Number(activeScore) || 0).changes > 0;
+}
+
 function normalizeRules(value) {
   const source = Array.isArray(value)
     ? value
@@ -217,11 +368,16 @@ function clearUserHistory(guildId, userId) {
   const tx = db.transaction(() => {
     const incidentIds = db.prepare('SELECT incident_id FROM incidents WHERE guild_id = ? AND user_id = ?')
       .all(normalizedGuildId, normalizedUserId).map(row => row.incident_id);
-    const counts = { incidents: incidentIds.length, actions: 0, signals: 0, falsePositives: 0, riskProfiles: 0 };
+    const counts = { incidents: incidentIds.length, actions: 0, signals: 0, falsePositives: 0, riskProfiles: 0, globalReportsRevoked: 0 };
     if (incidentIds.length) {
       const placeholders = incidentIds.map(() => '?').join(',');
       counts.actions = db.prepare(`DELETE FROM actions WHERE guild_id = ? AND incident_id IN (${placeholders})`).run(normalizedGuildId, ...incidentIds).changes;
       counts.falsePositives = db.prepare(`DELETE FROM false_positives WHERE guild_id = ? AND incident_id IN (${placeholders})`).run(normalizedGuildId, ...incidentIds).changes;
+      counts.globalReportsRevoked = db.prepare(`
+        UPDATE guild_guard_global_reports
+        SET status = 'revoked', revoke_reason = 'Local user history cleared', revoked_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE source_guild_id = ? AND source_incident_id IN (${placeholders}) AND status = 'active'
+      `).run(normalizedGuildId, ...incidentIds).changes;
     }
     counts.signals = db.prepare('DELETE FROM risk_signals WHERE guild_id = ? AND user_id = ?').run(normalizedGuildId, normalizedUserId).changes;
     db.prepare('DELETE FROM incidents WHERE guild_id = ? AND user_id = ?').run(normalizedGuildId, normalizedUserId);
@@ -333,7 +489,19 @@ async function handleMessageCreate(message) {
 }
 
 async function handleMemberJoin(member) {
-  return process(member, 'member_join');
+  const result = await process(member, 'member_join');
+  const config = getConfig(member?.guild?.id);
+  const networkConfig = config.globalReputation || {};
+  if (config.enabled && networkConfig.consumeEnabled !== false && networkConfig.notifyOnJoin !== false) {
+    const reputation = getGlobalReputation(member?.id, { guildId: member?.guild?.id, excludeGuildId: member?.guild?.id });
+    if (reputation.activeScore >= Number(networkConfig.alertThreshold || 50) && reputation.reports.length) {
+      const joinEventId = `global_join:${member.guild.id}:${member.id}:${member.joinedTimestamp || Date.now()}`;
+      const reportMatches = reputation.reports.filter(report => claimGlobalMatch(member.guild.id, joinEventId, member.id, report.reportId, reputation.activeScore));
+      if (reportMatches.length) await actionService.alertGlobalReputation({ source: member, event: result.event, reputation, config });
+    }
+    result.globalReputation = reputation;
+  }
+  return result;
 }
 
 async function handleMemberUpdate(oldMember, newMember) {
@@ -474,6 +642,13 @@ module.exports = {
   getConfig,
   updateConfig,
   listRules,
+  getGlobalReputationConfig,
+  getGlobalReputation,
+  getGlobalReportForIncident,
+  listGlobalReports,
+  publishGlobalReport,
+  revokeGlobalReport,
+  claimGlobalMatch,
   createRule,
   updateRule,
   deleteRule,

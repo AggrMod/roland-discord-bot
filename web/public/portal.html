@@ -425,6 +425,7 @@
             <button class="settings-tab" data-tab="rules" onclick="switchGuildGuardTab('rules')">Rules</button>
             <button class="settings-tab" data-tab="domains" onclick="switchGuildGuardTab('domains')">Domains</button>
             <button class="settings-tab" data-tab="staff" onclick="switchGuildGuardTab('staff')">Trusted staff</button>
+            <button class="settings-tab" data-tab="global" onclick="switchGuildGuardTab('global')">Global Safety</button>
           </div>
           <div id="guildGuardTab-incidents" class="settings-tab-pane">
             <div class="metrics-grid" id="guildGuardMetrics" style="margin-bottom:var(--space-4);"></div>
@@ -467,6 +468,19 @@
                 <label class="settings-row"><span>Risk decay enabled</span><input id="guildGuardRiskDecayEnabled" type="checkbox"></label>
                 <label class="settings-row"><span>Decay half-life (hours)</span><input id="guildGuardRiskDecayHalfLife" type="number" min="1" max="8760"></label>
               </div>
+              <h3>Global Safety Network</h3>
+              <p class="section-subtitle">Receive decaying reputation matches from other GuildPilot tenants. Publishing is always explicit and limited to confirmed incidents.</p>
+              <div class="settings-grid">
+                <label class="settings-row"><span>Receive global reputation alerts</span><input id="guildGuardGlobalConsume" type="checkbox"></label>
+                <label class="settings-row"><span>Publish confirmed incidents</span><input id="guildGuardGlobalPublish" type="checkbox"></label>
+                <label class="settings-row"><span>Alert on member join</span><input id="guildGuardGlobalNotify" type="checkbox"></label>
+                <label class="settings-row"><span>Global alert threshold</span><input id="guildGuardGlobalThreshold" type="number" min="1" max="100"></label>
+                <label class="settings-row"><span>Spam half-life (days)</span><input id="guildGuardGlobalHalfLifeSpam" type="number" min="1" max="3650"></label>
+                <label class="settings-row"><span>Unsafe link half-life (days)</span><input id="guildGuardGlobalHalfLifeUnsafeLink" type="number" min="1" max="3650"></label>
+                <label class="settings-row"><span>Impersonation half-life (days)</span><input id="guildGuardGlobalHalfLifeImpersonation" type="number" min="1" max="3650"></label>
+                <label class="settings-row"><span>Scam half-life (days)</span><input id="guildGuardGlobalHalfLifeScam" type="number" min="1" max="3650"></label>
+                <label class="settings-row"><span>Suspicious account half-life (days)</span><input id="guildGuardGlobalHalfLifeSuspicious" type="number" min="1" max="3650"></label>
+              </div>
               <button type="submit" class="btn-primary">Save Guild Guard configuration</button><span id="guildGuardConfigStatus" class="form-status"></span>
             </form>
           </div>
@@ -493,6 +507,13 @@
               <p class="section-subtitle">Guild Guard automatically syncs members who hold Administrator, Manage Server, Manage Messages, Moderate Members, Kick Members, or Ban Members permissions. Role changes are reflected automatically.</p>
               <div style="display:flex;justify-content:flex-end;margin-bottom:var(--space-3);"><button type="button" class="btn-secondary" onclick="loadGuildGuardIdentities()">Refresh identities</button></div>
               <div class="data-table-wrap"><table class="data-table"><thead><tr><th>User ID</th><th>Username</th><th>Display name</th><th>Source</th><th>Status</th></tr></thead><tbody id="guildGuardIdentities"><tr><td colspan="5">Loading…</td></tr></tbody></table></div>
+            </div>
+          </div>
+          <div id="guildGuardTab-global" class="settings-tab-pane" style="display:none;">
+            <div class="card gp-workspace-card">
+              <h3>Published global reports</h3>
+              <p class="section-subtitle">These confirmed reports are shared with other opted-in GuildPilot tenants. Historical reports remain auditable while their active score decays over time.</p>
+              <div class="data-table-wrap"><table class="data-table"><thead><tr><th>Reported</th><th>User</th><th>Category</th><th>Base score</th><th>Status</th><th>Action</th></tr></thead><tbody id="guildGuardGlobalReports"><tr><td colspan="6">Loading…</td></tr></tbody></table></div>
             </div>
           </div>
         </section>

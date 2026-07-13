@@ -32,7 +32,7 @@ function tableColumns(table) {
   return new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(row => row.name));
 }
 
-for (const table of ['guild_guard_configs', 'staff_identities', 'domain_allowlist', 'domain_blocklist', 'risk_profiles', 'risk_signals', 'incidents', 'actions', 'raid_events', 'false_positives']) {
+for (const table of ['guild_guard_configs', 'staff_identities', 'domain_allowlist', 'domain_blocklist', 'risk_profiles', 'risk_signals', 'incidents', 'actions', 'raid_events', 'false_positives', 'guild_guard_global_reports', 'guild_guard_global_matches']) {
   assert.ok(tableColumns(table).size > 0, `expected ${table} table`);
 }
 
@@ -252,15 +252,51 @@ const quickAction = await actionService.executeQuickAction({
 });
 assert.strictEqual(quickAction.status, 'applied');
 assert.strictEqual(quickTimeoutMs, 3600000);
+guard.updateConfig('guild-rule', {
+  publishEnabled: true,
+  globalReputation: { publishEnabled: true, consumeEnabled: true, notifyOnJoin: true, alertThreshold: 50 }
+});
+assert.strictEqual(guard.updateIncidentStatus('guild-rule', ruleResult.incident.incident_id, 'confirmed', 'rule-admin').status, 'confirmed');
+const globalReport = guard.publishGlobalReport('guild-rule', ruleResult.incident.incident_id, 'rule-admin');
+assert.strictEqual(globalReport.status, 'active');
+assert.strictEqual(globalReport.category, 'impersonation');
+const globalReputation = guard.getGlobalReputation('rule-attacker');
+assert.ok(globalReputation.activeScore > 0);
+assert.strictEqual(globalReputation.reportCount, 1);
+assert.strictEqual(globalReputation.sourceCount, 1);
+const decayedReputation = guard.getGlobalReputation('rule-attacker', { now: Date.now() + (180 * 86400000) });
+assert.ok(decayedReputation.activeScore < globalReputation.activeScore);
+let globalAlertPayload = null;
+guard.updateConfig('guild-recipient', {
+  enabled: true,
+  alertChannelId: 'recipient-alert-channel',
+  globalReputation: { consumeEnabled: true, notifyOnJoin: true, alertThreshold: 50 }
+});
+const recipientGuild = {
+  id: 'guild-recipient',
+  channels: { cache: new Map([['recipient-alert-channel', { send: async payload => { globalAlertPayload = payload; } }]]) }
+};
+const joinResult = await guard.handleMemberJoin({
+  id: 'rule-attacker',
+  guild: recipientGuild,
+  user: { id: 'rule-attacker', username: 'RuleModerator' },
+  joinedTimestamp: Date.now()
+});
+assert.ok(joinResult.globalReputation && joinResult.globalReputation.activeScore > 0);
+assert.ok(globalAlertPayload && globalAlertPayload.content.includes('Global Safety Network match'));
+assert.strictEqual(db.prepare('SELECT COUNT(*) AS count FROM guild_guard_global_matches WHERE guild_id = ?').get('guild-recipient').count, 1);
+assert.strictEqual(guard.revokeGlobalReport(globalReport.report_id, 'other-admin', 'not owner', 'guild-recipient'), null);
 const userSummary = guard.getUserIncidentSummary('guild-rule', 'rule-attacker');
 assert.strictEqual(userSummary.total, 1);
-assert.strictEqual(userSummary.open, 1);
+assert.strictEqual(userSummary.confirmed, 1);
 assert.ok(userSummary.averageRiskScore > 0);
 const clearCounts = guard.clearUserHistory('guild-rule', 'rule-attacker');
 assert.strictEqual(clearCounts.incidents, 1);
 assert.strictEqual(clearCounts.riskProfiles, 1);
+assert.strictEqual(clearCounts.globalReportsRevoked, 1);
 assert.strictEqual(guard.getUserIncidentSummary('guild-rule', 'rule-attacker').total, 0);
 assert.strictEqual(guard.getRiskProfile('guild-rule', 'rule-attacker'), null);
+assert.strictEqual(guard.getGlobalReputation('rule-attacker').activeScore, 0);
 
 guard.updateConfig('guild-raid', {
   enabled: true,

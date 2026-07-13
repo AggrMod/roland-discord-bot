@@ -17,7 +17,7 @@
     button.danger { background: #b91c1c; }
     .config-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; }
     .config-field { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .65rem .75rem; background: #0f172a; border-radius: 7px; }
-    .config-field input[type="number"], .config-field select { max-width: 130px; background: #1e293b; color: #e2e8f0; border: 1px solid #475569; border-radius: 5px; padding: .35rem; }
+    .config-field input:not([type="checkbox"]), .config-field select { max-width: 180px; background: #1e293b; color: #e2e8f0; border: 1px solid #475569; border-radius: 5px; padding: .35rem; }
     .config-field input[type="checkbox"] { width: 18px; height: 18px; accent-color: #6366f1; }
     .config-status { color: #a5b4fc; margin-left: .5rem; }
     code { color: #a5b4fc; }
@@ -66,6 +66,20 @@
       </form>
       <details><summary>Raw configuration</summary><pre id="config">Loading...</pre></details>
     </section>
+    <section class="card">
+      <h2>Trusted staff identities</h2>
+      <p>Register staff names that Guild Guard should protect from impersonation. The identity's Discord user ID is required so the real account is not flagged.</p>
+      <form id="identity-form">
+        <div class="config-grid">
+          <label class="config-field"><span>Discord user ID</span><input id="identity-user-id" type="text" required></label>
+          <label class="config-field"><span>Username</span><input id="identity-username" type="text"></label>
+          <label class="config-field"><span>Display name</span><input id="identity-display-name" type="text"></label>
+          <label class="config-field"><span>Aliases</span><input id="identity-aliases" type="text" placeholder="GuildMod, Moderator"></label>
+        </div>
+        <button type="submit">Register identity</button><span id="identity-status" class="config-status"></span>
+      </form>
+      <div id="identities">Loading...</div>
+    </section>
   </main>
   <script>
     const guildId = new URLSearchParams(window.location.search).get('guildId') || '';
@@ -78,6 +92,48 @@
     const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
     const statusCount = (summary, status) => Number(summary?.statuses?.[status] || 0);
     const getConfig = configData => configData.data?.config || configData.config || {};
+    const detectorLabels = {
+      spam_flood: 'Spam flood', duplicate_message: 'Duplicate message', mass_mention: 'Mass mention',
+      suspicious_account: 'Suspicious account', staff_impersonation: 'Staff impersonation',
+      link_protection: 'Unsafe link', lookalike_domain: 'Lookalike domain', raid_burst: 'Raid burst'
+    };
+    function incidentDetectors(incident) {
+      try {
+        const signals = JSON.parse(incident.signals_json || '[]');
+        return [...new Set(signals.map(signal => detectorLabels[signal.detector] || signal.detector).filter(Boolean))];
+      } catch (_) { return []; }
+    }
+    function renderIdentities(identities) {
+      const container = document.getElementById('identities');
+      if (!identities.length) { container.textContent = 'No staff identities registered.'; return; }
+      container.innerHTML = `<table><thead><tr><th>User ID</th><th>Username</th><th>Display name</th><th>Aliases</th><th>Action</th></tr></thead><tbody>${identities.map(identity => `<tr><td><code>${escapeHtml(identity.user_id)}</code></td><td>${escapeHtml(identity.username || '')}</td><td>${escapeHtml(identity.display_name || '')}</td><td>${escapeHtml((identity.aliases || []).join(', '))}</td><td><button class="danger" data-identity-user-id="${escapeHtml(identity.user_id)}">Remove</button></td></tr>`).join('')}</tbody></table>`;
+      container.querySelectorAll('[data-identity-user-id]').forEach(button => button.addEventListener('click', async () => {
+        if (!window.confirm('Remove this trusted staff identity?')) return;
+        const response = await apiFetch(`/api/admin/guildguard/staff-identities/${encodeURIComponent(button.dataset.identityUserId)}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Unable to remove staff identity');
+        await loadIdentities();
+      }));
+    }
+    async function loadIdentities() {
+      const response = await apiFetch('/api/admin/guildguard/staff-identities');
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.message || 'Unable to load staff identities');
+      renderIdentities(payload.data?.identities || payload.identities || []);
+    }
+    async function saveIdentity(event) {
+      event.preventDefault();
+      const aliases = document.getElementById('identity-aliases').value.split(',').map(value => value.trim()).filter(Boolean);
+      const response = await apiFetch('/api/admin/guildguard/staff-identities', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: document.getElementById('identity-user-id').value.trim(), username: document.getElementById('identity-username').value.trim(), displayName: document.getElementById('identity-display-name').value.trim(), aliases })
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to save staff identity');
+      document.getElementById('identity-form').reset();
+      document.getElementById('identity-status').textContent = 'Saved';
+      await loadIdentities();
+      setTimeout(() => { document.getElementById('identity-status').textContent = ''; }, 3000);
+    }
     function renderConfig(config) {
       document.getElementById('guard-enabled').checked = config.enabled === true;
       document.getElementById('guard-mode').value = config.mode === 'enforce' ? 'enforce' : 'monitor';
@@ -144,10 +200,15 @@
       document.getElementById('metric-false-positive').textContent = statusCount(summary, 'false_positive');
       document.getElementById('metric-risk').textContent = summary.averageRiskScore ?? 0;
       renderConfig(getConfig(configData));
-      document.getElementById('incidents').innerHTML = incidents.map(incident => `<tr><td>${escapeHtml(incident.created_at)}</td><td><code>${escapeHtml(incident.event_type)}</code></td><td>${escapeHtml(incident.risk_score)}</td><td>${escapeHtml(incident.status)}</td><td><button data-id="${escapeHtml(incident.incident_id)}" data-status="reviewed">Review</button><button class="secondary" data-id="${escapeHtml(incident.incident_id)}" data-status="confirmed">Confirm</button><button class="danger" data-id="${escapeHtml(incident.incident_id)}" data-status="false_positive">False positive</button></td></tr>`).join('');
+      document.getElementById('incidents').innerHTML = incidents.map(incident => {
+        const detectors = incidentDetectors(incident);
+        const typeLabel = `${incident.event_type || 'event'}${detectors.length ? ` -> ${detectors.join(', ')}` : ''}`;
+        return `<tr><td>${escapeHtml(incident.created_at)}</td><td><code>${escapeHtml(typeLabel)}</code></td><td>${escapeHtml(incident.risk_score)}</td><td>${escapeHtml(incident.status)}</td><td><button data-id="${escapeHtml(incident.incident_id)}" data-status="reviewed">Review</button><button class="secondary" data-id="${escapeHtml(incident.incident_id)}" data-status="confirmed">Confirm</button><button class="danger" data-id="${escapeHtml(incident.incident_id)}" data-status="false_positive">False positive</button></td></tr>`;
+      }).join('');
       document.querySelectorAll('button[data-id]').forEach(button => button.addEventListener('click', async () => {
         try { await reviewIncident(button.dataset.id, button.dataset.status); } catch (error) { document.getElementById('summary').textContent = error.message; }
       }));
+      loadIdentities().catch(error => { document.getElementById('identities').textContent = error.message; });
     }
     document.getElementById('retention').addEventListener('click', async () => {
       const response = await apiFetch('/api/admin/guildguard/retention/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
@@ -158,6 +219,9 @@
     });
     document.getElementById('config-form').addEventListener('submit', event => {
       saveConfig(event).catch(error => { document.getElementById('config-status').textContent = error.message; });
+    });
+    document.getElementById('identity-form').addEventListener('submit', event => {
+      saveIdentity(event).catch(error => { document.getElementById('identity-status').textContent = error.message; });
     });
     load().catch(error => { document.getElementById('summary').textContent = error.message; });
   </script>

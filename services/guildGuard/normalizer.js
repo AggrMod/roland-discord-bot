@@ -1,5 +1,8 @@
 const ZERO_WIDTH_RE = /[\u200B-\u200D\uFEFF]/g;
-const URL_RE = /(?:https?:\/\/|www\.)[^\s<>]+/gi;
+// Capture explicit URLs plus Discord-style bare domains (example.com/path).
+// The boundary prevents matching the domain portion of an email or an
+// already-prefixed URL twice.
+const URL_RE = /(?:https?:\/\/|www\.)[^\s<>]+|(?<![\/@\w])(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?:[/?#][^\s<>]*)?/gi;
 const MENTION_RE = /<@!?(\d+)>|<@&(\d+)>|<#(\d+)>/g;
 
 function safeText(value, maxLength) {

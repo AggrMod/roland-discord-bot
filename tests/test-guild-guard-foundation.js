@@ -46,6 +46,8 @@ const event = normalizeEvent({
 assert.strictEqual(event.guildId, 'guild-a');
 assert.strictEqual(event.normalizedContent, 'visit https://example.com <@123>!');
 assert.deepStrictEqual(event.urls, ['https://example.com']);
+const bareDomainEvent = normalizeEvent({ guildId: 'guild-test', author: { id: 'user-1' }, content: 'visit example.com/docs or www.github.com' });
+assert.deepStrictEqual(bareDomainEvent.urls, ['example.com/docs', 'www.github.com']);
 assert.deepStrictEqual(event.mentions, ['123']);
 
 const config = guard.getConfig('guild-a');

@@ -7,6 +7,7 @@ const EventWindowStore = require('./eventWindow');
 const actionService = require('./actions');
 const identityRegistry = require('./identityRegistry');
 const domainRegistry = require('./domainRegistry');
+const { scoreSignals, riskLevel } = require('./scoring');
 const {
   spamFloodDetector,
   duplicateMessageDetector,
@@ -70,23 +71,104 @@ function isExempt(event, config) {
   return (event.roleIds || []).some(roleId => (exemptions.roleIds || []).includes(roleId));
 }
 
-async function recordSignals(event, signals) {
+function decayRiskScore(score, updatedAt, config, now = Date.now()) {
+  if (config?.risk?.decayEnabled === false) return Math.max(0, Number(score) || 0);
+  const halfLifeHours = Math.max(1, Number(config?.risk?.decayHalfLifeHours) || 24);
+  // SQLite CURRENT_TIMESTAMP is UTC but has no timezone suffix. Parsing it as
+  // local time makes a fresh profile look hours old on non-UTC hosts.
+  const timestamp = String(updatedAt || '');
+  const normalizedTimestamp = timestamp && !/[zZ]|[+-]\d\d:?\d\d$/.test(timestamp)
+    ? `${timestamp.replace(' ', 'T')}Z`
+    : timestamp;
+  const updatedMs = normalizedTimestamp ? new Date(normalizedTimestamp).getTime() : now;
+  if (!Number.isFinite(updatedMs) || updatedMs >= now) return Math.max(0, Number(score) || 0);
+  const factor = Math.pow(0.5, Math.max(0, now - updatedMs) / (halfLifeHours * 3600000));
+  return Math.max(0, Math.round((Number(score) || 0) * factor));
+}
+
+function getRiskProfile(guildId, userId, applyDecay = true) {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  const normalizedUserId = String(userId || '').trim();
+  if (!normalizedGuildId || !normalizedUserId) return null;
+  const row = db.prepare('SELECT * FROM risk_profiles WHERE guild_id = ? AND user_id = ?').get(normalizedGuildId, normalizedUserId);
+  if (!row) return null;
+  const config = getConfig(normalizedGuildId);
+  const score = applyDecay ? decayRiskScore(row.risk_score, row.updated_at, config) : Number(row.risk_score) || 0;
+  const level = riskLevel(score, config);
+  if (score !== Number(row.risk_score) || level !== row.risk_level) {
+    db.prepare('UPDATE risk_profiles SET risk_score = ?, risk_level = ?, updated_at = CURRENT_TIMESTAMP WHERE guild_id = ? AND user_id = ?')
+      .run(score, level, normalizedGuildId, normalizedUserId);
+  }
+  const current = db.prepare('SELECT * FROM risk_profiles WHERE guild_id = ? AND user_id = ?').get(normalizedGuildId, normalizedUserId) || row;
+  return { ...current, risk_score: score, risk_level: level };
+}
+
+function listRiskSignals(guildId, userId, limit = 100) {
+  const bounded = Math.max(1, Math.min(500, Number(limit) || 100));
+  return db.prepare('SELECT * FROM risk_signals WHERE guild_id = ? AND user_id = ? ORDER BY created_at DESC, id DESC LIMIT ?')
+    .all(normalizeGuildId(guildId), String(userId || '').trim(), bounded)
+    .map(row => ({ ...row, metadata: jsonParse(row.metadata_json, {}) }));
+}
+
+function listUserIncidents(guildId, userId, limit = 50) {
+  const bounded = Math.max(1, Math.min(200, Number(limit) || 50));
+  return db.prepare('SELECT * FROM incidents WHERE guild_id = ? AND user_id = ? ORDER BY created_at DESC, id DESC LIMIT ?')
+    .all(normalizeGuildId(guildId), String(userId || '').trim(), bounded);
+}
+
+function resetRiskProfile(guildId, userId) {
+  return db.prepare('DELETE FROM risk_profiles WHERE guild_id = ? AND user_id = ?').run(normalizeGuildId(guildId), String(userId || '').trim()).changes > 0;
+}
+
+function decayRiskProfiles(guildId = null) {
+  const rows = guildId
+    ? db.prepare('SELECT * FROM risk_profiles WHERE guild_id = ?').all(normalizeGuildId(guildId))
+    : db.prepare('SELECT * FROM risk_profiles').all();
+  let changed = 0;
+  const tx = db.transaction(() => {
+    for (const row of rows) {
+      const config = getConfig(row.guild_id);
+      const score = decayRiskScore(row.risk_score, row.updated_at, config);
+      const level = riskLevel(score, config);
+      if (score === Number(row.risk_score) && level === row.risk_level) continue;
+      changed += db.prepare('UPDATE risk_profiles SET risk_score = ?, risk_level = ?, updated_at = CURRENT_TIMESTAMP WHERE guild_id = ? AND user_id = ?')
+        .run(score, level, row.guild_id, row.user_id).changes;
+    }
+  });
+  tx();
+  return changed;
+}
+
+async function recordSignals(event, signals, config = getConfig(event.guildId)) {
   const insert = db.prepare(`
     INSERT OR IGNORE INTO risk_signals
       (guild_id, event_id, user_id, detector, severity, score, metadata_json)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
-  const updateProfile = db.prepare(`
-    INSERT INTO risk_profiles (guild_id, user_id, risk_score, signal_count, last_signal_at)
-    VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)
-    ON CONFLICT(guild_id, user_id) DO UPDATE SET risk_score = MIN(100, risk_profiles.risk_score + excluded.risk_score),
-      signal_count = risk_profiles.signal_count + 1, last_signal_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-  `);
   const tx = db.transaction(() => {
     for (const signal of signals) {
       insert.run(event.guildId, event.eventId, event.userId, String(signal.detector || 'unknown'), String(signal.severity || 'info'), Number(signal.score) || 0, JSON.stringify(signal.metadata || {}));
     }
-    if (event.userId) updateProfile.run(event.guildId, event.userId, Number(signals.reduce((sum, s) => sum + (Number(s.score) || 0), 0)) || 0);
+    if (event.userId) {
+      const existing = db.prepare('SELECT * FROM risk_profiles WHERE guild_id = ? AND user_id = ?').get(event.guildId, event.userId);
+      const previousScore = existing ? decayRiskScore(existing.risk_score, existing.updated_at, config) : 0;
+      const signalScore = scoreSignals(signals, config);
+      const nextScore = Math.min(100, previousScore + signalScore);
+      const nextLevel = riskLevel(nextScore, config);
+      db.prepare(`
+        INSERT INTO risk_profiles
+          (guild_id, user_id, risk_score, risk_level, signal_count, first_signal_at, last_signal_at, violation_count, last_violation_at)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1, CURRENT_TIMESTAMP)
+        ON CONFLICT(guild_id, user_id) DO UPDATE SET
+          risk_score = excluded.risk_score,
+          risk_level = excluded.risk_level,
+          signal_count = risk_profiles.signal_count + excluded.signal_count,
+          last_signal_at = CURRENT_TIMESTAMP,
+          violation_count = risk_profiles.violation_count + 1,
+          last_violation_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
+      `).run(event.guildId, event.userId, nextScore, nextLevel, signals.length);
+    }
   });
   tx();
 }
@@ -257,7 +339,7 @@ function purgeExpired(guildId, retentionDays = null) {
 
 function runRetentionSweep() {
   const guilds = db.prepare('SELECT guild_id FROM guild_guard_configs').all();
-  return guilds.map(row => purgeExpired(row.guild_id));
+  return guilds.map(row => ({ ...purgeExpired(row.guild_id), decayed: decayRiskProfiles(row.guild_id) }));
 }
 
 module.exports = {
@@ -272,6 +354,11 @@ module.exports = {
   createTestIncident,
   listIncidents,
   getDashboardSummary,
+  getRiskProfile,
+  listRiskSignals,
+  listUserIncidents,
+  resetRiskProfile,
+  decayRiskProfiles,
   getIncident,
   updateIncidentStatus,
   reportFalsePositive,

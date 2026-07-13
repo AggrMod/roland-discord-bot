@@ -13,7 +13,8 @@ process.env.DB_BACKUP_ON_STARTUP = 'false';
 const db = require('../database/db');
 const guard = require('../services/guildGuard');
 const { normalizeEvent, normalizeContent } = require('../services/guildGuard/normalizer');
-const { scoreSignals, decidePolicy } = require('../services/guildGuard/scoring');
+const { scoreSignals, decidePolicy, riskLevel } = require('../services/guildGuard/scoring');
+const { resolveSafeUrl, isPrivateIp } = require('../services/guildGuard/urlSafety');
 const EventWindowStore = require('../services/guildGuard/eventWindow');
 const {
   spamFloodDetector,
@@ -76,6 +77,10 @@ assert.strictEqual(guard.listIncidents('guild-b').length, 1);
 
 assert.strictEqual(scoreSignals([{ score: 40 }, { score: 80 }]), 100);
 assert.strictEqual(decidePolicy(70, config).action, 'timeout');
+assert.strictEqual(scoreSignals([{ detector: 'spam_flood', score: 30 }, { detector: 'duplicate_message', score: 25 }], config), 65);
+assert.strictEqual(riskLevel(65, config), 'high');
+assert.strictEqual(isPrivateIp('127.0.0.1'), true);
+await assert.rejects(() => resolveSafeUrl('http://127.0.0.1/admin'), /private_destination/);
 assert.strictEqual(guard.isExempt({ isBot: true, isWebhook: false, isOwner: false, roleIds: [] }, config), true);
 
 const window = new EventWindowStore();
@@ -117,6 +122,10 @@ assert.ok(liveResult.signals.some(signal => signal.detector === 'mass_mention'))
 assert.ok(liveResult.action);
 assert.strictEqual(liveResult.action.status, 'skipped', 'enforcement must remain disabled by default');
 assert.strictEqual(db.prepare('SELECT COUNT(*) AS count FROM risk_signals WHERE guild_id = ?').get('guild-live').count, 1);
+const liveProfile = guard.getRiskProfile('guild-live', 'user-live');
+assert.strictEqual(liveProfile.risk_level, 'medium');
+db.prepare("UPDATE risk_profiles SET risk_score = 80, updated_at = datetime('now', '-48 hours') WHERE guild_id = ? AND user_id = ?").run('guild-live', 'user-live');
+assert.ok(guard.getRiskProfile('guild-live', 'user-live').risk_score < 80, 'risk profile should decay');
 let timeoutMs = null;
 const appliedAction = await actionService.execute({
   source: { member: { timeout: async duration => { timeoutMs = duration; } } },
@@ -155,14 +164,33 @@ assert.ok(identitySignal && identitySignal.metadata.matchedStaffUserId === 'staf
 guard.domainRegistry.add('guild-links', 'trusted.example', 'allow');
 guard.domainRegistry.add('guild-links', 'evil.example', 'block', { reason: 'test' });
 const linkConfig = { detectors: { links: { enabled: true, requireAllowlist: false, protectedDomains: ['trusted.example'] } } };
-const blockedLinkSignal = linkProtectionDetector.detect({
+const blockedLinkSignal = await linkProtectionDetector.detect({
   eventType: 'message_create', guildId: 'guild-links', urls: ['https://evil.example/path']
 }, { config: linkConfig, domainRegistry: guard.domainRegistry });
 assert.ok(blockedLinkSignal && blockedLinkSignal[0].metadata.category === 'blocklisted');
-const lookalikeSignal = linkProtectionDetector.detect({
+const lookalikeSignal = await linkProtectionDetector.detect({
   eventType: 'message_create', guildId: 'guild-links', urls: ['https://trusled.example/path']
 }, { config: linkConfig, domainRegistry: guard.domainRegistry });
 assert.ok(lookalikeSignal && lookalikeSignal[0].metadata.category === 'lookalike');
+
+let alertPayload = null;
+guard.updateConfig('guild-alert', {
+  enabled: true,
+  alertChannelId: 'alert-channel',
+  risk: { alert: 25 },
+  detectors: { massMention: { enabled: true, threshold: 2 } }
+});
+const alertGuild = {
+  id: 'guild-alert',
+  channels: { cache: new Map([['alert-channel', { send: async payload => { alertPayload = payload; } }]]) }
+};
+const alertResult = await guard.process({
+  id: 'alert-message-1', guild: alertGuild, guildId: 'guild-alert', content: '@everyone hello',
+  author: { id: 'alert-user', username: 'AlertUser' }, mentions: ['1', '2'], everyoneMention: true
+}, 'message_create');
+assert.ok(alertResult.incident);
+assert.ok(alertPayload && alertPayload.content.includes('Guild Guard alert'));
+assert.ok(db.prepare("SELECT COUNT(*) AS count FROM actions WHERE incident_id = ? AND action_type = 'alert' AND status = 'applied'").get(alertResult.incident.incident_id).count >= 1);
 
 guard.updateConfig('guild-raid', {
   enabled: true,

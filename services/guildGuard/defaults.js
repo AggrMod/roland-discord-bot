@@ -21,11 +21,27 @@ const DEFAULT_CONFIG = Object.freeze({
       requireAllowlist: false,
       protectedDomains: [],
       score: 65,
-      lookalikeScore: 45
+      lookalikeScore: 45,
+      unsafeDestinationScore: 100,
+      inspectShortenedUrls: true,
+      redirectMaxHops: 3,
+      urlTimeoutMs: 1500
     },
     raids: { enabled: false, windowSeconds: 60, joinThreshold: 8, score: 80 }
   },
-  risk: { warning: 35, timeout: 60, quarantine: 80, alert: 25 },
+  risk: {
+    warning: 35,
+    timeout: 60,
+    quarantine: 80,
+    alert: 25,
+    decayEnabled: true,
+    decayHalfLifeHours: 24,
+    combinationBonuses: [
+      { detectors: ['spam_flood', 'duplicate_message'], score: 10, reason: 'repeated spam pattern' },
+      { detectors: ['staff_impersonation', 'link_protection'], score: 20, reason: 'possible staff scam pattern' },
+      { detectors: ['suspicious_account', 'link_protection'], score: 15, reason: 'new account link risk' }
+    ]
+  },
   retentionDays: 30,
   alertChannelId: null,
   actions: {

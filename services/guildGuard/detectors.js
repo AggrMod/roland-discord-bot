@@ -1,3 +1,5 @@
+const { resolveSafeUrl, toHttpUrl, isPrivateHostname, SHORTENER_HOSTS } = require('./urlSafety');
+
 function numberSetting(config, detectorName, key, fallback, minimum = 0) {
   const value = Number(config?.detectors?.[detectorName]?.[key]);
   return Number.isFinite(value) && value >= minimum ? value : fallback;
@@ -113,7 +115,7 @@ const impersonationDetector = {
 
 const linkProtectionDetector = {
   name: 'link_protection',
-  detect(event, { config, domainRegistry }) {
+  async detect(event, { config, domainRegistry }) {
     if (event.eventType !== 'message_create' || !enabled(config, 'links') || !domainRegistry || event.urls.length === 0) return null;
     const lists = domainRegistry.getLists(event.guildId);
     const protectedDomains = (config.detectors.links.protectedDomains || [])
@@ -122,14 +124,44 @@ const linkProtectionDetector = {
     const references = [...new Set([...lists.allow, ...protectedDomains])];
     const signals = [];
     for (const rawUrl of event.urls) {
-      const domain = domainRegistry.normalizeDomain(rawUrl);
+      let analyzedUrl = rawUrl;
+      let urlAnalysis = null;
+      try {
+        const parsed = toHttpUrl(rawUrl);
+        const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+        if (isPrivateHostname(parsed.hostname) || (config.detectors.links.inspectShortenedUrls !== false && SHORTENER_HOSTS.has(host))) {
+          urlAnalysis = await resolveSafeUrl(rawUrl, {
+            maxRedirects: config.detectors.links.redirectMaxHops,
+            timeoutMs: config.detectors.links.urlTimeoutMs
+          });
+          if (!urlAnalysis.safe) {
+            signals.push({
+              detector: this.name,
+              severity: 'critical',
+              score: numberSetting(config, 'links', 'unsafeDestinationScore', 100, 1),
+              metadata: { domain: host, category: 'unsafe_destination', url: rawUrl, reason: urlAnalysis.reason, redirects: urlAnalysis.redirects }
+            });
+            continue;
+          }
+          analyzedUrl = urlAnalysis.finalUrl || rawUrl;
+        }
+      } catch (error) {
+        signals.push({
+          detector: this.name,
+          severity: 'critical',
+          score: numberSetting(config, 'links', 'unsafeDestinationScore', 100, 1),
+          metadata: { category: 'unsafe_destination', url: rawUrl, reason: error?.message || 'invalid_url' }
+        });
+        continue;
+      }
+      const domain = domainRegistry.normalizeDomain(analyzedUrl);
       if (!domain) continue;
       if (lists.block.includes(domain)) {
         signals.push({
           detector: this.name,
           severity: 'high',
           score: numberSetting(config, 'links', 'score', 65, 1),
-          metadata: { domain, category: 'blocklisted', url: rawUrl }
+          metadata: { domain, category: 'blocklisted', url: rawUrl, finalUrl: urlAnalysis?.finalUrl || null, redirects: urlAnalysis?.redirects || [] }
         });
         continue;
       }
@@ -140,7 +172,7 @@ const linkProtectionDetector = {
           detector: 'lookalike_domain',
           severity: 'high',
           score: numberSetting(config, 'links', 'lookalikeScore', 45, 1),
-          metadata: { domain, lookalikeOf: lookalike, category: 'lookalike', url: rawUrl }
+          metadata: { domain, lookalikeOf: lookalike, category: 'lookalike', url: rawUrl, finalUrl: urlAnalysis?.finalUrl || null, redirects: urlAnalysis?.redirects || [] }
         });
         continue;
       }
@@ -149,7 +181,7 @@ const linkProtectionDetector = {
           detector: this.name,
           severity: 'medium',
           score: Math.min(50, numberSetting(config, 'links', 'unlistedScore', 25, 1)),
-          metadata: { domain, category: 'unlisted', url: rawUrl }
+          metadata: { domain, category: 'unlisted', url: rawUrl, finalUrl: urlAnalysis?.finalUrl || null, redirects: urlAnalysis?.redirects || [] }
         });
       }
     }

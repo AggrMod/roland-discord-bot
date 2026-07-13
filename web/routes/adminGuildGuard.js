@@ -37,6 +37,22 @@ function createAdminGuildGuardRouter({ logger, adminAuthMiddleware, ensureGuildG
     return res.json(toSuccessResponse({ incident }));
   });
 
+  router.get('/api/admin/guildguard/users/:userId/risk', adminAuthMiddleware, (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    const userId = String(req.params.userId || '').trim();
+    if (!userId) return res.status(400).json(toErrorResponse('User ID is required', 'VALIDATION_ERROR'));
+    return res.json(toSuccessResponse({
+      profile: guildGuardService.getRiskProfile(req.guildId, userId),
+      incidents: guildGuardService.listUserIncidents(req.guildId, userId, req.query?.limit),
+      signals: guildGuardService.listRiskSignals(req.guildId, userId, req.query?.signalLimit)
+    }));
+  });
+
+  router.post('/api/admin/guildguard/users/:userId/risk/reset', adminAuthMiddleware, (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    return res.json(toSuccessResponse({ removed: guildGuardService.resetRiskProfile(req.guildId, req.params.userId) }));
+  });
+
   router.post('/api/admin/guildguard/incidents/:incidentId/review', adminAuthMiddleware, (req, res) => {
     if (!ensureGuildGuardModule(req, res)) return;
     try {
@@ -72,7 +88,9 @@ function createAdminGuildGuardRouter({ logger, adminAuthMiddleware, ensureGuildG
 
   router.post('/api/admin/guildguard/retention/run', adminAuthMiddleware, (req, res) => {
     if (!ensureGuildGuardModule(req, res)) return;
-    return res.json(toSuccessResponse({ result: guildGuardService.purgeExpired(req.guildId, req.body?.retentionDays) }));
+    const result = guildGuardService.purgeExpired(req.guildId, req.body?.retentionDays);
+    result.decayed = guildGuardService.decayRiskProfiles(req.guildId);
+    return res.json(toSuccessResponse({ result }));
   });
 
   router.get('/api/admin/guildguard/staff-identities', adminAuthMiddleware, async (req, res) => {

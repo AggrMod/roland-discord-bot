@@ -122,7 +122,7 @@ const REQUIRED_SCHEMA = Object.freeze({
   staff_identities: ['guild_id', 'user_id', 'enabled', 'aliases_json', 'managed_by_roles'],
   domain_allowlist: ['guild_id', 'domain', 'created_at'],
   domain_blocklist: ['guild_id', 'domain', 'created_at'],
-  risk_profiles: ['guild_id', 'user_id', 'risk_score', 'signal_count', 'updated_at'],
+  risk_profiles: ['guild_id', 'user_id', 'risk_score', 'signal_count', 'updated_at', 'risk_level', 'violation_count'],
   risk_signals: ['guild_id', 'event_id', 'detector', 'severity', 'score', 'metadata_json'],
   incidents: ['incident_id', 'guild_id', 'event_id', 'event_type', 'status', 'signals_json'],
   actions: ['guild_id', 'incident_id', 'action_type', 'status', 'metadata_json'],

@@ -10,9 +10,40 @@ function recordAction({ event, incident, actionType, status, metadata = {} }) {
     .get(event.guildId, incident.incident_id);
 }
 
-async function execute({ source, event, decision, config, incident }) {
+async function alertStaff({ source, event, decision, config, incident, signals }) {
+  const channelId = String(config?.alertChannelId || '').trim();
+  const threshold = Number(config?.risk?.alert || 25);
+  if (!channelId || Number(decision?.score || 0) < threshold || !incident) return null;
+  const guild = source?.guild || source?.member?.guild;
+  let channel = guild?.channels?.cache?.get(channelId) || null;
+  if (!channel && typeof guild?.channels?.fetch === 'function') {
+    try { channel = await guild.channels.fetch(channelId); } catch (_) { channel = null; }
+  }
+  if (!channel?.send) return recordAction({ event, incident, actionType: 'alert', status: 'skipped', metadata: { reason: 'alert_channel_unavailable', channelId } });
+  const detectorNames = [...new Set((signals || []).map(signal => String(signal.detector || '').trim()).filter(Boolean))];
+  const messageUrl = event.channelId && event.eventId && /^\d{15,25}$/.test(String(event.eventId))
+    ? `https://discord.com/channels/${event.guildId}/${event.channelId}/${event.eventId}`
+    : null;
+  const content = [
+    `🛡️ Guild Guard alert: ${event.eventType || 'event'} scored ${decision.score}/100.`,
+    `Detectors: ${detectorNames.join(', ') || 'risk signal'}.`,
+    event.userId ? `User: <@${event.userId}>` : null,
+    messageUrl ? `Message: ${messageUrl}` : null,
+    `Incident: ${incident.incident_id}`
+  ].filter(Boolean).join('\n');
+  try {
+    await channel.send({ content, allowedMentions: { parse: [] } });
+    return recordAction({ event, incident, actionType: 'alert', status: 'applied', metadata: { channelId, detectors: detectorNames } });
+  } catch (error) {
+    return recordAction({ event, incident, actionType: 'alert', status: 'failed', metadata: { channelId, error: String(error?.message || error) } });
+  }
+}
+
+async function execute({ source, event, decision, config, incident, signals }) {
   const actions = config?.actions || {};
-  if (!incident || decision?.action === 'monitor') return null;
+  if (!incident) return null;
+  await alertStaff({ source, event, decision, config, incident, signals });
+  if (decision?.action === 'monitor') return null;
   if (config?.mode !== 'enforce' || actions.enabled !== true) {
     return recordAction({ event, incident, actionType: decision.action, status: 'skipped', metadata: { reason: 'enforcement_disabled' } });
   }

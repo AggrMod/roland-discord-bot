@@ -422,11 +422,13 @@
           <div class="settings-tabs" id="guildGuardTabs">
             <button class="settings-tab active" data-tab="incidents" onclick="switchGuildGuardTab('incidents')">Review</button>
             <button class="settings-tab" data-tab="configuration" onclick="switchGuildGuardTab('configuration')">Detection &amp; actions</button>
+            <button class="settings-tab" data-tab="domains" onclick="switchGuildGuardTab('domains')">Domains</button>
             <button class="settings-tab" data-tab="staff" onclick="switchGuildGuardTab('staff')">Trusted staff</button>
           </div>
           <div id="guildGuardTab-incidents" class="settings-tab-pane">
             <div class="metrics-grid" id="guildGuardMetrics" style="margin-bottom:var(--space-4);"></div>
             <div class="card gp-workspace-card"><div class="data-table-wrap"><table class="data-table"><thead><tr><th>Time</th><th>Type / detector</th><th>Score</th><th>Status</th><th>Action</th></tr></thead><tbody id="guildGuardIncidents"><tr><td colspan="5">Loading…</td></tr></tbody></table></div></div>
+            <div id="guildGuardIncidentDetail" class="card gp-workspace-card" style="display:none;margin-top:var(--space-4);"></div>
             <div style="display:flex;justify-content:flex-end;margin-top:var(--space-3);"><button type="button" class="btn-secondary" onclick="runGuildGuardRetention()">Run retention cleanup</button></div>
           </div>
           <div id="guildGuardTab-configuration" class="settings-tab-pane" style="display:none;">
@@ -435,6 +437,7 @@
                 <label class="settings-row"><span>Enabled</span><input id="guildGuardEnabled" type="checkbox"></label>
                 <label class="settings-row"><span>Mode</span><select id="guildGuardMode"><option value="monitor">Monitor only</option><option value="enforce">Enforce actions</option></select></label>
                 <label class="settings-row"><span>Retention days</span><input id="guildGuardRetention" type="number" min="1" max="3650" step="1"></label>
+                <label class="settings-row"><span>Moderator alert channel ID</span><input id="guildGuardAlertChannel" type="text" placeholder="Optional Discord channel ID"></label>
               </div>
               <h3>Detectors</h3>
               <div class="settings-grid">
@@ -454,8 +457,29 @@
                 <label class="settings-row"><span>Timeout users</span><input data-guildguard-action="timeoutUsers" type="checkbox"></label>
                 <label class="settings-row"><span>Raid lockdown</span><input data-guildguard-action="lockdownEnabled" type="checkbox"></label>
               </div>
+              <h3>Risk policy</h3>
+              <div class="settings-grid">
+                <label class="settings-row"><span>Warning threshold</span><input id="guildGuardRiskWarning" type="number" min="1" max="100"></label>
+                <label class="settings-row"><span>Timeout threshold</span><input id="guildGuardRiskTimeout" type="number" min="1" max="100"></label>
+                <label class="settings-row"><span>Quarantine threshold</span><input id="guildGuardRiskQuarantine" type="number" min="1" max="100"></label>
+                <label class="settings-row"><span>Alert threshold</span><input id="guildGuardRiskAlert" type="number" min="1" max="100"></label>
+                <label class="settings-row"><span>Risk decay enabled</span><input id="guildGuardRiskDecayEnabled" type="checkbox"></label>
+                <label class="settings-row"><span>Decay half-life (hours)</span><input id="guildGuardRiskDecayHalfLife" type="number" min="1" max="8760"></label>
+              </div>
               <button type="submit" class="btn-primary">Save Guild Guard configuration</button><span id="guildGuardConfigStatus" class="form-status"></span>
             </form>
+          </div>
+          <div id="guildGuardTab-domains" class="settings-tab-pane" style="display:none;">
+            <div class="card gp-workspace-card">
+              <p class="section-subtitle">Allow trusted domains so normal links are not treated as unsafe. Blocked domains always override the allowlist.</p>
+              <form id="guildGuardDomainForm" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:var(--space-4);">
+                <select id="guildGuardDomainType"><option value="allow">Allow domain</option><option value="block">Block domain</option></select>
+                <input id="guildGuardDomain" type="text" placeholder="example.com" required>
+                <input id="guildGuardDomainReason" type="text" placeholder="Reason (optional)">
+                <button type="submit" class="btn-primary">Save domain</button><span id="guildGuardDomainStatus" class="form-status"></span>
+              </form>
+              <div id="guildGuardDomains">Loading...</div>
+            </div>
           </div>
           <div id="guildGuardTab-staff" class="settings-tab-pane" style="display:none;">
             <div class="card gp-workspace-card">

@@ -34,8 +34,8 @@ class DetectionPipeline {
       return { event, config, signals, score: 0, decision: decidePolicy(0, config), incident: null };
     }
 
-    const score = scoreSignals(signals);
-    if (signals.length > 0) await this.recordSignals(event, signals);
+    const score = scoreSignals(signals, config);
+    if (signals.length > 0) await this.recordSignals(event, signals, config);
     const incident = await this.recordIncident(event, signals, score, {
       action: decidePolicy(score, config).action,
       rawContent: event.rawContent,

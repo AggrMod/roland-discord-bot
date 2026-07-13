@@ -15,6 +15,11 @@
     button { background: #6366f1; color: white; border: 0; border-radius: 6px; padding: .45rem .65rem; margin: .15rem; cursor: pointer; }
     button.secondary { background: #475569; }
     button.danger { background: #b91c1c; }
+    .config-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; }
+    .config-field { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .65rem .75rem; background: #0f172a; border-radius: 7px; }
+    .config-field input[type="number"], .config-field select { max-width: 130px; background: #1e293b; color: #e2e8f0; border: 1px solid #475569; border-radius: 5px; padding: .35rem; }
+    .config-field input[type="checkbox"] { width: 18px; height: 18px; accent-color: #6366f1; }
+    .config-status { color: #a5b4fc; margin-left: .5rem; }
     code { color: #a5b4fc; }
   </style>
 </head>
@@ -31,7 +36,36 @@
     </section>
     <section class="card"><h2>Incidents</h2><table><thead><tr><th>Time</th><th>Type</th><th>Score</th><th>Status</th><th>Action</th></tr></thead><tbody id="incidents"></tbody></table></section>
     <section class="card"><h2>Operations</h2><button id="retention">Run retention cleanup</button><span id="retention-result"></span></section>
-    <section class="card"><h2>Configuration</h2><pre id="config">Loading...</pre></section>
+    <section class="card">
+      <h2>Configuration</h2>
+      <form id="config-form">
+        <div class="config-grid">
+          <label class="config-field"><span>Enabled</span><input id="guard-enabled" type="checkbox"></label>
+          <label class="config-field"><span>Mode</span><select id="guard-mode"><option value="monitor">Monitor only</option><option value="enforce">Enforce actions</option></select></label>
+          <label class="config-field"><span>Retention days</span><input id="guard-retention" type="number" min="1" max="3650" step="1"></label>
+        </div>
+        <h3>Detectors</h3>
+        <div class="config-grid">
+          <label class="config-field"><span>Spam flood</span><input data-detector="spam" type="checkbox"></label>
+          <label class="config-field"><span>Duplicate messages</span><input data-detector="duplicateMessages" type="checkbox"></label>
+          <label class="config-field"><span>Mass mentions</span><input data-detector="massMention" type="checkbox"></label>
+          <label class="config-field"><span>Suspicious accounts</span><input data-detector="suspiciousAccount" type="checkbox"></label>
+          <label class="config-field"><span>Staff impersonation</span><input data-detector="impersonation" type="checkbox"></label>
+          <label class="config-field"><span>Link protection</span><input data-detector="links" type="checkbox"></label>
+          <label class="config-field"><span>Raid bursts</span><input data-detector="raids" type="checkbox"></label>
+        </div>
+        <h3>Actions</h3>
+        <div class="config-grid">
+          <label class="config-field"><span>Allow actions</span><input id="actions-enabled" type="checkbox"></label>
+          <label class="config-field"><span>Warn users</span><input data-action="warnUsers" type="checkbox"></label>
+          <label class="config-field"><span>Delete messages</span><input data-action="deleteMessages" type="checkbox"></label>
+          <label class="config-field"><span>Timeout users</span><input data-action="timeoutUsers" type="checkbox"></label>
+          <label class="config-field"><span>Raid lockdown</span><input data-action="lockdownEnabled" type="checkbox"></label>
+        </div>
+        <button type="submit">Save configuration</button><span id="config-status" class="config-status"></span>
+      </form>
+      <details><summary>Raw configuration</summary><pre id="config">Loading...</pre></details>
+    </section>
   </main>
   <script>
     const guildId = new URLSearchParams(window.location.search).get('guildId') || '';
@@ -43,6 +77,43 @@
     });
     const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
     const statusCount = (summary, status) => Number(summary?.statuses?.[status] || 0);
+    const getConfig = configData => configData.data?.config || configData.config || {};
+    function renderConfig(config) {
+      document.getElementById('guard-enabled').checked = config.enabled === true;
+      document.getElementById('guard-mode').value = config.mode === 'enforce' ? 'enforce' : 'monitor';
+      document.getElementById('guard-retention').value = Number(config.retentionDays || 30);
+      document.querySelectorAll('[data-detector]').forEach(input => {
+        input.checked = config.detectors?.[input.dataset.detector]?.enabled === true;
+      });
+      document.getElementById('actions-enabled').checked = config.actions?.enabled === true;
+      document.querySelectorAll('[data-action]').forEach(input => {
+        input.checked = config.actions?.[input.dataset.action] === true;
+      });
+      document.getElementById('config').textContent = JSON.stringify(config, null, 2);
+    }
+    async function saveConfig(event) {
+      event.preventDefault();
+      const detectors = {};
+      document.querySelectorAll('[data-detector]').forEach(input => { detectors[input.dataset.detector] = { enabled: input.checked }; });
+      const actions = { enabled: document.getElementById('actions-enabled').checked };
+      document.querySelectorAll('[data-action]').forEach(input => { actions[input.dataset.action] = input.checked; });
+      const response = await apiFetch('/api/admin/guildguard/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: document.getElementById('guard-enabled').checked,
+          mode: document.getElementById('guard-mode').value,
+          retentionDays: Number(document.getElementById('guard-retention').value || 30),
+          detectors,
+          actions
+        })
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to save Guild Guard configuration');
+      renderConfig(getConfig(payload));
+      document.getElementById('config-status').textContent = 'Saved';
+      setTimeout(() => { document.getElementById('config-status').textContent = ''; }, 3000);
+    }
     async function reviewIncident(id, status) {
       const reason = status === 'false_positive' ? window.prompt('Why is this a false positive?') : '';
       if (status === 'false_positive' && !reason) return;
@@ -63,6 +134,7 @@
       const incidentData = await incidentResponse.json();
       const configData = await configResponse.json();
       const summaryData = await summaryResponse.json();
+      if (!configResponse.ok) throw new Error(configData.message || 'Unable to load Guild Guard configuration');
       const incidents = incidentData.data?.incidents || incidentData.incidents || [];
       const summary = summaryData.data?.summary || summaryData.summary || {};
       document.getElementById('summary').textContent = `${incidents.length} recent incident(s); last event ${summary.lastIncidentAt || 'none'}`;
@@ -71,7 +143,7 @@
       document.getElementById('metric-confirmed').textContent = statusCount(summary, 'confirmed');
       document.getElementById('metric-false-positive').textContent = statusCount(summary, 'false_positive');
       document.getElementById('metric-risk').textContent = summary.averageRiskScore ?? 0;
-      document.getElementById('config').textContent = JSON.stringify(configData.data?.config || configData.config || {}, null, 2);
+      renderConfig(getConfig(configData));
       document.getElementById('incidents').innerHTML = incidents.map(incident => `<tr><td>${escapeHtml(incident.created_at)}</td><td><code>${escapeHtml(incident.event_type)}</code></td><td>${escapeHtml(incident.risk_score)}</td><td>${escapeHtml(incident.status)}</td><td><button data-id="${escapeHtml(incident.incident_id)}" data-status="reviewed">Review</button><button class="secondary" data-id="${escapeHtml(incident.incident_id)}" data-status="confirmed">Confirm</button><button class="danger" data-id="${escapeHtml(incident.incident_id)}" data-status="false_positive">False positive</button></td></tr>`).join('');
       document.querySelectorAll('button[data-id]').forEach(button => button.addEventListener('click', async () => {
         try { await reviewIncident(button.dataset.id, button.dataset.status); } catch (error) { document.getElementById('summary').textContent = error.message; }
@@ -83,6 +155,9 @@
       const result = payload.data?.result || payload.result || {};
       document.getElementById('retention-result').textContent = ` Deleted ${result.deleted || 0} row(s).`;
       await load();
+    });
+    document.getElementById('config-form').addEventListener('submit', event => {
+      saveConfig(event).catch(error => { document.getElementById('config-status').textContent = error.message; });
     });
     load().catch(error => { document.getElementById('summary').textContent = error.message; });
   </script>

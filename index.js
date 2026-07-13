@@ -418,6 +418,9 @@ client.once(Events.ClientReady, () => {
   inviteTrackerService.setClient(client);
   proposalService.setClient(client);
   webServer.setClient(client);
+  Promise.allSettled([...client.guilds.cache.values()].map(guild => guildGuardService.identityRegistry.syncFromGuild(guild)))
+    .then(results => logger.log(`[guild-guard] synchronized role-managed staff identities for ${results.length} guild(s)`))
+    .catch(error => logger.warn(`[guild-guard] startup staff identity sync failed: ${error?.message || error}`));
   governanceLogger.setClient(client);
   ticketService.setClient(client);
 
@@ -645,6 +648,7 @@ client.on(Events.InviteCreate, invite => inviteTrackerService.handleInviteCreate
 client.on(Events.InviteDelete, invite => inviteTrackerService.handleInviteDelete(invite));
 client.on(Events.GuildMemberAdd, async member => {
   try {
+    guildGuardService.identityRegistry.syncMember(member);
     await guildGuardService.handleMemberJoin(member);
   } catch (error) {
     logger.warn(`[guild-guard] member join normalization failed guild=${member?.guild?.id || 'unknown'} user=${member?.id || 'unknown'}: ${error?.message || error}`);
@@ -669,11 +673,15 @@ client.on(Events.GuildMemberAdd, async member => {
 });
 client.on(Events.GuildMemberUpdate, async (o, n) => {
   try {
+    guildGuardService.identityRegistry.syncMember(n);
     await guildGuardService.handleMemberUpdate(o, n);
   } catch (error) {
     logger.warn(`[guild-guard] member update normalization failed guild=${n?.guild?.id || 'unknown'} user=${n?.id || 'unknown'}: ${error?.message || error}`);
   }
   inviteTrackerService.handleMemberRoleUpdate(o, n);
+});
+client.on(Events.GuildMemberRemove, member => {
+  guildGuardService.identityRegistry.disableRoleManagedMember(member?.guild?.id, member?.id);
 });
 
 async function handlePanelVerifyButton(interaction) {

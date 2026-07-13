@@ -110,6 +110,10 @@
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-ticket"></i></span>
             <span class="nav-label">Ticketing</span>
           </button>
+          <button class="nav-item" data-section="guildguard" data-module="guildguard" onclick="openSidebarSection('guildguard'); toggleMobileMenu()" id="mobileNavGuildGuard" style="display:none;">
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-shield-halved"></i></span>
+            <span class="nav-label">Guild Guard</span>
+          </button>
           <div class="sidebar-section-divider"></div>
           <div class="sidebar-group-label" id="mobileGroupManagement">Management</div>
           <button class="nav-item" data-section="plans" onclick="switchSection('plans'); toggleMobileMenu()" id="mobileNavPlans" style="display:none;">
@@ -192,6 +196,10 @@
           <button class="nav-item" data-section="ticketing" data-module="ticketing" onclick="openSidebarSection('ticketing')" id="sidebarNavTicketing" style="display:none;">
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-ticket"></i></span>
             <span class="nav-label">Ticketing</span>
+          </button>
+          <button class="nav-item" data-section="guildguard" data-module="guildguard" onclick="openSidebarSection('guildguard')" id="sidebarNavGuildGuard" style="display:none;">
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-shield-halved"></i></span>
+            <span class="nav-label">Guild Guard</span>
           </button>
           <div class="sidebar-section-divider"></div>
           <div class="sidebar-group-label" id="sidebarGroupManagement">Management</div>
@@ -401,6 +409,60 @@
         <section id="section-module-detail" class="content-section app-surface">
           <div id="module-detail-container" class="module-detail">
             <!-- Content injected dynamically by portal.js -->
+          </div>
+        </section>
+
+        <!-- Guild Guard Section -->
+        <section id="section-guildguard" class="content-section app-surface">
+          <header class="section-header">
+            <h2>Guild Guard</h2>
+            <p class="section-subtitle">Review moderation incidents, tune detection, and manage trusted staff identities.</p>
+          </header>
+          <div id="guildGuardStatus" class="form-status" style="margin-bottom:var(--space-4);"></div>
+          <div class="settings-tabs" id="guildGuardTabs">
+            <button class="settings-tab active" data-tab="incidents" onclick="switchGuildGuardTab('incidents')">Review</button>
+            <button class="settings-tab" data-tab="configuration" onclick="switchGuildGuardTab('configuration')">Detection &amp; actions</button>
+            <button class="settings-tab" data-tab="staff" onclick="switchGuildGuardTab('staff')">Trusted staff</button>
+          </div>
+          <div id="guildGuardTab-incidents" class="settings-tab-pane">
+            <div class="metrics-grid" id="guildGuardMetrics" style="margin-bottom:var(--space-4);"></div>
+            <div class="card gp-workspace-card"><div class="data-table-wrap"><table class="data-table"><thead><tr><th>Time</th><th>Type / detector</th><th>Score</th><th>Status</th><th>Action</th></tr></thead><tbody id="guildGuardIncidents"><tr><td colspan="5">Loading…</td></tr></tbody></table></div></div>
+            <div style="display:flex;justify-content:flex-end;margin-top:var(--space-3);"><button type="button" class="btn-secondary" onclick="runGuildGuardRetention()">Run retention cleanup</button></div>
+          </div>
+          <div id="guildGuardTab-configuration" class="settings-tab-pane" style="display:none;">
+            <form id="guildGuardConfigForm" class="card gp-workspace-card">
+              <div class="settings-grid">
+                <label class="settings-row"><span>Enabled</span><input id="guildGuardEnabled" type="checkbox"></label>
+                <label class="settings-row"><span>Mode</span><select id="guildGuardMode"><option value="monitor">Monitor only</option><option value="enforce">Enforce actions</option></select></label>
+                <label class="settings-row"><span>Retention days</span><input id="guildGuardRetention" type="number" min="1" max="3650" step="1"></label>
+              </div>
+              <h3>Detectors</h3>
+              <div class="settings-grid">
+                <label class="settings-row"><span>Spam flood</span><input data-guildguard-detector="spam" type="checkbox"></label>
+                <label class="settings-row"><span>Duplicate messages</span><input data-guildguard-detector="duplicateMessages" type="checkbox"></label>
+                <label class="settings-row"><span>Mass mentions</span><input data-guildguard-detector="massMention" type="checkbox"></label>
+                <label class="settings-row"><span>Suspicious accounts</span><input data-guildguard-detector="suspiciousAccount" type="checkbox"></label>
+                <label class="settings-row"><span>Staff impersonation</span><input data-guildguard-detector="impersonation" type="checkbox"></label>
+                <label class="settings-row"><span>Link protection</span><input data-guildguard-detector="links" type="checkbox"></label>
+                <label class="settings-row"><span>Raid bursts</span><input data-guildguard-detector="raids" type="checkbox"></label>
+              </div>
+              <h3>Actions</h3>
+              <div class="settings-grid">
+                <label class="settings-row"><span>Allow actions</span><input id="guildGuardActionsEnabled" type="checkbox"></label>
+                <label class="settings-row"><span>Warn users</span><input data-guildguard-action="warnUsers" type="checkbox"></label>
+                <label class="settings-row"><span>Delete messages</span><input data-guildguard-action="deleteMessages" type="checkbox"></label>
+                <label class="settings-row"><span>Timeout users</span><input data-guildguard-action="timeoutUsers" type="checkbox"></label>
+                <label class="settings-row"><span>Raid lockdown</span><input data-guildguard-action="lockdownEnabled" type="checkbox"></label>
+              </div>
+              <button type="submit" class="btn-primary">Save Guild Guard configuration</button><span id="guildGuardConfigStatus" class="form-status"></span>
+            </form>
+          </div>
+          <div id="guildGuardTab-staff" class="settings-tab-pane" style="display:none;">
+            <div class="card gp-workspace-card">
+              <p class="section-subtitle">Guild Guard automatically syncs members who hold Administrator, Manage Server, Manage Messages, Moderate Members, Kick Members, or Ban Members permissions. Role changes are reflected automatically.</p>
+              <div style="display:flex;justify-content:flex-end;margin-bottom:var(--space-3);"><button type="button" class="btn-secondary" onclick="loadGuildGuardIdentities()">Refresh identities</button></div>
+              <div class="data-table-wrap"><table class="data-table"><thead><tr><th>User ID</th><th>Username</th><th>Display name</th><th>Source</th><th>Status</th></tr></thead><tbody id="guildGuardIdentities"><tr><td colspan="5">Loading…</td></tr></tbody></table></div>
+            </div>
           </div>
         </section>
 

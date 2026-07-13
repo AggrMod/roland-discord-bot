@@ -33,13 +33,14 @@ function upsert(guildId, identity) {
   const aliases = Array.isArray(identity.aliases) ? identity.aliases.map(value => String(value).trim()).filter(Boolean) : [];
   db.prepare(`
     INSERT INTO staff_identities
-      (guild_id, user_id, username, display_name, aliases_json, enabled)
-    VALUES (?, ?, ?, ?, ?, ?)
+      (guild_id, user_id, username, display_name, aliases_json, enabled, managed_by_roles)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(guild_id, user_id) DO UPDATE SET
       username = excluded.username,
       display_name = excluded.display_name,
       aliases_json = excluded.aliases_json,
       enabled = excluded.enabled,
+      managed_by_roles = excluded.managed_by_roles,
       updated_at = CURRENT_TIMESTAMP
   `).run(
     normalizedGuildId,
@@ -47,9 +48,86 @@ function upsert(guildId, identity) {
     identity.username ? String(identity.username).trim() : null,
     identity.displayName || identity.display_name ? String(identity.displayName || identity.display_name).trim() : null,
     JSON.stringify(aliases),
-    identity.enabled === false ? 0 : 1
+    identity.enabled === false ? 0 : 1,
+    identity.managedByRoles === true ? 1 : 0
   );
   return list(normalizedGuildId, false).find(row => row.user_id === userId) || null;
+}
+
+const ROLE_MANAGEMENT_PERMISSIONS = Object.freeze([
+  'Administrator',
+  'ManageGuild',
+  'ManageMessages',
+  'ModerateMembers',
+  'KickMembers',
+  'BanMembers'
+]);
+
+function hasRoleManagementPermission(role) {
+  return ROLE_MANAGEMENT_PERMISSIONS.some(permission => role?.permissions?.has?.(permission));
+}
+
+function memberHasRoleManagementPermission(member) {
+  if (member?.permissions?.has?.('Administrator')) return true;
+  return [...(member?.roles?.cache?.values?.() || [])].some(hasRoleManagementPermission);
+}
+
+function upsertRoleManagedIdentity(guildId, member) {
+  const userId = String(member?.id || member?.user?.id || '').trim();
+  if (!userId) return false;
+  const username = String(member?.user?.username || member?.username || '').trim() || null;
+  const displayName = String(member?.displayName || member?.user?.globalName || member?.user?.username || '').trim() || null;
+  db.prepare(`
+    INSERT INTO staff_identities
+      (guild_id, user_id, username, display_name, aliases_json, enabled, managed_by_roles)
+    VALUES (?, ?, ?, ?, '[]', 1, 1)
+    ON CONFLICT(guild_id, user_id) DO UPDATE SET
+      username = excluded.username,
+      display_name = excluded.display_name,
+      enabled = 1,
+      managed_by_roles = 1,
+      updated_at = CURRENT_TIMESTAMP
+  `).run(String(guildId), userId, username, displayName);
+  return true;
+}
+
+async function syncFromGuild(guild) {
+  const guildId = String(guild?.id || '').trim();
+  if (!guildId || !guild?.members) return { guildId, added: 0, disabled: 0 };
+  await guild.members.fetch();
+  const privilegedIds = new Set();
+  for (const member of guild.members.cache.values()) {
+    if (memberHasRoleManagementPermission(member)) {
+      privilegedIds.add(String(member.id));
+      upsertRoleManagedIdentity(guildId, member);
+    }
+  }
+  const managed = list(guildId, false).filter(identity => Number(identity.managed_by_roles) === 1);
+  let disabled = 0;
+  for (const identity of managed) {
+    if (privilegedIds.has(identity.user_id)) continue;
+    disabled += db.prepare(`UPDATE staff_identities SET enabled = 0, updated_at = CURRENT_TIMESTAMP WHERE guild_id = ? AND user_id = ? AND managed_by_roles = 1`).run(guildId, identity.user_id).changes;
+  }
+  return { guildId, added: privilegedIds.size, disabled };
+}
+
+function syncMember(member) {
+  const guildId = String(member?.guild?.id || '').trim();
+  const userId = String(member?.id || '').trim();
+  if (!guildId || !userId) return { guildId, userId, enabled: false };
+  if (memberHasRoleManagementPermission(member)) {
+    upsertRoleManagedIdentity(guildId, member);
+    return { guildId, userId, enabled: true };
+  }
+  const result = db.prepare('UPDATE staff_identities SET enabled = 0, updated_at = CURRENT_TIMESTAMP WHERE guild_id = ? AND user_id = ? AND managed_by_roles = 1')
+    .run(guildId, userId);
+  return { guildId, userId, enabled: false, disabled: result.changes > 0 };
+}
+
+function disableRoleManagedMember(guildId, userId) {
+  const result = db.prepare('UPDATE staff_identities SET enabled = 0, updated_at = CURRENT_TIMESTAMP WHERE guild_id = ? AND user_id = ? AND managed_by_roles = 1')
+    .run(String(guildId || '').trim(), String(userId || '').trim());
+  return result.changes > 0;
 }
 
 function remove(guildId, userId) {
@@ -70,4 +148,4 @@ function findImpersonationMatch(guildId, event) {
   return null;
 }
 
-module.exports = { list, upsert, remove, findImpersonationMatch, normalizeIdentity };
+module.exports = { list, upsert, remove, findImpersonationMatch, normalizeIdentity, syncFromGuild, syncMember, disableRoleManagedMember };

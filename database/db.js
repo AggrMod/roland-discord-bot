@@ -119,7 +119,7 @@ const REQUIRED_SCHEMA = Object.freeze({
   auto_messages: ['guild_id', 'name', 'channel_id', 'enabled', 'schedule_type', 'schedule_config_json', 'timezone', 'embed_json', 'next_run_at'],
   auto_message_audit: ['guild_id', 'auto_message_id', 'status', 'event_type', 'created_at'],
   guild_guard_configs: ['guild_id', 'enabled', 'mode', 'config_json', 'updated_at'],
-  staff_identities: ['guild_id', 'user_id', 'enabled', 'aliases_json'],
+  staff_identities: ['guild_id', 'user_id', 'enabled', 'aliases_json', 'managed_by_roles'],
   domain_allowlist: ['guild_id', 'domain', 'created_at'],
   domain_blocklist: ['guild_id', 'domain', 'created_at'],
   risk_profiles: ['guild_id', 'user_id', 'risk_score', 'signal_count', 'updated_at'],

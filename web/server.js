@@ -1543,6 +1543,7 @@ class WebServer {
       adminAuthMiddleware,
       ensureGuildGuardModule,
       guildGuardService,
+      getClient: () => this.client,
     }));
     const createAdminTicketsRouter = require('./routes/adminTickets');
     this.app.use('/', createAdminTicketsRouter({

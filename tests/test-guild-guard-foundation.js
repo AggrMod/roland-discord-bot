@@ -134,6 +134,15 @@ guard.identityRegistry.upsert('guild-identity', {
   displayName: 'Guild Moderator',
   aliases: ['GuildMod']
 });
+const roleManagedMember = {
+  id: 'staff-2',
+  user: { id: 'staff-2', username: 'RoleModerator', globalName: 'Role Moderator' },
+  displayName: 'Role Moderator',
+  roles: { cache: { values: () => [{ permissions: { has: permission => permission === 'ModerateMembers' } }] } },
+  permissions: { has: () => false }
+};
+guard.identityRegistry.syncMember({ ...roleManagedMember, guild: { id: 'guild-identity' } });
+assert.strictEqual(guard.identityRegistry.list('guild-identity', false).find(identity => identity.user_id === 'staff-2').managed_by_roles, 1);
 const identityConfig = { detectors: { impersonation: { enabled: true, score: 70 } } };
 const identitySignal = impersonationDetector.detect({
   guildId: 'guild-identity',

@@ -95,6 +95,7 @@ const PORTAL_PAGE_EXPECTATIONS = Object.freeze({
     'dashboard',
     'module-hub',
     'module-detail',
+    'guildguard',
     'servers',
     'governance',
     'wallets',
@@ -1444,6 +1445,8 @@ function updateModuleVisibility() {
     { id: 'mobileNavTokenActivity', key: 'tokentracker' },
     { id: 'mobileNavSelfServe', key: 'selfserveroles' },
     { id: 'mobileNavTicketing', key: 'ticketing' },
+    { id: 'sidebarNavGuildGuard', key: 'guildguard' },
+    { id: 'mobileNavGuildGuard', key: 'guildguard' },
     { id: 'mobileNavEngagement', key: 'engagement' },
     { id: 'mobileNavHeist', key: 'heist' },
   ];
@@ -1473,7 +1476,7 @@ const MODULE_REGISTRY = [
   { key: 'telegrambridge', label: 'Telegram Bridge', icon: '\u{1F4E1}', section: 'telegram-bridge', adminOnly: true, desc: 'Mirror Telegram groups and channels into Discord channels.' },
   { key: 'automessages', label: 'Auto Messages', icon: '\u{1F4E2}', section: 'auto-messages', adminOnly: true, desc: 'Schedule recurring embedded announcements in selected Discord channels.' },
   { key: 'selfserveroles', label: 'Self-Serve Roles', icon: '\u{1F3AD}', section: 'self-serve-roles', desc: 'Claim optional roles assigned by administrators.' },
-  { key: 'guildguard', label: 'Guild Guard', icon: '\u{1F6E1}\uFE0F', section: 'guildguard', adminOnly: true, externalPath: '/admin/guildguard', desc: 'Review security incidents and configure moderation detectors.' },
+  { key: 'guildguard', label: 'Guild Guard', icon: '\u{1F6E1}\uFE0F', section: 'guildguard', adminOnly: true, desc: 'Review security incidents and configure moderation detectors.' },
   { key: 'aiassistant', label: 'AI Assistant', icon: '\u{1F916}', section: 'aiassistant', adminOnly: true, desc: 'Tune prompts, safety controls, and assistant behavior for your server.' },
   { key: 'help', label: 'Help Center', icon: '\u2753', section: 'help', desc: 'Guides, command references, and troubleshooting across all modules.' }
 ];
@@ -1702,6 +1705,126 @@ function renderModuleHub() {
   
   grid.innerHTML = html;
 }
+
+const GUILD_GUARD_DETECTOR_LABELS = Object.freeze({
+  spam_flood: 'Spam flood', duplicate_message: 'Duplicate message', mass_mention: 'Mass mention',
+  suspicious_account: 'Suspicious account', staff_impersonation: 'Staff impersonation',
+  link_protection: 'Unsafe link', lookalike_domain: 'Lookalike domain', raid_burst: 'Raid burst'
+});
+
+function switchGuildGuardTab(tab) {
+  const selected = ['incidents', 'configuration', 'staff'].includes(tab) ? tab : 'incidents';
+  document.querySelectorAll('#guildGuardTabs .settings-tab').forEach(button => button.classList.toggle('active', button.dataset.tab === selected));
+  document.querySelectorAll('#section-guildguard .settings-tab-pane').forEach(pane => { pane.style.display = pane.id === `guildGuardTab-${selected}` ? '' : 'none'; });
+}
+
+function guildGuardSignals(incident) {
+  try {
+    const signals = JSON.parse(incident?.signals_json || '[]');
+    return [...new Set(signals.map(signal => GUILD_GUARD_DETECTOR_LABELS[signal.detector] || signal.detector).filter(Boolean))];
+  } catch (_) { return []; }
+}
+
+function renderGuildGuardConfig(config) {
+  document.getElementById('guildGuardEnabled').checked = config.enabled === true;
+  document.getElementById('guildGuardMode').value = config.mode === 'enforce' ? 'enforce' : 'monitor';
+  document.getElementById('guildGuardRetention').value = Number(config.retentionDays || 30);
+  document.querySelectorAll('[data-guildguard-detector]').forEach(input => { input.checked = config.detectors?.[input.dataset.guildguardDetector]?.enabled === true; });
+  document.getElementById('guildGuardActionsEnabled').checked = config.actions?.enabled === true;
+  document.querySelectorAll('[data-guildguard-action]').forEach(input => { input.checked = config.actions?.[input.dataset.guildguardAction] === true; });
+}
+
+function renderGuildGuardIncidents(incidents) {
+  const target = document.getElementById('guildGuardIncidents');
+  if (!incidents.length) { target.innerHTML = '<tr><td colspan="5">No incidents in the selected server.</td></tr>'; return; }
+  target.innerHTML = incidents.map(incident => {
+    const labels = guildGuardSignals(incident);
+    const typeLabel = `${incident.event_type || 'event'}${labels.length ? ` -> ${labels.join(', ')}` : ''}`;
+    return `<tr><td>${escapeHtml(incident.created_at)}</td><td><code>${escapeHtml(typeLabel)}</code></td><td>${escapeHtml(incident.risk_score)}</td><td>${escapeHtml(incident.status)}</td><td><button class="btn-secondary" data-guildguard-review="reviewed" data-incident-id="${escapeHtml(incident.incident_id)}">Review</button><button class="btn-secondary" data-guildguard-review="confirmed" data-incident-id="${escapeHtml(incident.incident_id)}">Confirm</button><button class="btn-danger" data-guildguard-review="false_positive" data-incident-id="${escapeHtml(incident.incident_id)}">False positive</button></td></tr>`;
+  }).join('');
+  target.querySelectorAll('[data-guildguard-review]').forEach(button => button.addEventListener('click', () => reviewGuildGuardIncident(button.dataset.incidentId, button.dataset.guildguardReview)));
+}
+
+function renderGuildGuardSummary(summary) {
+  const counts = summary?.statuses || {};
+  const metrics = [
+    ['Total (7d)', summary?.total ?? 0], ['Open', counts.open || 0], ['Confirmed', counts.confirmed || 0],
+    ['False positives', counts.false_positive || 0], ['Avg. risk', summary?.averageRiskScore ?? 0]
+  ];
+  document.getElementById('guildGuardMetrics').className = 'overview-metrics-grid';
+  document.getElementById('guildGuardMetrics').innerHTML = metrics.map(([label, value]) => `<div class="overview-metric"><div class="overview-metric-val">${escapeHtml(value)}</div><div class="overview-metric-label">${escapeHtml(label)}</div></div>`).join('');
+}
+
+function renderGuildGuardIdentities(identities) {
+  const target = document.getElementById('guildGuardIdentities');
+  if (!identities.length) { target.innerHTML = '<tr><td colspan="5">No privileged staff identities found.</td></tr>'; return; }
+  target.innerHTML = identities.map(identity => `<tr><td><code>${escapeHtml(identity.user_id)}</code></td><td>${escapeHtml(identity.username || '')}</td><td>${escapeHtml(identity.display_name || '')}</td><td>${Number(identity.managed_by_roles) === 1 ? 'Role permissions' : 'Manual override'}</td><td>${Number(identity.enabled) === 1 ? 'Active' : 'Disabled'}</td></tr>`).join('');
+}
+
+async function loadGuildGuardIdentities() {
+  const response = await fetch('/api/admin/guildguard/staff-identities', { credentials: 'include' });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message || 'Unable to load Guild Guard identities');
+  renderGuildGuardIdentities(payload.data?.identities || payload.identities || []);
+}
+
+async function reviewGuildGuardIncident(incidentId, status) {
+  const reason = status === 'false_positive' ? window.prompt('Why is this a false positive?') : '';
+  if (status === 'false_positive' && !reason) return;
+  const endpoint = status === 'false_positive'
+    ? `/api/admin/guildguard/incidents/${encodeURIComponent(incidentId)}/false-positive`
+    : `/api/admin/guildguard/incidents/${encodeURIComponent(incidentId)}/review`;
+  const response = await fetch(endpoint, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(status === 'false_positive' ? { reason } : { status }) });
+  if (!response.ok) throw new Error('Unable to update Guild Guard incident');
+  await loadGuildGuardView();
+}
+
+async function saveGuildGuardConfig(event) {
+  event.preventDefault();
+  const detectors = {};
+  document.querySelectorAll('[data-guildguard-detector]').forEach(input => { detectors[input.dataset.guildguardDetector] = { enabled: input.checked }; });
+  const actions = { enabled: document.getElementById('guildGuardActionsEnabled').checked };
+  document.querySelectorAll('[data-guildguard-action]').forEach(input => { actions[input.dataset.guildguardAction] = input.checked; });
+  const response = await fetch('/api/admin/guildguard/config', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: document.getElementById('guildGuardEnabled').checked, mode: document.getElementById('guildGuardMode').value, retentionDays: Number(document.getElementById('guildGuardRetention').value || 30), detectors, actions }) });
+  const payload = await response.json();
+  if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to save Guild Guard configuration');
+  renderGuildGuardConfig(payload.data?.config || payload.config || {});
+  document.getElementById('guildGuardConfigStatus').textContent = 'Saved';
+  setTimeout(() => { document.getElementById('guildGuardConfigStatus').textContent = ''; }, 3000);
+}
+
+async function runGuildGuardRetention() {
+  const response = await fetch('/api/admin/guildguard/retention/run', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  if (!response.ok) throw new Error('Unable to run Guild Guard retention cleanup');
+  await loadGuildGuardView();
+}
+
+async function loadGuildGuardView() {
+  if (!activeGuildId || !(isAdmin || isSuperadmin)) return;
+  const status = document.getElementById('guildGuardStatus');
+  try {
+    const [incidentsResponse, configResponse, summaryResponse] = await Promise.all([
+      fetch('/api/admin/guildguard/incidents?limit=100', { credentials: 'include' }),
+      fetch('/api/admin/guildguard/config', { credentials: 'include' }),
+      fetch('/api/admin/guildguard/summary?days=7', { credentials: 'include' })
+    ]);
+    const incidentsPayload = await incidentsResponse.json();
+    const configPayload = await configResponse.json();
+    const summaryPayload = await summaryResponse.json();
+    if (!configResponse.ok) throw new Error(configPayload.message || 'Unable to load Guild Guard configuration');
+    renderGuildGuardIncidents(incidentsPayload.data?.incidents || incidentsPayload.incidents || []);
+    renderGuildGuardConfig(configPayload.data?.config || configPayload.config || {});
+    renderGuildGuardSummary(summaryPayload.data?.summary || summaryPayload.summary || {});
+    await loadGuildGuardIdentities();
+    status.textContent = '';
+  } catch (error) {
+    status.textContent = error.message || 'Unable to load Guild Guard';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('guildGuardConfigForm')?.addEventListener('submit', event => saveGuildGuardConfig(event).catch(error => { document.getElementById('guildGuardConfigStatus').textContent = error.message; }));
+});
 
 // ==================== GENERAL HUB & SETTINGS ====================
 
@@ -2081,6 +2204,8 @@ function updateSidebarModuleNav() {
     { id: 'mobileNavSelfServe', module: 'selfserveroles' },
     { id: 'sidebarNavTicketing', module: 'ticketing' },
     { id: 'mobileNavTicketing', module: 'ticketing' },
+    { id: 'sidebarNavGuildGuard', module: 'guildguard' },
+    { id: 'mobileNavGuildGuard', module: 'guildguard' },
     // Plans nav handled separately (superadmin-only)
   ];
 
@@ -2222,6 +2347,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     treasury: moduleState.wallettracker,
     'nft-activity': moduleState.nfttracker,
     'token-activity': moduleState.tokentracker,
+    guildguard: moduleState.guildguard,
     heist: moduleState.heist,
     battle: moduleState.minigames
   };
@@ -2250,6 +2376,7 @@ function applyTenantModuleNavVisibility(settings = {}) {
     'section-treasury': !moduleState.wallettracker,
     'section-nft-activity': !moduleState.nfttracker,
     'section-token-activity': !moduleState.tokentracker,
+    'section-guildguard': !moduleState.guildguard,
     'section-heist': !moduleState.heist,
     'section-welcome': !moduleState.welcome,
     'section-battle': !moduleState.minigames
@@ -5917,7 +6044,8 @@ function switchSection(sectionName, options = {}) {
     'engagement',
     'welcome',
     'self-serve-roles',
-    'ticketing'
+    'ticketing',
+    'guildguard'
   ]);
   const workspaceSections = new Set(['module-hub', 'settings', 'vault']);
   if (workspaceSections.has(sectionName)) {
@@ -5941,7 +6069,7 @@ function switchSection(sectionName, options = {}) {
     sectionName = (isAdmin || isSuperadmin) ? (activeGuildId ? 'module-hub' : 'servers') : 'landing';
   }
 
-  if (['settings', 'invites', 'aiassistant'].includes(sectionName) && !(isAdmin || isSuperadmin)) {
+  if (['settings', 'invites', 'aiassistant', 'guildguard'].includes(sectionName) && !(isAdmin || isSuperadmin)) {
     if (!options.silentGate) showInfo('Admin access required for this area.');
     sectionName = userData ? (activeGuildId ? 'module-hub' : 'profile') : 'landing';
   }
@@ -5968,7 +6096,8 @@ function switchSection(sectionName, options = {}) {
     'engagement',
     'welcome',
     'self-serve-roles',
-    'ticketing'
+    'ticketing',
+    'guildguard'
   ]);
   if (serverContextSections.has(sectionName) && !activeGuildId) {
     if (userData && hasServerChoices()) {
@@ -5996,7 +6125,8 @@ function switchSection(sectionName, options = {}) {
     vault: 'vault',
     'self-serve-roles': 'selfserveroles',
     ticketing: 'ticketing',
-    engagement: 'engagement'
+    engagement: 'engagement',
+    guildguard: 'guildguard'
   };
   const required = sectionRequiresModule[sectionName];
   if (required && moduleState && moduleState[required] === false) {
@@ -6161,6 +6291,8 @@ function switchSection(sectionName, options = {}) {
     loadWelcomeSettingsSection();
   } else if (sectionName === 'engagement') {
     loadEngagementSection();
+  } else if (sectionName === 'guildguard') {
+    loadGuildGuardView();
   } else if (sectionName === 'plans') {
     updatePlanPrices();
     if (isAdmin) loadCurrentPlan();

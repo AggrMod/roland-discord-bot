@@ -1,7 +1,7 @@
 const express = require('express');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
 
-function createAdminGuildGuardRouter({ logger, adminAuthMiddleware, ensureGuildGuardModule, guildGuardService }) {
+function createAdminGuildGuardRouter({ logger, adminAuthMiddleware, ensureGuildGuardModule, guildGuardService, getClient }) {
   const router = express.Router();
 
   router.get('/api/admin/guildguard/config', adminAuthMiddleware, (req, res) => {
@@ -75,8 +75,14 @@ function createAdminGuildGuardRouter({ logger, adminAuthMiddleware, ensureGuildG
     return res.json(toSuccessResponse({ result: guildGuardService.purgeExpired(req.guildId, req.body?.retentionDays) }));
   });
 
-  router.get('/api/admin/guildguard/staff-identities', adminAuthMiddleware, (req, res) => {
+  router.get('/api/admin/guildguard/staff-identities', adminAuthMiddleware, async (req, res) => {
     if (!ensureGuildGuardModule(req, res)) return;
+    try {
+      const guild = getClient?.()?.guilds?.cache?.get(String(req.guildId || ''));
+      if (guild) await guildGuardService.identityRegistry.syncFromGuild(guild);
+    } catch (error) {
+      logger.warn('Guild Guard staff identity sync failed:', error);
+    }
     return res.json(toSuccessResponse({ identities: guildGuardService.identityRegistry.list(req.guildId, false) }));
   });
 

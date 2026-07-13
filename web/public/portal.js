@@ -1729,7 +1729,7 @@ function renderGuildGuardConfig(config) {
   document.getElementById('guildGuardEnabled').checked = config.enabled === true;
   document.getElementById('guildGuardMode').value = config.mode === 'enforce' ? 'enforce' : 'monitor';
   document.getElementById('guildGuardRetention').value = Number(config.retentionDays || 30);
-  document.getElementById('guildGuardAlertChannel').value = config.alertChannelId || '';
+  loadGuildGuardAlertChannels(config.alertChannelId || '');
   document.querySelectorAll('[data-guildguard-detector]').forEach(input => { input.checked = config.detectors?.[input.dataset.guildguardDetector]?.enabled === true; });
   document.getElementById('guildGuardActionsEnabled').checked = config.actions?.enabled === true;
   document.querySelectorAll('[data-guildguard-action]').forEach(input => { input.checked = config.actions?.[input.dataset.guildguardAction] === true; });
@@ -1739,6 +1739,27 @@ function renderGuildGuardConfig(config) {
   document.getElementById('guildGuardRiskAlert').value = Number(config.risk?.alert || 25);
   document.getElementById('guildGuardRiskDecayEnabled').checked = config.risk?.decayEnabled !== false;
   document.getElementById('guildGuardRiskDecayHalfLife').value = Number(config.risk?.decayHalfLifeHours || 24);
+}
+
+async function loadGuildGuardAlertChannels(selectedId = '') {
+  const select = document.getElementById('guildGuardAlertChannel');
+  if (!select) return;
+  const selected = String(selectedId || '').trim();
+  select.innerHTML = '<option value="">Loading channels...</option>';
+  try {
+    const response = await fetch('/api/admin/discord/channels', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const payload = await response.json();
+    if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to load channels');
+    const channels = (payload.channels || payload.data?.channels || [])
+      .filter(channel => channel && channel.kind !== 'category');
+    populateChannelSelects(['guildGuardAlertChannel'], channels, { selectedValue: selected }, ['selectedValue']);
+    if (selected && !channels.some(channel => String(channel.id) === selected)) {
+      select.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(selected)}" selected>Unknown channel (${escapeHtml(selected)})</option>`);
+    }
+  } catch (error) {
+    select.innerHTML = '<option value="">Unable to load channels</option>';
+    if (selected) select.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(selected)}" selected>Configured channel (${escapeHtml(selected)})</option>`);
+  }
 }
 
 function renderGuildGuardIncidents(incidents) {
@@ -1821,7 +1842,7 @@ async function saveGuildGuardConfig(event) {
     decayEnabled: document.getElementById('guildGuardRiskDecayEnabled').checked,
     decayHalfLifeHours: Number(document.getElementById('guildGuardRiskDecayHalfLife').value || 24)
   };
-  const response = await fetch('/api/admin/guildguard/config', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: document.getElementById('guildGuardEnabled').checked, mode: document.getElementById('guildGuardMode').value, retentionDays: Number(document.getElementById('guildGuardRetention').value || 30), alertChannelId: document.getElementById('guildGuardAlertChannel').value.trim() || null, detectors, actions, risk }) });
+  const response = await fetch('/api/admin/guildguard/config', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: document.getElementById('guildGuardEnabled').checked, mode: document.getElementById('guildGuardMode').value, retentionDays: Number(document.getElementById('guildGuardRetention').value || 30), alertChannelId: document.getElementById('guildGuardAlertChannel').value || null, detectors, actions, risk }) });
   const payload = await response.json();
   if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to save Guild Guard configuration');
   renderGuildGuardConfig(payload.data?.config || payload.config || {});

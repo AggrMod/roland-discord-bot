@@ -8,6 +8,7 @@ const walletService = require('./walletService');
 const roleService = require('./roleService');
 const battleService = require('./battleService');
 const { decryptSecret } = require('../utils/secretVault');
+const { safeRemoteFetch } = require('../utils/safeRemoteFetch');
 const crypto = require('crypto');
 let pdfParse = null;
 try {
@@ -1038,9 +1039,15 @@ class AiAssistantService {
     `).run(normalizedGuildId, sourceUrl, requestedByUserId ? String(requestedByUserId).trim() : null, JSON.stringify(payload || {})).lastInsertRowid;
 
     try {
-      const response = await fetchWithTimeout(sourceUrl, { method: 'GET', headers: { 'User-Agent': 'GuildPilot-KnowledgeBot/1.0' } }, 45000);
-      const contentType = String(response.headers.get('content-type') || '').toLowerCase();
-      const rawBody = await response.text();
+      const response = await safeRemoteFetch(sourceUrl, {
+        timeoutMs: 45000,
+        maxBytes: 512 * 1024,
+        maxRedirects: 3,
+        allowedContentTypes: ['text/plain', 'text/html', 'text/markdown', 'application/xhtml+xml'],
+        headers: { Accept: 'text/plain, text/html, text/markdown;q=0.9' },
+      });
+      const contentType = String(response.contentType || '').toLowerCase();
+      const rawBody = response.body.toString('utf8');
       const body = contentType.includes('html') ? stripHtmlToText(rawBody) : String(rawBody || '').trim();
       if (!response.ok || !body || body.length < 20) {
         throw new Error(`Could not import from URL (${response.status})`);
@@ -1136,12 +1143,20 @@ class AiAssistantService {
     ).lastInsertRowid;
 
     try {
-      const response = await fetchWithTimeout(sourceUrl, { method: 'GET', headers: { 'User-Agent': 'GuildPilot-KnowledgeBot/1.0' } }, 45000);
+      const response = await safeRemoteFetch(sourceUrl, {
+        timeoutMs: 45000,
+        maxBytes: 8 * 1024 * 1024,
+        maxRedirects: 3,
+        allowedContentTypes: ['application/pdf'],
+        headers: { Accept: 'application/pdf' },
+      });
       if (!response.ok) {
         throw new Error(`Could not download PDF (${response.status})`);
       }
-      const arrayBuffer = await response.arrayBuffer();
-      const parsed = await pdfParse(Buffer.from(arrayBuffer));
+      if (response.body.subarray(0, 5).toString('ascii') !== '%PDF-') {
+        throw new Error('Remote file is not a valid PDF');
+      }
+      const parsed = await pdfParse(response.body);
       const body = String(parsed?.text || '').replace(/\s+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 12000);
       if (body.length < 20) throw new Error('PDF text extraction returned too little content');
 

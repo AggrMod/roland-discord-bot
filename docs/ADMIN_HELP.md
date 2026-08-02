@@ -6,12 +6,21 @@ This file is the source-of-truth command reference for the current production co
 - Canonical module commands: `/verification`, `/governance`, `/treasury`, `/wallet-tracker`, `/invites`, `/nft-tracker`, `/token-tracker`, `/aiassistant`, `/minigames`, `/points`, `/heist`, `/config`, `/moderation`.
 - Minigames currently run through dedicated commands (`/battle`, `/higherlower`, `/diceduel`, `/reactionrace`, `/numberguess`, `/slots`, `/trivia`, `/wordscramble`, `/rps`, `/blackjack`, `/gamenight`) and are mapped to the `minigames` module entitlement.
 
+## Portal-managed modules
+- **Welcome & Onboarding:** join messages, CAPTCHA, assets, presets, and onboarding analytics.
+- **Auto Messages:** recurring Discord announcements, schedules, tests, and delivery audit.
+- **Telegram Bridge:** Telegram-to-Discord mappings, media forwarding, tests, and delivery audit.
+- **Guild Guard:** detectors, incidents, domains, staff identities, risk profiles, and moderation actions.
+- **Support Tickets:** categories, forms, panels, transcripts, open-ticket review, and automation.
+- These modules are configured from **Modules** in the portal and do not require a dedicated slash-command family.
+
 ## Verification
 - `/verification status`
 - `/verification wallets`
 - `/verification refresh`
 - `/verification quick`
 - Admin: `/verification admin panel|export-user|remove-user|export-wallets|token-role-add|token-role-remove|token-role-list|role-config|actions|og-view|og-enable|og-role|og-limit|og-sync`
+- Network-aware rules: configure Solana collection/SPL rules or Ethereum, Base, Polygon, Arbitrum One, and Optimism ERC-721, ERC-1155, and ERC-20 rules in Modules → Identity / Verification. Existing roles are preserved when an EVM RPC check is unavailable.
 - Multi-tenant note: legacy `role-config` write actions are blocked; use portal Settings → Verification for tenant-scoped rule edits.
 - OG roles are tenant-scoped in multi-tenant mode.
 
@@ -23,7 +32,7 @@ This file is the source-of-truth command reference for the current production co
 - `/governance cancel`
 - Admin: `/governance admin list|cancel|settings|panel`
 
-## Treasury
+## Wallet Tracker compatibility commands
 - `/treasury view`
 - Admin: `/treasury admin status|refresh|enable|disable|set-wallet|set-interval|tx-history|tx-alerts`
 
@@ -41,12 +50,13 @@ This file is the source-of-truth command reference for the current production co
 - `/invites panel`
 - `/invites export`
 
-## NFT Tracker
+## NFT Activity
 - `/nft-tracker collection add`
 - `/nft-tracker collection remove`
 - `/nft-tracker collection list`
 - `/nft-tracker collection feed`
 - NFT activity alert config is tenant-scoped (per guild) for `enabled/channel/eventTypes/minSol`.
+- Portal tracking supports Solana collections, EVM ERC-721 collections, and specific ERC-1155 token IDs on Ethereum, Base, Polygon, Arbitrum One, and Optimism.
 
 ## Token Tracker
 - `/token-tracker add`
@@ -54,6 +64,7 @@ This file is the source-of-truth command reference for the current production co
 - `/token-tracker remove`
 - `/token-tracker list`
 - `/token-tracker feed`
+- Portal tracking supports SPL tokens and ERC-20 contracts per configured EVM network.
 
 ## Points (Engagement)
 - `/points balance`

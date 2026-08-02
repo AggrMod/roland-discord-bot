@@ -4,6 +4,7 @@ const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
 const xProviderService = require('../../services/xProviderService');
 const { getModuleDisplayName } = require('../../services/moduleLabelService');
 const settingsManager = require('../../config/settings');
+const { encryptSecret } = require('../../utils/secretVault');
 
 function createAuthUserRouter({
   logger,
@@ -37,6 +38,20 @@ function createAuthUserRouter({
       return;
     }
     req.session.save((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+
+  const regenerateSession = (req) => new Promise((resolve, reject) => {
+    if (!req.session || typeof req.session.regenerate !== 'function') {
+      resolve();
+      return;
+    }
+    req.session.regenerate((error) => {
       if (error) {
         reject(error);
         return;
@@ -133,6 +148,42 @@ function createAuthUserRouter({
     } catch (_error) {
       return null;
     }
+  };
+
+  const hashOAuthState = (state) => crypto.createHash('sha256').update(String(state || ''), 'utf8').digest('hex');
+
+  const rememberOAuthState = (req, kind, state, expiresAt) => {
+    const now = Date.now();
+    const existing = Array.isArray(req.session?.oauthStateRecords) ? req.session.oauthStateRecords : [];
+    const current = existing
+      .filter((record) => Number(record?.expiresAt || 0) >= now)
+      .slice(-4);
+    current.push({ kind, stateHash: hashOAuthState(state), expiresAt: Number(expiresAt || 0) });
+    req.session.oauthStateRecords = current;
+  };
+
+  const consumeOAuthState = (req, kind, state) => {
+    const records = Array.isArray(req.session?.oauthStateRecords) ? req.session.oauthStateRecords : [];
+    const now = Date.now();
+    const providedHash = hashOAuthState(state);
+    let matched = false;
+    const remaining = [];
+
+    for (const record of records) {
+      const valid = record?.kind === kind && Number(record?.expiresAt || 0) >= now;
+      const storedHash = String(record?.stateHash || '');
+      const same = valid
+        && storedHash.length === providedHash.length
+        && crypto.timingSafeEqual(Buffer.from(storedHash), Buffer.from(providedHash));
+      if (same && !matched) {
+        matched = true;
+        continue;
+      }
+      if (Number(record?.expiresAt || 0) >= now) remaining.push(record);
+    }
+
+    if (req.session) req.session.oauthStateRecords = remaining;
+    return matched;
   };
 
   const WEB_AUTH_TOKEN_KIND = 'public_web_access_v1';
@@ -412,6 +463,8 @@ function createAuthUserRouter({
       if (!stateToken) {
         return res.status(500).json(toErrorResponse('Could not create auth state', 'CONFIG_ERROR'));
       }
+      rememberOAuthState(req, WEB_AUTH_STATE_KIND, stateToken, now + WEB_AUTH_STATE_TTL_MS);
+      await saveSession(req);
 
       const clientId = String(process.env.CLIENT_ID || '').trim();
       if (!clientId) {
@@ -440,7 +493,9 @@ function createAuthUserRouter({
 
     const statePayload = verifySignedToken(state);
     const now = Date.now();
-    if (!statePayload || statePayload.kind !== WEB_AUTH_STATE_KIND || Number(statePayload.exp || 0) < now) {
+    const sessionStateValid = consumeOAuthState(req, WEB_AUTH_STATE_KIND, state);
+    await saveSession(req);
+    if (!statePayload || statePayload.kind !== WEB_AUTH_STATE_KIND || Number(statePayload.exp || 0) < now || !sessionStateValid) {
       return res.status(400).json(toErrorResponse('Invalid or expired OAuth state', 'VALIDATION_ERROR'));
     }
 
@@ -1204,6 +1259,8 @@ function createAuthUserRouter({
         logger.error('[auth] Could not sign portal OAuth state; check SESSION_SECRET/PUBLIC_WEB_AUTH_SECRET.');
         return res.redirect('/app?error=oauth_state_failed');
       }
+      rememberOAuthState(req, PORTAL_AUTH_STATE_KIND, oauthState, now + PORTAL_AUTH_STATE_TTL_MS);
+      await saveSession(req);
 
       const redirectUri = encodeURIComponent(oauthRedirectUri);
       const scope = encodeURIComponent('identify guilds');
@@ -1222,16 +1279,15 @@ function createAuthUserRouter({
     if (!code) return res.redirect('/app?error=no_code');
     const statePayload = verifySignedToken(String(state || ''));
     const now = Date.now();
+    const sessionStateValid = consumeOAuthState(req, PORTAL_AUTH_STATE_KIND, String(state || ''));
+    await saveSession(req);
     const signedStateValid = statePayload
       && statePayload.kind === PORTAL_AUTH_STATE_KIND
-      && Number(statePayload.exp || 0) >= now;
+      && Number(statePayload.exp || 0) >= now
+      && sessionStateValid;
 
-    // Compatibility fallback for sessions created before signed state rollout.
-    const expectedState = String(req.session?.oauthState || '');
-    const legacyStateValid = !!expectedState && !!state && String(state) === expectedState;
-    if (!signedStateValid && !legacyStateValid) {
-      if (req.session?.oauthState) delete req.session.oauthState;
-      logger.warn(`[auth] Discord callback rejected invalid state hasSession=${!!req.session} hasExpected=${!!expectedState}`);
+    if (!signedStateValid) {
+      logger.warn(`[auth] Discord callback rejected invalid state hasSession=${!!req.session} sessionBound=${sessionStateValid}`);
       return res.redirect('/app?error=invalid_state');
     }
 
@@ -1240,7 +1296,6 @@ function createAuthUserRouter({
         || req.session?.oauthRedirectUri
         || resolveOAuthRedirectUri(req);
       if (req.session?.oauthRedirectUri) delete req.session.oauthRedirectUri;
-      if (req.session?.oauthState) delete req.session.oauthState;
 
       const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
         method: 'POST',
@@ -1271,18 +1326,19 @@ function createAuthUserRouter({
         return res.redirect('/app?error=user_fetch_failed');
       }
 
+      const returnTo = String(statePayload?.returnTo || req.session.returnTo || '').trim();
+      await regenerateSession(req);
       req.session.discordUser = {
         id: userData.id,
         username: userData.username,
         discriminator: userData.discriminator,
         avatar: userData.avatar,
-        accessToken: tokenData.access_token,
-        refreshToken: tokenData.refresh_token || null,
-        tokenExpiresAt: Date.now() + (Math.max(60, Number(tokenData.expires_in || 3600)) - 30) * 1000
+        accessTokenEncrypted: encryptSecret(tokenData.access_token),
+        refreshTokenEncrypted: encryptSecret(tokenData.refresh_token || ''),
+        tokenExpiresAt: Date.now() + (Math.max(60, Number(tokenData.expires_in || 3600)) - 30) * 1000,
+        authenticatedAt: Date.now()
       };
 
-      const returnTo = String(statePayload?.returnTo || req.session.returnTo || '').trim();
-      delete req.session.returnTo;
       await saveSession(req);
       let safeReturn = returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/app';
       if (safeReturn === '/' || safeReturn.startsWith('/?')) {
@@ -1301,7 +1357,17 @@ function createAuthUserRouter({
 
   router.get('/auth/discord/logout', (req, res) => {
     req.session.destroy(() => {
-      res.clearCookie('connect.sid');
+      const configuredSecure = String(process.env.SESSION_COOKIE_SECURE || '').trim().toLowerCase();
+      const secure = configuredSecure === 'true' || configuredSecure === '1' || configuredSecure === 'on'
+        || (configuredSecure !== 'false' && configuredSecure !== '0' && configuredSecure !== 'off' && process.env.NODE_ENV === 'production');
+      const domain = String(process.env.SESSION_COOKIE_DOMAIN || '').trim();
+      res.clearCookie('connect.sid', {
+        path: '/',
+        httpOnly: true,
+        sameSite: 'lax',
+        secure,
+        ...(domain ? { domain } : {}),
+      });
       return res.redirect('/dashboard');
     });
   });
@@ -1431,7 +1497,12 @@ function createAuthUserRouter({
     try {
       const discordId = req.session.discordUser.id;
       const userInfo = await roleService.getUserInfo(discordId);
-      const wallets = db.prepare('SELECT wallet_address, is_favorite, primary_wallet, created_at FROM wallets WHERE discord_id = ? ORDER BY is_favorite DESC, created_at ASC').all(discordId);
+      const wallets = db.prepare(`
+        SELECT wallet_address, chain_family, chain_id, is_favorite, primary_wallet, created_at
+        FROM wallets
+        WHERE discord_id = ?
+        ORDER BY is_favorite DESC, created_at ASC
+      `).all(discordId);
       const userPrefs = db.prepare('SELECT wallet_alert_identity_opt_out FROM users WHERE discord_id = ?').get(discordId) || {};
       const requestedGuildId = getRequestedGuildId(req, { allowFallback: !tenantService.isMultitenantEnabled() });
       const missingTenantSelection = tenantService.isMultitenantEnabled() && !requestedGuildId;

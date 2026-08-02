@@ -54,7 +54,7 @@ module.exports = [
     },
   },
   {
-    files: ['web/public/**/*.js'],
+    files: ['web/public/**/*.js', 'tools/qa-signoff-collab/public/**/*.js'],
     languageOptions: {
       globals: {
         window: 'readonly',

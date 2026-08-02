@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 // Fix D (audit M-1): plan-identity gate in setTenantModule.
-// Rollout is monitor-before-enforce via MODULE_IDENTITY_ENFORCE; default off
-// means no behavior change.
+// Plan entitlement enforcement is on by default. Monitor/off remain explicit
+// operational escape hatches.
 
 process.env.MULTITENANT_ENABLED = 'true';
 
@@ -17,11 +17,18 @@ function freshGuild() {
 }
 
 function run() {
-  // --- Default (flag unset): no gating, free tenant may enable aiassistant ---
+  // --- Default (flag unset): secure-by-default gating ---
   delete process.env.MODULE_IDENTITY_ENFORCE;
   let g = freshGuild();
   let r = tenantService.setTenantModule(g, 'aiassistant', true, 'tester');
-  assert.strictEqual(r.success, true, 'default off must not block (no behavior change)');
+  assert.strictEqual(r.success, false, 'default mode must block out-of-plan modules');
+  assert.strictEqual(r.code, 'module_not_in_plan');
+
+  // --- Explicit off: emergency/migration escape hatch ---
+  process.env.MODULE_IDENTITY_ENFORCE = 'off';
+  g = freshGuild();
+  r = tenantService.setTenantModule(g, 'aiassistant', true, 'tester');
+  assert.strictEqual(r.success, true, 'explicit off mode must not block');
 
   // --- Monitor: logs but does not block ---
   process.env.MODULE_IDENTITY_ENFORCE = 'monitor';

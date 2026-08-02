@@ -165,6 +165,30 @@ function formatList(items) {
   return items.map(item => `  - ${item}`).join('\n');
 }
 
+function extractArraySource(content, declaration, terminator) {
+  const start = content.indexOf(declaration);
+  if (start === -1) return '';
+  const end = content.indexOf(terminator, start + declaration.length);
+  return end === -1 ? '' : content.slice(start, end + terminator.length);
+}
+
+function checkPortalModuleGuideCoverage() {
+  const portalFile = path.join(repoRoot, 'web', 'public', 'portal.js');
+  if (!fs.existsSync(portalFile)) return { missing: [], registryCount: 0, guideCount: 0 };
+
+  const content = fs.readFileSync(portalFile, 'utf8');
+  const registrySource = extractArraySource(content, 'const MODULE_REGISTRY = [', '];');
+  const guidesSource = extractArraySource(content, 'const HELP_GUIDES = Object.freeze([', ']);');
+  const registryKeys = new Set([...registrySource.matchAll(/\bkey:\s*'([^']+)'/g)].map(match => match[1]));
+  const guideKeys = new Set([...guidesSource.matchAll(/\bmoduleKey:\s*'([^']+)'/g)].map(match => match[1]));
+
+  return {
+    missing: [...registryKeys].filter(key => !guideKeys.has(key)).sort(),
+    registryCount: registryKeys.size,
+    guideCount: guideKeys.size,
+  };
+}
+
 function runParityCheck() {
   const { expected, roots } = loadExpectedCommands();
   const expectedAll = [...expected].sort();
@@ -186,8 +210,10 @@ function runParityCheck() {
       filterExpected: slash => true
     },
     {
-      label: 'web/public/portal.html',
-      file: path.join(repoRoot, 'web', 'public', 'portal.html'),
+      // The role-aware Help Center and command inventory are rendered from
+      // portal.js. portal.html only contains their empty render targets.
+      label: 'web/public/portal.js',
+      file: path.join(repoRoot, 'web', 'public', 'portal.js'),
       filterExpected: slash => true
     }
   ];
@@ -227,6 +253,15 @@ function runParityCheck() {
       console.log('  Stale/unknown commands:');
       console.log(formatList(stale));
     }
+  }
+
+  const moduleGuides = checkPortalModuleGuideCoverage();
+  console.log(`\n[help-parity] role-aware module guides`);
+  console.log(`  modules=${moduleGuides.registryCount} documented=${moduleGuides.guideCount} missing=${moduleGuides.missing.length}`);
+  if (moduleGuides.missing.length > 0) {
+    hasFailures = true;
+    console.log('  Missing module guides:');
+    console.log(formatList(moduleGuides.missing));
   }
 
   if (hasFailures) {

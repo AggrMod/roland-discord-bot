@@ -14,6 +14,8 @@ const fs = require('fs');
 const nacl = require('tweetnacl');
 const bs58Module = require('bs58');
 const bs58 = bs58Module.default || bs58Module;
+const { decryptSecret, encryptSecret } = require('../utils/secretVault');
+const { createCsrfProtection } = require('./middleware/csrfProtection');
 const db = require('../database/db');
 const logger = require('../utils/logger');
 const settingsManager = require('../config/settings');
@@ -295,8 +297,23 @@ class WebServer {
     this.app.use(require('cookie-parser')());
     this.app.use(express.json({ limit: process.env.WEBHOOK_BODY_LIMIT || '6mb' }));
     this.app.use(helmet({
-      // Portal currently relies on inline handlers/styles; keep CSP rollout separate.
-      contentSecurityPolicy: false,
+      // Inline handlers are removed during the portal component migration. Ship
+      // an explicit policy now so directives cannot silently regress meanwhile.
+      contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+          'script-src': ["'self'", "'unsafe-inline'", 'https://cdnjs.cloudflare.com'],
+          'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com'],
+          'font-src': ["'self'", 'https://fonts.gstatic.com', 'https://cdnjs.cloudflare.com', 'data:'],
+          'img-src': ["'self'", 'https:', 'data:', 'blob:'],
+          'connect-src': ["'self'", 'https:'],
+          'object-src': ["'none'"],
+          'base-uri': ["'self'"],
+          'frame-ancestors': ["'none'"],
+          'form-action': ["'self'"],
+          'upgrade-insecure-requests': process.env.NODE_ENV === 'production' ? [] : null,
+        },
+      },
       crossOriginEmbedderPolicy: false,
     }));
     this.app.use(express.static(path.join(__dirname, 'public'), {
@@ -361,29 +378,14 @@ class WebServer {
       }
     }));
 
-    // CSRF defense-in-depth: require XMLHttpRequest marker on internal mutating
-    // API calls. Secret-authenticated webhook/entitlement routes are exempt.
-    const mutatingMethods = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
-    this.app.use('/api', (req, res, next) => {
-      if (!mutatingMethods.has(req.method)) {
-        return next();
-      }
-
-      const pathName = String(req.path || '');
-      const hasSecretAuth = !!req.headers['x-webhook-secret'] || !!req.headers['x-entitlement-secret'];
-      if (pathName.startsWith('/webhooks/') || hasSecretAuth) {
-        return next();
-      }
-
-      const requestedWith = String(req.headers['x-requested-with'] || '').trim().toLowerCase();
-      if (requestedWith !== 'xmlhttprequest') {
-        return res.status(403).json(toErrorResponse('Missing or invalid X-Requested-With header', 'FORBIDDEN'));
-      }
-
-      next();
+    const csrf = createCsrfProtection({
+      secret: process.env.CSRF_SECRET || sessionSecret,
+      isProduction: process.env.NODE_ENV === 'production',
+      allowedOrigins,
+      toErrorResponse,
     });
-    // Stub endpoint so portal.js fetchCsrfToken() doesn't 404.
-    this.app.get('/api/csrf-token', (req, res) => res.json(toSuccessResponse({ token: '' })));
+    this.app.get('/api/csrf-token', csrf.issueToken);
+    this.app.use('/api', csrf.protectMutations);
   }
 
   setupRoutes() {
@@ -482,7 +484,9 @@ class WebServer {
     };
 
     const refreshDiscordAccessToken = async (req) => {
-      const refreshToken = String(req.session?.discordUser?.refreshToken || '').trim();
+      const sessionUser = req.session?.discordUser || {};
+      const refreshToken = decryptSecret(sessionUser.refreshTokenEncrypted)
+        || String(sessionUser.refreshToken || '').trim();
       if (!refreshToken) {
         return null;
       }
@@ -513,18 +517,21 @@ class WebServer {
 
       req.session.discordUser = {
         ...(req.session.discordUser || {}),
-        accessToken: tokenData.access_token,
-        refreshToken: tokenData.refresh_token || refreshToken,
+        accessTokenEncrypted: encryptSecret(tokenData.access_token),
+        refreshTokenEncrypted: encryptSecret(tokenData.refresh_token || refreshToken),
         tokenExpiresAt: Date.now() + (Math.max(60, Number(tokenData.expires_in || 3600)) - 30) * 1000
       };
-      return req.session.discordUser.accessToken;
+      delete req.session.discordUser.accessToken;
+      delete req.session.discordUser.refreshToken;
+      return tokenData.access_token;
     };
 
     const getValidDiscordAccessToken = async (req) => {
       const sessionUser = req.session?.discordUser || null;
       if (!sessionUser) return null;
 
-      const accessToken = String(sessionUser.accessToken || '').trim();
+      const accessToken = decryptSecret(sessionUser.accessTokenEncrypted)
+        || String(sessionUser.accessToken || '').trim();
       const tokenExpiresAt = Number(sessionUser.tokenExpiresAt || 0);
       if (accessToken && tokenExpiresAt > Date.now()) {
         return accessToken;
@@ -747,7 +754,7 @@ class WebServer {
     }
 
     function ensureNftTrackerModule(req, res) {
-      return ensureTenantModuleEnabled(req, res, 'nfttracker', 'NFT Tracker');
+      return ensureTenantModuleEnabled(req, res, 'nfttracker', 'NFT Activity');
     }
 
     function ensureTokenTrackerModule(req, res) {
@@ -779,7 +786,7 @@ class WebServer {
     }
 
     function ensureTicketingModule(req, res) {
-      return ensureTenantModuleEnabled(req, res, 'ticketing', 'Ticketing');
+      return ensureTenantModuleEnabled(req, res, 'ticketing', 'Support Tickets');
     }
     function ensureWelcomeModule(req, res) {
       return ensureTenantModuleEnabled(req, res, 'welcome', 'Welcome & Onboarding');
@@ -1237,6 +1244,10 @@ class WebServer {
 
     const normalizeTierRule = (rule = {}) => ({
       ...rule,
+      chainFamily: rule.chainFamily || rule.chain_family || (String(rule.chainId || rule.chain_id || '').startsWith('eip155:') ? 'evm' : 'solana'),
+      chainId: rule.chainId || rule.chain_id || 'solana:mainnet',
+      nftStandard: rule.nftStandard || rule.nft_standard || (String(rule.chainId || rule.chain_id || '').startsWith('eip155:') ? 'erc721' : 'solana'),
+      tokenId: rule.tokenId ?? rule.token_id ?? null,
       neverRemove: parseRuleBoolean(
         rule.neverRemove ?? rule.never_remove ?? rule.keepOnLoss ?? rule.keep_on_loss,
         false
@@ -1584,6 +1595,7 @@ class WebServer {
     const createActivityWebhooksRouter = require('./routes/activityWebhooks');
     this.app.use('/', createActivityWebhooksRouter({
       logger,
+      db,
       nftActivityService,
       trackedWalletsService,
       getActivityWebhookSecret,

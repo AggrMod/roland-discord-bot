@@ -18,7 +18,10 @@
         "tests/test-verification-plan-limits.js",
         "tests/test-verification-token-rule-edges.js",
         "tests/test-verification-delegation-toggle.js",
-        "tests/test-wallet-delegation.js"
+        "tests/test-wallet-delegation.js",
+        "tests/test-wallet-verification-challenges.js",
+        "tests/test-evm-foundation.js",
+        "tests/test-evm-role-rules.js"
       ]
     },
     {
@@ -33,7 +36,7 @@
     },
     {
       "id": "treasury",
-      "label": "Treasury",
+      "label": "Wallet Tracker command compatibility",
       "tests": [
         "tests/test-treasury.js",
         "tests/test-treasury-tx-alert-validation.js"
@@ -54,7 +57,8 @@
       "tests": [
         "tests/test-nft-webhook-dedup-and-alerts.js",
         "tests/test-nft-alert-permission-fallback.js",
-        "tests/test-nft-webhook-throughput-burst.js"
+        "tests/test-nft-webhook-throughput-burst.js",
+        "tests/test-evm-nft-tracker-standards.js"
       ]
     },
     {
@@ -87,6 +91,29 @@
       "tests": [
         "tests/test-aiassistant-command-gating-dispatch.js",
         "scripts/ai-assistant-smoke.js"
+      ]
+    },
+    {
+      "id": "telegram_bridge",
+      "label": "Telegram Bridge",
+      "tests": [
+        "tests/test-telegram-bridge-service.js",
+        "tests/test-telegram-bridge-routes.js"
+      ]
+    },
+    {
+      "id": "auto_messages",
+      "label": "Auto Messages",
+      "tests": [
+        "tests/test-auto-message-service.js",
+        "tests/test-auto-message-routes.js"
+      ]
+    },
+    {
+      "id": "guild_guard",
+      "label": "Guild Guard",
+      "tests": [
+        "tests/test-guild-guard-foundation.js"
       ]
     },
     {

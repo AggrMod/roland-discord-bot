@@ -1,5 +1,6 @@
 const db = require('../database/db');
 const logger = require('../utils/logger');
+const { getChain, getExplorerUrl, normalizeAddress: normalizeChainAddress } = require('../utils/chainIdentity');
 const entitlementService = require('./entitlementService');
 const { applyEmbedBranding, getBranding } = require('./embedBranding');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
@@ -66,6 +67,11 @@ function normalizeChain(input) {
   if (['sol', 'solana'].includes(raw)) return 'solana';
   if (['eth', 'ethereum', 'mainnet'].includes(raw)) return 'ethereum';
   if (['matic', 'polygon', 'polygon-pos'].includes(raw)) return 'polygon';
+  if (raw === 'eip155:1') return 'ethereum';
+  if (raw === 'eip155:8453') return 'base';
+  if (raw === 'eip155:137') return 'polygon';
+  if (raw === 'eip155:42161') return 'arbitrum';
+  if (raw === 'eip155:10') return 'optimism';
   return raw;
 }
 
@@ -83,7 +89,7 @@ class NFTActivityService {
       const row = db.prepare(`
         SELECT token_name, raw_json
         FROM nft_activity_events
-        WHERE LOWER(token_mint) = LOWER(?)
+        WHERE token_mint = ?
         ORDER BY datetime(created_at) DESC
         LIMIT 1
       `).get(tokenMint);
@@ -222,7 +228,7 @@ class NFTActivityService {
     }
   }
 
-  addTrackedCollection({ guildId, collectionAddress, collectionName, channelId, trackMint, trackSale, trackList, trackDelist, trackTransfer, trackBid, meSymbol }) {
+  addTrackedCollection({ guildId, chain: chainValue = 'solana:mainnet', collectionAddress, collectionName, channelId, nftStandard = null, tokenId = null, trackMint, trackSale, trackList, trackDelist, trackTransfer, trackBid, meSymbol }) {
     try {
       const normalizedGuildId = String(guildId || '').trim();
       if (normalizedGuildId) {
@@ -250,20 +256,33 @@ class NFTActivityService {
         }
       }
 
-      const normalizedAddress = String(collectionAddress || '').trim();
+      const chain = getChain(chainValue);
+      const normalizedAddress = normalizeChainAddress(collectionAddress, chain?.chainId);
       const normalizedName = String(collectionName || '').trim();
       const normalizedChannelId = String(channelId || '').trim();
-      if (!normalizedAddress || !normalizedName || !normalizedChannelId) {
-        return { success: false, message: 'collectionAddress, collectionName, and channelId are required' };
+      if (!chain || !normalizedAddress || !normalizedName || !normalizedChannelId) {
+        return { success: false, message: 'A supported chain, valid collectionAddress, collectionName, and channelId are required' };
+      }
+      const normalizedStandard = chain.family === 'evm' ? String(nftStandard || 'erc721').trim().toLowerCase() : 'solana';
+      const normalizedTokenId = tokenId === null || tokenId === undefined || tokenId === '' ? null : String(tokenId).trim();
+      if (chain.family === 'evm' && !['erc721', 'erc1155'].includes(normalizedStandard)) {
+        return { success: false, message: 'EVM NFT standard must be ERC-721 or ERC-1155' };
+      }
+      if (normalizedStandard === 'erc1155' && !normalizedTokenId) {
+        return { success: false, message: 'ERC-1155 trackers require a token ID' };
       }
       const result = db.prepare(`
-        INSERT INTO nft_tracked_collections (guild_id, collection_address, collection_name, channel_id, track_mint, track_sale, track_list, track_delist, track_transfer, track_bid, me_symbol)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO nft_tracked_collections (guild_id, chain_family, chain_id, collection_address, collection_name, channel_id, nft_standard, token_id, track_mint, track_sale, track_list, track_delist, track_transfer, track_bid, me_symbol)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         normalizedGuildId,
+        chain.family,
+        chain.chainId,
         normalizedAddress,
         normalizedName,
         normalizedChannelId,
+        normalizedStandard,
+        normalizedTokenId,
         trackMint !== undefined ? (trackMint ? 1 : 0) : 1,
         trackSale !== undefined ? (trackSale ? 1 : 0) : 1,
         trackList !== undefined ? (trackList ? 1 : 0) : 1,
@@ -301,10 +320,24 @@ class NFTActivityService {
 
   updateTrackedCollection(id, updates, guildId) {
     try {
-      const allowed = ['collection_name', 'channel_id', 'track_mint', 'track_sale', 'track_list', 'track_delist', 'track_transfer', 'track_bid', 'enabled', 'me_symbol'];
+      const existing = guildId
+        ? db.prepare('SELECT * FROM nft_tracked_collections WHERE id = ? AND guild_id = ?').get(id, guildId)
+        : db.prepare('SELECT * FROM nft_tracked_collections WHERE id = ?').get(id);
+      if (!existing) return { success: false, message: 'Collection not found or not owned by this server' };
+      if (String(existing.chain_family || 'solana') === 'evm') {
+        const standard = String(updates?.nftStandard || existing.nft_standard || 'erc721').trim().toLowerCase();
+        const tokenId = updates?.tokenId ?? existing.token_id;
+        if (!['erc721', 'erc1155'].includes(standard)) return { success: false, message: 'EVM NFT standard must be ERC-721 or ERC-1155' };
+        if (standard === 'erc1155' && (tokenId === null || tokenId === undefined || String(tokenId).trim() === '')) {
+          return { success: false, message: 'ERC-1155 trackers require a token ID' };
+        }
+      }
+      const allowed = ['collection_name', 'channel_id', 'nft_standard', 'token_id', 'track_mint', 'track_sale', 'track_list', 'track_delist', 'track_transfer', 'track_bid', 'enabled', 'me_symbol'];
       const fieldMap = {
         collectionName: 'collection_name',
         channelId: 'channel_id',
+        nftStandard: 'nft_standard',
+        tokenId: 'token_id',
         trackMint: 'track_mint',
         trackSale: 'track_sale',
         trackList: 'track_list',
@@ -349,8 +382,11 @@ class NFTActivityService {
     }
   }
 
-  getTrackedCollectionByAddress(address) {
+  getTrackedCollectionByAddress(address, chainId = null) {
     try {
+      if (chainId) {
+        return db.prepare('SELECT * FROM nft_tracked_collections WHERE LOWER(collection_address) = LOWER(?) AND chain_id = ? AND enabled = 1').get(address, chainId);
+      }
       // Case-insensitive match — ingestEvent lowercases collectionKey but DB stores original case
       return db.prepare('SELECT * FROM nft_tracked_collections WHERE LOWER(collection_address) = LOWER(?) AND enabled = 1').get(address);
     } catch (e) {
@@ -358,14 +394,15 @@ class NFTActivityService {
     }
   }
 
-  getTrackedCollectionsByAddress(address) {
+  getTrackedCollectionsByAddress(address, chainId = null) {
     try {
-      return db.prepare(`
+      const rows = db.prepare(`
         SELECT *
         FROM nft_tracked_collections
         WHERE enabled = 1
           AND LOWER(TRIM(collection_address)) = LOWER(TRIM(?))
       `).all(address);
+      return chainId ? rows.filter(row => String(row.chain_id || 'solana:mainnet') === chainId) : rows;
     } catch (e) {
       return [];
     }
@@ -406,7 +443,7 @@ class NFTActivityService {
     return !!row;
   }
 
-  ingestEvent(event, source = 'webhook') {
+  ingestEvent(event, ingestSource = 'webhook') {
     try {
       // Parse Helius enhanced transaction format
       const nftData = event.events?.nft || {};
@@ -422,7 +459,7 @@ class NFTActivityService {
       // If no direct collection key, scan accountData for any tracked collection address
       if (!collectionKey) {
         const accountAddresses = (event.accountData || []).map(a => (a.account || '').toLowerCase());
-        if (mintFromNft) accountAddresses.push(mintFromNft.toLowerCase());
+        if (mintFromNft) accountAddresses.push(mintFromNft);
         const allTracked = db.prepare('SELECT collection_address FROM nft_tracked_collections WHERE enabled = 1').all();
         for (const row of allTracked) {
           if (accountAddresses.includes(row.collection_address.toLowerCase())) {
@@ -433,7 +470,9 @@ class NFTActivityService {
       }
 
       // Check both nft_activity_watch (legacy) and nft_tracked_collections (new)
-      const trackedByAddress = collectionKey ? this.getTrackedCollectionByAddress(collectionKey) : null;
+      const chainInfo = getChain(event.chainId || event.chain_id || event.chain || event.network || 'solana:mainnet');
+      const chainId = chainInfo?.chainId || 'solana:mainnet';
+      const trackedByAddress = collectionKey ? this.getTrackedCollectionByAddress(collectionKey, chainId) : null;
       const watchedLegacy = collectionKey ? this.isWatched(collectionKey) : false;
       if (!trackedByAddress && !watchedLegacy) {
         return { success: false, ignored: true, message: 'Collection not watched' };
@@ -452,8 +491,8 @@ class NFTActivityService {
       const priceSol = rawPrice !== null ? Number(rawPrice) / (rawPrice > 1000 ? 1e9 : 1) : null; // convert lamports if needed
       const txSignature = event.txSignature || event.signature || null;
       const eventTime = event.eventTime || event.timestamp || new Date().toISOString();
-      const source = String(event.source || nftData.source || 'solana').toLowerCase();
-      const chain = normalizeChain(event.chain || event.network || source);
+      const eventSource = String(event.source || nftData.source || ingestSource || 'unknown').toLowerCase();
+      const chain = normalizeChain(chainId);
 
       // Dedup: skip if tx_signature already recorded (webhook + poll overlap)
       if (txSignature) {
@@ -463,8 +502,8 @@ class NFTActivityService {
 
       const insert = db.prepare(`
         INSERT INTO nft_activity_events
-        (event_type, collection_key, token_mint, token_name, from_wallet, to_wallet, price_sol, tx_signature, source, event_time, raw_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (event_type, collection_key, token_mint, token_name, from_wallet, to_wallet, price_sol, tx_signature, source, event_time, raw_json, chain_family, chain_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         eventType,
         collectionKey,
@@ -474,9 +513,11 @@ class NFTActivityService {
         toWallet,
         Number.isFinite(priceSol) ? priceSol : null,
         txSignature,
-        source,
+        eventSource,
         eventTime,
-        JSON.stringify(event)
+        JSON.stringify(event),
+        chainInfo?.family || 'solana',
+        chainId
       );
 
       this.maybeSendAlert({
@@ -491,6 +532,7 @@ class NFTActivityService {
         txSignature,
         eventTime,
         chain,
+        chainId,
         imageUrl: event.imageUrl || null
       }).catch(err => logger.error('Error sending NFT activity alert:', err));
 
@@ -531,7 +573,7 @@ class NFTActivityService {
 
   async maybeSendAlert(evt) {
     // Per-collection tracked config (can be multiple tenants/channels for same collection)
-    const trackedRows = evt.collectionKey ? this.getTrackedCollectionsByAddress(evt.collectionKey) : [];
+    const trackedRows = evt.collectionKey ? this.getTrackedCollectionsByAddress(evt.collectionKey, evt.chainId || null) : [];
     const eventFlagMap = { mint: 'track_mint', sell: 'track_sale', list: 'track_list', delist: 'track_delist', transfer: 'track_transfer', bid: 'track_bid' };
     // Event types with no flag (bid, pool_update, etc.) are not user-configurable
     // — block them unless explicitly mapped to a flag column
@@ -600,7 +642,7 @@ class NFTActivityService {
     const walletToDisplay = (wallet) => {
       if (!wallet) return 'N/A';
 
-      const cacheKey = String(wallet).toLowerCase();
+      const cacheKey = String(wallet).trim();
       if (walletIdentityCache.has(cacheKey)) {
         return walletIdentityCache.get(cacheKey);
       }
@@ -611,7 +653,7 @@ class NFTActivityService {
           SELECT u.username, COALESCE(u.wallet_alert_identity_opt_out, 0) AS wallet_alert_identity_opt_out
           FROM wallets w
           JOIN users u ON u.discord_id = w.discord_id
-          WHERE lower(w.wallet_address) = lower(?)
+          WHERE w.wallet_address = ?
           LIMIT 1
         `).get(wallet);
         if (row?.username && Number(row.wallet_alert_identity_opt_out || 0) !== 1) {
@@ -623,8 +665,9 @@ class NFTActivityService {
       return display;
     };
 
-    const explorer = evt.txSignature ? `https://solscan.io/tx/${evt.txSignature}` : null;
-    const meLink = evt.tokenMint ? `https://magiceden.io/item-details/${evt.tokenMint}` : null;
+    const explorer = evt.txSignature ? getExplorerUrl(evt.chainId || 'solana:mainnet', 'tx', evt.txSignature) : null;
+    const isSolana = !evt.chainId || String(evt.chainId).startsWith('solana:');
+    const meLink = isSolana && evt.tokenMint ? `https://magiceden.io/item-details/${evt.tokenMint}` : null;
     const buttons = [];
     if (explorer) buttons.push(new ButtonBuilder().setLabel('View Tx').setURL(explorer).setStyle(ButtonStyle.Link).setEmoji('🔍'));
     if (meLink) buttons.push(new ButtonBuilder().setLabel('Magic Eden').setURL(meLink).setStyle(ButtonStyle.Link).setEmoji('🌊'));
@@ -853,6 +896,7 @@ class NFTActivityService {
 
       for (const col of collections) {
         try {
+          if (String(col.chain_family || 'solana') !== 'solana') continue;
           // Magic Eden poll — only if me_symbol is configured
           if (col.me_symbol) {
           // No type filter — ME returns all activity types; we filter client-side

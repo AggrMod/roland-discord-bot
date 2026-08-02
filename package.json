@@ -15,6 +15,7 @@
     "check:release-gate": "node scripts/release-gate.js",
     "check:missions-smoke": "node tests/test-heist-v1-flow.js",
     "qa:signoff:start": "node tools/qa-signoff-collab/server.js",
+    "preview:portal": "node scripts/preview-portal.mjs",
     "test:v1:full": "node scripts/test-v1-complete.js",
     "test:v1:plan-sequence": "node scripts/test-v1-plan-sequence.js"
   },
@@ -28,6 +29,7 @@
     "csrf-csrf": "^4.0.3",
     "discord.js": "^14.16.3",
     "dotenv": "^16.4.7",
+    "ethers": "^6.17.0",
     "express": "^4.18.2",
     "express-rate-limit": "^8.3.1",
     "express-session": "^1.18.0",
@@ -38,5 +40,10 @@
   "devDependencies": {
     "eslint": "^8.57.0",
     "eslint-plugin-security": "^2.1.1"
+  },
+  "overrides": {
+    "jayson": {
+      "uuid": "^11.1.1"
+    }
   }
 }

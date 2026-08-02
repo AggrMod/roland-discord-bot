@@ -1,14 +1,14 @@
 const assert = require('assert');
+const { Keypair } = require('@solana/web3.js');
 const db = require('../database/db');
 const walletService = require('../services/walletService');
 
 function run() {
   const discordId = `delegation-disabled-test-${Date.now()}`;
-  const suffix = String(Date.now());
   const username = 'delegation-disabled-user';
   const guildId = 'guild-delegation-disabled';
-  const delegateWallet = `DelegateWallet-${suffix}`;
-  const coldWallet = `ColdWallet-${suffix}`;
+  const delegateWallet = Keypair.generate().publicKey.toBase58();
+  const coldWallet = Keypair.generate().publicKey.toBase58();
 
   db.prepare('DELETE FROM wallet_delegations WHERE discord_id = ?').run(discordId);
   db.prepare('DELETE FROM wallets WHERE discord_id = ?').run(discordId);

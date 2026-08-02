@@ -1,13 +1,16 @@
 const COMMAND_MODULE_MAP = Object.freeze({
   verification: 'verification',
   governance: 'governance',
-  treasury: 'treasury',
+  proposal: 'governance',
+  // Keep the legacy /treasury command under the Wallet Tracker entitlement.
+  treasury: 'wallettracker',
   minigames: 'minigames',
   'wallet-tracker': 'wallettracker',
   invites: 'invites',
   'nft-tracker': 'nfttracker',
   'token-tracker': 'tokentracker',
   aiassistant: 'aiassistant',
+  ticketing: 'ticketing',
   vault: 'vault',
   battle: 'minigames',
   heist: 'heist',

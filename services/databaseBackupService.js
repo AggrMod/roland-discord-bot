@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const db = require('../database/db');
 const logger = require('../utils/logger');
+const crypto = require('crypto');
+const { encryptFile, deriveFileKey } = require('../utils/encryptedFile');
 
 function toPositiveInt(value, fallback) {
   const parsed = Number.parseInt(String(value ?? ''), 10);
@@ -57,6 +59,10 @@ class DatabaseBackupService {
     return path.resolve(path.join(__dirname, '..', 'database', 'backups'));
   }
 
+  getEncryptionSecret() {
+    return String(process.env.DB_BACKUP_ENCRYPTION_KEY || process.env.SECRET_VAULT_KEY || '').trim();
+  }
+
   ensureBackupDirExists() {
     const backupDir = this.getBackupDir();
     fs.mkdirSync(backupDir, { recursive: true });
@@ -77,13 +83,13 @@ class DatabaseBackupService {
       String(now.getUTCSeconds()).padStart(2, '0'),
       'Z'
     ].join('');
-    return `${baseName}-${stamp}${ext}`;
+    return `${baseName}-${stamp}${ext}.enc`;
   }
 
   pruneOldBackups(dbPath, backupDir) {
     const cutoff = Date.now() - this.getRetentionMs();
     const baseName = path.basename(dbPath, path.extname(dbPath));
-    const ext = path.extname(dbPath) || '.db';
+    const ext = `${path.extname(dbPath) || '.db'}.enc`;
     const prefix = `${baseName}-`;
 
     let entries = [];
@@ -137,17 +143,24 @@ class DatabaseBackupService {
     const backupDir = this.ensureBackupDirExists();
     const backupName = this.buildBackupFileName(dbPath);
     const destination = path.join(backupDir, backupName);
+    const temporary = path.join(backupDir, `.pending-${crypto.randomUUID()}${path.extname(dbPath) || '.db'}`);
 
     try {
       if (!fs.existsSync(dbPath)) {
         throw new Error(`Database file not found at ${dbPath}`);
       }
+      const encryptionSecret = this.getEncryptionSecret();
+      if (!deriveFileKey(encryptionSecret)) {
+        throw new Error('DB_BACKUP_ENCRYPTION_KEY or SECRET_VAULT_KEY must be configured with at least 32 characters');
+      }
 
       if (typeof db.backup === 'function') {
-        await db.backup(destination);
+        await db.backup(temporary);
       } else {
-        fs.copyFileSync(dbPath, destination);
+        fs.copyFileSync(dbPath, temporary);
       }
+      try { fs.chmodSync(temporary, 0o600); } catch (_error) {}
+      await encryptFile(temporary, destination, encryptionSecret);
 
       const prune = this.pruneOldBackups(dbPath, backupDir);
       logger.log(`[db-backup] Created backup (${reason}): ${backupName}${prune.deleted ? ` | pruned=${prune.deleted}` : ''}`);
@@ -156,6 +169,7 @@ class DatabaseBackupService {
       logger.error('[db-backup] Backup failed:', error);
       return { success: false, message: error?.message || 'Backup failed' };
     } finally {
+      try { fs.unlinkSync(temporary); } catch (_error) {}
       this.inFlight = false;
     }
   }
@@ -166,6 +180,11 @@ class DatabaseBackupService {
       return;
     }
     if (this.intervalHandle) {
+      return;
+    }
+
+    if (!deriveFileKey(this.getEncryptionSecret())) {
+      logger.error('[db-backup] Scheduler not started: configure DB_BACKUP_ENCRYPTION_KEY or SECRET_VAULT_KEY with at least 32 characters');
       return;
     }
 

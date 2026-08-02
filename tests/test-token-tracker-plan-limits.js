@@ -4,6 +4,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { Keypair } = require('@solana/web3.js');
 
 const tempDbPath = path.join(
   os.tmpdir(),
@@ -32,7 +33,7 @@ function run() {
 
   const blocked = trackedWalletsService.addTrackedToken({
     guildId,
-    tokenMint: `mint-blocked-${Date.now()}`,
+    tokenMint: Keypair.generate().publicKey.toBase58(),
     tokenSymbol: 'BLK',
     enabled: true,
   });
@@ -44,7 +45,7 @@ function run() {
 
   const allowed = trackedWalletsService.addTrackedToken({
     guildId,
-    tokenMint: `mint-allowed-${Date.now()}`,
+    tokenMint: Keypair.generate().publicKey.toBase58(),
     tokenSymbol: 'OK',
     enabled: true,
   });

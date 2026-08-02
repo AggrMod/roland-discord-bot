@@ -105,7 +105,8 @@ class ModuleGuard {
           enabled = compatibleModuleKeys.some(moduleKey => tenantService.isModuleEnabled(guildId, moduleKey));
         }
       } catch (error) {
-        logger.warn(`Falling back to global module toggle for ${moduleName}: ${error.message}`);
+        logger.error(`Module entitlement lookup failed for ${moduleName}; denying access:`, error);
+        enabled = false;
       }
     }
 
@@ -205,8 +206,15 @@ class ModuleGuard {
         // Single-tenant: no plan enforcement
         return true;
       }
-    } catch {
-      return true; // Can't check plan → allow
+    } catch (error) {
+      logger.error(`Plan entitlement lookup failed for ${minPlan}; denying access:`, error);
+      const unavailableReply = {
+        content: 'Plan access could not be verified right now. Please try again shortly.',
+        ephemeral: true,
+      };
+      if (interaction.deferred || interaction.replied) await interaction.editReply(unavailableReply);
+      else await interaction.reply(unavailableReply);
+      return false;
     }
 
     const currentTier = TIER[planKey] ?? 0;

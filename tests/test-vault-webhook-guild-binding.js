@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 
 // Fix F (audit H-2): vault webhook per-guild secret + guild-match binding.
-// Default (VAULT_WEBHOOK_ENFORCE_GUILD_MATCH unset) = legacy global-secret auth,
-// unchanged. Enforce mode requires the target guild's own secret and rejects
-// events for other guilds.
+// Enforce is the secure default and mandatory in production. Explicit legacy
+// modes are available only outside production for controlled migrations.
 
 const assert = require('assert');
 const crypto = require('crypto');
@@ -77,12 +76,18 @@ async function run() {
   const port = server.address().port;
 
   try {
-    // ---- Default (off): legacy global secret, event guild trusted ----
+    // ---- Secure default: per-guild secret required ----
     delete process.env.VAULT_WEBHOOK_ENFORCE_GUILD_MATCH;
     ingested.length = 0;
     let r = await post({ port, guildQuery: G1, secret: GLOBAL_SECRET, body: [{ guildId: G2, txSignature: 'sigA' }] });
-    assert.strictEqual(r.status, 200, 'off mode: global secret authorizes');
-    assert.deepStrictEqual(ingested, [G2], 'off mode: event guild is trusted (legacy behavior)');
+    assert.strictEqual(r.status, 401, 'default mode: global secret is rejected');
+    assert.deepStrictEqual(ingested, [], 'default mode: cross-guild event is not ingested');
+
+    // Explicit off is retained only for non-production migrations.
+    process.env.VAULT_WEBHOOK_ENFORCE_GUILD_MATCH = 'off';
+    r = await post({ port, guildQuery: G1, secret: GLOBAL_SECRET, body: [{ guildId: G2, txSignature: 'sigLegacy' }] });
+    assert.strictEqual(r.status, 200, 'non-production off mode: global secret authorizes');
+    assert.deepStrictEqual(ingested, [G2], 'non-production off mode preserves the legacy behavior');
 
     // ---- Enforce: per-guild secret required ----
     process.env.VAULT_WEBHOOK_ENFORCE_GUILD_MATCH = 'enforce';
@@ -114,10 +119,17 @@ async function run() {
     assert.strictEqual(r.body.data.processed, 0, 'enforce: cross-guild event is not processed');
     assert.deepStrictEqual(ingested, [], 'enforce: nothing ingested for the foreign guild');
 
+    // Production cannot opt back into a legacy mode.
+    process.env.NODE_ENV = 'production';
+    process.env.VAULT_WEBHOOK_ENFORCE_GUILD_MATCH = 'off';
+    r = await post({ port, guildQuery: G1, secret: GLOBAL_SECRET, body: [{ guildId: G1, txSignature: 'sigG' }] });
+    assert.strictEqual(r.status, 401, 'production: global secret remains rejected when off is requested');
+
     console.log('vault webhook guild-binding assertions passed');
   } finally {
     server.close();
     delete process.env.VAULT_WEBHOOK_ENFORCE_GUILD_MATCH;
+    delete process.env.NODE_ENV;
     delete process.env.VAULT_MINT_WEBHOOK_SECRET;
     delete process.env[`VAULT_WEBHOOK_SECRET_${G1}`];
   }

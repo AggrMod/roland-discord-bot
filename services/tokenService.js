@@ -45,7 +45,7 @@ class TokenService {
     const guildId = options.guildId || null;
     const mintList = this._normalizeMintList(options.mintFilter);
     const mintFilterSet = mintList.length
-      ? new Set(mintList.map(m => m.toLowerCase()))
+      ? new Set(mintList.map(m => String(m || '').trim()))
       : null;
 
     if (!normalizedWallet) return [];
@@ -104,7 +104,7 @@ class TokenService {
         const info = entry?.account?.data?.parsed?.info;
         const mint = String(info?.mint || '').trim();
         if (!mint) continue;
-        if (mintFilterSet && !mintFilterSet.has(mint.toLowerCase())) continue;
+        if (mintFilterSet && !mintFilterSet.has(mint)) continue;
 
         const tokenAmount = info?.tokenAmount;
         const amount = Number(tokenAmount?.uiAmount ?? 0);

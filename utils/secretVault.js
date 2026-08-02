@@ -4,7 +4,12 @@ const ALGO = 'aes-256-gcm';
 const VERSION = 'v1';
 
 function getMasterKey() {
-  const source = String(process.env.SUPERADMIN_SECRET_KEY || process.env.SESSION_SECRET || '').trim();
+  const source = String(
+    process.env.SECRET_VAULT_KEY
+      || process.env.SUPERADMIN_SECRET_KEY
+      || process.env.SESSION_SECRET
+      || ''
+  ).trim();
   if (!source) return null;
   return crypto.createHash('sha256').update(source, 'utf8').digest();
 }

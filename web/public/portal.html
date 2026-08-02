@@ -16,7 +16,10 @@
     <nav class="top-nav" role="navigation" aria-label="Main navigation">
       <div class="nav-brand">
         <button class="mobile-menu-btn" onclick="toggleMobileMenu()" aria-label="Open menu">☰</button>
-        <h1 id="navBrandTitle"><img src="/assets/branding/guildpilot-logo.png" alt="" style="width:22px;height:22px;border-radius:50%;vertical-align:middle;margin-right:8px;object-fit:cover;">GuildPilot</h1>
+        <h1 id="navBrandTitle" class="nav-brand-title">
+          <span class="nav-brand-emblem" aria-hidden="true"><img src="/assets/branding/guildpilot-logo.png" alt=""></span>
+          <span class="nav-brand-copy"><small aria-hidden="true">GuildPilot</small><strong>Command center</strong></span>
+        </h1>
       </div>
       <div class="top-nav-center">
         <div id="commandServerSwitcher" class="command-server-switcher" style="display:none;">
@@ -43,7 +46,7 @@
         <div id="memberIdentityTile" class="member-identity-tile" style="display:none;">
           <img id="navAvatar" class="nav-avatar" src="" alt="User avatar" style="display:none;">
           <div class="member-identity-tile__content">
-            <span class="member-identity-tile__kicker">Member Identity</span>
+            <span id="navAccessRole" class="member-identity-tile__kicker">User</span>
             <span id="navUsername" class="nav-username"></span>
           </div>
           <div class="member-identity-tile__actions">
@@ -60,84 +63,65 @@
       <div class="mobile-menu-content">
         <button class="mobile-menu-close" onclick="toggleMobileMenu()" aria-label="Close menu">✕</button>
         <div class="sidebar-search mobile-sidebar-search">
-          <input type="text" id="mobileSidebarSearchInput" placeholder="Search modules..." onkeyup="onSidebarSearch(this.value, '#mobileMenu')">
+          <input type="text" id="mobileSidebarSearchInput" placeholder="Search workspace..." onkeyup="onSidebarSearch(this.value, '#mobileMenu')">
           <span class="search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
         </div>
         <div class="mobile-menu-items">
+          <div class="sidebar-group-label">My workspace</div>
           <button class="nav-item active" data-section="landing" onclick="goHomePage(); toggleMobileMenu()">
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-house"></i></span>
-            <span class="nav-label">Hub</span>
+            <span class="nav-label">Home</span>
+          </button>
+          <button class="nav-item" data-section="profile" onclick="switchSection('profile'); toggleMobileMenu()" id="mobileNavProfile">
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-user"></i></span>
+            <span class="nav-label">My profile</span>
+          </button>
+          <button class="nav-item" data-section="wallets" data-module="verification" onclick="switchSection('wallets'); toggleMobileMenu()" id="mobileNavWallets">
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-wallet"></i></span>
+            <span class="nav-label">My wallets</span>
           </button>
           <div class="sidebar-section-divider"></div>
           <div class="sidebar-group-label" id="mobileGroupCommunity">Community</div>
-          <button class="nav-item" data-section="wallets" data-module="verification" onclick="switchSection('wallets'); toggleMobileMenu()" id="mobileNavWallets" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-shield-halved"></i></span>
-            <span class="nav-label">Verification</span>
+          <button class="nav-item" data-section="servers" onclick="switchSection('servers'); toggleMobileMenu()" id="mobileNavServers">
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-people-group"></i></span>
+            <span class="nav-label">My communities</span>
           </button>
           <button class="nav-item" data-section="governance" data-module="governance" onclick="switchSection('governance'); toggleMobileMenu()" id="mobileNavGovernance" style="display:none;">
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-landmark"></i></span>
             <span class="nav-label">Governance</span>
           </button>
-          <button class="nav-item" data-section="treasury" data-module="treasury" onclick="openSidebarSection('treasury'); toggleMobileMenu()" id="mobileNavTreasury" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-wallet"></i></span>
-            <span class="nav-label">Wallet Tracker</span>
-          </button>
-          <button class="nav-item" data-section="nft-activity" data-module="nfttracker" onclick="switchSection('nft-activity'); toggleMobileMenu()" id="mobileNavNftActivity" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-palette"></i></span>
-            <span class="nav-label">NFT Tracker</span>
-          </button>
-          <button class="nav-item" data-section="token-activity" data-module="tokentracker" onclick="switchSection('token-activity'); toggleMobileMenu()" id="mobileNavTokenActivity" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-coins"></i></span>
-            <span class="nav-label">Token Tracker</span>
-          </button>
           <button class="nav-item" data-section="engagement" data-module="engagement" onclick="switchSection('engagement'); toggleMobileMenu()" id="mobileNavEngagement" style="display:none;">
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-chart-line"></i></span>
-            <span class="nav-label">Engagement</span>
-          </button>
-          <button class="nav-item" data-section="battle" data-module="battle" onclick="switchSection('battle'); toggleMobileMenu()" id="mobileNavBattle" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-gamepad"></i></span>
-            <span class="nav-label">Minigames</span>
+            <span class="nav-label">My activity</span>
           </button>
           <button class="nav-item" data-section="heist" data-module="heist" onclick="switchSection('heist'); toggleMobileMenu()" id="mobileNavHeist" style="display:none;">
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-rocket"></i></span>
             <span class="nav-label">Missions</span>
           </button>
-          <button class="nav-item" data-section="self-serve-roles" data-module="selfserveroles" onclick="openSidebarSection('self-serve-roles'); toggleMobileMenu()" id="mobileNavSelfServe" style="display:none;">
+          <button class="nav-item" data-section="self-serve-roles" data-module="selfserveroles" onclick="switchSection('self-serve-roles'); toggleMobileMenu()" id="mobileNavSelfServe" style="display:none;">
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-user-tag"></i></span>
-            <span class="nav-label">Self-Serve Roles</span>
+            <span class="nav-label">Community roles</span>
           </button>
-          <button class="nav-item" data-section="ticketing" data-module="ticketing" onclick="openSidebarSection('ticketing'); toggleMobileMenu()" id="mobileNavTicketing" style="display:none;">
+          <button class="nav-item" data-section="ticketing" data-module="ticketing" onclick="switchSection('ticketing'); toggleMobileMenu()" id="mobileNavTicketing" style="display:none;">
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-ticket"></i></span>
-            <span class="nav-label">Ticketing</span>
-          </button>
-          <button class="nav-item" data-section="guildguard" data-module="guildguard" onclick="openSidebarSection('guildguard'); toggleMobileMenu()" id="mobileNavGuildGuard" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-shield-halved"></i></span>
-            <span class="nav-label">Guild Guard</span>
+            <span class="nav-label">Support</span>
           </button>
           <div class="sidebar-section-divider"></div>
-          <div class="sidebar-group-label" id="mobileGroupManagement">Management</div>
-          <button class="nav-item" data-section="plans" onclick="switchSection('plans'); toggleMobileMenu()" id="mobileNavPlans" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-gem"></i></span>
-            <span class="nav-label">Plans</span>
-          </button>
-          <button class="nav-item" data-section="settings" onclick="openAdminSettingsEntry(); toggleMobileMenu()" id="mobileNavSettings" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-gear"></i></span>
-            <span class="nav-label">Modules</span>
-          </button>
-          <button class="nav-item" data-section="help" onclick="switchSection('help'); toggleMobileMenu()">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-circle-question"></i></span>
-            <span class="nav-label">Help</span>
+          <div class="sidebar-group-label" id="mobileGroupManagement">Administration</div>
+          <button class="nav-item nav-item--workspace" data-section="module-hub" onclick="openAdminSettingsEntry(); toggleMobileMenu()" id="mobileNavSettings" style="display:none;">
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-sliders"></i></span>
+            <span class="nav-label">Manage modules</span>
           </button>
           <div class="sidebar-footer" id="mobileSuperadminSidebarGroup" style="display:none;">
-          <button class="nav-item" data-section="admin" onclick="switchSection('admin'); showAdminView('superadmin'); toggleMobileMenu()" id="mobileNavAdmin" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-shield"></i></span>
-            <span class="nav-label">Superadmin</span>
-          </button>
-          <button class="nav-item" data-section="admin" onclick="switchSection('admin'); showAdminView('monitor'); toggleMobileMenu()" id="mobileNavMonitor" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-display"></i></span>
-            <span class="nav-label">Monitor</span>
-          </button>
+            <button class="nav-item nav-item--superadmin" data-section="admin" onclick="switchSection('admin'); showAdminView('superadmin'); toggleMobileMenu()" id="mobileNavAdmin" style="display:none;">
+              <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-shield-halved"></i></span>
+              <span class="nav-label">Platform console</span>
+            </button>
           </div>
+          <button class="nav-item" data-section="help" onclick="switchSection('help'); toggleMobileMenu()">
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-circle-question"></i></span>
+            <span class="nav-label">Help &amp; support</span>
+          </button>
         </div>
       </div>
     </div>
@@ -147,84 +131,65 @@
       <!-- Sidebar Navigation -->
       <aside class="sidebar" role="navigation" aria-label="Section navigation">
         <div class="sidebar-search">
-          <input type="text" id="sidebarSearchInput" placeholder="Search modules..." onkeyup="onSidebarSearch(this.value)">
+          <input type="text" id="sidebarSearchInput" placeholder="Search workspace..." onkeyup="onSidebarSearch(this.value)">
           <span class="search-icon">🔍</span>
         </div>
         <div class="sidebar-nav-items">
+          <div class="sidebar-group-label">My workspace</div>
           <button class="nav-item active" data-section="landing" onclick="goHomePage()">
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-house"></i></span>
-            <span class="nav-label">Hub</span>
+            <span class="nav-label">Home</span>
+          </button>
+          <button class="nav-item" data-section="profile" onclick="switchSection('profile')" id="sidebarNavProfile">
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-user"></i></span>
+            <span class="nav-label">My profile</span>
+          </button>
+          <button class="nav-item" data-section="wallets" data-module="verification" onclick="switchSection('wallets')" id="sidebarNavWallets">
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-wallet"></i></span>
+            <span class="nav-label">My wallets</span>
           </button>
           <div class="sidebar-section-divider"></div>
           <div class="sidebar-group-label" id="sidebarGroupCommunity">Community</div>
-          <button class="nav-item" data-section="wallets" data-module="verification" onclick="switchSection('wallets')" id="sidebarNavWallets" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-shield-halved"></i></span>
-            <span class="nav-label">Verification</span>
+          <button class="nav-item" data-section="servers" onclick="switchSection('servers')" id="sidebarNavServers">
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-people-group"></i></span>
+            <span class="nav-label">My communities</span>
           </button>
           <button class="nav-item" data-section="governance" data-module="governance" onclick="switchSection('governance')" id="sidebarNavGovernance" style="display:none;">
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-landmark"></i></span>
             <span class="nav-label">Governance</span>
           </button>
-          <button class="nav-item" data-section="treasury" data-module="treasury" onclick="openSidebarSection('treasury')" id="sidebarNavTreasury" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-wallet"></i></span>
-            <span class="nav-label">Wallet Tracker</span>
-          </button>
-          <button class="nav-item" data-section="nft-activity" data-module="nfttracker" onclick="switchSection('nft-activity')" id="sidebarNavNftActivity" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-palette"></i></span>
-            <span class="nav-label">NFT Tracker</span>
-          </button>
-          <button class="nav-item" data-section="token-activity" data-module="tokentracker" onclick="switchSection('token-activity')" id="sidebarNavTokenActivity" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-coins"></i></span>
-            <span class="nav-label">Token Tracker</span>
-          </button>
           <button class="nav-item" data-section="engagement" data-module="engagement" onclick="switchSection('engagement')" id="sidebarNavEngagement" style="display:none;">
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-chart-line"></i></span>
-            <span class="nav-label">Engagement</span>
-          </button>
-          <button class="nav-item" data-section="battle" data-module="battle" onclick="switchSection('battle')" id="sidebarNavBattle" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-gamepad"></i></span>
-            <span class="nav-label">Minigames</span>
+            <span class="nav-label">My activity</span>
           </button>
           <button class="nav-item" data-section="heist" data-module="heist" onclick="switchSection('heist')" id="sidebarNavHeist" style="display:none;">
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-rocket"></i></span>
             <span class="nav-label">Missions</span>
           </button>
-          <button class="nav-item" data-section="self-serve-roles" data-module="selfserveroles" onclick="openSidebarSection('self-serve-roles')" id="sidebarNavSelfServe" style="display:none;">
+          <button class="nav-item" data-section="self-serve-roles" data-module="selfserveroles" onclick="switchSection('self-serve-roles')" id="sidebarNavSelfServe" style="display:none;">
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-user-tag"></i></span>
-            <span class="nav-label">Self-Serve Roles</span>
+            <span class="nav-label">Community roles</span>
           </button>
-          <button class="nav-item" data-section="ticketing" data-module="ticketing" onclick="openSidebarSection('ticketing')" id="sidebarNavTicketing" style="display:none;">
+          <button class="nav-item" data-section="ticketing" data-module="ticketing" onclick="switchSection('ticketing')" id="sidebarNavTicketing" style="display:none;">
             <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-ticket"></i></span>
-            <span class="nav-label">Ticketing</span>
-          </button>
-          <button class="nav-item" data-section="guildguard" data-module="guildguard" onclick="openSidebarSection('guildguard')" id="sidebarNavGuildGuard" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-shield-halved"></i></span>
-            <span class="nav-label">Guild Guard</span>
+            <span class="nav-label">Support</span>
           </button>
           <div class="sidebar-section-divider"></div>
-          <div class="sidebar-group-label" id="sidebarGroupManagement">Management</div>
-          <button class="nav-item" data-section="plans" onclick="switchSection('plans')" id="sidebarNavPlans" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-gem"></i></span>
-            <span class="nav-label">Plans</span>
-          </button>
-          <button class="nav-item" data-section="settings" onclick="openAdminSettingsEntry()" id="sidebarNavSettings" style="display:none;">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-gear"></i></span>
-            <span class="nav-label">Modules</span>
-          </button>
-          <button class="nav-item" data-section="help" onclick="switchSection('help')">
-            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-circle-question"></i></span>
-            <span class="nav-label">Help</span>
+          <div class="sidebar-group-label" id="sidebarGroupManagement">Administration</div>
+          <button class="nav-item nav-item--workspace" data-section="module-hub" onclick="openAdminSettingsEntry()" id="sidebarNavSettings" style="display:none;">
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-sliders"></i></span>
+            <span class="nav-label">Manage modules</span>
           </button>
           <div class="sidebar-footer" id="adminSuperadminSidebarGroup" style="display:none;">
-            <button class="nav-item" data-section="admin" onclick="switchSection('admin'); showAdminView('superadmin')" id="adminSuperadminNav">
-              <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-shield"></i></span>
-              <span class="nav-label">Superadmin</span>
-            </button>
-            <button class="nav-item" data-section="admin" onclick="switchSection('admin'); showAdminView('monitor')">
-              <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-display"></i></span>
-              <span class="nav-label">Monitor</span>
+            <button class="nav-item nav-item--superadmin" data-section="admin" onclick="switchSection('admin'); showAdminView('superadmin')" id="adminSuperadminNav">
+              <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-shield-halved"></i></span>
+              <span class="nav-label">Platform console</span>
             </button>
           </div>
+          <button class="nav-item" data-section="help" onclick="switchSection('help')">
+            <span class="nav-icon" aria-hidden="true"><i class="fa-solid fa-circle-question"></i></span>
+            <span class="nav-label">Help &amp; support</span>
+          </button>
         </div>
         <div id="sidebarServerContext" class="sidebar-server-context" style="display:none;">
           <div class="sidebar-server-card" onclick="switchSection('servers')">
@@ -246,10 +211,10 @@
         <!-- Landing / General Section -->
         <section id="section-landing" class="content-section app-surface active">
           <div id="generalPreSelection" class="home-page home-page--fresh">
-            <header class="functional-hub__header" style="margin-bottom: var(--space-8);">
-              <p class="gpf-kicker">Unified App Hub</p>
+            <header class="functional-hub__header role-home-header" style="margin-bottom: var(--space-8);">
+              <p class="gpf-kicker" id="appHubRoleKicker">Personal workspace</p>
               <h1 id="appHubGreeting">Welcome to GuildPilot.</h1>
-              <p class="gpf-subtitle">Manage your profile, discover communities, or access administrative workspaces.</p>
+              <p class="gpf-subtitle" id="appHubSubtitle">Manage your identity, wallets, and communities from one clear workspace.</p>
             </header>
             
             <div id="appHubBento" class="dashboard-bento">
@@ -395,12 +360,21 @@
 
         <!-- Module Hub / Dashboard -->
         <section id="section-module-hub" class="content-section app-surface">
-          <header class="section-header" style="margin-bottom: var(--space-8);">
+          <header class="section-header module-workspace-header" style="margin-bottom: var(--space-8);">
+            <div>
+              <p class="gpf-kicker">Server management</p>
+              <h2>Modules</h2>
+              <p class="section-subtitle">All server configuration starts here. Choose a module to manage its settings.</p>
+            </div>
             <div id="moduleHubServerInfo"></div>
-            <p class="section-subtitle">Select a module to manage settings or view community data.</p>
           </header>
-          
-          <div id="module-hub-grid" class="module-grid">
+
+          <div class="module-workspace-notice">
+            <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+            <div><strong>One place for every setting</strong><span>Members use the main menu. Server configuration stays inside this workspace.</span></div>
+          </div>
+
+          <div id="module-hub-grid" class="module-grid module-grid--managed">
             <!-- Tiles injected dynamically by portal.js -->
           </div>
         </section>
@@ -959,10 +933,10 @@
           </div>
         </section>
 
-        <!-- NFT Tracker Section -->
+        <!-- NFT Activity Section -->
         <section id="section-nft-activity" class="content-section">
           <header class="section-header">
-            <h2>NFT Tracker</h2>
+            <h2>NFT Activity</h2>
             <p class="section-subtitle">Manage tracked collections and live activity feed</p>
           </header>
           <div id="nftActivityTrackerSettingsPanel"></div>
@@ -1004,9 +978,16 @@
         </section>
 
         <section id="section-aiassistant" class="content-section">
-          <header class="section-header">
-            <h2>AI Assistant</h2>
-            <p class="section-subtitle">Tune assistant personas, guardrails, policies, and knowledge controls for this server</p>
+          <header class="section-header ai-page-header">
+            <div class="ai-page-heading">
+              <span class="ai-page-kicker">Intelligence workspace</span>
+              <h2>AI Assistant</h2>
+              <p class="section-subtitle">Set up a trusted community assistant in a few clear steps</p>
+            </div>
+            <div class="ai-page-health" aria-label="AI workspace status">
+              <span class="ai-page-health__dot" aria-hidden="true"></span>
+              <span><strong>Systems ready</strong><small>Protected workspace</small></span>
+            </div>
           </header>
           <div id="aiAssistantModuleSettingsPanel"></div>
         </section>
@@ -1434,7 +1415,7 @@
           </div>
         </section>
 
-        <!-- Ticketing Section -->
+        <!-- Support Tickets Section -->
         <section id="section-ticketing" class="content-section">
           <header class="section-header">
             <h2>Support Tickets</h2>
@@ -1450,7 +1431,7 @@
             </div>
           </div>
           <div class="card" id="ticketingModuleSettingsCard" style="display:none;">
-            <h3 style="margin:0 0 var(--space-2) 0;">Ticketing Admin</h3>
+            <h3 style="margin:0 0 var(--space-2) 0;">Support Tickets Admin</h3>
             <p style="color:var(--text-secondary);margin:0 0 var(--space-3) 0;font-size:0.85em;">
               Configure categories, post ticket panels, review open tickets, and tune automation.
             </p>
@@ -1520,1128 +1501,63 @@
         </section>
 
         <!-- Help Section -->
-        <section id="section-help" class="content-section app-surface">
-          <header class="section-header">
-            <h2>Help Center</h2>
-            <p class="section-subtitle">Comprehensive guides and troubleshooting resources</p>
+        <section id="section-help" class="content-section app-surface help-center-v2">
+          <header class="help-hero">
+            <div class="help-hero__copy">
+              <p class="gpf-kicker" id="helpRoleKicker">GuildPilot guide</p>
+              <h2>How can we help?</h2>
+              <p id="helpRoleSubtitle">Clear guidance for your profile, wallets, communities, and GuildPilot features.</p>
+            </div>
+            <div class="help-search" role="search">
+              <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+              <label class="sr-only" for="helpSearchInput">Search help topics</label>
+              <input id="helpSearchInput" type="search" placeholder="Search Wallet Tracker, Auto Messages, billing..." autocomplete="off" oninput="filterHelpCenter(this.value)">
+              <kbd>/</kbd>
+            </div>
           </header>
 
-          <div class="help-categories">
-            <div class="card help-card" onclick="toggleHelp('getting-started')">
-              <h3>🚀 Getting Started</h3>
-              <p>Learn the fundamentals and how to participate</p>
-            </div>
-            <div class="card help-card" onclick="toggleHelp('user-flow')">
-              <h3>User Flow</h3>
-              <p>End-to-end member journey from login to module participation</p>
-            </div>
-            <div class="card help-card" onclick="toggleHelp('module-guides')">
-              <h3>Module Guides</h3>
-              <p>Role-based guidance for every module in the platform</p>
-            </div>
-            <div class="card help-card" onclick="toggleHelp('module-verification')">
-              <h3>Module: Verification</h3>
-              <p>Identity proof, wallet linking, and role sync commands</p>
-            </div>
-            <div class="card help-card" onclick="toggleHelp('module-governance')">
-              <h3>Module: Governance</h3>
-              <p>Proposal creation, support flow, and voting controls</p>
-            </div>
-            <div class="card help-card" onclick="toggleHelp('module-treasury')">
-              <h3>Module: Treasury</h3>
-              <p>Treasury visibility, refresh, and alert management</p>
-            </div>
-            <div class="card help-card" onclick="toggleHelp('module-wallettracker')">
-              <h3>Module: Wallet Tracker</h3>
-              <p>Tracked wallet watchlists and holdings visibility</p>
-            </div>
-            <div class="card help-card" onclick="toggleHelp('module-nfttracker')">
-              <h3>Module: NFT Tracker</h3>
-              <p>Collection feed and NFT market activity coverage</p>
-            </div>
-            <div class="card help-card" onclick="toggleHelp('module-tokentracker')">
-              <h3>Module: Token Tracker</h3>
-              <p>Token movement feed and tracked asset controls</p>
-            </div>
-            <div class="card help-card" data-help-role="admin" style="display:none;" onclick="toggleHelp('module-invites')">
-              <h3>Module: Invite Tracker</h3>
-              <p>Referral attribution, invite leaderboard, and exports</p>
-            </div>
-            <div class="card help-card" data-help-role="admin" style="display:none;" onclick="toggleHelp('module-aiassistant')">
-              <h3>Module: AI Assistant</h3>
-              <p>Ask, summarize, and run briefings with assistant tools</p>
-            </div>
-            <div class="card help-card" onclick="toggleHelp('module-ticketing')">
-              <h3>Module: Ticketing</h3>
-              <p>Portal-managed support intake and routing workflows</p>
-            </div>
-            <div class="card help-card" onclick="toggleHelp('module-engagement')">
-              <h3>Module: Engagement</h3>
-              <p>Points economy, rewards, and leaderboard commands</p>
-            </div>
-            <div class="card help-card" onclick="toggleHelp('module-minigames')">
-              <h3>Module: Minigames</h3>
-              <p>Battle, game sessions, and Game Night orchestration</p>
-            </div>
-            <div class="card help-card" onclick="toggleHelp('module-missions')">
-              <h3>Module: Missions</h3>
-              <p>Missions lifecycle and participant operations</p>
-            </div>
-            <div class="card help-card" onclick="toggleHelp('module-selfserveroles')">
-              <h3>Module: Self-Serve Roles</h3>
-              <p>Member role-claim experience and role menu operation</p>
-            </div>
-            <div class="card help-card" data-help-role="admin" style="display:none;" onclick="toggleHelp('module-branding')">
-              <h3>Module: Branding</h3>
-              <p>Tenant identity, style defaults, and visual consistency</p>
-            </div>
-            <div class="card help-card" data-help-role="admin" style="display:none;" onclick="toggleHelp('module-config')">
-              <h3>Module: System Config</h3>
-              <p>Global module status and operational toggle commands</p>
-            </div>
-            <div class="card help-card" onclick="toggleHelp('wallet-setup')">
-              <h3>💼 Wallet Setup</h3>
-              <p>Complete guide to linking and verifying your Solana wallet</p>
-            </div>
-            <div class="card help-card" onclick="toggleHelp('governance')">
-              <h3>📜 Governance</h3>
-              <p>Understanding proposals, voting, and DAO participation</p>
-            </div>
-            <div class="card help-card" onclick="toggleHelp('battles')">
-              <h3>⚔️ Battle Lobbies</h3>
-              <p>Create and join battle lobbies with configurable role gating</p>
-            </div>
-            <div class="card help-card" onclick="toggleHelp('inventory')">
-              <h3>📦 Bot Inventory</h3>
-              <p>Complete feature and module map of everything currently built</p>
-            </div>
-            <div class="card help-card" onclick="toggleHelp('commands')">
-              <h3>📚 Commands by Category</h3>
-              <p>Full slash command reference grouped by system area</p>
-            </div>
-            <div id="helpAdminFlowCard" class="card help-card" data-help-role="admin" style="display:none;" onclick="toggleHelp('admin-flow')">
-              <h3>Admin Flow</h3>
-              <p>Operational workflow for server moderators and administrators</p>
-            </div>
-            <div id="helpSuperadminFlowCard" class="card help-card" data-help-role="superadmin" style="display:none;" onclick="toggleHelp('superadmin-flow')">
-              <h3>Superadmin Flow</h3>
-              <p>Tenant governance, global controls, monitoring, and rollout flow</p>
-            </div>
-            <div class="card help-card" onclick="toggleHelp('troubleshooting')">
-              <h3>🔧 Troubleshooting</h3>
-              <p>Solutions to common issues and technical problems</p>
-            </div>
+          <div class="help-role-path" id="helpRolePath" aria-label="Your GuildPilot path"></div>
+
+          <div class="help-center-layout">
+            <aside class="help-topic-sidebar" aria-label="Help topics">
+              <div class="help-topic-sidebar__header">
+                <span>Browse guides</span>
+                <strong id="helpGuideCount">0 topics</strong>
+              </div>
+              <nav id="helpGuideNav" class="help-guide-nav"></nav>
+            </aside>
+
+            <main id="helpGuideContent" class="help-guide-content" aria-live="polite">
+              <div class="help-guide-empty">
+                <i class="fa-solid fa-compass" aria-hidden="true"></i>
+                <h3>Choose a guide</h3>
+                <p>Select a topic to see clear instructions and the right place to manage it.</p>
+              </div>
+            </main>
           </div>
 
-          <div id="help-getting-started" class="help-content" style="display:none;">
-            <div class="card">
-              <h3>🚀 Getting Started</h3>
-              <div class="help-steps">
-                <div class="help-step">
-                  <div class="step-number">1</div>
-                  <div class="step-content">
-                    <h4>Join the Discord</h4>
-                    <p>Become a member of the Discord server to access all features and community benefits.</p>
-                  </div>
-                </div>
-                <div class="help-step">
-                  <div class="step-number">2</div>
-                  <div class="step-content">
-                    <h4>Link Your Wallet</h4>
-                    <p>Navigate to the Wallets section and verify ownership of your Solana wallet containing your community NFTs.</p>
-                  </div>
-                </div>
-                <div class="help-step">
-                  <div class="step-number">3</div>
-                  <div class="step-content">
-                    <h4>Get Your Tier</h4>
-                    <p>Your membership tier is automatically assigned based on the number of verified NFTs you hold.</p>
-                  </div>
-                </div>
-                <div class="help-step">
-                  <div class="step-number">4</div>
-                  <div class="step-content">
-                    <h4>Participate & Earn</h4>
-                    <p>Start voting on governance proposals and joining missions to earn rewards and shape the DAO's future.</p>
-                  </div>
-                </div>
+          <div class="help-support-strip">
+            <div>
+              <span class="help-support-strip__icon"><i class="fa-solid fa-life-ring" aria-hidden="true"></i></span>
+              <div>
+                <strong>Still need help?</strong>
+                <p>Open your community’s Support area. Include the server, feature, time, and any error message.</p>
               </div>
             </div>
-          </div>
-
-          <div id="help-user-flow" class="help-content" style="display:none;">
-            <div class="card">
-              <h3>User Flow</h3>
-              <div class="help-steps">
-                <div class="help-step">
-                  <div class="step-number">1</div>
-                  <div class="step-content">
-                    <h4>Authenticate and Select Context</h4>
-                    <p>Log in through Discord and select a server so module permissions and content are tenant-aware.</p>
-                  </div>
-                </div>
-                <div class="help-step">
-                  <div class="step-number">2</div>
-                  <div class="step-content">
-                    <h4>Complete Identity Setup</h4>
-                    <p>Open Wallets, connect one or more wallets, and verify ownership. Set a primary wallet for voting and tier logic.</p>
-                  </div>
-                </div>
-                <div class="help-step">
-                  <div class="step-number">3</div>
-                  <div class="step-content">
-                    <h4>Unlock Module Access</h4>
-                    <p>Use Module Hub to open enabled modules for your server, then move between governance, tracking, support, and game systems.</p>
-                  </div>
-                </div>
-                <div class="help-step">
-                  <div class="step-number">4</div>
-                  <div class="step-content">
-                    <h4>Participate and Track Outcomes</h4>
-                    <p>Vote on proposals, join missions and games, and monitor your stats in profile, points, and activity dashboards.</p>
-                  </div>
-                </div>
-                <div class="help-step">
-                  <div class="step-number">5</div>
-                  <div class="step-content">
-                    <h4>Get Support Fast</h4>
-                    <p>Use troubleshooting guidance first, then escalate in Discord support with screenshots, error messages, and steps to reproduce.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-module-guides" class="help-content" style="display:none;">
-            <div class="card">
-              <h3>Module Guides</h3>
-              <p style="color:var(--text-secondary); margin-bottom:12px;">
-                Quick operational reference by module with user, admin, and superadmin responsibilities.
-              </p>
-              <div class="help-section">
-                <h4>Module Responsibility Matrix</h4>
-                <div class="data-table-wrap"><table class="data-table">
-                  <thead>
-                    <tr>
-                      <th>Module</th>
-                      <th>User Focus</th>
-                      <th>Admin Focus</th>
-                      <th>Superadmin Focus</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr><td>Verification</td><td>Link wallet and claim roles.</td><td>Configure role rules and sync actions.</td><td>Set tenant defaults and lock policy.</td></tr>
-                    <tr><td>Governance</td><td>Create, support, and vote on proposals.</td><td>Moderate lifecycle and thresholds.</td><td>Define default governance guardrails.</td></tr>
-                    <tr><td>Treasury</td><td>View balances and movement context.</td><td>Set wallets, intervals, and tx alerts.</td><td>Review platform-wide financial posture.</td></tr>
-                    <tr><td>Wallet Tracker</td><td>Follow tracked wallets and holdings.</td><td>Manage watchlists and feed behavior.</td><td>Set baseline tracker capacity by plan.</td></tr>
-                    <tr><td>NFT Tracker</td><td>See collection activity updates.</td><td>Manage collections and feed channels.</td><td>Control capacity and defaults per tenant.</td></tr>
-                    <tr><td>Token Tracker</td><td>Monitor token movement streams.</td><td>Add and maintain token feeds.</td><td>Define scaling limits and rollout policy.</td></tr>
-                    <tr><td>Invite Tracker</td><td>Review personal invite impact.</td><td>Manage leaderboards and exports.</td><td>Standardize anti-abuse defaults.</td></tr>
-                    <tr><td>Ticketing</td><td>Open and follow support tickets.</td><td>Manage categories, handlers, automation.</td><td>Set baseline templates and limits.</td></tr>
-                    <tr><td>Engagement</td><td>Earn points and redeem rewards.</td><td>Maintain economy and reward controls.</td><td>Tune global reward policy and limits.</td></tr>
-                    <tr><td>AI Assistant</td><td>Ask questions and get contextual help.</td><td>Tune prompts, scope, and safeguards.</td><td>Approve model policy and guardrails.</td></tr>
-                    <tr><td>Minigames</td><td>Join sessions and compete.</td><td>Start, moderate, and monitor game runs.</td><td>Manage tenancy defaults and enablement.</td></tr>
-                    <tr><td>Missions</td><td>Sign up, track status, and participate.</td><td>Create and operate mission lifecycle.</td><td>Control mission defaults at scale.</td></tr>
-                    <tr><td>Self-Serve Roles</td><td>Claim optional roles instantly.</td><td>Curate role menu and constraints.</td><td>Set governance policy for role menus.</td></tr>
-                    <tr><td>Branding</td><td>Receive branded tenant experience.</td><td>Apply server-level branding values.</td><td>Define parent-brand defaults and locks.</td></tr>
-                    <tr><td>Help Center</td><td>Follow docs and resolve blockers.</td><td>Share runbooks with moderators.</td><td>Maintain cross-tenant documentation quality.</td></tr>
-                  </tbody>
-                </table></div>
-              </div>
-              <div class="help-section">
-                <h4>Operational Pattern</h4>
-                <ol>
-                  <li>Enable only modules your server team can actively maintain.</li>
-                  <li>Document owner, escalation path, and success metric per module.</li>
-                  <li>Roll out changes in one tenant first, then scale after validation.</li>
-                  <li>Use Help Center and command docs as the single source of truth.</li>
-                </ol>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-module-verification" class="help-content" style="display:none;">
-            <div class="card">
-              <h3>Module: Verification</h3>
-              <div class="help-section">
-                <h4>What It Does</h4>
-                <p>Handles wallet linking, verification proofs, role assignment, and verification-admin controls for user identity and access.</p>
-              </div>
-              <div class="help-section">
-                <h4>Commands</h4>
-                <ul>
-                  <li><code>/verification status</code>, <code>/verification wallets</code>, <code>/verification refresh</code>, <code>/verification quick</code></li>
-                  <li><code>/verification admin panel</code>, <code>/verification admin role-config</code>, <code>/verification admin actions</code></li>
-                  <li><code>/verification admin export-user</code>, <code>/verification admin remove-user</code>, <code>/verification admin export-wallets</code></li>
-                  <li><code>/verification admin token-role-add</code>, <code>/verification admin token-role-remove</code>, <code>/verification admin token-role-list</code></li>
-                  <li><code>/verification admin og-view</code>, <code>/verification admin og-enable</code>, <code>/verification admin og-role</code>, <code>/verification admin og-limit</code>, <code>/verification admin og-sync</code></li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-module-governance" class="help-content" style="display:none;">
-            <div class="card">
-              <h3>Module: Governance</h3>
-              <div class="help-section">
-                <h4>What It Does</h4>
-                <p>Runs proposal workflows from draft to vote, including support collection, voting windows, and moderation controls.</p>
-              </div>
-              <div class="help-section">
-                <h4>Commands</h4>
-                <ul>
-                  <li><code>/governance propose</code>, <code>/governance support</code>, <code>/governance vote</code></li>
-                  <li><code>/governance comment</code>, <code>/governance cancel</code></li>
-                  <li><code>/governance admin list</code>, <code>/governance admin cancel</code>, <code>/governance admin settings</code>, <code>/governance admin panel</code></li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-module-treasury" class="help-content" style="display:none;">
-            <div class="card">
-              <h3>Module: Treasury</h3>
-              <div class="help-section">
-                <h4>What It Does</h4>
-                <p>Tracks treasury balances and transaction events, with admin controls for refresh, wallet assignment, and alerting.</p>
-              </div>
-              <div class="help-section">
-                <h4>Commands</h4>
-                <ul>
-                  <li><code>/treasury view</code></li>
-                  <li><code>/treasury admin status</code>, <code>/treasury admin refresh</code></li>
-                  <li><code>/treasury admin enable</code>, <code>/treasury admin disable</code></li>
-                  <li><code>/treasury admin set-wallet</code>, <code>/treasury admin set-interval</code></li>
-                  <li><code>/treasury admin tx-history</code>, <code>/treasury admin tx-alerts</code></li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-module-wallettracker" class="help-content" style="display:none;">
-            <div class="card">
-              <h3>Module: Wallet Tracker</h3>
-              <div class="help-section">
-                <h4>What It Does</h4>
-                <p>Maintains tracked-wallet watchlists and holdings snapshots so teams can monitor key wallets over time.</p>
-              </div>
-              <div class="help-section">
-                <h4>Commands</h4>
-                <ul>
-                  <li><code>/wallet-tracker add</code>, <code>/wallet-tracker remove</code>, <code>/wallet-tracker edit</code></li>
-                  <li><code>/wallet-tracker list</code>, <code>/wallet-tracker holdings</code>, <code>/wallet-tracker refresh-all</code></li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-module-nfttracker" class="help-content" style="display:none;">
-            <div class="card">
-              <h3>Module: NFT Tracker</h3>
-              <div class="help-section">
-                <h4>What It Does</h4>
-                <p>Tracks configured NFT collections and pushes marketplace activity into operational feeds.</p>
-              </div>
-              <div class="help-section">
-                <h4>Commands</h4>
-                <ul>
-                  <li><code>/nft-tracker collection add</code>, <code>/nft-tracker collection remove</code></li>
-                  <li><code>/nft-tracker collection list</code>, <code>/nft-tracker collection feed</code></li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-module-tokentracker" class="help-content" style="display:none;">
-            <div class="card">
-              <h3>Module: Token Tracker</h3>
-              <div class="help-section">
-                <h4>What It Does</h4>
-                <p>Monitors token activity streams for configured assets and publishes movement feeds for operators.</p>
-              </div>
-              <div class="help-section">
-                <h4>Commands</h4>
-                <ul>
-                  <li><code>/token-tracker add</code>, <code>/token-tracker edit</code>, <code>/token-tracker remove</code></li>
-                  <li><code>/token-tracker list</code>, <code>/token-tracker feed</code></li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-module-invites" class="help-content" data-help-role="admin" style="display:none;">
-            <div class="card">
-              <h3>Module: Invite Tracker</h3>
-              <div class="help-section">
-                <h4>What It Does</h4>
-                <p>Measures invite attribution and campaign performance across members with export support for reporting.</p>
-              </div>
-              <div class="help-section">
-                <h4>Commands</h4>
-                <ul>
-                  <li><code>/invites who</code>, <code>/invites leaderboard</code>, <code>/invites panel</code>, <code>/invites export</code></li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-module-aiassistant" class="help-content" data-help-role="admin" style="display:none;">
-            <div class="card">
-              <h3>Module: AI Assistant</h3>
-              <div class="help-section">
-                <h4>What It Does</h4>
-                <p>Provides assistant responses, briefings, and context support with tenant-configurable behavior controls.</p>
-              </div>
-              <div class="help-section">
-                <h4>Commands</h4>
-                <ul>
-                  <li><code>/aiassistant ask</code>, <code>/aiassistant status</code>, <code>/aiassistant briefing</code></li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-module-ticketing" class="help-content" style="display:none;">
-            <div class="card">
-              <h3>Module: Ticketing</h3>
-              <div class="help-section">
-                <h4>What It Does</h4>
-                <p>Manages support workflows, category routing, handler assignment, and close/reopen automation from the portal.</p>
-              </div>
-              <div class="help-section">
-                <h4>Commands</h4>
-                <ul>
-                  <li>No dedicated slash command namespace is currently exposed for ticketing in this build.</li>
-                  <li>Ticketing operations are managed primarily through portal admin tools and configured workflows.</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-module-engagement" class="help-content" style="display:none;">
-            <div class="card">
-              <h3>Module: Engagement</h3>
-              <div class="help-section">
-                <h4>What It Does</h4>
-                <p>Runs points economy mechanics, leaderboard visibility, and reward redemption for member participation.</p>
-              </div>
-              <div class="help-section">
-                <h4>Commands</h4>
-                <ul>
-                  <li><code>/points balance</code>, <code>/points leaderboard</code>, <code>/points history</code>, <code>/points daily</code></li>
-                  <li><code>/points shop</code>, <code>/points redeem</code>, <code>/points admin</code></li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-module-minigames" class="help-content" style="display:none;">
-            <div class="card">
-              <h3>Module: Minigames</h3>
-              <div class="help-section">
-                <h4>What It Does</h4>
-                <p>Provides battle sessions, standalone mini-games, and Game Night orchestration for engagement events.</p>
-              </div>
-              <div class="help-section">
-                <h4>Commands</h4>
-                <ul>
-                  <li><code>/minigames run</code>, <code>/minigames help</code></li>
-                  <li><code>/battle create</code>, <code>/battle start</code>, <code>/battle cancel</code>, <code>/battle stats</code>, <code>/battle admin list</code>, <code>/battle admin force-end</code>, <code>/battle admin settings</code></li>
-                  <li><code>/higherlower start</code>, <code>/higherlower cancel</code></li>
-                  <li><code>/diceduel start</code>, <code>/diceduel cancel</code></li>
-                  <li><code>/reactionrace start</code>, <code>/reactionrace cancel</code></li>
-                  <li><code>/numberguess start</code>, <code>/numberguess cancel</code></li>
-                  <li><code>/slots start</code>, <code>/slots cancel</code></li>
-                  <li><code>/trivia start</code>, <code>/trivia cancel</code></li>
-                  <li><code>/wordscramble start</code>, <code>/wordscramble cancel</code></li>
-                  <li><code>/rps start</code>, <code>/rps cancel</code></li>
-                  <li><code>/blackjack start</code>, <code>/blackjack cancel</code></li>
-                  <li><code>/gamenight start</code>, <code>/gamenight skip</code>, <code>/gamenight cancel</code>, <code>/gamenight leaderboard</code></li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-module-missions" class="help-content" style="display:none;">
-            <div class="card">
-              <h3>Module: Missions</h3>
-              <div class="help-section">
-                <h4>What It Does</h4>
-                <p>Supports randomized solo/co-op missions with NFT locking, progression rewards, and full admin lifecycle controls.</p>
-              </div>
-              <div class="help-section">
-                <h4>Commands</h4>
-                <ul>
-                  <li><code>/heist board</code>, <code>/heist profile</code>, <code>/heist join</code>, <code>/heist leave</code></li>
-                  <li><code>/heist admin panel</code>, <code>/heist admin templates</code>, <code>/heist admin template-create</code></li>
-                  <li><code>/heist admin spawn-now</code>, <code>/heist admin resolve</code>, <code>/heist admin cancel</code></li>
-                  <li><code>/vault open</code>, <code>/vault balance</code>, <code>/vault history</code>, <code>/vault leaderboard</code>, <code>/vault rewards</code>, <code>/vault claims</code>, <code>/vault verify-social</code>, <code>/vault upgrade</code></li>
-                  <li><code>/vault admin panel</code>, <code>/vault admin setup</code>, <code>/vault admin setstatus</code>, <code>/vault admin config-view</code>, <code>/vault admin config-set</code></li>
-                  <li><code>/vault admin addkeys</code>, <code>/vault admin removekeys</code>, <code>/vault admin backfill</code>, <code>/vault admin fix-stats</code>, <code>/vault admin import-csv</code></li>
-                  <li><code>/vault admin rewards-list</code>, <code>/vault admin rewards-add</code>, <code>/vault admin rewards-update</code>, <code>/vault admin rewards-remove</code></li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-module-selfserveroles" class="help-content" style="display:none;">
-            <div class="card">
-              <h3>Module: Self-Serve Roles</h3>
-              <div class="help-section">
-                <h4>What It Does</h4>
-                <p>Lets members claim optional roles configured by admins, with role menu eligibility rules managed in server settings.</p>
-              </div>
-              <div class="help-section">
-                <h4>Commands</h4>
-                <ul>
-                  <li>No dedicated slash command namespace is currently exposed for self-serve roles in this build.</li>
-                  <li>Role claim behavior is configured and operated through portal/admin role management views.</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-module-branding" class="help-content" data-help-role="admin" style="display:none;">
-            <div class="card">
-              <h3>Module: Branding</h3>
-              <div class="help-section">
-                <h4>What It Does</h4>
-                <p>Controls tenant identity defaults such as naming, color usage, and support/contact references across surfaces.</p>
-              </div>
-              <div class="help-section">
-                <h4>Commands</h4>
-                <ul>
-                  <li>No dedicated slash command namespace is currently exposed for branding in this build.</li>
-                  <li>Branding is maintained through portal settings and superadmin policy defaults.</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-module-config" class="help-content" data-help-role="admin" style="display:none;">
-            <div class="card">
-              <h3>Module: System Config</h3>
-              <div class="help-section">
-                <h4>What It Does</h4>
-                <p>Provides operator-level visibility into module state and system toggles used to enable or disable major capabilities.</p>
-              </div>
-              <div class="help-section">
-                <h4>Commands</h4>
-                <ul>
-                  <li><code>/config modules</code>, <code>/config toggle</code>, <code>/config status</code></li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-module-moderation" class="help-content" data-help-role="admin" style="display:none;">
-            <div class="card">
-              <h3>Module: Moderation</h3>
-              <div class="help-section">
-                <h4>What It Does</h4>
-                <p>Provides direct moderation controls for immediate member and channel safety actions.</p>
-              </div>
-              <div class="help-section">
-                <h4>Commands</h4>
-                <ul>
-                  <li><code>/moderation kick</code>, <code>/moderation ban</code>, <code>/moderation timeout</code>, <code>/moderation purge</code></li>
-                  <li><code>/moderation settings-view</code>, <code>/moderation settings-raid</code>, <code>/moderation settings-keywords</code></li>
-                  <li><code>/moderation keyword-add</code>, <code>/moderation keyword-remove</code>, <code>/moderation keyword-list</code></li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-wallet-setup" class="help-content" style="display:none;">
-            <div class="card">
-              <h3>💼 Wallet Setup Guide</h3>
-              <div class="help-section">
-                <h4>How to Link a Wallet</h4>
-                <ol>
-                  <li>Click the <strong>"Add Wallet"</strong> button in the Wallets section</li>
-                  <li>Choose <strong>Sign Message</strong> (free) or <strong>Micro Transaction</strong></li>
-                  <li>Your wallet extension (Phantom, Solflare, etc.) opens automatically</li>
-                  <li>Approve the signature or transaction in your wallet</li>
-                  <li>Done — your wallet address is detected automatically, no copy/paste needed</li>
-                </ol>
-              </div>
-              <div class="help-section">
-                <h4>Supported Wallets</h4>
-                <ul>
-                  <li><strong>Phantom</strong> - Popular browser extension and mobile app</li>
-                  <li><strong>Solflare</strong> - Web-based and mobile wallet</li>
-                  <li><strong>Backpack</strong> - Modern multi-chain wallet</li>
-                  <li><strong>Any Solana wallet</strong> that supports message signing</li>
-                </ul>
-              </div>
-              <div class="help-section">
-                <h4>Setting a Primary Wallet</h4>
-                <p>Click the <strong>"Set Primary"</strong> button next to any verified wallet. This wallet will be used for primary voting power calculations and NFT verification.</p>
-              </div>
-              <div class="help-section">
-                <h4>Security Best Practices</h4>
-                <ul>
-                  <li>Never share your private key or seed phrase</li>
-                  <li>Only sign messages you understand</li>
-                  <li>Verify you're on the official portal before signing</li>
-                  <li>Keep your wallet software up to date</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-governance" class="help-content" style="display:none;">
-            <div class="card">
-              <h3>📜 Governance Guide</h3>
-              <div class="help-section">
-                <h4>Creating a Proposal</h4>
-                <ol>
-                  <li>Click <strong>Create Proposal</strong> in the Governance section, or use <code>/governance propose</code> in Discord</li>
-                  <li>Provide a clear, descriptive title for your proposal</li>
-                  <li>Write a detailed description explaining the proposal's purpose and impact</li>
-                  <li>Optionally choose a category and add a cost indication for context</li>
-                  <li>Wait for admin review and approval before voting begins</li>
-                  <li>Engage with the community to gather support</li>
-                </ol>
-              </div>
-              <div class="help-section">
-                <h4>Proposal Lifecycle</h4>
-                <ul>
-                  <li><span class="status-badge status-draft">Draft</span> - Proposal created, awaiting admin approval</li>
-                  <li><span class="status-badge status-supporting">Supporting</span> - Gathering community support before voting</li>
-                  <li><span class="status-badge status-voting">Voting</span> - Active voting period, cast your vote</li>
-                  <li><span class="status-badge status-passed">Passed</span> - Proposal approved by the community</li>
-                  <li><span class="status-badge status-rejected">Rejected</span> - Proposal did not meet approval threshold</li>
-                  <li><span class="status-badge status-closed">Closed</span> - Voting period ended</li>
-                </ul>
-              </div>
-              <div class="help-section">
-                <h4>Voting on Proposals</h4>
-                <ol>
-                  <li>View active proposals in the Governance section</li>
-                  <li>Read the proposal details carefully</li>
-                  <li>Click <strong>Yes</strong>, <strong>No</strong>, or <strong>Abstain</strong> on any active proposal, or use <code>/governance vote</code> in Discord</li>
-                  <li>Your voting power is automatically calculated based on your tier</li>
-                  <li>Track voting progress and results in real-time</li>
-                </ol>
-              </div>
-              <div class="help-section">
-                <h4>Voting Power by Tier</h4>
-                <div class="data-table-wrap"><table class="data-table">
-                  <thead>
-                    <tr>
-                      <th>Tier</th>
-                      <th>NFTs Required</th>
-                      <th>Voting Power</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>Associate</td>
-                      <td>1</td>
-                      <td>1 VP</td>
-                    </tr>
-                    <tr>
-                      <td>Soldier</td>
-                      <td>2-4</td>
-                      <td>2 VP</td>
-                    </tr>
-                    <tr>
-                      <td>Capo</td>
-                      <td>5-9</td>
-                      <td>3 VP</td>
-                    </tr>
-                    <tr>
-                      <td>Underboss</td>
-                      <td>10-19</td>
-                      <td>4 VP</td>
-                    </tr>
-                    <tr>
-                      <td>Don</td>
-                      <td>20+</td>
-                      <td>5 VP</td>
-                    </tr>
-                  </tbody>
-                </table></div>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-battles" class="help-content" style="display:none;">
-            <div class="card">
-              <h3>⚔️ Battle Lobbies</h3>
-              <div class="help-section">
-                <h4>Creating a Battle Lobby</h4>
-                <p>Use the command: <code>/battle create</code> <strong>(Admins/Moderators only)</strong></p>
-                <p><strong>Optional Parameters:</strong></p>
-                <ul>
-                  <li><code>max_players</code> — Maximum number of participants (default: 999)</li>
-                  <li><code>required_role_1/2/3</code> — Require at least ONE of these roles to join</li>
-                  <li><code>excluded_role_1/2/3</code> — Block users with ANY of these roles</li>
-                </ul>
-                <p><strong>Channel Rule:</strong> only one active battle per channel at a time.</p>
-              </div>
-              <div class="help-section">
-                <h4>Role Gating Explained</h4>
-                <p><strong>Required Roles (ANY Logic):</strong> A user must have at least one of the specified roles. If you set required_role_1:@Member and required_role_2:@Supporter, any user with @Member OR @Supporter can join.</p>
-                <p><strong>Excluded Roles (NONE Logic):</strong> A user cannot have any of the specified roles. If you set excluded_role_1:@Bot and excluded_role_2:@Muted, users with @Bot OR @Muted are blocked.</p>
-              </div>
-              <div class="help-section">
-                <h4>Example: Members-Only Battle</h4>
-                <p>Create a battle for members and supporters only, excluding bots:</p>
-                <p><code>/battle create max_players:20 required_role_1:@Member required_role_2:@Supporter excluded_role_1:@Bot</code></p>
-              </div>
-              <div class="help-section">
-                <h4>Joining a Battle</h4>
-                <ol>
-                  <li>React with ⚔️ to a battle lobby message to join</li>
-                  <li>If you meet role requirements, you're added to the participant list</li>
-                  <li>If you don't meet requirements, your reaction is removed and you'll receive a DM explaining why</li>
-                  <li>An admin/mod starts the lobby with <code>/battle start</code> once minimum players are reached</li>
-                </ol>
-              </div>
-              <div class="help-section">
-                <h4>Battle Commands</h4>
-                <ul>
-                  <li><code>/battle start</code> — Start your open lobby (requires minimum players, Admin/Mod only)</li>
-                  <li><code>/battle cancel</code> — Cancel your open lobby (closes lobby message and removes reactions)</li>
-                  <li><code>/battle stats</code> — View battle statistics and leaderboards</li>
-                </ul>
-              </div>
-              <div class="help-section">
-                <h4>Elite Four Phase</h4>
-                <ul>
-                  <li>Automatically triggers when 4 fighters remain</li>
-                  <li>All remaining fighters reset to 100 HP</li>
-                  <li>No lucky escapes / revivals</li>
-                  <li>Higher combat intensity and dramatic narration</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-inventory" class="help-content" style="display:none;">
-            <div class="card">
-              <h3>📦 Full Bot Inventory</h3>
-              <p style="color:var(--text-secondary); margin-bottom:12px;">
-                This inventory reflects the currently shipped GuildPilot build (Discord commands + web portal + admin systems).
-              </p>
-
-              <div class="help-section">
-                <h4>Core Product Areas</h4>
-                <ul>
-                  <li><strong>Verification & Identity:</strong> multi-wallet linking, signature verification, micro-transfer verification, tier/trait role sync, OG role flow, action export tools.</li>
-                  <li><strong>Governance:</strong> proposal creation, support phase, voting lifecycle, admin moderation/controls, quorum + VP configuration.</li>
-                  <li><strong>Treasury:</strong> SOL/USDC visibility, refresh controls, wallet assignment, tx history, tx alert automation.</li>
-                  <li><strong>NFT Activity & Tracking:</strong> collection watchlists, feed, wallet tracking, holdings panels, webhook/polling integrations.</li>
-                  <li><strong>Ticketing:</strong> category-based ticketing, handler/ping role assignment, templates, claim/reopen/close flows, auto-close automation.</li>
-                  <li><strong>Engagement:</strong> points economy, leaderboard/history, reward shop, redemption and admin grant/deduct flows.</li>
-                  <li><strong>Games:</strong> battle royale + standalone mini-games + cross-game Game Night sessions.</li>
-                  <li><strong>Missions:</strong> Mission lifecycle and participant role assignment.</li>
-                </ul>
-              </div>
-
-              <div class="help-section">
-                <h4>Web Portal Areas</h4>
-                <ul>
-                  <li><strong>Public/User:</strong> landing, servers, wallets, dashboard, governance, battle, treasury, help.</li>
-                  <li><strong>Admin:</strong> users, proposals, roles, voting power mappings, self-serve roles, invite tracker, NFT tracker, ticketing, settings, API reference, analytics/monitoring, command guide.</li>
-                  <li><strong>Superadmin:</strong> tenant management, plan templates, module baselines, branding defaults, entitlement webhook support, environment visibility.</li>
-                </ul>
-              </div>
-
-              <div class="help-section">
-                <h4>Feature Gates and Scope</h4>
-                <ul>
-                  <li><strong>Module toggles:</strong> verification, governance, treasury, ticketing, engagement, AI assistant, self-serve roles, wallet tracker, invite tracker, NFT tracker, token tracker, minigames, missions, and branding.</li>
-                  <li><strong>Plan limits:</strong> all plans keep core functionality; paid tiers increase module capacity limits (trackers, rules, categories, games, etc.).</li>
-                  <li><strong>Permissions:</strong> admin/mod checks are applied per command and per section for operational controls.</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-commands" class="help-content" style="display:none;">
-            <div class="card">
-              <h3>📚 Commands by Category</h3>
-              <p style="color:var(--text-secondary); margin-bottom:12px;">
-                Complete slash command surface grouped by operational category.
-              </p>
-
-              <div class="help-section">
-                <h4>Verification and Roles</h4>
-                <ul>
-                  <li><code>/verification status</code></li>
-                  <li><code>/verification wallets</code></li>
-                  <li><code>/verification refresh</code></li>
-                  <li><code>/verification quick</code></li>
-                  <li><code>/verification admin panel</code></li>
-                  <li><code>/verification admin export-user</code></li>
-                  <li><code>/verification admin remove-user</code></li>
-                  <li><code>/verification admin export-wallets</code></li>
-                  <li><code>/verification admin token-role-add</code></li>
-                  <li><code>/verification admin token-role-remove</code></li>
-                  <li><code>/verification admin token-role-list</code></li>
-                  <li><code>/verification admin role-config</code></li>
-                  <li><code>/verification admin actions</code></li>
-                  <li><code>/verification admin og-view</code></li>
-                  <li><code>/verification admin og-enable</code></li>
-                  <li><code>/verification admin og-role</code></li>
-                  <li><code>/verification admin og-limit</code></li>
-                  <li><code>/verification admin og-sync</code></li>
-                </ul>
-              </div>
-
-              <div class="help-section">
-                <h4>Governance</h4>
-                <ul>
-                  <li><code>/governance propose</code></li>
-                  <li><code>/governance support</code></li>
-                  <li><code>/governance vote</code></li>
-                  <li><code>/governance comment</code></li>
-                  <li><code>/governance cancel</code></li>
-                  <li><code>/governance admin list</code></li>
-                  <li><code>/governance admin cancel</code></li>
-                  <li><code>/governance admin settings</code></li>
-                  <li><code>/governance admin panel</code></li>
-                </ul>
-              </div>
-
-              <div class="help-section">
-                <h4>Treasury</h4>
-                <ul>
-                  <li><code>/treasury view</code></li>
-                  <li><code>/treasury admin status</code></li>
-                  <li><code>/treasury admin refresh</code></li>
-                  <li><code>/treasury admin enable</code></li>
-                  <li><code>/treasury admin disable</code></li>
-                  <li><code>/treasury admin set-wallet</code></li>
-                  <li><code>/treasury admin set-interval</code></li>
-                  <li><code>/treasury admin tx-history</code></li>
-                  <li><code>/treasury admin tx-alerts</code></li>
-                </ul>
-              </div>
-
-              <div class="help-section">
-                <h4>Wallet Tracker</h4>
-                <ul>
-                  <li><code>/wallet-tracker add</code></li>
-                  <li><code>/wallet-tracker remove</code></li>
-                  <li><code>/wallet-tracker list</code></li>
-                  <li><code>/wallet-tracker edit</code></li>
-                  <li><code>/wallet-tracker holdings</code></li>
-                  <li><code>/wallet-tracker refresh-all</code></li>
-                </ul>
-              </div>
-
-              <div class="help-section">
-                <h4>Invite Tracker</h4>
-                <ul>
-                  <li><code>/invites who</code></li>
-                  <li><code>/invites leaderboard</code></li>
-                  <li><code>/invites panel</code></li>
-                  <li><code>/invites export</code></li>
-                </ul>
-              </div>
-
-              <div class="help-section">
-                <h4>NFT Tracker</h4>
-                <ul>
-                  <li><code>/nft-tracker collection add</code></li>
-                  <li><code>/nft-tracker collection remove</code></li>
-                  <li><code>/nft-tracker collection list</code></li>
-                  <li><code>/nft-tracker collection feed</code></li>
-                </ul>
-              </div>
-
-              <div class="help-section">
-                <h4>Token Tracker</h4>
-                <ul>
-                  <li><code>/token-tracker add</code></li>
-                  <li><code>/token-tracker edit</code></li>
-                  <li><code>/token-tracker remove</code></li>
-                  <li><code>/token-tracker list</code></li>
-                  <li><code>/token-tracker feed</code></li>
-                </ul>
-              </div>
-
-              <div class="help-section">
-                <h4>Points and Engagement</h4>
-                <ul>
-                  <li><code>/points balance</code></li>
-                  <li><code>/points leaderboard</code></li>
-                  <li><code>/points history</code></li>
-                  <li><code>/points daily</code></li>
-                  <li><code>/points shop</code></li>
-                  <li><code>/points redeem</code></li>
-                  <li><code>/points admin</code></li>
-                </ul>
-              </div>
-
-              <div class="help-section">
-                <h4>AI Assistant (Pro)</h4>
-                <ul>
-                  <li><code>/aiassistant ask</code></li>
-                  <li><code>/aiassistant status</code></li>
-                  <li><code>/aiassistant briefing</code></li>
-                </ul>
-              </div>
-
-              <div class="help-section">
-                <h4>Missions</h4>
-                <ul>
-                  <li><code>/heist board</code></li>
-                  <li><code>/heist profile</code></li>
-                  <li><code>/heist join</code></li>
-                  <li><code>/heist leave</code></li>
-                  <li><code>/heist admin panel</code></li>
-                  <li><code>/heist admin templates</code></li>
-                  <li><code>/heist admin template-create</code></li>
-                  <li><code>/heist admin spawn-now</code></li>
-                  <li><code>/heist admin resolve</code></li>
-                  <li><code>/heist admin cancel</code></li>
-                </ul>
-              </div>
-
-              <div class="help-section">
-                <h4>Vault</h4>
-                <ul>
-                  <li><code>/vault open</code></li>
-                  <li><code>/vault balance</code></li>
-                  <li><code>/vault history</code></li>
-                  <li><code>/vault leaderboard</code></li>
-                  <li><code>/vault rewards</code></li>
-                  <li><code>/vault claims</code></li>
-                  <li><code>/vault verify-social</code></li>
-                  <li><code>/vault upgrade</code></li>
-                  <li><code>/vault admin panel</code></li>
-                  <li><code>/vault admin setup</code></li>
-                  <li><code>/vault admin setstatus</code></li>
-                  <li><code>/vault admin config-view</code></li>
-                  <li><code>/vault admin config-set</code></li>
-                  <li><code>/vault admin addkeys</code></li>
-                  <li><code>/vault admin removekeys</code></li>
-                  <li><code>/vault admin backfill</code></li>
-                  <li><code>/vault admin fix-stats</code></li>
-                  <li><code>/vault admin import-csv</code></li>
-                  <li><code>/vault admin rewards-list</code></li>
-                  <li><code>/vault admin rewards-add</code></li>
-                  <li><code>/vault admin rewards-update</code></li>
-                  <li><code>/vault admin rewards-remove</code></li>
-                </ul>
-              </div>
-
-              <div class="help-section">
-                <h4>Battle and Mini-Games</h4>
-                <ul>
-                  <li><code>/minigames run</code></li>
-                  <li><code>/minigames help</code></li>
-                  <li><code>/battle create</code></li>
-                  <li><code>/battle start</code></li>
-                  <li><code>/battle cancel</code></li>
-                  <li><code>/battle stats</code></li>
-                  <li><code>/battle admin list</code></li>
-                  <li><code>/battle admin force-end</code></li>
-                  <li><code>/battle admin settings</code></li>
-                  <li><code>/higherlower start</code></li>
-                  <li><code>/higherlower cancel</code></li>
-                  <li><code>/diceduel start</code></li>
-                  <li><code>/diceduel cancel</code></li>
-                  <li><code>/reactionrace start</code></li>
-                  <li><code>/reactionrace cancel</code></li>
-                  <li><code>/numberguess start</code></li>
-                  <li><code>/numberguess cancel</code></li>
-                  <li><code>/slots start</code></li>
-                  <li><code>/slots cancel</code></li>
-                  <li><code>/trivia start</code></li>
-                  <li><code>/trivia cancel</code></li>
-                  <li><code>/wordscramble start</code></li>
-                  <li><code>/wordscramble cancel</code></li>
-                  <li><code>/rps start</code></li>
-                  <li><code>/rps cancel</code></li>
-                  <li><code>/blackjack start</code></li>
-                  <li><code>/blackjack cancel</code></li>
-                </ul>
-              </div>
-
-              <div class="help-section">
-                <h4>Game Night</h4>
-                <ul>
-                  <li><code>/gamenight start</code></li>
-                  <li><code>/gamenight skip</code></li>
-                  <li><code>/gamenight cancel</code></li>
-                  <li><code>/gamenight leaderboard</code></li>
-                </ul>
-              </div>
-
-              <div class="help-section">
-                <h4>System Configuration</h4>
-                <ul>
-                  <li><code>/config modules</code></li>
-                  <li><code>/config toggle</code></li>
-                  <li><code>/config status</code></li>
-                </ul>
-              </div>
-
-              <div class="help-section">
-                <h4>Moderation</h4>
-                <ul>
-                  <li><code>/moderation kick</code></li>
-                  <li><code>/moderation ban</code></li>
-                  <li><code>/moderation timeout</code></li>
-                  <li><code>/moderation purge</code></li>
-                  <li><code>/moderation settings-view</code></li>
-                  <li><code>/moderation settings-raid</code></li>
-                  <li><code>/moderation settings-keywords</code></li>
-                  <li><code>/moderation keyword-add</code></li>
-                  <li><code>/moderation keyword-remove</code></li>
-                  <li><code>/moderation keyword-list</code></li>
-                </ul>
-              </div>
-
-            </div>
-          </div>
-
-          <div id="help-admin-flow" class="help-content" data-help-role="admin" style="display:none;">
-            <div class="card">
-              <h3>Admin Flow</h3>
-              <div class="help-section">
-                <h4>Daily Operational Cycle</h4>
-                <ol>
-                  <li>Select the active server and open Module Hub.</li>
-                  <li>Validate module toggles, channel mappings, and automation settings.</li>
-                  <li>Review governance queue, ticket backlog, and engagement anomalies.</li>
-                  <li>Run refresh and export operations only when data drift is confirmed.</li>
-                  <li>Publish status updates and next actions for moderators.</li>
-                </ol>
-              </div>
-              <div class="help-section">
-                <h4>Admin Incident Flow</h4>
-                <ol>
-                  <li>Confirm the issue scope (single user, channel, module, or tenant-wide symptom).</li>
-                  <li>Capture evidence: command response, UI state, timestamp, and server ID.</li>
-                  <li>Apply reversible mitigations first (toggle, pause automation, fallback command).</li>
-                  <li>Escalate to superadmin for cross-tenant or infrastructure-impacting incidents.</li>
-                  <li>Document post-incident changes in the module runbook.</li>
-                </ol>
-              </div>
-              <div class="help-section">
-                <h4>Admin Quality Checklist</h4>
-                <ul>
-                  <li>Permissions tested with a non-admin user account.</li>
-                  <li>All critical commands exercised once after settings changes.</li>
-                  <li>Ticketing, governance, and tracker channels mapped correctly.</li>
-                  <li>Help section links match the currently enabled module set.</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-superadmin-flow" class="help-content" data-help-role="superadmin" style="display:none;">
-            <div class="card">
-              <h3>Superadmin Flow</h3>
-              <div class="help-section">
-                <h4>Tenant Governance Lifecycle</h4>
-                <ol>
-                  <li>Provision tenant with plan, module baseline, and branding defaults.</li>
-                  <li>Define locked settings versus tenant-editable settings.</li>
-                  <li>Run onboarding validation for auth, module access, and policy enforcement.</li>
-                  <li>Monitor health dashboards and queue anomalies for intervention.</li>
-                  <li>Promote successful baseline updates to broader tenant groups.</li>
-                </ol>
-              </div>
-              <div class="help-section">
-                <h4>Change Rollout Flow</h4>
-                <ol>
-                  <li>Draft change objective and blast-radius assessment.</li>
-                  <li>Apply to pilot tenant(s) with monitoring checkpoints.</li>
-                  <li>Verify module behavior, data integrity, and command reliability.</li>
-                  <li>Communicate rollout status to admins and support teams.</li>
-                  <li>Scale rollout in phases and keep rollback path ready.</li>
-                </ol>
-              </div>
-              <div class="help-section">
-                <h4>Superadmin Control Priorities</h4>
-                <ul>
-                  <li>Platform safety before feature velocity.</li>
-                  <li>Consistent defaults and naming across tenants.</li>
-                  <li>Auditability for high-impact actions and permission changes.</li>
-                  <li>Documentation parity between product behavior and help center.</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div id="help-troubleshooting" class="help-content" style="display:none;">
-            <div class="card">
-              <h3>🔧 Troubleshooting</h3>
-              <div class="help-section">
-                <h4>Wallet Verification Failed</h4>
-                <p><strong>Issue:</strong> Signature verification returns an error</p>
-                <p><strong>Solutions:</strong></p>
-                <ul>
-                  <li>Make sure your wallet extension is unlocked before clicking the verify button</li>
-                  <li>Try a different wallet application (switch between Phantom, Solflare, etc.)</li>
-                  <li>Clear your browser cache and cookies, then try again</li>
-                  <li>Make sure your wallet software is up to date</li>
-                  <li>If using a hardware wallet, ensure it's connected and the Solana app is open</li>
-                </ul>
-              </div>
-              <div class="help-section">
-                <h4>Tier Not Updating</h4>
-                <p><strong>Issue:</strong> Your displayed tier doesn't reflect your current NFT count</p>
-                <p><strong>Solutions:</strong></p>
-                <ul>
-                  <li>Run <code>/verification refresh</code> in Discord to force a holdings refresh</li>
-                  <li>Wait 2-3 minutes for the blockchain verification to complete</li>
-                  <li>Ensure your NFTs are in a wallet that's been verified in the system</li>
-                  <li>Check that you've set your primary wallet correctly</li>
-                  <li>Contact support if the issue persists after 5 minutes</li>
-                </ul>
-              </div>
-              <div class="help-section">
-                <h4>Cannot See Admin Features</h4>
-                <p><strong>Issue:</strong> Admin panel is not visible in the navigation</p>
-                <p><strong>Solutions:</strong></p>
-                <ul>
-                  <li>Verify you have administrator role in the Discord server</li>
-                  <li>Log out completely and log back in to refresh permissions</li>
-                  <li>Clear browser cache and session storage</li>
-                  <li>Contact a server administrator if you should have access</li>
-                </ul>
-              </div>
-              <div class="help-section">
-                <h4>Voting Not Working</h4>
-                <p><strong>Issue:</strong> Unable to cast votes on proposals</p>
-                <p><strong>Solutions:</strong></p>
-                <ul>
-                  <li>Ensure you have at least 1 verified NFT (minimum tier requirement)</li>
-                  <li>Check that the proposal is in "Voting" status</li>
-                  <li>Verify you haven't already voted on this proposal</li>
-                  <li>Try refreshing the page and voting again, or use <code>/governance vote</code> in Discord</li>
-                </ul>
-              </div>
-              <div class="help-section">
-                <h4>Still Need Help?</h4>
-                <p>If your issue isn't resolved by the solutions above, please reach out to support:</p>
-                <ul>
-                  <li>Visit the <strong>#support</strong> channel in Discord</li>
-                  <li>Provide detailed information about your issue</li>
-                  <li>Include screenshots if applicable</li>
-                  <li>Mention any error messages you received</li>
-                </ul>
-              </div>
-            </div>
+            <button class="btn btn-secondary" type="button" onclick="switchSection('ticketing')">Open support</button>
           </div>
         </section>
 
         <!-- Admin Section -->
         <section id="section-admin" class="content-section app-surface">
-          <header class="section-header">
-            <h2>Admin Command Center</h2>
-            <p class="section-subtitle">Pick a workspace tile to open the exact admin panel you need.</p>
+          <header class="section-header platform-console-header">
+            <div>
+              <p class="gpf-kicker">Superadmin only</p>
+              <h2>Platform console</h2>
+              <p class="section-subtitle">Manage tenants, billing, global access, providers, security, and infrastructure.</p>
+            </div>
           </header>
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;">
+          <div class="admin-workspace-chooser" style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;">
             <div style="color:var(--text-secondary);font-size:0.86em;">Choose an admin workspace tile.</div>
             <button type="button" class="btn-secondary" id="adminFocusResetBtn" onclick="resetAdminFocusMode()" style="display:none;">Show All Admin Tiles</button>
           </div>
@@ -2651,8 +1567,8 @@
             <button class="command-tile" data-admin-tile="users" onclick="showAdminView('users')"><strong>User Management</strong><span>Users, tiers, and filters</span></button>
             <button class="command-tile" data-admin-tile="roles" onclick="showAdminView('roles')"><strong>Verification Roles</strong><span>Role mapping and rules</span></button>
             <button class="command-tile" data-admin-tile="votingpower" onclick="showAdminView('votingpower')"><strong>Voting Power</strong><span>Governance weighting</span></button>
-            <button class="command-tile" data-admin-tile="ticketing" onclick="showAdminView('ticketing')"><strong>Ticketing</strong><span>Support desk setup</span></button>
-            <button class="command-tile" data-admin-tile="nfttracker" onclick="showAdminView('nfttracker')"><strong>NFT Tracker</strong><span>Collections and alerts</span></button>
+            <button class="command-tile" data-admin-tile="ticketing" onclick="showAdminView('ticketing')"><strong>Support Tickets</strong><span>Support desk setup</span></button>
+            <button class="command-tile" data-admin-tile="nfttracker" onclick="showAdminView('nfttracker')"><strong>NFT Activity</strong><span>Collections and alerts</span></button>
             <button class="command-tile" data-admin-tile="invites" onclick="showAdminView('invites')"><strong>Invite Tracker</strong><span>Referral performance</span></button>
             <button class="command-tile" data-admin-tile="monitor" onclick="showAdminView('monitor')"><strong>Monitoring</strong><span>System diagnostics</span></button>
             <button class="command-tile" data-admin-tile="superadmin" onclick="showAdminView('superadmin')"><strong>Superadmin</strong><span>Global platform control</span></button>
@@ -2745,7 +1661,7 @@
               <h3>📡 NFT Activity Tracker</h3>
               <button class="btn-secondary" onclick="loadNftTrackerView()">Refresh</button>
             </div>
-            <div id="adminNftTrackerContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>NFT Tracker</strong> to load data.</div>
+            <div id="adminNftTrackerContent" style="margin-top: var(--space-4); color: var(--text-secondary);">Select <strong>NFT Activity</strong> to load data.</div>
           </div>
 
           <div class="card" id="adminInviteTrackerCard" style="display:none;">
@@ -2875,13 +1791,13 @@
             <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;">
               <div>
                 <div style="font-weight:700;color:var(--text-primary);margin-bottom:4px;">Quick Setup</div>
-                <div style="color:var(--text-secondary);font-size:0.88em;">Recommended order: General -> Verification -> Governance -> Ticketing -> Branding</div>
+                <div style="color:var(--text-secondary);font-size:0.88em;">Recommended order: General -> Verification -> Governance -> Support Tickets -> Branding</div>
               </div>
               <div style="display:flex;flex-wrap:wrap;gap:8px;">
                 <button class="btn-secondary" onclick="switchSettingsTab('general')">1. General</button>
                 <button class="btn-secondary" onclick="switchSettingsTab('verification')">2. Verification</button>
                 <button class="btn-secondary" onclick="switchSettingsTab('governance')">3. Governance</button>
-                <button class="btn-secondary" onclick="switchSettingsTab('ticketing')">4. Ticketing</button>
+                <button class="btn-secondary" onclick="switchSettingsTab('ticketing')">4. Support Tickets</button>
                 <button class="btn-secondary" onclick="switchSettingsTab('branding')">5. Branding</button>
               </div>
             </div>
@@ -2904,14 +1820,14 @@
             <button class="settings-tab" data-tab="verification" onclick="switchSettingsTab('verification')">Verification & Roles</button>
             <button class="settings-tab" data-tab="branding" onclick="switchSettingsTab('branding')">Branding</button>
             <button class="settings-tab" data-tab="aiassistant" onclick="switchSettingsTab('aiassistant')">AI Assistant</button>
-            <button class="settings-tab" data-tab="treasury" onclick="switchSettingsTab('treasury')">Treasury / Wallet Tracker</button>
+            <button class="settings-tab" data-tab="treasury" onclick="switchSettingsTab('treasury')">Wallet Tracker</button>
             <button class="settings-tab" data-tab="invites" onclick="switchSettingsTab('invites')">Invite Tracker</button>
-            <button class="settings-tab" data-tab="nfttracker" onclick="switchSettingsTab('nfttracker')">NFT Tracker</button>
+            <button class="settings-tab" data-tab="nfttracker" onclick="switchSettingsTab('nfttracker')">NFT Activity</button>
             <button class="settings-tab" data-tab="tokentracker" onclick="switchSettingsTab('tokentracker')">Token Tracker</button>
             <button class="settings-tab" data-tab="battle" onclick="switchSettingsTab('battle')">Minigames</button>
             <button class="settings-tab" data-tab="heist" onclick="switchSettingsTab('heist')">Missions</button>
             <button class="settings-tab" data-tab="selfserve" onclick="switchSettingsTab('selfserve')">Self-Serve Roles</button>
-            <button class="settings-tab" data-tab="ticketing" onclick="switchSettingsTab('ticketing')">Ticketing</button>
+            <button class="settings-tab" data-tab="ticketing" onclick="switchSettingsTab('ticketing')">Support Tickets</button>
             <button class="settings-tab" data-tab="engagement" onclick="switchSettingsTab('engagement')">Engagement</button>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;">
@@ -2922,9 +1838,9 @@
             <button class="command-tile" data-settings-tile="general" onclick="switchSettingsTab('general')"><strong>General</strong><span>Server core setup</span></button>
             <button class="command-tile" data-settings-tile="verification" onclick="switchSettingsTab('verification')"><strong>Verification</strong><span>Wallet and role rules</span></button>
             <button class="command-tile" data-settings-tile="governance" onclick="switchSettingsTab('governance')"><strong>Governance</strong><span>Voting and proposals</span></button>
-            <button class="command-tile" data-settings-tile="ticketing" onclick="switchSettingsTab('ticketing')"><strong>Ticketing</strong><span>Support channels and forms</span></button>
+            <button class="command-tile" data-settings-tile="ticketing" onclick="switchSettingsTab('ticketing')"><strong>Support Tickets</strong><span>Support channels and forms</span></button>
             <button class="command-tile" data-settings-tile="branding" onclick="switchSettingsTab('branding')"><strong>Branding</strong><span>Identity and visuals</span></button>
-            <button class="command-tile" data-settings-tile="aiassistant" onclick="switchSettingsTab('aiassistant')"><strong>AI Assistant</strong><span>Prompt and safety</span></button>
+            <button class="command-tile" data-settings-tile="aiassistant" onclick="switchSettingsTab('aiassistant')"><strong>AI Assistant</strong><span>Guided setup and knowledge</span></button>
           </div>
           <div id="settingsAccordionNav" class="card" style="display:none;margin-top:10px;margin-bottom:12px;"></div>
           <div id="settingsTabContent" style="margin-top:24px;">
@@ -3066,6 +1982,17 @@
         <button type="button" class="btn-secondary" style="min-height:34px;padding:6px 12px;" onclick="closeWalletVerifyModal()">Close</button>
       </div>
       <div class="modal-body">
+        <label style="display:grid;gap:7px;margin-bottom:16px;">
+          <span style="color:#cbd5e1;font-size:0.84rem;font-weight:700;">Network</span>
+          <select id="walletVerificationChain" onchange="onWalletVerificationChainChange()" style="width:100%;padding:11px 12px;border:1px solid rgba(99,102,241,0.28);border-radius:10px;background:rgba(15,23,42,0.9);color:#e2e8f0;">
+            <option value="solana:mainnet">Solana</option>
+            <option value="eip155:1">Ethereum</option>
+            <option value="eip155:8453">Base</option>
+            <option value="eip155:137">Polygon</option>
+            <option value="eip155:42161">Arbitrum One</option>
+            <option value="eip155:10">Optimism</option>
+          </select>
+        </label>
         <p style="color:var(--text-secondary);margin-bottom:16px;line-height:1.6;">Choose a verification method. Your existing wallets stay visible in the background and are never replaced by this flow.</p>
         <div style="display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));">
           <div style="padding:24px;background:linear-gradient(135deg,rgba(99,102,241,0.16),rgba(99,102,241,0.05));border:2px solid rgba(99,102,241,0.28);border-radius:14px;text-align:center;">
@@ -3078,10 +2005,10 @@
             <button id="signVerifyBtn" onclick="verifyBySignature()" class="btn-primary" style="padding:12px 18px;width:100%;font-size:0.95em;">
               ✓ Connect &amp; Sign
             </button>
-            <p style="color:var(--text-muted);font-size:0.8em;margin-top:10px;">Phantom &bull; Solflare &bull; Backpack</p>
+            <p id="signatureWalletSupport" style="color:var(--text-muted);font-size:0.8em;margin-top:10px;">Phantom &bull; Solflare &bull; Backpack</p>
           </div>
 
-          <div style="padding:24px;background:linear-gradient(135deg,rgba(99,102,241,0.16),rgba(99,102,241,0.05));border:2px solid rgba(99,102,241,0.28);border-radius:14px;text-align:center;">
+          <div id="microVerifyCard" style="padding:24px;background:linear-gradient(135deg,rgba(99,102,241,0.16),rgba(99,102,241,0.05));border:2px solid rgba(99,102,241,0.28);border-radius:14px;text-align:center;">
             <div style="font-size:2.1em;margin-bottom:10px;">🔐</div>
             <h4 style="color:#e0e7ff;margin:0 0 10px 0;font-size:1.1em;">On-Chain Proof</h4>
             <p style="color:var(--text-secondary);font-size:0.9em;line-height:1.6;margin:0 0 16px 0;">
@@ -3149,6 +2076,12 @@
       </div>
       <div class="modal-body">
         <div style="display:flex; flex-direction:column; gap:16px;">
+          <div>
+            <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Network <span style="color:#ef4444;">*</span></label>
+            <select id="addWalletChain" class="form-input" onchange="onTrackedWalletChainChange()">
+              <option value="solana:mainnet">Solana</option><option value="eip155:1">Ethereum</option><option value="eip155:8453">Base</option><option value="eip155:137">Polygon</option><option value="eip155:42161">Arbitrum One</option><option value="eip155:10">Optimism</option>
+            </select>
+          </div>
           <!-- Wallet Address -->
           <div>
             <label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Wallet Address <span style="color:#ef4444;">*</span></label>
@@ -3192,7 +2125,26 @@
       <div class="modal-body">
         <div style="display:flex;flex-direction:column;gap:16px;">
           <input type="hidden" id="colEditId" value="">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Network <span style="color:#ef4444;">*</span></label>
+            <select id="colChain" class="form-input" onchange="onTrackedCollectionChainChange()">
+              <option value="solana:mainnet">Solana</option><option value="eip155:1">Ethereum</option><option value="eip155:8453">Base</option><option value="eip155:137">Polygon</option><option value="eip155:42161">Arbitrum One</option><option value="eip155:10">Optimism</option>
+            </select>
+          </div>
+          <div id="colEvmStandardWrap" class="tracker-form-grid" style="display:none;grid-template-columns:1fr 1fr;gap:12px;">
+            <div>
+              <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">NFT Standard</label>
+              <select id="colNftStandard" class="form-input" onchange="onTrackedCollectionChainChange()">
+                <option value="erc721">ERC-721 collection</option>
+                <option value="erc1155">ERC-1155 token</option>
+              </select>
+            </div>
+            <div id="colTokenIdWrap" style="display:none;">
+              <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Token ID <span style="color:#ef4444;">*</span></label>
+              <input id="colTokenId" type="text" placeholder="e.g. 42" class="form-input">
+            </div>
+          </div>
+          <div class="tracker-form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div>
               <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Collection Name <span style="color:#ef4444;">*</span></label>
               <input id="colName" type="text" placeholder="e.g. Vault Runners" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;box-sizing:border-box;">
@@ -3202,7 +2154,7 @@
               <input id="colAddress" type="text" placeholder="Solana collection address" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;font-family:monospace;box-sizing:border-box;">
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="tracker-form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div>
               <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Alert Channel <span style="color:#ef4444;">*</span></label>
               <select id="colChannel" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;box-sizing:border-box;"><option value="">-- Select channel --</option></select>
@@ -3243,7 +2195,13 @@
       <div class="modal-body">
         <div style="display:flex;flex-direction:column;gap:16px;">
           <input type="hidden" id="tokenEditId" value="">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Network <span style="color:#ef4444;">*</span></label>
+            <select id="tokenChain" class="form-input" onchange="onTrackedTokenChainChange()">
+              <option value="solana:mainnet">Solana (SPL)</option><option value="eip155:1">Ethereum (ERC-20)</option><option value="eip155:8453">Base (ERC-20)</option><option value="eip155:137">Polygon (ERC-20)</option><option value="eip155:42161">Arbitrum One (ERC-20)</option><option value="eip155:10">Optimism (ERC-20)</option>
+            </select>
+          </div>
+          <div class="tracker-form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div>
               <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Token Symbol</label>
               <input id="tokenSymbol" type="text" placeholder="e.g. CATZ" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;box-sizing:border-box;">
@@ -3254,10 +2212,10 @@
             </div>
           </div>
           <div>
-            <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Token Mint <span style="color:#ef4444;">*</span></label>
+            <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Token / Mint Address <span style="color:#ef4444;">*</span></label>
             <input id="tokenMint" type="text" placeholder="SPL token mint address" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;font-family:monospace;box-sizing:border-box;">
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="tracker-form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div>
               <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Alert Channels</label>
               <select id="tokenAlertChannels" multiple data-ms-title="Token Alert Channels" data-ms-placeholder="Wallet default channel (optional)" style="width:100%;min-height:120px;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;box-sizing:border-box;"></select>

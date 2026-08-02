@@ -22,10 +22,9 @@ turning on `aiassistant`) because `setTenantModule` only checked the module
   already-enabled (grandfathered) module**.
 - Operator/superadmin callers pass `{ bypassPlanGate: true }` (superadmin tenant
   ops, monetization template apply/restore) so they can still grant any module.
-- **Rollout flag `MODULE_IDENTITY_ENFORCE`** = `off` (default, no change) →
-  `monitor` (logs "would block …", changes nothing) → `enforce` (returns
-  `module_not_in_plan`). Review monitor logs to confirm no legitimate tenant is
-  affected before enforcing.
+- **Runtime flag `MODULE_IDENTITY_ENFORCE`** defaults to `enforce` and returns
+  `module_not_in_plan`. `monitor` logs without blocking; `off` is reserved as a
+  temporary rollback lever.
 
 ---
 
@@ -86,7 +85,7 @@ then flip to `enforce`.
 
 | Flag | Default | Effect |
 |---|---|---|
-| `MODULE_IDENTITY_ENFORCE` | `off` | `off`/`monitor`/`enforce` plan-module gate |
+| `MODULE_IDENTITY_ENFORCE` | `enforce` | `off`/`monitor`/`enforce` plan-module gate |
 | `TREASURY_PER_TENANT` | `false` | per-guild treasury config |
 | `VAULT_WEBHOOK_ENFORCE_GUILD_MATCH` | `off` | `off`/`monitor`/`enforce` vault webhook guild binding |
 | `VAULT_WEBHOOK_SECRET_<GUILD_ID>` | unset | per-guild vault webhook secret |
@@ -110,8 +109,8 @@ then flip to `enforce`.
 
 ## Recommended rollout order (per fix, on staging first)
 
-1. Deploy with all three flags at their defaults (no behavior change).
-2. `MODULE_IDENTITY_ENFORCE=monitor` → review logs (~days) → `enforce`.
+1. Validate grandfathered tenant modules before deployment.
+2. Deploy with `MODULE_IDENTITY_ENFORCE=enforce`; use `monitor` temporarily only when migration evidence requires it.
 3. `TREASURY_PER_TENANT=true` on staging → verify each guild's treasury →
    production (the primary guild keeps its config via backfill).
 4. Provision `VAULT_WEBHOOK_SECRET_<guild>` per vault tenant →

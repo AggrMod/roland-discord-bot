@@ -9,6 +9,27 @@ const lines = source.split(/\r?\n/);
 
 const violations = [];
 
+const dashboardSecurityRules = [
+  {
+    pattern: /\$\{server\.name\s*\|\|\s*['"]Web3 Community['"]\}/,
+    message: 'dashboard server names must be HTML-escaped before interpolation',
+  },
+  {
+    pattern: /src="\$\{server\.icon\s*\|\|/,
+    message: 'dashboard server icons must pass through sanitizeImageUrl before interpolation',
+  },
+  {
+    pattern: /<p>\$\{data\.error\s*\|\|/,
+    message: 'dashboard API errors must be HTML-escaped before interpolation',
+  },
+];
+
+for (const rule of dashboardSecurityRules) {
+  if (rule.pattern.test(source)) {
+    violations.push({ line: 'dashboard', expression: rule.message, snippet: String(rule.pattern) });
+  }
+}
+
 for (let i = 0; i < lines.length; i += 1) {
   const line = lines[i];
   if (!line.includes('onclick=') || !line.includes('${')) continue;

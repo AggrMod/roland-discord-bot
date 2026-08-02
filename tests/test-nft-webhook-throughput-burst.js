@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const assert = require('assert');
+const { Keypair } = require('@solana/web3.js');
 
 const db = require('../database/db');
 const nftActivityService = require('../services/nftActivityService');
@@ -10,7 +11,7 @@ const logger = require('../utils/logger');
 async function run() {
   const stamp = Date.now();
   const guildId = `nft-burst-guild-${stamp}`;
-  const collection = `NFT_BURST_COLL_${stamp}`;
+  const collection = Keypair.generate().publicKey.toBase58();
   const channelId = `nft-burst-channel-${stamp}`;
   const burstSize = 300;
   const sent = [];

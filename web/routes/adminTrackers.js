@@ -33,8 +33,11 @@ function createAdminTrackersRouter({
     try {
       const {
         collectionAddress,
+        chain,
         collectionName,
         channelId,
+        nftStandard,
+        tokenId,
         trackMint,
         trackSale,
         trackList,
@@ -45,9 +48,12 @@ function createAdminTrackersRouter({
       } = req.body || {};
       const result = nftActivityService.addTrackedCollection({
         guildId: req.guildId,
+        chain: chain || 'solana:mainnet',
         collectionAddress,
         collectionName,
         channelId,
+        nftStandard,
+        tokenId,
         trackMint,
         trackSale,
         trackList,
@@ -59,7 +65,9 @@ function createAdminTrackersRouter({
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to add tracked collection', 'VALIDATION_ERROR', null, result));
       }
-      nftActivityService.syncAddressToHelius(collectionAddress, 'add').catch(() => {});
+      if (!String(chain || 'solana:mainnet').startsWith('eip155:')) {
+        nftActivityService.syncAddressToHelius(collectionAddress, 'add').catch(() => {});
+      }
       return res.json(toSuccessResponse(result));
     } catch (routeError) {
       logger.error('Error adding tracked collection:', routeError);
@@ -76,7 +84,7 @@ function createAdminTrackersRouter({
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to remove tracked collection', 'VALIDATION_ERROR', null, result));
       }
-      if (collection && collection.collection_address) {
+      if (collection && collection.collection_address && String(collection.chain_family || 'solana') === 'solana') {
         nftActivityService.syncAddressToHelius(collection.collection_address, 'remove').catch(() => {});
       }
       return res.json(toSuccessResponse(result));
@@ -183,10 +191,11 @@ function createAdminTrackersRouter({
   router.post('/api/admin/wallet-tracker/wallets', adminAuthMiddleware, (req, res) => {
     if (!ensureWalletTrackerModule(req, res)) return;
     try {
-      const { walletAddress, label, alertChannelId, panelChannelId } = req.body || {};
+      const { walletAddress, chain, label, alertChannelId, panelChannelId } = req.body || {};
       const result = trackedWalletsService.addTrackedWallet({
         guildId: req.guildId || '',
         walletAddress,
+        chain: chain || 'solana:mainnet',
         label: label || null,
         alertChannelId: alertChannelId || null,
         panelChannelId: panelChannelId || null,
@@ -427,6 +436,7 @@ function createAdminTrackersRouter({
       if (!ensureTokenTrackerModule(req, res)) return;
       try {
         const {
+          chain,
           tokenMint,
           tokenSymbol,
           tokenName,
@@ -441,6 +451,7 @@ function createAdminTrackersRouter({
         } = req.body || {};
         const result = trackedWalletsService.addTrackedToken({
           guildId: req.guildId || '',
+          chain: chain || 'solana:mainnet',
           tokenMint,
           tokenSymbol: tokenSymbol || null,
           tokenName: tokenName || null,

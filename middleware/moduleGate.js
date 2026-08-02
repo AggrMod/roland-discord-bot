@@ -115,7 +115,10 @@ async function enforceMinigamePlanLimit(interaction) {
   try {
     entitlementService = require('../services/entitlementService');
   } catch (_error) {
-    return true;
+    const reply = { content: 'Plan access could not be verified right now. Please try again shortly.', ephemeral: true };
+    if (interaction.deferred || interaction.replied) await interaction.editReply(reply);
+    else await interaction.reply(reply);
+    return false;
   }
 
   const limit = entitlementService.getEffectiveLimit(interaction.guildId, 'minigames', 'max_enabled_games');
@@ -171,7 +174,12 @@ async function moduleGate(interaction, moduleKey, options = {}) {
         }
         return false;
       }
-    } catch (_) {}
+    } catch (_error) {
+      const reply = { content: 'Module access could not be verified right now. Please try again shortly.', ephemeral: true };
+      if (interaction.deferred || interaction.replied) await interaction.editReply(reply);
+      else await interaction.reply(reply);
+      return false;
+    }
     return true;
   }
 

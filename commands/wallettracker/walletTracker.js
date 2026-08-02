@@ -6,6 +6,13 @@ const {
 const trackedWalletsService = require('../../services/trackedWalletsService');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
+const { getChain } = require('../../utils/chainIdentity');
+
+const CHAIN_CHOICES = [
+  { name: 'Solana', value: 'solana:mainnet' }, { name: 'Ethereum', value: 'eip155:1' },
+  { name: 'Base', value: 'eip155:8453' }, { name: 'Polygon', value: 'eip155:137' },
+  { name: 'Arbitrum One', value: 'eip155:42161' }, { name: 'Optimism', value: 'eip155:10' },
+];
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -17,7 +24,9 @@ module.exports = {
         .setName('add')
         .setDescription('Start tracking a wallet for TX alerts and holdings')
         .addStringOption(o =>
-          o.setName('address').setDescription('Solana wallet address').setRequired(true))
+          o.setName('address').setDescription('Solana or EVM wallet address').setRequired(true))
+        .addStringOption(o =>
+          o.setName('chain').setDescription('Network (defaults to Solana)').setRequired(false).addChoices(...CHAIN_CHOICES))
         .addStringOption(o =>
           o.setName('label').setDescription('Friendly name (e.g. "Whale #1")').setRequired(false))
         .addChannelOption(o =>
@@ -88,6 +97,7 @@ module.exports = {
   async handleWalletAdd(interaction) {
     await interaction.deferReply({ ephemeral: true });
     const address = interaction.options.getString('address');
+    const chain = interaction.options.getString('chain') || 'solana:mainnet';
     const label = interaction.options.getString('label');
     const alertCh = interaction.options.getChannel('alert_channel');
     const panelCh = interaction.options.getChannel('panel_channel');
@@ -95,6 +105,7 @@ module.exports = {
 
     const result = trackedWalletsService.addTrackedWallet({
       guildId,
+      chain,
       walletAddress: address,
       label,
       alertChannelId: alertCh?.id || null,
@@ -110,6 +121,7 @@ module.exports = {
       .setTitle('✅ Wallet Tracked')
       .addFields(
         { name: 'Address', value: `\`${address}\``, inline: false },
+        { name: 'Network', value: getChain(chain)?.name || chain, inline: true },
         { name: 'Label', value: label || '—', inline: true },
         { name: 'TX Alert Channel', value: alertCh ? `<#${alertCh.id}>` : '—', inline: true },
         { name: 'Holdings Panel Channel', value: panelCh ? `<#${panelCh.id}>` : '—', inline: true },
@@ -145,7 +157,8 @@ module.exports = {
       const alertCh = w.alert_channel_id ? ` 🔔<#${w.alert_channel_id}>` : '';
       const panelCh = w.panel_channel_id ? ` 📋<#${w.panel_channel_id}>` : '';
       const status = w.enabled ? '' : ' *(disabled)*';
-      return `**#${w.id}** ${addr}${lbl}${alertCh}${panelCh}${status}`;
+      const network = getChain(w.chain_id || 'solana:mainnet')?.name || w.chain_id || 'Solana';
+      return `**#${w.id}** ${network} · ${addr}${lbl}${alertCh}${panelCh}${status}`;
     });
 
     const embed = new EmbedBuilder()
@@ -214,4 +227,3 @@ module.exports = {
     await interaction.editReply({ content: '✅ All holdings panels refreshed.' });
   },
 };
-

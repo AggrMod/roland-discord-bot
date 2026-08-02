@@ -31,21 +31,7 @@ let vaultSettingsCache = null;
 let vaultConfigModalState = { type: '', index: -1 };
 let vaultWinChanceModalState = { tierId: '' };
 let vaultKeyEconomyTab = 'tiers';
-const VAULT_UI_MODE_STORAGE_KEY = 'vaultUiMode';
 let quickSwitchActiveIndex = 0;
-
-function vaultGetUiMode() {
-  return 'advanced';
-}
-
-function vaultSetUiMode(mode) {
-  // No-op: simple/advanced toggle removed in v1 redesign
-}
-
-function vaultApplyUiMode() {
-  // Dynamic context-driven visibility - no more simple/advanced toggle
-  vaultApplyDynamicVisibility();
-}
 
 function vaultApplyDynamicVisibility() {
   // Show all settings-rows that were previously behind data-vault-advanced
@@ -395,7 +381,6 @@ function openPortalMultiSelectPicker(selectId) {
     </div>
   `;
 
-  const modal = overlay.querySelector('.gp-ms-modal');
   const searchEl = overlay.querySelector('.gp-ms-search');
   const listEl = overlay.querySelector('.gp-ms-list');
   const countEl = overlay.querySelector('.gp-ms-count');
@@ -611,8 +596,7 @@ function setStoredAdminView(view) {
 document.addEventListener('DOMContentLoaded', () => {
   initializePortalPages();
   initializePortalMultiSelects();
-  fetchCsrfToken();
-  loadPortal();
+  fetchCsrfToken().finally(() => loadPortal());
 
   document.addEventListener('click', (event) => {
     const wrap = document.querySelector('.nav-user-menu-wrap');
@@ -669,6 +653,15 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    if (e.key === '/' && document.getElementById('section-help')?.classList.contains('active')) {
+      const tagName = String(e.target?.tagName || '').toLowerCase();
+      if (!['input', 'textarea', 'select'].includes(tagName) && !e.target?.isContentEditable) {
+        e.preventDefault();
+        document.getElementById('helpSearchInput')?.focus();
+        return;
+      }
+    }
+
     if (e.key === 'Escape') {
       if (_portalMultiSelectPickerState) {
         closePortalMultiSelectPicker(false);
@@ -722,11 +715,27 @@ function showWalletAddForm() {
 
   modal.style.display = 'flex';
 
-  // Mobile helper for opening this page directly inside wallet apps
-  renderMobileWalletLaunchPanel();
+  onWalletVerificationChainChange();
 
   // Auto-show any pending micro-verify request so user doesn't need to click again
-  autoShowPendingMicroVerify();
+  if (!getWalletVerificationChain().startsWith('eip155:')) autoShowPendingMicroVerify();
+}
+
+function getWalletVerificationChain() {
+  return String(document.getElementById('walletVerificationChain')?.value || 'solana:mainnet').trim();
+}
+
+function onWalletVerificationChainChange() {
+  const isEvm = getWalletVerificationChain().startsWith('eip155:');
+  const microCard = document.getElementById('microVerifyCard');
+  const support = document.getElementById('signatureWalletSupport');
+  const signBtn = document.getElementById('signVerifyBtn');
+  if (microCard) microCard.style.display = isEvm ? 'none' : '';
+  if (support) support.textContent = isEvm
+    ? 'MetaMask • Coinbase Wallet • Rabby • WalletConnect-compatible browsers'
+    : 'Phantom • Solflare • Backpack';
+  if (signBtn) signBtn.innerHTML = isEvm ? 'Connect EVM Wallet & Sign' : 'Connect & Sign';
+  renderMobileWalletLaunchPanel();
 }
 
 function closeWalletVerifyModal() {
@@ -890,6 +899,11 @@ function renderMobileWalletLaunchPanel() {
   const panel = document.getElementById('mobileWalletLaunchPanel');
   if (!panel) return;
 
+  if (getWalletVerificationChain().startsWith('eip155:')) {
+    panel.innerHTML = '';
+    return;
+  }
+
   const isMobile = isMobileWalletContext();
   const provider = getSolanaProvider();
   const providerName = getDetectedWalletProviderName(provider);
@@ -932,6 +946,11 @@ function renderMobileWalletLaunchPanel() {
 
 async function verifyBySignature() {
   const btn = document.getElementById('signVerifyBtn');
+  const chain = getWalletVerificationChain();
+  if (chain.startsWith('eip155:')) {
+    await verifyEvmBySignature(chain, btn);
+    return;
+  }
 
   const provider = getSolanaProvider();
   if (!provider) {
@@ -959,7 +978,12 @@ async function verifyBySignature() {
     if (btn) btn.innerHTML = ' Requesting challenge...';
 
     // 2. Get challenge from server
-    const challengeRes = await fetch('/api/verify/challenge', { method: 'POST', credentials: 'include' });
+    const challengeRes = await fetch('/api/verify/challenge', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletAddress, chain: 'solana:mainnet' })
+    });
     const challengeData = await challengeRes.json();
     if (!challengeData.success) throw new Error(challengeData.message || 'Failed to get challenge');
 
@@ -979,7 +1003,7 @@ async function verifyBySignature() {
     const verifyRes = await fetch('/api/verify/signature', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ walletAddress, signature: sig58 })
+      body: JSON.stringify({ walletAddress, signature: sig58, challengeId: challengeData.challengeId })
     });
     const verifyData = await verifyRes.json();
 
@@ -1003,6 +1027,76 @@ async function verifyBySignature() {
       btn.innerHTML = ' Connect & Sign';
     }
     renderMobileWalletLaunchPanel();
+  }
+}
+
+async function verifyEvmBySignature(chain, btn) {
+  const provider = window.ethereum;
+  if (!provider?.request) {
+    showError('No EVM wallet detected. Open this page in MetaMask, Coinbase Wallet, or another EVM wallet browser.');
+    return;
+  }
+
+  const numericChainId = Number(String(chain).split(':')[1]);
+  const hexChainId = `0x${numericChainId.toString(16)}`;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = 'Connecting wallet...';
+  }
+
+  try {
+    const accounts = await provider.request({ method: 'eth_requestAccounts' });
+    const walletAddress = String(accounts?.[0] || '').trim();
+    if (!walletAddress) throw new Error('The wallet did not return an account.');
+
+    const currentChainId = String(await provider.request({ method: 'eth_chainId' }) || '').toLowerCase();
+    if (currentChainId !== hexChainId.toLowerCase()) {
+      if (btn) btn.innerHTML = 'Switching network...';
+      await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hexChainId }] });
+    }
+
+    if (btn) btn.innerHTML = 'Requesting secure challenge...';
+    const challengeRes = await fetch('/api/verify/challenge', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletAddress, chain }),
+    });
+    const challengeData = await challengeRes.json();
+    if (!challengeData.success) throw new Error(challengeData.message || 'Failed to get verification challenge');
+
+    if (btn) btn.innerHTML = 'Sign the SIWE message in your wallet...';
+    const signature = await provider.request({
+      method: 'personal_sign',
+      params: [challengeData.message, walletAddress],
+    });
+
+    if (btn) btn.innerHTML = 'Verifying ownership...';
+    const verifyRes = await fetch('/api/verify/signature', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletAddress, chain, signature, challengeId: challengeData.challengeId }),
+    });
+    const verifyData = await verifyRes.json();
+    if (!verifyData.success) throw new Error(verifyData.message || 'Verification failed');
+
+    showSuccess(verifyData.message || 'EVM wallet verified!');
+    closeWalletVerifyModal();
+    await loadPortal();
+  } catch (error) {
+    if (error?.code === 4001 || /reject|denied/i.test(String(error?.message || ''))) {
+      showInfo('Signing cancelled. No changes made.');
+    } else if (error?.code === 4902) {
+      showError('This network is not configured in your wallet yet. Add it in your wallet and try again.');
+    } else {
+      showError(`EVM verification failed: ${error?.message || 'Unknown error'}`);
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = 'Connect EVM Wallet & Sign';
+    }
   }
 }
 
@@ -1309,20 +1403,29 @@ function setNavBrandTitle(brandTitle, iconUrl, label) {
   if (!brandTitle) return;
   brandTitle.textContent = '';
 
+  const emblem = document.createElement('span');
+  emblem.className = 'nav-brand-emblem';
+  emblem.setAttribute('aria-hidden', 'true');
   if (iconUrl) {
     const img = document.createElement('img');
     img.src = iconUrl;
     img.alt = '';
-    img.style.width = '22px';
-    img.style.height = '22px';
-    img.style.borderRadius = '50%';
-    img.style.verticalAlign = 'middle';
-    img.style.marginRight = '8px';
-    img.style.objectFit = 'cover';
-    brandTitle.appendChild(img);
+    emblem.appendChild(img);
+  } else {
+    emblem.textContent = 'GP';
   }
+  brandTitle.appendChild(emblem);
 
-  brandTitle.appendChild(document.createTextNode(label || 'Portal'));
+  const copy = document.createElement('span');
+  copy.className = 'nav-brand-copy';
+  const product = document.createElement('small');
+  product.textContent = 'GuildPilot';
+  product.setAttribute('aria-hidden', 'true');
+  const context = document.createElement('strong');
+  const contextLabel = String(label || 'Portal').trim();
+  context.textContent = contextLabel.toLowerCase() === 'guildpilot' ? 'Command center' : contextLabel;
+  copy.append(product, context);
+  brandTitle.appendChild(copy);
 }
 
 function updateActiveGuildBadge() {
@@ -1372,7 +1475,11 @@ function onServerSwitcherSelect(rawValue) {
   const guildId = String(rawValue || '').trim();
   if (!guildId || guildId === activeGuildId) return;
   setActiveGuild(guildId, { persist: true, announce: false });
-  switchSection('module-hub');
+  if (isAdmin || isSuperadmin) {
+    openAdminSettingsEntry();
+  } else {
+    switchSection('landing');
+  }
 }
 
 function updateSidebarServerContext() {
@@ -1421,8 +1528,8 @@ function applyPreSelectionVisibility() {
     if (sectionEl) sectionEl.style.display = locked ? 'none' : '';
   });
 
-  // Keep module navigation hidden until a tenant context is selected.
-  setNavSectionVisibility('wallets', !locked);
+  // Wallet identity is user-owned and remains available without tenant context.
+  setNavSectionVisibility('wallets', !!userData);
   setNavSectionVisibility('landing', true);
 
   const walletsSection = document.getElementById('section-wallets');
@@ -1461,7 +1568,7 @@ function updateModuleVisibility() {
 // ==================== MODULE REGISTRY & HUB ====================
 
 const MODULE_REGISTRY = [
-  { key: 'welcome', label: 'Welcome & Onboarding', icon: '\u{1F44B}', section: 'welcome', desc: 'Join messages, onboarding flow, and captcha checks for new members.' },
+  { key: 'welcome', label: 'Welcome & Onboarding', icon: '\u{1F44B}', section: 'welcome', adminOnly: true, desc: 'Join messages, onboarding flow, and captcha checks for new members.' },
   { key: 'verification', label: 'Identity / Verification', icon: '\u{1F4BC}', section: 'wallets', desc: 'Securely verify wallet ownership and manage roles.' },
   { key: 'governance', label: 'Governance / Voting', icon: '\u{1F4DC}', section: 'governance', desc: 'Participate in DAO decision-making and proposals.' },
   { key: 'wallettracker', label: 'Wallet Tracker', icon: '\u{1F4B0}', section: 'treasury', desc: 'Monitor community floor price and tracked wallets.' },
@@ -1477,8 +1584,7 @@ const MODULE_REGISTRY = [
   { key: 'automessages', label: 'Auto Messages', icon: '\u{1F4E2}', section: 'auto-messages', adminOnly: true, desc: 'Schedule recurring embedded announcements in selected Discord channels.' },
   { key: 'selfserveroles', label: 'Self-Serve Roles', icon: '\u{1F3AD}', section: 'self-serve-roles', desc: 'Claim optional roles assigned by administrators.' },
   { key: 'guildguard', label: 'Guild Guard', icon: '\u{1F6E1}\uFE0F', section: 'guildguard', adminOnly: true, desc: 'Review security incidents and configure moderation detectors.' },
-  { key: 'aiassistant', label: 'AI Assistant', icon: '\u{1F916}', section: 'aiassistant', adminOnly: true, desc: 'Tune prompts, safety controls, and assistant behavior for your server.' },
-  { key: 'help', label: 'Help Center', icon: '\u2753', section: 'help', desc: 'Guides, command references, and troubleshooting across all modules.' }
+  { key: 'aiassistant', label: 'AI Assistant', icon: '\u{1F916}', section: 'aiassistant', adminOnly: true, desc: 'Tune prompts, safety controls, and assistant behavior for your server.' }
 ];
 
 const MODULE_TOGGLE_SETTING_FIELD_MAP = Object.freeze({
@@ -1551,12 +1657,6 @@ async function toggleModuleFromHub(moduleKey, enabled, inputEl) {
   }
 }
 
-function openModuleExternal(pathname) {
-  const target = new URL(pathname, window.location.origin);
-  if (activeGuildId) target.searchParams.set('guildId', activeGuildId);
-  window.location.assign(target.toString());
-}
-
 function updateBreadcrumbs(items = []) {
   const wrap = document.getElementById('breadcrumb-wrap');
   if (!wrap) return;
@@ -1578,132 +1678,117 @@ function updateBreadcrumbs(items = []) {
   }).join('');
 }
 
+function openManagedModule(sectionName) {
+  moduleAdminWorkspaceMode = true;
+  switchSection(sectionName, { force: true, fromModules: true });
+}
+
 function renderModuleHub() {
   const grid = document.getElementById('module-hub-grid');
   if (!grid) return;
-  
+
+  if (!(isAdmin || isSuperadmin)) {
+    grid.innerHTML = '<div class="module-workspace-empty"><strong>Server team access required</strong><span>Modules are available to server administrators and moderators.</span></div>';
+    return;
+  }
+
   const state = window._tenantModuleState || {};
   const record = getServerRecord(activeGuildId);
-  const name = record?.name || activeGuildId || 'Selected Server';
+  const name = record?.name || activeGuildId || 'Selected server';
   const iconUrl = record ? getGuildIconUrl(record) : '';
-  const isServerAdmin = isAdmin || isSuperadmin;
-  const canManageModules = isServerAdmin && !!activeGuildId;
+  const canManageModules = !!activeGuildId;
   const readOnlyManaged = !!portalSettingsData?.readOnlyManaged && !isSuperadmin;
   const infoEl = document.getElementById('moduleHubServerInfo');
+
   if (infoEl && activeGuildId) {
     infoEl.innerHTML = `
       <div class="module-hub-server">
         ${iconUrl
-          ? `<img src="${iconUrl}" alt="${escapeHtml(name)} icon" class="module-hub-server__icon">`
+          ? `<img src="${iconUrl}" alt="" class="module-hub-server__icon">`
           : `<div class="module-hub-server__icon module-hub-server__icon--fallback">${escapeHtml(name.slice(0, 2).toUpperCase())}</div>`}
         <div class="module-hub-server__meta">
+          <span>Configuring</span>
           <div class="module-hub-server__name">${escapeHtml(name)}</div>
-          <div class="module-hub-server__id">
-            <span>ID: ${escapeHtml(activeGuildId)}</span>
-            <button class="module-hub-server__copy" onclick="navigator.clipboard.writeText('${escapeJsString(activeGuildId)}');showSuccess('Server ID copied!')">Copy</button>
-          </div>
         </div>
-      </div>
-    `;
+        <button class="module-hub-server__switch" onclick="switchSection('servers')">Switch</button>
+      </div>`;
   } else if (infoEl) {
     infoEl.innerHTML = '';
   }
-  
-  // Breadcrumbs: Servers > [Server Name]
-  updateBreadcrumbs([
-    { label: 'Servers', action: "switchSection('servers')" },
-    { label: name }
-  ]);
-  
-  let html = '';
 
-  if (false && isServerAdmin) { // legacy settings tile intentionally hidden
-    html += `
-      <div class="module-tile module-tile--admin" onclick="switchSection('settings')">
-        <div class="module-tile__header">
-          <div class="module-tile__icon">\u2699\uFE0F</div>
-          <div class="module-tile__status status-active">Admin</div>
-        </div>
-        <div class="module-tile__body">
-          <h3 class="module-tile__title">Server Settings</h3>
-          <p class="module-tile__desc">Configure module behavior, channels, automation, and tenant-level controls.</p>
-        </div>
-        <div class="module-tile__footer">
-          <span style="font-size:0.8rem; color:var(--gold);">Open Control Panel &rarr;</span>
-        </div>
-      </div>
-    `;
-  }
-  
-  // Add Infrastructure Tile for Superadmins
-  if (isSuperadmin) {
-    html += `
-      <div class="module-tile" onclick="switchSection('admin'); showAdminView('superadmin'); setTimeout(() => setSuperadminWorkspaceTab('overview'), 120);">
-        <div class="module-tile__header">
-          <div class="module-tile__icon">\u{1F5A5}\uFE0F</div>
-          <div class="module-tile__status status-active">System</div>
-        </div>
-        <div class="module-tile__body">
-          <h3 class="module-tile__title">Infrastructure</h3>
-          <p class="module-tile__desc">Monitor CPU, Memory, and live process status of the platform.</p>
-        </div>
-        <div class="module-tile__footer">
-          <span style="font-size:0.8rem; color:var(--gold);">Live Diagnostics &rarr;</span>
-        </div>
-      </div>
-    `;
-  }
-  
-  MODULE_REGISTRY.forEach(mod => {
+  updateBreadcrumbs([
+    { label: 'My communities', action: "switchSection('servers')" },
+    { label: name },
+    { label: 'Modules' }
+  ]);
+
+  const categoryDefinitions = [
+    { key: 'foundation', label: 'Foundation', description: 'Core server setup, identity, and onboarding.', modules: ['welcome', 'verification', 'selfserveroles'] },
+    { key: 'community', label: 'Community operations', description: 'Member support, governance, engagement, and automation.', modules: ['governance', 'ticketing', 'engagement', 'invites', 'aiassistant', 'automessages', 'telegrambridge'] },
+    { key: 'web3', label: 'Web3 and tracking', description: 'Wallet, NFT, token, collection, and reward operations.', modules: ['wallettracker', 'nfttracker', 'tokentracker', 'vault'] },
+    { key: 'safety', label: 'Safety and experiences', description: 'Moderation, missions, and community activities.', modules: ['guildguard', 'heist', 'minigames'] },
+  ];
+
+  const renderToggle = (mod, isEnabled) => {
+    if (!(canManageModules && canToggleModuleFromHub(mod.key))) return '';
+    return `
+      <div class="module-tile__toggle" onclick="event.stopPropagation()">
+        <span>${readOnlyManaged ? 'Locked' : (isEnabled ? 'On' : 'Off')}</span>
+        <label class="toggle-switch" title="${readOnlyManaged ? 'Managed by superadmin' : `Turn ${escapeHtml(mod.label)} on or off`}">
+          <input type="checkbox" ${isEnabled ? 'checked' : ''} ${readOnlyManaged ? 'disabled' : ''}
+                 onchange="toggleModuleFromHub('${escapeJsString(mod.key)}', this.checked, this)">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>`;
+  };
+
+  const renderTile = (mod) => {
     const isEnabled = state[mod.key] !== false;
-    const isDisabledStyle = !isEnabled ? 'module-tile--disabled' : '';
-    const lockedToAdmin = !!mod.adminOnly && !isServerAdmin;
-    if (lockedToAdmin) return;
-    const statusLabel = isEnabled ? 'Active' : 'Disabled';
-    const statusClass = isEnabled ? 'status-active' : 'status-disabled';
-    
-    const onClick = !isEnabled
-      ? ''
-      : mod.externalPath
-        ? `openModuleExternal('${escapeJsString(mod.externalPath)}')`
-        : `switchSection('${mod.section}')`;
-    const toggleHtml = (canManageModules && canToggleModuleFromHub(mod.key))
-      ? `
-        <div style="display:flex;align-items:center;gap:8px; margin-left:auto;" onclick="event.stopPropagation()">
-          <span style="font-size:0.74rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">
-            ${readOnlyManaged ? 'Locked' : 'Enabled'}
-          </span>
-          <label class="toggle-switch" title="${readOnlyManaged ? 'Managed by superadmin' : 'Toggle module'}">
-            <input type="checkbox"
-                   ${isEnabled ? 'checked' : ''}
-                   ${readOnlyManaged ? 'disabled' : ''}
-                   onchange="toggleModuleFromHub('${escapeJsString(mod.key)}', this.checked, this)">
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-      `
-      : '';
-    
-    html += `
-      <div class="module-tile ${isDisabledStyle}" ${onClick ? `onclick="${onClick}"` : ''}>
+    const onClick = isEnabled ? `openManagedModule('${escapeJsString(mod.section)}')` : '';
+    return `
+      <article class="module-tile module-tile--managed ${isEnabled ? '' : 'module-tile--disabled'}" ${onClick ? `onclick="${onClick}"` : ''}>
         <div class="module-tile__header">
-          <div class="module-tile__icon">${mod.icon}</div>
-          <div class="module-tile__status ${statusClass}">${statusLabel}</div>
+          <div class="module-tile__icon" aria-hidden="true">${mod.icon}</div>
+          <span class="module-tile__status ${isEnabled ? 'status-active' : 'status-disabled'}">${isEnabled ? 'Enabled' : 'Disabled'}</span>
         </div>
         <div class="module-tile__body">
           <h3 class="module-tile__title">${escapeHtml(mod.label)}</h3>
           <p class="module-tile__desc">${escapeHtml(mod.desc)}</p>
         </div>
         <div class="module-tile__footer">
-          ${isServerAdmin ? '<span class="nav-icon" style="font-size:1.1rem; opacity:0.6;">\u2699\uFE0F</span>' : ''}
-          <span style="font-size:0.8rem; color:var(--text-muted); margin-left:8px;">${isEnabled ? 'Enter Module &rarr;' : 'Module Disabled'}</span>
-          ${toggleHtml}
+          <span class="module-tile__action">${isEnabled ? 'Configure' : 'Unavailable'} <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+          ${renderToggle(mod, isEnabled)}
         </div>
+      </article>`;
+  };
+
+  const coreSettingsTile = `
+    <article class="module-tile module-tile--managed module-tile--core" onclick="openManagedModule('settings')">
+      <div class="module-tile__header">
+        <div class="module-tile__icon" aria-hidden="true"><i class="fa-solid fa-sliders"></i></div>
+        <span class="module-tile__status status-active">Core</span>
       </div>
-    `;
-  });
-  
-  grid.innerHTML = html;
+      <div class="module-tile__body">
+        <h3 class="module-tile__title">Server settings</h3>
+        <p class="module-tile__desc">Branding, permissions, defaults, and shared server behavior.</p>
+      </div>
+      <div class="module-tile__footer"><span class="module-tile__action">Configure <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span></div>
+    </article>`;
+
+  grid.innerHTML = categoryDefinitions.map((category, categoryIndex) => {
+    const cards = MODULE_REGISTRY
+      .filter(mod => category.modules.includes(mod.key))
+      .map(renderTile)
+      .join('');
+    return `
+      <section class="module-category" aria-labelledby="module-category-${escapeHtml(category.key)}">
+        <header class="module-category__header">
+          <div><span>${String(categoryIndex + 1).padStart(2, '0')}</span><h3 id="module-category-${escapeHtml(category.key)}">${escapeHtml(category.label)}</h3></div>
+          <p>${escapeHtml(category.description)}</p>
+        </header>
+        <div class="module-category__grid">${categoryIndex === 0 ? coreSettingsTile : ''}${cards}</div>
+      </section>`;
+  }).join('');
 }
 
 const GUILD_GUARD_DETECTOR_LABELS = Object.freeze({
@@ -2089,96 +2174,145 @@ document.addEventListener('DOMContentLoaded', () => {
 // ==================== GENERAL HUB & SETTINGS ====================
 
 
+function getPortalAccessRole() {
+  if (isSuperadmin) {
+    return {
+      key: 'superadmin',
+      label: 'Superadmin',
+      kicker: 'Platform workspace',
+      description: 'Manage the GuildPilot platform, tenants, billing, and infrastructure.',
+    };
+  }
+  if (isAdmin) {
+    return {
+      key: 'server-admin',
+      label: 'Server admin / moderator',
+      kicker: 'Server team workspace',
+      description: 'Use your personal tools or configure the selected server from Modules.',
+    };
+  }
+  return {
+    key: 'user',
+    label: 'User',
+    kicker: 'Personal workspace',
+    description: 'Manage your identity, wallets, and communities from one clear workspace.',
+  };
+}
+
+function updatePortalRolePresentation() {
+  const role = getPortalAccessRole();
+  document.body.dataset.portalRole = role.key;
+  const roleLabel = document.getElementById('navAccessRole');
+  if (roleLabel) roleLabel.textContent = role.label;
+  const kicker = document.getElementById('appHubRoleKicker');
+  if (kicker) kicker.textContent = role.kicker;
+  const subtitle = document.getElementById('appHubSubtitle');
+  if (subtitle) subtitle.textContent = role.description;
+}
+
 async function renderGeneralSection() {
   const hub = document.getElementById('appHubBento');
   const greeting = document.getElementById('appHubGreeting');
   if (!hub) return;
+
   const user = userData?.user || userData || {};
-
-  if (userData && greeting) {
-    greeting.textContent = `Welcome back, ${user.username || 'Guild Admin'}.`;
-  }
-
   if (!userData) {
     hub.innerHTML = `
-      <div class="bento-panel panel-overview">
-        <div class="bento-panel-header">
-          <div class="bento-panel-title">Authentication Required</div>
-        </div>
-        <p style="color:var(--text-secondary); margin-bottom:var(--space-6);">Connect your Discord account to access your personal workspace and managed communities.</p>
-        <button class="btn btn-primary" style="width:100%;" onclick="login()">Login with Discord</button>
-      </div>
-    `;
+      <section class="role-login-card">
+        <span class="role-home-eyebrow">Welcome to GuildPilot</span>
+        <h2>Your community identity, in one place.</h2>
+        <p>Connect Discord to manage wallets, profiles, community access, and server workspaces.</p>
+        <button class="btn-primary" onclick="login()"><i class="fa-brands fa-discord" aria-hidden="true"></i> Continue with Discord</button>
+      </section>`;
     return;
   }
 
-  const isAdminLike = !!(isAdmin || isSuperadmin);
+  const role = getPortalAccessRole();
   const managedCount = (serverAccessData.managedServers || []).length;
   const joinedCount = (serverAccessData.unmanagedServers || []).length;
-  const adminTitle = isSuperadmin ? 'Go to Superadmin' : 'Go to Admin';
-  const adminAction = isSuperadmin
-    ? "switchSection('admin'); showAdminView('superadmin');"
-    : "switchSection('module-hub');";
+  const communityCount = managedCount + joinedCount;
+  const activeServerName = activeGuildId ? getActiveServerLabel() : 'No server selected';
+  const avatarUrl = user.avatar
+    ? `https://cdn.discordapp.com/avatars/${user.discordId || ''}/${user.avatar}.png`
+    : 'https://cdn.discordapp.com/embed/avatars/0.png';
 
-  const adminCard = isAdminLike
-    ? `
-      <div class="module-bento-tile" onclick="${adminAction}">
-        <div class="module-bento-top">
-          <div class="module-bento-info">
-            <div class="module-bento-title">${adminTitle}</div>
-            <div class="module-bento-status">${isSuperadmin ? 'Platform controls and tenant ops' : 'Module workspace and server settings'}</div>
-          </div>
-        </div>
-        <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-          <div class="module-bento-metric">${isSuperadmin ? 'Global Control' : 'Server Admin'}</div>
-          <div class="module-bento-icon-wrapper"><i class="fas fa-shield-alt"></i></div>
-        </div>
+  if (greeting) greeting.textContent = `Welcome back, ${user.username || 'member'}.`;
+  updatePortalRolePresentation();
+
+  const serverAdminWorkspace = role.key === 'server-admin' ? `
+    <section class="role-management-card role-management-card--server">
+      <div class="role-management-card__icon"><i class="fa-solid fa-sliders" aria-hidden="true"></i></div>
+      <div class="role-management-card__copy">
+        <span>Server administration</span>
+        <h2>Manage ${escapeHtml(activeServerName)}</h2>
+        <p>Configure verification, trackers, roles, support, AI, and every other server module from one workspace.</p>
+        <div class="role-management-card__meta"><span>${managedCount} managed ${managedCount === 1 ? 'server' : 'servers'}</span><span>Configuration stays in Modules</span></div>
       </div>
-    `
-    : '';
+      <button class="btn-primary" onclick="openAdminSettingsEntry()">Open Modules <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
+    </section>` : '';
+
+  const superadminWorkspace = role.key === 'superadmin' ? `
+    <section class="role-management-card role-management-card--platform">
+      <div class="role-management-card__icon"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i></div>
+      <div class="role-management-card__copy">
+        <span>Platform administration</span>
+        <h2>GuildPilot platform console</h2>
+        <p>Manage tenant lifecycle, plans, billing, identities, providers, security, and infrastructure.</p>
+        <div class="role-management-card__meta"><span>Tenants</span><span>Billing</span><span>Security</span><span>Infrastructure</span></div>
+      </div>
+      <button class="btn-primary" onclick="switchSection('admin'); showAdminView('superadmin')">Open Platform Console <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
+    </section>
+    <section class="role-secondary-admin-card">
+      <div><span>Selected server</span><strong>${escapeHtml(activeServerName)}</strong></div>
+      <p>Need to configure a tenant directly?</p>
+      <button class="btn-secondary" onclick="openAdminSettingsEntry()">Manage server modules</button>
+    </section>` : '';
 
   hub.innerHTML = `
-    <div class="bento-panel panel-overview" style="grid-column:1 / -1;">
-      <div class="bento-panel-header">
-        <div class="bento-panel-title">
-          <img src="${user.avatar ? `https://cdn.discordapp.com/avatars/${user.discordId || ''}/${user.avatar}.png` : '/assets/default-avatar.png'}" class="bento-icon" style="object-fit:cover; border-radius:50%;" onerror="this.src='/assets/default-avatar.png'">
-          ${user.username || 'Guild Admin'}
-        </div>
+    <section class="role-home-summary">
+      <div class="role-home-identity">
+        <img src="${escapeHtml(avatarUrl)}" alt="" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+        <div><span>Your access</span><strong>${escapeHtml(role.label)}</strong><small>${escapeHtml(user.username || 'GuildPilot member')}</small></div>
       </div>
-      <div class="overview-metrics-grid">
-        <div class="overview-metric"><div class="overview-metric-val">${managedCount}</div><div class="overview-metric-label">Managed Servers</div></div>
-        <div class="overview-metric"><div class="overview-metric-val">${joinedCount}</div><div class="overview-metric-label">Joined Servers</div></div>
-        <div class="overview-metric"><div class="overview-metric-val">${isAdminLike ? 'Admin' : 'Member'}</div><div class="overview-metric-label">Access Level</div></div>
+      <div class="role-home-stats">
+        <div><strong>${communityCount}</strong><span>${communityCount === 1 ? 'Community' : 'Communities'}</span></div>
+        <div><strong>${managedCount}</strong><span>Managed</span></div>
+        <div><strong>${activeGuildId ? 'Active' : 'Select'}</strong><span>Server context</span></div>
       </div>
-    </div>
-    <div class="panel-modules-grid" style="grid-column:1 / -1;">
-      <div class="module-bento-tile" onclick="switchSection('profile')">
-        <div class="module-bento-top">
-          <div class="module-bento-info">
-            <div class="module-bento-title">Go to User Profile</div>
-            <div class="module-bento-status">Identity, wallets, and account settings</div>
-          </div>
-        </div>
-        <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-          <div class="module-bento-metric">Member Hub</div>
-          <div class="module-bento-icon-wrapper"><i class="fas fa-user"></i></div>
-        </div>
-      </div>
-      <div class="module-bento-tile" onclick="smartRouteToServerDashboard()">
-        <div class="module-bento-top">
-          <div class="module-bento-info">
-            <div class="module-bento-title">Go to Server</div>
-            <div class="module-bento-status">Select community and open dashboard</div>
-          </div>
-        </div>
-        <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-          <div class="module-bento-metric">Server Workspace</div>
-          <div class="module-bento-icon-wrapper"><i class="fas fa-server"></i></div>
-        </div>
-      </div>
-      ${adminCard}
-    </div>
-  `;
+    </section>
+
+    <section class="role-primary-actions" aria-label="Personal actions">
+      <article class="role-action-card role-action-card--wallet" onclick="switchSection('wallets')">
+        <div class="role-action-card__top"><span class="role-action-card__icon"><i class="fa-solid fa-wallet" aria-hidden="true"></i></span><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></div>
+        <span class="role-action-card__eyebrow">Start here</span>
+        <h2>Connect your wallets</h2>
+        <p>Verify Solana and EVM wallets and keep one identity across communities.</p>
+        <div class="role-chain-list"><span>Solana</span><span>Ethereum</span><span>Base</span><span>Polygon</span></div>
+      </article>
+      <article class="role-action-card" onclick="switchSection('profile')">
+        <div class="role-action-card__top"><span class="role-action-card__icon"><i class="fa-solid fa-user" aria-hidden="true"></i></span><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></div>
+        <span class="role-action-card__eyebrow">Your identity</span>
+        <h2>Profile & privacy</h2>
+        <p>Review your Discord identity, linked accounts, privacy choices, and community profile.</p>
+      </article>
+      <article class="role-action-card" onclick="switchSection('servers')">
+        <div class="role-action-card__top"><span class="role-action-card__icon"><i class="fa-solid fa-people-group" aria-hidden="true"></i></span><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></div>
+        <span class="role-action-card__eyebrow">Your communities</span>
+        <h2>Choose a server</h2>
+        <p>Open a community, review your access, or invite GuildPilot to a server you manage.</p>
+      </article>
+    </section>
+
+    ${serverAdminWorkspace}
+    ${superadminWorkspace}
+
+    <section class="role-getting-started">
+      <div><span>1</span><p><strong>Connect a wallet</strong><small>Solana or an EVM network</small></p></div>
+      <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+      <div><span>2</span><p><strong>Complete your profile</strong><small>Identity and privacy settings</small></p></div>
+      <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+      <div><span>3</span><p><strong>Choose a community</strong><small>Use member features</small></p></div>
+    </section>`;
 }
 
 function selectAndGoToServer(guildId) {
@@ -2445,6 +2579,11 @@ function updateSidebarModuleNav() {
   const hasServer = !!activeGuildId;
   const state = window._tenantModuleState || {};
 
+  ['sidebarNavProfile', 'mobileNavProfile', 'sidebarNavWallets', 'mobileNavWallets', 'sidebarNavServers', 'mobileNavServers'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = userData ? '' : 'none';
+  });
+
   const moduleItems = [
     { id: 'sidebarNavWallets', module: 'verification' },
     { id: 'mobileNavWallets', module: 'verification' },
@@ -2470,12 +2609,12 @@ function updateSidebarModuleNav() {
   ];
 
   // Module nav is only visible in active tenant context.
-  const noServerRequired = new Set();
+  const noServerRequired = new Set(['verification']);
 
   moduleItems.forEach(({ id, module }) => {
     const el = document.getElementById(id);
     if (!el) return;
-    const enabled = module === null || state[module] !== false;
+    const enabled = module === 'verification' ? !!userData : (module === null || state[module] !== false);
     const visibleWithoutServer = noServerRequired.has(module);
     el.style.display = ((hasServer || visibleWithoutServer) && enabled) ? '' : 'none';
   });
@@ -2485,12 +2624,6 @@ function updateSidebarModuleNav() {
   if (battleNav) battleNav.style.display = 'none';
   const battleNavMobile = document.getElementById('mobileNavBattle');
   if (battleNavMobile) battleNavMobile.style.display = 'none';
-
-  // Keep Plans visible in the grouped sidebar menu on desktop and mobile.
-  const plansNav = document.getElementById('sidebarNavPlans');
-  if (plansNav) plansNav.style.display = '';
-  const mobilePlans = document.getElementById('mobileNavPlans');
-  if (mobilePlans) mobilePlans.style.display = '';
 
   const sidebarSettings = document.getElementById('sidebarNavSettings');
   if (sidebarSettings) {
@@ -2504,7 +2637,7 @@ function updateSidebarModuleNav() {
   const communityLabel = document.getElementById('sidebarGroupCommunity');
   if (communityLabel) {
     const communityIds = [
-      'sidebarNavWallets',
+      'sidebarNavServers',
       'sidebarNavGovernance',
       'sidebarNavTreasury',
       'sidebarNavNftActivity',
@@ -2523,7 +2656,7 @@ function updateSidebarModuleNav() {
   const mobileCommunityLabel = document.getElementById('mobileGroupCommunity');
   if (mobileCommunityLabel) {
     const communityIds = [
-      'mobileNavWallets',
+      'mobileNavServers',
       'mobileNavGovernance',
       'mobileNavTreasury',
       'mobileNavNftActivity',
@@ -2542,14 +2675,12 @@ function updateSidebarModuleNav() {
 
   const managementLabel = document.getElementById('sidebarGroupManagement');
   if (managementLabel) {
-    const hasVisibleManagement = (plansNav && plansNav.style.display !== 'none')
-      || (!!sidebarSettings && sidebarSettings.style.display !== 'none');
+    const hasVisibleManagement = !!sidebarSettings && sidebarSettings.style.display !== 'none';
     managementLabel.style.display = hasVisibleManagement ? '' : 'none';
   }
   const mobileManagementLabel = document.getElementById('mobileGroupManagement');
   if (mobileManagementLabel) {
-    const hasVisibleManagement = (mobilePlans && mobilePlans.style.display !== 'none')
-      || (!!mobileSettings && mobileSettings.style.display !== 'none');
+    const hasVisibleManagement = !!mobileSettings && mobileSettings.style.display !== 'none';
     mobileManagementLabel.style.display = hasVisibleManagement ? '' : 'none';
   }
 
@@ -3092,6 +3223,8 @@ function showAuthenticatedState() {
   }
   if (mobileNavProfile) mobileNavProfile.style.display = '';
 
+  updatePortalRolePresentation();
+  updateSidebarModuleNav();
   updateActiveGuildBadge();
 
   // Show dashboard content
@@ -3126,6 +3259,8 @@ function showUnauthenticatedState() {
     navAuthBtn.classList.add('btn-primary');
   }
   if (mobileNavProfile) mobileNavProfile.style.display = 'none';
+  document.body.dataset.portalRole = 'visitor';
+  updateSidebarModuleNav();
   updateHelpCenterRoleVisibility();
   const dashboardWelcomeTitle = document.getElementById('dashboardWelcomeTitle');
   if (dashboardWelcomeTitle) {
@@ -3175,29 +3310,412 @@ function refreshAdminEntryVisibility() {
     });
   }
 
+  updatePortalRolePresentation();
+  updateSidebarModuleNav();
   updateHelpCenterRoleVisibility();
+  if (document.getElementById('section-landing')?.classList.contains('active')) {
+    renderGeneralSection();
+  }
 }
 
-function canViewHelpRole(roleKey) {
-  if (!roleKey) return true;
-  if (roleKey === 'admin') return !!(isAdmin || isSuperadmin);
-  if (roleKey === 'superadmin') return !!isSuperadmin;
-  return true;
+const HELP_GUIDES = Object.freeze([
+  {
+    id: 'getting-started', group: 'Essentials', role: 'user', icon: 'fa-compass',
+    title: 'Getting started', summary: 'Set up your GuildPilot identity and enter your first community.',
+    route: 'landing', action: 'Back to home',
+    overview: 'GuildPilot connects your Discord identity, verified wallets, and community access in one personal workspace.',
+    steps: ['Sign in with Discord.', 'Open My wallets and verify a Solana or EVM wallet.', 'Review Profile & privacy.', 'Choose a community to use its enabled features.'],
+    tips: ['Server configuration is never required for regular members.', 'Available community features depend on the modules enabled by that server.']
+  },
+  {
+    id: 'profile', group: 'Essentials', role: 'user', icon: 'fa-user-shield',
+    title: 'Profile & privacy', summary: 'Manage your identity, linked accounts, preferences, and privacy choices.',
+    route: 'profile', action: 'Open profile',
+    overview: 'Your profile is the personal control point for identity and privacy across GuildPilot communities.',
+    steps: ['Review your Discord identity.', 'Check linked accounts and profile details.', 'Choose the privacy settings that fit you.', 'Save changes before leaving the page.'],
+    tips: ['Profile settings belong to you and are not server configuration.', 'Reconnect Discord if your name or avatar is out of date.']
+  },
+  {
+    id: 'wallets', group: 'Essentials', role: 'user', icon: 'fa-wallet',
+    title: 'Wallets & verification', summary: 'Connect Solana and EVM wallets with a signed ownership proof.',
+    route: 'wallets', action: 'Open my wallets',
+    overview: 'Wallet verification uses a temporary challenge and signature. GuildPilot never asks for a seed phrase or private key.',
+    steps: ['Choose Solana or an EVM network.', 'Connect the matching wallet application.', 'Read and sign the ownership challenge.', 'Confirm the verified wallet and select a primary wallet when needed.'],
+    tips: ['Supported EVM identity covers Ethereum, Base, Polygon, Arbitrum One, and Optimism.', 'A signature proves control without transferring assets.', 'Only approve a message you can read and recognize.']
+  },
+  {
+    id: 'communities', group: 'Essentials', role: 'user', icon: 'fa-people-group',
+    title: 'My communities', summary: 'Choose a server and understand which features are available to you.',
+    route: 'servers', action: 'Choose a community',
+    overview: 'Your selected community controls which modules, roles, content, and permissions appear in the portal.',
+    steps: ['Open My communities.', 'Select a server you belong to.', 'Review available member features.', 'Switch servers whenever you need a different context.'],
+    tips: ['Server admins see a managed indicator for communities they can configure.', 'Regular members cannot open the Modules configuration workspace.']
+  },
+  {
+    id: 'governance', group: 'Modules', role: 'user', moduleKey: 'governance', icon: 'fa-landmark',
+    title: 'Governance / Voting', summary: 'Read proposals, join discussions, support ideas, and vote.',
+    route: 'governance', action: 'Open governance',
+    overview: 'Governance gives communities a structured path from proposal to decision, with access and voting rules defined by the server.',
+    steps: ['Select the correct community.', 'Review active proposals and their deadlines.', 'Support, discuss, or vote when eligible.', 'Check the result after voting closes.'],
+    tips: ['Voting power and eligibility can depend on verified wallets, NFTs, tokens, or roles.', 'If voting is unavailable, confirm the proposal status and your verified identity.']
+  },
+  {
+    id: 'engagement', group: 'Modules', role: 'user', moduleKey: 'engagement', icon: 'fa-chart-line',
+    title: 'Engagement Hub', summary: 'Follow participation, leaderboards, tasks, points, and rewards.',
+    route: 'engagement', action: 'Open engagement',
+    overview: 'The Engagement Hub turns eligible community activity into points, achievements, leaderboards, and reward opportunities.',
+    steps: ['Review available tasks and point rules.', 'Complete eligible community or social activity.', 'Track progress and leaderboard position.', 'Redeem rewards when requirements are met.'],
+    tips: ['Each community controls its own economy and eligibility rules.', 'Some activity may need account linking or verification before credit is awarded.']
+  },
+  {
+    id: 'missions', group: 'Modules', role: 'user', moduleKey: 'heist', icon: 'fa-rocket',
+    title: 'Missions', summary: 'Join role-based missions, track status, and claim outcomes.',
+    route: 'heist', action: 'Open missions',
+    overview: 'Missions organize time-bound community objectives with eligibility, participant slots, rewards, and resolution states.',
+    steps: ['Open the mission board.', 'Check access requirements and available slots.', 'Join an eligible mission.', 'Follow its progress and final outcome.'],
+    tips: ['Wallet, NFT, token, trait, or Discord-role requirements may apply.', 'Mission availability is configured by the server team.']
+  },
+  {
+    id: 'roles', group: 'Modules', role: 'user', moduleKey: 'selfserveroles', icon: 'fa-user-tag',
+    title: 'Self-Serve Roles', summary: 'Claim optional roles and understand verified role access.',
+    route: 'self-serve-roles', action: 'Open community roles',
+    overview: 'Self-serve roles are optional roles you can claim directly. Verified roles are managed automatically from identity or asset rules.',
+    steps: ['Choose the correct community.', 'Open Community roles.', 'Claim or remove available optional roles.', 'Use wallet verification when a role has asset requirements.'],
+    tips: ['Role options differ per community.', 'Contact support if Discord permissions prevent an eligible role from being assigned.']
+  },
+  {
+    id: 'support', group: 'Modules', role: 'user', moduleKey: 'ticketing', icon: 'fa-ticket',
+    title: 'Support Tickets', summary: 'Open a private support request and follow its progress.',
+    route: 'ticketing', action: 'Open support',
+    overview: 'Support Tickets gives members a structured support path while helping the server team route, manage, and document requests.',
+    steps: ['Select a support category.', 'Describe the problem and expected result.', 'Include the server, feature, timestamp, and error text.', 'Follow replies and close the request when resolved.'],
+    tips: ['Never include seed phrases, private keys, passwords, or access tokens.', 'Screenshots are useful after sensitive information is removed.']
+  },
+  {
+    id: 'wallet-tracker', group: 'Modules', role: 'user', moduleKey: 'wallettracker', icon: 'fa-binoculars',
+    title: 'Wallet Tracker', summary: 'Monitor configured wallets, balances, holdings, and transaction alerts.',
+    route: 'treasury', action: 'Open Wallet Tracker',
+    overview: 'Wallet Tracker provides read-only monitoring for public community addresses across supported chains.',
+    steps: ['Open the tracker for the selected community.', 'Review monitored addresses and labels.', 'Check balances, holdings, and recent activity.', 'Use alerts to follow important movement.'],
+    tips: ['Tracking a public address never grants spending access.', 'EVM tracking uses chain-aware network and contract identifiers.']
+  },
+  {
+    id: 'nft-tracker', group: 'Modules', role: 'user', moduleKey: 'nfttracker', icon: 'fa-images',
+    title: 'NFT activity', summary: 'Follow collection sales, listings, transfers, and configured feeds.',
+    route: 'nft-activity', action: 'Open NFT activity',
+    overview: 'NFT Activity monitors configured Solana collections plus EVM ERC-721 collections and ERC-1155 token IDs.',
+    steps: ['Choose a community.', 'Open NFT activity.', 'Review confirmed mint, transfer, and supported marketplace events.', 'Open the marketplace or explorer link when available.'],
+    tips: ['EVM tracking uses the configured RPC and confirmation depth.', 'Collection configuration and feed channels are managed from Modules.', 'Always verify contract addresses before acting on an asset.']
+  },
+  {
+    id: 'token-tracker', group: 'Modules', role: 'user', moduleKey: 'tokentracker', icon: 'fa-coins',
+    title: 'Token activity', summary: 'Follow configured token transfers, swaps, and movement feeds.',
+    route: 'token-activity', action: 'Open token activity',
+    overview: 'Token Tracker monitors selected fungible assets and presents chain-aware activity without requesting wallet permissions.',
+    steps: ['Open Token activity for the selected community.', 'Review the configured assets and networks.', 'Inspect transaction direction and amount.', 'Use the explorer link for independent verification.'],
+    tips: ['Symbol names can be duplicated; contract or mint address is the trusted identifier.', 'Tracked tokens and alert thresholds are controlled by server admins.']
+  },
+  {
+    id: 'vault', group: 'Modules', role: 'user', moduleKey: 'vault', icon: 'fa-vault',
+    title: 'Vault', summary: 'Use keys, seasons, rewards, claims, and verified social requirements.',
+    route: 'vault', action: 'Open Vault',
+    overview: 'Vault combines reward inventory, keys, seasons, eligibility rules, openings, and claim tracking.',
+    steps: ['Review your key balance and current season.', 'Check available rewards and requirements.', 'Open or redeem when eligible.', 'Track claims until the server team completes them.'],
+    tips: ['Reward probability and inventory are configured by the server team.', 'Verify payment or social actions only through the official GuildPilot flow.']
+  },
+  {
+    id: 'minigames', group: 'Modules', role: 'user', moduleKey: 'minigames', icon: 'fa-gamepad',
+    title: 'Minigames', summary: 'Join game sessions, lobbies, competitions, and Game Night.',
+    route: 'battle', action: 'Open minigames',
+    overview: 'Minigames supports Battle Arena and community game sessions with server-defined access, timing, and rewards.',
+    steps: ['Open an active lobby or session.', 'Check entry and role requirements.', 'Join before the session starts.', 'Review the result and leaderboard.'],
+    tips: ['Moderators control session lifecycle and disruptive participants.', 'Game availability depends on the Minigames module.']
+  },
+  {
+    id: 'modules', group: 'Server management', role: 'admin', icon: 'fa-sliders',
+    title: 'Manage modules', summary: 'The single starting point for every server configuration task.',
+    route: 'module-hub', action: 'Open Modules', managed: true,
+    overview: 'Modules keeps all server administration out of the member navigation. Select a server, then configure its enabled capabilities here.',
+    steps: ['Select a managed server.', 'Open Manage modules.', 'Choose the feature you want to configure.', 'Save settings and test with a regular member account.'],
+    tips: ['Disable modules the team cannot actively operate.', 'Superadmin-managed settings can appear locked for server admins.']
+  },
+  {
+    id: 'welcome', group: 'Modules', role: 'admin', moduleKey: 'welcome', icon: 'fa-hand-sparkles',
+    title: 'Welcome & onboarding', summary: 'Configure join messages, onboarding, captcha, and first-member experience.',
+    route: 'welcome', action: 'Configure onboarding', managed: true,
+    overview: 'Welcome & Onboarding controls the first interaction a new Discord member has with the community.',
+    steps: ['Choose the welcome channel and message.', 'Configure captcha or onboarding safeguards.', 'Preview the final message.', 'Send a test before enabling it for everyone.'],
+    tips: ['Keep onboarding short and action-oriented.', 'Confirm the bot can view and send messages in the target channel.']
+  },
+  {
+    id: 'verification-admin', group: 'Modules', role: 'admin', moduleKey: 'verification', icon: 'fa-id-card',
+    title: 'Identity / Verification', summary: 'Configure wallet proof, NFT/token rules, role mappings, and re-verification.',
+    route: 'wallets', action: 'Configure verification', managed: true,
+    overview: 'Verification administration translates signed wallet identity and on-chain holdings into community access rules.',
+    steps: ['Choose Solana or an EVM network for each rule.', 'Create an NFT collection, ERC-1155 token ID, SPL token, or ERC-20 balance rule.', 'Map each rule to a Discord role.', 'Run re-verification and test assignment and removal with a non-admin account.'],
+    tips: ['EVM NFT rules support ERC-721 collection balances and ERC-1155 token IDs.', 'RPC failures preserve existing roles instead of removing them.', 'Keep the bot role above every role it needs to assign.']
+  },
+  {
+    id: 'invites', group: 'Modules', role: 'admin', moduleKey: 'invites', icon: 'fa-envelope-open-text',
+    title: 'Invite Tracker', summary: 'Manage referral attribution, leaderboard behavior, panels, and exports.',
+    route: 'invites', action: 'Configure invites', managed: true,
+    overview: 'Invite Tracker measures Discord invite performance while giving moderators tools to review attribution and anomalies.',
+    steps: ['Enable the module.', 'Choose leaderboard and display settings.', 'Post the member panel where needed.', 'Review and export referral activity.'],
+    tips: ['Document how leaves, rejoins, and suspicious invites are handled.', 'Use exports for audits, not as a replacement for live data.']
+  },
+  {
+    id: 'ai-assistant', group: 'Modules', role: 'admin', moduleKey: 'aiassistant', icon: 'fa-wand-magic-sparkles',
+    title: 'AI Assistant', summary: 'Manage assistant behavior, knowledge, personas, channels, limits, and safety.',
+    route: 'aiassistant', action: 'Configure AI Assistant', managed: true,
+    overview: 'AI Assistant gives end users simple community help while admins manage its knowledge and behavior through a guided portal.',
+    steps: ['Choose where the assistant can respond.', 'Define its primary instructions and tone.', 'Add approved knowledge documents or sources.', 'Set role limits and safety policies, then test common questions.'],
+    tips: ['Keep one clear default persona before adding specialists.', 'Review suggested knowledge changes before publishing them.', 'Do not store secrets or private member data in assistant knowledge.']
+  },
+  {
+    id: 'automation', group: 'Modules', role: 'admin', moduleKey: 'automessages', icon: 'fa-clock-rotate-left',
+    title: 'Auto Messages', summary: 'Schedule recurring Discord announcements with channel-aware content.',
+    route: 'auto-messages', action: 'Configure Auto Messages', managed: true,
+    overview: 'Auto Messages publishes recurring announcements on schedules controlled by the server team.',
+    steps: ['Choose the destination channel.', 'Write and preview the message or embed.', 'Set the cadence and active window.', 'Send a test before enabling the schedule.'],
+    tips: ['Avoid schedules that overlap or create notification fatigue.', 'Pause automation during incidents or campaign changes.']
+  },
+  {
+    id: 'telegram', group: 'Modules', role: 'admin', moduleKey: 'telegrambridge', icon: 'fa-paper-plane',
+    title: 'Telegram Bridge', summary: 'Mirror approved Telegram groups or channels into Discord.',
+    route: 'telegram-bridge', action: 'Configure Telegram Bridge', managed: true,
+    overview: 'Telegram Bridge maps external Telegram sources to selected Discord destinations.',
+    steps: ['Connect the approved Telegram source.', 'Map it to a Discord channel.', 'Choose forwarding behavior and formatting.', 'Send a test and confirm permissions.'],
+    tips: ['Only bridge sources the community is authorized to republish.', 'Review links and media handling before enabling automated forwarding.']
+  },
+  {
+    id: 'guild-guard', group: 'Modules', role: 'admin', moduleKey: 'guildguard', icon: 'fa-shield-halved',
+    title: 'Guild Guard', summary: 'Review incidents and configure spam, raid, link, domain, and moderation defenses.',
+    route: 'guildguard', action: 'Configure Guild Guard', managed: true,
+    overview: 'Guild Guard combines monitoring, configurable detectors, safe enforcement actions, incident retention, and global reports.',
+    steps: ['Start in monitor mode.', 'Review detector signals and false positives.', 'Configure alerts, trusted domains, staff identities, and rules.', 'Enable enforcement only after validation.'],
+    tips: ['Use reversible actions while tuning detectors.', 'Escalate cross-server patterns to a superadmin.']
+  },
+  {
+    id: 'server-settings', group: 'Server management', role: 'admin', icon: 'fa-palette',
+    title: 'Server settings & branding', summary: 'Manage shared defaults, permissions, visual identity, and portal behavior.',
+    route: 'settings', action: 'Open server settings', managed: true,
+    overview: 'Server settings provides the shared configuration used across modules, including identity, branding, defaults, and permissions.',
+    steps: ['Open Server settings from Modules.', 'Review general settings and role permissions.', 'Apply approved branding values.', 'Test desktop, mobile, Discord messages, and embeds.'],
+    tips: ['Keep sufficient color contrast for accessibility.', 'Locked settings are controlled by the platform owner.']
+  },
+  {
+    id: 'platform', group: 'Platform console', role: 'superadmin', icon: 'fa-building-shield',
+    title: 'Tenants & platform operations', summary: 'Provision tenants and control shared platform behavior.',
+    route: 'admin', action: 'Open Platform console', superadminView: 'superadmin',
+    overview: 'The Platform console is reserved for cross-tenant operations. Server-level configuration remains in Modules.',
+    steps: ['Open Tenants to select or provision an organization.', 'Apply plan, module baseline, limits, and branding defaults.', 'Define locked versus tenant-editable settings.', 'Validate the tenant with admin and member accounts.'],
+    tips: ['Use pilot tenants before broad configuration rollouts.', 'Keep a rollback path for high-impact changes.']
+  },
+  {
+    id: 'billing', group: 'Platform console', role: 'superadmin', icon: 'fa-credit-card',
+    title: 'Billing & entitlements', summary: 'Manage plans, limits, receipts, crypto quotes, and tenant access.',
+    route: 'admin', action: 'Open billing', superadminView: 'superadmin',
+    overview: 'Billing connects commercial plan state to tenant entitlements and module capacity without changing member-owned settings.',
+    steps: ['Review the tenant and current plan.', 'Confirm billing status, period, and receipt evidence.', 'Apply the correct entitlements and limits.', 'Audit the resulting module access.'],
+    tips: ['Verify on-chain payment evidence independently before approval.', 'Billing changes should be traceable to an operator and timestamp.']
+  },
+  {
+    id: 'security', group: 'Platform console', role: 'superadmin', icon: 'fa-lock',
+    title: 'Security, providers & infrastructure', summary: 'Control privileged access, provider configuration, integrations, and system health.',
+    route: 'admin', action: 'Open security controls', superadminView: 'superadmin',
+    overview: 'Platform security covers superadmin identities, environment health, provider integrations, secret-backed settings, and incident-level controls.',
+    steps: ['Review privileged identities and least-privilege access.', 'Check provider and environment health without exposing secrets.', 'Validate integrations and security events.', 'Record and review every high-impact change.'],
+    tips: ['Never display raw provider secrets in the portal.', 'Rotate compromised credentials and review related audit activity immediately.']
+  },
+  {
+    id: 'troubleshooting', group: 'Support', role: 'user', icon: 'fa-screwdriver-wrench',
+    title: 'Troubleshooting', summary: 'Resolve common wallet, permission, module, and browser issues safely.',
+    route: 'ticketing', action: 'Contact support',
+    overview: 'Most issues come from the wrong server context, an incomplete wallet challenge, disabled modules, or missing Discord permissions.',
+    steps: ['Confirm the selected community and feature.', 'Refresh the page and retry the exact action once.', 'For wallets, unlock the correct app and request a new challenge.', 'For roles or modules, ask a server admin to verify Discord permissions and module status.', 'Open support with the time, server, action, and error message.'],
+    tips: ['Never solve a support issue by sharing a seed phrase, private key, password, token, or raw secret.', 'Use a current browser and wallet application.', 'Admins should test configuration with a regular member account.']
+  }
+]);
+
+let helpCenterState = { query: '', activeId: '' };
+
+function getHelpRoleLevel() {
+  if (isSuperadmin) return 3;
+  if (isAdmin) return 2;
+  return 1;
+}
+
+function canViewHelpGuide(guide) {
+  const required = guide?.role === 'superadmin' ? 3 : guide?.role === 'admin' ? 2 : 1;
+  return getHelpRoleLevel() >= required;
+}
+
+function getHelpGuideTitle(guide) {
+  if (!guide?.moduleKey) return guide?.title || '';
+  return MODULE_REGISTRY.find((module) => module.key === guide.moduleKey)?.label || guide.title || '';
+}
+
+function getVisibleHelpGuides() {
+  const query = String(helpCenterState.query || '').trim().toLowerCase();
+  const groupOrder = ['Essentials', 'Modules', 'Server management', 'Platform console', 'Support'];
+  const moduleOrder = new Map(MODULE_REGISTRY.map((module, index) => [module.key, index]));
+  return HELP_GUIDES.filter(canViewHelpGuide).filter((guide) => {
+    if (!query) return true;
+    return [getHelpGuideTitle(guide), guide.summary, guide.overview, guide.group, ...(guide.steps || []), ...(guide.tips || [])]
+      .join(' ')
+      .toLowerCase()
+      .includes(query);
+  }).sort((left, right) => {
+    const groupDifference = groupOrder.indexOf(left.group) - groupOrder.indexOf(right.group);
+    if (groupDifference) return groupDifference;
+    if (left.group === 'Modules') {
+      return (moduleOrder.get(left.moduleKey) ?? 999) - (moduleOrder.get(right.moduleKey) ?? 999);
+    }
+    return getHelpGuideTitle(left).localeCompare(getHelpGuideTitle(right));
+  });
+}
+
+function renderHelpRolePath() {
+  const wrap = document.getElementById('helpRolePath');
+  if (!wrap) return;
+  const role = getPortalAccessRole();
+  const items = [
+    { icon: 'fa-wallet', label: 'Connect wallets', detail: 'Solana + EVM' },
+    { icon: 'fa-user', label: 'Complete profile', detail: 'Identity + privacy' },
+    { icon: 'fa-people-group', label: 'Use communities', detail: 'Member features' },
+  ];
+  if (getHelpRoleLevel() >= 2) items.push({ icon: 'fa-sliders', label: 'Manage modules', detail: 'Server configuration' });
+  if (getHelpRoleLevel() >= 3) items.push({ icon: 'fa-building-shield', label: 'Platform console', detail: 'Tenants + billing' });
+  wrap.innerHTML = `
+    <div class="help-role-path__label"><span>Your path</span><strong>${escapeHtml(role.label)}</strong></div>
+    <div class="help-role-path__steps">${items.map((item, index) => `
+      <div class="help-path-step">
+        <span class="help-path-step__number">${index + 1}</span>
+        <i class="fa-solid ${item.icon}" aria-hidden="true"></i>
+        <div><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.detail)}</span></div>
+      </div>`).join('')}</div>`;
+}
+
+function renderHelpGuideContent(guide) {
+  const content = document.getElementById('helpGuideContent');
+  if (!content) return;
+  if (!guide) {
+    content.innerHTML = `
+      <div class="help-guide-empty">
+        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+        <h3>No matching guides</h3>
+        <p>Try a broader search such as wallets, AI, tracking, billing, or security.</p>
+        <button class="btn btn-secondary" type="button" onclick="clearHelpSearch()">Clear search</button>
+      </div>`;
+    return;
+  }
+  const guideTitle = getHelpGuideTitle(guide);
+  const showManagementNote = getHelpRoleLevel() >= 2 && !!guide.moduleKey;
+  const actionLabel = showManagementNote ? `Configure ${guideTitle}` : (guide.action || 'Open feature');
+  content.innerHTML = `
+    <article class="help-guide-article">
+      <header class="help-guide-article__header">
+        <div class="help-guide-article__icon"><i class="fa-solid ${escapeHtml(guide.icon)}" aria-hidden="true"></i></div>
+        <div>
+          <span>${escapeHtml(guide.group)}</span>
+          <h3>${escapeHtml(guideTitle)}</h3>
+          <p>${escapeHtml(guide.summary)}</p>
+        </div>
+      </header>
+      <div class="help-guide-overview">${escapeHtml(guide.overview)}</div>
+      <section class="help-guide-section">
+        <h4>How it works</h4>
+        <ol class="help-guide-steps">${(guide.steps || []).map((step, index) => `
+          <li><span>${index + 1}</span><p>${escapeHtml(step)}</p></li>`).join('')}</ol>
+      </section>
+      <section class="help-guide-section">
+        <h4>Good to know</h4>
+        <ul class="help-guide-tips">${(guide.tips || []).map((tip) => `<li><i class="fa-solid fa-check" aria-hidden="true"></i><span>${escapeHtml(tip)}</span></li>`).join('')}</ul>
+      </section>
+      ${showManagementNote ? `
+        <section class="help-guide-section">
+          <h4>Managing this module</h4>
+          <div class="help-guide-overview">Select a managed server, open <strong>Manage modules</strong>, then choose ${escapeHtml(guideTitle)}. Test every change with a regular member account before announcing it.</div>
+        </section>` : ''}
+      <div class="help-guide-article__action">
+        <button class="btn btn-primary" type="button" onclick="openHelpDestination('${escapeJsString(guide.id)}')">${escapeHtml(actionLabel)} <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
+      </div>
+    </article>`;
+}
+
+function renderHelpCenter() {
+  const section = document.getElementById('section-help');
+  const nav = document.getElementById('helpGuideNav');
+  if (!section || !nav) return;
+  const role = getPortalAccessRole();
+  const kicker = document.getElementById('helpRoleKicker');
+  const subtitle = document.getElementById('helpRoleSubtitle');
+  if (kicker) kicker.textContent = `${role.label} help center`;
+  if (subtitle) subtitle.textContent = getHelpRoleLevel() >= 3
+    ? 'Guides for personal tools, server modules, tenants, billing, security, and platform operations.'
+    : getHelpRoleLevel() >= 2
+      ? 'Guides for personal tools and every server feature you configure through Modules.'
+      : 'Clear guidance for your profile, wallets, communities, and member features.';
+  renderHelpRolePath();
+
+  const guides = getVisibleHelpGuides();
+  const count = document.getElementById('helpGuideCount');
+  if (count) count.textContent = `${guides.length} topic${guides.length === 1 ? '' : 's'}`;
+  if (!guides.some((guide) => guide.id === helpCenterState.activeId)) {
+    helpCenterState.activeId = guides[0]?.id || '';
+  }
+  const groups = [...new Set(guides.map((guide) => guide.group))];
+  nav.innerHTML = groups.map((group) => `
+    <div class="help-guide-group">
+      <span class="help-guide-group__label">${escapeHtml(group)}</span>
+      ${guides.filter((guide) => guide.group === group).map((guide) => `
+        <button type="button" class="help-guide-link ${guide.id === helpCenterState.activeId ? 'active' : ''}" onclick="selectHelpGuide('${escapeJsString(guide.id)}')">
+          <i class="fa-solid ${escapeHtml(guide.icon)}" aria-hidden="true"></i>
+          <span><strong>${escapeHtml(getHelpGuideTitle(guide))}</strong><small>${escapeHtml(guide.summary)}</small></span>
+          <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+        </button>`).join('')}
+    </div>`).join('');
+  renderHelpGuideContent(guides.find((guide) => guide.id === helpCenterState.activeId));
+}
+
+function selectHelpGuide(guideId) {
+  const guide = HELP_GUIDES.find((item) => item.id === guideId && canViewHelpGuide(item));
+  if (!guide) return;
+  helpCenterState.activeId = guide.id;
+  renderHelpCenter();
+  document.getElementById('helpGuideContent')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function filterHelpCenter(query) {
+  helpCenterState.query = String(query || '');
+  helpCenterState.activeId = '';
+  renderHelpCenter();
+}
+
+function clearHelpSearch() {
+  const input = document.getElementById('helpSearchInput');
+  if (input) input.value = '';
+  filterHelpCenter('');
+  input?.focus();
+}
+
+function openHelpDestination(guideId) {
+  const guide = HELP_GUIDES.find((item) => item.id === guideId && canViewHelpGuide(item));
+  if (!guide) return;
+  if (guide.superadminView) {
+    switchSection('admin');
+    showAdminView(guide.superadminView);
+    return;
+  }
+  if (guide.managed || (guide.moduleKey && getHelpRoleLevel() >= 2)) {
+    openManagedModule(guide.route);
+    return;
+  }
+  switchSection(guide.route);
 }
 
 function updateHelpCenterRoleVisibility() {
-  document.querySelectorAll('[data-help-role]').forEach((el) => {
-    const roleKey = el.getAttribute('data-help-role');
-    const isVisible = canViewHelpRole(roleKey);
-    const isHelpContent = el.classList?.contains('help-content');
-    if (!isVisible) {
-      el.style.display = 'none';
-      el.setAttribute('aria-hidden', 'true');
-    } else {
-      if (!isHelpContent) el.style.display = '';
-      el.setAttribute('aria-hidden', 'false');
-    }
-  });
+  if (document.getElementById('section-help')?.classList.contains('active')) renderHelpCenter();
 }
 
 async function checkAdminStatus() {
@@ -3737,7 +4255,7 @@ function renderWallets(options = {}) {
       <div class="empty-state">
         <div class="empty-state-icon">&#128188;</div>
         <h4 class="empty-state-title">No Wallets Connected</h4>
-        <p class="empty-state-message">Link your Solana wallet to verify NFT ownership and unlock voting power.</p>
+        <p class="empty-state-message">Link a Solana or EVM wallet to verify holdings and unlock community access.</p>
         <div class="empty-state-action">
           <button class="btn-primary" onclick="showWalletAddForm()">
             <span>&#10133;</span>
@@ -3758,6 +4276,7 @@ function renderWallets(options = {}) {
           ${wallet.is_favorite ? '&#9733; ' : ''}${escapeHtml(wallet.wallet_address)}
         </div>
         <div class="wallet-meta">
+          <span style="padding:2px 7px;border-radius:999px;background:rgba(99,102,241,0.14);color:#c7d2fe;font-size:0.72em;">${escapeHtml(formatWalletChainLabel(wallet.chain_id, wallet.chain_family))}</span>
           ${wallet.is_favorite ? '<span style="color: var(--gold);">Primary Wallet</span>' : '<span>Secondary Wallet</span>'}
           <span>Verified ${formatDate(new Date(verifiedAt))}</span>
         </div>
@@ -6290,6 +6809,11 @@ function switchSection(sectionName, options = {}) {
     return;
   }
 
+  if (sectionName === 'module-hub' && !(isAdmin || isSuperadmin)) {
+    if (!options.silentGate) showInfo('Server team access is required to manage modules.');
+    sectionName = 'landing';
+  }
+
   const adminManagedModuleSections = new Set([
     'governance',
     'wallets',
@@ -6329,9 +6853,10 @@ function switchSection(sectionName, options = {}) {
     sectionName = (isAdmin || isSuperadmin) ? (activeGuildId ? 'module-hub' : 'servers') : 'landing';
   }
 
-  if (['settings', 'invites', 'aiassistant', 'guildguard'].includes(sectionName) && !(isAdmin || isSuperadmin)) {
+  const adminOnlyModule = MODULE_REGISTRY.find(module => module.section === sectionName && module.adminOnly);
+  if ((sectionName === 'settings' || adminOnlyModule) && !(isAdmin || isSuperadmin)) {
     if (!options.silentGate) showInfo('Admin access required for this area.');
-    sectionName = userData ? (activeGuildId ? 'module-hub' : 'profile') : 'landing';
+    sectionName = userData ? (activeGuildId ? 'landing' : 'profile') : 'landing';
   }
   if (sectionName === 'vault' && !(isAdmin || isSuperadmin)) {
     if (!options.silentGate) showInfo('Admin access required for this area.');
@@ -6451,11 +6976,18 @@ function switchSection(sectionName, options = {}) {
   } else if (sectionName === 'servers') {
     updateBreadcrumbs([{ label: 'Servers' }]);
   } else if (moduleInfo && activeGuildId) {
-    updateBreadcrumbs([
-      { label: 'Servers', action: "switchSection('servers')" },
-      { label: serverName, action: "switchSection('module-hub')" },
-      { label: moduleInfo.label }
-    ]);
+    const managingModule = !!(moduleAdminWorkspaceMode && (isAdmin || isSuperadmin));
+    updateBreadcrumbs(managingModule
+      ? [
+        { label: 'Modules', action: "switchSection('module-hub')" },
+        { label: serverName, action: "switchSection('module-hub')" },
+        { label: moduleInfo.label }
+      ]
+      : [
+        { label: 'My communities', action: "switchSection('servers')" },
+        { label: serverName, action: "switchSection('landing')" },
+        { label: moduleInfo.label }
+      ]);
   } else if (sectionName === 'settings' && activeGuildId) {
     updateBreadcrumbs([
       { label: 'Servers', action: "switchSection('servers')" },
@@ -6580,35 +7112,6 @@ function switchSection(sectionName, options = {}) {
   window.history.pushState({}, '', url);
 }
 
-function toggleHelp(categoryId) {
-  const content = document.getElementById(`help-${categoryId}`);
-  const requiredRole = content?.getAttribute('data-help-role');
-  if (!canViewHelpRole(requiredRole)) {
-    showError('You do not have permission to view that help section.');
-    return;
-  }
-  const wasVisible = !!content && content.style.display === 'block';
-
-  // Hide all help content
-  document.querySelectorAll('.help-content').forEach(content => {
-    content.style.display = 'none';
-  });
-
-  // Show selected help content
-  if (content && !wasVisible) {
-    content.style.display = 'block';
-    
-    if (content.style.display === 'block') {
-      // Smooth scroll to content
-      setTimeout(() => {
-        content.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }, 100);
-    }
-  }
-
-  updateHelpCenterRoleVisibility();
-}
-
 async function loadTreasuryPublicView() {
   const content = document.getElementById('publicTreasuryView');
   if (!content) return;
@@ -6666,10 +7169,10 @@ async function loadTreasuryPublicView() {
           : ''}
       `;
     } else {
-      content.innerHTML = `<div style="color:var(--text-secondary); text-align:center; padding:20px;">Treasury data unavailable</div>`;
+      content.innerHTML = `<div style="color:var(--text-secondary); text-align:center; padding:20px;">Wallet Tracker data unavailable</div>`;
     }
   } catch (e) {
-    content.innerHTML = `<div style="color:#ef4444; text-align:center; padding:20px;">Error loading treasury: ${escapeHtml(e.message)}</div>`;
+    content.innerHTML = `<div style="color:#ef4444; text-align:center; padding:20px;">Error loading Wallet Tracker: ${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -6775,6 +7278,7 @@ async function loadTrackedWalletList() {
       return `
         <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
           <td style="padding:10px 12px;">
+            <span class="chain-badge">${escapeHtml(formatWalletChainLabel(w.chain_id || 'solana:mainnet'))}</span>
             <span style="font-family:monospace;font-size:0.85em;" title="${escapeHtml(w.wallet_address)}">${addr}</span>
             <button class="tw-copy-btn" data-addr="${escapeHtml(w.wallet_address)}" title="Copy address" style="margin-left:4px;background:none;border:none;cursor:pointer;font-size:0.85em;"></button>
           </td>
@@ -6785,7 +7289,7 @@ async function loadTrackedWalletList() {
           <td style="padding:10px 12px;">
             <div style="display:flex;gap:6px;">
               <button class="tw-panel-btn" data-id="${w.id}" title="Refresh Holdings Panel" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;"> Panel</button>
-              <button class="tw-edit-btn" data-id="${w.id}" data-addr="${escapeHtml(w.wallet_address)}" data-label="${escapeHtml(w.label||'')}" data-alertch="${w.alert_channel_id||''}" data-panelch="${w.panel_channel_id||''}" title="Edit" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;"></button>
+              <button class="tw-edit-btn" data-id="${w.id}" data-chain="${escapeHtml(w.chain_id || 'solana:mainnet')}" data-addr="${escapeHtml(w.wallet_address)}" data-label="${escapeHtml(w.label||'')}" data-alertch="${w.alert_channel_id||''}" data-panelch="${w.panel_channel_id||''}" title="Edit" style="font-size:0.8em;padding:4px 8px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;"></button>
               <button class="tw-remove-btn" data-id="${w.id}" title="Remove" style="font-size:0.8em;padding:4px 8px;background:#ef4444;color:#fff;border:none;border-radius:6px;cursor:pointer;"></button>
             </div>
           </td>
@@ -6853,7 +7357,8 @@ function attachTrackedWalletListeners(container) {
         btn.dataset.addr,
         btn.dataset.label,
         btn.dataset.alertch,
-        btn.dataset.panelch
+        btn.dataset.panelch,
+        btn.dataset.chain
       );
     });
   });
@@ -6876,13 +7381,23 @@ function attachTrackedWalletListeners(container) {
 
 
 // ==================== ADD WALLET MODAL ====================
-async function openAddWalletModal(existingId, existingAddr, existingLabel, existingAlertCh, existingPanelCh) {
+function onTrackedWalletChainChange() {
+  const chain = document.getElementById('addWalletChain')?.value || 'solana:mainnet';
+  const input = document.getElementById('addWalletAddress');
+  if (input) input.placeholder = chain.startsWith('eip155:') ? '0x wallet address' : 'Solana wallet address';
+}
+
+async function openAddWalletModal(existingId, existingAddr, existingLabel, existingAlertCh, existingPanelCh, existingChain) {
   const modal = document.getElementById('addWalletModal');
   const isEdit = !!existingId;
   document.getElementById('addWalletModalTitle').textContent = isEdit ? 'Edit Tracked Wallet' : 'Add Tracked Wallet';
   document.getElementById('addWalletEditId').value = existingId || '';
   document.getElementById('addWalletAddress').value = existingAddr || '';
   document.getElementById('addWalletAddress').disabled = isEdit; // can't change address on edit
+  const chainSelect = document.getElementById('addWalletChain');
+  chainSelect.value = existingChain || 'solana:mainnet';
+  chainSelect.disabled = isEdit;
+  onTrackedWalletChainChange();
   document.getElementById('addWalletLabel').value = existingLabel || '';
   document.getElementById('addWalletError').style.display = 'none';
   modal.style.display = 'flex';
@@ -6928,19 +7443,22 @@ async function openAddWalletModal(existingId, existingAddr, existingLabel, exist
 function closeAddWalletModal() {
   document.getElementById('addWalletModal').style.display = 'none';
   document.getElementById('addWalletAddress').disabled = false;
+  document.getElementById('addWalletChain').disabled = false;
   document.body.style.overflow = '';
 }
 
 async function saveNewWallet() {
   const editId = document.getElementById('addWalletEditId').value;
   const addr = document.getElementById('addWalletAddress').value.trim();
+  const chain = document.getElementById('addWalletChain').value;
   const label = document.getElementById('addWalletLabel').value.trim();
   const alertChannelId = document.getElementById('addWalletChannel').value.trim();
   const panelChannelId = document.getElementById('addWalletPanelChannel').value.trim();
   const errEl = document.getElementById('addWalletError');
 
-  if (!editId && (!addr || addr.length < 32 || addr.length > 44)) {
-    errEl.textContent = 'A valid Solana wallet address is required.';
+  const validShape = chain.startsWith('eip155:') ? /^0x[a-fA-F0-9]{40}$/.test(addr) : addr.length >= 32 && addr.length <= 44;
+  if (!editId && !validShape) {
+    errEl.textContent = `A valid ${formatWalletChainLabel(chain)} wallet address is required.`;
     errEl.style.display = 'block';
     return;
   }
@@ -6965,7 +7483,7 @@ async function saveNewWallet() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
         credentials: 'include',
-        body: JSON.stringify({ walletAddress: addr, label: label || null, alertChannelId: alertChannelId || null, panelChannelId: panelChannelId || null })
+        body: JSON.stringify({ chain, walletAddress: addr, label: label || null, alertChannelId: alertChannelId || null, panelChannelId: panelChannelId || null })
       });
     }
     result = await res.json();
@@ -7058,23 +7576,53 @@ async function saveTreasuryAlertsCfg() {
   }
 }
 
-function exportTreasuryCSV() {
-  // TODO: multi-wallet export. For now, export single wallet info from visible table.
-  const table = document.querySelector('#treasuryWalletTableContainer table');
-  if (!table) { showSuccess('No wallet data to export.'); return; }
-  let csv = '\uFEFFAddress,Channel,Status\n';
-  table.querySelectorAll('tbody tr').forEach(row => {
-    const cells = row.querySelectorAll('td');
-    const addr = cells[0]?.textContent?.trim().replace(/[{}\n]/g, ' ').replace(/\s+/g, ' ') || '';
-    const ch = cells[1]?.textContent?.trim() || '';
-    const status = cells[3]?.textContent?.trim() || '';
-    csv += `"${addr}","${ch}","${status}"\n`;
-  });
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'treasury-wallets.csv';
-  a.click();
+async function exportTreasuryCSV() {
+  try {
+    const response = await fetch('/api/admin/wallet-tracker/wallets', {
+      credentials: 'include',
+      headers: buildTenantRequestHeaders(),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.success === false) {
+      throw new Error(data.message || 'Unable to load tracked wallets.');
+    }
+
+    const wallets = data.wallets || data.data?.wallets || [];
+    if (!wallets.length) {
+      showInfo('No tracked wallets to export.');
+      return;
+    }
+
+    const escapeCsv = value => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const rows = wallets.map(wallet => [
+      wallet.chain_id || 'solana:mainnet',
+      formatWalletChainLabel(wallet.chain_id || 'solana:mainnet'),
+      wallet.wallet_address || '',
+      wallet.label || '',
+      wallet.alert_channel_id || '',
+      wallet.panel_channel_id || '',
+      wallet.enabled ? 'active' : 'paused',
+      wallet.created_at || '',
+      wallet.updated_at || '',
+    ].map(escapeCsv).join(','));
+    const header = [
+      'Chain ID', 'Network', 'Wallet Address', 'Label', 'Alert Channel ID',
+      'Panel Channel ID', 'Status', 'Created At', 'Updated At',
+    ].map(escapeCsv).join(',');
+    const csv = `\uFEFF${[header, ...rows].join('\n')}\n`;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `wallet-tracker-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    showSuccess(`Exported ${wallets.length} tracked wallet${wallets.length === 1 ? '' : 's'}.`);
+  } catch (error) {
+    showError(error.message || 'Failed to export tracked wallets.');
+  }
 }
 
 function getQuickSwitchEntries() {
@@ -7823,12 +8371,9 @@ function resetAdminFocusMode() {
 }
 
 
-let superadminListCache = [];
-let tenantListCache = [];
 let selectedTenantGuildId = null;
 let selectedTenantDetailCache = null;
 let selectedTenantAuditCache = [];
-let selectedTenantLimitsCache = null;
 let selectedTenantTemplatePreview = null;
 let superadminTemplateCatalog = [];
 let superadminTenantPage = 1;
@@ -7899,7 +8444,7 @@ let portalPlanCatalogCache = [];
 const TENANT_MODULE_LABELS = {
   verification: 'Verification',
   governance: 'Governance',
-  treasury: 'Treasury',
+  treasury: 'Wallet Tracker',
   wallettracker: 'Wallet Tracker',
   aiassistant: 'AI Assistant',
   telegrambridge: 'Telegram Bridge',
@@ -7907,8 +8452,8 @@ const TENANT_MODULE_LABELS = {
   invites: 'Invite Tracker',
   minigames: 'Minigames',
   heist: 'Missions',
-  ticketing: 'Ticketing',
-  nfttracker: 'NFT Tracker',
+  ticketing: 'Support Tickets',
+  nfttracker: 'NFT Activity',
   tokentracker: 'Token Tracker',
   selfserveroles: 'Self-Serve Roles',
   guildguard: 'Guild Guard',
@@ -8018,9 +8563,6 @@ function renderSuperadminIdentityAudit(logs = []) {
 
 function renderTenantRow(tenant) {
   const selected = tenant.guildId === selectedTenantGuildId;
-  const statusColor = String(tenant.status || 'active').toLowerCase() === 'suspended'
-    ? 'rgba(239,68,68,0.18)'
-    : 'rgba(34,197,94,0.18)';
 
   return `
     <button type="button" onclick="selectTenantGuild('${escapeJsString(tenant.guildId)}')" style="width:100%; text-align:left; display:grid; grid-template-columns:minmax(0,1.6fr) repeat(3,minmax(0,1fr)); gap:12px; align-items:center; padding:12px 14px; border:none; border-bottom:1px solid rgba(99,102,241,0.15); background:${selected ? 'rgba(99,102,241,0.16)' : 'transparent'}; color:inherit; cursor:pointer;">
@@ -8647,7 +9189,6 @@ function openSuperadminBillingReceiptReview(guildId) {
     showError('Could not find billing record in current workspace.');
     return;
   }
-  const receipt = entry.latestReceipt || null;
   showConfirmModal(`Billing Review: ${entry.guildName || entry.guildId}`, '', null, 'Approve');
   const body = document.getElementById('confirmMessage');
   if (body) body.innerHTML = '<div style="color:var(--text-secondary);">Loading receipt history...</div>';
@@ -9272,8 +9813,8 @@ async function loadSuperadminWorkspaceHubV2() {
       <div class="sa-v2-shell">
         <div class="sa-v2-header">
           <div>
-            <h3>Admin Workspace Hub</h3>
-            <p>Role-aware operational panel with tenant split view and billing ledger.</p>
+            <h3>Platform operations</h3>
+            <p>Tenant management, billing operations, access control, integrations, and platform health.</p>
           </div>
           <div class="sa-v2-chip-row">
             <span class="sa-v2-chip">Role: ${escapeHtml(isSuperadmin ? 'Superadmin' : 'Tenant Admin')}</span>
@@ -10112,7 +10653,6 @@ async function saveTenantModuleLimits() {
     });
     const data = await response.json();
     if (data.success) {
-      selectedTenantLimitsCache = data.limits || null;
       showSuccess('Tenant module limits saved');
       await loadSuperadminView();
     } else {
@@ -10597,7 +11137,7 @@ async function loadAdminHelpView() {
       { name: '/verification admin export-user', desc: 'Export member verification data', options: 'user (required), full-addresses (optional)', example: '/verification admin export-user user:@member full-addresses:true' },
       { name: '/verification admin remove-user', desc: 'Remove member verification record', options: 'user, confirm (required)', example: '/verification admin remove-user user:@member confirm:true' },
       { name: '/verification admin export-wallets', desc: 'Export verified wallets CSV', options: 'role, primary-only (optional)', example: '/verification admin export-wallets role:@Verified primary-only:true' },
-      { name: '/verification admin token-role-add', desc: 'Add token balance role rule', options: 'mint, role, min_amount (required), symbol/max_amount (optional)', example: '/verification admin token-role-add mint:So1... role:@Holder min_amount:1' },
+      { name: '/verification admin token-role-add', desc: 'Add an SPL or ERC-20 balance role rule', options: 'mint, role, min_amount (required), chain/symbol/max_amount (optional)', example: '/verification admin token-role-add mint:0x... role:@Holder min_amount:100 chain:ethereum' },
       { name: '/verification admin token-role-remove', desc: 'Remove token balance role rule', options: 'id (required)', example: '/verification admin token-role-remove id:3' },
       { name: '/verification admin token-role-list', desc: 'List token balance role rules', options: '-', example: '/verification admin token-role-list' },
       { name: '/verification admin role-config', desc: 'Manage tier/trait role mapping actions', options: 'action + optional trait/role fields', example: '/verification admin role-config action:view' },
@@ -10616,9 +11156,10 @@ async function loadAdminHelpView() {
       { name: '/governance cancel', desc: 'Cancel your own proposal', options: 'proposal_id, confirm (required)', example: '/governance cancel proposal_id:1 confirm:true' },
       { name: '/governance admin list', desc: 'List proposals', options: 'status (optional)', example: '/governance admin list status:voting' },
       { name: '/governance admin cancel', desc: 'Cancel proposal', options: 'proposal_id, confirm (required)', example: '/governance admin cancel proposal_id:1 confirm:true' },
-      { name: '/governance admin settings', desc: 'View governance settings', options: '-', example: '/governance admin settings' }
+      { name: '/governance admin settings', desc: 'View governance settings', options: '-', example: '/governance admin settings' },
+      { name: '/governance admin panel', desc: 'Post the governance action panel', options: 'channel (optional)', example: '/governance admin panel channel:#governance' }
     ])}
-    ${cmdSection('Treasury', 'TRY', [
+    ${cmdSection('Wallet Tracker compatibility commands', 'WLT', [
       { name: '/treasury view', desc: 'Public treasury snapshot', options: '-', example: '/treasury view' },
       { name: '/treasury admin status', desc: 'Admin treasury status', options: '-', example: '/treasury admin status' },
       { name: '/treasury admin refresh', desc: 'Refresh treasury balances', options: '-', example: '/treasury admin refresh' },
@@ -10629,14 +11170,14 @@ async function loadAdminHelpView() {
       { name: '/treasury admin tx-history', desc: 'Show transaction history', options: 'limit (optional)', example: '/treasury admin tx-history limit:10' },
       { name: '/treasury admin tx-alerts', desc: 'Configure tx alerts', options: 'enabled, channel, incoming_only, min_sol', example: '/treasury admin tx-alerts enabled:true channel:#treasury' }
     ])}
-    ${cmdSection('NFT Tracker', 'NFT', [
-      { name: '/nft-tracker collection add', desc: 'Track collection events', options: 'address, name, channel (required), me_symbol', example: '/nft-tracker collection add address:... name:"Collection" channel:#alerts' },
+    ${cmdSection('NFT Activity', 'NFT', [
+      { name: '/nft-tracker collection add', desc: 'Track Solana, ERC-721, or ERC-1155 events', options: 'address, name, channel (required), chain, standard, token_id, me_symbol', example: '/nft-tracker collection add address:0x... name:"Collection" channel:#alerts chain:ethereum standard:erc721' },
       { name: '/nft-tracker collection remove', desc: 'Remove tracked collection', options: 'id (required)', example: '/nft-tracker collection remove id:3' },
       { name: '/nft-tracker collection list', desc: 'List tracked collections', options: '-', example: '/nft-tracker collection list' },
       { name: '/nft-tracker collection feed', desc: 'Show collection feed', options: 'limit (optional)', example: '/nft-tracker collection feed limit:15' }
     ])}
     ${cmdSection('Wallet Tracker', 'WLT', [
-      { name: '/wallet-tracker add', desc: 'Track wallet', options: 'address (required), label, alert_channel, panel_channel', example: '/wallet-tracker add address:So1... label:"Whale"' },
+      { name: '/wallet-tracker add', desc: 'Track a Solana or EVM wallet', options: 'address (required), chain, label, alert_channel, panel_channel', example: '/wallet-tracker add address:0x... chain:ethereum label:"Whale"' },
       { name: '/wallet-tracker remove', desc: 'Remove tracked wallet', options: 'id (required)', example: '/wallet-tracker remove id:2' },
       { name: '/wallet-tracker list', desc: 'List tracked wallets', options: '-', example: '/wallet-tracker list' },
       { name: '/wallet-tracker edit', desc: 'Edit tracked wallet', options: 'id + optional label/channels/enabled', example: '/wallet-tracker edit id:2 enabled:false' },
@@ -10650,7 +11191,7 @@ async function loadAdminHelpView() {
       { name: '/invites export', desc: 'Export invite events CSV (paid plans)', options: 'period (optional)', example: '/invites export period:all' }
     ])}
     ${cmdSection('Token Tracker', 'TOK', [
-      { name: '/token-tracker add', desc: 'Track SPL token mint for balances + alerts', options: 'mint(required), symbol/name(optional), alert_channel, min_alert_amount, alert flags', example: '/token-tracker add mint:... symbol:CAT alert_channel:#token-alerts alert_buys:true' },
+      { name: '/token-tracker add', desc: 'Track SPL or ERC-20 balances and transfers', options: 'mint(required), chain, symbol/name(optional), alert_channel, min_alert_amount, alert flags', example: '/token-tracker add mint:0x... chain:ethereum symbol:CAT alert_channel:#token-alerts alert_transfers:true' },
       { name: '/token-tracker edit', desc: 'Edit tracked token options', options: 'id(required) + optional mint/symbol/name/alert_channel/min_alert_amount/alert flags/enabled', example: '/token-tracker edit id:2 alert_transfers:true' },
       { name: '/token-tracker remove', desc: 'Remove tracked token mint', options: 'id(required)', example: '/token-tracker remove id:2' },
       { name: '/token-tracker list', desc: 'List tracked token mints', options: '-', example: '/token-tracker list' },
@@ -10665,6 +11206,7 @@ async function loadAdminHelpView() {
       { name: '/points balance', desc: 'Show points balance', options: 'user (optional admin)', example: '/points balance' },
       { name: '/points leaderboard', desc: 'Show leaderboard', options: 'limit (optional)', example: '/points leaderboard limit:10' },
       { name: '/points history', desc: 'Show points history', options: 'user (optional admin)', example: '/points history' },
+      { name: '/points daily', desc: 'Claim the daily streak reward', options: '-', example: '/points daily' },
       { name: '/points shop', desc: 'Browse rewards shop', options: '-', example: '/points shop' },
       { name: '/points redeem', desc: 'Redeem item', options: 'item_id (required)', example: '/points redeem item_id:4' },
       { name: '/points admin', desc: 'Manage points and shop', options: 'action(required: grant/deduct/add-item/remove-item/config) + optional user/amount/reason/value/item_id', example: '/points admin action:grant user:@member amount:50 reason:"Event"' }
@@ -10681,7 +11223,33 @@ async function loadAdminHelpView() {
       { name: '/heist admin resolve', desc: 'Resolve mission immediately', options: 'mission_id(required)', example: '/heist admin resolve mission_id:M-8E2A47' },
       { name: '/heist admin cancel', desc: 'Cancel mission and release locks', options: 'mission_id(required), confirm(required)', example: '/heist admin cancel mission_id:M-8E2A47 confirm:true' }
     ])}
+    ${cmdSection('Vault', 'VAULT', [
+      { name: '/vault balance', desc: 'Show your Vault balance and season statistics', options: '-', example: '/vault balance' },
+      { name: '/vault open', desc: 'Open the Vault with an available key', options: 'key tier (optional)', example: '/vault open' },
+      { name: '/vault history', desc: 'Show recent Vault openings', options: '-', example: '/vault history' },
+      { name: '/vault rewards', desc: 'Browse available Vault rewards', options: '-', example: '/vault rewards' },
+      { name: '/vault claims', desc: 'Show your reward claims', options: '-', example: '/vault claims' },
+      { name: '/vault verify-social', desc: 'Verify configured social requirements', options: 'reward or action identifiers', example: '/vault verify-social' },
+      { name: '/vault leaderboard', desc: 'Show the Vault leaderboard', options: 'limit (optional)', example: '/vault leaderboard' },
+      { name: '/vault upgrade', desc: 'Upgrade eligible Vault keys', options: 'tier and amount', example: '/vault upgrade' },
+      { name: '/vault admin setup', desc: 'Initialize Vault configuration', options: 'setup options', example: '/vault admin setup' },
+      { name: '/vault admin panel', desc: 'Post the Vault action panel', options: 'channel (optional)', example: '/vault admin panel' },
+      { name: '/vault admin config-view', desc: 'View Vault configuration', options: '-', example: '/vault admin config-view' },
+      { name: '/vault admin config-set', desc: 'Update Vault configuration', options: 'configuration fields', example: '/vault admin config-set' },
+      { name: '/vault admin addkeys', desc: 'Grant keys to a member', options: 'user, amount, tier', example: '/vault admin addkeys' },
+      { name: '/vault admin removekeys', desc: 'Remove keys from a member', options: 'user, amount, tier', example: '/vault admin removekeys' },
+      { name: '/vault admin rewards-list', desc: 'List configured Vault rewards', options: '-', example: '/vault admin rewards-list' },
+      { name: '/vault admin rewards-add', desc: 'Add a Vault reward', options: 'reward fields', example: '/vault admin rewards-add' },
+      { name: '/vault admin rewards-update', desc: 'Update a Vault reward', options: 'reward code and fields', example: '/vault admin rewards-update' },
+      { name: '/vault admin rewards-remove', desc: 'Remove a Vault reward', options: 'reward code', example: '/vault admin rewards-remove' },
+      { name: '/vault admin setstatus', desc: 'Update a reward claim status', options: 'claim and status', example: '/vault admin setstatus' },
+      { name: '/vault admin backfill', desc: 'Run a member Vault backfill', options: 'user', example: '/vault admin backfill' },
+      { name: '/vault admin import-csv', desc: 'Import Vault records from CSV', options: 'CSV attachment', example: '/vault admin import-csv' },
+      { name: '/vault admin fix-stats', desc: 'Repair Vault aggregate statistics', options: 'user or scope', example: '/vault admin fix-stats' }
+    ])}
     ${cmdSection('Battle and Games', 'GAMES', [
+      { name: '/minigames run', desc: 'Start a supported minigame from the canonical command', options: 'game and game-specific options', example: '/minigames run' },
+      { name: '/minigames help', desc: 'Show available minigames and usage', options: '-', example: '/minigames help' },
       { name: '/battle create', desc: 'Create battle lobby', options: 'max_players, required/excluded roles, era', example: '/battle create max_players:20 era:mafia' },
       { name: '/battle start', desc: 'Start battle', options: '-', example: '/battle start' },
       { name: '/battle cancel', desc: 'Cancel battle', options: '-', example: '/battle cancel' },
@@ -10712,6 +11280,18 @@ async function loadAdminHelpView() {
       { name: '/gamenight cancel', desc: 'Cancel Game Night', options: '-', example: '/gamenight cancel' },
       { name: '/gamenight leaderboard', desc: 'Game Night standings', options: '-', example: '/gamenight leaderboard' }
     ], 'Most game start/cancel flows require admin or moderator permissions. Game Night requires Growth+ plan in tenant mode.')}
+    ${cmdSection('Moderation', 'MOD', [
+      { name: '/moderation kick', desc: 'Kick a member', options: 'user, reason', example: '/moderation kick' },
+      { name: '/moderation ban', desc: 'Ban a member', options: 'user, reason, message history', example: '/moderation ban' },
+      { name: '/moderation timeout', desc: 'Temporarily timeout a member', options: 'user, duration, reason', example: '/moderation timeout' },
+      { name: '/moderation purge', desc: 'Bulk-delete recent messages', options: 'amount and filters', example: '/moderation purge' },
+      { name: '/moderation settings-view', desc: 'View moderation settings', options: '-', example: '/moderation settings-view' },
+      { name: '/moderation settings-raid', desc: 'Configure raid protection', options: 'raid protection fields', example: '/moderation settings-raid' },
+      { name: '/moderation settings-keywords', desc: 'Configure keyword enforcement', options: 'keyword settings', example: '/moderation settings-keywords' },
+      { name: '/moderation keyword-add', desc: 'Add a blocked keyword', options: 'keyword and action', example: '/moderation keyword-add' },
+      { name: '/moderation keyword-remove', desc: 'Remove a blocked keyword', options: 'keyword', example: '/moderation keyword-remove' },
+      { name: '/moderation keyword-list', desc: 'List blocked keywords', options: '-', example: '/moderation keyword-list' }
+    ])}
     ${cmdSection('Config', 'CFG', [
       { name: '/config modules', desc: 'View module toggles', options: '-', example: '/config modules' },
       { name: '/config toggle', desc: 'Toggle core module', options: 'module, enabled (required)', example: '/config toggle module:minigames enabled:true' },
@@ -10770,7 +11350,6 @@ async function loadAdminProposals() {
 
       for (const p of items) {
         const catColor = categoryColors[p.category] || '#8b5cf6';
-        const commentCount = p.comment_count || 0;
         const vetoVotes = p.veto_votes ? JSON.parse(p.veto_votes || '[]').length : 0;
 
         let actions = '';
@@ -11054,11 +11633,10 @@ async function loadAdminSettingsView() {
       { id: 'moduleWalletTrackerEnabled',label: 'Wallet Tracker',  icon: 'W',  moduleKey: 'wallettracker' },
       { id: 'moduleAiAssistantEnabled',  label: 'AI Assistant',    icon: 'AI', moduleKey: 'aiassistant'  },
       { id: 'moduleInviteTrackerEnabled',label: 'Invite Tracker',  icon: '', moduleKey: 'invites'       },
-      { id: 'moduleTreasuryEnabled',     label: 'Treasury',        icon: '$',  moduleKey: 'treasury'      },
-      { id: 'moduleNftTrackerEnabled',   label: 'NFT Tracker',     icon: 'N',  moduleKey: 'nfttracker'    },
+      { id: 'moduleNftTrackerEnabled',   label: 'NFT Activity',    icon: 'N',  moduleKey: 'nfttracker'    },
       { id: 'moduleTokenTrackerEnabled', label: 'Token Tracker',   icon: '\ud83e\ude99',  moduleKey: 'tokentracker'  },
       { id: 'moduleRoleClaimEnabled',    label: 'Self-Serve Roles',icon: 'R',  moduleKey: 'selfserveroles'},
-      { id: 'moduleTicketingEnabled',    label: 'Ticketing',       icon: 'TK', moduleKey: 'ticketing'     },
+      { id: 'moduleTicketingEnabled',    label: 'Support Tickets', icon: 'TK', moduleKey: 'ticketing'     },
       { id: 'moduleEngagementEnabled',   label: 'Engagement',      icon: 'E',  moduleKey: 'engagement'    },
       { id: 'moduleGuildGuardEnabled',   label: 'Guild Guard',     icon: 'GG', moduleKey: 'guildguard'    },
     ];
@@ -11922,7 +12500,6 @@ function vaultRenderAdminPanel() {
   const rewardTable = config.rewardTable || {};
   const rewards = Array.isArray(vaultSettingsCache?.rewards) ? vaultSettingsCache.rewards : [];
   const seasons = Array.isArray(vaultSettingsCache?.seasons) ? vaultSettingsCache.seasons : [];
-  const milestones = Array.isArray(vaultSettingsCache?.milestones) ? vaultSettingsCache.milestones : [];
   const openings = Array.isArray(vaultSettingsCache?.openings) ? vaultSettingsCache.openings : [];
   const claims = Array.isArray(vaultSettingsCache?.claims) ? vaultSettingsCache.claims : [];
   const audit = Array.isArray(vaultSettingsCache?.audit) ? vaultSettingsCache.audit : [];
@@ -13048,7 +13625,7 @@ async function vaultRunBackfill() {
   try {
     const payload = { walletAddress };
     if (discordUserId) payload.discordUserId = discordUserId;
-    const res = await vaultFetchJson('/api/admin/vault/backfill', {
+    await vaultFetchJson('/api/admin/vault/backfill', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -13309,17 +13886,13 @@ async function loadAdminAnalyticsView() {
   content.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-secondary);">Loading analytics...</div>';
 
   try {
-    const [usersRes, proposalsRes, missionsRes, treasuryRes, leaderboardRes, statsRes] = await Promise.all([
+    const [usersRes, proposalsRes, missionsRes, treasuryRes, leaderboardRes] = await Promise.all([
       fetch('/api/admin/users', { credentials: 'include' }),
       fetch('/api/admin/proposals', { credentials: 'include' }),
       fetch('/api/admin/missions', { credentials: 'include' }),
       fetch(buildPublicV1Url('/api/public/v1/treasury') || '/api/public/v1/treasury').catch(() => null),
       (buildPublicV1Url('/api/public/v1/leaderboard', { requireGuild: true })
         ? fetch(buildPublicV1Url('/api/public/v1/leaderboard', { requireGuild: true }))
-        : Promise.resolve(null)
-      ).catch(() => null),
-      (buildPublicV1Url('/api/public/v1/stats', { requireGuild: true })
-        ? fetch(buildPublicV1Url('/api/public/v1/stats', { requireGuild: true }))
         : Promise.resolve(null)
       ).catch(() => null)
     ]);
@@ -13329,8 +13902,6 @@ async function loadAdminAnalyticsView() {
     const missionsData = missionsRes.ok ? await missionsRes.json() : {};
     const treasuryData = treasuryRes && treasuryRes.ok ? await treasuryRes.json() : null;
     const leaderboardData = leaderboardRes && leaderboardRes.ok ? await leaderboardRes.json() : null;
-    const statsData = statsRes && statsRes.ok ? await statsRes.json() : null;
-
     const users = usersData.users || [];
     const proposals = proposalsData.proposals || [];
     const missions = missionsData.missions || [];
@@ -13456,7 +14027,7 @@ async function fetchDiscordRoles() {
   return [];
 }
 
-function roleSelectHTML(id, selectedValue, required = false) {
+function roleSelectHTML(id, selectedValue) {
   return `<select id="${id}" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;">
     <option value="">-- Select Role --</option>
   </select>`;
@@ -13487,11 +14058,6 @@ async function loadNftTrackerView() {
   if (!content) return;
 
   const cardStyle = 'background:var(--card-bg);border:1px solid var(--border-default);border-radius:var(--radius-lg);padding:var(--space-5);margin-bottom:var(--space-4);';
-  const gridRow = 'display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);';
-  const fieldLabel = 'display:block;font-weight:600;font-size:0.85em;color:#c9d6ff;margin-bottom:6px;';
-  const fieldInput = 'width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;';
-  const selectStyle = fieldInput;
-
   content.innerHTML = `
     <div style="${cardStyle}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4);padding-bottom:var(--space-3);border-bottom:1px solid rgba(99,102,241,0.15);">
@@ -13508,6 +14074,11 @@ async function loadNftTrackerView() {
 async function openAddCollectionModal(existingId, existingData) {
   const isEdit = !!existingId;
   document.getElementById('colEditId').value = existingId || '';
+  const chainSelect = document.getElementById('colChain');
+  chainSelect.value = (existingData && existingData.chain) || 'solana:mainnet';
+  chainSelect.disabled = isEdit;
+  document.getElementById('colNftStandard').value = (existingData && existingData.nftStandard) || 'erc721';
+  document.getElementById('colTokenId').value = (existingData && existingData.tokenId) || '';
   document.getElementById('colName').value = (existingData && existingData.name) || '';
   const addrEl = document.getElementById('colAddress');
   addrEl.value = (existingData && existingData.address) || '';
@@ -13519,6 +14090,7 @@ async function openAddCollectionModal(existingId, existingData) {
   document.getElementById('colList').checked    = existingData ? !!existingData.trackList     : false;
   document.getElementById('colDelist').checked  = existingData ? !!existingData.trackDelist   : false;
   document.getElementById('colTransfer').checked= existingData ? !!existingData.trackTransfer : false;
+  onTrackedCollectionChainChange();
   document.getElementById('colError').style.display = 'none';
   const modal = document.getElementById('addCollectionModal');
   modal.querySelector('.modal-title').textContent = isEdit ? 'Edit Collection' : 'Add Tracked Collection';
@@ -13555,9 +14127,35 @@ async function openAddCollectionModal(existingId, existingData) {
   } catch (e) { console.error('[CollectionModal] Channel load error:', e); }
 }
 
+function onTrackedCollectionChainChange() {
+  const isEvm = String(document.getElementById('colChain')?.value || '').startsWith('eip155:');
+  const standard = document.getElementById('colNftStandard')?.value || 'erc721';
+  const address = document.getElementById('colAddress');
+  const meSymbol = document.getElementById('colMeSymbol');
+  const standardWrap = document.getElementById('colEvmStandardWrap');
+  const tokenIdWrap = document.getElementById('colTokenIdWrap');
+  if (address) address.placeholder = isEvm ? '0x collection contract' : 'Solana collection address';
+  if (meSymbol) {
+    meSymbol.disabled = isEvm;
+    if (isEvm) meSymbol.value = '';
+  }
+  if (standardWrap) standardWrap.style.display = isEvm ? 'grid' : 'none';
+  if (tokenIdWrap) tokenIdWrap.style.display = isEvm && standard === 'erc1155' ? '' : 'none';
+  for (const id of ['colSale', 'colBid', 'colList', 'colDelist']) {
+    const input = document.getElementById(id);
+    if (!input) continue;
+    input.disabled = isEvm;
+    if (isEvm) input.checked = false;
+  }
+  if (isEvm && !document.getElementById('colEditId')?.value) {
+    document.getElementById('colTransfer').checked = true;
+  }
+}
+
 function closeAddCollectionModal() {
   document.getElementById('addCollectionModal').style.display = 'none';
   document.getElementById('colAddress').disabled = false;
+  document.getElementById('colChain').disabled = false;
   document.body.style.overflow = '';
 }
 
@@ -13565,11 +14163,19 @@ async function saveCollection() {
   const editId = document.getElementById('colEditId').value;
   const name = document.getElementById('colName').value.trim();
   const address = document.getElementById('colAddress').value.trim();
+  const chain = document.getElementById('colChain').value;
   const channelId = document.getElementById('colChannel').value;
+  const nftStandard = chain.startsWith('eip155:') ? document.getElementById('colNftStandard').value : 'solana';
+  const tokenId = nftStandard === 'erc1155' ? document.getElementById('colTokenId').value.trim() : null;
   const errEl = document.getElementById('colError');
 
   if (!name || (!editId && !address) || !channelId) {
     errEl.textContent = 'Collection name, address, and alert channel are required.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (nftStandard === 'erc1155' && !tokenId) {
+    errEl.textContent = 'ERC-1155 trackers require a token ID.';
     errEl.style.display = 'block';
     return;
   }
@@ -13581,6 +14187,9 @@ async function saveCollection() {
   const payload = {
     collectionName: name,
     collectionAddress: address,
+    chain,
+    nftStandard,
+    tokenId,
     channelId,
     meSymbol: document.getElementById('colMeSymbol').value.trim(),
     trackMint:     document.getElementById('colMint').checked,
@@ -13650,7 +14259,7 @@ async function renderNftCollectionsCard(wrapId) {
 
     const rows = collections.map(c => `
       <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
-        <td style="padding:10px 12px;color:var(--text-primary);font-size:0.9em;">${escapeHtml(c.collection_name)}</td>
+        <td style="padding:10px 12px;color:var(--text-primary);font-size:0.9em;"><span class="chain-badge">${escapeHtml(formatWalletChainLabel(c.chain_id || 'solana:mainnet'))}</span>${escapeHtml(c.collection_name)}</td>
         <td style="padding:10px 12px;color:var(--text-secondary);font-family:monospace;font-size:0.85em;" title="${escapeHtml(c.collection_address)}">${truncAddr(c.collection_address)}</td>
         <td style="padding:10px 12px;font-size:0.85em;">${eventIcons(c)}</td>
         <td style="padding:10px 12px;font-size:0.85em;color:${c.enabled ? '#86efac' : '#fca5a5'};">${c.enabled ? 'Yes' : 'No'}</td>
@@ -13658,9 +14267,12 @@ async function renderNftCollectionsCard(wrapId) {
           <div style="display:flex;gap:6px;">
             <button class="nc-edit-btn"
               data-id="${c.id}"
+              data-chain="${escapeHtml(c.chain_id || 'solana:mainnet')}"
               data-name="${escapeHtml(c.collection_name)}"
               data-addr="${escapeHtml(c.collection_address)}"
               data-channelid="${c.channel_id||''}"
+              data-nftstandard="${escapeHtml(c.nft_standard || (String(c.chain_id || '').startsWith('eip155:') ? 'erc721' : 'solana'))}"
+              data-tokenid="${escapeHtml(c.token_id || '')}"
               data-mesymbol="${escapeHtml(c.me_symbol||'')}"
               data-mint="${!!c.track_mint}"
               data-sale="${!!c.track_sale}"
@@ -13692,8 +14304,11 @@ async function renderNftCollectionsCard(wrapId) {
       btn.addEventListener('click', () => {
         openAddCollectionModal(btn.dataset.id, {
           name:          btn.dataset.name,
+          chain:         btn.dataset.chain,
           address:       btn.dataset.addr,
           channelId:     btn.dataset.channelid,
+          nftStandard:   btn.dataset.nftstandard,
+          tokenId:       btn.dataset.tokenid,
           meSymbol:      btn.dataset.mesymbol,
           trackMint:     btn.dataset.mint === 'true',
           trackSale:     btn.dataset.sale === 'true',
@@ -13721,8 +14336,6 @@ async function removeNftCollection(id) {
   } catch (e) { showError('Error removing collection'); }
 }
 
-let nftTrackedTokensCache = [];
-
 async function openAddTokenModal(existingId, existingData) {
   const isEdit = !!existingId;
   const modal = document.getElementById('addTokenModal');
@@ -13733,7 +14346,11 @@ async function openAddTokenModal(existingId, existingData) {
 
   document.getElementById('addTokenModalTitle').textContent = isEdit ? 'Edit Tracked Token' : 'Add Tracked Token';
   document.getElementById('tokenEditId').value = existingId || '';
+  const chainSelect = document.getElementById('tokenChain');
+  chainSelect.value = existingData?.chain || 'solana:mainnet';
+  chainSelect.disabled = isEdit;
   document.getElementById('tokenMint').value = (existingData && existingData.tokenMint) || '';
+  document.getElementById('tokenMint').disabled = isEdit;
   document.getElementById('tokenSymbol').value = (existingData && existingData.tokenSymbol) || '';
   document.getElementById('tokenName').value = (existingData && existingData.tokenName) || '';
   document.getElementById('tokenMinAlertAmount').value = existingData ? String(Number(existingData.minAlertAmount || 0)) : '0';
@@ -13741,6 +14358,7 @@ async function openAddTokenModal(existingId, existingData) {
   document.getElementById('tokenAlertSells').checked = existingData ? !!existingData.alertSells : true;
   document.getElementById('tokenAlertTransfers').checked = existingData ? !!existingData.alertTransfers : false;
   document.getElementById('tokenEnabled').checked = existingData ? !!existingData.enabled : true;
+  onTrackedTokenChainChange();
 
   const errEl = document.getElementById('tokenError');
   errEl.style.display = 'none';
@@ -13791,17 +14409,31 @@ async function openAddTokenModal(existingId, existingData) {
   }
 }
 
+function onTrackedTokenChainChange() {
+  const isEvm = String(document.getElementById('tokenChain')?.value || '').startsWith('eip155:');
+  const mint = document.getElementById('tokenMint');
+  if (mint) mint.placeholder = isEvm ? '0x ERC-20 contract address' : 'SPL token mint address';
+  if (isEvm && !document.getElementById('tokenEditId')?.value) {
+    document.getElementById('tokenAlertTransfers').checked = true;
+    document.getElementById('tokenAlertBuys').checked = false;
+    document.getElementById('tokenAlertSells').checked = false;
+  }
+}
+
 function closeAddTokenModal() {
   closePortalMultiSelectPicker(false);
   const modal = document.getElementById('addTokenModal');
   if (!modal) return;
   modal.style.display = 'none';
+  document.getElementById('tokenChain').disabled = false;
+  document.getElementById('tokenMint').disabled = false;
   document.body.style.overflow = '';
 }
 
 async function saveToken() {
   const editId = document.getElementById('tokenEditId').value;
   const tokenMint = document.getElementById('tokenMint').value.trim();
+  const chain = document.getElementById('tokenChain').value;
   const tokenSymbol = document.getElementById('tokenSymbol').value.trim();
   const tokenName = document.getElementById('tokenName').value.trim();
   const alertChannelIds = Array.from(document.getElementById('tokenAlertChannels')?.selectedOptions || [])
@@ -13826,6 +14458,7 @@ async function saveToken() {
   }
 
   const payload = {
+    chain,
     tokenMint,
     tokenSymbol: tokenSymbol || null,
     tokenName: tokenName || null,
@@ -13902,8 +14535,6 @@ async function renderNftTrackedTokensCard(wrapId = 'nts_tokensWrap') {
     if (!response.ok || data.success === false) throw new Error(data.message || 'Failed to load tracked tokens');
 
     const tokens = Array.isArray(data.tokens) ? data.tokens : [];
-    nftTrackedTokensCache = tokens;
-
     if (!tokens.length) {
       wrap.innerHTML = `<div style="text-align:center;padding:var(--space-5);color:var(--text-secondary);">
         <p style="margin-bottom:16px;">No tracked tokens yet.</p>
@@ -13925,7 +14556,7 @@ async function renderNftTrackedTokensCard(wrapId = 'nts_tokensWrap') {
         : '<span style="color:var(--text-secondary);">Wallet default</span>';
       return `
         <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
-          <td style="padding:8px 10px;color:#cbd5e1;font-family:monospace;font-size:0.82em;" title="${escapeHtml(mint)}">${escapeHtml(mintShort)}</td>
+          <td style="padding:8px 10px;color:#cbd5e1;font-family:monospace;font-size:0.82em;" title="${escapeHtml(mint)}"><span class="chain-badge">${escapeHtml(formatWalletChainLabel(token.chain_id || 'solana:mainnet'))}</span>${escapeHtml(mintShort)}</td>
           <td style="padding:8px 10px;color:#e2e8f0;">${escapeHtml(token.token_symbol || '')}</td>
           <td style="padding:8px 10px;color:#cbd5e1;">${escapeHtml(token.token_name || '')}</td>
           <td style="padding:8px 10px;color:#cbd5e1;">${channelDisplay}</td>
@@ -13934,6 +14565,7 @@ async function renderNftTrackedTokensCard(wrapId = 'nts_tokensWrap') {
           <td style="padding:8px 10px;text-align:right;white-space:nowrap;">
             <button class="nt-edit-btn"
               data-id="${token.id}"
+              data-chain="${escapeHtml(token.chain_id || 'solana:mainnet')}"
               data-mint="${escapeHtml(token.token_mint || '')}"
               data-symbol="${escapeHtml(token.token_symbol || '')}"
               data-name="${escapeHtml(token.token_name || '')}"
@@ -13978,6 +14610,7 @@ async function renderNftTrackedTokensCard(wrapId = 'nts_tokensWrap') {
         }
         openAddTokenModal(btn.dataset.id, {
           tokenMint: btn.dataset.mint || '',
+          chain: btn.dataset.chain || 'solana:mainnet',
           tokenSymbol: btn.dataset.symbol || '',
           tokenName: btn.dataset.name || '',
           alertChannelId: btn.dataset.alertChannel || '',
@@ -14476,7 +15109,7 @@ async function loadBrandingSettingsView() {
 
         <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(99,102,241,0.15);display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
           <div>
-            ${brandHelp('Ticketing Color Override', 'Optional. If set, ticketing embeds/panels use this instead of global brand color.')}
+            ${brandHelp('Support Tickets Color Override', 'Optional. If set, support ticket embeds and panels use this instead of the global brand color.')}
             <input id="br_ticketing_color" type="text" value="${escapeHtml(b.ticketing_color || '')}" style="${fieldInput}" placeholder="(fallback to global)">
           </div>
           <div>
@@ -14484,7 +15117,7 @@ async function loadBrandingSettingsView() {
             <input id="br_selfserve_color" type="text" value="${escapeHtml(b.selfserve_color || '')}" style="${fieldInput}" placeholder="(fallback to global)">
           </div>
           <div>
-            ${brandHelp('NFT Tracker Color Override', 'Optional. If set, NFT tracker embeds/panels use this color.')}
+            ${brandHelp('NFT Activity Color Override', 'Optional. If set, NFT activity embeds and panels use this color.')}
             <input id="br_nfttracker_color" type="text" value="${escapeHtml(b.nfttracker_color || '')}" style="${fieldInput}" placeholder="(fallback to global)">
           </div>
         </div>
@@ -14686,7 +15319,7 @@ async function saveTreasuryModuleSettings() {
     else showError(data.message || 'Failed to save wallet tracker settings');
   } catch (e) {
     console.error('[Treasury] Save error:', e);
-    showError('Failed to save treasury settings');
+    showError('Failed to save Wallet Tracker settings');
   }
 }
 
@@ -14753,8 +15386,6 @@ let aiAssistantKnowledgeCache = [];
 let aiAssistantPersonasCache = [];
 let aiAssistantRoleLimitsCache = [];
 let aiAssistantSuggestionCache = [];
-let aiAssistantRoleLabelMap = new Map();
-
 async function loadAiAssistantSettingsView(targetPaneId = null) {
   if (!isAdmin) return;
   const pane = (targetPaneId && document.getElementById(targetPaneId))
@@ -14808,7 +15439,6 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
     aiAssistantPersonasCache = Array.isArray(personasJson?.personas) ? personasJson.personas : [];
     aiAssistantRoleLimitsCache = Array.isArray(roleLimitsJson?.limits) ? roleLimitsJson.limits : [];
     aiAssistantSuggestionCache = Array.isArray(suggestionsJson?.suggestions) ? suggestionsJson.suggestions : [];
-    aiAssistantRoleLabelMap = new Map(roles.map(role => [String(role.id), String(role.name || role.id)]));
     const channelPolicyMap = new Map(channelPolicies.map(policy => [String(policy.channelId || ''), policy]));
     const roleLimitMap = new Map(aiAssistantRoleLimitsCache.map(row => [String(row.roleId || ''), row]));
     const ingestionJobs = Array.isArray(ingestionJobsJson?.jobs) ? ingestionJobsJson.jobs : [];
@@ -14962,26 +15592,78 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
       'Responses are split across Discord messages when needed so answers should not be cut off by the portal response setting.',
     ].join('\n');
 
+    const readinessItems = [
+      { label: 'Assistant enabled', ready: !!s.enabled, target: 'general' },
+      { label: 'Trusted knowledge added', ready: knowledgeDocs.some(doc => doc.enabled), target: 'knowledgebase' },
+      { label: 'Audience scoped', ready: allowed.length > 0, target: 'general' },
+      { label: 'Safety filter on', ready: s.safetyFilterEnabled !== false, target: 'general' },
+    ];
+    const readinessCount = readinessItems.filter(item => item.ready).length;
+    const readinessPercent = Math.round((readinessCount / readinessItems.length) * 100);
+    const readinessRows = readinessItems.map(item => `
+      <button type="button" class="ai-readiness-item ${item.ready ? 'is-ready' : ''}" data-ai-target="${escapeHtml(item.target)}" onclick="switchAiAssistantTab(this.dataset.aiTarget)">
+        <span class="ai-readiness-icon" aria-hidden="true">${item.ready ? '&#10003;' : readinessItems.indexOf(item) + 1}</span>
+        <span>${escapeHtml(item.label)}</span>
+        <span class="ai-readiness-state">${item.ready ? 'Ready' : 'Set up'}</span>
+      </button>
+    `).join('');
+
     pane.innerHTML = `
-      <div class="settings-tabs" style="margin-bottom:var(--space-4);">
-        <button class="settings-tab active" data-aiassistant-tab="general" onclick="switchAiAssistantTab('general')">General</button>
-        <button class="settings-tab" data-aiassistant-tab="knowledgebase" onclick="switchAiAssistantTab('knowledgebase')">Knowledgebase</button>
-        <button class="settings-tab" data-aiassistant-tab="channelmode" onclick="switchAiAssistantTab('channelmode')">Channel Mode</button>
-        <button class="settings-tab" data-aiassistant-tab="audit" onclick="switchAiAssistantTab('audit')">Audit</button>
+      <div class="ai-console">
+        <section class="ai-command-hero" aria-labelledby="ai-command-title">
+          <div class="ai-hero-orbit" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div class="ai-command-copy">
+            <span class="ai-eyebrow">Community intelligence</span>
+            <div class="ai-command-title-row">
+              <h3 id="ai-command-title">Your AI Assistant</h3>
+              <span class="ai-status-pill ${s.enabled ? 'is-live' : ''}">${s.enabled ? 'Live' : 'Not live'}</span>
+            </div>
+            <p>Give members reliable answers from your approved server knowledge. GuildPilot keeps provider details out of the way so you can focus on content, access, and tone.</p>
+            <div class="ai-trust-signals" aria-label="Assistant safeguards">
+              <span><i class="fa-solid fa-book-open" aria-hidden="true"></i> Knowledge-grounded</span>
+              <span><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> Tenant-safe</span>
+              <span><i class="fa-solid fa-bolt" aria-hidden="true"></i> Always available</span>
+            </div>
+            <div class="ai-hero-actions">
+              <button type="button" class="btn-primary" onclick="switchAiAssistantTab('general')">Continue setup</button>
+              <button type="button" class="btn-secondary" onclick="switchAiAssistantTab('knowledgebase')">Add knowledge</button>
+            </div>
+          </div>
+          <div class="ai-readiness" aria-label="AI Assistant readiness">
+            <div class="ai-readiness-heading">
+              <div><strong>${readinessPercent}% ready</strong><span>${readinessCount} of ${readinessItems.length} essentials complete</span></div>
+              <span>${readinessCount}/${readinessItems.length}</span>
+            </div>
+            <div class="ai-readiness-track"><span style="width:${readinessPercent}%"></span></div>
+            <div class="ai-readiness-list">${readinessRows}</div>
+          </div>
+        </section>
+        <div class="ai-overview-metrics" aria-label="AI Assistant overview">
+          <div><span>Questions today</span><strong>${Number(summaryToday.total || 0)}</strong><small>Live activity</small></div>
+          <div><span>Knowledge sources</span><strong>${knowledgeDocs.filter(doc => doc.enabled).length}</strong><small>Approved context</small></div>
+          <div><span>Allowed channels</span><strong>${allowed.length || 'All'}</strong><small>Audience scope</small></div>
+          <div><span>Pending reviews</span><strong>${aiAssistantSuggestionCache.length}</strong><small>Needs attention</small></div>
+        </div>
       </div>
-      <div data-aiassistant-tab-panel="general" style="${cardStyle}">
+      <div class="settings-tabs ai-settings-tabs" role="tablist" aria-label="AI Assistant settings">
+        <button class="settings-tab active" role="tab" aria-selected="true" data-aiassistant-tab="general" onclick="switchAiAssistantTab('general')">Setup</button>
+        <button class="settings-tab" role="tab" aria-selected="false" data-aiassistant-tab="knowledgebase" onclick="switchAiAssistantTab('knowledgebase')">Knowledge</button>
+        <button class="settings-tab" role="tab" aria-selected="false" data-aiassistant-tab="channelmode" onclick="switchAiAssistantTab('channelmode')">Channel behavior</button>
+        <button class="settings-tab" role="tab" aria-selected="false" data-aiassistant-tab="audit" onclick="switchAiAssistantTab('audit')">Advanced</button>
+      </div>
+      <div class="ai-settings-panel" role="tabpanel" data-aiassistant-tab-panel="general" style="${cardStyle}">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;"> AI Assistant</h3>
-          <span style="color:var(--text-secondary);font-size:0.82em;">Tenant-scoped runtime settings</span>
+          <div><h3 style="margin:0;color:#c9d6ff;">Essentials</h3><p class="ai-panel-description">Choose where the assistant can respond and who can use it.</p></div>
+          <span class="ai-managed-badge">Provider managed securely</span>
         </div>
         <div style="display:grid;gap:12px;">
           <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;">
             <input id="aiassistant_enabled" type="checkbox" ${s.enabled ? 'checked' : ''}>
-            Enable AI Assistant for this server
+            Make the assistant available in this server
           </label>
           <label style="display:flex;align-items:center;gap:8px;color:#c9d6ff;font-size:0.9em;">
             <input id="aiassistant_mention_enabled" type="checkbox" ${s.mentionEnabled !== false ? 'checked' : ''}>
-            Enable mention trigger ("@GuildPilot" in chat)
+            Let members ask by mentioning @GuildPilot
           </label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div style="padding:10px 12px;border:1px solid rgba(99,102,241,0.16);border-radius:8px;background:rgba(30,41,59,0.35);color:var(--text-secondary);font-size:0.86em;">
@@ -14989,7 +15671,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
               AI provider and model settings are managed by Superadmin.
             </div>
             <label style="display:grid;gap:6px;">
-              <span style="font-size:0.82em;color:var(--text-secondary);">Slash Response Visibility</span>
+              <span style="font-size:0.82em;color:var(--text-secondary);">Who sees slash-command answers?</span>
               <select id="aiassistant_visibility" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
                 <option value="public" ${s.responseVisibility === 'public' ? 'selected' : ''}>Public Replies</option>
                 <option value="ephemeral" ${s.responseVisibility === 'ephemeral' ? 'selected' : ''}>Private Replies</option>
@@ -15025,19 +15707,22 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
           <input id="aiassistant_model_openai" type="hidden" value="${escapeHtml(String(s.modelOpenai || 'gpt-5.4'))}">
           <input id="aiassistant_model_gemini" type="hidden" value="${escapeHtml(String(s.modelGemini || 'gemini-2.0-flash'))}">
           <label style="display:grid;gap:6px;">
-            <span style="font-size:0.82em;color:var(--text-secondary);">Allowed Channels (blank = all channels)</span>
+              <span style="font-size:0.82em;color:var(--text-secondary);">Where can members use the assistant?</span>
             <select id="aiassistant_allowed_channels" multiple size="6" data-ms-title="Allowed Channels" data-ms-placeholder="All channels" style="width:100%;padding:8px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
               ${channelRows}
             </select>
-            <span style="font-size:0.76em;color:var(--text-secondary);">Tip: hold Ctrl/Cmd on desktop for multi-select. Mobile gets picker mode automatically.</span>
+            <span style="font-size:0.76em;color:var(--text-secondary);">Leave empty for every channel, or select a smaller trusted audience.</span>
           </label>
           <label style="display:grid;gap:6px;">
-            <span style="font-size:0.82em;color:var(--text-secondary);">Allowed Roles (blank = all members)</span>
+            <span style="font-size:0.82em;color:var(--text-secondary);">Who can use the assistant?</span>
             <select id="aiassistant_allowed_roles" multiple size="6" data-ms-title="Allowed Roles" data-ms-placeholder="All roles" style="width:100%;padding:8px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">
               ${roleRows}
             </select>
-            <span style="font-size:0.76em;color:var(--text-secondary);">If selected, only members with one of these roles can trigger mention AI replies.</span>
+            <span style="font-size:0.76em;color:var(--text-secondary);">Leave empty for every member, or select one or more Discord roles.</span>
           </label>
+          <details class="ai-advanced-settings">
+            <summary><span>Behavior, reports and limits</span><small>Optional controls for experienced admins</small></summary>
+            <div class="ai-advanced-settings-body">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <label style="display:grid;gap:6px;">
               <span style="font-size:0.82em;color:var(--text-secondary);">Recap Channel (Family Report)</span>
@@ -15100,15 +15785,17 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
             <span style="font-size:0.82em;color:var(--text-secondary);">System Prompt (tenant style/policy)</span>
             <textarea id="aiassistant_system_prompt" rows="6" style="padding:9px 10px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;">${escapeHtml(String(s.systemPrompt || ''))}</textarea>
           </label>
+            </div>
+          </details>
         </div>
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
           <button class="btn-secondary" onclick="loadAiAssistantSettingsView()">Reset</button>
           <button class="btn-primary" onclick="saveAiAssistantSettings()">Save AI Assistant Settings</button>
         </div>
       </div>
-      <div data-aiassistant-tab-panel="channelmode" style="${cardStyle}display:none;">
+      <div class="ai-settings-panel" role="tabpanel" data-aiassistant-tab-panel="channelmode" style="${cardStyle}display:none;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;"> Channel Modes</h3>
+          <div><h3 style="margin:0;color:#c9d6ff;">Channels & access</h3><p class="ai-panel-description">Choose how GuildPilot behaves in each approved channel.</p></div>
           <button class="btn-primary" onclick="saveAiAssistantChannelPolicies()">Save Channel Modes</button>
         </div>
         <div style="color:var(--text-secondary);font-size:0.8em;margin-bottom:10px;">
@@ -15129,7 +15816,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
           </table>
         </div>
       </div>
-      <div data-aiassistant-tab-panel="audit" style="${cardStyle}display:none;">
+      <div class="ai-settings-panel" role="tabpanel" data-aiassistant-tab-panel="audit" style="${cardStyle}display:none;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
           <h3 style="margin:0;color:#c9d6ff;"> AI Usage Overview (Today)</h3>
           <button class="btn-secondary" onclick="loadAiAssistantSettingsView()">Refresh Metrics</button>
@@ -15159,12 +15846,14 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
           </table>
         </div>
       </div>
-      <div data-aiassistant-tab-panel="knowledgebase" style="${cardStyle}display:none;">
+      <div class="ai-settings-panel" role="tabpanel" data-aiassistant-tab-panel="knowledgebase" style="${cardStyle}display:none;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-          <h3 style="margin:0;color:#c9d6ff;"> Knowledge Sources</h3>
-          <span style="color:var(--text-secondary);font-size:0.82em;">Tenant docs used for grounded AI answers</span>
+          <div><h3 style="margin:0;color:#c9d6ff;">Knowledge</h3><p class="ai-panel-description">Add trusted information the assistant can use in its answers.</p></div>
+          <span class="ai-managed-badge">${knowledgeDocs.filter(doc => doc.enabled).length} active sources</span>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:12px;">
+        <details class="ai-advanced-settings" style="margin-bottom:12px;">
+          <summary><span>Quick imports</span><small>Sync announcements or add GuildPilot's built-in product guide</small></summary>
+          <div class="ai-advanced-settings-body" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));">
           <div style="border:1px solid rgba(99,102,241,0.16);border-radius:8px;background:rgba(30,41,59,0.35);padding:12px;">
             <div style="font-weight:700;color:#e0e7ff;margin-bottom:6px;">Announcement Channels</div>
             <div style="color:var(--text-secondary);font-size:0.82em;margin-bottom:10px;">Import recent announcement messages so the assistant can answer questions about active promotions, updates, and announcements.</div>
@@ -15191,6 +15880,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
             </div>
           </div>
         </div>
+        </details>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;">
           <label style="display:grid;gap:6px;">
             <span style="font-size:0.82em;color:var(--text-secondary);">Title</span>
@@ -15286,7 +15976,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
     initializePortalMultiSelects(pane);
 
     pane.insertAdjacentHTML('beforeend', `
-      <div data-aiassistant-tab-panel="general" style="${cardStyle}">
+      <div class="ai-settings-panel" role="tabpanel" data-aiassistant-tab-panel="audit" style="${cardStyle}display:none;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
           <h3 style="margin:0;color:#c9d6ff;"> Persona Profiles</h3>
           <button class="btn-secondary btn-sm" onclick="loadAiAssistantSettingsView()">Refresh</button>
@@ -15336,7 +16026,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
           </table>
         </div>
       </div>
-      <div data-aiassistant-tab-panel="general" style="${cardStyle}">
+      <div class="ai-settings-panel" role="tabpanel" data-aiassistant-tab-panel="audit" style="${cardStyle}display:none;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
           <h3 style="margin:0;color:#c9d6ff;"> Role Tier Limits</h3>
           <button class="btn-primary btn-sm" onclick="saveAiAssistantRoleLimits()">Save Role Limits</button>
@@ -15355,7 +16045,7 @@ async function loadAiAssistantSettingsView(targetPaneId = null) {
           </table>
         </div>
       </div>
-      <div data-aiassistant-tab-panel="knowledgebase" style="${cardStyle}display:none;">
+      <div class="ai-settings-panel" role="tabpanel" data-aiassistant-tab-panel="audit" style="${cardStyle}display:none;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
           <h3 style="margin:0;color:#c9d6ff;"> Knowledge Ingestion</h3>
           <button class="btn-secondary btn-sm" onclick="loadAiAssistantSettingsView()">Refresh Jobs</button>
@@ -15470,7 +16160,9 @@ function switchAiAssistantTab(tabKey) {
     ? String(tabKey).trim()
     : 'general';
   document.querySelectorAll('[data-aiassistant-tab]').forEach(button => {
-    button.classList.toggle('active', button.getAttribute('data-aiassistant-tab') === normalized);
+    const selected = button.getAttribute('data-aiassistant-tab') === normalized;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-selected', selected ? 'true' : 'false');
   });
   document.querySelectorAll('[data-aiassistant-tab-panel]').forEach(panel => {
     panel.style.display = panel.getAttribute('data-aiassistant-tab-panel') === normalized ? '' : 'none';
@@ -16777,7 +17469,7 @@ async function loadAdminRoles(targetPaneId = null) {
 
     let html = '';
     html += `<div style="margin-bottom:12px;">
-      <p style="color:var(--text-secondary); font-size:0.85em; margin:0;">Define NFT collection, NFT trait, and token-based rules for automatic Discord role assignment.</p>
+      <p style="color:var(--text-secondary); font-size:0.85em; margin:0;">Define chain-aware NFT collection, Solana trait, and token-balance rules for automatic Discord role assignment.</p>
     </div>`;
 
     if (allRules.length === 0) {
@@ -16805,7 +17497,6 @@ async function loadAdminRoles(targetPaneId = null) {
       const rows = allRules.map(rule => {
         const isCollection = rule._type === 'collection';
         const isTrait = rule._type === 'trait';
-        const isToken = rule._type === 'token';
         const badge = isCollection
           ? '<span class="badge-collection">NFT Collection</span>'
           : isTrait
@@ -16822,20 +17513,24 @@ async function loadAdminRoles(targetPaneId = null) {
             ? (rule.collectionId || rule.trait_collection_id || '')
             : (rule.tokenMint || '');
         const roleId = rule.roleId || '';
+        const chainId = rule.chainId || rule.chain_id || 'solana:mainnet';
+        const chainLabel = formatWalletChainLabel(chainId, rule.chainFamily || rule.chain_family);
         let details = '';
         if (isCollection) {
           const max = (rule.maxNFTs === Infinity || rule.maxNFTs >= 999999) ? 'INF' : rule.maxNFTs;
-          details = `Min: ${rule.minNFTs}, Max: ${max} NFTs`;
+          const standard = String(rule.nftStandard || rule.nft_standard || '').toUpperCase();
+          const tokenId = rule.tokenId ?? rule.token_id;
+          details = `${escapeHtml(chainLabel)} · Min: ${rule.minNFTs}, Max: ${max} NFTs${standard && standard !== 'SOLANA' ? ` · ${escapeHtml(standard)}` : ''}${tokenId !== null && tokenId !== undefined && tokenId !== '' ? ` #${escapeHtml(String(tokenId))}` : ''}`;
         } else if (isTrait) {
           const vals = rule.traitValues || rule.trait_values || (rule.traitValue || rule.trait_value ? [rule.traitValue || rule.trait_value] : []);
           const valArr = Array.isArray(vals) ? vals : String(vals).split(',').map(v => v.trim()).filter(Boolean);
-          details = valArr.length ? 'Values: ' + valArr.map(v => escapeHtml(v)).join(', ') : '-';
+          details = `Solana · ${valArr.length ? 'Values: ' + valArr.map(v => escapeHtml(v)).join(', ') : '-'}`;
         } else {
           const min = Number(rule.minAmount || 0).toLocaleString(undefined, { maximumFractionDigits: 6 });
           const max = rule.maxAmount === null || rule.maxAmount === undefined
             ? 'INF'
             : Number(rule.maxAmount).toLocaleString(undefined, { maximumFractionDigits: 6 });
-          details = `Balance: ${min} -> ${max}${rule.enabled === false ? ' (disabled)' : ''}`;
+          details = `${escapeHtml(chainLabel)} · Balance: ${min} -> ${max}${rule.enabled === false ? ' (disabled)' : ''}`;
         }
         if (ruleNeverRemove(rule)) {
           details += ' | Keep role on loss';
@@ -16894,7 +17589,7 @@ function _ensureAddRuleModal() {
   modal.className = 'modal-overlay';
   modal.style.display = 'none';
   modal.innerHTML = `
-    <div class="modal-box" style="max-width:520px;width:520px;min-height:620px;display:flex;flex-direction:column;">
+    <div class="modal-box verification-rule-modal" style="max-width:520px;width:min(520px,calc(100vw - 24px));min-height:620px;display:flex;flex-direction:column;">
 
       <div class="modal-header">
         <h3 id="addRuleModalTitle">Add Verification Rule</h3>
@@ -16903,7 +17598,7 @@ function _ensureAddRuleModal() {
       <div class="modal-body" style="flex:1;overflow:auto;">
         <div style="margin-bottom:20px;">
           <label style="display:block;font-size:0.85em;color:var(--text-secondary);margin-bottom:8px;">Rule Type</label>
-          <div style="display:flex;gap:12px;">
+          <div class="verification-rule-type-grid" style="display:flex;gap:12px;">
             <label class="rule-type-option" id="ruleTypeCollectionLabel">
               <input type="radio" name="ruleType" value="collection" id="ruleTypeCollection" onchange="onRuleTypeChange()" checked>
               <span>NFT Collection</span>
@@ -16920,6 +17615,17 @@ function _ensureAddRuleModal() {
               <small>Balance range</small>
             </label>
           </div>
+        </div>
+        <div class="form-group" id="ruleChainField" style="margin-bottom:14px;">
+          <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Network <span style="color:#f87171;">*</span></label>
+          <select id="ruleChain" class="form-input" onchange="onVerificationRuleChainChange()">
+            <option value="solana:mainnet">Solana</option>
+            <option value="eip155:1">Ethereum</option>
+            <option value="eip155:8453">Base</option>
+            <option value="eip155:137">Polygon</option>
+            <option value="eip155:42161">Arbitrum One</option>
+            <option value="eip155:10">Optimism</option>
+          </select>
         </div>
         <div class="form-group" id="collectionIdField" style="margin-bottom:14px;">
           <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Collection ID <span style="color:#f87171;">*</span></label>
@@ -16951,6 +17657,19 @@ function _ensureAddRuleModal() {
             <div class="form-group">
               <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Max NFTs <small style="color:var(--text-secondary);">(blank = INF)</small></label>
               <input type="number" id="ruleMaxNFTs" placeholder="INF" min="0" style="width:100%;padding:10px 12px;background:rgba(30,41,59,0.8);border:1px solid rgba(99,102,241,0.22);border-radius:8px;color:#e0e7ff;font-size:0.9em;">
+            </div>
+          </div>
+          <div id="evmNftFields" style="display:none;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+            <div class="form-group">
+              <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">NFT Standard</label>
+              <select id="ruleNftStandard" class="form-input" onchange="onVerificationRuleChainChange()">
+                <option value="erc721">ERC-721 collection</option>
+                <option value="erc1155">ERC-1155 token</option>
+              </select>
+            </div>
+            <div class="form-group" id="ruleTokenIdField" style="display:none;">
+              <label style="display:block;color:#c9d6ff;font-size:0.9em;margin-bottom:6px;">Token ID <span style="color:#f87171;">*</span></label>
+              <input type="text" id="ruleNftTokenId" placeholder="e.g. 42" class="form-input">
             </div>
           </div>
         </div>
@@ -17018,10 +17737,31 @@ function onRuleTypeChange() {
   const collectionFields = document.getElementById('collectionFields');
   const traitFields = document.getElementById('traitFields');
   const tokenFields = document.getElementById('tokenFields');
+  const chainField = document.getElementById('ruleChainField');
+  const chainSelect = document.getElementById('ruleChain');
   if (collectionIdField) collectionIdField.style.display = isToken ? 'none' : '';
   if (collectionFields) collectionFields.style.display = (!isTrait && !isToken) ? '' : 'none';
   if (traitFields) traitFields.style.display = isTrait ? '' : 'none';
   if (tokenFields) tokenFields.style.display = isToken ? '' : 'none';
+  if (chainField) chainField.style.display = '';
+  if (isTrait && chainSelect) chainSelect.value = 'solana:mainnet';
+  if (chainSelect) chainSelect.disabled = isTrait;
+  onVerificationRuleChainChange();
+}
+
+function onVerificationRuleChainChange() {
+  const type = document.querySelector('input[name="ruleType"]:checked')?.value || 'collection';
+  const chain = document.getElementById('ruleChain')?.value || 'solana:mainnet';
+  const isEvm = chain.startsWith('eip155:');
+  const standard = document.getElementById('ruleNftStandard')?.value || 'erc721';
+  const collectionInput = document.getElementById('ruleCollectionId');
+  const tokenInput = document.getElementById('ruleTokenMint');
+  const evmFields = document.getElementById('evmNftFields');
+  const tokenIdField = document.getElementById('ruleTokenIdField');
+  if (collectionInput) collectionInput.placeholder = isEvm ? '0x collection contract address' : 'Solana collection address';
+  if (tokenInput) tokenInput.placeholder = isEvm ? '0x ERC-20 contract address' : 'SPL token mint address';
+  if (evmFields) evmFields.style.display = type === 'collection' && isEvm ? 'grid' : 'none';
+  if (tokenIdField) tokenIdField.style.display = type === 'collection' && isEvm && standard === 'erc1155' ? '' : 'none';
 }
 
 function onTraitValueKeydown(e) {
@@ -17064,6 +17804,9 @@ function openAddRuleModal(editData = null) {
 
   // Reset form
   document.getElementById('ruleCollectionId').value = '';
+  document.getElementById('ruleChain').value = 'solana:mainnet';
+  document.getElementById('ruleNftStandard').value = 'erc721';
+  document.getElementById('ruleNftTokenId').value = '';
   document.getElementById('ruleRoleId').value = '';
   document.getElementById('ruleTierName').value = '';
   document.getElementById('ruleMinNFTs').value = '1';
@@ -17096,6 +17839,7 @@ function openAddRuleModal(editData = null) {
     const neverRemove = neverRemoveRaw === true || neverRemoveRaw === 1 || ['true', '1', 'yes', 'on'].includes(normalizedNeverRemove);
     document.getElementById('ruleNeverRemove').checked = !!neverRemove;
     document.getElementById('ruleRoleId').value = editData.roleId || '';
+    document.getElementById('ruleChain').value = editData.chainId || editData.chain_id || 'solana:mainnet';
     document.getElementById('addRuleModalTitle').textContent = 'Edit Verification Rule';
 
     if (ruleType === 'token') {
@@ -17114,6 +17858,8 @@ function openAddRuleModal(editData = null) {
         renderTraitValueTags();
       } else {
         document.getElementById('ruleTierName').value = editData.name || '';
+        document.getElementById('ruleNftStandard').value = editData.nftStandard || editData.nft_standard || 'erc721';
+        document.getElementById('ruleNftTokenId').value = editData.tokenId ?? editData.token_id ?? '';
         document.getElementById('ruleMinNFTs').value = editData.minNFTs ?? 1;
         document.getElementById('ruleMaxNFTs').value = (editData.maxNFTs >= 999999 || editData.maxNFTs === Infinity) ? '' : (editData.maxNFTs ?? '');
       }
@@ -17134,6 +17880,7 @@ function closeAddRuleModal() {
 
 async function saveRule() {
   const selectedType = document.querySelector('input[name="ruleType"]:checked')?.value || 'collection';
+  const chain = document.getElementById('ruleChain')?.value || 'solana:mainnet';
   const roleId = document.getElementById('ruleRoleId').value;
   const neverRemove = !!document.getElementById('ruleNeverRemove')?.checked;
   if (!roleId) { showError('Discord Role is required.'); return; }
@@ -17158,7 +17905,7 @@ async function saveRule() {
         const response = await fetch(`/api/admin/roles/tokens/${encodeURIComponent(existing.id)}`, {
           method: 'PUT', credentials: 'include',
           headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
-          body: JSON.stringify({ tokenMint, tokenSymbol: tokenSymbol || null, minAmount, maxAmount, roleId, enabled, neverRemove })
+          body: JSON.stringify({ chain, tokenMint, tokenSymbol: tokenSymbol || null, minAmount, maxAmount, roleId, enabled, neverRemove })
         });
         const data = await response.json();
         if (!data.success) throw new Error(data.message || 'Failed to update token rule');
@@ -17166,7 +17913,7 @@ async function saveRule() {
         const response = await fetch('/api/admin/roles/tokens', {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
-          body: JSON.stringify({ tokenMint, tokenSymbol: tokenSymbol || null, minAmount, maxAmount, roleId, enabled, neverRemove })
+          body: JSON.stringify({ chain, tokenMint, tokenSymbol: tokenSymbol || null, minAmount, maxAmount, roleId, enabled, neverRemove })
         });
         const data = await response.json();
         if (!data.success) throw new Error(data.message || 'Failed to create token rule');
@@ -17207,13 +17954,16 @@ async function saveRule() {
       const minNFTs = parseInt(document.getElementById('ruleMinNFTs').value) || 1;
       const maxNFTsRaw = document.getElementById('ruleMaxNFTs').value;
       const maxNFTs = maxNFTsRaw === '' ? 999999 : parseInt(maxNFTsRaw);
+      const nftStandard = chain.startsWith('eip155:') ? (document.getElementById('ruleNftStandard')?.value || 'erc721') : 'solana';
+      const tokenId = nftStandard === 'erc1155' ? document.getElementById('ruleNftTokenId')?.value.trim() : null;
+      if (nftStandard === 'erc1155' && !tokenId) { showError('ERC-1155 rules require a token ID.'); btn.disabled = false; btn.textContent = 'Save Rule'; return; }
 
       if (_editingRuleIdx !== null && _editingRuleType === 'tier') {
         const existing = adminTiersCache[_editingRuleIdx];
         const response = await fetch(`/api/admin/roles/tiers/${encodeURIComponent(existing.name)}`, {
           method: 'PUT', credentials: 'include',
           headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
-          body: JSON.stringify({ name, minNFTs, maxNFTs, votingPower: 1, collectionId, roleId, neverRemove })
+          body: JSON.stringify({ name, minNFTs, maxNFTs, votingPower: 1, chain, collectionId, nftStandard, tokenId, roleId, neverRemove })
         });
         const data = await response.json();
         if (!data.success) throw new Error(data.message || 'Failed to update tier');
@@ -17221,7 +17971,7 @@ async function saveRule() {
         const response = await fetch('/api/admin/roles/tiers', {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
-          body: JSON.stringify({ name, minNFTs, maxNFTs, votingPower: 1, collectionId, roleId, neverRemove })
+          body: JSON.stringify({ name, minNFTs, maxNFTs, votingPower: 1, chain, collectionId, nftStandard, tokenId, roleId, neverRemove })
         });
         const data = await response.json();
         if (!data.success) throw new Error(data.message || 'Failed to create tier');
@@ -17521,15 +18271,10 @@ async function loadAdminStats() {
   if (!content) return;
 
   try {
-    const [usersRes, proposalsRes] = await Promise.all([
-      fetch('/api/admin/users', { credentials: 'include' }),
-      fetch('/api/admin/proposals', { credentials: 'include' })
-    ]);
+    const usersRes = await fetch('/api/admin/users', { credentials: 'include' });
     const usersData = await usersRes.json();
-    const proposalsData = await proposalsRes.json();
 
     const users = usersData.users || [];
-    const proposals = proposalsData.proposals || [];
     const verified = users.filter(u => u.total_nfts > 0).length;
     const pending = users.length - verified;
 
@@ -17730,79 +18475,19 @@ function confirmRemoveUser(discordId, username) {
 }
 
 // ==================== TREASURY TRACKER ====================
-async function loadTreasuryTrackerView() {
-  const content = document.getElementById('treasuryTrackerView');
-  if (!content) return;
-
-  content.innerHTML = `<div style="text-align:center; padding: var(--space-5);"><div class="spinner"></div><p>Loading...</p></div>`;
-
-  try {
-    const response = await fetch('/api/admin/settings', { credentials: 'include' });
-    const data = await response.json();
-    
-    // Try to get treasury-specific config
-    let treasuryConfig = {};
-    try {
-      const tRes = await fetch('/api/public/v1/treasury', { credentials: 'include' });
-      const tData = await tRes.json();
-      if (tData.success) treasuryConfig = tData.treasury || {};
-    } catch(e) {}
-
-    const walletAddr = treasuryConfig.wallet_address || data?.settings?.treasuryWallet || 'Not configured';
-    const refreshInterval = treasuryConfig.refresh_interval || data?.settings?.treasuryInterval || 'Unknown';
-    const lastSync = treasuryConfig.last_updated ? new Date(treasuryConfig.last_updated).toLocaleString() : 'Never';
-    const alertsEnabled = treasuryConfig.tx_alerts_enabled ?? data?.settings?.treasuryAlerts ?? false;
-    const alertChannel = treasuryConfig.tx_alerts_channel || data?.settings?.treasuryAlertsChannel || 'Not set';
-
-    let html = `
-      <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">
-        <div style="padding:16px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.18); border-radius:10px;">
-          <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:6px;">Wallet Address</div>
-          <div style="color:#e0e7ff; font-family:monospace; font-size:0.85em; word-break:break-all;">${escapeHtml(String(walletAddr))}</div>
-        </div>
-        <div style="padding:16px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.18); border-radius:10px;">
-          <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:6px;">Refresh Interval</div>
-          <div style="color:#e0e7ff; font-size:1.1em; font-weight:600;">${escapeHtml(String(refreshInterval))}</div>
-        </div>
-        <div style="padding:16px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.18); border-radius:10px;">
-          <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:6px;">Last Sync</div>
-          <div style="color:#e0e7ff; font-size:1em;">${escapeHtml(lastSync)}</div>
-        </div>
-        <div style="padding:16px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.18); border-radius:10px;">
-          <div style="color:var(--text-secondary); font-size:0.85em; margin-bottom:6px;">Transaction Alerts</div>
-          <div style="color:${alertsEnabled ? '#10b981' : '#ef4444'}; font-size:1.1em; font-weight:600;">${alertsEnabled ? ' Enabled' : ' Disabled'}</div>
-          <div style="color:var(--text-secondary); font-size:0.8em; margin-top:4px;">Channel: ${escapeHtml(String(alertChannel))}</div>
-        </div>
-      </div>
-    `;
-
-    if (isAdmin) {
-      html += `
-        <div style="margin-top:16px;">
-          <button class="btn-primary" onclick="openTreasuryConfigModal()" style="font-size:0.85em; padding:8px 16px;"> Edit Tracker Config</button>
-        </div>
-      `;
-    }
-
-    content.innerHTML = html;
-  } catch (e) {
-    content.innerHTML = `<div style="color:var(--text-secondary); text-align:center; padding:20px;">Treasury tracker config unavailable  admin access may be required.</div>`;
-  }
-}
-
 async function openTreasuryConfigModal() {
   if (!isAdmin) return;
-  showConfirmModal('Edit Treasury Config', '', null);
+  showConfirmModal('Edit Wallet Tracker Config', '', null);
   const title = document.getElementById('confirmTitle');
   const body = document.getElementById('confirmMessage');
   const btn = document.getElementById('confirmButton');
-  title.textContent = ' Treasury Tracker Configuration';
+  title.textContent = 'Wallet Tracker Configuration';
   btn.textContent = 'Save Config';
   btn.classList.remove('btn-danger');
   btn.classList.add('btn-primary');
   body.innerHTML = `
     <div style="display:grid; gap:14px;">
-      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Treasury Wallet Address</label>
+      <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Primary Tracked Wallet Address</label>
         <input id="treasuryWalletInput" type="text" placeholder="Solana wallet address" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em; font-family:monospace;"></div>
       <div><label style="display:block; color:#c9d6ff; font-size:0.9em; margin-bottom:6px;">Refresh Interval (hours)</label>
         <input id="treasuryIntervalInput" type="number" min="1" max="168" step="1" placeholder="6" style="width:100%; padding:10px 12px; background:rgba(30,41,59,0.8); border:1px solid rgba(99,102,241,0.22); border-radius:8px; color:#e0e7ff; font-size:0.9em;"></div>
@@ -17853,7 +18538,7 @@ async function openTreasuryConfigModal() {
         credentials: 'include',
         body: JSON.stringify(payload)
       });
-      showSuccess('Treasury config updated. Changes may take a moment to apply.');
+      showSuccess('Wallet Tracker configuration updated. Changes may take a moment to apply.');
       loadTreasuryTrackerView();
     } catch (e) {
       showError('Error updating config: ' + e.message);
@@ -17877,7 +18562,7 @@ async function loadNFTActivityView() {
   const container = document.getElementById('nftActivityPublicView');
   if (!container) return;
 
-  // Inject shared settings panel into tracker tab (same as Settings  NFT Tracker)
+  // Inject the shared settings panel into the NFT Activity tracker tab.
   if (isAdmin) {
     const settingsPanel = document.getElementById('nftActivityTrackerSettingsPanel');
     if (settingsPanel) {
@@ -18061,11 +18746,12 @@ async function loadNFTActivityAdminView(preloadedCollections = null) {
       const name = col.collection_name || col.collectionName || col.name || 'Unknown';
       const addr = col.collection_address || col.collectionAddress || '';
       const isEnabled = col.enabled !== 0 && col.enabled !== false;
+      const chainLabel = formatWalletChainLabel(col.chain_id || col.chainId, col.chain_family || col.chainFamily);
       return `
         <div style="padding:10px 14px; border-bottom:1px solid rgba(99,102,241,0.12); display:flex; justify-content:space-between; align-items:center; gap:12px;">
           <div>
             <div style="color:#e0e7ff; font-weight:600;">${escapeHtml(name)}</div>
-            <div style="color:var(--text-secondary); font-size:0.8em; font-family:monospace;">${escapeHtml(addr)}</div>
+            <div style="color:var(--text-secondary); font-size:0.8em;"><strong>${escapeHtml(chainLabel)}</strong> · <span style="font-family:monospace;">${escapeHtml(addr)}</span></div>
           </div>
           <div style="display:flex; align-items:center; gap:10px;">
             <span style="color:${isEnabled ? '#10b981' : '#ef4444'}; font-size:0.85em;">${isEnabled ? ' Enabled' : ' Disabled'}</span>
@@ -18185,9 +18871,16 @@ async function openNftActivityAddCollectionModal() {
     <div style="background:var(--card-bg,#1e293b);border:1px solid rgba(99,102,241,0.3);border-radius:12px;padding:24px;width:500px;max-width:95vw;max-height:90vh;overflow-y:auto;">
       <h3 style="margin:0 0 16px;color:var(--text-primary,#e0e7ff);"> Watch New Collection</h3>
       <div style="display:grid;gap:14px;">
+        <div><label style="${lb}">Network *</label><select id="caChainInput" style="${fi}">
+          <option value="solana:mainnet">Solana</option><option value="eip155:1">Ethereum</option><option value="eip155:8453">Base</option><option value="eip155:137">Polygon</option><option value="eip155:42161">Arbitrum One</option><option value="eip155:10">Optimism</option>
+        </select></div>
+        <div id="caStandardWrap" style="display:none;grid-template-columns:1fr 1fr;gap:12px;">
+          <div><label style="${lb}">NFT Standard</label><select id="caNftStandard" style="${fi}"><option value="erc721">ERC-721 collection</option><option value="erc1155">ERC-1155 token</option></select></div>
+          <div id="caTokenIdWrap" style="display:none;"><label style="${lb}">Token ID *</label><input type="text" id="caTokenId" placeholder="e.g. 42" style="${fi}"></div>
+        </div>
         <div><label style="${lb}">Collection Address *</label><input type="text" id="caAddrInput" placeholder="Solana collection address" style="${fi}font-family:monospace;"></div>
         <div><label style="${lb}">Collection Name *</label><input type="text" id="caNameInput" placeholder="e.g. Vault Runners" style="${fi}"></div>
-        <div><label style="${lb}">Alert Channel</label><select id="caChannelInput" style="${fi}"><option value="">Loading...</option></select></div>
+        <div><label style="${lb}">Alert Channel *</label><select id="caChannelInput" style="${fi}"><option value="">Loading...</option></select></div>
         <div><label style="${lb}">Magic Eden Symbol <small style="color:#94a3b8;">(e.g. vault_runners)</small></label><input type="text" id="caMeInput" placeholder="vault_runners" style="${fi}"></div>
         <div style="display:flex;flex-wrap:wrap;gap:12px;">
           <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caMint" checked>  Mint</label>
@@ -18197,6 +18890,7 @@ async function openNftActivityAddCollectionModal() {
           <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caDelist" checked>  Delist</label>
           <label style="display:flex;align-items:center;gap:6px;color:#c9d6ff;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="caTransfer">  Transfer</label>
         </div>
+        <div id="caNetworkNote" style="color:#94a3b8;font-size:0.8em;">Solana supports marketplace and transfer activity.</div>
       </div>
       <div style="display:flex;gap:10px;align-items:center;margin-top:20px;">
         <button id="caAddBtn" style="padding:8px 18px;background:#6366f1;color:#fff;border:none;border-radius:8px;font-size:0.85em;font-weight:600;cursor:pointer;">Add Collection</button>
@@ -18205,6 +18899,34 @@ async function openNftActivityAddCollectionModal() {
       </div>
     </div>`;
   document.body.appendChild(overlay);
+
+  const syncCollectionNetworkFields = () => {
+    const isEvm = String(document.getElementById('caChainInput')?.value || '').startsWith('eip155:');
+    const addressInput = document.getElementById('caAddrInput');
+    const meInput = document.getElementById('caMeInput');
+    const note = document.getElementById('caNetworkNote');
+    const standard = document.getElementById('caNftStandard')?.value || 'erc721';
+    const standardWrap = document.getElementById('caStandardWrap');
+    const tokenIdWrap = document.getElementById('caTokenIdWrap');
+    if (addressInput) addressInput.placeholder = isEvm ? '0x collection contract address' : 'Solana collection address';
+    if (meInput) { meInput.disabled = isEvm; if (isEvm) meInput.value = ''; }
+    if (standardWrap) standardWrap.style.display = isEvm ? 'grid' : 'none';
+    if (tokenIdWrap) tokenIdWrap.style.display = isEvm && standard === 'erc1155' ? '' : 'none';
+    for (const id of ['caSale', 'caBid', 'caList', 'caDelist']) {
+      const input = document.getElementById(id);
+      if (!input) continue;
+      input.disabled = isEvm;
+      if (isEvm) input.checked = false;
+    }
+    const transfer = document.getElementById('caTransfer');
+    if (isEvm && transfer) transfer.checked = true;
+    if (note) note.textContent = isEvm
+      ? 'EVM RPC tracking covers confirmed ERC-721 mint and transfer events.'
+      : 'Solana supports marketplace and transfer activity.';
+  };
+  document.getElementById('caChainInput')?.addEventListener('change', syncCollectionNetworkFields);
+  document.getElementById('caNftStandard')?.addEventListener('change', syncCollectionNetworkFields);
+  syncCollectionNetworkFields();
 
   // Populate channel dropdown
   const sel = document.getElementById('caChannelInput');
@@ -18215,7 +18937,7 @@ async function openNftActivityAddCollectionModal() {
       const channels = chData.channels || [];
       const grouped = {};
       channels.forEach(ch => { const p = ch.parentName || 'Other'; if (!grouped[p]) grouped[p] = []; grouped[p].push(ch); });
-      sel.innerHTML = '<option value="">-- Select channel (optional) --</option>';
+      sel.innerHTML = '<option value="">-- Select alert channel --</option>';
       Object.keys(grouped).sort().forEach(parent => {
         const og = document.createElement('optgroup'); og.label = parent;
         grouped[parent].forEach(ch => { const o = document.createElement('option'); o.value = ch.id; o.textContent = '# ' + ch.name; og.appendChild(o); });
@@ -18229,17 +18951,21 @@ async function openNftActivityAddCollectionModal() {
   document.getElementById('caAddBtn').addEventListener('click', async () => {
     const addBtn = document.getElementById('caAddBtn');
     const feedback = document.getElementById('caFeedback');
+    const chain = document.getElementById('caChainInput').value;
+    const nftStandard = chain.startsWith('eip155:') ? document.getElementById('caNftStandard').value : 'solana';
+    const tokenId = nftStandard === 'erc1155' ? document.getElementById('caTokenId').value.trim() : null;
     const addr = document.getElementById('caAddrInput').value.trim();
     const name = document.getElementById('caNameInput').value.trim();
     const chId = document.getElementById('caChannelInput').value;
-    if (!addr || !name) { if (feedback) { feedback.style.color='#fca5a5'; feedback.textContent='Address and name are required'; } return; }
+    if (!addr || !name || !chId) { if (feedback) { feedback.style.color='#fca5a5'; feedback.textContent='Address, name, and alert channel are required'; } return; }
+    if (nftStandard === 'erc1155' && !tokenId) { if (feedback) { feedback.style.color='#fca5a5'; feedback.textContent='ERC-1155 requires a token ID'; } return; }
     addBtn.disabled = true; addBtn.textContent = 'Adding...';
     try {
       const res = await fetch('/api/admin/nft-tracker/collections', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
         body: JSON.stringify({
-          collectionAddress: addr, collectionName: name, channelId: chId,
+          chain, collectionAddress: addr, collectionName: name, channelId: chId, nftStandard, tokenId,
           meSymbol: document.getElementById('caMeInput').value.trim(),
           trackMint: !!document.getElementById('caMint').checked,
           trackSale: !!document.getElementById('caSale').checked,
@@ -18307,7 +19033,7 @@ async function loadTreasuryTrackerView() {
       container.innerHTML = `
         <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
           <div class="stat-card">
-            <div class="stat-label">Treasury Wallet</div>
+            <div class="stat-label">Primary Tracked Wallet</div>
             <div class="stat-value" style="font-size:0.9em;">${c.solanaWallet ? `${c.solanaWallet.slice(0,8)}...${c.solanaWallet.slice(-8)}` : 'Not configured'}</div>
           </div>
           <div class="stat-card">
@@ -18326,20 +19052,20 @@ async function loadTreasuryTrackerView() {
         ${isAdmin ? `
           <div style="margin-top:16px; padding:12px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.22); border-radius:10px;">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
-              <span style="color:var(--text-secondary); font-size:0.9em;">Configure treasury settings via Discord: <code style="background:rgba(0,0,0,0.3); padding:4px 8px; border-radius:4px;">/treasury admin ...</code></span>
-              <button class="btn-secondary" onclick="loadTreasuryTrackerView()" style="padding:8px 16px;">
-                <span></span>
-                <span>Refresh</span>
-              </button>
+              <span style="color:var(--text-secondary); font-size:0.9em;">Manage tracked wallets here. The legacy <code style="background:rgba(0,0,0,0.3); padding:4px 8px; border-radius:4px;">/treasury</code> command remains available for compatibility.</span>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+                <button class="btn-primary" onclick="openTreasuryConfigModal()" style="padding:8px 16px;">Edit settings</button>
+                <button class="btn-secondary" onclick="loadTreasuryTrackerView()" style="padding:8px 16px;">Refresh</button>
+              </div>
             </div>
           </div>
         ` : ''}
       `;
     } else {
-      container.innerHTML = '<p style="color:var(--text-secondary);">Treasury tracker not configured</p>';
+      container.innerHTML = '<p style="color:var(--text-secondary);">Wallet Tracker is not configured.</p>';
     }
   } catch (error) {
-    console.error('Error loading treasury tracker:', error);
+    console.error('Error loading Wallet Tracker:', error);
     container.innerHTML = `<p style="color:#ef4444;">Failed to load tracker config: ${escapeHtml(error.message)}</p>`;
   }
 }
@@ -19116,8 +19842,6 @@ function _showCategoryForm(cat) {
   const fields = cat ? safeJsonArray(cat.template_fields) : [];
   const handlerRoles = cat ? safeJsonArray(cat.handler_role_ids || cat.allowed_role_ids) : [];
   const pingRoles = cat ? safeJsonArray(cat.ping_role_ids) : [];
-  const textChannels = _ticketChannelsList.filter(c => c.kind === 'text');
-
   let fieldsHtml = '';
   const renderField = (f, idx) => `
     <div id="tmplField_${idx}" style="background:rgba(0,0,0,0.15);border-radius:6px;padding:8px;margin-bottom:6px;">
@@ -19824,7 +20548,6 @@ async function submitCryptoPaymentReceipt() {
     if (quoteSummary) quoteSummary.textContent = 'No active quote yet. Prepare quote to lock amount for 5 minutes.';
     const amountInput = document.getElementById('billingCryptoAmount');
     if (amountInput) amountInput.value = '';
-    billingCryptoQuoteState = null;
     setBillingQuoteUiState(false);
   } catch (error) {
     showError(`Failed to submit receipt: ${error?.message || 'unknown error'}`);
@@ -19859,7 +20582,6 @@ async function prepareBillingCryptoQuote() {
       throw new Error(data?.message || 'Could not prepare quote');
     }
 
-    billingCryptoQuoteState = data?.quote || null;
     if (quoteAmountEl) quoteAmountEl.value = String(data?.quote?.tokenAmount ?? '');
     if (quoteTokenEl) quoteTokenEl.value = String(data?.quoteToken || '');
     setBillingQuoteUiState(true);
@@ -20149,42 +20871,6 @@ function onEngShopTypeChange() {
   const type = document.getElementById('engShopType').value;
   document.getElementById('engShopRoleRow').style.display = type === 'role' ? '' : 'none';
   document.getElementById('engShopCodesRow').style.display = type === 'code' ? '' : 'none';
-}
-
-async function submitEngShopItem() {
-  const name = document.getElementById('engShopName').value.trim();
-  const cost = parseInt(document.getElementById('engShopCost').value, 10);
-  if (!name || !cost || cost < 1) { showError('Name and a valid cost are required.'); return; }
-  const type = document.getElementById('engShopType').value;
-  const body = {
-    name,
-    description: document.getElementById('engShopDesc').value.trim() || null,
-    type,
-    cost,
-    quantity: parseInt(document.getElementById('engShopQty').value, 10) || -1,
-    roleId: type === 'role' ? (document.getElementById('engShopRoleId').value.trim() || null) : null,
-    codes: type === 'code' ? document.getElementById('engShopCodes').value.trim().split('\n').map(s=>s.trim()).filter(Boolean) : null,
-  };
-  try {
-    const res = await fetch('/api/admin/engagement/shop', {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    if (data.success) { showSuccess('Shop item added!'); closeEngShopModal(); loadEngagementShop(); }
-    else showError(data.message || 'Failed to add item.');
-  } catch (e) { showError('Error adding shop item.'); }
-}
-
-async function deleteEngShopItem(itemId) {
-  if (!confirm('Remove this shop item?')) return;
-  try {
-    const res = await fetch(`/api/admin/engagement/shop/${itemId}`, { method: 'DELETE', credentials: 'include' });
-    const data = await res.json();
-    if (data.success) { showSuccess('Item removed.'); loadEngagementShop(); }
-    else showError(data.message || 'Failed to remove item.');
-  } catch (e) { showError('Error removing item.'); }
 }
 
 function startXAccountLink(section = 'engagement') {
@@ -20970,32 +21656,6 @@ async function submitEngagementTask(mode) {
   }
 }
 
-async function loadEngagementAchievements() {
-  const el = document.getElementById('engagementAchievementsView');
-  if (!el) return;
-  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
-  try {
-    const res = await fetch('/api/admin/engagement/achievements', { credentials: 'include', headers: buildTenantRequestHeaders() });
-    const data = await res.json();
-    if (!data.success || !data.achievements?.length) {
-      el.innerHTML = '<p style="color:var(--text-secondary);">No achievements configured yet.</p>';
-      return;
-    }
-    el.innerHTML = data.achievements.map(achievement => `
-      <div class="table-row" style="align-items:flex-start;">
-        <div style="flex:1;">
-          <div style="font-weight:600;">${escapeHtml(achievement.icon || '')} ${escapeHtml(achievement.name)}</div>
-          <div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(achievement.metric_type)}  threshold ${achievement.threshold}  reward ${formatEngagementAmount(achievement.reward_points || 0)}</div>
-          ${achievement.description ? `<div style="font-size:0.82em;color:var(--text-muted);">${escapeHtml(achievement.description)}</div>` : ''}
-        </div>
-        <button class="btn-danger btn-sm" onclick="deleteEngagementAchievement(${achievement.id})">Delete</button>
-      </div>
-    `).join('');
-  } catch (e) {
-    el.innerHTML = '<p style="color:var(--error);">Failed to load achievements.</p>';
-  }
-}
-
 async function submitEngagementAchievement() {
   const body = {
     name: document.getElementById('engAchievementName').value.trim(),
@@ -21044,32 +21704,6 @@ async function deleteEngagementAchievement(id) {
     }
   } catch (e) {
     showError('Error removing achievement.');
-  }
-}
-
-async function loadEngagementRedemptions() {
-  const el = document.getElementById('engagementRedemptionsView');
-  if (!el) return;
-  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p class="loading-text">Loading...</p></div>';
-  try {
-    const res = await fetch('/api/admin/engagement/redemptions?limit=50', { credentials: 'include', headers: buildTenantRequestHeaders() });
-    const data = await res.json();
-    if (!data.success || !data.redemptions?.length) {
-      el.innerHTML = '<p style="color:var(--text-secondary);">No redemptions yet.</p>';
-      return;
-    }
-    el.innerHTML = data.redemptions.map(redemption => `
-      <div class="table-row" style="align-items:flex-start;">
-        <div style="flex:1;">
-          <div style="font-weight:600;">${escapeHtml(redemption.item_name || `Item #${redemption.item_id}`)}</div>
-          <div style="font-size:0.82em;color:var(--text-muted);">User: ${escapeHtml(redemption.user_id)}  Cost: ${formatEngagementAmount(redemption.cost)}</div>
-          <div style="font-size:0.82em;color:var(--text-muted);">Mode: ${escapeHtml(redemption.fulfillment_mode || 'auto')}  Status: ${escapeHtml(redemption.fulfillment_status || 'completed')}</div>
-        </div>
-        <span style="font-size:0.8em;color:var(--text-muted);white-space:nowrap;">#${redemption.id}</span>
-      </div>
-    `).join('');
-  } catch (e) {
-    el.innerHTML = '<p style="color:var(--error);">Failed to load redemptions.</p>';
   }
 }
 
@@ -21946,7 +22580,22 @@ async function autoMessagesFetch(path, options = {}) {
   if (!response.ok || data.success === false) {
     throw new Error(data.message || data.error?.message || `Auto Messages request failed (${response.status})`);
   }
+
+  onVerificationRuleChainChange();
   return data.data || data;
+}
+
+function formatWalletChainLabel(chainId, chainFamily) {
+  const labels = {
+    'solana:mainnet': 'Solana',
+    'eip155:1': 'Ethereum',
+    'eip155:8453': 'Base',
+    'eip155:137': 'Polygon',
+    'eip155:42161': 'Arbitrum',
+    'eip155:10': 'Optimism',
+  };
+  const normalized = String(chainId || '').trim();
+  return labels[normalized] || (String(chainFamily || '').toLowerCase() === 'evm' ? 'EVM' : 'Solana');
 }
 
 function autoMessagesChannelOptions(selected = '') {
@@ -22558,8 +23207,6 @@ async function telegramBridgeSendTest(mappingId) {
 }
 
 // ==================== DASHBOARD & SEARCH LOGIC ====================
-let dashboardDataCache = null;
-let billingCryptoQuoteState = null;
 let dashboardAnalyticsRange = '7d';
 
 async function renderDashboardGrid() {
@@ -22573,10 +23220,14 @@ async function renderDashboardGrid() {
     if (!res.ok) throw new Error("Failed to fetch dashboard data");
 
     const data = await res.json();
-    dashboardDataCache = data;
-
     if (!data.success) {
-      grid.innerHTML = `<div class="empty-state"><p>${data.error || "Failed to load data"}</p></div>`;
+      grid.innerHTML = `<div class="empty-state"><p>${escapeHtml(data.error || "Failed to load data")}</p></div>`;
+      return;
+    }
+
+    const dashboardPayload = data?.data;
+    if (!dashboardPayload || typeof dashboardPayload !== 'object' || !dashboardPayload.server) {
+      grid.innerHTML = '<div class="empty-state"><p>Dashboard data is not available yet.</p></div>';
       return;
     }
 
@@ -22589,9 +23240,11 @@ async function renderDashboardGrid() {
       walletPreview = [],
       activeProposals = [],
       activeMissions = [],
-    } = data.data;
+    } = dashboardPayload;
     dashboardAnalyticsRange = ['24h', '7d', '30d'].includes(String(analyticsRange)) ? String(analyticsRange) : dashboardAnalyticsRange;
     const metrics = server.metrics || {};
+    const serverIconUrl = sanitizeImageUrl(server.icon) || '/assets/default-server.png';
+    const serverName = escapeHtml(server.name || 'Web3 Community');
     grid.className = "dashboard-bento";
 
     const overviewHtml = `
@@ -22599,8 +23252,8 @@ async function renderDashboardGrid() {
         <div class="bento-panel-header">
           <div>
             <div class="bento-panel-title">
-              <img src="${server.icon || '/assets/default-server.png'}" class="bento-icon" alt="" style="object-fit:cover; border-radius:50%;" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%234f46e5%22/><text x=%2250%22 y=%2265%22 font-family=%22Arial%22 font-size=%2240%22 fill=%22white%22 text-anchor=%22middle%22>${server.name ? server.name.charAt(0) : 'S'}</text></svg>'">
-              ${server.name || 'Web3 Community'}
+              <img src="${serverIconUrl}" class="bento-icon" alt="" style="object-fit:cover; border-radius:50%;">
+              ${serverName}
             </div>
             <div class="panel-overview-subtitle">Command center overview for modules, activity, and operations.</div>
           </div>
@@ -22646,10 +23299,10 @@ async function renderDashboardGrid() {
       { key: 'missions', section: 'heist', title: 'Missions', icon: 'fas fa-crosshairs', metric: `${Number(moduleAnalytics?.missions?.activeMissions || 0).toLocaleString()} active`, sub: `${Number(moduleAnalytics?.missions?.participantsActive || 0).toLocaleString()} participants`, enabled: !!modules?.missions?.enabled },
       { key: 'welcome', section: 'welcome', title: 'Welcome', icon: 'fas fa-hand-paper', metric: `${Number(moduleAnalytics?.welcome?.joins || 0).toLocaleString()} joins (${dashboardAnalyticsRange})`, sub: `${Number(moduleAnalytics?.welcome?.welcomesSent || 0).toLocaleString()} welcomes`, enabled: !!modules?.welcome?.enabled },
       { key: 'invites', section: 'invites', title: 'Invite Tracker', icon: 'fas fa-user-plus', metric: `${Number(moduleAnalytics?.invites?.joins || 0).toLocaleString()} joins (${dashboardAnalyticsRange})`, sub: 'Invite events', enabled: true },
-      { key: 'nfttracker', section: 'nft-activity', title: 'NFT Tracker', icon: 'fas fa-palette', metric: `${Number(moduleAnalytics?.nfttracker?.events || 0).toLocaleString()} events (${dashboardAnalyticsRange})`, sub: `${Number(moduleAnalytics?.nfttracker?.trackedCollections || 0).toLocaleString()} collections`, enabled: !!modules?.tracking?.enabled },
+      { key: 'nfttracker', section: 'nft-activity', title: 'NFT Activity', icon: 'fas fa-palette', metric: `${Number(moduleAnalytics?.nfttracker?.events || 0).toLocaleString()} events (${dashboardAnalyticsRange})`, sub: `${Number(moduleAnalytics?.nfttracker?.trackedCollections || 0).toLocaleString()} collections`, enabled: !!modules?.tracking?.enabled },
       { key: 'tokentracker', section: 'token-activity', title: 'Token Tracker', icon: 'fas fa-coins', metric: `${Number(moduleAnalytics?.tokentracker?.activeRules || 0).toLocaleString()} active rules`, sub: 'Role-gating rules', enabled: !!modules?.tracking?.enabled },
       { key: 'engagement', section: 'engagement', title: 'Engagement', icon: 'fas fa-trophy', metric: `${Number(moduleAnalytics?.engagement?.points || 0).toLocaleString()} points (${dashboardAnalyticsRange})`, sub: `${Number(moduleAnalytics?.engagement?.activeUsers || 0).toLocaleString()} active users`, enabled: true },
-      { key: 'ticketing', section: 'ticketing', title: 'Ticketing', icon: 'fas fa-ticket-alt', metric: `${Number(moduleAnalytics?.ticketing?.openTickets || 0).toLocaleString()} open`, sub: 'Open support tickets', enabled: true },
+      { key: 'ticketing', section: 'ticketing', title: 'Support Tickets', icon: 'fas fa-ticket-alt', metric: `${Number(moduleAnalytics?.ticketing?.openTickets || 0).toLocaleString()} open`, sub: 'Open support tickets', enabled: true },
       { key: 'selfserveroles', section: 'self-serve-roles', title: 'Self-Serve Roles', icon: 'fas fa-user-tag', metric: `${Number(moduleAnalytics?.selfserveroles?.activePanels || 0).toLocaleString()} panels`, sub: 'Role panels enabled', enabled: true },
       { key: 'vault', section: 'vault', title: 'Vault', icon: 'fas fa-lock', metric: `${Number(moduleAnalytics?.vault?.activeItems || 0).toLocaleString()} items`, sub: `${Number(moduleAnalytics?.vault?.pendingClaims || 0).toLocaleString()} pending claims`, enabled: true },
       { key: 'telegrambridge', section: 'telegram-bridge', title: 'Telegram Bridge', icon: 'fas fa-satellite-dish', metric: `${Number(moduleAnalytics?.telegrambridge?.activeSyncs || 0).toLocaleString()} syncs`, sub: `${Number(moduleAnalytics?.telegrambridge?.failures || 0).toLocaleString()} failures`, enabled: !!modules?.telegrambridge?.enabled },
@@ -22772,44 +23425,6 @@ async function populateEngagementTicketCategorySelect(selectedValue = '') {
     select.innerHTML = '<option value="">-- None --</option>';
   }
 }
-function renderDashboardTile(title, value, icon, meta, statusClass, onClickStr = null) {
-  const onClickAttr = onClickStr ? `onclick="${onClickStr}"` : "";
-  return `
-    <article class="dashboard-tile" ${onClickAttr}>
-      <div class="dashboard-tile__header">
-        <div class="dashboard-tile__icon">${icon}</div>
-        <span class="dashboard-tile__status ${statusClass}">${statusClass.replace("status-", "")}</span>
-      </div>
-      <div class="dashboard-tile__content">
-        <div class="dashboard-tile__title">${title}</div>
-        <div class="dashboard-tile__value">${value}</div>
-      </div>
-      <div class="dashboard-tile__footer">
-        <div class="dashboard-tile__meta">${meta}</div>
-        <div class="dashboard-tile__arrow"></div>
-      </div>
-    </article>
-  `;
-}
-
-function getModuleIcon(modId) {
-  const icons = {
-    governance: "\u{1F4DC}",
-    verification: "\u{1F4BC}",
-    battle: "\u2694\uFE0F",
-    treasury: "\u{1F4B0}",
-    nfttracker: "\u{1F3A8}",
-    tokentracker: "\u{1FA99}",
-    selfserve: "\u{1F3AD}",
-    ticketing: "\u{1F3AB}",
-    engagement: "\u{1F3C6}",
-    heist: "\u{1F3AF}",
-    aiassistant: "\u{1F916}",
-    invites: "\u{1F4E8}"
-  };
-  return icons[modId] || "\u{1F4E6}";
-}
-
 function setDashboardAnalyticsRange(range = '7d') {
   const normalized = ['24h', '7d', '30d'].includes(String(range).toLowerCase()) ? String(range).toLowerCase() : '7d';
   if (dashboardAnalyticsRange === normalized) return;

@@ -6,18 +6,27 @@ const {
 const trackedWalletsService = require('../../services/trackedWalletsService');
 const moduleGuard = require('../../utils/moduleGuard');
 const logger = require('../../utils/logger');
+const { getChain } = require('../../utils/chainIdentity');
+
+const CHAIN_CHOICES = [
+  { name: 'Solana', value: 'solana:mainnet' }, { name: 'Ethereum', value: 'eip155:1' },
+  { name: 'Base', value: 'eip155:8453' }, { name: 'Polygon', value: 'eip155:137' },
+  { name: 'Arbitrum One', value: 'eip155:42161' }, { name: 'Optimism', value: 'eip155:10' },
+];
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('token-tracker')
-    .setDescription('Track SPL token activity and alerts')
+    .setDescription('Track SPL and ERC-20 token activity and alerts')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommand(sub =>
       sub
         .setName('add')
         .setDescription('Add a token mint to track')
         .addStringOption(o =>
-          o.setName('mint').setDescription('SPL token mint address').setRequired(true))
+          o.setName('mint').setDescription('SPL mint or ERC-20 contract address').setRequired(true))
+        .addStringOption(o =>
+          o.setName('chain').setDescription('Network (defaults to Solana)').setRequired(false).addChoices(...CHAIN_CHOICES))
         .addStringOption(o =>
           o.setName('symbol').setDescription('Token symbol (optional)').setRequired(false))
         .addStringOption(o =>
@@ -102,6 +111,7 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
 
     const mint = interaction.options.getString('mint');
+    const chain = interaction.options.getString('chain') || 'solana:mainnet';
     const symbol = interaction.options.getString('symbol');
     const name = interaction.options.getString('name');
     const alertChannel = interaction.options.getChannel('alert_channel');
@@ -113,6 +123,7 @@ module.exports = {
 
     const result = trackedWalletsService.addTrackedToken({
       guildId: interaction.guildId,
+      chain,
       tokenMint: mint,
       tokenSymbol: symbol,
       tokenName: name,
@@ -132,6 +143,7 @@ module.exports = {
       .setTitle('✅ Token Mint Tracked')
       .addFields(
         { name: 'Mint', value: `\`${mint}\``, inline: false },
+        { name: 'Network', value: getChain(chain)?.name || chain, inline: true },
         { name: 'Symbol', value: symbol || '—', inline: true },
         { name: 'Name', value: name || '—', inline: true },
         { name: 'ID', value: `#${result.id}`, inline: true },
@@ -208,7 +220,8 @@ module.exports = {
       const channel = channels.length
         ? `Alert channels: ${channels.map(id => `<#${id}>`).join(', ')}`
         : (t.alert_channel_id ? `Alert channel: <#${t.alert_channel_id}>` : 'Alert channel: Wallet default');
-      return `**#${t.id}** ${mintShort}${symbol}${name}${status}\n${alerts}\n${channel}`;
+      const network = getChain(t.chain_id || 'solana:mainnet')?.name || t.chain_id || 'Solana';
+      return `**#${t.id}** ${network} · ${mintShort}${symbol}${name}${status}\n${alerts}\n${channel}`;
     });
 
     const embed = new EmbedBuilder()

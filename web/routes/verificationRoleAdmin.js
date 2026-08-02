@@ -1,5 +1,6 @@
 const express = require('express');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
+const { getChain, normalizeAddress } = require('../../utils/chainIdentity');
 
 const verificationSyncJobs = new Map();
 const VERIFICATION_SYNC_ERROR_SAMPLE_LIMIT = 10;
@@ -173,6 +174,23 @@ function createVerificationRoleAdminRouter({
 }) {
   const router = express.Router();
 
+  const normalizeCollectionRule = (body = {}, current = {}) => {
+    const chain = getChain(body.chain || body.chainId || body.chain_id || current.chainId || current.chain_id || 'solana:mainnet');
+    const rawCollection = String(body.collectionId ?? current.collectionId ?? current.collection_id ?? '').trim();
+    const collectionId = chain?.family === 'evm' ? normalizeAddress(rawCollection, chain.chainId) : rawCollection;
+    const nftStandard = chain?.family === 'evm'
+      ? String(body.nftStandard || body.nft_standard || current.nftStandard || current.nft_standard || 'erc721').trim().toLowerCase()
+      : 'solana';
+    const tokenIdRaw = body.tokenId ?? body.token_id ?? current.tokenId ?? current.token_id ?? null;
+    const tokenId = tokenIdRaw === null || tokenIdRaw === undefined || tokenIdRaw === '' ? null : String(tokenIdRaw).trim();
+    if (!chain || !collectionId) return { success: false, message: 'A supported chain and valid collection address are required' };
+    if (chain.family === 'evm' && !['erc721', 'erc1155'].includes(nftStandard)) {
+      return { success: false, message: 'EVM NFT standard must be ERC-721 or ERC-1155' };
+    }
+    if (nftStandard === 'erc1155' && !tokenId) return { success: false, message: 'ERC-1155 rules require a token ID' };
+    return { success: true, chainFamily: chain.family, chainId: chain.chainId, collectionId, nftStandard, tokenId };
+  };
+
   router.get('/api/admin/roles/config', adminAuthMiddleware, (req, res) => {
     if (!ensureVerificationModule(req, res)) return;
     try {
@@ -193,10 +211,12 @@ function createVerificationRoleAdminRouter({
   router.post('/api/admin/roles/tiers', adminAuthMiddleware, (req, res) => {
     if (!ensureVerificationModule(req, res)) return;
     try {
-      const { name, minNFTs, maxNFTs, votingPower, roleId, collectionId, neverRemove } = req.body || {};
+      const { name, minNFTs, maxNFTs, votingPower, roleId, neverRemove } = req.body || {};
       if (!name || minNFTs === undefined || maxNFTs === undefined || votingPower === undefined) {
         return res.status(400).json(toErrorResponse('Missing required fields', 'VALIDATION_ERROR'));
       }
+      const normalizedRule = normalizeCollectionRule(req.body || {});
+      if (!normalizedRule.success) return res.status(400).json(toErrorResponse(normalizedRule.message, 'VALIDATION_ERROR'));
 
       const useTenantScoped = tenantService.isMultitenantEnabled() && !!req.guildId;
       const ruleCounts = getVerificationRuleCounts(req.guildId, { tenantScoped: useTenantScoped });
@@ -229,7 +249,11 @@ function createVerificationRoleAdminRouter({
           maxNFTs,
           votingPower,
           roleId: roleId || null,
-          collectionId: collectionId || null,
+          collectionId: normalizedRule.collectionId,
+          chainFamily: normalizedRule.chainFamily,
+          chainId: normalizedRule.chainId,
+          nftStandard: normalizedRule.nftStandard,
+          tokenId: normalizedRule.tokenId,
           neverRemove: parseRuleBoolean(neverRemove, false)
         });
         saveTenantRoleConfig(req.guildId, cfg);
@@ -242,8 +266,14 @@ function createVerificationRoleAdminRouter({
         maxNFTs,
         votingPower,
         roleId || null,
-        collectionId || null,
-        parseRuleBoolean(neverRemove, false)
+        normalizedRule.collectionId,
+        parseRuleBoolean(neverRemove, false),
+        {
+          chainFamily: normalizedRule.chainFamily,
+          chainId: normalizedRule.chainId,
+          nftStandard: normalizedRule.nftStandard,
+          tokenId: normalizedRule.tokenId,
+        }
       );
       if (!result.success) return res.status(400).json(toErrorResponse(result.message || 'Failed to add tier', 'VALIDATION_ERROR', null, result));
       return res.json(toSuccessResponse(result));
@@ -264,16 +294,34 @@ function createVerificationRoleAdminRouter({
         const cfg = getTenantRoleConfig(req.guildId);
         const idx = (cfg.tiers || []).findIndex(t => String(t.name).toLowerCase() === String(name).toLowerCase());
         if (idx < 0) return res.status(404).json(toErrorResponse('Tier not found', 'NOT_FOUND'));
+        const normalizedRule = normalizeCollectionRule(updates, cfg.tiers[idx]);
+        if (!normalizedRule.success) return res.status(400).json(toErrorResponse(normalizedRule.message, 'VALIDATION_ERROR'));
         cfg.tiers[idx] = {
           ...cfg.tiers[idx],
           ...updates,
+          collectionId: normalizedRule.collectionId,
+          chainFamily: normalizedRule.chainFamily,
+          chainId: normalizedRule.chainId,
+          nftStandard: normalizedRule.nftStandard,
+          tokenId: normalizedRule.tokenId,
           neverRemove: parseRuleBoolean(updates.neverRemove ?? updates.never_remove ?? cfg.tiers[idx].neverRemove, false)
         };
         saveTenantRoleConfig(req.guildId, cfg);
         return res.json(toSuccessResponse({ message: 'Tier updated' }));
       }
 
-      const result = roleService.editTier(name, updates);
+      const currentTier = roleService.getRoleConfigSummary().tiers.find(t => String(t.name).toLowerCase() === String(name).toLowerCase());
+      if (!currentTier) return res.status(404).json(toErrorResponse('Tier not found', 'NOT_FOUND'));
+      const normalizedRule = normalizeCollectionRule(updates, currentTier);
+      if (!normalizedRule.success) return res.status(400).json(toErrorResponse(normalizedRule.message, 'VALIDATION_ERROR'));
+      const result = roleService.editTier(name, {
+        ...updates,
+        collectionId: normalizedRule.collectionId,
+        chainFamily: normalizedRule.chainFamily,
+        chainId: normalizedRule.chainId,
+        nftStandard: normalizedRule.nftStandard,
+        tokenId: normalizedRule.tokenId,
+      });
       if (!result.success) return res.status(400).json(toErrorResponse(result.message || 'Failed to update tier', 'VALIDATION_ERROR', null, result));
       return res.json(toSuccessResponse(result));
     } catch (routeError) {
@@ -492,7 +540,7 @@ function createVerificationRoleAdminRouter({
   router.post('/api/admin/roles/tokens', adminAuthMiddleware, (req, res) => {
     if (!ensureVerificationModule(req, res)) return;
     try {
-      const { tokenMint, tokenSymbol, minAmount, maxAmount, roleId, enabled, neverRemove } = req.body || {};
+      const { chain, chainId, tokenMint, tokenSymbol, minAmount, maxAmount, roleId, enabled, neverRemove } = req.body || {};
       if (!tokenMint || !roleId || minAmount === undefined || minAmount === null) {
         return res.status(400).json(toErrorResponse('tokenMint, roleId, and minAmount are required', 'VALIDATION_ERROR'));
       }
@@ -510,6 +558,7 @@ function createVerificationRoleAdminRouter({
 
       const result = roleService.addTokenRoleRule({
         guildId: req.guildId || '',
+        chain: chain || chainId || 'solana:mainnet',
         tokenMint,
         tokenSymbol: tokenSymbol || null,
         minAmount,

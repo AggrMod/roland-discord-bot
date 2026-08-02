@@ -22,6 +22,18 @@
     </section>
 
     <section class="card" style="padding:16px;margin:16px 0;">
+      <h2>Portal-managed modules</h2>
+      <ul>
+        <li><strong>Welcome &amp; Onboarding:</strong> join messages, CAPTCHA, assets, presets, and analytics.</li>
+        <li><strong>Auto Messages:</strong> recurring announcements, schedules, tests, and delivery audit.</li>
+        <li><strong>Telegram Bridge:</strong> Telegram-to-Discord mappings, media forwarding, tests, and delivery audit.</li>
+        <li><strong>Guild Guard:</strong> detectors, incidents, domains, staff identities, risk profiles, and moderation actions.</li>
+        <li><strong>Support Tickets:</strong> categories, forms, panels, transcripts, open-ticket review, and automation.</li>
+      </ul>
+      <p>Configure these features from <strong>Modules</strong> in the portal. They do not require a dedicated slash-command family.</p>
+    </section>
+
+    <section class="card" style="padding:16px;margin:16px 0;">
       <h2>Verification</h2>
       <ul>
         <li><code>/verification status</code></li>
@@ -30,6 +42,7 @@
         <li><code>/verification quick</code></li>
       </ul>
       <p><strong>Admin:</strong> <code>/verification admin panel|export-user|remove-user|export-wallets|token-role-add|token-role-remove|token-role-list|role-config|actions|og-view|og-enable|og-role|og-limit|og-sync</code></p>
+      <p><strong>Network-aware rules:</strong> Configure Solana collection/SPL rules or Ethereum, Base, Polygon, Arbitrum One, and Optimism ERC-721, ERC-1155, and ERC-20 rules in Modules → Identity / Verification. Existing roles are preserved when an EVM RPC check is unavailable.</p>
     </section>
 
     <section class="card" style="padding:16px;margin:16px 0;">
@@ -45,7 +58,7 @@
     </section>
 
     <section class="card" style="padding:16px;margin:16px 0;">
-      <h2>Treasury</h2>
+      <h2>Wallet Tracker compatibility commands</h2>
       <ul>
         <li><code>/treasury view</code></li>
       </ul>
@@ -56,8 +69,9 @@
       <h2>Trackers</h2>
       <p><strong>Wallet Tracker:</strong> <code>/wallet-tracker add|remove|list|edit|holdings|refresh-all</code></p>
       <p><strong>Invite Tracker:</strong> <code>/invites who|leaderboard|panel|export</code> (supports optional verification NFT stats)</p>
-      <p><strong>NFT Tracker:</strong> <code>/nft-tracker collection add|remove|list|feed</code></p>
+      <p><strong>NFT Activity:</strong> <code>/nft-tracker collection add|remove|list|feed</code></p>
       <p><strong>Token Tracker:</strong> <code>/token-tracker add|edit|remove|list|feed</code></p>
+      <p><strong>EVM coverage:</strong> Wallet tracking, ERC-20 transfers, ERC-721 collections, and ERC-1155 token IDs are configured per network from Modules.</p>
     </section>
 
     <section class="card" style="padding:16px;margin:16px 0;">

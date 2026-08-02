@@ -2,6 +2,8 @@ const express = require('express');
 const crypto = require('crypto');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
 const { maskAddress } = require('../../utils/mask');
+const { getChain, normalizeAddress, listSupportedChains } = require('../../utils/chainIdentity');
+const evmService = require('../../services/evmService');
 
 function createUserWalletVerificationRouter({
   logger,
@@ -50,52 +52,175 @@ function createUserWalletVerificationRouter({
     }
   };
 
+  const verificationSessionHash = (req) => crypto
+    .createHash('sha256')
+    .update(String(req.sessionID || ''))
+    .digest('hex');
+
+  const resolveVerificationOrigin = (req) => {
+    const configured = String(process.env.WEB_URL || '').trim();
+    const candidate = configured || `${req.protocol || 'https'}://${String(req.get('host') || '').trim()}`;
+    try {
+      return new URL(candidate).origin;
+    } catch (_error) {
+      return '';
+    }
+  };
+
+  router.get('/api/verify/chains', (_req, res) => res.json(toSuccessResponse({
+    chains: listSupportedChains().map(chain => ({
+      chainId: chain.chainId,
+      family: chain.family,
+      name: chain.name,
+      nativeSymbol: chain.nativeSymbol,
+      hexChainId: chain.hexChainId || null,
+    })),
+  })));
+
   router.post('/api/verify/challenge', (req, res) => {
     if (!requireUser(req, res)) return;
 
     try {
-      const nonce = crypto.randomBytes(16).toString('hex');
+      const chain = getChain(req.body?.chain || 'solana:mainnet');
+      const walletAddress = normalizeAddress(req.body?.walletAddress, chain?.chainId);
+      if (!chain || !walletAddress) {
+        return res.status(400).json(toErrorResponse('A supported chain and valid wallet address are required', 'VALIDATION_ERROR'));
+      }
+      const discordId = String(req.session.discordUser.id || '').trim();
+      const guildId = String(req.guildId || '').trim();
+      const origin = resolveVerificationOrigin(req);
+      if (!origin) {
+        return res.status(500).json(toErrorResponse('Wallet verification origin is not configured', 'CONFIG_ERROR'));
+      }
+
+      const challengeId = crypto.randomBytes(24).toString('hex');
+      const nonce = crypto.randomBytes(24).toString('hex');
+      const issuedAt = new Date();
+      const expiresAt = new Date(issuedAt.getTime() + (5 * 60 * 1000));
       const branding = getBranding(req.guildId || '', 'verification');
-      const brandName = String(branding?.brandName || branding?.displayName || 'Guild Pilot').trim() || 'Guild Pilot';
-      const message = `${brandName} Wallet Verification\nUser: ${req.session.discordUser.username}\nNonce: ${nonce}`;
-      req.session.verifyChallenge = { message, nonce, createdAt: Date.now() };
-      return res.json(toSuccessResponse({ message }));
+      const brandName = String(branding?.brandName || branding?.displayName || 'GuildPilot')
+        .replace(/[\r\n]+/g, ' ')
+        .trim()
+        .slice(0, 80) || 'GuildPilot';
+      const verificationUri = `${origin}/app?section=wallets`;
+      const message = chain.family === 'evm'
+        ? [
+          `${new URL(origin).host} wants you to sign in with your Ethereum account:`,
+          walletAddress,
+          '',
+          `Link this ${chain.name} wallet to your Discord account on ${brandName}.`,
+          '',
+          `URI: ${verificationUri}`,
+          'Version: 1',
+          `Chain ID: ${chain.numericChainId}`,
+          `Nonce: ${nonce}`,
+          `Issued At: ${issuedAt.toISOString()}`,
+          `Expiration Time: ${expiresAt.toISOString()}`,
+          `Request ID: ${challengeId}`,
+        ].join('\n')
+        : [
+          `${brandName} wants you to verify this Solana wallet:`,
+          walletAddress,
+          '',
+          'Purpose: Link this wallet to your Discord account',
+          `URI: ${verificationUri}`,
+          `Chain: ${chain.chainId}`,
+          `Discord ID: ${discordId}`,
+          `Guild ID: ${guildId || 'none'}`,
+          `Nonce: ${nonce}`,
+          `Issued At: ${issuedAt.toISOString()}`,
+          `Expiration Time: ${expiresAt.toISOString()}`,
+          `Request ID: ${challengeId}`,
+        ].join('\n');
+
+      db.prepare(`
+        DELETE FROM wallet_verification_challenges
+        WHERE expires_at <= CURRENT_TIMESTAMP
+           OR (discord_id = ? AND session_hash = ? AND consumed_at IS NULL)
+      `).run(discordId, verificationSessionHash(req));
+      db.prepare(`
+        INSERT INTO wallet_verification_challenges (
+          challenge_id, session_hash, discord_id, guild_id, chain_family, chain_id,
+          wallet_address, message, expires_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        challengeId,
+        verificationSessionHash(req),
+        discordId,
+        guildId,
+        chain.family,
+        chain.chainId,
+        walletAddress,
+        message,
+        expiresAt.toISOString()
+      );
+
+      return res.json(toSuccessResponse({ message, challengeId, expiresAt: expiresAt.toISOString(), chain: chain.chainId }));
     } catch (routeError) {
       logger.error('Error generating challenge:', routeError);
       return res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 
-  router.post('/api/verify/signature', async (req, res) => {
+  const verifyWalletSignature = async (req, res) => {
     if (!requireUser(req, res)) return;
 
     try {
-      const { walletAddress, signature } = req.body || {};
-      const discordId = req.session.discordUser.id;
+      const chain = getChain(req.body?.chain || 'solana:mainnet');
+      const walletAddress = normalizeAddress(req.body?.walletAddress, chain?.chainId);
+      const signature = String(req.body?.signature || '').trim();
+      const challengeId = String(req.body?.challengeId || '').trim();
+      const discordId = String(req.session.discordUser.id || '').trim();
+      const guildId = String(req.guildId || '').trim();
 
-      if (!walletAddress || !signature) {
-        return res.status(400).json(toErrorResponse('Missing walletAddress or signature', 'VALIDATION_ERROR'));
+      if (!chain || !walletAddress || !signature || signature.length > 1024 || !/^[a-f0-9]{48}$/.test(challengeId)) {
+        return res.status(400).json(toErrorResponse('Missing or invalid wallet verification fields', 'VALIDATION_ERROR'));
       }
 
-      const challenge = req.session.verifyChallenge;
-      if (!challenge || (Date.now() - challenge.createdAt) > 5 * 60 * 1000) {
-        return res.status(400).json(toErrorResponse('Challenge expired. Please try again.', 'VALIDATION_ERROR'));
+      const consumeChallenge = db.transaction(() => {
+        const challenge = db.prepare(`
+          SELECT * FROM wallet_verification_challenges
+          WHERE challenge_id = ?
+            AND session_hash = ?
+            AND discord_id = ?
+            AND guild_id = ?
+            AND chain_family = ?
+            AND chain_id = ?
+            AND wallet_address = ?
+            AND consumed_at IS NULL
+            AND expires_at > CURRENT_TIMESTAMP
+          LIMIT 1
+        `).get(challengeId, verificationSessionHash(req), discordId, guildId, chain.family, chain.chainId, walletAddress);
+        if (!challenge) return null;
+        const consumed = db.prepare(`
+          UPDATE wallet_verification_challenges
+          SET consumed_at = CURRENT_TIMESTAMP, attempts = attempts + 1
+          WHERE challenge_id = ? AND consumed_at IS NULL
+        `).run(challengeId);
+        return consumed.changes === 1 ? challenge : null;
+      });
+      const challenge = consumeChallenge();
+      if (!challenge) {
+        return res.status(400).json(toErrorResponse('Challenge is invalid, expired, or already used. Request a new challenge.', 'VALIDATION_ERROR'));
       }
 
-      const isValid = verifySignature(walletAddress, signature, challenge.message);
+      const isValid = chain.family === 'evm'
+        ? evmService.verifyWalletSignature({ address: walletAddress, signature, message: challenge.message })
+        : verifySignature(walletAddress, signature, challenge.message);
       if (!isValid) {
         return res.status(400).json(toErrorResponse('Invalid signature. Make sure you signed with the correct wallet.', 'VALIDATION_ERROR'));
       }
 
-      delete req.session.verifyChallenge;
-
-      const existingWallet = db.prepare('SELECT * FROM wallets WHERE wallet_address = ?').get(walletAddress);
+      const existingWallet = db.prepare('SELECT * FROM wallets WHERE chain_family = ? AND wallet_address = ?')
+        .get(chain.family, walletAddress);
       if (existingWallet) {
         if (existingWallet.discord_id === discordId) {
-          triggerVaultBackfillBestEffort(req, discordId, walletAddress);
+          if (chain.family === 'solana') triggerVaultBackfillBestEffort(req, discordId, walletAddress);
           try {
             await refreshUserRoles(req, discordId, req.session.discordUser.username || 'Web User');
-            triggerOgRoleBestEffort(req, discordId, req.session.discordUser.username || 'Web User');
+            if (chain.family === 'solana') {
+              triggerOgRoleBestEffort(req, discordId, req.session.discordUser.username || 'Web User');
+            }
           } catch (roleErr) {
             logger.error('Role refresh after verify-existing failed (non-fatal):', roleErr);
           }
@@ -109,7 +234,13 @@ function createUserWalletVerificationRouter({
         db.prepare('INSERT INTO users (discord_id, username) VALUES (?, ?)').run(discordId, req.session.discordUser.username || 'Web User');
       }
 
-      const linkResult = walletService.linkWallet(discordId, req.session.discordUser.username || 'Web User', walletAddress, req.guildId || '');
+      const linkResult = walletService.linkWallet(
+        discordId,
+        req.session.discordUser.username || 'Web User',
+        walletAddress,
+        req.guildId || '',
+        chain.chainId
+      );
       if (!linkResult?.success) {
         return res.status(400).json(toErrorResponse(linkResult?.message || 'Failed to link wallet', 'VALIDATION_ERROR'));
       }
@@ -121,82 +252,24 @@ function createUserWalletVerificationRouter({
       }
 
       // Always attempt OG assignment in guild context (safe no-op if not eligible/already assigned).
-      triggerOgRoleBestEffort(req, discordId, req.session.discordUser.username || 'Web User');
+      if (chain.family === 'solana') {
+        triggerOgRoleBestEffort(req, discordId, req.session.discordUser.username || 'Web User');
+      }
 
       logger.log(`Web signature verification: User ${discordId} linked wallet ${maskAddress(walletAddress)}`);
-      return res.json(toSuccessResponse({ message: 'Wallet verified successfully!' }));
+      return res.json(toSuccessResponse({
+        message: `${chain.name} wallet verified successfully!`,
+        isFavorite: !!linkResult?.isFirstWallet,
+        chain: chain.chainId,
+      }));
     } catch (routeError) {
       logger.error('Error in signature verification:', routeError);
       return res.status(500).json(toErrorResponse('Internal server error'));
     }
-  });
+  };
 
-  router.post('/api/verify', async (req, res) => {
-    if (!req.session?.discordUser?.id) {
-      return res.status(401).json(toErrorResponse('Not authenticated', 'UNAUTHORIZED'));
-    }
-
-    try {
-      const discordId = req.session.discordUser.id;
-      const { walletAddress, signature } = req.body || {};
-
-      if (!walletAddress || !signature) {
-        return res.status(400).json(toErrorResponse('Missing required fields', 'VALIDATION_ERROR'));
-      }
-
-      const challenge = req.session.verifyChallenge;
-      if (!challenge || (Date.now() - challenge.createdAt) > 5 * 60 * 1000) {
-        return res.status(400).json(toErrorResponse('Challenge expired. Request a new challenge first.', 'VALIDATION_ERROR'));
-      }
-
-      const isValid = verifySignature(walletAddress, signature, challenge.message);
-      delete req.session.verifyChallenge;
-
-      if (!isValid) {
-        return res.status(400).json(toErrorResponse('Invalid signature', 'VALIDATION_ERROR'));
-      }
-
-      const existingWallet = db.prepare('SELECT * FROM wallets WHERE wallet_address = ?').get(walletAddress);
-      if (existingWallet) {
-        if (existingWallet.discord_id === discordId) {
-          triggerVaultBackfillBestEffort(req, discordId, walletAddress);
-          try {
-            await refreshUserRoles(req, discordId, req.session.discordUser?.username || 'Web User');
-            triggerOgRoleBestEffort(req, discordId, req.session.discordUser?.username || 'Web User');
-          } catch (roleErr) {
-            logger.error('Role refresh after legacy verify-existing failed (non-fatal):', roleErr);
-          }
-          return res.json(toSuccessResponse({ message: 'Wallet already linked. Verification status refreshed.' }));
-        }
-        return res.status(400).json(toErrorResponse('This wallet is already linked to another account', 'VALIDATION_ERROR'));
-      }
-
-      const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(discordId);
-      if (!user) {
-        db.prepare('INSERT INTO users (discord_id, username) VALUES (?, ?)').run(discordId, 'Web User');
-      }
-
-      const linkResult = walletService.linkWallet(discordId, req.session.discordUser?.username || 'Web User', walletAddress, req.guildId || '');
-      if (!linkResult?.success) {
-        return res.status(400).json(toErrorResponse(linkResult?.message || 'Failed to link wallet', 'VALIDATION_ERROR'));
-      }
-
-      try {
-        await refreshUserRoles(req, discordId, 'Web User');
-      } catch (roleErr) {
-        logger.error('Role update after legacy verify failed (non-fatal):', roleErr);
-      }
-
-      // Always attempt OG assignment in guild context (safe no-op if not eligible/already assigned).
-      triggerOgRoleBestEffort(req, discordId, req.session.discordUser?.username || 'Web User');
-
-      logger.log(`Web verification: User ${discordId} linked wallet ${maskAddress(walletAddress)}`);
-      return res.json(toSuccessResponse({ message: 'Wallet verified successfully', isFavorite: !!linkResult?.isFirstWallet }));
-    } catch (routeError) {
-      logger.error('Error verifying wallet:', routeError);
-      return res.status(500).json(toErrorResponse('Internal server error'));
-    }
-  });
+  router.post('/api/verify/signature', verifyWalletSignature);
+  router.post('/api/verify', verifyWalletSignature);
 
   router.get('/api/wallets/:discordId', (req, res) => {
     if (!req.session?.discordUser?.id) {
@@ -208,7 +281,12 @@ function createUserWalletVerificationRouter({
 
     try {
       const { discordId } = req.params;
-      const wallets = db.prepare('SELECT wallet_address, is_favorite, primary_wallet, created_at FROM wallets WHERE discord_id = ? ORDER BY is_favorite DESC, created_at ASC').all(discordId);
+      const wallets = db.prepare(`
+        SELECT wallet_address, chain_family, chain_id, is_favorite, primary_wallet, created_at
+        FROM wallets
+        WHERE discord_id = ?
+        ORDER BY is_favorite DESC, created_at ASC
+      `).all(discordId);
       return res.json(toSuccessResponse({ wallets }));
     } catch (routeError) {
       logger.error('Error fetching wallets:', routeError);

@@ -2,10 +2,13 @@ const db = require('../database/db');
 const logger = require('../utils/logger');
 const clientProvider = require('../utils/clientProvider');
 const { maskAddress } = require('../utils/mask');
+const { getChain, normalizeAddress } = require('../utils/chainIdentity');
 
 class WalletService {
   normalizeWallet(value) {
-    return String(value || '').trim().toLowerCase();
+    // Solana base58 public keys are case-sensitive. Chain-specific EVM
+    // canonicalization will live in the EVM adapter instead of this legacy API.
+    return String(value || '').trim();
   }
 
   normalizeGuild(value) {
@@ -50,8 +53,13 @@ class WalletService {
     }
   }
 
-  linkWallet(discordId, username, walletAddress, guildId = '') {
+  linkWallet(discordId, username, walletAddress, guildId = '', chainValue = 'solana:mainnet') {
     try {
+      const chain = getChain(chainValue);
+      const normalizedWalletAddress = normalizeAddress(walletAddress, chain?.chainId);
+      if (!chain || !normalizedWalletAddress) {
+        return { success: false, message: 'Unsupported chain or invalid wallet address' };
+      }
       // Wrap existence check + INSERT in a transaction to prevent race conditions
       const linkTransaction = db.transaction(() => {
         let user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(discordId);
@@ -60,7 +68,8 @@ class WalletService {
           db.prepare('INSERT INTO users (discord_id, username) VALUES (?, ?)').run(discordId, username);
         }
 
-        const existingWallet = db.prepare('SELECT * FROM wallets WHERE wallet_address = ?').get(walletAddress);
+        const existingWallet = db.prepare('SELECT * FROM wallets WHERE chain_family = ? AND wallet_address = ?')
+          .get(chain.family, normalizedWalletAddress);
 
         if (existingWallet) {
           if (existingWallet.discord_id === discordId) {
@@ -73,8 +82,10 @@ class WalletService {
         const isPrimary = walletCount === 0 ? 1 : 0;
         const isFirstWallet = walletCount === 0;
 
-        db.prepare('INSERT INTO wallets (discord_id, wallet_address, primary_wallet, is_favorite) VALUES (?, ?, ?, ?)')
-          .run(discordId, walletAddress, isPrimary, isPrimary);
+        db.prepare(`
+          INSERT INTO wallets (discord_id, chain_family, chain_id, wallet_address, primary_wallet, is_favorite)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(discordId, chain.family, chain.chainId, normalizedWalletAddress, isPrimary, isPrimary);
 
         return { success: true, message: 'Wallet linked successfully', isFirstWallet };
       });
@@ -82,12 +93,14 @@ class WalletService {
       const result = linkTransaction();
 
       if (result.success && result.isFirstWallet) {
-        logger.log(`Wallet ${maskAddress(walletAddress)} linked to user ${discordId}`);
-        this.triggerOGRoleAssignment(discordId, username, guildId);
-        this.triggerVaultBackfill(discordId, guildId, walletAddress);
+        logger.log(`${chain.name} wallet ${maskAddress(normalizedWalletAddress)} linked to user ${discordId}`);
+        if (chain.family === 'solana') {
+          this.triggerOGRoleAssignment(discordId, username, guildId);
+          this.triggerVaultBackfill(discordId, guildId, normalizedWalletAddress);
+        }
       } else if (result.success) {
-        logger.log(`Wallet ${maskAddress(walletAddress)} linked to user ${discordId}`);
-        this.triggerVaultBackfill(discordId, guildId, walletAddress);
+        logger.log(`${chain.name} wallet ${maskAddress(normalizedWalletAddress)} linked to user ${discordId}`);
+        if (chain.family === 'solana') this.triggerVaultBackfill(discordId, guildId, normalizedWalletAddress);
       }
 
       return result;
@@ -162,7 +175,12 @@ class WalletService {
 
   getLinkedWallets(discordId) {
     try {
-      const wallets = db.prepare('SELECT wallet_address, primary_wallet FROM wallets WHERE discord_id = ? ORDER BY primary_wallet DESC').all(discordId);
+      const wallets = db.prepare(`
+        SELECT wallet_address, chain_family, chain_id, primary_wallet, is_favorite
+        FROM wallets
+        WHERE discord_id = ?
+        ORDER BY primary_wallet DESC, created_at ASC
+      `).all(discordId);
       return wallets;
     } catch (error) {
       logger.error('Error fetching wallets:', error);
@@ -180,7 +198,7 @@ class WalletService {
           UPDATE wallet_delegations
           SET status = 'revoked', updated_at = CURRENT_TIMESTAMP
           WHERE discord_id = ?
-            AND LOWER(delegate_wallet_address) = LOWER(?)
+            AND delegate_wallet_address = ?
             AND status = 'active'
         `).run(discordId, delegateWallet);
         if (Number(revokedDelegations?.changes || 0) > 0) {
@@ -231,7 +249,7 @@ class WalletService {
         UPDATE wallet_delegations
         SET status = 'revoked', updated_at = CURRENT_TIMESTAMP
         WHERE discord_id = ?
-          AND LOWER(cold_wallet_address) = LOWER(?)
+          AND cold_wallet_address = ?
           AND (? = '' OR guild_id = ?)
           AND status = 'active'
       `).run(String(discordId || '').trim(), coldWallet, normalizedGuildId, normalizedGuildId);
@@ -253,8 +271,12 @@ class WalletService {
     }
   }
 
-  getAllUserWallets(discordId, guildId = '') {
-    const directWallets = this.getLinkedWallets(discordId).map(w => String(w.wallet_address || '').trim()).filter(Boolean);
+  getAllUserWallets(discordId, guildId = '', options = {}) {
+    const chainFamily = String(options?.chainFamily || 'solana').trim().toLowerCase();
+    const directWallets = this.getLinkedWallets(discordId)
+      .filter(wallet => !chainFamily || String(wallet.chain_family || 'solana') === chainFamily)
+      .map(w => String(w.wallet_address || '').trim())
+      .filter(Boolean);
     return [...new Set(directWallets)];
   }
 

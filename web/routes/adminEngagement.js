@@ -253,9 +253,6 @@ function createAdminEngagementRouter({
   };
 
   router.get('/api/admin/engagement/monitored-accounts', adminAuthMiddleware, handleGetMonitoredAccounts);
-  // Backward-compat alias for older cached portal bundles that call a malformed URL.
-  router.get('/api/admin/engagement.onitored-accounts', adminAuthMiddleware, handleGetMonitoredAccounts);
-
   router.post('/api/admin/engagement/monitored-accounts', adminAuthMiddleware, (req, res) => {
     if (!guard(req, res)) return;
     try {

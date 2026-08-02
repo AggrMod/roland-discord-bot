@@ -22,7 +22,7 @@ module.exports = {
       INSERT OR IGNORE INTO user_tenant_memberships (discord_id, guild_id, source, last_verified_at, created_at, updated_at)
       SELECT w.discord_id, tw.guild_id, 'tracked_wallet', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       FROM tracked_wallets tw
-      INNER JOIN wallets w ON LOWER(w.wallet_address) = LOWER(tw.wallet_address)
+      INNER JOIN wallets w ON w.wallet_address = tw.wallet_address
       WHERE tw.guild_id IS NOT NULL AND tw.guild_id <> ''
         AND w.discord_id IS NOT NULL AND w.discord_id <> ''
       `,

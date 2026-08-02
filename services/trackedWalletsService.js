@@ -7,12 +7,14 @@ const clientProvider = require('../utils/clientProvider');
 const { applyEmbedBranding, getBranding } = require('./embedBranding');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { Connection, PublicKey, LAMPORTS_PER_SOL } = require('@solana/web3.js');
+const evmService = require('./evmService');
+const { getChain, getExplorerUrl, normalizeAddress: normalizeChainAddress } = require('../utils/chainIdentity');
 
 const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 const USDT_MINT = 'Es9vMFrzaCERmJfrF4H2sW9gK5bN8wK5Y7vJgqS5M8X';
 const STABLECOIN_MINTS = new Set([
-  USDC_MINT.toLowerCase(),
-  USDT_MINT.toLowerCase(),
+  USDC_MINT,
+  USDT_MINT,
 ]);
 const TOKEN_ACTIVITY_POLL_LIMIT = Math.max(10, Math.min(50, Number(process.env.TRACKED_TOKEN_POLL_LIMIT || 25)));
 const TOKEN_ACTIVITY_ALERT_CAP_PER_WALLET = Math.max(1, Math.min(25, Number(process.env.TRACKED_TOKEN_ALERT_CAP || 8)));
@@ -75,7 +77,7 @@ function parseUiAmount(entry) {
 }
 
 function normalizeAddress(address) {
-  return String(address || '').trim().toLowerCase();
+  return String(address || '').trim();
 }
 
 function normalizeDiscordChannelId(channelId) {
@@ -181,7 +183,7 @@ class TrackedWalletsService {
   }
   // ─── CRUD ────────────────────────────────────────────────────────────────
 
-  addTrackedWallet({ guildId, walletAddress, label, alertChannelId, panelChannelId }) {
+  addTrackedWallet({ guildId, walletAddress, chain: chainValue = 'solana:mainnet', label, alertChannelId, panelChannelId }) {
     try {
       const normalizedGuildId = String(guildId || '').trim();
       if (normalizedGuildId) {
@@ -220,22 +222,27 @@ class TrackedWalletsService {
         }
       }
 
-      const addr = String(walletAddress || '').trim();
-      if (!addr) return { success: false, message: 'walletAddress is required' };
+      const chain = getChain(chainValue);
+      const addr = normalizeChainAddress(walletAddress, chain?.chainId);
+      if (!chain || !addr) return { success: false, message: 'A supported chain and valid walletAddress are required' };
 
       const result = db.prepare(`
-        INSERT INTO tracked_wallets (guild_id, wallet_address, label, alert_channel_id, panel_channel_id)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO tracked_wallets (guild_id, chain_family, chain_id, wallet_address, label, alert_channel_id, panel_channel_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(
         normalizedGuildId,
+        chain.family,
+        chain.chainId,
         addr,
         (label || '').trim() || null,
         (alertChannelId || '').trim() || null,
         (panelChannelId || '').trim() || null,
       );
 
-      this.syncWalletAddressToHeliusWebhook(addr, 'add')
-        .catch(err => logger.error('[tracked-token-webhook] failed to sync added wallet to helius webhook:', err?.message || err));
+      if (chain.family === 'solana') {
+        this.syncWalletAddressToHeliusWebhook(addr, 'add')
+          .catch(err => logger.error('[tracked-token-webhook] failed to sync added wallet to helius webhook:', err?.message || err));
+      }
 
       return { success: true, id: result.lastInsertRowid };
     } catch (e) {
@@ -250,15 +257,15 @@ class TrackedWalletsService {
   removeTrackedWallet(id, guildId) {
     try {
       const existing = guildId
-        ? db.prepare('SELECT id, guild_id, wallet_address, enabled FROM tracked_wallets WHERE id = ? AND guild_id = ?').get(id, guildId)
-        : db.prepare('SELECT id, guild_id, wallet_address, enabled FROM tracked_wallets WHERE id = ?').get(id);
+        ? db.prepare('SELECT id, guild_id, chain_family, chain_id, wallet_address, enabled FROM tracked_wallets WHERE id = ? AND guild_id = ?').get(id, guildId)
+        : db.prepare('SELECT id, guild_id, chain_family, chain_id, wallet_address, enabled FROM tracked_wallets WHERE id = ?').get(id);
       const query = guildId
         ? 'DELETE FROM tracked_wallets WHERE id = ? AND guild_id = ?'
         : 'DELETE FROM tracked_wallets WHERE id = ?';
       const params = guildId ? [id, guildId] : [id];
       const result = db.prepare(query).run(...params);
 
-      if (result.changes > 0 && existing?.wallet_address) {
+      if (result.changes > 0 && existing?.wallet_address && String(existing.chain_family || 'solana') === 'solana') {
         const remaining = this.countEnabledTrackedWalletsByAddress(existing.wallet_address);
         if (remaining === 0) {
           this.syncWalletAddressToHeliusWebhook(existing.wallet_address, 'remove')
@@ -302,12 +309,51 @@ class TrackedWalletsService {
 
       const walletSnapshots = await Promise.all(
         wallets.map(async (walletRow) => {
+          const chain = getChain(walletRow.chain_id || 'solana:mainnet');
+          if (chain?.family === 'evm') {
+            try {
+              const native = await evmService.getNativeBalance(walletRow.wallet_address, chain.chainId);
+              return {
+                id: walletRow.id,
+                walletAddress: walletRow.wallet_address,
+                label: walletRow.label || null,
+                enabled: Number(walletRow.enabled || 0) === 1,
+                chainFamily: chain.family,
+                chainId: chain.chainId,
+                chainName: chain.name,
+                nativeSymbol: native.symbol,
+                nativeBalance: Number(native.formatted),
+                sol: null,
+                usdc: null,
+              };
+            } catch (error) {
+              return {
+                id: walletRow.id,
+                walletAddress: walletRow.wallet_address,
+                label: walletRow.label || null,
+                enabled: Number(walletRow.enabled || 0) === 1,
+                chainFamily: chain.family,
+                chainId: chain.chainId,
+                chainName: chain.name,
+                nativeSymbol: chain.nativeSymbol,
+                nativeBalance: null,
+                error: error?.message || 'RPC unavailable',
+                sol: null,
+                usdc: null,
+              };
+            }
+          }
           const balances = await _getSolanaBalances(walletRow.wallet_address);
           return {
             id: walletRow.id,
             walletAddress: walletRow.wallet_address,
             label: walletRow.label || null,
             enabled: Number(walletRow.enabled || 0) === 1,
+            chainFamily: 'solana',
+            chainId: 'solana:mainnet',
+            chainName: 'Solana',
+            nativeSymbol: 'SOL',
+            nativeBalance: Number.isFinite(Number(balances?.sol)) ? Number(balances.sol) : null,
             sol: Number.isFinite(Number(balances?.sol)) ? Number(balances.sol) : null,
             usdc: Number.isFinite(Number(balances?.usdc)) ? Number(balances.usdc) : null,
           };
@@ -326,6 +372,13 @@ class TrackedWalletsService {
         success: true,
         walletCount: walletSnapshots.length,
         totals,
+        byChain: walletSnapshots.reduce((acc, row) => {
+          const key = String(row.chainId || 'solana:mainnet');
+          if (!acc[key]) acc[key] = { chainId: key, chainName: row.chainName, nativeSymbol: row.nativeSymbol, nativeBalance: 0, walletCount: 0 };
+          acc[key].walletCount += 1;
+          if (Number.isFinite(row.nativeBalance)) acc[key].nativeBalance += row.nativeBalance;
+          return acc;
+        }, {}),
         wallets: walletSnapshots,
         lastUpdated: new Date().toISOString(),
       };
@@ -346,12 +399,13 @@ class TrackedWalletsService {
     }
   }
 
-  getTrackedWalletsByAddress(walletAddress) {
+  getTrackedWalletsByAddress(walletAddress, chainId = null) {
     try {
-      return db.prepare(`
+      const rows = db.prepare(`
         SELECT * FROM tracked_wallets
         WHERE LOWER(wallet_address) = LOWER(?) AND enabled = 1
       `).all(walletAddress);
+      return chainId ? rows.filter(row => String(row.chain_id || 'solana:mainnet') === chainId) : rows;
     } catch (e) {
       return [];
     }
@@ -361,7 +415,7 @@ class TrackedWalletsService {
     try {
       const normalized = Array.from(new Set(
         (Array.isArray(addresses) ? addresses : [])
-          .map(addr => String(addr || '').trim().toLowerCase())
+          .map(addr => String(addr || '').trim())
           .filter(Boolean)
       ));
       if (!normalized.length) return [];
@@ -370,7 +424,7 @@ class TrackedWalletsService {
       return db.prepare(`
         SELECT * FROM tracked_wallets
         WHERE enabled = 1
-          AND LOWER(wallet_address) IN (${placeholders})
+          AND wallet_address IN (${placeholders})
       `).all(...normalized);
     } catch (e) {
       logger.error('Error getting tracked wallets by addresses:', e);
@@ -430,7 +484,7 @@ class TrackedWalletsService {
         SELECT COUNT(*) AS count
         FROM tracked_wallets
         WHERE enabled = 1
-          AND LOWER(wallet_address) = LOWER(?)
+          AND wallet_address = ?
       `).get(walletAddress);
       return Number(row?.count || 0);
     } catch (_error) {
@@ -534,7 +588,7 @@ class TrackedWalletsService {
     const { apiKey, webhookId } = this.getHeliusTokenWebhookConfig();
     if (!apiKey || !webhookId) return { success: false, skipped: true, reason: 'missing_helius_webhook_config' };
 
-    const enabledWallets = db.prepare('SELECT DISTINCT wallet_address FROM tracked_wallets WHERE enabled = 1').all()
+    const enabledWallets = db.prepare("SELECT DISTINCT wallet_address FROM tracked_wallets WHERE enabled = 1 AND chain_family = 'solana'").all()
       .map(row => String(row?.wallet_address || '').trim())
       .filter(addr => addr && isValidSolanaAddress(addr));
     if (!enabledWallets.length) return { success: true, skipped: true, reason: 'no_enabled_wallets' };
@@ -561,6 +615,7 @@ class TrackedWalletsService {
 
   addTrackedToken({
     guildId,
+    chain: chainValue = 'solana:mainnet',
     tokenMint,
     tokenSymbol = null,
     tokenName = null,
@@ -575,8 +630,9 @@ class TrackedWalletsService {
   }) {
     try {
       const guild = String(guildId || '').trim();
-      const mint = String(tokenMint || '').trim();
-      if (!guild || !mint) return { success: false, message: 'guildId and tokenMint are required' };
+      const chain = getChain(chainValue);
+      const mint = normalizeChainAddress(tokenMint, chain?.chainId);
+      if (!guild || !chain || !mint) return { success: false, message: 'guildId, a supported chain, and valid token address are required' };
 
       const countRow = db.prepare(`
         SELECT COUNT(1) AS count
@@ -608,11 +664,13 @@ class TrackedWalletsService {
 
       const result = db.prepare(`
         INSERT INTO tracked_tokens (
-          guild_id, token_mint, token_symbol, token_name, decimals, enabled, alert_channel_id, alert_channel_ids, alert_buys, alert_sells, alert_transfers, min_alert_amount
+          guild_id, chain_family, chain_id, token_mint, token_symbol, token_name, decimals, enabled, alert_channel_id, alert_channel_ids, alert_buys, alert_sells, alert_transfers, min_alert_amount
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         guild,
+        chain.family,
+        chain.chainId,
         mint,
         String(tokenSymbol || '').trim() || null,
         String(tokenName || '').trim() || null,
@@ -627,8 +685,10 @@ class TrackedWalletsService {
       );
 
       // Keep Helius webhook account addresses in sync for live push coverage.
-      this.syncWalletAddressToHeliusWebhook(mint, 'add')
-        .catch(err => logger.error('[tracked-token-webhook] failed to sync added tracked token mint to helius webhook:', err?.message || err));
+      if (chain.family === 'solana') {
+        this.syncWalletAddressToHeliusWebhook(mint, 'add')
+          .catch(err => logger.error('[tracked-token-webhook] failed to sync added tracked token mint to helius webhook:', err?.message || err));
+      }
 
       return { success: true, id: Number(result.lastInsertRowid) };
     } catch (e) {
@@ -754,7 +814,7 @@ class TrackedWalletsService {
       const mintAfter = String(
         (Object.prototype.hasOwnProperty.call(updates, 'tokenMint') ? updates.tokenMint : before?.token_mint) || ''
       ).trim();
-      if (enabledAfter && mintAfter) {
+      if (enabledAfter && mintAfter && String(before?.chain_family || 'solana') === 'solana') {
         this.syncWalletAddressToHeliusWebhook(mintAfter, 'add')
           .catch(err => logger.error('[tracked-token-webhook] failed to sync updated tracked token mint to helius webhook:', err?.message || err));
       }
@@ -785,14 +845,14 @@ class TrackedWalletsService {
       const safeLimit = Math.min(Math.max(Number(limit) || 30, 1), 100);
       const rows = guildId
         ? db.prepare(`
-          SELECT id, guild_id, wallet_id, wallet_address, token_mint, token_symbol, token_name, event_type, amount_delta, balance_after, sol_delta, stable_delta, tx_signature, event_time, source, created_at
+          SELECT id, guild_id, chain_family, chain_id, wallet_id, wallet_address, token_mint, token_symbol, token_name, event_type, amount_delta, amount_raw, balance_after, sol_delta, stable_delta, tx_signature, event_time, source, created_at
           FROM tracked_token_events
           WHERE guild_id = ?
           ORDER BY datetime(COALESCE(event_time, created_at)) DESC
           LIMIT ?
         `).all(String(guildId), safeLimit)
         : db.prepare(`
-          SELECT id, guild_id, wallet_id, wallet_address, token_mint, token_symbol, token_name, event_type, amount_delta, balance_after, sol_delta, stable_delta, tx_signature, event_time, source, created_at
+          SELECT id, guild_id, chain_family, chain_id, wallet_id, wallet_address, token_mint, token_symbol, token_name, event_type, amount_delta, amount_raw, balance_after, sol_delta, stable_delta, tx_signature, event_time, source, created_at
           FROM tracked_token_events
           ORDER BY datetime(COALESCE(event_time, created_at)) DESC
           LIMIT ?
@@ -813,6 +873,7 @@ class TrackedWalletsService {
 
   saveTrackedTokenEvent({
     guildId,
+    chainId = 'solana:mainnet',
     walletId,
     walletAddress,
     tokenMint,
@@ -820,6 +881,7 @@ class TrackedWalletsService {
     tokenName,
     eventType,
     amountDelta,
+    amountRaw = null,
     balanceAfter = null,
     solDelta = null,
     stableDelta = null,
@@ -835,7 +897,7 @@ class TrackedWalletsService {
         WHERE guild_id = ?
           AND wallet_address = ?
           AND tx_signature = ?
-          AND LOWER(token_mint) = LOWER(?)
+          AND token_mint = ?
         LIMIT 1
       `).get(
         String(guildId || ''),
@@ -849,11 +911,13 @@ class TrackedWalletsService {
 
       const result = db.prepare(`
         INSERT INTO tracked_token_events (
-          guild_id, wallet_id, wallet_address, token_mint, token_symbol, token_name, event_type, amount_delta, balance_after,
+          guild_id, chain_family, chain_id, wallet_id, wallet_address, token_mint, token_symbol, token_name, event_type, amount_delta, amount_raw, balance_after,
           sol_delta, stable_delta, tx_signature, event_time, source, raw_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         String(guildId || ''),
+        getChain(chainId)?.family || 'solana',
+        getChain(chainId)?.chainId || 'solana:mainnet',
         walletId ? Number(walletId) : null,
         String(walletAddress || ''),
         String(tokenMint || ''),
@@ -861,6 +925,7 @@ class TrackedWalletsService {
         String(tokenName || '').trim() || null,
         String(eventType || '').trim().toLowerCase(),
         safeToNumber(amountDelta),
+        amountRaw === null || amountRaw === undefined ? null : String(amountRaw),
         balanceAfter === null || balanceAfter === undefined ? null : safeToNumber(balanceAfter),
         solDelta === null || solDelta === undefined ? null : safeToNumber(solDelta),
         stableDelta === null || stableDelta === undefined ? null : safeToNumber(stableDelta),
@@ -1019,7 +1084,7 @@ class TrackedWalletsService {
       for (const row of rows || []) {
         const owner = normalizeAddress(row?.owner);
         if (!owner || owner !== walletLower) continue;
-        const mint = String(row?.mint || '').trim().toLowerCase();
+        const mint = String(row?.mint || '').trim();
         if (!mint) continue;
         const amount = parseUiAmount(row);
         if (!Number.isFinite(amount)) continue;
@@ -1091,20 +1156,26 @@ class TrackedWalletsService {
     return events;
   }
 
-  getTrackedTokenMapForGuild(guildId, tokenConfigCache = null) {
+  getTrackedTokenMapForGuild(guildId, tokenConfigCache = null, chainFamily = 'solana') {
     const guildKey = String(guildId || '');
+    const family = String(chainFamily || 'solana').trim().toLowerCase();
+    const cacheKey = `${guildKey}:${family}`;
     const cache = tokenConfigCache instanceof Map ? tokenConfigCache : null;
-    if (cache && cache.has(guildKey)) {
-      return cache.get(guildKey);
+    if (cache && cache.has(cacheKey)) {
+      return cache.get(cacheKey);
     }
 
-    const tokenRows = this.getTrackedTokens(guildKey).filter(token => token.enabled !== false && Number(token.enabled ?? 1) === 1);
+    const tokenRows = this.getTrackedTokens(guildKey).filter(token => (
+      token.enabled !== false
+      && Number(token.enabled ?? 1) === 1
+      && String(token.chain_family || 'solana') === family
+    ));
     const tokenMap = new Map(
       tokenRows
-        .map(token => [String(token.token_mint || '').trim().toLowerCase(), token])
+        .map(token => [String(token.token_mint || '').trim(), token])
         .filter(([mint]) => !!mint)
     );
-    if (cache) cache.set(guildKey, tokenMap);
+    if (cache) cache.set(cacheKey, tokenMap);
     return tokenMap;
   }
 
@@ -1115,10 +1186,10 @@ class TrackedWalletsService {
     }
 
     const rows = this.getTrackedTokens()
-      .filter(token => token.enabled !== false && Number(token.enabled ?? 1) === 1);
+      .filter(token => token.enabled !== false && Number(token.enabled ?? 1) === 1 && String(token.chain_family || 'solana') === 'solana');
     const byMint = new Map();
     for (const row of rows) {
-      const mintLower = String(row.token_mint || '').trim().toLowerCase();
+      const mintLower = String(row.token_mint || '').trim();
       if (!mintLower) continue;
       const arr = byMint.get(mintLower) || [];
       arr.push(row);
@@ -1151,7 +1222,7 @@ class TrackedWalletsService {
       for (const row of rows || []) {
         const ownerEntry = getOwnerEntry(row?.owner);
         if (!ownerEntry) continue;
-        const mint = String(row?.mint || '').trim().toLowerCase();
+        const mint = String(row?.mint || '').trim();
         if (!mint) continue;
         if (trackedMintSetLower instanceof Set && trackedMintSetLower.size > 0 && !trackedMintSetLower.has(mint) && !STABLECOIN_MINTS.has(mint)) {
           continue;
@@ -1586,7 +1657,7 @@ class TrackedWalletsService {
     const ownerSolDeltas = new Map();
     const addTokenDelta = (ownerRaw, mintRaw, deltaRaw) => {
       const owner = normalizeAddress(ownerRaw);
-      const mint = String(mintRaw || '').trim().toLowerCase();
+      const mint = String(mintRaw || '').trim();
       const delta = safeToNumber(deltaRaw);
       if (!owner || !mint || Math.abs(delta) < 1e-12) return;
       if (!ownerTokenDeltas.has(owner)) ownerTokenDeltas.set(owner, new Map());
@@ -2081,7 +2152,10 @@ class TrackedWalletsService {
   }
 
   async pollTrackedTokenActivity(guildId = null) {
-    const wallets = this.getTrackedWallets(guildId).filter(wallet => Number(wallet.enabled || 0) === 1);
+    const wallets = this.getTrackedWallets(guildId).filter(wallet => (
+      Number(wallet.enabled || 0) === 1
+      && String(wallet.chain_family || 'solana') === 'solana'
+    ));
     if (!wallets.length) return;
 
     const tokenConfigCache = new Map();
@@ -2113,6 +2187,37 @@ class TrackedWalletsService {
   async buildHoldingsEmbed(walletRow, guildId) {
     const addr = walletRow.wallet_address;
     const label = walletRow.label || `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+    const walletChain = getChain(walletRow.chain_id || 'solana:mainnet');
+    if (walletChain?.family === 'evm') {
+      const native = await evmService.getNativeBalance(addr, walletChain.chainId);
+      const trackedTokens = this.isTokenTrackerEnabled(guildId)
+        ? this.getTrackedTokens(guildId).filter(token => Number(token.enabled || 0) === 1 && token.chain_id === walletChain.chainId)
+        : [];
+      const balances = await Promise.all(trackedTokens.map(token =>
+        evmService.getTokenBalance(addr, token.token_mint, walletChain.chainId).catch(() => null)
+      ));
+      const embed = new EmbedBuilder()
+        .setTitle(`💼 Holdings: ${label}`)
+        .setDescription(`**${walletChain.name}** wallet overview`)
+        .addFields(
+          { name: walletChain.nativeSymbol, value: Number(native.formatted).toLocaleString(undefined, { maximumFractionDigits: 6 }), inline: true },
+          { name: 'Address', value: `\`${addr.slice(0, 6)}...${addr.slice(-4)}\``, inline: true },
+        )
+        .setTimestamp();
+      const tokenLines = balances.filter(Boolean).map(item => `• **${item.symbol}**: ${Number(item.formatted).toLocaleString(undefined, { maximumFractionDigits: 6 })}`);
+      if (tokenLines.length) embed.addFields({ name: 'Tracked Tokens', value: tokenLines.slice(0, 12).join('\n'), inline: false });
+      const client = clientProvider.getClient();
+      const branding = getBranding(guildId || '', 'wallettracker');
+      applyEmbedBranding(embed, {
+        guildId: guildId || '', moduleKey: 'wallettracker', defaultColor: '#6366F1', defaultFooter: 'Wallet Holdings',
+        fallbackLogoUrl: branding.logo || client?.user?.displayAvatarURL?.() || null,
+      });
+      const explorerUrl = getExplorerUrl(walletChain.chainId, 'address', addr);
+      const components = explorerUrl
+        ? [new ActionRowBuilder().addComponents(new ButtonBuilder().setLabel(`${walletChain.name} Explorer`).setURL(explorerUrl).setStyle(ButtonStyle.Link))]
+        : [];
+      return { embed, components };
+    }
     const trackedTokens = this.isTokenTrackerEnabled(guildId)
       ? this.getTrackedTokens(guildId).filter(t => Number(t.enabled || 0) === 1)
       : [];
@@ -2210,14 +2315,14 @@ class TrackedWalletsService {
 
     if (trackedTokens.length > 0) {
       const trackedByMint = new Map(
-        trackedTokens.map(t => [String(t.token_mint || '').trim().toLowerCase(), t])
+        trackedTokens.map(t => [String(t.token_mint || '').trim(), t])
       );
 
       const tokenLines = (tokenBalances || [])
-        .filter(t => String(t.mint || '').toLowerCase() !== USDC_MINT.toLowerCase())
+        .filter(t => String(t.mint || '').trim() !== USDC_MINT)
         .sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0))
         .map(t => {
-          const conf = trackedByMint.get(String(t.mint || '').toLowerCase());
+          const conf = trackedByMint.get(String(t.mint || '').trim());
           const symbol = conf?.token_symbol || conf?.token_name || `${t.mint.slice(0, 4)}...${t.mint.slice(-4)}`;
           const amount = Number(t.amount || 0);
           return `• **${symbol}**: ${amount.toLocaleString(undefined, { maximumFractionDigits: 6 })}`;
@@ -2329,7 +2434,7 @@ class TrackedWalletsService {
         SELECT u.username, COALESCE(u.wallet_alert_identity_opt_out, 0) AS wallet_alert_identity_opt_out
         FROM wallets w
         JOIN users u ON u.discord_id = w.discord_id
-        WHERE lower(w.wallet_address) = lower(?)
+          WHERE w.wallet_address = ?
         LIMIT 1
       `).get(wallet);
 
@@ -2342,7 +2447,7 @@ class TrackedWalletsService {
   }
 
   isKnownUserWallet(walletAddress, cache = null) {
-    const wallet = String(walletAddress || '').trim().toLowerCase();
+    const wallet = String(walletAddress || '').trim();
     if (!wallet) return false;
 
     if (cache instanceof Map && cache.has(wallet)) {
@@ -2354,7 +2459,7 @@ class TrackedWalletsService {
       const row = db.prepare(`
         SELECT 1
         FROM wallets
-        WHERE lower(wallet_address) = ?
+        WHERE wallet_address = ?
         LIMIT 1
       `).get(wallet);
       known = !!row;
@@ -2394,6 +2499,7 @@ class TrackedWalletsService {
     const solDelta = evt?.solDelta ?? evt?.sol_delta;
     const stableDelta = evt?.stableDelta ?? evt?.stable_delta;
     const signature = String(evt?.txSignature || evt?.tx_signature || '').trim();
+    const chainId = String(evt?.chainId || evt?.chain_id || walletRow?.chain_id || 'solana:mainnet');
     const walletIdentity = this.resolveWalletIdentity(walletRow.wallet_address);
     const walletDisplay = walletIdentity.isAddress ? `\`${walletIdentity.text}\`` : walletIdentity.text;
 
@@ -2464,7 +2570,7 @@ class TrackedWalletsService {
       buttons.push(
         new ButtonBuilder()
           .setLabel('View Tx')
-          .setURL(`https://solscan.io/tx/${signature}`)
+          .setURL(getExplorerUrl(chainId, 'tx', signature))
           .setStyle(ButtonStyle.Link)
           .setEmoji('🔍')
       );
@@ -2473,7 +2579,7 @@ class TrackedWalletsService {
       buttons.push(
         new ButtonBuilder()
           .setLabel('Token')
-          .setURL(`https://solscan.io/token/${tokenMint}`)
+          .setURL(getExplorerUrl(chainId, 'token', tokenMint))
           .setStyle(ButtonStyle.Link)
           .setEmoji('🪙')
       );
@@ -2512,7 +2618,7 @@ class TrackedWalletsService {
     if (!channel || !channel.send) return;
 
     const label = walletRow.label || `${walletRow.wallet_address.slice(0, 6)}...${walletRow.wallet_address.slice(-4)}`;
-    const role = evt.from_wallet?.toLowerCase() === walletRow.wallet_address.toLowerCase() ? 'Sent' : 'Received';
+    const role = String(evt.from_wallet || '').trim() === String(walletRow.wallet_address || '').trim() ? 'Sent' : 'Received';
     const eventType = (evt.eventType || evt.event_type || 'activity').toUpperCase();
 
     const branding = getBranding(guildId || '', 'wallettracker');
@@ -2545,9 +2651,10 @@ class TrackedWalletsService {
 
     const txSig = evt.txSignature || evt.tx_signature;
     const tokenMint = evt.tokenMint || evt.token_mint;
+    const chainId = String(evt.chainId || evt.chain_id || walletRow.chain_id || 'solana:mainnet');
     const buttons = [];
-    if (txSig) buttons.push(new ButtonBuilder().setLabel('View Tx').setURL(`https://solscan.io/tx/${txSig}`).setStyle(ButtonStyle.Link).setEmoji('🔍'));
-    if (tokenMint) buttons.push(new ButtonBuilder().setLabel('Magic Eden').setURL(`https://magiceden.io/item-details/${tokenMint}`).setStyle(ButtonStyle.Link).setEmoji('🌊'));
+    if (txSig) buttons.push(new ButtonBuilder().setLabel('View Tx').setURL(getExplorerUrl(chainId, 'tx', txSig)).setStyle(ButtonStyle.Link).setEmoji('🔍'));
+    if (tokenMint && chainId.startsWith('solana:')) buttons.push(new ButtonBuilder().setLabel('Magic Eden').setURL(`https://magiceden.io/item-details/${tokenMint}`).setStyle(ButtonStyle.Link).setEmoji('🌊'));
     const components = buttons.length ? [new ActionRowBuilder().addComponents(...buttons)] : [];
 
     try {

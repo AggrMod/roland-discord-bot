@@ -10,6 +10,7 @@ const { applyEmbedBranding } = require('../../services/embedBranding');
 const db = require('../../database/db');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
+const { getChain } = require('../../utils/chainIdentity');
 
 function isGovernanceEnabled(guildId = null) {
   try {
@@ -135,7 +136,7 @@ module.exports = {
             .addStringOption(option =>
               option
                 .setName('mint')
-                .setDescription('SPL token mint address')
+                .setDescription('SPL mint or ERC-20 contract address')
                 .setRequired(true))
             .addRoleOption(option =>
               option
@@ -148,6 +149,19 @@ module.exports = {
                 .setDescription('Minimum token balance required')
                 .setRequired(true)
                 .setMinValue(0))
+            .addStringOption(option =>
+              option
+                .setName('chain')
+                .setDescription('Network (defaults to Solana)')
+                .setRequired(false)
+                .addChoices(
+                  { name: 'Solana', value: 'solana:mainnet' },
+                  { name: 'Ethereum', value: 'eip155:1' },
+                  { name: 'Base', value: 'eip155:8453' },
+                  { name: 'Polygon', value: 'eip155:137' },
+                  { name: 'Arbitrum One', value: 'eip155:42161' },
+                  { name: 'Optimism', value: 'eip155:10' }
+                ))
             .addStringOption(option =>
               option
                 .setName('symbol')
@@ -403,20 +417,21 @@ module.exports = {
       return;
     }
 
-    const walletAddresses = wallets.map(w => w.wallet_address);
-    const allNFTs = await nftService.getAllNFTsForWallets(walletAddresses, { guildId: interaction.guildId || null });
+    const walletRecords = roleService.getVerificationWalletRecords(discordId, interaction.guildId || null);
+    const walletAddresses = walletRecords.filter(wallet => wallet.chainFamily === 'solana').map(wallet => wallet.address);
+    const allNFTs = walletAddresses.length
+      ? await nftService.getAllNFTsForWallets(walletAddresses, { guildId: interaction.guildId || null })
+      : [];
     const totalNFTs = allNFTs.length;
     const tokenRules = roleService.getTokenRoleRules(interaction.guildId || null).filter(rule => rule.enabled !== false);
-    const trackedTokenMints = [...new Set(tokenRules.map(rule => String(rule.tokenMint || '').trim()).filter(Boolean))];
-    const tokenTotals = trackedTokenMints.length
-      ? await tokenService.getAggregateBalancesForWallets(walletAddresses, trackedTokenMints, { guildId: interaction.guildId || null })
-      : {};
+    const tokenBalances = await roleService.getTokenRuleBalances(walletRecords, tokenRules, interaction.guildId || null);
     const tokenSummary = tokenRules
       .map(rule => {
         const mint = String(rule.tokenMint || '').trim();
-        const amount = Number(tokenTotals[mint] || 0);
+        const amount = Number(tokenBalances.get(rule)?.balance || 0);
         const symbol = rule.tokenSymbol || `${mint.slice(0, 4)}...${mint.slice(-4)}`;
-        return { symbol, amount };
+        const chainName = getChain(rule.chainId || 'solana:mainnet')?.name || 'Solana';
+        return { symbol: `${symbol} · ${chainName}`, amount };
       })
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 5);
@@ -442,7 +457,7 @@ module.exports = {
       .setDescription(
         `You have **${wallets.length}** verified wallet${wallets.length > 1 ? 's' : ''}\n` +
         `You have **${totalNFTs}** NFTs in your wallet${wallets.length > 1 ? 's' : ''}\n` +
-        `${trackedTokenMints.length ? `Tracking **${trackedTokenMints.length}** token mint(s) for role rules\n\n` : '\n'}` +
+        `${tokenRules.length ? `Tracking **${tokenRules.length}** chain-aware token rule(s)\n\n` : '\n'}` +
         rolesList
       )
       .addFields(fields)
@@ -875,6 +890,7 @@ module.exports = {
     const mint = interaction.options.getString('mint');
     const role = interaction.options.getRole('role');
     const symbol = interaction.options.getString('symbol');
+    const chain = interaction.options.getString('chain') || 'solana:mainnet';
     const minAmount = interaction.options.getNumber('min_amount');
     const maxAmount = interaction.options.getNumber('max_amount');
 
@@ -884,6 +900,7 @@ module.exports = {
 
     const result = roleService.addTokenRoleRule({
       guildId: interaction.guildId || null,
+      chain,
       tokenMint: mint,
       tokenSymbol: symbol || null,
       minAmount,
@@ -897,6 +914,7 @@ module.exports = {
     }
 
     const maxDisplay = maxAmount === null ? '∞' : maxAmount.toLocaleString(undefined, { maximumFractionDigits: 6 });
+    const chainName = getChain(chain)?.name || chain;
     const embed = new EmbedBuilder()
       .setColor('#57F287')
       .setTitle('✅ Token Role Rule Added')
@@ -904,7 +922,8 @@ module.exports = {
         { name: 'Rule ID', value: `#${result.id}`, inline: true },
         { name: 'Role', value: `<@&${role.id}>`, inline: true },
         { name: 'Symbol', value: symbol || '—', inline: true },
-        { name: 'Token Mint', value: `\`${mint}\``, inline: false },
+        { name: 'Network', value: chainName, inline: true },
+        { name: 'Token Address', value: `\`${mint}\``, inline: false },
         { name: 'Range', value: `${minAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} to ${maxDisplay}`, inline: false }
       )
       .setFooter({ text: 'Rule applies on /verification refresh and automatic sync' })
@@ -939,7 +958,8 @@ module.exports = {
         : Number(rule.maxAmount).toLocaleString(undefined, { maximumFractionDigits: 6 });
       const minDisplay = Number(rule.minAmount || 0).toLocaleString(undefined, { maximumFractionDigits: 6 });
       const symbol = rule.tokenSymbol || `${rule.tokenMint.slice(0, 4)}...${rule.tokenMint.slice(-4)}`;
-      return `**#${rule.id}** ${symbol} (${minDisplay} - ${maxDisplay}) → <@&${rule.roleId}>`;
+      const chainName = getChain(rule.chainId || 'solana:mainnet')?.name || rule.chainId || 'Solana';
+      return `**#${rule.id}** ${symbol} · ${chainName} (${minDisplay} - ${maxDisplay}) → <@&${rule.roleId}>`;
     });
 
     const embed = new EmbedBuilder()

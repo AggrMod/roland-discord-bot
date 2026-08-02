@@ -6,6 +6,13 @@ const {
 const nftActivityService = require('../../services/nftActivityService');
 const logger = require('../../utils/logger');
 const moduleGuard = require('../../utils/moduleGuard');
+const { getChain } = require('../../utils/chainIdentity');
+
+const CHAIN_CHOICES = [
+  { name: 'Solana', value: 'solana:mainnet' }, { name: 'Ethereum', value: 'eip155:1' },
+  { name: 'Base', value: 'eip155:8453' }, { name: 'Polygon', value: 'eip155:137' },
+  { name: 'Arbitrum One', value: 'eip155:42161' }, { name: 'Optimism', value: 'eip155:10' },
+];
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -26,6 +33,15 @@ module.exports = {
               o.setName('name').setDescription('Display name').setRequired(true))
             .addChannelOption(o =>
               o.setName('channel').setDescription('Channel for alerts').setRequired(true))
+            .addStringOption(o =>
+              o.setName('chain').setDescription('Network (defaults to Solana)').setRequired(false).addChoices(...CHAIN_CHOICES))
+            .addStringOption(o =>
+              o.setName('standard').setDescription('EVM NFT standard').setRequired(false).addChoices(
+                { name: 'ERC-721 collection', value: 'erc721' },
+                { name: 'ERC-1155 token', value: 'erc1155' }
+              ))
+            .addStringOption(o =>
+              o.setName('token_id').setDescription('Required for ERC-1155 tracking').setRequired(false))
             .addStringOption(o =>
               o.setName('me_symbol').setDescription('Magic Eden collection symbol (for poll fallback)').setRequired(false)))
         .addSubcommand(sub =>
@@ -87,31 +103,38 @@ module.exports = {
     const address = interaction.options.getString('address');
     const name = interaction.options.getString('name');
     const channel = interaction.options.getChannel('channel');
+    const chain = interaction.options.getString('chain') || 'solana:mainnet';
+    const nftStandard = chain.startsWith('eip155:') ? (interaction.options.getString('standard') || 'erc721') : 'solana';
+    const tokenId = interaction.options.getString('token_id');
     const meSymbol = interaction.options.getString('me_symbol');
 
     const result = nftActivityService.addTrackedCollection({
       guildId: interaction.guildId,
+      chain,
       collectionAddress: address,
       collectionName: name,
       channelId: channel.id,
+      nftStandard,
+      tokenId,
       trackMint: true,
-      trackSale: true,
-      trackList: true,
-      trackDelist: true,
-      trackTransfer: false,
+      trackSale: !chain.startsWith('eip155:'),
+      trackList: !chain.startsWith('eip155:'),
+      trackDelist: !chain.startsWith('eip155:'),
+      trackTransfer: chain.startsWith('eip155:'),
       trackBid: false,
       meSymbol: meSymbol || '',
     });
 
     if (!result.success) return interaction.editReply({ content: `❌ ${result.message}` });
 
-    nftActivityService.syncAddressToHelius(address, 'add').catch(() => {});
+    if (!chain.startsWith('eip155:')) nftActivityService.syncAddressToHelius(address, 'add').catch(() => {});
 
     const embed = new EmbedBuilder()
       .setColor('#57F287')
       .setTitle('✅ Collection Tracked')
       .addFields(
         { name: 'Collection', value: name, inline: true },
+        { name: 'Network', value: getChain(chain)?.name || chain, inline: true },
         { name: 'Address', value: `\`${address.slice(0, 8)}...${address.slice(-6)}\``, inline: true },
         { name: 'Alert Channel', value: `<#${channel.id}>`, inline: true },
         { name: 'ME Symbol', value: meSymbol || '-', inline: true },
@@ -143,7 +166,9 @@ module.exports = {
       const ch = c.channel_id ? `<#${c.channel_id}>` : '-';
       const me = c.me_symbol ? ` (ME: ${c.me_symbol})` : '';
       const status = c.enabled ? '' : ' *(disabled)*';
-      return `**#${c.id}** ${addr} - **${c.collection_name}**${me} -> ${ch}${status}`;
+      const network = getChain(c.chain_id || 'solana:mainnet')?.name || c.chain_id || 'Solana';
+      const standard = c.nft_standard && c.nft_standard !== 'solana' ? ` · ${String(c.nft_standard).toUpperCase()}${c.token_id ? ` #${c.token_id}` : ''}` : '';
+      return `**#${c.id}** ${network}${standard} · ${addr} - **${c.collection_name}**${me} -> ${ch}${status}`;
     });
 
     const embed = new EmbedBuilder()

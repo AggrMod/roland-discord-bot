@@ -14,7 +14,8 @@ function createVaultWebhooksRouter({
   // shared global secret while the target guild was fully attacker-controlled,
   // so any holder of that secret could grant rewards to ANY guild. Per-guild
   // secrets bind authorization to a specific guild; guild-match rejects events
-  // for other guilds. Rollout is monitor-before-enforce; default off = today.
+  // for other guilds. Production always enforces this boundary. Legacy modes
+  // remain available only in non-production environments for migration tests.
   function getGlobalVaultSecret() {
     return String(
       process.env.VAULT_MINT_WEBHOOK_SECRET
@@ -31,7 +32,9 @@ function createVaultWebhooksRouter({
   }
 
   function guildMatchMode() {
-    return String(process.env.VAULT_WEBHOOK_ENFORCE_GUILD_MATCH || 'off').trim().toLowerCase();
+    if (process.env.NODE_ENV === 'production') return 'enforce';
+    const requested = String(process.env.VAULT_WEBHOOK_ENFORCE_GUILD_MATCH || 'enforce').trim().toLowerCase();
+    return requested === 'off' || requested === 'monitor' ? requested : 'enforce';
   }
 
   function resolveAuthGuildId(req) {

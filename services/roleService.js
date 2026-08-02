@@ -2,10 +2,12 @@ const db = require('../database/db');
 const walletService = require('./walletService');
 const nftService = require('./nftService');
 const tokenService = require('./tokenService');
+const evmService = require('./evmService');
 const entitlementService = require('./entitlementService');
 const tenantService = require('./tenantService');
 const settingsManager = require('../config/settings');
 const logger = require('../utils/logger');
+const { getChain, normalizeAddress } = require('../utils/chainIdentity');
 let ogRoleService = null; // Lazy load to avoid circular deps
 
 class RoleService {
@@ -103,25 +105,54 @@ class RoleService {
     }
   }
 
-  getVerificationWallets(discordId, guildId = null) {
+  getVerificationWalletRecords(discordId, guildId = null) {
     // Security hard-disable: only directly linked wallets may affect verification.
     // Cold/delegated wallet claims are not safe enough for V1 because users could
     // add arbitrary wallets without proving control of the cold wallet itself.
     return walletService.getLinkedWallets(discordId)
-      .map(w => String(w?.wallet_address || '').trim())
+      .map(wallet => {
+        const chain = getChain(wallet?.chain_id || (wallet?.chain_family === 'evm' ? '' : 'solana:mainnet'));
+        // Legacy Solana rows predate chain metadata and were already verified at
+        // insertion time. Keep their stored address intact for compatibility;
+        // EVM rows still require strict checksum/address normalization.
+        const rawAddress = String(wallet?.wallet_address || '').trim();
+        const address = chain?.family === 'evm'
+          ? normalizeAddress(rawAddress, chain.chainId)
+          : rawAddress;
+        if (!chain || !address) return null;
+        return {
+          address,
+          chainFamily: chain.family,
+          chainId: chain.chainId,
+          primary: Number(wallet?.primary_wallet || 0) === 1,
+        };
+      })
       .filter(Boolean);
+  }
+
+  getVerificationWallets(discordId, guildId = null) {
+    return this.getVerificationWalletRecords(discordId, guildId)
+      .filter(wallet => wallet.chainFamily === 'solana')
+      .map(wallet => wallet.address);
+  }
+
+  getRuleChain(rule = {}) {
+    return getChain(rule.chainId || rule.chain_id || rule.chain || 'solana:mainnet') || getChain('solana:mainnet');
   }
 
   async updateUserRoles(discordId, username, guildId = null) {
     try {
-      const wallets = this.getVerificationWallets(discordId, guildId || "");
+      const walletRecords = this.getVerificationWalletRecords(discordId, guildId || '');
+      const wallets = walletRecords.filter(wallet => wallet.chainFamily === 'solana').map(wallet => wallet.address);
       
-      if (wallets.length === 0) {
+      if (walletRecords.length === 0) {
         logger.warn(`No wallets linked for user ${discordId}`);
         return { success: false, message: 'No wallets linked' };
       }
 
-      const nftSnapshot = await nftService.getAllNFTsForWalletsWithHealth(wallets, { guildId });
+      const nftSnapshot = wallets.length
+        ? await nftService.getAllNFTsForWalletsWithHealth(wallets, { guildId })
+        : { nfts: [], health: null };
       const allNFTs = Array.isArray(nftSnapshot?.nfts) ? nftSnapshot.nfts : [];
       const nftHealth = nftSnapshot?.health || null;
       if (nftHealth?.hadFailureWithoutCache) {
@@ -140,11 +171,17 @@ class RoleService {
       const tokenRules = guildId
         ? this.getTokenRoleRules(guildId).filter(r => r.enabled !== false)
         : [];
-      const trackedMints = [...new Set(tokenRules.map(r => String(r.tokenMint || '').trim()).filter(Boolean))];
       let totalTrackedTokens = 0;
-      if (trackedMints.length > 0) {
-        const tokenTotals = await tokenService.getAggregateBalancesForWallets(wallets, trackedMints, { guildId });
-        totalTrackedTokens = Object.values(tokenTotals).reduce((sum, amount) => sum + Number(amount || 0), 0);
+      if (tokenRules.length > 0) {
+        const tokenBalances = await this.getTokenRuleBalances(walletRecords, tokenRules, guildId);
+        const uniqueBalances = new Map();
+        for (const rule of tokenRules) {
+          const chain = this.getRuleChain(rule);
+          const result = tokenBalances.get(rule);
+          if (!result?.healthy) continue;
+          uniqueBalances.set(`${chain.chainId}:${String(rule.tokenMint || '').toLowerCase()}`, Number(result.balance || 0));
+        }
+        totalTrackedTokens = [...uniqueBalances.values()].reduce((sum, amount) => sum + amount, 0);
       }
 
       db.prepare(`
@@ -332,8 +369,11 @@ class RoleService {
       };
       const currentMemberRoleIds = new Set(member.roles.cache.keys());
 
-      const wallets = this.getVerificationWallets(discordId, guildId || "");
-      const nftSnapshot = await nftService.getAllNFTsForWalletsWithHealth(wallets, { guildId });
+      const walletRecords = this.getVerificationWalletRecords(discordId, guildId || '');
+      const wallets = walletRecords.filter(wallet => wallet.chainFamily === 'solana').map(wallet => wallet.address);
+      const nftSnapshot = wallets.length
+        ? await nftService.getAllNFTsForWalletsWithHealth(wallets, { guildId })
+        : { nfts: [], health: null };
       const allNFTs = Array.isArray(nftSnapshot?.nfts) ? nftSnapshot.nfts : [];
       const nftHealth = nftSnapshot?.health || null;
 
@@ -352,24 +392,29 @@ class RoleService {
       changes.added.push(...tierChanges.added);
       changes.removed.push(...tierChanges.removed);
 
-      // 2. Sync trait roles
+      // 2. Sync EVM collection roles using verified wallets on each configured chain.
+      const evmTierChanges = await this.syncEvmCollectionRoles(member, walletRecords, guildId, currentMemberRoleIds);
+      changes.added.push(...evmTierChanges.added);
+      changes.removed.push(...evmTierChanges.removed);
+
+      // 3. Sync Solana trait roles.
       const traitChanges = await this.syncTraitRoles(member, allNFTs, guildId, currentMemberRoleIds);
       changes.added.push(...traitChanges.added);
       changes.removed.push(...traitChanges.removed);
 
-      // 3. Sync token balance roles
-      const tokenChanges = await this.syncTokenRoles(member, wallets, guildId, currentMemberRoleIds);
+      // 4. Sync SPL and ERC-20 token balance roles.
+      const tokenChanges = await this.syncTokenRoles(member, walletRecords, guildId, currentMemberRoleIds);
       changes.added.push(...tokenChanges.added);
       changes.removed.push(...tokenChanges.removed);
 
-      // 4. Sync OG role (if applicable)
+      // 5. Sync OG role (if applicable)
       if (!ogRoleService) ogRoleService = require('./ogRoleService');
       const ogResult = await ogRoleService.assignOnVerification(guild, discordId, userInfo.username);
       if (ogResult?.assigned) {
         changes.added.push('OG Role');
       }
 
-      // 5. Assign base verified role (unconditional for all verified users)
+      // 6. Assign base verified role (unconditional for all verified users)
       const settingsManager = require('../config/settings');
       let baseVerifiedRoleId = settingsManager.getSettings().baseVerifiedRoleId;
       if (guildId && tenantService.isMultitenantEnabled()) {
@@ -506,13 +551,15 @@ class RoleService {
     try {
       if (guildId) {
         return db.prepare(`
-          SELECT id, guild_id, token_mint, token_symbol, min_amount, max_amount, role_id, enabled, never_remove, created_at, updated_at
+          SELECT id, guild_id, chain_family, chain_id, token_mint, token_symbol, min_amount, max_amount, role_id, enabled, never_remove, created_at, updated_at
           FROM token_role_rules
           WHERE guild_id = ?
           ORDER BY min_amount ASC, id ASC
         `).all(guildId).map(row => ({
           id: row.id,
           guildId: row.guild_id,
+          chainFamily: row.chain_family || 'solana',
+          chainId: row.chain_id || 'solana:mainnet',
           tokenMint: row.token_mint,
           tokenSymbol: row.token_symbol || null,
           minAmount: Number(row.min_amount || 0),
@@ -526,12 +573,14 @@ class RoleService {
       }
 
       return db.prepare(`
-        SELECT id, guild_id, token_mint, token_symbol, min_amount, max_amount, role_id, enabled, never_remove, created_at, updated_at
+        SELECT id, guild_id, chain_family, chain_id, token_mint, token_symbol, min_amount, max_amount, role_id, enabled, never_remove, created_at, updated_at
         FROM token_role_rules
         ORDER BY guild_id ASC, min_amount ASC, id ASC
       `).all().map(row => ({
         id: row.id,
         guildId: row.guild_id,
+        chainFamily: row.chain_family || 'solana',
+        chainId: row.chain_id || 'solana:mainnet',
         tokenMint: row.token_mint,
         tokenSymbol: row.token_symbol || null,
         minAmount: Number(row.min_amount || 0),
@@ -548,16 +597,18 @@ class RoleService {
     }
   }
 
-  addTokenRoleRule({ guildId, tokenMint, tokenSymbol = null, minAmount = 0, maxAmount = null, roleId, enabled = true, neverRemove = false }) {
+  addTokenRoleRule({ guildId, chain: chainValue = 'solana:mainnet', tokenMint, tokenSymbol = null, minAmount = 0, maxAmount = null, roleId, enabled = true, neverRemove = false }) {
     try {
       const normalizedGuild = String(guildId || '').trim();
-      const normalizedMint = String(tokenMint || '').trim();
+      const chain = getChain(chainValue);
+      const rawMint = String(tokenMint || '').trim();
+      const normalizedMint = chain?.family === 'evm' ? normalizeAddress(rawMint, chain.chainId) : rawMint;
       const normalizedRole = String(roleId || '').trim();
       const normalizedSymbol = String(tokenSymbol || '').trim() || null;
       const normalizedNeverRemove = this.toBooleanFlag(neverRemove, false);
 
-      if (!normalizedGuild || !normalizedMint || !normalizedRole) {
-        return { success: false, message: 'guildId, tokenMint, and roleId are required' };
+      if (!normalizedGuild || !chain || !normalizedMint || !normalizedRole) {
+        return { success: false, message: 'guildId, a supported chain, valid tokenMint, and roleId are required' };
       }
 
       const min = Number(minAmount || 0);
@@ -591,9 +642,9 @@ class RoleService {
       }
 
       const result = db.prepare(`
-        INSERT INTO token_role_rules (guild_id, token_mint, token_symbol, min_amount, max_amount, role_id, enabled, never_remove)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(normalizedGuild, normalizedMint, normalizedSymbol, min, max, normalizedRole, enabled ? 1 : 0, normalizedNeverRemove ? 1 : 0);
+        INSERT INTO token_role_rules (guild_id, chain_family, chain_id, token_mint, token_symbol, min_amount, max_amount, role_id, enabled, never_remove)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(normalizedGuild, chain.family, chain.chainId, normalizedMint, normalizedSymbol, min, max, normalizedRole, enabled ? 1 : 0, normalizedNeverRemove ? 1 : 0);
 
       return { success: true, id: Number(result.lastInsertRowid) };
     } catch (error) {
@@ -610,8 +661,17 @@ class RoleService {
       const id = Number(ruleId);
       if (!Number.isFinite(id)) return { success: false, message: 'Invalid rule id' };
 
+      const existing = guildId
+        ? db.prepare('SELECT * FROM token_role_rules WHERE id = ? AND guild_id = ?').get(id, String(guildId))
+        : db.prepare('SELECT * FROM token_role_rules WHERE id = ?').get(id);
+      if (!existing) return { success: false, message: 'Token rule not found' };
+
+      const targetChain = getChain(updates.chain || updates.chainId || updates.chain_id || existing.chain_id || 'solana:mainnet');
+      const rawMint = String(updates.tokenMint ?? existing.token_mint ?? '').trim();
+      const targetMint = targetChain?.family === 'evm' ? normalizeAddress(rawMint, targetChain.chainId) : rawMint;
+      if (!targetChain || !targetMint) return { success: false, message: 'A supported chain and valid token address are required' };
+
       const fieldMap = {
-        tokenMint: 'token_mint',
         tokenSymbol: 'token_symbol',
         minAmount: 'min_amount',
         maxAmount: 'max_amount',
@@ -622,8 +682,10 @@ class RoleService {
       };
 
       const setClauses = [];
-      const params = [];
+      const params = [targetChain.family, targetChain.chainId, targetMint];
+      setClauses.push('chain_family = ?', 'chain_id = ?', 'token_mint = ?');
       for (const [key, value] of Object.entries(updates || {})) {
+        if (['chain', 'chainId', 'chain_id', 'tokenMint'].includes(key)) continue;
         const col = fieldMap[key];
         if (!col) continue;
 
@@ -755,7 +817,8 @@ class RoleService {
     const changes = { added: [], removed: [] };
 
     try {
-      const allTiers = this.getEffectiveTiers(guildId).filter(t => t && t.roleId);
+      const allTiers = this.getEffectiveTiers(guildId)
+        .filter(t => t && t.roleId && this.getRuleChain(t).family === 'solana');
       const liveRoleIds = currentMemberRoleIds || new Set(member.roles.cache.keys());
       const allNFTs = Array.isArray(nfts) ? nfts : [];
 
@@ -842,7 +905,8 @@ class RoleService {
     const changes = { added: [], removed: [] };
 
     try {
-      const traitRoles = this.getEffectiveTraitRoles(guildId);
+      const traitRoles = this.getEffectiveTraitRoles(guildId)
+        .filter(rule => this.getRuleChain(rule).family === 'solana');
       const liveRoleIds = currentMemberRoleIds || new Set(member.roles.cache.keys());
       const roleStates = new Map();
       const allNFTs = Array.isArray(nfts) ? nfts : [];
@@ -933,10 +997,159 @@ class RoleService {
     return changes;
   }
 
+  async applyChainRoleStates(member, roleStates, liveRoleIds, changes, guildId, kind) {
+    for (const [roleId, state] of roleStates.entries()) {
+      const has = liveRoleIds.has(roleId);
+      const role = member.guild.roles.cache.get(roleId);
+      if (!role) continue;
+      const label = state.labels?.[0] || role.name || roleId;
+
+      if (state.shouldHave && !has) {
+        if (this.isProtectedRole(role) || !this.canBotManageRole(member, role)) {
+          const reason = this.isProtectedRole(role) ? 'protected' : 'unmanaged';
+          this.logRoleSyncWarnOnce(
+            `${kind}:add:${reason}:${guildId || member.guild.id}:${member.id}:${role.id}`,
+            `Skipped adding ${reason} ${kind} role ${role.name} (${role.id}) for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`
+          );
+          continue;
+        }
+        await member.roles.add(role);
+        liveRoleIds.add(roleId);
+        changes.added.push(label);
+        logger.log(`Added ${kind} role ${label} to ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+        continue;
+      }
+
+      if (!state.shouldHave && has) {
+        if (state.uncertain) {
+          this.logRoleSyncWarnOnce(
+            `${kind}:remove:uncertain:${guildId || member.guild.id}:${member.id}:${role.id}`,
+            `Skipped removing ${kind} role ${role.name} (${role.id}) because an on-chain balance check failed${guildId ? ` [guild ${guildId}]` : ''}`
+          );
+          continue;
+        }
+        if (state.neverRemove || this.isProtectedRole(role) || !this.canBotManageRole(member, role)) continue;
+        await member.roles.remove(role);
+        liveRoleIds.delete(roleId);
+        changes.removed.push(label);
+        logger.log(`Removed ${kind} role ${label} from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
+      }
+    }
+  }
+
+  async syncEvmCollectionRoles(member, walletRecords, guildId = null, currentMemberRoleIds = null) {
+    const changes = { added: [], removed: [] };
+    const rules = this.getEffectiveTiers(guildId)
+      .filter(rule => rule && rule.roleId && rule.collectionId && this.getRuleChain(rule).family === 'evm');
+    if (!rules.length) return changes;
+
+    const liveRoleIds = currentMemberRoleIds || new Set(member.roles.cache.keys());
+    const roleStates = new Map();
+    const balanceCache = new Map();
+
+    for (const rule of rules) {
+      const chain = this.getRuleChain(rule);
+      const collection = normalizeAddress(rule.collectionId, chain.chainId);
+      const standard = String(rule.nftStandard || rule.nft_standard || 'erc721').toLowerCase();
+      const tokenId = rule.tokenId ?? rule.token_id ?? null;
+      const addresses = (walletRecords || [])
+        .filter(wallet => wallet.chainId === chain.chainId)
+        .map(wallet => wallet.address);
+      const cacheKey = `${chain.chainId}:${String(collection).toLowerCase()}:${standard}:${tokenId ?? ''}`;
+      let result = balanceCache.get(cacheKey);
+
+      if (!result) {
+        if (!collection) {
+          result = { healthy: false, balance: 0 };
+        } else if (!addresses.length) {
+          result = { healthy: true, balance: 0 };
+        } else {
+          const checks = await Promise.allSettled(addresses.map(address => (
+            evmService.getNftBalance(address, collection, chain.chainId, { standard, tokenId })
+          )));
+          const failed = checks.some(check => check.status === 'rejected');
+          const balance = checks
+            .filter(check => check.status === 'fulfilled')
+            .reduce((sum, check) => sum + Number(check.value?.balance || 0), 0);
+          result = { healthy: !failed, balance };
+        }
+        balanceCache.set(cacheKey, result);
+      }
+
+      const min = Number(rule.minNFTs || 0);
+      const max = rule.maxNFTs === null || rule.maxNFTs === undefined
+        ? Number.POSITIVE_INFINITY
+        : Number(rule.maxNFTs);
+      const shouldHave = result.healthy && Number.isFinite(result.balance) && result.balance >= min && result.balance <= max;
+      const roleId = String(rule.roleId || '').trim();
+      const state = roleStates.get(roleId) || { shouldHave: false, neverRemove: false, uncertain: false, labels: [] };
+      state.shouldHave ||= shouldHave;
+      state.neverRemove ||= this.isRuleNeverRemove(rule);
+      state.uncertain ||= !result.healthy;
+      state.labels.push(`${rule.name || 'NFT holder'} · ${chain.name}`);
+      roleStates.set(roleId, state);
+    }
+
+    await this.applyChainRoleStates(member, roleStates, liveRoleIds, changes, guildId, 'EVM NFT');
+    return changes;
+  }
+
+  async getTokenRuleBalances(walletRecords, tokenRules, guildId = null) {
+    const results = new Map();
+    const records = (Array.isArray(walletRecords) ? walletRecords : [])
+      .map(wallet => typeof wallet === 'string'
+        ? { address: wallet, chainFamily: 'solana', chainId: 'solana:mainnet' }
+        : wallet)
+      .filter(wallet => wallet?.address && wallet?.chainId);
+    const solanaRules = tokenRules.filter(rule => this.getRuleChain(rule).family === 'solana');
+    const solanaWallets = records.filter(wallet => wallet.chainFamily === 'solana').map(wallet => wallet.address);
+
+    if (solanaRules.length) {
+      const mints = [...new Set(solanaRules.map(rule => String(rule.tokenMint || '').trim()).filter(Boolean))];
+      try {
+        const balances = solanaWallets.length
+          ? await tokenService.getAggregateBalancesForWallets(solanaWallets, mints, { guildId })
+          : {};
+        for (const rule of solanaRules) {
+          results.set(rule, { healthy: true, balance: Number(balances[String(rule.tokenMint || '').trim()] || 0) });
+        }
+      } catch (error) {
+        for (const rule of solanaRules) results.set(rule, { healthy: false, balance: 0, error });
+      }
+    }
+
+    const evmCache = new Map();
+    for (const rule of tokenRules.filter(item => this.getRuleChain(item).family === 'evm')) {
+      const chain = this.getRuleChain(rule);
+      const token = normalizeAddress(rule.tokenMint, chain.chainId);
+      const addresses = records.filter(wallet => wallet.chainId === chain.chainId).map(wallet => wallet.address);
+      const key = `${chain.chainId}:${String(token).toLowerCase()}`;
+      let result = evmCache.get(key);
+      if (!result) {
+        if (!token) {
+          result = { healthy: false, balance: 0 };
+        } else if (!addresses.length) {
+          result = { healthy: true, balance: 0 };
+        } else {
+          const checks = await Promise.allSettled(addresses.map(address => evmService.getTokenBalance(address, token, chain.chainId)));
+          const failed = checks.some(check => check.status === 'rejected');
+          const balance = checks
+            .filter(check => check.status === 'fulfilled')
+            .reduce((sum, check) => sum + Number(check.value?.formatted || 0), 0);
+          result = { healthy: !failed, balance };
+        }
+        evmCache.set(key, result);
+      }
+      results.set(rule, result);
+    }
+
+    return results;
+  }
+
   /**
-   * Sync token roles for a member based on configured SPL token balance rules
+   * Sync token roles for a member based on configured SPL or ERC-20 balances.
    */
-  async syncTokenRoles(member, wallets, guildId = null, currentMemberRoleIds = null) {
+  async syncTokenRoles(member, walletRecords, guildId = null, currentMemberRoleIds = null) {
     const changes = { added: [], removed: [] };
 
     try {
@@ -945,72 +1158,36 @@ class RoleService {
       if (tokenRules.length === 0) return changes;
 
       const liveRoleIds = currentMemberRoleIds || new Set(member.roles.cache.keys());
-      const trackedMints = [...new Set(tokenRules.map(rule => String(rule.tokenMint || '').trim()).filter(Boolean))];
-      const balancesByMint = await tokenService.getAggregateBalancesForWallets(wallets || [], trackedMints, { guildId });
+      const balancesByRule = await this.getTokenRuleBalances(walletRecords || [], tokenRules, guildId);
       const roleStates = new Map();
 
       for (const rule of tokenRules) {
         const mint = String(rule.tokenMint || '').trim();
-        const balance = Number(balancesByMint[mint] || 0);
+        const balanceResult = balancesByRule.get(rule) || { healthy: false, balance: 0 };
+        const balance = Number(balanceResult.balance || 0);
         const min = Number(rule.minAmount || 0);
         const max = rule.maxAmount === null || rule.maxAmount === undefined ? Number.POSITIVE_INFINITY : Number(rule.maxAmount);
-        const shouldHave = Number.isFinite(balance) && balance >= min && balance <= max;
+        const shouldHave = balanceResult.healthy && Number.isFinite(balance) && balance >= min && balance <= max;
+        const chain = this.getRuleChain(rule);
 
         const label = rule.tokenSymbol
-          ? `${rule.tokenSymbol} (${mint.slice(0, 6)}...${mint.slice(-4)})`
-          : `Token ${mint.slice(0, 6)}...${mint.slice(-4)}`;
+          ? `${rule.tokenSymbol} · ${chain.name}`
+          : `Token ${mint.slice(0, 6)}...${mint.slice(-4)} · ${chain.name}`;
 
         const roleId = String(rule.roleId || '').trim();
         const existing = roleStates.get(roleId) || {
           shouldHave: false,
           neverRemove: false,
+          uncertain: false,
           labels: []
         };
         existing.shouldHave = existing.shouldHave || shouldHave;
         existing.neverRemove = existing.neverRemove || this.isRuleNeverRemove(rule);
+        existing.uncertain = existing.uncertain || !balanceResult.healthy;
         existing.labels.push(label);
         roleStates.set(roleId, existing);
       }
-
-        for (const [roleId, state] of roleStates.entries()) {
-          const has = liveRoleIds.has(roleId);
-          const role = member.guild.roles.cache.get(roleId);
-          if (!role) continue;
-        const label = state.labels[0] || role.name || roleId;
-
-        if (state.shouldHave && !has) {
-          if (this.isProtectedRole(role)) {
-            const key = `token:add:protected:${guildId || member.guild.id}:${member.id}:${role.id}`;
-            this.logRoleSyncWarnOnce(key, `Skipped adding protected token role ${role.name} (${role.id}) for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-          } else if (!this.canBotManageRole(member, role)) {
-            const key = `token:add:unmanaged:${guildId || member.guild.id}:${member.id}:${role.id}`;
-            this.logRoleSyncWarnOnce(key, `Skipped adding unmanaged token role ${role.name} (${role.id}) for ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-            } else {
-              await member.roles.add(role);
-              liveRoleIds.add(roleId);
-              changes.added.push(label);
-              logger.log(`Added token role ${label} to ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-            }
-        } else if (!state.shouldHave && has) {
-          if (state.neverRemove) {
-            const key = `token:remove:override:${guildId || member.guild.id}:${member.id}:${role.id}`;
-            this.logRoleSyncWarnOnce(key, `Skipped removing token role ${role.name} (${role.id}) from ${member.user.tag} due to rule override${guildId ? ` [guild ${guildId}]` : ''}`);
-            continue;
-          }
-          if (this.isProtectedRole(role)) {
-            const key = `token:remove:protected:${guildId || member.guild.id}:${member.id}:${role.id}`;
-            this.logRoleSyncWarnOnce(key, `Skipped removing protected token role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-          } else if (!this.canBotManageRole(member, role)) {
-            const key = `token:remove:unmanaged:${guildId || member.guild.id}:${member.id}:${role.id}`;
-            this.logRoleSyncWarnOnce(key, `Skipped removing unmanaged token role ${role.name} (${role.id}) from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-            } else {
-              await member.roles.remove(role);
-              liveRoleIds.delete(roleId);
-              changes.removed.push(label);
-              logger.log(`Removed token role ${label} from ${member.user.tag}${guildId ? ` [guild ${guildId}]` : ''}`);
-            }
-        }
-      }
+      await this.applyChainRoleStates(member, roleStates, liveRoleIds, changes, guildId, 'token');
     } catch (error) {
       logger.error('Error syncing token roles:', error);
     }
@@ -1206,6 +1383,10 @@ class RoleService {
         votingPower: tier.votingPower,
         roleId: tier.roleId,
         collectionId: tier.collectionId || null,
+        chainFamily: this.getRuleChain(tier).family,
+        chainId: this.getRuleChain(tier).chainId,
+        nftStandard: tier.nftStandard || tier.nft_standard || (this.getRuleChain(tier).family === 'evm' ? 'erc721' : 'solana'),
+        tokenId: tier.tokenId ?? tier.token_id ?? null,
         neverRemove: this.isRuleNeverRemove(tier),
         configured: !!tier.roleId
       });
@@ -1232,6 +1413,8 @@ class RoleService {
         guildId: rule.guildId,
         tokenMint: rule.tokenMint,
         tokenSymbol: rule.tokenSymbol,
+        chainFamily: rule.chainFamily,
+        chainId: rule.chainId,
         minAmount: rule.minAmount,
         maxAmount: rule.maxAmount,
         roleId: rule.roleId,
@@ -1248,7 +1431,7 @@ class RoleService {
    * CRUD operations for tiers
    */
   
-  addTier(name, minNFTs, maxNFTs, votingPower, roleId = null, collectionId = null, neverRemove = false) {
+  addTier(name, minNFTs, maxNFTs, votingPower, roleId = null, collectionId = null, neverRemove = false, chainOptions = {}) {
     try {
       if (!this.tiersConfig) {
         this.loadConfigs();
@@ -1261,7 +1444,9 @@ class RoleService {
       }
 
       // Check for overlapping ranges
+      const chainId = chainOptions.chainId || 'solana:mainnet';
       const overlap = this.tiersConfig.tiers.find(t => {
+        if (this.getRuleChain(t).chainId !== chainId || String(t.collectionId || '') !== String(collectionId || '')) return false;
         return (minNFTs >= t.minNFTs && minNFTs <= t.maxNFTs) ||
                (maxNFTs >= t.minNFTs && maxNFTs <= t.maxNFTs) ||
                (minNFTs <= t.minNFTs && maxNFTs >= t.maxNFTs);
@@ -1281,6 +1466,10 @@ class RoleService {
         votingPower,
         roleId,
         collectionId: collectionId || null,
+        chainFamily: chainOptions.chainFamily || this.getRuleChain({ chainId }).family,
+        chainId,
+        nftStandard: chainOptions.nftStandard || (String(chainId).startsWith('eip155:') ? 'erc721' : 'solana'),
+        tokenId: chainOptions.tokenId ?? null,
         neverRemove: this.toBooleanFlag(neverRemove, false)
       };
 

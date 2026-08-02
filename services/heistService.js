@@ -2553,7 +2553,7 @@ class HeistService {
     for (const item of (Array.isArray(existingItems) ? existingItems : [])) {
       const mint = String(item?.metadata?.mint || '').trim();
       if (!mint) continue;
-      existingMints.add(mint.toLowerCase());
+      existingMints.add(mint);
     }
 
     let createdCount = 0;
@@ -2562,7 +2562,7 @@ class HeistService {
     const tx = db.transaction(() => {
       for (const nft of collectionNfts) {
         const mint = String(nft?.mint || '').trim();
-        if (!mint || existingMints.has(mint.toLowerCase())) {
+        if (!mint || existingMints.has(mint)) {
           skippedCount += 1;
           continue;
         }
@@ -2601,7 +2601,7 @@ class HeistService {
           safeJsonStringify(metadata, '{}')
         );
 
-        existingMints.add(mint.toLowerCase());
+        existingMints.add(mint);
         createdCount += 1;
       }
     });

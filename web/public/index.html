@@ -118,11 +118,11 @@
       </p>
       <div class="hero-actions">
         <a id="heroInviteBtn" href="#" class="btn btn-primary">Invite Bot</a>
-        <a id="heroDemoBtn" href="#" class="btn btn-secondary" onclick="return false;">View Demo</a>
+        <a id="heroDemoBtn" href="#features" class="btn btn-secondary">Explore Features</a>
         <a href="/pricing" class="btn btn-ghost">Compare Plans &#8594;</a>
       </div>
       <div class="hero-proof">
-        <span>&#128279; Solana-native</span>
+        <span>&#128279; Solana live &middot; EVM next</span>
         <span>&#128737;&#65039; No fund custody</span>
         <span>&#9889; Instant setup</span>
       </div>
@@ -338,7 +338,7 @@
       <div class="trust-badge"><span class="icon">&#9881;&#65039;</span> Server-specific config</div>
       <div class="trust-badge"><span class="icon">&#128203;</span> Activity logs</div>
       <div class="trust-badge"><span class="icon">&#128172;</span> Discord-native flows</div>
-      <div class="trust-badge"><span class="icon">&#9728;&#65039;</span> Solana-ready</div>
+      <div class="trust-badge"><span class="icon">&#9728;&#65039;</span> Solana live &middot; EVM planned</div>
     </div>
   </div>
 </section>
@@ -390,7 +390,7 @@
       <div class="footer-col">
         <h4>Community</h4>
         <a href="#" id="footerInviteBtn">Invite Bot</a>
-        <a href="#" id="footerDemoBtn" onclick="return false;">Join Demo Server</a>
+        <a href="#features" id="footerDemoBtn">Explore Features</a>
         <a href="#trust">Security</a>
       </div>
       <div class="footer-col">
@@ -401,7 +401,7 @@
     </div>
     <div class="footer-bottom">
       <span>&copy; 2026 GuildPilot. All rights reserved.</span>
-      <span>Built for Solana communities</span>
+      <span>Built for Web3 communities</span>
     </div>
   </div>
 </footer>
@@ -414,14 +414,9 @@
     var inviteUrl = clientId
       ? 'https://discord.com/oauth2/authorize?client_id=' + clientId + '&permissions=8&scope=bot%20applications.commands'
       : '/auth/discord/login';
-    var demoUrl = '#';
     ['navInviteBtn','mobileInviteBtn','heroInviteBtn','ctaInviteBtn','footerInviteBtn'].forEach(function(id) {
       var el = document.getElementById(id);
       if (el) { el.href = inviteUrl; el.onclick = null; }
-    });
-    ['heroDemoBtn','footerDemoBtn'].forEach(function(id) {
-      var el = document.getElementById(id);
-      if (el) { el.href = demoUrl; el.onclick = null; }
     });
   })();
 </script>

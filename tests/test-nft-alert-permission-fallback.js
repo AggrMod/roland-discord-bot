@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const assert = require('assert');
+const { Keypair } = require('@solana/web3.js');
 
 const nftActivityService = require('../services/nftActivityService');
 const clientProvider = require('../utils/clientProvider');
@@ -12,7 +13,7 @@ function wait(ms) {
 
 async function run() {
   const stamp = Date.now();
-  const collection = `COLL_PERMISSION_${stamp}`;
+  const collection = Keypair.generate().publicKey.toBase58();
   const blockedChannel = `nft-blocked-${stamp}`;
   const goodChannel = `nft-good-${stamp}`;
   const blockedGuild = `nft-guild-blocked-${stamp}`;
@@ -110,4 +111,3 @@ run().catch((error) => {
   console.error('NFT alert permission fallback test failed:', error.message);
   process.exit(1);
 });
-

@@ -1,4 +1,5 @@
 const assert = require('assert');
+const { Keypair } = require('@solana/web3.js');
 
 const db = require('../database/db');
 const nftActivityService = require('../services/nftActivityService');
@@ -12,8 +13,8 @@ async function run() {
   const stamp = Date.now();
   const guildA = `nft-a-${stamp}`;
   const guildB = `nft-b-${stamp}`;
-  const collectionA = `COLLA_${stamp}`;
-  const collectionB = `COLLB_${stamp}`;
+  const collectionA = Keypair.generate().publicKey.toBase58();
+  const collectionB = Keypair.generate().publicKey.toBase58();
   const channelA = `nft-channel-a-${stamp}`;
   const channelB = `nft-channel-b-${stamp}`;
 

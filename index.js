@@ -21,17 +21,16 @@ const clientProvider = require('./utils/clientProvider');
 const tenantService = require('./services/tenantService');
 const aiAssistantService = require('./services/aiAssistantService');
 const aiSummaryService = require('./services/aiSummaryService');
+const centralizedModuleGate = require('./middleware/moduleGate');
+const { getCommandModuleKey: getCentralizedCommandModuleKey } = require('./config/commandModules');
 
 // Global caches/state
 const commandCooldownCache = new Map();
 const legacyAliasNoticeCache = new Map();
 const aiAssistantMentionCooldownCache = new Map();
-const aiAssistantPassiveChannelCache = new Map();
 const aiAssistantPassiveChannelState = new Map();
 
 const LEGACY_ALIAS_NOTICE_TTL_MS = 24 * 60 * 60 * 1000;
-const inviteRefreshMs = 120 * 1000;
-
 const COMMAND_COOLDOWN_SECONDS = {
   default: 3,
   verification: {
@@ -48,12 +47,6 @@ const COMMAND_COOLDOWN_SECONDS = {
 
 const LEGACY_MINIGAME_ALIASES = new Set(['battle', 'heist', 'arena', 'coinflip', 'rps', 'dice', 'slots', 'higherlower', 'gamenight']);
 
-const PLAN_TIER_RANK = {
-  'starter': 0,
-  'pro': 1,
-  'enterprise': 2
-};
-
 const AI_PASSIVE_KEYWORDS = new Set([
   'help', 'how', 'what', 'why', 'where', 'when', 'who',
   'bot', 'ai', 'assistant', 'question', 'info', 'information',
@@ -62,45 +55,6 @@ const AI_PASSIVE_KEYWORDS = new Set([
   'family', 'mafia', 'don', 'boss', 'consigliere', 'underboss',
   'solana', 'nft', 'wallet', 'token', 'treasury'
 ]);
-
-// Helper: Module gate for commands
-async function moduleGate(interaction, moduleKey) {
-  if (!moduleKey) return true;
-  const guildId = interaction.guildId;
-  if (!guildId) return true;
-
-  if (tenantService.isModuleEnabled(guildId, moduleKey)) {
-    return true;
-  }
-
-  const message = {
-    content: `❌ The **${moduleKey}** module is currently disabled for this server.`,
-    ephemeral: true
-  };
-
-  if (interaction.deferred || interaction.replied) {
-    await interaction.followUp(message);
-  } else {
-    await interaction.reply(message);
-  }
-  return false;
-}
-
-function getCommandModuleKey(commandName) {
-  const mapping = {
-    'verification': 'verification',
-    'governance': 'governance',
-    'proposal': 'governance',
-    'treasury': 'treasury',
-    'ticketing': 'ticketing',
-    'heist': 'heist',
-    'vault': 'vault',
-    'minigames': 'minigames',
-    'battle': 'minigames',
-    'aiassistant': 'aiassistant'
-  };
-  return mapping[commandName.toLowerCase()] || null;
-}
 
 function getCommandCooldownSeconds(interaction) {
   const commandName = String(interaction.commandName || '').toLowerCase();
@@ -515,6 +469,16 @@ client.once(Events.ClientReady, () => {
   intervals.push(setInterval(pollTrackedTokenActivity, tokenPollIntervalMs));
   setTimeout(pollTrackedTokenActivity, 45 * 1000);
 
+  const evmTrackerService = require('./services/evmTrackerService');
+  const pollEvmActivity = () => {
+    evmTrackerService.pollAll().catch(err => {
+      logger.error('[evm-tracker] Error in scheduled poll:', err);
+    });
+  };
+  const evmPollIntervalMs = Math.max(30, Number(process.env.EVM_TRACKER_POLL_INTERVAL_SEC || 90)) * 1000;
+  intervals.push(setInterval(pollEvmActivity, evmPollIntervalMs));
+  setTimeout(pollEvmActivity, 60 * 1000);
+
   const sweepWebhookRetryQueue = () => {
     trackedWalletsService.processWebhookRetryQueue()
       .catch(err => logger.error('[tracked-token-webhook] Error in durable retry sweep:', err));
@@ -595,6 +559,11 @@ async function handleGuildGuardActionButton(interaction) {
     if (interaction.deferred || interaction.replied) await interaction.editReply({ content }).catch(() => {});
     else await interaction.reply({ content, ephemeral: true }).catch(() => {});
   }
+
+  if (process.env.NODE_ENV === 'production' && getTrimmedEnv('SECRET_VAULT_KEY').length < 32) {
+    logger.error('CRITICAL: SECRET_VAULT_KEY must be set to at least 32 characters in production.');
+    process.exit(1);
+  }
 }
 
 client.on(Events.InteractionCreate, async interaction => {
@@ -613,8 +582,8 @@ client.on(Events.InteractionCreate, async interaction => {
     if (!command) return;
     try {
       if (!(await enforceCommandCooldown(interaction))) return;
-      const moduleKey = getCommandModuleKey(interaction.commandName);
-      if (!(await moduleGate(interaction, moduleKey))) return;
+      const moduleKey = getCentralizedCommandModuleKey(interaction.commandName);
+      if (!(await centralizedModuleGate(interaction, moduleKey))) return;
       await command.execute(interaction);
       await maybeSendLegacyMinigameAliasNotice(interaction);
     } catch (error) {

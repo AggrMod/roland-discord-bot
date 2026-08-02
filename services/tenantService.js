@@ -707,9 +707,9 @@ class TenantService {
       // able to enable a module the plan doesn't include (e.g. a free tenant
       // turning on aiassistant). Operator/superadmin callers pass
       // bypassPlanGate. Already-enabled (grandfathered) modules are never
-      // disturbed. Rollout is monitor-before-enforce via env, default off so
-      // there is NO behavior change until an operator opts in.
-      const planGateMode = String(process.env.MODULE_IDENTITY_ENFORCE || 'off').trim().toLowerCase();
+      // disturbed. Enforcement is secure-by-default. Operators can explicitly
+      // select monitor/off only for a controlled migration or incident response.
+      const planGateMode = String(process.env.MODULE_IDENTITY_ENFORCE || 'enforce').trim().toLowerCase();
       if (!options.bypassPlanGate && !alreadyEnabled && (planGateMode === 'monitor' || planGateMode === 'enforce')) {
         const planKey = normalizePlanKey(before?.planKey || context.tenant?.plan_key || getDefaultPlanKey()) || getDefaultPlanKey();
         const plan = getPlanPreset(planKey);

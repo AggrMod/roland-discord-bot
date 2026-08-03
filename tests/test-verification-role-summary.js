@@ -28,11 +28,13 @@ const fields = buildVerificationRoleFields([
 
 assert.strictEqual(fields.length, 2);
 assert.strictEqual(fields[0].name, '<@&100000000000000001>');
-assert.match(fields[0].value, /Solana · Solpranos:/);
+assert.match(fields[0].value, /^Solpranos:/);
+assert.doesNotMatch(fields[0].value, /Solana/);
 assert.match(fields[0].value, /Holds 3 NFTs/);
 assert.match(fields[0].value, /Requires 1\+ NFTs/);
 assert.strictEqual(fields[1].name, '<@&100000000000000002>');
-assert.match(fields[1].value, /Ethereum · Ethereum Collection:/);
+assert.match(fields[1].value, /^Ethereum Collection:/);
+assert.doesNotMatch(fields[1].value, /Ethereum ·/);
 assert.match(fields[1].value, /Holds 2 NFTs/);
 assert.match(fields[1].value, /Requires 1–5 NFTs/);
 
@@ -51,7 +53,8 @@ const message = buildVerificationRoleMessage([
   },
 ]);
 assert.match(message, /<@&100000000000000003>/, 'native Discord message content contains the real role mention');
-assert.match(message, /Ethereum · The Deck by Gamblor: Holds 17 NFTs · Requires 1\+ NFTs/);
+assert.match(message, /The Deck by Gamblor: Holds 17 NFTs · Requires 1\+ NFTs/);
+assert.doesNotMatch(message, /Ethereum ·/);
 assert.ok(message.length <= 1900, 'role message stays below Discord content limits');
 
 console.log('verification role summary assertions passed');

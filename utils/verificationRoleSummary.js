@@ -22,11 +22,13 @@ function formatRequirement(minValue, maxValue, unit) {
 function formatGrantReason(grant = {}) {
   const chainName = String(grant.chainName || '').trim();
   const assetName = String(grant.assetName || '').trim();
-  const heading = [chainName, assetName].filter(Boolean).join(' · ') || 'Verified wallet';
 
   if (grant.kind === 'wallet') {
     return 'Wallet ownership verified';
   }
+  const heading = grant.kind === 'token'
+    ? ([chainName, assetName].filter(Boolean).join(' · ') || 'Verified token')
+    : (assetName || 'NFT collection');
   if (grant.kind === 'trait') {
     const trait = String(grant.trait || '').trim() || 'Required NFT trait';
     return `${heading}: Owns an NFT with ${trait}`;

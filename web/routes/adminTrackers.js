@@ -1,5 +1,51 @@
 const express = require('express');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
+const { getChain, normalizeAddress } = require('../../utils/chainIdentity');
+const evmService = require('../../services/evmService');
+
+async function resolveWithin(promise, timeoutMs) {
+  let timeoutId;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise(resolve => {
+        timeoutId = setTimeout(() => resolve(null), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+async function resolveTrackedCollectionMetadata({ nftActivityService, chainValue, collectionAddress, timeoutMs = 6000 }) {
+  const chain = getChain(chainValue || 'solana:mainnet');
+  const normalizedAddress = normalizeAddress(collectionAddress, chain?.chainId);
+  if (!chain || !normalizedAddress) {
+    return { success: false, message: 'A supported network and valid collection address are required' };
+  }
+
+  const metadataPromise = chain.family === 'evm'
+    ? evmService.getNftCollectionMetadata(normalizedAddress, chain.chainId)
+    : nftActivityService.resolveTokenAssetMeta(normalizedAddress);
+  const metadata = await resolveWithin(metadataPromise, timeoutMs);
+  const name = String(metadata?.name || '').trim();
+  if (!name) {
+    return {
+      success: false,
+      message: 'The collection name could not be resolved automatically. Enter it manually to continue.',
+      chainId: chain.chainId,
+      collectionAddress: normalizedAddress,
+    };
+  }
+
+  return {
+    success: true,
+    name,
+    symbol: String(metadata?.symbol || '').trim() || null,
+    chainId: chain.chainId,
+    collectionAddress: normalizedAddress,
+  };
+}
 
 function createAdminTrackersRouter({
   logger,
@@ -28,7 +74,28 @@ function createAdminTrackersRouter({
     }
   });
 
-  router.post('/api/admin/nft-tracker/collections', adminAuthMiddleware, (req, res) => {
+  router.post('/api/admin/nft-tracker/collections/resolve-metadata', adminAuthMiddleware, async (req, res) => {
+    if (!ensureNftTrackerModule(req, res)) return;
+    try {
+      const result = await resolveTrackedCollectionMetadata({
+        nftActivityService,
+        chainValue: req.body?.chain || 'solana:mainnet',
+        collectionAddress: req.body?.collectionAddress,
+      });
+      if (!result.success) {
+        return res.status(422).json(toErrorResponse(result.message, 'METADATA_NOT_FOUND', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (routeError) {
+      logger.warn(`NFT collection metadata resolution failed: ${routeError?.message || routeError}`);
+      return res.status(422).json(toErrorResponse(
+        'The collection name could not be resolved automatically. Enter it manually to continue.',
+        'METADATA_NOT_FOUND'
+      ));
+    }
+  });
+
+  router.post('/api/admin/nft-tracker/collections', adminAuthMiddleware, async (req, res) => {
     if (!ensureNftTrackerModule(req, res)) return;
     try {
       const {
@@ -46,11 +113,24 @@ function createAdminTrackersRouter({
         trackBid,
         meSymbol
       } = req.body || {};
+      const explicitCollectionName = String(collectionName || '').trim();
+      let resolvedCollectionName = '';
+      try {
+        const metadata = await resolveTrackedCollectionMetadata({
+          nftActivityService,
+          chainValue: chain || 'solana:mainnet',
+          collectionAddress,
+        });
+        resolvedCollectionName = metadata.success ? metadata.name : '';
+      } catch (metadataError) {
+        logger.warn(`NFT collection name lookup failed while saving: ${metadataError?.message || metadataError}`);
+      }
+      const effectiveCollectionName = resolvedCollectionName || explicitCollectionName;
       const result = nftActivityService.addTrackedCollection({
         guildId: req.guildId,
         chain: chain || 'solana:mainnet',
         collectionAddress,
-        collectionName,
+        collectionName: effectiveCollectionName,
         channelId,
         nftStandard,
         tokenId,
@@ -68,7 +148,11 @@ function createAdminTrackersRouter({
       if (!String(chain || 'solana:mainnet').startsWith('eip155:')) {
         nftActivityService.syncAddressToHelius(collectionAddress, 'add').catch(() => {});
       }
-      return res.json(toSuccessResponse(result));
+      return res.json(toSuccessResponse({
+        ...result,
+        collectionName: effectiveCollectionName,
+        metadataResolved: Boolean(resolvedCollectionName),
+      }));
     } catch (routeError) {
       logger.error('Error adding tracked collection:', routeError);
       return res.status(500).json(toErrorResponse('Failed to add tracked collection', 'INTERNAL_ERROR', { detail: routeError?.message || 'unknown_error' }));
@@ -536,3 +620,4 @@ function createAdminTrackersRouter({
 }
 
 module.exports = createAdminTrackersRouter;
+module.exports.resolveTrackedCollectionMetadata = resolveTrackedCollectionMetadata;

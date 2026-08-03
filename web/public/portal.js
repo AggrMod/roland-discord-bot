@@ -14388,6 +14388,59 @@ async function loadNftTrackerView() {
   await renderNftCollectionsCard('nftCollectionsTableWrap');
 }
 
+async function resolveNftTrackerCollectionName({ chain, address, nameInput, statusEl, showFailure = false }) {
+  const normalizedAddress = String(address || '').trim();
+  const normalizedChain = String(chain || 'solana:mainnet').trim();
+  if (!normalizedAddress || !nameInput) return '';
+
+  const lookupKey = `${normalizedChain}:${normalizedAddress}`;
+  const requestToken = `${lookupKey}:${Date.now()}:${Math.random()}`;
+  nameInput.dataset.resolvingCollection = requestToken;
+  if (statusEl) {
+    statusEl.style.color = 'var(--text-secondary)';
+    statusEl.textContent = 'Resolving collection name...';
+  }
+
+  try {
+    const response = await fetch('/api/admin/nft-tracker/collections/resolve-metadata', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...buildTenantRequestHeaders() },
+      body: JSON.stringify({ chain: normalizedChain, collectionAddress: normalizedAddress }),
+    });
+    const data = await response.json();
+    if (nameInput.dataset.resolvingCollection !== requestToken) return '';
+
+    const resolvedName = String(data?.name || data?.data?.name || '').trim();
+    if (response.ok && data.success !== false && resolvedName) {
+      nameInput.value = resolvedName;
+      nameInput.dataset.resolvedCollection = lookupKey;
+      if (statusEl) {
+        statusEl.style.color = '#86efac';
+        statusEl.textContent = `Resolved as ${resolvedName}`;
+      }
+      return resolvedName;
+    }
+
+    if (statusEl) {
+      statusEl.style.color = showFailure ? '#fca5a5' : 'var(--text-secondary)';
+      statusEl.textContent = showFailure
+        ? (data?.message || 'Name lookup failed. Enter the collection name manually.')
+        : 'Name not found automatically. You can enter it manually.';
+    }
+  } catch (_error) {
+    if (nameInput.dataset.resolvingCollection === requestToken && statusEl) {
+      statusEl.style.color = showFailure ? '#fca5a5' : 'var(--text-secondary)';
+      statusEl.textContent = 'Name lookup is unavailable. You can enter it manually.';
+    }
+  } finally {
+    if (nameInput.dataset.resolvingCollection === requestToken) {
+      delete nameInput.dataset.resolvingCollection;
+    }
+  }
+  return '';
+}
+
 async function openAddCollectionModal(existingId, existingData) {
   const isEdit = !!existingId;
   document.getElementById('colEditId').value = existingId || '';
@@ -14396,10 +14449,38 @@ async function openAddCollectionModal(existingId, existingData) {
   chainSelect.disabled = isEdit;
   document.getElementById('colNftStandard').value = (existingData && existingData.nftStandard) || 'erc721';
   document.getElementById('colTokenId').value = (existingData && existingData.tokenId) || '';
-  document.getElementById('colName').value = (existingData && existingData.name) || '';
+  const collectionNameInput = document.getElementById('colName');
+  collectionNameInput.value = (existingData && existingData.name) || '';
+  delete collectionNameInput.dataset.resolvedCollection;
+  delete collectionNameInput.dataset.resolvingCollection;
+  collectionNameInput.oninput = () => { delete collectionNameInput.dataset.resolvedCollection; };
   const addrEl = document.getElementById('colAddress');
   addrEl.value = (existingData && existingData.address) || '';
   addrEl.disabled = isEdit;
+  const nameStatus = document.getElementById('colNameResolutionStatus');
+  if (nameStatus) {
+    nameStatus.style.color = 'var(--text-secondary)';
+    nameStatus.textContent = isEdit ? 'Saved collection name.' : 'Enter an address and we will look up its name.';
+  }
+  addrEl.oninput = () => {
+    const currentNameInput = document.getElementById('colName');
+    if (currentNameInput.dataset.resolvedCollection) currentNameInput.value = '';
+    delete currentNameInput.dataset.resolvedCollection;
+    delete currentNameInput.dataset.resolvingCollection;
+    if (nameStatus) {
+      nameStatus.style.color = 'var(--text-secondary)';
+      nameStatus.textContent = 'Move out of the address field to resolve its name.';
+    }
+  };
+  addrEl.onblur = () => {
+    if (isEdit) return;
+    resolveNftTrackerCollectionName({
+      chain: document.getElementById('colChain').value,
+      address: addrEl.value,
+      nameInput: document.getElementById('colName'),
+      statusEl: nameStatus,
+    });
+  };
   document.getElementById('colMeSymbol').value = (existingData && existingData.meSymbol) || '';
   document.getElementById('colMint').checked    = existingData ? !!existingData.trackMint     : true;
   document.getElementById('colSale').checked    = existingData ? !!existingData.trackSale     : true;
@@ -14467,6 +14548,15 @@ function onTrackedCollectionChainChange() {
   if (isEvm && !document.getElementById('colEditId')?.value) {
     document.getElementById('colTransfer').checked = true;
   }
+  const currentAddress = String(address?.value || '').trim();
+  if (currentAddress && !document.getElementById('colEditId')?.value) {
+    resolveNftTrackerCollectionName({
+      chain: document.getElementById('colChain')?.value,
+      address: currentAddress,
+      nameInput: document.getElementById('colName'),
+      statusEl: document.getElementById('colNameResolutionStatus'),
+    });
+  }
 }
 
 function closeAddCollectionModal() {
@@ -14478,7 +14568,8 @@ function closeAddCollectionModal() {
 
 async function saveCollection() {
   const editId = document.getElementById('colEditId').value;
-  const name = document.getElementById('colName').value.trim();
+  const nameInput = document.getElementById('colName');
+  let name = nameInput.value.trim();
   const address = document.getElementById('colAddress').value.trim();
   const chain = document.getElementById('colChain').value;
   const channelId = document.getElementById('colChannel').value;
@@ -14486,8 +14577,17 @@ async function saveCollection() {
   const tokenId = nftStandard === 'erc1155' ? document.getElementById('colTokenId').value.trim() : null;
   const errEl = document.getElementById('colError');
 
+  if (!editId && address && !name) {
+    name = await resolveNftTrackerCollectionName({
+      chain,
+      address,
+      nameInput,
+      statusEl: document.getElementById('colNameResolutionStatus'),
+      showFailure: true,
+    });
+  }
   if (!name || (!editId && !address) || !channelId) {
-    errEl.textContent = 'Collection name, address, and alert channel are required.';
+    errEl.textContent = 'Collection address, resolved name, and alert channel are required. Enter the name manually if lookup is unavailable.';
     errEl.style.display = 'block';
     return;
   }
@@ -19198,7 +19298,7 @@ async function openNftActivityAddCollectionModal() {
           <div id="caTokenIdWrap" style="display:none;"><label style="${lb}">Token ID *</label><input type="text" id="caTokenId" placeholder="e.g. 42" style="${fi}"></div>
         </div>
         <div><label style="${lb}">Collection Address *</label><input type="text" id="caAddrInput" placeholder="Solana collection address" style="${fi}font-family:monospace;"></div>
-        <div><label style="${lb}">Collection Name *</label><input type="text" id="caNameInput" placeholder="e.g. Vault Runners" style="${fi}"></div>
+        <div><label style="${lb}">Collection Name <small style="color:#94a3b8;">(automatic)</small></label><input type="text" id="caNameInput" placeholder="Resolved from collection address" style="${fi}"><div id="caNameStatus" aria-live="polite" style="min-height:16px;margin-top:5px;color:#94a3b8;font-size:0.78em;">Enter an address and we will look up its name.</div></div>
         <div><label style="${lb}">Alert Channel *</label><select id="caChannelInput" style="${fi}"><option value="">Loading...</option></select></div>
         <div><label style="${lb}">Magic Eden Symbol <small style="color:#94a3b8;">(e.g. vault_runners)</small></label><input type="text" id="caMeInput" placeholder="vault_runners" style="${fi}"></div>
         <div style="display:flex;flex-wrap:wrap;gap:12px;">
@@ -19243,8 +19343,35 @@ async function openNftActivityAddCollectionModal() {
       ? 'EVM RPC tracking covers confirmed ERC-721 mint and transfer events.'
       : 'Solana supports marketplace and transfer activity.';
   };
-  document.getElementById('caChainInput')?.addEventListener('change', syncCollectionNetworkFields);
+  const resolveActivityCollectionName = (showFailure = false) => resolveNftTrackerCollectionName({
+    chain: document.getElementById('caChainInput')?.value,
+    address: document.getElementById('caAddrInput')?.value,
+    nameInput: document.getElementById('caNameInput'),
+    statusEl: document.getElementById('caNameStatus'),
+    showFailure,
+  });
+  document.getElementById('caChainInput')?.addEventListener('change', () => {
+    syncCollectionNetworkFields();
+    if (document.getElementById('caAddrInput')?.value.trim()) resolveActivityCollectionName();
+  });
   document.getElementById('caNftStandard')?.addEventListener('change', syncCollectionNetworkFields);
+  document.getElementById('caAddrInput')?.addEventListener('input', () => {
+    const nameInput = document.getElementById('caNameInput');
+    if (nameInput?.dataset.resolvedCollection) nameInput.value = '';
+    if (nameInput) {
+      delete nameInput.dataset.resolvedCollection;
+      delete nameInput.dataset.resolvingCollection;
+    }
+    const status = document.getElementById('caNameStatus');
+    if (status) {
+      status.style.color = '#94a3b8';
+      status.textContent = 'Move out of the address field to resolve its name.';
+    }
+  });
+  document.getElementById('caAddrInput')?.addEventListener('blur', () => resolveActivityCollectionName());
+  document.getElementById('caNameInput')?.addEventListener('input', event => {
+    delete event.currentTarget.dataset.resolvedCollection;
+  });
   syncCollectionNetworkFields();
 
   // Populate channel dropdown
@@ -19274,9 +19401,11 @@ async function openNftActivityAddCollectionModal() {
     const nftStandard = chain.startsWith('eip155:') ? document.getElementById('caNftStandard').value : 'solana';
     const tokenId = nftStandard === 'erc1155' ? document.getElementById('caTokenId').value.trim() : null;
     const addr = document.getElementById('caAddrInput').value.trim();
-    const name = document.getElementById('caNameInput').value.trim();
+    const nameInput = document.getElementById('caNameInput');
+    let name = nameInput.value.trim();
     const chId = document.getElementById('caChannelInput').value;
-    if (!addr || !name || !chId) { if (feedback) { feedback.style.color='#fca5a5'; feedback.textContent='Address, name, and alert channel are required'; } return; }
+    if (addr && !name) name = await resolveActivityCollectionName(true);
+    if (!addr || !name || !chId) { if (feedback) { feedback.style.color='#fca5a5'; feedback.textContent='Address, resolved name, and alert channel are required. Enter the name manually if lookup is unavailable.'; } return; }
     if (nftStandard === 'erc1155' && !tokenId) { if (feedback) { feedback.style.color='#fca5a5'; feedback.textContent='ERC-1155 requires a token ID'; } return; }
     addBtn.disabled = true; addBtn.textContent = 'Adding...';
     try {

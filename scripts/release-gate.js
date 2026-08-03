@@ -44,6 +44,7 @@ const checks = [
   { name: 'verification-role-summary', cmd: process.execPath, args: ['tests/test-verification-role-summary.js'] },
   { name: 'verification-role-evidence', cmd: process.execPath, args: ['tests/test-verification-role-evidence.js'] },
   { name: 'verification-collection-name-resolution', cmd: process.execPath, args: ['tests/test-verification-collection-name-resolution.js'] },
+  { name: 'nft-tracker-collection-name-resolution', cmd: process.execPath, args: ['tests/test-nft-tracker-collection-name-resolution.js'] },
   { name: 'evm-nft-tracker-standards', cmd: process.execPath, args: ['tests/test-evm-nft-tracker-standards.js'] },
   { name: 'verification-role-config-validation', cmd: process.execPath, args: ['tests/test-verification-role-config-validation.js'] },
   { name: 'verification-delegation-toggle', cmd: process.execPath, args: ['tests/test-verification-delegation-toggle.js'] },

@@ -413,8 +413,13 @@ function createAdminCoreRouter({
       res.json(toSuccessResponse({
         plan,
         planLabel: snapshot?.planLabel || tenantContext?.planLabel || plan,
+        basePlan: snapshot?.basePlan || plan,
+        basePlanLabel: snapshot?.basePlanLabel || snapshot?.planLabel || tenantContext?.planLabel || plan,
         status: snapshot?.status || tenantContext?.status || 'active',
         expiresAt: snapshot?.expiresAt || null,
+        contract: snapshot?.contract || null,
+        pilot: snapshot?.pilot || null,
+        alerts: snapshot?.alerts || null,
         billing: snapshot?.billing || null,
         paymentDetails: billingService.getPaymentDetails(req.guildId),
         renewal: snapshot?.renewal || { options: [] },
@@ -472,6 +477,7 @@ function createAdminCoreRouter({
         planKey: body.planKey,
         billingInterval: body.billingInterval,
         tokenSymbol: body.tokenSymbol,
+        customPlan: body.customPlan,
       });
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to create quote', 'VALIDATION_ERROR'));

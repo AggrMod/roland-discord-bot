@@ -3515,9 +3515,9 @@ const HELP_GUIDES = Object.freeze([
     id: 'billing', group: 'Platform console', role: 'superadmin', icon: 'fa-credit-card',
     title: 'Billing & entitlements', summary: 'Manage plans, limits, receipts, crypto quotes, and tenant access.',
     route: 'admin', action: 'Open billing', superadminView: 'superadmin',
-    overview: 'Billing connects commercial plan state to tenant entitlements and module capacity without changing member-owned settings.',
-    steps: ['Review the tenant and current plan.', 'Confirm billing status, period, and receipt evidence.', 'Apply the correct entitlements and limits.', 'Audit the resulting module access.'],
-    tips: ['Verify on-chain payment evidence independently before approval.', 'Billing changes should be traceable to an operator and timestamp.']
+    overview: 'Billing connects the tenant\'s legitimate base plan to module capacity. Temporary Pro pilots are layered on top and automatically return to that base plan when they end.',
+    steps: ['Review the tenant\'s effective access, paid fallback, renewal date, and warnings.', 'Assign Free, Growth, Pro, Enterprise, or build a Custom plan from modules and capacity limits.', 'For a temporary evaluation, start a 7-day Pro pilot and record the conversation or reason.', 'Confirm payment evidence and audit the resulting entitlement change.'],
+    tips: ['Yearly plans include 12 months for the price of 10; eligible early yearly renewals in the final 62 days cost 9 months.', 'Expiring subscriptions and pilots appear in the Platform console action inbox.', 'Verify on-chain payment evidence independently before approval.', 'Billing changes should be traceable to an operator and timestamp.']
   },
   {
     id: 'security', group: 'Platform console', role: 'superadmin', icon: 'fa-lock',
@@ -8466,9 +8466,10 @@ const TENANT_PLAN_LABELS = {
   starter: 'Free',
   growth: 'Growth',
   pro: 'Pro',
+  custom: 'Custom',
   enterprise: 'Enterprise'
 };
-const TENANT_PLAN_ORDER = ['starter', 'growth', 'pro', 'enterprise'];
+const TENANT_PLAN_ORDER = ['starter', 'growth', 'pro', 'custom', 'enterprise'];
 let portalPlanCatalogCache = [];
 
 const TENANT_MODULE_LABELS = {
@@ -8673,6 +8674,91 @@ function renderTenantTemplatePreview(previewPayload) {
   `;
 }
 
+function renderTenantPlanLifecyclePanel(tenant) {
+  const contract = tenant?.planContract || {};
+  const subscription = tenant?.subscription || {};
+  const pilot = contract?.pilot || subscription?.pilot || null;
+  const basePlanKey = String(contract?.basePlanKey || subscription?.basePlan || tenant?.planKey || 'starter').toLowerCase();
+  const effectivePlanKey = String(tenant?.planKey || basePlanKey).toLowerCase();
+  const customPlan = contract?.customPlan || null;
+  const selectedCustomModules = new Map((customPlan?.modules || []).map(module => [String(module?.key || ''), module]));
+  const customCatalog = (superadminWorkspacePlansCache || []).find(plan => String(plan?.key || '').toLowerCase() === 'custom')?.customBuilder || {};
+  const planCards = (superadminWorkspacePlansCache || []).map(plan => {
+    const key = String(plan?.key || '').toLowerCase();
+    if (!key) return '';
+    const monthly = Number(plan?.billing?.monthlyUsd);
+    const price = key === 'starter' ? 'Free forever' : (key === 'custom' || key === 'enterprise' ? 'Configured access' : `$${monthly.toFixed(2)} / month`);
+    return `
+      <label class="sa-plan-choice">
+        <input type="radio" name="tenantPlanChoice" value="${escapeHtml(key)}" ${basePlanKey === key ? 'checked' : ''} onchange="toggleTenantCustomPlanBuilder()">
+        <span><strong>${escapeHtml(plan.label || key)}</strong><small>${escapeHtml(price)}</small></span>
+      </label>
+    `;
+  }).join('');
+  const customRows = (customCatalog.modules || []).map(module => {
+    const key = String(module?.key || '');
+    const current = selectedCustomModules.get(key);
+    const checked = !!current;
+    const capacity = String(current?.capacity || 'growth');
+    return `
+      <div class="sa-custom-module-row">
+        <label><input type="checkbox" data-custom-plan-module="${escapeHtml(key)}" ${checked ? 'checked' : ''} onchange="updateTenantCustomQuotePreview()"><span><strong>${escapeHtml(module.label || key)}</strong><small>From $${Number(module.monthlyUsd || 0).toFixed(2)} / month</small></span></label>
+        <select data-custom-plan-capacity="${escapeHtml(key)}" onchange="updateTenantCustomQuotePreview()">
+          ${(customCatalog.capacities || []).map(option => `<option value="${escapeHtml(option.key)}" ${capacity === option.key ? 'selected' : ''}>${escapeHtml(option.label || option.key)}</option>`).join('')}
+        </select>
+      </div>
+    `;
+  }).join('');
+  const billing = tenant?.billing || subscription?.billing || null;
+  const billingEnd = billing?.currentPeriodEnd ? new Date(billing.currentPeriodEnd).toLocaleDateString() : 'No expiry date';
+  const alert = subscription?.alerts || {};
+  const pilotEnd = pilot?.endsAt ? new Date(pilot.endsAt).toLocaleString() : 'Not set';
+  const pilotActive = pilot?.active === true;
+
+  return `
+    <div class="sa-plan-lifecycle">
+      <section class="sa-entitlement-summary">
+        <div><span>Effective access</span><strong>${escapeHtml(getTenantPlanLabel(effectivePlanKey))}${pilotActive ? ' pilot' : ''}</strong><small>${pilotActive ? `Temporary until ${escapeHtml(pilotEnd)}` : 'Current module entitlement'}</small></div>
+        <div><span>Paid fallback</span><strong>${escapeHtml(getTenantPlanLabel(basePlanKey))}</strong><small>${escapeHtml(contract?.assignmentSource || 'system')} assignment</small></div>
+        <div><span>Renewal</span><strong>${escapeHtml(billingEnd)}</strong><small>${alert?.daysRemaining === null || alert?.daysRemaining === undefined ? 'No active renewal window' : `${escapeHtml(String(alert.daysRemaining))} days remaining`}</small></div>
+      </section>
+
+      <section class="sa-lifecycle-card sa-lifecycle-card--primary">
+        <div class="sa-lifecycle-heading"><div><span class="sa-v3-eyebrow">Access contract</span><h4>Assign a plan</h4><p>Choose the tenant's legitimate fallback entitlement. An active pilot remains layered on top.</p></div><button class="btn-primary" id="tenantPlanApplyBtn" onclick="applyTenantPlan()">Apply access</button></div>
+        <div class="sa-plan-choice-grid">${planCards}</div>
+        <div class="sa-plan-fields">
+          <label><span>Billing cadence</span><select id="tenantPlanBillingInterval"><option value="monthly" ${billing?.billingInterval !== 'yearly' ? 'selected' : ''}>Monthly</option><option value="yearly" ${billing?.billingInterval === 'yearly' ? 'selected' : ''}>Yearly · 12 months for the price of 10</option></select></label>
+          <div class="sa-plan-policy"><i class="fa-solid fa-tags"></i><span>Early annual renewal in the final 62 days charges 9 months for 12.</span></div>
+        </div>
+        <div id="tenantCustomPlanBuilder" class="sa-custom-builder" style="display:${basePlanKey === 'custom' ? 'grid' : 'none'};">
+          <div class="sa-lifecycle-heading"><div><h5>Custom module builder</h5><p>Select only the modules needed and set a capacity bundle for each.</p></div><strong id="tenantCustomQuotePreview">Calculating…</strong></div>
+          <div class="sa-custom-module-list">${customRows || '<div class="sa-v2-empty">Custom module pricing is unavailable.</div>'}</div>
+        </div>
+      </section>
+
+      <section class="sa-lifecycle-card">
+        <div class="sa-lifecycle-heading"><div><span class="sa-v3-eyebrow">Temporary access</span><h4>Pro pilot</h4><p>Pro is applied temporarily and automatically returns to ${escapeHtml(getTenantPlanLabel(basePlanKey))} when the pilot ends.</p></div>${pilotActive ? `<button class="btn-secondary" onclick="endTenantPilot()">End pilot</button>` : `<button class="btn-primary" onclick="startTenantPilot()">Start pilot</button>`}</div>
+        ${pilotActive ? `
+          <div class="sa-pilot-active"><i class="fa-solid fa-hourglass-half"></i><div><strong>Pro pilot active</strong><span>Ends ${escapeHtml(pilotEnd)} · fallback ${escapeHtml(getTenantPlanLabel(basePlanKey))}</span></div></div>
+        ` : `
+          <div class="sa-plan-fields">
+            <label><span>Duration</span><select id="tenantPilotDays"><option value="7">7 days</option><option value="14">14 days</option><option value="30">30 days</option></select></label>
+            <label><span>Internal note</span><input id="tenantPilotNote" type="text" maxlength="300" placeholder="Conversation or reason for this pilot"></label>
+          </div>
+        `}
+      </section>
+
+      <section class="sa-lifecycle-card sa-lifecycle-card--compact">
+        <div class="sa-lifecycle-heading"><div><span class="sa-v3-eyebrow">Operations</span><h4>Service status</h4></div><button class="btn-secondary" id="tenantStatusSaveBtn" onclick="saveTenantStatus()">Save status</button></div>
+        <div class="sa-plan-fields">
+          <label><span>Tenant status</span><select id="tenantStatusSelect"><option value="active" ${String(tenant.status || 'active') === 'active' ? 'selected' : ''}>Active</option><option value="suspended" ${String(tenant.status || '') === 'suspended' ? 'selected' : ''}>Suspended</option></select></label>
+          <div class="sa-plan-policy"><i class="fa-solid fa-credit-card"></i><span>${escapeHtml(String(billing?.provider || 'No provider'))} · ${escapeHtml(String(billing?.subscriptionStatus || 'no subscription'))} · ${escapeHtml(billingEnd)}</span></div>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
 function renderTenantDetailPanel(tenant, tenantLimits = null, workspaceTenantTab = '') {
   if (!tenant) {
     return `<div style="padding:18px; text-align:center; color:var(--text-secondary);">Select a tenant to manage plan, modules, branding, and status.</div>`;
@@ -8686,6 +8772,10 @@ function renderTenantDetailPanel(tenant, tenantLimits = null, workspaceTenantTab
   const showModulesSection = forceModulesControls;
   const showBrandingSection = forceBranding;
   const allowTenantMockData = isMockModeEnabled();
+
+  if (forcePlanControls) {
+    return renderTenantPlanLifecyclePanel(tenant);
+  }
 
   const billing = tenant.billing || null;
   const billingStatus = String(billing?.subscriptionStatus || 'unknown').toLowerCase();
@@ -8997,16 +9087,27 @@ function renderWorkspaceActivityItems(items = []) {
 function renderWorkspaceOverview(tenants = [], billingEntries = []) {
   const total = tenants.length;
   const active = tenants.filter((tenant) => String(tenant.status || '').toLowerCase() === 'active').length;
-  const suspended = tenants.filter((tenant) => String(tenant.status || '').toLowerCase() === 'suspended').length;
   const paid = billingEntries.filter((entry) => ['active', 'trialing', 'paid', 'approved', 'success'].includes(String(entry.subscriptionStatus || '').toLowerCase())).length;
   const pendingBilling = billingEntries.filter((entry) => Number(entry.pendingReceiptsCount || 0) > 0 || String(entry.verificationStatus || '').toLowerCase() === 'pending_review').length;
+  const expiring = billingEntries.filter((entry) => ['warning', 'urgent'].includes(String(entry?.lifecycle?.warningLevel || ''))).length;
+  const pilots = billingEntries.filter((entry) => entry?.pilot?.active === true).length;
   return `
     <div class="sa-v3-overview">
       <div class="sa-v3-metrics" aria-label="Platform summary">
         <article class="sa-v3-metric"><span>Tenants</span><strong>${escapeHtml(String(total))}</strong><small>${escapeHtml(String(active))} active</small></article>
         <article class="sa-v3-metric"><span>Billing active</span><strong>${escapeHtml(String(paid))}</strong><small>${pendingBilling ? `${escapeHtml(String(pendingBilling))} awaiting review` : 'No reviews waiting'}</small></article>
-        <article class="sa-v3-metric"><span>Needs attention</span><strong>${escapeHtml(String(suspended + pendingBilling))}</strong><small>${escapeHtml(String(suspended))} suspended</small></article>
+        <article class="sa-v3-metric"><span>Renewals due</span><strong>${escapeHtml(String(expiring))}</strong><small>Within the next 30 days</small></article>
+        <article class="sa-v3-metric"><span>Active pilots</span><strong>${escapeHtml(String(pilots))}</strong><small>Temporary Pro access</small></article>
       </div>
+
+      <section class="sa-v3-action-inbox">
+        <div class="sa-v3-category__header"><span>Now</span><div><h4>Action inbox</h4><p>Work the items that affect customer access first.</p></div></div>
+        <div class="sa-v3-action-inbox__items">
+          <button type="button" onclick="setSuperadminWorkspaceTab('billing')"><i class="fa-solid fa-receipt"></i><span><strong>${escapeHtml(String(pendingBilling))} payment review${pendingBilling === 1 ? '' : 's'}</strong><small>Verify receipts and activate purchased plans</small></span><i class="fa-solid fa-arrow-right"></i></button>
+          <button type="button" onclick="setSuperadminWorkspaceTab('billing')"><i class="fa-solid fa-clock"></i><span><strong>${escapeHtml(String(expiring))} renewal${expiring === 1 ? '' : 's'} due</strong><small>Follow up before paid access expires</small></span><i class="fa-solid fa-arrow-right"></i></button>
+          <button type="button" onclick="setSuperadminWorkspaceTab('tenants')"><i class="fa-solid fa-plane-up"></i><span><strong>${escapeHtml(String(pilots))} active pilot${pilots === 1 ? '' : 's'}</strong><small>Review trials and their fallback plans</small></span><i class="fa-solid fa-arrow-right"></i></button>
+        </div>
+      </section>
 
       <section class="sa-v3-category" aria-labelledby="saBusinessHeading">
         <div class="sa-v3-category__header">
@@ -9210,6 +9311,18 @@ function resetSuperadminWorkspaceBillingFilters() {
   superadminWorkspaceBillingPage = 1;
   superadminWorkspaceBillingSortBy = 'updatedAt';
   superadminWorkspaceBillingSortDir = 'desc';
+  loadSuperadminView();
+}
+
+function openTenantPlanLifecycle(guildId) {
+  selectedTenantGuildId = String(guildId || '').trim();
+  superadminWorkspaceTenantTab = 'plan';
+  superadminWorkspaceV2 = 'tenants';
+  const url = new URL(window.location);
+  url.searchParams.set('saWs', 'tenants');
+  url.searchParams.set('saTenantTab', 'plan');
+  url.searchParams.set('saTenantId', selectedTenantGuildId);
+  window.history.replaceState({}, '', url);
   loadSuperadminView();
 }
 
@@ -9667,12 +9780,12 @@ async function loadSuperadminWorkspaceHubV2() {
                 <tbody>
                   ${billingEntries.length ? billingEntries.map((entry) => `
                     <tr>
-                      <td><strong>${escapeHtml(entry.guildName || entry.guildId)}</strong><div class="muted" style="font-size:0.76em;">${escapeHtml(entry.guildId || '')}</div></td>
-                      <td>${escapeHtml(entry.subscriptionStatus || 'unknown')}</td>
+                      <td><strong>${escapeHtml(entry.guildName || entry.guildId)}</strong><div class="muted" style="font-size:0.76em;">${escapeHtml(entry.guildId || '')}</div>${entry?.pilot?.active ? '<div class="badge" style="margin-top:4px;">Pro pilot</div>' : ''}</td>
+                      <td>${escapeHtml(entry.subscriptionStatus || 'unknown')}<div class="muted" style="font-size:0.72em;margin-top:3px;">${escapeHtml(getTenantPlanLabel(entry.basePlanKey || 'starter'))} fallback</div></td>
                       <td>${escapeHtml(entry.provider || 'n/a')}</td>
                       <td>${escapeHtml(entry.billingInterval || 'n/a')}</td>
                       <td>${escapeHtml(entry.lastPaymentAt ? new Date(entry.lastPaymentAt).toLocaleString() : '')}</td>
-                      <td>${escapeHtml(entry.currentPeriodEnd ? new Date(entry.currentPeriodEnd).toLocaleString() : '')}</td>
+                      <td>${escapeHtml(entry.currentPeriodEnd ? new Date(entry.currentPeriodEnd).toLocaleString() : '')}${entry?.lifecycle?.warningLevel ? `<div style="color:${entry.lifecycle.warningLevel === 'urgent' ? '#fca5a5' : '#fde68a'};font-size:.72em;margin-top:3px;">${escapeHtml(String(entry.lifecycle.daysRemaining))} days remaining</div>` : ''}</td>
                       <td>
                         ${escapeHtml(entry.verificationStatus || 'pending')}
                         ${Number(entry.pendingReceiptsCount || 0) > 0 ? `<div class="muted" style="font-size:0.74em;margin-top:3px;">${escapeHtml(String(entry.pendingReceiptsCount))} receipt(s) pending</div>` : ''}
@@ -9680,6 +9793,7 @@ async function loadSuperadminWorkspaceHubV2() {
                       </td>
                       <td>
                         <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                          <button class="btn-primary" style="padding:4px 8px;" onclick="openTenantPlanLifecycle('${escapeJsString(entry.guildId || '')}')">Access</button>
                           <button class="btn-secondary" style="padding:4px 8px;" onclick="openSuperadminBillingReceiptReview('${escapeJsString(entry.guildId || '')}')">Review</button>
                           <button class="btn-secondary" style="padding:4px 8px;" onclick="superadminBillingAction('${escapeJsString(entry.guildId || '')}', 'approve', ${entry.latestReceipt?.id ? `{ receiptId: ${Number(entry.latestReceipt.id)}, planKey: '${escapeJsString(entry.latestReceipt.planKey || '')}', billingInterval: '${escapeJsString(entry.latestReceipt.billingInterval || '')}' }` : 'null'})">Approve</button>
                           <button class="btn-secondary" style="padding:4px 8px;" onclick="superadminRejectBillingReceipt('${escapeJsString(entry.guildId || '')}', ${entry.latestReceipt?.id ? Number(entry.latestReceipt.id) : 'null'})">Reject</button>
@@ -9927,7 +10041,7 @@ async function loadSuperadminWorkspaceHubV2() {
           ${tabButton('security')}
           ${tabButton('integrations')}
         </div>
-        ${renderWorkspaceDataHealth(workspaceLoadState)}
+        ${workspace === 'overview' || workspaceWarnings.length ? renderWorkspaceDataHealth(workspaceLoadState) : ''}
         ${workspaceWarnings.length ? `<div class="sa-v2-inline-note" style="margin:8px 0 12px; border-color:rgba(245,158,11,0.35); color:#fde68a;">${workspaceWarnings.map((item) => escapeHtml(item)).join(' ')}</div>` : ''}
         <div class="sa-v2-main ${workspace === 'overview' ? 'sa-v2-main--overview' : 'sa-v2-main--focused'}">
           <div class="sa-v2-body">${workspaceBody}</div>
@@ -9950,6 +10064,9 @@ async function loadSuperadminWorkspaceHubV2() {
     `;
     if (workspace === 'security' && superadminWorkspaceFocus === 'identity') {
       setTimeout(() => loadSuperadminIdentityView(), 0);
+    }
+    if (workspace === 'tenants' && superadminWorkspaceTenantTab === 'plan') {
+      setTimeout(() => toggleTenantCustomPlanBuilder(), 0);
     }
     if (workspaceWarnings.length) {
       reportAdminUiTelemetry('workspace_partial_failure', { workspace, warnings: workspaceWarnings });
@@ -10516,11 +10633,18 @@ async function rollbackTenantTemplate() {
 async function applyTenantPlan() {
   if (!selectedTenantGuildId) return;
 
-  const select = document.getElementById('tenantPlanSelect');
+  const select = document.querySelector('input[name="tenantPlanChoice"]:checked');
   const btn = document.getElementById('tenantPlanApplyBtn');
   if (!select || !btn) return;
   const nextPlan = String(select.value || '').toLowerCase();
-  const currentPlan = String(selectedTenantDetailCache?.planKey || '').toLowerCase();
+  const currentPlan = String(selectedTenantDetailCache?.planContract?.basePlanKey || selectedTenantDetailCache?.planKey || '').toLowerCase();
+  const customPlan = nextPlan === 'custom' ? getTenantCustomPlanPayload() : null;
+  if (nextPlan === 'custom' && (!customPlan || customPlan.modules.length === 0)) {
+    showError('Select at least one module for the custom plan.');
+    return;
+  }
+  const billingInterval = document.getElementById('tenantPlanBillingInterval')?.value || 'monthly';
+  const quotedMonthlyUsd = nextPlan === 'custom' ? calculateTenantCustomMonthlyUsd(customPlan) : null;
 
   const runApply = async () => {
     btn.disabled = true;
@@ -10530,7 +10654,12 @@ async function applyTenantPlan() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ plan: select.value })
+        body: JSON.stringify({
+          plan: select.value,
+          customPlan,
+          billingInterval,
+          quotedMonthlyUsd,
+        })
       });
       const data = await response.json();
 
@@ -10561,6 +10690,88 @@ async function applyTenantPlan() {
   }
 
   await runApply();
+}
+
+function getTenantCustomPlanPayload() {
+  const modules = [];
+  document.querySelectorAll('[data-custom-plan-module]').forEach(input => {
+    if (!input.checked) return;
+    const key = String(input.dataset.customPlanModule || '');
+    const capacity = document.querySelector(`[data-custom-plan-capacity="${CSS.escape(key)}"]`)?.value || 'growth';
+    modules.push({ key, capacity });
+  });
+  return { version: 1, modules };
+}
+
+function calculateTenantCustomMonthlyUsd(customPlan = null) {
+  const config = customPlan || getTenantCustomPlanPayload();
+  const catalog = (superadminWorkspacePlansCache || []).find(plan => String(plan?.key || '').toLowerCase() === 'custom')?.customBuilder || {};
+  const moduleMap = new Map((catalog.modules || []).map(module => [String(module.key || ''), module]));
+  const capacityMap = new Map((catalog.capacities || []).map(capacity => [String(capacity.key || ''), Number(capacity.multiplier || 1)]));
+  const subtotal = (config?.modules || []).reduce((total, module) => {
+    const modulePrice = Number(moduleMap.get(String(module.key || ''))?.monthlyUsd || 0);
+    const multiplier = Number(capacityMap.get(String(module.capacity || 'growth')) || 1);
+    return total + (modulePrice * multiplier);
+  }, Number(catalog.platformBaseMonthlyUsd || 0));
+  return Number(Math.max(Number(catalog.minimumMonthlyUsd || 0), subtotal).toFixed(2));
+}
+
+function updateTenantCustomQuotePreview() {
+  const preview = document.getElementById('tenantCustomQuotePreview');
+  if (!preview) return;
+  const customPlan = getTenantCustomPlanPayload();
+  if (!customPlan.modules.length) {
+    preview.textContent = 'Select a module';
+    return;
+  }
+  preview.textContent = `$${calculateTenantCustomMonthlyUsd(customPlan).toFixed(2)} / month`;
+}
+
+function toggleTenantCustomPlanBuilder() {
+  const selected = document.querySelector('input[name="tenantPlanChoice"]:checked')?.value || '';
+  const builder = document.getElementById('tenantCustomPlanBuilder');
+  if (builder) builder.style.display = selected === 'custom' ? 'grid' : 'none';
+  if (selected === 'custom') updateTenantCustomQuotePreview();
+}
+
+async function startTenantPilot() {
+  if (!selectedTenantGuildId) return;
+  const days = Number(document.getElementById('tenantPilotDays')?.value || 7);
+  const note = document.getElementById('tenantPilotNote')?.value?.trim() || '';
+  try {
+    const response = await fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/plan-lifecycle`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'start_pilot', days, note }),
+    });
+    const data = await response.json();
+    if (!data.success) throw new Error(data.message || 'Failed to start pilot');
+    showSuccess(`Pro pilot started for ${days} days`);
+    await loadSuperadminView();
+  } catch (error) {
+    showError(formatAdminWorkspaceError('Failed to start Pro pilot', error));
+  }
+}
+
+function endTenantPilot() {
+  if (!selectedTenantGuildId) return;
+  showConfirmModal('End Pro Pilot?', 'The tenant immediately returns to its paid fallback plan.', async () => {
+    try {
+      const response = await fetch(`/api/superadmin/tenants/${encodeURIComponent(selectedTenantGuildId)}/plan-lifecycle`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'end_pilot', reason: 'Ended manually from platform console' }),
+      });
+      const data = await response.json();
+      if (!data.success) throw new Error(data.message || 'Failed to end pilot');
+      showSuccess(`Pilot ended; ${getTenantPlanLabel(data.fallbackPlanKey || 'starter')} restored`);
+      await loadSuperadminView();
+    } catch (error) {
+      showError(formatAdminWorkspaceError('Failed to end Pro pilot', error));
+    }
+  }, 'End pilot');
 }
 
 async function toggleTenantModule(moduleKey, checkbox) {
@@ -20454,6 +20665,7 @@ async function loadPortalPlanCatalog(force = false) {
       { key: 'starter', label: 'Free', tagline: 'All core modules enabled. AI Assistant unlocks on Pro.', billing: { monthlyUsd: 0 }, color: '#64748b', cta: 'Get Started Free', ctaAction: 'signup_free', features: [] },
       { key: 'growth', label: 'Growth', tagline: 'All core modules enabled with higher limits and X engagement.', billing: { monthlyUsd: 19.99 }, color: '#6366f1', popular: true, cta: 'Start Growth', ctaAction: 'upgrade_growth', features: [] },
       { key: 'pro', label: 'Pro', tagline: 'All modules enabled, including AI Assistant and highest limits.', billing: { monthlyUsd: 49.99 }, color: '#f59e0b', cta: 'Start Pro', ctaAction: 'upgrade_pro', features: [] },
+      { key: 'custom', label: 'Custom', tagline: 'Choose only the modules and limits you need.', billing: { monthlyUsd: null, custom: true }, color: '#a78bfa', cta: 'Build Your Plan', ctaAction: 'build_custom', features: [] },
       { key: 'enterprise', label: 'Enterprise', tagline: 'Custom rollout and support bundles', billing: { monthlyUsd: null, enterprise: true }, color: '#10b981', cta: 'Contact Team', ctaAction: 'contact_enterprise', features: [] },
     ];
   }
@@ -20468,17 +20680,20 @@ async function updatePlanPrices() {
 
   grid.innerHTML = planCatalog.map(plan => {
     const monthlyPrice = plan?.billing?.monthlyUsd;
-    const isContactPlan = monthlyPrice === null || monthlyPrice === undefined;
+    const isCustomPlan = String(plan?.key || '').toLowerCase() === 'custom';
+    const isContactPlan = (monthlyPrice === null || monthlyPrice === undefined) && !isCustomPlan;
     const discountedMonthly = (!isContactPlan && Number(monthlyPrice) > 0 && annual)
-      ? Number(monthlyPrice) * 0.85
+      ? Number(monthlyPrice) * (10 / 12)
       : Number(monthlyPrice || 0);
-    const priceText = isContactPlan
+    const priceText = isCustomPlan
+      ? 'Build'
+      : isContactPlan
       ? 'Contact'
       : (Number(monthlyPrice || 0) === 0 ? '0' : discountedMonthly.toFixed(2));
-    const annualTotal = (!isContactPlan && annual && Number(monthlyPrice) > 0)
-      ? `$${(Number(monthlyPrice) * 0.85 * 12).toFixed(2)}/yr`
+    const annualTotal = (!isContactPlan && !isCustomPlan && annual && Number(monthlyPrice) > 0)
+      ? `$${(Number(monthlyPrice) * 10).toFixed(2)}/yr`
       : '';
-    const period = isContactPlan || Number(monthlyPrice || 0) === 0 ? '' : annual ? '/mo' : '/month';
+    const period = isContactPlan || isCustomPlan || Number(monthlyPrice || 0) === 0 ? '' : annual ? '/mo' : '/month';
     const accentColor = plan.color || '#6366f1';
 
     const featureRows = (Array.isArray(plan.features) ? plan.features : []).map(f => {
@@ -20495,10 +20710,10 @@ async function updatePlanPrices() {
           <div class="plan-name" style="color:${accentColor};">${escapeHtml(plan.label || plan.key || 'Plan')}</div>
           <div class="plan-tagline">${escapeHtml(plan.tagline)}</div>
           <div class="plan-price">
-            <span class="plan-price-amount">${isContactPlan ? '' : '$'}${priceText}</span>
+            <span class="plan-price-amount">${isContactPlan || isCustomPlan ? '' : '$'}${priceText}</span>
             <span class="plan-price-period">${period}</span>
           </div>
-          ${annualTotal ? `<div class="plan-annual-note">Billed as ${annualTotal} &middot; Save 15%</div>` : ''}
+          ${annualTotal ? `<div class="plan-annual-note">Billed as ${annualTotal} &middot; 2 months free</div>` : ''}
         </div>
         <ul class="plan-features">${featureRows}</ul>
         <div class="plan-cta">
@@ -20531,6 +20746,7 @@ function handlePlanCta(action) {
   let targetPlan = '';
   if (action === 'upgrade_growth') targetPlan = 'growth';
   if (action === 'upgrade_pro') targetPlan = 'pro';
+  if (action === 'build_custom') targetPlan = 'custom';
 
   if (action === 'contact_enterprise') {
     const support = getGuildPilotSupportUrl();
@@ -20630,6 +20846,7 @@ async function submitCryptoPaymentReceipt() {
     } else {
       showSuccess('Crypto receipt submitted. Superadmin will review it shortly.');
     }
+    try { localStorage.removeItem('guildpilotPlanIntent'); } catch (_error) {}
     const txInput = document.getElementById('billingCryptoTxSignature');
     const walletInput = document.getElementById('billingCryptoSenderWallet');
     const quoteInput = document.getElementById('billingCryptoQuoteToken');
@@ -20646,6 +20863,54 @@ async function submitCryptoPaymentReceipt() {
   }
 }
 
+function getStoredPlanIntent() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('guildpilotPlanIntent') || 'null');
+    const createdMs = parsed?.createdAt ? Date.parse(parsed.createdAt) : Number.NaN;
+    if (!parsed?.planKey || (Number.isFinite(createdMs) && Date.now() - createdMs > 86400000)) return null;
+    return parsed;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function renderBillingCustomPlanBuilder(intent = null) {
+  const customCatalog = (portalPlanCatalogCache || []).find(plan => String(plan?.key || '').toLowerCase() === 'custom')?.customBuilder || {};
+  const selected = new Map((intent?.customPlan?.modules || []).map(module => [String(module?.key || ''), module]));
+  return `
+    <div id="billingCustomPlanBuilder" class="billing-custom-builder" style="display:none;">
+      <div class="billing-panel__title">Custom modules &amp; capacity</div>
+      <div class="billing-panel__hint">The price updates securely when you prepare the quote. Capacity determines the included limits for each selected module.</div>
+      <div class="billing-custom-builder__grid">
+        ${(customCatalog.modules || []).map(module => {
+          const current = selected.get(String(module.key || ''));
+          return `<div class="billing-custom-builder__row"><label><input type="checkbox" data-billing-custom-module="${escapeHtml(module.key)}" ${current ? 'checked' : ''}><span>${escapeHtml(module.label || module.key)}</span></label><select data-billing-custom-capacity="${escapeHtml(module.key)}">${(customCatalog.capacities || []).map(capacity => `<option value="${escapeHtml(capacity.key)}" ${String(current?.capacity || 'growth') === String(capacity.key) ? 'selected' : ''}>${escapeHtml(capacity.label || capacity.key)}</option>`).join('')}</select></div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function getBillingCustomPlanPayload() {
+  const modules = [];
+  document.querySelectorAll('[data-billing-custom-module]').forEach(input => {
+    if (!input.checked) return;
+    const key = String(input.dataset.billingCustomModule || '');
+    const capacity = document.querySelector(`[data-billing-custom-capacity="${key}"]`)?.value || 'growth';
+    modules.push({ key, capacity });
+  });
+  return { version: 1, modules };
+}
+
+function toggleBillingCustomPlanBuilder() {
+  const planKey = String(document.getElementById('billingCryptoPlan')?.value || '');
+  const builder = document.getElementById('billingCustomPlanBuilder');
+  if (builder) builder.style.display = planKey === 'custom' ? 'block' : 'none';
+  setBillingQuoteUiState(false);
+  const summary = document.getElementById('billingCryptoQuoteSummary');
+  if (summary) summary.textContent = 'Step 1: Prepare a quote to lock amount for 5 minutes.';
+}
+
 async function prepareBillingCryptoQuote() {
   try {
     const planKey = String(document.getElementById('billingCryptoPlan')?.value || '').trim().toLowerCase();
@@ -20658,6 +20923,10 @@ async function prepareBillingCryptoQuote() {
     if (!planKey) return showError('Select a plan for quote.');
     if (!billingInterval) return showError('Select billing interval.');
     if (!tokenSymbol) return showError('Select payment token.');
+    const customPlan = planKey === 'custom' ? getBillingCustomPlanPayload() : null;
+    if (planKey === 'custom' && (!customPlan || customPlan.modules.length === 0)) {
+      return showError('Select at least one module for the custom plan.');
+    }
 
     const response = await fetch('/api/admin/billing/crypto-quote', {
       method: 'POST',
@@ -20667,6 +20936,7 @@ async function prepareBillingCryptoQuote() {
         planKey,
         billingInterval,
         tokenSymbol,
+        customPlan,
       }),
     });
     const data = await response.json().catch(() => ({}));
@@ -20683,7 +20953,8 @@ async function prepareBillingCryptoQuote() {
       const rateInfo = q?.tokenSymbol === 'SOL' && Number(q?.fxRate) > 0
         ? ` (1 SOL = $${Number(q.fxRate).toFixed(2)})`
         : '';
-      quoteSummary.textContent = `Quote ready: ${q.tokenAmount} ${q.tokenSymbol} for ${q.planKey}/${q.billingInterval}, expires at ${expires}${rateInfo}.`;
+      const discountInfo = Number(q?.discountMonths || 0) > 0 ? ` Includes ${q.discountMonths} free month${Number(q.discountMonths) === 1 ? '' : 's'}.` : '';
+      quoteSummary.textContent = `Quote ready: ${q.tokenAmount} ${q.tokenSymbol} for ${q.planKey}/${q.billingInterval}, expires at ${expires}${rateInfo}.${discountInfo}`;
     }
     showSuccess('Quote prepared. Use this exact amount in your transfer.');
   } catch (error) {
@@ -20702,6 +20973,8 @@ async function loadCurrentPlan() {
   }
 
   try {
+    await loadPortalPlanCatalog();
+    const planIntent = getStoredPlanIntent();
     const res = await fetch('/api/admin/plan', { credentials: 'include', headers: buildTenantRequestHeaders() });
     if (!res.ok) {
       content.innerHTML = '<div style="color:#fca5a5;font-size:0.88em;">Could not load plan details right now. Please try again.</div>';
@@ -20724,6 +20997,17 @@ async function loadCurrentPlan() {
     const billingWallet = String(paymentDetails.destinationWallet || '').trim();
     const acceptedTokens = Array.isArray(paymentDetails.acceptedTokens) ? paymentDetails.acceptedTokens.join(', ') : 'SOL, USDC';
     const onchainVerificationEnabled = !!paymentDetails.onchainVerificationEnabled;
+    const warningLevel = String(data?.alerts?.warningLevel || '');
+    const daysRemaining = data?.alerts?.daysRemaining;
+    const planWarningHtml = warningLevel ? `
+      <div class="billing-lifecycle-alert ${warningLevel === 'urgent' || warningLevel === 'expired' ? 'is-urgent' : ''}">
+        <i class="fa-solid ${warningLevel === 'early_renewal' ? 'fa-tags' : 'fa-clock'}"></i>
+        <div><strong>${warningLevel === 'early_renewal' ? 'Early renewal discount available' : warningLevel === 'expired' ? 'Plan expired' : 'Plan expires soon'}</strong><span>${warningLevel === 'early_renewal' ? 'Renew the annual plan now and pay 9 months for 12.' : `${escapeHtml(String(daysRemaining ?? 0))} days remaining. Renew to keep paid modules active.`}</span></div>
+      </div>
+    ` : '';
+    const pilotHtml = data?.pilot?.active ? `
+      <div class="billing-lifecycle-alert is-pilot"><i class="fa-solid fa-plane-up"></i><div><strong>Pro pilot active</strong><span>Temporary Pro access ends ${escapeHtml(data.pilot.endsAt ? new Date(data.pilot.endsAt).toLocaleString() : 'soon')} and returns to ${escapeHtml(data.basePlanLabel || 'Free')}.</span></div></div>
+    ` : '';
     let receiptRows = [];
     try {
       const receiptsRes = await fetch('/api/admin/billing/crypto-receipts?limit=25', {
@@ -20808,6 +21092,7 @@ async function loadCurrentPlan() {
           ${actionButtons.join('')}
         </div>
       </div>
+      ${pilotHtml}${planWarningHtml}
       <div class="billing-panel">
         <div class="billing-panel__title">Pay with SOL/USDC (Manual Review)</div>
         <div class="billing-panel__facts">
@@ -20820,12 +21105,13 @@ async function loadCurrentPlan() {
           <label class="billing-field"><span>Token</span><select id="billingCryptoToken"><option value="SOL">SOL</option><option value="USDC">USDC</option></select></label>
           <label class="billing-field"><span>Interval</span><select id="billingCryptoInterval"><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label>
           <label class="billing-field billing-field--span2"><span>Sender Wallet</span><input id="billingCryptoSenderWallet" type="text" placeholder="Generate quote first" disabled></label>
-          <label class="billing-field"><span>Plan</span><select id="billingCryptoPlan"><option value="growth">Growth</option><option value="pro">Pro</option></select></label>
+          <label class="billing-field"><span>Plan</span><select id="billingCryptoPlan" onchange="toggleBillingCustomPlanBuilder()"><option value="growth">Growth</option><option value="pro">Pro</option><option value="custom">Custom</option></select></label>
           <label class="billing-field"><span>Quoted Amount</span><input id="billingCryptoAmount" type="text" readonly placeholder="Prepare quote first"></label>
           <input id="billingCryptoQuoteToken" type="hidden" value="">
           <button class="btn-secondary billing-submit-btn" onclick="prepareBillingCryptoQuote()">Prepare Quote</button>
           <button id="billingCryptoSubmitBtn" class="btn-primary billing-submit-btn" onclick="submitCryptoPaymentReceipt()" disabled>Submit</button>
         </div>
+        ${renderBillingCustomPlanBuilder(planIntent)}
         <div id="billingCryptoQuoteSummary" class="billing-panel__hint">Step 1: Prepare a quote to lock amount for 5 minutes.</div>
         <div id="billingCryptoFlowHint" class="billing-panel__hint">Step 2: Pay that exact amount. Step 3: Submit TX for automatic verification and plan activation.</div>
       </div>
@@ -20836,9 +21122,14 @@ async function loadCurrentPlan() {
     `;
     const intervalSelect = document.getElementById('billingCryptoInterval');
     if (intervalSelect) {
-      const preferredInterval = document.getElementById('billingAnnualToggle')?.checked ? 'yearly' : 'monthly';
+      const preferredInterval = planIntent?.billingInterval || (document.getElementById('billingAnnualToggle')?.checked ? 'yearly' : 'monthly');
       intervalSelect.value = preferredInterval;
     }
+    const billingPlanSelect = document.getElementById('billingCryptoPlan');
+    if (billingPlanSelect && ['growth', 'pro', 'custom'].includes(String(planIntent?.planKey || ''))) {
+      billingPlanSelect.value = planIntent.planKey;
+    }
+    toggleBillingCustomPlanBuilder();
     setBillingQuoteUiState(false);
     card.style.display = 'block';
   } catch (e) {
@@ -22671,6 +22962,19 @@ async function autoMessagesFetch(path, options = {}) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.success === false) {
     throw new Error(data.message || data.error?.message || `Auto Messages request failed (${response.status})`);
+  }
+
+  if (targetPlan === 'custom') {
+    try {
+      localStorage.setItem('guildpilotPlanIntent', JSON.stringify({ planKey: 'custom', billingInterval: interval, customPlan: { version: 1, modules: [] }, createdAt: new Date().toISOString() }));
+    } catch (_error) {}
+    loadCurrentPlan().then(() => {
+      const planSelect = document.getElementById('billingCryptoPlan');
+      if (planSelect) planSelect.value = 'custom';
+      toggleBillingCustomPlanBuilder();
+      document.getElementById('currentPlanCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return;
   }
 
   onVerificationRuleChainChange();

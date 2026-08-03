@@ -88,6 +88,19 @@ const PLAN_MARKETING = Object.freeze({
       { label: 'Priority operational support', included: true },
     ],
   },
+  custom: {
+    displayLabel: 'Custom',
+    tagline: 'Choose only the modules and capacity your community needs.',
+    color: '#a78bfa',
+    cta: 'Build Your Plan',
+    ctaAction: 'build_custom',
+    features: [
+      { label: 'Choose individual GuildPilot modules', included: true },
+      { label: 'Set capacity per selected module', included: true },
+      { label: 'Instant transparent price calculation', included: true },
+      { label: 'Monthly or annual billing', included: true },
+    ],
+  },
   enterprise: {
     displayLabel: 'Enterprise',
     tagline: 'Custom rollout and support bundles',
@@ -110,7 +123,9 @@ const PLAN_PRESETS = Object.freeze({
     description: 'All core modules enabled with starter limits. AI Assistant is Pro-only.',
     billing: {
       monthlyUsd: 0,
-      annualDiscountPct: 15,
+      annualDiscountPct: 16.67,
+      annualBilledMonths: 10,
+      earlyRenewalBilledMonths: 9,
       enterprise: false
     },
     limits: {
@@ -218,7 +233,9 @@ const PLAN_PRESETS = Object.freeze({
     description: 'All core modules enabled with higher limits plus X engagement support.',
     billing: {
       monthlyUsd: 19.99,
-      annualDiscountPct: 15,
+      annualDiscountPct: 16.67,
+      annualBilledMonths: 10,
+      earlyRenewalBilledMonths: 9,
       enterprise: false
     },
     limits: {
@@ -326,7 +343,9 @@ const PLAN_PRESETS = Object.freeze({
     description: 'All modules enabled, including AI Assistant and expanded operational limits.',
     billing: {
       monthlyUsd: 49.99,
-      annualDiscountPct: 15,
+      annualDiscountPct: 16.67,
+      annualBilledMonths: 10,
+      earlyRenewalBilledMonths: 9,
       enterprise: false
     },
     limits: {
@@ -428,13 +447,36 @@ const PLAN_PRESETS = Object.freeze({
       automessages: true
     }
   },
+  custom: {
+    key: 'custom',
+    label: 'Custom',
+    description: 'A tenant-specific selection of modules and capacity limits.',
+    billing: {
+      monthlyUsd: null,
+      annualDiscountPct: 16.67,
+      annualBilledMonths: 10,
+      earlyRenewalBilledMonths: 9,
+      enterprise: false,
+      custom: true
+    },
+    limits: {
+      max_commands: 20,
+      max_enabled_modules: 0,
+      max_branding_profiles: 0,
+      max_read_only_overrides: 0
+    },
+    moduleLimits: {},
+    modules: Object.fromEntries(MODULE_KEYS.map(moduleKey => [moduleKey, false]))
+  },
   enterprise: {
     key: 'enterprise',
     label: 'Enterprise',
     description: 'Maximum flexibility for custom tenant operations and support bundles.',
     billing: {
       monthlyUsd: null,
-      annualDiscountPct: 15,
+      annualDiscountPct: 16.67,
+      annualBilledMonths: 10,
+      earlyRenewalBilledMonths: 9,
       enterprise: true
     },
     limits: {
@@ -538,6 +580,152 @@ const PLAN_PRESETS = Object.freeze({
   }
 });
 
+const CUSTOM_PLAN_BASE_MONTHLY_USD = 4.99;
+const CUSTOM_PLAN_MIN_MONTHLY_USD = 9.99;
+const CUSTOM_PLAN_CAPACITY_MULTIPLIERS = Object.freeze({
+  starter: 0.6,
+  growth: 1,
+  pro: 1.75,
+  unlimited: 2.75,
+});
+const CUSTOM_PLAN_MODULE_PRICING = Object.freeze({
+  verification: { label: 'Wallet & role verification', monthlyUsd: 4.5 },
+  governance: { label: 'Governance', monthlyUsd: 3.5 },
+  treasury: { label: 'Treasury monitoring', monthlyUsd: 2.5 },
+  wallettracker: { label: 'Wallet tracker', monthlyUsd: 3.5 },
+  invites: { label: 'Invite analytics', monthlyUsd: 2.5 },
+  minigames: { label: 'Minigames', monthlyUsd: 3 },
+  heist: { label: 'Heist missions', monthlyUsd: 3.5 },
+  vault: { label: 'Vault rewards', monthlyUsd: 4 },
+  welcome: { label: 'Welcome & onboarding', monthlyUsd: 2.5 },
+  ticketing: { label: 'Ticketing', monthlyUsd: 3 },
+  nfttracker: { label: 'NFT tracker', monthlyUsd: 3.5 },
+  tokentracker: { label: 'Token tracker', monthlyUsd: 3.5 },
+  selfserveroles: { label: 'Self-service roles', monthlyUsd: 2 },
+  branding: { label: 'Advanced branding', monthlyUsd: 3 },
+  analytics: { label: 'Analytics', monthlyUsd: 2.5 },
+  engagement: { label: 'Engagement & rewards', monthlyUsd: 4 },
+  guildguard: { label: 'Guild Guard', monthlyUsd: 5 },
+  aiassistant: { label: 'AI Assistant', monthlyUsd: 12 },
+  telegrambridge: { label: 'Telegram Bridge', monthlyUsd: 4 },
+  automessages: { label: 'Auto Messages', monthlyUsd: 2.5 },
+});
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function normalizeCustomPlanConfig(input = {}) {
+  const rawModules = Array.isArray(input?.modules)
+    ? input.modules
+    : Object.entries(input?.modules && typeof input.modules === 'object' ? input.modules : {})
+      .filter(([, value]) => value !== false && value !== null)
+      .map(([key, value]) => ({ key, ...(value && typeof value === 'object' ? value : {}) }));
+
+  const seen = new Set();
+  const modules = [];
+  for (const rawSelection of rawModules) {
+    const key = String(rawSelection?.key || rawSelection?.moduleKey || '').trim().toLowerCase();
+    if (!MODULE_KEYS.includes(key) || seen.has(key)) continue;
+    seen.add(key);
+
+    const requestedCapacity = String(rawSelection?.capacity || rawSelection?.tier || 'growth').trim().toLowerCase();
+    const capacity = Object.prototype.hasOwnProperty.call(CUSTOM_PLAN_CAPACITY_MULTIPLIERS, requestedCapacity)
+      ? requestedCapacity
+      : 'growth';
+    const capacityPlanKey = capacity === 'unlimited' ? 'enterprise' : capacity;
+    const defaults = cloneJson(PLAN_PRESETS[capacityPlanKey]?.moduleLimits?.[key] || {});
+    const requestedLimits = rawSelection?.limits && typeof rawSelection.limits === 'object'
+      ? rawSelection.limits
+      : {};
+    const limits = {};
+
+    for (const [limitKey, defaultValue] of Object.entries(defaults)) {
+      const requestedValue = requestedLimits[limitKey];
+      if (limitKey.startsWith('allow_')) {
+        limits[limitKey] = defaultValue === 1 && Number(requestedValue ?? defaultValue) > 0 ? 1 : 0;
+        continue;
+      }
+      if (defaultValue === null) {
+        if (requestedValue === null || requestedValue === undefined || requestedValue === '') {
+          limits[limitKey] = null;
+        } else {
+          const numeric = Number(requestedValue);
+          limits[limitKey] = Number.isFinite(numeric) && numeric >= 0 ? Math.floor(numeric) : null;
+        }
+        continue;
+      }
+      const numeric = Number(requestedValue ?? defaultValue);
+      limits[limitKey] = Number.isFinite(numeric)
+        ? Math.max(0, Math.min(Math.floor(numeric), Number(defaultValue)))
+        : Number(defaultValue);
+    }
+
+    modules.push({
+      key,
+      label: CUSTOM_PLAN_MODULE_PRICING[key]?.label || key,
+      capacity,
+      limits,
+    });
+  }
+
+  if (!modules.length) {
+    return { success: false, message: 'Select at least one module for a custom plan' };
+  }
+
+  return {
+    success: true,
+    config: {
+      version: 1,
+      modules,
+    },
+  };
+}
+
+function computeCustomPlanMonthlyUsd(input = {}) {
+  const normalized = normalizeCustomPlanConfig(input);
+  if (!normalized.success) return { ...normalized, monthlyUsd: null, breakdown: [] };
+
+  const breakdown = normalized.config.modules.map((module) => {
+    const base = Number(CUSTOM_PLAN_MODULE_PRICING[module.key]?.monthlyUsd || 0);
+    const multiplier = Number(CUSTOM_PLAN_CAPACITY_MULTIPLIERS[module.capacity] || 1);
+    return {
+      key: module.key,
+      label: module.label,
+      capacity: module.capacity,
+      monthlyUsd: Number((base * multiplier).toFixed(2)),
+    };
+  });
+  const rawMonthly = CUSTOM_PLAN_BASE_MONTHLY_USD
+    + breakdown.reduce((total, module) => total + module.monthlyUsd, 0);
+  const monthlyUsd = Number(Math.max(CUSTOM_PLAN_MIN_MONTHLY_USD, rawMonthly).toFixed(2));
+
+  return {
+    success: true,
+    config: normalized.config,
+    monthlyUsd,
+    breakdown,
+    platformBaseMonthlyUsd: CUSTOM_PLAN_BASE_MONTHLY_USD,
+  };
+}
+
+function getCustomPlanCatalog() {
+  return {
+    platformBaseMonthlyUsd: CUSTOM_PLAN_BASE_MONTHLY_USD,
+    minimumMonthlyUsd: CUSTOM_PLAN_MIN_MONTHLY_USD,
+    capacities: Object.keys(CUSTOM_PLAN_CAPACITY_MULTIPLIERS).map(key => ({
+      key,
+      label: key === 'starter' ? 'Light' : (key === 'unlimited' ? 'Unlimited' : `${key[0].toUpperCase()}${key.slice(1)} capacity`),
+      multiplier: CUSTOM_PLAN_CAPACITY_MULTIPLIERS[key],
+    })),
+    modules: MODULE_KEYS.map(key => ({
+      key,
+      label: CUSTOM_PLAN_MODULE_PRICING[key]?.label || key,
+      monthlyUsd: Number(CUSTOM_PLAN_MODULE_PRICING[key]?.monthlyUsd || 0),
+    })),
+  };
+}
+
 function normalizePlanKey(planKey) {
   return String(planKey || '').trim().toLowerCase();
 }
@@ -582,6 +770,7 @@ function getPlanCatalog() {
         label: String(feature?.label || ''),
         included: feature?.included !== false,
       })) : [],
+      customBuilder: planKey === 'custom' ? getCustomPlanCatalog() : null,
     };
   });
 }
@@ -591,6 +780,9 @@ module.exports = {
   PLAN_PRESETS,
   MODULE_KEYS,
   getDefaultPlanKey,
+  getCustomPlanCatalog,
+  computeCustomPlanMonthlyUsd,
+  normalizeCustomPlanConfig,
   getPlanCatalog,
   getModuleKeys,
   getPlanModuleLimitDefaults,

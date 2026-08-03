@@ -25,6 +25,10 @@ for (const workspace of workspaces) {
 }
 
 assert.match(portalJs, /Business operations/, 'overview should group tenant and billing operations');
+assert.match(portalJs, /Action inbox/, 'overview should prioritize payment, renewal, and pilot work');
+assert.match(portalJs, /Custom module builder/, 'tenant access should expose a custom plan builder');
+assert.match(portalJs, /Pro pilot/, 'tenant access should expose temporary Pro pilots');
+assert.match(portalJs, /early annual renewal/i, 'tenant access should explain the early renewal incentive');
 assert.match(portalJs, /Platform control/, 'overview should group security and infrastructure operations');
 assert.match(portalJs, /showAdminView\('monitor'\)/, 'system health should remain directly reachable');
 assert.match(portalJs, /All platform data sources are available/, 'data health should use one readable status surface');
@@ -35,9 +39,11 @@ assert.match(portalCss, /\.sa-v2-shell \.btn-secondary\s*\{/, 'superadmin second
 assert.match(portalCss, /\.sa-v3-launch-card:focus-visible/, 'operation cards should expose keyboard focus');
 assert.match(portalCss, /@media \(max-width: 760px\)[\s\S]*?\.sa-v2-tabs[\s\S]*?overflow-x: auto/, 'workspace navigation should remain usable on mobile');
 assert.match(portalCss, /#section-admin\.superadmin-console-mode/, 'superadmin mode should remove duplicate generic admin chrome');
+assert.match(portalCss, /\.sa-plan-choice-grid/, 'plan choices should have a dedicated responsive layout');
+assert.match(portalCss, /\.sa-v3-action-inbox/, 'superadmin priority work should have a visible action inbox');
 
-assert.match(portalHtml, /portal-style\.css\?v=4/, 'superadmin CSS changes should be cache-busted');
-assert.match(portalHtml, /portal\.js\?v=4/, 'superadmin JavaScript changes should be cache-busted');
+assert.match(portalHtml, /portal-style\.css\?v=5/, 'superadmin CSS changes should be cache-busted');
+assert.match(portalHtml, /portal\.js\?v=5/, 'superadmin JavaScript changes should be cache-busted');
 assert.match(previewServer, /\/api\/superadmin\/workspace\/tenants/, 'local preview should provide tenant workspace data');
 assert.match(previewServer, /pendingReceiptsCount:\s*1/, 'local preview should demonstrate an actionable billing state');
 

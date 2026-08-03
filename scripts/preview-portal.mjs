@@ -1,6 +1,10 @@
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const { getPlanCatalog } = require('../config/plans');
 
 const app = express();
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -134,8 +138,8 @@ const previewTenants = [
   {
     guildId: '100000000000000003', guildName: 'Neon Syndicate', status: 'active', planKey: 'pro',
     enabledModulesCount: 12, totalModulesCount: 17, updatedAt: new Date(Date.now() - 3600000).toISOString(),
-    summary: { planLabel: 'Pro', moduleCoverage: '12/17', billingStatus: 'active' },
-    billing: { provider: 'stripe', subscriptionStatus: 'active', billingInterval: 'monthly', currentPeriodEnd: '2026-09-03T00:00:00.000Z' },
+    summary: { planLabel: 'Pro pilot', moduleCoverage: '12/17', billingStatus: 'active', basePlanKey: 'growth', pilotActive: true, pilotEndsAt: '2026-08-10T12:00:00.000Z', warningLevel: 'warning', daysRemaining: 22 },
+    billing: { provider: 'stripe', subscriptionStatus: 'active', billingInterval: 'yearly', currentPeriodEnd: '2026-08-25T00:00:00.000Z' },
   },
   {
     guildId: '100000000000000004', guildName: 'Atlas Collective', status: 'suspended', planKey: 'growth',
@@ -152,7 +156,8 @@ const previewBilling = [
   },
   {
     guildId: '100000000000000003', guildName: 'Neon Syndicate', provider: 'stripe', subscriptionStatus: 'active',
-    billingInterval: 'monthly', currentPeriodEnd: '2026-09-03T00:00:00.000Z', lastPaymentAt: '2026-08-03T07:15:00.000Z',
+    billingInterval: 'yearly', currentPeriodEnd: '2026-08-25T00:00:00.000Z', lastPaymentAt: '2025-08-25T07:15:00.000Z', basePlanKey: 'growth',
+    pilot: { planKey: 'pro', status: 'active', endsAt: '2026-08-10T12:00:00.000Z', active: true }, lifecycle: { daysRemaining: 22, warningLevel: 'warning' },
     verificationStatus: 'verified', pendingReceiptsCount: 0, updatedAt: new Date(Date.now() - 3600000).toISOString(), latestReceipt: null,
   },
   {
@@ -183,13 +188,9 @@ app.get('/api/superadmin/workspace/activity', (_req, res) => res.json({
 }));
 app.get('/api/superadmin/workspace/plans', (_req, res) => res.json({
   success: true,
-  plans: [
-    { key: 'starter', label: 'Free', description: 'Core community tools' },
-    { key: 'growth', label: 'Growth', description: 'Growing community operations' },
-    { key: 'pro', label: 'Pro', description: 'Full automation suite' },
-    { key: 'enterprise', label: 'Enterprise', description: 'Custom platform operations' },
-  ],
+  plans: getPlanCatalog(),
 }));
+app.get('/api/plans/catalog', (_req, res) => res.json({ success: true, plans: getPlanCatalog() }));
 app.get('/api/superadmin/admins', (_req, res) => res.json({
   success: true,
   superadmins: [{ userId: '100000000000000001', source: 'env', displayName: 'Platform Owner' }],
@@ -222,12 +223,47 @@ app.get('/api/superadmin/tenants/:guildId', (req, res) => {
       limits: {},
       branding: { bot_display_name: tenant.guildName, brand_emoji: '✦', brand_color: '#F8B64C', support_url: 'https://guildpilot.app/support' },
       planDescription: tenant.summary?.planLabel ? `${tenant.summary.planLabel} tenant configuration` : '',
+      planContract: {
+        basePlanKey: tenant.summary?.basePlanKey || tenant.planKey,
+        billingInterval: tenant.billing?.billingInterval || null,
+        assignmentSource: 'self_service',
+        pilot: tenant.summary?.pilotActive ? { planKey: 'pro', startedAt: '2026-08-03T12:00:00.000Z', endsAt: tenant.summary.pilotEndsAt, status: 'active', active: true, note: 'Onboarding conversation' } : null,
+      },
+      subscription: {
+        plan: tenant.planKey,
+        basePlan: tenant.summary?.basePlanKey || tenant.planKey,
+        basePlanLabel: tenant.summary?.basePlanKey === 'growth' ? 'Growth' : tenant.summary?.planLabel,
+        pilot: tenant.summary?.pilotActive ? { planKey: 'pro', endsAt: tenant.summary.pilotEndsAt, status: 'active', active: true } : null,
+        alerts: { warningLevel: tenant.summary?.warningLevel || null, daysRemaining: tenant.summary?.daysRemaining ?? null },
+      },
       readOnlyManaged: false,
     },
   });
 });
+app.put('/api/superadmin/tenants/:guildId/plan', (req, res) => {
+  const tenant = previewTenants.find(item => item.guildId === req.params.guildId);
+  if (tenant && req.body?.plan) {
+    tenant.planKey = req.body.plan;
+    tenant.summary.planLabel = String(req.body.plan).replace(/^./, char => char.toUpperCase());
+    tenant.summary.basePlanKey = req.body.plan;
+  }
+  res.json({ success: true, tenant });
+});
+app.post('/api/superadmin/tenants/:guildId/plan-lifecycle', (req, res) => {
+  const tenant = previewTenants.find(item => item.guildId === req.params.guildId) || previewTenants[0];
+  if (req.body?.action === 'start_pilot') {
+    tenant.summary.basePlanKey = tenant.planKey;
+    tenant.planKey = 'pro';
+    tenant.summary.pilotActive = true;
+    tenant.summary.pilotEndsAt = new Date(Date.now() + (Number(req.body.days || 7) * 86400000)).toISOString();
+  } else if (req.body?.action === 'end_pilot') {
+    tenant.planKey = tenant.summary.basePlanKey || 'starter';
+    tenant.summary.pilotActive = false;
+  }
+  res.json({ success: true, fallbackPlanKey: tenant.summary.basePlanKey || 'starter', tenant });
+});
 app.get('/api/admin/modules/catalog', (_req, res) => res.json({ success: true, modules: [] }));
-app.get('/api/admin/plan', (_req, res) => res.json({ success: true, plan: { tier: 'pro' } }));
+app.get('/api/admin/plan', (_req, res) => res.json({ success: true, plan: 'pro', planLabel: 'Pro pilot', basePlan: 'growth', basePlanLabel: 'Growth', status: 'active', expiresAt: '2026-08-25T00:00:00.000Z', pilot: { planKey: 'pro', active: true, endsAt: '2026-08-10T12:00:00.000Z' }, alerts: { warningLevel: 'warning', daysRemaining: 22 }, billing: { provider: 'stripe', subscriptionStatus: 'active', billingInterval: 'yearly', currentPeriodEnd: '2026-08-25T00:00:00.000Z' }, renewal: { options: [], annualDiscountMonths: 2, earlyRenewalEligible: true }, paymentDetails: { acceptedTokens: ['SOL', 'USDC'], onchainVerificationEnabled: true } }));
 app.get('/api/public/v1/treasury', (_req, res) => res.json({ success: true, treasury: {} }));
 app.get('/api/*', (_req, res) => res.json({ success: true }));
 app.use(express.static(publicDir));

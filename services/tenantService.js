@@ -8,6 +8,7 @@ const {
   getModuleKeys,
   getPlanKeys,
   getPlanPreset,
+  normalizeCustomPlanConfig,
   normalizePlanKey
 } = require('../config/plans');
 
@@ -557,6 +558,10 @@ class TenantService {
       return { success: false, message: 'Tenant not found' };
     }
 
+    if (context?.planKey === 'custom' && normalizedPlanKey !== 'custom') {
+      db.prepare('DELETE FROM tenant_module_limit_overrides WHERE tenant_id = ?').run(tenantId);
+    }
+
     db.prepare(`
       UPDATE tenants
       SET plan_key = ?, updated_at = CURRENT_TIMESTAMP
@@ -601,11 +606,100 @@ class TenantService {
     return this.getTenantContext(normalizedGuildId);
   }
 
+  applyCustomPlanBundle(guildId, customPlan) {
+    const normalizedGuildId = normalizeGuildId(guildId);
+    const normalized = normalizeCustomPlanConfig(customPlan);
+    if (!normalizedGuildId) return { success: false, message: 'guildId is required' };
+    if (!normalized.success) return normalized;
+
+    const context = this.ensureTenant(normalizedGuildId);
+    const tenantId = context?.tenant?.id;
+    if (!tenantId) return { success: false, message: 'Tenant not found' };
+
+    const selectedModules = new Map(normalized.config.modules.map(module => [module.key, module]));
+    const applyCustom = db.transaction(() => {
+      db.prepare(`
+        UPDATE tenants
+        SET plan_key = 'custom', updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(tenantId);
+
+      const upsertModule = db.prepare(`
+        INSERT INTO tenant_modules (tenant_id, module_key, enabled)
+        VALUES (?, ?, ?)
+        ON CONFLICT(tenant_id, module_key) DO UPDATE SET
+          enabled = excluded.enabled,
+          updated_at = CURRENT_TIMESTAMP
+      `);
+      for (const moduleKey of ALL_MODULE_KEYS) {
+        upsertModule.run(tenantId, moduleKey, selectedModules.has(moduleKey) ? 1 : 0);
+      }
+
+      db.prepare(`
+        INSERT INTO tenant_limits (
+          tenant_id, max_commands, max_enabled_modules, max_branding_profiles, max_read_only_overrides, mock_data_enabled
+        ) VALUES (?, ?, ?, ?, 1, 0)
+        ON CONFLICT(tenant_id) DO UPDATE SET
+          max_commands = excluded.max_commands,
+          max_enabled_modules = excluded.max_enabled_modules,
+          max_branding_profiles = excluded.max_branding_profiles,
+          max_read_only_overrides = excluded.max_read_only_overrides,
+          updated_at = CURRENT_TIMESTAMP
+      `).run(
+        tenantId,
+        Math.max(20, selectedModules.size * 4),
+        selectedModules.size,
+        selectedModules.has('branding') ? 1 : 0
+      );
+
+      db.prepare('DELETE FROM tenant_module_limit_overrides WHERE tenant_id = ?').run(tenantId);
+      const insertLimit = db.prepare(`
+        INSERT INTO tenant_module_limit_overrides (tenant_id, module_key, limit_key, limit_value)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(tenant_id, module_key, limit_key) DO UPDATE SET
+          limit_value = excluded.limit_value,
+          updated_at = CURRENT_TIMESTAMP
+      `);
+      for (const module of normalized.config.modules) {
+        for (const [limitKey, limitValue] of Object.entries(module.limits || {})) {
+          insertLimit.run(tenantId, module.key, limitKey, limitValue);
+        }
+      }
+    });
+
+    applyCustom();
+    return {
+      success: true,
+      tenant: this.getTenantContext(normalizedGuildId),
+      customPlan: normalized.config,
+    };
+  }
+
+  setTenantCustomPlan(guildId, customPlan, actorId) {
+    const before = this.getTenantContext(guildId);
+    const result = this.applyCustomPlanBundle(guildId, customPlan);
+    if (!result.success) return result;
+
+    this.logAudit(guildId, actorId, 'set_custom_plan', before, {
+      tenant: result.tenant,
+      customPlan: result.customPlan,
+    });
+    if (MULTITENANT_ENABLED) {
+      this.syncGuildCommandsForGuild(guildId, result.tenant?.guildName).catch(error => {
+        logger.error(`Error syncing commands after custom plan update for ${guildId}:`, error);
+      });
+    }
+    return result;
+  }
+
   setTenantPlan(guildId, planKey, actorId) {
     const normalizedPlanKey = normalizePlanKey(planKey);
 
     if (!getPlanKeys().includes(normalizedPlanKey)) {
       return { success: false, message: 'Invalid plan' };
+    }
+    if (normalizedPlanKey === 'custom') {
+      return { success: false, message: 'Custom plans require a module and capacity configuration' };
     }
 
     const before = this.getTenantContext(guildId);

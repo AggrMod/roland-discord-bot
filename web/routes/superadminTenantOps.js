@@ -143,6 +143,7 @@ function createSuperadminTenantOpsRouter({
       const hydratedTenants = await hydrateTenantGuildNames(result.tenants || []);
       const normalized = hydratedTenants.map((tenant) => {
         const billing = tenant?.billing || null;
+        const lifecycle = billingService.getSubscriptionSnapshot(tenant.guildId);
         return {
           guildId: tenant.guildId,
           guildName: tenant.guildName || tenant.guildId,
@@ -155,6 +156,11 @@ function createSuperadminTenantOpsRouter({
             planLabel: String(tenant.planLabel || tenant.planKey || 'starter'),
             moduleCoverage: `${Number(tenant.enabledModulesCount || 0)}/${Number(tenant.totalModulesCount || 0)}`,
             billingStatus: String(billing?.subscriptionStatus || 'unknown'),
+            basePlanKey: lifecycle?.basePlan || tenant.planKey || 'starter',
+            pilotActive: lifecycle?.pilot?.active === true,
+            pilotEndsAt: lifecycle?.pilot?.endsAt || null,
+            warningLevel: lifecycle?.alerts?.warningLevel || null,
+            daysRemaining: lifecycle?.alerts?.daysRemaining ?? null,
           },
           billing: billing ? {
             provider: billing.provider || null,
@@ -197,6 +203,10 @@ function createSuperadminTenantOpsRouter({
           tb.last_payment_at AS lastPaymentAt,
           tb.last_payment_status AS lastPaymentStatus,
           tb.updated_at AS updatedAt,
+          COALESCE(tpc.base_plan_key, t.plan_key, 'starter') AS basePlanKey,
+          tpc.pilot_plan_key AS pilotPlanKey,
+          tpc.pilot_status AS pilotStatus,
+          tpc.pilot_ends_at AS pilotEndsAt,
           (
             SELECT COUNT(*)
             FROM crypto_payment_receipts cpr
@@ -261,6 +271,7 @@ function createSuperadminTenantOpsRouter({
           ) AS latestReceiptCreatedAt
         FROM tenant_billing tb
         INNER JOIN tenants t ON t.id = tb.tenant_id
+        LEFT JOIN tenant_plan_contracts tpc ON tpc.tenant_id = t.id
         ORDER BY COALESCE(tb.updated_at, tb.created_at) DESC, tb.id DESC
       `).all();
 
@@ -308,6 +319,21 @@ function createSuperadminTenantOpsRouter({
         lastPaymentAt: row.lastPaymentAt || null,
         lastPaymentStatus: row.lastPaymentStatus || null,
         updatedAt: row.updatedAt || null,
+        basePlanKey: row.basePlanKey || 'starter',
+        pilot: row.pilotPlanKey ? {
+          planKey: row.pilotPlanKey,
+          status: row.pilotStatus || null,
+          endsAt: row.pilotEndsAt || null,
+          active: String(row.pilotStatus || '').toLowerCase() === 'active' && Date.parse(row.pilotEndsAt || '') > Date.now(),
+        } : null,
+        lifecycle: (() => {
+          const endMs = row.currentPeriodEnd ? Date.parse(row.currentPeriodEnd) : Number.NaN;
+          const daysRemaining = Number.isFinite(endMs) ? Math.ceil((endMs - Date.now()) / 86400000) : null;
+          return {
+            daysRemaining,
+            warningLevel: daysRemaining === null ? null : (daysRemaining <= 7 ? 'urgent' : (daysRemaining <= 30 ? 'warning' : (daysRemaining <= 62 && row.billingInterval === 'yearly' ? 'early_renewal' : null))),
+          };
+        })(),
         verificationStatus: Number(row.pendingReceiptsCount || 0) > 0
           ? 'pending_review'
           : (['active', 'trialing', 'paid', 'approved', 'success'].includes(String(row.subscriptionStatus || '').toLowerCase())
@@ -358,12 +384,13 @@ function createSuperadminTenantOpsRouter({
       }
 
       const tenant = tenantService.getTenant(guildId) || tenantService.ensureTenant(guildId, null) || tenantService.getTenant(guildId);
-      if (!tenant?.id) {
+      const tenantId = tenant?.tenant?.id || tenant?.id || null;
+      if (!tenantId) {
         return res.status(404).json(toErrorResponse('Tenant not found', 'NOT_FOUND'));
       }
 
       const actorId = req.session?.discordUser?.id || 'unknown';
-      const beforeRow = db.prepare('SELECT * FROM tenant_billing WHERE tenant_id = ? LIMIT 1').get(tenant.id) || null;
+      const beforeRow = db.prepare('SELECT * FROM tenant_billing WHERE tenant_id = ? LIMIT 1').get(tenantId) || null;
 
       const patch = {
         subscriptionStatus: String(req.body?.subscriptionStatus || '').trim().toLowerCase() || null,
@@ -379,8 +406,8 @@ function createSuperadminTenantOpsRouter({
         patch.subscriptionStatus = patch.subscriptionStatus || 'approved';
         patch.tenantStatus = patch.tenantStatus || 'active';
       } else if (action === 'reject') {
-        patch.subscriptionStatus = patch.subscriptionStatus || 'rejected';
-        patch.tenantStatus = patch.tenantStatus || 'suspended';
+        patch.subscriptionStatus = patch.receiptId ? (beforeRow?.subscription_status || null) : (patch.subscriptionStatus || 'rejected');
+        patch.tenantStatus = patch.tenantStatus || null;
       } else {
         if (!patch.subscriptionStatus) {
           return res.status(400).json(toErrorResponse('subscriptionStatus is required for override', 'VALIDATION_ERROR'));
@@ -399,8 +426,12 @@ function createSuperadminTenantOpsRouter({
         patch.currentPeriodEnd = dt.toISOString();
       }
 
-      if (patch.planKey) {
-        const planResult = tenantService.setTenantPlan(guildId, patch.planKey, actorId);
+      if (patch.planKey && !(patch.receiptId && action === 'approve')) {
+        const planResult = billingService.assignBasePlan(guildId, {
+          planKey: patch.planKey,
+          billingInterval: patch.billingInterval,
+          source: 'superadmin',
+        }, actorId);
         if (!planResult?.success) {
           return res.status(400).json(toErrorResponse(planResult?.message || 'Failed to update tenant plan', 'VALIDATION_ERROR', null, planResult));
         }
@@ -431,7 +462,10 @@ function createSuperadminTenantOpsRouter({
         if (!patch.billingInterval) patch.billingInterval = String(receiptRow.billing_interval || '').toLowerCase() || null;
 
         if (action === 'approve') {
-          const expectedUsd = billingService.getExpectedPlanUsd(patch.planKey, patch.billingInterval);
+          const customPlan = (() => {
+            try { return receiptRow.custom_plan_json ? JSON.parse(receiptRow.custom_plan_json) : null; } catch (_error) { return null; }
+          })();
+          const expectedUsd = billingService.getExpectedPlanUsd(patch.planKey, patch.billingInterval, { customPlan });
           if (!Number.isFinite(expectedUsd) || expectedUsd <= 0) {
             return res.status(400).json(toErrorResponse('Cannot approve receipt: plan pricing is not eligible for self-serve billing', 'VALIDATION_ERROR'));
           }
@@ -445,6 +479,13 @@ function createSuperadminTenantOpsRouter({
         });
         if (!receiptResult.success) {
           return res.status(400).json(toErrorResponse(receiptResult.message || 'Failed to update receipt status', 'VALIDATION_ERROR'));
+        }
+        if (action === 'approve') {
+          const entitlementResult = billingService.applyApprovedReceiptEntitlement(receiptResult.receipt, actorId);
+          if (!entitlementResult.success) {
+            return res.status(400).json(toErrorResponse(entitlementResult.message || 'Failed to activate receipt entitlement', 'VALIDATION_ERROR', null, entitlementResult));
+          }
+          patch.currentPeriodEnd = entitlementResult.currentPeriodEnd || patch.currentPeriodEnd;
         }
       }
 
@@ -462,8 +503,8 @@ function createSuperadminTenantOpsRouter({
           metadata_json = COALESCE(excluded.metadata_json, tenant_billing.metadata_json),
           updated_at = CURRENT_TIMESTAMP
       `).run(
-        tenant.id,
-        String(beforeRow?.provider || 'manual'),
+        tenantId,
+        patch.receiptId && action === 'approve' ? 'manual_crypto' : String(beforeRow?.provider || 'manual'),
         patch.subscriptionStatus,
         patch.billingInterval || beforeRow?.billing_interval || null,
         patch.currentPeriodEnd || beforeRow?.current_period_end || null,
@@ -478,7 +519,7 @@ function createSuperadminTenantOpsRouter({
         })
       );
 
-      const afterRow = db.prepare('SELECT * FROM tenant_billing WHERE tenant_id = ? LIMIT 1').get(tenant.id) || null;
+      const afterRow = db.prepare('SELECT * FROM tenant_billing WHERE tenant_id = ? LIMIT 1').get(tenantId) || null;
       tenantService.logAudit(guildId, actorId, `billing_${action}`, beforeRow || {}, afterRow || {});
 
       res.json(toSuccessResponse({
@@ -709,6 +750,8 @@ function createSuperadminTenantOpsRouter({
         tenant: {
           ...tenant,
           branding,
+          planContract: billingService.getPlanContract(req.params.guildId),
+          subscription: billingService.getSubscriptionSnapshot(req.params.guildId),
           serverProfile: serverProfile || null,
           serverProfileCapabilities: {
             nick: true,
@@ -884,11 +927,13 @@ function createSuperadminTenantOpsRouter({
 
   router.put('/tenants/:guildId/plan', superadminGuard, logSuperadminTenantAction, (req, res) => {
     try {
-      const result = tenantService.setTenantPlan(
-        req.params.guildId,
-        req.body?.plan,
-        req.session.discordUser.id
-      );
+      const result = billingService.assignBasePlan(req.params.guildId, {
+        planKey: req.body?.plan,
+        customPlan: req.body?.customPlan,
+        billingInterval: req.body?.billingInterval,
+        quotedMonthlyUsd: req.body?.quotedMonthlyUsd,
+        source: 'superadmin',
+      }, req.session.discordUser.id);
 
       if (!result.success) {
         return res.status(400).json(toErrorResponse(result.message || 'Failed to update tenant plan', 'VALIDATION_ERROR', null, result));
@@ -898,6 +943,43 @@ function createSuperadminTenantOpsRouter({
     } catch (error) {
       logger.error('Error updating tenant plan:', error);
       res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.post('/tenants/:guildId/plan-lifecycle', superadminGuard, logSuperadminTenantAction, (req, res) => {
+    try {
+      const action = String(req.body?.action || '').trim().toLowerCase();
+      const actorId = req.session?.discordUser?.id || 'unknown';
+      let result = null;
+      if (action === 'assign') {
+        result = billingService.assignBasePlan(req.params.guildId, {
+          planKey: req.body?.planKey,
+          customPlan: req.body?.customPlan,
+          billingInterval: req.body?.billingInterval,
+          quotedMonthlyUsd: req.body?.quotedMonthlyUsd,
+          source: 'superadmin',
+        }, actorId);
+      } else if (action === 'start_pilot') {
+        result = billingService.startPilot(req.params.guildId, {
+          days: req.body?.days,
+          note: req.body?.note,
+        }, actorId);
+      } else if (action === 'end_pilot') {
+        result = billingService.endPilot(req.params.guildId, {
+          status: 'cancelled',
+          reason: String(req.body?.reason || 'Ended manually by superadmin'),
+        }, actorId);
+      } else {
+        return res.status(400).json(toErrorResponse('action must be assign, start_pilot, or end_pilot', 'VALIDATION_ERROR'));
+      }
+
+      if (!result?.success) {
+        return res.status(400).json(toErrorResponse(result?.message || 'Failed to update plan lifecycle', 'VALIDATION_ERROR', null, result));
+      }
+      return res.json(toSuccessResponse(result));
+    } catch (error) {
+      logger.error('Error updating tenant plan lifecycle:', error);
+      return res.status(500).json(toErrorResponse('Internal server error'));
     }
   });
 

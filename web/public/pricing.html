@@ -100,7 +100,7 @@
         <span style="position:absolute;inset:0;background:var(--border);border-radius:26px;transition:background 0.3s;"></span>
         <span id="toggleDot" style="position:absolute;top:3px;left:3px;width:20px;height:20px;background:#fff;border-radius:50%;transition:transform 0.3s;"></span>
       </label>
-      <span>Annually <span style="background:rgba(74,222,128,0.15);color:#4ade80;padding:2px 8px;border-radius:10px;font-size:0.8em;font-weight:600;">Save 15%</span></span>
+      <span>Annually <span style="background:rgba(74,222,128,0.15);color:#4ade80;padding:2px 8px;border-radius:10px;font-size:0.8em;font-weight:600;">2 months free</span></span>
     </div>
 
     <!-- Plan Cards -->
@@ -125,7 +125,7 @@
           <li class="excluded">X engagement provider (Growth/Pro)</li>
           <li class="excluded">AI Assistant (Pro only)</li>
         </ul>
-        <a href="/auth/discord/login" class="btn btn-secondary" style="width:100%;justify-content:center;">Get Started</a>
+        <a href="/auth/discord/login" data-plan-choice="starter" class="btn btn-secondary" style="width:100%;justify-content:center;">Get Started</a>
       </div>
 
       <!-- Growth -->
@@ -148,7 +148,7 @@
           <li>Vault store (100 rewards)</li>
           <li>Invite tracking (180 days + export)</li>
         </ul>
-        <a href="/auth/discord/login" class="btn btn-secondary" style="width:100%;justify-content:center;">Start Growth</a>
+        <a href="/auth/discord/login" data-plan-choice="growth" class="btn btn-secondary" style="width:100%;justify-content:center;">Start Growth</a>
       </div>
 
       <!-- Pro (Featured) -->
@@ -172,7 +172,22 @@
           <li>Unlimited invite history</li>
           <li>2 branding profiles</li>
         </ul>
-        <a href="/auth/discord/login" class="btn btn-primary" style="width:100%;justify-content:center;">Start Pro</a>
+        <a href="/auth/discord/login" data-plan-choice="pro" class="btn btn-primary" style="width:100%;justify-content:center;">Start Pro</a>
+      </div>
+
+      <!-- Custom -->
+      <div class="pricing-card">
+        <h3>Custom</h3>
+        <p class="plan-desc">Select only the modules and capacity limits your community actually needs.</p>
+        <div class="price"><span>Instant quote</span></div>
+        <p class="price-note">Transparent module-based pricing</p>
+        <ul class="plan-features">
+          <li>Choose individual modules</li>
+          <li>Light, Growth, Pro, or unlimited capacity</li>
+          <li>Automatic monthly and annual price</li>
+          <li>Activated after verified payment</li>
+        </ul>
+        <button type="button" class="btn btn-secondary" style="width:100%;justify-content:center;" onclick="openCustomPlanBuilder()">Build Custom Plan</button>
       </div>
 
       <!-- Enterprise -->
@@ -198,6 +213,18 @@
         <a href="#" class="btn btn-secondary" style="width:100%;justify-content:center;" onclick="return false;">Contact Us</a>
       </div>
     </div>
+
+    <section id="customPlanBuilder" class="custom-plan-builder" hidden>
+      <div class="custom-plan-builder__header">
+        <div><span class="section-kicker">Custom plan builder</span><h2>Build the right-sized workspace.</h2><p>Select modules, choose capacity, and get an immediate quote before signing in.</p></div>
+        <div class="custom-plan-builder__quote"><span>Estimated price</span><strong id="publicCustomPlanPrice">Select a module</strong><small id="publicCustomPlanAnnual">Annual includes 2 free months</small></div>
+      </div>
+      <div id="publicCustomPlanModules" class="custom-plan-builder__modules"><div class="custom-plan-builder__loading">Loading module pricing…</div></div>
+      <div class="custom-plan-builder__footer">
+        <p>The server owner signs in, selects the Discord server, completes payment, and the plan activates after verification.</p>
+        <button id="publicCustomPlanContinue" type="button" class="btn btn-primary" onclick="continueCustomPlanCheckout()" disabled>Continue to secure checkout</button>
+      </div>
+    </section>
 
     <!-- Competitor Comparison -->
     <div class="section-header reveal" style="margin-top:80px;">

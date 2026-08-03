@@ -1,8 +1,13 @@
 const db = require('../database/db');
 const tenantService = require('./tenantService');
 const settingsManager = require('../config/settings');
-const { getPlanPreset, normalizePlanKey } = require('../config/plans');
-const { Connection, PublicKey, LAMPORTS_PER_SOL } = require('@solana/web3.js');
+const {
+  computeCustomPlanMonthlyUsd,
+  getPlanPreset,
+  normalizeCustomPlanConfig,
+  normalizePlanKey,
+} = require('../config/plans');
+const { Connection, LAMPORTS_PER_SOL } = require('@solana/web3.js');
 const crypto = require('crypto');
 
 function normalizeString(value) {
@@ -135,13 +140,149 @@ function applyTemplate(url, params = {}) {
 }
 
 class BillingService {
+  getPlanContract(guildId) {
+    const normalizedGuildId = normalizeString(guildId);
+    if (!normalizedGuildId) return null;
+    const tenant = tenantService.getTenant(normalizedGuildId)
+      || tenantService.ensureTenant(normalizedGuildId, null)
+      || tenantService.getTenant(normalizedGuildId);
+    const tenantId = tenant?.tenant?.id || tenant?.id || null;
+    if (!tenantId) return null;
+
+    db.prepare(`
+      INSERT OR IGNORE INTO tenant_plan_contracts (
+        tenant_id, base_plan_key, billing_interval, assignment_source
+      ) VALUES (?, ?, ?, 'system')
+    `).run(
+      tenantId,
+      normalizePlanKey(tenant.planKey) || 'starter',
+      tenant.billing?.billingInterval || null
+    );
+
+    const row = db.prepare('SELECT * FROM tenant_plan_contracts WHERE tenant_id = ? LIMIT 1').get(tenantId);
+    if (!row) return null;
+    const pilotEndsAtMs = row.pilot_ends_at ? Date.parse(row.pilot_ends_at) : Number.NaN;
+    const pilotActive = String(row.pilot_status || '').toLowerCase() === 'active'
+      && Number.isFinite(pilotEndsAtMs)
+      && pilotEndsAtMs > Date.now();
+    return {
+      tenantId,
+      guildId: normalizedGuildId,
+      basePlanKey: normalizePlanKey(row.base_plan_key) || 'starter',
+      customPlan: Object.keys(safeJsonParse(row.custom_plan_json)).length ? safeJsonParse(row.custom_plan_json) : null,
+      quotedMonthlyUsd: row.quoted_monthly_usd === null || row.quoted_monthly_usd === undefined
+        ? null
+        : Number(row.quoted_monthly_usd),
+      billingInterval: row.billing_interval || null,
+      assignmentSource: row.assignment_source || 'system',
+      pilot: row.pilot_plan_key ? {
+        planKey: normalizePlanKey(row.pilot_plan_key),
+        startedAt: row.pilot_started_at || null,
+        endsAt: row.pilot_ends_at || null,
+        status: row.pilot_status || null,
+        assignedBy: row.pilot_assigned_by || null,
+        note: row.pilot_note || null,
+        active: pilotActive,
+      } : null,
+      updatedAt: row.updated_at || null,
+      createdAt: row.created_at || null,
+    };
+  }
+
+  getRenewalTiming(guildId, now = new Date()) {
+    const billing = this.getTenantBilling(guildId);
+    const endMs = billing?.currentPeriodEnd ? Date.parse(billing.currentPeriodEnd) : Number.NaN;
+    const nowMs = now instanceof Date ? now.getTime() : Date.parse(now);
+    const remainingMs = Number.isFinite(endMs) && Number.isFinite(nowMs) ? endMs - nowMs : Number.NaN;
+    const daysRemaining = Number.isFinite(remainingMs) ? Math.ceil(remainingMs / 86400000) : null;
+    const activeStatus = ['active', 'approved', 'paid', 'success', 'trialing'].includes(
+      String(billing?.subscriptionStatus || '').toLowerCase()
+    );
+    const earlyYearlyRenewalEligible = billing?.billingInterval === 'yearly'
+      && activeStatus
+      && Number.isFinite(remainingMs)
+      && remainingMs > 0
+      && remainingMs <= (62 * 86400000);
+    let warningLevel = null;
+    if (daysRemaining !== null && daysRemaining <= 0) warningLevel = 'expired';
+    else if (daysRemaining !== null && daysRemaining <= 7) warningLevel = 'urgent';
+    else if (daysRemaining !== null && daysRemaining <= 30) warningLevel = 'warning';
+    else if (daysRemaining !== null && daysRemaining <= 62 && billing?.billingInterval === 'yearly') warningLevel = 'early_renewal';
+
+    return {
+      daysRemaining,
+      warningLevel,
+      earlyYearlyRenewalEligible,
+      earlyRenewalWindowDays: 62,
+    };
+  }
+
+  getPlanPriceQuote({ guildId = null, planKey, billingInterval = 'monthly', customPlan = null, now = new Date() } = {}) {
+    const normalizedPlan = normalizePlanKey(planKey);
+    const interval = normalizeInterval(billingInterval) || 'monthly';
+    if (!normalizedPlan || normalizedPlan === 'starter' || normalizedPlan === 'enterprise') {
+      return { success: false, message: 'Select Growth, Pro, or Custom for a paid quote' };
+    }
+
+    let monthlyUsd = null;
+    let normalizedCustomPlan = null;
+    let breakdown = [];
+    if (normalizedPlan === 'custom') {
+      const computed = computeCustomPlanMonthlyUsd(customPlan || {});
+      if (!computed.success) return computed;
+      monthlyUsd = computed.monthlyUsd;
+      normalizedCustomPlan = computed.config;
+      breakdown = computed.breakdown || [];
+    } else {
+      const preset = getPlanPreset(normalizedPlan);
+      monthlyUsd = Number(preset?.billing?.monthlyUsd || 0);
+    }
+    if (!Number.isFinite(monthlyUsd) || monthlyUsd <= 0) {
+      return { success: false, message: 'Unable to calculate this plan price' };
+    }
+
+    const renewalTiming = guildId ? this.getRenewalTiming(guildId, now) : {
+      earlyYearlyRenewalEligible: false,
+      daysRemaining: null,
+      warningLevel: null,
+      earlyRenewalWindowDays: 62,
+    };
+    const billedMonths = interval === 'yearly'
+      ? (renewalTiming.earlyYearlyRenewalEligible ? 9 : 10)
+      : 1;
+    const totalUsd = Number((monthlyUsd * billedMonths).toFixed(2));
+
+    return {
+      success: true,
+      planKey: normalizedPlan,
+      billingInterval: interval,
+      monthlyUsd: Number(monthlyUsd.toFixed(2)),
+      totalUsd,
+      billedMonths,
+      serviceMonths: interval === 'yearly' ? 12 : 1,
+      discountMonths: interval === 'yearly' ? 12 - billedMonths : 0,
+      pricingReason: interval === 'yearly'
+        ? (renewalTiming.earlyYearlyRenewalEligible ? 'early_yearly_renewal' : 'yearly_two_month_discount')
+        : 'monthly_standard',
+      earlyRenewalEligible: renewalTiming.earlyYearlyRenewalEligible,
+      earlyRenewalWindowDays: renewalTiming.earlyRenewalWindowDays,
+      customPlan: normalizedCustomPlan,
+      breakdown,
+    };
+  }
+
   getQuoteSigningSecret() {
-    return envValue([
+    const configured = envValue([
       'BILLING_QUOTE_SECRET',
       'PUBLIC_WEB_AUTH_SECRET',
       'SESSION_SECRET',
       'JWT_SECRET',
-    ]) || 'guildpilot-local-quote-secret';
+    ]);
+    if (configured) return configured;
+    if (String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production') {
+      throw new Error('A billing quote signing secret is required in production');
+    }
+    return 'guildpilot-local-quote-secret';
   }
 
   signQuotePayload(payload = {}) {
@@ -164,7 +305,11 @@ class BillingService {
       .createHmac('sha256', this.getQuoteSigningSecret())
       .update(payloadPart)
       .digest('base64url');
-    if (expectedSig !== signaturePart) return { success: false, message: 'quoteToken signature is invalid' };
+    const expectedBuffer = Buffer.from(expectedSig, 'utf8');
+    const actualBuffer = Buffer.from(signaturePart, 'utf8');
+    if (expectedBuffer.length !== actualBuffer.length || !crypto.timingSafeEqual(expectedBuffer, actualBuffer)) {
+      return { success: false, message: 'quoteToken signature is invalid' };
+    }
     try {
       const payload = JSON.parse(fromBase64Url(payloadPart));
       return { success: true, payload };
@@ -213,10 +358,14 @@ class BillingService {
     if (!billingInterval) return { success: false, message: 'billingInterval must be monthly or yearly' };
     if (!tokenSymbol) return { success: false, message: 'tokenSymbol must be SOL or USDC' };
 
-    const expectedUsd = this.getExpectedPlanUsd(planKey, billingInterval);
-    if (!Number.isFinite(expectedUsd) || expectedUsd <= 0) {
-      return { success: false, message: 'Unable to compute plan price for quote' };
-    }
+    const pricing = this.getPlanPriceQuote({
+      guildId: normalizedGuildId,
+      planKey,
+      billingInterval,
+      customPlan: payload.customPlan || payload.custom_plan,
+    });
+    if (!pricing.success) return pricing;
+    const expectedUsd = pricing.totalUsd;
 
     let quotedAmount = expectedUsd;
     let fxRate = null;
@@ -247,6 +396,12 @@ class BillingService {
       fxRate,
       rateSource,
       amountDecimals,
+      monthlyUsd: pricing.monthlyUsd,
+      billedMonths: pricing.billedMonths,
+      serviceMonths: pricing.serviceMonths,
+      discountMonths: pricing.discountMonths,
+      pricingReason: pricing.pricingReason,
+      customPlan: pricing.customPlan,
       issuedAt: Date.now(),
       expiresAt: expiresAtMs,
       nonce: crypto.randomBytes(8).toString('hex'),
@@ -428,15 +583,21 @@ class BillingService {
     if (amount > 1000000) return { success: false, message: 'amount is outside allowed range' };
 
     const preset = getPlanPreset(planKey);
-    if (!preset || !Number.isFinite(Number(preset?.billing?.monthlyUsd || 0)) || Number(preset.billing.monthlyUsd) <= 0) {
+    const customPlan = planKey === 'custom' ? quoteMetadata?.customPlan : null;
+    const customValidation = planKey === 'custom' ? normalizeCustomPlanConfig(customPlan || {}) : null;
+    if (planKey === 'custom' && !customValidation?.success) {
+      return { success: false, message: customValidation?.message || 'Custom plan configuration is invalid' };
+    }
+    if (planKey !== 'custom' && (!preset || !Number.isFinite(Number(preset?.billing?.monthlyUsd || 0)) || Number(preset.billing.monthlyUsd) <= 0)) {
       return { success: false, message: 'planKey does not support self-serve crypto billing' };
     }
 
     try {
       db.prepare(`
         INSERT INTO crypto_payment_receipts (
-          guild_id, tx_signature, amount, token_symbol, sender_wallet, plan_key, billing_interval, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+          guild_id, tx_signature, amount, token_symbol, sender_wallet, plan_key, billing_interval, status,
+          custom_plan_json, quote_usd_amount, pricing_reason
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
       `).run(
         normalizedGuildId,
         txSignature,
@@ -444,7 +605,10 @@ class BillingService {
         tokenSymbol,
         senderWallet,
         planKey,
-        billingInterval
+        billingInterval,
+        customPlan ? JSON.stringify(customPlan) : null,
+        quoteMetadata?.usdAmount === undefined ? null : Number(quoteMetadata.usdAmount),
+        quoteMetadata?.pricingReason || null
       );
       return {
         success: true,
@@ -480,6 +644,171 @@ class BillingService {
     return base.toISOString();
   }
 
+  assignBasePlan(guildId, {
+    planKey,
+    customPlan = null,
+    billingInterval = null,
+    quotedMonthlyUsd = null,
+    source = 'manual',
+  } = {}, actorId = 'billing-plan-assignment') {
+    const normalizedGuildId = normalizeString(guildId);
+    const normalizedPlan = normalizePlanKey(planKey);
+    if (!normalizedGuildId) return { success: false, message: 'guildId is required' };
+    if (!['starter', 'growth', 'pro', 'custom', 'enterprise'].includes(normalizedPlan)) {
+      return { success: false, message: 'Invalid plan key' };
+    }
+
+    let normalizedCustomPlan = null;
+    let resolvedMonthlyUsd = quotedMonthlyUsd === null ? null : Number(quotedMonthlyUsd);
+    if (normalizedPlan === 'custom') {
+      const computed = computeCustomPlanMonthlyUsd(customPlan || {});
+      if (!computed.success) return computed;
+      normalizedCustomPlan = computed.config;
+      resolvedMonthlyUsd = Number.isFinite(resolvedMonthlyUsd) && resolvedMonthlyUsd > 0
+        ? Number(resolvedMonthlyUsd.toFixed(2))
+        : computed.monthlyUsd;
+    } else if (!Number.isFinite(resolvedMonthlyUsd)) {
+      const presetMonthly = Number(getPlanPreset(normalizedPlan)?.billing?.monthlyUsd);
+      resolvedMonthlyUsd = Number.isFinite(presetMonthly) ? presetMonthly : null;
+    }
+
+    const contract = this.getPlanContract(normalizedGuildId);
+    if (!contract?.tenantId) return { success: false, message: 'Tenant not found' };
+    const interval = normalizeInterval(billingInterval) || contract.billingInterval || null;
+    db.prepare(`
+      UPDATE tenant_plan_contracts
+      SET base_plan_key = ?,
+          custom_plan_json = ?,
+          quoted_monthly_usd = ?,
+          billing_interval = ?,
+          assignment_source = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE tenant_id = ?
+    `).run(
+      normalizedPlan,
+      normalizedCustomPlan ? JSON.stringify(normalizedCustomPlan) : null,
+      resolvedMonthlyUsd,
+      interval,
+      normalizeLower(source) || 'manual',
+      contract.tenantId
+    );
+
+    const pilotActive = contract.pilot?.active === true;
+    let application = null;
+    if (!pilotActive) {
+      application = normalizedPlan === 'custom'
+        ? tenantService.setTenantCustomPlan(normalizedGuildId, normalizedCustomPlan, actorId)
+        : tenantService.setTenantPlan(normalizedGuildId, normalizedPlan, actorId);
+      if (!application?.success) return application || { success: false, message: 'Failed to apply plan' };
+    } else {
+      tenantService.logAudit(normalizedGuildId, actorId, 'set_base_plan_during_pilot', contract, {
+        basePlanKey: normalizedPlan,
+        customPlan: normalizedCustomPlan,
+        billingInterval: interval,
+      });
+    }
+
+    tenantService.setTenantStatus(normalizedGuildId, 'active', actorId);
+    return {
+      success: true,
+      effectivePlanKey: pilotActive ? contract.pilot.planKey : normalizedPlan,
+      contract: this.getPlanContract(normalizedGuildId),
+      tenant: tenantService.getTenant(normalizedGuildId),
+    };
+  }
+
+  startPilot(guildId, { days = 7, note = '' } = {}, actorId = 'superadmin-pilot') {
+    const normalizedGuildId = normalizeString(guildId);
+    const durationDays = Math.max(1, Math.min(30, Math.floor(Number(days) || 7)));
+    const contract = this.getPlanContract(normalizedGuildId);
+    if (!contract?.tenantId) return { success: false, message: 'Tenant not found' };
+    if (contract.pilot?.active) return { success: false, message: 'This tenant already has an active pilot' };
+
+    const startedAt = new Date();
+    const endsAt = new Date(startedAt.getTime() + (durationDays * 86400000));
+    db.prepare(`
+      UPDATE tenant_plan_contracts
+      SET pilot_plan_key = 'pro',
+          pilot_started_at = ?,
+          pilot_ends_at = ?,
+          pilot_status = 'active',
+          pilot_assigned_by = ?,
+          pilot_note = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE tenant_id = ?
+    `).run(
+      startedAt.toISOString(),
+      endsAt.toISOString(),
+      normalizeString(actorId),
+      normalizeString(note),
+      contract.tenantId
+    );
+
+    const applied = tenantService.setTenantPlan(normalizedGuildId, 'pro', actorId);
+    if (!applied.success) return applied;
+    tenantService.setTenantStatus(normalizedGuildId, 'active', actorId);
+    tenantService.logAudit(normalizedGuildId, actorId, 'start_pro_pilot', contract, this.getPlanContract(normalizedGuildId));
+    return {
+      success: true,
+      contract: this.getPlanContract(normalizedGuildId),
+      tenant: tenantService.getTenant(normalizedGuildId),
+    };
+  }
+
+  endPilot(guildId, { status = 'expired', reason = 'Pilot ended' } = {}, actorId = 'billing-pilot-sweep') {
+    const normalizedGuildId = normalizeString(guildId);
+    const contract = this.getPlanContract(normalizedGuildId);
+    if (!contract?.tenantId) return { success: false, message: 'Tenant not found' };
+    if (!contract.pilot) return { success: false, message: 'This tenant has no pilot assignment' };
+
+    const normalizedStatus = ['expired', 'cancelled'].includes(normalizeLower(status))
+      ? normalizeLower(status)
+      : 'expired';
+    db.prepare(`
+      UPDATE tenant_plan_contracts
+      SET pilot_status = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE tenant_id = ?
+    `).run(normalizedStatus, contract.tenantId);
+
+    const fallback = contract.basePlanKey === 'custom'
+      ? tenantService.setTenantCustomPlan(normalizedGuildId, contract.customPlan || {}, actorId)
+      : tenantService.setTenantPlan(normalizedGuildId, contract.basePlanKey || 'starter', actorId);
+    if (!fallback.success) return fallback;
+    tenantService.setTenantStatus(normalizedGuildId, 'active', actorId);
+    tenantService.logAudit(normalizedGuildId, actorId, 'end_pro_pilot', contract, {
+      ...this.getPlanContract(normalizedGuildId),
+      reason,
+    });
+    return {
+      success: true,
+      fallbackPlanKey: contract.basePlanKey || 'starter',
+      contract: this.getPlanContract(normalizedGuildId),
+      tenant: tenantService.getTenant(normalizedGuildId),
+    };
+  }
+
+  enforcePilotExpiry({ batchSize = 50 } = {}) {
+    const limit = Math.max(1, Math.min(200, Number(batchSize) || 50));
+    const rows = db.prepare(`
+      SELECT t.guild_id AS guild_id
+      FROM tenant_plan_contracts tpc
+      INNER JOIN tenants t ON t.id = tpc.tenant_id
+      WHERE LOWER(COALESCE(tpc.pilot_status, '')) = 'active'
+        AND tpc.pilot_ends_at IS NOT NULL
+        AND datetime(tpc.pilot_ends_at) <= datetime('now')
+      ORDER BY datetime(tpc.pilot_ends_at) ASC
+      LIMIT ?
+    `).all(limit);
+    let reverted = 0;
+    let errors = 0;
+    for (const row of rows) {
+      const result = this.endPilot(row.guild_id, { status: 'expired', reason: 'Automatic pilot expiry' }, 'billing-pilot-sweep');
+      if (result.success) reverted += 1;
+      else errors += 1;
+    }
+    return { scanned: rows.length, reverted, errors };
+  }
+
   applyApprovedReceiptEntitlement(receiptRow, actorId = 'billing-auto-approval') {
     if (!receiptRow || !receiptRow.guild_id) return { success: false, message: 'receiptRow is required' };
     const guildId = String(receiptRow.guild_id).trim();
@@ -488,31 +817,45 @@ class BillingService {
     if (!guildId || !planKey) return { success: false, message: 'receipt is missing guild or plan metadata' };
 
     const tenant = tenantService.getTenant(guildId) || tenantService.ensureTenant(guildId, null) || tenantService.getTenant(guildId);
-    if (!tenant?.id) return { success: false, message: 'Tenant not found for receipt guild' };
-
-    const setPlan = tenantService.setTenantPlan(guildId, planKey, actorId);
+    const tenantId = tenant?.tenant?.id || tenant?.id || null;
+    if (!tenantId) return { success: false, message: 'Tenant not found for receipt guild' };
+    const customPlan = Object.keys(safeJsonParse(receiptRow.custom_plan_json)).length
+      ? safeJsonParse(receiptRow.custom_plan_json)
+      : null;
+    const currentBilling = this.getTenantBilling(guildId);
+    const currentEndMs = currentBilling?.currentPeriodEnd ? Date.parse(currentBilling.currentPeriodEnd) : Number.NaN;
+    const periodBase = Number.isFinite(currentEndMs) && currentEndMs > Date.now()
+      ? new Date(currentEndMs)
+      : new Date();
+    const periodEnd = this.computePeriodEndIso(billingInterval, periodBase);
+    const price = this.getPlanPriceQuote({ guildId: null, planKey, billingInterval, customPlan });
+    const setPlan = this.assignBasePlan(guildId, {
+      planKey,
+      customPlan,
+      billingInterval,
+      quotedMonthlyUsd: price.success ? price.monthlyUsd : null,
+      source: 'self_service',
+    }, actorId);
     if (!setPlan?.success) return { success: false, message: setPlan?.message || 'Failed to apply plan from receipt' };
 
-    const setStatus = tenantService.setTenantStatus(guildId, 'active', actorId);
-    if (!setStatus?.success) return { success: false, message: setStatus?.message || 'Failed to activate tenant after receipt approval' };
-
-    const periodEnd = this.computePeriodEndIso(billingInterval, new Date());
     db.prepare(`
       INSERT INTO tenant_billing (
-        tenant_id, provider, subscription_status, billing_interval, current_period_end, last_payment_at, last_payment_status, metadata_json
-      ) VALUES (?, 'manual_crypto', 'approved', ?, ?, ?, 'approved', ?)
+        tenant_id, provider, subscription_status, billing_interval, current_period_start, current_period_end, last_payment_at, last_payment_status, metadata_json
+      ) VALUES (?, 'manual_crypto', 'approved', ?, ?, ?, ?, 'approved', ?)
       ON CONFLICT(tenant_id) DO UPDATE SET
         provider = 'manual_crypto',
         subscription_status = 'approved',
         billing_interval = excluded.billing_interval,
+        current_period_start = excluded.current_period_start,
         current_period_end = excluded.current_period_end,
         last_payment_at = excluded.last_payment_at,
         last_payment_status = 'approved',
         metadata_json = excluded.metadata_json,
         updated_at = CURRENT_TIMESTAMP
     `).run(
-      tenant.id,
+      tenantId,
       billingInterval,
+      periodBase.toISOString(),
       periodEnd,
       new Date().toISOString(),
       JSON.stringify({
@@ -520,6 +863,10 @@ class BillingService {
         receiptId: Number(receiptRow.id || 0) || null,
         txSignature: receiptRow.tx_signature || null,
         actorId,
+        planKey,
+        customPlan,
+        quoteUsdAmount: receiptRow.quote_usd_amount === null ? null : Number(receiptRow.quote_usd_amount),
+        pricingReason: receiptRow.pricing_reason || null,
         appliedAt: new Date().toISOString(),
       })
     );
@@ -569,18 +916,15 @@ class BillingService {
     };
   }
 
-  getExpectedPlanUsd(planKey, billingInterval = 'monthly') {
-    const normalizedPlan = normalizePlanKey(planKey);
-    const normalizedInterval = normalizeInterval(billingInterval) || 'monthly';
-    const preset = getPlanPreset(normalizedPlan);
-    const monthly = Number(preset?.billing?.monthlyUsd || 0);
-    if (!preset || !Number.isFinite(monthly) || monthly <= 0) return null;
-    if (normalizedInterval === 'yearly') {
-      const discountPct = Number(preset?.billing?.annualDiscountPct || 0);
-      const yearly = monthly * 12 * (1 - (Math.max(0, Math.min(100, discountPct)) / 100));
-      return Number(yearly.toFixed(2));
-    }
-    return Number(monthly.toFixed(2));
+  getExpectedPlanUsd(planKey, billingInterval = 'monthly', options = {}) {
+    const quote = this.getPlanPriceQuote({
+      guildId: options.guildId || null,
+      planKey,
+      billingInterval,
+      customPlan: options.customPlan || null,
+      now: options.now || new Date(),
+    });
+    return quote.success ? quote.totalUsd : null;
   }
 
   listCryptoReceiptsByGuild(guildId, { limit = 20, status = '' } = {}) {
@@ -919,11 +1263,15 @@ class BillingService {
           guildId
         });
         if (!url) continue;
+        const price = this.getPlanPriceQuote({ guildId, planKey: normalizedPlan, billingInterval });
         options.push({
           provider,
           interval: billingInterval,
           url,
-          label: `${provider === 'stripe' ? 'Stripe' : 'Crypto'} ${billingInterval === 'yearly' ? 'Yearly' : 'Monthly'}`
+          label: `${provider === 'stripe' ? 'Stripe' : 'Crypto'} ${billingInterval === 'yearly' ? 'Yearly' : 'Monthly'}`,
+          totalUsd: price.success ? price.totalUsd : null,
+          pricingReason: price.success ? price.pricingReason : null,
+          discountMonths: price.success ? price.discountMonths : 0,
         });
       }
     }
@@ -935,26 +1283,29 @@ class BillingService {
     const normalizedGrace = Math.max(0, Number(graceMinutes) || 0);
     const normalizedBatch = Math.max(1, Math.min(200, Number(batchSize) || 50));
     const cutoff = new Date(Date.now() - (normalizedGrace * 60 * 1000)).toISOString();
-
-    const activeMarkers = ['active', 'approved', 'success', 'paid', 'trialing'];
-    const placeholders = activeMarkers.map(() => '?').join(', ');
+    const pilotExpiry = this.enforcePilotExpiry({ batchSize: normalizedBatch });
     const rows = db.prepare(`
       SELECT
         t.guild_id AS guild_id,
-        t.plan_key AS plan_key,
+        COALESCE(tpc.base_plan_key, t.plan_key, 'starter') AS plan_key,
         t.status AS tenant_status,
         tb.subscription_status AS subscription_status,
         tb.current_period_end AS current_period_end
       FROM tenants t
       INNER JOIN tenant_billing tb ON tb.tenant_id = t.id
-      WHERE LOWER(COALESCE(t.plan_key, 'starter')) != 'starter'
+      LEFT JOIN tenant_plan_contracts tpc ON tpc.tenant_id = t.id
+      WHERE LOWER(COALESCE(tpc.base_plan_key, t.plan_key, 'starter')) != 'starter'
         AND LOWER(COALESCE(t.status, 'active')) = 'active'
         AND tb.current_period_end IS NOT NULL
         AND datetime(tb.current_period_end) <= datetime(?)
-        AND LOWER(COALESCE(tb.subscription_status, '')) NOT IN (${placeholders})
+        AND NOT (
+          LOWER(COALESCE(tpc.pilot_status, '')) = 'active'
+          AND tpc.pilot_ends_at IS NOT NULL
+          AND datetime(tpc.pilot_ends_at) > datetime('now')
+        )
       ORDER BY datetime(tb.current_period_end) ASC
       LIMIT ?
-    `).all(cutoff, ...activeMarkers, normalizedBatch);
+    `).all(cutoff, normalizedBatch);
 
     let downgraded = 0;
     let errors = 0;
@@ -964,9 +1315,11 @@ class BillingService {
         const guildId = normalizeString(row.guild_id);
         if (!guildId) continue;
 
-        const downgrade = tenantService.setTenantPlan(guildId, 'starter', 'billing-expiry-sweep');
-        const suspend = tenantService.setTenantStatus(guildId, 'suspended', 'billing-expiry-sweep');
-        if (!downgrade.success || !suspend.success) {
+        const downgrade = this.assignBasePlan(guildId, {
+          planKey: 'starter',
+          source: 'billing_expiry',
+        }, 'billing-expiry-sweep');
+        if (!downgrade.success) {
           errors += 1;
           continue;
         }
@@ -988,7 +1341,8 @@ class BillingService {
       scanned: rows.length,
       downgraded,
       errors,
-      cutoff
+      cutoff,
+      pilots: pilotExpiry,
     };
   }
 
@@ -1009,36 +1363,67 @@ class BillingService {
 
   getSubscriptionSnapshot(guildId) {
     const context = tenantService.getTenantContext(guildId);
-    const planKey = context?.planKey || 'starter';
-    const planPreset = getPlanPreset(planKey);
+    const effectivePlanKey = context?.planKey || 'starter';
+    const contract = this.getPlanContract(guildId);
+    const basePlanKey = contract?.basePlanKey || effectivePlanKey;
+    const planPreset = getPlanPreset(basePlanKey);
     const billing = this.getTenantBilling(guildId);
-    const billingInterval = billing?.billingInterval || 'monthly';
+    const billingInterval = billing?.billingInterval || contract?.billingInterval || 'monthly';
     const renewalOptions = this.getRenewalOptions({
       guildId,
-      planKey,
+      planKey: basePlanKey,
       interval: billingInterval
+    });
+    const renewalTiming = this.getRenewalTiming(guildId);
+    const monthlyQuote = this.getPlanPriceQuote({
+      guildId,
+      planKey: basePlanKey,
+      billingInterval: 'monthly',
+      customPlan: contract?.customPlan || null,
+    });
+    const yearlyQuote = this.getPlanPriceQuote({
+      guildId,
+      planKey: basePlanKey,
+      billingInterval: 'yearly',
+      customPlan: contract?.customPlan || null,
     });
 
     const manageUrl = billing?.provider
       ? this.resolveManageUrl({
         provider: billing.provider,
         guildId,
-        planKey,
+        planKey: basePlanKey,
         interval: billingInterval
       })
       : null;
 
     return {
-      plan: planKey,
-      planLabel: context?.planLabel || planPreset?.label || planKey,
+      plan: effectivePlanKey,
+      planLabel: contract?.pilot?.active ? `${getPlanPreset(effectivePlanKey)?.label || 'Pro'} pilot` : (context?.planLabel || planPreset?.label || effectivePlanKey),
+      basePlan: basePlanKey,
+      basePlanLabel: planPreset?.label || basePlanKey,
       status: context?.status || 'active',
       expiresAt: billing?.currentPeriodEnd || null,
+      contract,
+      pilot: contract?.pilot || null,
+      alerts: {
+        daysRemaining: renewalTiming.daysRemaining,
+        warningLevel: renewalTiming.warningLevel,
+        expiringSoon: ['warning', 'urgent'].includes(renewalTiming.warningLevel),
+        earlyRenewalEligible: renewalTiming.earlyYearlyRenewalEligible,
+      },
       billing: billing ? {
         ...billing,
         manageUrl: manageUrl || null
       } : null,
       renewal: {
-        annualDiscountPct: Number(planPreset?.billing?.annualDiscountPct || 15),
+        annualDiscountPct: Number(planPreset?.billing?.annualDiscountPct || 16.67),
+        annualDiscountMonths: 2,
+        earlyRenewalDiscountMonths: 3,
+        earlyRenewalWindowDays: renewalTiming.earlyRenewalWindowDays,
+        earlyRenewalEligible: renewalTiming.earlyYearlyRenewalEligible,
+        monthlyQuote: monthlyQuote.success ? monthlyQuote : null,
+        yearlyQuote: yearlyQuote.success ? yearlyQuote : null,
         supportUrl: this.getSupportUrl(guildId),
         options: renewalOptions
       }

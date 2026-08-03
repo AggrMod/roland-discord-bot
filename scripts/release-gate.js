@@ -87,6 +87,7 @@ const checks = [
   { name: 'role-claim-interaction-permissions', cmd: process.execPath, args: ['tests/test-role-claim-interaction-permissions.js'] },
   { name: 'admin-user-tenant-scoping', cmd: process.execPath, args: ['tests/test-admin-user-tenant-scoping.js'] },
   { name: 'superadmin-workspace-telemetry', cmd: process.execPath, args: ['tests/test-superadmin-workspace-telemetry.js'] },
+  { name: 'superadmin-portal-ui-contract', cmd: process.execPath, args: ['tests/test-superadmin-portal-ui-contract.js'] },
   { name: 'wallet-delegation', cmd: process.execPath, args: ['tests/test-wallet-delegation.js'] },
   { name: 'engagement-streak-and-minigame-rewards', cmd: process.execPath, args: ['tests/test-engagement-streak-and-minigame-rewards.js'] },
   { name: 'engagement-provider-flows', cmd: process.execPath, args: ['tests/test-engagement-provider-flows.js'] },

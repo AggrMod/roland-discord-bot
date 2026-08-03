@@ -8298,7 +8298,10 @@ function showAdminView(view) {
   const card = document.getElementById(target.card);
   if (card) card.style.display = 'block';
   const adminSection = document.getElementById('section-admin');
-  if (adminSection) adminSection.classList.add('admin-focused-mode');
+  if (adminSection) {
+    adminSection.classList.add('admin-focused-mode');
+    adminSection.classList.toggle('superadmin-console-mode', resolvedView === 'superadmin');
+  }
   const adminFocusResetBtn = document.getElementById('adminFocusResetBtn');
   if (adminFocusResetBtn) adminFocusResetBtn.style.display = '';
   document.querySelectorAll('[data-admin-tile]').forEach(tile => {
@@ -8364,7 +8367,7 @@ function showAdminView(view) {
 
 function resetAdminFocusMode() {
   const adminSection = document.getElementById('section-admin');
-  if (adminSection) adminSection.classList.remove('admin-focused-mode');
+  if (adminSection) adminSection.classList.remove('admin-focused-mode', 'superadmin-console-mode');
   const adminFocusResetBtn = document.getElementById('adminFocusResetBtn');
   if (adminFocusResetBtn) adminFocusResetBtn.style.display = 'none';
   document.querySelectorAll('[data-admin-tile]').forEach(tile => tile.classList.remove('active'));
@@ -8397,6 +8400,33 @@ let superadminWorkspaceActivityCache = [];
 let superadminWorkspacePlansCache = [];
 let superadminWorkspaceFocus = '';
 const SUPERADMIN_WORKSPACES = new Set(['overview', 'tenants', 'billing', 'security', 'integrations']);
+const SUPERADMIN_WORKSPACE_META = {
+  overview: {
+    label: 'Control center',
+    description: 'Platform pulse and shortcuts',
+    icon: 'fa-gauge-high',
+  },
+  tenants: {
+    label: 'Tenants',
+    description: 'Plans, modules and branding',
+    icon: 'fa-building-shield',
+  },
+  billing: {
+    label: 'Billing',
+    description: 'Payments and subscriptions',
+    icon: 'fa-credit-card',
+  },
+  security: {
+    label: 'Access',
+    description: 'Superadmins and identities',
+    icon: 'fa-user-shield',
+  },
+  integrations: {
+    label: 'Platform',
+    description: 'Providers and global systems',
+    icon: 'fa-sliders',
+  },
+};
 
 function reportAdminUiTelemetry(event, payload = {}) {
   try {
@@ -8969,12 +8999,67 @@ function renderWorkspaceOverview(tenants = [], billingEntries = []) {
   const active = tenants.filter((tenant) => String(tenant.status || '').toLowerCase() === 'active').length;
   const suspended = tenants.filter((tenant) => String(tenant.status || '').toLowerCase() === 'suspended').length;
   const paid = billingEntries.filter((entry) => ['active', 'trialing', 'paid', 'approved', 'success'].includes(String(entry.subscriptionStatus || '').toLowerCase())).length;
+  const pendingBilling = billingEntries.filter((entry) => Number(entry.pendingReceiptsCount || 0) > 0 || String(entry.verificationStatus || '').toLowerCase() === 'pending_review').length;
   return `
-    <div class="sa-v2-grid">
-      <article class="sa-v2-card"><h4>Tenants</h4><div class="sa-v2-kpi">${escapeHtml(String(total))}</div><p>Total onboarded servers</p></article>
-      <article class="sa-v2-card"><h4>Active</h4><div class="sa-v2-kpi">${escapeHtml(String(active))}</div><p>Currently active tenants</p></article>
-      <article class="sa-v2-card"><h4>Suspended</h4><div class="sa-v2-kpi">${escapeHtml(String(suspended))}</div><p>Needs follow-up</p></article>
-      <article class="sa-v2-card"><h4>Paid Billing</h4><div class="sa-v2-kpi">${escapeHtml(String(paid))}</div><p>Verified paid states</p></article>
+    <div class="sa-v3-overview">
+      <div class="sa-v3-metrics" aria-label="Platform summary">
+        <article class="sa-v3-metric"><span>Tenants</span><strong>${escapeHtml(String(total))}</strong><small>${escapeHtml(String(active))} active</small></article>
+        <article class="sa-v3-metric"><span>Billing active</span><strong>${escapeHtml(String(paid))}</strong><small>${pendingBilling ? `${escapeHtml(String(pendingBilling))} awaiting review` : 'No reviews waiting'}</small></article>
+        <article class="sa-v3-metric"><span>Needs attention</span><strong>${escapeHtml(String(suspended + pendingBilling))}</strong><small>${escapeHtml(String(suspended))} suspended</small></article>
+      </div>
+
+      <section class="sa-v3-category" aria-labelledby="saBusinessHeading">
+        <div class="sa-v3-category__header">
+          <span>01</span>
+          <div><h4 id="saBusinessHeading">Business operations</h4><p>Manage customers, plans, payments, and service status.</p></div>
+        </div>
+        <div class="sa-v3-launch-grid">
+          <button type="button" class="sa-v3-launch-card" onclick="setSuperadminWorkspaceTab('tenants')">
+            <span class="sa-v3-launch-card__icon"><i class="fa-solid fa-building-shield" aria-hidden="true"></i></span>
+            <span class="sa-v3-launch-card__badge">${escapeHtml(String(total))} tenants</span>
+            <strong>Tenant management</strong>
+            <small>Plans, module access, branding, limits, status, and tenant audit history.</small>
+            <span class="sa-v3-launch-card__action">Open workspace <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+          </button>
+          <button type="button" class="sa-v3-launch-card" onclick="setSuperadminWorkspaceTab('billing')">
+            <span class="sa-v3-launch-card__icon"><i class="fa-solid fa-credit-card" aria-hidden="true"></i></span>
+            <span class="sa-v3-launch-card__badge ${pendingBilling ? 'is-warning' : ''}">${pendingBilling ? `${escapeHtml(String(pendingBilling))} to review` : 'Queue clear'}</span>
+            <strong>Billing operations</strong>
+            <small>Review receipts, approve payments, manage subscriptions, and apply overrides.</small>
+            <span class="sa-v3-launch-card__action">Open workspace <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+          </button>
+        </div>
+      </section>
+
+      <section class="sa-v3-category" aria-labelledby="saPlatformHeading">
+        <div class="sa-v3-category__header">
+          <span>02</span>
+          <div><h4 id="saPlatformHeading">Platform control</h4><p>Secure global access and operate shared GuildPilot infrastructure.</p></div>
+        </div>
+        <div class="sa-v3-launch-grid sa-v3-launch-grid--three">
+          <button type="button" class="sa-v3-launch-card" onclick="setSuperadminWorkspaceTab('security')">
+            <span class="sa-v3-launch-card__icon"><i class="fa-solid fa-user-shield" aria-hidden="true"></i></span>
+            <span class="sa-v3-launch-card__badge">Restricted</span>
+            <strong>Security & access</strong>
+            <small>Superadmin access, trusted identities, manual verification, and wallet links.</small>
+            <span class="sa-v3-launch-card__action">Open workspace <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+          </button>
+          <button type="button" class="sa-v3-launch-card" onclick="setSuperadminWorkspaceTab('integrations')">
+            <span class="sa-v3-launch-card__icon"><i class="fa-solid fa-sliders" aria-hidden="true"></i></span>
+            <span class="sa-v3-launch-card__badge">Global</span>
+            <strong>Providers & systems</strong>
+            <small>AI routing, X provider, chain presentation, replay tools, and payment settings.</small>
+            <span class="sa-v3-launch-card__action">Open workspace <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+          </button>
+          <button type="button" class="sa-v3-launch-card" onclick="showAdminView('monitor')">
+            <span class="sa-v3-launch-card__icon"><i class="fa-solid fa-heart-pulse" aria-hidden="true"></i></span>
+            <span class="sa-v3-launch-card__badge is-healthy">Live</span>
+            <strong>System health</strong>
+            <small>Runtime health, memory, disk, process uptime, restart counts, and diagnostics.</small>
+            <span class="sa-v3-launch-card__action">Open monitor <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+          </button>
+        </div>
+      </section>
     </div>
   `;
 }
@@ -8999,13 +9084,16 @@ function renderWorkspaceDataHealth(loadState = {}) {
     { key: 'tenantDetailFailed', label: 'Tenant Detail', failed: !!loadState.tenantDetailFailed },
     { key: 'tenantAuditFailed', label: 'Tenant Audit', failed: !!loadState.tenantAuditFailed },
   ];
+  const failed = checks.filter(item => item.failed);
+  const healthyCount = checks.length - failed.length;
   return `
-    <div style="display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 12px;">
-      ${checks.map((item) => `
-        <button class="sa-v2-chip" style="border:${item.failed ? '1px solid rgba(239,68,68,0.45); color:#fecaca;' : '1px solid rgba(16,185,129,0.35); color:#bbf7d0;'} background:rgba(15,23,42,0.55);" ${item.failed ? 'onclick="loadSuperadminView()"' : 'disabled'}>
-          ${item.failed ? 'Issue' : 'OK'}: ${escapeHtml(item.label)}
-        </button>
-      `).join('')}
+    <div class="sa-v3-health ${failed.length ? 'has-issues' : 'is-healthy'}" role="status">
+      <span class="sa-v3-health__dot" aria-hidden="true"></span>
+      <div>
+        <strong>${failed.length ? `${escapeHtml(String(failed.length))} data source${failed.length === 1 ? '' : 's'} need attention` : 'All platform data sources are available'}</strong>
+        <span>${failed.length ? escapeHtml(failed.map(item => item.label).join(', ')) : `${escapeHtml(String(healthyCount))} of ${escapeHtml(String(checks.length))} checks healthy`}</span>
+      </div>
+      <button type="button" class="btn-secondary" onclick="loadSuperadminView()"><i class="fa-solid fa-rotate" aria-hidden="true"></i> Refresh status</button>
     </div>
   `;
 }
@@ -9503,9 +9591,16 @@ async function loadSuperadminWorkspaceHubV2() {
       selectedTenantAuditCache = auditJson?.success ? (auditJson.auditLogs || []) : [];
     }
 
-    const tabButton = (key, label) => {
+    const tabButton = (key) => {
       const enabled = !!capabilities[key];
-      return `<button class="sa-v2-tab ${workspace === key ? 'active' : ''}" data-sa-workspace-tab="${escapeHtml(key)}" ${enabled ? 'onclick="onSuperadminWorkspaceTabClick(event)"' : ''} ${enabled ? '' : 'disabled'}>${label}</button>`;
+      const meta = SUPERADMIN_WORKSPACE_META[key] || { label: key, description: '', icon: 'fa-circle' };
+      return `
+        <button type="button" class="sa-v2-tab ${workspace === key ? 'active' : ''}" data-sa-workspace-tab="${escapeHtml(key)}" ${workspace === key ? 'aria-current="page"' : ''} ${enabled ? 'onclick="onSuperadminWorkspaceTabClick(event)"' : ''} ${enabled ? '' : 'disabled'}>
+          <span class="sa-v2-tab__icon"><i class="fa-solid ${escapeHtml(meta.icon)}" aria-hidden="true"></i></span>
+          <span class="sa-v2-tab__copy"><strong>${escapeHtml(meta.label)}</strong><small>${escapeHtml(meta.description)}</small></span>
+          <i class="fa-solid fa-chevron-right sa-v2-tab__arrow" aria-hidden="true"></i>
+        </button>
+      `;
     };
 
     let workspaceBody = '';
@@ -9811,39 +9906,35 @@ async function loadSuperadminWorkspaceHubV2() {
 
     content.innerHTML = `
       <div class="sa-v2-shell">
-        <div class="sa-v2-header">
-          <div>
-            <h3>Platform operations</h3>
-            <p>Tenant management, billing operations, access control, integrations, and platform health.</p>
+        <div class="sa-v2-header sa-v3-hero">
+          <div class="sa-v3-hero__identity">
+            <span class="sa-v3-hero__icon"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i></span>
+            <div>
+              <span class="sa-v3-eyebrow">GuildPilot control center</span>
+              <h3>Platform operations</h3>
+              <p>Run tenants, revenue, access, providers, and infrastructure from one workspace.</p>
+            </div>
           </div>
-          <div class="sa-v2-chip-row">
-            <span class="sa-v2-chip">Role: ${escapeHtml(isSuperadmin ? 'Superadmin' : 'Tenant Admin')}</span>
-            <span class="sa-v2-chip">Active Guild: ${escapeHtml(activeGuildId || 'none')}</span>
-            <span class="sa-v2-chip">UI: Superadmin V2</span>
+          <div class="sa-v3-hero__actions">
+            <span class="sa-v3-access-badge"><i class="fa-solid fa-lock" aria-hidden="true"></i> ${escapeHtml(isSuperadmin ? 'Superadmin access' : 'Tenant admin')}</span>
+            <button type="button" class="btn-secondary" onclick="loadSuperadminView()"><i class="fa-solid fa-rotate" aria-hidden="true"></i> Refresh</button>
           </div>
         </div>
-        <div class="sa-v2-tabs">
-          ${tabButton('overview', 'Overview')}
-          ${tabButton('tenants', 'Tenants')}
-          ${tabButton('billing', 'Billing')}
-          ${tabButton('security', 'Security & Access')}
-          ${tabButton('integrations', 'Integrations & System')}
+        <div class="sa-v2-tabs" aria-label="Platform workspaces">
+          ${tabButton('overview')}
+          ${tabButton('tenants')}
+          ${tabButton('billing')}
+          ${tabButton('security')}
+          ${tabButton('integrations')}
         </div>
         ${renderWorkspaceDataHealth(workspaceLoadState)}
         ${workspaceWarnings.length ? `<div class="sa-v2-inline-note" style="margin:8px 0 12px; border-color:rgba(245,158,11,0.35); color:#fde68a;">${workspaceWarnings.map((item) => escapeHtml(item)).join(' ')}</div>` : ''}
-        <div class="sa-v2-main">
+        <div class="sa-v2-main ${workspace === 'overview' ? 'sa-v2-main--overview' : 'sa-v2-main--focused'}">
           <div class="sa-v2-body">${workspaceBody}</div>
-          <aside class="sa-v2-rail">
+          ${workspace === 'overview' ? `
+          <aside class="sa-v2-rail" aria-label="Platform activity">
             <div class="sa-v2-rail-card">
-              <h4>Quick Actions</h4>
-              <div class="sa-v2-quick-actions">
-                <button class="btn-secondary" onclick="loadSuperadminView()">Refresh Workspace</button>
-                <button class="btn-secondary" onclick="setSuperadminWorkspaceTab('tenants')">Open Tenants</button>
-                <button class="btn-secondary" onclick="setSuperadminWorkspaceTab('billing')">Open Billing</button>
-              </div>
-            </div>
-            <div class="sa-v2-rail-card">
-              <h4>Recent Activity</h4>
+              <div class="sa-v3-rail-heading"><div><span class="sa-v3-eyebrow">Audit stream</span><h4>Recent activity</h4></div><button type="button" class="sa-v3-icon-button" title="Refresh activity" aria-label="Refresh activity" onclick="loadSuperadminView()"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button></div>
               <div class="sa-v2-activity-list">
                 ${
                   workspaceLoadState.activityFailed
@@ -9853,6 +9944,7 @@ async function loadSuperadminWorkspaceHubV2() {
               </div>
             </div>
           </aside>
+          ` : ''}
         </div>
       </div>
     `;

@@ -11,6 +11,11 @@ function normalizeString(value) {
   return String(value || '').trim();
 }
 
+function normalizePostId(value) {
+  const normalized = normalizeString(value);
+  return /^\d{1,19}$/.test(normalized) ? normalized : '';
+}
+
 function normalizeCallbackUrl(value) {
   const input = normalizeString(value);
   if (!input) return '';
@@ -276,8 +281,9 @@ async function getUserPosts(userId, { bearerToken, accessToken, sinceId = '', ma
   if (exclude.length) {
     url.searchParams.set('exclude', exclude.join(','));
   }
-  if (normalizeString(sinceId)) {
-    url.searchParams.set('since_id', normalizeString(sinceId));
+  const normalizedSinceId = normalizePostId(sinceId);
+  if (normalizedSinceId) {
+    url.searchParams.set('since_id', normalizedSinceId);
   }
   const data = await fetchJson(url, {
     headers: buildAuthHeader({ accessToken, bearerToken }),
@@ -303,8 +309,9 @@ async function searchRecentPosts(query, { bearerToken, accessToken, sinceId = ''
   url.searchParams.set('query', normalizeString(query));
   url.searchParams.set('max_results', String(Math.max(10, Math.min(Number(maxResults || 10), 100))));
   url.searchParams.set('tweet.fields', 'author_id,created_at,conversation_id,entities,in_reply_to_user_id,lang,public_metrics,text');
-  if (normalizeString(sinceId)) {
-    url.searchParams.set('since_id', normalizeString(sinceId));
+  const normalizedSinceId = normalizePostId(sinceId);
+  if (normalizedSinceId) {
+    url.searchParams.set('since_id', normalizedSinceId);
   }
   const data = await fetchJson(url, {
     headers: buildAuthHeader({ accessToken, bearerToken }),
@@ -365,6 +372,7 @@ async function getFollowing(userId, { accessToken, bearerToken, maxResults = 100
 
 module.exports = {
   DEFAULT_SCOPES,
+  normalizePostId,
   getRuntimeConfig,
   isConfigured,
   resolveRedirectUri,

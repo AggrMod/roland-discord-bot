@@ -10,6 +10,7 @@ const HELIUS_RATE_LIMIT_BACKOFF_MS = Math.max(5_000, Number(process.env.HELIUS_R
 const HELIUS_FETCH_TIMEOUT_MS = Math.max(3_000, Number(process.env.HELIUS_FETCH_TIMEOUT_MS || 15_000));
 const HELIUS_FETCH_MAX_RETRIES = Math.max(0, Number(process.env.HELIUS_FETCH_MAX_RETRIES || 2));
 const HELIUS_RETRY_BASE_MS = Math.max(250, Number(process.env.HELIUS_RETRY_BASE_MS || 1200));
+const HELIUS_ERROR_LOG_COOLDOWN_MS = Math.max(30_000, Number(process.env.HELIUS_ERROR_LOG_COOLDOWN_MS || 300_000));
 
 // Helius rate limiter — default 10 req/sec (free tier), set HELIUS_RPS in .env to override
 const HELIUS_RPS = parseInt(process.env.HELIUS_RPS || '10');
@@ -18,14 +19,17 @@ let _heliusLastCall = 0;
 let _heliusQueue = Promise.resolve();
 
 function heliusRateLimited(fn) {
-  _heliusQueue = _heliusQueue.then(async () => {
+  // Keep the queue usable after a request rejects. Without the recovery catch,
+  // one timeout permanently poisons the promise chain for every later caller.
+  const scheduled = _heliusQueue.catch(() => undefined).then(async () => {
     const now = Date.now();
     const wait = HELIUS_MIN_INTERVAL_MS - (now - _heliusLastCall);
     if (wait > 0) await new Promise(r => setTimeout(r, wait));
     _heliusLastCall = Date.now();
     return fn();
   });
-  return _heliusQueue;
+  _heliusQueue = scheduled.catch(() => undefined);
+  return scheduled;
 }
 
 function delay(ms) {
@@ -44,12 +48,28 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = HELIUS_FETCH_TIME
 
 function isHeliusTransientError(error) {
   const code = String(error?.cause?.code || error?.code || '').toUpperCase();
+  const name = String(error?.name || '').toLowerCase();
   const msg = String(error?.message || '').toLowerCase();
-  return code === 'UND_ERR_CONNECT_TIMEOUT'
+  return error?.heliusTransient === true
+    || name === 'aborterror'
+    || code === 'UND_ERR_CONNECT_TIMEOUT'
+    || code === 'UND_ERR_HEADERS_TIMEOUT'
+    || code === 'ETIMEDOUT'
+    || code === 'ECONNRESET'
     || code === 'ABORT_ERR'
+    || msg.includes('aborted')
     || msg.includes('fetch failed')
     || msg.includes('timeout')
     || msg.includes('network');
+}
+
+function createHeliusProviderError(message, { cause = null, status = null, transient = false } = {}) {
+  const error = new Error(String(message || 'Helius provider request failed'));
+  if (cause) error.cause = cause;
+  if (status !== null && status !== undefined) error.status = Number(status);
+  error.code = transient ? 'HELIUS_TRANSIENT' : 'HELIUS_PROVIDER_ERROR';
+  error.heliusTransient = transient;
+  return error;
 }
 
 function isValidSolanaAddress(address) {
@@ -243,7 +263,15 @@ class NFTService {
           source: 'fresh-network'
         };
       } catch (error) {
-        logger.error('Error fetching NFTs:', error);
+        const now = Date.now();
+        if (isHeliusTransientError(error)) {
+          if (now - this.lastHeliusErrorLogAt >= HELIUS_ERROR_LOG_COOLDOWN_MS) {
+            logger.warn(`[nft] Helius is temporarily unavailable (${error.message}); preserving cached role data`);
+            this.lastHeliusErrorLogAt = now;
+          }
+        } else {
+          logger.error(`[nft] Helius provider request failed: ${error?.message || 'unknown error'}`);
+        }
         const staleNfts = this.getCachedWalletNfts(cacheKey, { allowStale: true }) || [];
         if (staleNfts.length === 0) {
           this.markProviderDegraded('fetch-error-no-cache');
@@ -308,28 +336,38 @@ class NFTService {
         }, HELIUS_FETCH_TIMEOUT_MS));
 
         if (!response.ok) {
-          if (response.status === 429) {
+          const transient = response.status === 429 || response.status >= 500;
+          if (transient) {
             this.heliusBackoffUntil = Date.now() + HELIUS_RATE_LIMIT_BACKOFF_MS;
           }
-          if ((response.status === 429 || response.status >= 500) && attempt < HELIUS_FETCH_MAX_RETRIES) {
+          if (transient && attempt < HELIUS_FETCH_MAX_RETRIES) {
             await delay(HELIUS_RETRY_BASE_MS * Math.pow(2, attempt));
             continue;
           }
-          logger.error(`Helius HTTP error: ${response.status} ${response.statusText}`);
-          return [];
+          throw createHeliusProviderError(
+            `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`,
+            { status: response.status, transient }
+          );
         }
 
         const data = await response.json();
         if (data.error) {
-          if (Number(data.error?.code || 0) === -32429) {
+          const transient = Number(data.error?.code || 0) === -32429;
+          if (transient) {
             this.heliusBackoffUntil = Date.now() + HELIUS_RATE_LIMIT_BACKOFF_MS;
           }
-          logger.error('Helius API error:', data.error);
-          return [];
+          if (transient && attempt < HELIUS_FETCH_MAX_RETRIES) {
+            await delay(HELIUS_RETRY_BASE_MS * Math.pow(2, attempt));
+            continue;
+          }
+          throw createHeliusProviderError(
+            `API error ${data.error?.code || 'unknown'}: ${data.error?.message || 'unknown error'}`,
+            { transient }
+          );
         }
 
-        if (!data.result || !data.result.items) {
-          return [];
+        if (!Array.isArray(data?.result?.items)) {
+          throw createHeliusProviderError('Malformed getAssetsByOwner response');
         }
 
         return data.result.items
@@ -347,18 +385,20 @@ class NFTService {
           await delay(HELIUS_RETRY_BASE_MS * Math.pow(2, attempt));
           continue;
         }
-        const now = Date.now();
-        if (now - this.lastHeliusErrorLogAt > 30_000) {
-          logger.error('Helius fetch error:', error);
-          this.lastHeliusErrorLogAt = now;
-        } else {
-          logger.warn(`Helius transient fetch failure (suppressed duplicate): ${error?.message || 'unknown error'}`);
+        if (isHeliusTransientError(error)) {
+          this.heliusBackoffUntil = Date.now() + HELIUS_RATE_LIMIT_BACKOFF_MS;
+          if (error?.heliusTransient === true) throw error;
+          throw createHeliusProviderError(
+            `request timed out after ${HELIUS_FETCH_TIMEOUT_MS}ms`,
+            { cause: error, transient: true }
+          );
         }
-        return [];
+        if (error?.code === 'HELIUS_PROVIDER_ERROR') throw error;
+        throw createHeliusProviderError(error?.message || 'Unexpected Helius failure', { cause: error });
       }
     }
 
-    return [];
+    throw createHeliusProviderError('Helius retry budget exhausted', { transient: true });
   }
   extractHeliusAttributes(attributes) {
     if (!Array.isArray(attributes)) return [];

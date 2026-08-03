@@ -35,6 +35,7 @@ const checks = [
   { name: 'encrypted-backup-file', cmd: process.execPath, args: ['tests/test-encrypted-backup-file.js'] },
   { name: 'db-adhoc-guard', cmd: process.execPath, args: ['scripts/check-db-adhoc-guard.js'] },
   { name: 'tenant-mock-scoping', cmd: process.execPath, args: ['tests/test-tenant-mock-scoping.js'] },
+  { name: 'provider-request-resilience', cmd: process.execPath, args: ['tests/test-provider-request-resilience.js'] },
   { name: 'verification-role-safety', cmd: process.execPath, args: ['tests/test-verification-role-safety.js'] },
   { name: 'wallet-verification-challenges', cmd: process.execPath, args: ['tests/test-wallet-verification-challenges.js'] },
   { name: 'evm-foundation', cmd: process.execPath, args: ['tests/test-evm-foundation.js'] },

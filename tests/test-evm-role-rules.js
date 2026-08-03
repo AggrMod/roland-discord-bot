@@ -26,12 +26,12 @@ async function main() {
   db.prepare('INSERT INTO users (discord_id, username) VALUES (?, ?)').run(discordId, 'evm-user');
   db.prepare(`
     INSERT INTO wallets (discord_id, chain_family, chain_id, wallet_address, verified, primary_wallet)
-    VALUES (?, 'evm', 'eip155:1', ?, 1, 1)
+    VALUES (?, 'evm', 'eip155:4663', ?, 1, 1)
   `).run(discordId, wallet);
 
   const tokenRule = roleService.addTokenRoleRule({
     guildId,
-    chain: 'eip155:1',
+    chain: 'eip155:4663',
     tokenMint: token,
     tokenSymbol: 'COINY',
     minAmount: 100,
@@ -40,19 +40,19 @@ async function main() {
   assert.strictEqual(tokenRule.success, true);
   const storedRule = roleService.getTokenRoleRules(guildId)[0];
   assert.strictEqual(storedRule.chainFamily, 'evm');
-  assert.strictEqual(storedRule.chainId, 'eip155:1');
+  assert.strictEqual(storedRule.chainId, 'eip155:4663');
 
   db.prepare(`
     INSERT INTO tenant_role_configs (guild_id, tiers_json, traits_json)
     VALUES (?, ?, '[]')
   `).run(guildId, JSON.stringify([
     {
-      name: 'ETH NFT Holder', chainFamily: 'evm', chainId: 'eip155:1', collectionId: collection,
+      name: 'Robinhood NFT Holder', chainFamily: 'evm', chainId: 'eip155:4663', collectionId: collection,
       nftStandard: 'erc721', tokenId: null, minNFTs: 1, maxNFTs: 999999, votingPower: 1,
       roleId: 'role-nft', neverRemove: false,
     },
     {
-      name: 'ERC1155 Holder', chainFamily: 'evm', chainId: 'eip155:1', collectionId: erc1155Collection,
+      name: 'ERC1155 Holder', chainFamily: 'evm', chainId: 'eip155:4663', collectionId: erc1155Collection,
       nftStandard: 'erc1155', tokenId: '42', minNFTs: 1, maxNFTs: 999999, votingPower: 1,
       roleId: 'role-1155', neverRemove: false,
     },
@@ -60,13 +60,13 @@ async function main() {
   db.prepare(`
     INSERT INTO nft_tracked_collections (
       guild_id, chain_family, chain_id, collection_address, collection_name, channel_id, nft_standard
-    ) VALUES (?, 'evm', 'eip155:1', ?, ?, ?, 'erc721')
-  `).run(guildId, collection, 'Ethereum Test Collection', 'channel-evm-721');
+    ) VALUES (?, 'evm', 'eip155:4663', ?, ?, ?, 'erc721')
+  `).run(guildId, collection, 'Robinhood Test Collection', 'channel-evm-721');
   db.prepare(`
     INSERT INTO nft_tracked_collections (
       guild_id, chain_family, chain_id, collection_address, collection_name, channel_id, nft_standard, token_id
-    ) VALUES (?, 'evm', 'eip155:1', ?, ?, ?, 'erc1155', '42')
-  `).run(guildId, erc1155Collection, 'Ethereum Items', 'channel-evm-1155');
+    ) VALUES (?, 'evm', 'eip155:4663', ?, ?, ?, 'erc1155', '42')
+  `).run(guildId, erc1155Collection, 'Robinhood Items', 'channel-evm-1155');
 
   const roleCache = new Map();
   const guildRoles = new Map([
@@ -101,15 +101,15 @@ async function main() {
   };
 
   const records = roleService.getVerificationWalletRecords(discordId, guildId);
-  assert.deepStrictEqual(records.map(record => record.chainId), ['eip155:1']);
+  assert.deepStrictEqual(records.map(record => record.chainId), ['eip155:4663']);
   const nftChanges = await roleService.syncEvmCollectionRoles(member, records, guildId, new Set(roleCache.keys()));
   const tokenChanges = await roleService.syncTokenRoles(member, records, guildId, new Set(roleCache.keys()));
   assert(added.includes('role-nft'), 'ERC-721 collection ownership assigns its Discord role');
   assert(added.includes('role-1155'), 'ERC-1155 token ownership assigns its Discord role');
   assert(added.includes('role-token'), 'ERC-20 balance assigns its Discord role');
-  assert.deepStrictEqual(observed1155, { chainId: 'eip155:1', standard: 'erc1155', tokenId: '42' });
-  assert.ok(nftChanges.granted.some(grant => grant.roleName === 'SOLROLEA' && grant.balance === 1 && grant.assetName === 'Ethereum Test Collection'), 'ERC-721 role includes named collection evidence');
-  assert.ok(nftChanges.granted.some(grant => grant.roleName === 'ERC1155ROLE' && grant.unit === 'ERC-1155 #42' && grant.assetName === 'Ethereum Items'), 'ERC-1155 role includes named token evidence');
+  assert.deepStrictEqual(observed1155, { chainId: 'eip155:4663', standard: 'erc1155', tokenId: '42' });
+  assert.ok(nftChanges.granted.some(grant => grant.roleName === 'SOLROLEA' && grant.chainName === 'Robinhood Chain' && grant.balance === 1 && grant.assetName === 'Robinhood Test Collection'), 'Robinhood ERC-721 ownership assigns named role evidence');
+  assert.ok(nftChanges.granted.some(grant => grant.roleName === 'ERC1155ROLE' && grant.chainName === 'Robinhood Chain' && grant.unit === 'ERC-1155 #42' && grant.assetName === 'Robinhood Items'), 'Robinhood ERC-1155 ownership assigns named token evidence');
   assert.ok(tokenChanges.granted.some(grant => grant.roleName === 'ETHROLEB' && grant.balance === 250), 'ERC-20 role includes balance evidence');
 
   evmService.getTokenBalance = async () => ({ formatted: '5' });

@@ -162,10 +162,10 @@ async function run() {
       path: '/api/verify/challenge',
       method: 'POST',
       cookie,
-      body: { chain: 'eip155:8453', walletAddress: evmWallet.address },
+      body: { chain: 'eip155:4663', walletAddress: evmWallet.address },
     });
     assert.strictEqual(evmChallenge.status, 200);
-    assert.match(evmChallenge.body.message, /Chain ID: 8453/);
+    assert.match(evmChallenge.body.message, /Chain ID: 4663/);
     assert.match(evmChallenge.body.message, /Version: 1/);
     const evmSignature = await evmWallet.signMessage(evmChallenge.body.message);
     const evmResult = await request({
@@ -174,7 +174,7 @@ async function run() {
       method: 'POST',
       cookie,
       body: {
-        chain: 'eip155:8453',
+        chain: 'eip155:4663',
         walletAddress: evmWallet.address,
         signature: evmSignature,
         challengeId: evmChallenge.body.challengeId,
@@ -182,7 +182,7 @@ async function run() {
     });
     assert.strictEqual(evmResult.status, 200, 'EVM challenge and signature verify end to end');
     const linkedEvm = db.prepare("SELECT chain_id FROM wallets WHERE chain_family = 'evm' AND wallet_address = ?").get(evmWallet.address);
-    assert.strictEqual(linkedEvm.chain_id, 'eip155:8453');
+    assert.strictEqual(linkedEvm.chain_id, 'eip155:4663');
 
     console.log('wallet verification challenge assertions passed');
   } finally {

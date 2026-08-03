@@ -54,6 +54,7 @@ const CHAIN_PRICE_META = {
   solana: { unit: 'SOL', icon: '<:1000042064:1488241763222290564>' },
   ethereum: { unit: 'ETH', icon: '⟠' },
   base: { unit: 'ETH', icon: '🔵' },
+  robinhood: { unit: 'ETH', icon: '🟢' },
   polygon: { unit: 'MATIC', icon: '🟣' },
   arbitrum: { unit: 'ETH', icon: '🔷' },
   optimism: { unit: 'ETH', icon: '🔴' },
@@ -67,8 +68,10 @@ function normalizeChain(input) {
   if (['sol', 'solana'].includes(raw)) return 'solana';
   if (['eth', 'ethereum', 'mainnet'].includes(raw)) return 'ethereum';
   if (['matic', 'polygon', 'polygon-pos'].includes(raw)) return 'polygon';
+  if (['robinhood', 'robinhood-chain', 'robinhood chain'].includes(raw)) return 'robinhood';
   if (raw === 'eip155:1') return 'ethereum';
   if (raw === 'eip155:8453') return 'base';
+  if (raw === 'eip155:4663') return 'robinhood';
   if (raw === 'eip155:137') return 'polygon';
   if (raw === 'eip155:42161') return 'arbitrum';
   if (raw === 'eip155:10') return 'optimism';

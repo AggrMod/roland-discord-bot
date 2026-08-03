@@ -107,6 +107,7 @@ class SettingsManager {
         solana: '<:1000042064:1488241763222290564>',
         ethereum: '⟠',
         base: '🔵',
+        robinhood: '🟢',
         polygon: '🟣',
         arbitrum: '🔷',
         optimism: '🔴',

@@ -1052,7 +1052,21 @@ async function verifyEvmBySignature(chain, btn) {
     const currentChainId = String(await provider.request({ method: 'eth_chainId' }) || '').toLowerCase();
     if (currentChainId !== hexChainId.toLowerCase()) {
       if (btn) btn.innerHTML = 'Switching network...';
-      await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hexChainId }] });
+      try {
+        await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hexChainId }] });
+      } catch (switchError) {
+        if (Number(switchError?.code) !== 4902 || chain !== 'eip155:4663') throw switchError;
+        await provider.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: '0x1237',
+            chainName: 'Robinhood Chain',
+            nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+            rpcUrls: ['https://rpc.mainnet.chain.robinhood.com'],
+            blockExplorerUrls: ['https://robinhoodchain.blockscout.com'],
+          }],
+        });
+      }
     }
 
     if (btn) btn.innerHTML = 'Requesting secure challenge...';
@@ -2287,7 +2301,7 @@ async function renderGeneralSection() {
         <span class="role-action-card__eyebrow">Start here</span>
         <h2>Connect your wallets</h2>
         <p>Verify Solana and EVM wallets and keep one identity across communities.</p>
-        <div class="role-chain-list"><span>Solana</span><span>Ethereum</span><span>Base</span><span>Polygon</span></div>
+        <div class="role-chain-list"><span>Solana</span><span>Ethereum</span><span>Base</span><span>Robinhood</span><span>Polygon</span></div>
       </article>
       <article class="role-action-card" onclick="switchSection('profile')">
         <div class="role-action-card__top"><span class="role-action-card__icon"><i class="fa-solid fa-user" aria-hidden="true"></i></span><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></div>
@@ -3341,7 +3355,7 @@ const HELP_GUIDES = Object.freeze([
     route: 'wallets', action: 'Open my wallets',
     overview: 'Wallet verification uses a temporary challenge and signature. GuildPilot never asks for a seed phrase or private key.',
     steps: ['Choose Solana or an EVM network.', 'Connect the matching wallet application.', 'Read and sign the ownership challenge.', 'Confirm the verified wallet and select a primary wallet when needed.'],
-    tips: ['Supported EVM identity covers Ethereum, Base, Polygon, Arbitrum One, and Optimism.', 'A signature proves control without transferring assets.', 'Only approve a message you can read and recognize.']
+    tips: ['Supported EVM identity covers Ethereum, Base, Robinhood Chain, Polygon, Arbitrum One, and Optimism.', 'A signature proves control without transferring assets.', 'Only approve a message you can read and recognize.']
   },
   {
     id: 'communities', group: 'Essentials', role: 'user', icon: 'fa-people-group',
@@ -17926,6 +17940,7 @@ function _ensureAddRuleModal() {
             <option value="solana:mainnet">Solana</option>
             <option value="eip155:1">Ethereum</option>
             <option value="eip155:8453">Base</option>
+            <option value="eip155:4663">Robinhood Chain</option>
             <option value="eip155:137">Polygon</option>
             <option value="eip155:42161">Arbitrum One</option>
             <option value="eip155:10">Optimism</option>
@@ -19176,7 +19191,7 @@ async function openNftActivityAddCollectionModal() {
       <h3 style="margin:0 0 16px;color:var(--text-primary,#e0e7ff);"> Watch New Collection</h3>
       <div style="display:grid;gap:14px;">
         <div><label style="${lb}">Network *</label><select id="caChainInput" style="${fi}">
-          <option value="solana:mainnet">Solana</option><option value="eip155:1">Ethereum</option><option value="eip155:8453">Base</option><option value="eip155:137">Polygon</option><option value="eip155:42161">Arbitrum One</option><option value="eip155:10">Optimism</option>
+          <option value="solana:mainnet">Solana</option><option value="eip155:1">Ethereum</option><option value="eip155:8453">Base</option><option value="eip155:4663">Robinhood Chain</option><option value="eip155:137">Polygon</option><option value="eip155:42161">Arbitrum One</option><option value="eip155:10">Optimism</option>
         </select></div>
         <div id="caStandardWrap" style="display:none;grid-template-columns:1fr 1fr;gap:12px;">
           <div><label style="${lb}">NFT Standard</label><select id="caNftStandard" style="${fi}"><option value="erc721">ERC-721 collection</option><option value="erc1155">ERC-1155 token</option></select></div>
@@ -22987,6 +23002,7 @@ function formatWalletChainLabel(chainId, chainFamily) {
     'solana:mainnet': 'Solana',
     'eip155:1': 'Ethereum',
     'eip155:8453': 'Base',
+    'eip155:4663': 'Robinhood Chain',
     'eip155:137': 'Polygon',
     'eip155:42161': 'Arbitrum',
     'eip155:10': 'Optimism',

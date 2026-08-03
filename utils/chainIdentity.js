@@ -11,6 +11,7 @@ const SOLANA_MAINNET = Object.freeze({
 const EVM_NETWORKS = Object.freeze({
   'eip155:1': { family: 'evm', chainId: 'eip155:1', numericChainId: 1, hexChainId: '0x1', name: 'Ethereum', nativeSymbol: 'ETH', rpcEnv: 'EVM_ETHEREUM_RPC_URL', explorerBase: 'https://etherscan.io' },
   'eip155:8453': { family: 'evm', chainId: 'eip155:8453', numericChainId: 8453, hexChainId: '0x2105', name: 'Base', nativeSymbol: 'ETH', rpcEnv: 'EVM_BASE_RPC_URL', explorerBase: 'https://basescan.org' },
+  'eip155:4663': { family: 'evm', chainId: 'eip155:4663', numericChainId: 4663, hexChainId: '0x1237', name: 'Robinhood Chain', nativeSymbol: 'ETH', rpcEnv: 'EVM_ROBINHOOD_RPC_URL', explorerBase: 'https://robinhoodchain.blockscout.com' },
   'eip155:137': { family: 'evm', chainId: 'eip155:137', numericChainId: 137, hexChainId: '0x89', name: 'Polygon', nativeSymbol: 'POL', rpcEnv: 'EVM_POLYGON_RPC_URL', explorerBase: 'https://polygonscan.com' },
   'eip155:42161': { family: 'evm', chainId: 'eip155:42161', numericChainId: 42161, hexChainId: '0xa4b1', name: 'Arbitrum One', nativeSymbol: 'ETH', rpcEnv: 'EVM_ARBITRUM_RPC_URL', explorerBase: 'https://arbiscan.io' },
   'eip155:10': { family: 'evm', chainId: 'eip155:10', numericChainId: 10, hexChainId: '0xa', name: 'Optimism', nativeSymbol: 'ETH', rpcEnv: 'EVM_OPTIMISM_RPC_URL', explorerBase: 'https://optimistic.etherscan.io' },
@@ -23,6 +24,8 @@ const CHAIN_ALIASES = Object.freeze({
   eth: 'eip155:1',
   mainnet: 'eip155:1',
   base: 'eip155:8453',
+  robinhood: 'eip155:4663',
+  'robinhood-chain': 'eip155:4663',
   polygon: 'eip155:137',
   matic: 'eip155:137',
   arbitrum: 'eip155:42161',

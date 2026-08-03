@@ -20,7 +20,7 @@ This file is the source-of-truth command reference for the current production co
 - `/verification refresh`
 - `/verification quick`
 - Admin: `/verification admin panel|export-user|remove-user|export-wallets|token-role-add|token-role-remove|token-role-list|role-config|actions|og-view|og-enable|og-role|og-limit|og-sync`
-- Network-aware rules: configure Solana collection/SPL rules or Ethereum, Base, Polygon, Arbitrum One, and Optimism ERC-721, ERC-1155, and ERC-20 rules in Modules → Identity / Verification. Existing roles are preserved when an EVM RPC check is unavailable.
+- Network-aware rules: configure Solana collection/SPL rules or Ethereum, Base, Robinhood Chain, Polygon, Arbitrum One, and Optimism ERC-721, ERC-1155, and ERC-20 rules in Modules → Identity / Verification. Existing roles are preserved when an EVM RPC check is unavailable.
 - Multi-tenant note: legacy `role-config` write actions are blocked; use portal Settings → Verification for tenant-scoped rule edits.
 - OG roles are tenant-scoped in multi-tenant mode.
 
@@ -56,7 +56,7 @@ This file is the source-of-truth command reference for the current production co
 - `/nft-tracker collection list`
 - `/nft-tracker collection feed`
 - NFT activity alert config is tenant-scoped (per guild) for `enabled/channel/eventTypes/minSol`.
-- Portal tracking supports Solana collections, EVM ERC-721 collections, and specific ERC-1155 token IDs on Ethereum, Base, Polygon, Arbitrum One, and Optimism.
+- Portal tracking supports Solana collections, EVM ERC-721 collections, and specific ERC-1155 token IDs on Ethereum, Base, Robinhood Chain, Polygon, Arbitrum One, and Optimism.
 
 ## Token Tracker
 - `/token-tracker add`

@@ -11,6 +11,7 @@ const databasePath = path.join(runDir, 'evm.db');
 process.env.DATABASE_PATH = databasePath;
 process.env.DB_BACKUP_ENABLED = 'false';
 process.env.DB_BACKUP_ON_STARTUP = 'false';
+process.env.EVM_ROBINHOOD_RPC_URL = 'https://robinhood.example.invalid/rpc';
 
 async function main() {
   const db = require('../database/db');
@@ -18,6 +19,7 @@ async function main() {
   const trackedWalletsService = require('../services/trackedWalletsService');
   const {
     getChain,
+    getEvmRpcUrl,
     getExplorerUrl,
     normalizeAddress,
     normalizeChainId,
@@ -26,6 +28,12 @@ async function main() {
   assert.strictEqual(normalizeChainId('base'), 'eip155:8453');
   assert.strictEqual(normalizeChainId('0x89'), 'eip155:137');
   assert.strictEqual(getChain('eip155:42161').name, 'Arbitrum One');
+  assert.strictEqual(normalizeChainId('robinhood'), 'eip155:4663');
+  assert.deepStrictEqual(
+    { name: getChain('eip155:4663').name, numericChainId: getChain('eip155:4663').numericChainId, hexChainId: getChain('eip155:4663').hexChainId },
+    { name: 'Robinhood Chain', numericChainId: 4663, hexChainId: '0x1237' }
+  );
+  assert.strictEqual(getEvmRpcUrl('eip155:4663'), process.env.EVM_ROBINHOOD_RPC_URL);
 
   const signer = Wallet.createRandom();
   const checksumAddress = normalizeAddress(signer.address.toLowerCase(), 'eip155:1');
@@ -74,6 +82,8 @@ async function main() {
 
   const txUrl = getExplorerUrl('eip155:8453', 'tx', `0x${'b'.repeat(64)}:7`);
   assert.strictEqual(txUrl, `https://basescan.org/tx/0x${'b'.repeat(64)}`);
+  const robinhoodTxUrl = getExplorerUrl('robinhood', 'tx', `0x${'e'.repeat(64)}`);
+  assert.strictEqual(robinhoodTxUrl, `https://robinhoodchain.blockscout.com/tx/0x${'e'.repeat(64)}`);
 
   const trackedToken = Wallet.createRandom().address;
   const trackedCollection = Wallet.createRandom().address;

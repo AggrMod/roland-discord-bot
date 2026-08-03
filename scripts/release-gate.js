@@ -39,6 +39,7 @@ const checks = [
   { name: 'verification-role-safety', cmd: process.execPath, args: ['tests/test-verification-role-safety.js'] },
   { name: 'wallet-verification-challenges', cmd: process.execPath, args: ['tests/test-wallet-verification-challenges.js'] },
   { name: 'evm-foundation', cmd: process.execPath, args: ['tests/test-evm-foundation.js'] },
+  { name: 'robinhood-chain-support', cmd: process.execPath, args: ['tests/test-robinhood-chain-support.js'] },
   { name: 'evm-role-rules', cmd: process.execPath, args: ['tests/test-evm-role-rules.js'] },
   { name: 'verification-role-summary', cmd: process.execPath, args: ['tests/test-verification-role-summary.js'] },
   { name: 'verification-role-evidence', cmd: process.execPath, args: ['tests/test-verification-role-evidence.js'] },

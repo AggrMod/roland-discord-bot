@@ -11,6 +11,7 @@ const { getChain } = require('../../utils/chainIdentity');
 const CHAIN_CHOICES = [
   { name: 'Solana', value: 'solana:mainnet' }, { name: 'Ethereum', value: 'eip155:1' },
   { name: 'Base', value: 'eip155:8453' }, { name: 'Polygon', value: 'eip155:137' },
+  { name: 'Robinhood Chain', value: 'eip155:4663' },
   { name: 'Arbitrum One', value: 'eip155:42161' }, { name: 'Optimism', value: 'eip155:10' },
 ];
 

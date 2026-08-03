@@ -14,7 +14,7 @@ The implementation pass is complete for the requested sequence: security/reliabi
 - One-time wallet challenges are bound to session, stable Discord identity, guild, origin, exact address, chain and expiry. OAuth state/session handling, CSRF, encrypted OAuth credentials, encrypted backups and durable webhook acceptance were hardened.
 - Production dependency exposure is now **3 moderate, 0 high and 0 critical**. The remaining advisories are isolated to the Solana `@solana/web3.js` / `jayson` / `uuid` graph; npm's suggested fix is an invalid legacy downgrade.
 - The portal now uses the premium information hierarchy, with the AI Assistant reduced to Setup, Knowledge, Channel behavior and Advanced workspaces.
-- EVM support now includes chain-aware identities; EIP-4361-style EOA signing; Ethereum, Base, Polygon, Arbitrum and Optimism; native/ERC-20 holdings; ERC-20 transfer tracking; ERC-721 mint/transfer tracking; native wallet transaction alerts; confirmation-aware cursors; and chain-specific explorer links.
+- EVM support now includes chain-aware identities; EIP-4361-style EOA signing; Ethereum, Base, Robinhood Chain, Polygon, Arbitrum and Optimism; native/ERC-20 holdings; ERC-20 transfer tracking; ERC-721 mint/transfer tracking; native wallet transaction alerts; confirmation-aware cursors; and chain-specific explorer links.
 
 Remaining release caveats: CSP still permits inline compatibility and should be made strict after portal modularization; ERC-1271 contract-wallet signatures and ERC-1155 live event polling are follow-ups; each production RPC endpoint still needs a live provider/rate-limit smoke test. The detailed findings below preserve the original review state and evidence, while this section records what was changed afterward.
 

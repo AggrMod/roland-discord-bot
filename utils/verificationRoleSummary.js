@@ -79,8 +79,29 @@ function buildVerificationRoleFields(grants, { maxRoles = 20, maxCharacters = 50
   return fields;
 }
 
+function buildVerificationRoleMessage(grants, { incomplete = false, maxCharacters = 1900 } = {}) {
+  const lines = [
+    incomplete ? '**Role Check Incomplete**' : '**Your Verified Roles**',
+    incomplete
+      ? 'Some holdings could not be checked. Existing roles were preserved where provider data was unavailable.'
+      : 'These are the roles you currently qualify for and the rule behind each one.',
+  ];
+  const fields = buildVerificationRoleFields(grants, { maxRoles: 20, maxCharacters: Math.max(600, maxCharacters - 300) });
+
+  for (const field of fields) {
+    const block = `\n${field.name}\n${field.value}`;
+    if (lines.join('\n').length + block.length > maxCharacters) {
+      lines.push('\n_Additional verified roles matched._');
+      break;
+    }
+    lines.push(block);
+  }
+  return lines.join('\n').slice(0, maxCharacters);
+}
+
 module.exports = {
   buildVerificationRoleFields,
+  buildVerificationRoleMessage,
   formatGrantReason,
   formatRequirement,
 };

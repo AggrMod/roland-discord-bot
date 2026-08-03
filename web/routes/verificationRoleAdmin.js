@@ -1,10 +1,65 @@
 const express = require('express');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
 const { getChain, normalizeAddress } = require('../../utils/chainIdentity');
+const nftActivityService = require('../../services/nftActivityService');
+const evmService = require('../../services/evmService');
 
 const verificationSyncJobs = new Map();
 const VERIFICATION_SYNC_ERROR_SAMPLE_LIMIT = 10;
 const VERIFICATION_SYNC_RETENTION_MS = 6 * 60 * 60 * 1000;
+
+async function resolveWithin(promise, timeoutMs) {
+  let timeoutId;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise(resolve => {
+        timeoutId = setTimeout(() => resolve(null), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+async function resolveCollectionRuleName({ db, logger, guildId, normalizedRule, body = {}, current = {}, timeoutMs = 6000 }) {
+  const normalizedGuildId = String(guildId || '').trim();
+  const explicitName = String(body.collectionName || body.collection_name || '').trim();
+  const currentName = String(current.collectionName || current.collection_name || '').trim();
+
+  try {
+    if (normalizedGuildId) {
+      const addressCondition = normalizedRule.chainFamily === 'evm'
+        ? 'LOWER(TRIM(collection_address)) = LOWER(TRIM(?))'
+        : 'TRIM(collection_address) = TRIM(?)';
+      const tracked = db.prepare(`
+        SELECT collection_name
+        FROM nft_tracked_collections
+        WHERE guild_id = ? AND chain_id = ?
+          AND ${addressCondition}
+        ORDER BY enabled DESC, id ASC
+        LIMIT 1
+      `).get(normalizedGuildId, normalizedRule.chainId, normalizedRule.collectionId);
+      const trackedName = String(tracked?.collection_name || '').trim();
+      if (trackedName) return trackedName;
+    }
+  } catch (lookupError) {
+    logger.warn(`Collection tracker name lookup failed: ${lookupError?.message || lookupError}`);
+  }
+
+  try {
+    const metadataPromise = normalizedRule.chainFamily === 'evm'
+      ? evmService.getNftCollectionMetadata(normalizedRule.collectionId, normalizedRule.chainId)
+      : nftActivityService.resolveTokenAssetMeta(normalizedRule.collectionId);
+    const metadata = await resolveWithin(metadataPromise, timeoutMs);
+    const resolvedName = String(metadata?.name || '').trim();
+    if (resolvedName) return resolvedName;
+  } catch (metadataError) {
+    logger.warn(`Collection metadata resolution failed for ${normalizedRule.collectionId}: ${metadataError?.message || metadataError}`);
+  }
+
+  return explicitName || currentName || null;
+}
 
 function normalizeVerificationSyncGuildId(guildId) {
   return String(guildId || '').trim();
@@ -191,6 +246,10 @@ function createVerificationRoleAdminRouter({
     return { success: true, chainFamily: chain.family, chainId: chain.chainId, collectionId, nftStandard, tokenId };
   };
 
+  const resolveCollectionName = (guildId, normalizedRule, body = {}, current = {}) => resolveCollectionRuleName({
+    db, logger, guildId, normalizedRule, body, current,
+  });
+
   router.get('/api/admin/roles/config', adminAuthMiddleware, (req, res) => {
     if (!ensureVerificationModule(req, res)) return;
     try {
@@ -208,7 +267,7 @@ function createVerificationRoleAdminRouter({
     }
   });
 
-  router.post('/api/admin/roles/tiers', adminAuthMiddleware, (req, res) => {
+  router.post('/api/admin/roles/tiers', adminAuthMiddleware, async (req, res) => {
     if (!ensureVerificationModule(req, res)) return;
     try {
       const { name, minNFTs, maxNFTs, votingPower, roleId, neverRemove } = req.body || {};
@@ -217,6 +276,7 @@ function createVerificationRoleAdminRouter({
       }
       const normalizedRule = normalizeCollectionRule(req.body || {});
       if (!normalizedRule.success) return res.status(400).json(toErrorResponse(normalizedRule.message, 'VALIDATION_ERROR'));
+      const collectionName = await resolveCollectionName(req.guildId, normalizedRule, req.body || {});
 
       const useTenantScoped = tenantService.isMultitenantEnabled() && !!req.guildId;
       const ruleCounts = getVerificationRuleCounts(req.guildId, { tenantScoped: useTenantScoped });
@@ -250,6 +310,7 @@ function createVerificationRoleAdminRouter({
           votingPower,
           roleId: roleId || null,
           collectionId: normalizedRule.collectionId,
+          collectionName,
           chainFamily: normalizedRule.chainFamily,
           chainId: normalizedRule.chainId,
           nftStandard: normalizedRule.nftStandard,
@@ -273,6 +334,7 @@ function createVerificationRoleAdminRouter({
           chainId: normalizedRule.chainId,
           nftStandard: normalizedRule.nftStandard,
           tokenId: normalizedRule.tokenId,
+          collectionName,
         }
       );
       if (!result.success) return res.status(400).json(toErrorResponse(result.message || 'Failed to add tier', 'VALIDATION_ERROR', null, result));
@@ -283,7 +345,7 @@ function createVerificationRoleAdminRouter({
     }
   });
 
-  router.put('/api/admin/roles/tiers/:name', adminAuthMiddleware, (req, res) => {
+  router.put('/api/admin/roles/tiers/:name', adminAuthMiddleware, async (req, res) => {
     if (!ensureVerificationModule(req, res)) return;
     try {
       const { name } = req.params;
@@ -296,10 +358,12 @@ function createVerificationRoleAdminRouter({
         if (idx < 0) return res.status(404).json(toErrorResponse('Tier not found', 'NOT_FOUND'));
         const normalizedRule = normalizeCollectionRule(updates, cfg.tiers[idx]);
         if (!normalizedRule.success) return res.status(400).json(toErrorResponse(normalizedRule.message, 'VALIDATION_ERROR'));
+        const collectionName = await resolveCollectionName(req.guildId, normalizedRule, updates, cfg.tiers[idx]);
         cfg.tiers[idx] = {
           ...cfg.tiers[idx],
           ...updates,
           collectionId: normalizedRule.collectionId,
+          collectionName,
           chainFamily: normalizedRule.chainFamily,
           chainId: normalizedRule.chainId,
           nftStandard: normalizedRule.nftStandard,
@@ -314,9 +378,11 @@ function createVerificationRoleAdminRouter({
       if (!currentTier) return res.status(404).json(toErrorResponse('Tier not found', 'NOT_FOUND'));
       const normalizedRule = normalizeCollectionRule(updates, currentTier);
       if (!normalizedRule.success) return res.status(400).json(toErrorResponse(normalizedRule.message, 'VALIDATION_ERROR'));
+      const collectionName = await resolveCollectionName(req.guildId, normalizedRule, updates, currentTier);
       const result = roleService.editTier(name, {
         ...updates,
         collectionId: normalizedRule.collectionId,
+        collectionName,
         chainFamily: normalizedRule.chainFamily,
         chainId: normalizedRule.chainId,
         nftStandard: normalizedRule.nftStandard,
@@ -660,3 +726,4 @@ function createVerificationRoleAdminRouter({
 }
 
 module.exports = createVerificationRoleAdminRouter;
+module.exports.resolveCollectionRuleName = resolveCollectionRuleName;

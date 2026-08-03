@@ -907,7 +907,8 @@ class RoleService {
           existing.matches.push({
             kind: 'nft',
             chainName: 'Solana',
-            assetName: this.getCollectionDisplayName(guildId, 'solana:mainnet', tier.collectionId, tier.name),
+            assetName: String(tier.collectionName || tier.collection_name || '').trim()
+              || this.getCollectionDisplayName(guildId, 'solana:mainnet', tier.collectionId, tier.name),
             balance: count,
             min,
             max,
@@ -1020,7 +1021,8 @@ class RoleService {
           existing.matches.push({
             kind: 'trait',
             chainName: 'Solana',
-            assetName: this.getCollectionDisplayName(guildId, 'solana:mainnet', traitCollectionId, 'NFT collection'),
+            assetName: String(traitRole.collectionName || traitRole.collection_name || '').trim()
+              || this.getCollectionDisplayName(guildId, 'solana:mainnet', traitCollectionId, 'NFT collection'),
             trait: `${traitType}: ${traitValues.join(' or ')}`,
           });
         }
@@ -1176,7 +1178,8 @@ class RoleService {
         state.matches.push({
           kind: 'nft',
           chainName: chain.name,
-          assetName: this.getCollectionDisplayName(guildId, chain.chainId, collection, rule.name || 'NFT collection'),
+          assetName: String(rule.collectionName || rule.collection_name || '').trim()
+            || this.getCollectionDisplayName(guildId, chain.chainId, collection, rule.name || 'NFT collection'),
           balance: result.balance,
           min,
           max,
@@ -1595,6 +1598,7 @@ class RoleService {
         votingPower,
         roleId,
         collectionId: collectionId || null,
+        collectionName: String(chainOptions.collectionName || '').trim() || null,
         chainFamily: chainOptions.chainFamily || this.getRuleChain({ chainId }).family,
         chainId,
         nftStandard: chainOptions.nftStandard || (String(chainId).startsWith('eip155:') ? 'erc721' : 'solana'),
@@ -1632,6 +1636,9 @@ class RoleService {
       if (updates.votingPower !== undefined) tier.votingPower = updates.votingPower;
       if (updates.roleId !== undefined) tier.roleId = updates.roleId;
       if (updates.collectionId !== undefined) tier.collectionId = updates.collectionId || null;
+      if (updates.collectionName !== undefined || updates.collection_name !== undefined) {
+        tier.collectionName = String(updates.collectionName ?? updates.collection_name ?? '').trim() || null;
+      }
       if (updates.neverRemove !== undefined || updates.never_remove !== undefined) {
         tier.neverRemove = this.toBooleanFlag(updates.neverRemove ?? updates.never_remove, false);
       }

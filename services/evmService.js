@@ -16,6 +16,8 @@ const ERC20_ABI = [
   'function name() view returns (string)',
 ];
 const ERC721_ABI = [
+  'function name() view returns (string)',
+  'function symbol() view returns (string)',
   'function balanceOf(address owner) view returns (uint256)',
   'function ownerOf(uint256 tokenId) view returns (address)',
 ];
@@ -110,6 +112,23 @@ class EvmService {
     }
     const balance = await contract.balanceOf(owner);
     return { balance: balance.toString(), standard: 'erc721', tokenId: null, collectionAddress: collection, chainId: chain.chainId };
+  }
+
+  async getNftCollectionMetadata(collectionAddress, chainValue) {
+    const chain = getChain(chainValue);
+    const collection = normalizeAddress(collectionAddress, chain?.chainId);
+    if (!chain || chain.family !== 'evm' || !collection) throw new Error('Invalid EVM collection or chain');
+    const contract = new Contract(collection, ERC721_ABI, this.getProvider(chain.chainId));
+    const [name, symbol] = await Promise.all([
+      contract.name().catch(() => ''),
+      contract.symbol().catch(() => ''),
+    ]);
+    return {
+      name: String(name || '').trim() || null,
+      symbol: String(symbol || '').trim() || null,
+      collectionAddress: collection,
+      chainId: chain.chainId,
+    };
   }
 
   clearProviderCache() {

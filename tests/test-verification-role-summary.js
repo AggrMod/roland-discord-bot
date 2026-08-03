@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { buildVerificationRoleFields } = require('../utils/verificationRoleSummary');
+const { buildVerificationRoleFields, buildVerificationRoleMessage } = require('../utils/verificationRoleSummary');
 
 const fields = buildVerificationRoleFields([
   {
@@ -43,5 +43,15 @@ for (const removedLabel of ['Linked Wallets', 'Primary Wallet', 'raw', 'Tracked 
 
 const empty = buildVerificationRoleFields([]);
 assert.strictEqual(empty[0].name, 'No holding-based roles matched');
+
+const message = buildVerificationRoleMessage([
+  {
+    roleId: '100000000000000003', roleName: 'ETHROLEB', kind: 'nft', chainName: 'Ethereum',
+    assetName: 'The Deck by Gamblor', balance: 17, min: 1, max: 999999, unit: 'NFTs',
+  },
+]);
+assert.match(message, /<@&100000000000000003>/, 'native Discord message content contains the real role mention');
+assert.match(message, /Ethereum · The Deck by Gamblor: Holds 17 NFTs · Requires 1\+ NFTs/);
+assert.ok(message.length <= 1900, 'role message stays below Discord content limits');
 
 console.log('verification role summary assertions passed');

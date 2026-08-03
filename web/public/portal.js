@@ -17818,12 +17818,13 @@ async function loadAdminRoles(targetPaneId = null) {
         const roleId = rule.roleId || '';
         const chainId = rule.chainId || rule.chain_id || 'solana:mainnet';
         const chainLabel = formatWalletChainLabel(chainId, rule.chainFamily || rule.chain_family);
+        const collectionName = String(rule.collectionName || rule.collection_name || '').trim();
         let details = '';
         if (isCollection) {
           const max = (rule.maxNFTs === Infinity || rule.maxNFTs >= 999999) ? 'INF' : rule.maxNFTs;
           const standard = String(rule.nftStandard || rule.nft_standard || '').toUpperCase();
           const tokenId = rule.tokenId ?? rule.token_id;
-          details = `${escapeHtml(chainLabel)} · Min: ${rule.minNFTs}, Max: ${max} NFTs${standard && standard !== 'SOLANA' ? ` · ${escapeHtml(standard)}` : ''}${tokenId !== null && tokenId !== undefined && tokenId !== '' ? ` #${escapeHtml(String(tokenId))}` : ''}`;
+          details = `${escapeHtml(chainLabel)}${collectionName ? ` · ${escapeHtml(collectionName)}` : ''} · Min: ${rule.minNFTs}, Max: ${max} NFTs${standard && standard !== 'SOLANA' ? ` · ${escapeHtml(standard)}` : ''}${tokenId !== null && tokenId !== undefined && tokenId !== '' ? ` #${escapeHtml(String(tokenId))}` : ''}`;
         } else if (isTrait) {
           const vals = rule.traitValues || rule.trait_values || (rule.traitValue || rule.trait_value ? [rule.traitValue || rule.trait_value] : []);
           const valArr = Array.isArray(vals) ? vals : String(vals).split(',').map(v => v.trim()).filter(Boolean);

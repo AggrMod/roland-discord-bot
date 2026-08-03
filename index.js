@@ -18,7 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('./utils/logger');
 const clientProvider = require('./utils/clientProvider');
-const { buildVerificationRoleFields } = require('./utils/verificationRoleSummary');
+const { buildVerificationRoleMessage } = require('./utils/verificationRoleSummary');
 const tenantService = require('./services/tenantService');
 const aiAssistantService = require('./services/aiAssistantService');
 const aiSummaryService = require('./services/aiSummaryService');
@@ -731,18 +731,8 @@ async function handlePanelVerifyButton(interaction) {
     }
 
     const grantedRoles = syncResult?.grantedRoles || syncResult?.changes?.granted || [];
-    const roleFields = buildVerificationRoleFields(grantedRoles);
-    const syncDescription = syncResult?.success === false
-      ? 'Some holdings could not be checked. Existing roles were preserved where provider data was unavailable.'
-      : 'These are the roles you currently qualify for and the rule behind each one.';
-
-    const embed = new EmbedBuilder()
-      .setColor(syncResult?.success === false ? '#F59E0B' : '#57F287')
-      .setTitle(syncResult?.success === false ? 'Role Check Incomplete' : 'Your Verified Roles')
-      .setDescription(syncDescription)
-      .addFields(...roleFields);
-
-    await interaction.editReply({ embeds: [embed], allowedMentions: { parse: [] } });
+    const roleMessage = buildVerificationRoleMessage(grantedRoles, { incomplete: syncResult?.success === false });
+    await interaction.editReply({ content: roleMessage, embeds: [] });
   } catch (e) {
     logger.error('Verify button error:', e);
   }

@@ -4,10 +4,25 @@ const fs = require('fs');
 const path = require('path');
 
 const portalPath = path.join(process.cwd(), 'web', 'public', 'portal.js');
+const portalHtmlPath = path.join(process.cwd(), 'web', 'public', 'portal.html');
+const serverPath = path.join(process.cwd(), 'web', 'server.js');
 const source = fs.readFileSync(portalPath, 'utf8');
+const portalHtml = fs.readFileSync(portalHtmlPath, 'utf8');
+const serverSource = fs.readFileSync(serverPath, 'utf8');
 const lines = source.split(/\r?\n/);
 
 const violations = [];
+
+const inlineHandlerCount = [source, portalHtml]
+  .reduce((total, fileSource) => total + (fileSource.match(/\bon(?:click|change|input|keyup|keydown|submit)\s*=/gi) || []).length, 0);
+const allowsInlineHandlerAttributes = /['"]script-src-attr['"]\s*:\s*\[[^\]]*unsafe-inline[^\]]*\]/s.test(serverSource);
+if (inlineHandlerCount > 0 && !allowsInlineHandlerAttributes) {
+  violations.push({
+    line: 'csp',
+    expression: `portal contains ${inlineHandlerCount} inline event handlers but script-src-attr does not allow them`,
+    snippet: "Configure script-src-attr 'unsafe-inline' until all inline handlers are migrated to addEventListener.",
+  });
+}
 
 const dashboardSecurityRules = [
   {
@@ -61,4 +76,4 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-console.log('[portal-inline-js-safety] OK: dynamic onclick args are JS-escaped');
+console.log(`[portal-inline-js-safety] OK: ${inlineHandlerCount} inline handlers are CSP-compatible and dynamic onclick args are JS-escaped`);

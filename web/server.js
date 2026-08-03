@@ -303,6 +303,11 @@ class WebServer {
         useDefaults: true,
         directives: {
           'script-src': ["'self'", "'unsafe-inline'", 'https://cdnjs.cloudflare.com'],
+          // The current portal still uses inline onclick/onchange handlers.
+          // Helmet's default script-src-attr 'none' overrides script-src and
+          // disables every portal navigation action, so allow attributes until
+          // the component migration replaces those handlers with listeners.
+          'script-src-attr': ["'unsafe-inline'"],
           'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com'],
           'font-src': ["'self'", 'https://fonts.gstatic.com', 'https://cdnjs.cloudflare.com', 'data:'],
           'img-src': ["'self'", 'https:', 'data:', 'blob:'],
@@ -319,7 +324,11 @@ class WebServer {
     this.app.use(express.static(path.join(__dirname, 'public'), {
       setHeaders: (res, filePath) => {
         // Keep portal shell/script fresh so module setting UX changes are visible immediately.
-        if (filePath.endsWith(`${path.sep}portal.js`) || filePath.endsWith(`${path.sep}portal.html`)) {
+        if (
+          filePath.endsWith(`${path.sep}portal.js`)
+          || filePath.endsWith(`${path.sep}portal.html`)
+          || filePath.endsWith(`${path.sep}portal-style.css`)
+        ) {
           res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
           res.setHeader('Pragma', 'no-cache');
           res.setHeader('Expires', '0');
@@ -871,6 +880,10 @@ class WebServer {
 
     // Authenticated app dashboard (existing portal)
     this.app.get('/app', (req, res) => {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      res.setHeader('Surrogate-Control', 'no-store');
       res.sendFile(path.join(__dirname, 'public', 'portal.html'));
     });
 

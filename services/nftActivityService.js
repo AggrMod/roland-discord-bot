@@ -491,7 +491,11 @@ class NFTActivityService {
       const fromWallet = event.fromWallet || nftData.seller || nftData.from || event.from || null;
       const toWallet = event.toWallet || nftData.buyer || nftData.to || event.to || null;
       const rawPrice = nftData.amount ?? event.priceSol ?? event.price ?? null;
-      const priceSol = rawPrice !== null ? Number(rawPrice) / (rawPrice > 1000 ? 1e9 : 1) : null; // convert lamports if needed
+      const numericPrice = rawPrice !== null ? Number(rawPrice) : null;
+      const priceSol = numericPrice !== null
+        ? (chainInfo?.family === 'solana' && numericPrice > 1000 ? numericPrice / 1e9 : numericPrice)
+        : null;
+      const currencySymbol = String(event.currencySymbol || event.paymentSymbol || '').trim().toUpperCase() || null;
       const txSignature = event.txSignature || event.signature || null;
       const eventTime = event.eventTime || event.timestamp || new Date().toISOString();
       const eventSource = String(event.source || nftData.source || ingestSource || 'unknown').toLowerCase();
@@ -536,6 +540,7 @@ class NFTActivityService {
         eventTime,
         chain,
         chainId,
+        currencySymbol,
         imageUrl: event.imageUrl || null
       }).catch(err => logger.error('Error sending NFT activity alert:', err));
 
@@ -555,7 +560,7 @@ class NFTActivityService {
     const typeIcon = iconMap[typeUpper] || '🧩';
     const chainMeta = getChainPriceMeta(evt.chain);
     const priceDisplay = evt.priceSol !== null && evt.priceSol !== undefined && evt.priceSol > 0
-      ? `${chainMeta.icon} ${Number(evt.priceSol).toFixed(3)} ${chainMeta.unit}`
+      ? `${chainMeta.icon} ${Number(evt.priceSol).toFixed(3)} ${evt.currencySymbol || chainMeta.unit}`
       : '—';
 
     for (const addr of involvedWallets) {
@@ -636,7 +641,7 @@ class NFTActivityService {
     const defaultChainIcon = chainMeta.icon;
     const mappedIcon = chainEmojiMap[chainKey] || (chainKey === 'solana' ? envSolIcon : defaultChainIcon);
     const priceDisplay = evt.priceSol !== null && evt.priceSol !== undefined && evt.priceSol > 0
-      ? `${mappedIcon} ${Number(evt.priceSol).toFixed(3)} ${chainMeta.unit}`
+      ? `${mappedIcon} ${Number(evt.priceSol).toFixed(3)} ${evt.currencySymbol || chainMeta.unit}`
       : '—';
 
     const displayType = typeUpper === 'SELL' ? 'BUY' : typeUpper;

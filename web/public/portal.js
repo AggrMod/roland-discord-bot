@@ -1586,7 +1586,7 @@ const MODULE_REGISTRY = [
   { key: 'verification', label: 'Identity / Verification', icon: '\u{1F4BC}', section: 'wallets', desc: 'Securely verify wallet ownership and manage roles.' },
   { key: 'governance', label: 'Governance / Voting', icon: '\u{1F4DC}', section: 'governance', desc: 'Participate in DAO decision-making and proposals.' },
   { key: 'wallettracker', label: 'Wallet Tracker', icon: '\u{1F4B0}', section: 'treasury', desc: 'Monitor community floor price and tracked wallets.' },
-  { key: 'nfttracker', label: 'NFT Activity', icon: '\u{1F3A8}', section: 'nft-activity', desc: 'Real-time sales and listings feed for collections.' },
+  { key: 'nfttracker', label: 'NFT Activity', icon: '\u{1F3A8}', section: 'nft-activity', desc: 'Collection mints, transfers, Solana marketplace activity, and Ethereum sales.' },
   { key: 'tokentracker', label: 'Token Tracker', icon: '\u{1FA99}', section: 'token-activity', desc: 'Monitor token transactions and swap activity.' },
   { key: 'invites', label: 'Invite Tracker', icon: '\u{1F4E7}', section: 'invites', adminOnly: true, desc: 'Measure invite performance, leaderboard trends, and referral activity.' },
   { key: 'ticketing', label: 'Support Tickets', icon: '\u{1F3AB}', section: 'ticketing', desc: 'Integrated support desk and category routing.' },
@@ -3415,11 +3415,11 @@ const HELP_GUIDES = Object.freeze([
   },
   {
     id: 'nft-tracker', group: 'Modules', role: 'user', moduleKey: 'nfttracker', icon: 'fa-images',
-    title: 'NFT activity', summary: 'Follow collection sales, listings, transfers, and configured feeds.',
+    title: 'NFT activity', summary: 'Follow collection mints, transfers, supported sales, and configured feeds.',
     route: 'nft-activity', action: 'Open NFT activity',
-    overview: 'NFT Activity monitors configured Solana collections plus EVM ERC-721 collections and ERC-1155 token IDs.',
+    overview: 'NFT Activity monitors configured Solana collections plus EVM ERC-721 collections and ERC-1155 token IDs. Ethereum collections can also track completed marketplace sales through Alchemy.',
     steps: ['Choose a community.', 'Open NFT activity.', 'Review confirmed mint, transfer, and supported marketplace events.', 'Open the marketplace or explorer link when available.'],
-    tips: ['EVM tracking uses the configured RPC and confirmation depth.', 'Collection configuration and feed channels are managed from Modules.', 'Always verify contract addresses before acting on an asset.']
+    tips: ['EVM tracking uses the configured RPC and confirmation depth.', 'Ethereum completed-sale monitoring activates automatically when the Ethereum RPC is an Alchemy endpoint.', 'Collection configuration and feed channels are managed from Modules.', 'Always verify contract addresses before acting on an asset.']
   },
   {
     id: 'token-tracker', group: 'Modules', role: 'user', moduleKey: 'tokentracker', icon: 'fa-coins',
@@ -14526,12 +14526,15 @@ async function openAddCollectionModal(existingId, existingData) {
 }
 
 function onTrackedCollectionChainChange() {
-  const isEvm = String(document.getElementById('colChain')?.value || '').startsWith('eip155:');
+  const chainId = String(document.getElementById('colChain')?.value || '');
+  const isEvm = chainId.startsWith('eip155:');
+  const supportsEthereumSales = chainId === 'eip155:1';
   const standard = document.getElementById('colNftStandard')?.value || 'erc721';
   const address = document.getElementById('colAddress');
   const meSymbol = document.getElementById('colMeSymbol');
   const standardWrap = document.getElementById('colEvmStandardWrap');
   const tokenIdWrap = document.getElementById('colTokenIdWrap');
+  const networkNote = document.getElementById('colNetworkNote');
   if (address) address.placeholder = isEvm ? '0x collection contract' : 'Solana collection address';
   if (meSymbol) {
     meSymbol.disabled = isEvm;
@@ -14542,11 +14545,20 @@ function onTrackedCollectionChainChange() {
   for (const id of ['colSale', 'colBid', 'colList', 'colDelist']) {
     const input = document.getElementById(id);
     if (!input) continue;
-    input.disabled = isEvm;
-    if (isEvm) input.checked = false;
+    const supported = id === 'colSale' && supportsEthereumSales;
+    input.disabled = isEvm && !supported;
+    if (isEvm && !supported) input.checked = false;
+    if (supported && !document.getElementById('colEditId')?.value) input.checked = true;
   }
   if (isEvm && !document.getElementById('colEditId')?.value) {
     document.getElementById('colTransfer').checked = true;
+  }
+  if (networkNote) {
+    networkNote.textContent = supportsEthereumSales
+      ? 'Ethereum tracks confirmed mints and transfers through RPC, plus completed marketplace sales through Alchemy.'
+      : isEvm
+        ? 'This EVM network currently supports confirmed ERC-721/1155 mint and transfer events.'
+        : 'Solana supports marketplace and transfer activity.';
   }
   const currentAddress = String(address?.value || '').trim();
   if (currentAddress && !document.getElementById('colEditId')?.value) {
@@ -19320,7 +19332,9 @@ async function openNftActivityAddCollectionModal() {
   document.body.appendChild(overlay);
 
   const syncCollectionNetworkFields = () => {
-    const isEvm = String(document.getElementById('caChainInput')?.value || '').startsWith('eip155:');
+    const chainId = String(document.getElementById('caChainInput')?.value || '');
+    const isEvm = chainId.startsWith('eip155:');
+    const supportsEthereumSales = chainId === 'eip155:1';
     const addressInput = document.getElementById('caAddrInput');
     const meInput = document.getElementById('caMeInput');
     const note = document.getElementById('caNetworkNote');
@@ -19334,14 +19348,18 @@ async function openNftActivityAddCollectionModal() {
     for (const id of ['caSale', 'caBid', 'caList', 'caDelist']) {
       const input = document.getElementById(id);
       if (!input) continue;
-      input.disabled = isEvm;
-      if (isEvm) input.checked = false;
+      const supported = id === 'caSale' && supportsEthereumSales;
+      input.disabled = isEvm && !supported;
+      if (isEvm && !supported) input.checked = false;
+      if (supported) input.checked = true;
     }
     const transfer = document.getElementById('caTransfer');
     if (isEvm && transfer) transfer.checked = true;
-    if (note) note.textContent = isEvm
-      ? 'EVM RPC tracking covers confirmed ERC-721 mint and transfer events.'
-      : 'Solana supports marketplace and transfer activity.';
+    if (note) note.textContent = supportsEthereumSales
+      ? 'Ethereum RPC covers confirmed mint/transfer events; Alchemy covers completed marketplace sales.'
+      : isEvm
+        ? 'EVM RPC tracking covers confirmed ERC-721 mint and transfer events.'
+        : 'Solana supports marketplace and transfer activity.';
   };
   const resolveActivityCollectionName = (showFailure = false) => resolveNftTrackerCollectionName({
     chain: document.getElementById('caChainInput')?.value,

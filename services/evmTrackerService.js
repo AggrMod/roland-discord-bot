@@ -14,6 +14,61 @@ const CONFIRMATIONS = Math.max(0, Math.min(64, Number(process.env.EVM_TRACKER_CO
 const BLOCK_SPAN = Math.max(1, Math.min(5000, Number(process.env.EVM_TRACKER_BLOCK_SPAN || 750)));
 const WALLET_BLOCK_SPAN = Math.max(1, Math.min(25, Number(process.env.EVM_WALLET_TRACKER_BLOCK_SPAN || 6)));
 const MAX_ALERTS_PER_POLL = Math.max(1, Math.min(250, Number(process.env.EVM_TRACKER_ALERT_CAP || 50)));
+const ALCHEMY_SALES_TIMEOUT_MS = Math.max(3000, Math.min(60000, Number(process.env.ALCHEMY_NFT_SALES_TIMEOUT_MS || 15000)));
+const ALCHEMY_SALES_MAX_PAGES = Math.max(1, Math.min(25, Number(process.env.ALCHEMY_NFT_SALES_MAX_PAGES || 10)));
+
+function normalizeAlchemySalesEndpoint(value) {
+  try {
+    const parsed = new URL(String(value || '').trim());
+    if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== 'eth-mainnet.g.alchemy.com') return '';
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    if (parts.length === 3 && parts[0] === 'nft' && parts[1] === 'v2' && parts[2]) {
+      parsed.pathname = `/nft/v2/${parts[2]}/getNFTSales`;
+    } else if (!(parts.length === 4 && parts[0] === 'nft' && parts[1] === 'v2' && parts[2] && parts[3] === 'getNFTSales')) {
+      return '';
+    }
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString();
+  } catch (_error) {
+    return '';
+  }
+}
+
+function getAlchemyEthereumSalesEndpoint() {
+  const explicit = normalizeAlchemySalesEndpoint(process.env.ALCHEMY_ETHEREUM_NFT_API_URL);
+  if (explicit) return explicit;
+  try {
+    const rpcUrl = new URL(getEvmRpcUrl('eip155:1'));
+    if (rpcUrl.protocol !== 'https:' || rpcUrl.hostname.toLowerCase() !== 'eth-mainnet.g.alchemy.com') return '';
+    const parts = rpcUrl.pathname.split('/').filter(Boolean);
+    if (parts.length !== 2 || parts[0] !== 'v2' || !parts[1]) return '';
+    return normalizeAlchemySalesEndpoint(`${rpcUrl.origin}/nft/v2/${parts[1]}`);
+  } catch (_error) {
+    return '';
+  }
+}
+
+function getAlchemySalePrice(sale) {
+  const fees = [sale?.sellerFee, sale?.protocolFee, sale?.royaltyFee]
+    .filter(fee => fee && fee.amount !== null && fee.amount !== undefined);
+  if (!fees.length) return { amount: null, symbol: null };
+  const decimals = Number(fees[0].decimals ?? 18);
+  const symbol = String(fees[0].symbol || 'ETH').trim().toUpperCase() || 'ETH';
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 255) return { amount: null, symbol };
+  try {
+    const totalRaw = fees.reduce((total, fee) => {
+      const feeDecimals = Number(fee.decimals ?? decimals);
+      const feeSymbol = String(fee.symbol || symbol).trim().toUpperCase();
+      if (feeDecimals !== decimals || feeSymbol !== symbol) throw new Error('Mixed sale currencies are unsupported');
+      return total + BigInt(String(fee.amount || '0'));
+    }, 0n);
+    const amount = Number(formatUnits(totalRaw, decimals));
+    return { amount: Number.isFinite(amount) ? amount : null, symbol };
+  } catch (_error) {
+    return { amount: null, symbol };
+  }
+}
 
 function topicAddress(topic) {
   const value = String(topic || '');
@@ -239,6 +294,104 @@ class EvmTrackerService {
     return { processed, fromBlock: range.fromBlock, toBlock: range.toBlock };
   }
 
+  async fetchAlchemyCollectionSales(endpoint, collectionAddress, fromBlock, toBlock) {
+    const sales = [];
+    let pageKey = '';
+    for (let page = 0; page < ALCHEMY_SALES_MAX_PAGES; page += 1) {
+      const requestUrl = new URL(endpoint);
+      requestUrl.searchParams.set('contractAddress', collectionAddress);
+      requestUrl.searchParams.set('fromBlock', String(fromBlock));
+      requestUrl.searchParams.set('toBlock', String(toBlock));
+      requestUrl.searchParams.set('order', 'asc');
+      requestUrl.searchParams.set('limit', '1000');
+      if (pageKey) requestUrl.searchParams.set('pageKey', pageKey);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), ALCHEMY_SALES_TIMEOUT_MS);
+      let response;
+      try {
+        response = await fetch(requestUrl, {
+          method: 'GET',
+          headers: { Accept: 'application/json', 'User-Agent': 'GuildPilot-Ethereum-NFT-Sales/1.0' },
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+      if (!response.ok) throw new Error(`Alchemy NFT Sales request failed with status ${response.status}`);
+      const payload = await response.json();
+      if (!Array.isArray(payload?.nftSales)) throw new Error('Alchemy NFT Sales returned an invalid response');
+      sales.push(...payload.nftSales);
+      pageKey = String(payload.pageKey || '').trim();
+      if (!pageKey) return sales;
+    }
+    throw new Error(`Alchemy NFT Sales exceeded ${ALCHEMY_SALES_MAX_PAGES} pages for one polling range`);
+  }
+
+  async pollCollectionSales(config) {
+    if (String(config.chain_id || '') !== 'eip155:1' || Number(config.track_sale || 0) !== 1) {
+      return { skipped: true, processed: 0 };
+    }
+    const endpoint = getAlchemyEthereumSalesEndpoint();
+    if (!endpoint) return { skipped: true, reason: 'alchemy_sales_not_configured', processed: 0 };
+
+    const provider = evmService.getProvider('eip155:1');
+    const safeHead = await getSafeHead(provider);
+    const cursor = getCursor(config.guild_id, 'eip155:1', 'nft-sale', config.id);
+    if (!cursor) {
+      saveCursor(config.guild_id, 'eip155:1', 'nft-sale', config.id, safeHead);
+      return { initialized: true, processed: 0 };
+    }
+    const range = getPollRange(cursor, safeHead, BLOCK_SPAN);
+    if (!range) return { processed: 0 };
+
+    const sales = await this.fetchAlchemyCollectionSales(
+      endpoint,
+      config.collection_address,
+      range.fromBlock,
+      range.toBlock
+    );
+    const configuredTokenId = config.token_id === null || config.token_id === undefined || config.token_id === ''
+      ? null
+      : String(config.token_id);
+    let processed = 0;
+    for (const sale of sales) {
+      const tokenId = sale?.tokenId === null || sale?.tokenId === undefined ? '' : String(sale.tokenId);
+      if (!tokenId || (configuredTokenId !== null && tokenId !== configuredTokenId)) continue;
+      const transactionHash = String(sale.transactionHash || '').trim();
+      if (!transactionHash) continue;
+      const blockNumber = Number(sale.blockNumber);
+      const logIndex = Number(sale.logIndex ?? 0);
+      const bundleIndex = Number(sale.bundleIndex ?? 0);
+      const price = getAlchemySalePrice(sale);
+      const eventTime = Number.isFinite(blockNumber)
+        ? await this.getBlockTime(provider, 'eip155:1', blockNumber)
+        : new Date().toISOString();
+      const result = nftActivityService.ingestEvent({
+        type: 'NFT_SALE',
+        chainId: 'eip155:1',
+        collectionKey: config.collection_address,
+        tokenMint: `${config.collection_address}#${tokenId}`,
+        tokenName: `${config.collection_name} #${tokenId}`,
+        fromWallet: sale.sellerAddress || null,
+        toWallet: sale.buyerAddress || null,
+        price: price.amount,
+        currencySymbol: price.symbol,
+        txSignature: `${transactionHash}:${logIndex}:${bundleIndex}:${tokenId}`,
+        eventTime,
+        source: 'alchemy-nft-sales',
+        marketplace: sale.marketplace || null,
+        quantity: sale.quantity || '1',
+        blockNumber,
+        logIndex,
+        bundleIndex,
+      }, 'alchemy-nft-sales');
+      if (result?.success) processed += 1;
+    }
+    saveCursor(config.guild_id, 'eip155:1', 'nft-sale', config.id, range.toBlock);
+    return { processed, fromBlock: range.fromBlock, toBlock: range.toBlock };
+  }
+
   async pollNativeWallets(guildId, chainId, walletRows) {
     const chain = getChain(chainId);
     if (!chain || chain.family !== 'evm' || !walletRows.length) return { processed: 0 };
@@ -292,7 +445,7 @@ class EvmTrackerService {
   async pollAll() {
     if (this.polling) return { skipped: true, reason: 'already_running' };
     this.polling = true;
-    const summary = { tokens: 0, nft: 0, wallets: 0, errors: [] };
+    const summary = { tokens: 0, nft: 0, sales: 0, wallets: 0, errors: [] };
     try {
       const tokenConfigs = db.prepare("SELECT * FROM tracked_tokens WHERE enabled = 1 AND chain_family = 'evm'").all();
       const collectionConfigs = db.prepare("SELECT * FROM nft_tracked_collections WHERE enabled = 1 AND chain_family = 'evm'").all();
@@ -308,10 +461,19 @@ class EvmTrackerService {
       }
       for (const config of collectionConfigs) {
         if (!getEvmRpcUrl(config.chain_id)) continue;
-        try { summary.nft += Number((await this.pollCollection(config)).processed || 0); }
-        catch (error) {
-          saveCursor(config.guild_id, config.chain_id, 'nft', config.id, Number(getCursor(config.guild_id, config.chain_id, 'nft', config.id)?.last_block || 0), error?.message);
-          summary.errors.push(`nft:${config.id}:${error?.message || error}`);
+        if (Number(config.track_mint || 0) === 1 || Number(config.track_transfer || 0) === 1) {
+          try { summary.nft += Number((await this.pollCollection(config)).processed || 0); }
+          catch (error) {
+            saveCursor(config.guild_id, config.chain_id, 'nft', config.id, Number(getCursor(config.guild_id, config.chain_id, 'nft', config.id)?.last_block || 0), error?.message);
+            summary.errors.push(`nft:${config.id}:${error?.message || error}`);
+          }
+        }
+        if (String(config.chain_id) === 'eip155:1' && Number(config.track_sale || 0) === 1) {
+          try { summary.sales += Number((await this.pollCollectionSales(config)).processed || 0); }
+          catch (error) {
+            saveCursor(config.guild_id, config.chain_id, 'nft-sale', config.id, Number(getCursor(config.guild_id, config.chain_id, 'nft-sale', config.id)?.last_block || 0), error?.message);
+            summary.errors.push(`nft-sale:${config.id}:${error?.message || error}`);
+          }
         }
       }
       const walletGroups = new Map();
@@ -325,8 +487,8 @@ class EvmTrackerService {
         try { summary.wallets += Number((await this.pollNativeWallets(rows[0].guild_id, rows[0].chain_id, rows)).processed || 0); }
         catch (error) { summary.errors.push(`wallet:${rows[0].chain_id}:${error?.message || error}`); }
       }
-      if (summary.tokens || summary.nft || summary.wallets || summary.errors.length) {
-        logger.log(`[evm-tracker] tokens=${summary.tokens} nft=${summary.nft} wallets=${summary.wallets} errors=${summary.errors.length}`);
+      if (summary.tokens || summary.nft || summary.sales || summary.wallets || summary.errors.length) {
+        logger.log(`[evm-tracker] tokens=${summary.tokens} nft=${summary.nft} sales=${summary.sales} wallets=${summary.wallets} errors=${summary.errors.length}`);
       }
       return summary;
     } finally {
@@ -336,3 +498,5 @@ class EvmTrackerService {
 }
 
 module.exports = new EvmTrackerService();
+module.exports.getAlchemyEthereumSalesEndpoint = getAlchemyEthereumSalesEndpoint;
+module.exports.getAlchemySalePrice = getAlchemySalePrice;

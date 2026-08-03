@@ -92,12 +92,15 @@ async function main() {
 
   const records = roleService.getVerificationWalletRecords(discordId, guildId);
   assert.deepStrictEqual(records.map(record => record.chainId), ['eip155:1']);
-  await roleService.syncEvmCollectionRoles(member, records, guildId, new Set(roleCache.keys()));
-  await roleService.syncTokenRoles(member, records, guildId, new Set(roleCache.keys()));
+  const nftChanges = await roleService.syncEvmCollectionRoles(member, records, guildId, new Set(roleCache.keys()));
+  const tokenChanges = await roleService.syncTokenRoles(member, records, guildId, new Set(roleCache.keys()));
   assert(added.includes('role-nft'), 'ERC-721 collection ownership assigns its Discord role');
   assert(added.includes('role-1155'), 'ERC-1155 token ownership assigns its Discord role');
   assert(added.includes('role-token'), 'ERC-20 balance assigns its Discord role');
   assert.deepStrictEqual(observed1155, { chainId: 'eip155:1', standard: 'erc1155', tokenId: '42' });
+  assert.ok(nftChanges.granted.some(grant => grant.roleName === 'SOLROLEA' && grant.balance === 1), 'ERC-721 role includes grant evidence');
+  assert.ok(nftChanges.granted.some(grant => grant.roleName === 'ERC1155ROLE' && grant.unit === 'ERC-1155 #42'), 'ERC-1155 role includes token evidence');
+  assert.ok(tokenChanges.granted.some(grant => grant.roleName === 'ETHROLEB' && grant.balance === 250), 'ERC-20 role includes balance evidence');
 
   evmService.getTokenBalance = async () => ({ formatted: '5' });
   await roleService.syncTokenRoles(member, records, guildId, new Set(roleCache.keys()));

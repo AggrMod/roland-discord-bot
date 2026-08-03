@@ -18,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('./utils/logger');
 const clientProvider = require('./utils/clientProvider');
+const { buildVerificationRoleFields } = require('./utils/verificationRoleSummary');
 const tenantService = require('./services/tenantService');
 const aiAssistantService = require('./services/aiAssistantService');
 const aiSummaryService = require('./services/aiSummaryService');
@@ -719,18 +720,6 @@ async function handlePanelVerifyButton(interaction) {
       return interaction.editReply({ embeds: [embed], components: [row] });
     }
 
-    const shortenWallet = (value) => {
-      const raw = String(value || '').trim();
-      if (!raw) return 'Unknown';
-      if (raw.length <= 10) return raw;
-      return `${raw.slice(0, 5)}...${raw.slice(-5)}`;
-    };
-
-    const primaryWalletAddress = walletService.getFavoriteWallet(discordId)
-      || wallets.find(w => w && (w.is_primary || w.isPrimary || w.is_favorite || w.isFavorite))?.wallet_address
-      || wallets[0]?.wallet_address
-      || null;
-
     const updateResult = await roleService.updateUserRoles(discordId, username, panelGuildId || null);
     if (!updateResult.success) {
       return interaction.editReply({ content: `Error: ${updateResult.message}` });
@@ -741,31 +730,17 @@ async function handlePanelVerifyButton(interaction) {
       syncResult = await roleService.syncUserDiscordRoles(interaction.guild, discordId, panelGuildId || interaction.guild.id);
     }
 
-    const totalTokens = Number(updateResult.totalTokens || 0);
-    const syncAdded = Number(syncResult?.totalAdded || 0);
-    const syncRemoved = Number(syncResult?.totalRemoved || 0);
-    const syncDescription = syncResult?.success
-      ? 'Holdings refreshed and Discord roles synchronized.'
-      : 'Holdings refreshed, but role synchronization could not fully complete.';
-    const effectiveGuildId = panelGuildId || interaction.guildId || '';
-    const effectiveVotingPower = interaction.member
-      ? Number(roleService.getUserVotingPower(discordId, interaction.member, effectiveGuildId) || 0)
-      : Number(updateResult.votingPower || 0);
+    const grantedRoles = syncResult?.grantedRoles || syncResult?.changes?.granted || [];
+    const roleFields = buildVerificationRoleFields(grantedRoles);
+    const syncDescription = syncResult?.success === false
+      ? 'Some holdings could not be checked. Existing roles were preserved where provider data was unavailable.'
+      : 'These are the roles you currently qualify for and the rule behind each one.';
 
     const embed = new EmbedBuilder()
       .setColor(syncResult?.success === false ? '#F59E0B' : '#57F287')
-      .setTitle('Holdings Verified')
+      .setTitle(syncResult?.success === false ? 'Role Check Incomplete' : 'Your Verified Roles')
       .setDescription(syncDescription)
-      .addFields(
-        { name: 'Linked Wallets', value: `${wallets.length}`, inline: true },
-        { name: 'Primary Wallet', value: primaryWalletAddress ? `\`${shortenWallet(primaryWalletAddress)}\`` : 'Not set', inline: true },
-        { name: 'NFTs', value: `${Number(updateResult.totalNFTs || 0)} (raw ${Number(updateResult.rawNFTs || 0)})`, inline: true },
-        { name: 'Tracked Tokens', value: totalTokens.toLocaleString(undefined, { maximumFractionDigits: 6 }), inline: true },
-        { name: 'Tier', value: String(updateResult.tier || 'None'), inline: true },
-        { name: 'Voting Power', value: `${effectiveVotingPower}`, inline: true },
-        { name: 'Role Sync', value: syncResult?.success ? `+${syncAdded} / -${syncRemoved}` : (syncResult?.message || 'Not available'), inline: false }
-      )
-      .setTimestamp();
+      .addFields(...roleFields);
 
     await interaction.editReply({ embeds: [embed] });
   } catch (e) {

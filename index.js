@@ -731,7 +731,9 @@ async function handlePanelVerifyButton(interaction) {
     }
 
     const grantedRoles = syncResult?.grantedRoles || syncResult?.changes?.granted || [];
-    const roleMessage = buildVerificationRoleMessage(grantedRoles, { incomplete: syncResult?.success === false });
+    const roleMessage = buildVerificationRoleMessage(grantedRoles, {
+      incomplete: syncResult?.success === false || syncResult?.incomplete === true || syncResult?.changes?.incomplete === true,
+    });
     await interaction.editReply({ content: roleMessage, embeds: [] });
   } catch (e) {
     logger.error('Verify button error:', e);

@@ -140,6 +140,27 @@ class RoleService {
     return getChain(rule.chainId || rule.chain_id || rule.chain || 'solana:mainnet') || getChain('solana:mainnet');
   }
 
+  getVerificationAddressesForChain(walletRecords, chainValue) {
+    const chain = getChain(chainValue);
+    if (!chain) return [];
+    const seen = new Set();
+    const addresses = [];
+    for (const wallet of Array.isArray(walletRecords) ? walletRecords : []) {
+      const walletFamily = String(wallet?.chainFamily || wallet?.chain_family || '').trim().toLowerCase();
+      const walletChainId = String(wallet?.chainId || wallet?.chain_id || '').trim();
+      const eligible = chain.family === 'evm'
+        ? walletFamily === 'evm'
+        : walletFamily === 'solana' && walletChainId === chain.chainId;
+      if (!eligible) continue;
+      const address = normalizeAddress(wallet?.address || wallet?.wallet_address, chain.chainId);
+      const key = chain.family === 'evm' ? address.toLowerCase() : address;
+      if (!address || seen.has(key)) continue;
+      seen.add(key);
+      addresses.push(address);
+    }
+    return addresses;
+  }
+
   getCollectionDisplayName(guildId, chainValue, collectionId, fallback = '') {
     const normalizedGuildId = String(guildId || '').trim();
     const rawCollectionId = String(collectionId || '').trim();
@@ -402,7 +423,8 @@ class RoleService {
       const changes = {
         added: [],
         removed: [],
-        granted: []
+        granted: [],
+        incomplete: false,
       };
       const currentMemberRoleIds = new Set(member.roles.cache.keys());
 
@@ -435,6 +457,7 @@ class RoleService {
       changes.added.push(...evmTierChanges.added);
       changes.removed.push(...evmTierChanges.removed);
       changes.granted.push(...(evmTierChanges.granted || []));
+      changes.incomplete ||= evmTierChanges.incomplete === true;
 
       // 3. Sync Solana trait roles.
       const traitChanges = await this.syncTraitRoles(member, allNFTs, guildId, currentMemberRoleIds);
@@ -447,6 +470,7 @@ class RoleService {
       changes.added.push(...tokenChanges.added);
       changes.removed.push(...tokenChanges.removed);
       changes.granted.push(...(tokenChanges.granted || []));
+      changes.incomplete ||= tokenChanges.incomplete === true;
 
       // 5. Sync OG role (if applicable)
       if (!ogRoleService) ogRoleService = require('./ogRoleService');
@@ -504,6 +528,7 @@ class RoleService {
 
       return { 
         success: true, 
+        incomplete: changes.incomplete,
         changes,
         grantedRoles: changes.granted,
         totalAdded: changes.added.length,
@@ -1126,7 +1151,7 @@ class RoleService {
   }
 
   async syncEvmCollectionRoles(member, walletRecords, guildId = null, currentMemberRoleIds = null) {
-    const changes = { added: [], removed: [], granted: [] };
+    const changes = { added: [], removed: [], granted: [], incomplete: false };
     const rules = this.getEffectiveTiers(guildId)
       .filter(rule => rule && rule.roleId && rule.collectionId && this.getRuleChain(rule).family === 'evm');
     if (!rules.length) return changes;
@@ -1140,9 +1165,7 @@ class RoleService {
       const collection = normalizeAddress(rule.collectionId, chain.chainId);
       const standard = String(rule.nftStandard || rule.nft_standard || 'erc721').toLowerCase();
       const tokenId = rule.tokenId ?? rule.token_id ?? null;
-      const addresses = (walletRecords || [])
-        .filter(wallet => wallet.chainId === chain.chainId)
-        .map(wallet => wallet.address);
+      const addresses = this.getVerificationAddressesForChain(walletRecords, chain.chainId);
       const cacheKey = `${chain.chainId}:${String(collection).toLowerCase()}:${standard}:${tokenId ?? ''}`;
       let result = balanceCache.get(cacheKey);
 
@@ -1174,6 +1197,7 @@ class RoleService {
       state.shouldHave ||= shouldHave;
       state.neverRemove ||= this.isRuleNeverRemove(rule);
       state.uncertain ||= !result.healthy;
+      changes.incomplete ||= !result.healthy;
       if (shouldHave) {
         state.matches.push({
           kind: 'nft',
@@ -1232,7 +1256,7 @@ class RoleService {
     for (const rule of tokenRules.filter(item => this.getRuleChain(item).family === 'evm')) {
       const chain = this.getRuleChain(rule);
       const token = normalizeAddress(rule.tokenMint, chain.chainId);
-      const addresses = records.filter(wallet => wallet.chainId === chain.chainId).map(wallet => wallet.address);
+      const addresses = this.getVerificationAddressesForChain(records, chain.chainId);
       const key = `${chain.chainId}:${String(token).toLowerCase()}`;
       let result = evmCache.get(key);
       if (!result) {
@@ -1260,7 +1284,7 @@ class RoleService {
    * Sync token roles for a member based on configured SPL or ERC-20 balances.
    */
   async syncTokenRoles(member, walletRecords, guildId = null, currentMemberRoleIds = null) {
-    const changes = { added: [], removed: [], granted: [] };
+    const changes = { added: [], removed: [], granted: [], incomplete: false };
 
     try {
       const tokenRules = this.getTokenRoleRules(guildId)
@@ -1295,6 +1319,7 @@ class RoleService {
         existing.shouldHave = existing.shouldHave || shouldHave;
         existing.neverRemove = existing.neverRemove || this.isRuleNeverRemove(rule);
         existing.uncertain = existing.uncertain || !balanceResult.healthy;
+        changes.incomplete ||= !balanceResult.healthy;
         existing.labels.push(label);
         if (shouldHave) {
           existing.matches.push({

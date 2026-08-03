@@ -26,7 +26,7 @@ async function main() {
   db.prepare('INSERT INTO users (discord_id, username) VALUES (?, ?)').run(discordId, 'evm-user');
   db.prepare(`
     INSERT INTO wallets (discord_id, chain_family, chain_id, wallet_address, verified, primary_wallet)
-    VALUES (?, 'evm', 'eip155:4663', ?, 1, 1)
+    VALUES (?, 'evm', 'eip155:1', ?, 1, 1)
   `).run(discordId, wallet);
 
   const tokenRule = roleService.addTokenRoleRule({
@@ -101,12 +101,13 @@ async function main() {
   };
 
   const records = roleService.getVerificationWalletRecords(discordId, guildId);
-  assert.deepStrictEqual(records.map(record => record.chainId), ['eip155:4663']);
+  assert.deepStrictEqual(records.map(record => record.chainId), ['eip155:1']);
   const nftChanges = await roleService.syncEvmCollectionRoles(member, records, guildId, new Set(roleCache.keys()));
   const tokenChanges = await roleService.syncTokenRoles(member, records, guildId, new Set(roleCache.keys()));
   assert(added.includes('role-nft'), 'ERC-721 collection ownership assigns its Discord role');
   assert(added.includes('role-1155'), 'ERC-1155 token ownership assigns its Discord role');
   assert(added.includes('role-token'), 'ERC-20 balance assigns its Discord role');
+  assert.ok(added.includes('role-nft') && added.includes('role-token'), 'an EVM wallet linked through Ethereum is evaluated on Robinhood Chain');
   assert.deepStrictEqual(observed1155, { chainId: 'eip155:4663', standard: 'erc1155', tokenId: '42' });
   assert.ok(nftChanges.granted.some(grant => grant.roleName === 'SOLROLEA' && grant.chainName === 'Robinhood Chain' && grant.balance === 1 && grant.assetName === 'Robinhood Test Collection'), 'Robinhood ERC-721 ownership assigns named role evidence');
   assert.ok(nftChanges.granted.some(grant => grant.roleName === 'ERC1155ROLE' && grant.chainName === 'Robinhood Chain' && grant.unit === 'ERC-1155 #42' && grant.assetName === 'Robinhood Items'), 'Robinhood ERC-1155 ownership assigns named token evidence');
@@ -119,9 +120,10 @@ async function main() {
   roleCache.set('role-token', guildRoles.get('role-token'));
   const removalsBeforeFailure = removed.length;
   evmService.getTokenBalance = async () => { throw new Error('RPC unavailable'); };
-  await roleService.syncTokenRoles(member, records, guildId, new Set(roleCache.keys()));
+  const failedSync = await roleService.syncTokenRoles(member, records, guildId, new Set(roleCache.keys()));
   assert.strictEqual(removed.length, removalsBeforeFailure, 'RPC failure never removes a role');
   assert.strictEqual(roleCache.has('role-token'), true, 'existing role is preserved during RPC failure');
+  assert.strictEqual(failedSync.incomplete, true, 'RPC failure is surfaced as an incomplete verification result');
 
   evmService.getTokenBalance = originalTokenBalance;
   evmService.getNftBalance = originalNftBalance;

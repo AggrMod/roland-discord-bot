@@ -21,6 +21,7 @@ This file is the source-of-truth command reference for the current production co
 - `/verification quick`
 - Admin: `/verification admin panel|export-user|remove-user|export-wallets|token-role-add|token-role-remove|token-role-list|role-config|actions|og-view|og-enable|og-role|og-limit|og-sync`
 - Network-aware rules: configure Solana collection/SPL rules or Ethereum, Base, Robinhood Chain, Polygon, Arbitrum One, and Optimism ERC-721, ERC-1155, and ERC-20 rules in Modules → Identity / Verification. Existing roles are preserved when an EVM RPC check is unavailable.
+- A verified EVM address is checked across every configured EVM network; members do not need to reconnect the same address separately for Ethereum, Base, Robinhood Chain, or other supported EVM chains.
 - Multi-tenant note: legacy `role-config` write actions are blocked; use portal Settings → Verification for tenant-scoped rule edits.
 - OG roles are tenant-scoped in multi-tenant mode.
 

@@ -3355,7 +3355,7 @@ const HELP_GUIDES = Object.freeze([
     route: 'wallets', action: 'Open my wallets',
     overview: 'Wallet verification uses a temporary challenge and signature. GuildPilot never asks for a seed phrase or private key.',
     steps: ['Choose Solana or an EVM network.', 'Connect the matching wallet application.', 'Read and sign the ownership challenge.', 'Confirm the verified wallet and select a primary wallet when needed.'],
-    tips: ['Supported EVM identity covers Ethereum, Base, Robinhood Chain, Polygon, Arbitrum One, and Optimism.', 'A signature proves control without transferring assets.', 'Only approve a message you can read and recognize.']
+    tips: ['One verified EVM address works across Ethereum, Base, Robinhood Chain, Polygon, Arbitrum One, and Optimism.', 'A signature proves control without transferring assets.', 'Only approve a message you can read and recognize.']
   },
   {
     id: 'communities', group: 'Essentials', role: 'user', icon: 'fa-people-group',

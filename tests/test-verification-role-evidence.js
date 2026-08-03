@@ -1,7 +1,16 @@
 const assert = require('assert');
-const roleService = require('../services/roleService');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'guildpilot-role-evidence-'));
+process.env.DATABASE_PATH = path.join(runDir, 'role-evidence.db');
+process.env.DB_BACKUP_ENABLED = 'false';
+process.env.DB_BACKUP_ON_STARTUP = 'false';
 
 async function main() {
+  const db = require('../database/db');
+  const roleService = require('../services/roleService');
   const originalGetEffectiveTiers = roleService.getEffectiveTiers.bind(roleService);
   const roleCache = new Map();
   const holderRole = {
@@ -28,8 +37,14 @@ async function main() {
   };
 
   try {
+    db.prepare(`
+      INSERT INTO nft_tracked_collections (
+        guild_id, chain_family, chain_id, collection_address, collection_name, channel_id
+      ) VALUES (?, 'solana', 'solana:mainnet', ?, ?, ?)
+    `).run(guild.id, 'solpranos-collection', 'The Solpranos', 'channel-role-evidence');
+
     roleService.getEffectiveTiers = () => [{
-      name: 'Solpranos',
+      name: 'Solana test role',
       chainId: 'solana:mainnet',
       collectionId: 'solpranos-collection',
       minNFTs: 1,
@@ -47,7 +62,7 @@ async function main() {
     assert.deepStrictEqual(result.granted[0], {
       kind: 'nft',
       chainName: 'Solana',
-      assetName: 'Solpranos',
+      assetName: 'The Solpranos',
       balance: 2,
       min: 1,
       max: 999999,
@@ -57,6 +72,8 @@ async function main() {
     });
   } finally {
     roleService.getEffectiveTiers = originalGetEffectiveTiers;
+    db.close();
+    fs.rmSync(runDir, { recursive: true, force: true });
   }
 
   console.log('verification role evidence assertions passed');

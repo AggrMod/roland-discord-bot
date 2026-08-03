@@ -742,7 +742,7 @@ async function handlePanelVerifyButton(interaction) {
       .setDescription(syncDescription)
       .addFields(...roleFields);
 
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({ embeds: [embed], allowedMentions: { parse: [] } });
   } catch (e) {
     logger.error('Verify button error:', e);
   }

@@ -140,6 +140,42 @@ class RoleService {
     return getChain(rule.chainId || rule.chain_id || rule.chain || 'solana:mainnet') || getChain('solana:mainnet');
   }
 
+  getCollectionDisplayName(guildId, chainValue, collectionId, fallback = '') {
+    const normalizedGuildId = String(guildId || '').trim();
+    const rawCollectionId = String(collectionId || '').trim();
+    const chain = getChain(chainValue || 'solana:mainnet');
+    if (!rawCollectionId) return String(fallback || 'NFT collection').trim();
+
+    try {
+      if (normalizedGuildId && chain) {
+        const addressClause = chain.family === 'evm'
+          ? 'LOWER(TRIM(collection_address)) = LOWER(TRIM(?))'
+          : 'TRIM(collection_address) = TRIM(?)';
+        const tracked = db.prepare(`
+          SELECT collection_name
+          FROM nft_tracked_collections
+          WHERE guild_id = ? AND chain_id = ? AND ${addressClause}
+          ORDER BY enabled DESC, id ASC
+          LIMIT 1
+        `).get(normalizedGuildId, chain.chainId, rawCollectionId);
+        const trackedName = String(tracked?.collection_name || '').trim();
+        if (trackedName) return trackedName;
+      }
+
+      if (chain?.family === 'solana') {
+        if (!this.collectionsConfig) this.loadConfigs();
+        const catalogEntry = (this.collectionsConfig?.collections || [])
+          .find(collection => String(collection?.id || '').trim() === rawCollectionId);
+        const catalogName = String(catalogEntry?.name || '').trim();
+        if (catalogName) return catalogName;
+      }
+    } catch (error) {
+      logger.warn(`Failed to resolve collection display name for ${rawCollectionId}: ${error?.message || error}`);
+    }
+
+    return String(fallback || '').trim() || `${rawCollectionId.slice(0, 6)}...${rawCollectionId.slice(-4)}`;
+  }
+
   async updateUserRoles(discordId, username, guildId = null) {
     try {
       const walletRecords = this.getVerificationWalletRecords(discordId, guildId || '');
@@ -871,7 +907,7 @@ class RoleService {
           existing.matches.push({
             kind: 'nft',
             chainName: 'Solana',
-            assetName: String(tier.name || tier.collectionId || 'NFT collection'),
+            assetName: this.getCollectionDisplayName(guildId, 'solana:mainnet', tier.collectionId, tier.name),
             balance: count,
             min,
             max,
@@ -984,7 +1020,7 @@ class RoleService {
           existing.matches.push({
             kind: 'trait',
             chainName: 'Solana',
-            assetName: String(traitCollectionId || 'NFT collection'),
+            assetName: this.getCollectionDisplayName(guildId, 'solana:mainnet', traitCollectionId, 'NFT collection'),
             trait: `${traitType}: ${traitValues.join(' or ')}`,
           });
         }
@@ -1140,7 +1176,7 @@ class RoleService {
         state.matches.push({
           kind: 'nft',
           chainName: chain.name,
-          assetName: String(rule.name || 'NFT collection'),
+          assetName: this.getCollectionDisplayName(guildId, chain.chainId, collection, rule.name || 'NFT collection'),
           balance: result.balance,
           min,
           max,

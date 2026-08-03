@@ -57,6 +57,16 @@ async function main() {
       roleId: 'role-1155', neverRemove: false,
     },
   ]));
+  db.prepare(`
+    INSERT INTO nft_tracked_collections (
+      guild_id, chain_family, chain_id, collection_address, collection_name, channel_id, nft_standard
+    ) VALUES (?, 'evm', 'eip155:1', ?, ?, ?, 'erc721')
+  `).run(guildId, collection, 'Ethereum Test Collection', 'channel-evm-721');
+  db.prepare(`
+    INSERT INTO nft_tracked_collections (
+      guild_id, chain_family, chain_id, collection_address, collection_name, channel_id, nft_standard, token_id
+    ) VALUES (?, 'evm', 'eip155:1', ?, ?, ?, 'erc1155', '42')
+  `).run(guildId, erc1155Collection, 'Ethereum Items', 'channel-evm-1155');
 
   const roleCache = new Map();
   const guildRoles = new Map([
@@ -98,8 +108,8 @@ async function main() {
   assert(added.includes('role-1155'), 'ERC-1155 token ownership assigns its Discord role');
   assert(added.includes('role-token'), 'ERC-20 balance assigns its Discord role');
   assert.deepStrictEqual(observed1155, { chainId: 'eip155:1', standard: 'erc1155', tokenId: '42' });
-  assert.ok(nftChanges.granted.some(grant => grant.roleName === 'SOLROLEA' && grant.balance === 1), 'ERC-721 role includes grant evidence');
-  assert.ok(nftChanges.granted.some(grant => grant.roleName === 'ERC1155ROLE' && grant.unit === 'ERC-1155 #42'), 'ERC-1155 role includes token evidence');
+  assert.ok(nftChanges.granted.some(grant => grant.roleName === 'SOLROLEA' && grant.balance === 1 && grant.assetName === 'Ethereum Test Collection'), 'ERC-721 role includes named collection evidence');
+  assert.ok(nftChanges.granted.some(grant => grant.roleName === 'ERC1155ROLE' && grant.unit === 'ERC-1155 #42' && grant.assetName === 'Ethereum Items'), 'ERC-1155 role includes named token evidence');
   assert.ok(tokenChanges.granted.some(grant => grant.roleName === 'ETHROLEB' && grant.balance === 250), 'ERC-20 role includes balance evidence');
 
   evmService.getTokenBalance = async () => ({ formatted: '5' });

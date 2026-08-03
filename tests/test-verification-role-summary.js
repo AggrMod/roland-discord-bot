@@ -3,7 +3,7 @@ const { buildVerificationRoleFields } = require('../utils/verificationRoleSummar
 
 const fields = buildVerificationRoleFields([
   {
-    roleId: 'role-sol',
+    roleId: '100000000000000001',
     roleName: 'SOLROLEA',
     kind: 'nft',
     chainName: 'Solana',
@@ -14,7 +14,7 @@ const fields = buildVerificationRoleFields([
     unit: 'NFTs',
   },
   {
-    roleId: 'role-eth',
+    roleId: '100000000000000002',
     roleName: 'ETHROLEB',
     kind: 'nft',
     chainName: 'Ethereum',
@@ -27,12 +27,12 @@ const fields = buildVerificationRoleFields([
 ]);
 
 assert.strictEqual(fields.length, 2);
-assert.strictEqual(fields[0].name, '@SOLROLEA');
-assert.match(fields[0].value, /Solana · Solpranos/);
+assert.strictEqual(fields[0].name, '<@&100000000000000001>');
+assert.match(fields[0].value, /Solana · Solpranos:/);
 assert.match(fields[0].value, /Holds 3 NFTs/);
 assert.match(fields[0].value, /Requires 1\+ NFTs/);
-assert.strictEqual(fields[1].name, '@ETHROLEB');
-assert.match(fields[1].value, /Ethereum · Ethereum Collection/);
+assert.strictEqual(fields[1].name, '<@&100000000000000002>');
+assert.match(fields[1].value, /Ethereum · Ethereum Collection:/);
 assert.match(fields[1].value, /Holds 2 NFTs/);
 assert.match(fields[1].value, /Requires 1–5 NFTs/);
 

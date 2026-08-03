@@ -25,17 +25,17 @@ function formatGrantReason(grant = {}) {
   const heading = [chainName, assetName].filter(Boolean).join(' · ') || 'Verified wallet';
 
   if (grant.kind === 'wallet') {
-    return `${heading}\nWallet ownership verified`;
+    return 'Wallet ownership verified';
   }
   if (grant.kind === 'trait') {
     const trait = String(grant.trait || '').trim() || 'Required NFT trait';
-    return `${heading}\nOwns an NFT with ${trait}`;
+    return `${heading}: Owns an NFT with ${trait}`;
   }
 
   const balance = formatNumber(grant.balance);
   const unit = String(grant.unit || (grant.kind === 'token' ? 'tokens' : 'NFTs')).trim();
   const heldUnit = Number(grant.balance) === 1 && unit === 'NFTs' ? 'NFT' : unit;
-  return `${heading}\nHolds ${balance} ${heldUnit} · ${formatRequirement(grant.min, grant.max, unit)}`;
+  return `${heading}: Holds ${balance} ${heldUnit} · ${formatRequirement(grant.min, grant.max, unit)}`;
 }
 
 function buildVerificationRoleFields(grants, { maxRoles = 20, maxCharacters = 5000 } = {}) {
@@ -63,7 +63,7 @@ function buildVerificationRoleFields(grants, { maxRoles = 20, maxCharacters = 50
   const fields = [];
   let characterCount = 0;
   for (const entry of entries.slice(0, Math.max(1, maxRoles))) {
-    const name = `@${entry.roleName}`.slice(0, 256);
+    const name = (entry.roleId ? `<@&${entry.roleId}>` : `@${entry.roleName}`).slice(0, 256);
     const value = entry.reasons.join('\n').slice(0, 1024);
     if (fields.length && characterCount + name.length + value.length > maxCharacters) break;
     fields.push({ name, value, inline: false });

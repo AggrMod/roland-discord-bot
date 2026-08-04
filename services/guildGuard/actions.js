@@ -353,26 +353,33 @@ async function execute({ source, event, decision, config, incident, signals }) {
     }
   }
 
-  if ((action === 'timeout' || action === 'quarantine') && actions.timeoutUsers === true) {
-    const member = source?.member || source;
-    try {
-      if (typeof member?.timeout !== 'function') throw new Error('moderate_members_permission_or_member_unavailable');
-      const timeoutSeconds = Math.max(1, Math.min(2419200, Number(actions.timeoutSeconds) || 60));
-      await member.timeout(timeoutSeconds * 1000, 'Guild Guard risk policy');
-      return finalizeAction(claim.id, 'applied', { timeoutSeconds, containment: action === 'quarantine' });
-    } catch (error) {
-      return finalizeAction(claim.id, 'failed', { error: String(error?.message || error) });
+  if (action === 'timeout' || action === 'quarantine') {
+    const outcome = { policyAction: action, containment: action === 'quarantine', messageDeleted: false, timeoutApplied: false, errors: [] };
+    let requested = 0;
+    if (actions.deleteMessages === true) {
+      requested += 1;
+      try {
+        if (typeof source?.delete !== 'function') throw new Error('manage_messages_permission_or_message_unavailable');
+        await source.delete();
+        outcome.messageDeleted = true;
+      } catch (error) {
+        outcome.errors.push({ action: 'delete', message: String(error?.message || error) });
+      }
     }
-  }
-
-  if ((action === 'timeout' || action === 'quarantine') && actions.deleteMessages === true) {
-    try {
-      if (typeof source?.delete !== 'function') throw new Error('manage_messages_permission_or_message_unavailable');
-      await source.delete();
-      return finalizeAction(claim.id, 'applied', { policyAction: action, messageDeleted: true });
-    } catch (error) {
-      return finalizeAction(claim.id, 'failed', { policyAction: action, error: String(error?.message || error) });
+    if (actions.timeoutUsers === true) {
+      requested += 1;
+      const member = source?.member || source;
+      try {
+        if (typeof member?.timeout !== 'function') throw new Error('moderate_members_permission_or_member_unavailable');
+        outcome.timeoutSeconds = Math.max(1, Math.min(2419200, Number(actions.timeoutSeconds) || 60));
+        await member.timeout(outcome.timeoutSeconds * 1000, 'Guild Guard risk policy');
+        outcome.timeoutApplied = true;
+      } catch (error) {
+        outcome.errors.push({ action: 'timeout', message: String(error?.message || error) });
+      }
     }
+    const applied = Number(outcome.messageDeleted) + Number(outcome.timeoutApplied);
+    return finalizeAction(claim.id, actionStatus(applied, outcome.errors, requested), outcome);
   }
 
   return finalizeAction(claim.id, 'skipped', { reason: 'unsupported_or_missing_permission' });

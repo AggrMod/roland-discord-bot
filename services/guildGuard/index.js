@@ -15,7 +15,9 @@ const {
   massMentionDetector,
   suspiciousAccountDetector,
   impersonationDetector,
+  scamLanguageDetector,
   linkProtectionDetector,
+  attachmentThreatDetector,
   raidBurstDetector
 } = require('./detectors');
 
@@ -30,7 +32,8 @@ function normalizeGuildId(guildId) {
 
 const GUILD_GUARD_RULE_DETECTORS = new Set([
   'spam_flood', 'duplicate_message', 'mass_mention', 'suspicious_account',
-  'staff_impersonation', 'link_protection', 'lookalike_domain', 'raid_burst'
+  'staff_impersonation', 'wallet_drainer_language', 'link_protection', 'lookalike_domain',
+  'link_deception', 'dangerous_attachment', 'qr_code_link', 'raid_burst'
 ]);
 
 const GLOBAL_REPUTATION_CATEGORIES = new Set(['spam', 'unsafe_link', 'impersonation', 'scam', 'suspicious_account']);
@@ -49,7 +52,8 @@ function normalizeGlobalCategory(value, incident = null) {
   try { signals = JSON.parse(incident?.signals_json || '[]'); } catch (_) { signals = []; }
   const detectors = new Set(signals.map(signal => String(signal?.detector || '').trim()));
   if (detectors.has('staff_impersonation')) return 'impersonation';
-  if (detectors.has('link_protection') || detectors.has('lookalike_domain')) return 'unsafe_link';
+  if (detectors.has('wallet_drainer_language') || detectors.has('dangerous_attachment') || detectors.has('qr_code_link')) return 'scam';
+  if (detectors.has('link_protection') || detectors.has('lookalike_domain') || detectors.has('link_deception')) return 'unsafe_link';
   if (detectors.has('spam_flood') || detectors.has('duplicate_message') || detectors.has('mass_mention')) return 'spam';
   if (detectors.has('suspicious_account') || detectors.has('raid_burst')) return 'suspicious_account';
   return 'scam';
@@ -472,7 +476,7 @@ async function recordIncident(event, signals, score, evidence, status = 'open') 
 
 const eventWindow = new EventWindowStore();
 const pipeline = new DetectionPipeline({
-  detectors: [spamFloodDetector, duplicateMessageDetector, massMentionDetector, suspiciousAccountDetector, impersonationDetector, linkProtectionDetector, raidBurstDetector],
+  detectors: [spamFloodDetector, duplicateMessageDetector, massMentionDetector, suspiciousAccountDetector, impersonationDetector, scamLanguageDetector, linkProtectionDetector, attachmentThreatDetector, raidBurstDetector],
   isExempt,
   recordIncident,
   recordSignals,

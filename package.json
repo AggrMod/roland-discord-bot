@@ -34,7 +34,9 @@
     "express-rate-limit": "^8.3.1",
     "express-session": "^1.18.0",
     "helmet": "^8.1.0",
+    "jsqr": "^1.4.0",
     "pdf-parse": "^1.1.4",
+    "sharp": "^0.35.3",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {

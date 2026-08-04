@@ -227,6 +227,9 @@ body {
 .gg-evidence-panel p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .gg-safe-links { display: grid; gap: 7px; margin-top: 13px; padding-top: 13px; border-top: 1px solid rgba(70, 96, 139, .25); }
 .gg-safe-links code { width: fit-content; max-width: 100%; overflow-wrap: anywhere; user-select: text; }
+.gg-safe-attachments { display: grid; gap: 8px; margin-top: 13px; padding-top: 13px; border-top: 1px solid rgba(70, 96, 139, .25); }
+.gg-safe-attachments > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid rgba(139, 129, 255, .15); border-radius: 10px; background: rgba(5, 9, 20, .38); }
+.gg-safe-attachments span { color: var(--text-secondary); font-size: .82rem; }
 .gg-detail-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 15px 0; }
 .gg-history-summary h4 { margin-top: 0; }
 .gg-history-summary p:last-child { margin-bottom: 0; }

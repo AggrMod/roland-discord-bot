@@ -41,6 +41,13 @@ class DetectionPipeline {
       channelId: event.channelId,
       rawContent: event.rawContent,
       urls: event.urls,
+      attachments: (event.attachments || []).map(attachment => ({
+        name: attachment.name,
+        contentType: attachment.contentType,
+        size: attachment.size,
+        width: attachment.width,
+        height: attachment.height
+      })),
       mentions: event.mentions
     }, options.incidentStatus);
     const decision = decidePolicy(score, config);

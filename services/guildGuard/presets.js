@@ -14,6 +14,8 @@ const PRESETS = Object.freeze({
         massMention: { enabled: true, threshold: 6 },
         suspiciousAccount: { enabled: true, maxAccountAgeHours: 24 },
         impersonation: { enabled: true, score: 70 },
+        scamLanguage: { enabled: true, score: 50, secretRequestScore: 100 },
+        attachments: { enabled: true, scanQrCodes: true, qrCodeScore: 30, maxImagesPerMessage: 2, maxScanBytes: 3000000, scanTimeoutMs: 4000 },
         links: { enabled: true, requireAllowlist: false },
         raids: { enabled: true, windowSeconds: 60, joinThreshold: 8, score: 80 }
       },
@@ -42,6 +44,8 @@ const PRESETS = Object.freeze({
         massMention: { enabled: true, threshold: 5 },
         suspiciousAccount: { enabled: true, maxAccountAgeHours: 48 },
         impersonation: { enabled: true, score: 70 },
+        scamLanguage: { enabled: true, score: 55, secretRequestScore: 100 },
+        attachments: { enabled: true, scanQrCodes: true, qrCodeScore: 35, maxImagesPerMessage: 2, maxScanBytes: 3000000, scanTimeoutMs: 4000 },
         links: { enabled: true, requireAllowlist: false },
         raids: { enabled: true, windowSeconds: 60, joinThreshold: 8, score: 80 }
       },
@@ -73,6 +77,8 @@ const PRESETS = Object.freeze({
         massMention: { enabled: true, threshold: 4 },
         suspiciousAccount: { enabled: true, maxAccountAgeHours: 72 },
         impersonation: { enabled: true, score: 75 },
+        scamLanguage: { enabled: true, score: 60, secretRequestScore: 100 },
+        attachments: { enabled: true, scanQrCodes: true, qrCodeScore: 45, maxImagesPerMessage: 3, maxScanBytes: 4000000, scanTimeoutMs: 5000 },
         links: { enabled: true, requireAllowlist: false, lookalikeScore: 55 },
         raids: { enabled: true, windowSeconds: 60, joinThreshold: 5, score: 85 }
       },

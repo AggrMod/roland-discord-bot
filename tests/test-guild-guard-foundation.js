@@ -13,6 +13,7 @@ process.env.DB_BACKUP_ON_STARTUP = 'false';
 const db = require('../database/db');
 const guard = require('../services/guildGuard');
 const { normalizeEvent, normalizeContent } = require('../services/guildGuard/normalizer');
+const { classifyAttachment, scanQrAttachment } = require('../services/guildGuard/attachmentSafety');
 const { scoreSignals, decidePolicy, riskLevel } = require('../services/guildGuard/scoring');
 const { resolveSafeUrl, isPrivateIp } = require('../services/guildGuard/urlSafety');
 const EventWindowStore = require('../services/guildGuard/eventWindow');
@@ -22,7 +23,9 @@ const {
   massMentionDetector,
   suspiciousAccountDetector,
   impersonationDetector,
-  linkProtectionDetector
+  scamLanguageDetector,
+  linkProtectionDetector,
+  attachmentThreatDetector
 } = require('../services/guildGuard/detectors');
 const actionService = require('../services/guildGuard/actions');
 
@@ -50,6 +53,22 @@ assert.deepStrictEqual(event.urls, ['https://example.com']);
 const bareDomainEvent = normalizeEvent({ guildId: 'guild-test', author: { id: 'user-1' }, content: 'visit example.com/docs or www.github.com' });
 assert.deepStrictEqual(bareDomainEvent.urls, ['example.com/docs', 'www.github.com']);
 assert.deepStrictEqual(event.mentions, ['123']);
+const attachmentEvent = normalizeEvent({
+  guildId: 'guild-a',
+  author: { id: 'user-a' },
+  attachments: new Map([['file-1', { id: 'file-1', name: 'photo.jpg.exe', url: 'https://cdn.discordapp.com/attachments/a/b/photo.jpg.exe', contentType: 'application/octet-stream', size: 2048 }]])
+});
+assert.strictEqual(attachmentEvent.attachments.length, 1);
+assert.strictEqual(attachmentEvent.attachments[0].name, 'photo.jpg.exe');
+assert.ok(classifyAttachment(attachmentEvent.attachments[0]).some(finding => finding.category === 'double_extension'));
+assert.strictEqual(classifyAttachment({ name: 'logo.svg', contentType: 'image/svg+xml' })[0].score, 45, 'ordinary SVG files should warn instead of auto-contain under Balanced thresholds');
+const decodedQr = await scanQrAttachment({
+  name: 'qr.png', url: 'https://cdn.discordapp.com/attachments/a/b/qr.png', contentType: 'image/png'
+}, {
+  fetcher: async () => ({ ok: true, body: Buffer.from('fake-image') }),
+  decoder: async () => 'https://evil.example/claim'
+});
+assert.strictEqual(decodedQr, 'https://evil.example/claim');
 
 const config = guard.getConfig('guild-a');
 assert.strictEqual(config.enabled, false, 'Guild Guard must be disabled by default');
@@ -144,6 +163,20 @@ const appliedAction = await actionService.execute({
 });
 assert.strictEqual(appliedAction.status, 'applied');
 assert.strictEqual(timeoutMs, 5000);
+let combinedTimeoutMs = null;
+let combinedMessageDeleted = false;
+const combinedIncident = await guard.createTestIncident('guild-combined-action', { id: 'combined-action', author: { id: 'combined-user' } });
+const combinedAction = await actionService.execute({
+  source: { member: { timeout: async duration => { combinedTimeoutMs = duration; } }, delete: async () => { combinedMessageDeleted = true; } },
+  event: { guildId: 'guild-combined-action', userId: 'combined-user', eventType: 'message_create' },
+  decision: { action: 'quarantine', score: 90 },
+  config: { mode: 'enforce', actions: { enabled: true, timeoutUsers: true, timeoutSeconds: 120, deleteMessages: true }, rules: [] },
+  incident: combinedIncident.incident,
+  signals: []
+});
+assert.strictEqual(combinedAction.status, 'applied');
+assert.strictEqual(combinedTimeoutMs, 120000);
+assert.strictEqual(combinedMessageDeleted, true, 'high-risk messages must be deleted even when the member is also contained');
 
 guard.identityRegistry.upsert('guild-identity', {
   userId: 'staff-1',
@@ -180,6 +213,34 @@ const lookalikeSignal = await linkProtectionDetector.detect({
   eventType: 'message_create', guildId: 'guild-links', urls: ['https://trusled.example/path']
 }, { config: linkConfig, domainRegistry: guard.domainRegistry });
 assert.ok(lookalikeSignal && lookalikeSignal[0].metadata.category === 'lookalike');
+const deceptiveLinkSignal = await linkProtectionDetector.detect({
+  eventType: 'message_create', guildId: 'guild-links', rawContent: '[trusted.example](https://evil.example/claim)', urls: ['https://evil.example/claim']
+}, { config: linkConfig, domainRegistry: guard.domainRegistry });
+assert.ok(deceptiveLinkSignal.some(signal => signal.detector === 'link_deception' && signal.metadata.category === 'masked_destination'));
+const secretRequestSignal = scamLanguageDetector.detect({
+  eventType: 'message_create', normalizedContent: 'support needs you to paste your seed phrase immediately', urls: [], attachments: []
+}, { config: { detectors: { scamLanguage: { enabled: true } } } });
+assert.strictEqual(secretRequestSignal.severity, 'critical');
+assert.strictEqual(scamLanguageDetector.detect({
+  eventType: 'message_create', normalizedContent: 'never share your seed phrase with anyone', urls: [], attachments: []
+}, { config: { detectors: { scamLanguage: { enabled: true } } } }), null, 'member safety warnings must not be classified as seed phrase theft');
+guard.domainRegistry.add('guild-language-safe', 'guildpilot.app', 'allow');
+assert.strictEqual(scamLanguageDetector.detect({
+  eventType: 'message_create', guildId: 'guild-language-safe', normalizedContent: 'connect your wallet to verify and claim your role', urls: ['https://guildpilot.app/wallets'], attachments: []
+}, { config: { detectors: { scamLanguage: { enabled: true } } }, domainRegistry: guard.domainRegistry }), null, 'trusted destinations must suppress ordinary wallet onboarding language');
+const attachmentSignals = await attachmentThreatDetector.detect({
+  eventType: 'message_create', guildId: 'guild-links', rawContent: '', urls: [], attachments: [
+    { name: 'claim.png', url: 'https://cdn.discordapp.com/attachments/a/b/claim.png', contentType: 'image/png', size: 1000 },
+    { name: 'rewards.pdf.exe', url: 'https://cdn.discordapp.com/attachments/a/b/rewards.pdf.exe', contentType: 'application/octet-stream', size: 1000 }
+  ]
+}, {
+  config: { detectors: { attachments: { enabled: true, scanQrCodes: true }, links: { enabled: true, protectedDomains: [] } } },
+  domainRegistry: guard.domainRegistry,
+  scanQrAttachment: async attachment => attachment.name === 'claim.png' ? 'https://evil.example/claim' : null
+});
+assert.ok(attachmentSignals.some(signal => signal.detector === 'qr_code_link'));
+assert.ok(attachmentSignals.some(signal => signal.detector === 'dangerous_attachment' && signal.metadata.category === 'double_extension'));
+assert.ok(attachmentSignals.some(signal => signal.detector === 'link_protection' && signal.metadata.source === 'qr_code'));
 
 let alertPayload = null;
 guard.updateConfig('guild-alert', {

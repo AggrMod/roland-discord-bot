@@ -1,4 +1,7 @@
+const net = require('net');
 const { resolveSafeUrl, toHttpUrl, isPrivateHostname, SHORTENER_HOSTS } = require('./urlSafety');
+const { classifyAttachment, isScannableImage, scanQrAttachment } = require('./attachmentSafety');
+const { extractUrls } = require('./normalizer');
 
 function numberSetting(config, detectorName, key, fallback, minimum = 0) {
   const value = Number(config?.detectors?.[detectorName]?.[key]);
@@ -113,6 +116,40 @@ const impersonationDetector = {
   }
 };
 
+const scamLanguageDetector = {
+  name: 'wallet_drainer_language',
+  detect(event, { config, domainRegistry }) {
+    if (event.eventType !== 'message_create' || !enabled(config, 'scamLanguage') || !event.normalizedContent) return null;
+    const content = event.normalizedContent;
+    const safetyWarning = /\b(never|do not|don't|will never)\b.{0,35}\b(share|send|enter|submit|import|paste|provide)\b.{0,45}\b(seed phrase|recovery phrase|secret phrase|private key)\b/.test(content);
+    const secretRequest = !safetyWarning && /\b(seed phrase|recovery phrase|secret phrase|private key)\b/.test(content)
+      && /\b(send|share|enter|submit|verify|validate|import|paste|provide)\b/.test(content);
+    if (secretRequest) {
+      return {
+        detector: this.name,
+        severity: 'critical',
+        score: numberSetting(config, 'scamLanguage', 'secretRequestScore', 100, 1),
+        metadata: { category: 'secret_request', explanation: 'Message asks a member to disclose wallet recovery credentials' }
+      };
+    }
+    const walletReference = /\b(wallet|metamask|phantom|ledger|trezor)\b/.test(content);
+    const walletAction = /\b(connect|verify|validate|sync|restore|migrate|rectify|authenticate|reconnect)\b/.test(content);
+    const pressureOrLure = /\b(urgent|immediately|airdrop|claim|mint|support|suspended|compromised|security|reward|refund|giveaway|whitelist)\b/.test(content);
+    const carriesDestination = (event.urls || []).length > 0 || (event.attachments || []).length > 0;
+    const allowedDomains = domainRegistry?.getLists?.(event.guildId)?.allow || [];
+    const allLinkedDomainsAllowed = Boolean(domainRegistry && event.urls?.length > 0
+      && event.urls.every(url => allowedDomains.includes(domainRegistry.normalizeDomain(url))));
+    if (allLinkedDomainsAllowed) return null;
+    if (!walletReference || !walletAction || (!pressureOrLure && !carriesDestination)) return null;
+    return {
+      detector: this.name,
+      severity: carriesDestination ? 'high' : 'medium',
+      score: numberSetting(config, 'scamLanguage', 'score', carriesDestination ? 55 : 40, 1),
+      metadata: { category: 'wallet_lure', hasDestination: carriesDestination, explanation: 'Message combines wallet instructions with pressure, rewards, or an external destination' }
+    };
+  }
+};
+
 const linkProtectionDetector = {
   name: 'link_protection',
   async detect(event, { config, domainRegistry }) {
@@ -123,12 +160,39 @@ const linkProtectionDetector = {
       .filter(Boolean);
     const references = [...new Set([...lists.allow, ...protectedDomains])];
     const signals = [];
+    const markdownLinks = String(event.rawContent || '').matchAll(/\[([^\]]{1,200})\]\((https?:\/\/[^)\s]+)\)/gi);
+    for (const match of markdownLinks) {
+      const displayedDomain = domainRegistry.normalizeDomain(match[1]);
+      const destinationDomain = domainRegistry.normalizeDomain(match[2]);
+      if (displayedDomain && destinationDomain && displayedDomain !== destinationDomain
+        && (references.includes(displayedDomain) || lists.block.includes(destinationDomain))) {
+        signals.push({
+          detector: 'link_deception',
+          severity: 'critical',
+          score: numberSetting(config, 'links', 'deceptionScore', 80, 1),
+          metadata: { category: 'masked_destination', displayedDomain, destinationDomain, url: match[2] }
+        });
+      }
+    }
     for (const rawUrl of event.urls) {
       let analyzedUrl = rawUrl;
       let urlAnalysis = null;
       try {
         const parsed = toHttpUrl(rawUrl);
         const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+        const explicitlyAllowed = lists.allow.includes(domainRegistry.normalizeDomain(parsed.toString()));
+        if (!explicitlyAllowed && (parsed.username || parsed.password)) {
+          signals.push({ detector: 'link_deception', severity: 'critical', score: numberSetting(config, 'links', 'deceptionScore', 80, 1), metadata: { category: 'embedded_credentials', domain: host, url: rawUrl } });
+        }
+        if (!explicitlyAllowed && host.includes('xn--')) {
+          signals.push({ detector: 'link_deception', severity: 'high', score: numberSetting(config, 'links', 'punycodeScore', 60, 1), metadata: { category: 'internationalized_domain', domain: host, url: rawUrl } });
+        }
+        if (!explicitlyAllowed && net.isIP(parsed.hostname)) {
+          signals.push({ detector: 'link_deception', severity: 'high', score: numberSetting(config, 'links', 'ipAddressScore', 55, 1), metadata: { category: 'ip_address_link', domain: host, url: rawUrl } });
+        }
+        if (!explicitlyAllowed && parsed.port && !['80', '443'].includes(parsed.port)) {
+          signals.push({ detector: 'link_deception', severity: 'medium', score: numberSetting(config, 'links', 'unusualPortScore', 40, 1), metadata: { category: 'unusual_port', domain: host, port: parsed.port, url: rawUrl } });
+        }
         if (isPrivateHostname(parsed.hostname) || (config.detectors.links.inspectShortenedUrls !== false && SHORTENER_HOSTS.has(host))) {
           urlAnalysis = await resolveSafeUrl(rawUrl, {
             maxRedirects: config.detectors.links.redirectMaxHops,
@@ -189,6 +253,56 @@ const linkProtectionDetector = {
   }
 };
 
+const attachmentThreatDetector = {
+  name: 'dangerous_attachment',
+  async detect(event, context) {
+    const { config } = context;
+    if (event.eventType !== 'message_create' || !enabled(config, 'attachments') || !event.attachments?.length) return null;
+    const signals = [];
+    const attachmentConfig = config.detectors.attachments || {};
+    const qrScanner = context.scanQrAttachment || scanQrAttachment;
+    const scanLimit = Math.max(0, Math.min(3, Number(attachmentConfig.maxImagesPerMessage) || 2));
+    let scannedImages = 0;
+    for (const attachment of event.attachments) {
+      for (const finding of classifyAttachment(attachment)) {
+        signals.push({
+          detector: this.name,
+          severity: finding.severity,
+          score: finding.score,
+          metadata: { ...finding, attachmentName: attachment.name, contentType: attachment.contentType, size: attachment.size }
+        });
+      }
+      if (attachmentConfig.scanQrCodes === false || scannedImages >= scanLimit || !isScannableImage(attachment)) continue;
+      scannedImages += 1;
+      try {
+        const decoded = await qrScanner(attachment, {
+          maxBytes: attachmentConfig.maxScanBytes,
+          timeoutMs: attachmentConfig.scanTimeoutMs
+        });
+        if (!decoded) continue;
+        const qrUrls = extractUrls(decoded);
+        if (!qrUrls.length) continue;
+        signals.push({
+          detector: 'qr_code_link',
+          severity: 'medium',
+          score: numberSetting(config, 'attachments', 'qrCodeScore', 35, 1),
+          metadata: { category: 'qr_destination', attachmentName: attachment.name, decodedUrls: qrUrls }
+        });
+        const linkSignals = await linkProtectionDetector.detect({ ...event, rawContent: '', urls: qrUrls }, context);
+        if (Array.isArray(linkSignals)) {
+          signals.push(...linkSignals.map(signal => ({
+            ...signal,
+            metadata: { ...(signal.metadata || {}), source: 'qr_code', attachmentName: attachment.name }
+          })));
+        }
+      } catch (_) {
+        // A transient CDN or image decoding failure is not itself evidence of malicious content.
+      }
+    }
+    return signals.length ? signals : null;
+  }
+};
+
 const raidBurstDetector = {
   name: 'raid_burst',
   detect(event, { config, eventWindow }) {
@@ -213,7 +327,9 @@ module.exports = {
   massMentionDetector,
   suspiciousAccountDetector,
   impersonationDetector,
+  scamLanguageDetector,
   linkProtectionDetector,
+  attachmentThreatDetector,
   raidBurstDetector,
   levenshtein
 };

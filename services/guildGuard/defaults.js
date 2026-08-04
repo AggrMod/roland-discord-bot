@@ -17,6 +17,15 @@ const DEFAULT_CONFIG = Object.freeze({
     massMention: { enabled: false },
     suspiciousAccount: { enabled: false },
     impersonation: { enabled: false, score: 70 },
+    scamLanguage: { enabled: false, score: 55, secretRequestScore: 100 },
+    attachments: {
+      enabled: false,
+      scanQrCodes: true,
+      qrCodeScore: 35,
+      maxImagesPerMessage: 2,
+      maxScanBytes: 3000000,
+      scanTimeoutMs: 4000
+    },
     links: {
       enabled: false,
       requireAllowlist: false,
@@ -40,7 +49,10 @@ const DEFAULT_CONFIG = Object.freeze({
     combinationBonuses: [
       { detectors: ['spam_flood', 'duplicate_message'], score: 10, reason: 'repeated spam pattern' },
       { detectors: ['staff_impersonation', 'link_protection'], score: 20, reason: 'possible staff scam pattern' },
-      { detectors: ['suspicious_account', 'link_protection'], score: 15, reason: 'new account link risk' }
+      { detectors: ['suspicious_account', 'link_protection'], score: 15, reason: 'new account link risk' },
+      { detectors: ['wallet_drainer_language', 'link_protection'], score: 20, reason: 'wallet-drainer link pattern' },
+      { detectors: ['wallet_drainer_language', 'qr_code_link'], score: 20, reason: 'wallet-drainer QR pattern' },
+      { detectors: ['dangerous_attachment', 'wallet_drainer_language'], score: 15, reason: 'dangerous wallet attachment pattern' }
     ]
   },
   retentionDays: 30,

@@ -1808,8 +1808,33 @@ function renderModuleHub() {
 const GUILD_GUARD_DETECTOR_LABELS = Object.freeze({
   spam_flood: 'Spam flood', duplicate_message: 'Duplicate message', mass_mention: 'Mass mention',
   suspicious_account: 'Suspicious account', staff_impersonation: 'Staff impersonation',
-  link_protection: 'Unsafe link', lookalike_domain: 'Lookalike domain', raid_burst: 'Raid burst'
+  wallet_drainer_language: 'Wallet scam language', link_protection: 'Unsafe link',
+  lookalike_domain: 'Lookalike domain', link_deception: 'Disguised link',
+  dangerous_attachment: 'Dangerous attachment', qr_code_link: 'QR-code link', raid_burst: 'Raid burst'
 });
+
+function describeGuildGuardSignal(signal) {
+  const metadata = signal?.metadata || {};
+  const explanations = {
+    secret_request: 'The message asks a member to disclose a seed phrase, recovery phrase, or private key.',
+    wallet_lure: 'Wallet instructions are combined with urgency, rewards, support claims, or an external destination.',
+    masked_destination: `The link displays ${metadata.displayedDomain || 'one domain'} but opens ${metadata.destinationDomain || 'another domain'}.`,
+    embedded_credentials: 'The URL hides text before the real destination, which can mislead members.',
+    internationalized_domain: 'The destination uses a punycode domain that may imitate familiar characters.',
+    ip_address_link: 'The destination uses a raw IP address instead of a normal domain.',
+    unusual_port: 'The destination uses an unusual network port.',
+    executable: 'The attached file can run code on a member device.',
+    active_content: 'The attached file can contain active web content.',
+    double_extension: 'The filename disguises its true executable type behind a familiar extension.',
+    disguised_archive: 'The archive name disguises active or executable content.',
+    content_type_mismatch: 'The filename and the file type reported by Discord do not match.',
+    qr_destination: 'An attached image contains a QR code that opens an external link.',
+    blocklisted: `The destination ${metadata.domain || ''} is on this community's blocked list.`,
+    lookalike: `The destination resembles trusted domain ${metadata.lookalikeOf || ''}.`,
+    unsafe_destination: 'The destination could not be resolved safely.'
+  };
+  return explanations[metadata.category] || metadata.explanation || `${GUILD_GUARD_DETECTOR_LABELS[signal?.detector] || signal?.detector || 'Risk signal'} contributed to this incident.`;
+}
 
 function switchGuildGuardTab(tab) {
   const selected = ['overview', 'incidents', 'protection', 'trusted', 'advanced'].includes(tab) ? tab : 'overview';
@@ -1837,7 +1862,9 @@ function renderGuildGuardCoverage(config) {
   const target = document.getElementById('guildGuardCoverage');
   if (!target) return;
   const layers = [
-    ['links', 'Links & wallet scams', 'Dangerous and lookalike domains'],
+    ['links', 'Dangerous links', 'Shortened, disguised and lookalike domains'],
+    ['scamLanguage', 'Wallet scam language', 'Seed phrase requests and pressured wallet instructions'],
+    ['attachments', 'Files & QR codes', 'Dangerous files and links hidden in images'],
     ['impersonation', 'Impersonation', 'Protected staff identities'],
     ['raids', 'Raid defence', 'Join bursts and recoverable raid mode'],
     ['spam', 'Spam protection', 'Floods, repeated messages and mass mentions']
@@ -1867,6 +1894,7 @@ function renderGuildGuardConfig(config) {
   document.getElementById('guildGuardRiskAlert').value = Number(config.risk?.alert || 25);
   document.getElementById('guildGuardRiskDecayEnabled').checked = config.risk?.decayEnabled !== false;
   document.getElementById('guildGuardRiskDecayHalfLife').value = Number(config.risk?.decayHalfLifeHours || 24);
+  document.getElementById('guildGuardScanQrCodes').checked = config.detectors?.attachments?.scanQrCodes !== false;
   const globalReputation = config.globalReputation || {};
   document.getElementById('guildGuardGlobalConsume').checked = globalReputation.consumeEnabled !== false;
   document.getElementById('guildGuardGlobalPublish').checked = globalReputation.publishEnabled === true;
@@ -1921,7 +1949,11 @@ function renderGuildGuardIncidents(incidents) {
     suspicious_account: 'Suspicious new account',
     mass_mention: 'Mass mention blocked',
     spam_flood: 'Message flood detected',
-    duplicate_message: 'Repeated message campaign'
+    duplicate_message: 'Repeated message campaign',
+    wallet_drainer_language: 'Possible wallet-drainer message',
+    link_deception: 'Disguised destination detected',
+    dangerous_attachment: 'Dangerous file attachment',
+    qr_code_link: 'Link hidden in a QR code'
   };
   target.innerHTML = incidents.map(incident => {
     const labels = guildGuardSignals(incident);
@@ -1962,11 +1994,12 @@ async function loadGuildGuardIncidentDetail(incidentId) {
         ? `<button type="button" class="btn-danger" data-guildguard-global-revoke="${escapeHtml(globalReport.report_id)}">Revoke global report</button>`
         : '';
     const globalReputation = risk.globalReputation || { activeScore: 0, reportCount: 0, sourceCount: 0, categoryLabels: [] };
-    const signalSummary = signals.map(signal => `${GUILD_GUARD_DETECTOR_LABELS[signal.detector] || signal.detector} added ${signal.score} risk`).join(' · ') || 'No detector details available';
+    const signalSummary = signals.map(signal => `${GUILD_GUARD_DETECTOR_LABELS[signal.detector] || signal.detector}: ${describeGuildGuardSignal(signal)}`).join(' ') || 'No detector details available';
     const safeUrls = (evidence.urls || []).map(url => `<code>${escapeHtml(url)}</code>`).join(' ') || '<span class="section-subtitle">No links recorded.</span>';
+    const safeAttachments = (evidence.attachments || []).map(attachment => `<div><strong>${escapeHtml(attachment.name || 'attachment')}</strong><span>${escapeHtml(attachment.contentType || 'unknown type')} · ${escapeHtml(Math.ceil(Number(attachment.size || 0) / 1024))} KB</span></div>`).join('') || '<span class="section-subtitle">No files recorded.</span>';
     target.innerHTML = `<div class="gg-incident-detail__header"><div><span class="gg-eyebrow">Incident review</span><h3>${escapeHtml(guildGuardSignals(incident)[0] || 'Security incident')}</h3><p>${escapeHtml(signalSummary)}</p></div><button type="button" class="btn-secondary" data-guildguard-close-detail>Close</button></div>
       <div class="gg-detail-facts"><div><span>Member</span><strong>${escapeHtml(incident.user_id || 'Unknown')}</strong></div><div><span>Risk score</span><strong>${escapeHtml(incident.risk_score || 0)}/100</strong></div><div><span>Status</span><strong>${escapeHtml(String(incident.status || 'open').replaceAll('_', ' '))}</strong></div><div><span>Related incidents</span><strong>${escapeHtml(incidentSummary.total)}</strong></div></div>
-      <section class="gg-evidence-panel"><span class="gg-eyebrow">What Guild Guard saw</span><p>${escapeHtml(evidence.rawContent || 'No message content was stored for this event.')}</p><div class="gg-safe-links"><strong>Links are shown as non-clickable text</strong>${safeUrls}</div></section>
+      <section class="gg-evidence-panel"><span class="gg-eyebrow">What Guild Guard saw</span><p>${escapeHtml(evidence.rawContent || 'No message content was stored for this event.')}</p><div class="gg-safe-links"><strong>Links are shown as non-clickable text</strong>${safeUrls}</div><div class="gg-safe-attachments"><strong>Attached files</strong>${safeAttachments}</div></section>
       <div class="gg-detail-actions"><button type="button" class="btn-primary" data-guildguard-detail-review="confirmed">Confirm scam</button><button type="button" class="btn-secondary" data-guildguard-detail-review="reviewed">Mark reviewed</button><button type="button" class="btn-secondary" data-guildguard-detail-review="false_positive">Mark safe</button>${globalAction}<button type="button" class="btn-danger" data-guildguard-clear-user="${escapeHtml(incident.user_id || '')}">Clear user history</button></div>
       <section class="gg-history-summary"><h4>Member safety history</h4><p>Current risk: <strong>${escapeHtml(risk.profile?.risk_score ?? 0)}</strong> (${escapeHtml(risk.profile?.risk_level || 'low')}) · Confirmed: ${escapeHtml(incidentSummary.confirmed)} · Marked safe: ${escapeHtml(incidentSummary.falsePositive)}</p><p>Community Safety Network: ${escapeHtml(globalReputation.activeScore)}/100 from ${escapeHtml(globalReputation.sourceCount)} community source(s). External reports remain advisory and never ban automatically.</p></section>`;
     target.querySelector('[data-guildguard-close-detail]')?.addEventListener('click', () => { target.style.display = 'none'; });
@@ -2090,6 +2123,7 @@ async function saveGuildGuardConfig(event) {
   event.preventDefault();
   const detectors = {};
   document.querySelectorAll('[data-guildguard-detector]').forEach(input => { detectors[input.dataset.guildguardDetector] = { enabled: input.checked }; });
+  detectors.attachments = { ...detectors.attachments, scanQrCodes: document.getElementById('guildGuardScanQrCodes').checked };
   const actions = {
     enabled: document.getElementById('guildGuardActionsEnabled').checked,
     timeoutSeconds: Number(document.getElementById('guildGuardTimeoutSeconds').value || 3600),

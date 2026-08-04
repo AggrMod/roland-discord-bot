@@ -19,6 +19,29 @@ function normalizeContent(value) {
     .toLowerCase();
 }
 
+function extractUrls(value) {
+  return [...normalizeContent(value).matchAll(URL_RE)].map(match => match[0]).slice(0, 25);
+}
+
+function collectionValues(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value.values === 'function') return [...value.values()];
+  return [];
+}
+
+function normalizeAttachments(value) {
+  return collectionValues(value).slice(0, 10).map((attachment) => ({
+    id: safeText(attachment?.id, 64) || null,
+    name: safeText(attachment?.name || attachment?.filename, 255) || 'attachment',
+    url: safeText(attachment?.url || attachment?.proxyURL, 2048) || null,
+    contentType: safeText(attachment?.contentType || attachment?.content_type, 128).toLowerCase() || null,
+    size: Math.max(0, Number(attachment?.size) || 0),
+    width: Math.max(0, Number(attachment?.width) || 0) || null,
+    height: Math.max(0, Number(attachment?.height) || 0) || null
+  }));
+}
+
 function normalizeEvent(input, eventType = 'message_create') {
   const source = input || {};
   const author = source.author || source.user || {};
@@ -51,7 +74,8 @@ function normalizeEvent(input, eventType = 'message_create') {
     roleIds: Array.isArray(source.roleIds) ? source.roleIds.map(id => String(id)) : (member.roles?.cache ? [...member.roles.cache.keys()] : []),
     rawContent,
     normalizedContent,
-    urls: [...normalizedContent.matchAll(URL_RE)].map(match => match[0]).slice(0, 25),
+    urls: extractUrls(normalizedContent),
+    attachments: normalizeAttachments(source.attachments),
     mentions: mentions.slice(0, 100),
     everyoneMention: /(^|\s)@(everyone|here)(?=\s|$)/i.test(rawContent),
     accountCreatedTimestamp: accountCreatedTimestamp ? Number(accountCreatedTimestamp) : null,
@@ -60,4 +84,4 @@ function normalizeEvent(input, eventType = 'message_create') {
   };
 }
 
-module.exports = { normalizeEvent, normalizeContent };
+module.exports = { normalizeEvent, normalizeContent, normalizeAttachments, extractUrls };

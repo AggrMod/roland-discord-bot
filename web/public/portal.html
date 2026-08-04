@@ -434,6 +434,8 @@
               <div class="gg-subsection-title"><span class="gg-eyebrow">Detection</span><h3>Safety layers</h3></div>
               <div class="gg-toggle-grid">
                 <label class="settings-row"><span><strong>Dangerous links</strong><small>Blocklisted, shortened and lookalike domains.</small></span><input data-guildguard-detector="links" type="checkbox"></label>
+                <label class="settings-row"><span><strong>Wallet scam language</strong><small>Detect seed phrase requests and pressured wallet instructions.</small></span><input data-guildguard-detector="scamLanguage" type="checkbox"></label>
+                <label class="settings-row"><span><strong>Files and QR codes</strong><small>Inspect dangerous filenames and links hidden in attached images.</small></span><input data-guildguard-detector="attachments" type="checkbox"></label>
                 <label class="settings-row"><span><strong>Staff impersonation</strong><small>Protect moderator and owner identities.</small></span><input data-guildguard-detector="impersonation" type="checkbox"></label>
                 <label class="settings-row"><span><strong>Raid bursts</strong><small>Detect abnormal waves of new members.</small></span><input data-guildguard-detector="raids" type="checkbox"></label>
                 <label class="settings-row"><span><strong>Suspicious accounts</strong><small>Raise risk for newly created accounts.</small></span><input data-guildguard-detector="suspiciousAccount" type="checkbox"></label>
@@ -462,6 +464,7 @@
                 <label class="settings-row"><span>Alert threshold</span><input id="guildGuardRiskAlert" type="number" min="1" max="100"></label>
                 <label class="settings-row"><span>Risk decay enabled</span><input id="guildGuardRiskDecayEnabled" type="checkbox"></label>
                 <label class="settings-row"><span>Decay half-life (hours)</span><input id="guildGuardRiskDecayHalfLife" type="number" min="1" max="8760"></label>
+                <label class="settings-row"><span><strong>Decode QR destinations</strong><small>Securely scan up to three Discord image attachments per message.</small></span><input id="guildGuardScanQrCodes" type="checkbox"></label>
               </div>
               <h3>Global Safety Network</h3>
               <p class="section-subtitle">Receive decaying safety signals from other GuildPilot communities. Publishing is always explicit and limited to confirmed incidents.</p>
@@ -522,7 +525,7 @@
             <form id="guildGuardRuleForm">
               <input type="hidden" id="guildGuardRuleId">
               <label class="form-label">Rule name<input id="guildGuardRuleName" class="form-input" required maxlength="120" placeholder="Unsafe link escalation"></label>
-              <label class="form-label">Detector<select id="guildGuardRuleDetector" class="form-input"><option value="spam_flood">Spam flood</option><option value="duplicate_message">Duplicate message</option><option value="mass_mention">Mass mention</option><option value="suspicious_account">Suspicious account</option><option value="staff_impersonation">Staff impersonation</option><option value="link_protection">Unsafe link</option><option value="lookalike_domain">Lookalike domain</option><option value="raid_burst">Raid burst</option></select></label>
+              <label class="form-label">Detector<select id="guildGuardRuleDetector" class="form-input"><option value="spam_flood">Spam flood</option><option value="duplicate_message">Duplicate message</option><option value="mass_mention">Mass mention</option><option value="suspicious_account">Suspicious account</option><option value="staff_impersonation">Staff impersonation</option><option value="wallet_drainer_language">Wallet scam language</option><option value="link_protection">Unsafe link</option><option value="lookalike_domain">Lookalike domain</option><option value="link_deception">Disguised link</option><option value="dangerous_attachment">Dangerous attachment</option><option value="qr_code_link">QR-code link</option><option value="raid_burst">Raid burst</option></select></label>
               <label class="form-label">Trigger score greater than<input id="guildGuardRuleThreshold" class="form-input" type="number" min="1" max="100" value="50" required></label>
               <div class="settings-grid"><label class="settings-row"><span>Enabled</span><input id="guildGuardRuleEnabled" type="checkbox" checked></label><label class="settings-row"><span>Notify staff</span><input id="guildGuardRuleNotify" type="checkbox" checked></label><label class="settings-row"><span>Ping moderators/admins</span><input id="guildGuardRulePing" type="checkbox" checked></label><label class="settings-row"><span>Delete message</span><input id="guildGuardRuleDelete" type="checkbox" checked></label><label class="settings-row"><span>Mute user</span><input id="guildGuardRuleTimeout" type="checkbox" checked></label></div>
               <label class="form-label">Mute duration (seconds)<input id="guildGuardRuleTimeoutSeconds" class="form-input" type="number" min="1" max="2419200" value="3600"></label>

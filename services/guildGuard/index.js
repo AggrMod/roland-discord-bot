@@ -9,6 +9,7 @@ const actionService = require('./actions');
 const identityRegistry = require('./identityRegistry');
 const domainRegistry = require('./domainRegistry');
 const presetRegistry = require('./presets');
+const threatIntelRegistry = require('./threatIntelRegistry');
 const { scoreSignals, riskLevel } = require('./scoring');
 const {
   spamFloodDetector,
@@ -37,7 +38,7 @@ const GUILD_GUARD_RULE_DETECTORS = new Set([
   'spam_flood', 'duplicate_message', 'mass_mention', 'suspicious_account',
   'staff_impersonation', 'wallet_drainer_language', 'link_protection', 'lookalike_domain',
   'link_deception', 'dangerous_attachment', 'qr_code_link', 'coordinated_link_campaign',
-  'coordinated_message_campaign', 'low_trust_destination', 'account_link_burst', 'raid_burst'
+  'coordinated_message_campaign', 'low_trust_destination', 'account_link_burst', 'threat_intelligence_domain', 'raid_burst'
 ]);
 
 const GLOBAL_REPUTATION_CATEGORIES = new Set(['spam', 'unsafe_link', 'impersonation', 'scam', 'suspicious_account']);
@@ -57,7 +58,7 @@ function normalizeGlobalCategory(value, incident = null) {
   const detectors = new Set(signals.map(signal => String(signal?.detector || '').trim()));
   if (detectors.has('staff_impersonation')) return 'impersonation';
   if (detectors.has('wallet_drainer_language') || detectors.has('dangerous_attachment') || detectors.has('qr_code_link') || detectors.has('coordinated_link_campaign')) return 'scam';
-  if (detectors.has('link_protection') || detectors.has('lookalike_domain') || detectors.has('link_deception')) return 'unsafe_link';
+  if (detectors.has('link_protection') || detectors.has('lookalike_domain') || detectors.has('link_deception') || detectors.has('threat_intelligence_domain')) return 'unsafe_link';
   if (detectors.has('spam_flood') || detectors.has('duplicate_message') || detectors.has('mass_mention') || detectors.has('coordinated_message_campaign')) return 'spam';
   if (detectors.has('suspicious_account') || detectors.has('low_trust_destination') || detectors.has('account_link_burst') || detectors.has('raid_burst')) return 'suspicious_account';
   return 'scam';
@@ -489,7 +490,7 @@ const pipeline = new DetectionPipeline({
   getConfig,
   eventWindow,
   applyAction: actionService.execute,
-  detectorContext: { identityRegistry, domainRegistry }
+  detectorContext: { identityRegistry, domainRegistry, threatIntelRegistry }
 });
 
 function globallyAvailable() {
@@ -574,14 +575,63 @@ function getDashboardSummary(guildId, windowDays = 7) {
     GROUP BY event_type
     ORDER BY count DESC, event_type ASC
   `).all(normalizedGuildId, since);
+  const byDetector = db.prepare(`
+    SELECT detector, COUNT(*) AS count, ROUND(COALESCE(AVG(score), 0), 1) AS averageScore
+    FROM risk_signals
+    WHERE guild_id = ? AND created_at >= datetime('now', ?)
+    GROUP BY detector
+    ORDER BY count DESC, averageScore DESC, detector ASC
+    LIMIT 10
+  `).all(normalizedGuildId, since);
+  const actionStatuses = db.prepare(`
+    SELECT status, COUNT(*) AS count
+    FROM actions
+    WHERE guild_id = ? AND created_at >= datetime('now', ?)
+    GROUP BY status
+  `).all(normalizedGuildId, since).reduce((result, row) => {
+    result[row.status] = Number(row.count) || 0;
+    return result;
+  }, {});
+  const recentEvidence = db.prepare(`
+    SELECT evidence_json FROM incidents
+    WHERE guild_id = ? AND created_at >= datetime('now', ?)
+    ORDER BY created_at DESC
+    LIMIT 500
+  `).all(normalizedGuildId, since);
+  const channelCounts = new Map();
+  for (const row of recentEvidence) {
+    const channelId = String(jsonParse(row.evidence_json, {})?.channelId || '').trim();
+    if (channelId) channelCounts.set(channelId, (channelCounts.get(channelId) || 0) + 1);
+  }
+  const topChannels = [...channelCounts.entries()].map(([channelId, count]) => ({ channelId, count }))
+    .sort((left, right) => right.count - left.count).slice(0, 5);
+  const openMemberReports = db.prepare("SELECT COUNT(*) AS count FROM guild_guard_member_reports WHERE guild_id = ? AND status = 'open'")
+    .get(normalizedGuildId)?.count || 0;
+  const total = Number(totals?.total || 0);
+  const falsePositiveCount = Number(statuses.false_positive || 0);
+  const falsePositiveRate = total ? Math.round((falsePositiveCount / total) * 1000) / 10 : 0;
+  const config = getConfig(normalizedGuildId);
+  const recommendations = [];
+  if (falsePositiveRate >= 15) recommendations.push('Review trusted domains and detector thresholds; the false-positive rate is above 15%.');
+  if (Number(actionStatuses.failed || 0) > 0) recommendations.push('Check GuildPilot Discord permissions because one or more protection actions failed.');
+  if (Number(openMemberReports) > 0) recommendations.push(`Review ${openMemberReports} open member scam report${Number(openMemberReports) === 1 ? '' : 's'}.`);
+  if (config.enabled && config.mode !== 'enforce' && total > 0) recommendations.push('Protection is monitoring only; review recent incidents before enabling automatic response.');
+  if (byDetector[0]?.detector && ['link_protection', 'lookalike_domain', 'threat_intelligence_domain'].includes(byDetector[0].detector)) recommendations.push('Links are the leading signal; keep official community domains in the trusted list.');
+  if (!recommendations.length) recommendations.push('No urgent tuning changes are recommended from the selected period.');
   return {
     guildId: normalizedGuildId,
     windowDays: days,
-    total: totals?.total || 0,
+    total,
     statuses,
     byEventType,
     averageRiskScore: totals?.averageRiskScore || 0,
-    lastIncidentAt: totals?.lastIncidentAt || null
+    lastIncidentAt: totals?.lastIncidentAt || null,
+    falsePositiveRate,
+    byDetector,
+    actionStatuses,
+    topChannels,
+    openMemberReports: Number(openMemberReports),
+    recommendations
   };
 }
 
@@ -690,6 +740,20 @@ function blockIncidentDomains(guildId, incidentId, actorId = null) {
     metadata: { actorId: actorId || null, domains: blocked, skipped }
   });
   return { incidentId: incident.incident_id, domains: blocked, skipped };
+}
+
+function submitIncidentThreatIntelligence(guildId, incidentId, actorId = null) {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  const incident = getIncident(normalizedGuildId, incidentId);
+  if (!incident) return null;
+  if (incident.status !== 'confirmed') throw new Error('Confirm the incident before submitting threat intelligence');
+  const allowlist = new Set(domainRegistry.list(normalizedGuildId, 'allow'));
+  const domains = incidentDomains(incident).filter(domain => !allowlist.has(domain) && !isSystemSafeDomain(domain));
+  if (!domains.length) throw new Error('This incident has no eligible domains to submit');
+  return {
+    incidentId: incident.incident_id,
+    entries: threatIntelRegistry.submit(normalizedGuildId, incident.incident_id, domains, actorId)
+  };
 }
 
 async function executeBulkIncidentResponse(guildId, input = {}, actorId = null, guild = null) {
@@ -949,6 +1013,7 @@ module.exports = {
   getIncident,
   listIncidentCampaigns,
   blockIncidentDomains,
+  submitIncidentThreatIntelligence,
   executeBulkIncidentResponse,
   createMemberReport,
   listMemberReports,
@@ -963,6 +1028,7 @@ module.exports = {
   restoreExpiredLockdowns: actionService.restoreExpiredLockdowns,
   identityRegistry,
   domainRegistry,
+  threatIntelRegistry,
   _pipeline: pipeline,
   _eventWindow: eventWindow
 };

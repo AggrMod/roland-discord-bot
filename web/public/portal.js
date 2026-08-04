@@ -1812,7 +1812,7 @@ const GUILD_GUARD_DETECTOR_LABELS = Object.freeze({
   lookalike_domain: 'Lookalike domain', link_deception: 'Disguised link',
   dangerous_attachment: 'Dangerous attachment', qr_code_link: 'QR-code link',
   coordinated_link_campaign: 'Coordinated link campaign', coordinated_message_campaign: 'Coordinated message campaign',
-  low_trust_destination: 'Low-trust destination', account_link_burst: 'Cross-channel link burst',
+  low_trust_destination: 'Low-trust destination', account_link_burst: 'Cross-channel link burst', threat_intelligence_domain: 'Reviewed malicious domain',
   raid_burst: 'Raid burst'
 });
 
@@ -1838,7 +1838,8 @@ function describeGuildGuardSignal(signal) {
     multi_account_link_campaign: `${metadata.userCount || 'Multiple'} accounts shared ${metadata.domain || 'the same destination'} in a short period.`,
     multi_account_message_campaign: `${metadata.userCount || 'Multiple'} accounts posted the same message in a short period.`,
     low_trust_destination: `A ${metadata.youngAccount ? 'newly created account' : 'recently joined member'} shared an untrusted destination.`,
-    cross_channel_link_burst: `One account shared untrusted links across ${metadata.channelCount || 'multiple'} channels in ${metadata.windowSeconds || 'a short'} seconds.`
+    cross_channel_link_burst: `One account shared untrusted links across ${metadata.channelCount || 'multiple'} channels in ${metadata.windowSeconds || 'a short'} seconds.`,
+    reviewed_threat_intelligence: `${metadata.domain || 'This domain'} was reviewed and approved as malicious by GuildPilot safety staff.`
   };
   return explanations[metadata.category] || metadata.explanation || `${GUILD_GUARD_DETECTOR_LABELS[signal?.detector] || signal?.detector || 'Risk signal'} contributed to this incident.`;
 }
@@ -2036,7 +2037,8 @@ function renderGuildGuardIncidents(incidents) {
     coordinated_link_campaign: 'Coordinated scam campaign',
     coordinated_message_campaign: 'Coordinated message campaign',
     low_trust_destination: 'Low-trust account shared a destination',
-    account_link_burst: 'Possible compromised account'
+    account_link_burst: 'Possible compromised account',
+    threat_intelligence_domain: 'Reviewed malicious domain detected'
   };
   target.innerHTML = incidents.map(incident => {
     const labels = guildGuardSignals(incident);
@@ -2115,10 +2117,13 @@ async function loadGuildGuardIncidentDetail(incidentId) {
     const blockDomainsAction = incident.status === 'confirmed' && incidentHasDomains
       ? `<button type="button" class="btn-primary" data-guildguard-block-domains="${escapeHtml(incident.incident_id)}">Block detected domains</button>`
       : '';
+    const threatIntelAction = incident.status === 'confirmed' && incidentHasDomains
+      ? `<button type="button" class="btn-secondary" data-guildguard-submit-intel="${escapeHtml(incident.incident_id)}">Submit domain for global review</button>`
+      : '';
     target.innerHTML = `<div class="gg-incident-detail__header"><div><span class="gg-eyebrow">Incident review</span><h3>${escapeHtml(guildGuardSignals(incident)[0] || 'Security incident')}</h3><p>${escapeHtml(signalSummary)}</p></div><button type="button" class="btn-secondary" data-guildguard-close-detail>Close</button></div>
       <div class="gg-detail-facts"><div><span>Member</span><strong>${escapeHtml(incident.user_id || 'Unknown')}</strong></div><div><span>Risk score</span><strong>${escapeHtml(incident.risk_score || 0)}/100</strong></div><div><span>Status</span><strong>${escapeHtml(String(incident.status || 'open').replaceAll('_', ' '))}</strong></div><div><span>Related incidents</span><strong>${escapeHtml(incidentSummary.total)}</strong></div></div>
       <section class="gg-evidence-panel"><span class="gg-eyebrow">What Guild Guard saw</span><p>${escapeHtml(evidence.rawContent || 'No message content was stored for this event.')}</p><div class="gg-safe-links"><strong>Links are shown as non-clickable text</strong>${safeUrls}</div><div class="gg-safe-attachments"><strong>Attached files</strong>${safeAttachments}</div></section>
-      <div class="gg-detail-actions"><button type="button" class="btn-primary" data-guildguard-detail-review="confirmed">Confirm scam</button><button type="button" class="btn-secondary" data-guildguard-detail-review="reviewed">Mark reviewed</button><button type="button" class="btn-secondary" data-guildguard-detail-review="false_positive">Mark safe</button>${blockDomainsAction}${globalAction}<button type="button" class="btn-danger" data-guildguard-clear-user="${escapeHtml(incident.user_id || '')}">Clear user history</button></div>
+      <div class="gg-detail-actions"><button type="button" class="btn-primary" data-guildguard-detail-review="confirmed">Confirm scam</button><button type="button" class="btn-secondary" data-guildguard-detail-review="reviewed">Mark reviewed</button><button type="button" class="btn-secondary" data-guildguard-detail-review="false_positive">Mark safe</button>${blockDomainsAction}${threatIntelAction}${globalAction}<button type="button" class="btn-danger" data-guildguard-clear-user="${escapeHtml(incident.user_id || '')}">Clear user history</button></div>
       <section class="gg-history-summary"><h4>Member safety history</h4><p>Current risk: <strong>${escapeHtml(risk.profile?.risk_score ?? 0)}</strong> (${escapeHtml(risk.profile?.risk_level || 'low')}) · Confirmed: ${escapeHtml(incidentSummary.confirmed)} · Marked safe: ${escapeHtml(incidentSummary.falsePositive)}</p><p>Community Safety Network: ${escapeHtml(globalReputation.activeScore)}/100 from ${escapeHtml(globalReputation.sourceCount)} community source(s). External reports remain advisory and never ban automatically.</p></section>`;
     target.querySelector('[data-guildguard-close-detail]')?.addEventListener('click', () => { target.style.display = 'none'; });
     target.querySelector('[data-guildguard-clear-user]')?.addEventListener('click', () => {
@@ -2133,6 +2138,9 @@ async function loadGuildGuardIncidentDetail(incidentId) {
     target.querySelector('[data-guildguard-block-domains]')?.addEventListener('click', () => {
       blockGuildGuardIncidentDomains(incident.incident_id).catch(error => { target.textContent = error.message || 'Unable to block incident domains'; });
     });
+    target.querySelector('[data-guildguard-submit-intel]')?.addEventListener('click', () => {
+      submitGuildGuardThreatIntelligence(incident.incident_id).catch(error => { target.textContent = error.message || 'Unable to submit threat intelligence'; });
+    });
     target.querySelectorAll('[data-guildguard-detail-review]').forEach(button => button.addEventListener('click', async () => {
       try {
         const status = button.dataset.guildguardDetailReview;
@@ -2146,6 +2154,17 @@ async function loadGuildGuardIncidentDetail(incidentId) {
     target.style.display = '';
     target.textContent = error.message || 'Unable to load incident details';
   }
+}
+
+async function submitGuildGuardThreatIntelligence(incidentId) {
+  if (!window.confirm('Submit non-trusted domains from this confirmed incident for GuildPilot superadmin review?\n\nSubmission does not activate or globally block a domain.')) return;
+  const response = await fetch(`/api/admin/guildguard/incidents/${encodeURIComponent(incidentId)}/threat-intelligence`, {
+    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: '{}'
+  });
+  const payload = await response.json();
+  if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to submit threat intelligence');
+  document.getElementById('guildGuardStatus').textContent = 'Domain intelligence submitted for manual review.';
+  await loadGuildGuardThreatIntelligence();
 }
 
 async function blockGuildGuardIncidentDomains(incidentId) {
@@ -2208,6 +2227,20 @@ function renderGuildGuardSummary(summary) {
   ];
   document.getElementById('guildGuardMetrics').className = 'overview-metrics-grid';
   document.getElementById('guildGuardMetrics').innerHTML = metrics.map(([label, value]) => `<div class="overview-metric"><div class="overview-metric-val">${escapeHtml(value)}</div><div class="overview-metric-label">${escapeHtml(label)}</div></div>`).join('');
+  const insights = document.getElementById('guildGuardInsights');
+  if (insights) {
+    const detector = summary?.byDetector?.[0];
+    const actions = summary?.actionStatuses || {};
+    const topChannel = summary?.topChannels?.[0];
+    const facts = [
+      ['False-positive rate', `${summary?.falsePositiveRate || 0}%`, `${counts.false_positive || 0} of ${summary?.total || 0} incidents`],
+      ['Leading detector', detector ? (GUILD_GUARD_DETECTOR_LABELS[detector.detector] || detector.detector) : 'No signals', detector ? `${detector.count} signals` : 'No detector activity'],
+      ['Automatic responses', `${actions.applied || 0} applied`, `${actions.failed || 0} failed · ${actions.skipped || 0} skipped`],
+      ['Most targeted channel', topChannel ? `#${topChannel.channelId}` : 'No channel pattern', topChannel ? `${topChannel.count} incidents` : 'No message incidents']
+    ];
+    const recommendations = (summary?.recommendations || []).map(recommendation => `<div class="gg-coverage-item is-active"><span class="gg-check-icon"><i class="fa-solid fa-lightbulb" aria-hidden="true"></i></span><div><strong>Recommendation</strong><small>${escapeHtml(recommendation)}</small></div></div>`).join('');
+    insights.innerHTML = facts.map(([label, value, detail]) => `<div class="gg-coverage-item"><span class="gg-check-icon"><i class="fa-solid fa-chart-line" aria-hidden="true"></i></span><div><strong>${escapeHtml(label)}: ${escapeHtml(value)}</strong><small>${escapeHtml(detail)}</small></div></div>`).join('') + recommendations;
+  }
 }
 
 function renderGuildGuardHealth(health) {
@@ -2426,6 +2459,61 @@ async function loadGuildGuardGlobalReports() {
   renderGuildGuardGlobalReports(payload.data?.reports || payload.reports || []);
 }
 
+function renderGuildGuardThreatIntelligence(payload, pending = []) {
+  const activeTarget = document.getElementById('guildGuardThreatIntelActive');
+  const submissionsTarget = document.getElementById('guildGuardThreatIntelSubmissions');
+  const pendingTarget = document.getElementById('guildGuardThreatIntelPending');
+  const active = payload?.active || [];
+  const submissions = payload?.submissions || [];
+  if (activeTarget) activeTarget.innerHTML = active.length
+    ? active.map(entry => `<div class="gg-coverage-item is-active"><span class="gg-check-icon"><i class="fa-solid fa-shield-virus" aria-hidden="true"></i></span><div><strong>${escapeHtml(entry.domain)}</strong><small>${escapeHtml(entry.confidence)}% confidence · ${escapeHtml(entry.source_guild_count)} reviewed community sources</small></div><span>Approved</span></div>`).join('')
+    : '<p class="section-subtitle">No globally reviewed domains are active.</p>';
+  if (submissionsTarget) submissionsTarget.innerHTML = submissions.length
+    ? submissions.map(entry => `<div class="gg-coverage-item"><span class="gg-check-icon"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i></span><div><strong>${escapeHtml(entry.domain)}</strong><small>${escapeHtml(entry.confidence)}% confidence · ${escapeHtml(entry.source_guild_count)} source communities</small></div><span class="gg-status-chip is-${escapeHtml(entry.status)}">${escapeHtml(entry.status)}</span></div>`).join('')
+    : '<p class="section-subtitle">This server has not submitted domain intelligence.</p>';
+  const reviewCard = document.getElementById('guildGuardThreatIntelReviewCard');
+  if (reviewCard) reviewCard.style.display = isSuperadmin ? '' : 'none';
+  if (pendingTarget && isSuperadmin) {
+    pendingTarget.innerHTML = pending.length
+      ? pending.map(entry => `<div class="gg-coverage-item is-active"><span class="gg-check-icon"><i class="fa-solid fa-scale-balanced" aria-hidden="true"></i></span><div><strong>${escapeHtml(entry.domain)}</strong><small>${escapeHtml(entry.confidence)}% confidence · ${escapeHtml(entry.report_count)} reports from ${escapeHtml(entry.source_guild_count)} communities</small></div><div style="display:flex;gap:6px;"><button type="button" class="btn-primary btn-sm" data-guildguard-intel-approve="${escapeHtml(entry.domain)}">Approve</button><button type="button" class="btn-danger btn-sm" data-guildguard-intel-revoke="${escapeHtml(entry.domain)}">Reject</button></div></div>`).join('')
+      : '<p class="section-subtitle">No domains are waiting for review.</p>';
+    pendingTarget.querySelectorAll('[data-guildguard-intel-approve]').forEach(button => button.addEventListener('click', () => {
+      reviewGuildGuardThreatDomain(button.dataset.guildguardIntelApprove, 'active').catch(error => {
+        document.getElementById('guildGuardStatus').textContent = error.message || 'Unable to approve threat intelligence';
+      });
+    }));
+    pendingTarget.querySelectorAll('[data-guildguard-intel-revoke]').forEach(button => button.addEventListener('click', () => {
+      reviewGuildGuardThreatDomain(button.dataset.guildguardIntelRevoke, 'revoked').catch(error => {
+        document.getElementById('guildGuardStatus').textContent = error.message || 'Unable to reject threat intelligence';
+      });
+    }));
+  }
+}
+
+async function loadGuildGuardThreatIntelligence() {
+  const requests = [fetch('/api/admin/guildguard/threat-intelligence?limit=100', { credentials: 'include' })];
+  if (isSuperadmin) requests.push(fetch('/api/admin/guildguard/threat-intelligence/review-queue?limit=100', { credentials: 'include' }));
+  const responses = await Promise.all(requests);
+  const payload = await responses[0].json();
+  if (!responses[0].ok || payload.success === false) throw new Error(payload.message || 'Unable to load threat intelligence');
+  let pending = [];
+  if (responses[1]) {
+    const reviewPayload = await responses[1].json();
+    if (responses[1].ok && reviewPayload.success !== false) pending = reviewPayload.data?.pending || reviewPayload.pending || [];
+  }
+  renderGuildGuardThreatIntelligence(payload.data || payload, pending);
+}
+
+async function reviewGuildGuardThreatDomain(domain, status) {
+  if (!window.confirm(`${status === 'active' ? 'Approve' : 'Reject'} ${domain}? Only approved domains become an active Guild Guard signal.`)) return;
+  const response = await fetch(`/api/admin/guildguard/threat-intelligence/${encodeURIComponent(domain)}/review`, {
+    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status })
+  });
+  const payload = await response.json();
+  if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to review threat intelligence');
+  await loadGuildGuardThreatIntelligence();
+}
+
 async function runGuildGuardRetention() {
   const response = await fetch('/api/admin/guildguard/retention/run', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: '{}' });
   if (!response.ok) throw new Error('Unable to run Guild Guard retention cleanup');
@@ -2461,6 +2549,7 @@ async function loadGuildGuardView() {
     await loadGuildGuardRules();
     await loadGuildGuardDomains();
     await loadGuildGuardGlobalReports();
+    await loadGuildGuardThreatIntelligence();
     status.textContent = '';
   } catch (error) {
     status.textContent = error.message || 'Unable to load Guild Guard';

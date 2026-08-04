@@ -130,6 +130,36 @@ function createAdminGuildGuardRouter({ logger, adminAuthMiddleware, ensureGuildG
     return res.json(toSuccessResponse({ reports: guildGuardService.listMemberReports(req.guildId, req.query?.limit) }));
   });
 
+  router.get('/api/admin/guildguard/threat-intelligence', adminAuthMiddleware, (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    return res.json(toSuccessResponse({
+      active: guildGuardService.threatIntelRegistry.list('active', req.query?.limit),
+      submissions: guildGuardService.threatIntelRegistry.listSubmissions(req.guildId, req.query?.limit)
+    }));
+  });
+
+  router.get('/api/admin/guildguard/threat-intelligence/review-queue', adminAuthMiddleware, (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    if (!req.isSuperadmin) return res.status(403).json(toErrorResponse('Superadmin access required', 'FORBIDDEN'));
+    return res.json(toSuccessResponse({ pending: guildGuardService.threatIntelRegistry.list('pending', req.query?.limit) }));
+  });
+
+  router.post('/api/admin/guildguard/threat-intelligence/:domain/review', adminAuthMiddleware, (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    if (!req.isSuperadmin) return res.status(403).json(toErrorResponse('Superadmin access required', 'FORBIDDEN'));
+    try {
+      const entry = guildGuardService.threatIntelRegistry.review(
+        req.params.domain,
+        String(req.body?.status || '').trim(),
+        req.session?.discordUser?.id
+      );
+      if (!entry) return res.status(404).json(toErrorResponse('Threat intelligence entry not found', 'NOT_FOUND'));
+      return res.json(toSuccessResponse({ entry }));
+    } catch (error) {
+      return res.status(400).json(toErrorResponse(error.message || 'Unable to review threat intelligence', 'VALIDATION_ERROR'));
+    }
+  });
+
   router.post('/api/admin/guildguard/member-reports/:reportId/review', adminAuthMiddleware, (req, res) => {
     if (!ensureGuildGuardModule(req, res)) return;
     try {
@@ -272,6 +302,17 @@ function createAdminGuildGuardRouter({ logger, adminAuthMiddleware, ensureGuildG
       return res.json(toSuccessResponse({ result }));
     } catch (error) {
       return res.status(400).json(toErrorResponse(error.message || 'Unable to block incident domains', 'VALIDATION_ERROR'));
+    }
+  });
+
+  router.post('/api/admin/guildguard/incidents/:incidentId/threat-intelligence', adminAuthMiddleware, (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    try {
+      const result = guildGuardService.submitIncidentThreatIntelligence(req.guildId, req.params.incidentId, req.session?.discordUser?.id);
+      if (!result) return res.status(404).json(toErrorResponse('Incident not found', 'NOT_FOUND'));
+      return res.status(201).json(toSuccessResponse({ result }));
+    } catch (error) {
+      return res.status(400).json(toErrorResponse(error.message || 'Unable to submit threat intelligence', 'VALIDATION_ERROR'));
     }
   });
 

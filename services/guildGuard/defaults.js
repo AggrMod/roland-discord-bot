@@ -33,6 +33,7 @@ const DEFAULT_CONFIG = Object.freeze({
       requireAllowlist: false,
       protectedDomains: [],
       score: 65,
+      threatIntelScore: 70,
       lookalikeScore: 45,
       unsafeDestinationScore: 100,
       inspectShortenedUrls: true,

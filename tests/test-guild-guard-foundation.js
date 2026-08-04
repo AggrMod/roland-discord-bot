@@ -37,7 +37,7 @@ function tableColumns(table) {
   return new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(row => row.name));
 }
 
-for (const table of ['guild_guard_configs', 'staff_identities', 'domain_allowlist', 'domain_blocklist', 'risk_profiles', 'risk_signals', 'incidents', 'actions', 'raid_events', 'false_positives', 'guild_guard_global_reports', 'guild_guard_global_matches', 'guild_guard_member_reports']) {
+for (const table of ['guild_guard_configs', 'staff_identities', 'domain_allowlist', 'domain_blocklist', 'risk_profiles', 'risk_signals', 'incidents', 'actions', 'raid_events', 'false_positives', 'guild_guard_global_reports', 'guild_guard_global_matches', 'guild_guard_member_reports', 'guild_guard_threat_domains', 'guild_guard_threat_domain_reports']) {
   assert.ok(tableColumns(table).size > 0, `expected ${table} table`);
 }
 
@@ -516,6 +516,35 @@ assert.ok(domainAction.skipped.some(item => item.domain === 'discord.com' && ite
 assert.ok(guard.domainRegistry.list('guild-domain-action', 'block').includes('campaign-block.example'));
 assert.strictEqual(db.prepare("SELECT status FROM actions WHERE incident_id = ? AND action_type = 'moderator:block_domains'").get(domainActionIncident.incident.incident_id).status, 'applied');
 
+const threatIntelIncident = await guard.createTestIncident('guild-intel-source', {
+  id: 'threat-intel-incident',
+  content: 'Visit https://reviewed-drainer.example/claim',
+  author: { id: 'threat-intel-user' }
+});
+await assert.rejects(
+  async () => guard.submitIncidentThreatIntelligence('guild-intel-source', threatIntelIncident.incident.incident_id, 'intel-moderator'),
+  /Confirm the incident/
+);
+guard.updateIncidentStatus('guild-intel-source', threatIntelIncident.incident.incident_id, 'confirmed', 'intel-moderator');
+const threatIntelSubmission = guard.submitIncidentThreatIntelligence('guild-intel-source', threatIntelIncident.incident.incident_id, 'intel-moderator');
+assert.strictEqual(threatIntelSubmission.entries[0].status, 'pending');
+assert.strictEqual(guard.threatIntelRegistry.isActiveDomain('reviewed-drainer.example'), null, 'community submissions must never activate automatically');
+assert.strictEqual(guard.threatIntelRegistry.listSubmissions('guild-intel-source').length, 1);
+assert.strictEqual(guard.threatIntelRegistry.listSubmissions('other-intel-source').length, 0, 'threat intelligence submissions must remain tenant scoped');
+guard.threatIntelRegistry.review('reviewed-drainer.example', 'active', 'superadmin-reviewer');
+const reviewedThreatSignal = await linkProtectionDetector.detect({
+  eventType: 'message_create', guildId: 'guild-intel-consumer', urls: ['https://reviewed-drainer.example/claim']
+}, { config: linkConfig, domainRegistry: guard.domainRegistry, threatIntelRegistry: guard.threatIntelRegistry });
+assert.ok(reviewedThreatSignal.some(signal => signal.detector === 'threat_intelligence_domain'));
+guard.domainRegistry.add('guild-intel-trusted', 'reviewed-drainer.example', 'allow');
+assert.strictEqual(await linkProtectionDetector.detect({
+  eventType: 'message_create', guildId: 'guild-intel-trusted', urls: ['https://reviewed-drainer.example/claim']
+}, { config: linkConfig, domainRegistry: guard.domainRegistry, threatIntelRegistry: guard.threatIntelRegistry }), null, 'a tenant trusted domain must override shared threat intelligence');
+guard.threatIntelRegistry.review('reviewed-drainer.example', 'revoked', 'superadmin-reviewer');
+assert.strictEqual(await linkProtectionDetector.detect({
+  eventType: 'message_create', guildId: 'guild-intel-consumer', urls: ['https://reviewed-drainer.example/claim']
+}, { config: linkConfig, domainRegistry: guard.domainRegistry, threatIntelRegistry: guard.threatIntelRegistry }), null, 'revoked intelligence must stop triggering protection');
+
 const bulkCampaignOne = await guard.createTestIncident('guild-bulk-response', {
   id: 'bulk-campaign-1', channelId: 'bulk-channel', content: 'claim at https://bulk-campaign.example/one', author: { id: 'bulk-user-1' }
 });
@@ -588,6 +617,11 @@ const dashboardSummary = guard.getDashboardSummary('guild-live', 7);
 assert.strictEqual(dashboardSummary.guildId, 'guild-live');
 assert.ok(Number.isFinite(dashboardSummary.averageRiskScore));
 assert.ok(Array.isArray(dashboardSummary.byEventType));
+assert.ok(Array.isArray(dashboardSummary.byDetector));
+assert.ok(Array.isArray(dashboardSummary.topChannels));
+assert.ok(Array.isArray(dashboardSummary.recommendations) && dashboardSummary.recommendations.length > 0);
+assert.strictEqual(typeof dashboardSummary.actionStatuses, 'object');
+assert.ok(Number.isFinite(dashboardSummary.falsePositiveRate));
 assert.ok(guard.runRetentionSweep().some(result => result.guildId === 'guild-live'));
 
 console.log('Guild Guard foundation tests passed.');

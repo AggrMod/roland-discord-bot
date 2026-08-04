@@ -152,7 +152,7 @@ const scamLanguageDetector = {
 
 const linkProtectionDetector = {
   name: 'link_protection',
-  async detect(event, { config, domainRegistry }) {
+  async detect(event, { config, domainRegistry, threatIntelRegistry }) {
     if (event.eventType !== 'message_create' || !enabled(config, 'links') || !domainRegistry || event.urls.length === 0) return null;
     const lists = domainRegistry.getLists(event.guildId);
     const protectedDomains = (config.detectors.links.protectedDomains || [])
@@ -230,6 +230,16 @@ const linkProtectionDetector = {
         continue;
       }
       if (lists.allow.includes(domain)) continue;
+      const threatIntel = threatIntelRegistry?.isActiveDomain?.(domain);
+      if (threatIntel) {
+        signals.push({
+          detector: 'threat_intelligence_domain',
+          severity: 'high',
+          score: numberSetting(config, 'links', 'threatIntelScore', 70, 1),
+          metadata: { domain, category: 'reviewed_threat_intelligence', confidence: threatIntel.confidence, reportCount: threatIntel.report_count, sourceGuildCount: threatIntel.source_guild_count, url: rawUrl }
+        });
+        continue;
+      }
       const lookalike = references.find(reference => reference !== domain && levenshtein(reference, domain) <= 2);
       if (lookalike) {
         signals.push({

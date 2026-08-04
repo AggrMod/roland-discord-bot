@@ -3,11 +3,6 @@ const gnService   = require('../../services/gameNightService');
 const moduleGuard = require('../../utils/moduleGuard');
 const logger      = require('../../utils/logger');
 
-const GAME_CHOICES = gnService.GAME_ROSTER.map(g => {
-  const labels = { diceduel:'Dice Duel', higherlower:'Higher or Lower', reactionrace:'Reaction Race', numberguess:'Number Guess', slots:'Slots', trivia:'Trivia', wordscramble:'Word Scramble', rps:'RPS Tournament', blackjack:'Blackjack' };
-  return { name: labels[g] || g, value: g };
-});
-
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('gamenight')
@@ -98,7 +93,9 @@ module.exports = {
         if (!session) return interaction.editReply({ content: '❌ No active Game Night in this channel.' });
         if (session.creatorId !== user.id) return interaction.editReply({ content: '❌ Only the Game Night host can skip games.' });
         if (session.status !== 'playing') return interaction.editReply({ content: '❌ Game Night isn\'t in progress yet.' });
-        session.skipRequested = true;
+        if (!gnService.requestSkip(channel.id)) {
+          return interaction.editReply({ content: '❌ This game could not be skipped.' });
+        }
         const GL = gnService.GAME_INFO;
         const current = GL[session.games[session.currentGameIndex]]?.name || session.games[session.currentGameIndex];
         await channel.send(`⏭️ **${user.username}** skipped **${current}**. Moving to next game...`);
@@ -116,7 +113,7 @@ module.exports = {
           await msg.edit({ embeds: [gnService.buildCancelledEmbed('❌ Game Night cancelled by host.', guildId)] });
           await msg.reactions.removeAll().catch(() => {});
         } catch (_) {}
-        gnService.endSession(channel.id);
+        gnService.cancelSession(channel.id);
         return interaction.editReply({ content: '✅ Game Night cancelled.' });
       }
 
@@ -126,8 +123,6 @@ module.exports = {
         if (!session || session.status === 'waiting') {
           return interaction.reply({ content: '❌ No active Game Night in progress.', ephemeral: true });
         }
-        const GL = gnService.GAME_INFO;
-        const currentGame = GL[session.games[session.currentGameIndex]]?.name || '?';
         const gamesLeft = session.games.length - session.currentGameIndex - 1;
         await interaction.reply({ embeds: [gnService.buildLeaderboardEmbed(session, guildId, `game ${session.currentGameIndex + 1}`, gamesLeft)], ephemeral: false });
       }

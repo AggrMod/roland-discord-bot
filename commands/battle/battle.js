@@ -343,7 +343,9 @@ module.exports = {
       maxPlayers,
       requiredRoleArray.length ? requiredRoleArray : null,
       excludedRoleArray.length ? excludedRoleArray : null,
-      requestedEra
+      requestedEra,
+      null,
+      guildId
     );
 
     if (!createResult.success) {
@@ -595,7 +597,7 @@ module.exports = {
     await interaction.deferReply();
 
     const targetUser = interaction.options.getUser('user') || interaction.user;
-    const stats = battleService.getStats(targetUser.id) || {};
+    const stats = battleService.getStats(interaction.guildId, targetUser.id) || {};
 
     const played = stats.battles_played || 0;
     const won = stats.battles_won || 0;

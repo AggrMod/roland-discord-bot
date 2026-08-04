@@ -140,7 +140,10 @@
         "tests/test-minigames-moderator-permissions.js",
         "tests/test-minigames-session-replace-safety.js",
         "tests/test-minigames-concurrent-session-scale.js",
-        "tests/test-battle-race-safety.js"
+        "tests/test-minigame-reaction-handler.js",
+        "tests/test-gamenight-control-safety.js",
+        "tests/test-battle-race-safety.js",
+        "tests/test-battle-stats-tenant-scope.js"
       ]
     },
     {

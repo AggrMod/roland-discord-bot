@@ -585,7 +585,7 @@ class BattleService {
     }
   }
 
-  createLobby(channelId, messageId, creatorId, minPlayers = 2, maxPlayers = 999, requiredRoleIds = null, excludedRoleIds = null, era = 'mafia', bounties = null) {
+  createLobby(channelId, messageId, creatorId, minPlayers = 2, maxPlayers = 999, requiredRoleIds = null, excludedRoleIds = null, era = 'mafia', bounties = null, guildId = null) {
     const lobbyId = `battle_${Date.now()}_${creatorId}`;
 
     try {
@@ -602,9 +602,9 @@ class BattleService {
         }
 
         db.prepare(`
-          INSERT INTO battle_lobbies (lobby_id, channel_id, message_id, creator_id, min_players, max_players, required_role_ids, excluded_role_ids, era, bounties_json)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(lobbyId, channelId, messageId, creatorId, minPlayers, maxPlayers, requiredIdsStr, excludedIdsStr, era, bountyJson);
+          INSERT INTO battle_lobbies (lobby_id, channel_id, message_id, creator_id, min_players, max_players, required_role_ids, excluded_role_ids, era, bounties_json, guild_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(lobbyId, channelId, messageId, creatorId, minPlayers, maxPlayers, requiredIdsStr, excludedIdsStr, era, bountyJson, guildId || null);
         return { success: true };
       })();
 
@@ -1226,7 +1226,7 @@ class BattleService {
     // Update stats for all participants
     const allParticipants = this.getParticipants(lobbyId);
     for (const p of allParticipants) {
-      this.updateStats(p.user_id, p.username, p.user_id === winner.user_id, p.total_damage_dealt);
+      this.updateStats(lobby.guild_id || 'legacy', p.user_id, p.username, p.user_id === winner.user_id, p.total_damage_dealt);
     }
 
     const finalParticipantsById = new Map(allParticipants.map(p => [p.user_id, p]));
@@ -1311,9 +1311,11 @@ class BattleService {
     };
   }
 
-  updateStats(userId, username, won, damageDealt) {
+  updateStats(guildId, userId, username, won, damageDealt) {
     try {
-      const existing = db.prepare('SELECT * FROM battle_stats WHERE user_id = ?').get(userId);
+      const normalizedGuildId = String(guildId || '').trim();
+      if (!normalizedGuildId) return;
+      const existing = db.prepare('SELECT * FROM battle_stats WHERE guild_id = ? AND user_id = ?').get(normalizedGuildId, userId);
       
       if (existing) {
         db.prepare(`
@@ -1322,22 +1324,22 @@ class BattleService {
               battles_won = battles_won + ?,
               total_damage_dealt = total_damage_dealt + ?,
               updated_at = CURRENT_TIMESTAMP
-          WHERE user_id = ?
-        `).run(won ? 1 : 0, damageDealt, userId);
+          WHERE guild_id = ? AND user_id = ?
+        `).run(won ? 1 : 0, damageDealt, normalizedGuildId, userId);
       } else {
         db.prepare(`
-          INSERT INTO battle_stats (user_id, username, battles_played, battles_won, total_damage_dealt)
-          VALUES (?, ?, 1, ?, ?)
-        `).run(userId, username, won ? 1 : 0, damageDealt);
+          INSERT INTO battle_stats (guild_id, user_id, username, battles_played, battles_won, total_damage_dealt)
+          VALUES (?, ?, ?, 1, ?, ?)
+        `).run(normalizedGuildId, userId, username, won ? 1 : 0, damageDealt);
       }
     } catch (error) {
       logger.error('Error updating battle stats:', error);
     }
   }
 
-  getStats(userId) {
+  getStats(guildId, userId) {
     try {
-      return db.prepare('SELECT * FROM battle_stats WHERE user_id = ?').get(userId);
+      return db.prepare('SELECT * FROM battle_stats WHERE guild_id = ? AND user_id = ?').get(guildId, userId);
     } catch (error) {
       logger.error('Error getting battle stats:', error);
       return null;

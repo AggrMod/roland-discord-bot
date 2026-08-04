@@ -15,6 +15,25 @@ const SKIP_EMOJI = '⏭️';
 const SCORE_TABLE = [10, 7, 5, 3, 1]; // index = (place - 1); 5th+ all get 1pt
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+function trackCollector(session, collector) {
+  if (!session || !collector) return collector;
+  if (!session.activeCollectors) session.activeCollectors = new Set();
+  session.activeCollectors.add(collector);
+  collector.once('end', () => session.activeCollectors.delete(collector));
+  return collector;
+}
+
+function stopCollectors(session, reason) {
+  for (const collector of session?.activeCollectors || []) {
+    try { collector.stop(reason); } catch (_) {}
+  }
+  session?.activeCollectors?.clear();
+}
+
+function sessionStopped(session) {
+  return !session || session.cancelRequested || session.status === 'cancelled' || session.status === 'ended';
+}
+
 const GAME_ROSTER = [
   'diceduel', 'higherlower', 'reactionrace',
   'numberguess', 'slots', 'trivia',
@@ -47,8 +66,12 @@ class GameNightService {
 
   createSession({ channelId, messageId, creatorId, gatherSecs = 60, selectedGames }) {
     const previous = this._sessions.get(channelId);
-    if (previous?.gatherTimer) {
-      clearTimeout(previous.gatherTimer);
+    if (previous) {
+      if (previous.gatherTimer) clearTimeout(previous.gatherTimer);
+      previous.cancelRequested = true;
+      previous.skipRequested = true;
+      previous.status = 'cancelled';
+      stopCollectors(previous, 'session_replaced');
     }
     const games = (selectedGames && selectedGames.length > 0)
       ? selectedGames.filter(g => GAME_ROSTER.includes(g))
@@ -57,7 +80,8 @@ class GameNightService {
       channelId, lobbyMessageId: messageId, creatorId, gatherSecs,
       status: 'waiting', players: new Set(), playerNames: new Map(),
       scores: new Map(), games, currentGameIndex: 0,
-      gatherTimer: null, skipRequested: false,
+      gatherTimer: null, skipRequested: false, cancelRequested: false,
+      activeCollectors: new Set(), completedGames: 0,
     };
     this._sessions.set(channelId, session);
     return session;
@@ -87,8 +111,29 @@ class GameNightService {
     const s = this._sessions.get(channelId);
     if (!s) return;
     clearTimeout(s.gatherTimer);
+    stopCollectors(s, 'session_ended');
     s.status = 'ended';
     this._sessions.delete(channelId);
+  }
+
+  cancelSession(channelId) {
+    const s = this._sessions.get(channelId);
+    if (!s) return false;
+    clearTimeout(s.gatherTimer);
+    s.cancelRequested = true;
+    s.skipRequested = true;
+    s.status = 'cancelled';
+    stopCollectors(s, 'session_cancelled');
+    this._sessions.delete(channelId);
+    return true;
+  }
+
+  requestSkip(channelId) {
+    const s = this._sessions.get(channelId);
+    if (!s || s.status !== 'playing' || s.cancelRequested) return false;
+    s.skipRequested = true;
+    stopCollectors(s, 'game_skipped');
+    return true;
   }
 
   awardPoints(session, ranked) {
@@ -113,7 +158,7 @@ class GameNightService {
       .addFields({ name: `👥 Players (${session.players.size})`, value: playerList })
       .setTimestamp();
     this._author(e, guildId);
-    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: `Starts in ${session.gatherSecs}s � Host can react ${SKIP_EMOJI} to skip a game mid-session` });
+    applyEmbedBranding(e, { guildId, moduleKey: 'minigames', defaultColor: '#f59e0b', defaultFooter: `Starts in ${session.gatherSecs}s • Host can use /gamenight skip during a game` });
     return e;
   }
 
@@ -171,40 +216,58 @@ class GameNightService {
     const GL = { diceduel:'🎲 Dice Duel', higherlower:'🃏 Higher or Lower', reactionrace:'⚡ Reaction Race', numberguess:'🔢 Number Guess', slots:'🎰 Slots', trivia:'❓ Trivia', wordscramble:'🧩 Word Scramble', rps:'🪨 RPS Tournament', blackjack:'🎴 Blackjack' };
 
     for (let i = 0; i < total; i++) {
+      if (sessionStopped(session)) return;
       session.currentGameIndex = i;
       session.skipRequested = false;
       const gameKey = session.games[i];
       const info = GAME_INFO[gameKey] || { name: gameKey, desc: '' };
 
       await sleep(3000);
-      const introMsg = await channel.send({ embeds: [this.buildIntroEmbed({ gameIndex: i + 1, total, gameName: info.name, gameDesc: info.desc, guildId })] });
-      await introMsg.react(SKIP_EMOJI).catch(() => {});
+      if (sessionStopped(session)) return;
+      await channel.send({ embeds: [this.buildIntroEmbed({ gameIndex: i + 1, total, gameName: info.name, gameDesc: info.desc, guildId })] });
       await sleep(4000);
+      if (sessionStopped(session)) return;
 
       let ranked = [];
+      let completed = false;
       if (!session.skipRequested) {
         try {
           const runner = RUNNERS[gameKey];
           ranked = runner ? await runner(channel, guildId, new Set(session.players), new Map(session.playerNames), session) : [...session.players];
+          completed = !!runner && !session.skipRequested && !sessionStopped(session);
         } catch (err) {
+          if (sessionStopped(session)) return;
           logger.error(`[GameNight] ${gameKey} error:`, err);
-          ranked = [...session.players];
+          await channel.send({ embeds: [this.buildCancelledEmbed(`❌ ${info.name} ended because of an error. No points were awarded.`, guildId)] });
         }
-      } else {
-        ranked = [...session.players]; // skipped → no points awarded fairly, give equal
+      }
+
+      if (sessionStopped(session)) return;
+      if (session.skipRequested) {
         await channel.send({ embeds: [this.buildCancelledEmbed('⏭️ Game skipped by host.', guildId)] });
       }
 
-      this.awardPoints(session, ranked);
+      if (completed && ranked.length > 0) {
+        this.awardPoints(session, ranked);
+        session.completedGames += 1;
+      }
 
       if (i < total - 1) {
         await sleep(3000);
+        if (sessionStopped(session)) return;
         await channel.send({ embeds: [this.buildLeaderboardEmbed(session, guildId, GL[gameKey] || gameKey, total - i - 1)] });
         await sleep(5000);
+        if (sessionStopped(session)) return;
       }
     }
 
     await sleep(2000);
+    if (sessionStopped(session)) return;
+    if (session.completedGames === 0) {
+      await channel.send({ embeds: [this.buildCancelledEmbed('No games were completed, so no champion or rewards were awarded.', guildId)] });
+      this.endSession(channel.id);
+      return;
+    }
     const sorted = [...session.scores.entries()].sort((a, b) => b[1] - a[1]);
     const topWinners = sorted.filter(([, s]) => s === sorted[0][1]).map(([id]) => `<@${id}>`);
     const rewardUsers = sorted.slice(0, 3).map(([id]) => ({ userId: id, username: session.playerNames.get(id) || id }));
@@ -224,7 +287,6 @@ const RUNNERS = {};
 
 // ── 1. DICE DUEL ─────────────────────────────────────────────────────────────
 RUNNERS.diceduel = async (channel, guildId, players, playerNames, session) => {
-  const ddSvc = require('./diceDuelService');
   const FACES = ['⚀','⚁','⚂','⚃','⚄','⚅'];
   const roll = () => Math.floor(Math.random() * 6) + 1;
 
@@ -311,9 +373,10 @@ RUNNERS.higherlower = async (channel, guildId, players, playerNames, session) =>
     await qMsg.react('⬆️').catch(() => {}); await qMsg.react('⬇️').catch(() => {});
 
     const picks = new Map();
-    const col = qMsg.createReactionCollector({ filter: (r, u) => ['⬆️','⬇️'].includes(r.emoji.name) && !u.bot && alive.has(u.id), time: 20000 });
+    const col = trackCollector(session, qMsg.createReactionCollector({ filter: (r, u) => ['⬆️','⬇️'].includes(r.emoji.name) && !u.bot && alive.has(u.id), time: 20000 }));
     col.on('collect', (r, u) => { if (!picks.has(u.id)) picks.set(u.id, r.emoji.name); });
     await new Promise(res => col.on('end', res));
+    if (session.skipRequested || sessionStopped(session)) return [];
 
     // Eliminate wrong guesses (or non-reactors)
     const toElim = [];
@@ -377,9 +440,10 @@ RUNNERS.reactionrace = async (channel, guildId, players, playerNames, session) =
     await readyMsg.react(RACE_EMOJI).catch(() => {});
 
     const order = [];
-    const col = readyMsg.createReactionCollector({ filter: (r, u) => r.emoji.name === RACE_EMOJI && !u.bot && alive.has(u.id), time: 8000 });
+    const col = trackCollector(session, readyMsg.createReactionCollector({ filter: (r, u) => r.emoji.name === RACE_EMOJI && !u.bot && alive.has(u.id), time: 8000 }));
     col.on('collect', (_, u) => { if (!order.includes(u.id)) order.push(u.id); });
     await new Promise(res => col.on('end', res));
+    if (session.skipRequested || sessionStopped(session)) return [];
 
     const noReact = [...alive].filter(id => !order.includes(id));
     let toElim = noReact.length > 0 ? noReact : (order.length > 0 ? [order[order.length - 1]] : []);
@@ -421,9 +485,10 @@ RUNNERS.numberguess = async (channel, guildId, players, playerNames, session) =>
     await channel.send({ embeds: [qE] });
 
     const guesses = new Map();
-    const col = channel.createMessageCollector({ filter: m => players.has(m.author.id) && /^\d+$/.test(m.content.trim()), time: 30000 });
+    const col = trackCollector(session, channel.createMessageCollector({ filter: m => players.has(m.author.id) && /^\d+$/.test(m.content.trim()), time: 30000 }));
     col.on('collect', m => { if (!guesses.has(m.author.id)) guesses.set(m.author.id, parseInt(m.content.trim())); });
     await new Promise(res => col.on('end', res));
+    if (session.skipRequested || sessionStopped(session)) return [];
 
     // Score: 10-(distance) floored at 1, or 10 for exact
     let roundScores = [];
@@ -451,7 +516,7 @@ RUNNERS.numberguess = async (channel, guildId, players, playerNames, session) =>
 };
 
 // ── 5. SLOTS ──────────────────────────────────────────────────────────────────
-RUNNERS.slots = async (channel, guildId, players, playerNames, session) => {
+RUNNERS.slots = async (channel, guildId, players, playerNames) => {
   const { EmbedBuilder: EB } = require('discord.js');
   const REELS = ['💎','🍒','🍋','⭐','🔔','🍇'];
   const SCORES = { '💎💎💎': 100, '🍒🍒🍒': 80, '⭐⭐⭐': 70, '🔔🔔🔔': 60, '🍋🍋🍋': 50, '🍇🍇🍇': 40 };
@@ -497,9 +562,10 @@ RUNNERS.trivia = async (channel, guildId, players, playerNames, session) => {
     for (const e of EMOJIS) await qMsg.react(e).catch(() => {});
 
     const picks = new Map();
-    const col = qMsg.createReactionCollector({ filter: (r, u) => EMOJIS.includes(r.emoji.name) && !u.bot && players.has(u.id), time: 20000 });
+    const col = trackCollector(session, qMsg.createReactionCollector({ filter: (r, u) => EMOJIS.includes(r.emoji.name) && !u.bot && players.has(u.id), time: 20000 }));
     col.on('collect', (r, u) => { if (!picks.has(u.id)) picks.set(u.id, r.emoji.name); });
     await new Promise(res => col.on('end', res));
+    if (session.skipRequested || sessionStopped(session)) return [];
 
     const correctEmoji = EMOJIS[correctIdx];
     const winners = [];
@@ -525,7 +591,6 @@ RUNNERS.trivia = async (channel, guildId, players, playerNames, session) => {
 // ── 7. WORD SCRAMBLE ─────────────────────────────────────────────────────────
 RUNNERS.wordscramble = async (channel, guildId, players, playerNames, session) => {
   const { EmbedBuilder: EB } = require('discord.js');
-  const wsSvc = require('./wordScrambleService');
   const scores = new Map([...players].map(id => [id, 0]));
   const WORDS = ['discord','crypto','bitcoin','solana','wallet','blockchain','diamond','thunder','castle','pirate','galaxy','dragon','trophy','legend','market'];
   const pool = WORDS.sort(() => Math.random() - 0.5).slice(0, 5);
@@ -541,11 +606,12 @@ RUNNERS.wordscramble = async (channel, guildId, players, playerNames, session) =
     await channel.send({ embeds: [qE] });
 
     let winnerId = null;
-    const col = channel.createMessageCollector({ filter: m => players.has(m.author.id), time: 30000 });
+    const col = trackCollector(session, channel.createMessageCollector({ filter: m => players.has(m.author.id), time: 30000 }));
     await new Promise(res => {
       col.on('collect', m => { if (m.content.trim().toLowerCase() === word && !winnerId) { winnerId = m.author.id; scores.set(winnerId, (scores.get(winnerId)||0)+1); col.stop(); } });
       col.on('end', res);
     });
+    if (session.skipRequested || sessionStopped(session)) return [];
 
     const rE = new EB().setTitle(`🧩 Round ${round} — The word was **${word}**!`).setDescription(winnerId ? `🏆 **${playerNames.get(winnerId) || winnerId}** got it first!` : '😮 Nobody got it!').setTimestamp();
     applyEmbedBranding(rE, { guildId, moduleKey: 'minigames', defaultColor: winnerId ? '#4ade80' : '#ef4444', defaultFooter: `Game Night � Word Scramble` });
@@ -588,9 +654,10 @@ RUNNERS.rps = async (channel, guildId, players, playerNames, session) => {
       for (const e of CHOICES) await mMsg.react(e).catch(()=>{});
 
       const picks = new Map();
-      const col = mMsg.createReactionCollector({ filter:(r,u)=>CHOICES.includes(r.emoji.name)&&!u.bot&&[pA,pB].includes(u.id), time:25000 });
+      const col = trackCollector(session, mMsg.createReactionCollector({ filter:(r,u)=>CHOICES.includes(r.emoji.name)&&!u.bot&&[pA,pB].includes(u.id), time:25000 }));
       col.on('collect',(r,u)=>{ if(!picks.has(u.id)) picks.set(u.id, r.emoji.name); });
       await new Promise(res=>col.on('end',res));
+      if (session.skipRequested || sessionStopped(session)) return [];
 
       const cA = picks.get(pA)||null, cB = picks.get(pB)||null;
       let loser = null;
@@ -659,8 +726,9 @@ RUNNERS.blackjack = async (channel, guildId, players, playerNames, session) => {
     let standing = false;
     while (!standing && handVal(hand) < 21) {
       let decision = null;
-      const col = tMsg.createReactionCollector({filter:(r,u)=>['👆','✋'].includes(r.emoji.name)&&u.id===id&&!u.bot, time:20000, max:1});
+      const col = trackCollector(session, tMsg.createReactionCollector({filter:(r,u)=>['👆','✋'].includes(r.emoji.name)&&u.id===id&&!u.bot, time:20000, max:1}));
       await new Promise(res=>{ col.on('collect',r=>{decision=r.emoji.name;res();}); col.on('end',res); });
+      if (session.skipRequested || sessionStopped(session)) return [];
       if (!decision || decision === '✋') { standing = true; break; }
       hand.push(draw());
       val = handVal(hand);
@@ -689,7 +757,7 @@ RUNNERS.blackjack = async (channel, guildId, players, playerNames, session) => {
     return (o[a.outcome] - o[b.outcome]) || b.val - a.val;
   });
 
-  const lines = results.map((r, i) => {
+  const lines = results.map((r) => {
     const icon = {win:'🏆',push:'🤝',lose:'❌',bust:'💀'}[r.outcome];
     return `${icon} **${playerNames.get(r.id)||r.id}** — ${handStr(r.hand)} (${r.val}) — ${r.outcome.toUpperCase()}`;
   }).join('\n');

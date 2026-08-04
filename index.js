@@ -1763,29 +1763,15 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
       eng.tryAwardReaction(reaction.message.guildId, user.id, user.username, `react:${reaction.message.id}`, reaction.message.channelId);
     } catch (_) {}
   }
-  const battleService = require('./services/battleService');
-  const lobby = battleService.getLobbyByMessage(reaction.message.id);
-  if (lobby && lobby.status === 'open' && reaction.emoji.name === '⚔️') {
-    const member = await reaction.message.guild.members.fetch(user.id).catch(() => null);
-    const roles = member?.roles.cache.map(r => r.id) || [];
-    const res = battleService.addParticipant(lobby.lobby_id, user.id, user.username, roles);
-    if (res.success) await reaction.message.edit({ embeds: [battleService.buildLobbyEmbed(lobby, reaction.message.guildId)] });
-    else {
-      await reaction.users.remove(user.id).catch(() => {});
-      if (res.message) try { await user.send(`❌ ${res.message}`); } catch (_) {}
-    }
-  }
+  const gameReactionHandler = require('./services/gameReactionHandler');
+  await gameReactionHandler.handleReactionAdd(reaction, user);
 });
 
 client.on(Events.MessageReactionRemove, async (reaction, user) => {
   if (user.bot) return;
   if (reaction.partial) try { await reaction.fetch(); } catch (_) { return; }
-  const battleService = require('./services/battleService');
-  const lobby = battleService.getLobbyByMessage(reaction.message.id);
-  if (lobby && lobby.status === 'open' && reaction.emoji.name === '⚔️') {
-    const res = battleService.removeParticipant(lobby.lobby_id, user.id);
-    if (res.success) await reaction.message.edit({ embeds: [battleService.buildLobbyEmbed(lobby, reaction.message.guildId)] });
-  }
+  const gameReactionHandler = require('./services/gameReactionHandler');
+  await gameReactionHandler.handleReactionRemove(reaction, user);
 });
 
 client.on(Events.Error, e => logger.error('Client error:', e));

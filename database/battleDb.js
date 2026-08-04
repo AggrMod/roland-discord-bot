@@ -37,17 +37,20 @@ function initBattleTables() {
     );
 
     CREATE TABLE IF NOT EXISTS battle_stats (
-      user_id TEXT PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
       username TEXT NOT NULL,
       battles_played INTEGER DEFAULT 0,
       battles_won INTEGER DEFAULT 0,
       total_damage_dealt INTEGER DEFAULT 0,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (guild_id, user_id)
     );
 
     CREATE INDEX IF NOT EXISTS idx_battle_lobbies_status ON battle_lobbies(status);
     CREATE INDEX IF NOT EXISTS idx_battle_participants_lobby ON battle_participants(lobby_id);
     CREATE INDEX IF NOT EXISTS idx_battle_participants_user ON battle_participants(user_id);
+    CREATE INDEX IF NOT EXISTS idx_battle_stats_guild_wins ON battle_stats(guild_id, battles_won DESC, total_damage_dealt DESC);
   `);
 
   // Safe additive migrations

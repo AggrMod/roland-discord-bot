@@ -25,7 +25,8 @@ const {
   impersonationDetector,
   scamLanguageDetector,
   linkProtectionDetector,
-  attachmentThreatDetector
+  attachmentThreatDetector,
+  coordinatedCampaignDetector
 } = require('../services/guildGuard/detectors');
 const actionService = require('../services/guildGuard/actions');
 
@@ -242,6 +243,47 @@ assert.ok(attachmentSignals.some(signal => signal.detector === 'qr_code_link'));
 assert.ok(attachmentSignals.some(signal => signal.detector === 'dangerous_attachment' && signal.metadata.category === 'double_extension'));
 assert.ok(attachmentSignals.some(signal => signal.detector === 'link_protection' && signal.metadata.source === 'qr_code'));
 
+const campaignWindow = new EventWindowStore();
+const campaignConfig = { detectors: { campaigns: { enabled: true, windowSeconds: 90, userThreshold: 3, messageThreshold: 3 } } };
+const campaignTimestamp = Date.now();
+for (let i = 0; i < 3; i += 1) {
+  campaignWindow.record({
+    eventId: `campaign-${i}`, eventType: 'message_create', guildId: 'guild-campaign',
+    userId: `campaign-user-${i}`, channelId: `campaign-channel-${i % 2}`,
+    normalizedContent: `claim your reward at https://campaign-evil.example/claim code ${i}`,
+    urls: ['https://campaign-evil.example/claim'], timestamp: campaignTimestamp + i
+  });
+}
+const campaignSignals = coordinatedCampaignDetector.detect({
+  eventId: 'campaign-2', eventType: 'message_create', guildId: 'guild-campaign',
+  userId: 'campaign-user-2', channelId: 'campaign-channel-0',
+  normalizedContent: 'claim your reward at https://campaign-evil.example/claim code 2',
+  urls: ['https://campaign-evil.example/claim'], timestamp: campaignTimestamp + 2
+}, { config: campaignConfig, eventWindow: campaignWindow, domainRegistry: guard.domainRegistry });
+assert.ok(campaignSignals.some(signal => signal.detector === 'coordinated_link_campaign' && signal.metadata.userCount === 3));
+
+guard.domainRegistry.add('guild-campaign-trusted', 'trusted-campaign.example', 'allow');
+const trustedCampaignWindow = new EventWindowStore();
+for (let i = 0; i < 3; i += 1) trustedCampaignWindow.record({
+  eventId: `trusted-${i}`, eventType: 'message_create', guildId: 'guild-campaign-trusted', userId: `trusted-user-${i}`,
+  normalizedContent: 'trusted community update at trusted-campaign.example', urls: ['https://trusted-campaign.example/news'], timestamp: campaignTimestamp + i
+});
+assert.strictEqual(coordinatedCampaignDetector.detect({
+  eventType: 'message_create', guildId: 'guild-campaign-trusted', userId: 'trusted-user-2',
+  normalizedContent: 'trusted community update at trusted-campaign.example', urls: ['https://trusted-campaign.example/news'], timestamp: campaignTimestamp + 2
+}, { config: campaignConfig, eventWindow: trustedCampaignWindow, domainRegistry: guard.domainRegistry }), null, 'trusted domains must not trigger Campaign Radar');
+
+const copiedCampaignWindow = new EventWindowStore();
+for (let i = 0; i < 3; i += 1) copiedCampaignWindow.record({
+  eventId: `copied-${i}`, eventType: 'message_create', guildId: 'guild-copied', userId: `copied-user-${i}`,
+  channelId: `copied-channel-${i}`, normalizedContent: 'urgent support verification required now', urls: [], timestamp: campaignTimestamp + i
+});
+const copiedSignals = coordinatedCampaignDetector.detect({
+  eventType: 'message_create', guildId: 'guild-copied', userId: 'copied-user-2', channelId: 'copied-channel-2',
+  normalizedContent: 'urgent support verification required now', urls: [], timestamp: campaignTimestamp + 2
+}, { config: campaignConfig, eventWindow: copiedCampaignWindow, domainRegistry: guard.domainRegistry });
+assert.ok(copiedSignals.some(signal => signal.detector === 'coordinated_message_campaign'));
+
 let alertPayload = null;
 guard.updateConfig('guild-alert', {
   enabled: true,
@@ -422,6 +464,24 @@ assert.strictEqual(reviewed.status, 'reviewed');
 const falsePositive = guard.reportFalsePositive('guild-live', liveResult.incident.incident_id, 'moderator-1', 'approved test fixture');
 assert.strictEqual(falsePositive.status, 'false_positive');
 assert.strictEqual(guard.listFalsePositives('guild-live').length, 1);
+
+guard.domainRegistry.add('guild-domain-action', 'trusted-action.example', 'allow');
+const domainActionIncident = await guard.createTestIncident('guild-domain-action', {
+  id: 'domain-action-incident',
+  content: 'Visit https://campaign-block.example/claim https://trusted-action.example/help https://discord.com/channels/1',
+  author: { id: 'domain-action-user' }
+});
+await assert.rejects(
+  async () => guard.blockIncidentDomains('guild-domain-action', domainActionIncident.incident.incident_id, 'moderator-1'),
+  /Confirm the incident/
+);
+guard.updateIncidentStatus('guild-domain-action', domainActionIncident.incident.incident_id, 'confirmed', 'moderator-1');
+const domainAction = guard.blockIncidentDomains('guild-domain-action', domainActionIncident.incident.incident_id, 'moderator-1');
+assert.deepStrictEqual(domainAction.domains, ['campaign-block.example']);
+assert.ok(domainAction.skipped.some(item => item.domain === 'trusted-action.example' && item.reason === 'trusted_domain'));
+assert.ok(domainAction.skipped.some(item => item.domain === 'discord.com' && item.reason === 'protected_platform_domain'));
+assert.ok(guard.domainRegistry.list('guild-domain-action', 'block').includes('campaign-block.example'));
+assert.strictEqual(db.prepare("SELECT status FROM actions WHERE incident_id = ? AND action_type = 'moderator:block_domains'").get(domainActionIncident.incident.incident_id).status, 'applied');
 
 const retentionIncident = await guard.createTestIncident('guild-retention', { id: 'retention-1', author: { id: 'retention-user' } });
 db.prepare("UPDATE incidents SET created_at = datetime('now', '-90 days') WHERE incident_id = ?").run(retentionIncident.incident.incident_id);

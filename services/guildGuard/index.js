@@ -18,6 +18,7 @@ const {
   scamLanguageDetector,
   linkProtectionDetector,
   attachmentThreatDetector,
+  coordinatedCampaignDetector,
   raidBurstDetector
 } = require('./detectors');
 
@@ -33,7 +34,8 @@ function normalizeGuildId(guildId) {
 const GUILD_GUARD_RULE_DETECTORS = new Set([
   'spam_flood', 'duplicate_message', 'mass_mention', 'suspicious_account',
   'staff_impersonation', 'wallet_drainer_language', 'link_protection', 'lookalike_domain',
-  'link_deception', 'dangerous_attachment', 'qr_code_link', 'raid_burst'
+  'link_deception', 'dangerous_attachment', 'qr_code_link', 'coordinated_link_campaign',
+  'coordinated_message_campaign', 'raid_burst'
 ]);
 
 const GLOBAL_REPUTATION_CATEGORIES = new Set(['spam', 'unsafe_link', 'impersonation', 'scam', 'suspicious_account']);
@@ -52,9 +54,9 @@ function normalizeGlobalCategory(value, incident = null) {
   try { signals = JSON.parse(incident?.signals_json || '[]'); } catch (_) { signals = []; }
   const detectors = new Set(signals.map(signal => String(signal?.detector || '').trim()));
   if (detectors.has('staff_impersonation')) return 'impersonation';
-  if (detectors.has('wallet_drainer_language') || detectors.has('dangerous_attachment') || detectors.has('qr_code_link')) return 'scam';
+  if (detectors.has('wallet_drainer_language') || detectors.has('dangerous_attachment') || detectors.has('qr_code_link') || detectors.has('coordinated_link_campaign')) return 'scam';
   if (detectors.has('link_protection') || detectors.has('lookalike_domain') || detectors.has('link_deception')) return 'unsafe_link';
-  if (detectors.has('spam_flood') || detectors.has('duplicate_message') || detectors.has('mass_mention')) return 'spam';
+  if (detectors.has('spam_flood') || detectors.has('duplicate_message') || detectors.has('mass_mention') || detectors.has('coordinated_message_campaign')) return 'spam';
   if (detectors.has('suspicious_account') || detectors.has('raid_burst')) return 'suspicious_account';
   return 'scam';
 }
@@ -476,7 +478,7 @@ async function recordIncident(event, signals, score, evidence, status = 'open') 
 
 const eventWindow = new EventWindowStore();
 const pipeline = new DetectionPipeline({
-  detectors: [spamFloodDetector, duplicateMessageDetector, massMentionDetector, suspiciousAccountDetector, impersonationDetector, scamLanguageDetector, linkProtectionDetector, attachmentThreatDetector, raidBurstDetector],
+  detectors: [spamFloodDetector, duplicateMessageDetector, massMentionDetector, suspiciousAccountDetector, impersonationDetector, scamLanguageDetector, linkProtectionDetector, attachmentThreatDetector, coordinatedCampaignDetector, raidBurstDetector],
   isExempt,
   recordIncident,
   recordSignals,
@@ -584,6 +586,63 @@ function getIncident(guildId, incidentId) {
     .get(normalizeGuildId(guildId), String(incidentId || '').trim()) || null;
 }
 
+const SYSTEM_SAFE_DOMAINS = Object.freeze(['discord.com', 'discord.gg', 'discordapp.com', 'discordapp.net', 'guildpilot.app']);
+
+function isSystemSafeDomain(domain) {
+  return SYSTEM_SAFE_DOMAINS.some(safeDomain => domain === safeDomain || domain.endsWith(`.${safeDomain}`));
+}
+
+function incidentDomains(incident) {
+  const evidence = jsonParse(incident?.evidence_json, {});
+  const signals = jsonParse(incident?.signals_json, []);
+  const candidates = [...(Array.isArray(evidence.urls) ? evidence.urls : [])];
+  for (const signal of Array.isArray(signals) ? signals : []) {
+    const metadata = signal?.metadata || {};
+    for (const key of ['domain', 'destinationDomain', 'finalUrl', 'url']) {
+      if (metadata[key]) candidates.push(metadata[key]);
+    }
+    if (Array.isArray(metadata.decodedUrls)) candidates.push(...metadata.decodedUrls);
+  }
+  return [...new Set(candidates.map(domainRegistry.normalizeDomain).filter(Boolean))];
+}
+
+function blockIncidentDomains(guildId, incidentId, actorId = null) {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  const incident = getIncident(normalizedGuildId, incidentId);
+  if (!incident) return null;
+  if (incident.status !== 'confirmed') throw new Error('Confirm the incident before blocking its domains');
+  const allowlist = new Set(domainRegistry.list(normalizedGuildId, 'allow'));
+  const existingBlocklist = new Set(domainRegistry.list(normalizedGuildId, 'block'));
+  const blocked = [];
+  const skipped = [];
+  for (const domain of incidentDomains(incident)) {
+    if (allowlist.has(domain)) {
+      skipped.push({ domain, reason: 'trusted_domain' });
+      continue;
+    }
+    if (isSystemSafeDomain(domain)) {
+      skipped.push({ domain, reason: 'protected_platform_domain' });
+      continue;
+    }
+    if (existingBlocklist.has(domain)) {
+      skipped.push({ domain, reason: 'already_blocked' });
+      continue;
+    }
+    blocked.push(domainRegistry.add(normalizedGuildId, domain, 'block', {
+      reason: `Confirmed Guild Guard incident ${incident.incident_id}`,
+      createdBy: actorId || null
+    }));
+  }
+  actionService.recordAction({
+    event: { guildId: normalizedGuildId },
+    incident,
+    actionType: 'moderator:block_domains',
+    status: blocked.length ? 'applied' : 'skipped',
+    metadata: { actorId: actorId || null, domains: blocked, skipped }
+  });
+  return { incidentId: incident.incident_id, domains: blocked, skipped };
+}
+
 function updateIncidentStatus(guildId, incidentId, status, actorId = null) {
   const allowed = new Set(['open', 'reviewed', 'confirmed', 'false_positive', 'closed']);
   if (!allowed.has(status)) throw new Error('Invalid incident status');
@@ -682,6 +741,7 @@ module.exports = {
   resetRiskProfile,
   decayRiskProfiles,
   getIncident,
+  blockIncidentDomains,
   updateIncidentStatus,
   reportFalsePositive,
   listFalsePositives,

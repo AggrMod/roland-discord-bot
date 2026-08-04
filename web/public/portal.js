@@ -1597,7 +1597,7 @@ const MODULE_REGISTRY = [
   { key: 'telegrambridge', label: 'Telegram Bridge', icon: '\u{1F4E1}', section: 'telegram-bridge', adminOnly: true, desc: 'Mirror Telegram groups and channels into Discord channels.' },
   { key: 'automessages', label: 'Auto Messages', icon: '\u{1F4E2}', section: 'auto-messages', adminOnly: true, desc: 'Schedule recurring embedded announcements in selected Discord channels.' },
   { key: 'selfserveroles', label: 'Self-Serve Roles', icon: '\u{1F3AD}', section: 'self-serve-roles', desc: 'Claim optional roles assigned by administrators.' },
-  { key: 'guildguard', label: 'Guild Guard', icon: '\u{1F6E1}\uFE0F', section: 'guildguard', adminOnly: true, desc: 'Protect your community with clear presets, scam defense, incident review, and raid response.' },
+  { key: 'guildguard', label: 'Guild Guard', icon: '\u{1F6E1}\uFE0F', section: 'guildguard', adminOnly: true, desc: 'Protect your community with scam defense, Campaign Radar, incident review, and raid response.' },
   { key: 'aiassistant', label: 'AI Assistant', icon: '\u{1F916}', section: 'aiassistant', adminOnly: true, desc: 'Tune prompts, safety controls, and assistant behavior for your server.' }
 ];
 
@@ -1810,7 +1810,9 @@ const GUILD_GUARD_DETECTOR_LABELS = Object.freeze({
   suspicious_account: 'Suspicious account', staff_impersonation: 'Staff impersonation',
   wallet_drainer_language: 'Wallet scam language', link_protection: 'Unsafe link',
   lookalike_domain: 'Lookalike domain', link_deception: 'Disguised link',
-  dangerous_attachment: 'Dangerous attachment', qr_code_link: 'QR-code link', raid_burst: 'Raid burst'
+  dangerous_attachment: 'Dangerous attachment', qr_code_link: 'QR-code link',
+  coordinated_link_campaign: 'Coordinated link campaign', coordinated_message_campaign: 'Coordinated message campaign',
+  raid_burst: 'Raid burst'
 });
 
 function describeGuildGuardSignal(signal) {
@@ -1831,7 +1833,9 @@ function describeGuildGuardSignal(signal) {
     qr_destination: 'An attached image contains a QR code that opens an external link.',
     blocklisted: `The destination ${metadata.domain || ''} is on this community's blocked list.`,
     lookalike: `The destination resembles trusted domain ${metadata.lookalikeOf || ''}.`,
-    unsafe_destination: 'The destination could not be resolved safely.'
+    unsafe_destination: 'The destination could not be resolved safely.',
+    multi_account_link_campaign: `${metadata.userCount || 'Multiple'} accounts shared ${metadata.domain || 'the same destination'} in a short period.`,
+    multi_account_message_campaign: `${metadata.userCount || 'Multiple'} accounts posted the same message in a short period.`
   };
   return explanations[metadata.category] || metadata.explanation || `${GUILD_GUARD_DETECTOR_LABELS[signal?.detector] || signal?.detector || 'Risk signal'} contributed to this incident.`;
 }
@@ -1865,6 +1869,7 @@ function renderGuildGuardCoverage(config) {
     ['links', 'Dangerous links', 'Shortened, disguised and lookalike domains'],
     ['scamLanguage', 'Wallet scam language', 'Seed phrase requests and pressured wallet instructions'],
     ['attachments', 'Files & QR codes', 'Dangerous files and links hidden in images'],
+    ['campaigns', 'Campaign Radar', 'The same scam spread by multiple accounts or channels'],
     ['impersonation', 'Impersonation', 'Protected staff identities'],
     ['raids', 'Raid defence', 'Join bursts and recoverable raid mode'],
     ['spam', 'Spam protection', 'Floods, repeated messages and mass mentions']
@@ -1953,7 +1958,9 @@ function renderGuildGuardIncidents(incidents) {
     wallet_drainer_language: 'Possible wallet-drainer message',
     link_deception: 'Disguised destination detected',
     dangerous_attachment: 'Dangerous file attachment',
-    qr_code_link: 'Link hidden in a QR code'
+    qr_code_link: 'Link hidden in a QR code',
+    coordinated_link_campaign: 'Coordinated scam campaign',
+    coordinated_message_campaign: 'Coordinated message campaign'
   };
   target.innerHTML = incidents.map(incident => {
     const labels = guildGuardSignals(incident);
@@ -1997,10 +2004,17 @@ async function loadGuildGuardIncidentDetail(incidentId) {
     const signalSummary = signals.map(signal => `${GUILD_GUARD_DETECTOR_LABELS[signal.detector] || signal.detector}: ${describeGuildGuardSignal(signal)}`).join(' ') || 'No detector details available';
     const safeUrls = (evidence.urls || []).map(url => `<code>${escapeHtml(url)}</code>`).join(' ') || '<span class="section-subtitle">No links recorded.</span>';
     const safeAttachments = (evidence.attachments || []).map(attachment => `<div><strong>${escapeHtml(attachment.name || 'attachment')}</strong><span>${escapeHtml(attachment.contentType || 'unknown type')} · ${escapeHtml(Math.ceil(Number(attachment.size || 0) / 1024))} KB</span></div>`).join('') || '<span class="section-subtitle">No files recorded.</span>';
+    const incidentHasDomains = (evidence.urls || []).length > 0 || signals.some(signal => {
+      const metadata = signal?.metadata || {};
+      return Boolean(metadata.domain || metadata.destinationDomain || metadata.finalUrl || metadata.url || metadata.decodedUrls?.length);
+    });
+    const blockDomainsAction = incident.status === 'confirmed' && incidentHasDomains
+      ? `<button type="button" class="btn-primary" data-guildguard-block-domains="${escapeHtml(incident.incident_id)}">Block detected domains</button>`
+      : '';
     target.innerHTML = `<div class="gg-incident-detail__header"><div><span class="gg-eyebrow">Incident review</span><h3>${escapeHtml(guildGuardSignals(incident)[0] || 'Security incident')}</h3><p>${escapeHtml(signalSummary)}</p></div><button type="button" class="btn-secondary" data-guildguard-close-detail>Close</button></div>
       <div class="gg-detail-facts"><div><span>Member</span><strong>${escapeHtml(incident.user_id || 'Unknown')}</strong></div><div><span>Risk score</span><strong>${escapeHtml(incident.risk_score || 0)}/100</strong></div><div><span>Status</span><strong>${escapeHtml(String(incident.status || 'open').replaceAll('_', ' '))}</strong></div><div><span>Related incidents</span><strong>${escapeHtml(incidentSummary.total)}</strong></div></div>
       <section class="gg-evidence-panel"><span class="gg-eyebrow">What Guild Guard saw</span><p>${escapeHtml(evidence.rawContent || 'No message content was stored for this event.')}</p><div class="gg-safe-links"><strong>Links are shown as non-clickable text</strong>${safeUrls}</div><div class="gg-safe-attachments"><strong>Attached files</strong>${safeAttachments}</div></section>
-      <div class="gg-detail-actions"><button type="button" class="btn-primary" data-guildguard-detail-review="confirmed">Confirm scam</button><button type="button" class="btn-secondary" data-guildguard-detail-review="reviewed">Mark reviewed</button><button type="button" class="btn-secondary" data-guildguard-detail-review="false_positive">Mark safe</button>${globalAction}<button type="button" class="btn-danger" data-guildguard-clear-user="${escapeHtml(incident.user_id || '')}">Clear user history</button></div>
+      <div class="gg-detail-actions"><button type="button" class="btn-primary" data-guildguard-detail-review="confirmed">Confirm scam</button><button type="button" class="btn-secondary" data-guildguard-detail-review="reviewed">Mark reviewed</button><button type="button" class="btn-secondary" data-guildguard-detail-review="false_positive">Mark safe</button>${blockDomainsAction}${globalAction}<button type="button" class="btn-danger" data-guildguard-clear-user="${escapeHtml(incident.user_id || '')}">Clear user history</button></div>
       <section class="gg-history-summary"><h4>Member safety history</h4><p>Current risk: <strong>${escapeHtml(risk.profile?.risk_score ?? 0)}</strong> (${escapeHtml(risk.profile?.risk_level || 'low')}) · Confirmed: ${escapeHtml(incidentSummary.confirmed)} · Marked safe: ${escapeHtml(incidentSummary.falsePositive)}</p><p>Community Safety Network: ${escapeHtml(globalReputation.activeScore)}/100 from ${escapeHtml(globalReputation.sourceCount)} community source(s). External reports remain advisory and never ban automatically.</p></section>`;
     target.querySelector('[data-guildguard-close-detail]')?.addEventListener('click', () => { target.style.display = 'none'; });
     target.querySelector('[data-guildguard-clear-user]')?.addEventListener('click', () => {
@@ -2012,13 +2026,37 @@ async function loadGuildGuardIncidentDetail(incidentId) {
     target.querySelector('[data-guildguard-global-revoke]')?.addEventListener('click', () => {
       revokeGuildGuardGlobalReport(globalReport.report_id).catch(error => { target.textContent = error.message || 'Unable to revoke global report'; });
     });
-    target.querySelectorAll('[data-guildguard-detail-review]').forEach(button => button.addEventListener('click', () => {
-      reviewGuildGuardIncident(incident.incident_id, button.dataset.guildguardDetailReview).catch(error => { target.textContent = error.message || 'Unable to review incident'; });
+    target.querySelector('[data-guildguard-block-domains]')?.addEventListener('click', () => {
+      blockGuildGuardIncidentDomains(incident.incident_id).catch(error => { target.textContent = error.message || 'Unable to block incident domains'; });
+    });
+    target.querySelectorAll('[data-guildguard-detail-review]').forEach(button => button.addEventListener('click', async () => {
+      try {
+        const status = button.dataset.guildguardDetailReview;
+        await reviewGuildGuardIncident(incident.incident_id, status);
+        if (status === 'confirmed') await loadGuildGuardIncidentDetail(incident.incident_id);
+      } catch (error) {
+        target.textContent = error.message || 'Unable to review incident';
+      }
     }));
   } catch (error) {
     target.style.display = '';
     target.textContent = error.message || 'Unable to load incident details';
   }
+}
+
+async function blockGuildGuardIncidentDomains(incidentId) {
+  if (!window.confirm('Add every non-trusted domain found in this confirmed incident to the community blocklist?')) return;
+  const response = await fetch(`/api/admin/guildguard/incidents/${encodeURIComponent(incidentId)}/block-domains`, {
+    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({})
+  });
+  const payload = await response.json();
+  if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to block incident domains');
+  const result = payload.data?.result || payload.result || {};
+  const count = Array.isArray(result.domains) ? result.domains.length : 0;
+  document.getElementById('guildGuardStatus').textContent = count
+    ? `${count} incident domain${count === 1 ? '' : 's'} added to the blocklist.`
+    : 'No new domains were eligible for blocking.';
+  await Promise.all([loadGuildGuardDomains(), loadGuildGuardIncidentDetail(incidentId)]);
 }
 
 async function clearGuildGuardUserHistory(userId) {

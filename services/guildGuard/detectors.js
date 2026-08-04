@@ -303,6 +303,66 @@ const attachmentThreatDetector = {
   }
 };
 
+const coordinatedCampaignDetector = {
+  name: 'coordinated_link_campaign',
+  detect(event, { config, eventWindow, domainRegistry }) {
+    if (event.eventType !== 'message_create' || !enabled(config, 'campaigns') || !eventWindow) return null;
+    const windowSeconds = numberSetting(config, 'campaigns', 'windowSeconds', 90, 10);
+    const userThreshold = numberSetting(config, 'campaigns', 'userThreshold', 3, 2);
+    const recent = eventWindow.getRecentGuild(event.guildId, windowSeconds * 1000, event.timestamp)
+      .filter(item => item.eventType === 'message_create' && item.userId);
+    const allowedDomains = new Set(domainRegistry?.getLists?.(event.guildId)?.allow || []);
+    const normalizedCurrentDomains = [...new Set((event.urls || [])
+      .map(url => domainRegistry?.normalizeDomain?.(url)).filter(Boolean))];
+    const trustedOnlyDestination = normalizedCurrentDomains.length > 0
+      && normalizedCurrentDomains.every(domain => allowedDomains.has(domain));
+    const currentDomains = normalizedCurrentDomains.filter(domain => !allowedDomains.has(domain));
+    const signals = [];
+
+    for (const domain of currentDomains) {
+      const matching = recent.filter(item => (item.urls || []).some(url => domainRegistry?.normalizeDomain?.(url) === domain));
+      const userIds = [...new Set(matching.map(item => item.userId).filter(Boolean))];
+      if (userIds.length < userThreshold) continue;
+      const channelIds = [...new Set(matching.map(item => item.channelId).filter(Boolean))];
+      signals.push({
+        detector: this.name,
+        severity: userIds.length >= userThreshold + 2 ? 'critical' : 'high',
+        score: Math.min(100, numberSetting(config, 'campaigns', 'linkScore', 75, 1) + Math.max(0, userIds.length - userThreshold) * 5),
+        metadata: {
+          category: 'multi_account_link_campaign',
+          domain,
+          userCount: userIds.length,
+          channelCount: channelIds.length,
+          windowSeconds
+        }
+      });
+    }
+
+    const normalizedContent = String(event.normalizedContent || '');
+    const messageThreshold = numberSetting(config, 'campaigns', 'messageThreshold', userThreshold, 2);
+    if (normalizedContent.length >= 20 && !trustedOnlyDestination) {
+      const copied = recent.filter(item => item.normalizedContent === normalizedContent);
+      const copiedUsers = [...new Set(copied.map(item => item.userId).filter(Boolean))];
+      if (copiedUsers.length >= messageThreshold) {
+        signals.push({
+          detector: 'coordinated_message_campaign',
+          severity: copiedUsers.length >= messageThreshold + 2 ? 'high' : 'medium',
+          score: Math.min(65, numberSetting(config, 'campaigns', 'messageScore', 45, 1) + Math.max(0, copiedUsers.length - messageThreshold) * 5),
+          metadata: {
+            category: 'multi_account_message_campaign',
+            userCount: copiedUsers.length,
+            channelCount: [...new Set(copied.map(item => item.channelId).filter(Boolean))].length,
+            windowSeconds,
+            contentHash: normalizedContent.slice(0, 120)
+          }
+        });
+      }
+    }
+
+    return signals.length ? signals : null;
+  }
+};
+
 const raidBurstDetector = {
   name: 'raid_burst',
   detect(event, { config, eventWindow }) {
@@ -330,6 +390,7 @@ module.exports = {
   scamLanguageDetector,
   linkProtectionDetector,
   attachmentThreatDetector,
+  coordinatedCampaignDetector,
   raidBurstDetector,
   levenshtein
 };

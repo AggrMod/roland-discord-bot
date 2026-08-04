@@ -207,6 +207,21 @@ function createAdminGuildGuardRouter({ logger, adminAuthMiddleware, ensureGuildG
     }
   });
 
+  router.post('/api/admin/guildguard/incidents/:incidentId/block-domains', adminAuthMiddleware, (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    try {
+      const result = guildGuardService.blockIncidentDomains(
+        req.guildId,
+        req.params.incidentId,
+        req.session?.discordUser?.id
+      );
+      if (!result) return res.status(404).json(toErrorResponse('Incident not found', 'NOT_FOUND'));
+      return res.json(toSuccessResponse({ result }));
+    } catch (error) {
+      return res.status(400).json(toErrorResponse(error.message || 'Unable to block incident domains', 'VALIDATION_ERROR'));
+    }
+  });
+
   router.post('/api/admin/guildguard/incidents/:incidentId/false-positive', adminAuthMiddleware, (req, res) => {
     if (!ensureGuildGuardModule(req, res)) return;
     const incident = guildGuardService.reportFalsePositive(

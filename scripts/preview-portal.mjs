@@ -272,7 +272,7 @@ let previewGuildGuardConfig = {
   detectors: {
     spam: { enabled: true }, duplicateMessages: { enabled: true }, massMention: { enabled: true },
     suspiciousAccount: { enabled: true }, impersonation: { enabled: true }, links: { enabled: true },
-    scamLanguage: { enabled: true }, attachments: { enabled: true, scanQrCodes: true }, raids: { enabled: true }
+    scamLanguage: { enabled: true }, attachments: { enabled: true, scanQrCodes: true }, campaigns: { enabled: true }, raids: { enabled: true }
   },
   actions: { enabled: true, warnUsers: true, deleteMessages: true, timeoutUsers: true, timeoutSeconds: 3600, lockdownEnabled: true, lockdownDurationSeconds: 900 },
   risk: { warning: 35, timeout: 60, quarantine: 80, alert: 25, decayEnabled: true, decayHalfLifeHours: 24 },
@@ -280,7 +280,7 @@ let previewGuildGuardConfig = {
   rules: [{ id: 'preview-rule', name: 'Staff impersonation containment', detectors: ['staff_impersonation'], threshold: 50, enabled: true, actions: { notifyStaff: true, pingStaff: true, timeoutUsers: true, timeoutSeconds: 3600, deleteMessages: true } }]
 };
 const previewGuildGuardIncidents = [
-  { incident_id: 'preview-link', created_at: '2026-08-04 08:12:00', user_id: '829104552019201024', user_incident_count: 2, event_type: 'message_create', risk_score: 88, status: 'open', signals_json: JSON.stringify([{ detector: 'lookalike_domain', score: 55 }, { detector: 'suspicious_account', score: 33 }]), evidence_json: JSON.stringify({ rawContent: 'Claim your free mint at guildpiIot.example', urls: ['https://guildpiIot.example/claim'] }) },
+  { incident_id: 'preview-link', created_at: '2026-08-04 08:12:00', user_id: '829104552019201024', user_incident_count: 2, event_type: 'message_create', risk_score: 88, status: 'confirmed', signals_json: JSON.stringify([{ detector: 'coordinated_link_campaign', score: 75, metadata: { category: 'multi_account_link_campaign', domain: 'guildpiIot.example', userCount: 4, channelCount: 2 } }, { detector: 'lookalike_domain', score: 55 }]), evidence_json: JSON.stringify({ rawContent: 'Claim your free mint at guildpiIot.example', urls: ['https://guildpiIot.example/claim'] }) },
   { incident_id: 'preview-qr', created_at: '2026-08-04 08:04:00', user_id: '772104552019201077', user_incident_count: 1, event_type: 'message_create', risk_score: 90, status: 'open', signals_json: JSON.stringify([{ detector: 'qr_code_link', score: 35, metadata: { category: 'qr_destination', attachmentName: 'wallet-support.png', decodedUrls: ['https://wallet-support.example/claim'] } }, { detector: 'wallet_drainer_language', score: 55, metadata: { category: 'wallet_lure', hasDestination: true } }]), evidence_json: JSON.stringify({ rawContent: 'Urgent: scan this QR code to reconnect your wallet and keep your mint access.', urls: [], attachments: [{ name: 'wallet-support.png', contentType: 'image/png', size: 84213, width: 900, height: 900 }] }) },
   { incident_id: 'preview-identity', created_at: '2026-08-04 07:48:00', user_id: '981204552019201021', user_incident_count: 1, event_type: 'message_create', risk_score: 70, status: 'reviewed', signals_json: JSON.stringify([{ detector: 'staff_impersonation', score: 70 }]), evidence_json: JSON.stringify({ rawContent: 'I am support. DM me to validate your wallet.', urls: [] }) },
   { incident_id: 'preview-raid', created_at: '2026-08-03 23:41:00', user_id: 'Join wave', user_incident_count: 8, event_type: 'member_join', risk_score: 84, status: 'confirmed', signals_json: JSON.stringify([{ detector: 'raid_burst', score: 84 }]), evidence_json: JSON.stringify({ rawContent: '', urls: [] }) }
@@ -312,7 +312,12 @@ app.get('/api/admin/guildguard/users/:userId/risk', (req, res) => res.json({
   incidents: previewGuildGuardIncidents.filter(item => item.user_id === req.params.userId),
   globalReputation: { activeScore: 0, reportCount: 0, sourceCount: 0, categoryLabels: [] }
 }));
-app.post('/api/admin/guildguard/incidents/:incidentId/review', (req, res) => res.json({ success: true, incidentId: req.params.incidentId, status: req.body?.status || 'reviewed' }));
+app.post('/api/admin/guildguard/incidents/:incidentId/review', (req, res) => {
+  const incident = previewGuildGuardIncidents.find(item => item.incident_id === req.params.incidentId);
+  if (incident) incident.status = req.body?.status || 'reviewed';
+  res.json({ success: true, incident });
+});
+app.post('/api/admin/guildguard/incidents/:incidentId/block-domains', (req, res) => res.json({ success: true, result: { incidentId: req.params.incidentId, domains: ['wallet-support.example'], skipped: [] } }));
 app.post('/api/admin/guildguard/incidents/:incidentId/false-positive', (req, res) => res.json({ success: true, incidentId: req.params.incidentId, status: 'false_positive' }));
 app.get('/api/admin/guildguard/summary', (_req, res) => res.json({ success: true, summary: { total: 12, statuses: { open: 2, reviewed: 7, confirmed: 2, false_positive: 1 }, averageRiskScore: 61, lastIncidentAt: '2026-08-04 08:12:00' } }));
 app.get('/api/admin/guildguard/rules', (_req, res) => res.json({ success: true, rules: previewGuildGuardConfig.rules }));

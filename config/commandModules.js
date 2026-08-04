@@ -23,6 +23,7 @@ const COMMAND_MODULE_MAP = Object.freeze({
   wordscramble: 'minigames',
   rps: 'minigames',
   blackjack: 'minigames',
+  codebreaker: 'minigames',
   gamenight: 'minigames',
   points: 'engagement',
   guildguard: 'guildguard',

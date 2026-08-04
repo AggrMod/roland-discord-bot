@@ -11,7 +11,7 @@ module.exports = {
       .setName('start')
       .setDescription('Start a Game Night lobby')
       .addIntegerOption(o => o.setName('join_time').setDescription('Seconds to gather players (30–180, default 90)').setMinValue(30).setMaxValue(180).setRequired(false))
-      .addStringOption(o => o.setName('games').setDescription('Comma-separated game list, e.g. diceduel,trivia,slots (default: all 9)').setMaxLength(200).setRequired(false))
+      .addStringOption(o => o.setName('games').setDescription('Comma-separated game list, e.g. diceduel,trivia,codebreaker (default: all 10)').setMaxLength(200).setRequired(false))
     )
     .addSubcommand(s => s.setName('skip').setDescription('Skip the current game (host only)'))
     .addSubcommand(s => s.setName('cancel').setDescription('Cancel the Game Night lobby or session (host only)'))

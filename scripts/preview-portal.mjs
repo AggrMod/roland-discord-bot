@@ -71,6 +71,7 @@ app.get('/api/admin/minigames/summary', (_req, res) => res.json({
     { key: 'wordscramble', name: 'Word Scramble', desc: 'Be first to unscramble each word in chat.' },
     { key: 'rps', name: 'RPS Tournament', desc: 'A finite rock-paper-scissors knockout bracket.' },
     { key: 'blackjack', name: 'Blackjack', desc: 'Each player faces the dealer and aims for 21.' },
+    { key: 'codebreaker', name: 'Codebreaker', desc: 'Solve a unique four-digit code from right-place and misplaced-digit clues.' },
   ],
 }));
 app.get('/api/admin/aiassistant/settings', (_req, res) => res.json({

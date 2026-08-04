@@ -11973,6 +11973,8 @@ async function loadAdminHelpView() {
       { name: '/rps cancel', desc: 'Cancel RPS Tournament', options: '-', example: '/rps cancel' },
       { name: '/blackjack start', desc: 'Start Blackjack', options: 'join_time (optional)', example: '/blackjack start' },
       { name: '/blackjack cancel', desc: 'Cancel Blackjack', options: '-', example: '/blackjack cancel' },
+      { name: '/codebreaker start', desc: 'Start the multiplayer logic game', options: 'join_time (optional)', example: '/codebreaker start join_time:60' },
+      { name: '/codebreaker cancel', desc: 'Cancel Codebreaker', options: '-', example: '/codebreaker cancel' },
       { name: '/gamenight start', desc: 'Start Game Night', options: 'join_time, games (optional)', example: '/gamenight start join_time:90 games:trivia,slots,rps' },
       { name: '/gamenight skip', desc: 'Skip Game Night round', options: '-', example: '/gamenight skip' },
       { name: '/gamenight cancel', desc: 'Cancel Game Night', options: '-', example: '/gamenight cancel' },
@@ -12182,6 +12184,7 @@ const MINIGAMES_FALLBACK_ROSTER = [
   { key: 'wordscramble', name: 'Word Scramble', desc: 'Be first to unscramble each word in chat.' },
   { key: 'rps', name: 'RPS Tournament', desc: 'A finite rock-paper-scissors knockout bracket.' },
   { key: 'blackjack', name: 'Blackjack', desc: 'Each player faces the dealer and aims for 21.' },
+  { key: 'codebreaker', name: 'Codebreaker', desc: 'Solve a unique four-digit code from right-place and misplaced-digit clues.' },
 ];
 let minigamesRoster = [...MINIGAMES_FALLBACK_ROSTER];
 

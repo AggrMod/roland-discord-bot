@@ -17,6 +17,7 @@ assert.match(html, /id="battleModuleSettingsCard"/, 'Battle settings should rema
 
 assert.match(script, /function updateGameNightCommandPreview\(/, 'portal should update the command when the lineup changes');
 assert.match(script, /function copyGameNightCommand\(/, 'portal should offer one-click command copying');
+assert.match(script, /key: 'codebreaker'/, 'portal fallback roster should include Codebreaker');
 assert.match(script, /\/api\/admin\/minigames\/summary/, 'portal should load the tenant-scoped minigames summary');
 assert.match(script, /loadMinigamesOverview\(\)/, 'opening the Minigames workspace should load its overview');
 

@@ -144,6 +144,7 @@
         "tests/test-gamenight-control-safety.js",
         "tests/test-minigames-fairness-guards.js",
         "tests/test-minigames-portal-workspace.js",
+        "tests/test-codebreaker-game.js",
         "tests/test-battle-race-safety.js",
         "tests/test-battle-stats-tenant-scope.js"
       ]

@@ -1,6 +1,6 @@
 /**
  * GameNightService — Orchestrates multi-game sessions with cross-game scoring.
- * Growth plan feature. Runs 9 mini-games sequentially, tracks points, crowns champion.
+ * Growth plan feature. Runs 10 mini-games sequentially, tracks points, crowns champion.
  *
  * Scoring: 1st=10pts � 2nd=7pts � 3rd=5pts � 4th=3pts � 5th+=1pt
  */
@@ -9,6 +9,7 @@ const { EmbedBuilder } = require('discord.js');
 const { applyEmbedBranding, getBranding } = require('./embedBranding');
 const engagementService = require('./engagementService');
 const numberGuessService = require('./numberGuessService');
+const codebreakerService = require('./codebreakerService');
 const logger = require('../utils/logger');
 
 const JOIN_EMOJI = '🎉';
@@ -38,7 +39,7 @@ function sessionStopped(session) {
 const GAME_ROSTER = [
   'diceduel', 'higherlower', 'reactionrace',
   'numberguess', 'slots', 'trivia',
-  'wordscramble', 'rps', 'blackjack',
+  'wordscramble', 'rps', 'codebreaker', 'blackjack',
 ];
 
 const GAME_INFO = {
@@ -51,6 +52,7 @@ const GAME_INFO = {
   wordscramble:{ name: '🧩 Word Scramble',   desc: 'Unscramble the word by typing it in chat first. 5 rounds, 30 seconds each. Most round wins wins.' },
   rps:         { name: '🪨 RPS Tournament',  desc: 'Bracket matchups! React 🪨 ✂️ 📄. Loser eliminated. Ties re-match. Last one wins.' },
   blackjack:   { name: '🎴 Blackjack',       desc: 'Everyone vs the dealer. React 👆 Hit or ✋ Stand. Get closest to 21 without busting.' },
+  codebreaker: { name: '🔐 Codebreaker',     desc: 'Solve a unique four-digit code from right-place and misplaced-digit clues. Six rounds maximum.' },
 };
 
 function pointsForPlace(place) {
@@ -733,7 +735,42 @@ RUNNERS.rps = async (channel, guildId, players, playerNames, session) => {
   return winner ? [winner, ...eliminated] : [...eliminated];
 };
 
-// ── 9. BLACKJACK ─────────────────────────────────────────────────────────────
+// ── 9. CODEBREAKER ───────────────────────────────────────────────────────────
+RUNNERS.codebreaker = async (channel, guildId, players, playerNames, session) => {
+  const game = {
+    players: new Set(players),
+    playerNames: new Map(playerNames),
+    progress: new Map([...players].map(userId => [userId, codebreakerService.emptyProgress(userId)])),
+    secret: codebreakerService.generateSecret(),
+  };
+
+  for (let round = 1; round <= codebreakerService.MAX_ROUNDS; round += 1) {
+    await channel.send({ embeds: [codebreakerService.buildRoundEmbed(round, guildId)] });
+    const guesses = new Map();
+    const collector = trackCollector(session, channel.createMessageCollector({
+      filter: message => players.has(message.author.id) && codebreakerService.isValidGuess(message.content),
+      time: codebreakerService.GUESS_SECS * 1000,
+    }));
+    collector.on('collect', message => {
+      if (guesses.has(message.author.id)) return;
+      guesses.set(message.author.id, message.content.trim());
+      if (guesses.size === players.size) collector.stop('all_guessed');
+    });
+    await new Promise(resolve => collector.on('end', resolve));
+    if (session.skipRequested || sessionStopped(session)) return [];
+
+    const results = codebreakerService.resolveRound(game, guesses, round);
+    await channel.send({ embeds: [codebreakerService.buildRoundResultEmbed({ round, results, playerNames, guildId })] });
+    if (results.some(result => result.cracked)) break;
+    await sleep(1500);
+  }
+
+  const rankings = codebreakerService.rankings(game);
+  await channel.send({ embeds: [codebreakerService.buildWinnerEmbed({ game, rankings, guildId })] });
+  return rankings.map(entry => entry.userId);
+};
+
+// ── 10. BLACKJACK ────────────────────────────────────────────────────────────
 RUNNERS.blackjack = async (channel, guildId, players, playerNames, session) => {
   const { EmbedBuilder: EB } = require('discord.js');
   const SUITS = ['♠️','♥️','♦️','♣️'], RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];

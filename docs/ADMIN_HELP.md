@@ -4,7 +4,7 @@ This file is the source-of-truth command reference for the current production co
 
 ## Command Taxonomy
 - Canonical module commands: `/verification`, `/governance`, `/treasury`, `/wallet-tracker`, `/invites`, `/nft-tracker`, `/token-tracker`, `/aiassistant`, `/minigames`, `/points`, `/heist`, `/config`, `/moderation`.
-- Minigames currently run through dedicated commands (`/battle`, `/higherlower`, `/diceduel`, `/reactionrace`, `/numberguess`, `/slots`, `/trivia`, `/wordscramble`, `/rps`, `/blackjack`, `/gamenight`) and are mapped to the `minigames` module entitlement.
+- Minigames currently run through dedicated commands (`/battle`, `/higherlower`, `/diceduel`, `/reactionrace`, `/numberguess`, `/slots`, `/trivia`, `/wordscramble`, `/rps`, `/blackjack`, `/codebreaker`, `/gamenight`) and are mapped to the `minigames` module entitlement.
 
 ## Portal-managed modules
 - **Welcome & Onboarding:** join messages, CAPTCHA, assets, presets, and onboarding analytics.
@@ -86,7 +86,7 @@ This file is the source-of-truth command reference for the current production co
 ## Minigames
 - Canonical: `/minigames run`, `/minigames help`
 - Battle: `/battle create|start|cancel|stats` and `/battle admin list|force-end|settings`
-- Arcade commands: `/higherlower start|cancel`, `/diceduel start|cancel`, `/reactionrace start|cancel`, `/numberguess start|cancel`, `/slots start|cancel`, `/trivia start|cancel`, `/wordscramble start|cancel`, `/rps start|cancel`, `/blackjack start|cancel`
+- Arcade commands: `/higherlower start|cancel`, `/diceduel start|cancel`, `/reactionrace start|cancel`, `/numberguess start|cancel`, `/slots start|cancel`, `/trivia start|cancel`, `/wordscramble start|cancel`, `/rps start|cancel`, `/blackjack start|cancel`, `/codebreaker start|cancel`
 - Game Night: `/gamenight start|skip|cancel|leaderboard`
 - Legacy alias policy: dedicated game commands remain supported for one migration cycle and now show an in-app hint to use `/minigames run`.
 

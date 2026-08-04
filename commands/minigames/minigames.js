@@ -14,6 +14,7 @@ const GAME_OPTIONS = [
   { name: 'Word Scramble', value: 'wordscramble' },
   { name: 'RPS Tournament', value: 'rps' },
   { name: 'Blackjack', value: 'blackjack' },
+  { name: 'Codebreaker', value: 'codebreaker' },
 ];
 
 const ACTION_OPTIONS = [
@@ -37,6 +38,7 @@ const ALLOWED_ACTIONS = Object.freeze({
   wordscramble: new Set(['start', 'cancel']),
   rps: new Set(['start', 'cancel']),
   blackjack: new Set(['start', 'cancel']),
+  codebreaker: new Set(['start', 'cancel']),
 });
 
 const STANDALONE_JOIN_TIME = Object.freeze({ min: 10, max: 120 });

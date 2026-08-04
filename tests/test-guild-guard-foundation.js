@@ -37,7 +37,7 @@ function tableColumns(table) {
   return new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(row => row.name));
 }
 
-for (const table of ['guild_guard_configs', 'staff_identities', 'domain_allowlist', 'domain_blocklist', 'risk_profiles', 'risk_signals', 'incidents', 'actions', 'raid_events', 'false_positives', 'guild_guard_global_reports', 'guild_guard_global_matches']) {
+for (const table of ['guild_guard_configs', 'staff_identities', 'domain_allowlist', 'domain_blocklist', 'risk_profiles', 'risk_signals', 'incidents', 'actions', 'raid_events', 'false_positives', 'guild_guard_global_reports', 'guild_guard_global_matches', 'guild_guard_member_reports']) {
   assert.ok(tableColumns(table).size > 0, `expected ${table} table`);
 }
 
@@ -552,6 +552,32 @@ const bulkTimeoutResult = await guard.executeBulkIncidentResponse('guild-bulk-li
 }, 'bulk-moderator', bulkTimeoutGuild);
 assert.strictEqual(bulkTimeoutResult.applied, 1);
 assert.strictEqual(bulkTimeoutMs, 600000);
+
+const memberReport = guard.createMemberReport('guild-member-safety', '772104552019201077', {
+  reportedUserId: '<@981204552019201021>',
+  description: 'This account sent a private wallet support link and requested a connection.',
+  evidenceReference: 'https://discord.com/channels/1/2/3'
+});
+assert.strictEqual(memberReport.reported_user_id, '981204552019201021');
+assert.strictEqual(guard.listMemberReports('guild-member-safety').length, 1);
+assert.strictEqual(guard.listMemberReports('other-member-safety').length, 0, 'member reports must remain tenant scoped');
+assert.throws(() => guard.createMemberReport('guild-member-safety', '772104552019201077', { description: 'short' }), /at least 10 characters/);
+assert.strictEqual(guard.updateMemberReportStatus('other-member-safety', memberReport.report_id, 'reviewed', 'moderator'), null);
+assert.strictEqual(guard.updateMemberReportStatus('guild-member-safety', memberReport.report_id, 'reviewed', 'moderator').status, 'reviewed');
+
+let safetyPanelPayload = null;
+const safetyPanelGuild = { channels: { cache: new Map([['safety-channel', { id: 'safety-channel', send: async payload => { safetyPanelPayload = payload; return { id: 'safety-message' }; } }]]) } };
+const safetyPanelResult = await guard.postMemberSafetyPanel(safetyPanelGuild, 'safety-channel');
+assert.strictEqual(safetyPanelResult.messageId, 'safety-message');
+assert.ok(safetyPanelPayload.components[0].components.some(button => button.data.custom_id === 'guildguard_report_scam'));
+
+let memberReportAlert = null;
+guard.updateConfig('guild-member-safety', { alertChannelId: 'member-report-alert' });
+const memberReportGuild = { channels: { cache: new Map([['member-report-alert', { send: async payload => { memberReportAlert = payload; } }]]) } };
+const memberReportNotification = await guard.notifyMemberReport(memberReportGuild, memberReport);
+assert.strictEqual(memberReportNotification.sent, true);
+assert.ok(memberReportAlert.embeds[0].data.title.includes('Member scam report'));
+assert.deepStrictEqual(memberReportAlert.allowedMentions.parse, []);
 
 const retentionIncident = await guard.createTestIncident('guild-retention', { id: 'retention-1', author: { id: 'retention-user' } });
 db.prepare("UPDATE incidents SET created_at = datetime('now', '-90 days') WHERE incident_id = ?").run(retentionIncident.incident.incident_id);

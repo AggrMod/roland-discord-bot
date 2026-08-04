@@ -579,6 +579,57 @@ async function handleGuildGuardActionCancel(interaction) {
   await interaction.update({ content: 'Guild Guard action cancelled.', components: [] }).catch(() => {});
 }
 
+async function handleGuildGuardMemberReportButton(interaction) {
+  const modal = new ModalBuilder().setCustomId('guildguard_member_report').setTitle('Report a suspected scam');
+  const reportedUser = new TextInputBuilder()
+    .setCustomId('reported_user')
+    .setLabel('Account ID or mention (optional)')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setMaxLength(30)
+    .setPlaceholder('Right-click the account and choose Copy User ID');
+  const description = new TextInputBuilder()
+    .setCustomId('description')
+    .setLabel('What happened?')
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true)
+    .setMinLength(10)
+    .setMaxLength(1500)
+    .setPlaceholder('Describe the message, request, link, or wallet action. Never paste a seed phrase or private key.');
+  const evidence = new TextInputBuilder()
+    .setCustomId('evidence_reference')
+    .setLabel('Message link or reference (optional)')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setMaxLength(500)
+    .setPlaceholder('Right-click the message and choose Copy Message Link');
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(reportedUser),
+    new ActionRowBuilder().addComponents(description),
+    new ActionRowBuilder().addComponents(evidence)
+  );
+  await interaction.showModal(modal);
+}
+
+async function handleGuildGuardMemberReportModal(interaction) {
+  try {
+    await interaction.deferReply({ ephemeral: true });
+    const report = guildGuardService.createMemberReport(interaction.guildId, interaction.user?.id, {
+      reportedUserId: interaction.fields.getTextInputValue('reported_user'),
+      description: interaction.fields.getTextInputValue('description'),
+      evidenceReference: interaction.fields.getTextInputValue('evidence_reference')
+    });
+    const notification = await guildGuardService.notifyMemberReport(interaction.guild, report).catch(() => ({ sent: false }));
+    await interaction.editReply({ content: notification.sent
+      ? 'Your report was sent privately to the community moderators. Thank you for helping protect the community.'
+      : 'Your report was saved for moderator review. Thank you for helping protect the community.' });
+  } catch (error) {
+    const content = error?.message || 'Your report could not be submitted.';
+    if (interaction.deferred || interaction.replied) await interaction.editReply({ content }).catch(() => {});
+    else await interaction.reply({ content, ephemeral: true }).catch(() => {});
+  }
+}
+
 client.on(Events.InteractionCreate, async interaction => {
   if (interaction.isAutocomplete()) {
     const command = client.commands.get(interaction.commandName);
@@ -610,6 +661,11 @@ client.on(Events.InteractionCreate, async interaction => {
 
   if (interaction.isButton()) {
     const customId = interaction.customId;
+    if (customId === 'guildguard_report_scam') { await handleGuildGuardMemberReportButton(interaction); return; }
+    if (customId === 'guildguard_safety_tips') {
+      await interaction.reply({ content: '**Safety checklist**\n• Never share a seed phrase or private key.\n• Treat unsolicited DMs as untrusted.\n• Open wallet links from the official community portal.\n• Read every transaction before signing.\n• Report the account and message; do not confront the sender.', ephemeral: true });
+      return;
+    }
     if (customId.startsWith('guildguard_action:') || customId.startsWith('guildguard_confirm:')) { await handleGuildGuardActionButton(interaction); return; }
     if (customId.startsWith('guildguard_cancel:')) { await handleGuildGuardActionCancel(interaction); return; }
     if (customId === inviteTrackerService.REFRESH_BUTTON_ID || customId.startsWith(inviteTrackerService.SORT_BUTTON_PREFIX)) {
@@ -655,6 +711,7 @@ client.on(Events.InteractionCreate, async interaction => {
   }
 
   if (interaction.isModalSubmit()) {
+    if (interaction.customId === 'guildguard_member_report') { await handleGuildGuardMemberReportModal(interaction); return; }
     if (interaction.customId.startsWith('ticket_modal_')) { await handleTicketModalSubmit(interaction); return; }
     if (interaction.customId === 'vault_panel_upgrade_modal' || interaction.customId.startsWith('vault_panel_upg_do_') || interaction.customId === 'vault_panel_payment_tx_modal') {
       const vaultCommand = client.commands.get('vault');

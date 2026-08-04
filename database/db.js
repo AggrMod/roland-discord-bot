@@ -136,6 +136,7 @@ const REQUIRED_SCHEMA = Object.freeze({
   false_positives: ['guild_id', 'incident_id', 'reported_by', 'status', 'created_at'],
   guild_guard_global_reports: ['report_id', 'user_id', 'category', 'base_score', 'source_guild_id', 'source_incident_id', 'status', 'created_at'],
   guild_guard_global_matches: ['guild_id', 'event_id', 'user_id', 'report_id', 'active_score', 'notified_at'],
+  guild_guard_member_reports: ['report_id', 'guild_id', 'reporter_user_id', 'description', 'status', 'created_at'],
 });
 
 function ensureSchemaMigrationsTable() {

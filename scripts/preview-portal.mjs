@@ -303,6 +303,9 @@ app.get('/api/admin/guildguard/health', (_req, res) => res.json({ success: true,
 app.get('/api/admin/guildguard/incidents', (_req, res) => res.json({ success: true, incidents: previewGuildGuardIncidents }));
 app.get('/api/admin/guildguard/campaigns', (_req, res) => res.json({ success: true, campaigns: [{ key: 'domain:guildpiIot.example', label: 'guildpiIot.example', domain: 'guildpiIot.example', incidentIds: ['preview-link', 'preview-qr'], incidentCount: 2, userCount: 2, maximumRiskScore: 90, openCount: 1, lastSeenAt: '2026-08-04 08:12:00' }] }));
 app.post('/api/admin/guildguard/incidents/bulk-response', (req, res) => res.json({ success: true, result: { action: req.body?.action, selected: req.body?.incidentIds?.length || 0, applied: req.body?.incidentIds?.length || 0, failed: 0, skipped: 0, results: [] } }));
+app.get('/api/admin/guildguard/member-reports', (_req, res) => res.json({ success: true, reports: [{ report_id: 'preview-member-report', reporter_user_id: '772104552019201077', reported_user_id: '981204552019201021', description: 'This account sent me a private wallet support link and asked me to reconnect.', evidence_reference: 'Discord message link supplied', status: 'open', created_at: '2026-08-04 08:15:00' }] }));
+app.post('/api/admin/guildguard/member-reports/:reportId/review', (req, res) => res.json({ success: true, report: { report_id: req.params.reportId, status: req.body?.status || 'reviewed' } }));
+app.post('/api/admin/guildguard/member-safety/panel', (req, res) => res.status(201).json({ success: true, result: { channelId: req.body?.channelId, messageId: 'preview-safety-panel' } }));
 app.get('/api/admin/guildguard/incidents/:incidentId', (req, res) => {
   const incident = previewGuildGuardIncidents.find(item => item.incident_id === req.params.incidentId) || previewGuildGuardIncidents[0];
   res.json({ success: true, incident, globalReport: null });

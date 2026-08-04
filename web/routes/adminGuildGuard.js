@@ -125,6 +125,38 @@ function createAdminGuildGuardRouter({ logger, adminAuthMiddleware, ensureGuildG
     return res.json(toSuccessResponse({ campaigns: guildGuardService.listIncidentCampaigns(req.guildId, req.query?.days) }));
   });
 
+  router.get('/api/admin/guildguard/member-reports', adminAuthMiddleware, (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    return res.json(toSuccessResponse({ reports: guildGuardService.listMemberReports(req.guildId, req.query?.limit) }));
+  });
+
+  router.post('/api/admin/guildguard/member-reports/:reportId/review', adminAuthMiddleware, (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    try {
+      const report = guildGuardService.updateMemberReportStatus(
+        req.guildId,
+        req.params.reportId,
+        String(req.body?.status || '').trim(),
+        req.session?.discordUser?.id
+      );
+      if (!report) return res.status(404).json(toErrorResponse('Member report not found', 'NOT_FOUND'));
+      return res.json(toSuccessResponse({ report }));
+    } catch (error) {
+      return res.status(400).json(toErrorResponse(error.message || 'Unable to review member report', 'VALIDATION_ERROR'));
+    }
+  });
+
+  router.post('/api/admin/guildguard/member-safety/panel', adminAuthMiddleware, async (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    try {
+      const guild = getClient?.()?.guilds?.cache?.get(String(req.guildId || '')) || null;
+      const result = await guildGuardService.postMemberSafetyPanel(guild, req.body?.channelId);
+      return res.status(201).json(toSuccessResponse({ result }));
+    } catch (error) {
+      return res.status(400).json(toErrorResponse(error.message || 'Unable to post member safety panel', 'VALIDATION_ERROR'));
+    }
+  });
+
   router.post('/api/admin/guildguard/incidents/bulk-response', adminAuthMiddleware, async (req, res) => {
     if (!ensureGuildGuardModule(req, res)) return;
     try {

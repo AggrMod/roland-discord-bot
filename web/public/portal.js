@@ -1937,7 +1937,7 @@ async function loadGuildGuardAlertChannels(selectedId = '') {
     if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to load channels');
     const channels = (payload.channels || payload.data?.channels || [])
       .filter(channel => channel && channel.kind !== 'category');
-    populateChannelSelects(['guildGuardAlertChannel'], channels, { selectedValue: selected }, ['selectedValue']);
+    populateChannelSelects(['guildGuardAlertChannel', 'guildGuardSafetyPanelChannel'], channels, { selectedValue: selected }, ['selectedValue', null]);
     if (selected && !channels.some(channel => String(channel.id) === selected)) {
       select.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(selected)}" selected>Unknown channel (${escapeHtml(selected)})</option>`);
     }
@@ -1978,6 +1978,43 @@ function renderGuildGuardCampaigns(campaigns) {
     document.querySelectorAll('[data-guildguard-select-incident]').forEach(input => { input.checked = guildGuardSelectedIncidents.has(input.value); });
     updateGuildGuardBulkToolbar();
   }));
+}
+
+function renderGuildGuardMemberReports(reports) {
+  const target = document.getElementById('guildGuardMemberReports');
+  if (!target) return;
+  if (!reports.length) {
+    target.innerHTML = '<p class="section-subtitle">No member scam reports are waiting for review.</p>';
+    return;
+  }
+  target.innerHTML = reports.map(report => `<div class="gg-coverage-item ${report.status === 'open' ? 'is-active' : ''}"><span class="gg-check-icon"><i class="fa-solid fa-user-shield" aria-hidden="true"></i></span><div><strong>${report.reported_user_id ? `Reported account ${escapeHtml(report.reported_user_id)}` : 'Suspicious activity report'}</strong><small>${escapeHtml(report.description)} · Reporter ${escapeHtml(report.reporter_user_id)}${report.evidence_reference ? ` · Evidence: ${escapeHtml(report.evidence_reference)}` : ''}</small></div><div style="display:flex;gap:6px;flex-wrap:wrap;"><span class="gg-status-chip is-${escapeHtml(report.status)}">${escapeHtml(report.status)}</span>${report.status === 'open' ? `<button type="button" class="btn-secondary btn-sm" data-guildguard-report-review="${escapeHtml(report.report_id)}">Mark reviewed</button><button type="button" class="btn-secondary btn-sm" data-guildguard-report-dismiss="${escapeHtml(report.report_id)}">Dismiss</button>` : ''}</div></div>`).join('');
+  target.querySelectorAll('[data-guildguard-report-review]').forEach(button => button.addEventListener('click', () => reviewGuildGuardMemberReport(button.dataset.guildguardReportReview, 'reviewed').catch(error => { document.getElementById('guildGuardStatus').textContent = error.message; })));
+  target.querySelectorAll('[data-guildguard-report-dismiss]').forEach(button => button.addEventListener('click', () => reviewGuildGuardMemberReport(button.dataset.guildguardReportDismiss, 'dismissed').catch(error => { document.getElementById('guildGuardStatus').textContent = error.message; })));
+}
+
+async function postGuildGuardSafetyPanel() {
+  const statusTarget = document.getElementById('guildGuardStatus');
+  try {
+    const channelId = document.getElementById('guildGuardSafetyPanelChannel').value;
+    if (!channelId) throw new Error('Select a channel for the safety panel');
+    const response = await fetch('/api/admin/guildguard/member-safety/panel', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channelId })
+    });
+    const payload = await response.json();
+    if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to post the safety panel');
+    statusTarget.textContent = 'Member safety and private scam-report panel posted.';
+  } catch (error) {
+    statusTarget.textContent = error.message || 'Unable to post the safety panel';
+  }
+}
+
+async function reviewGuildGuardMemberReport(reportId, status) {
+  const response = await fetch(`/api/admin/guildguard/member-reports/${encodeURIComponent(reportId)}/review`, {
+    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status })
+  });
+  const payload = await response.json();
+  if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to review member report');
+  await loadGuildGuardView();
 }
 
 function renderGuildGuardIncidents(incidents) {
@@ -2399,24 +2436,27 @@ async function loadGuildGuardView() {
   if (!activeGuildId || !(isAdmin || isSuperadmin)) return;
   const status = document.getElementById('guildGuardStatus');
   try {
-    const [incidentsResponse, configResponse, summaryResponse, healthResponse, campaignsResponse] = await Promise.all([
+    const [incidentsResponse, configResponse, summaryResponse, healthResponse, campaignsResponse, memberReportsResponse] = await Promise.all([
       fetch('/api/admin/guildguard/incidents?limit=100', { credentials: 'include' }),
       fetch('/api/admin/guildguard/config', { credentials: 'include' }),
       fetch('/api/admin/guildguard/summary?days=7', { credentials: 'include' }),
       fetch('/api/admin/guildguard/health', { credentials: 'include' }),
-      fetch('/api/admin/guildguard/campaigns?days=7', { credentials: 'include' })
+      fetch('/api/admin/guildguard/campaigns?days=7', { credentials: 'include' }),
+      fetch('/api/admin/guildguard/member-reports?limit=100', { credentials: 'include' })
     ]);
     const incidentsPayload = await incidentsResponse.json();
     const configPayload = await configResponse.json();
     const summaryPayload = await summaryResponse.json();
     const healthPayload = await healthResponse.json();
     const campaignsPayload = await campaignsResponse.json();
+    const memberReportsPayload = await memberReportsResponse.json();
     if (!configResponse.ok) throw new Error(configPayload.message || 'Unable to load Guild Guard configuration');
     renderGuildGuardIncidents(incidentsPayload.data?.incidents || incidentsPayload.incidents || []);
     renderGuildGuardConfig(configPayload.data?.config || configPayload.config || {});
     renderGuildGuardSummary(summaryPayload.data?.summary || summaryPayload.summary || {});
     renderGuildGuardHealth(healthPayload.data?.health || healthPayload.health || {});
     renderGuildGuardCampaigns(campaignsPayload.data?.campaigns || campaignsPayload.campaigns || []);
+    renderGuildGuardMemberReports(memberReportsPayload.data?.reports || memberReportsPayload.reports || []);
     await loadGuildGuardIdentities();
     await loadGuildGuardRules();
     await loadGuildGuardDomains();

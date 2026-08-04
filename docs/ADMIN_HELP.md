@@ -10,7 +10,7 @@ This file is the source-of-truth command reference for the current production co
 - **Welcome & Onboarding:** join messages, CAPTCHA, assets, presets, and onboarding analytics.
 - **Auto Messages:** recurring Discord announcements, schedules, tests, and delivery audit.
 - **Telegram Bridge:** Telegram-to-Discord mappings, media forwarding, tests, and delivery audit.
-- **Guild Guard:** an owner-friendly Community Safety Center with protection presets, wallet-scam language detection, disguised-link checks, dangerous file and QR-code inspection, multi-account Campaign Radar, Account Trust and compromised-account signals, grouped campaign incidents, bulk moderator response, staff impersonation monitoring, recoverable raid response, and one-click domain blocking.
+- **Guild Guard:** an owner-friendly Community Safety Center with protection presets, wallet-scam language detection, disguised-link checks, dangerous file and QR-code inspection, multi-account Campaign Radar, Account Trust and compromised-account signals, grouped campaign incidents, bulk moderator response, a member safety and private scam-report panel, staff impersonation monitoring, recoverable raid response, and one-click domain blocking.
 - **Support Tickets:** categories, forms, panels, transcripts, open-ticket review, and automation.
 - These modules are configured from **Modules** in the portal and do not require a dedicated slash-command family.
 

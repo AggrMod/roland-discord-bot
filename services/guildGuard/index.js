@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const db = require('../../database/db');
 const moduleGuard = require('../../utils/moduleGuard');
 const { DEFAULT_CONFIG, mergeConfig } = require('./defaults');
@@ -382,7 +383,7 @@ function clearUserHistory(guildId, userId) {
   const tx = db.transaction(() => {
     const incidentIds = db.prepare('SELECT incident_id FROM incidents WHERE guild_id = ? AND user_id = ?')
       .all(normalizedGuildId, normalizedUserId).map(row => row.incident_id);
-    const counts = { incidents: incidentIds.length, actions: 0, signals: 0, falsePositives: 0, riskProfiles: 0, globalReportsRevoked: 0 };
+    const counts = { incidents: incidentIds.length, actions: 0, signals: 0, falsePositives: 0, riskProfiles: 0, globalReportsRevoked: 0, memberReports: 0 };
     if (incidentIds.length) {
       const placeholders = incidentIds.map(() => '?').join(',');
       counts.actions = db.prepare(`DELETE FROM actions WHERE guild_id = ? AND incident_id IN (${placeholders})`).run(normalizedGuildId, ...incidentIds).changes;
@@ -396,6 +397,8 @@ function clearUserHistory(guildId, userId) {
     counts.signals = db.prepare('DELETE FROM risk_signals WHERE guild_id = ? AND user_id = ?').run(normalizedGuildId, normalizedUserId).changes;
     db.prepare('DELETE FROM incidents WHERE guild_id = ? AND user_id = ?').run(normalizedGuildId, normalizedUserId);
     counts.riskProfiles = db.prepare('DELETE FROM risk_profiles WHERE guild_id = ? AND user_id = ?').run(normalizedGuildId, normalizedUserId).changes;
+    counts.memberReports = db.prepare('DELETE FROM guild_guard_member_reports WHERE guild_id = ? AND (reporter_user_id = ? OR reported_user_id = ?)')
+      .run(normalizedGuildId, normalizedUserId, normalizedUserId).changes;
     return counts;
   });
   return tx();
@@ -753,6 +756,98 @@ async function executeBulkIncidentResponse(guildId, input = {}, actorId = null, 
   };
 }
 
+function normalizeReportedUserId(value) {
+  const normalized = String(value || '').trim().replace(/[<@!>]/g, '');
+  if (!normalized) return null;
+  if (!/^\d{15,22}$/.test(normalized)) throw new Error('Reported account must be a valid Discord user ID or mention');
+  return normalized;
+}
+
+function createMemberReport(guildId, reporterUserId, input = {}) {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  const reporter = String(reporterUserId || '').trim();
+  const description = String(input.description || '').trim().slice(0, 1500);
+  if (!normalizedGuildId || !reporter) throw new Error('Server and reporter are required');
+  if (description.length < 10) throw new Error('Please describe what happened in at least 10 characters');
+  const reportId = crypto.randomUUID();
+  const reportedUserId = normalizeReportedUserId(input.reportedUserId);
+  const evidenceReference = String(input.evidenceReference || '').trim().slice(0, 500) || null;
+  db.prepare(`
+    INSERT INTO guild_guard_member_reports
+      (report_id, guild_id, reporter_user_id, reported_user_id, description, evidence_reference)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(reportId, normalizedGuildId, reporter, reportedUserId, description, evidenceReference);
+  return db.prepare('SELECT * FROM guild_guard_member_reports WHERE report_id = ?').get(reportId);
+}
+
+function listMemberReports(guildId, limit = 100) {
+  const bounded = Math.max(1, Math.min(200, Number(limit) || 100));
+  return db.prepare(`
+    SELECT * FROM guild_guard_member_reports
+    WHERE guild_id = ?
+    ORDER BY CASE status WHEN 'open' THEN 0 WHEN 'reviewed' THEN 1 ELSE 2 END, created_at DESC, id DESC
+    LIMIT ?
+  `).all(normalizeGuildId(guildId), bounded);
+}
+
+function updateMemberReportStatus(guildId, reportId, status, actorId = null) {
+  const allowed = new Set(['open', 'reviewed', 'closed', 'dismissed']);
+  if (!allowed.has(status)) throw new Error('Invalid member report status');
+  const result = db.prepare(`
+    UPDATE guild_guard_member_reports
+    SET status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+    WHERE guild_id = ? AND report_id = ?
+  `).run(status, actorId || null, normalizeGuildId(guildId), String(reportId || '').trim());
+  if (!result.changes) return null;
+  return db.prepare('SELECT * FROM guild_guard_member_reports WHERE guild_id = ? AND report_id = ?')
+    .get(normalizeGuildId(guildId), String(reportId || '').trim());
+}
+
+async function notifyMemberReport(guild, report) {
+  if (!guild || !report) return { sent: false, reason: 'guild_unavailable' };
+  const config = getConfig(report.guild_id);
+  const channelId = String(config.alertChannelId || '').trim();
+  let channel = channelId ? guild.channels?.cache?.get?.(channelId) || null : null;
+  if (!channel && channelId && typeof guild.channels?.fetch === 'function') {
+    try { channel = await guild.channels.fetch(channelId); } catch (_) { channel = null; }
+  }
+  if (!channel || typeof channel.send !== 'function') return { sent: false, reason: 'alert_channel_unavailable' };
+  const embed = new EmbedBuilder()
+    .setColor(0xf59e0b)
+    .setTitle('Member scam report')
+    .setDescription(report.description)
+    .addFields(
+      { name: 'Reporter', value: `<@${report.reporter_user_id}>`, inline: true },
+      { name: 'Reported account', value: report.reported_user_id ? `<@${report.reported_user_id}>` : 'Not supplied', inline: true },
+      { name: 'Evidence reference', value: report.evidence_reference || 'Not supplied' }
+    )
+    .setFooter({ text: `Report ${report.report_id}` })
+    .setTimestamp();
+  await channel.send({ content: 'A member submitted a Guild Guard scam report.', embeds: [embed], allowedMentions: { parse: [] } });
+  return { sent: true, channelId };
+}
+
+async function postMemberSafetyPanel(guild, channelId) {
+  const normalizedChannelId = String(channelId || '').trim();
+  let channel = guild?.channels?.cache?.get?.(normalizedChannelId) || null;
+  if (!channel && normalizedChannelId && typeof guild?.channels?.fetch === 'function') channel = await guild.channels.fetch(normalizedChannelId);
+  if (!channel || typeof channel.send !== 'function') throw new Error('Select a text channel where GuildPilot can send messages');
+  const embed = new EmbedBuilder()
+    .setColor(0x7c3aed)
+    .setTitle('Stay safe from Discord and wallet scams')
+    .setDescription('GuildPilot and your community team will never ask for your seed phrase or private key. Bots cannot inspect your private DMs, so report suspicious messages here.')
+    .addFields(
+      { name: 'Before connecting a wallet', value: 'Check the domain, use official links, and never approve a transaction you do not understand.' },
+      { name: 'If someone contacts you privately', value: 'Do not share secrets or click urgent support links. Capture the account ID and message link, then report it.' }
+    );
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('guildguard_report_scam').setLabel('Report a scam').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('guildguard_safety_tips').setLabel('Safety checklist').setStyle(ButtonStyle.Secondary)
+  );
+  const message = await channel.send({ embeds: [embed], components: [row], allowedMentions: { parse: [] } });
+  return { channelId: channel.id || normalizedChannelId, messageId: message?.id || null };
+}
+
 function updateIncidentStatus(guildId, incidentId, status, actorId = null) {
   const allowed = new Set(['open', 'reviewed', 'confirmed', 'false_positive', 'closed']);
   if (!allowed.has(status)) throw new Error('Invalid incident status');
@@ -804,6 +899,7 @@ function purgeExpired(guildId, retentionDays = null) {
       ['risk_signals', 'guild_id'],
       ['raid_events', 'guild_id'],
       ['false_positives', 'guild_id'],
+      ['guild_guard_member_reports', 'guild_id'],
       ['incidents', 'guild_id']
     ];
     return statements.reduce((total, [table, guildColumn]) => total + db.prepare(`DELETE FROM ${table} WHERE ${guildColumn} = ? AND created_at < datetime('now', ?)`)
@@ -854,6 +950,11 @@ module.exports = {
   listIncidentCampaigns,
   blockIncidentDomains,
   executeBulkIncidentResponse,
+  createMemberReport,
+  listMemberReports,
+  updateMemberReportStatus,
+  notifyMemberReport,
+  postMemberSafetyPanel,
   updateIncidentStatus,
   reportFalsePositive,
   listFalsePositives,

@@ -1,8 +1,47 @@
 const express = require('express');
+const { PermissionFlagsBits } = require('discord.js');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
 
 function createAdminGuildGuardRouter({ logger, adminAuthMiddleware, ensureGuildGuardModule, guildGuardService, getClient }) {
   const router = express.Router();
+
+  async function getProtectionHealth(guildId) {
+    const config = guildGuardService.getConfig(guildId);
+    const guild = getClient?.()?.guilds?.cache?.get(String(guildId || '')) || null;
+    let member = guild?.members?.me || null;
+    if (!member && typeof guild?.members?.fetchMe === 'function') {
+      try { member = await guild.members.fetchMe(); } catch (_) { member = null; }
+    }
+    const rules = Array.isArray(config.rules) ? config.rules : [];
+    const needsDelete = config.actions?.deleteMessages === true || rules.some(rule => rule?.enabled !== false && rule?.actions?.deleteMessages === true);
+    const needsTimeout = config.actions?.timeoutUsers === true || rules.some(rule => rule?.enabled !== false && rule?.actions?.timeoutUsers === true);
+    const needsLockdown = config.actions?.lockdownEnabled === true;
+    const alertChannelId = String(config.alertChannelId || '').trim();
+    const alertChannel = alertChannelId ? guild?.channels?.cache?.get(alertChannelId) || null : null;
+    const channelPermissions = alertChannel && member && typeof alertChannel.permissionsFor === 'function'
+      ? alertChannel.permissionsFor(member)
+      : null;
+    const hasGuildPermission = permission => Boolean(member?.permissions?.has?.(permission));
+    const checks = [
+      { id: 'bot_connected', label: 'GuildPilot is connected to this server', ok: Boolean(guild && member), required: true },
+      { id: 'alert_channel', label: 'Moderator alert channel selected', ok: Boolean(alertChannelId), required: true },
+      {
+        id: 'send_alerts',
+        label: 'GuildPilot can send alerts in the selected channel',
+        ok: Boolean(alertChannelId && alertChannel && channelPermissions?.has?.(PermissionFlagsBits.ViewChannel) && channelPermissions?.has?.(PermissionFlagsBits.SendMessages)),
+        required: Boolean(alertChannelId)
+      },
+      { id: 'manage_messages', label: 'GuildPilot can remove dangerous messages', ok: !needsDelete || hasGuildPermission(PermissionFlagsBits.ManageMessages), required: needsDelete },
+      { id: 'moderate_members', label: 'GuildPilot can timeout suspicious members', ok: !needsTimeout || hasGuildPermission(PermissionFlagsBits.ModerateMembers), required: needsTimeout },
+      { id: 'manage_server', label: 'GuildPilot can activate and restore raid mode', ok: !needsLockdown || hasGuildPermission(PermissionFlagsBits.ManageGuild), required: needsLockdown }
+    ];
+    const requiredChecks = checks.filter(check => check.required);
+    return {
+      ready: requiredChecks.every(check => check.ok),
+      score: requiredChecks.length ? Math.round((requiredChecks.filter(check => check.ok).length / requiredChecks.length) * 100) : 100,
+      checks
+    };
+  }
 
   router.get('/api/admin/guildguard/config', adminAuthMiddleware, (req, res) => {
     if (!ensureGuildGuardModule(req, res)) return;
@@ -17,6 +56,31 @@ function createAdminGuildGuardRouter({ logger, adminAuthMiddleware, ensureGuildG
     } catch (error) {
       logger.error('Guild Guard config update failed:', error);
       return res.status(400).json(toErrorResponse(error.message || 'Invalid Guild Guard configuration', 'VALIDATION_ERROR'));
+    }
+  });
+
+  router.get('/api/admin/guildguard/presets', adminAuthMiddleware, (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    return res.json(toSuccessResponse({ presets: guildGuardService.listPresets() }));
+  });
+
+  router.post('/api/admin/guildguard/preset', adminAuthMiddleware, (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    try {
+      const config = guildGuardService.applyPreset(req.guildId, req.body?.preset);
+      return res.json(toSuccessResponse({ config }));
+    } catch (error) {
+      return res.status(400).json(toErrorResponse(error.message || 'Unable to apply protection preset', 'VALIDATION_ERROR'));
+    }
+  });
+
+  router.get('/api/admin/guildguard/health', adminAuthMiddleware, async (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    try {
+      return res.json(toSuccessResponse({ health: await getProtectionHealth(req.guildId) }));
+    } catch (error) {
+      logger.warn('Guild Guard health check failed:', error);
+      return res.status(500).json(toErrorResponse('Unable to check Guild Guard permissions', 'HEALTH_CHECK_FAILED'));
     }
   });
 

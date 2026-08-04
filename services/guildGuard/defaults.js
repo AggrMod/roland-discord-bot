@@ -1,6 +1,7 @@
 const DEFAULT_CONFIG = Object.freeze({
   enabled: false,
   mode: 'monitor',
+  preset: 'custom',
   exemptions: {
     botUsers: true,
     webhookUsers: true,
@@ -74,7 +75,8 @@ const DEFAULT_CONFIG = Object.freeze({
     timeoutUsers: false,
     timeoutSeconds: 60,
     lockdownEnabled: false,
-    lockdownVerificationLevel: 'high'
+    lockdownVerificationLevel: 'high',
+    lockdownDurationSeconds: 900
   }
 });
 

@@ -7,6 +7,7 @@ const EventWindowStore = require('./eventWindow');
 const actionService = require('./actions');
 const identityRegistry = require('./identityRegistry');
 const domainRegistry = require('./domainRegistry');
+const presetRegistry = require('./presets');
 const { scoreSignals, riskLevel } = require('./scoring');
 const {
   spamFloodDetector,
@@ -251,6 +252,12 @@ function updateConfig(guildId, patch) {
   return next;
 }
 
+function applyPreset(guildId, presetKey) {
+  const preset = presetRegistry.getPreset(presetKey);
+  if (!preset) throw new Error('Unknown Guild Guard protection preset');
+  return updateConfig(guildId, preset.patch);
+}
+
 function listRules(guildId) {
   return getConfig(guildId).rules;
 }
@@ -287,8 +294,8 @@ function deleteRule(guildId, ruleId) {
 
 function isExempt(event, config) {
   const exemptions = config?.exemptions || {};
+  if (event.isWebhook) return exemptions.webhookUsers === true;
   if (exemptions.botUsers && event.isBot) return true;
-  if (exemptions.webhookUsers && event.isWebhook) return true;
   if (exemptions.owner && event.isOwner) return true;
   if ((exemptions.userIds || []).includes(event.userId)) return true;
   if ((exemptions.channelIds || []).includes(event.channelId)) return true;
@@ -641,6 +648,8 @@ module.exports = {
   DEFAULT_CONFIG,
   getConfig,
   updateConfig,
+  applyPreset,
+  listPresets: presetRegistry.listPresets,
   listRules,
   getGlobalReputationConfig,
   getGlobalReputation,
@@ -674,6 +683,7 @@ module.exports = {
   listFalsePositives,
   purgeExpired,
   runRetentionSweep,
+  restoreExpiredLockdowns: actionService.restoreExpiredLockdowns,
   identityRegistry,
   domainRegistry,
   _pipeline: pipeline,

@@ -1597,7 +1597,7 @@ const MODULE_REGISTRY = [
   { key: 'telegrambridge', label: 'Telegram Bridge', icon: '\u{1F4E1}', section: 'telegram-bridge', adminOnly: true, desc: 'Mirror Telegram groups and channels into Discord channels.' },
   { key: 'automessages', label: 'Auto Messages', icon: '\u{1F4E2}', section: 'auto-messages', adminOnly: true, desc: 'Schedule recurring embedded announcements in selected Discord channels.' },
   { key: 'selfserveroles', label: 'Self-Serve Roles', icon: '\u{1F3AD}', section: 'self-serve-roles', desc: 'Claim optional roles assigned by administrators.' },
-  { key: 'guildguard', label: 'Guild Guard', icon: '\u{1F6E1}\uFE0F', section: 'guildguard', adminOnly: true, desc: 'Review security incidents and configure moderation detectors.' },
+  { key: 'guildguard', label: 'Guild Guard', icon: '\u{1F6E1}\uFE0F', section: 'guildguard', adminOnly: true, desc: 'Protect your community with clear presets, scam defense, incident review, and raid response.' },
   { key: 'aiassistant', label: 'AI Assistant', icon: '\u{1F916}', section: 'aiassistant', adminOnly: true, desc: 'Tune prompts, safety controls, and assistant behavior for your server.' }
 ];
 
@@ -1812,9 +1812,16 @@ const GUILD_GUARD_DETECTOR_LABELS = Object.freeze({
 });
 
 function switchGuildGuardTab(tab) {
-  const selected = ['incidents', 'configuration', 'rules', 'domains', 'staff', 'global'].includes(tab) ? tab : 'incidents';
+  const selected = ['overview', 'incidents', 'protection', 'trusted', 'advanced'].includes(tab) ? tab : 'overview';
+  const panes = {
+    overview: ['guildGuardTab-overview'],
+    incidents: ['guildGuardTab-incidents'],
+    protection: ['guildGuardTab-configuration'],
+    trusted: ['guildGuardTab-domains', 'guildGuardTab-staff'],
+    advanced: ['guildGuardTab-rules', 'guildGuardTab-global']
+  };
   document.querySelectorAll('#guildGuardTabs .settings-tab').forEach(button => button.classList.toggle('active', button.dataset.tab === selected));
-  document.querySelectorAll('#section-guildguard .settings-tab-pane').forEach(pane => { pane.style.display = pane.id === `guildGuardTab-${selected}` ? '' : 'none'; });
+  document.querySelectorAll('#section-guildguard .settings-tab-pane').forEach(pane => { pane.style.display = panes[selected].includes(pane.id) ? '' : 'none'; });
 }
 
 function guildGuardSignals(incident) {
@@ -1824,7 +1831,27 @@ function guildGuardSignals(incident) {
   } catch (_) { return []; }
 }
 
+let guildGuardCurrentConfig = {};
+
+function renderGuildGuardCoverage(config) {
+  const target = document.getElementById('guildGuardCoverage');
+  if (!target) return;
+  const layers = [
+    ['links', 'Links & wallet scams', 'Dangerous and lookalike domains'],
+    ['impersonation', 'Impersonation', 'Protected staff identities'],
+    ['raids', 'Raid defence', 'Join bursts and recoverable raid mode'],
+    ['spam', 'Spam protection', 'Floods, repeated messages and mass mentions']
+  ];
+  target.innerHTML = layers.map(([key, label, description]) => {
+    const enabled = key === 'spam'
+      ? ['spam', 'duplicateMessages', 'massMention'].some(detector => config.detectors?.[detector]?.enabled === true)
+      : config.detectors?.[key]?.enabled === true;
+    return `<div class="gg-coverage-item ${enabled ? 'is-active' : ''}"><span class="gg-check-icon"><i class="fa-solid ${enabled ? 'fa-check' : 'fa-minus'}" aria-hidden="true"></i></span><div><strong>${escapeHtml(label)}</strong><small>${escapeHtml(description)}</small></div><span>${enabled ? 'Active' : 'Off'}</span></div>`;
+  }).join('');
+}
+
 function renderGuildGuardConfig(config) {
+  guildGuardCurrentConfig = config || {};
   document.getElementById('guildGuardEnabled').checked = config.enabled === true;
   document.getElementById('guildGuardMode').value = config.mode === 'enforce' ? 'enforce' : 'monitor';
   document.getElementById('guildGuardRetention').value = Number(config.retentionDays || 30);
@@ -1832,6 +1859,8 @@ function renderGuildGuardConfig(config) {
   document.querySelectorAll('[data-guildguard-detector]').forEach(input => { input.checked = config.detectors?.[input.dataset.guildguardDetector]?.enabled === true; });
   document.getElementById('guildGuardActionsEnabled').checked = config.actions?.enabled === true;
   document.querySelectorAll('[data-guildguard-action]').forEach(input => { input.checked = config.actions?.[input.dataset.guildguardAction] === true; });
+  document.getElementById('guildGuardTimeoutSeconds').value = Number(config.actions?.timeoutSeconds || 3600);
+  document.getElementById('guildGuardLockdownDuration').value = Number(config.actions?.lockdownDurationSeconds || 900);
   document.getElementById('guildGuardRiskWarning').value = Number(config.risk?.warning || 35);
   document.getElementById('guildGuardRiskTimeout').value = Number(config.risk?.timeout || 60);
   document.getElementById('guildGuardRiskQuarantine').value = Number(config.risk?.quarantine || 80);
@@ -1848,6 +1877,16 @@ function renderGuildGuardConfig(config) {
   document.getElementById('guildGuardGlobalHalfLifeImpersonation').value = Number(globalReputation.halfLifeDays?.impersonation || 180);
   document.getElementById('guildGuardGlobalHalfLifeScam').value = Number(globalReputation.halfLifeDays?.scam || 365);
   document.getElementById('guildGuardGlobalHalfLifeSuspicious').value = Number(globalReputation.halfLifeDays?.suspicious_account || 120);
+  document.getElementById('guildGuardScanBots').checked = config.exemptions?.botUsers === false;
+  document.getElementById('guildGuardScanWebhooks').checked = config.exemptions?.webhookUsers === false;
+  const preset = ['essential', 'balanced', 'strict'].includes(config.preset) ? config.preset : 'custom';
+  const presetLabel = preset === 'custom' ? 'Custom protection' : `${preset.charAt(0).toUpperCase()}${preset.slice(1)} protection`;
+  document.getElementById('guildGuardPresetLabel').textContent = presetLabel;
+  const modeBadge = document.getElementById('guildGuardModeBadge');
+  modeBadge.textContent = !config.enabled ? 'Protection off' : config.mode === 'enforce' && config.actions?.enabled ? 'Protecting automatically' : 'Monitoring only';
+  modeBadge.className = `gg-mode-badge ${config.enabled ? (config.mode === 'enforce' && config.actions?.enabled ? 'is-protecting' : 'is-monitoring') : 'is-off'}`;
+  document.querySelectorAll('[data-gg-preset-card]').forEach(card => card.classList.toggle('is-selected', card.dataset.ggPresetCard === preset));
+  renderGuildGuardCoverage(config);
 }
 
 async function loadGuildGuardAlertChannels(selectedId = '') {
@@ -1873,11 +1912,30 @@ async function loadGuildGuardAlertChannels(selectedId = '') {
 
 function renderGuildGuardIncidents(incidents) {
   const target = document.getElementById('guildGuardIncidents');
-  if (!incidents.length) { target.innerHTML = '<tr><td colspan="7">No incidents in the selected server.</td></tr>'; return; }
+  if (!incidents.length) { target.innerHTML = '<div class="gg-empty-state"><i class="fa-solid fa-shield-check" aria-hidden="true"></i><h3>No recent incidents</h3><p>Guild Guard has nothing waiting for moderator review.</p></div>'; return; }
+  const incidentTitles = {
+    link_protection: 'Possible dangerous link',
+    lookalike_domain: 'Lookalike domain detected',
+    staff_impersonation: 'Possible staff impersonation',
+    raid_burst: 'Coordinated join burst',
+    suspicious_account: 'Suspicious new account',
+    mass_mention: 'Mass mention blocked',
+    spam_flood: 'Message flood detected',
+    duplicate_message: 'Repeated message campaign'
+  };
   target.innerHTML = incidents.map(incident => {
     const labels = guildGuardSignals(incident);
-    const typeLabel = `${incident.event_type || 'event'}${labels.length ? ` -> ${labels.join(', ')}` : ''}`;
-    return `<tr><td>${escapeHtml(incident.created_at)}</td><td><code>${escapeHtml(incident.user_id || 'unknown')}</code></td><td>${escapeHtml(incident.user_incident_count ?? 1)}</td><td><code>${escapeHtml(typeLabel)}</code></td><td>${escapeHtml(incident.risk_score)}</td><td>${escapeHtml(incident.status)}</td><td><button class="btn-secondary" data-guildguard-detail-id="${escapeHtml(incident.incident_id)}">Details</button><button class="btn-secondary" data-guildguard-review="reviewed" data-incident-id="${escapeHtml(incident.incident_id)}">Review</button><button class="btn-secondary" data-guildguard-review="confirmed" data-incident-id="${escapeHtml(incident.incident_id)}">Confirm</button><button class="btn-danger" data-guildguard-review="false_positive" data-incident-id="${escapeHtml(incident.incident_id)}">False positive</button></td></tr>`;
+    const signals = (() => { try { return JSON.parse(incident.signals_json || '[]'); } catch (_) { return []; } })();
+    const primaryDetector = signals[0]?.detector || '';
+    const title = incidentTitles[primaryDetector] || labels[0] || 'Security incident';
+    const score = Number(incident.risk_score || 0);
+    const riskClass = score >= 80 ? 'critical' : score >= 60 ? 'high' : score >= 35 ? 'medium' : 'low';
+    const when = incident.created_at ? new Date(`${String(incident.created_at).replace(' ', 'T')}Z`).toLocaleString() : 'Unknown time';
+    return `<article class="gg-incident-card gg-incident-card--${riskClass}">
+      <div class="gg-incident-card__risk"><span>${escapeHtml(score)}</span><small>Risk</small></div>
+      <div class="gg-incident-card__body"><div class="gg-incident-card__meta"><span class="gg-status-chip is-${escapeHtml(incident.status || 'open')}">${escapeHtml(String(incident.status || 'open').replaceAll('_', ' '))}</span><span>${escapeHtml(when)}</span></div><h3>${escapeHtml(title)}</h3><p>${escapeHtml(labels.join(' · ') || incident.event_type || 'Risk signal')} · Member ${escapeHtml(incident.user_id || 'unknown')} · ${escapeHtml(incident.user_incident_count ?? 1)} related incident(s)</p></div>
+      <div class="gg-incident-card__actions"><button class="btn-primary" data-guildguard-detail-id="${escapeHtml(incident.incident_id)}">Review incident</button><button class="btn-secondary" data-guildguard-review="confirmed" data-incident-id="${escapeHtml(incident.incident_id)}">Confirm scam</button><button class="btn-secondary" data-guildguard-review="false_positive" data-incident-id="${escapeHtml(incident.incident_id)}">Mark safe</button></div>
+    </article>`;
   }).join('');
   target.querySelectorAll('[data-guildguard-review]').forEach(button => button.addEventListener('click', () => reviewGuildGuardIncident(button.dataset.incidentId, button.dataset.guildguardReview)));
   target.querySelectorAll('[data-guildguard-detail-id]').forEach(button => button.addEventListener('click', () => loadGuildGuardIncidentDetail(button.dataset.guildguardDetailId)));
@@ -1904,7 +1962,13 @@ async function loadGuildGuardIncidentDetail(incidentId) {
         ? `<button type="button" class="btn-danger" data-guildguard-global-revoke="${escapeHtml(globalReport.report_id)}">Revoke global report</button>`
         : '';
     const globalReputation = risk.globalReputation || { activeScore: 0, reportCount: 0, sourceCount: 0, categoryLabels: [] };
-    target.innerHTML = `<div class="card-header-row"><h3>Incident details</h3><div class="button-row">${globalAction}<button type="button" class="btn-danger" data-guildguard-clear-user="${escapeHtml(incident.user_id || '')}">Clear user history</button><button type="button" class="btn-secondary" data-guildguard-close-detail>Close</button></div></div><p><strong>Incident:</strong> <code>${escapeHtml(incident.incident_id)}</code> &nbsp; <strong>User:</strong> <code>${escapeHtml(incident.user_id || 'unknown')}</code></p><p><strong>Signals:</strong> ${escapeHtml(signals.map(signal => `${GUILD_GUARD_DETECTOR_LABELS[signal.detector] || signal.detector} (${signal.score})`).join(', ') || 'none')}</p><details open><summary>Evidence</summary><pre>${escapeHtml(JSON.stringify(evidence, null, 2))}</pre></details><h4>User risk history</h4><p>Current score: <strong>${escapeHtml(risk.profile?.risk_score ?? 0)}</strong> (${escapeHtml(risk.profile?.risk_level || 'low')}); violations: ${escapeHtml(risk.profile?.violation_count ?? 0)}</p><p>Incidents: <strong>${escapeHtml(incidentSummary.total)}</strong> · Open: ${escapeHtml(incidentSummary.open)} · Confirmed: ${escapeHtml(incidentSummary.confirmed)} · False positives: ${escapeHtml(incidentSummary.falsePositive)} · Average risk: ${escapeHtml(incidentSummary.averageRiskScore)}</p><p><strong>Global reputation:</strong> ${escapeHtml(globalReputation.activeScore)}/100 · ${escapeHtml(globalReputation.reportCount)} report(s) from ${escapeHtml(globalReputation.sourceCount)} tenant(s) · ${escapeHtml((globalReputation.categoryLabels || []).join(', ') || 'none')}</p><div class="data-table-wrap"><table class="data-table"><thead><tr><th>Time</th><th>Event</th><th>Score</th><th>Status</th></tr></thead><tbody>${(risk.incidents || []).slice(0, 20).map(item => `<tr><td>${escapeHtml(item.created_at)}</td><td>${escapeHtml(item.event_type)}</td><td>${escapeHtml(item.risk_score)}</td><td>${escapeHtml(item.status)}</td></tr>`).join('') || '<tr><td colspan="4">No related incidents.</td></tr>'}</tbody></table></div>`;
+    const signalSummary = signals.map(signal => `${GUILD_GUARD_DETECTOR_LABELS[signal.detector] || signal.detector} added ${signal.score} risk`).join(' · ') || 'No detector details available';
+    const safeUrls = (evidence.urls || []).map(url => `<code>${escapeHtml(url)}</code>`).join(' ') || '<span class="section-subtitle">No links recorded.</span>';
+    target.innerHTML = `<div class="gg-incident-detail__header"><div><span class="gg-eyebrow">Incident review</span><h3>${escapeHtml(guildGuardSignals(incident)[0] || 'Security incident')}</h3><p>${escapeHtml(signalSummary)}</p></div><button type="button" class="btn-secondary" data-guildguard-close-detail>Close</button></div>
+      <div class="gg-detail-facts"><div><span>Member</span><strong>${escapeHtml(incident.user_id || 'Unknown')}</strong></div><div><span>Risk score</span><strong>${escapeHtml(incident.risk_score || 0)}/100</strong></div><div><span>Status</span><strong>${escapeHtml(String(incident.status || 'open').replaceAll('_', ' '))}</strong></div><div><span>Related incidents</span><strong>${escapeHtml(incidentSummary.total)}</strong></div></div>
+      <section class="gg-evidence-panel"><span class="gg-eyebrow">What Guild Guard saw</span><p>${escapeHtml(evidence.rawContent || 'No message content was stored for this event.')}</p><div class="gg-safe-links"><strong>Links are shown as non-clickable text</strong>${safeUrls}</div></section>
+      <div class="gg-detail-actions"><button type="button" class="btn-primary" data-guildguard-detail-review="confirmed">Confirm scam</button><button type="button" class="btn-secondary" data-guildguard-detail-review="reviewed">Mark reviewed</button><button type="button" class="btn-secondary" data-guildguard-detail-review="false_positive">Mark safe</button>${globalAction}<button type="button" class="btn-danger" data-guildguard-clear-user="${escapeHtml(incident.user_id || '')}">Clear user history</button></div>
+      <section class="gg-history-summary"><h4>Member safety history</h4><p>Current risk: <strong>${escapeHtml(risk.profile?.risk_score ?? 0)}</strong> (${escapeHtml(risk.profile?.risk_level || 'low')}) · Confirmed: ${escapeHtml(incidentSummary.confirmed)} · Marked safe: ${escapeHtml(incidentSummary.falsePositive)}</p><p>Community Safety Network: ${escapeHtml(globalReputation.activeScore)}/100 from ${escapeHtml(globalReputation.sourceCount)} community source(s). External reports remain advisory and never ban automatically.</p></section>`;
     target.querySelector('[data-guildguard-close-detail]')?.addEventListener('click', () => { target.style.display = 'none'; });
     target.querySelector('[data-guildguard-clear-user]')?.addEventListener('click', () => {
       clearGuildGuardUserHistory(incident.user_id).catch(error => { target.textContent = error.message || 'Unable to clear user history'; });
@@ -1915,6 +1979,9 @@ async function loadGuildGuardIncidentDetail(incidentId) {
     target.querySelector('[data-guildguard-global-revoke]')?.addEventListener('click', () => {
       revokeGuildGuardGlobalReport(globalReport.report_id).catch(error => { target.textContent = error.message || 'Unable to revoke global report'; });
     });
+    target.querySelectorAll('[data-guildguard-detail-review]').forEach(button => button.addEventListener('click', () => {
+      reviewGuildGuardIncident(incident.incident_id, button.dataset.guildguardDetailReview).catch(error => { target.textContent = error.message || 'Unable to review incident'; });
+    }));
   } catch (error) {
     target.style.display = '';
     target.textContent = error.message || 'Unable to load incident details';
@@ -1968,6 +2035,33 @@ function renderGuildGuardSummary(summary) {
   document.getElementById('guildGuardMetrics').innerHTML = metrics.map(([label, value]) => `<div class="overview-metric"><div class="overview-metric-val">${escapeHtml(value)}</div><div class="overview-metric-label">${escapeHtml(label)}</div></div>`).join('');
 }
 
+function renderGuildGuardHealth(health) {
+  const score = Number(health?.score || 0);
+  const scoreTarget = document.getElementById('guildGuardHealthScore');
+  if (scoreTarget) scoreTarget.textContent = `${score}%`;
+  const target = document.getElementById('guildGuardHealthChecks');
+  if (!target) return;
+  const checks = Array.isArray(health?.checks) ? health.checks : [];
+  target.innerHTML = checks.map(check => `<div class="gg-health-check ${check.ok ? 'is-ok' : check.required ? 'is-required' : 'is-optional'}"><span class="gg-check-icon"><i class="fa-solid ${check.ok ? 'fa-check' : check.required ? 'fa-exclamation' : 'fa-minus'}" aria-hidden="true"></i></span><div><strong>${escapeHtml(check.label)}</strong><small>${check.ok ? 'Ready' : check.required ? 'Action required' : 'Not required by current settings'}</small></div></div>`).join('') || '<p class="section-subtitle">Protection health is unavailable.</p>';
+}
+
+async function applyGuildGuardPreset(preset) {
+  const messages = {
+    essential: 'Essential turns on monitoring and moderator alerts without automatic member actions.',
+    balanced: 'Balanced enables automatic deletion, containment and recoverable raid mode for high-confidence threats.',
+    strict: 'Strict uses tighter launch-day thresholds and also scans untrusted bot content.'
+  };
+  if (!window.confirm(`${messages[preset] || 'Apply this protection preset?'}\n\nYour alert channel and trusted sources will be preserved.`)) return;
+  const response = await fetch('/api/admin/guildguard/preset', {
+    method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ preset })
+  });
+  const payload = await response.json();
+  if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to apply protection preset');
+  renderGuildGuardConfig(payload.data?.config || payload.config || {});
+  document.getElementById('guildGuardStatus').textContent = `${preset.charAt(0).toUpperCase()}${preset.slice(1)} protection applied.`;
+  await loadGuildGuardView();
+}
+
 function renderGuildGuardIdentities(identities) {
   const target = document.getElementById('guildGuardIdentities');
   if (!identities.length) { target.innerHTML = '<tr><td colspan="5">No privileged staff identities found.</td></tr>'; return; }
@@ -1996,7 +2090,11 @@ async function saveGuildGuardConfig(event) {
   event.preventDefault();
   const detectors = {};
   document.querySelectorAll('[data-guildguard-detector]').forEach(input => { detectors[input.dataset.guildguardDetector] = { enabled: input.checked }; });
-  const actions = { enabled: document.getElementById('guildGuardActionsEnabled').checked };
+  const actions = {
+    enabled: document.getElementById('guildGuardActionsEnabled').checked,
+    timeoutSeconds: Number(document.getElementById('guildGuardTimeoutSeconds').value || 3600),
+    lockdownDurationSeconds: Number(document.getElementById('guildGuardLockdownDuration').value || 900)
+  };
   document.querySelectorAll('[data-guildguard-action]').forEach(input => { actions[input.dataset.guildguardAction] = input.checked; });
   const risk = {
     warning: Number(document.getElementById('guildGuardRiskWarning').value || 35),
@@ -2019,7 +2117,12 @@ async function saveGuildGuardConfig(event) {
       suspicious_account: Number(document.getElementById('guildGuardGlobalHalfLifeSuspicious').value || 120)
     }
   };
-  const response = await fetch('/api/admin/guildguard/config', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: document.getElementById('guildGuardEnabled').checked, mode: document.getElementById('guildGuardMode').value, retentionDays: Number(document.getElementById('guildGuardRetention').value || 30), alertChannelId: document.getElementById('guildGuardAlertChannel').value || null, detectors, actions, risk, globalReputation }) });
+  const exemptions = {
+    ...(guildGuardCurrentConfig.exemptions || {}),
+    botUsers: !document.getElementById('guildGuardScanBots').checked,
+    webhookUsers: !document.getElementById('guildGuardScanWebhooks').checked
+  };
+  const response = await fetch('/api/admin/guildguard/config', { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ preset: 'custom', enabled: document.getElementById('guildGuardEnabled').checked, mode: document.getElementById('guildGuardMode').value, retentionDays: Number(document.getElementById('guildGuardRetention').value || 30), alertChannelId: document.getElementById('guildGuardAlertChannel').value || null, detectors, actions, risk, globalReputation, exemptions }) });
   const payload = await response.json();
   if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to save Guild Guard configuration');
   renderGuildGuardConfig(payload.data?.config || payload.config || {});
@@ -2157,18 +2260,21 @@ async function loadGuildGuardView() {
   if (!activeGuildId || !(isAdmin || isSuperadmin)) return;
   const status = document.getElementById('guildGuardStatus');
   try {
-    const [incidentsResponse, configResponse, summaryResponse] = await Promise.all([
+    const [incidentsResponse, configResponse, summaryResponse, healthResponse] = await Promise.all([
       fetch('/api/admin/guildguard/incidents?limit=100', { credentials: 'include' }),
       fetch('/api/admin/guildguard/config', { credentials: 'include' }),
-      fetch('/api/admin/guildguard/summary?days=7', { credentials: 'include' })
+      fetch('/api/admin/guildguard/summary?days=7', { credentials: 'include' }),
+      fetch('/api/admin/guildguard/health', { credentials: 'include' })
     ]);
     const incidentsPayload = await incidentsResponse.json();
     const configPayload = await configResponse.json();
     const summaryPayload = await summaryResponse.json();
+    const healthPayload = await healthResponse.json();
     if (!configResponse.ok) throw new Error(configPayload.message || 'Unable to load Guild Guard configuration');
     renderGuildGuardIncidents(incidentsPayload.data?.incidents || incidentsPayload.incidents || []);
     renderGuildGuardConfig(configPayload.data?.config || configPayload.config || {});
     renderGuildGuardSummary(summaryPayload.data?.summary || summaryPayload.summary || {});
+    renderGuildGuardHealth(healthPayload.data?.health || healthPayload.health || {});
     await loadGuildGuardIdentities();
     await loadGuildGuardRules();
     await loadGuildGuardDomains();
@@ -2183,6 +2289,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('guildGuardConfigForm')?.addEventListener('submit', event => saveGuildGuardConfig(event).catch(error => { document.getElementById('guildGuardConfigStatus').textContent = error.message; }));
   document.getElementById('guildGuardRuleForm')?.addEventListener('submit', event => saveGuildGuardRule(event).catch(error => { document.getElementById('guildGuardStatus').textContent = error.message; }));
   document.getElementById('guildGuardDomainForm')?.addEventListener('submit', event => saveGuildGuardDomain(event).catch(error => { document.getElementById('guildGuardDomainStatus').textContent = error.message; }));
+  document.querySelectorAll('[data-guildguard-preset]').forEach(button => button.addEventListener('click', () => {
+    applyGuildGuardPreset(button.dataset.guildguardPreset).catch(error => { document.getElementById('guildGuardStatus').textContent = error.message; });
+  }));
 });
 
 // ==================== GENERAL HUB & SETTINGS ====================
@@ -3503,11 +3612,11 @@ const HELP_GUIDES = Object.freeze([
   },
   {
     id: 'guild-guard', group: 'Modules', role: 'admin', moduleKey: 'guildguard', icon: 'fa-shield-halved',
-    title: 'Guild Guard', summary: 'Review incidents and configure spam, raid, link, domain, and moderation defenses.',
+    title: 'Guild Guard', summary: 'Protect your community with guided presets, scam defense, incident review, and recoverable raid response.',
     route: 'guildguard', action: 'Configure Guild Guard', managed: true,
-    overview: 'Guild Guard combines monitoring, configurable detectors, safe enforcement actions, incident retention, and global reports.',
-    steps: ['Start in monitor mode.', 'Review detector signals and false positives.', 'Configure alerts, trusted domains, staff identities, and rules.', 'Enable enforcement only after validation.'],
-    tips: ['Use reversible actions while tuning detectors.', 'Escalate cross-server patterns to a superadmin.']
+    overview: 'The Community Safety Center turns Guild Guard into a guided protection layer for scam links, spam, staff impersonation, suspicious joins, and raids.',
+    steps: ['Choose Essential, Balanced, or Strict protection.', 'Resolve any protection-health warnings.', 'Review incidents and confirm scams or mark safe activity.', 'Maintain trusted domains and staff identities when your community changes.'],
+    tips: ['Balanced is the recommended starting point for most communities.', 'Raid mode automatically restores the previous server verification level after the configured protection window.']
   },
   {
     id: 'server-settings', group: 'Server management', role: 'admin', icon: 'fa-palette',

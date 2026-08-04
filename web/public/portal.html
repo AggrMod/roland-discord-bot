@@ -388,53 +388,74 @@
 
         <!-- Guild Guard Section -->
         <section id="section-guildguard" class="content-section app-surface">
-          <header class="section-header">
-            <h2>Guild Guard</h2>
-            <p class="section-subtitle">Review moderation incidents, tune detection, and manage trusted staff identities.</p>
+          <header class="gg-hero">
+            <div class="gg-hero__copy">
+              <span class="gg-eyebrow"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> Community Safety Center</span>
+              <div class="gg-hero__title-row"><h2>Guild Guard</h2><span id="guildGuardModeBadge" class="gg-mode-badge">Checking protection...</span></div>
+              <p>Protect members from wallet scams, impersonation, dangerous links, spam and coordinated raids from one clear workspace.</p>
+              <div class="gg-hero__actions"><button type="button" class="btn-primary" onclick="switchGuildGuardTab('protection')">Configure protection</button><button type="button" class="btn-secondary" onclick="switchGuildGuardTab('incidents')">Review incidents</button></div>
+            </div>
+            <div class="gg-health-score" aria-label="Protection health score"><strong id="guildGuardHealthScore">--</strong><span>Protection health</span></div>
           </header>
           <div id="guildGuardStatus" class="form-status" style="margin-bottom:var(--space-4);"></div>
           <div class="settings-tabs" id="guildGuardTabs">
-            <button class="settings-tab active" data-tab="incidents" onclick="switchGuildGuardTab('incidents')">Review</button>
-            <button class="settings-tab" data-tab="configuration" onclick="switchGuildGuardTab('configuration')">Detection &amp; actions</button>
-            <button class="settings-tab" data-tab="rules" onclick="switchGuildGuardTab('rules')">Rules</button>
-            <button class="settings-tab" data-tab="domains" onclick="switchGuildGuardTab('domains')">Domains</button>
-            <button class="settings-tab" data-tab="staff" onclick="switchGuildGuardTab('staff')">Trusted staff</button>
-            <button class="settings-tab" data-tab="global" onclick="switchGuildGuardTab('global')">Global Safety</button>
+            <button class="settings-tab active" data-tab="overview" onclick="switchGuildGuardTab('overview')">Overview</button>
+            <button class="settings-tab" data-tab="incidents" onclick="switchGuildGuardTab('incidents')">Incidents</button>
+            <button class="settings-tab" data-tab="protection" onclick="switchGuildGuardTab('protection')">Protection</button>
+            <button class="settings-tab" data-tab="trusted" onclick="switchGuildGuardTab('trusted')">Trusted sources</button>
+            <button class="settings-tab" data-tab="advanced" onclick="switchGuildGuardTab('advanced')">Advanced</button>
           </div>
-          <div id="guildGuardTab-incidents" class="settings-tab-pane">
+          <div id="guildGuardTab-overview" class="settings-tab-pane">
+            <section class="gg-section-heading"><div><span class="gg-eyebrow">Protection level</span><h3>Choose how Guild Guard should respond</h3><p>Start with a preset. You can fine-tune every layer later.</p></div></section>
+            <div class="gg-preset-grid">
+              <article class="gg-preset-card" data-gg-preset-card="essential"><div class="gg-preset-card__icon"><i class="fa-solid fa-eye" aria-hidden="true"></i></div><span>Essential</span><h3>Watch and alert</h3><p>Monitor the main scam and raid signals without automatic member actions.</p><button type="button" class="btn-secondary" data-guildguard-preset="essential">Use Essential</button></article>
+              <article class="gg-preset-card gg-preset-card--recommended" data-gg-preset-card="balanced"><div class="gg-preset-ribbon">Recommended</div><div class="gg-preset-card__icon"><i class="fa-solid fa-shield" aria-hidden="true"></i></div><span>Balanced</span><h3>Protect automatically</h3><p>Remove high-confidence threats, contain offenders and activate recoverable raid mode.</p><button type="button" class="btn-primary" data-guildguard-preset="balanced">Use Balanced</button></article>
+              <article class="gg-preset-card" data-gg-preset-card="strict"><div class="gg-preset-card__icon"><i class="fa-solid fa-shield-virus" aria-hidden="true"></i></div><span>Strict</span><h3>Launch-day defence</h3><p>Tighter thresholds for public launches, mints and high-traffic events.</p><button type="button" class="btn-secondary" data-guildguard-preset="strict">Use Strict</button></article>
+            </div>
             <div class="metrics-grid" id="guildGuardMetrics" style="margin-bottom:var(--space-4);"></div>
-            <div class="card gp-workspace-card"><div class="data-table-wrap"><table class="data-table"><thead><tr><th>Time</th><th>User</th><th>Incidents</th><th>Type / detector</th><th>Score</th><th>Status</th><th>Action</th></tr></thead><tbody id="guildGuardIncidents"><tr><td colspan="7">Loading…</td></tr></tbody></table></div></div>
+            <div class="gg-overview-grid">
+              <section class="card gp-workspace-card"><div class="card-header-row"><div><span class="gg-eyebrow">Readiness</span><h3>Protection health</h3></div><button type="button" class="btn-secondary btn-sm" onclick="loadGuildGuardView()">Recheck</button></div><div id="guildGuardHealthChecks" class="gg-health-checks"><p class="section-subtitle">Checking GuildPilot permissions...</p></div></section>
+              <section class="card gp-workspace-card"><span class="gg-eyebrow">Coverage</span><h3>Your active safety layers</h3><div id="guildGuardCoverage" class="gg-coverage-list"></div></section>
+            </div>
+          </div>
+          <div id="guildGuardTab-incidents" class="settings-tab-pane" style="display:none;">
+            <section class="gg-section-heading"><div><span class="gg-eyebrow">Moderator inbox</span><h3>Incidents that need a decision</h3><p>See what happened, why it was flagged and what Guild Guard did.</p></div></section>
+            <div id="guildGuardIncidents" class="gg-incident-list"><div class="gg-empty-state">Loading incidents...</div></div>
             <div id="guildGuardIncidentDetail" class="card gp-workspace-card" style="display:none;margin-top:var(--space-4);"></div>
-            <div style="display:flex;justify-content:flex-end;margin-top:var(--space-3);"><button type="button" class="btn-secondary" onclick="runGuildGuardRetention()">Run retention cleanup</button></div>
           </div>
           <div id="guildGuardTab-configuration" class="settings-tab-pane" style="display:none;">
             <form id="guildGuardConfigForm" class="card gp-workspace-card">
+              <div class="gg-form-intro"><div><span class="gg-eyebrow">Protection controls</span><h3>Decide what Guild Guard watches and does</h3><p>Balanced settings are recommended for most communities.</p></div><span id="guildGuardPresetLabel" class="gg-mode-badge">Custom</span></div>
               <div class="settings-grid">
-                <label class="settings-row"><span>Enabled</span><input id="guildGuardEnabled" type="checkbox"></label>
-                <label class="settings-row"><span>Mode</span><select id="guildGuardMode"><option value="monitor">Monitor only</option><option value="enforce">Enforce actions</option></select></label>
-                <label class="settings-row"><span>Retention days</span><input id="guildGuardRetention" type="number" min="1" max="3650" step="1"></label>
-                <label class="settings-row"><span>Moderator alert channel</span><select id="guildGuardAlertChannel"><option value="">Loading channels...</option></select></label>
+                <label class="settings-row"><span><strong>Guild Guard</strong><small>Turn protection on for this server.</small></span><input id="guildGuardEnabled" type="checkbox"></label>
+                <label class="settings-row"><span><strong>Response mode</strong><small>Monitor first or take configured actions.</small></span><select id="guildGuardMode"><option value="monitor">Monitor only</option><option value="enforce">Protect automatically</option></select></label>
+                <label class="settings-row"><span><strong>Moderator alerts</strong><small>Where incidents and quick actions appear.</small></span><select id="guildGuardAlertChannel"><option value="">Loading channels...</option></select></label>
               </div>
-              <h3>Detectors</h3>
-              <div class="settings-grid">
-                <label class="settings-row"><span>Spam flood</span><input data-guildguard-detector="spam" type="checkbox"></label>
-                <label class="settings-row"><span>Duplicate messages</span><input data-guildguard-detector="duplicateMessages" type="checkbox"></label>
-                <label class="settings-row"><span>Mass mentions</span><input data-guildguard-detector="massMention" type="checkbox"></label>
-                <label class="settings-row"><span>Suspicious accounts</span><input data-guildguard-detector="suspiciousAccount" type="checkbox"></label>
-                <label class="settings-row"><span>Staff impersonation</span><input data-guildguard-detector="impersonation" type="checkbox"></label>
-                <label class="settings-row"><span>Link protection</span><input data-guildguard-detector="links" type="checkbox"></label>
-                <label class="settings-row"><span>Raid bursts</span><input data-guildguard-detector="raids" type="checkbox"></label>
+              <div class="gg-subsection-title"><span class="gg-eyebrow">Detection</span><h3>Safety layers</h3></div>
+              <div class="gg-toggle-grid">
+                <label class="settings-row"><span><strong>Dangerous links</strong><small>Blocklisted, shortened and lookalike domains.</small></span><input data-guildguard-detector="links" type="checkbox"></label>
+                <label class="settings-row"><span><strong>Staff impersonation</strong><small>Protect moderator and owner identities.</small></span><input data-guildguard-detector="impersonation" type="checkbox"></label>
+                <label class="settings-row"><span><strong>Raid bursts</strong><small>Detect abnormal waves of new members.</small></span><input data-guildguard-detector="raids" type="checkbox"></label>
+                <label class="settings-row"><span><strong>Suspicious accounts</strong><small>Raise risk for newly created accounts.</small></span><input data-guildguard-detector="suspiciousAccount" type="checkbox"></label>
+                <label class="settings-row"><span><strong>Spam floods</strong><small>Detect rapid cross-message activity.</small></span><input data-guildguard-detector="spam" type="checkbox"></label>
+                <label class="settings-row"><span><strong>Repeated messages</strong><small>Find copied scam and spam campaigns.</small></span><input data-guildguard-detector="duplicateMessages" type="checkbox"></label>
+                <label class="settings-row"><span><strong>Mass mentions</strong><small>Stop disruptive member and role mentions.</small></span><input data-guildguard-detector="massMention" type="checkbox"></label>
               </div>
-              <h3>Actions</h3>
-              <div class="settings-grid">
-                <label class="settings-row"><span>Allow actions</span><input id="guildGuardActionsEnabled" type="checkbox"></label>
-                <label class="settings-row"><span>Warn users</span><input data-guildguard-action="warnUsers" type="checkbox"></label>
-                <label class="settings-row"><span>Delete messages</span><input data-guildguard-action="deleteMessages" type="checkbox"></label>
-                <label class="settings-row"><span>Timeout users</span><input data-guildguard-action="timeoutUsers" type="checkbox"></label>
-                <label class="settings-row"><span>Raid lockdown</span><input data-guildguard-action="lockdownEnabled" type="checkbox"></label>
+              <div class="gg-subsection-title"><span class="gg-eyebrow">Response</span><h3>Automatic actions</h3></div>
+              <div class="gg-toggle-grid">
+                <label class="settings-row"><span><strong>Allow automatic actions</strong><small>Required for deletion, timeout and raid mode.</small></span><input id="guildGuardActionsEnabled" type="checkbox"></label>
+                <label class="settings-row"><span><strong>Warn members</strong><small>Explain that a message was flagged.</small></span><input data-guildguard-action="warnUsers" type="checkbox"></label>
+                <label class="settings-row"><span><strong>Delete dangerous messages</strong><small>Remove high-risk content immediately.</small></span><input data-guildguard-action="deleteMessages" type="checkbox"></label>
+                <label class="settings-row"><span><strong>Contain suspicious members</strong><small>Apply a temporary Discord timeout.</small></span><input data-guildguard-action="timeoutUsers" type="checkbox"></label>
+                <label class="settings-row"><span><strong>Recoverable raid mode</strong><small>Raise verification and restore it automatically.</small></span><input data-guildguard-action="lockdownEnabled" type="checkbox"></label>
+                <label class="settings-row"><span><strong>Containment duration</strong><small>Seconds a suspicious member is timed out.</small></span><input id="guildGuardTimeoutSeconds" type="number" min="60" max="2419200" step="60"></label>
+                <label class="settings-row"><span><strong>Raid mode duration</strong><small>Seconds before server verification is restored.</small></span><input id="guildGuardLockdownDuration" type="number" min="60" max="86400" step="60"></label>
               </div>
+              <details class="gg-advanced-config">
+              <summary>Advanced risk and Safety Network settings</summary>
               <h3>Risk policy</h3>
               <div class="settings-grid">
+                <label class="settings-row"><span>Incident retention days</span><input id="guildGuardRetention" type="number" min="1" max="3650" step="1"></label>
                 <label class="settings-row"><span>Warning threshold</span><input id="guildGuardRiskWarning" type="number" min="1" max="100"></label>
                 <label class="settings-row"><span>Timeout threshold</span><input id="guildGuardRiskTimeout" type="number" min="1" max="100"></label>
                 <label class="settings-row"><span>Quarantine threshold</span><input id="guildGuardRiskQuarantine" type="number" min="1" max="100"></label>
@@ -443,7 +464,7 @@
                 <label class="settings-row"><span>Decay half-life (hours)</span><input id="guildGuardRiskDecayHalfLife" type="number" min="1" max="8760"></label>
               </div>
               <h3>Global Safety Network</h3>
-              <p class="section-subtitle">Receive decaying reputation matches from other GuildPilot tenants. Publishing is always explicit and limited to confirmed incidents.</p>
+              <p class="section-subtitle">Receive decaying safety signals from other GuildPilot communities. Publishing is always explicit and limited to confirmed incidents.</p>
               <div class="settings-grid">
                 <label class="settings-row"><span>Receive global reputation alerts</span><input id="guildGuardGlobalConsume" type="checkbox"></label>
                 <label class="settings-row"><span>Publish confirmed incidents</span><input id="guildGuardGlobalPublish" type="checkbox"></label>
@@ -454,7 +475,10 @@
                 <label class="settings-row"><span>Impersonation half-life (days)</span><input id="guildGuardGlobalHalfLifeImpersonation" type="number" min="1" max="3650"></label>
                 <label class="settings-row"><span>Scam half-life (days)</span><input id="guildGuardGlobalHalfLifeScam" type="number" min="1" max="3650"></label>
                 <label class="settings-row"><span>Suspicious account half-life (days)</span><input id="guildGuardGlobalHalfLifeSuspicious" type="number" min="1" max="3650"></label>
+                <label class="settings-row"><span>Scan bot messages</span><input id="guildGuardScanBots" type="checkbox"></label>
+                <label class="settings-row"><span>Scan webhook messages</span><input id="guildGuardScanWebhooks" type="checkbox"></label>
               </div>
+              </details>
               <button type="submit" class="btn-primary">Save Guild Guard configuration</button><span id="guildGuardConfigStatus" class="form-status"></span>
             </form>
           </div>

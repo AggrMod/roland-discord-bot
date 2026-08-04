@@ -53,6 +53,13 @@ assert.deepStrictEqual(event.mentions, ['123']);
 
 const config = guard.getConfig('guild-a');
 assert.strictEqual(config.enabled, false, 'Guild Guard must be disabled by default');
+const balancedPreset = guard.applyPreset('guild-preset', 'balanced');
+assert.strictEqual(balancedPreset.preset, 'balanced');
+assert.strictEqual(balancedPreset.mode, 'enforce');
+assert.strictEqual(balancedPreset.actions.lockdownEnabled, true);
+assert.strictEqual(balancedPreset.exemptions.webhookUsers, false);
+assert.strictEqual(guard.listPresets().length, 3);
+assert.strictEqual(guard.isExempt({ isBot: true, isWebhook: true, isOwner: false, roleIds: [] }, balancedPreset), false, 'webhooks use their explicit exemption instead of the generic bot exemption');
 const skipped = await guard.process({ id: 'message-disabled', guildId: 'guild-a', content: 'hello', author: { id: 'user-a' } }, 'message_create');
 assert.strictEqual(skipped.skipped, true);
 assert.strictEqual(skipped.reason, 'disabled');
@@ -202,6 +209,12 @@ guard.updateConfig('guild-rule', {
   actions: { enabled: true },
   rules: { staffImpersonation: { enabled: true, threshold: 50, timeoutSeconds: 3600, deleteMessages: true, pingStaff: true } }
 });
+guard.createRule('guild-rule', {
+  name: 'Impersonation audit trail',
+  detectors: ['staff_impersonation'],
+  threshold: 60,
+  actions: { notifyStaff: true, pingStaff: false, timeoutUsers: false, deleteMessages: false }
+});
 let ruleAlertPayload = null;
 let ruleAlertCount = 0;
 let ruleTimeoutMs = null;
@@ -224,6 +237,7 @@ assert.ok(Array.isArray(ruleAlertPayload.embeds) && ruleAlertPayload.embeds.leng
 assert.strictEqual(ruleAlertPayload.components[0].components.length, 5);
 assert.deepStrictEqual(ruleAlertPayload.allowedMentions.users, ['rule-staff']);
 assert.strictEqual(db.prepare("SELECT status FROM actions WHERE incident_id = ? AND action_type = 'rule:staff_impersonation_escalation'").get(ruleResult.incident.incident_id).status, 'applied');
+assert.strictEqual(db.prepare("SELECT COUNT(*) AS count FROM actions WHERE incident_id = ? AND action_type LIKE 'rule:%'").get(ruleResult.incident.incident_id).count, 2, 'every matching rule must be evaluated and recorded');
 await actionService.execute({
   source: { guild: ruleGuild, member: { timeout: async () => {} }, delete: async () => {} },
   event: ruleResult.event,
@@ -314,15 +328,33 @@ for (let i = 0; i < 3; i += 1) {
 assert.ok(raidResult.incident && raidResult.signals.some(signal => signal.detector === 'raid_burst'));
 assert.strictEqual(db.prepare('SELECT COUNT(*) AS count FROM raid_events WHERE guild_id = ?').get('guild-raid').count, 1);
 let lockedLevel = null;
+const lockdownGuild = { id: 'guild-raid', verificationLevel: 'low', setVerificationLevel: async level => { lockedLevel = level; } };
 const lockdownAction = await actionService.execute({
-  source: { guild: { setVerificationLevel: async level => { lockedLevel = level; } } },
+  source: { guild: lockdownGuild },
   event: raidResult.event,
   decision: { action: 'quarantine' },
-  config: { mode: 'enforce', actions: { enabled: true, lockdownEnabled: true, lockdownVerificationLevel: 'high' } },
+  config: { mode: 'enforce', actions: { enabled: true, lockdownEnabled: true, lockdownVerificationLevel: 'high', lockdownDurationSeconds: 60 } },
   incident: raidResult.incident
 });
 assert.strictEqual(lockdownAction.status, 'applied');
 assert.strictEqual(lockedLevel, 'high');
+assert.strictEqual(db.prepare('SELECT status FROM guild_guard_lockdowns WHERE guild_id = ?').get('guild-raid').status, 'active');
+db.prepare("UPDATE guild_guard_lockdowns SET restore_at = datetime('now', '-1 second') WHERE guild_id = ?").run('guild-raid');
+const restoredLockdowns = await actionService.restoreExpiredLockdowns({ guilds: { cache: new Map([['guild-raid', lockdownGuild]]) } });
+assert.strictEqual(restoredLockdowns[0].restored, true);
+assert.strictEqual(lockedLevel, 'low');
+assert.strictEqual(db.prepare('SELECT status FROM guild_guard_lockdowns WHERE guild_id = ?').get('guild-raid').status, 'restored');
+
+const failedActionIncident = await guard.createTestIncident('guild-action-failure', { id: 'failed-action', author: { id: 'failed-user' } });
+const failedTimeout = await actionService.execute({
+  source: { member: { timeout: async () => { throw new Error('Missing permissions'); } } },
+  event: { guildId: 'guild-action-failure', userId: 'failed-user', eventType: 'message_create' },
+  decision: { action: 'timeout', score: 65 },
+  config: { mode: 'enforce', actions: { enabled: true, timeoutUsers: true, timeoutSeconds: 60 }, rules: [] },
+  incident: failedActionIncident.incident,
+  signals: []
+});
+assert.strictEqual(failedTimeout.status, 'failed', 'failed Discord operations must never be recorded as applied');
 
 const reviewed = guard.updateIncidentStatus('guild-live', liveResult.incident.incident_id, 'reviewed', 'moderator-1');
 assert.strictEqual(reviewed.status, 'reviewed');

@@ -417,6 +417,7 @@ client.once(Events.ClientReady, () => {
   startXEngagementScheduler();
   startHeistScheduler();
   startGuildGuardRetentionScheduler();
+  startGuildGuardLockdownRecoveryScheduler();
 
   treasuryService.setClient(client);
   treasuryService.startScheduler();
@@ -536,12 +537,23 @@ function canUseGuildGuardQuickAction(interaction, action) {
 
 async function handleGuildGuardActionButton(interaction) {
   try {
-    const [, action, incidentId] = String(interaction.customId || '').split(':');
+    const [actionKind, action, incidentId] = String(interaction.customId || '').split(':');
     if (!canUseGuildGuardQuickAction(interaction, action)) {
       await interaction.reply({ content: 'You do not have permission to use this moderator action.', ephemeral: true });
       return;
     }
-    await interaction.deferReply({ ephemeral: true });
+    const requiresConfirmation = new Set(['kick', 'ban', 'delete']).has(action);
+    if (actionKind === 'guildguard_action' && requiresConfirmation) {
+      const labels = { kick: 'kick this member', ban: 'ban this member', delete: 'delete the original message' };
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`guildguard_confirm:${action}:${incidentId}`).setLabel('Confirm action').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId(`guildguard_cancel:${action}:${incidentId}`).setLabel('Cancel').setStyle(ButtonStyle.Secondary)
+      );
+      await interaction.reply({ content: `Confirm that you want Guild Guard to ${labels[action]}. This action is recorded in the incident audit trail.`, components: [row], ephemeral: true });
+      return;
+    }
+    if (actionKind === 'guildguard_confirm') await interaction.update({ content: 'Applying Guild Guard action...', components: [] });
+    else await interaction.deferReply({ ephemeral: true });
     const incident = guildGuardService.getIncident(interaction.guildId, incidentId);
     if (!incident) {
       await interaction.editReply({ content: 'This Guild Guard incident is no longer available.' });
@@ -561,10 +573,10 @@ async function handleGuildGuardActionButton(interaction) {
     else await interaction.reply({ content, ephemeral: true }).catch(() => {});
   }
 
-  if (process.env.NODE_ENV === 'production' && getTrimmedEnv('SECRET_VAULT_KEY').length < 32) {
-    logger.error('CRITICAL: SECRET_VAULT_KEY must be set to at least 32 characters in production.');
-    process.exit(1);
-  }
+}
+
+async function handleGuildGuardActionCancel(interaction) {
+  await interaction.update({ content: 'Guild Guard action cancelled.', components: [] }).catch(() => {});
 }
 
 client.on(Events.InteractionCreate, async interaction => {
@@ -598,7 +610,8 @@ client.on(Events.InteractionCreate, async interaction => {
 
   if (interaction.isButton()) {
     const customId = interaction.customId;
-    if (customId.startsWith('guildguard_action:')) { await handleGuildGuardActionButton(interaction); return; }
+    if (customId.startsWith('guildguard_action:') || customId.startsWith('guildguard_confirm:')) { await handleGuildGuardActionButton(interaction); return; }
+    if (customId.startsWith('guildguard_cancel:')) { await handleGuildGuardActionCancel(interaction); return; }
     if (customId === inviteTrackerService.REFRESH_BUTTON_ID || customId.startsWith(inviteTrackerService.SORT_BUTTON_PREFIX)) {
       await inviteTrackerService.handlePanelInteraction(interaction).catch(() => {});
       return;
@@ -1418,6 +1431,20 @@ function startGuildGuardRetentionScheduler() {
   setTimeout(run, 45 * 1000);
 }
 
+function startGuildGuardLockdownRecoveryScheduler() {
+  const run = async () => {
+    try {
+      const results = await guildGuardService.restoreExpiredLockdowns(client);
+      const restored = results.filter(result => result.restored).length;
+      if (restored > 0) logger.log(`[guild-guard] restored ${restored} expired raid lockdown(s)`);
+    } catch (error) {
+      logger.warn(`[guild-guard] lockdown recovery failed: ${error?.message || error}`);
+    }
+  };
+  intervals.push(setInterval(run, 60 * 1000));
+  setTimeout(run, 30 * 1000);
+}
+
 async function handleTicketOpenButton(interaction) {
   try {
     const cid = interaction.customId.replace('ticket_open_', '');
@@ -1628,12 +1655,13 @@ async function handleAiAssistantPassiveMessage(message) {
 }
 
 client.on(Events.MessageCreate, async message => {
-  if (message.author.bot || !message.guild) return;
+  if (!message.guild) return;
   try {
-    await guildGuardService.handleMessageCreate(message);
+    if (message.author?.id !== client.user?.id) await guildGuardService.handleMessageCreate(message);
   } catch (error) {
     logger.warn(`[guild-guard] message normalization failed guild=${message.guildId || 'unknown'} user=${message.author?.id || 'unknown'}: ${error?.message || error}`);
   }
+  if (message.author.bot) return;
   try {
     const keywordScan = moderationService.checkMessageForKeywords(message.guildId, message.content);
     if (keywordScan?.matched) {
@@ -1720,6 +1748,9 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 async function startDiscordClient() {
   try {
+    if (process.env.NODE_ENV === 'production' && getTrimmedEnv('SECRET_VAULT_KEY').length < 32) {
+      throw new Error('SECRET_VAULT_KEY must be set to at least 32 characters in production');
+    }
     await client.login(process.env.DISCORD_TOKEN);
   } catch (error) {
     const message = error?.message || String(error);

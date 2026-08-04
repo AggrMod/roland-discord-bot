@@ -104,6 +104,155 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Guild Guard Safety Center */
+#section-guildguard {
+  --gg-cyan: #39d2ff;
+  --gg-violet: #8d72ff;
+  --gg-green: #43dbb3;
+  --gg-amber: #ffc857;
+}
+
+.gg-hero {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 32px;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: clamp(24px, 4vw, 42px);
+  border: 1px solid rgba(76, 121, 190, .34);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 88% 18%, rgba(141, 114, 255, .25), transparent 34%),
+    radial-gradient(circle at 8% 110%, rgba(57, 210, 255, .14), transparent 36%),
+    linear-gradient(135deg, rgba(15, 29, 52, .98), rgba(11, 18, 34, .98));
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .26);
+}
+
+.gg-hero::after {
+  content: '';
+  position: absolute;
+  width: 260px;
+  height: 260px;
+  right: -110px;
+  top: -120px;
+  border: 1px solid rgba(141, 114, 255, .26);
+  border-radius: 50%;
+}
+
+.gg-hero__copy { position: relative; z-index: 1; max-width: 780px; }
+.gg-eyebrow { display: inline-flex; align-items: center; gap: 8px; color: var(--gg-cyan); font-size: .72rem; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+.gg-hero__title-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
+.gg-hero h2 { margin: 0; font-size: clamp(2rem, 5vw, 3.15rem); line-height: 1; letter-spacing: -.045em; }
+.gg-hero p { max-width: 690px; margin: 16px 0 0; color: var(--text-secondary); font-size: 1rem; line-height: 1.65; }
+.gg-hero__actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 24px; }
+
+.gg-mode-badge { display: inline-flex; align-items: center; min-height: 28px; padding: 5px 10px; border: 1px solid rgba(148, 163, 184, .25); border-radius: 999px; background: rgba(15, 23, 42, .72); color: #cbd5e1; font-size: .72rem; font-weight: 800; }
+.gg-mode-badge.is-protecting { border-color: rgba(67, 219, 179, .38); background: rgba(13, 86, 72, .28); color: #7ef1d0; }
+.gg-mode-badge.is-monitoring { border-color: rgba(255, 200, 87, .38); background: rgba(95, 66, 16, .3); color: #ffd979; }
+.gg-mode-badge.is-off { color: #94a3b8; }
+
+.gg-health-score { position: relative; z-index: 1; display: grid; place-items: center; width: 132px; height: 132px; padding: 16px; border: 1px solid rgba(67, 219, 179, .36); border-radius: 50%; background: radial-gradient(circle, rgba(19, 62, 68, .88), rgba(11, 23, 39, .96)); text-align: center; box-shadow: inset 0 0 34px rgba(67, 219, 179, .09), 0 14px 35px rgba(0, 0, 0, .25); }
+.gg-health-score strong { align-self: end; color: #effffb; font-size: 1.8rem; line-height: 1; }
+.gg-health-score span { align-self: start; margin-top: 6px; color: #8fb7b1; font-size: .68rem; line-height: 1.15; text-transform: uppercase; }
+
+#guildGuardTabs { position: sticky; top: 0; z-index: 5; margin-bottom: 22px; padding: 5px; border: 1px solid rgba(72, 103, 154, .28); border-radius: 14px; background: rgba(8, 15, 28, .88); backdrop-filter: blur(16px); }
+#guildGuardTabs .settings-tab { border-radius: 10px; }
+
+.gg-section-heading { display: flex; justify-content: space-between; align-items: end; margin: 10px 0 18px; }
+.gg-section-heading h3, .gg-form-intro h3, .gg-subsection-title h3 { margin: 5px 0 4px; font-size: 1.35rem; }
+.gg-section-heading p, .gg-form-intro p { margin: 0; color: var(--text-secondary); }
+
+.gg-preset-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+.gg-preset-card { position: relative; display: flex; min-height: 280px; flex-direction: column; align-items: flex-start; padding: 24px; overflow: hidden; border: 1px solid rgba(73, 105, 157, .38); border-radius: 20px; background: linear-gradient(145deg, rgba(20, 35, 61, .94), rgba(12, 22, 40, .96)); transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; }
+.gg-preset-card:hover { transform: translateY(-2px); border-color: rgba(86, 148, 235, .6); }
+.gg-preset-card.is-selected { border-color: var(--gg-green); box-shadow: 0 0 0 1px rgba(67, 219, 179, .25), 0 16px 40px rgba(0, 0, 0, .2); }
+.gg-preset-card--recommended { border-color: rgba(141, 114, 255, .68); background: radial-gradient(circle at 100% 0, rgba(141, 114, 255, .2), transparent 40%), linear-gradient(145deg, rgba(30, 31, 69, .97), rgba(14, 23, 43, .97)); }
+.gg-preset-ribbon { position: absolute; top: 16px; right: -34px; width: 140px; padding: 6px 0; transform: rotate(38deg); background: linear-gradient(90deg, #765cf1, #9b7dff); color: white; font-size: .62rem; font-weight: 900; letter-spacing: .06em; text-align: center; text-transform: uppercase; }
+.gg-preset-card__icon { display: grid; place-items: center; width: 46px; height: 46px; margin-bottom: 18px; border: 1px solid rgba(57, 210, 255, .24); border-radius: 14px; background: rgba(57, 210, 255, .08); color: var(--gg-cyan); font-size: 1.1rem; }
+.gg-preset-card > span { color: var(--gg-cyan); font-size: .72rem; font-weight: 800; text-transform: uppercase; }
+.gg-preset-card h3 { margin: 7px 0 8px; font-size: 1.25rem; }
+.gg-preset-card p { flex: 1; margin: 0 0 20px; color: var(--text-secondary); line-height: 1.55; }
+
+.gg-overview-grid { display: grid; grid-template-columns: 1.12fr .88fr; gap: 16px; }
+.gg-health-checks, .gg-coverage-list { display: grid; gap: 9px; margin-top: 16px; }
+.gg-health-check, .gg-coverage-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid rgba(67, 89, 127, .32); border-radius: 13px; background: rgba(8, 16, 29, .48); }
+.gg-health-check strong, .gg-coverage-item strong { display: block; font-size: .86rem; }
+.gg-health-check small, .gg-coverage-item small { display: block; margin-top: 2px; color: var(--text-secondary); font-size: .72rem; }
+.gg-check-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; background: rgba(148, 163, 184, .1); color: #94a3b8; font-size: .72rem; }
+.gg-health-check.is-ok .gg-check-icon, .gg-coverage-item.is-active .gg-check-icon { background: rgba(67, 219, 179, .12); color: var(--gg-green); }
+.gg-health-check.is-required .gg-check-icon { background: rgba(255, 200, 87, .12); color: var(--gg-amber); }
+.gg-coverage-item > span:last-child { color: #94a3b8; font-size: .68rem; font-weight: 800; text-transform: uppercase; }
+.gg-coverage-item.is-active > span:last-child { color: var(--gg-green); }
+
+.gg-form-intro { display: flex; justify-content: space-between; gap: 20px; align-items: start; margin-bottom: 20px; }
+.gg-subsection-title { margin: 28px 0 12px; }
+.gg-toggle-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+#section-guildguard .settings-row { min-height: 70px; border: 1px solid rgba(70, 94, 137, .32); border-radius: 14px; background: rgba(9, 18, 33, .55); }
+#section-guildguard .settings-row span strong { display: block; color: var(--text-primary); font-size: .84rem; }
+#section-guildguard .settings-row span small { display: block; max-width: 260px; margin-top: 3px; color: var(--text-secondary); font-size: .68rem; line-height: 1.35; }
+.gg-advanced-config { margin: 26px 0 18px; border: 1px solid rgba(73, 98, 141, .35); border-radius: 14px; background: rgba(8, 15, 28, .42); }
+.gg-advanced-config > summary { cursor: pointer; padding: 15px 17px; color: #cbd5e1; font-size: .84rem; font-weight: 800; }
+.gg-advanced-config[open] { padding: 0 17px 17px; }
+.gg-advanced-config[open] > summary { margin: 0 -17px 14px; border-bottom: 1px solid rgba(73, 98, 141, .28); }
+
+.gg-incident-list { display: grid; gap: 11px; }
+.gg-incident-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 18px; border: 1px solid rgba(73, 100, 145, .34); border-left: 3px solid #64748b; border-radius: 16px; background: linear-gradient(135deg, rgba(19, 33, 57, .96), rgba(11, 20, 36, .96)); }
+.gg-incident-card--medium { border-left-color: var(--gg-amber); }
+.gg-incident-card--high, .gg-incident-card--critical { border-left-color: #fb7185; }
+.gg-incident-card__risk { display: grid; place-items: center; width: 58px; height: 58px; border: 1px solid rgba(148, 163, 184, .2); border-radius: 15px; background: rgba(4, 11, 22, .55); }
+.gg-incident-card__risk span { align-self: end; font-size: 1.2rem; font-weight: 900; }
+.gg-incident-card__risk small { align-self: start; color: var(--text-secondary); font-size: .6rem; text-transform: uppercase; }
+.gg-incident-card__meta { display: flex; align-items: center; gap: 9px; color: var(--text-secondary); font-size: .68rem; }
+.gg-incident-card__body h3 { margin: 7px 0 5px; font-size: 1rem; }
+.gg-incident-card__body p { margin: 0; color: var(--text-secondary); font-size: .77rem; }
+.gg-incident-card__actions { display: flex; justify-content: flex-end; gap: 7px; flex-wrap: wrap; max-width: 320px; }
+.gg-status-chip { display: inline-flex; padding: 4px 8px; border-radius: 999px; background: rgba(148, 163, 184, .12); color: #cbd5e1; font-weight: 800; text-transform: capitalize; }
+.gg-status-chip.is-confirmed { background: rgba(251, 113, 133, .13); color: #fda4af; }
+.gg-status-chip.is-false_positive { background: rgba(67, 219, 179, .12); color: #7ef1d0; }
+.gg-empty-state { padding: 52px 20px; border: 1px dashed rgba(80, 108, 155, .42); border-radius: 18px; color: var(--text-secondary); text-align: center; }
+.gg-empty-state i { margin-bottom: 12px; color: var(--gg-green); font-size: 1.7rem; }
+.gg-empty-state h3 { margin: 0 0 5px; color: var(--text-primary); }
+.gg-empty-state p { margin: 0; }
+
+.gg-incident-detail__header { display: flex; justify-content: space-between; gap: 20px; align-items: start; }
+.gg-incident-detail__header h3 { margin: 6px 0; font-size: 1.35rem; }
+.gg-incident-detail__header p { margin: 0; color: var(--text-secondary); }
+.gg-detail-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 18px 0; }
+.gg-detail-facts > div { padding: 13px; border: 1px solid rgba(70, 96, 139, .3); border-radius: 12px; background: rgba(7, 15, 29, .46); }
+.gg-detail-facts span { display: block; color: var(--text-secondary); font-size: .66rem; text-transform: uppercase; }
+.gg-detail-facts strong { display: block; margin-top: 5px; overflow-wrap: anywhere; font-size: .82rem; text-transform: capitalize; }
+.gg-evidence-panel, .gg-history-summary { padding: 17px; border: 1px solid rgba(70, 96, 139, .3); border-radius: 14px; background: rgba(7, 15, 29, .46); }
+.gg-evidence-panel p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.gg-safe-links { display: grid; gap: 7px; margin-top: 13px; padding-top: 13px; border-top: 1px solid rgba(70, 96, 139, .25); }
+.gg-safe-links code { width: fit-content; max-width: 100%; overflow-wrap: anywhere; user-select: text; }
+.gg-detail-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 15px 0; }
+.gg-history-summary h4 { margin-top: 0; }
+.gg-history-summary p:last-child { margin-bottom: 0; }
+
+@media (max-width: 980px) {
+  .gg-preset-grid { grid-template-columns: 1fr; }
+  .gg-preset-card { min-height: 0; }
+  .gg-overview-grid { grid-template-columns: 1fr; }
+  .gg-incident-card { grid-template-columns: auto minmax(0, 1fr); }
+  .gg-incident-card__actions { grid-column: 1 / -1; justify-content: flex-start; max-width: none; }
+}
+
+@media (max-width: 680px) {
+  .gg-hero { grid-template-columns: 1fr; padding: 22px; }
+  .gg-health-score { width: 104px; height: 104px; border-radius: 20px; }
+  #guildGuardTabs { position: static; display: flex; overflow-x: auto; }
+  #guildGuardTabs .settings-tab { flex: 0 0 auto; }
+  .gg-toggle-grid, .gg-detail-facts { grid-template-columns: 1fr; }
+  .gg-form-intro, .gg-incident-detail__header { flex-direction: column; }
+  .gg-incident-card { grid-template-columns: 1fr; }
+  .gg-incident-card__actions { grid-column: auto; }
+  .gg-incident-card__actions button { width: 100%; }
+  .gg-health-check, .gg-coverage-item { grid-template-columns: auto minmax(0, 1fr); }
+  .gg-coverage-item > span:last-child { grid-column: 2; }
+}
+
 h1,
 h2,
 h3,

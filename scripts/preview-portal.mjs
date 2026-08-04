@@ -262,6 +262,61 @@ app.post('/api/superadmin/tenants/:guildId/plan-lifecycle', (req, res) => {
   }
   res.json({ success: true, fallbackPlanKey: tenant.summary.basePlanKey || 'starter', tenant });
 });
+let previewGuildGuardConfig = {
+  enabled: true,
+  mode: 'enforce',
+  preset: 'balanced',
+  retentionDays: 30,
+  alertChannelId: '100000000000000011',
+  exemptions: { botUsers: true, webhookUsers: false },
+  detectors: {
+    spam: { enabled: true }, duplicateMessages: { enabled: true }, massMention: { enabled: true },
+    suspiciousAccount: { enabled: true }, impersonation: { enabled: true }, links: { enabled: true }, raids: { enabled: true }
+  },
+  actions: { enabled: true, warnUsers: true, deleteMessages: true, timeoutUsers: true, timeoutSeconds: 3600, lockdownEnabled: true, lockdownDurationSeconds: 900 },
+  risk: { warning: 35, timeout: 60, quarantine: 80, alert: 25, decayEnabled: true, decayHalfLifeHours: 24 },
+  globalReputation: { consumeEnabled: true, publishEnabled: false, notifyOnJoin: true, alertThreshold: 50, halfLifeDays: { spam: 90, unsafe_link: 120, impersonation: 180, scam: 365, suspicious_account: 120 } },
+  rules: [{ id: 'preview-rule', name: 'Staff impersonation containment', detectors: ['staff_impersonation'], threshold: 50, enabled: true, actions: { notifyStaff: true, pingStaff: true, timeoutUsers: true, timeoutSeconds: 3600, deleteMessages: true } }]
+};
+const previewGuildGuardIncidents = [
+  { incident_id: 'preview-link', created_at: '2026-08-04 08:12:00', user_id: '829104552019201024', user_incident_count: 2, event_type: 'message_create', risk_score: 88, status: 'open', signals_json: JSON.stringify([{ detector: 'lookalike_domain', score: 55 }, { detector: 'suspicious_account', score: 33 }]), evidence_json: JSON.stringify({ rawContent: 'Claim your free mint at guildpiIot.example', urls: ['https://guildpiIot.example/claim'] }) },
+  { incident_id: 'preview-identity', created_at: '2026-08-04 07:48:00', user_id: '981204552019201021', user_incident_count: 1, event_type: 'message_create', risk_score: 70, status: 'reviewed', signals_json: JSON.stringify([{ detector: 'staff_impersonation', score: 70 }]), evidence_json: JSON.stringify({ rawContent: 'I am support. DM me to validate your wallet.', urls: [] }) },
+  { incident_id: 'preview-raid', created_at: '2026-08-03 23:41:00', user_id: 'Join wave', user_incident_count: 8, event_type: 'member_join', risk_score: 84, status: 'confirmed', signals_json: JSON.stringify([{ detector: 'raid_burst', score: 84 }]), evidence_json: JSON.stringify({ rawContent: '', urls: [] }) }
+];
+app.get('/api/admin/guildguard/config', (_req, res) => res.json({ success: true, config: previewGuildGuardConfig }));
+app.put('/api/admin/guildguard/config', (req, res) => { previewGuildGuardConfig = { ...previewGuildGuardConfig, ...req.body }; res.json({ success: true, config: previewGuildGuardConfig }); });
+app.post('/api/admin/guildguard/preset', (req, res) => {
+  const preset = ['essential', 'balanced', 'strict'].includes(req.body?.preset) ? req.body.preset : 'balanced';
+  previewGuildGuardConfig = { ...previewGuildGuardConfig, preset, enabled: true, mode: preset === 'essential' ? 'monitor' : 'enforce', actions: { ...previewGuildGuardConfig.actions, enabled: preset !== 'essential' } };
+  res.json({ success: true, config: previewGuildGuardConfig });
+});
+app.get('/api/admin/guildguard/health', (_req, res) => res.json({ success: true, health: { ready: true, score: 100, checks: [
+  { id: 'bot_connected', label: 'GuildPilot is connected to this server', ok: true, required: true },
+  { id: 'alert_channel', label: 'Moderator alert channel selected', ok: true, required: true },
+  { id: 'send_alerts', label: 'GuildPilot can send alerts in the selected channel', ok: true, required: true },
+  { id: 'manage_messages', label: 'GuildPilot can remove dangerous messages', ok: true, required: true },
+  { id: 'moderate_members', label: 'GuildPilot can timeout suspicious members', ok: true, required: true },
+  { id: 'manage_server', label: 'GuildPilot can activate and restore raid mode', ok: true, required: true }
+] } }));
+app.get('/api/admin/guildguard/incidents', (_req, res) => res.json({ success: true, incidents: previewGuildGuardIncidents }));
+app.get('/api/admin/guildguard/incidents/:incidentId', (req, res) => {
+  const incident = previewGuildGuardIncidents.find(item => item.incident_id === req.params.incidentId) || previewGuildGuardIncidents[0];
+  res.json({ success: true, incident, globalReport: null });
+});
+app.get('/api/admin/guildguard/users/:userId/risk', (req, res) => res.json({
+  success: true,
+  profile: { user_id: req.params.userId, risk_score: 64, incident_count: 2, confirmed_count: 0, false_positive_count: 0 },
+  summary: { total: 2, open: 1, reviewed: 1, confirmed: 0 },
+  incidents: previewGuildGuardIncidents.filter(item => item.user_id === req.params.userId),
+  global: null
+}));
+app.post('/api/admin/guildguard/incidents/:incidentId/review', (req, res) => res.json({ success: true, incidentId: req.params.incidentId, status: req.body?.status || 'reviewed' }));
+app.post('/api/admin/guildguard/incidents/:incidentId/false-positive', (req, res) => res.json({ success: true, incidentId: req.params.incidentId, status: 'false_positive' }));
+app.get('/api/admin/guildguard/summary', (_req, res) => res.json({ success: true, summary: { total: 12, statuses: { open: 2, reviewed: 7, confirmed: 2, false_positive: 1 }, averageRiskScore: 61, lastIncidentAt: '2026-08-04 08:12:00' } }));
+app.get('/api/admin/guildguard/rules', (_req, res) => res.json({ success: true, rules: previewGuildGuardConfig.rules }));
+app.get('/api/admin/guildguard/domains', (_req, res) => res.json({ success: true, domains: { allow: ['guildpilot.app', 'discord.com'], block: ['guildpiIot.example'] } }));
+app.get('/api/admin/guildguard/staff-identities', (_req, res) => res.json({ success: true, identities: [{ user_id: '100000000000000001', username: 'CommunityLead', display_name: 'Community Lead', managed_by_roles: 1, enabled: 1 }] }));
+app.get('/api/admin/guildguard/global-reputation/reports', (_req, res) => res.json({ success: true, reports: [] }));
 app.get('/api/admin/modules/catalog', (_req, res) => res.json({ success: true, modules: [] }));
 app.get('/api/admin/plan', (_req, res) => res.json({ success: true, plan: 'pro', planLabel: 'Pro pilot', basePlan: 'growth', basePlanLabel: 'Growth', status: 'active', expiresAt: '2026-08-25T00:00:00.000Z', pilot: { planKey: 'pro', active: true, endsAt: '2026-08-10T12:00:00.000Z' }, alerts: { warningLevel: 'warning', daysRemaining: 22 }, billing: { provider: 'stripe', subscriptionStatus: 'active', billingInterval: 'yearly', currentPeriodEnd: '2026-08-25T00:00:00.000Z' }, renewal: { options: [], annualDiscountMonths: 2, earlyRenewalEligible: true }, paymentDetails: { acceptedTokens: ['SOL', 'USDC'], onchainVerificationEnabled: true } }));
 app.get('/api/public/v1/treasury', (_req, res) => res.json({ success: true, treasury: {} }));

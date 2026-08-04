@@ -52,6 +52,7 @@ module.exports = {
 
         const placeholder = await channel.send({ content: '🎉 Setting up Game Night...' });
         const session = gnService.createSession({
+          guildId,
           channelId: channel.id, messageId: placeholder.id,
           creatorId: user.id, gatherSecs,
           selectedGames: selectedGames.length > 0 ? selectedGames : [...gnService.GAME_ROSTER],

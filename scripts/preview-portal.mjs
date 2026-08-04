@@ -56,6 +56,23 @@ app.get('/api/admin/discord/roles', (_req, res) => res.json({
     { id: '100000000000000021', name: 'Community Team' },
   ],
 }));
+app.get('/api/admin/minigames/summary', (_req, res) => res.json({
+  success: true,
+  activeSessionCount: 0,
+  activeSessions: [],
+  recommendedJoinSeconds: 90,
+  games: [
+    { key: 'diceduel', name: 'Dice Duel', desc: 'Roll through elimination rounds until one player remains.' },
+    { key: 'higherlower', name: 'Higher or Lower', desc: 'Predict the next card and survive each reveal.' },
+    { key: 'reactionrace', name: 'Reaction Race', desc: 'React at the right moment; the slowest player drops out.' },
+    { key: 'numberguess', name: 'Number Guess', desc: 'Guess from 1 to 100. The closest answer scores the round.' },
+    { key: 'slots', name: 'Slots', desc: 'A quick simultaneous spin with combo-based results.' },
+    { key: 'trivia', name: 'Trivia', desc: 'Five multiple-choice questions with reaction answers.' },
+    { key: 'wordscramble', name: 'Word Scramble', desc: 'Be first to unscramble each word in chat.' },
+    { key: 'rps', name: 'RPS Tournament', desc: 'A finite rock-paper-scissors knockout bracket.' },
+    { key: 'blackjack', name: 'Blackjack', desc: 'Each player faces the dealer and aims for 21.' },
+  ],
+}));
 app.get('/api/admin/aiassistant/settings', (_req, res) => res.json({
   success: true,
   settings: {

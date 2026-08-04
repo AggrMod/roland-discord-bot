@@ -75,6 +75,7 @@ const checks = [
   { name: 'minigame-reaction-handler', cmd: process.execPath, args: ['tests/test-minigame-reaction-handler.js'] },
   { name: 'gamenight-control-safety', cmd: process.execPath, args: ['tests/test-gamenight-control-safety.js'] },
   { name: 'minigames-fairness-guards', cmd: process.execPath, args: ['tests/test-minigames-fairness-guards.js'] },
+  { name: 'minigames-portal-workspace', cmd: process.execPath, args: ['tests/test-minigames-portal-workspace.js'] },
   { name: 'config-command-dispatch', cmd: process.execPath, args: ['tests/test-config-command-dispatch.js'] },
   { name: 'moderation-command-dispatch', cmd: process.execPath, args: ['tests/test-moderation-command-dispatch.js'] },
   { name: 'nft-alert-config-scoping', cmd: process.execPath, args: ['tests/test-nft-alert-config-scoping.js'] },

@@ -65,7 +65,7 @@ class GameNightService {
     this._sessions = new Map(); // channelId → session
   }
 
-  createSession({ channelId, messageId, creatorId, gatherSecs = 60, selectedGames }) {
+  createSession({ guildId = null, channelId, messageId, creatorId, gatherSecs = 60, selectedGames }) {
     const previous = this._sessions.get(channelId);
     if (previous) {
       if (previous.gatherTimer) clearTimeout(previous.gatherTimer);
@@ -78,6 +78,7 @@ class GameNightService {
       ? [...new Set(selectedGames.filter(g => GAME_ROSTER.includes(g)))]
       : [...GAME_ROSTER];
     const session = {
+      guildId: guildId ? String(guildId) : null,
       channelId, lobbyMessageId: messageId, creatorId, gatherSecs,
       status: 'waiting', players: new Set(), playerNames: new Map(),
       scores: new Map(), games, currentGameIndex: 0,
@@ -90,6 +91,28 @@ class GameNightService {
 
   getSession(channelId)  { return this._sessions.get(channelId) || null; }
   getByMessage(msgId)    { for (const [, s] of this._sessions) if (s.lobbyMessageId === msgId) return s; return null; }
+
+  getAdminSummary(guildId) {
+    const normalizedGuildId = String(guildId || '').trim();
+    const activeSessions = [...this._sessions.values()]
+      .filter(session => normalizedGuildId && session.guildId === normalizedGuildId)
+      .map(session => ({
+        channelId: session.channelId,
+        lobbyMessageId: session.lobbyMessageId,
+        status: session.status,
+        playerCount: session.players.size,
+        currentGame: session.games[session.currentGameIndex] || null,
+        completedGames: session.completedGames || 0,
+        totalGames: session.games.length,
+      }));
+    const games = GAME_ROSTER.map(key => ({ key, ...GAME_INFO[key] }));
+    return {
+      activeSessionCount: activeSessions.length,
+      activeSessions,
+      games,
+      recommendedJoinSeconds: 90,
+    };
+  }
 
   addPlayer(channelId, userId, username) {
     const s = this._sessions.get(channelId);

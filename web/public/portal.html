@@ -1045,46 +1045,71 @@
 
         <!-- Battle Section -->
         <section id="section-battle" class="content-section">
-          <header class="section-header">
-            <h2>Minigames</h2>
-            <p class="section-subtitle">Run the minigames module, including Battle Arena sessions and lobbies</p>
-          </header>
-          <div id="battleModuleSettingsCard" class="card" style="display:none; overflow:visible; margin-bottom:var(--space-4);">
-            <h3>Battle Settings</h3>
-            <p style="color:var(--text-secondary); margin-bottom:16px; font-size:0.9em;">Control the pacing of battle rounds. Lower means faster battles, higher adds more suspense.</p>
-            <div style="display:grid; gap:16px;">
-              <div>
-                <label class="form-label">Round Pause - Minimum (seconds)</label>
-                <input type="number" id="battleModulePauseMinInput" min="1" max="60" step="1" class="form-input" placeholder="5" style="width:160px;">
-              </div>
-              <div>
-                <label class="form-label">Round Pause - Maximum (seconds)</label>
-                <input type="number" id="battleModulePauseMaxInput" min="1" max="120" step="1" class="form-input" placeholder="10" style="width:160px;">
-              </div>
-              <div>
-                <label class="form-label">Elite Four Prep Delay (seconds)</label>
-                <input type="number" id="battleModuleElitePrepInput" min="1" max="120" step="1" class="form-input" placeholder="12" style="width:160px;">
-              </div>
-              <div>
-                <label class="form-label">Forced Elimination Interval (rounds)</label>
-                <input type="number" id="battleModuleForcedEliminationIntervalInput" min="1" max="20" step="1" class="form-input" placeholder="3" style="width:160px;">
-              </div>
-              <div id="battleModuleDefaultEraWrap">
-                <label class="form-label">Default Battle Era</label>
-                <select id="battleModuleDefaultEraSelect" class="form-input" style="width:220px;"></select>
-                <p style="color:var(--text-secondary); font-size:0.82em; margin-top:4px;">Era used when no era is specified in /battle create.</p>
-              </div>
-              <div>
-                <button class="btn-primary" onclick="saveBattleModuleSettings()" style="width:fit-content;">Save Battle Settings</button>
-              </div>
+          <div class="minigames-hero">
+            <div>
+              <span class="minigames-eyebrow"><i class="fas fa-gamepad"></i> Community arcade</span>
+              <h2>Minigames &amp; Game Night</h2>
+              <p>Build a clear game lineup, copy the ready-to-run Discord command, and manage Battle Arena pacing from one workspace.</p>
+            </div>
+            <div class="minigames-hero__status">
+              <span id="minigamesModuleStatus" class="minigames-status-pill">Module ready</span>
+              <small>Games run safely inside Discord</small>
             </div>
           </div>
-          <div class="card" id="battleOverviewCard">
-            <div class="empty-state">
-              <div class="empty-state-icon">⚔️</div>
-              <h4 class="empty-state-title">Use Discord to Battle</h4>
-              <p class="empty-state-message">Battles are run via the <strong>/battle</strong> command in Discord. Join active battles from there.</p>
+
+          <div class="minigames-metrics" aria-label="Minigames overview">
+            <div><span>Game Night roster</span><strong id="minigamesRosterCount">9</strong><small>different game formats</small></div>
+            <div><span>Active Game Nights</span><strong id="minigamesActiveCount">0</strong><small>for this community</small></div>
+            <div><span>Recommended lobby</span><strong id="minigamesRecommendedLobby">90s</strong><small>enough time to join</small></div>
+          </div>
+
+          <div class="minigames-workspace">
+            <div class="minigames-main-column">
+              <div class="card minigames-builder-card">
+                <div class="minigames-card-heading">
+                  <div><span class="minigames-step">1</span><h3>Build a Game Night</h3></div>
+                  <button type="button" class="btn-secondary minigames-select-toggle" onclick="toggleAllGameNightGames()">Select all</button>
+                </div>
+                <p class="minigames-card-copy">Choose the games your community enjoys. Duplicate or unknown game names are automatically blocked.</p>
+                <div id="minigamesRosterGrid" class="minigames-roster-grid"><div class="minigames-loading">Loading the game roster...</div></div>
+                <div class="minigames-command-builder">
+                  <label><span>Lobby time</span><select id="minigamesJoinTime" class="form-input" onchange="updateGameNightCommandPreview()"><option value="30">30 seconds</option><option value="60">60 seconds</option><option value="90" selected>90 seconds</option><option value="120">2 minutes</option><option value="180">3 minutes</option></select></label>
+                  <div class="minigames-command-preview"><span>Discord command</span><code id="minigamesCommandPreview">/gamenight start join_time:90</code></div>
+                  <button type="button" class="btn-primary" onclick="copyGameNightCommand()"><i class="far fa-copy"></i> Copy command</button>
+                </div>
+              </div>
+
+              <div class="card minigames-roster-card">
+                <div class="minigames-card-heading"><div><span class="minigames-step">2</span><h3>Know what players can expect</h3></div></div>
+                <div id="minigamesGameDetails" class="minigames-game-details"></div>
+              </div>
             </div>
+
+            <aside class="minigames-side-column">
+              <div class="card minigames-live-card">
+                <span class="minigames-card-kicker">Live control</span><h3>Current session</h3>
+                <div id="minigamesLiveSession" class="minigames-live-state"><i class="fas fa-circle-check"></i><div><strong>No Game Night running</strong><span>Start one with the command builder.</span></div></div>
+                <div class="minigames-quick-commands">
+                  <button type="button" onclick="copyMinigameCommand('/gamenight leaderboard')"><span>View scores</span><code>/gamenight leaderboard</code></button>
+                  <button type="button" onclick="copyMinigameCommand('/gamenight skip')"><span>Skip current game</span><code>/gamenight skip</code></button>
+                  <button type="button" onclick="copyMinigameCommand('/gamenight cancel')"><span>End session</span><code>/gamenight cancel</code></button>
+                </div>
+              </div>
+
+              <div id="battleModuleSettingsCard" class="card minigames-battle-settings" style="display:none; overflow:visible;">
+                <span class="minigames-card-kicker">Battle Arena</span><h3>Battle pacing</h3><p>Set a comfortable rhythm for rounds and forced eliminations.</p>
+                <div class="minigames-settings-grid">
+                  <label><span>Minimum pause</span><div><input type="number" id="battleModulePauseMinInput" min="1" max="60" step="1" class="form-input" placeholder="5"><small>sec</small></div></label>
+                  <label><span>Maximum pause</span><div><input type="number" id="battleModulePauseMaxInput" min="1" max="120" step="1" class="form-input" placeholder="10"><small>sec</small></div></label>
+                  <label><span>Elite Four prep</span><div><input type="number" id="battleModuleElitePrepInput" min="1" max="120" step="1" class="form-input" placeholder="12"><small>sec</small></div></label>
+                  <label><span>Forced elimination</span><div><input type="number" id="battleModuleForcedEliminationIntervalInput" min="1" max="20" step="1" class="form-input" placeholder="3"><small>rounds</small></div></label>
+                  <label id="battleModuleDefaultEraWrap" class="minigames-era-field"><span>Default Battle Era</span><select id="battleModuleDefaultEraSelect" class="form-input"></select><small>Used when no era is included in the Discord command.</small></label>
+                </div>
+                <button class="btn-primary" onclick="saveBattleModuleSettings()">Save Battle settings</button>
+              </div>
+
+              <div class="card minigames-help-card"><i class="fas fa-shield-halved"></i><div><strong>Host controls stay private</strong><span>Only an admin or moderator can start games. Only the Game Night host can skip or cancel its session.</span></div></div>
+            </aside>
           </div>
         </section>
 

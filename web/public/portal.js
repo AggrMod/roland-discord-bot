@@ -7434,6 +7434,7 @@ function switchSection(sectionName, options = {}) {
   } else if (sectionName === 'token-activity') {
     loadTokenActivityView();
   } else if (sectionName === 'battle') {
+    loadMinigamesOverview();
     const battleModuleSettingsCard = document.getElementById('battleModuleSettingsCard');
     const canManageBattle = !!((isAdmin || isSuperadmin) && moduleAdminWorkspaceMode);
     if (battleModuleSettingsCard) {
@@ -12170,6 +12171,119 @@ function adminProposalHold(proposalId) {
 }
 
 let portalSettingsData = null;
+
+const MINIGAMES_FALLBACK_ROSTER = [
+  { key: 'diceduel', name: 'Dice Duel', desc: 'Roll through elimination rounds until one player remains.' },
+  { key: 'higherlower', name: 'Higher or Lower', desc: 'Predict the next card and survive each reveal.' },
+  { key: 'reactionrace', name: 'Reaction Race', desc: 'React at the right moment; the slowest player drops out.' },
+  { key: 'numberguess', name: 'Number Guess', desc: 'Guess from 1 to 100. The closest answer scores the round.' },
+  { key: 'slots', name: 'Slots', desc: 'A quick simultaneous spin with combo-based results.' },
+  { key: 'trivia', name: 'Trivia', desc: 'Five multiple-choice questions with reaction answers.' },
+  { key: 'wordscramble', name: 'Word Scramble', desc: 'Be first to unscramble each word in chat.' },
+  { key: 'rps', name: 'RPS Tournament', desc: 'A finite rock-paper-scissors knockout bracket.' },
+  { key: 'blackjack', name: 'Blackjack', desc: 'Each player faces the dealer and aims for 21.' },
+];
+let minigamesRoster = [...MINIGAMES_FALLBACK_ROSTER];
+
+function renderMinigamesRoster(games) {
+  minigamesRoster = Array.isArray(games) && games.length ? games : [...MINIGAMES_FALLBACK_ROSTER];
+  const picker = document.getElementById('minigamesRosterGrid');
+  const details = document.getElementById('minigamesGameDetails');
+  if (picker) {
+    picker.innerHTML = minigamesRoster.map((game, index) => `
+      <label class="minigames-game-option">
+        <input type="checkbox" value="${escapeHtml(game.key)}" checked onchange="updateGameNightCommandPreview()">
+        <span class="minigames-game-option__number">${String(index + 1).padStart(2, '0')}</span>
+        <span><strong>${escapeHtml(game.name || game.key)}</strong><small>${escapeHtml(game.desc || '')}</small></span>
+        <i class="fas fa-check"></i>
+      </label>
+    `).join('');
+  }
+  if (details) {
+    details.innerHTML = minigamesRoster.map((game, index) => `
+      <article><span>${String(index + 1).padStart(2, '0')}</span><div><strong>${escapeHtml(game.name || game.key)}</strong><p>${escapeHtml(game.desc || '')}</p></div></article>
+    `).join('');
+  }
+  const count = document.getElementById('minigamesRosterCount');
+  if (count) count.textContent = String(minigamesRoster.length);
+  updateGameNightCommandPreview();
+}
+
+function selectedGameNightGames() {
+  return [...document.querySelectorAll('#minigamesRosterGrid input[type="checkbox"]:checked')]
+    .map(input => input.value);
+}
+
+function updateGameNightCommandPreview() {
+  const selected = selectedGameNightGames();
+  const joinTime = Number(document.getElementById('minigamesJoinTime')?.value || 90);
+  const preview = document.getElementById('minigamesCommandPreview');
+  if (preview) {
+    const gameOption = selected.length > 0 && selected.length < minigamesRoster.length
+      ? ` games:${selected.join(',')}`
+      : '';
+    preview.textContent = selected.length === 0
+      ? 'Select at least one game'
+      : `/gamenight start join_time:${joinTime}${gameOption}`;
+  }
+  const toggle = document.querySelector('.minigames-select-toggle');
+  if (toggle) toggle.textContent = selected.length === minigamesRoster.length ? 'Clear all' : 'Select all';
+}
+
+function toggleAllGameNightGames() {
+  const inputs = [...document.querySelectorAll('#minigamesRosterGrid input[type="checkbox"]')];
+  const shouldSelect = !inputs.every(input => input.checked);
+  inputs.forEach(input => { input.checked = shouldSelect; });
+  updateGameNightCommandPreview();
+}
+
+async function copyMinigameCommand(command) {
+  if (!command || !navigator.clipboard?.writeText) return showError('Clipboard access is unavailable in this browser.');
+  try {
+    await navigator.clipboard.writeText(command);
+    showSuccess('Discord command copied.');
+  } catch (_) {
+    showError('Could not copy the command.');
+  }
+}
+
+function copyGameNightCommand() {
+  if (selectedGameNightGames().length === 0) return showError('Select at least one Game Night game first.');
+  return copyMinigameCommand(document.getElementById('minigamesCommandPreview')?.textContent || '');
+}
+
+function renderMinigamesLiveSession(sessions) {
+  const container = document.getElementById('minigamesLiveSession');
+  if (!container) return;
+  const session = Array.isArray(sessions) ? sessions[0] : null;
+  if (!session) {
+    container.classList.remove('is-live');
+    container.innerHTML = '<i class="fas fa-circle-check"></i><div><strong>No Game Night running</strong><span>Start one with the command builder.</span></div>';
+    return;
+  }
+  const rosterGame = minigamesRoster.find(game => game.key === session.currentGame);
+  const currentGame = rosterGame?.name || (session.currentGame ? String(session.currentGame) : 'Preparing');
+  container.classList.add('is-live');
+  container.innerHTML = `<i class="fas fa-signal"></i><div><strong>${escapeHtml(currentGame)}</strong><span>${Number(session.playerCount || 0)} players · ${Number(session.completedGames || 0)}/${Number(session.totalGames || 0)} games complete</span></div>`;
+}
+
+async function loadMinigamesOverview() {
+  renderMinigamesRoster(minigamesRoster);
+  try {
+    const response = await fetch('/api/admin/minigames/summary', { credentials: 'include', headers: buildTenantRequestHeaders() });
+    const data = await response.json();
+    if (!response.ok || !data.success) throw new Error(data.message || 'Summary unavailable');
+    renderMinigamesRoster(data.games);
+    renderMinigamesLiveSession(data.activeSessions);
+    const activeCount = document.getElementById('minigamesActiveCount');
+    const lobby = document.getElementById('minigamesRecommendedLobby');
+    if (activeCount) activeCount.textContent = String(Number(data.activeSessionCount || 0));
+    if (lobby) lobby.textContent = `${Number(data.recommendedJoinSeconds || 90)}s`;
+  } catch (error) {
+    console.warn('[Minigames] summary unavailable:', error.message);
+    renderMinigamesLiveSession([]);
+  }
+}
 
 function getBattleSettingsFieldIds(scope = 'settings') {
   if (scope === 'module') {

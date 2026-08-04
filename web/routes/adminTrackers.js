@@ -2,6 +2,7 @@ const express = require('express');
 const { toSuccessResponse, toErrorResponse } = require('./responseCompat');
 const { getChain, normalizeAddress } = require('../../utils/chainIdentity');
 const evmService = require('../../services/evmService');
+const gameNightService = require('../../services/gameNightService');
 
 async function resolveWithin(promise, timeoutMs) {
   let timeoutId;
@@ -199,6 +200,16 @@ function createAdminTrackersRouter({
       return res.json(toSuccessResponse({ eras }));
     } catch (routeError) {
       logger.error('Error fetching battle eras for tenant:', routeError);
+      return res.status(500).json(toErrorResponse('Internal server error'));
+    }
+  });
+
+  router.get('/api/admin/minigames/summary', adminAuthMiddleware, (req, res) => {
+    if (!ensureMinigamesModule(req, res)) return;
+    try {
+      return res.json(toSuccessResponse(gameNightService.getAdminSummary(req.guildId)));
+    } catch (routeError) {
+      logger.error('Error fetching minigames summary for tenant:', routeError);
       return res.status(500).json(toErrorResponse('Internal server error'));
     }
   });

@@ -14,12 +14,18 @@ function run() {
   assert.strictEqual(numberGuessService.isValidGuess('not-a-number'), false, 'non-numeric guesses must be rejected');
 
   const session = gameNightService.createSession({
+    guildId: 'guild-fairness',
     channelId: `fairness-${Date.now()}`,
     messageId: `message-${Date.now()}`,
     creatorId: 'host',
     selectedGames: ['trivia', 'trivia', 'slots', 'unknown', 'slots'],
   });
   assert.deepStrictEqual(session.games, ['trivia', 'slots'], 'Game Night should deduplicate and discard unsupported service inputs');
+  const tenantSummary = gameNightService.getAdminSummary('guild-fairness');
+  const otherTenantSummary = gameNightService.getAdminSummary('guild-other');
+  assert.strictEqual(tenantSummary.activeSessionCount, 1, 'admin summary should include its own tenant session');
+  assert.strictEqual(otherTenantSummary.activeSessionCount, 0, 'admin summary must not leak sessions across tenants');
+  assert.strictEqual(tenantSummary.games.length, gameNightService.GAME_ROSTER.length, 'admin summary should expose the complete Game Night roster');
   gameNightService.endSession(session.channelId);
 
   const noShow = rpsService.resolveMatchup(null, null, 'player-a', 'player-b');

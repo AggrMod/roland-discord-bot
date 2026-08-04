@@ -319,7 +319,20 @@ body {
 .minigames-settings-grid .minigames-era-field { grid-column: 1 / -1; }
 .minigames-settings-grid .minigames-era-field select { width: 100%; }
 .minigames-settings-grid .minigames-era-field > small { display: block; margin-top: 5px; color: #68758d; font-size: .67rem; }
-.minigames-battle-settings > .btn-primary { width: 100%; }
+.minigames-battle-settings { position: relative; }
+.minigames-battle-settings::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; border-radius: 18px 0 0 18px; background: linear-gradient(180deg, var(--mg-gold), var(--mg-violet)); }
+.minigames-battle-settings .minigames-settings-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.minigames-battle-settings .minigames-settings-grid--era { grid-template-columns: minmax(220px, 420px); margin-bottom: 10px; }
+.minigames-signature-badge { padding: 6px 9px; border: 1px solid rgba(231,206,156,.24); border-radius: 999px; color: var(--mg-gold); background: rgba(231,206,156,.08); font-size: .65rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.minigames-settings-section { margin-top: 14px; padding: 15px; border: 1px solid rgba(162,174,214,.11); border-radius: 13px; background: rgba(8,13,25,.38); }
+.minigames-settings-section__heading strong, .minigames-settings-section__heading span { display: block; }
+.minigames-settings-section__heading strong { color: #dfe5f2; font-size: .82rem; }
+.minigames-settings-section__heading span { margin-top: 3px; color: #748198; font-size: .7rem; line-height: 1.45; }
+.minigames-era-availability { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; min-height: 31px; }
+.minigames-era-availability > span { padding: 5px 8px; border: 1px solid rgba(84,221,210,.16); border-radius: 999px; color: #91dcd5; background: rgba(84,221,210,.06); font-size: .66rem; }
+.minigames-era-availability > small { flex-basis: 100%; color: #6f7d95; font-size: .67rem; line-height: 1.45; }
+.minigames-gauntlet-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 14px; flex-wrap: wrap; }
+.minigames-gauntlet-actions .btn-primary, .minigames-gauntlet-actions .btn-secondary { min-height: 40px; }
 
 .minigames-help-card { display: flex; gap: 12px; align-items: flex-start; }
 .minigames-help-card > i { margin-top: 2px; color: var(--mg-gold); }
@@ -332,6 +345,8 @@ body {
   .minigames-workspace { grid-template-columns: 1fr; }
   .minigames-side-column { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .minigames-help-card { grid-column: 1 / -1; }
+  .minigames-battle-settings .minigames-settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .minigames-battle-settings .minigames-settings-grid--era { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 760px) {
@@ -344,12 +359,15 @@ body {
   .minigames-command-builder { grid-template-columns: 1fr; }
   .minigames-command-builder .btn-primary { width: 100%; }
   .minigames-help-card { grid-column: auto; }
+  .minigames-gauntlet-actions { display: grid; grid-template-columns: 1fr; }
+  .minigames-gauntlet-actions .btn-primary, .minigames-gauntlet-actions .btn-secondary { width: 100%; }
 }
 
 @media (max-width: 480px) {
   .minigames-card-heading { align-items: flex-start; }
   .minigames-card-heading > div { align-items: flex-start; }
   .minigames-settings-grid { grid-template-columns: 1fr; }
+  .minigames-battle-settings .minigames-settings-grid { grid-template-columns: 1fr; }
   .minigames-settings-grid .minigames-era-field { grid-column: auto; }
   .minigames-command-preview code { white-space: normal; word-break: break-word; }
 }

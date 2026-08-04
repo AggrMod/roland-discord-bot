@@ -32,7 +32,7 @@ Discord bot for the Guild Pilot NFT ecosystem featuring wallet verification, DAO
 
 | Game | Command | Type |
 |---|---|---|
-| âš”ï¸ Battle Royale | `/battle` | HP-based elimination |
+| âš”ï¸ Pilot's Gauntlet | `/battle` | Narrated last-member-standing elimination |
 | ðŸƒ Higher or Lower | `/higherlower` | Card guessing, wrong = out |
 | ðŸŽ² Dice Duel | `/diceduel` | Lowest d6 roll eliminated |
 | âš¡ Reaction Race | `/reactionrace` | Slowest to react is out |

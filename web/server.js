@@ -1650,8 +1650,7 @@ class WebServer {
       const baseUrl = normalizeOrigin(process.env.WEB_URL) || `http://localhost:${this.port}`;
       logger.log(`Web server running on port ${this.port}`);
       logger.log(`Verification URL: ${baseUrl}/verify`);
-      logger.log(`Dashboard URL: ${baseUrl}/dashboard`);
-      logger.log(`Admin Portal URL: ${baseUrl}/admin`);
+      logger.log(`Portal URL: ${baseUrl}/app`);
     });
 
     const sweepEnabled = String(process.env.BILLING_EXPIRY_SWEEP_ENABLED || 'true').toLowerCase() !== 'false';

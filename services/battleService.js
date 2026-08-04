@@ -395,14 +395,14 @@ class BattleService {
     if (era.lobbyTitle) return era.lobbyTitle;
     const eraIcon = era.lobbyIcon || this.SWORD_EMOJI;
     const eraName = era.name || 'Battle';
-    return `${eraIcon} ${eraName} Battle Lobby`;
+    return `${eraIcon} Pilot's Gauntlet: ${eraName}`;
   }
 
   getLobbyFooter(eraKey) {
     const era = this.getEraConfig(eraKey);
     if (era.lobbyFooter) return era.lobbyFooter;
     const eraName = era.name || 'Battle';
-    return `Creator can /battle start when ready | Era: ${eraName}`;
+    return `Pilot's Gauntlet | Creator can /battle start when ready | Era: ${eraName}`;
   }
 
   formatVictoryTemplate(template, { winnerNameBold, winnerMention, rounds, totalPlayers, eraName }) {
@@ -418,13 +418,13 @@ class BattleService {
   getVictoryEmbedTitle(eraKey) {
     const era = this.getEraConfig(eraKey);
     if (era.victoryTitle) return era.victoryTitle;
-    return `${era.lobbyIcon || '🏆'} ${era.name || 'Battle'} Champion`;
+    return `${era.lobbyIcon || '🏆'} ${era.name || 'Battle'} Gauntlet Champion`;
   }
 
   getVictoryEmbedFooter(eraKey) {
     const era = this.getEraConfig(eraKey);
     if (era.victoryFooter) return era.victoryFooter;
-    return `Era: ${era.name || 'Battle'}`;
+    return `Pilot's Gauntlet | Era: ${era.name || 'Battle'}`;
   }
 
   getVictoryAnnouncement(eraKey, winnerId) {
@@ -439,7 +439,7 @@ class BattleService {
         eraName: era.name || 'Battle',
       });
     }
-    return `🏆 ${era.name || 'Battle'} champion: ${winnerMention}`;
+    return `🏆 Pilot's Gauntlet champion (${era.name || 'Battle'}): ${winnerMention}`;
   }
 
   normalizeEraKey(eraKey) {

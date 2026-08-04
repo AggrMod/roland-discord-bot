@@ -165,7 +165,7 @@ This document outlines the new module-first command architecture for the GuildPi
 
 | Command | Game | Description |
 |---|---|---|
-| `/battle create/start/cancel/stats` | ⚔️ Battle Royale | HP-based lobby, role gating, Elite Four mode |
+| `/battle create/start/cancel/stats` | ⚔️ Pilot's Gauntlet | Narrated last-member-standing lobby, role gating, Final Four mode |
 | `/higherlower start/cancel` | 🃏 Higher or Lower | Guess higher/lower, wrong = eliminated |
 | `/diceduel start/cancel` | 🎲 Dice Duel | Lowest d6 roll eliminated each round |
 | `/reactionrace start/cancel` | ⚡ Reaction Race | Last to react is eliminated each round |

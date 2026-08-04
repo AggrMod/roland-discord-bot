@@ -71,7 +71,7 @@ function formatBattleUserLabel(userId, username = null) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('battle')
-    .setDescription('⚔️ Battle module - Mafia battle competition')
+    .setDescription("Pilot's Gauntlet - a narrated last-member-standing game")
     
     // User commands
     .addSubcommand(subcommand =>
@@ -161,7 +161,7 @@ module.exports = {
     .addSubcommandGroup(group =>
       group
         .setName('admin')
-        .setDescription('Admin battle management')
+        .setDescription("Admin controls for Pilot's Gauntlet")
         
         .addSubcommand(subcommand =>
           subcommand
@@ -186,7 +186,7 @@ module.exports = {
         .addSubcommand(subcommand =>
           subcommand
             .setName('settings')
-            .setDescription('View/configure battle settings'))),
+            .setDescription("View Pilot's Gauntlet settings"))),
 
   async autocomplete(interaction) {
     try {
@@ -695,16 +695,20 @@ module.exports = {
 
   async handleAdminSettings(interaction) {
     await interaction.deferReply({ ephemeral: true });
+    const runtimeSettings = getBattleRuntimeSettings(interaction.guildId);
 
     const embed = new EmbedBuilder()
       .setColor('#FFD700')
-      .setTitle('⚙️ Battle Settings')
-      .setDescription('Current battle system configuration')
+      .setTitle("⚙️ Pilot's Gauntlet Settings")
+      .setDescription('Current pacing, era and access configuration for this community.')
       .addFields(
-        { name: 'Max Players (default)', value: 'Unlimited', inline: true },
-        { name: 'Required Role', value: 'Optional', inline: true }
+        { name: 'Round Pause', value: `${runtimeSettings.battleRoundPauseMinSec}-${runtimeSettings.battleRoundPauseMaxSec} seconds`, inline: true },
+        { name: 'Final Four Prep', value: `${runtimeSettings.battleElitePrepSec} seconds`, inline: true },
+        { name: 'Forced Elimination', value: `Every ${runtimeSettings.battleForcedEliminationIntervalRounds} rounds without an elimination`, inline: true },
+        { name: 'Default Era', value: battleService.getEraName(runtimeSettings.battleDefaultEra || 'mafia'), inline: true },
+        { name: 'Available Eras', value: battleService.getAvailableEras(interaction.guildId).map(era => era.name).join(', ') || 'None assigned', inline: false }
       )
-      .setFooter({ text: 'Additional settings in Sprint B' })
+      .setFooter({ text: "Configure Pilot's Gauntlet from Minigames in the GuildPilot portal" })
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });

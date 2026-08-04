@@ -107,14 +107,14 @@ All paid plans offer a **15% annual discount**. A `null` limit below means **unl
 
 **Purpose:** A 10-game suite plus orchestrated Game Night, all with reaction-based lobbies.
 
-**What it does:** Battle Royale (HP elimination), Higher/Lower, Dice Duel, Reaction Race, Number Guess, Slots, Trivia, Word Scramble, RPS Tournament, Blackjack. **Game Night** runs multiple games in sequence with cross-game scoring (🥇10/🥈7/🥉5/4th3/5th+1) and crowns a champion. All game commands require **Moderator/Admin**.
+**What it does:** Pilot's Gauntlet (narrated last-member-standing elimination), Higher/Lower, Dice Duel, Reaction Race, Number Guess, Slots, Trivia, Word Scramble, RPS Tournament, Blackjack. **Game Night** runs multiple games in sequence with cross-game scoring (🥇10/🥈7/🥉5/4th3/5th+1) and crowns a champion. All game commands require **Moderator/Admin**.
 
 **Commands:** `/minigames run | help`; per-game `/<game> start | cancel` (and `/battle create|start|cancel|stats`, `/battle admin …`); `/gamenight start | skip | cancel | leaderboard`.
 
 | Limit | Free | Growth | Pro | Enterprise |
 |---|---|---|---|---|
 | Enabled games | 3 | 8 | ∞ | ∞ |
-| Bounties per battle | 0 | 3 | 3 | ∞ |
+| Bounties per Gauntlet | 0 | 3 | 3 | ∞ |
 
 > Game order for the per-plan game cap: battle, gamenight, higherlower, diceduel, reactionrace, numberguess, slots, trivia, wordscramble, rps, blackjack — the first *N* are unlocked. Game Night orchestration is effectively **Growth+**.
 

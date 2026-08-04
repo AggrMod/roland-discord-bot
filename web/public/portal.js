@@ -1591,7 +1591,7 @@ const MODULE_REGISTRY = [
   { key: 'invites', label: 'Invite Tracker', icon: '\u{1F4E7}', section: 'invites', adminOnly: true, desc: 'Measure invite performance, leaderboard trends, and referral activity.' },
   { key: 'ticketing', label: 'Support Tickets', icon: '\u{1F3AB}', section: 'ticketing', desc: 'Integrated support desk and category routing.' },
   { key: 'engagement', label: 'Engagement Hub', icon: '\u{1F3C6}', section: 'engagement', desc: 'Activity points, reward shop, and leaderboards.' },
-  { key: 'minigames', label: 'Minigames', icon: '\u2694\uFE0F', section: 'battle', desc: 'Arcade module including Battle Arena sessions, lobbies, and game events.' },
+  { key: 'minigames', label: 'Minigames', icon: '\u2694\uFE0F', section: 'battle', desc: "Game Night, Pilot's Gauntlet, lobbies, and community events." },
   { key: 'heist', label: 'Missions', icon: '\u{1F3AF}', section: 'heist', desc: 'Role-based missions and strategic community goals.' },
   { key: 'vault', label: 'Vault', icon: '\u{1F510}', section: 'vault', desc: 'Key rewards, mint sync rules, seasons, and vault operations.' },
   { key: 'telegrambridge', label: 'Telegram Bridge', icon: '\u{1F4E1}', section: 'telegram-bridge', adminOnly: true, desc: 'Mirror Telegram groups and channels into Discord channels.' },
@@ -3821,7 +3821,7 @@ const HELP_GUIDES = Object.freeze([
     id: 'minigames', group: 'Modules', role: 'user', moduleKey: 'minigames', icon: 'fa-gamepad',
     title: 'Minigames', summary: 'Join game sessions, lobbies, competitions, and Game Night.',
     route: 'battle', action: 'Open minigames',
-    overview: 'Minigames supports Battle Arena and community game sessions with server-defined access, timing, and rewards.',
+    overview: "Minigames supports Pilot's Gauntlet and community game sessions with server-defined access, timing, eras, and rewards.",
     steps: ['Open an active lobby or session.', 'Check entry and role requirements.', 'Join before the session starts.', 'Review the result and leaderboard.'],
     tips: ['Moderators control session lifecycle and disruptive participants.', 'Game availability depends on the Minigames module.']
   },
@@ -8793,8 +8793,11 @@ let superadminWorkspaceBillingSortDir = 'desc';
 let superadminWorkspaceBillingEntriesCache = [];
 let superadminWorkspaceActivityCache = [];
 let superadminWorkspacePlansCache = [];
+let superadminTenantListCache = [];
 let superadminWorkspaceFocus = '';
-const SUPERADMIN_WORKSPACES = new Set(['overview', 'tenants', 'billing', 'security', 'integrations']);
+let superadminEraCatalog = [];
+let superadminEraAssignments = [];
+const SUPERADMIN_WORKSPACES = new Set(['overview', 'tenants', 'billing', 'eras', 'security', 'integrations']);
 const SUPERADMIN_WORKSPACE_META = {
   overview: {
     label: 'Control center',
@@ -8810,6 +8813,11 @@ const SUPERADMIN_WORKSPACE_META = {
     label: 'Billing',
     description: 'Payments and subscriptions',
     icon: 'fa-credit-card',
+  },
+  eras: {
+    label: 'Game identities',
+    description: "Pilot's Gauntlet eras",
+    icon: 'fa-masks-theater',
   },
   security: {
     label: 'Access',
@@ -9450,6 +9458,7 @@ function getWorkspaceCapabilityMatrix() {
     overview: true,
     tenants: !!isSuperadmin,
     billing: !!isSuperadmin,
+    eras: !!isSuperadmin,
     security: !!isSuperadmin,
     integrations: !!isSuperadmin,
   };
@@ -9547,6 +9556,13 @@ function renderWorkspaceOverview(tenants = [], billingEntries = []) {
             <small>AI routing, X provider, chain presentation, replay tools, and payment settings.</small>
             <span class="sa-v3-launch-card__action">Open workspace <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
           </button>
+          <button type="button" class="sa-v3-launch-card" onclick="setSuperadminWorkspaceTab('eras')">
+            <span class="sa-v3-launch-card__icon"><i class="fa-solid fa-masks-theater" aria-hidden="true"></i></span>
+            <span class="sa-v3-launch-card__badge">Tenant scoped</span>
+            <strong>Game identities</strong>
+            <small>Assign custom Pilot's Gauntlet eras to the communities that purchased or commissioned them.</small>
+            <span class="sa-v3-launch-card__action">Manage eras <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+          </button>
           <button type="button" class="sa-v3-launch-card" onclick="showAdminView('monitor')">
             <span class="sa-v3-launch-card__icon"><i class="fa-solid fa-heart-pulse" aria-hidden="true"></i></span>
             <span class="sa-v3-launch-card__badge is-healthy">Live</span>
@@ -9558,6 +9574,121 @@ function renderWorkspaceOverview(tenants = [], billingEntries = []) {
       </section>
     </div>
   `;
+}
+
+function renderWorkspaceEraAssignments(tenants = [], eras = [], assignments = []) {
+  const tenantOptions = tenants.map((tenant) => `<option value="${escapeHtml(tenant.guildId || '')}">${escapeHtml(tenant.guildName || tenant.guildId || '')}</option>`).join('');
+  const eraOptions = eras.map((era) => `<option value="${escapeHtml(era.key || '')}">${escapeHtml(era.name || era.key || '')}</option>`).join('');
+  const catalogCards = eras.length
+    ? eras.map((era) => {
+        const assignedCount = assignments.filter((assignment) => String(assignment.era_key || '') === String(era.key || '')).length;
+        return `
+          <article class="sa-v2-card">
+            <span class="sa-v3-eyebrow">${assignedCount} tenant${assignedCount === 1 ? '' : 's'}</span>
+            <h4>${escapeHtml(era.name || era.key || 'Unnamed era')}</h4>
+            <p>${escapeHtml(era.description || 'Custom Pilot\'s Gauntlet identity.')}</p>
+            <code>${escapeHtml(era.key || '')}</code>
+          </article>
+        `;
+      }).join('')
+    : '<div class="sa-v2-empty">No assignable eras are currently registered.</div>';
+  const assignmentRows = assignments.length
+    ? assignments.map((assignment) => {
+        const era = eras.find((item) => String(item.key || '') === String(assignment.era_key || ''));
+        const tenantLabel = assignment.guild_name || assignment.guild_id || 'Unknown tenant';
+        const actor = assignment.assigned_by_display_name || assignment.assigned_by || 'system';
+        return `
+          <tr>
+            <td><strong>${escapeHtml(tenantLabel)}</strong><div class="muted" style="font-size:.74rem;">${escapeHtml(assignment.guild_id || '')}</div></td>
+            <td><strong>${escapeHtml(era?.name || assignment.era_key || '')}</strong><div class="muted" style="font-size:.74rem;">${escapeHtml(assignment.era_key || '')}</div></td>
+            <td>${escapeHtml(actor)}</td>
+            <td>${escapeHtml(assignment.assigned_at ? new Date(assignment.assigned_at).toLocaleString() : 'Unknown')}</td>
+            <td><button type="button" class="btn-secondary" onclick="revokeSuperadminEra('${escapeJsString(assignment.guild_id || '')}', '${escapeJsString(assignment.era_key || '')}')">Revoke</button></td>
+          </tr>
+        `;
+      }).join('')
+    : '<tr><td colspan="5">No custom era assignments yet.</td></tr>';
+
+  return `
+    <div class="sa-v2-panel">
+      <div class="sa-v2-detail-header">
+        <div><span class="sa-v3-eyebrow">Pilot's Gauntlet</span><h4>Custom era assignments</h4><p class="section-subtitle">Grant an era to a tenant. It then appears in that server's Minigames settings and <code>/battle create</code> autocomplete.</p></div>
+      </div>
+      <div class="sa-v2-toolbar" style="grid-template-columns:minmax(220px,1.3fr) minmax(180px,1fr) auto;">
+        <div>
+          <input id="superadminEraTenantInput" type="text" list="superadminEraTenantOptions" placeholder="Tenant name or Discord server ID" aria-label="Tenant">
+          <datalist id="superadminEraTenantOptions">${tenantOptions}</datalist>
+        </div>
+        <select id="superadminEraKeySelect" aria-label="Custom era"><option value="">Select a custom era</option>${eraOptions}</select>
+        <button id="superadminEraAssignBtn" type="button" class="btn-primary" onclick="assignSuperadminEra()">Assign era</button>
+      </div>
+      <div class="sa-v2-inline-note">Assignments are tenant-scoped. Revoking an era removes it from the server's default-era selector and Discord autocomplete without deleting historical battle results.</div>
+    </div>
+    <div class="sa-v2-grid" style="margin-top:12px;">${catalogCards}</div>
+    <div class="sa-v2-panel" style="margin-top:12px;">
+      <div class="sa-v2-detail-header"><h4>Active assignments</h4><span class="sa-v3-access-badge">${escapeHtml(String(assignments.length))} active</span></div>
+      <div class="sa-v2-table-wrap">
+        <table class="sa-v2-table">
+          <thead><tr><th>Tenant</th><th>Era</th><th>Assigned by</th><th>Assigned</th><th>Action</th></tr></thead>
+          <tbody>${assignmentRows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+async function assignSuperadminEra() {
+  const tenantInput = document.getElementById('superadminEraTenantInput');
+  const eraSelect = document.getElementById('superadminEraKeySelect');
+  const button = document.getElementById('superadminEraAssignBtn');
+  const rawTenant = String(tenantInput?.value || '').trim();
+  const matchedTenant = (Array.isArray(superadminTenantListCache) ? superadminTenantListCache : []).find((tenant) =>
+    String(tenant.guildId || '') === rawTenant || String(tenant.guildName || '').toLowerCase() === rawTenant.toLowerCase()
+  );
+  const guildId = String(matchedTenant?.guildId || rawTenant).trim();
+  const eraKey = String(eraSelect?.value || '').trim();
+  if (!guildId || !eraKey) return showError('Select a tenant and custom era first.');
+  if (button) { button.disabled = true; button.textContent = 'Assigning...'; }
+  try {
+    const response = await fetch('/api/superadmin/era-assignments', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guildId, eraKey }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data?.success === false) throw new Error(data?.message || `HTTP ${response.status}`);
+    showSuccess('Custom era assigned to the tenant.');
+    await loadSuperadminView();
+  } catch (error) {
+    showError(`Failed to assign era: ${error?.message || 'Unknown error'}`);
+  } finally {
+    if (button) { button.disabled = false; button.textContent = 'Assign era'; }
+  }
+}
+
+function revokeSuperadminEra(guildId, eraKey) {
+  const normalizedGuildId = String(guildId || '').trim();
+  const normalizedEraKey = String(eraKey || '').trim();
+  if (!normalizedGuildId || !normalizedEraKey) return;
+  showConfirmModal(
+    'Revoke custom era?',
+    'The era will immediately disappear from this community\'s available Pilot\'s Gauntlet identities. Historical results remain intact.',
+    async () => {
+      try {
+        const response = await fetch(`/api/superadmin/era-assignments/${encodeURIComponent(normalizedGuildId)}/${encodeURIComponent(normalizedEraKey)}`, {
+          method: 'DELETE', credentials: 'include',
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data?.success === false) throw new Error(data?.message || `HTTP ${response.status}`);
+        showSuccess('Custom era revoked.');
+        await loadSuperadminView();
+      } catch (error) {
+        showError(`Failed to revoke era: ${error?.message || 'Unknown error'}`);
+      }
+    },
+    'Revoke'
+  );
 }
 
 function renderWorkspaceScopedError(message, retryLabel = 'Retry', retryAction = 'loadSuperadminView()') {
@@ -9577,6 +9708,7 @@ function renderWorkspaceDataHealth(loadState = {}) {
     { key: 'adminsFailed', label: 'Superadmins', failed: !!loadState.adminsFailed },
     { key: 'globalFailed', label: 'Integrations', failed: !!loadState.globalFailed },
     { key: 'plansFailed', label: 'Plans', failed: !!loadState.plansFailed },
+    { key: 'erasFailed', label: 'Game identities', failed: !!loadState.erasFailed },
     { key: 'tenantDetailFailed', label: 'Tenant Detail', failed: !!loadState.tenantDetailFailed },
     { key: 'tenantAuditFailed', label: 'Tenant Audit', failed: !!loadState.tenantAuditFailed },
   ];
@@ -9996,6 +10128,7 @@ async function loadSuperadminWorkspaceHubV2() {
       adminsFailed: false,
       globalFailed: false,
       plansFailed: false,
+      erasFailed: false,
       tenantDetailFailed: false,
       tenantAuditFailed: false,
     };
@@ -10013,13 +10146,15 @@ async function loadSuperadminWorkspaceHubV2() {
     billingQs.set('sortBy', String(superadminWorkspaceBillingSortBy || 'updatedAt'));
     billingQs.set('sortDir', String(superadminWorkspaceBillingSortDir || 'desc'));
 
-    const [tenantsRes, activityRes, billingRes, adminsRes, globalSettingsRes, plansRes] = await Promise.all([
+    const [tenantsRes, activityRes, billingRes, adminsRes, globalSettingsRes, plansRes, erasRes, eraAssignmentsRes] = await Promise.all([
       fetch(`/api/superadmin/workspace/tenants?${tenantsQs.toString()}`, { credentials: 'include', headers }),
       fetch('/api/superadmin/workspace/activity?limit=25', { credentials: 'include' }),
       fetch(`/api/superadmin/workspace/billing?${billingQs.toString()}`, { credentials: 'include' }),
       fetch('/api/superadmin/admins', { credentials: 'include' }),
       fetch('/api/superadmin/global-settings', { credentials: 'include' }),
       fetch('/api/superadmin/workspace/plans', { credentials: 'include' }),
+      fetch('/api/superadmin/eras', { credentials: 'include' }),
+      fetch('/api/superadmin/era-assignments', { credentials: 'include' }),
     ]);
 
     const tenantsJson = await tenantsRes.json().catch(() => ({}));
@@ -10028,6 +10163,8 @@ async function loadSuperadminWorkspaceHubV2() {
     const adminsJson = await adminsRes.json().catch(() => ({}));
     const globalSettingsJson = await globalSettingsRes.json().catch(() => ({}));
     const plansJson = await plansRes.json().catch(() => ({}));
+    const erasJson = await erasRes.json().catch(() => ({}));
+    const eraAssignmentsJson = await eraAssignmentsRes.json().catch(() => ({}));
     if (!tenantsRes.ok || tenantsJson?.success === false) {
       throw new Error(tenantsJson?.message || 'Failed to load tenant workspace');
     }
@@ -10050,8 +10187,13 @@ async function loadSuperadminWorkspaceHubV2() {
     if (!plansRes.ok || plansJson?.success === false) {
       workspaceLoadState.plansFailed = true;
     }
+    if (!erasRes.ok || erasJson?.success === false || !eraAssignmentsRes.ok || eraAssignmentsJson?.success === false) {
+      workspaceLoadState.erasFailed = true;
+      workspaceWarnings.push("Pilot's Gauntlet era assignments are temporarily unavailable.");
+    }
 
     const tenants = Array.isArray(tenantsJson?.tenants) ? tenantsJson.tenants : [];
+    superadminTenantListCache = tenants;
     const billingEntries = (billingRes.ok && billingJson?.success !== false && Array.isArray(billingJson?.entries)) ? billingJson.entries : [];
     superadminWorkspaceBillingEntriesCache = Array.isArray(billingEntries) ? billingEntries : [];
     const billingPagination = billingJson?.pagination || { page: 1, pageSize: superadminWorkspaceBillingPageSize || 25, total: billingEntries.length, totalPages: 1 };
@@ -10067,6 +10209,8 @@ async function loadSuperadminWorkspaceHubV2() {
       ? plansJson.plans
       : [];
     superadminWorkspaceActivityCache = activityItems;
+    superadminEraCatalog = (erasRes.ok && erasJson?.success !== false && Array.isArray(erasJson?.eras)) ? erasJson.eras : [];
+    superadminEraAssignments = (eraAssignmentsRes.ok && eraAssignmentsJson?.success !== false && Array.isArray(eraAssignmentsJson?.assignments)) ? eraAssignmentsJson.assignments : [];
 
     if (!selectedTenantGuildId && tenants.length > 0) {
       selectedTenantGuildId = tenants[0].guildId;
@@ -10213,6 +10357,12 @@ async function loadSuperadminWorkspaceHubV2() {
           </div>
         `
         : renderWorkspaceLockedState('Billing workspace');
+    } else if (workspace === 'eras') {
+      workspaceBody = capabilities.eras
+        ? (workspaceLoadState.erasFailed
+            ? renderWorkspaceScopedError("Pilot's Gauntlet era data failed to load.", 'Retry game identities', 'loadSuperadminView()')
+            : renderWorkspaceEraAssignments(tenants, superadminEraCatalog, superadminEraAssignments))
+        : renderWorkspaceLockedState('Game identities workspace');
     } else if (workspace === 'security') {
       if (!capabilities.security) {
         workspaceBody = renderWorkspaceLockedState('Security & Access');
@@ -10433,6 +10583,7 @@ async function loadSuperadminWorkspaceHubV2() {
           ${tabButton('overview')}
           ${tabButton('tenants')}
           ${tabButton('billing')}
+          ${tabButton('eras')}
           ${tabButton('security')}
           ${tabButton('integrations')}
         </div>
@@ -11945,16 +12096,16 @@ async function loadAdminHelpView() {
       { name: '/vault admin import-csv', desc: 'Import Vault records from CSV', options: 'CSV attachment', example: '/vault admin import-csv' },
       { name: '/vault admin fix-stats', desc: 'Repair Vault aggregate statistics', options: 'user or scope', example: '/vault admin fix-stats' }
     ])}
-    ${cmdSection('Battle and Games', 'GAMES', [
+    ${cmdSection("Pilot's Gauntlet and Games", 'GAMES', [
       { name: '/minigames run', desc: 'Start a supported minigame from the canonical command', options: 'game and game-specific options', example: '/minigames run' },
       { name: '/minigames help', desc: 'Show available minigames and usage', options: '-', example: '/minigames help' },
-      { name: '/battle create', desc: 'Create battle lobby', options: 'max_players, required/excluded roles, era', example: '/battle create max_players:20 era:mafia' },
-      { name: '/battle start', desc: 'Start battle', options: '-', example: '/battle start' },
-      { name: '/battle cancel', desc: 'Cancel battle', options: '-', example: '/battle cancel' },
-      { name: '/battle stats', desc: 'Battle stats', options: 'user (optional)', example: '/battle stats user:@member' },
-      { name: '/battle admin list', desc: 'List active battles', options: '-', example: '/battle admin list' },
-      { name: '/battle admin force-end', desc: 'Force end battle', options: 'battle_id, confirm (required)', example: '/battle admin force-end battle_id:b1 confirm:true' },
-      { name: '/battle admin settings', desc: 'View battle settings', options: '-', example: '/battle admin settings' },
+      { name: '/battle create', desc: "Create a Pilot's Gauntlet lobby", options: 'max_players, required/excluded roles, era', example: '/battle create max_players:20 era:mafia' },
+      { name: '/battle start', desc: "Start Pilot's Gauntlet", options: 'bounty_1, bounty_2, bounty_3 (optional)', example: '/battle start bounty_1:@member' },
+      { name: '/battle cancel', desc: "Cancel Pilot's Gauntlet", options: '-', example: '/battle cancel' },
+      { name: '/battle stats', desc: 'Gauntlet stats', options: 'user (optional)', example: '/battle stats user:@member' },
+      { name: '/battle admin list', desc: 'List active Gauntlets', options: '-', example: '/battle admin list' },
+      { name: '/battle admin force-end', desc: 'Force end a Gauntlet', options: 'battle_id, confirm (required)', example: '/battle admin force-end battle_id:b1 confirm:true' },
+      { name: '/battle admin settings', desc: 'View Gauntlet settings', options: '-', example: '/battle admin settings' },
       { name: '/higherlower start', desc: 'Start Higher or Lower', options: 'join_time (optional)', example: '/higherlower start join_time:45' },
       { name: '/higherlower cancel', desc: 'Cancel Higher or Lower', options: '-', example: '/higherlower cancel' },
       { name: '/diceduel start', desc: 'Start Dice Duel', options: 'join_time (optional)', example: '/diceduel start join_time:60' },
@@ -12343,7 +12494,7 @@ async function loadBattleTimingSettings(scope = 'settings') {
         eraWrap.id = 'battleDefaultEraWrap';
         eraWrap.style.cssText = 'margin-top:16px;border-top:1px solid rgba(99,102,241,0.15);padding-top:16px;position:relative;z-index:1;';
         eraWrap.innerHTML = `
-          <label class="form-label">Default Battle Era</label>
+          <label class="form-label">Default Gauntlet Era</label>
           <select id="battleDefaultEraSelect" class="form-input" style="width:220px;background:rgba(30,41,59,0.95);color:#e0e7ff;border:1px solid rgba(99,102,241,0.22);">
             ${opts}
           </select>
@@ -12364,8 +12515,20 @@ async function loadBattleTimingSettings(scope = 'settings') {
       eraSelect.innerHTML = opts;
       eraSelect.value = currentEra;
     }
+
+    if (scope === 'module') {
+      const availability = document.getElementById('battleModuleEraAvailability');
+      if (availability) {
+        const eraChips = eras.map((era) => `<span>${escapeHtml(era.name || era.key)}</span>`).join('');
+        availability.innerHTML = `${eraChips || '<span>No assigned eras available</span>'}<small>Only eras assigned to this community appear here. Custom era access is managed from the GuildPilot platform console.</small>`;
+      }
+    }
   } catch (e) {
-    console.error('[Battle settings] load error:', e);
+    console.error("[Pilot's Gauntlet settings] load error:", e);
+    if (scope === 'module') {
+      const availability = document.getElementById('battleModuleEraAvailability');
+      if (availability) availability.innerHTML = '<span>Era list unavailable</span><small>Refresh the module workspace to try again.</small>';
+    }
   }
 }
 
@@ -12397,10 +12560,10 @@ async function saveBattleTimingSettings(scope = 'settings') {
       })
     });
     const data = await res.json();
-    if (data.success) showSuccess(scope === 'module' ? 'Minigames settings saved!' : 'Battle settings saved!');
-    else showError(data.message || 'Failed to save battle settings.');
+    if (data.success) showSuccess("Pilot's Gauntlet settings saved!");
+    else showError(data.message || "Failed to save Pilot's Gauntlet settings.");
   } catch (e) {
-    showError('Error saving battle settings.');
+    showError("Error saving Pilot's Gauntlet settings.");
   }
 }
 

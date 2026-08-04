@@ -20,7 +20,7 @@ Branch: `main`
      - Optional DM notification (if DMs enabled)
    - Role requirement shown in lobby embed
 
-3. **Rumble Royale-Style Round Feed**
+3. **Pilot's Gauntlet Round Feed**
    - Multi-event rounds (2-5 events per round)
    - Event distribution:
      - 60% combat (attacks/crits/eliminations)

@@ -17,6 +17,7 @@ const PRESETS = Object.freeze({
         scamLanguage: { enabled: true, score: 50, secretRequestScore: 100 },
         attachments: { enabled: true, scanQrCodes: true, qrCodeScore: 30, maxImagesPerMessage: 2, maxScanBytes: 3000000, scanTimeoutMs: 4000 },
         campaigns: { enabled: true, windowSeconds: 90, userThreshold: 4, messageThreshold: 4, linkScore: 65, messageScore: 40 },
+        accountTrust: { enabled: true, maxAccountAgeHours: 48, maxMemberAgeHours: 12, lowTrustScore: 25, burstWindowSeconds: 120, channelThreshold: 4, burstScore: 60 },
         links: { enabled: true, requireAllowlist: false },
         raids: { enabled: true, windowSeconds: 60, joinThreshold: 8, score: 80 }
       },
@@ -48,6 +49,7 @@ const PRESETS = Object.freeze({
         scamLanguage: { enabled: true, score: 55, secretRequestScore: 100 },
         attachments: { enabled: true, scanQrCodes: true, qrCodeScore: 35, maxImagesPerMessage: 2, maxScanBytes: 3000000, scanTimeoutMs: 4000 },
         campaigns: { enabled: true, windowSeconds: 90, userThreshold: 3, messageThreshold: 3, linkScore: 75, messageScore: 45 },
+        accountTrust: { enabled: true, maxAccountAgeHours: 72, maxMemberAgeHours: 24, lowTrustScore: 30, burstWindowSeconds: 120, channelThreshold: 3, burstScore: 65 },
         links: { enabled: true, requireAllowlist: false },
         raids: { enabled: true, windowSeconds: 60, joinThreshold: 8, score: 80 }
       },
@@ -82,6 +84,7 @@ const PRESETS = Object.freeze({
         scamLanguage: { enabled: true, score: 60, secretRequestScore: 100 },
         attachments: { enabled: true, scanQrCodes: true, qrCodeScore: 45, maxImagesPerMessage: 3, maxScanBytes: 4000000, scanTimeoutMs: 5000 },
         campaigns: { enabled: true, windowSeconds: 90, userThreshold: 3, messageThreshold: 3, linkScore: 80, messageScore: 50 },
+        accountTrust: { enabled: true, maxAccountAgeHours: 168, maxMemberAgeHours: 48, lowTrustScore: 35, burstWindowSeconds: 120, channelThreshold: 3, burstScore: 75 },
         links: { enabled: true, requireAllowlist: false, lookalikeScore: 55 },
         raids: { enabled: true, windowSeconds: 60, joinThreshold: 5, score: 85 }
       },

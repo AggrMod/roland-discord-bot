@@ -26,7 +26,8 @@ const {
   scamLanguageDetector,
   linkProtectionDetector,
   attachmentThreatDetector,
-  coordinatedCampaignDetector
+  coordinatedCampaignDetector,
+  accountTrustDetector
 } = require('../services/guildGuard/detectors');
 const actionService = require('../services/guildGuard/actions');
 
@@ -61,6 +62,8 @@ const attachmentEvent = normalizeEvent({
 });
 assert.strictEqual(attachmentEvent.attachments.length, 1);
 assert.strictEqual(attachmentEvent.attachments[0].name, 'photo.jpg.exe');
+const memberAgeEvent = normalizeEvent({ guildId: 'guild-a', author: { id: 'member-age-user' }, member: { joinedTimestamp: Date.now() - 3600000 } });
+assert.ok(memberAgeEvent.memberAgeHours >= 0.9 && memberAgeEvent.memberAgeHours <= 1.1);
 assert.ok(classifyAttachment(attachmentEvent.attachments[0]).some(finding => finding.category === 'double_extension'));
 assert.strictEqual(classifyAttachment({ name: 'logo.svg', contentType: 'image/svg+xml' })[0].score, 45, 'ordinary SVG files should warn instead of auto-contain under Balanced thresholds');
 const decodedQr = await scanQrAttachment({
@@ -283,6 +286,36 @@ const copiedSignals = coordinatedCampaignDetector.detect({
   normalizedContent: 'urgent support verification required now', urls: [], timestamp: campaignTimestamp + 2
 }, { config: campaignConfig, eventWindow: copiedCampaignWindow, domainRegistry: guard.domainRegistry });
 assert.ok(copiedSignals.some(signal => signal.detector === 'coordinated_message_campaign'));
+
+const accountTrustConfig = { detectors: { accountTrust: { enabled: true, maxAccountAgeHours: 72, maxMemberAgeHours: 24, channelThreshold: 3, burstWindowSeconds: 120 } } };
+const accountTrustWindow = new EventWindowStore();
+const youngAccountEvent = {
+  eventId: 'young-account-link', eventType: 'message_create', guildId: 'guild-account-trust', userId: 'young-account', channelId: 'channel-1',
+  normalizedContent: 'connect your wallet at risky-account.example', urls: ['https://risky-account.example/connect'], attachments: [],
+  accountAgeHours: 2, memberAgeHours: 1, timestamp: campaignTimestamp
+};
+accountTrustWindow.record(youngAccountEvent);
+const lowTrustSignals = accountTrustDetector.detect(youngAccountEvent, { config: accountTrustConfig, eventWindow: accountTrustWindow, domainRegistry: guard.domainRegistry });
+assert.ok(lowTrustSignals.some(signal => signal.detector === 'low_trust_destination' && signal.metadata.youngAccount === true));
+
+guard.domainRegistry.add('guild-account-trust-safe', 'trusted-account.example', 'allow');
+const safeAccountWindow = new EventWindowStore();
+const safeYoungAccountEvent = { ...youngAccountEvent, guildId: 'guild-account-trust-safe', urls: ['https://trusted-account.example/connect'] };
+safeAccountWindow.record(safeYoungAccountEvent);
+assert.strictEqual(accountTrustDetector.detect(safeYoungAccountEvent, { config: accountTrustConfig, eventWindow: safeAccountWindow, domainRegistry: guard.domainRegistry }), null, 'trusted destinations must not lower account trust');
+
+const compromisedWindow = new EventWindowStore();
+let compromisedEvent = null;
+for (let i = 0; i < 3; i += 1) {
+  compromisedEvent = {
+    eventId: `compromised-${i}`, eventType: 'message_create', guildId: 'guild-compromised', userId: 'established-account', channelId: `channel-${i}`,
+    normalizedContent: `see https://compromised.example/claim/${i}`, urls: [`https://compromised.example/claim/${i}`], attachments: [],
+    accountAgeHours: 20000, memberAgeHours: 8000, timestamp: campaignTimestamp + i
+  };
+  compromisedWindow.record(compromisedEvent);
+}
+const compromisedSignals = accountTrustDetector.detect(compromisedEvent, { config: accountTrustConfig, eventWindow: compromisedWindow, domainRegistry: guard.domainRegistry });
+assert.ok(compromisedSignals.some(signal => signal.detector === 'account_link_burst' && signal.metadata.channelCount === 3));
 
 let alertPayload = null;
 guard.updateConfig('guild-alert', {

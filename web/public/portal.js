@@ -1812,6 +1812,7 @@ const GUILD_GUARD_DETECTOR_LABELS = Object.freeze({
   lookalike_domain: 'Lookalike domain', link_deception: 'Disguised link',
   dangerous_attachment: 'Dangerous attachment', qr_code_link: 'QR-code link',
   coordinated_link_campaign: 'Coordinated link campaign', coordinated_message_campaign: 'Coordinated message campaign',
+  low_trust_destination: 'Low-trust destination', account_link_burst: 'Cross-channel link burst',
   raid_burst: 'Raid burst'
 });
 
@@ -1835,7 +1836,9 @@ function describeGuildGuardSignal(signal) {
     lookalike: `The destination resembles trusted domain ${metadata.lookalikeOf || ''}.`,
     unsafe_destination: 'The destination could not be resolved safely.',
     multi_account_link_campaign: `${metadata.userCount || 'Multiple'} accounts shared ${metadata.domain || 'the same destination'} in a short period.`,
-    multi_account_message_campaign: `${metadata.userCount || 'Multiple'} accounts posted the same message in a short period.`
+    multi_account_message_campaign: `${metadata.userCount || 'Multiple'} accounts posted the same message in a short period.`,
+    low_trust_destination: `A ${metadata.youngAccount ? 'newly created account' : 'recently joined member'} shared an untrusted destination.`,
+    cross_channel_link_burst: `One account shared untrusted links across ${metadata.channelCount || 'multiple'} channels in ${metadata.windowSeconds || 'a short'} seconds.`
   };
   return explanations[metadata.category] || metadata.explanation || `${GUILD_GUARD_DETECTOR_LABELS[signal?.detector] || signal?.detector || 'Risk signal'} contributed to this incident.`;
 }
@@ -1870,6 +1873,7 @@ function renderGuildGuardCoverage(config) {
     ['scamLanguage', 'Wallet scam language', 'Seed phrase requests and pressured wallet instructions'],
     ['attachments', 'Files & QR codes', 'Dangerous files and links hidden in images'],
     ['campaigns', 'Campaign Radar', 'The same scam spread by multiple accounts or channels'],
+    ['accountTrust', 'Account Trust', 'Young, newly joined or suddenly link-heavy accounts'],
     ['impersonation', 'Impersonation', 'Protected staff identities'],
     ['raids', 'Raid defence', 'Join bursts and recoverable raid mode'],
     ['spam', 'Spam protection', 'Floods, repeated messages and mass mentions']
@@ -1960,7 +1964,9 @@ function renderGuildGuardIncidents(incidents) {
     dangerous_attachment: 'Dangerous file attachment',
     qr_code_link: 'Link hidden in a QR code',
     coordinated_link_campaign: 'Coordinated scam campaign',
-    coordinated_message_campaign: 'Coordinated message campaign'
+    coordinated_message_campaign: 'Coordinated message campaign',
+    low_trust_destination: 'Low-trust account shared a destination',
+    account_link_burst: 'Possible compromised account'
   };
   target.innerHTML = incidents.map(incident => {
     const labels = guildGuardSignals(incident);

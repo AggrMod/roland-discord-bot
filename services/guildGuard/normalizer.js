@@ -55,6 +55,11 @@ function normalizeEvent(input, eventType = 'message_create') {
     || author.createdAt?.getTime?.()
     || source.user?.createdTimestamp
     || null;
+  const memberJoinedTimestamp = source.memberJoinedTimestamp
+    || source.joinedTimestamp
+    || member.joinedTimestamp
+    || member.joinedAt?.getTime?.()
+    || null;
   const mentions = [];
   for (const match of normalizedContent.matchAll(MENTION_RE)) {
     mentions.push(match[1] || match[2] || match[3]);
@@ -80,6 +85,8 @@ function normalizeEvent(input, eventType = 'message_create') {
     everyoneMention: /(^|\s)@(everyone|here)(?=\s|$)/i.test(rawContent),
     accountCreatedTimestamp: accountCreatedTimestamp ? Number(accountCreatedTimestamp) : null,
     accountAgeHours: accountCreatedTimestamp ? Math.max(0, (Date.now() - Number(accountCreatedTimestamp)) / 3600000) : null,
+    memberJoinedTimestamp: memberJoinedTimestamp ? Number(memberJoinedTimestamp) : null,
+    memberAgeHours: memberJoinedTimestamp ? Math.max(0, (Date.now() - Number(memberJoinedTimestamp)) / 3600000) : null,
     timestamp: source.createdTimestamp || source.createdAt?.getTime?.() || Date.now()
   };
 }

@@ -272,7 +272,7 @@ let previewGuildGuardConfig = {
   detectors: {
     spam: { enabled: true }, duplicateMessages: { enabled: true }, massMention: { enabled: true },
     suspiciousAccount: { enabled: true }, impersonation: { enabled: true }, links: { enabled: true },
-    scamLanguage: { enabled: true }, attachments: { enabled: true, scanQrCodes: true }, campaigns: { enabled: true }, raids: { enabled: true }
+    scamLanguage: { enabled: true }, attachments: { enabled: true, scanQrCodes: true }, campaigns: { enabled: true }, accountTrust: { enabled: true }, raids: { enabled: true }
   },
   actions: { enabled: true, warnUsers: true, deleteMessages: true, timeoutUsers: true, timeoutSeconds: 3600, lockdownEnabled: true, lockdownDurationSeconds: 900 },
   risk: { warning: 35, timeout: 60, quarantine: 80, alert: 25, decayEnabled: true, decayHalfLifeHours: 24 },

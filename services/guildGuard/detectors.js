@@ -363,6 +363,69 @@ const coordinatedCampaignDetector = {
   }
 };
 
+const accountTrustDetector = {
+  name: 'low_trust_destination',
+  detect(event, { config, eventWindow, domainRegistry }) {
+    if (event.eventType !== 'message_create' || !enabled(config, 'accountTrust') || !eventWindow || !domainRegistry) return null;
+    const lists = domainRegistry.getLists(event.guildId);
+    const untrustedDomains = [...new Set((event.urls || [])
+      .map(domainRegistry.normalizeDomain)
+      .filter(domain => domain && !lists.allow.includes(domain)))];
+    const hasDestination = untrustedDomains.length > 0;
+    if (!hasDestination) return null;
+
+    const maxAccountAgeHours = numberSetting(config, 'accountTrust', 'maxAccountAgeHours', 72, 1);
+    const maxMemberAgeHours = numberSetting(config, 'accountTrust', 'maxMemberAgeHours', 24, 1);
+    const youngAccount = Number.isFinite(event.accountAgeHours) && event.accountAgeHours <= maxAccountAgeHours;
+    const newMember = Number.isFinite(event.memberAgeHours) && event.memberAgeHours <= maxMemberAgeHours;
+    const walletCue = /\b(wallet|metamask|phantom|ledger|trezor|seed phrase|private key)\b/.test(event.normalizedContent || '');
+    const actionCue = /\b(connect|verify|validate|sync|restore|migrate|claim|mint|support|urgent)\b/.test(event.normalizedContent || '');
+    const signals = [];
+
+    if (youngAccount || (newMember && walletCue && actionCue)) {
+      signals.push({
+        detector: this.name,
+        severity: youngAccount && event.accountAgeHours <= 6 ? 'high' : 'medium',
+        score: numberSetting(config, 'accountTrust', 'lowTrustScore', youngAccount ? 30 : 25, 1),
+        metadata: {
+          category: 'low_trust_destination',
+          accountAgeHours: event.accountAgeHours,
+          memberAgeHours: event.memberAgeHours,
+          youngAccount,
+          newMember,
+          domains: untrustedDomains
+        }
+      });
+    }
+
+    const burstWindowSeconds = numberSetting(config, 'accountTrust', 'burstWindowSeconds', 120, 10);
+    const channelThreshold = numberSetting(config, 'accountTrust', 'channelThreshold', 3, 2);
+    const recent = eventWindow.getRecent(event.guildId, event.userId, burstWindowSeconds * 1000, event.timestamp)
+      .filter(item => item.eventType === 'message_create' && (item.urls || []).some(url => {
+        const domain = domainRegistry.normalizeDomain(url);
+        return domain && !lists.allow.includes(domain);
+      }));
+    const channelIds = [...new Set(recent.map(item => item.channelId).filter(Boolean))];
+    if (channelIds.length >= channelThreshold) {
+      const domains = [...new Set(recent.flatMap(item => item.urls || []).map(domainRegistry.normalizeDomain).filter(Boolean))];
+      signals.push({
+        detector: 'account_link_burst',
+        severity: channelIds.length >= channelThreshold + 2 ? 'critical' : 'high',
+        score: Math.min(100, numberSetting(config, 'accountTrust', 'burstScore', 65, 1) + Math.max(0, channelIds.length - channelThreshold) * 5),
+        metadata: {
+          category: 'cross_channel_link_burst',
+          channelCount: channelIds.length,
+          channelThreshold,
+          windowSeconds: burstWindowSeconds,
+          domains
+        }
+      });
+    }
+
+    return signals.length ? signals : null;
+  }
+};
+
 const raidBurstDetector = {
   name: 'raid_burst',
   detect(event, { config, eventWindow }) {
@@ -391,6 +454,7 @@ module.exports = {
   linkProtectionDetector,
   attachmentThreatDetector,
   coordinatedCampaignDetector,
+  accountTrustDetector,
   raidBurstDetector,
   levenshtein
 };

@@ -27,6 +27,7 @@ const DEFAULT_CONFIG = Object.freeze({
       scanTimeoutMs: 4000
     },
     campaigns: { enabled: false, windowSeconds: 90, userThreshold: 3, messageThreshold: 3, linkScore: 75, messageScore: 45 },
+    accountTrust: { enabled: false, maxAccountAgeHours: 72, maxMemberAgeHours: 24, lowTrustScore: 30, burstWindowSeconds: 120, channelThreshold: 3, burstScore: 65 },
     links: {
       enabled: false,
       requireAllowlist: false,
@@ -54,7 +55,8 @@ const DEFAULT_CONFIG = Object.freeze({
       { detectors: ['wallet_drainer_language', 'link_protection'], score: 20, reason: 'wallet-drainer link pattern' },
       { detectors: ['wallet_drainer_language', 'qr_code_link'], score: 20, reason: 'wallet-drainer QR pattern' },
       { detectors: ['dangerous_attachment', 'wallet_drainer_language'], score: 15, reason: 'dangerous wallet attachment pattern' },
-      { detectors: ['coordinated_link_campaign', 'wallet_drainer_language'], score: 15, reason: 'coordinated wallet-drainer campaign' }
+      { detectors: ['coordinated_link_campaign', 'wallet_drainer_language'], score: 15, reason: 'coordinated wallet-drainer campaign' },
+      { detectors: ['low_trust_destination', 'wallet_drainer_language'], score: 15, reason: 'low-trust wallet scam pattern' }
     ]
   },
   retentionDays: 30,

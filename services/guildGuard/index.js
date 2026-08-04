@@ -19,6 +19,7 @@ const {
   linkProtectionDetector,
   attachmentThreatDetector,
   coordinatedCampaignDetector,
+  accountTrustDetector,
   raidBurstDetector
 } = require('./detectors');
 
@@ -35,7 +36,7 @@ const GUILD_GUARD_RULE_DETECTORS = new Set([
   'spam_flood', 'duplicate_message', 'mass_mention', 'suspicious_account',
   'staff_impersonation', 'wallet_drainer_language', 'link_protection', 'lookalike_domain',
   'link_deception', 'dangerous_attachment', 'qr_code_link', 'coordinated_link_campaign',
-  'coordinated_message_campaign', 'raid_burst'
+  'coordinated_message_campaign', 'low_trust_destination', 'account_link_burst', 'raid_burst'
 ]);
 
 const GLOBAL_REPUTATION_CATEGORIES = new Set(['spam', 'unsafe_link', 'impersonation', 'scam', 'suspicious_account']);
@@ -57,7 +58,7 @@ function normalizeGlobalCategory(value, incident = null) {
   if (detectors.has('wallet_drainer_language') || detectors.has('dangerous_attachment') || detectors.has('qr_code_link') || detectors.has('coordinated_link_campaign')) return 'scam';
   if (detectors.has('link_protection') || detectors.has('lookalike_domain') || detectors.has('link_deception')) return 'unsafe_link';
   if (detectors.has('spam_flood') || detectors.has('duplicate_message') || detectors.has('mass_mention') || detectors.has('coordinated_message_campaign')) return 'spam';
-  if (detectors.has('suspicious_account') || detectors.has('raid_burst')) return 'suspicious_account';
+  if (detectors.has('suspicious_account') || detectors.has('low_trust_destination') || detectors.has('account_link_burst') || detectors.has('raid_burst')) return 'suspicious_account';
   return 'scam';
 }
 
@@ -478,7 +479,7 @@ async function recordIncident(event, signals, score, evidence, status = 'open') 
 
 const eventWindow = new EventWindowStore();
 const pipeline = new DetectionPipeline({
-  detectors: [spamFloodDetector, duplicateMessageDetector, massMentionDetector, suspiciousAccountDetector, impersonationDetector, scamLanguageDetector, linkProtectionDetector, attachmentThreatDetector, coordinatedCampaignDetector, raidBurstDetector],
+  detectors: [spamFloodDetector, duplicateMessageDetector, massMentionDetector, suspiciousAccountDetector, impersonationDetector, scamLanguageDetector, linkProtectionDetector, attachmentThreatDetector, coordinatedCampaignDetector, accountTrustDetector, raidBurstDetector],
   isExempt,
   recordIncident,
   recordSignals,

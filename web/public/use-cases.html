@@ -1,167 +1,116 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GuildPilot Use Cases | NFT Projects, DAOs &amp; Token Communities</title>
-  <meta name="description" content="See how GuildPilot helps NFT projects, DAOs, token communities, founders, and moderators run wallet verification, NFT roles, DAO votes, tracking, missions, rewards, and support inside Discord.">
-  <meta name="keywords" content="NFT Discord bot, DAO Discord bot, token community Discord bot, NFT holder roles, DAO voting platform, Web3 Discord moderation, Solana community bot">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GuildPilot Use Cases | NFT Projects, DAOs, Token Communities &amp; Discord Teams</title>
+  <meta name="description" content="See how NFT projects, DAOs, token communities, founders, and moderators use GuildPilot for wallet identity, security, governance, tracking, support, rewards, and entertainment.">
   <link rel="canonical" href="https://guildpilot.app/use-cases">
-  <meta property="og:title" content="GuildPilot Use Cases &#8212; NFT projects, DAOs, and token communities">
-  <meta property="og:description" content="GuildPilot helps Web3 Discord communities verify holders, run governance, track activity, manage support, and reward active members.">
+  <meta property="og:title" content="GuildPilot use cases — Built around real community workflows">
+  <meta property="og:description" content="One premium operating system for NFT projects, DAOs, token communities, founders, and moderation teams.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://guildpilot.app/use-cases">
-  <meta property="og:image" content="https://guildpilot.app/assets/dashboard-mockup.png">
-  <meta property="og:image:alt" content="GuildPilot use cases for NFT projects, DAOs, and token communities">
+  <meta property="og:image" content="https://guildpilot.app/assets/og-guildpilot.png">
   <meta property="og:site_name" content="GuildPilot">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="GuildPilot Use Cases &#8212; Web3 Discord Communities">
-  <meta name="twitter:description" content="Built for NFT projects, DAOs, token communities, founders, and moderators.">
-  <meta name="twitter:image" content="https://guildpilot.app/assets/dashboard-mockup.png">
-  <meta name="theme-color" content="#0b1020">
+  <meta name="twitter:image" content="https://guildpilot.app/assets/og-guildpilot.png">
+  <meta name="theme-color" content="#070a12">
   <link rel="icon" type="image/png" href="/assets/branding/guildpilot-logo.png">
   <link rel="stylesheet" href="/landing.css">
   <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "ItemList",
-    "name": "GuildPilot Use Cases",
-    "url": "https://guildpilot.app/use-cases",
-    "itemListElement": [
-      { "@type": "ListItem", "position": 1, "name": "NFT projects" },
-      { "@type": "ListItem", "position": 2, "name": "DAOs" },
-      { "@type": "ListItem", "position": 3, "name": "Token communities" },
-      { "@type": "ListItem", "position": 4, "name": "Founders and moderators" }
-    ]
-  }
+  {"@context":"https://schema.org","@type":"ItemList","name":"GuildPilot community use cases","url":"https://guildpilot.app/use-cases","itemListElement":[
+    {"@type":"ListItem","position":1,"name":"NFT projects"},{"@type":"ListItem","position":2,"name":"DAOs"},{"@type":"ListItem","position":3,"name":"Token communities"},{"@type":"ListItem","position":4,"name":"Founders and moderation teams"}
+  ]}
   </script>
 </head>
 <body>
+  <nav class="pub-nav" id="publicNav" aria-label="Main navigation"><div class="container">
+    <a href="/" class="nav-brand" aria-label="GuildPilot home"><img src="/assets/branding/guildpilot-logo.png" alt="" width="38" height="38"><span class="nav-brand-copy"><small>Community OS</small>GuildPilot</span></a>
+    <div class="nav-links"><a href="/features">Product</a><a href="/use-cases" aria-current="page">Use cases</a><a href="/features#security">Security</a><a href="/pricing">Pricing</a><a href="/docs">Help</a></div>
+    <div class="nav-cta"><a href="/auth/discord/login" class="btn btn-ghost btn-sm">Sign in</a><a href="/auth/discord/login" class="btn btn-primary btn-sm">Add to Discord <span aria-hidden="true">→</span></a><button class="mobile-toggle" type="button" data-mobile-menu-toggle aria-label="Open menu" aria-controls="mobileMenu" aria-expanded="false">☰</button></div>
+  </div></nav>
+  <div class="mobile-menu" id="mobileMenu" aria-hidden="true"><button class="mobile-close" type="button" data-mobile-menu-toggle aria-label="Close menu">×</button><a href="/">Home</a><a href="/features">Product</a><a href="/use-cases">Use cases</a><a href="/features#security">Security</a><a href="/pricing">Pricing</a><a href="/docs">Help</a><a href="/auth/discord/login" class="btn btn-primary">Add GuildPilot</a></div>
 
-<nav class="pub-nav"><div class="container">
-  <a href="/" class="nav-brand"><img src="/assets/branding/guildpilot-logo.png" alt="GuildPilot" width="32" height="32"> GuildPilot</a>
-  <div class="nav-links">
-    <a href="/features">Product</a><a href="/use-cases" style="color:var(--text-primary);">Use Cases</a>
-    <a href="/pricing">Pricing</a><a href="/docs">Docs</a>
-  </div>
-  <div class="nav-cta">
-    <a href="/auth/discord/login" class="btn btn-ghost btn-sm">Login</a>
-    <a href="/auth/discord/login" class="btn btn-primary btn-sm">Invite Bot</a>
-    <button class="mobile-toggle" onclick="toggleMobileMenu()" aria-label="Menu">&#9776;</button>
-  </div>
-</div></nav>
-<div class="mobile-menu" id="mobileMenu"><button class="mobile-close" onclick="toggleMobileMenu()">&#10005;</button>
-  <a href="/">Home</a><a href="/features">Features</a><a href="/use-cases">Use Cases</a>
-  <a href="/pricing">Pricing</a><a href="/docs">Docs</a><a href="/auth/discord/login">Login</a>
-</div>
-
-<section class="section" style="padding-top:calc(var(--nav-h) + 60px);padding-bottom:40px;">
-  <div class="container">
-    <div class="section-header">
-      <span class="section-kicker">Use Cases</span>
-      <h1 class="section-title">Built for Web3 communities like yours.</h1>
-      <p class="section-subtitle">Whether you run an NFT project, DAO, token community, or moderate a large Discord &#8212; GuildPilot fits your workflow.</p>
-    </div>
-  </div>
-</section>
-
-<!-- NFT Projects -->
-<section class="section section-sm">
-  <div class="container">
-    <div class="usecase-card reveal" style="max-width:860px;margin:0 auto;padding:48px;">
-      <h3 style="font-size:1.4rem;">&#128444;&#65039; For NFT Projects</h3>
-      <p style="font-size:1.05rem;line-height:1.7;margin:16px 0 20px;">Launch holder-only channels, assign role tiers by collection or trait, verify wallets, track collection activity, run raffles and missions, and reward your most loyal holders &#8212; all from one bot.</p>
-      <h4 style="font-size:0.9rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">Key capabilities</h4>
-      <ul class="usecase-bullets" style="grid-template-columns:1fr 1fr 1fr;">
-        <li>Holder verification</li><li>Trait-based roles</li><li>Collection tracking</li>
-        <li>Private channels</li><li>Mint campaigns</li><li>Holder rewards</li>
-        <li>Leaderboards</li><li>Treasury monitoring</li><li>Mission system</li>
-      </ul>
-      <div style="margin-top:24px;">
-        <a href="/pricing" class="btn btn-secondary btn-sm">View Plans &#8594;</a>
+  <main>
+    <section class="page-hero">
+      <div class="container">
+        <span class="section-kicker">Built around your community</span>
+        <h1>Different communities. <span class="gradient-text">One clear operating model.</span></h1>
+        <p>GuildPilot adapts to how your server actually works—whether access begins with an NFT, decisions happen through a DAO, a token defines membership, or a team runs everything behind the scenes.</p>
+        <div class="page-hero__actions"><a href="/auth/discord/login" class="btn btn-primary">Add GuildPilot <span aria-hidden="true">→</span></a><a href="/features" class="btn btn-secondary">Explore capabilities</a></div>
+        <div class="page-proof"><div><strong>NFT communities</strong><span>Verify, gate, track, reward</span></div><div><strong>DAOs</strong><span>Propose, vote, publish</span></div><div><strong>Token communities</strong><span>Qualify, monitor, engage</span></div><div><strong>Community teams</strong><span>Protect, support, automate</span></div></div>
       </div>
-    </div>
-  </div>
-</section>
+    </section>
 
-<!-- DAOs -->
-<section class="section section-sm">
-  <div class="container">
-    <div class="usecase-card reveal" style="max-width:860px;margin:0 auto;padding:48px;">
-      <h3 style="font-size:1.4rem;">&#127963;&#65039; For DAOs</h3>
-      <p style="font-size:1.05rem;line-height:1.7;margin:16px 0 20px;">Create structured governance with proposal support phases, token or NFT-based voting power, quorum rules, and transparent outcomes. Give your community real decision-making power.</p>
-      <h4 style="font-size:0.9rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">Key capabilities</h4>
-      <ul class="usecase-bullets" style="grid-template-columns:1fr 1fr 1fr;">
-        <li>Proposal flow</li><li>Voting power</li><li>Role-based governance</li>
-        <li>Support thresholds</li><li>Quorum rules</li><li>Vote results</li>
-        <li>Treasury tracking</li><li>Transparency</li><li>Member directory</li>
-      </ul>
-      <div style="margin-top:24px;">
-        <a href="/pricing" class="btn btn-secondary btn-sm">View Plans &#8594;</a>
+    <section class="section section-tint">
+      <div class="container">
+        <div class="persona-grid">
+          <article class="usecase-card reveal" data-number="01">
+            <span class="usecase-label">NFT projects</span>
+            <h2>Make ownership useful inside Discord.</h2>
+            <p>Verify collections across Solana and EVM, assign roles by NFT count or trait, keep holder access current, and turn collection activity into community moments.</p>
+            <ul class="usecase-bullets"><li>NFT role rules</li><li>Trait gating</li><li>Holder tiers</li><li>Collection alerts</li><li>Missions</li><li>Vault rewards</li></ul>
+            <div class="usecase-outcome"><strong>Outcome:</strong> trusted holder access without manual wallet screenshots or spreadsheet checks.</div>
+          </article>
+          <article class="usecase-card reveal reveal-delay-1" data-number="02">
+            <span class="usecase-label">DAOs</span>
+            <h2>Move from informal polls to real governance.</h2>
+            <p>Give members proposal workflows, support phases, voting power, quorum rules, transparent outcomes, and community roles informed by verified holdings.</p>
+            <ul class="usecase-bullets"><li>Proposal review</li><li>Support phase</li><li>Voting power</li><li>Quorum</li><li>Thresholds</li><li>Published results</li></ul>
+            <div class="usecase-outcome"><strong>Outcome:</strong> structured decisions with a clear record and permissions your members understand.</div>
+          </article>
+          <article class="usecase-card reveal" data-number="03">
+            <span class="usecase-label">Token communities</span>
+            <h2>Connect balances, access, and loyalty.</h2>
+            <p>Qualify roles from token holdings, monitor important wallets and transactions, create tiered member experiences, and reward long-term participation.</p>
+            <ul class="usecase-bullets"><li>Token role rules</li><li>Balance tiers</li><li>Wallet alerts</li><li>Token activity</li><li>Points</li><li>Reward shop</li></ul>
+            <div class="usecase-outcome"><strong>Outcome:</strong> on-chain membership that stays meaningful after the initial launch.</div>
+          </article>
+          <article class="usecase-card reveal reveal-delay-1" data-number="04">
+            <span class="usecase-label">Founders &amp; moderators</span>
+            <h2>Run the server without living in configuration.</h2>
+            <p>Protect members with Guild Guard, automate repetitive communication, organize support, answer common questions with AI, and manage each feature from its module.</p>
+            <ul class="usecase-bullets"><li>Scam defense</li><li>AI support</li><li>Tickets</li><li>Auto messages</li><li>Welcome flows</li><li>Audit history</li></ul>
+            <div class="usecase-outcome"><strong>Outcome:</strong> fewer tools, fewer manual tasks, and a team that knows exactly where to work.</div>
+          </article>
+        </div>
       </div>
-    </div>
-  </div>
-</section>
+    </section>
 
-<!-- Token Communities -->
-<section class="section section-sm">
-  <div class="container">
-    <div class="usecase-card reveal" style="max-width:860px;margin:0 auto;padding:48px;">
-      <h3 style="font-size:1.4rem;">&#129689; For Token Communities</h3>
-      <p style="font-size:1.05rem;line-height:1.7;margin:16px 0 20px;">Assign roles based on token balances, monitor wallets, create gated areas for long-term holders, and reward believers with exclusive access and perks.</p>
-      <h4 style="font-size:0.9rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">Key capabilities</h4>
-      <ul class="usecase-bullets" style="grid-template-columns:1fr 1fr 1fr;">
-        <li>Token role checks</li><li>Balance-based access</li><li>Whale/holder tiers</li>
-        <li>Wallet alerts</li><li>Treasury tracking</li><li>Loyalty rewards</li>
-        <li>Token tracking</li><li>Engagement points</li><li>Community missions</li>
-      </ul>
-      <div style="margin-top:24px;">
-        <a href="/pricing" class="btn btn-secondary btn-sm">View Plans &#8594;</a>
+    <section class="section">
+      <div class="container">
+        <header class="section-header reveal"><span class="section-kicker">A connected member journey</span><h2 class="section-title">From first join to long-term participation.</h2><p class="section-subtitle">GuildPilot is most valuable when the parts work together. Identity informs access, security protects the journey, and engagement gives members a reason to stay.</p></header>
+        <div class="steps">
+          <article class="step-card reveal"><h3>Join &amp; verify</h3><p>Welcome members, complete CAPTCHA when required, connect wallets, verify holdings, and receive the right roles.</p></article>
+          <article class="step-card reveal reveal-delay-1"><h3>Participate &amp; contribute</h3><p>Ask the assistant, vote on proposals, complete missions, open support requests, join Game Night, and earn points.</p></article>
+          <article class="step-card reveal reveal-delay-2"><h3>Recognize &amp; retain</h3><p>Use achievements, leaderboards, vault rewards, holder tiers, and community events to recognize ongoing value.</p></article>
+        </div>
       </div>
-    </div>
-  </div>
-</section>
+    </section>
 
-<!-- Founders & Mods -->
-<section class="section section-sm">
-  <div class="container">
-    <div class="usecase-card reveal" style="max-width:860px;margin:0 auto;padding:48px;">
-      <h3 style="font-size:1.4rem;">&#128081; For Founders &amp; Moderators</h3>
-      <p style="font-size:1.05rem;line-height:1.7;margin:16px 0 20px;">Spend less time manually checking wallets, assigning roles, handling repetitive questions, and managing scattered tools. Run your server from one central dashboard.</p>
-      <h4 style="font-size:0.9rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">Key capabilities</h4>
-      <ul class="usecase-bullets" style="grid-template-columns:1fr 1fr 1fr;">
-        <li>Less manual work</li><li>Cleaner admin</li><li>Better moderation</li>
-        <li>One dashboard</li><li>Fewer subscriptions</li><li>Faster onboarding</li>
-        <li>Ticket system</li><li>Activity logs</li><li>Multi-server</li>
-      </ul>
-      <div style="margin-top:24px;">
-        <a href="/pricing" class="btn btn-secondary btn-sm">View Plans &#8594;</a>
+    <section class="section section-tint">
+      <div class="container">
+        <div class="outcome-panel reveal">
+          <div class="outcome-copy"><span class="eyebrow">Fits your operating style</span><h2>Start focused. Expand when it helps.</h2><p>Use a preset plan when you want the complete platform, or choose a custom plan with the exact modules and capacity your community needs.</p></div>
+          <div class="outcome-list">
+            <div class="outcome-item"><b>Launch</b><strong>Establish trusted access</strong><span>Wallet verification, onboarding, self-serve roles, and Guild Guard create a secure foundation.</span></div>
+            <div class="outcome-item"><b>Operate</b><strong>Reduce team workload</strong><span>Tickets, AI support, auto messages, Telegram bridging, and clear module settings simplify daily work.</span></div>
+            <div class="outcome-item"><b>Grow</b><strong>Understand activity</strong><span>Invites, trackers, analytics, governance, and engagement signals show what your community is doing.</span></div>
+            <div class="outcome-item"><b>Retain</b><strong>Create shared rituals</strong><span>Missions, rewards, Game Night, and Pilot's Gauntlet give members recurring reasons to return.</span></div>
+          </div>
+        </div>
       </div>
-    </div>
-  </div>
-</section>
+    </section>
 
-<!-- CTA -->
-<section class="cta-section">
-  <div class="container">
-    <h2 class="reveal">Find your community type above?</h2>
-    <p class="reveal">GuildPilot works for all Web3 Discord communities, from early projects to established DAOs.</p>
-    <div class="cta-actions reveal">
-      <a href="/auth/discord/login" class="btn btn-primary">Invite Bot</a>
-      <a href="/pricing" class="btn btn-secondary">Compare Plans</a>
-    </div>
-  </div>
-</section>
+    <section class="cta-section"><div class="container"><div class="cta-shell reveal"><span class="section-kicker">Your community, properly equipped</span><h2>Build the workflow your team and members deserve.</h2><p>Start free, choose a preset plan, or assemble a custom package around the modules you need.</p><div class="cta-actions"><a href="/auth/discord/login" class="btn btn-primary">Add GuildPilot <span aria-hidden="true">→</span></a><a href="/pricing" class="btn btn-secondary">View pricing</a></div></div></div></section>
+  </main>
 
-<footer class="pub-footer"><div class="container">
-  <div class="footer-grid">
-    <div class="footer-brand"><a href="/" class="nav-brand"><img src="/assets/branding/guildpilot-logo.png" alt="GuildPilot" width="28" height="28"> GuildPilot</a><p>The all-in-one command center for Web3 Discord communities.</p></div>
-    <div class="footer-col"><h4>Product</h4><a href="/features">Features</a><a href="/use-cases">Use Cases</a><a href="/pricing">Pricing</a></div>
-    <div class="footer-col"><h4>Resources</h4><a href="/docs">Docs</a><a href="/#trust">Security</a></div>
-    <div class="footer-col"><h4>Legal</h4><a href="/privacy-policy">Privacy</a><a href="/terms-of-service">Terms</a></div>
-  </div>
-  <div class="footer-bottom"><span>&copy; 2026 GuildPilot.</span><span>Built for Solana communities</span></div>
-</div></footer>
-<script src="/landing.js"></script>
+  <footer class="pub-footer"><div class="container"><div class="footer-grid">
+    <div class="footer-brand"><a href="/" class="nav-brand"><img src="/assets/branding/guildpilot-logo.png" alt="" width="38" height="38"><span class="nav-brand-copy"><small>Community OS</small>GuildPilot</span></a><p>Identity, security, intelligence, operations, and engagement for modern Discord communities.</p></div>
+    <div class="footer-col"><h4>Product</h4><a href="/features">All features</a><a href="/features#identity">Identity</a><a href="/features#security">Guild Guard</a><a href="/features#intelligence">AI &amp; tracking</a></div>
+    <div class="footer-col"><h4>Explore</h4><a href="/use-cases">Use cases</a><a href="/pricing">Pricing</a><a href="/docs">Help center</a><a href="/auth/discord/login">Portal login</a></div>
+    <div class="footer-col"><h4>Legal</h4><a href="/privacy-policy">Privacy policy</a><a href="/terms-of-service">Terms of service</a><a href="https://discord.gg/dNfxyZQSD9">Discord support</a></div>
+  </div><div class="footer-bottom"><span>© 2026 GuildPilot. All rights reserved.</span><span>Built for communities that take trust seriously.</span></div></div></footer>
+  <script src="/landing.js"></script>
 </body>
 </html>

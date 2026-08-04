@@ -22,6 +22,26 @@ function getPreviewRole(req) {
 }
 
 app.use(express.json());
+
+const publicPageRoutes = new Map([
+  ['/', 'index.html'],
+  ['/features', 'features.html'],
+  ['/use-cases', 'use-cases.html'],
+  ['/pricing', 'pricing.html'],
+  ['/privacy-policy', 'privacy-policy.html'],
+  ['/terms-of-service', 'terms-of-service.html'],
+]);
+
+for (const [routePath, fileName] of publicPageRoutes) {
+  app.get(routePath, (_req, res) => res.sendFile(path.join(publicDir, fileName)));
+}
+
+app.get('/docs', (_req, res) => res.redirect('/app?section=help&previewRole=admin'));
+app.get('/auth/discord/login', (req, res) => {
+  const returnTo = String(req.query?.returnTo || '').trim();
+  const previewDestination = returnTo.startsWith('/app') ? returnTo : '/app';
+  res.redirect(previewDestination);
+});
 app.get('/app', (_req, res) => res.sendFile(path.join(publicDir, 'portal.html')));
 app.get('/api/csrf-token', (_req, res) => res.json({ csrfToken: 'local-preview-token' }));
 app.get('/api/features', (_req, res) => res.json({ heistEnabled: true }));
@@ -73,6 +93,39 @@ app.get('/api/admin/minigames/summary', (_req, res) => res.json({
     { key: 'blackjack', name: 'Blackjack', desc: 'Each player faces the dealer and aims for 21.' },
     { key: 'codebreaker', name: 'Codebreaker', desc: 'Solve a unique four-digit code from right-place and misplaced-digit clues.' },
   ],
+}));
+let previewBattleSettings = {
+  moduleMinigamesEnabled: true,
+  moduleBattleEnabled: true,
+  battleRoundPauseMinSec: 5,
+  battleRoundPauseMaxSec: 10,
+  battleElitePrepSec: 12,
+  battleForcedEliminationIntervalRounds: 3,
+  battleDefaultEra: 'mafia',
+};
+const previewBattleEras = [
+  { key: 'mafia', name: 'Mafia', description: 'A classic underworld elimination story.' },
+  { key: 'vault_runners', name: 'Vault Runners', description: 'A high-stakes heist through a collapsing vault.' },
+  { key: 'yellowcatz', name: 'YellowCatz', description: 'A playful custom identity for community events.' },
+];
+let previewEraAssignments = [
+  {
+    guild_id: '100000000000000002', guild_name: 'GuildPilot Preview', era_key: 'mafia',
+    assigned_by: '100000000000000001', assigned_by_display_name: 'Platform Owner', assigned_at: new Date().toISOString(),
+  },
+  {
+    guild_id: '100000000000000002', guild_name: 'GuildPilot Preview', era_key: 'vault_runners',
+    assigned_by: '100000000000000001', assigned_by_display_name: 'Platform Owner', assigned_at: new Date().toISOString(),
+  },
+];
+app.get('/api/admin/settings', (_req, res) => res.json({ success: true, settings: previewBattleSettings }));
+app.put('/api/admin/settings', (req, res) => {
+  previewBattleSettings = { ...previewBattleSettings, ...req.body };
+  res.json({ success: true, settings: previewBattleSettings });
+});
+app.get('/api/admin/battle/eras', (_req, res) => res.json({
+  success: true,
+  eras: previewBattleEras.filter(era => previewEraAssignments.some(assignment => assignment.era_key === era.key)),
 }));
 app.get('/api/admin/aiassistant/settings', (_req, res) => res.json({
   success: true,
@@ -208,6 +261,27 @@ app.get('/api/superadmin/workspace/plans', (_req, res) => res.json({
   success: true,
   plans: getPlanCatalog(),
 }));
+app.get('/api/superadmin/eras', (_req, res) => res.json({ success: true, eras: previewBattleEras }));
+app.get('/api/superadmin/era-assignments', (_req, res) => res.json({ success: true, assignments: previewEraAssignments }));
+app.post('/api/superadmin/era-assignments', (req, res) => {
+  const tenant = previewTenants.find(item => item.guildId === req.body?.guildId);
+  const era = previewBattleEras.find(item => item.key === req.body?.eraKey);
+  if (!tenant || !era) return res.status(400).json({ success: false, error: 'Choose a valid tenant and era.' });
+  const existing = previewEraAssignments.some(item => item.guild_id === tenant.guildId && item.era_key === era.key);
+  if (!existing) {
+    previewEraAssignments.push({
+      guild_id: tenant.guildId, guild_name: tenant.guildName, era_key: era.key,
+      assigned_by: '100000000000000001', assigned_by_display_name: 'Platform Owner', assigned_at: new Date().toISOString(),
+    });
+  }
+  res.json({ success: true });
+});
+app.delete('/api/superadmin/era-assignments/:guildId/:eraKey', (req, res) => {
+  previewEraAssignments = previewEraAssignments.filter(item => (
+    item.guild_id !== req.params.guildId || item.era_key !== req.params.eraKey
+  ));
+  res.json({ success: true });
+});
 app.get('/api/plans/catalog', (_req, res) => res.json({ success: true, plans: getPlanCatalog() }));
 app.get('/api/superadmin/admins', (_req, res) => res.json({
   success: true,

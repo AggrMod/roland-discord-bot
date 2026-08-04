@@ -516,6 +516,43 @@ assert.ok(domainAction.skipped.some(item => item.domain === 'discord.com' && ite
 assert.ok(guard.domainRegistry.list('guild-domain-action', 'block').includes('campaign-block.example'));
 assert.strictEqual(db.prepare("SELECT status FROM actions WHERE incident_id = ? AND action_type = 'moderator:block_domains'").get(domainActionIncident.incident.incident_id).status, 'applied');
 
+const bulkCampaignOne = await guard.createTestIncident('guild-bulk-response', {
+  id: 'bulk-campaign-1', channelId: 'bulk-channel', content: 'claim at https://bulk-campaign.example/one', author: { id: 'bulk-user-1' }
+});
+const bulkCampaignTwo = await guard.createTestIncident('guild-bulk-response', {
+  id: 'bulk-campaign-2', channelId: 'bulk-channel', content: 'claim at https://bulk-campaign.example/two', author: { id: 'bulk-user-2' }
+});
+const campaignClusters = guard.listIncidentCampaigns('guild-bulk-response', 7);
+assert.ok(campaignClusters.some(campaign => campaign.domain === 'bulk-campaign.example' && campaign.incidentCount === 2));
+const bulkConfirmResult = await guard.executeBulkIncidentResponse('guild-bulk-response', {
+  incidentIds: [bulkCampaignOne.incident.incident_id, bulkCampaignTwo.incident.incident_id], action: 'confirm_and_block'
+}, 'bulk-moderator');
+assert.strictEqual(bulkConfirmResult.applied, 2);
+assert.strictEqual(guard.getIncident('guild-bulk-response', bulkCampaignOne.incident.incident_id).status, 'confirmed');
+assert.ok(guard.domainRegistry.list('guild-bulk-response', 'block').includes('bulk-campaign.example'));
+
+let bulkDeleted = false;
+const bulkDeleteIncident = await guard.createTestIncident('guild-bulk-live-actions', {
+  id: 'bulk-delete-message', channelId: 'bulk-delete-channel', content: 'remove me', author: { id: 'bulk-delete-user' }
+});
+const bulkDeleteGuild = { channels: { cache: new Map([['bulk-delete-channel', { messages: { fetch: async messageId => ({ delete: async () => { bulkDeleted = messageId === 'bulk-delete-message'; } }) } }]]) } };
+const bulkDeleteResult = await guard.executeBulkIncidentResponse('guild-bulk-live-actions', {
+  incidentIds: [bulkDeleteIncident.incident.incident_id], action: 'delete_messages'
+}, 'bulk-moderator', bulkDeleteGuild);
+assert.strictEqual(bulkDeleteResult.applied, 1);
+assert.strictEqual(bulkDeleted, true);
+
+let bulkTimeoutMs = null;
+const bulkTimeoutIncident = await guard.createTestIncident('guild-bulk-live-actions', {
+  id: 'bulk-timeout-message', content: 'timeout me', author: { id: 'bulk-timeout-user' }
+});
+const bulkTimeoutGuild = { members: { fetch: async userId => ({ timeout: async duration => { if (userId === 'bulk-timeout-user') bulkTimeoutMs = duration; } }) } };
+const bulkTimeoutResult = await guard.executeBulkIncidentResponse('guild-bulk-live-actions', {
+  incidentIds: [bulkTimeoutIncident.incident.incident_id], action: 'timeout_users', timeoutSeconds: 600
+}, 'bulk-moderator', bulkTimeoutGuild);
+assert.strictEqual(bulkTimeoutResult.applied, 1);
+assert.strictEqual(bulkTimeoutMs, 600000);
+
 const retentionIncident = await guard.createTestIncident('guild-retention', { id: 'retention-1', author: { id: 'retention-user' } });
 db.prepare("UPDATE incidents SET created_at = datetime('now', '-90 days') WHERE incident_id = ?").run(retentionIncident.incident.incident_id);
 const retentionResult = guard.purgeExpired('guild-retention', 30);

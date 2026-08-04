@@ -120,6 +120,27 @@ function createAdminGuildGuardRouter({ logger, adminAuthMiddleware, ensureGuildG
     return res.json(toSuccessResponse({ incidents: guildGuardService.listIncidents(req.guildId, req.query?.limit) }));
   });
 
+  router.get('/api/admin/guildguard/campaigns', adminAuthMiddleware, (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    return res.json(toSuccessResponse({ campaigns: guildGuardService.listIncidentCampaigns(req.guildId, req.query?.days) }));
+  });
+
+  router.post('/api/admin/guildguard/incidents/bulk-response', adminAuthMiddleware, async (req, res) => {
+    if (!ensureGuildGuardModule(req, res)) return;
+    try {
+      const guild = getClient?.()?.guilds?.cache?.get(String(req.guildId || '')) || null;
+      const result = await guildGuardService.executeBulkIncidentResponse(
+        req.guildId,
+        req.body || {},
+        req.session?.discordUser?.id,
+        guild
+      );
+      return res.json(toSuccessResponse({ result }));
+    } catch (error) {
+      return res.status(400).json(toErrorResponse(error.message || 'Unable to apply bulk incident response', 'VALIDATION_ERROR'));
+    }
+  });
+
   router.get('/api/admin/guildguard/summary', adminAuthMiddleware, (req, res) => {
     if (!ensureGuildGuardModule(req, res)) return;
     return res.json(toSuccessResponse({ summary: guildGuardService.getDashboardSummary(req.guildId, req.query?.days) }));

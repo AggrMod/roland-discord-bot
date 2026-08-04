@@ -199,6 +199,7 @@ body {
 
 .gg-incident-list { display: grid; gap: 11px; }
 .gg-incident-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 18px; border: 1px solid rgba(73, 100, 145, .34); border-left: 3px solid #64748b; border-radius: 16px; background: linear-gradient(135deg, rgba(19, 33, 57, .96), rgba(11, 20, 36, .96)); }
+.gg-incident-card__selector { display: flex; align-items: center; gap: 9px; }
 .gg-incident-card--medium { border-left-color: var(--gg-amber); }
 .gg-incident-card--high, .gg-incident-card--critical { border-left-color: #fb7185; }
 .gg-incident-card__risk { display: grid; place-items: center; width: 58px; height: 58px; border: 1px solid rgba(148, 163, 184, .2); border-radius: 15px; background: rgba(4, 11, 22, .55); }

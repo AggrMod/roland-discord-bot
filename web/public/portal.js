@@ -1947,6 +1947,39 @@ async function loadGuildGuardAlertChannels(selectedId = '') {
   }
 }
 
+const guildGuardSelectedIncidents = new Set();
+
+function updateGuildGuardBulkToolbar() {
+  const toolbar = document.getElementById('guildGuardBulkToolbar');
+  const count = guildGuardSelectedIncidents.size;
+  if (toolbar) toolbar.style.display = count ? '' : 'none';
+  const countTarget = document.getElementById('guildGuardBulkCount');
+  if (countTarget) countTarget.textContent = `${count} incident${count === 1 ? '' : 's'} selected`;
+}
+
+function clearGuildGuardIncidentSelection() {
+  guildGuardSelectedIncidents.clear();
+  document.querySelectorAll('[data-guildguard-select-incident]').forEach(input => { input.checked = false; });
+  updateGuildGuardBulkToolbar();
+}
+
+function renderGuildGuardCampaigns(campaigns) {
+  const target = document.getElementById('guildGuardCampaigns');
+  if (!target) return;
+  if (!campaigns.length) {
+    target.innerHTML = '<p class="section-subtitle">No related incident clusters in the selected period.</p>';
+    return;
+  }
+  target.innerHTML = campaigns.map(campaign => `<div class="gg-coverage-item is-active"><span class="gg-check-icon"><i class="fa-solid fa-diagram-project" aria-hidden="true"></i></span><div><strong>${escapeHtml(campaign.label)}</strong><small>${escapeHtml(campaign.incidentCount)} incidents · ${escapeHtml(campaign.userCount)} accounts · highest risk ${escapeHtml(campaign.maximumRiskScore)}</small></div><button type="button" class="btn-secondary btn-sm" data-guildguard-select-campaign="${escapeHtml(JSON.stringify(campaign.incidentIds))}">Select all</button></div>`).join('');
+  target.querySelectorAll('[data-guildguard-select-campaign]').forEach(button => button.addEventListener('click', () => {
+    let incidentIds = [];
+    try { incidentIds = JSON.parse(button.dataset.guildguardSelectCampaign || '[]'); } catch (_) { incidentIds = []; }
+    incidentIds.forEach(incidentId => guildGuardSelectedIncidents.add(String(incidentId)));
+    document.querySelectorAll('[data-guildguard-select-incident]').forEach(input => { input.checked = guildGuardSelectedIncidents.has(input.value); });
+    updateGuildGuardBulkToolbar();
+  }));
+}
+
 function renderGuildGuardIncidents(incidents) {
   const target = document.getElementById('guildGuardIncidents');
   if (!incidents.length) { target.innerHTML = '<div class="gg-empty-state"><i class="fa-solid fa-shield-check" aria-hidden="true"></i><h3>No recent incidents</h3><p>Guild Guard has nothing waiting for moderator review.</p></div>'; return; }
@@ -1977,13 +2010,41 @@ function renderGuildGuardIncidents(incidents) {
     const riskClass = score >= 80 ? 'critical' : score >= 60 ? 'high' : score >= 35 ? 'medium' : 'low';
     const when = incident.created_at ? new Date(`${String(incident.created_at).replace(' ', 'T')}Z`).toLocaleString() : 'Unknown time';
     return `<article class="gg-incident-card gg-incident-card--${riskClass}">
-      <div class="gg-incident-card__risk"><span>${escapeHtml(score)}</span><small>Risk</small></div>
+      <div class="gg-incident-card__selector"><label aria-label="Select incident"><input type="checkbox" value="${escapeHtml(incident.incident_id)}" data-guildguard-select-incident ${guildGuardSelectedIncidents.has(incident.incident_id) ? 'checked' : ''}></label><div class="gg-incident-card__risk"><span>${escapeHtml(score)}</span><small>Risk</small></div></div>
       <div class="gg-incident-card__body"><div class="gg-incident-card__meta"><span class="gg-status-chip is-${escapeHtml(incident.status || 'open')}">${escapeHtml(String(incident.status || 'open').replaceAll('_', ' '))}</span><span>${escapeHtml(when)}</span></div><h3>${escapeHtml(title)}</h3><p>${escapeHtml(labels.join(' · ') || incident.event_type || 'Risk signal')} · Member ${escapeHtml(incident.user_id || 'unknown')} · ${escapeHtml(incident.user_incident_count ?? 1)} related incident(s)</p></div>
       <div class="gg-incident-card__actions"><button class="btn-primary" data-guildguard-detail-id="${escapeHtml(incident.incident_id)}">Review incident</button><button class="btn-secondary" data-guildguard-review="confirmed" data-incident-id="${escapeHtml(incident.incident_id)}">Confirm scam</button><button class="btn-secondary" data-guildguard-review="false_positive" data-incident-id="${escapeHtml(incident.incident_id)}">Mark safe</button></div>
     </article>`;
   }).join('');
   target.querySelectorAll('[data-guildguard-review]').forEach(button => button.addEventListener('click', () => reviewGuildGuardIncident(button.dataset.incidentId, button.dataset.guildguardReview)));
   target.querySelectorAll('[data-guildguard-detail-id]').forEach(button => button.addEventListener('click', () => loadGuildGuardIncidentDetail(button.dataset.guildguardDetailId)));
+  target.querySelectorAll('[data-guildguard-select-incident]').forEach(input => input.addEventListener('change', () => {
+    if (input.checked) guildGuardSelectedIncidents.add(input.value);
+    else guildGuardSelectedIncidents.delete(input.value);
+    updateGuildGuardBulkToolbar();
+  }));
+  updateGuildGuardBulkToolbar();
+}
+
+async function runGuildGuardBulkResponse() {
+  const statusTarget = document.getElementById('guildGuardStatus');
+  try {
+    const incidentIds = [...guildGuardSelectedIncidents];
+    if (!incidentIds.length) return;
+    const action = document.getElementById('guildGuardBulkAction').value;
+    const labels = { confirm_and_block: 'confirm these incidents and block every non-trusted domain', delete_messages: 'delete the original Discord messages', timeout_users: 'timeout the involved accounts', close: 'close these incidents' };
+    if (!window.confirm(`Apply this response to ${incidentIds.length} incident(s)?\n\nGuildPilot will ${labels[action] || action}.`)) return;
+    const response = await fetch('/api/admin/guildguard/incidents/bulk-response', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ incidentIds, action })
+    });
+    const payload = await response.json();
+    if (!response.ok || payload.success === false) throw new Error(payload.message || 'Unable to apply bulk incident response');
+    const result = payload.data?.result || payload.result || {};
+    clearGuildGuardIncidentSelection();
+    await loadGuildGuardView();
+    statusTarget.textContent = `Bulk response complete: ${result.applied || 0} applied, ${result.failed || 0} failed, ${result.skipped || 0} skipped.`;
+  } catch (error) {
+    statusTarget.textContent = error.message || 'Unable to apply bulk incident response';
+  }
 }
 
 async function loadGuildGuardIncidentDetail(incidentId) {
@@ -2338,21 +2399,24 @@ async function loadGuildGuardView() {
   if (!activeGuildId || !(isAdmin || isSuperadmin)) return;
   const status = document.getElementById('guildGuardStatus');
   try {
-    const [incidentsResponse, configResponse, summaryResponse, healthResponse] = await Promise.all([
+    const [incidentsResponse, configResponse, summaryResponse, healthResponse, campaignsResponse] = await Promise.all([
       fetch('/api/admin/guildguard/incidents?limit=100', { credentials: 'include' }),
       fetch('/api/admin/guildguard/config', { credentials: 'include' }),
       fetch('/api/admin/guildguard/summary?days=7', { credentials: 'include' }),
-      fetch('/api/admin/guildguard/health', { credentials: 'include' })
+      fetch('/api/admin/guildguard/health', { credentials: 'include' }),
+      fetch('/api/admin/guildguard/campaigns?days=7', { credentials: 'include' })
     ]);
     const incidentsPayload = await incidentsResponse.json();
     const configPayload = await configResponse.json();
     const summaryPayload = await summaryResponse.json();
     const healthPayload = await healthResponse.json();
+    const campaignsPayload = await campaignsResponse.json();
     if (!configResponse.ok) throw new Error(configPayload.message || 'Unable to load Guild Guard configuration');
     renderGuildGuardIncidents(incidentsPayload.data?.incidents || incidentsPayload.incidents || []);
     renderGuildGuardConfig(configPayload.data?.config || configPayload.config || {});
     renderGuildGuardSummary(summaryPayload.data?.summary || summaryPayload.summary || {});
     renderGuildGuardHealth(healthPayload.data?.health || healthPayload.health || {});
+    renderGuildGuardCampaigns(campaignsPayload.data?.campaigns || campaignsPayload.campaigns || []);
     await loadGuildGuardIdentities();
     await loadGuildGuardRules();
     await loadGuildGuardDomains();

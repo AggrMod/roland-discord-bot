@@ -607,6 +607,51 @@ function incidentDomains(incident) {
   return [...new Set(candidates.map(domainRegistry.normalizeDomain).filter(Boolean))];
 }
 
+function normalizeIncidentIds(values) {
+  if (!Array.isArray(values)) return [];
+  return [...new Set(values.map(value => String(value || '').trim()).filter(Boolean))].slice(0, 100);
+}
+
+function listIncidentCampaigns(guildId, windowDays = 7) {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  const days = Math.max(1, Math.min(30, Number(windowDays) || 7));
+  const incidents = db.prepare(`
+    SELECT * FROM incidents
+    WHERE guild_id = ? AND status NOT IN ('false_positive', 'closed') AND created_at >= datetime('now', ?)
+    ORDER BY created_at DESC, id DESC
+    LIMIT 500
+  `).all(normalizedGuildId, `-${days} days`);
+  const groups = new Map();
+  for (const incident of incidents) {
+    const signals = jsonParse(incident.signals_json, []);
+    const keys = incidentDomains(incident).filter(domain => !isSystemSafeDomain(domain)).map(domain => ({ key: `domain:${domain}`, domain }));
+    for (const signal of Array.isArray(signals) ? signals : []) {
+      const contentHash = String(signal?.metadata?.contentHash || '').trim();
+      if (contentHash.length >= 20) keys.push({ key: `message:${contentHash}`, contentHash });
+    }
+    for (const item of keys) {
+      if (!groups.has(item.key)) groups.set(item.key, { ...item, incidents: [] });
+      groups.get(item.key).incidents.push(incident);
+    }
+  }
+  return [...groups.values()].map(group => {
+    const uniqueIncidents = [...new Map(group.incidents.map(incident => [incident.incident_id, incident])).values()];
+    return {
+      key: group.key,
+      label: group.domain || 'Repeated scam message',
+      domain: group.domain || null,
+      incidentIds: uniqueIncidents.slice(0, 100).map(incident => incident.incident_id),
+      incidentCount: uniqueIncidents.length,
+      userCount: new Set(uniqueIncidents.map(incident => incident.user_id).filter(Boolean)).size,
+      maximumRiskScore: Math.max(...uniqueIncidents.map(incident => Number(incident.risk_score) || 0)),
+      openCount: uniqueIncidents.filter(incident => ['open', 'reviewed', 'test'].includes(incident.status)).length,
+      lastSeenAt: uniqueIncidents[0]?.created_at || null
+    };
+  }).filter(group => group.incidentCount >= 2)
+    .sort((left, right) => right.maximumRiskScore - left.maximumRiskScore || right.incidentCount - left.incidentCount)
+    .slice(0, 25);
+}
+
 function blockIncidentDomains(guildId, incidentId, actorId = null) {
   const normalizedGuildId = normalizeGuildId(guildId);
   const incident = getIncident(normalizedGuildId, incidentId);
@@ -642,6 +687,70 @@ function blockIncidentDomains(guildId, incidentId, actorId = null) {
     metadata: { actorId: actorId || null, domains: blocked, skipped }
   });
   return { incidentId: incident.incident_id, domains: blocked, skipped };
+}
+
+async function executeBulkIncidentResponse(guildId, input = {}, actorId = null, guild = null) {
+  const normalizedGuildId = normalizeGuildId(guildId);
+  const incidentIds = normalizeIncidentIds(input.incidentIds);
+  const action = String(input.action || '').trim();
+  const supported = new Set(['confirm_and_block', 'delete_messages', 'timeout_users', 'close']);
+  if (!incidentIds.length) throw new Error('Select at least one incident');
+  if (!supported.has(action)) throw new Error('Invalid bulk response action');
+  const incidents = incidentIds.map(incidentId => getIncident(normalizedGuildId, incidentId)).filter(Boolean);
+  if (incidents.length !== incidentIds.length) throw new Error('One or more incidents were not found for this server');
+  const timeoutSeconds = Math.max(60, Math.min(2419200, Number(input.timeoutSeconds) || Number(getConfig(normalizedGuildId).actions?.timeoutSeconds) || 3600));
+  const processedUsers = new Set();
+  const results = [];
+
+  for (const incident of incidents) {
+    let status = 'applied';
+    let metadata = { actorId: actorId || null, action };
+    try {
+      if (action === 'confirm_and_block') {
+        if (incident.status !== 'confirmed') updateIncidentStatus(normalizedGuildId, incident.incident_id, 'confirmed', actorId);
+        const domainResult = blockIncidentDomains(normalizedGuildId, incident.incident_id, actorId);
+        metadata = { ...metadata, domains: domainResult?.domains || [], skippedDomains: domainResult?.skipped || [] };
+      } else if (action === 'close') {
+        updateIncidentStatus(normalizedGuildId, incident.incident_id, 'closed', actorId);
+      } else if (action === 'delete_messages') {
+        const evidence = jsonParse(incident.evidence_json, {});
+        let channel = guild?.channels?.cache?.get?.(String(evidence.channelId || '')) || null;
+        if (!channel && evidence.channelId && typeof guild?.channels?.fetch === 'function') channel = await guild.channels.fetch(String(evidence.channelId));
+        const message = channel?.messages?.fetch ? await channel.messages.fetch(String(incident.event_id)) : null;
+        if (!message || typeof message.delete !== 'function') throw new Error('message_unavailable');
+        await message.delete();
+        metadata = { ...metadata, channelId: evidence.channelId, messageId: incident.event_id };
+      } else if (action === 'timeout_users') {
+        if (!incident.user_id) throw new Error('member_unavailable');
+        if (processedUsers.has(incident.user_id)) {
+          status = 'skipped';
+          metadata = { ...metadata, reason: 'member_already_processed', userId: incident.user_id };
+        } else {
+          processedUsers.add(incident.user_id);
+          const member = guild?.members?.fetch ? await guild.members.fetch(String(incident.user_id)) : null;
+          if (!member || typeof member.timeout !== 'function') throw new Error('member_unavailable');
+          await member.timeout(timeoutSeconds * 1000, 'Guild Guard bulk incident response');
+          metadata = { ...metadata, userId: incident.user_id, timeoutSeconds };
+        }
+      }
+    } catch (error) {
+      status = 'failed';
+      metadata = { ...metadata, error: String(error?.message || error) };
+    }
+    actionService.recordAction({
+      event: { guildId: normalizedGuildId }, incident,
+      actionType: `moderator:bulk_${action}`, status, metadata
+    });
+    results.push({ incidentId: incident.incident_id, status, ...metadata });
+  }
+  return {
+    action,
+    selected: incidents.length,
+    applied: results.filter(result => result.status === 'applied').length,
+    failed: results.filter(result => result.status === 'failed').length,
+    skipped: results.filter(result => result.status === 'skipped').length,
+    results
+  };
 }
 
 function updateIncidentStatus(guildId, incidentId, status, actorId = null) {
@@ -742,7 +851,9 @@ module.exports = {
   resetRiskProfile,
   decayRiskProfiles,
   getIncident,
+  listIncidentCampaigns,
   blockIncidentDomains,
+  executeBulkIncidentResponse,
   updateIncidentStatus,
   reportFalsePositive,
   listFalsePositives,

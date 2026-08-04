@@ -301,6 +301,8 @@ app.get('/api/admin/guildguard/health', (_req, res) => res.json({ success: true,
   { id: 'manage_server', label: 'GuildPilot can activate and restore raid mode', ok: true, required: true }
 ] } }));
 app.get('/api/admin/guildguard/incidents', (_req, res) => res.json({ success: true, incidents: previewGuildGuardIncidents }));
+app.get('/api/admin/guildguard/campaigns', (_req, res) => res.json({ success: true, campaigns: [{ key: 'domain:guildpiIot.example', label: 'guildpiIot.example', domain: 'guildpiIot.example', incidentIds: ['preview-link', 'preview-qr'], incidentCount: 2, userCount: 2, maximumRiskScore: 90, openCount: 1, lastSeenAt: '2026-08-04 08:12:00' }] }));
+app.post('/api/admin/guildguard/incidents/bulk-response', (req, res) => res.json({ success: true, result: { action: req.body?.action, selected: req.body?.incidentIds?.length || 0, applied: req.body?.incidentIds?.length || 0, failed: 0, skipped: 0, results: [] } }));
 app.get('/api/admin/guildguard/incidents/:incidentId', (req, res) => {
   const incident = previewGuildGuardIncidents.find(item => item.incident_id === req.params.incidentId) || previewGuildGuardIncidents[0];
   res.json({ success: true, incident, globalReport: null });
